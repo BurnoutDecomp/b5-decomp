@@ -27,6 +27,7 @@
 #include "SharedClasses/DataLists/BrnHudMessageController.h" // BrnResource::HudMessageEvent (maMessages by value)
 
 namespace BrnFlapt { struct FileRef; }   // BrnFlaptFileRef.h (Prepare parameter, by const-ref)
+namespace CgsModule { struct Event; }    // CgsVariableEventQueue.h (AddMessage parameter, pointer-only)
 
 namespace BrnGui
 {
@@ -73,6 +74,11 @@ namespace BrnGui
         // base mAptRef, reset its timeline and install the transition-complete callback.
         void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);
 
+        // @ 0x8243DC68 -- h:203. Resolve lpEvent through the message controller into a
+        // formatted HudMessageEvent, then dispatch it against the live slot: refresh the
+        // same updatable id in place, keep the higher-priority pending message, or start it.
+        void AddMessage(const CgsModule::Event* lpEvent);
+
         // @ 0x8243DDE0 -- h:207. Advance the live slot: start a WAITING message, or end a
         // VISIBLE one once its end-time is reached.
         void Update();
@@ -90,12 +96,21 @@ namespace BrnGui
         // @ 0x82475B80 -- h:239. Adopt the shared message queue and reconcile its live slot.
         void SetInGameMessagesQueue(InGameMessagesQueue* lInGameInMessagesQueue);
 
+        // @ 0x824376F0 -- h:248. Retire any message the director no longer allows (clearing
+        // its state, dismissing a visible one), then promote a pending next-slot message.
+        void TerminateMessages();
+
     private:
         // @ 0x82437150 -- h:286. Begin transitioning the given slot's message IN (declared
         // here; bodied in a later slice -- it depends on the GUI audio-event output vein).
         void StartMessage(BrnResource::HudMessageEvent* lpEvent);
         // @ 0x824374B8 -- h:306. End the currently-visible message (declared; later slice).
         void EndMessage();
+
+        // @ 0x8241F248 -- h:292. Rebuild the message banner clip/text/icon and publish the
+        // named transition animation (declared here; bodied in a later slice -- it depends on
+        // the un-homed MovieClipRef bind helper vein).
+        void SendGameMessage(const char* lpcAnimName, bool lbNewIcon);
 
         // @ 0x82410F18 -- h:302. Fill the NEXT double-buffer slot with lpEvent, keeping the
         // higher-priority message when the slot is already occupied.
@@ -107,6 +122,11 @@ namespace BrnGui
         u8   GetNextIndex() const;
         // @ 0x8240EB48 -- h:318. Toggle the double-buffer slot selector in place.
         void SwitchCurrentIndex();
+
+        // @ 0x8241F530 -- h:323. Refresh the live slot's message in place (same id): copy in
+        // the new event, and if it is no longer merely WAITING re-latch the end-time, mark it
+        // VISIBLE and re-run the update animation.
+        void UpdateInPlace(BrnResource::HudMessageEvent* lpEvent);
 
         // @ 0x824111B0 -- h:328. Is lMessageId one of the fixed set of HUD message ids that
         // may be refreshed in place (rather than re-started) when re-queued while showing?

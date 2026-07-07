@@ -5,10 +5,28 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"        // BrnFlapt::FileRef::FindComponent (Prepare)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h" // BrnFlapt::MovieClipInstance::ResetTimeline
+#include "GameSource/Gui/BrnGuiHudMessageDirector.h"     // BrnGui::HudMessageDirector::IsMessageAllowed (TerminateMessages)
+#include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers (+0x14 serialiser slot)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::GetAccessPointers
+#include "GameSource/Replays/BrnReplayGuiModuleStaticLayout.h"          // BrnReplays::GuiModuleStaticLayout (UpdateInPlace tail)
 
 // Thin wrappers over the platform high-resolution timer (CgsTimeUtils.cpp); declared
 // locally per the house style rather than through a header (there is none).
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+
+// Compile-only slice of the GUI-module replay serialiser reached from the GUI
+// access-pointer block (mirrors BrnReplayHudMessageComponent.cpp). The full type + its
+// GetStaticLayout body live in GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.cpp
+// (no shared header). UpdateInPlace's serialiser tail calls GetStaticLayout() to reach the
+// GUI-module static layout and re-run its StartMessage flags.
+namespace BrnReplays
+{
+    class GuiModuleSerialiser
+    {
+    public:
+        GuiModuleStaticLayout* GetStaticLayout();
+    };
+}
 
 // BrnGui::InGameMessagesComponent -- the HUD in-game message queue driver, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Seven X360-emitted functions: the double-buffered slot accessors
@@ -218,5 +236,143 @@ namespace BrnGui
     {
         CGS_ASSERT(lpUserData != NULL, "lpUserData");
         static_cast<InGameMessagesComponent*>(lpUserData)->EndTransition();
+    }
+
+    // @ 0x8243DC68 -- h:203. Ask the message controller to format lpEvent into a live
+    // HudMessageEvent, then dispatch it against the current slot: an already-showing entry
+    // whose id matches and is updatable is refreshed in place; otherwise the incoming
+    // message replaces a lower-priority pending one (kept via QueueMessage) or, when it wins
+    // (or the slot is free), starts immediately. The X360 reads the incoming event's
+    // miForceRemoveThreshold (+0xC) against the slot's miPriority (+8) for the keep/start
+    // decision; reproduced verbatim.
+    void InGameMessagesComponent::AddMessage(const CgsModule::Event* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != NULL, "Invalid event passed in");
+
+        if (mpMessageController != NULL)
+        {
+            BrnResource::HudMessageEvent lOutMessage;
+            if (reinterpret_cast<const BrnResource::HudMessageController*>(mpMessageController)
+                    ->GetMessage(reinterpret_cast<const GuiHudMessage*>(lpEvent), &lOutMessage))
+            {
+                const u8 luIndex = GetCurrentIndex();
+                if (mpInGameMessagesQueue->maeMessageState[luIndex] != E_MESSAGESTATE_NOMESSAGE)
+                {
+                    if (lOutMessage.mHudMessageId ==
+                            mpInGameMessagesQueue->maMessages[GetCurrentIndex()].mHudMessageId
+                        && IsMessageUpdatable(lOutMessage.mHudMessageId))
+                    {
+                        UpdateInPlace(&lOutMessage);
+                        return;
+                    }
+                    if (lOutMessage.miForceRemoveThreshold <
+                            mpInGameMessagesQueue->maMessages[GetCurrentIndex()].miPriority)
+                    {
+                        QueueMessage(&lOutMessage);
+                        return;
+                    }
+                }
+                StartMessage(&lOutMessage);
+            }
+        }
+    }
+
+    // @ 0x8241F530 -- h:323. Refresh the live slot's message in place. The incoming event
+    // must carry the same id as the slot (else the "different message type" tripwire) and the
+    // slot must be occupied. Copy the new event in; if the slot is past WAITING, re-latch the
+    // end-time (base time + duration * timer frequency), mark it VISIBLE and re-run the update
+    // animation. Finally re-raise the GUI-module static-layout StartMessage flags.
+    void InGameMessagesComponent::UpdateInPlace(BrnResource::HudMessageEvent* lpEvent)
+    {
+        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+
+        CGS_ASSERT(lpEvent->mHudMessageId ==
+                       mpInGameMessagesQueue->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex].mHudMessageId,
+                   "Trying to update a different message type");
+
+        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+        CGS_ASSERT(mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] !=
+                       E_MESSAGESTATE_NOMESSAGE,
+                   "Invalid state to update a message in");
+
+        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+        if (&mpInGameMessagesQueue->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex] != lpEvent)
+        {
+            CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+            std::memcpy(&mpInGameMessagesQueue->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex],
+                        lpEvent, sizeof(BrnResource::HudMessageEvent));
+        }
+
+        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+        if (mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] !=
+            E_MESSAGESTATE_WAITING)
+        {
+            CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+            const u8 luIndex = mpInGameMessagesQueue->muCurrentMessageIndex;
+            const f32 lfDuration = mpInGameMessagesQueue->maMessages[luIndex].mfDuration;
+            const f32 lfTicks =
+                static_cast<f32>(static_cast<f64>(CgsSystem::GetSystemTimerFrequency())) * lfDuration;
+            mpInGameMessagesQueue->muCurrentEventEndTime =
+                static_cast<u64>(CgsSystem::GetSystemTimerBaseTime()) + static_cast<s64>(lfTicks);
+
+            CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+            mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] =
+                E_MESSAGESTATE_VISIBLE;
+
+            SendGameMessage("updateAnim", false);
+        }
+
+        CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
+        CGS_ASSERT(lpAccessPointers != 0, "mpAccessPointers != NULL");   // CgsGuiStateInterface.h:344
+
+        // The GUI-module replay serialiser lives in the access-pointer block (guest +0x14);
+        // reached by attested offset (see BrnReplayHudMessageComponent.cpp).
+        BrnReplays::GuiModuleSerialiser* lpSerialiser =
+            *reinterpret_cast<BrnReplays::GuiModuleSerialiser**>(
+                reinterpret_cast<u8*>(lpAccessPointers) + 0x14);
+        CGS_ASSERT(lpSerialiser != 0, "mpSerialiser");                  // CgsGuiShared.h:216
+
+        lpSerialiser->GetStaticLayout()->StartMessage();
+    }
+
+    // @ 0x824376F0 -- h:248. Retire the director-disallowed messages from each double-buffer
+    // slot: if a slot holds a message the director no longer allows, dismiss a non-WAITING one
+    // with an "invisible" transition and clear its state to NOMESSAGE. Then, if the live slot
+    // is now empty and the other slot is WAITING, flip to it and start its message.
+    void InGameMessagesComponent::TerminateMessages()
+    {
+        CGS_ASSERT(mpDirector != NULL, "mpDirector");
+
+        if (mpInGameMessagesQueue->maeMessageState[0] != E_MESSAGESTATE_NOMESSAGE)
+        {
+            if (!mpDirector->IsMessageAllowed(mpInGameMessagesQueue->maMessages[0].mHudMessageId))
+            {
+                if (mpInGameMessagesQueue->maeMessageState[0] != E_MESSAGESTATE_WAITING)
+                    SendGameMessage("invisible", false);
+                mpInGameMessagesQueue->maeMessageState[0] = E_MESSAGESTATE_NOMESSAGE;
+            }
+        }
+
+        if (mpInGameMessagesQueue->maeMessageState[1] != E_MESSAGESTATE_NOMESSAGE)
+        {
+            if (!mpDirector->IsMessageAllowed(mpInGameMessagesQueue->maMessages[1].mHudMessageId))
+            {
+                if (mpInGameMessagesQueue->maeMessageState[1] != E_MESSAGESTATE_WAITING)
+                    SendGameMessage("invisible", false);
+                mpInGameMessagesQueue->maeMessageState[1] = E_MESSAGESTATE_NOMESSAGE;
+            }
+        }
+
+        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+        if (mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] ==
+            E_MESSAGESTATE_NOMESSAGE)
+        {
+            if (mpInGameMessagesQueue->maeMessageState[GetNextIndex()] == E_MESSAGESTATE_WAITING)
+            {
+                SwitchCurrentIndex();
+                const u8 luIndex = GetCurrentIndex();
+                StartMessage(&mpInGameMessagesQueue->maMessages[luIndex]);
+            }
+        }
     }
 }

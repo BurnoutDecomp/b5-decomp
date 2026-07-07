@@ -3,13 +3,16 @@
 //
 // The BrnGame::BrnGameModule game-state->X bridge family. Reconstructed store-for-store
 // from BURNOUT_X360_ARTIST.XEX. Only the verified functions of this TU are homed here;
-// the remaining bridge entry points (BridgeGameStateToGui 0x823EE880 /
-// BridgeGameStateToNetwork 0x823E2398 / TranslateTakedownsToGuiEvents 0x823E1C38) are
-// DEFERRED (blocked: not store-for-store faithful / un-homed GUI+network event payloads)
-// and homed by their owning batches once the event layouts land.
+// the two top-level bridge entry points (BridgeGameStateToGui 0x823EE880 /
+// BridgeGameStateToNetwork 0x823E2398) remain DEFERRED (blocked: their pseudocode is not
+// store-for-store faithful -- ToGui's IDA output is flagged "local variable allocation has
+// failed" over ~160 locals with un-homed GUI event payloads + VariableEventQueue Append;
+// ToNetwork is a ~240-case switch over un-homed network-action payloads) and are homed by
+// their owning batches once those event layouts land.
 //
-//   BridgeGameStateToController   0x823C0AE8  [reconstructed]
-//   ConvertTrainingTypeToStringId 0x823AA3B8  [reconstructed]
+//   BridgeGameStateToController     0x823C0AE8  [reconstructed]
+//   ConvertTrainingTypeToStringId   0x823AA3B8  [reconstructed]
+//   TranslateTakedownsToGuiEvents   0x823E1C38  [reconstructed]
 //
 // FLAG (by-name, un-homed): the game-state input bind/unbind REQUEST-queue accessors
 // (BrnGameState::GetGameStateInput*RequestQueue; X360 sub_823B9CD8, +0x4C for the second
@@ -19,6 +22,7 @@
 
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGameStateToX.h"
+#include "GameSource/Game/GameBridgeControllerToX.h"                // CgsGui::GuiModule + AddGuiEvent<T> (established placeholder home)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"  // CgsInput::InputIO::PostWorldInputBuffer / BaseInputEvent
@@ -117,5 +121,74 @@ namespace BrnGame
             return "ERROR - UNKNOWN TRAINING TYPE";
         }
         return KAC_GENERAL_TRAINING_TEXT[liIndex];
+    }
+
+    // =========================================================================
+    // TranslateTakedownsToGuiEvents  (X360 0x823E1C38)
+    // For each record in the game-state output's TakedownEvent output queue, synthesise a takedown
+    // GUI event and push it through the CgsGui GUI module (this + 7252512). A record is a HARD
+    // takedown (BrnGui::GuiTakedownEvent) when its race-car index equals the runner index, or when
+    // the soft-takedown-display flag bit is clear; otherwise it is a SOFT takedown
+    // (BrnGui::GuiSoftTakedownEvent) which carries only the leading fields + two status bytes.
+    //
+    // FLAG: the takedown queue element accessor (BrnGameState::GetTakedownEventOutputRecord), the
+    // GUI event payload layouts, and the soft-display flag word are un-homed placeholders reached
+    // by name (see GameBridgeGameStateToX.h / BrnGameModule.hpp) -- the parity contract encoded here
+    // is the record-by-record hard/soft classification + store-for-store field copy.
+    // =========================================================================
+    void BrnGameModule::TranslateTakedownsToGuiEvents(
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        const void* lpTakedownQueue,
+        s32 liRunnerActiveRaceCarIndex)
+    {
+        // X360 `li r,1; extldi r,r,64,33` -> 64-bit mask 0x0000000200000000 (bit 33).
+        static const u64 KU_TAKEDOWN_SOFT_DISPLAY_MASK = 0x0000000200000000ull;
+
+        CgsGui::GuiModule* lpGui = mpCgsGuiModule;
+
+        const s32 liCount = BrnGameState::GetTakedownEventOutputCount(lpTakedownQueue);  // *(queue+8)
+        for (s32 i = 0; i < liCount; ++i)
+        {
+            const BrnGameState::TakedownEventOutputRecord* lpRecord =
+                BrnGameState::GetTakedownEventOutputRecord(lpTakedownQueue, i);
+
+            // Hard when the record's race-car index matches the runner, or the soft-display bit is clear.
+            bool lbHard;
+            if (lpRecord->miRaceCarIndex == liRunnerActiveRaceCarIndex)
+            {
+                lbHard = true;
+            }
+            else
+            {
+                lbHard = ((mu64TakedownDisplayFlags & KU_TAKEDOWN_SOFT_DISPLAY_MASK) == 0);
+            }
+
+            if (lbHard)
+            {
+                BrnGui::GuiTakedownEvent lEvent;
+                lEvent.mu64Field00   = lpRecord->mu64Field08;   // +0x00 <- src +0x08
+                lEvent.mu64Field08   = lpRecord->mu64Field10;   // +0x08 <- src +0x10
+                lEvent.miField10     = lpRecord->miField00;     // +0x10 <- src +0x00
+                lEvent.miRaceCarIndex= lpRecord->miRaceCarIndex;// +0x14 <- src +0x04
+                lEvent.miField18     = lpRecord->miField18;     // +0x18 <- src +0x18
+                lEvent.miField1C     = lpRecord->miField20;     // +0x1C <- src +0x20
+                lEvent.miField20     = lpRecord->miField1C;     // +0x20 <- src +0x1C
+                lEvent.mbStatus24    = lpRecord->mbField24;     // +0x24 <- src +0x24
+                lEvent.mbStatus25    = lpRecord->mbField26;     // +0x25 <- src +0x26
+                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiInput);
+            }
+            else
+            {
+                BrnGui::GuiSoftTakedownEvent lEvent;
+                lEvent.mu64Field00   = lpRecord->mu64Field08;   // +0x00 <- src +0x08
+                lEvent.mu64Field08   = lpRecord->mu64Field10;   // +0x08 <- src +0x10
+                lEvent.miField10     = lpRecord->miField00;     // +0x10 <- src +0x00
+                lEvent.miRaceCarIndex= lpRecord->miRaceCarIndex;// +0x14 <- src +0x04
+                lEvent.miField18     = lpRecord->miField18;     // +0x18 <- src +0x18
+                lEvent.mbStatus1C    = lpRecord->mbField24;     // +0x1C byte0 <- src +0x24
+                lEvent.mbStatus1D    = lpRecord->mbField26;     // +0x1D byte1 <- src +0x26
+                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiInput);
+            }
+        }
     }
 } // namespace BrnGame

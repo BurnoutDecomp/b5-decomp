@@ -256,6 +256,16 @@ namespace BrnGame
         void BridgeGameStateToController(BrnGameState::GameStateModule* lpGameStateOutput,
                                          CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput);
 
+        // X360 0x823E1C38 -- walk the game-state output's TakedownEvent output queue and push one
+        // GUI takedown event per record through the CgsGui GUI module (this + 7252512). A record
+        // whose race-car index matches the runner index, or when the "soft takedown display" flag
+        // bit is clear, becomes a BrnGui::GuiTakedownEvent; otherwise a BrnGui::GuiSoftTakedownEvent.
+        // Called by BridgeGameStateToGui. Home GameSource/Game/GameBridgeGameStateToX.cpp.
+        void TranslateTakedownsToGuiEvents(
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+            const void* lpTakedownQueue,
+            s32 liRunnerActiveRaceCarIndex);
+
         // ---- replay-output bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) -------
         // The mirror of the controller bridges: each reads the replay module's pre/post-sim OUTPUT
         // buffer and republishes it into a subsystem's INPUT buffer.
@@ -444,6 +454,13 @@ namespace BrnGame
         // the game-state region). Held by pointer per the mpCgsGuiModule precedent so the keystone
         // header need not embed the manager by value. FLAG: real layout embeds it @ +6769456.
         BrnGameState::TrainingManager* mpTrainingManager; // @ +6769456
+
+        // Takedown-display flag word (X360 64-bit field @ this + 6762752 == 0x673100, inside the
+        // game-state region). TranslateTakedownsToGuiEvents tests bit 33 (mask 0x0000000200000000,
+        // the X360 `li r,1; extldi r,r,64,33` rotate): when set the record becomes a SOFT takedown
+        // event, otherwise a hard one. FLAG: modelled as a logical member (semantic parity, not
+        // byte-exact) per the mpCgsGuiModule/mpTrainingManager precedent.
+        u64 mu64TakedownDisplayFlags;    // @ +6762752 (0x673100)
 
         // Render-metrics-requested flag the GameTalk StopRenderMetrics receiver clears
         // (X360 word store @ this + 0x9A1060). Mirrors the sibling's
