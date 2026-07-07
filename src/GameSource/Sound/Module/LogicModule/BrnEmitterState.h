@@ -63,11 +63,25 @@ struct EmitterState : public BrnSound::Logic::BrnState
     // for off_82FFB954). Bodied out-of-line in BrnEmitterState.cpp.
     virtual ~EmitterState();
 
-    // -- state lifecycle overrides (DWARF vtable slots after the dtor). DEFERRED
-    // bodies (declared for the vtable shape only; not in this TU's function set).
+    // -- state lifecycle overrides (DWARF vtable slots after the dtor).
+    // Attach (@ 0x826D2010) and IsAttachedToThis (@ 0x826BADA0) are bodied in the
+    // .cpp; UpdateParams stays a DEFERRED declaration (not in this TU's function set).
     virtual void Attach(void* lpvAttachment);
     virtual void UpdateParams(f32 lfDeltaTime);
-    virtual bool IsAttachedToThis(void* lpvAttachment);
+    virtual bool IsAttachedToThis(void* lpvTestAttachment);
+
+private:
+    // mEntity -- StaticSoundEntity (DWARF BrnEmitterState.h:117), the static sound
+    // entity this state is attached to. StaticSoundEntity's full layout is deferred
+    // project-wide (forward-decl only in SharedClasses/.../BrnStaticSoundMap.h); its
+    // sole member is a 16-byte Vector3Plus mPosPlus -- position xyz plus a packed w
+    // whose HIGH 16 bits carry the entity type (GetType()). Modelled here as a
+    // correctly-sized 16-byte span (the only X360-attested size is the 16-byte
+    // lvx/stvx copy in Attach) so this home need not force the StaticSoundEntity
+    // layout cascade the header note warned about. The X360 places it at this+0x60
+    // (its w at this+0x6C); Attach's whole-vector copy and IsAttachedToThis's
+    // per-lane float compare + w-high-word type compare are the only accesses.
+    alignas(16) u8 mEntity[16];
 };
 
 } // namespace World

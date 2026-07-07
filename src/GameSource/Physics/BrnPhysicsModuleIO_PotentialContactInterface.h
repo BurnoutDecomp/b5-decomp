@@ -68,6 +68,16 @@ namespace PhysicsModuleIO
         s32  GetLength() const;                                    // @0x825A0498  :59 (:150) read-lock
         const CgsSceneManager::SceneManagerIO::PotentialContact& GetEvent(s32 liIndex) const; // @0x825A0578 :62 (:154) read-lock
 
+        // Read access to the custom sub-queue the race-car-vs-world crash-prediction pass consumes.
+        // The X360 crash-prediction driver (VehicleManager::HandleCrashPredictionForRaceCarAndWorld
+        // @0x82640C28) reaches this queue via an inlined `this + 983152`, which is
+        // maCustomEventQueues[6] (983152 == 16-byte base + 6 * 0x28010 stride). ADDITIVE inline
+        // accessor -- byte offset (index 6) is asm-proven; the NAME is the best-fit DWARF accessor
+        // (:76 GetRaceCarWithWorldQueueValidated) FLAGGED as unproven (the accessor->index binding is
+        // not recoverable from this build). Host addressing uses the typed member index, so it stays
+        // layout-correct without the X360 32-bit byte offset.
+        const CustomPotentialContactQueue& GetRaceCarWithWorldQueueValidated() const { return maCustomEventQueues[6]; }
+
     private:
         const InPotentialContactQueue* mpQueue;                    // +4  :246 (const source queue)
         CustomPotentialContactQueue    maCustomEventQueues[KI_CUSTOM_QUEUE_COUNT]; // +16 :247

@@ -78,6 +78,13 @@ namespace Vehicle
         // @0x82592FD0: hand-written copy assignment (Clear()+Append() per queue).
         VehicleInputInterface& operator=(const VehicleInputInterface& lrOther);
 
+        // Read access to the embedded triangle-cache interface (mTriangleCacheInterface, the second
+        // member, at X360 byte +128016 == 16-byte InLineTestResultQueue header + 2000*64). The X360
+        // inlines this as a raw `this + 128016` at its call sites (e.g. the crash-prediction driver
+        // HandleCrashPredictionForRaceCarAndWorld). ADDITIVE inline accessor (header-only; no
+        // out-of-line symbol), so host addressing stays layout-correct without the X360 byte offset.
+        const InTriangleCacheInterface* GetTriangleCacheInterface() const { return &mTriangleCacheInterface; }
+
     private:
         InLineTestResultQueue                 mLineTestResultsQueue;                     // :261
         InTriangleCacheInterface              mTriangleCacheInterface;                   // :262

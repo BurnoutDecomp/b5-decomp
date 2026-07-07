@@ -33,6 +33,13 @@ namespace BrnPhysics { namespace PhysicsModuleIO { class VehicleOutputRequestInt
 namespace BrnPhysics { namespace Deformation { class DeformationInputInterface; } }
 namespace BrnGameState { namespace GameStateModuleIO { class VehicleOutputInterface; } }
 
+// Crash-prediction (race-car-vs-world) collaborators -- forward-declared in their real
+// namespaces (homed by their own TUs; HandleCrashPredictionForRaceCarAndWorld only takes/forwards
+// pointers + one by-value contact, so the declarations need no complete type here).
+namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
+namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
+namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; struct TriangleCacheInterface; } }
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -254,6 +261,39 @@ namespace Vehicle
         // strength/damage-limit to RaceCarPhysics::SetPlayerVehicleInShowtime on the player car and
         // latches the global player-in-showtime byte.
         void SetPlayerCarToShowtimeMode(bool lbInShowtime);
+
+        // ==========================================================================================
+        // Race-car-vs-world crash-prediction slice (X360 @0x82640C28). DWARF-authoritative
+        // signatures (BrnVehicleManager.h:1296/1200/1215). HandleCrashPredictionForRaceCarAndWorld
+        // walks the interface's already-validated race-car-world potential-contact queue, groups the
+        // contacts by their volume-A entity word (VolumeInstanceId high dword), orders each group by
+        // predicted impact time via PotentialContactOrderer, and dispatches every surviving contact
+        // to HandleRaceCarWorldPotentialContact. The two callees are bodied by their own TUs; declared
+        // here (declare-only) so this slice can call them.
+        // ------------------------------------------------------------------------------------------
+        // @0x82640C28 -- the crash-prediction driver bodied by THIS slice.
+        void HandleCrashPredictionForRaceCarAndWorld(
+            f32 lfTimestep,
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContactInterface,
+            const VehicleInputInterface* lpVehicleInputInterface,
+            BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+
+        // Declare-only callees (bodied by their own TUs). Signatures are DWARF-authoritative
+        // (:1200 / :1215). The tri-cache arg is the nested VehicleInputInterface::InTriangleCacheInterface,
+        // which is CgsSceneManager::SceneManagerIO::TriangleCacheInterface.
+        void HandleRaceCarWorldPotentialContact(
+            CgsSceneManager::SceneManagerIO::PotentialContact lContact,
+            BrnPhysics::PhysicsModuleIO::VehicleOutputRequestInterface* lpRequestOutputInterface,
+            BrnGameState::GameStateModuleIO::VehicleOutputInterface* lpVehicleOutputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
+            const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface,
+            f32 lfTimestep);
+
+        VecFloat PredictCarWorldContactTime(const CgsSceneManager::SceneManagerIO::PotentialContact& lContact);
 
     private:
         // ------------------------------------------------------------------------------------------

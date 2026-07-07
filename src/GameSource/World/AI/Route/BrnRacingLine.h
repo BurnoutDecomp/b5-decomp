@@ -18,6 +18,10 @@
 
 namespace BrnAI
 {
+// The section-cache generator reaches the trailing cursor/index/flag triple by
+// name (SetupSectionExit / DropHardNoGoLinesIntoMap live in BrnRacingLineGenerator).
+class RacingLineGenerator;
+
 class RacingLine
 {
 public:
@@ -53,6 +57,8 @@ private:
     s32 miCursor;      // 0xBC0  -> 0
     s32 miActiveIndex; // 0xBC4  -> -1
     s32 miFlags;       // 0xBC8  -> 0
+
+    friend class RacingLineGenerator;
 };
 }
 

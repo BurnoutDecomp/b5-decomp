@@ -19,14 +19,27 @@
 // only to the offsets the bodied asm attests. Members reached by name.
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector2 (rw::math::vpu alias)
 
 namespace BrnAI
 {
+struct AISection;   // fwd (SharedClasses/AI/AISectionsResourceType.h)
+
 class HardNoGoMap
 {
 public:
     static const u32 KU_WIDTH  = 32; // columns: one bit per width index (0..31)
     static const u32 KU_HEIGHT = 8;  // rows:    one 32-bit word per height index (0..7)
+
+    // Bodied in the (not-yet-committed) rest of the HardNoGoMap TU; declared here
+    // so the RacingLineGenerator callers (SetupSectionExit / DropHardNoGoLinesIntoMap)
+    // resolve. Shapes are DWARF-authoritative (BrnHardNoGoMap.h:50 / :86).
+    //   @0x82782F80 -- build the map from an AISection over the [start,end) line
+    //   budget; returns true once the whole section has been placed.
+    bool MakeMap(const AISection* lpAISection, s32 liStart, s32 liEnd);
+    //   @0x82783AA8 -- return the two maximal (left/right) edge points of the
+    //   occupied region at the given height interpolant.
+    void FindMaximalEdges(Vector2& lLeftEdge, Vector2& lRightEdge, f32 lfHeightInterp);
 
     // @0x82764898 -- is the (width,height) square marked occupied? Returns the
     // bit (mauMap[height] & (1<<width)) as a bool (the X360 spells the return
