@@ -523,8 +523,8 @@ const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOut
 // construction reuses AptString/EAStringC, but the resolve + walk read console
 // globals (the reserved-key sentinels) not yet reconstructed -- declared extern.
 // ---------------------------------------------------------------------------
-extern void AptActionInterpreter_EnumerateMembers(AptActionInterpreter* pInterp,
-                                                 AptValue* pScope, AptValue* pTarget);  // FLAG: native-hash enumerate walk
+// AptActionInterpreter::EnumerateMembers is now a member (declared in the header);
+// _doEnumerate() below forwards to it.
 
 void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
 {
@@ -533,7 +533,7 @@ void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
     // console data globals (dword_8324E580 / dword_8324E698) that are not yet
     // reconstructed as named symbols here; deferred to the enumerate-walk helper so
     // this stays faithful and links.
-    AptActionInterpreter_EnumerateMembers(this, pScope, pTarget);  // FLAG: enumerate walk follow-on
+    EnumerateMembers(pScope, pTarget);  // the native-hash enumerate walk (this member)
 }
 
 // ---------------------------------------------------------------------------
@@ -548,16 +548,14 @@ void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
 // layer is faithful and links; the operand-stack collapse the console performs around
 // it (Burnout_X360_Artist_01e3_0 == the pop-N primitive) is part of that helper.
 // ---------------------------------------------------------------------------
-extern AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInterp,
-                                                          AptValue* pScope, AptValue* pFunction,
-                                                          int nArgs, AptValue* pNewTarget,
-                                                          AptValue* pConstructTarget);  // FLAG: call-dispatch core
+// AptActionInterpreter::CallFunctionDispatch is now a member (declared in the header);
+// callFunction() below forwards to it.
 
 AptValue* AptActionInterpreter::callFunction(AptValue* pScope, AptValue* pFunction, int nArgs,
                                              AptValue* pNewTarget, AptValue* pConstructTarget)
 {
-    return AptActionInterpreter_CallFunctionDispatch(this, pScope, pFunction, nArgs,
-                                                     pNewTarget, pConstructTarget);  // FLAG: call-dispatch core
+        return CallFunctionDispatch(pScope, pFunction, nArgs,
+                                pNewTarget, pConstructTarget);  // the dispatch body (this member)
 }
 
 // ---------------------------------------------------------------------------
@@ -572,15 +570,13 @@ AptValue* AptActionInterpreter::callFunction(AptValue* pScope, AptValue* pFuncti
 // transcode helper so this entry layer is faithful and links. (Same deferral the
 // header documents.)
 // ---------------------------------------------------------------------------
-extern const unsigned char* AptActionInterpreter_ResolveTranscode(AptActionInterpreter* pInterp,
-                                                                 const unsigned char* pStream,
-                                                                 int nRelocBase, AptValue* pResolveCtx,
-                                                                 int nDirection);  // FLAG: resolve transcode
+// AptActionInterpreter::ResolveTranscode is now a member (declared in the header);
+// _parseStream() below forwards to it.
 
 const unsigned char* AptActionInterpreter::_parseStream(const unsigned char* pStream, int nRelocBase,
                                                         AptValue* pResolveCtx, int nDirection)
 {
-    return AptActionInterpreter_ResolveTranscode(this, pStream, nRelocBase, pResolveCtx, nDirection);  // FLAG
+    return ResolveTranscode(pStream, nRelocBase, pResolveCtx, nDirection);  // the opcode-length walk (this member)
 }
 
 // ---------------------------------------------------------------------------

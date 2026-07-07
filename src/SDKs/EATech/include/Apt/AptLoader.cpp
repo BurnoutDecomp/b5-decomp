@@ -444,7 +444,7 @@ bool AptLoader::AllImportsAvailable(AptFilePtr file)
 // AptCharacterAnimation; the console passes the raw mpData/mpDataBlock) so the x64
 // layout stays correct. Lands with the AptCharacterAnimation link follow-on.
 // ---------------------------------------------------------------------------
-void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, void* pDataBlock);
+// AptCharacterAnimation::Link is now a member (declared in AptCharacterAnimation.h); no free-function extern needed.
 
 // ---------------------------------------------------------------------------
 // notify @0x82B02030 -- publish a just-linked AptFile through the global Apt
@@ -552,8 +552,7 @@ void AptLoader::Update()
                     // the def base is pData + 0x20 (the console 4-byte formula was pData + 0x10; the
                     // struct static_asserts native-8 offsets, so it MUST be +0x20 here). This mirrors
                     // CompleteLoad's `pCharAnim = pRoot + luHdrSize` (0x20 native-8).
-                    AptCharacterAnimation_Link(
-                        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pData) + 0x20),
+                                        reinterpret_cast<AptCharacterAnimation*>(static_cast<char*>(pData) + 0x20)->Link(
                         pData, pDataBlock);
 
                     AptFilePtr notifyHandle;

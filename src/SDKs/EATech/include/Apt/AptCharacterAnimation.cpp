@@ -271,7 +271,7 @@ void AptCharacterAnimation::IncCharacterList(AptFilePtr filePtr) const
 // pointer width stays correct on x64; the native-struct transcode lands with the
 // FixupTranscode rebuild. The ref-count bookkeeping is faithful.
 // ===========================================================================
-void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, void* pDataBlock)
+void AptCharacterAnimation::Link(void* pData, void* pDataBlock)
 {
     (void)pData;        // console a2 (r4) -- the asm never reads it
     (void)pDataBlock;   // console a3 (r5) -- the asm never reads it
@@ -280,20 +280,20 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
     // The def-base head fields (importCount/table, charCount/table) are read through
     // the serialized 64-bit AptCharacterAnimation struct (charCount@0x18, charTable@
     // 0x20, importCount@0x34, importTable@0x38 -- the same offsets Fixup relocates).
-    const int32_t nImports = pCharAnim->mnImportCount;      // [c:0x20] mnImportCount
+    const int32_t nImports = mnImportCount;      // [c:0x20] mnImportCount
     if (nImports > 0)
     {
         for (int32_t i = 0; i < nImports; ++i)
         {
-            AptImportEntry& rEntry = pCharAnim->mpImportTable[i];   // [c:0x24] stride 0x20
+            AptImportEntry& rEntry = mpImportTable[i];   // [c:0x24] stride 0x20
             const int32_t nId = rEntry.mnId;                       // importEntry.mnId
 
             // FindExport(entry.mpFile, entry.mpClassName): the imported movie's export
             // table resolves the class name to a character.
             AptCharacter* const pResolved = rEntry.mpFile->FindExport(rEntry.mpClassName);
 
-            // Store the resolved character into mpCharacterTable[importId].
-            AptCharacter** const pTable = pCharAnim->mpCharacterTable;   // [c:0x10] charTable
+                        // Store the resolved character into mpCharacterTable[importId].
+            AptCharacter** const pTable = mpCharacterTable;   // [c:0x10] charTable
             pTable[nId] = pResolved;
 
             // If it resolved, copy the import's AptFile into the resolved character's
@@ -323,10 +323,10 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
     }
 
     // ---- pass 2: turn stored cross-reference INDICES into character pointers ----
-    const int32_t nChars = pCharAnim->mnCharacterCount;    // [c:0x0C] mnCharacterCount
-    if (nChars > 0)
+    const int32_t nChars = mnCharacterCount;    // [c:0x0C] mnCharacterCount
+        if (nChars > 0)
     {
-        AptCharacter** const pTable = pCharAnim->mpCharacterTable;   // [c:0x10] charTable
+        AptCharacter** const pTable = mpCharacterTable;   // [c:0x10] charTable
         for (int32_t i = 0; i < nChars; ++i)
         {
             void* pChar = pTable[i];
@@ -344,13 +344,13 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
                     // 8-BYTE slots @char+0x20 and @char+0x28 (console: 4-byte +0x10/
                     // +0x14) -- the prior console offsets read header padding on the
                     // GUIAPT64 bundles, so type-8 cross-refs never resolved.
-                    AptCharacter** const pT = pCharAnim->mpCharacterTable;
+                                        AptCharacter** const pT = mpCharacterTable;
                     const int32_t nIdx0 = BlobI32(pChar, 0x20);
                     const int32_t nIdx1 = BlobI32(pChar, 0x28);
                     // Data guard (host-only; the XB1 asm is unguarded on trusted data):
                     // only rewrite PLAUSIBLE indices -- a slot that already holds a
                     // pointer (or a stale/padding word) must not index the table.
-                    const int32_t nCount = pCharAnim->mnCharacterCount;
+                                        const int32_t nCount = mnCharacterCount;
                     if (nIdx0 >= 0 && nIdx0 < nCount && nIdx1 >= 0 && nIdx1 < nCount)
                     {
                         BlobPtrRef(pChar, 0x20) = pT[nIdx0];
@@ -378,10 +378,10 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
                     (luArr >= 0x10000u) && ((luArr >> 47) == 0u);
                 if (bArrSane)
                 {
-                    const int32_t nCount = pCharAnim->mnCharacterCount;
+                                        const int32_t nCount = mnCharacterCount;
                     for (int32_t r = 0; r < nRefs; ++r)
                     {
-                        AptCharacter** const pT = pCharAnim->mpCharacterTable;
+                                                AptCharacter** const pT = mpCharacterTable;
                         void* pArr = BlobPtr(pChar, 0x30);                 // the glyph index array
                         const int64_t nIdx = *reinterpret_cast<const int64_t*>(BlobAt(pArr, r * 8));
                         if (nIdx >= 0 && nIdx < nCount)

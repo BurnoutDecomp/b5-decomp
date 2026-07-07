@@ -238,14 +238,13 @@ extern void (*gpAptGCTableFree)(void* p, unsigned nBytes);                      
 // FLAG (un-homed AptCIH behavioural TU): per-frame tick of a freshly-created node.
 // AptCIH::tick @0x... is behavioural surface owned by AptCIHBehaviour.cpp; declared
 // as a free-function shim (the X360 calls it with the CIH in r3) so TickNewInsts links.
-extern int AptCIH_tick(AptCIH* pCIH);
+// AptCIH::tick is now called directly as a member (AptCIH.h is included above).
 
 // FLAG (un-homed AptCIH behavioural TU): queue a clip-event against a CIH. The X360
 // calls AptCIH::queueClipEvents(pCIH, nEventMask, nPacked, bDeferred) -> AptValue*;
 // declared as a free-function shim so the two input dispatchers (ProcessInputSet /
 // AddListenerToQueue path) link. Its body belongs with AptCIH's event machinery.
-extern AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask,
-                                        unsigned int nPacked, int bDeferred);
+// AptCIH::queueClipEvents is now called directly as a member (AptCIH.h is included above).
 
 // ---------------------------------------------------------------------------
 // FLAG (un-homed AS event-descriptor rodata + name table). AddListenerToQueue walks
@@ -584,7 +583,7 @@ void AptAnimationTarget::TickNewInsts()
         if ((liTypeTag == 5 || liTypeTag == 16)
             && static_cast<AptCharacterSpriteInstBase*>(lpCharInst)->mnGotoFrame == -1)
         {
-            AptCIH_tick(lpCIH);                                 // AptCIH::tick
+            lpCIH->tick();                                     // AptCIH::tick
             lpInsts = static_cast<AptValue**>(spNewInsts);     // reload (tick may realloc)
         }
 
@@ -1214,25 +1213,25 @@ int AptAnimationTarget::ProcessInputSet(int nEventId, int nCode, unsigned int nP
             {
                 if (nCode == 1)
                 {
-                    liResult = reinterpret_cast<intptr_t>(
-                        AptCIH_queueClipEvents(lpEntry, 128, nPacked, 0));
+                                        liResult = reinterpret_cast<intptr_t>(
+                        static_cast<AptCIH*>(lpEntry)->queueClipEvents(128, nPacked, 0));
                 }
                 else if (nCode == 0)
                 {
                     const unsigned int liEvent = nPacked >> 17;
-                    if (liEvent == 502u || liEvent == 501u)
+                                        if (liEvent == 502u || liEvent == 501u)
                     {
                         liResult = reinterpret_cast<intptr_t>(
-                            AptCIH_queueClipEvents(lpEntry, 64, nPacked, 0));
+                            static_cast<AptCIH*>(lpEntry)->queueClipEvents(64, nPacked, 0));
                     }
-                    else
+                                        else
                     {
                         liResult = reinterpret_cast<intptr_t>(
-                            AptCIH_queueClipEvents(lpEntry, 64, nPacked, 0));
+                            static_cast<AptCIH*>(lpEntry)->queueClipEvents(64, nPacked, 0));
                         if (!lbInputFired)
                         {
-                            AptValue* lpRet =
-                                AptCIH_queueClipEvents(lpEntry, 0x20000, nPacked, 1);
+                                                        AptValue* lpRet =
+                                static_cast<AptCIH*>(lpEntry)->queueClipEvents(0x20000, nPacked, 1);
                             liResult     = reinterpret_cast<intptr_t>(lpRet);
                             // X360 tests only the low byte (clrlwi. r11,r26,24; IDA char v7).
                             lbInputFired = ((reinterpret_cast<uintptr_t>(lpRet) & 0xFFu) != 0);
@@ -1709,43 +1708,26 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
 // reproduced with no behavioural change. Homed here, alongside those member bodies.
 // ===========================================================================
 
-// AptAnimationTarget_RunActions -- AptAnimationTarget::RunActions @0x82B0C9B0
-// (AptLinker / AptTarget per-frame action drain). The console returns r3; the free
-// callers discard it, so this is `void` to match the call-site declaration.
-void AptAnimationTarget_RunActions(AptAnimationTarget* pAnim)
-{
-    pAnim->RunActions();
-}
+// AptAnimationTarget::RunActions @0x82B0C9B0 is the real member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
+// (Callers discard the result -- they invoke the member directly.)
 
-// AptAnimationTarget_CleanRemList -- AptAnimationTarget::CleanRemList @0x82AEAB08.
-// The member is class-static (the rem list is a shared table); the console passes
-// the director in r3 but the body ignores it -- forwarded faithfully.
-void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim)
-{
-    (void)pAnim;
-    AptAnimationTarget::CleanRemList();
-}
 
-// AptAnimationTarget_PreDestroy -- AptAnimationTarget::PreDestroy @0x82AFE420
-// (AptTarget::Shutdown's director teardown step).
-void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim)
-{
-    pAnim->PreDestroy();
-}
+// AptAnimationTarget::CleanRemList @0x82AEAB08 is the real static member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
 
-// AptAnimationTarget_RemoveTimerFunctions -- AptAnimationTarget::RemoveTimerFunctions
-// @0x82AE4320 (AptCIH::SetCharacterInst drops an animation node's timer callbacks).
-void AptAnimationTarget_RemoveTimerFunctions(AptAnimationTarget* pAnim, AptCIH* pNode)
-{
-    pAnim->RemoveTimerFunctions(pNode);
-}
 
-// AptAnimationTarget_Destruct -- ~AptAnimationTarget @0x82AFF790 (AptTarget::Shutdown
-// runs the director destructor before pool-freeing the 88-byte block).
-void AptAnimationTarget_Destruct(AptAnimationTarget* pAnim)
-{
-    pAnim->~AptAnimationTarget();
-}
+// AptAnimationTarget::PreDestroy @0x82AFE420 is the real member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
+
+
+// AptAnimationTarget::RemoveTimerFunctions @0x82AE4320 is the real member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
+
+
+// ~AptAnimationTarget @0x82AFF790 is the real destructor (declared in AptAnimationTarget.h,
+// defined above); AptTarget::Shutdown invokes it explicitly (the AptAnimationTarget_Destruct shim is retired).
+
 
 // ---------------------------------------------------------------------------
 // AptReplaceReferences -- BLOCKED FLAG stub. This is the AptAnimationTarget TU's

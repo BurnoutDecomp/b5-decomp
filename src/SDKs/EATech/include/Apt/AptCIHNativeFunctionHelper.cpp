@@ -74,8 +74,7 @@
 //   AptHook_GetBytesTotal (gAptFuncs slot, X360 dword_8324E8AC) -- host query: total
 //     byte size of a loaded .apt by file path.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
-                                  int nDepth, EAStringC* pName, AptValue* pInitObject);   // AptCIH::InsertChild
+// AptCIH::InsertChild is now a member (declared in AptCIH.h, included above).
 extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports);
 extern int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3);             // dword_8324E8AC
 
@@ -547,15 +546,12 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, AptCIH*
 // scope, AptValue* target, parent, nameValue, depth, initObject); the console reaches
 // it here with scope == pContext (a CIH node) and target == 0.
-extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
-                                                    AptCIH* pScope, AptValue* pTarget, AptValue* pParent,
-                                                    AptValue* pNameValue, int nDepth, AptValue* pInitObject);
+// AptActionInterpreter::_doCloneSprite is now a member (declared in the header).
 
 // AptActionInterpreter::loadVariables (the AS loadVariables core; homed in
 // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, scope,
 // target, &urlString); the console reaches it here with target == 0.
-extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
-                                               AptValue* pScope, AptValue* pTarget, EAStringC* pURL);
+// AptActionInterpreter::loadVariables is now a member (declared in the header).
 
 // ===========================================================================
 // sMethod_duplicateMovieClip @0x82B0DEE8 -- AS duplicateMovieClip(name, depth
@@ -572,7 +568,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_duplicateMovieClip(AptValue* pCont
         : gppAptNativeArgStack[gnAptNativeArgCount - 3];
     const int nDepth = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();      // arg 1: AS depth
 
-    return AptActionInterpreter_doCloneSprite(&gAptActionInterpreter,
+        return gAptActionInterpreter._doCloneSprite(
                                               static_cast<AptCIH*>(pContext), nullptr, pContext,
                                               pNameValue, nDepth + 0x4000, pInitObject);
 }
@@ -590,7 +586,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
     {
         EAStringC strURL;                                                     // the X360 &unk_82F72FF8 empty sentinel
         gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strURL);     // arg 0 -> the URL
-        AptActionInterpreter_loadVariables(&gAptActionInterpreter, pContext, nullptr, &strURL);
+        gAptActionInterpreter.loadVariables(pContext, nullptr, &strURL);
     }
     return gpUndefinedValue;
 }
@@ -1033,8 +1029,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createEmptyMovieClip(AptValue* pCo
     if (!AptCharacterHelper::spDefaultMovieCharacter)
         AptCharacterHelper::CreateMovieCharacterInst();
 
-    AptCIH* const pInserted = AptCIH_InsertChild(
-        pNode, nullptr, AptCharacterHelper::spDefaultMovieCharacter,
+        AptCIH* const pInserted = pNode->InsertChild(
+        nullptr, AptCharacterHelper::spDefaultMovieCharacter,
         nDepth + 0x4000, &lName, nullptr);
 
     if (IsClipHandleOrCIHNone(pInserted))
@@ -1077,8 +1073,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     pNewName->toString(&lNewName);
     const int nDepth = pDepth->toInteger() + 0x4000;
 
-    AptCIH* const pInserted =
-        AptCIH_InsertChild(pNode, pNode, pCharacter, nDepth, &lNewName, pInitObj);
+        AptCIH* const pInserted =
+        pNode->InsertChild(pNode, pCharacter, nDepth, &lNewName, pInitObj);
     AptAnimationTarget::TickNewInsts();   // static drain of the module new-instance table (retired the AptAnimationTarget_TickNewInsts shim)
 
     return pInserted ? pInserted : gpUndefinedValue;
@@ -1127,8 +1123,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createTextField(AptValue* pContext
         AptCharacterHelper::CreateTextCharacterInst();
 
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
-    AptCIH* const pInserted = AptCIH_InsertChild(
-        pNode, nullptr, AptCharacterHelper::spDefaultTextCharacter,
+        AptCIH* const pInserted = pNode->InsertChild(
+        nullptr, AptCharacterHelper::spDefaultTextCharacter,
         nDepth + 0x4000, &lName, nullptr);
 
     AptCharacterInst* const pInst = pInserted->GetCharacterInst();

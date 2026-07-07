@@ -74,6 +74,12 @@ struct AptTarget
     // X360 body: `stw r4,0x24(r3); blr`.
     AptTarget* SetNext(void* pNext) { mpField24 = pNext; return this; }
 
+
+    // GetLoader @PS3 _ZN9AptTarget9GetLoaderEv @0xF15E60 -- the loader the target
+    // holds at +0x1C (`return *(this + 7);`). Body in AptTarget.cpp.
+    AptLoader* GetLoader();
+
+
     // ctor @0x82B00160 / Shutdown @0x82B02328 -- the AptTarget lifecycle (allocates /
     // tears down mpAnimationTarget + mpLoader + mpLinker + the render-root anchor).
     // Bodies in AptTarget.cpp.

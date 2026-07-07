@@ -48,8 +48,7 @@ extern unsigned int AptGetSwfVersion();
 // loadVariables native method drives, preserving the (interpreter, node, pendingRelease,
 // &url) call shape -- r5 = *(pContext+8) = mpPendingReleaseValue). The GetUrl2
 // loadVariables branch forwards to it.
-extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
-                                               AptValue* pNode, AptValue* pPendingRelease, EAStringC* pURL);
+// AptActionInterpreter::loadVariables is now a member (declared in the header).
 
 // ---------------------------------------------------------------------------
 // isNaN (the value test) @0x82AF9768 -- HOMED 2026-07-02, retiring the
@@ -382,7 +381,7 @@ void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInte
         // &url). loadVariables is not an AptActionInterpreter member; the homed core is
         // the same extern shim the loadVariables native method (AptCIHNativeFunctionHelper)
         // drives. FLAG: AptActionInterpreter::loadVariables (@0x82B07DF8) not yet homed.
-        AptActionInterpreter_loadVariables(pInterp, pNode, pContext->mpPendingReleaseValue, &strUrl);
+        pInterp->loadVariables(pNode, pContext->mpPendingReleaseValue, &strUrl);
         pInterp->stackPop(2);
         return;
     }

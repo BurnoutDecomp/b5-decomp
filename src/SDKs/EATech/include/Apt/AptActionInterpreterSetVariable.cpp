@@ -32,12 +32,10 @@
 // FLAG (AptFrameStack -- Adriwin's class:AptFrameStack TU; wired at AptInit): store
 // the value where the name already exists in the function scope chain. Returns true
 // if stored. Encapsulates the frame-stack + interpreter frame-context access.
-extern bool AptInterp_SetInScopeChain(AptActionInterpreter* pInterp,
-                                      const EAStringC* pName, AptValue* pValue);
+// AptActionInterpreter::SetInScopeChain is now a member (declared in the header).
 // FLAG: the frame-context fallback store (the no-scope-chain / type-12-37 / CIH
 // paths -- the interpreter frame context + AptFrameStack::CreateFrameStack).
-extern bool AptInterp_SetVariableFallback(AptActionInterpreter* pInterp, AptValue* pContext,
-                                          const EAStringC* pName, AptValue* pValue, int nDirect);
+// AptActionInterpreter::SetVariableFallback is now a member (declared in the header).
 
 #if defined(_MSC_VER)
 extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, int nContextType);
@@ -83,7 +81,7 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     if (nAllowScopeChain)
     {
         // 2) store where the name lives in the function scope chain.
-        if (nSearchScopeChain && AptInterp_SetInScopeChain(this, &name, pValue))   // FLAG: AptFrameStack
+        if (nSearchScopeChain && SetInScopeChain(&name, pValue))   // FLAG: AptFrameStack
             return 1;
 
         // 3) the context's own native hash.
@@ -100,7 +98,7 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
         }
 
         // FLAG: CIH (type 12/37) + frame-context hash fallback (AptFrameStack layer).
-        return AptInterp_SetVariableFallback(this, pContext, &name, pValue, nDirect) ? 1 : 0;
+        return SetVariableFallback(pContext, &name, pValue, nDirect) ? 1 : 0;
     }
 
     // No scope-chain search: store in the context's native hash directly. (FLAG: the

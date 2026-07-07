@@ -198,14 +198,11 @@ float AptValue::toFloat() const
     }
 }
 
-// ---------------------------------------------------------------------------
-// AptValue_toInteger -- homes the thunk AptMovie::labelToFrame used while the
-// AptValue conversion layer did not yet exist. Now a thin forward to toInteger().
-// ---------------------------------------------------------------------------
-int AptValue_toInteger(AptValue* pValue)
-{
-    return pValue ? pValue->toInteger() : 0;
-}
+// AptValue_toInteger removed -- it was a null-guarding forwarder to the real
+// member AptValue::toInteger() @0x7F2CF4 (defined above in this file). Its sole
+// call site (AptMovie::labelToFrame) now calls pValue->toInteger() directly under
+// its existing null guard.
+
 
 // ===========================================================================
 // AptValue string rendering -- the value-layer renderer the conversion/opcode

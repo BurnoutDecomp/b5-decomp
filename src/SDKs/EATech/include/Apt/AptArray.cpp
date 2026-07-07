@@ -557,7 +557,7 @@ static EAStringC gAptSortOnField;   // off_82F73384
 // name AptArray_sMethod_shift (extern "C") is kept -- the method-cache macro casts
 // it to AptExtFunctionPtr anyway -- and the unused AS-call argument (a2) the member
 // form takes is dropped (the sibling pop native is the same single-arg shape).
-extern "C" AptValue* AptArray_sMethod_shift(AptArray* pThis);   // off_8324E3F0 target
+// AptArray::sMethod_shift is now a static member (declared in AptArray.h); the method-cache below references it directly.
 
 // ---------------------------------------------------------------------------
 // AptArray_sMethod_shift @0xF1D39C (PS3) -- Array.prototype.shift: remove and return
@@ -571,7 +571,7 @@ extern "C" AptValue* AptArray_sMethod_shift(AptArray* pThis);   // off_8324E3F0 
 //        mpArray[length] = 0;  return v5;
 // The console memmove strides 4-byte pointers; widened here to sizeof(AptValue*).
 // ---------------------------------------------------------------------------
-extern "C" AptValue* AptArray_sMethod_shift(AptArray* pThis)
+AptValue* AptArray::sMethod_shift(AptArray* pThis)
 {
     if (!pThis->isArray())
         return gpUndefinedValue;
@@ -765,7 +765,7 @@ AptValue* AptArray::objectMemberLookup(AptValue* const /*pThis*/,
     if (strcmp(szName, "join") == 0)    APT_ARRAY_LAZY_METHOD(gpArrayMethod_join,    AptArray::sMethod_join);
     if (strcmp(szName, "pop") == 0)     APT_ARRAY_LAZY_METHOD(gpArrayMethod_pop,     AptArray::sMethod_pop);
     if (strcmp(szName, "push") == 0)    APT_ARRAY_LAZY_METHOD(gpArrayMethod_push,    AptArray::sMethod_push);
-    if (strcmp(szName, "shift") == 0)   APT_ARRAY_LAZY_METHOD(gpArrayMethod_shift,   AptArray_sMethod_shift);
+    if (strcmp(szName, "shift") == 0)   APT_ARRAY_LAZY_METHOD(gpArrayMethod_shift,   AptArray::sMethod_shift);
     if (strcmp(szName, "unshift") == 0) APT_ARRAY_LAZY_METHOD(gpArrayMethod_unshift, AptArray::sMethod_unshift);
     if (strcmp(szName, "reverse") == 0) APT_ARRAY_LAZY_METHOD(gpArrayMethod_reverse, AptArray::sMethod_reverse);
     if (strcmp(szName, "sort") == 0)    APT_ARRAY_LAZY_METHOD(gpArrayMethod_sort,    AptArray::sMethod_sort);

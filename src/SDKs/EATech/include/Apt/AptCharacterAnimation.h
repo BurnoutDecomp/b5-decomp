@@ -167,6 +167,12 @@ struct AptCharacterAnimation
     // the load base (the aptDataOffset memory address). SINGLE native-64-bit path (GUIAPT64
     // "1:7:8" only); the console dual-path/transcode is gone. Faithful body in the .cpp.
     AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+    // @0x82AFF... (PS3 @0xF44894, DecFIGS AptCharacterAnimation::Link(AptCharacter*, void*)) --
+    // bind a just-loaded movie root into the scene (AptLoader::Update's state 3->4 import/
+    // cross-reference resolution pass). Console args a2/a3 are never read; kept as the raw
+    // pData/pDataBlock the loader passes. Body in the .cpp.
+    void Link(void* pData, void* pDataBlock);
+
 };
 
 // Lock the serialized 64-bit def-base offsets Fixup relocates + the runtime reads

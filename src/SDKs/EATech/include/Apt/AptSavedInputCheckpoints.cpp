@@ -21,7 +21,8 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptSavedInputCheckpoints.h"
-#include "SDKs/EATech/include/Apt/AptLoader.h"        // AptLoader::IsLoaded / AptFilePtr / AptTarget_GetLoader
+#include "SDKs/EATech/include/Apt/AptLoader.h"        // AptLoader::IsLoaded / AptFilePtr
+#include "SDKs/EATech/include/Apt/AptTarget.h"        // AptTarget::GetLoader (full type for the member call)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"     // AptSharedPtrDecRef / AptSharedPtrDelete
 
 #include <new>        // placement new (element construction in raw storage)
@@ -174,7 +175,7 @@ void Checkpoint(AptFileSavedInputStateVector& rList, const EAStringC& name)
     }
 
     // 2. Not present -- is the file already loaded?
-    AptLoader*  pLoader = AptTarget_GetLoader(gpCurrentAptTarget);
+    AptLoader*  pLoader = gpCurrentAptTarget->GetLoader();
     AptFilePtr  loaded  = pLoader->IsLoaded(name);
     const bool  bLoaded = (loaded.pData != nullptr);
 
