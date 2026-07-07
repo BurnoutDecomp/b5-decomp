@@ -51,6 +51,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "types.hpp"   // u32 -- matches the FreeMemSize declaration in RealmcIfaceMessages.h
+
 namespace RealmcCore
 {
 
@@ -141,16 +143,29 @@ private:
 // IRealmcAllocatorBackend -- the abstract allocator object reached through the
 // global g_pRealmcAllocator pointer (X360 off_832BE204).
 //
-// allocate() tail-calls vtable slot +8 with (size, tag, extra); deallocate()
-// tail-calls vtable slot +12. On the X360 these are the 3rd and 4th entries of
-// the backend vtable (offsets 8 and 12 == slots 2 and 3 for 4-byte X360
-// pointers). Modelled here as virtual methods in that slot order.
+// The backend exposes two Allocate entry points plus a sized Free. From the asm
+// dispatch sites (byte offset == slot*4 for 4-byte X360 pointers):
+//   slot +4  the aligned/extended allocate (size, tag, flags, align, alignOffset)
+//            -- AllocateMem @0x82C44B70 tail-calls it with (size, tag, 0, 0, 0).
+//   slot +8  the plain allocate (size, tag, flags) -- allocator::allocate
+//            @0x82C44BC8 and MessagePtr's node-alloc tail-call it.
+//   slot +12 the sized Free (block, size) -- deallocate/FreeMemSize tail-call it.
+// Modelled here as virtual methods in that exact slot order (declaration order
+// == vtable slot order under MSVC).
 // ---------------------------------------------------------------------------
 class IRealmcAllocatorBackend
 {
 public:
     virtual ~IRealmcAllocatorBackend() {}            // vtable slot +0
-    virtual void  Reserved1() = 0;                   // vtable slot +4
+    // slot +4 -- the extended allocate AllocateMem forwards to. AllocateMem's
+    // asm passes (r4=size, r5=tag, r6=0, r7=0, r8=0), i.e. the plain allocate's
+    // (size, tag, flags) plus a trailing (align, alignOffset) pair, defaulted to
+    // zero at the AllocateMem call site.
+    virtual void* Allocate(std::size_t nSize,
+                           const char* szTag,
+                           int nFlags,
+                           int nAlign,
+                           int nAlignOffset) = 0;     // vtable slot +4
     virtual void* Allocate(std::size_t nSize,
                            const char* szTag,
                            int nExtra) = 0;           // vtable slot +8
@@ -160,6 +175,30 @@ public:
 // The global Realmc allocator backend (X360 off_832BE204). Installed by the
 // platform Realmc heap layer (another TU); declared here for compile/link.
 extern IRealmcAllocatorBackend* g_pRealmcAllocator;
+
+// ---------------------------------------------------------------------------
+// Realmc core memory free-functions (X360 thin thunks over g_pRealmcAllocator).
+// These are the RealmcCore-namespace memory entry points the Realmc/RealmcIface
+// tasks use for allocation. Reconstructed from BURNOUT_X360_ARTIST.XEX (no leak
+// source / DWARF).
+//   AllocateMem     @ 0x82C44B70 -- backend->Allocate(size, tag, 0, 0, 0) (slot +4)
+//   FreeMemSize     @ 0x82C44BA0 -- backend->Free(block, size)            (slot +12)
+//   GetMemAllocator @ 0x82C44B50 -- get-or-set the g_pRealmcAllocator pointer
+// FreeMemSize is also (redundantly) declared in RealmcIfaceMessages.h with the
+// identical signature; its owning body lives in this TU (RealmcCore.cpp).
+// ---------------------------------------------------------------------------
+
+// @ 0x82C44B70 -- allocate luSize bytes tagged with szTag through the backend's
+//                 slot +4 (extended allocate, flags/align/alignOffset = 0).
+void* AllocateMem(const char* szTag, std::size_t nSize);
+
+// @ 0x82C44BA0 -- free a sized block through the backend's slot +12.
+void FreeMemSize(void* lpBlock, u32 luSize);
+
+// @ 0x82C44B50 -- when pAllocator is non-null, install it as the global backend
+//                 and return it; when null, return the current global backend.
+//                 (The X360 uses the null argument as the "just read it" query.)
+IRealmcAllocatorBackend* GetMemAllocator(IRealmcAllocatorBackend* pAllocator);
 
 // ---------------------------------------------------------------------------
 // RealmcCore::allocator -- a thin stateless adaptor over g_pRealmcAllocator.

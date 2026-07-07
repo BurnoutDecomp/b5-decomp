@@ -2,6 +2,7 @@
 #define BRN_GUI_WORLD_DATA_CONTROLLER_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                          // CgsID (landmark/trigger lookups)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::ResourcePtr<T>
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"           // BrnWorld::GlobalColourPalette, PlayerCarColourPalette
 
@@ -23,9 +24,10 @@
 // Prepare acquire state machine + GetRequiredWinsInRank land in later waves.
 
 namespace BrnProgression { struct RaceEventData; struct ProgressionData; }
-namespace BrnTrigger     { struct TriggerData; }
+namespace BrnTrigger     { struct TriggerData; struct Landmark; struct BoxRegion; }
 namespace BrnResource    { struct VehicleList; }
 namespace BrnStreetData  { struct StreetData; }
+namespace BrnGameState   { class  LandmarkIndex; }
 namespace BrnGui { struct ChallengeList; }
 
 namespace BrnWorld
@@ -71,15 +73,35 @@ namespace BrnGui
 
         // ---- Accessors (bodies in BrnGuiWorldDataController.cpp) --------------------------------
 
-        // DWARF h:103 -- look up the serialised event record for an event id (sat-nav renderer).
-        // (Declared here for the coherent boundary; body lands with its own TU.)
+        // DWARF h:93 / X360 0x82501270 -- the landmark whose region index equals lLandmarkIndex
+        // (linear scan of the trigger data's landmark table; asserts + fires a not-found message).
+        const BrnTrigger::Landmark* GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandmarkIndex) const;
+
+        // DWARF h:98 / X360 0x82501480 -- the landmark whose id equals lLandmarkID (linear scan).
+        const BrnTrigger::Landmark* GetLandmarkInfoFromID(CgsID lLandmarkID) const;
+
+        // DWARF h:103 / X360 0x82501698 -- the OFFLINE race-event record for an event id (sat-nav
+        // renderer). Walks the progression event-junction table for a matching junction id.
         const BrnProgression::RaceEventData* GetEventInfoFromEventId(u32 luEventId) const;
+
+        // DWARF h:108 / X360 0x82501740 -- the ONLINE race-event record for an event id.
+        const BrnProgression::RaceEventData* GetOnlineEventInfoFromEventId(u32 luEventId) const;
 
         // DWARF h:112 / X360 0x8248E6D8 -- total landmark count (mpTriggerData->miLandmarkCount).
         s32 GetTotalNumberOfLandmarks() const;
 
         // DWARF h:116 / X360 0x824286E0 -- online landmark count (mpTriggerData->miOnlineLandmarkCount).
         s32 GetTotalNumberOfOnlineLandmarks() const;
+
+        // DWARF h:122 / X360 0x82501AC0 -- copy the generic-region box for trigger lTriggerID into
+        // *lpRegion (linear scan of the trigger data's generic-region table; fires on empty/miss).
+        void GetTriggerVolumeRegion(CgsID lTriggerID, BrnTrigger::BoxRegion* lpRegion) const;
+
+        // DWARF h:133 / X360 0x824F3AF0 -- the loaded vehicle-list resource (raw pointer member).
+        const BrnResource::VehicleList* GetVehicleList() const;
+
+        // DWARF h:137 / X360 0x824F3AF8 -- the loaded freeburn-challenge-list resource.
+        const ChallengeList* GetFreeburnChallengeList() const;
 
         // DWARF h:147 / X360 0x824BDA40 -- the lType'th player-car colour palette entry.
         const BrnWorld::PlayerCarColourPalette* GetColourPaletteFromType(BrnWorld::EPalettesTypes lType) const;

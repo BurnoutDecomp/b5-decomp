@@ -51,6 +51,69 @@ void allocator::deallocate()
 }
 
 // ---------------------------------------------------------------------------
+// AllocateMem @ 0x82C44B70
+//
+//   lis  r11, off_832BE204@ha
+//   mr   r5, r3                              -> r5 = szTag  (AllocateMem arg 1)
+//   li   r8, 0 ; li r7, 0 ; li r6, 0         -> align/alignOffset/flags = 0
+//   lwz  r11, off_832BE204@l(r11)            -> r11 = backend
+//   mr   r3, r11                             -> r3 = backend (this)
+//   lwz  r10, 0(r11) ; lwz r10, 4(r10)       -> vtable slot +4
+//   mtctr r10 ; bctr                         -> tail-call
+//
+// Tail-call: backend->[+4](backend, r4=nSize, r5=szTag, 0, 0, 0). r4 (nSize,
+// AllocateMem's second arg) is passed through untouched; only szTag is shuffled
+// into r5, so the wrapper is AllocateMem(szTag, nSize) forwarding to the backend's
+// extended allocate with a zero flags/align/alignOffset tail.
+// ---------------------------------------------------------------------------
+void* AllocateMem(const char* szTag, std::size_t nSize)
+{
+    return g_pRealmcAllocator->Allocate(nSize, szTag, 0, 0, 0);
+}
+
+// ---------------------------------------------------------------------------
+// FreeMemSize @ 0x82C44BA0
+//
+//   lis  r11, off_832BE204@ha
+//   mr   r5, r4                              -> r5 = luSize (arg 2)
+//   mr   r4, r3                              -> r4 = lpBlock (arg 1)
+//   lwz  r11, off_832BE204@l(r11)            -> r11 = backend
+//   mr   r3, r11                             -> r3 = backend (this)
+//   lwz  r10, 0(r11) ; lwz r11, 0xC(r10)     -> vtable slot +12
+//   mtctr r11 ; bctr                         -> tail-call
+//
+// Tail-call: backend->[+12](backend, lpBlock, luSize) == Free(block, size). This
+// is the sized free the Realmc deleting destructors call as FreeMemSize(this, N).
+// ---------------------------------------------------------------------------
+void FreeMemSize(void* lpBlock, u32 luSize)
+{
+    g_pRealmcAllocator->Free(lpBlock, luSize);
+}
+
+// ---------------------------------------------------------------------------
+// GetMemAllocator @ 0x82C44B50
+//
+//   cmplwi cr6, r3, 0                        -> pAllocator == 0 ?
+//   lis    r11, off_832BE204@ha
+//   beq    cr6, loc_82C44B64                 -> if null, go read
+//   stw    r3, off_832BE204@l(r11) ; blr     -> else store + return pAllocator
+//   loc:
+//   lwz    r3, off_832BE204@l(r11) ; blr     -> return the current global backend
+//
+// A get-or-set accessor over the global backend pointer: a non-null argument
+// installs the backend (and is returned); a null argument queries the current one.
+// ---------------------------------------------------------------------------
+IRealmcAllocatorBackend* GetMemAllocator(IRealmcAllocatorBackend* pAllocator)
+{
+    if (pAllocator == nullptr)
+    {
+        return g_pRealmcAllocator;
+    }
+    g_pRealmcAllocator = pAllocator;
+    return pAllocator;
+}
+
+// ---------------------------------------------------------------------------
 // Message::Message @ 0x82C456D8
 //
 //   stw off_821BA2CC, 0(r3)              -> install base vtable
