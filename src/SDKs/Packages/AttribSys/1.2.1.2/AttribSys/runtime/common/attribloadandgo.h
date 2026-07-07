@@ -124,4 +124,11 @@ namespace Attrib
         bool                 mInited;
         bool                 mDeinited;
     };
+
+    // Attrib::Vault scalar deleting destructor (MSVC's ??_G thunk) @ 0x8280F098 -- the
+    // deleting form of ~Vault. Runs the real ~Vault(), then -- when the low should-free
+    // bit of the deleting flag is set -- returns the 88-byte (0x58) vault to the AttribSys
+    // package allocator via the shared null-guarded census-free helper. Returns lpVault.
+    // Mirrors the sibling Collection_ScalarDeletingDtor (vechashmap.cpp @ 0x8280C510).
+    void* Vault_ScalarDeletingDtor(Vault* lpVault, int liDeleteFlag);
 }

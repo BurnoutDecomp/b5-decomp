@@ -77,10 +77,16 @@ namespace Attrib
         return NULL;
     }
 
+    // Attrib::Vault scalar deleting destructor -- real body now landed in the Vault home TU
+    // (attribloadandgo.cpp @ 0x8280F098). ~ClassPrivate drops the source Vault's last
+    // live-class reference here, so forward to the real deleting destructor rather than trap.
+    // Vault is only forward-declared in this TU (attribclassprivate.h), so declare the free
+    // helper locally and pass the block through as an (incomplete) Vault*.
+    void* Vault_ScalarDeletingDtor(Vault* lpVault, int liDeleteFlag);
+
     void Vault_Destroy(void* lpVault, char lcDeleting)
     {
-        (void)lpVault; (void)lcDeleting;
-        __debugbreak();
+        Vault_ScalarDeletingDtor(reinterpret_cast<Vault*>(lpVault), lcDeleting);
     }
 
     void* GetDatabasePrivate()

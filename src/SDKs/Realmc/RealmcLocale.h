@@ -65,5 +65,13 @@ LocaleGetStrCallback SetLocaleGetStrCallback(LocaleGetStrCallback pfnCallback);
 // when the callback is unset / yields no template).
 u16* GetString(const char* pszArgSpec, ...);
 
+// Localized-string lookup by numeric id -- the overload RealmcCore::Trc::_SetMsgOptions
+// calls once per unpacked option code. The X360 call passes r3 = the option code byte
+// (0..255) and r4 = 0, and consumes the returned u16* template as a NUL-terminated wide
+// string. The lookup body is owned by another Locale TU; declared here as the callee
+// shape the _SetMsgOptions asm attests (int in, u16* out). Distinct from the varargs
+// formatter above (that reads its first argument as a conversion spec, not an id).
+u16* GetString(int nStringId);
+
 } // namespace Locale
 } // namespace RealmcCore

@@ -22,6 +22,41 @@ namespace RealmcCore
 static char16_t gRealmcEmptyString16[1] = { 0 };
 
 // ---------------------------------------------------------------------------
+// String16 special members -- the eastl::basic_string ctor/dtor the X360 folds
+// inline into its owners (RealmcCore::Trc), de-inlined here (see RealmcContainers.h).
+//
+// The default ctor reproduces the empty-string stores the Trc copy ctor emits per
+// option string (begin = end = &empty, capEnd = &empty + 1); the range ctor is the
+// member copy-construction the Trc ctor does for mMessage (RangeInitialize); the
+// destructor is the per-string free the Trc destructor loops over. The allocator
+// name word is a stateless-allocator slot never read on this platform (AllocateSelf
+// leaves it too); it is zeroed here for defined behaviour.
+// ---------------------------------------------------------------------------
+String16::String16()
+{
+    mpBegin         = gRealmcEmptyString16;
+    mpEnd           = gRealmcEmptyString16;
+    mpCapEnd        = gRealmcEmptyString16 + 1;
+    mpAllocatorName = nullptr;
+}
+
+String16::String16(const char16_t* pFirst, const char16_t* pLast)
+{
+    mpAllocatorName = nullptr;
+    RangeInitialize(pFirst, pLast);   // seats begin/end/capEnd (allocates when non-empty)
+}
+
+String16::~String16()
+{
+    // capacity in char16 elements; the shared empty singleton has capacity 1, so a
+    // never-allocated (sentinel-empty) string never frees -- exactly the X360 guard.
+    const std::ptrdiff_t nCapacity = mpCapEnd - mpBegin;
+    if (nCapacity > 1 && mpBegin)
+        g_pRealmcAllocator->Free(
+            mpBegin, static_cast<std::size_t>(nCapacity) * sizeof(char16_t));
+}
+
+// ---------------------------------------------------------------------------
 // String16::AllocateSelf @ 0x82B55508
 //
 //   if (nCapacity <= 1) { begin = end = &empty ; capEnd = &empty + 1 }   (no alloc)
