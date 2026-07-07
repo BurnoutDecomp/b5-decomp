@@ -488,8 +488,33 @@ extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 // pop nCount operands off the operand stack, Releasing each.
 // AptApt_PopValues -> AptActionInterpreter::stackPop(int) member (@0x7FDB68).
 
-// AptApt_PopCIHStack / AptApt_PopCallStackC inlined into _FunctionAptActionCallMethod
-// cleanup (console inlined AptValueVector::pop(a1+3) / (a1+9); x64 named-member pop reproduced at each call site).
+// popCallStackB / popCIHStack -- DECOMP HELPERS (marked): the console has NO standalone
+// function here. It punned the {count,cap,array} call-frame-register (a1+3) and CIH/target
+// (a1+9) stack triples as AptValueVectors and INLINED AptValueVector::pop() at each use. The
+// x64 recon keeps those triples as named members, so the pop is homed as these named members
+// (calling the real AptValueVector::pop would need an unfaithful reinterpret_cast of the loose
+// members). _FunctionAptActionCallMethod's per-op cleanup calls them.
+void AptActionInterpreter::popCallStackB()   // console AptValue_::pop(a1 + 3)
+{
+    if (mnCallStackB_Count > 0)
+    {
+        AptValue* const pTop =
+            reinterpret_cast<AptValue*>(mpCallStackB[mnCallStackB_Count - 1]);
+        if (pTop)
+            pTop->Release();
+        --mnCallStackB_Count;
+    }
+}
+
+void AptActionInterpreter::popCIHStack()   // console AptValue_::pop(a1 + 9)
+{
+    if (mnCIHStackTop > 0)
+    {
+        if (mpCIHStack[mnCIHStackTop - 1])
+            mpCIHStack[mnCIHStackTop - 1]->Release();
+        --mnCIHStackTop;
+    }
+}
 
 
 // AptInitParmsT (the runtime-only AptActionInterpreter init-parameters block
@@ -1043,17 +1068,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             pInterp->mpCallStackB[pInterp->mnCallStackB_Count - 1]);   // console v64 = *(4*a1[3]+a1[5]-4) (stack B top)
         if (pBound->getVtblIndex() == AptVFT_Object && pBound->getIsDefined())
             pBound->SetHasClass(0);   // console *(v64+28) &= ~0x400000
-        // AptValue_::pop(a1 + 3) -- inlined here (console punned AptValueVector::pop on the
-        // {count,cap,array} triple; x64 reproduces it by named members). Pop the call-frame
-        // register stack, Releasing its top element.  // FLAG: call-frame stack pop
-        if (pInterp->mnCallStackB_Count > 0)
-        {
-            AptValue* const pTop =
-                reinterpret_cast<AptValue*>(pInterp->mpCallStackB[pInterp->mnCallStackB_Count - 1]);
-            if (pTop)
-                pTop->Release();
-            --pInterp->mnCallStackB_Count;
-        }
+        pInterp->popCallStackB();   // console AptValue_::pop(a1 + 3) -- pop the call-frame register stack
     }
 
     if (bReleaseAfter)
@@ -1072,15 +1087,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         }
     }
 
-    // AptValue_::pop(a1 + 9) -- inlined here (console punned AptValueVector::pop on the
-    // {count,cap,array} triple; x64 reproduces it by named members). Pop the CIH/target
-    // stack, Releasing its top element.  // FLAG: call-depth stack #2 pop
-    if (pInterp->mnCIHStackTop > 0)
-    {
-        if (pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1])
-            pInterp->mpCIHStack[pInterp->mnCIHStackTop - 1]->Release();
-        --pInterp->mnCIHStackTop;
-    }
+    pInterp->popCIHStack();   // console AptValue_::pop(a1 + 9) -- pop the CIH/target stack
     pMethodNameSaved->Release();     // console (*(*v19+4))(v19)
     pCountValue->Release();          // console (*(*v5+4))(v5)
     AptCallMethodProbe("exit", pInterp->mnStackTop, nArgs, "");
