@@ -807,7 +807,7 @@ namespace CgsGui
     // For an ONLOAD event (id 1) also fetches Param 3 (the movieclip) and registers a
     // new component. Pushes a GuiEventAptTrigger for the start/onload/transition kinds.
     // ========================================================================
-    AptValue* AptCommunicator::sMethod_SendAptEvent(AptValue* /*pContext*/, int /*iNumParams*/)
+    AptValue* AptCommunicator::sMethod_SendAptEvent(AptValue* /*pContext*/, int iNumParams)
     {
         AptValue* lpEventId  = AptExtObject::GetParam(0);   // FLAG: GetParam un-homed
         AptValue* lpUniqueId = AptExtObject::GetParam(1);
@@ -840,14 +840,24 @@ namespace CgsGui
                 EAStringC lDbgName;
                 if (lbNameOk)
                     lpNameVal->toString(&lDbgName);
-                char lacSae[192];
+                AptValue* const lpClip = AptExtObject::GetParam(3);
+                // Dump the actual arg COUNT + each param's type/value. If iNumParams != 4 or the
+                // name string shows up at the wrong index, the AS/C++ param protocol is misaligned
+                // (GetParam is flagged un-homed) -- a different bug than BuildName returning undefined.
+                EAStringC lP2, lP3;
+                if (lpNameVal && lpNameVal->getIsDefined()) lpNameVal->toString(&lP2);
+                if (lpClip && lpClip->getIsDefined())       lpClip->toString(&lP3);
+                char lacSae[256];
                 std::snprintf(lacSae, sizeof(lacSae),
-                    "[AptRT] SendAptEvent#%d: ev=%d(id=%d) uid=%d name=%d('%s') clip=%d\n",
-                    s_iSaeHits, lbEventOk ? 1 : 0,
-                    lbEventOk ? lpEventId->toInteger() : -1,
-                    lbUniqueOk ? 1 : 0, lbNameOk ? 1 : 0,
-                    lbNameOk ? lDbgName.GetBuffer() : "<undef>",
-                    (AptExtObject::GetParam(3) != 0) ? 1 : 0);
+                    "[AptRT] SendAptEvent#%d np=%d: ev(id=%d) uid=%d | p2Vft=%d p2='%s' | "
+                    "p3Vft=%d p3CIH=%d p3='%s'\n",
+                    s_iSaeHits, iNumParams,
+                    lbEventOk ? lpEventId->toInteger() : -1, lbUniqueOk ? 1 : 0,
+                    lpNameVal ? static_cast<int>(lpNameVal->getVtblIndex()) : -1,
+                    (lpNameVal && lpNameVal->getIsDefined()) ? lP2.GetBuffer() : "<undef>",
+                    lpClip ? static_cast<int>(lpClip->getVtblIndex()) : -1,
+                    (lpClip && lpClip->isCIH()) ? 1 : 0,
+                    (lpClip && lpClip->getIsDefined()) ? lP3.GetBuffer() : "<undef>");
                 CgsDev::Log::WriteToLog(lacSae);
             }
         }
