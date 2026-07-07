@@ -198,35 +198,17 @@ public:
         return mValueBitfield.mbAllowsDelayedDeletion != 0;
     }
 
-    // ---- leak setters (AptValue.h:228-236) -- trivial bitfield writes (the
-    // inverse of the getters above). The leak declares them out-of-line; they are
-    // the obvious field stores, kept inline here alongside the inline getters.
-    void setRefCount(uint32_t n)
-    {
-        if (n >= MAX_REFCOUNT)
-        {
-            mValueBitfield.mnReferenceCount = MAX_REFCOUNT;
-            mValueBitfield.mnMaxRefCountHit = 1;
-        }
-        else
-        {
-            mValueBitfield.mnReferenceCount = n;
-        }
-    }
+    // ---- leak setters (AptValue.h:228-236) -- lock-guarded bitfield writes.
+    // The X360 out-of-line bodies (setRefCount @0x82AD7E90, setVtblIndex
+    // @0x82AD7F20, setGCRoot @0x82AD80A8, SetAllowDelayedDeletion @0x82AD7E08)
+    // each take the Apt GC flag lock (unk_8324E75C) around the store, exactly
+    // like setGCMark. Bodies in AptValue.cpp.
+    void setRefCount(uint32_t n);
+    void setVtblIndex(AptVirtualFunctionTable_Indices n);
+    void setGCRoot(uint32_t n);
+    void SetAllowDelayedDeletion(bool bAllowed);
 
-    void setVtblIndex(AptVirtualFunctionTable_Indices n) { mValueBitfield.meValueType = n; }
     void setIsDefined(bool bDefined) { mValueBitfield.mbIsDefined = bDefined ? 1u : 0u; }
-
-    // GC-root count + delayed-deletion flag setters (the inverse of getGCRoot /
-    // getAllowsDelayedDeletion; used by the CIH/object ctors).
-    void setGCRoot(uint32_t n)
-    {
-        mValueBitfield.mnGCRootCount = (n >= MAX_GCROOT) ? MAX_GCROOT : n;
-    }
-    void SetAllowDelayedDeletion(bool bAllowed)
-    {
-        mValueBitfield.mbAllowsDelayedDeletion = bAllowed ? 1u : 0u;
-    }
 
     // ---- value-type predicates (leak AptValue.h is*/CanCreateScriptObject) ----
     // Each tests meValueType (+ mbIsDefined where the asm reads it). Reconstructed

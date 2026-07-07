@@ -488,9 +488,11 @@ void AptValue::Append_ToString(EAStringC* pOut) const
 // urlEncodeCustomRender @0x82AF9410 -- render this value to its URL-encoded form
 // ("key=value&key=value..."). X360: only a defined value that exposes a native
 // property hash (vtbl GetNativeHashVirtual, slot +8) produces a body; it walks the
-// hash, skips the "_proto__"/"type" magic keys and native-function values, and
-// appends "<key-render>=<value-render>&" per remaining entry, trimming the
-// trailing "&". Every other value renders the empty string.
+// hash, keeps ONLY the '_'-prefixed keys (0x82AF94A8: a key whose first char is
+// not '_' branches straight to the next item), skips the "__proto__"/"_type"
+// magic keys (both inline strcmps run from buffer+1) and native-function values,
+// and appends "<key>=<value-render>&" per remaining entry, trimming the trailing
+// "&". Every other value renders the empty string.
 // ---------------------------------------------------------------------------
 EAStringC AptValue::urlEncodeCustomRender() const
 {
@@ -517,17 +519,17 @@ EAStringC AptValue::urlEncodeCustomRender() const
         const EAStringC& strKey = pItem->mKey;
         const char* const pKeyBuf = strKey.GetBuffer();
 
-        // X360 0x82AF94A8: *(key+8)==95 -> the key starts with '_'; only then can it
-        // be the "_proto__" magic key. The "_proto__"/"type" keys are skipped.
-        bool lbSkip = false;
-        if (pKeyBuf[0] == '_')
-        {
-            // X360 inline strcmp vs "_proto__" then vs "type".
-            if (strcmp(pKeyBuf, "_proto__") == 0 || strcmp(pKeyBuf, "type") == 0)
-                lbSkip = true;
-        }
+        // X360 0x82AF94A8: *(key+8)==0x5F -- ONLY a key starting with '_' is
+        // considered at all (bne -> DecRef/next item). Of those, the two magic
+        // keys are skipped: the inline strcmps run from buffer+1 (addi r7,r3,9),
+        // so they reject "__proto__" (buffer+1 == "_proto__") and "_type"
+        // (buffer+1 == "type").
+        const bool lbCandidate =
+            pKeyBuf[0] == '_'
+            && strcmp(pKeyBuf + 1, "_proto__") != 0
+            && strcmp(pKeyBuf + 1, "type") != 0;
 
-        if (!lbSkip)
+        if (lbCandidate)
         {
             AptValue* const pValue = pItem->mpValue;   // X360 v19 = v21[1]
 
@@ -537,11 +539,13 @@ EAStringC AptValue::urlEncodeCustomRender() const
                 (pValue->getVtblIndex() == AptVFT_NativeFunction) && pValue->getIsDefined();
             if (!lbNativeFn)
             {
-                // X360 0x82AF954C: render value into v30, then build "key=value&".
+                // X360 0x82AF954C: render the value into v30 (var_4C), then build
+                // "key=value&" -- KEY first (0x82AF9558 appends the held key copy
+                // at var_48), then "=", then the value render, then "&".
                 pValue->toString(&strValue);
-                strOut += strValue;     // X360 operator+=(&v29, &v30)
+                strOut += strKey;       // X360 operator+=(&v29, &var_48 == the key)
                 strOut += "=";          // X360 sub_82AE8520(&v29, "=")
-                strOut += strKey;       // X360 operator+=(&v29, &v48 == the key)
+                strOut += strValue;     // X360 operator+=(&v29, &var_4C == the render)
                 strOut += "&";          // X360 sub_82AE8520(&v29, "&")
             }
         }
