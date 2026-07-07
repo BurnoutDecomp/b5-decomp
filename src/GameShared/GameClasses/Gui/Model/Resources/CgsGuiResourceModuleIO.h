@@ -86,6 +86,29 @@ namespace CgsGui
                   "ResourceHandle is two x64 pointers on PC");
     static_assert(sizeof(GuiEventLoadNotification) == 24,
                   "GuiEventLoadNotification PC layout (X360 payload size is 16 with 4-byte ptrs)");
+
+    // CgsGuiResourceModuleIO.h:130 / :146 (DWARF). Unlike load notifications, unload records
+    // carry only the request type, the original load-request id, and the file-name hash. The X360
+    // output buffer records both variants as flat 12-byte payloads: queue type 15 for unload-request
+    // notifications and type 16 for unload-complete notifications.
+    struct GuiEventUnloadRequestNotification
+    {
+        ResourceRequestTypes meRequestType;   // X360 +0x00
+        u32                  muLoadRequestId; // X360 +0x04
+        u32                  muFileNameHash;  // X360 +0x08
+    };
+
+    struct GuiEventUnloadNotification
+    {
+        ResourceRequestTypes meRequestType;   // X360 +0x00
+        u32                  muLoadRequestId; // X360 +0x04
+        u32                  muFileNameHash;  // X360 +0x08
+    };
+
+    static_assert(sizeof(GuiEventUnloadRequestNotification) == 12,
+                  "GuiEventUnloadRequestNotification flat payload size");
+    static_assert(sizeof(GuiEventUnloadNotification) == 12,
+                  "GuiEventUnloadNotification flat payload size");
 }
 
 namespace CgsGui
