@@ -109,17 +109,11 @@ AptRenderTreeManager* AptCurrentRenderTreeManager()
     return reinterpret_cast<AptRenderTreeManager*>(gpAptTarget->mppRenderRootAnchor);
 }
 
-AptRenderItem* AptRTM_CreateItem(AptRenderTreeManager* pMgr, AptCharacter* pCharacter, int nTick)
-{
-    // The manager's DOUBLE-BUFFERED wrapper around the Manager_CreateItem factory (the console
-    // AptRenderTreeManager::Update_CreateItem path, used when a live render-tree manager owns the
-    // per-tick revisions). NOTE: AptCharacterInst::AptCharacterInst NO LONGER routes through here --
-    // it now matches the X360 ctor faithfully (guard on gpAptTarget, call AptRenderItem::
-    // Manager_CreateItem DIRECTLY), so the prior INVENTED null-manager fallback (call the factory when
-    // pMgr==0) is removed. This helper stays for the manager-driven path once the render-tree manager
-    // lands; with no live manager yet it is currently unused.
-    return pMgr->Update_CreateItem(pCharacter, nTick);
-}
+// AptRTM_CreateItem removed (was unused): it was only a thin forwarder to the real member
+// AptRenderTreeManager::Update_CreateItem @0x814254. AptCharacterInst::AptCharacterInst no
+// longer routes through it (it calls AptRenderItem::Manager_CreateItem directly, matching the
+// X360 ctor), so the manager-driven path calls Update_CreateItem on the manager directly once
+// the render-tree-manager subsystem lands.
 
 AptRenderItem* AptRTM_GetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick)
 {

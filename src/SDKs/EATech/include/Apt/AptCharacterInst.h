@@ -53,11 +53,10 @@ struct AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode
 // gpCurrentTargetSim+0x2C offset) so the x64 layout stays correct. Null until a
 // target sim is active.
 //   AptCurrentRenderTreeManager() -> gpCurrentTargetSim's manager, or null.
-//   AptRTM_CreateItem            -> AptRenderTreeManager::Update_CreateItem @0x814254
 //   AptRTM_GetTickItemWritable   -> AptRenderTreeManager::Update_GetTickItemWritable
+// (AptRTM_CreateItem removed -- unused; the manager path calls Update_CreateItem directly.)
 // ---------------------------------------------------------------------------
 AptRenderTreeManager* AptCurrentRenderTreeManager();
-AptRenderItem*        AptRTM_CreateItem(AptRenderTreeManager* pMgr, AptCharacter* pCharacter, int nTick);
 AptRenderItem*        AptRTM_GetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick);
 extern int            gnCurrUpdateTick;
 
