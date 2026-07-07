@@ -10,13 +10,16 @@
 //   SetupLoadData()      0x826E4C88   (request the crumple patch bank bundle)
 //   Detach()             0x826F39C8   (base detach + release the patch voice)
 //
-// Attach (0x826F37E8) and AttachController (0x82685740) are DEFERRED -- their proposed
-// bodies were not store-for-store faithful in this dossier (Attach: un-homed base +0xE
-// counter + un-homed game-mode read; AttachController: sound, but bundled with Attach's
-// deferral) -- so they are left declared-only in the header for the vtable shape.
+// AttachController (0x82685740) is now bodied below (the controller-class gate +
+// mpPhysicsControl latch). Attach (0x826F37E8) remains BLOCKED: its store-for-store body
+// needs the un-homed CgsSound::Logic::VoiceWrapper::Create/Play + VoiceWrapper::CreateParams
+// (a foundational shared-header grow disallowed by scope), the un-homed AEMS interned-hash
+// static-init globals, and an un-homed base +0xE sequence counter -- so it is left
+// declared-only in the header for the vtable shape.
 // ============================================================================
 
 #include "GameSource/Sound/Vehicles/Deformation/BrnDeformationEffect.h"
+#include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h" // complete PhysicsControl for the AttachController downcast (BY NAME)
 
 namespace BrnSound
 {
@@ -74,6 +77,42 @@ void DeformationEffect::SetupLoadData()
     static_cast<BrnSound::Logic::IResourceRequester*>(this)->LoadAsset(
         "sound\\aems\\CRUMPLEPATCHBANK.BUNDLE", nullptr,
         BrnSound::Logic::ResourceRegistrar::E_DATA);
+}
+
+// The controller-class band the AttachController gate tests. The X360 masks the
+// supplied controller's object-id (`*(controller+0x14) & 0x7F0`) -- the class-tag band
+// shared with the sibling SingleGinsuEffect::AttachController. DeformationEffect accepts
+// ONLY a controller whose class band is 0 (the PhysicsControl class); any set bit in the
+// band is a mis-attached controller and trips the assert.
+static const s32 KI_CONTROLLER_CLASS_MASK = 0x7F0;
+
+// ---------------------------------------------------------------------------
+// DeformationEffect::AttachController  @ 0x82685740   (override of EffectBase::AttachController)
+//
+//   r11 = *(controller+0x14);            ; controller->miObjectId  (GetObjectId)
+//   r11 &= 0x7F0;                         ; class-tag band
+//   if (r11 != 0)                         ; wrong controller class?
+//       << assert "Cound't attach controller " >>   ; (Begin/Fire/EndAssert chain)
+//   else
+//       this->mpPhysicsControl = controller - 4;     ; latch the physics controller
+//
+// The controller is handed in via its CgsSound::Logic::EffectBase sub-object pointer; the
+// X360 `controller - 4` recovers the primary object, modelled here as a by-name downcast
+// to PhysicsControl (its EffectBase primary base performs the equivalent adjustment). The
+// de-inlined BeginAssert/Clear/FireAssert/EndAssert chain (which streams the failing
+// object-id after the message) collapses to one CGS_ASSERT with the verbatim rodata
+// string; the file-path/line args are dropped per convention.
+// ---------------------------------------------------------------------------
+void DeformationEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    if ((apController->GetObjectId() & KI_CONTROLLER_CLASS_MASK) != 0)
+    {
+        CGS_ASSERT(false, "Cound't attach controller ");
+    }
+    else
+    {
+        mpPhysicsControl = static_cast<BrnSound::Vehicles::Engines::PhysicsControl*>(apController);
+    }
 }
 
 // ---------------------------------------------------------------------------
