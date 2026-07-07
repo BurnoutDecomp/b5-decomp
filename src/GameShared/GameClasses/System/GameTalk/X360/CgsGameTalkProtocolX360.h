@@ -79,14 +79,14 @@ namespace CgsGameTalk
         // "PingResponse". X360 @0x82838F50.
         static void OnMessageReceived(EA::GameTalk::GameTalkMessage* lpMsg);
 
-        // IGameTalkProtocol override: connected iff Connect() established the
-        // socket. X360 @0x827DB688.
-        virtual bool IsConnected();
+        // IGameTalkProtocol override (vtable slot 1): connected iff Connect()
+        // established the socket. X360 @0x827DB688.
+        virtual bool IsConnected() override;
 
     private:
-        // IGameTalkProtocol override: send liMsgSize bytes over the active socket,
-        // pumping select() when the socket would block. X360 @0x82838158.
-        virtual bool Send(void* lpaBuffer, s32 liMsgSize);
+        // IGameTalkProtocol override (vtable slot 2): send liMsgSize bytes over the
+        // active socket, pumping select() when the socket would block. X360 @0x82838158.
+        virtual bool Send(void* lpaBuffer, s32 liMsgSize) override;
 
         // Create/bind/listen a non-blocking listening socket on liPort. X360 @0x82837230.
         void SetListeningMode(s32 liPort);
@@ -111,11 +111,11 @@ namespace CgsGameTalk
         static void SendPingResponseToGameExplorer(const char* lpacPingID);
 
         // --- members (offsets read off the X360 asm) ---
-        // +0x00 is the IGameTalkProtocol vtable (the base subobject).
-
-        // +0x04: the registered per-message callback DigestReceivedData fans each
-        // complete message out to (a no-op if null).
-        void (*mpfnMessageHandler)(const char* lpacMessage, u32 luLength); // +0x04
+        // +0x00 is the IGameTalkProtocol vtable, +0x04 the inherited
+        // IGameTalkProtocol::mpfnMessageHandler receive callback (the GameTalk
+        // manager installs its trampoline there; DigestReceivedData fans each
+        // complete message out through it). Both live in the base subobject, so this
+        // backend's own members begin at +0x08.
 
         u32  muBufferMsgStart;                      // +0x08  read cursor into macReceiveBuffer
         u32  muBufferMsgSize;                       // +0x0C  bytes currently buffered

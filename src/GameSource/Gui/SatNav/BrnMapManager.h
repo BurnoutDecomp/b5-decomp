@@ -33,9 +33,16 @@ namespace BrnGui
     // BrnMapManager.h:52 -- active-texture array capacity (1 low-res + up to 6 tiles x 3).
     const uint32_t KU_MAX_TEXTURES_IN_CACHE = 19;
 
+    class MainMapComponent;   // owning component; sets mbEnabled directly on the map-active event
+
     // BrnMapManager.h:48 (X360 `this` spans 0x578 bytes)
     class MapManager
     {
+        // MainMapComponent::RecvEvent (BrnMainMap.cpp @0x82458370) stores the map-active byte
+        // straight into mbEnabled (X360 `stb r11, 0x5F0(this)` == MapManager +0x564), so the
+        // owning component is a friend rather than routing through an invented setter.
+        friend class MainMapComponent;
+
     public:
         // BrnMapManager.h:61
         enum EZoomLevel

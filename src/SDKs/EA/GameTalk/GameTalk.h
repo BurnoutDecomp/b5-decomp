@@ -49,6 +49,11 @@ namespace EA
 {
 namespace GameTalk
 {
+    // The abstract transport the manager drives (full definition in
+    // SDKs/Packages/GameTalk/1.8.0/include/GameTalk/IGameTalkProtocol.h). Only a
+    // pointer is held here, so a forward declaration keeps this header light.
+    class IGameTalkProtocol;
+
     // ------------------------------------------------------------------------
     // GameTalk namespace-level helpers (X360 .XEX, BURNOUT_X360_ARTIST.XEX).
     //
@@ -140,6 +145,12 @@ namespace GameTalk
         const void* GetContent(s32 liIndex) const;
         s32         GetSize(s32 liIndex) const;
 
+        // The tool channel this message is addressed to (the +0x10 member). GROWN
+        // for GameTalkManager::ReceiveMessage / ConfigHandler (X360 @0x828390B8 /
+        // @0x82838FF0), which match an incoming message's channel (`lwz r,0x10(msg)`)
+        // against "Server Message" and each registered channel filter.
+        const char* GetChannel() const;
+
         // GetKeyContent(): look up the named key and return its content blob (the script
         //                  source for "ExecuteScript"); NULL when the key is absent. The
         //                  handler treats a non-NULL result as the script text to execute.
@@ -173,15 +184,18 @@ namespace GameTalk
     class GameTalkManager
     {
     public:
-        // Process-wide GameTalk singleton.
+        // Process-wide GameTalk singleton (X360 GetInstance @0x82836CF8 -> the
+        // off_8303577C global).
         static GameTalkManager* GetInstance();
 
-        // GROWN for CgsGameTalk::GameTalk::Prepare (X360 @0x828394B8): brings the
-        // process-wide GameTalk singleton up. The asm calls this with the owner
-        // object, a small count (10) and a flags word (0), then reads the populated
-        // global singleton pointer back out. Modelled to mirror the asm argument
-        // order (owner, count, flags); the return is discarded by the caller.
-        static void* CreateInstance(void* lpOwner, s32 liMaxChannels, s32 lxFlags);
+        // X360 @0x82839420. Package-allocate + construct the process-wide singleton
+        // and publish it. lpOwner is the transport the manager drives (an
+        // IGameTalkProtocol; passed opaquely as the CgsGameTalk front-door `this`,
+        // whose embedded protocol subobject sits at offset 0). liMaxChannels sizes
+        // the handler table; lpcName is the instance name seeding the "initialize"
+        // handshake (defaults to "Game.Xenon" when null). The return is the new
+        // instance; CgsGameTalk::GameTalk::Prepare reads it back via GetInstance().
+        static void* CreateInstance(void* lpOwner, s32 liMaxChannels, const char* lpcName);
 
         // GROWN for CgsGameTalk::GameTalk::Update (X360 @0x828376C0): pump the
         // singleton's transport once per frame. The X360 reaches the singleton's
@@ -189,26 +203,88 @@ namespace GameTalk
         // manager's own per-frame Update.
         void Update();
 
-        // Ferry a finished message out to the named tool endpoint
-        // ("Tool.GameExplorer"). STATIC (the asm passes the endpoint in r3, not a
-        // `this`); FileClose's `GetInstance()->SendMessage(...)` evaluates
-        // GetInstance() for its side effect then calls this static method.
+        // X360 @0x82838508. Serialize rMessage under the lpcEndpoint key
+        // (GameTalkMessage::CreateBuffer) and ship the wire buffer over the
+        // singleton's transport, then free the buffer. STATIC (the asm passes the
+        // endpoint in r3, not a `this`); FileClose's `GetInstance()->SendMessage(...)`
+        // evaluates GetInstance() for its side effect then calls this static method.
         static s32 SendMessage(const char* lpcEndpoint, GameTalkMessage& rMessage);
 
         // GROWN for CgsGameTalk::GameTalkProtocol::SendPingResponseToGameExplorer
         // (X360 @0x82838978): the X360 sends a heap-built message by pointer.
+        // Forwards to the reference overload.
         static s32 SendMessage(const char* lpcEndpoint, GameTalkMessage* lpMessage);
 
-        // GROWN for CgsGameTalk::GameTalkProtocol::Prepare (X360 @0x82839238):
-        // register lpHandler to receive messages arriving on the named channel
-        // (asm passes the manager instance, the OnMessageReceived function, and
-        // the "AttribSys.xenon" channel name).
-        // Returns the manager's registration result (forwarded by
-        // CgsGameTalk::GameTalk::RegisterMessageHandler, X360 @0x828248D0, which
-        // captures the r3 result and returns it).
+        // X360 @0x82838B70. Register lpHandler against the named channel filter in
+        // the first free handler slot, then announce the filter to the GameTalk
+        // server (SendServerChannel). Returns the announce result (forwarded by
+        // CgsGameTalk::GameTalk::RegisterMessageHandler, X360 @0x828248D0).
         static s32 RegisterMessageHandler(GameTalkManager* lpManager,
                                           MessageHandler lpHandler,
                                           const char* lpcChannel);
+
+        // X360 @0x828390B8. Static receive entry: route a decoded incoming message
+        // to the server config handler (when it matches "Server Message") and to
+        // every registered per-channel handler whose filter matches the message
+        // channel. Called by the transport receive trampoline (ReceiverCallback).
+        static s32 ReceiveMessage(GameTalkMessage* lpMessage);
+
+        // X360 @0x82836D08. Hierarchical dotted-name channel match: an empty pattern
+        // matches everything; otherwise lpcPattern must equal lpcChannel exactly or
+        // be a dot-delimited prefix of it ("a.b" matches "a.b" and "a.b.c", but not
+        // "a.bc"). Case-sensitive byte compare over the pattern length.
+        static bool IsMessageMatching(const char* lpcChannel, const char* lpcPattern);
+
+    private:
+        // 16-byte handler-table entry (X360 Malloc(...,16) in RegisterMessageHandler).
+        struct MessageHandlerEntry
+        {
+            const char*    mpcChannel;                          // +0x00 channel filter
+            MessageHandler mpfnHandler;                         // +0x04 message handler
+            void (*mpfnContextHandler)(GameTalkMessage*, void*);// +0x08 context handler
+            void*          mpContext;                           // +0x0C context slot
+        };
+
+        // X360 @0x828392F8. Wire the manager onto its transport (installs
+        // ReceiverCallback as the transport's receive callback), allocate + clear the
+        // handler table, and -- when the transport reports connected -- emit the
+        // platform / version / initialize config handshake.
+        GameTalkManager(void* lpOwner, s32 liMaxChannels, const char* lpcName);
+
+        // X360 @0x828384A0. Free the handler table and restore the vtable. The
+        // scalar-deleting variant that also releases the manager object is the
+        // compiler-emitted vtable thunk (not written by hand).
+        virtual ~GameTalkManager();
+
+        // X360 @0x82837770. Build a keyword message ([key][value], each length-
+        // prefixed big-endian) in the shared scratch buffer and send it over the
+        // transport. Returns the transport Send result.
+        s32 SendKeywordMessage(const char* lpcKey, const char* lpcValue);
+
+        // X360 @0x82838AA8. Build a "Client Message" carrying an Add/RemoveChannelFilter
+        // key for lpcChannelName and send it to the "GameTalkServer" endpoint.
+        static s32 SendServerChannel(const char* lpcChannelName, bool lbAdd);
+
+        // X360 @0x82838FF0. Handle a "Server Message": on an "UpdateTargetName" key
+        // adopt the new instance name (from the first entry's content), re-announce
+        // the config version, and re-register every live channel filter.
+        s32 ConfigHandler(GameTalkMessage* lpMessage);
+
+        // The transport receive trampoline installed into IGameTalkProtocol::
+        // mpfnMessageHandler; decodes raw wire bytes and forwards to ReceiveMessage.
+        // Defined in its own TU -- referenced here (and stored) by address only.
+        static void ReceiverCallback(const char* lpacMessage, u32 luLength);
+
+        // --- members (X360 offsets 0x00..0x18; pointers widened to x64) ---
+        // +0x00 is the implicit vtable (the class is polymorphic via ~GameTalkManager).
+        const char*           mpcName;        // +0x04  instance name ("Game.Xenon")
+        IGameTalkProtocol*    mpProtocol;     // +0x08  transport the manager drives
+        MessageHandlerEntry** mppHandlers;    // +0x0C  handler table (miMaxChannels slots)
+        s32                   miNumHandlers;  // +0x10  live handler count
+        s32                   miMaxChannels;  // +0x14  handler table capacity
+
+        // Process-wide singleton pointer (X360 off_8303577C).
+        static GameTalkManager* spInstance;
     };
 }
 }
