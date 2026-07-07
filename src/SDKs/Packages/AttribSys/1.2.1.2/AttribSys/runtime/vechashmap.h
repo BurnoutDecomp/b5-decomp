@@ -248,6 +248,13 @@ namespace Attrib
         // default key). Returns NULL only when neither is present.
         Collection* GetCollectionWithDefault(u64 luKey) const;
 
+        // The plain collection-table lookup with NO default fallback -- the Attrib::Class::Ta
+        // call site of Attrib::RefSpec::GetCollection / Attrib::FindCollection (asm:
+        // addi r3, mpPrivates, 0x1C; bl <table Find>). Returns the collection stored under
+        // luKey in this class's table (ClassPrivate::mCollections @ mpPrivates+0x1C), or NULL
+        // when the key is absent.
+        Collection* GetCollection(u64 luKey) const { return GetCollectionTable()->Find(luKey); }
+
         // @ 0x8280ADD8 -- remove lpCollection (located by its own 64-bit key at
         // collection+0x10) from this class's collection table. Returns true iff a live
         // bucket was actually vacated.

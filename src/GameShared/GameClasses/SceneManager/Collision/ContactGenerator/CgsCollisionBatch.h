@@ -28,9 +28,20 @@ namespace CgsCollision
     // DWARF CgsCollisionBatch.h:63.
     struct CollisionBatch
     {
+        // Construct the batch's embedded job in its empty (null-named) state. EA::Jobs::Job has
+        // no default ctor (only Job(const char*)), so this is required to make the batch (and the
+        // BaseCollisionGenerator array that embeds it) constructible; it mirrors the per-batch
+        // Job(this, 0) construction BaseCollisionGenerator::Prepare runs (X360 0x828106F4).
+        CollisionBatch() : mJob(nullptr) {}
+
         // @0x82810508 (this TU) -- wire the embedded job at ContactGeneratorEntry over the
         // freshly prepared descriptor and hand the ready Job* back.
         EA::Jobs::Job* SetupJob();
+
+        // DWARF CollisionBatch::WaitOn -- block until the embedded job's submitted instance
+        // completes. BaseCollisionGenerator::Finish / FinishBatch call this (the X360 build
+        // inlines it to a direct Job::WaitOn on the batch, mJob being at +0).
+        void WaitOn() { mJob.WaitOn(); }
 
     private:
         EA::Jobs::Job           mJob;              // +0x000  h:189

@@ -15,6 +15,8 @@ namespace Attrib
 {
     typedef u32 Key;   // X360: 32-bit class/attribute key (an earlier SDK rev was 64-bit).
 
+    class Class;       // full definition in vechashmap.h; RefSpec::GetClass returns it by pointer.
+
     // Partial Attrib::Collection layout (the fields Instance touches).
     struct Collection
     {
@@ -56,6 +58,21 @@ namespace Attrib
         RefSpec& operator=(const RefSpec& lrOther);   // @0x8280DFB0
         void Clean();                                  // @0x8280DB60
         bool HasResolvedCollection() const { return mpCollectionPtr != 0; }
+
+        // GROWN for the AttribSys support TU (attribsupport.cpp). The three lazy resolvers
+        // the X360 attests as real functions off this RefSpec:
+        //   GetClass                 @0x828084B0 -- the ref's owning Attrib::Class: the class
+        //                             held by an already-resolved collection (collection+0x18),
+        //                             else looked up in the process database's class-registry
+        //                             table by mClassKey (null when mClassKey is 0).
+        //   GetCollection            @0x82808530 -- resolve+AddRef+cache the collection stored
+        //                             under mCollectionKey in the class's table (null when
+        //                             mCollectionKey is 0 or the class/collection is absent).
+        //   GetCollectionWithDefault @0x828085C0 -- as GetCollection but with the class's
+        //                             default-collection fallback (Class::GetCollectionWithDefault).
+        const Class*      GetClass() const;                 // @0x828084B0
+        const Collection* GetCollection();                  // @0x82808530
+        const Collection* GetCollectionWithDefault();       // @0x828085C0
 
     private:
         u64               mClassKey;       // +0x00 (attribsys.h:762)
