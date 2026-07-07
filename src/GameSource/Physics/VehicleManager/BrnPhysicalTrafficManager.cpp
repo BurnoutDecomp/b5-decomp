@@ -12,7 +12,9 @@
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
-#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"  // VehiclePhysics::AddAirRam / GetTransform (full-physics body)
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"  // VehiclePhysics::AddAirRam / GetTransform / SetCrashing (full-physics body)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // CreatePhysicalTrafficEvent (real layout) + ETrafficType
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // Deformation::StreamedDeformationSpec::GetBoundingBox + CgsGeometric::AxisAlignedBox
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"                        // rw::math::vpu::IsValid(Matrix44Affine), TransformPoint
 
@@ -429,6 +431,199 @@ Vector3 PhysicalTrafficVehicle::GetArticulationPointWorldSpace() const
                "RwMathVPU::IsValid( GetPhysics()->GetTransform() )");
 
     return rw::math::vpu::TransformPoint(lrTransform, mArticulationPointLocal);
+}
+
+// =========================================================================================
+// PhysicalTrafficVehicle wave-8 methods (their own ledger funcs, homed here alongside the
+// wave-7 set). Reconstructed from BURNOUT_X360_ARTIST.XEX.
+//
+// FLAG (opaque-TrafficPhysics contract): this TU models the full-physics body as the opaque
+// `struct TrafficPhysics` (manager header) and, per the wave-7 precedent, reinterpret_casts the
+// raw mpVehicleBody / GetFullTrafficPhysics() pointer to the concrete VehiclePhysics for the base
+// entries it can reach BY NAME. The real `class TrafficPhysics : VehiclePhysics` (TrafficPhysics.h)
+// CANNOT be included here -- its name collides with the opaque slice -- so the TrafficPhysics-derived
+// forwards (TrafficPhysics::PreparePhysical / TrafficPhysics::Update) are DELEGATED to the
+// TrafficPhysics TU, exactly as every other full-physics operation in this TU is. Each function
+// below reproduces the observable PhysicalTrafficVehicle member-state writes (the fields this class
+// OWNS) store-for-store; the delegated / un-homed collaborator work is flagged inline, never faked.
+// =========================================================================================
+
+// PhysicalTrafficVehicle::PreparePhysical   @0x82641058
+//   Assert mpVehicleBody != NULL and mu8PhysicalType < COUNT. When fully physical, fetch the deform
+//   model's bounding box and (delegated) run the full-physics prepare. Then unconditionally seed the
+//   vehicle's id/state fields from the spawn event: mCgsID (+0x10), zero the check-notify timer, clear
+//   mbRammed/mbUsingBoxWithWorld, reset miCheckOwner (+0x33) to the not-checked sentinel, inline
+//   ClearArticulatedState() (+0x24/+0x28/+0x2C), promote to CAB when the event's mbIsCab is set, copy
+//   the event's ETrafficType into mePhysicalTrafficState (+0x20) and, for the CRASHING type, arm the
+//   body's crashing virtual. Returns true.
+bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* lpEvent,
+                                             VehicleAttribs* lpAttribs,
+                                             const Deformation::StreamedDeformationSpec* lpModelData,
+                                             const Vector3* lpWheelPositions, const f32* lpafWheelRadii)
+{
+    CGS_ASSERT(mpVehicleBody != nullptr, "mpVehicleBody != NULL");
+    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT, "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+
+    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+    {
+        // The AABB enclosing every deformation-sensor sphere (X360 builds it on the stack).
+        CgsGeometric::AxisAlignedBox lAABB;
+        lpModelData->GetBoundingBox(lAABB);
+
+        // FLAG (delegated full-physics prepare): the console then calls
+        //   TrafficPhysics::PreparePhysical(GetFullTraffic(), event, attribs, lAABB, model,
+        //                                   wheelPositions, wheelRadii)
+        // to build the full body. That entry lives on the real TrafficPhysics class, which this
+        // opaque-contract TU cannot include (see the group note above); it is owned by the
+        // TrafficPhysics TU (TrafficPhysics.cpp) and is NOT fabricated here.
+        (void)lAABB;
+        (void)lpAttribs;
+        (void)lpWheelPositions;
+        (void)lpafWheelRadii;
+    }
+
+    // ---- this vehicle's own id/state fields (unconditional, in X360 store order) ----
+    mCgsID                   = lpEvent->mCgsID;                  // +0x10 (event +0x88)
+    mfTimeSinceCheckNotify   = 0.0f;                             // +0x18
+    mbRammed                 = false;                            // +0x30
+    miCheckOwner             = -1;                               // +0x33 (not-yet-checked sentinel)
+    mbUsingBoxWithWorld      = false;                            // +0x34
+    // inlined ClearArticulatedState():
+    meArticulatedVehicleType = E_ARTICULATE_VEHICLE_NONE;        // +0x24
+    meArticulatedJointState  = E_ARTICULATE_JOINT_NONE;          // +0x28
+    miJointIndex             = -1;                               // +0x2C
+    if (lpEvent->mbIsCab)                                        // event +0x84
+        meArticulatedVehicleType = E_ARTICULATE_VEHICLE_CAB;
+
+    mePhysicalTrafficState = static_cast<u32>(lpEvent->meTrafficType);   // +0x20 (event +0x80)
+    switch (lpEvent->meTrafficType)
+    {
+    case E_TRAFFIC_TYPE_POTENTIAL:   // 0 -- no body activation
+    case E_TRAFFIC_TYPE_PHYSICAL:    // 2 -- no body activation
+        break;
+    case E_TRAFFIC_TYPE_CRASHING:    // 1 -- arm the body's crashing state
+        // X360: (*(*mpVehicleBody + 8))(mpVehicleBody) -- vtbl slot 2 == the crashing-activation
+        // virtual. Modeled BY NAME as VehiclePhysics::SetCrashing (the crash arm OnChecked calls
+        // directly); reinterpret the raw body pointer as the wave-7 accessors do.
+        reinterpret_cast<VehiclePhysics*>(mpVehicleBody)->SetCrashing();
+        break;
+    default:                         // 3+ (SLAMMED, ...) -- not a valid PHYSICAL prepare state
+        CGS_ASSERT(false, "Invalid physical traffic type");
+        break;
+    }
+    return true;
+}
+
+// PhysicalTrafficVehicle::OnChecked   @0x8261E360
+//   Assert leOwner is a valid race-car index and lpRaceCarPhysics != NULL. Latch the checker
+//   (miCheckOwner, +0x33) and reset the check-notify timer (mfTimeSinceCheckNotify, +0x18). When the
+//   checker is "hard" (an un-homed RaceCarPhysics strength byte > 8) and this car is fully physical,
+//   arm the full body's crashing state; the ensuing crash-impulse fold is delegated.
+void PhysicalTrafficVehicle::OnChecked(EActiveRaceCarIndex leOwner,
+                                       const RaceCarPhysics* lpRaceCarPhysics,
+                                       Vector3 lContactPointOnTraffic)
+{
+    CGS_ASSERT(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0 && leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "(leOwner >= E_ACTIVE_RACE_CAR_INDEX_0) && (leOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+    CGS_ASSERT(lpRaceCarPhysics != nullptr, "lpRaceCarPhysics");
+
+    miCheckOwner           = static_cast<s8>(leOwner);   // +0x33
+    mfTimeSinceCheckNotify = 0.0f;                        // +0x18
+
+    // FLAG (un-homed RaceCarPhysics field): the console gates the crash-impulse on a byte at
+    // RaceCarPhysics +0x140E (a checker-strength / collision-severity field owned by the
+    // RaceCarPhysics TU). Read here by raw offset -- the only honest way to touch an un-homed field
+    // without fabricating the full layout -- purely to reproduce the `> 8` gate.
+    const u8 lu8CheckerStrength = *(reinterpret_cast<const u8*>(lpRaceCarPhysics) + 0x140E);
+    if (lu8CheckerStrength > 8u)
+    {
+        CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+                   "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+        if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+        {
+            // Arm the full body's crashing state (X360: VehiclePhysics::SetCrashing on GetFullTraffic()).
+            reinterpret_cast<VehiclePhysics*>(GetFullTrafficPhysics())->SetCrashing();
+
+            // FLAG (delegated crash-impulse math): the console then reads SetCrashing()'s returned
+            // sub-object pointer and folds a crash impulse into its +0x50 vector -- a VMX dot/max/FMA
+            // cascade using RaceCarPhysics +0x1340 (the checker's linear-velocity direction) and
+            // lContactPointOnTraffic. That impulse lands in the opaque TrafficPhysics slice + un-homed
+            // RaceCarPhysics velocity and is owned by the full-physics TU (this TU only arms the
+            // crash). Not fabricated here.
+            (void)lContactPointOnTraffic;
+        }
+    }
+}
+
+// PhysicalTrafficVehicle::Update   @0x826411C0
+//   Assert mu8PhysicalType < COUNT. When fully physical, delegate the full-physics per-frame tick
+//   (UpdateFreezing + freeze-state insert + TrafficPhysics::Update). Unconditionally accumulate the
+//   check-notify timer by the sim time-step.
+void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeStep,
+                                    const Matrix44Affine* lpCameraMatrix,
+                                    const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                                    bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis)
+{
+    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT, "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+
+    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+    {
+        // FLAG (delegated full-physics tick): the console fetches GetFullTraffic() and runs, in order,
+        //   VehiclePhysics::UpdateFreezing(body, controls, dt)   -- BLOCKED in the VehiclePhysics TU,
+        //   a conditional freeze-state vector insert at TrafficPhysics +0x1060 guarded by the global
+        //     freeze-disable flag (byte_82F2A1A6),
+        //   and, when the body is not already settled (+0x70 == 0),
+        //   TrafficPhysics::Update(body, camera, controls, ...).
+        // All of that lands inside the opaque TrafficPhysics/VehiclePhysics slice and the BLOCKED
+        // UpdateFreezing, so it is delegated to those TUs (this opaque-contract TU cannot include the
+        // real TrafficPhysics class). Not fabricated here.
+        (void)lpCameraMatrix;
+        (void)lpControls;
+        (void)lbImpactTime;
+        (void)lbDoForceAdditiveAftertouch;
+        (void)lbUseSixaxis;
+        (void)lfGameTimerTimeStep;
+    }
+
+    // The one member write this vehicle owns each frame: accumulate the check-notify timer (+0x18).
+    mfTimeSinceCheckNotify += lfSimTimerTimeStep;
+}
+
+// PhysicalTrafficVehicle::SetArticulated   @0x825F3B68
+//   Assert the type is CAB or TRAILER and this vehicle has no joint yet (miJointIndex == -1). Set
+//   meArticulatedVehicleType (+0x24) and mark the joint ATTACHED (+0x28). The console then computes
+//   mArticulationPointLocal from the deformation model's hitch locator and, when fully physical, sets
+//   the full body's articulated solve-penetration weight; both are delegated (see inline flags).
+void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lrCreateTrafficEvent,
+                                            EArticulatedVehicleType leVehicleType)
+{
+    CGS_ASSERT(leVehicleType == E_ARTICULATE_VEHICLE_CAB || leVehicleType == E_ARTICULATE_VEHICLE_TRAILER,
+               "leVehicleType == E_ARTICULATE_VEHICLE_CAB || leVehicleType == E_ARTICULATE_VEHICLE_TRAILER");
+    CGS_ASSERT(miJointIndex == -1, "miJointIndex == -1");
+
+    meArticulatedVehicleType = leVehicleType;                  // +0x24
+    meArticulatedJointState  = E_ARTICULATE_JOINT_ATTACHED;    // +0x28
+
+    // FLAG (delegated articulation-point computation): the console resolves the spawn event's model
+    // handle (lrCreateTrafficEvent.mModelHandle, event +0x78) to a Deformation::StreamedDeformationSpec
+    // (CgsResource::BaseResourcePtr::CreateFromHandle + BrnPhysics::Def), builds the inverse
+    // car-model->handling-body transform (StreamedDeformationSpec::GetCarModelSpaceToHandlingBodySpace
+    // Transform + rw::math::vpu::InverseOfMatrixWithOrthonormal3x3), searches the spec's generic
+    // locator list (GetGenericLocators) for the hitch tag point (tag type 29 for a CAB, 28 for a
+    // TRAILER; asserts "Failed to find articulation tag point" when absent), then transforms that
+    // locator's translation into handling-body space (LocatorPointSpecList::GetLocatorXf +
+    // rw::math::vpu::TransformPoint) and stores the result into mArticulationPointLocal (+0), asserting
+    // "RwMathVPU::IsValid( mArticulationPointLocal )". Those collaborators (BrnPhysics::Def and the
+    // StreamedDeformationSpec transform/locator accessors) are owned by the resource + deformation TUs
+    // and are not declared for this TU; the point is NOT fabricated here.
+    (void)lrCreateTrafficEvent;
+
+    // FLAG (un-recoverable constant + un-declared setter): when fully physical the console finally
+    // calls VehiclePhysics::SetSolvePenetrationWeightFactor(GetFullTraffic(),
+    // KF_ARTICULATED_SOLVE_PENETRATION_WEIGHT_FACTOR), inserting the weight into the full body at
+    // +0x1050. The factor is loaded from un-dumped rodata (unk_8208FACC) so its value is not
+    // recoverable (a guessed constant would be wrong), and the setter is undeclared; delegated to the
+    // full-physics TU rather than guessed.
 }
 
 }   // namespace Vehicle

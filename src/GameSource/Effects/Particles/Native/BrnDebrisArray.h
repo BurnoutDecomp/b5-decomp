@@ -5,66 +5,116 @@
 //
 // BrnParticle::Native::BrnDebrisArray -- the platform ("Native") debris-bucket array
 // owned by the particle module. Live debris buckets hang off an intrusive doubly-linked
-// "used" list; a separate bucket pool keeps the free list. Only the slice exercised by
-// ClearAllBuckets is modelled here.
+// "used" list threaded through the FXBucketBase node of each bucket; freed buckets are
+// pushed back onto the shared FXBucketManager free list.
 //
-// LAYOUT AUTHORITY (X360 ARTIST asm, ClearAllBuckets @ 0x8227E3D0):
-//   this[1] @ +0x04 -- mpUsedHead   : head of the used-bucket doubly-linked list
-//   this[2] @ +0x08 -- mpBucketPool : the bucket-pool node holding the free list head
-//                                     (its [0] == free head, its [2] == free count)
-//   this[3] @ +0x0C -- muUsedCount  : live bucket count, zeroed once the list is drained
-//   this[0] @ +0x00 -- not touched by this function (kept as an opaque leading word)
+// LAYOUT AUTHORITY: DecFIGS DWARF (BrnDebrisRenderer.h:115) names the members and their
+// order; the X360 ARTIST asm pins the byte displacements this build touches:
+//   Construct           @ 0x8227A3D0  (stores mpParams/mpBucketManager, zeroes list)
+//   FreeExpiredBuckets  @ 0x82281CE0  (walks used list, recycles expired buckets)
+//   ClearAllBuckets     @ 0x8227E3D0  (drains the whole used list)
 //
-//   Each bucket node: node[0] @ +0x00 == mpPrev, node[1] @ +0x04 == mpNext.
+//   this[0] @ +0x00 -- mpParams        : const BrnDebrisArrayParams*  (&_gaDebrisArrayParams[type])
+//   this[1] @ +0x04 -- mpBuckets       : head of the used (live) bucket list
+//   this[2] @ +0x08 -- mpBucketManager : shared bucket pool / free list owner
+//   this[3] @ +0x0C -- muNumBuckets    : live bucket count
+//   then     mTexture / mMeshCollection : the acquired render resources (not touched by
+//                                         the three list-management bodies reconstructed here)
+//
+//   Each bucket is a BrnParticle::FXBucket<BrnDebris,32>; the list management touches only
+//   its FXBucketBase head (mpPreviousBucket @ +0x00, mpNextBucket @ +0x04,
+//   mfFinalParticleBirthTime @ +0x08). The free list lives on the FXBucketManager
+//   (mpFreeList @ +0x00, muNumFreeBuckets @ +0x08).
 //
 // X360 pointers are 32-bit; on the 64-bit host they widen so the absolute byte offsets
-// above do NOT hold. The load-bearing facts reproduced are the intrusive-list SHAPE
-// (prev/next first two words of each node) and the unlink-then-push SEQUENCE. Members
-// are pinned BY NAME and order, not by an absolute-offset assert. GROW additively.
-//
-// HONEST PLACEHOLDER: the full BrnDebrisArray / debris-bucket / bucket-pool layout is not
-// reconstructed in this pass; only the list-management fields are modelled.
+// above do NOT hold. The load-bearing facts reproduced are the member SET/ORDER and the
+// intrusive unlink-then-push SEQUENCE. Members are pinned BY NAME. GROW additively.
 // ============================================================================
 
 #include "types.hpp"
+#include "rw/math/vpu/types.h"                                   // Vector3 / Vector4 / Vector3Plus
+#include "GameSource/Effects/Particles/Native/FXBuckets.h"       // FXBucket / FXBucketManager / FXBucketBase
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::SafeResourceHandle
+
+namespace renderengine { class Texture; }
 
 namespace BrnParticle
 {
+    class BrnVFXMeshCollection;   // resource type held by mMeshCollection
+
 namespace Native
 {
-    // One debris bucket: an intrusive doubly-linked-list node. Only the two link words
-    // the list management touches are modelled; the bucket payload that follows is
-    // opaque here (grow additively when the bucket layout lands).
-    struct DebrisBucket
+    // BrnDebrisRenderer.h:67 (DWARF) -- selects one of the five debris parameter presets.
+    enum EDebrisArrayID
     {
-        DebrisBucket* mpPrev;   // node[0] @ +0x00
-        DebrisBucket* mpNext;   // node[1] @ +0x04
+        eDebrisArray_Coloured   = 0,
+        eDebrisArray_Shiny      = 1,
+        eDebrisArray_Dark       = 2,
+        eDebrisArray_HighDetail = 3,
+        eDebrisArray_Glass      = 4,
+        eDebrisArray_Max        = 5,
     };
 
-    // The free-list pool node. Its first word doubles as the free-list head (so that
-    // pushing a freed bucket and fixing up the head's prev pointer share the layout of a
-    // bucket node), and the third word is the free count.
-    struct DebrisBucketPool
+    // BrnDebrisRenderer.h:79 (DWARF) -- one debris particle. Three Vector3Plus registers
+    // pack a vec3 + a scalar in the w ("plus") lane, followed by the diffuse colour and a
+    // bounce counter. Offsets confirmed by SpawnDebris @ 0x82294DC8 (mDiffuseColour @ +0x30,
+    // mVelocityPlusScale @ +0x20, mPositionPlusRotVel @ +0x10, muBounceCount @ +0x40).
+    struct BrnDebris
     {
-        DebrisBucket* mpFreeHead;   // pool[0] @ +0x00 -- head of the free list
-        DebrisBucket* mpPad1;       // pool[1] @ +0x04 -- not touched here
-        u32           muFreeCount;  // pool[2] @ +0x08 -- free bucket count
+        rw::math::vpu::Vector3Plus mAxisPlusAngle;       // +0x00 -- rotation axis (xyz) + angle (w)
+        rw::math::vpu::Vector3Plus mPositionPlusRotVel;  // +0x10 -- position (xyz) + rotational velocity (w)
+        rw::math::vpu::Vector3Plus mVelocityPlusScale;   // +0x20 -- linear velocity (xyz) + size scale (w)
+        rw::math::vpu::Vector4     mDiffuseColour;       // +0x30
+        u8                         muBounceCount;        // +0x40
+    };
+
+    // BrnDebrisRenderer.h:92 (DWARF) -- per-array immutable parameters. sizeof == 0x50 (80)
+    // is pinned by Construct's stride (a3*5<<4 == a3*80). The Vector4/Vector3 members are
+    // 16-aligned, which forces the 8-byte pad after mfAmbientFactor so mColour lands at +0x20.
+    struct BrnDebrisArrayParams
+    {
+        const char*            mpMeshCollectionName; // +0x00
+        s32                    mnNumParticles;       // +0x04
+        f32                    mfSpecularPower;      // +0x08
+        f32                    mfSpecularIntensity;  // +0x0C
+        f32                    mfDiffuseFactor;      // +0x10  (SpawnDebris reads *(params+16))
+        f32                    mfAmbientFactor;      // +0x14
+        rw::math::vpu::Vector4 mColour;              // +0x20
+        rw::math::vpu::Vector3 mvBounciness;         // +0x30
+        f32                    mfFadeInTime;         // +0x40
+        f32                    mfDragResistance;     // +0x44
     };
 
     class BrnDebrisArray
     {
     public:
-        // BrnParticle::Native::BrnDebrisArray::ClearAllBuckets @ 0x8227E3D0. Drain every
-        // live bucket off the used list and push it back onto the bucket pool's free
-        // list, then zero the live count. Caller (X360 xref):
-        // BrnParticle::ParticleModule::ProcessEventQueue.
+        // BrnParticle::Native::BrnDebrisArray::DebrisBucket -- one fixed-capacity bucket of
+        // debris particles (DWARF BrnDebrisRenderer.h:111). The intrusive list links live in
+        // its FXBucketBase head.
+        typedef BrnParticle::FXBucket<BrnDebris, 32> DebrisBucket;
+
+        // BrnParticle::Native::BrnDebrisArray::Construct @ 0x8227A3D0. Point the array at its
+        // parameter preset (&_gaDebrisArrayParams[leDebrisType]), latch the shared bucket
+        // manager, and start with an empty used list. Caller: ParticleModule::Prepare.
+        void Construct(FXBucketManager* lpBucketManager, EDebrisArrayID leDebrisType);
+
+        // BrnParticle::Native::BrnDebrisArray::FreeExpiredBuckets @ 0x82281CE0. Walk the used
+        // list and recycle every bucket whose final particle birth time has fallen past the
+        // cut-off (currentTime - maxLifetime; maxLifetime is 10s at 30Hz, 2s otherwise).
+        // Caller: ParticleModule::BeginSimulateDebris.
+        void FreeExpiredBuckets(f32 lfCurrentTime, bool lbIsRunningAt30Hz);
+
+        // BrnParticle::Native::BrnDebrisArray::ClearAllBuckets @ 0x8227E3D0. Drain every live
+        // bucket back onto the pool free list. Caller: ParticleModule::ProcessEventQueue.
         void ClearAllBuckets();
 
     private:
-        void*             mpReserved0;   // this[0] @ +0x00 -- opaque, not touched here
-        DebrisBucket*     mpUsedHead;    // this[1] @ +0x04
-        DebrisBucketPool* mpBucketPool;  // this[2] @ +0x08
-        u32               muUsedCount;   // this[3] @ +0x0C
+        const BrnDebrisArrayParams*                            mpParams;        // this[0] @ +0x00
+        DebrisBucket*                                          mpBuckets;       // this[1] @ +0x04
+        FXBucketManager*                                       mpBucketManager; // this[2] @ +0x08
+        u32                                                    muNumBuckets;    // this[3] @ +0x0C
+        CgsResource::SafeResourceHandle<renderengine::Texture> mTexture;        // acquired texture
+        CgsResource::SafeResourceHandle<BrnVFXMeshCollection>  mMeshCollection; // acquired mesh collection
     };
 }
 }
