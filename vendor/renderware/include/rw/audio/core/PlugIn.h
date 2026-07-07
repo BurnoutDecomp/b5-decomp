@@ -200,6 +200,13 @@ public:
     static void New2(System *self, T **outResult, const char *name, unsigned size,
                      unsigned align, EA::Allocator::ICoreAllocator *allocator);
 
+    // Free `mem` back through the System's ICoreAllocator (slot +0x14). `flags` is the
+    // allocator flag word (always 0 at the call sites seen so far). Declared here as the
+    // additive counterpart to New2; the body lives in the System allocator TU (mangled
+    // ?Free@System@core@audio@rw@@). Grounded in Decoder::Release @0x82691528, which calls
+    // rw::audio::core::System::Free(off_83271928, ptr, 0).
+    static void Free(System *self, void *mem, s32 flags);
+
     // +0x00 .. +0x1F -- opaque System header.
     char mHeader20[0x20];
     // +0x20 -- base address of the per-System deferred-command ring buffer.

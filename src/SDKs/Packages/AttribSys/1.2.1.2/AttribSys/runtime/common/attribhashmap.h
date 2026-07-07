@@ -37,11 +37,13 @@
 
 namespace Attrib
 {
-    // The parent collection an inherited attribute resolves through. Opaque foreign type:
-    // Remove() reaches the parent-collection back-reference at +0x18 and its data area by
-    // recovered byte offsets (the collection's real layout is homed in attribinstance.h /
-    // vechashmap.h); modelled here only as a forward class so the bodies link.
-    class Collection;
+    // The parent collection an inherited attribute resolves through. Remove() reaches the
+    // parent-collection back-reference at +0x18 and its data area by recovered byte offsets;
+    // the collection's real layout is homed in attribinstance.h, where Attrib::Collection is
+    // an Attrib::HashMap-derived class (the X360 passes a Collection* straight into
+    // HashMap::Release / the +0x08 refcount ops). Forward-declared here as a struct to match
+    // that definition so the pointer-only uses below link.
+    struct Collection;
 
     // Attrib::HashMap -- open-addressing attribute hash map (X360 non-templated spine).
     class HashMap
@@ -112,7 +114,14 @@ namespace Attrib
         Node* mpBuckets;          // +0x00  flat bucket array
         u16   muCapacity;         // +0x04  number of buckets (table size)
         u16   muCount;            // +0x06  live entries
+    public:
+        // Shared object refcount (X360 +0x08). Public because the refcounted derived
+        // Attrib::Collection (which IS-A HashMap) and the Instance / RefSpec handles that hold
+        // it bump/read it directly -- Collection::AddRef is ++muRefCount with the 0xFFFF
+        // overflow guard, exactly the sequence the X360 inlines at every AddRef site. Left in
+        // declaration order (after muCount) so the member layout is unchanged.
         u16   muRefCount;         // +0x08  shared refcount
+    private:
         u8    mu8MaxSearchLength; // +0x0A  table-wide worst-collision probe length
         u8    mu8KeyShift;        // +0x0B  rotate-hash shift
     };

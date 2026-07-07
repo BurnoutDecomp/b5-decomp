@@ -679,9 +679,12 @@ AptValue* AptString::objectMemberLookup(AptValue* const pContext,
         return 0;
 
     // The Entry's second word carries a 1-based member id; (id - 1) indexes the
-    // X360 jump table. FLAG: the jump-table data (word_82145380) + the gperf
-    // wordlist id assignment are not recovered, so the id->member mapping below
-    // follows the gperf keyword declaration order; the per-member bodies are exact.
+    // X360 jump table word_82145380. The jump-table CONTENTS are un-recovered, but
+    // the physical case-block order @loc_82AFCB24+ pins the mapping unambiguously:
+    // the first block (jump base, offset 0) is the length branch, then charAt,
+    // charCodeAt, concat, fromCharCode, indexOf, lastIndexOf, slice, split, substr,
+    // substring, toLowerCase, toUpperCase (asm sMethod_* refs @0x82AFCB7C..0x82AFCF70).
+    // So uMember 0 == length (payload id 1) and 1..12 == charAt..toUpperCase.
     const unsigned int uMember = static_cast<unsigned int>(
         reinterpret_cast<uintptr_t>(pEntry->mpPayload)) - 1u;
     if (uMember > 0xCu)   // only 13 valid members (the X360 `> 0xC` reject)
@@ -689,26 +692,27 @@ AptValue* AptString::objectMemberLookup(AptValue* const pContext,
 
     switch (uMember)
     {
-    case 0:  return GetCachedStringMethod(SMC_charAt,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_charAt));
-    case 1:  return GetCachedStringMethod(SMC_charCodeAt,  reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_charCodeAt));
-    case 2:  return GetCachedStringMethod(SMC_concat,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_concat));
-    case 3:  return GetCachedStringMethod(SMC_fromCharCode,reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_fromCharCode));
-    case 4:  return GetCachedStringMethod(SMC_indexOf,     reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_indexOf));
-    case 5:  return GetCachedStringMethod(SMC_lastIndexOf, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_lastIndexOf));
-    case 6:  return GetCachedStringMethod(SMC_slice,       reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_slice));
-    case 7:  return GetCachedStringMethod(SMC_split,       reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_split));
-    case 8:  return GetCachedStringMethod(SMC_substr,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_substr));
-    case 9:  return GetCachedStringMethod(SMC_substring,   reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_substring));
-    case 10: return GetCachedStringMethod(SMC_toLowerCase, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_toLowerCase));
-    case 11: return GetCachedStringMethod(SMC_toUpperCase, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_toUpperCase));
-
-    case 12:
+    case 0:
     {
-        // "length": render the value and box its UTF-8 character count.
+        // "length": render the value and box its UTF-8 character count
+        // (jump-base block @loc_82AFCB24 -> toString/UTF8_Size/AptInteger::Create).
         EAStringC strValue;
         pContext->toString(&strValue);
         return AptInteger::Create(strValue.UTF8_Size());
     }
+
+    case 1:  return GetCachedStringMethod(SMC_charAt,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_charAt));
+    case 2:  return GetCachedStringMethod(SMC_charCodeAt,  reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_charCodeAt));
+    case 3:  return GetCachedStringMethod(SMC_concat,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_concat));
+    case 4:  return GetCachedStringMethod(SMC_fromCharCode,reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_fromCharCode));
+    case 5:  return GetCachedStringMethod(SMC_indexOf,     reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_indexOf));
+    case 6:  return GetCachedStringMethod(SMC_lastIndexOf, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_lastIndexOf));
+    case 7:  return GetCachedStringMethod(SMC_slice,       reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_slice));
+    case 8:  return GetCachedStringMethod(SMC_split,       reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_split));
+    case 9:  return GetCachedStringMethod(SMC_substr,      reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_substr));
+    case 10: return GetCachedStringMethod(SMC_substring,   reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_substring));
+    case 11: return GetCachedStringMethod(SMC_toLowerCase, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_toLowerCase));
+    case 12: return GetCachedStringMethod(SMC_toUpperCase, reinterpret_cast<AptExtFunctionPtr>(&AptString::sMethod_toUpperCase));
 
     default:
         return 0;
