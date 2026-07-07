@@ -1546,15 +1546,12 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
         callFunction(pNew, pClass, nArgs, 0, 0);              // run the constructor body
 
         // pop call stack #5 (release), the operand stack (release), then the CIH stack.
-        pRootStackE[mnCallStackE_Count - 1]->Release();       // console AptValue_::pop(a1+12)
-        --mnCallStackE_Count;
-        if (mnStackTop > 0)
-        {
-            mpStack[mnStackTop - 1]->Release();               // console AptValue_::Pop(a1)
-            --mnStackTop;
-        }
-        pCIHStack[mnCIHStackTop - 1]->Release();              // console AptValue_::pop(a1+9)
-        --mnCIHStackTop;
+        // Each interpreter stack is an AptValueVector-shaped {count,cap,array} triple; the
+        // console pops via AptValueVector::pop(a1 + wordOffset). Reproduced as the punned call
+        // (behaviour-identical -- these were already unguarded Release+decrement).
+        reinterpret_cast<AptValueVector*>(&mnCallStackE_Count)->pop();   // console AptValue_::pop(a1 + 12)
+        stackPop();                                                      // console AptValue_::pop(a1)  (operand stack; guarded stackPop @0x7F3248)
+        reinterpret_cast<AptValueVector*>(&mnCIHStackTop)->pop();        // console AptValue_::pop(a1 + 9)
     }
 
     pNew->SetHasClass(0);                                       // console *(v11+7) &= ~0x400000 (close the bracket)

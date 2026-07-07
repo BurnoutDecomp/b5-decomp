@@ -1499,10 +1499,10 @@ int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned in
                         static_cast<AptValue*>(pNode), pBlock, 0, nullptr, nullptr);
 
                     pBlock->Release();
-                    // Pop the CIH stack (Release the pinned node).
-                    gAptActionInterpreter
-                        .mpCIHStack[gAptActionInterpreter.mnCIHStackTop - 1]->Release();
-                    --gAptActionInterpreter.mnCIHStackTop;
+                    // Pop the CIH stack (Release the pinned node) -- the {count,cap,array}
+                    // triple punned as an AptValueVector, calling the real pop() (behaviour-
+                    // identical: the push above is unguarded + pNode non-null).
+                    reinterpret_cast<AptValueVector*>(&gAptActionInterpreter.mnCIHStackTop)->pop();
 
                     gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
                 }
