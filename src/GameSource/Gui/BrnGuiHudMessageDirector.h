@@ -29,6 +29,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                       // CgsID (u64), IsMessageAllowed param
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // VariableEventQueue<18432,16>
 
 namespace CgsGui { class ModelModule; }
@@ -58,6 +59,12 @@ namespace BrnGui
         // HudMessageAnalyzer's TriggerMessage overloads @0x825179E8/@0x82517AF8 call
         // it with false); declaration-only (its own ledger function).
         void AddMessage(const GuiHudMessage* lpMessage, bool lbFlag);
+
+        // IsMessageAllowed(id) -- is the message with this hash still permitted to show given the
+        // current stop-flag / filter state? ADDITIVE GROW: real X360 symbol (the
+        // InGameMessagesComponent::TerminateMessages @0x824376F0 queries it per live slot to retire
+        // messages the director no longer allows); declaration-only (its own ledger function).
+        bool IsMessageAllowed(CgsID lMessageId) const;
 
         // @ 0x8250C830 -- set the camera-sequence stop flag; when set, queue the stop event.
         void SetCameraSequenceFilter(bool lbShowing);
