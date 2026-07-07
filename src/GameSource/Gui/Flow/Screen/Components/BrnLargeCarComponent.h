@@ -76,6 +76,18 @@ namespace BrnGui
         // 0x8241B868 -- resource unload notification: UNLOAD_REQUESTED -> DATA_SUPPLIED.
         void HandleUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpUnloadEvent);
 
+        // 0x824B3740 -- install the owning GuiCache pointer (asserts non-null).
+        void SetCachePointer(GuiCache* lpGuiCache);
+
+        // 0x824C32B8 -- drive the load half of the state machine: returns true once the car's
+        // apt resources are READY; otherwise kicks off the resource request (DATA_SUPPLIED ->
+        // RESOURCES_REQUESTED) and returns false.
+        bool EnsureResourcesAreLoaded();
+
+        // 0x824B37A0 -- drive the unload half: returns true if no resources are outstanding,
+        // else releases them via ReleaseResources and returns false.
+        bool EnsureResourcesAreUnloaded();
+
     private:
         // DWARF BrnLargeCarComponent.h:127 -- car-name buffer capacity.
         static const s32 KI_MAX_CAR_NAME_LENGTH = 32;

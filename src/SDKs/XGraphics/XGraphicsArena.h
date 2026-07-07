@@ -95,4 +95,35 @@ public:
     bool        mbTrackStats; // +0x28 maintain the counters + LIFO-free behaviour
 };
 
+// ---------------------------------------------------------------------------
+// Arena-prefixed object allocation. The XGRAPHICS compiler carves small objects
+// (InternalVector, DefStack, ...) from an Arena while prepending the owning
+// arena pointer to each block, so the object can later be returned to its arena
+// without the caller tracking which one it came from. This idiom is inlined at
+// every VRegInfo allocation site; it is de-inlined into these two helpers.
+// ---------------------------------------------------------------------------
+
+// Allocate `auObjectSize` bytes for an object plus a leading Arena* slot; store
+// the owning arena in that slot and return the object pointer (just past it).
+// The X360 Malloc returns a -4 sentinel on OOM, which makes the object pointer
+// come out null -- a failed allocation yields null (the caller skips
+// construction), exactly as the ctor asm branches.
+inline void* ArenaAllocPrefixed(Arena* apArena, usize auObjectSize)
+{
+    void* lpBlock = apArena->Malloc(static_cast<int>(auObjectSize + sizeof(Arena*)));
+    *static_cast<Arena**>(lpBlock) = apArena;
+    if (reinterpret_cast<intptr_t>(lpBlock) == -static_cast<intptr_t>(sizeof(Arena*)))
+        return nullptr; // X360 OOM sentinel -> null object
+    return static_cast<u8*>(lpBlock) + sizeof(Arena*);
+}
+
+// Inverse of ArenaAllocPrefixed: recover the owning arena from the leading slot
+// and LIFO-free the whole block. The caller null-guards `apObject`.
+inline void ArenaFreePrefixed(void* apObject)
+{
+    u8*    lpBlock = static_cast<u8*>(apObject) - sizeof(Arena*);
+    Arena* lpArena = *reinterpret_cast<Arena**>(lpBlock);
+    lpArena->Free(lpBlock);
+}
+
 } // namespace XGRAPHICS

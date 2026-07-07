@@ -1,5 +1,6 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // FreeWithCensusIf
 
 // Attrib::Vault::DataBlock member functions, reconstructed store-for-store from
 // BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2):
@@ -37,4 +38,22 @@ void Attrib::Vault::DataBlock::Set(void* lpData, unsigned int luSize, u8 lu8Kind
     // kind byte (stb) -- store-for-store with the X360 pair.
     muKindAndSize = (muKindAndSize & 0xFF000000u) | (luSize & 0x00FFFFFFu);
     muKindAndSize = (muKindAndSize & 0x00FFFFFFu) | (static_cast<u32>(lu8Kind) << 24);
+}
+
+// @ 0x8280F098 -- Attrib::Vault scalar deleting destructor (MSVC's ??_G thunk). Called by
+// ClassPrivate's live-class refcount teardown, CgsAttribSys::VaultSlot::DoUnload,
+// Attrib::Collection::~Collection and DatabaseExportPolicy::Deinitialize. Runs the real
+// ~Vault(), then -- when the low should-free bit of the deleting flag is set -- returns the
+// 88-byte (0x58) vault to the AttribSys package allocator, with the shared live-byte census
+// decremented and the peak refreshed, NULL-guarding the block exactly as the X360 emits
+// (cmplwi r30,0 / beq before the GetAttribS()->Free(this,88,0)). Routed through the shared
+// null-guarded census-free helper so the census counters (dword_83011BFC / dword_83011BF8)
+// stay defined exactly once. Returns this. Store-for-store twin of the committed
+// Collection_ScalarDeletingDtor (vechashmap.cpp @ 0x8280C510), size 88 vs 40.
+void* Attrib::Vault_ScalarDeletingDtor(Attrib::Vault* lpVault, int liDeleteFlag)
+{
+    lpVault->~Vault();
+    if ((liDeleteFlag & 1) != 0)
+        Attrib::HashMapTablePolicy::FreeWithCensusIf(lpVault, 88, NULL);
+    return lpVault;
 }

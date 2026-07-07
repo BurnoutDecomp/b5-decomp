@@ -4,7 +4,8 @@
 //   Construct @0x8241B658, SetCarInfo @0x8241B6B0, ShowCar @0x8241B738,
 //   HandleLoadNotification @0x8241B7A8, HandleUnloadNotification @0x8241B868,
 //   HandleAptLoadTriggers @0x8241B928, HandleAptTransitionTriggers @0x8241B9F8,
-//   OnLoad @0x8243DAF8, ReleaseResources @0x8243DB98.
+//   OnLoad @0x8243DAF8, ReleaseResources @0x8243DB98, SetCachePointer @0x824B3740,
+//   EnsureResourcesAreLoaded @0x824C32B8, EnsureResourcesAreUnloaded @0x824B37A0.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnLargeCarComponent.h"
@@ -159,5 +160,53 @@ namespace BrnGui
                 CgsGui::E_GUI_RESOURCEREQUEST_UNLOAD);
             meCurrentState = E_INTERNAL_STATE_UNLOAD_REQUESTED;
         }
+    }
+
+    // @ 0x824B3740
+    void LargeCarComponent::SetCachePointer(GuiCache* lpGuiCache)
+    {
+        CGS_ASSERT(lpGuiCache != 0, "NULL != lpGuiCache");
+
+        mpGuiCache = lpGuiCache;   // this+0xB8
+    }
+
+    // @ 0x824C32B8
+    bool LargeCarComponent::EnsureResourcesAreLoaded()
+    {
+        CGS_ASSERT(meCurrentState >= E_INTERNAL_STATE_DATA_SUPPLIED,
+                   "E_INTERNAL_STATE_DATA_SUPPLIED <= meCurrentState");
+        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");
+
+        if (meCurrentState == E_INTERNAL_STATE_READY)
+        {
+            return true;
+        }
+
+        if (meCurrentState != E_INTERNAL_STATE_RESOURCES_REQUESTED)
+        {
+            CGS_ASSERT(muResourceIdType != 0, "muResourceIdType != 0");
+
+            mpStateInterface->RequestResource(
+                macCarNameText,
+                CgsGui::E_GUI_RESOURCETYPE_APT,
+                static_cast<s32>(muResourceIdType),
+                CgsGui::E_GUI_RESOURCEREQUEST_LOAD);
+            meCurrentState = E_INTERNAL_STATE_RESOURCES_REQUESTED;
+        }
+        return false;
+    }
+
+    // @ 0x824B37A0
+    bool LargeCarComponent::EnsureResourcesAreUnloaded()
+    {
+        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");
+
+        if (meCurrentState < E_INTERNAL_STATE_RESOURCES_REQUESTED)
+        {
+            return true;
+        }
+
+        ReleaseResources();
+        return false;
     }
 }

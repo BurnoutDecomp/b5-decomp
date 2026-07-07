@@ -76,6 +76,39 @@ public:
     //                 onto pFirst and shrink mpEnd. Returns pFirst.
     char16_t* erase(char16_t* pFirst, char16_t* pLast);
 
+    // ---- special members ----------------------------------------------------
+    // The eastl::basic_string ctor/dtor the X360 folds inline into its owners
+    // (e.g. RealmcCore::Trc's copy ctor / destructor), de-inlined here so those
+    // owners construct/destroy their String16 members BY NAME instead of poking
+    // the {begin,end,capEnd} words directly.
+
+    // Default -- the empty string: begin = end = the shared empty char16 singleton
+    // and capEnd one char16 past it (exactly the small path of AllocateSelf(1); no
+    // allocation). This is the state the Trc copy ctor seats each option string in.
+    String16();
+
+    // Range copy -- construct directly from the [pFirst, pLast) char16 range via
+    // RangeInitialize (allocates when the range is non-empty). Backs a String16
+    // member that is copy-constructed from another (the Trc mMessage member).
+    String16(const char16_t* pFirst, const char16_t* pLast);
+
+    // Free the owned heap buffer when the string holds one -- capacity > 1 char16
+    // AND begin is a real allocation (not the empty singleton / null). Matches the
+    // X360 inlined ~String16: v5 = (capEnd - begin) >> 1; if (v5 > 1 && begin) free.
+    ~String16();
+
+    // @ 0x82B579E8 (owned by its own String16 TU) -- assign the [pFirst, pLast)
+    // char16 range over the current contents (reusing or reallocating storage),
+    // returning mpBegin. Declared here so the cross-TU callers (the Trc copy ctor
+    // and RealmcCore::Trc::_SetMsgOptions) compile against it; the body is not part
+    // of this TU. (Same declare-across-the-TU-boundary pattern as IntVector::DoRealloc.)
+    char16_t* assign(const char16_t* pFirst, const char16_t* pLast);
+
+    // Range accessors so owners can hand [Begin(), End()) to RangeInitialize / assign
+    // without touching the private pointer words.
+    char16_t* Begin() const { return mpBegin; }
+    char16_t* End()   const { return mpEnd; }
+
 private:
     char16_t*   mpBegin;         // +0x00
     char16_t*   mpEnd;           // +0x04
