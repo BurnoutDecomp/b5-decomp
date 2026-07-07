@@ -12,6 +12,13 @@
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"   // CgsNetwork::NetworkTexture (player licence picture)
 #include "SharedClasses/StreetData/BrnChallengeData.h"                  // BrnStreetData::ChallengePlayerScoreEntry
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h" // BrnStreetData::ChallengeHighScoreEntry
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"   // CgsContainers::FastBitArray<15> (developer-challenge bits)
+#include "GameSource/GameState/BrnGameStateTypes.h"              // BrnGameState::StuntElementType (stunt-element tallies)
+#include "GameSource/GameState/BrnTakedownType.h"                // BrnGameState::ETakedownType (AddTakedown)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"           // GameStateModuleIO::EGameModeType (game-mode tallies)
+#include "SharedClasses/World/BrnWorldRegion.h"                  // BrnWorld::ECounty (per-county stunt tallies)
+#include "GameSource/GameState/SharedIO/BrnTargetEventScore.h"   // GameStateModuleIO::TargetEventScore (maTargetEventScores element)
+#include "GameSource/Network/Managers/BrnEventScoresManager.h"   // BrnNetwork::LocalEventScoreUploadData (maEventScoresToUpload element)
 #include "BrnProgressionCarData.h"        // BrnProgression::CarData (maCars element, full layout)
 #include "BrnProgressionLiveryData.h"     // BrnProgression::LiveryData (maLiveryChoices element)
 #include "BrnProgressionRivalData.h"      // BrnProgression::RivalData (maRivals element)
@@ -98,18 +105,31 @@ private:
 // seenElite@118038) are all read/written verbatim by this TU's functions and by
 // Profile::Construct @0x823708A8 (cross-checked store-by-store).
 //
-// TWO DWARF-vs-X360 deltas were resolved from the binary (PS3 DWARF drift):
-//   * maiTakedownTypeCounts is int32[17] on X360 (DWARF says [13]); the [17] size lands
-//     maiWinsPerOfflineGameMode at +468 / maiCompletedBarrelRolls at +588 exactly (proven by
-//     DEBUG_ClearMedals' win-array loop @0x1FC/-0x28 and SetBestStuntStats' +588 write).
+// DWARF-vs-X360 deltas resolved from the binary (PS3 DWARF drift; the shipped X360 build is
+// DLC-era and grew the layout):
+//   * The FOUR game-mode tally arrays are int32[18] on X360 (DWARF says [17]) -- the DLC
+//     island mode adds an 18th slot. PROVEN: AddGameModeTypeToDiscovered @0x82354AA0 and
+//     GetGameModeTypeDiscovered @0x8240E940 hit base +192 (== 120 + 18*4), AddGameModeType-
+//     Completed @0x82354B10 hits bases +264 / +336, AddTakedown @0x82354C00 pins
+//     miTotalTakedownCount at +408 and maiTakedownTypeCounts at +416, and Deserialise
+//     @0x8237D308 restores each array's element 17 (+188/+260/+332/+404) from the DLC blob.
+//   * maiTakedownTypeCounts stays the DWARF int32[13] (Deserialise memcpy's exactly 52 bytes
+//     into +416). Net size of the block is unchanged, so maiWinsPerOfflineGameMode still
+//     lands at +468 and miCompletedBarrelRolls at +588 (DEBUG_ClearMedals' win-array loop
+//     @0x1FC/-0x28 and SetBestStuntStats' +588 write).
 //   * maNetworkChallengeData[64] (ChallengeHighScoreEntry, 56B each) + maChallengeData[64]
 //     (ChallengePlayerScoreEntry, 40B each) sizes land mPlayerLicencePicture at +102620 exactly.
-//
-// The trophy/achievement bit arrays (DWARF lists them right after the dates) actually live in
-// the X360 late tail (Construct's ByteClear<BitArray<60>> stores land at +120032 / +120824),
-// not at +118024; that 8-byte gap + the late tail (through the highest proven store at
-// +0x1D800==120832, an 8-byte write) is reserved as flagged padding rather than placed at a
-// fabricated offset. sizeof(Profile) == 120840.
+//   * mSeenTrophyAwardBitArray (DWARF BrnProfile.h:1279, BitArray<35u>) sits at +118024 on
+//     X360 too (Get/SetSeenTrophyUnlockSequence @0x82475A30/@0x824BAA30 bit-op the qword at
+//     8*(idx>>6 + 14753) == +118024). The DWARF's FOLLOWING member mAchievementsEarnt
+//     (BitArray<60u>) is NOT at +118032 on X360 (the completion booleans live there); its
+//     X360 home is unrecovered and it is deliberately NOT placed here.
+//   * The X360 DLC-era tail (absent from the PS3 DWARF member list, which stops at miPad4):
+//     maTargetEventScores Array<TargetEventScore,49> @+118072 (count word +120032, proven by
+//     Get/Set/RemoveTargetEventScore), maEventScoresToUpload Array<LocalEventScoreUpload-
+//     Data,49> @+120040 (count word +120824, proven by Set/RemoveEventScoreToUpload) and
+//     mDeveloperChallengesCompleted FastBitArray<15> @+120832 (SetDeveloperChallengeComplete
+//     @0x823621F0). sizeof(Profile) == 120840.
 // ============================================================================================
 class Profile
 {
@@ -183,13 +203,83 @@ public:
     void DEBUG_ClearMedals();
 
     // ------------------------------------------------------------------------
-    // ADDITIVE GROW (declare-only) -- bodies in other (not-yet-reconstructed) Progression TUs.
-    // These were named by already-committed callers and are preserved here verbatim. The full
-    // member layout above now backs every offset they reach.
+    // Tally / query / persistence-tail functions reconstructed in this TU (BrnProfile.cpp);
+    // method shapes (param enum types, constness, returns) follow the DecFIGS DWARF
+    // (BrnProfile.h:709..1171) where attested, the X360 asm otherwise.
+    // ------------------------------------------------------------------------
+
+    // Drive-thru discovery. AddDriveThru returns the TrophyUnlockData::UnlockType awarded when
+    // a category completes (0 == E_UNLOCKTYPE_NONE); the DWARF return type is
+    // BrnProgression::TrophyUnlockData::UnlockType, whose full enum home is not yet
+    // reconstructed (only NONE=0/COUNT=35 are committed), so the s32 underlying value is used.
+    s32  AddDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType);           // 0x82374DB8
+    bool AreAllDriveThrusCompleted();                                               // 0x82361870 (DWARF: non-const)
+    s32  GetDriveThrusFound() const;                                                // 0x82361778 (car parks excluded!)
+
+    // Game-mode tallies (indexed by GsmIO::EGameModeType; the X360 [18] arrays below).
+    void AddGameModeTypeCompleted(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType);    // 0x82354B10
+    void AddGameModeTypeToDiscovered(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType); // 0x82354AA0
+    s32  GetGameModeTypeAmount(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const;     // 0x82354A38
+    s32  GetGameModeTypeDiscovered(BrnGameState::GameStateModuleIO::EGameModeType lEGameModeType) const; // 0x8240E940
+
+    // Offline win/loss tallies.
+    void AddWinForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);   // 0x82354C80
+    void AddLossForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType);  // 0x8230FB20
+    s32  GetNumRankWinsForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const; // 0x8230FA40
+    s32  GetNumLossesForGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType) const;   // 0x8230FAB0
+
+    // Takedown tallies.
+    void AddTakedown(BrnGameState::ETakedownType leTakedownType);                   // 0x82354C00
+
+    // Stunt-element sets + per-county tallies.
+    void AddStuntElement(BrnGameState::StuntElementType leStuntElementType, CgsID lId,
+                         BrnWorld::ECounty leCounty);                               // 0x8236AB00
+    bool IsStuntElementDone(BrnGameState::StuntElementType leStuntElementType, CgsID lId) const; // 0x823619B0
+    s32  GetStuntElementCount(BrnGameState::StuntElementType leStuntElementType) const;          // 0x82361950
+    s32  GetStuntElementCountByCounty(BrnGameState::StuntElementType leStuntElementType,
+                                      BrnWorld::ECounty leCounty) const;            // 0x82354D10
+
+    // Event records / medals.
+    const ProfileEvent* GetEvent(u32 luIndex) const;                                // 0x82354DA0
+    s32  GetMedalAchievedForEventWithID(s32 liEventID) const;                       // 0x82354EB0 (0 gold / 1 silver / 2 bronze / -1 none)
+    u32  GetTotalWinCount(u32& lruRankWins, u32& lruNonRankWins,
+                          u32& lruSpecialEventWins) const;                          // 0x82354E10
+    s32  GetTotalCarsToShutDown() const;                                            // 0x823549D0 (rivals in E_STATE_UNLOCKED)
+
+    // Prop-hit bit array.
+    void RecordPropHit(s32 liZoneIndex, s32 liPropIndex);                           // 0x82361C48
+
+    // "Seen all events of a mode won" HUD-message bits (leModeType is the not-yet-homed
+    // BrnProgression::RaceEventData::EModeType; taken as the s32 the X360 compares against 6).
+    bool GetSeenAllEventTypeWonMessage(s32 leModeType) const;                       // 0x82361F58
+    void SetSeenAllEventTypeWonMessage(s32 leModeType);                             // 0x823620A8
+
+    // Trophy-unlock-sequence-seen bits (leUnlockType is BrnProgression::TrophyUnlockData::
+    // UnlockType per the DWARF; taken as the s32 the X360 compares against 35).
+    bool GetSeenTrophyUnlockSequence(s32 leUnlockType) const;                       // 0x82475A30
+    void SetSeenTrophyUnlockSequence(s32 leUnlockType);                             // 0x824BAA30
+
+    // Target-event-score records (Burning Route / Stunt Attack targets; X360 DLC-era tail).
+    BrnGameState::GameStateModuleIO::TargetEventScore* GetTargetEvent(CgsID lEventId);          // 0x82371458
+    void SetTargetEventScore(BrnGameState::GameStateModuleIO::TargetEventScore::OpaqueHead lHead,
+                             CgsID lEventId, s32 liScore);                          // 0x823714F8
+    void RemoveTargetEventScore(CgsID lEventId);                                    // 0x82371600
+
+    // Pending online event-score uploads (X360 DLC-era tail).
+    void SetEventScoreToUpload(CgsID lEventId, s32 liScore,
+                               BrnGameState::GameStateModuleIO::EGameModeType leGameMode);      // 0x82371740
+    void RemoveEventScoreToUpload(CgsID lEventId);                                  // 0x823718F0
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (declare-only) -- bodies in other (not-yet-reconstructed) Progression TUs,
+    // EXCEPT where marked: SetTrainingAlreadySeen / GetPlayerBaseDeformAmount / GetCarData /
+    // SetDeveloperChallengeComplete / RepairUnlockedVehicle now have their X360 bodies in
+    // BrnProfile.cpp. These were named by already-committed callers and are preserved here
+    // verbatim. The full member layout above now backs every offset they reach.
     // ------------------------------------------------------------------------
     void ClearTrainingFlags();
     bool HasPlayerSeenTrainingType(ETrainingType leTrainingType) const;
-    void SetTrainingAlreadySeen(ETrainingType leTrainingType);
+    void SetTrainingAlreadySeen(ETrainingType leTrainingType);   // 0x82361B20 (body in BrnProfile.cpp)
 
     bool IsDriveThruDiscoverd(CgsID lId, BrnTrigger::GenericRegion::Type leType) const;
     s32  GetNumDriveThrusDiscovered(BrnTrigger::GenericRegion::Type leType) const;
@@ -251,13 +341,17 @@ private:
     s8    mi8PowerParkingBestRating;                         // +113
     s8    mi8PowerParkingBetweenOtherPlayersBestRating;      // +114
     u32   muBestNewBurnoutChainScore;                        // +116
-    s32   maGameModeTypeAmount[17];                          // +120
-    s32   maGameModeTypeAmountDiscovered[17];                // +188
-    s32   maGameModeTypeAmountCompleted[17];                 // +256
-    s32   maGameModeTypeAmountCompletedSinceTheStart[17];    // +324
-    s32   miTotalTakedownCount;                              // +392
-    s32   miTotalOnlineVerticleTakedownCount;                // +396
-    s32   maiTakedownTypeCounts[17];                         // +400  (X360: [17], not DWARF [13])
+    // The four game-mode tally arrays are [18] on X360 (PS3 DWARF [17]; the DLC island mode
+    // adds slot 17, which Serialise/Deserialise round-trip through the DLC side-blob instead
+    // of the main save image). Bases proven by the tally functions: +120 (GetGameModeType-
+    // Amount), +192 (Add/GetGameModeTypeDiscovered), +264/+336 (AddGameModeTypeCompleted).
+    s32   maGameModeTypeAmount[18];                          // +120
+    s32   maGameModeTypeAmountDiscovered[18];                // +192
+    s32   maGameModeTypeAmountCompleted[18];                 // +264
+    s32   maGameModeTypeAmountCompletedSinceTheStart[18];    // +336
+    s32   miTotalTakedownCount;                              // +408 (AddTakedown ++(this+408))
+    s32   miTotalOnlineVerticleTakedownCount;                // +412
+    s32   maiTakedownTypeCounts[13];                         // +416 (DWARF [13]; AddTakedown writes +416+4*type)
     s32   maiWinsPerOfflineGameMode[10];                     // +468
     s32   maiRankWinsPerOfflineGameMode[10];                 // +508
     s32   maiLossesPerOfflineGameMode[10];                   // +548
@@ -306,10 +400,11 @@ private:
     CgsSystem::DateAndTime mDateLicenceIssued;               // +117996 (12 bytes)
     CgsSystem::DateAndTime mDate100PercentCompleted;         // +118008 (12 bytes)
     s32   miHighestNumberOfTakeDownsInRoadRage;              // +118020
-    // FLAG: +118024..+118031 reserved. The trophy/achievement bit arrays (DWARF lists them
-    // here) live in the X360 late tail instead (Construct stores them at +120032 / +120824);
-    // this 8-byte gap is bridged rather than placed at a fabricated offset.
-    u8    mPad_PostHighRoadRage[8];                          // +118024
+    // Trophy-unlock-sequence-seen bits (DWARF BrnProfile.h:1279). One 64-bit field; the X360
+    // Get/SetSeenTrophyUnlockSequence bit-op the qword at +118024 exactly where the DWARF
+    // orders it. (The DWARF's FOLLOWING member, mAchievementsEarnt BitArray<60u>, is NOT here
+    // on X360 -- the completion booleans below sit at +118032 -- and stays unplaced.)
+    CgsContainers::BitArray<35u> mSeenTrophyAwardBitArray;   // +118024 (8 bytes)
     bool  mb100PercentCompletionSequenceShown;               // +118032
     bool  mbIsNewProfile;                                    // +118033 (Construct inits true)
     bool  mbCreditsSequenceViewed;                           // +118034
@@ -327,17 +422,21 @@ private:
     u32   muRoadRulesIDHighBits;                             // +118064
     s16   miPad3;                                            // +118068
     s8    miPad4;                                            // +118070
-    // FLAG: X360 tail beyond miPad4 (the PS3 DWARF member list stops here). On X360 the trophy/
-    // achievement bit arrays + remaining tail fields live in this region; Construct's late stores
-    // (at X360 +120032 / +120824 / +120832, all zero) fall inside it. Reserved as a fixed block;
-    // this TU's functions reach it only through the wholesale zero in Construct.
+    // ----- X360 DLC-era tail (the PS3 DWARF member list stops at miPad4) -----
+    // Member names are this TU's (the tail is absent from the DWARF); offsets/strides are
+    // X360-proven by the target-score / upload-score / developer-challenge functions. The
+    // X360 Construct's three late zero stores (+120032 / +120824 / +120832) are exactly the
+    // two Array count-word Clear()s and the FastBitArray zero.
     //
     // NOTE: this struct is NOT byte-size-asserted. The X360 member offsets quoted throughout are
     // the 32-bit-pointer ABI offsets (proven from the XEX); the PC reconstruction compiles 64-bit,
     // so any embedded pointer-bearing member (e.g. CgsNetwork::NetworkTexture, the Array<>/Set<>
     // count words, BitArray storage) is naturally wider here. Every function reaches its members BY
     // NAME, so behaviour is identical regardless of the exact byte offset on the PC target.
-    u8    mPad_LateTail[2769];                               // X360: +118071 .. +120839 (reserve)
+    Array<BrnGameState::GameStateModuleIO::TargetEventScore, 49> maTargetEventScores;   // X360 +118072 (count @ +120032 == +0x7A8 into the array)
+    Array<BrnNetwork::LocalEventScoreUploadData, 49>             maEventScoresToUpload; // X360 +120040 (count @ +120824 == +0x310 into the array)
+    CgsContainers::FastBitArray<15u>                             mDeveloperChallengesCompleted; // X360 +120832 (one u64 field; 15 == GsmIO::E_DEVELOPER_CHALLENGE_COUNT)
+    // X360 end: +120840 == sizeof(Profile)
 };
 
 } // namespace BrnProgression

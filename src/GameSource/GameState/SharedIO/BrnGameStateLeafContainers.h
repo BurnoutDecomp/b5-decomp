@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // GameStateImageManagerBase::ImageLoadRequest (real home)
+#include "GameSource/GameState/SharedIO/BrnTargetEventScore.h"              // GameStateModuleIO::TargetEventScore (real home)
 
 // Element-type homes for the fixed-capacity Array<T,N> leaf instantiations reconstructed by the
 // GameMode leaf batch. PROVISIONAL minimal records: sized to the X360 element stride; real field
@@ -13,9 +14,14 @@ namespace BrnGameState
 struct GridPositionAndScoreData { u8 maBlob[8]; };   // X360 stride 8 (provisional)
 struct BufferedNewHighScore     { u8 maBlob[32]; };  // X360 stride 32 (provisional)
 
+// NOTE: GameStateModuleIO::TargetEventScore is now FULLY homed in SharedIO/BrnTargetEventScore.h
+// (its id/score fields were decoded by the BrnProgression::Profile TU, whose maTargetEventScores
+// Array<TargetEventScore,49> embeds it). The provisional `struct TargetEventScore { u8 maBlob[40]; }`
+// stub that used to live here has been removed; the Array<TargetEventScore,49> explicit-
+// instantiation TU (Array_TargetEventScore_49.cpp) now reaches the real type through this include
+// (mirroring the DeveloperChallengeManager / ImageManagerBase / StuntModeScoringOnline promotions).
 namespace GameStateModuleIO
 {
-struct TargetEventScore        { u8 maBlob[40]; };   // X360 stride 40 (provisional)
 struct ChainableMultiplierInfo { s32 maField[4]; };  // X360 stride 16 (provisional)
 }
 
