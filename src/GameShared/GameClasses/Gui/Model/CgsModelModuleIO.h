@@ -3,7 +3,8 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (1-byte FlagSet base)
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // GuiEventQueueBase<N,16>, GuiEventQueueSmall, GuiEventLoadRequest
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // GuiEventQueueBase<N,16>, GuiEventQueueSmall
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // GuiEventLoadRequest
 #include "GameShared/GameClasses/System/Resource/CgsResourceRequestQueue.h" // ResourceRequestQueue<N>
 
 // CgsGui::ModelIO - the per-frame IO buffers the GUI model module exchanges with the
@@ -108,7 +109,8 @@ namespace ModelIO
         // CgsModelModuleIO.h:79 (DWARF). X360 0x8250C658: asserts this buffer is
         // locked-for-writing (status bit 3, "Not locked for writing\n"), then pushes the
         // request onto mLoadRequests via VariableEventQueue<4096,16>::AddEvent(&request,
-        // /*type*/39, /*size*/24). Returns the AddEvent result.
+        // /*type*/39, /*X360 size*/24). On the PC/x64 gate the file-name pointer widens,
+        // so the copied payload is sizeof(GuiEventLoadRequest).
         bool AddResourceRequests(const GuiEventLoadRequest& lrRequest);
 
         // CgsModelModuleIO.h:87 (DWARF, non-const overload). X360 0x824F7490: asserts this

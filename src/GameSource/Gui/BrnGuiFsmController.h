@@ -13,6 +13,11 @@
 namespace CgsGui
 {
     class ModelModule;
+    namespace ModelIO
+    {
+        struct InputBuffer;
+        struct OutputBuffer;
+    }
 }
 
 namespace CgsMemory { class HeapMalloc; }
@@ -49,7 +54,11 @@ namespace BrnGui
         static const s32 KI_FSM_NAME_LENGTH = 13;
 
         void Construct();
+        bool Prepare(CgsGui::ModelModule* lpGuiModelModule, CgsMemory::HeapMalloc* lpFSMAllocator);
+        void AddFlow(GuiFlow leFlow, BrnBaseFlow* lpFlow);
         void RunFsm(const GuiEventRunFsm* lpEvent);
+        void Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer,
+                    const CgsGui::ModelIO::OutputBuffer* lpModelOutputBuffer);
         bool HandleHudStateLoadComplete();
 
         // @ 0x824ECCF8 -- return whether the flow identified by luFlowId has a state
