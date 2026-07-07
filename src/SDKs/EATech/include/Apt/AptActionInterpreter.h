@@ -289,6 +289,27 @@ public:
     // interface chain walk that latches on pClass's prototype (the needle). Static:
     // it reads only the two value arguments, no interpreter state.
     static int instanceOfChainWalk(AptValue* pObject, AptValue* pClass);
+    // GetNodeFrameContextHash -- setVariable @0x82B03374's node branch: a node's frame-
+    // context is its DISPLAY PARENT's char-inst property hash (an AS timeline variable
+    // lives on the enclosing clip); null when the chain breaks. Static: reads only the
+    // node value. Body in AptActionInterpreterInterpHelpers.cpp.
+    static AptNativeHash* GetNodeFrameContextHash(AptValue* pContext);
+
+    // HashLookupName -- AptNativeHash::Lookup over the resolved method-name slot (the
+    // Extension-typed name path of CallMethod); null hash yields no value. Static: reads
+    // only the hash + slot args. Body in AptActionInterpreterInterpHelpers.cpp.
+    static AptValue* HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot);
+
+    // NameEquals (console Burnout_X360_Artist_0040_0 = EAStringC::operator==) -- does the
+    // resolved method-name slot equal the constant key? Null-guarded. Static: reads only
+    // the slot + constant. Body in AptActionInterpreterInterpHelpers.cpp.
+    static bool NameEquals(EAStringC** pNameSlot, const EAStringC* pConst);
+
+    // HasMember (console sub_82AE4058) -- does pValue (or, for object/CIH-typed values,
+    // its prototype) hold a member keyed by *pNameSlot? Static: reads only the value +
+    // name-slot args. Body in AptActionInterpreterInterpHelpers.cpp.
+    static bool HasMember(AptValue* pValue, EAStringC** pNameSlot);
+
 
     // _createObject @0x82B08088 -- the AS `new ClassName(args...)` value-materialiser.
     // Resolves the class value pClassName under (pScope, pTarget) via getVariable; if
