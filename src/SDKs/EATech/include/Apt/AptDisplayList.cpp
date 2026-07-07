@@ -1271,10 +1271,7 @@ void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
 // apt_state (hover) + apt_labeltxt (prompt) -- log confirms both are still
 // (APPLIED) by the shim, then overwritten. Off = shim-only drive, working menu.
 // Re-enable together with deleting the AptRuntimeSetComponent* shim (single driver).
-static const bool KB_CLASS_BINDING = false;  // §6.4: components bind + onLoad fires 67x reaching SendAptEvent,
-                                             // but name=undefined + clip='_global'(string): AS special names
-                                             // (_global/_parent) resolve to literal strings, never reaching
-                                             // findChild. Fix = the interpreter's special-name resolution order.
+static const bool KB_CLASS_BINDING = true;   // DIAG 2026-07-07g: dump nested RegisterComponent bytecode + op trace
 
 int AptCIH::AssociateInstToClass()
 {

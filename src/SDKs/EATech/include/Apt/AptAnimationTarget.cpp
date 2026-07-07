@@ -1333,6 +1333,9 @@ extern "C" void AptRunActionsStaleSlotProbeDefault(const void*, const void*) {}
 extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
 #endif
 
+// §6.4 DIAG: arm the opcode trace over the deferred onLoad drain + its nested calls.
+extern "C" void AptOpTraceArmDrain(int nOn);
+
 int AptAnimationTarget::RunActions()
 {
     CleanRemList();
@@ -1498,12 +1501,14 @@ int AptAnimationTarget::RunActions()
             // inlines PushStaticData here).
             AptValue** lpSavedHeap = AptScriptFunctionBase::PushStaticData();         // v14
 
+            AptOpTraceArmDrain(1);   // §6.4 DIAG: trace this queued onLoad + its nested calls
             gAptActionInterpreter.callFunction(
                 lpSlot->function.mpContext,    // a2 == *(v3+8)  (scope/this)
                 lpSlot->function.mpFuncDef,    // a3 == *(v3+12) (function def)
                 lpSlot->function.miReturnReg,  // a4 == *(v3+16) (arg count / return reg)
                 nullptr,
                 nullptr);
+            AptOpTraceArmDrain(0);
 
             // Pop the window back to the saved base (the 2-arg console form).
             gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);

@@ -221,7 +221,7 @@ extern "C" void AptOpTraceArmForClass(const char* pcExport, int nOn)
     }
 }
 
-static int s_iOpEarlyBudget = 400;   // trace the FIRST ops ever (the framework init actions)
+static int s_iOpEarlyBudget = 0;   // §6.4: don't spend the trace budget on framework init; capture the drain
 
 extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp)
 {
@@ -229,7 +229,7 @@ extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp)
     const bool bEarly = (s_iOpEarlyBudget > 0);
     if (bEarly)
         --s_iOpEarlyBudget;
-    if ((!s_iOpTraceArmed && !bEarly) || s_iOpHits >= 1400)
+    if ((!s_iOpTraceArmed && !bEarly) || s_iOpHits >= 8000)
         return;
     ++s_iOpHits;
     const unsigned char* pc = static_cast<const unsigned char*>(pcOp);
@@ -239,6 +239,52 @@ extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp)
     std::snprintf(lac, sizeof(lac), "[AptOp] %+06lld op=%03X pc=%p\n",
                   static_cast<long long>(pc - s_pOpTraceBase), nOp, pcOp);
     CgsDev::Log::WriteToLog(lac);
+}
+
+// §6.4 DIAG: generic op-trace arm (for the deferred onLoad drain + its nested calls) + an
+// armed-state accessor so ExecuteScriptFunction can dump ONLY the nested handler bytecode.
+extern "C" void AptOpTraceArmDrain(int nOn)
+{
+    static int s_iDrains = 0;
+    if (nOn) { if (s_iDrains >= 6) return; s_iOpTraceArmed = 1; s_pOpTraceBase = 0;
+               CgsDev::Log::WriteToLog("[AptRT] optrace ARM (drain)\n"); }
+    else if (s_iOpTraceArmed) { s_iOpTraceArmed = 0; ++s_iDrains;
+                                CgsDev::Log::WriteToLog("[AptRT] optrace DISARM (drain)\n"); }
+}
+extern "C" int AptOpTraceIsArmed(void) { return s_iOpTraceArmed; }
+
+// §6.4 DIAG: dump a handler's raw bytecode + constant pool (hex) so the nested onLoad /
+// RegisterComponent stream can be disassembled offline (the '_global' literal arg source).
+extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
+                               const char* const* ppPool, int nPoolCount)
+{
+    static int s_iFnDump = 0;
+    if (s_iFnDump >= 12 || pBase == nullptr || nSize <= 0 || nSize > 8192)
+        return;
+    ++s_iFnDump;
+    char lac[128];
+    std::snprintf(lac, sizeof(lac), "[AptFn] #%d size=%d poolN=%d\n", s_iFnDump, nSize, nPoolCount);
+    CgsDev::Log::WriteToLog(lac);
+    const unsigned char* const p = static_cast<const unsigned char*>(pBase);
+    char line[220];
+    for (int i = 0; i < nSize; i += 40)
+    {
+        int n = std::snprintf(line, sizeof(line), "[AptFn]  ");
+        for (int j = 0; j < 40 && (i + j) < nSize; ++j)
+            n += std::snprintf(line + n, sizeof(line) - n, "%02X", p[i + j]);
+        std::snprintf(line + n, sizeof(line) - n, "\n");
+        CgsDev::Log::WriteToLog(line);
+    }
+    if (ppPool != nullptr && nPoolCount > 0)
+    {
+        const int nDump = nPoolCount < 32 ? nPoolCount : 32;
+        for (int i = 0; i < nDump; ++i)
+        {
+            std::snprintf(line, sizeof(line), "[AptFn]  poolptr[%d]=%p\n", i,
+                          static_cast<const void*>(ppPool[i]));
+            CgsDev::Log::WriteToLog(line);
+        }
+    }
 }
 
 // The indirect-push value probe (stackPushIndirect): only while the opcode trace
