@@ -1,5 +1,6 @@
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 
 // =====================================================================================================
 // BrnPhysics::PhysicsModule -- contact-spy bridge slice (X360 ARTIST build).
@@ -18,7 +19,7 @@
 //                                               entity-type pair, then defer to the vehicle manager.
 //
 // FACADE MODEL. The PhysicsModule sub-objects touched here (the embedded ContactSpyData at module
-// byte offset 0x2ECF0, the DeformationManager at 0x4CBE0, the various IO-buffer queues) do not yet
+// byte offset 0x2ECF0, the DeformationManager at 0x4CBA0, the various IO-buffer queues) do not yet
 // have complete reconstructed C++ layouts, and the OutContactSpy / PotentialContactInterface /
 // PropRaceCarContactBuffer parameter types are un-homed. So -- exactly as the committed sibling
 // GameSource/Physics/BrnPhysicsQueueFacades.cpp does -- these bodies operate on RAW byte pointers,
@@ -37,10 +38,10 @@ namespace BrnPhysics
     // ---- module sub-object byte offsets (X360-attested from the call-site adds) ----------------------
     // mVehicleManager    @ +0x4AA0  (19104)   -- BrnVehicleManager (see BrnPhysicsModule.h)
     // mContactData       @ +0x2ECF0 (191728)  -- ContactSpyData; its five typed run lists follow.
-    // mDeformationManager@ +0x4CBE0 (314272)  -- DeformationManager (FixupWheel/BodyPartVehicleContact).
+    // mDeformationManager@ +0x4CBA0 (314272)  -- DeformationManager (FixupWheel/BodyPartVehicleContact).
     static const u32 KU_OFFSET_VEHICLE_MANAGER      = 19104;   // +0x4AA0
     static const u32 KU_OFFSET_CONTACT_DATA         = 191728;  // +0x2ECF0
-    static const u32 KU_OFFSET_DEFORMATION_MANAGER  = 314272;  // +0x4CBE0
+    static const u32 KU_OFFSET_DEFORMATION_MANAGER  = 314272;  // +0x4CBA0
 
     // ContactSpyData-relative run-list offsets (cross-validated against BrnContactSpyData.h):
     //   race car  queue @+0x00000, run list @+0x198D0 (ContactSpyRunList<8>)
@@ -82,6 +83,28 @@ namespace BrnPhysics
 
     // VehicleManager::ValidateSimulationContacts(vehMgr, contactQueue)  @0x82...
     extern void VehicleManager_ValidateSimulationContacts(u8* lpVehicleManager, u8* lpContactQueue);
+
+    // ---- Bridge-slice out-of-line helpers (declared-only; each its own ledger TU) -------------------
+    // BrnPhysics::PhysicsModuleIO::OutputBuffer::GetContactSpyInterface (X360 ...GetConta): returns
+    // the address of the output buffer's ContactSpyInterface container (a leading mpData pointer).
+    extern u8* OutputBuffer_GetContactSpyInterface(u8* lpOutputBuffer);
+
+    // BrnPhysics::ContactSpy::ContactSpyData::IsEmpty(interface) -> true iff all five contact queues empty.
+    extern bool ContactSpyData_IsEmpty(u8* lpContactSpyInterface);
+
+    // SimModuleOutputBuffer -> raw contact-spy queue accessor (X360 sub_"CgsPhysic...").
+    extern u8* GetSimModuleContactSpyQueue(u8* lpSimModuleOutputBuffer);
+
+    // Module discarded-contact SOURCE queue element accessor (X360 sub_"BrnPhysics::Cont...") and the
+    // ContactSpyData discarded-queue sink (BaseEventQueue<DiscardedContact,20>::AddEventSafe @0x825A3628).
+    extern u8*  GetDiscardedContactSourceEvent(u8* lpSourceQueue, s32 liIndex);
+    extern bool DiscardedContactQueue_AddEventSafe(u8* lpDiscardedQueue, u8* lpEvent);
+
+    // CgsPhysics::PhysicsSimulationIO::InputBuffer::AppendRemoveJointQueue<10>(inputBuffer, removeJointQueue).
+    extern void InputBuffer_AppendRemoveJointQueue_10(u8* lpInputBuffer, u8* lpRemoveJointQueue);
+
+    // BrnWorld::E_ENTITYTYPE_COUNT (entity-type-owner histogram width in CheckContactQueueSize).
+    static const s32 KI_ENTITYTYPE_COUNT = 35;   // 0x23
 
     // Raw view of a CgsModule::EventQueue<T,N> head (mpEvents@0, miMaxLength@4, miLength@8).
     struct RawContactQueueHead
@@ -162,10 +185,13 @@ namespace BrnPhysics
     {
         CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL");
 
-        // The two volume-instance ids of the potential contact live in the passed-by-value spy image:
-        // id A high dword @+0x70, id B high dword @+0x78; entity-type-owner == that high dword >> 24.
-        const u32 luEntityOwnerA = *reinterpret_cast<const u32*>(lpOutContactSpy + 0x70) >> 24;
-        const u32 luEntityOwnerB = *reinterpret_cast<const u32*>(lpOutContactSpy + 0x78) >> 24;
+        // The two volume-instance ids of the potential contact live in the passed-by-value spy image
+        // (a 0x70-byte struct; lpOutContactSpy points at spy+0x00). The X360 homes this by-value copy at
+        // stack arg_20 (std r4,arg_20 @0x825AB4EC), so its stack loads arg_70/arg_78/arg_80 are struct
+        // offsets +0x50/+0x58/+0x60 (arg_NN - 0x20). id A high dword @+0x50, id B high dword @+0x58;
+        // entity-type-owner == that high dword >> 24.
+        const u32 luEntityOwnerA = *reinterpret_cast<const u32*>(lpOutContactSpy + 0x50) >> 24;
+        const u32 luEntityOwnerB = *reinterpret_cast<const u32*>(lpOutContactSpy + 0x58) >> 24;
 
         // Illegal pair guards (assert messages + line numbers are X360 rodata; negated conditions).
         if (luEntityOwnerA == 2)
@@ -181,7 +207,7 @@ namespace BrnPhysics
 
         // Fetch the resolved-contact image for this spy (ten qwords -> 0x50-byte local image).
         u8* lpSrc = GetOutContactSpyForContact(lpPotentialContactsInterface,
-                                               *reinterpret_cast<const u32*>(lpOutContactSpy + 0x80 /*user index*/));
+                                               *reinterpret_cast<const u32*>(lpOutContactSpy + 0x60 /*user index; arg_80*/));
         u8 laImage[0x50];
         for (u32 luByte = 0; luByte < sizeof(laImage); ++luByte)
         {
@@ -209,13 +235,13 @@ namespace BrnPhysics
             // Entity-id / owner consistency asserts (debug-only; non-gating). The ids are 8-byte
             // volume-instance words and the entity-id is that word's HIGH dword (srdi ..,32). In the
             // X360 asm the raw-contact ids come from the lower stack image (var_50 / var_48) and the
-            // potential-contact ids from the passed spy (arg_70 / arg_78). FLAG: the raw-contact
-            // stack-image field homes are not independently attested; modelled here off the resolved
-            // image / spy word offsets used elsewhere in this function.
+            // potential-contact ids from the passed spy (arg_70 / arg_78 == spy +0x50 / +0x58). FLAG:
+            // the raw-contact stack-image field homes are not independently attested; modelled here off
+            // the resolved image / spy word offsets used elsewhere in this function.
             const u32 luRawIdAHi = static_cast<u32>(*reinterpret_cast<const u64*>(laImage + 0x30) >> 32);
             const u32 luRawIdBHi = static_cast<u32>(*reinterpret_cast<const u64*>(laImage + 0x38) >> 32);
-            const u32 luPotIdAHi = static_cast<u32>(*reinterpret_cast<const u64*>(lpOutContactSpy + 0x70) >> 32);
-            const u32 luPotIdBHi = static_cast<u32>(*reinterpret_cast<const u64*>(lpOutContactSpy + 0x78) >> 32);
+            const u32 luPotIdAHi = static_cast<u32>(*reinterpret_cast<const u64*>(lpOutContactSpy + 0x50) >> 32);
+            const u32 luPotIdBHi = static_cast<u32>(*reinterpret_cast<const u64*>(lpOutContactSpy + 0x58) >> 32);
 
             if ((luEntityOwnerA == 0 && luEntityOwnerB == 1) || (luEntityOwnerA == 1 && luEntityOwnerB == 0))
             {
@@ -260,37 +286,39 @@ namespace BrnPhysics
 
         // The wheel/body-part deformable path stores a SECOND, reciprocal contact: the spy image is
         // rebuilt with the two volume-instance ids swapped (A<->B), the two 8-byte id/tag fields
-        // (@+0x50 / @+0x48 groups) swapped, the two 16-bit trailing fields swapped, and the two
+        // (@+0x30 / @+0x28 groups) swapped, the two 16-bit trailing fields swapped, and the two
         // stress/geometry vectors negated (vspltisw -1; vslw doubles the sign mask; vxor flips sign).
+        // Spy struct offsets = X360 arg_NN - 0x20 (the by-value spy is homed at arg_20).
         if (lbBodyPartVsVehicle || lbWheelVsVehicle)
         {
-            // Swap the two potential-contact id qwords (+0x70 <-> +0x78).
-            {
-                u64* lpA = reinterpret_cast<u64*>(lpOutContactSpy + 0x70);
-                u64* lpB = reinterpret_cast<u64*>(lpOutContactSpy + 0x78);
-                const u64 luTmp = *lpA; *lpA = *lpB; *lpB = luTmp;
-            }
-            // Swap the two raw-contact id qwords (+0x50 <-> +0x48).
+            // Swap the two potential-contact id qwords (+0x50 <-> +0x58; arg_70/arg_78).
             {
                 u64* lpA = reinterpret_cast<u64*>(lpOutContactSpy + 0x50);
-                u64* lpB = reinterpret_cast<u64*>(lpOutContactSpy + 0x48);
+                u64* lpB = reinterpret_cast<u64*>(lpOutContactSpy + 0x58);
                 const u64 luTmp = *lpA; *lpA = *lpB; *lpB = luTmp;
             }
-            // Swap the two 32-bit fields (+0x40 <-> +0x44) and the two 16-bit fields (+0x38 <-> +0x3A).
+            // Swap the two raw-contact id qwords (+0x30 <-> +0x28; arg_50/arg_48).
             {
-                u32* lpA = reinterpret_cast<u32*>(lpOutContactSpy + 0x40);
-                u32* lpB = reinterpret_cast<u32*>(lpOutContactSpy + 0x44);
+                u64* lpA = reinterpret_cast<u64*>(lpOutContactSpy + 0x30);
+                u64* lpB = reinterpret_cast<u64*>(lpOutContactSpy + 0x28);
+                const u64 luTmp = *lpA; *lpA = *lpB; *lpB = luTmp;
+            }
+            // Swap the two 32-bit fields (+0x20 <-> +0x24; arg_40/arg_44) and the two 16-bit fields
+            // (+0x18 <-> +0x1A; arg_38/arg_3A).
+            {
+                u32* lpA = reinterpret_cast<u32*>(lpOutContactSpy + 0x20);
+                u32* lpB = reinterpret_cast<u32*>(lpOutContactSpy + 0x24);
                 const u32 luTmp = *lpA; *lpA = *lpB; *lpB = luTmp;
             }
             {
-                u16* lpA = reinterpret_cast<u16*>(lpOutContactSpy + 0x38);
-                u16* lpB = reinterpret_cast<u16*>(lpOutContactSpy + 0x3A);
+                u16* lpA = reinterpret_cast<u16*>(lpOutContactSpy + 0x18);
+                u16* lpB = reinterpret_cast<u16*>(lpOutContactSpy + 0x1A);
                 const u16 luTmp = *lpA; *lpA = *lpB; *lpB = luTmp;
             }
             // Negate the two 16-byte stress/geometry vectors (vxor with the all-ones sign mask == sign flip).
             {
                 u32* lpVecA = reinterpret_cast<u32*>(laImage + 0x00);
-                u32* lpVecB = reinterpret_cast<u32*>(lpOutContactSpy + 0x60);
+                u32* lpVecB = reinterpret_cast<u32*>(lpOutContactSpy + 0x40 /*arg_60*/);
                 for (u32 luLane = 0; luLane < 4; ++luLane)
                 {
                     lpVecA[luLane] ^= 0x80000000u;
@@ -332,5 +360,129 @@ namespace BrnPhysics
         }
 
         VehicleManager_ValidateSimulationContacts(lpModule + KU_OFFSET_VEHICLE_MANAGER, lpContactQueue);
+    }
+
+    // =================================================================================================
+    // BrnPhysics::PhysicsModule::BridgeVehicleManagerRequestsToSimulation  @0x825AB968
+    //   (InputBuffer* lpSimModuleInputBuffer, const RequestInterface* lpRequestInterface)
+    //
+    // Forward the vehicle-manager's per-frame joint requests into the simulation input buffer. Only
+    // the remove-joint queue is bridged here (the add-joint queue must already be empty this frame).
+    // =================================================================================================
+    void PhysicsModule_BridgeVehicleManagerRequestsToSimulation(u8* /*lpModule*/,
+                                                                u8* lpSimModuleInputBuffer,
+                                                                u8* lpRequestInterface)
+    {
+        CGS_ASSERT(lpSimModuleInputBuffer != nullptr, "lpSimModuleInputBuffer != NULL");
+        CGS_ASSERT(lpRequestInterface != nullptr, "lpRequestInterface != NULL");
+
+        // The add-joint queue (@+0x9BE8) must be drained already -- nothing to add this frame.
+        CGS_ASSERT(*reinterpret_cast<const s32*>(lpRequestInterface + 0x9BE8) == 0,
+                   "lpRequestInterface->GetAddJointQueue()->GetLength() == 0");
+
+        // Append the request interface's remove-joint queue (@+0xA370) into the sim input buffer.
+        InputBuffer_AppendRemoveJointQueue_10(lpSimModuleInputBuffer, lpRequestInterface + 0xA370);
+    }
+
+    // =================================================================================================
+    // BrnPhysics::PhysicsModule::CheckContactQueueSize  @0x825A1100
+    //   (const InAddContactQueue* lpContactQueue, EEntityTypeID leOwnerId)
+    //
+    // Diagnostics-only. Fires ONLY when the simulation contact queue is full (miLength == miMaxLength):
+    // tally every queued contact's two entity-type owners into a per-owner histogram, dump the
+    // histogram to the debug log, then assert "Contact Queue is full". No-op when the queue is not full.
+    // =================================================================================================
+    void PhysicsModule_CheckContactQueueSize(u8* /*lpModule*/, u8* lpContactQueue, u32 /*luOwnerId*/)
+    {
+        RawContactQueueHead* lpQueue = reinterpret_cast<RawContactQueueHead*>(lpContactQueue);
+        if (lpQueue->miLength != lpQueue->miMaxLength)
+        {
+            return;   // queue not full -- nothing to report
+        }
+
+        // Per-entity-type-owner contact histogram (each contact contributes to two owner buckets).
+        s32 laOwnerCounts[KI_ENTITYTYPE_COUNT] = { 0 };
+
+        for (s32 liIndex = 0; liIndex < lpQueue->miLength; ++liIndex)
+        {
+            u8* lpEvent = GetSimulationContact(lpContactQueue, liIndex);
+
+            // Each id's entity-type owner is the high byte of its high dword: id A @+0x30, id B @+0x38.
+            const u32 luOwnerA = *reinterpret_cast<const u32*>(lpEvent + 0x30) >> 24;
+            CGS_ASSERT(luOwnerA < static_cast<u32>(KI_ENTITYTYPE_COUNT),
+                       "lpContactEvent->mIDA.GetEntityIDOwner() < BrnWorld::E_ENTITYTYPE_COUNT");
+            ++laOwnerCounts[luOwnerA];
+
+            const u32 luOwnerB = *reinterpret_cast<const u32*>(lpEvent + 0x38) >> 24;
+            CGS_ASSERT(luOwnerB < static_cast<u32>(KI_ENTITYTYPE_COUNT),
+                       "lpContactEvent->mIDB.GetEntityIDOwner() < BrnWorld::E_ENTITYTYPE_COUNT");
+            ++laOwnerCounts[luOwnerB];
+        }
+
+        for (s32 liOwner = 0; liOwner < KI_ENTITYTYPE_COUNT; ++liOwner)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "Owner id: " << liOwner
+                                           << " Contact count: " << laOwnerCounts[liOwner] << "\n";
+            }
+        }
+
+        CGS_ASSERT(false, "Contact Queue is full\n");
+    }
+
+    // =================================================================================================
+    // BrnPhysics::PhysicsModule::BridgeSimulationToOutput  @0x825B0448
+    //   (OutputBuffer* lpOutputBuffer, const PotentialContactInterface*, const PropRaceCarContactBuffer*,
+    //    const SimModuleOutputBuffer* lpSimModuleOutputBuffer, VecFloat timeStep)
+    //
+    // End-of-frame bridge: resolve every contact spy the simulation produced into the module's
+    // ContactSpyData (via ProcessContactSpies), drain the module's discarded-contact source queue into
+    // that data's discarded-contact queue, then publish the ContactSpyData through the output buffer's
+    // contact-spy interface. The VecFloat time step is forwarded unchanged to ProcessContactSpies.
+    // =================================================================================================
+    void PhysicsModule_BridgeSimulationToOutput(u8* lpModule,
+                                                u8* lpOutputBuffer,
+                                                u8* lpPotentialContactsInterface,
+                                                u8* lpPropRaceCarContactBuffer,
+                                                u8* lpSimModuleOutputBuffer,
+                                                /*VecFloat*/ const void* lpTimeStep)
+    {
+        CGS_ASSERT(lpOutputBuffer != nullptr, "lpOutputBuffer != NULL");
+        CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL");
+        CGS_ASSERT(lpSimModuleOutputBuffer != nullptr, "lpSimModuleOutputBuffer != NULL");
+
+        // The output buffer's contact-spy interface must be empty (or unbound) before we repopulate it.
+        u8* lpContactSpyInterface = *reinterpret_cast<u8**>(OutputBuffer_GetContactSpyInterface(lpOutputBuffer));
+        const bool lbEmpty = (lpContactSpyInterface == nullptr) || ContactSpyData_IsEmpty(lpContactSpyInterface);
+        CGS_ASSERT(lbEmpty, "lpOutputBuffer->GetContactSpyInterface()->IsEmpty()");
+
+        // Resolve all raw contact spies into the module's typed contact queues.
+        PhysicsModule_ProcessContactSpies(lpModule,
+                                          GetSimModuleContactSpyQueue(lpSimModuleOutputBuffer),
+                                          lpPotentialContactsInterface,
+                                          lpPropRaceCarContactBuffer,
+                                          lpTimeStep);
+
+        // Drain the module's discarded-contact source queue (@+0x2BE40, length @+0x2BE48) into the
+        // ContactSpyData discarded-contact queue (@+0x480B0 == +0x2ECF0 + 0x193C0).
+        u8* lpSource       = lpModule + 0x2BE40;
+        u8* lpDiscardedDst = lpModule + 0x480B0;
+        const s32 liCount  = *reinterpret_cast<const s32*>(lpModule + 0x2BE48);
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        {
+            u8* lpEvent = GetDiscardedContactSourceEvent(lpSource, liIndex);
+            if (!DiscardedContactQueue_AddEventSafe(lpDiscardedDst, lpEvent)
+                && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "WARNING: Ran out of contacts in DiscardedContactQueue.\n";
+            }
+        }
+
+        // Publish: point the output buffer's contact-spy interface at the module's ContactSpyData.
+        u8* lpInterfaceContainer = OutputBuffer_GetContactSpyInterface(lpOutputBuffer);
+        u8* lpData = lpModule + KU_OFFSET_CONTACT_DATA;   // +0x2ECF0
+        CGS_ASSERT(lpData != nullptr, "lpData != NULL");
+        *reinterpret_cast<u8**>(lpInterfaceContainer) = lpData;
     }
 }
