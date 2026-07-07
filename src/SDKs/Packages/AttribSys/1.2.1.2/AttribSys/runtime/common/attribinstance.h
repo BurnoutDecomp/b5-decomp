@@ -10,6 +10,7 @@
 // generated-class accessor API is inlined away in X360.
 // Method bodies live in attribinstance.cpp; Collection internals are owned by the SDK.
 #include "types.hpp"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribhashmap.h" // Attrib::HashMap base
 
 namespace Attrib
 {
@@ -17,20 +18,32 @@ namespace Attrib
 
     class Class;       // full definition in vechashmap.h; RefSpec::GetClass returns it by pointer.
 
-    // Partial Attrib::Collection layout (the fields Instance / Attribute touch). Byte
-    // offsets in the comments are the X360-attested ones; member access is by name
-    // (semantic parity, not host byte-matching, since the pointers widen on the host).
-    struct Collection
+    // Attrib::Collection -- a refcounted attribute table plus the collection metadata
+    // (parent/default fallback, sub-collection, owning class, data area). It DERIVES from
+    // Attrib::HashMap: the X360 passes a Collection* straight into HashMap::Release and the
+    // +0x08 refcount ops, so the shared refcount (muRefCount @ +0x08) and the bucket table
+    // are the HashMap base's; only the collection-specific metadata is added here. Byte
+    // offsets in the comments are the X360-attested ones (the HashMap base occupies
+    // 0x00..0x0B); member access is by name (semantic parity, not host byte-matching, since
+    // the pointers widen on the host).
+    struct Collection : public HashMap
     {
-        u8          mPad0[8];
-        u16         muRefCount;      // +8
-        u8          mPad1[2];        // +10
-        Collection* mpParent;        // +12  parent/default collection an unmodify falls back to
-        void*       mpSubCollection; // +16
-        u8          mPad2[4];        // +20
-        int*        mpClass;         // +24
-        void*       mpData;          // +28
-        u32         muHasNoDefault;  // +32
+        Collection* mpParent;        // +0x0C  parent/default collection an unmodify falls back to
+        void*       mpSubCollection; // +0x10
+        u8          mPad2[4];        // +0x14
+        int*        mpClass;         // +0x18
+        void*       mpData;          // +0x1C
+        u32         muHasNoDefault;  // +0x20
+
+        // Bump the shared refcount (asserts it has not saturated at 0xFFFF); returns this.
+        Collection* AddRef();                       // @0x828028E0  (attribcollection.cpp)
+        // Drop one shared reference via HashMap::Release; on the final drop, queue this
+        // collection onto the attribute database's garbage list for deferred deletion.
+        int         Release();                       // @0x8280C2E8  (attribcollection.cpp)
+        // The real destructor (releases the attribute table this collection owns). Own
+        // AttribSys ledger TU (todo); declared so the scalar-deleting-destructor thunk
+        // (Collection_ScalarDeletingDtor @0x8280C510) links against it.
+        ~Collection();
     };
 
     // The 16-byte attribute record Get copies out.

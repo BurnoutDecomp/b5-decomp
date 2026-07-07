@@ -32,9 +32,9 @@
 // their base pointers.
 //
 // HONEST PLACEHOLDERS (flagged for proper homing -- see ParticleBucket.cpp
-// dep_flags): cVector, cMatrix, cTime, cParticleRandomSeed, sParticleNucleus and
-// cParticleEmitter are vendor math / Lion runtime types not yet homed in the
-// project. They are modelled here only as far as this TU's runtime touches them
+// dep_flags): cVector, cMatrix, cTime, sParticleNucleus and cParticleEmitter are
+// vendor math / Lion runtime types not yet homed in the project. (cParticleRandomSeed
+// is now homed -- ParticleRandomSeed.h -- and pulled in by include, not forked here.) They are modelled here only as far as this TU's runtime touches them
 // (correct element STRIDE for the indexed arrays; opaque-but-named otherwise).
 // NOTE: a sibling Lion home (ParticleBehaviour.h) also defines HONEST-PLACEHOLDER
 // cVector/cColour8. To avoid a cross-header ODR clash this header does NOT include
@@ -43,6 +43,11 @@
 // ============================================================================
 
 #include "types.hpp"
+
+// Real home for the per-bucket RNG seed snapshot (mRandomSeed). Its 0x34-byte size
+// exactly fills the DWARF-attested gap between mRandomSeed@0x1C and the next member
+// mnNextParticlePositionToFill@0x50 -- so this is the type's owning header, not a fork.
+#include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
 
 class cParticleEmitter;   // owning emitter (chained list head) -- opaque here
 
@@ -78,15 +83,8 @@ struct cTime
     u64 muTicks;
 };
 
-// ----------------------------------------------------------------------------
-// HONEST PLACEHOLDER: the per-bucket RNG seed snapshot (mRandomSeed). Not touched
-// by this TU's bodied function. Modelled opaque; sized only so the leading header
-// members keep a plausible sequence. Replace with the real seed home.
-// ----------------------------------------------------------------------------
-struct cParticleRandomSeed
-{
-    u32 mau32State[3];
-};
+// cParticleRandomSeed (mRandomSeed) now comes from its real home,
+// ParticleRandomSeed.h (included above); the former opaque placeholder is retired.
 
 // ----------------------------------------------------------------------------
 // HONEST PLACEHOLDER: one particle "nucleus" (the per-particle simulation state).

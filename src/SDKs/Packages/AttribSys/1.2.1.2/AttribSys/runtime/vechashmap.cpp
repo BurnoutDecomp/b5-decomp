@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"   // GetAttribSysAllocator
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // FreeWithCensusIf
 
 // AttribSys runtime -- the two live VecHashMap instantiations off the X360 spine:
 //   VecHashMap<Attrib::Key, Attrib::Class,      Attrib::Class::TablePolicy, false, 16u>
@@ -39,13 +40,20 @@ namespace Attrib
         return lpBlock;
     }
 
-    // Attrib::Collection scalar deleting destructor -- own TU; trap stub here.
+    // @ 0x8280C510 -- Attrib::Collection scalar deleting destructor (MSVC's ??_G thunk,
+    // called by CollectionHashMap::Clear on every live collection it evicts). Runs the real
+    // ~Collection(), then -- when the low should-free bit of the deleting flag is set --
+    // returns the 40-byte (0x28) collection to the AttribSys package allocator, with the
+    // shared live-byte census decremented and the peak refreshed, NULL-guarding the block
+    // exactly as the X360 emits (cmplwi r30,0 / beq before the GetAttribS()->Free(this,40,0)).
+    // Routed through the shared null-guarded census-free helper so the two census counters
+    // (dword_83011BFC / dword_83011BF8) stay defined exactly once. Returns this.
     void* Collection_ScalarDeletingDtor(Collection* lpCollection, int liDeleteFlag)
     {
-        (void)lpCollection;
-        (void)liDeleteFlag;
-        __debugbreak();
-        return NULL;
+        lpCollection->~Collection();
+        if ((liDeleteFlag & 1) != 0)
+            HashMapTablePolicy::FreeWithCensusIf(lpCollection, 40, NULL);
+        return lpCollection;
     }
 }
 
