@@ -1,55 +1,132 @@
 // BrnGuiFsmController.cpp
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
-//
-//   BrnGui::GuiFsmController::IsTransitionPending @ 0x824ECCF8
-//
-//   if !(luFlowId in [0,2]):  build "Invalid Flow Id passed" and fire (DWARF :190)
-//   if mapFlows[luFlowId] == 0: build "Error, flow not set" and fire (DWARF :191)
-//   return mabTransitionPending[luFlowId]    ; lbz r3, 0x94(luFlowId + this)
-//
-//   - flow lookup: `slwi r,a2,2 ; lwzx r,r,this`  -> mapFlows[a2] (4-byte slots @ +0x00)
-//   - return byte: `add r,a2,this ; lbz r3,0x94(r)` -> mabTransitionPending[a2] (1-byte
-//     slots @ +0x94, zero-extended).
-//
-// Both guards are non-fatal: the X360 returns the stored byte regardless. The X360
-// builds each assert message through a CgsDev::StrStream over the shared assert buffer;
-// reproduced here with the same stream. The X360-baked file/line are discarded per
-// project convention; the stringized condition text matches the X360 messages.
 
 #include "GameSource/Gui/BrnGuiFsmController.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert::Begin/Fire/End
-#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsID.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace BrnGui
 {
+namespace
+{
+    const char* const KAC_BLANK_FSM_ID = " ";
+
+    bool IsValidFlow(s32 liFlow)
+    {
+        return liFlow >= E_GUIFLOW_FIRST && liFlow < E_GUIFLOW_COUNT;
+    }
+}
+
+// @ 0x824F1940
+void GuiFsmController::Construct()
+{
+    mpGuiModelModule = 0;
+    mpFSMAllocator = 0;
+    mePrepareStage = E_PREPARESTAGE_START;
+
+    for (u32 luFlow = 0; luFlow < KU_NUM_FLOWS; ++luFlow)
+    {
+        mapFlows[luFlow] = 0;
+        maeFlowLoadState[luFlow] = E_FLOWLOADSTAGE_UNLOADED;
+        maHashToLoad[luFlow] = 0;
+        maacNameToLoad[luFlow][0] = 0;
+        mInitialStateId[luFlow] = 0;
+        mapLoadNotification[luFlow] = 0;
+        mapUnloadNotification[luFlow] = 0;
+        mbFsmTransitionPending[luFlow] = false;
+        mbModeManagerWaitingForResponse[luFlow] = false;
+
+        mFsmToChangeTo[luFlow] = GuiEventRunFsm();
+        mCurrentFsm[luFlow] = mFsmToChangeTo[luFlow];
+        macNameToUnload[luFlow][0] = 0;
+    }
+
+    mDummyUnloadNotification.meRequestType = CgsGui::E_GUI_RESOURCETYPE_START;
+    mDummyUnloadNotification.muLoadRequestId = 0;
+    mDummyUnloadNotification.muFileNameHash = 0;
+}
+
+// @ 0x824F9918
+void GuiFsmController::RunFsm(const GuiEventRunFsm* lpEvent)
+{
+    const s32 liFlow = static_cast<s32>(lpEvent->meFlowToUse);
+    if (!IsValidFlow(liFlow))
+    {
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "Invalid FlowToUse in the event";
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+        CgsDev::Assert::EndAssert();
+    }
+
+    const GuiFlow leFlow = static_cast<GuiFlow>(liFlow);
+    mbFsmTransitionPending[leFlow] = true;
+    mbModeManagerWaitingForResponse[leFlow] = true;
+    mFsmToChangeTo[leFlow] = *lpEvent;
+
+    if (maeFlowLoadState[leFlow] == E_FLOWLOADSTAGE_UNLOADED)
+    {
+        RunQueuedFsm(leFlow);
+    }
+    else if (maeFlowLoadState[leFlow] == E_FLOWLOADSTAGE_RUNNING)
+    {
+        maeFlowLoadState[leFlow] = E_FLOWLOADSTAGE_FSMSHUTDOWN;
+    }
+}
+
+// @ 0x824F1A00
+void GuiFsmController::RunQueuedFsm(GuiFlow leFlowToUse)
+{
+    maHashToLoad[leFlowToUse] = mFsmToChangeTo[leFlowToUse].mFsmId;
+    CgsIDConvertToString(mFsmToChangeTo[leFlowToUse].mFsmId, maacNameToLoad[leFlowToUse]);
+    mInitialStateId[leFlowToUse] = mFsmToChangeTo[leFlowToUse].mInitialStateId;
+
+    for (s32 liIndex = 0; liIndex < KI_FSM_NAME_LENGTH; ++liIndex)
+    {
+        if (maacNameToLoad[leFlowToUse][liIndex] == ' ')
+        {
+            maacNameToLoad[leFlowToUse][liIndex] = 0;
+            break;
+        }
+    }
+
+    maeFlowLoadState[leFlowToUse] = E_FLOWLOADSTAGE_TRIGGERLOAD;
+    mbFsmTransitionPending[leFlowToUse] = false;
+
+    mCurrentFsm[leFlowToUse] = mFsmToChangeTo[leFlowToUse];
+    mFsmToChangeTo[leFlowToUse].mFsmId = CgsIDCompress(KAC_BLANK_FSM_ID);
+    mFsmToChangeTo[leFlowToUse].mInitialStateId = CgsIDCompress(KAC_BLANK_FSM_ID);
+    mFsmToChangeTo[leFlowToUse].meFsmToRun = E_GUI_HUD_NUMSFSMS;
+    mFsmToChangeTo[leFlowToUse].meFlowToUse = E_GUIFLOW_COUNT;
+}
 
 // @ 0x824ECCF8
-bool GuiFsmController::IsTransitionPending( u32 luFlowId ) const
+bool GuiFsmController::IsTransitionPending(u32 luFlowId) const
 {
-    // ---- guard 1: valid flow id (X360: signed<0 || >=3) ----
-    if ( luFlowId >= KU_NUM_FLOWS )
+    if (luFlowId >= KU_NUM_FLOWS)
     {
         char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream( lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStrStream << "Invalid Flow Id passed";
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert( lStrStream.GetBuffer(), __FILE__, __LINE__ );
+        CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
         CgsDev::Assert::EndAssert();
     }
 
-    // ---- guard 2: flow is set ----
-    if ( mapFlows[luFlowId] == nullptr )
+    if (mapFlows[luFlowId] == 0)
     {
         char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream( lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE );
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
         lStrStream << "Error, flow not set";
         CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert( lStrStream.GetBuffer(), __FILE__, __LINE__ );
+        CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
         CgsDev::Assert::EndAssert();
     }
 
-    return mabTransitionPending[luFlowId] != 0;
+    return mbFsmTransitionPending[luFlowId];
 }
 
 } // namespace BrnGui

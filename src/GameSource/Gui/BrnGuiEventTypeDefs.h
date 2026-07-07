@@ -36,6 +36,7 @@
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsID.h"          // CgsIDCompress
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"     // CgsGui::GuiEvent<N> (event payload base)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiPopupResource.h" // PopupStyle/PopupIcons/GuiPopupParameter
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessage.h"     // HudMessageParamTypes/HudMessageParameter
@@ -60,6 +61,41 @@ enum GuiFlow
     E_GUIFLOW_COUNT   = 3,
     E_GUIFLOW_FIRST   = 0,
 };
+
+// BrnGuiEventTypeDefs.h:912 -- HUD FSM selector carried by GuiEventRunFsm.
+enum EHUDFSMs
+{
+    E_GUI_HUD_INVALID = -1,
+    E_GUI_HUD_BOOT    = 0,
+    E_GUI_HUD_FREEBURN = 1,
+    E_GUI_HUD_EVENT   = 2,
+    E_GUI_HUD_ONLINE  = 3,
+    E_GUI_HUD_NUMSFSMS = 4,
+};
+
+// BrnGuiEventTypeDefs.h:936 -- request to run a GUI FSM. X360 BrnGuiFsmController::RunFsm
+// copies this record as three qwords and reads meFlowToUse at +0x14, proving the controller-facing
+// record is 24 bytes with the ids first. The DecFIGS text lists meFsmToRun first, but the ARTIST
+// assembly wins for field order.
+struct GuiEventRunFsm : public CgsModule::Event
+{
+    CgsID    mFsmId;          // +0x00 -- FSM LuaCode resource id to load
+    CgsID    mInitialStateId; // +0x08 -- initial scripted state id
+    EHUDFSMs meFsmToRun;      // +0x10
+    GuiFlow  meFlowToUse;     // +0x14 -- RunFsm validates this against [0, E_GUIFLOW_COUNT)
+
+    GuiEventRunFsm()
+        : mFsmId(CgsIDCompress(" "))
+        , mInitialStateId(CgsIDCompress(" "))
+        , meFsmToRun(E_GUI_HUD_NUMSFSMS)
+        , meFlowToUse(E_GUIFLOW_COUNT)
+    {
+    }
+
+    s32 GetEventType() const { return 142; }
+};
+
+static_assert(sizeof(GuiEventRunFsm) == 24, "GuiEventRunFsm controller payload is 24 bytes");
 
 // Player-team identity carried on the X360 sat-nav icon payload. Bounds match the
 // X360 GetPlayerTeam guard (start == 0, count == 9). The canonical enum lives in the

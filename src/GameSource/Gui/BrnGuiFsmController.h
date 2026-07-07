@@ -1,51 +1,78 @@
 // BrnGuiFsmController.h
-// Home of BrnGui::GuiFsmController -- the GUI flow finite-state-machine controller. It
-// owns one flow object per GUI "flow id" (HUD / Screen / Overlay) and tracks, per flow,
-// whether a state transition is currently pending.
-//
-// This slice reconstructs ONLY the out-of-line accessor the X360 ARTIST build emits:
-//
-//   IsTransitionPending @ 0x824ECCF8 -> bool. Given a flow id (0..2), returns whether
-//                                       that flow has a transition pending, with two
-//                                       non-fatal guards:
-//         * the flow id must be in [0, 2]   (else "Invalid Flow Id passed", DWARF
-//           GameSource/Gui/BrnGuiFsmController.h:190)
-//         * the flow at that id must be set  (else "Error, flow not set", :191)
-//
-// LAYOUT (X360 authoritative):
-//   +0x00  mapFlows[3]            -- three flow-object pointers (index = 4 * flow id);
-//                                    `lwzx r,4*a2,this`. The flow object type is not in
-//                                    scope for this slice, so the slots are held as
-//                                    opaque pointers (void*), accessed BY NAME.
-//   +0x94  mabTransitionPending[3] -- per-flow "transition pending" byte (index = flow
-//                                    id, stride 1); `lbz r3, 0x94(a2 + this)`.
-// Only the two members touched by IsTransitionPending are modelled, at their X360-proven
-// offsets; the intervening bytes (0x0C .. 0x93) are an explicitly-reserved span so the
-// pending-flags array sits at its proven offset. Honest layout boundary, not fabricated.
+// Home of BrnGui::GuiFsmController -- the GUI flow FSM controller that queues
+// flow changes, drives the load/unload state machine, and prepares each flow's
+// LuaCode bundle once the resource module reports it loaded.
 
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                         // CgsID
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // load/unload notifications
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"    // GuiFlow, GuiEventRunFsm
+
+namespace CgsGui
+{
+    class ModelModule;
+}
+
+namespace CgsMemory { class HeapMalloc; }
+namespace InputBuffer { class GuiEventQueue; }
 
 namespace BrnGui
 {
-    // The GUI flow FSM controller. Only the members read by IsTransitionPending are
-    // modelled at their X360-proven offsets.
+    struct BrnBaseFlow;
+
     class GuiFsmController
     {
     public:
-        // Number of GUI flows the controller drives (HUD / Screen / Overlay). The X360
-        // guards the flow id against [0, KI_NUM_FLOWS).
-        static const u32 KU_NUM_FLOWS = 3;
+        // BrnGuiFsmController.h:55
+        enum PrepareStage
+        {
+            E_PREPARESTAGE_START       = 0,
+            E_PREPARESTAGE_SETPOINTERS = 1,
+            E_PREPARESTAGE_DONE        = 2,
+        };
+
+        // BrnGuiFsmController.h:63
+        enum FlowLoadStage
+        {
+            E_FLOWLOADSTAGE_TRIGGERLOAD   = 0,
+            E_FLOWLOADSTAGE_WFLOAD        = 1,
+            E_FLOWLOADSTAGE_RUNNING       = 2,
+            E_FLOWLOADSTAGE_FSMSHUTDOWN   = 3,
+            E_FLOWLOADSTAGE_TRIGGERUNLOAD = 4,
+            E_FLOWLOADSTAGE_WFUNLOAD      = 5,
+            E_FLOWLOADSTAGE_UNLOADED      = 6,
+        };
+
+        static const u32 KU_NUM_FLOWS = E_GUIFLOW_COUNT;
+        static const s32 KI_FSM_NAME_LENGTH = 13;
+
+        void Construct();
+        void RunFsm(const GuiEventRunFsm* lpEvent);
 
         // @ 0x824ECCF8 -- return whether the flow identified by luFlowId has a state
-        // transition pending. Asserts the id is valid and the flow is set (both
-        // non-fatal: the X360 returns the stored byte regardless).
-        bool IsTransitionPending( u32 luFlowId ) const;
+        // transition pending. Asserts the id is valid and the flow is set (both non-fatal).
+        bool IsTransitionPending(u32 luFlowId) const;
 
     private:
-        void* mapFlows[KU_NUM_FLOWS];          // @0x00 .. 0x0B  (flow object pointers, BY NAME)
-        u8    maHeadReserved[0x94 - 0x0C];     // @0x0C .. 0x93  (other controller state)
-        u8    mabTransitionPending[KU_NUM_FLOWS]; // @0x94 .. 0x96  (per-flow pending flag)
+        void RunQueuedFsm(GuiFlow leFlowToUse);
+
+        BrnBaseFlow* mapFlows[KU_NUM_FLOWS];                         // h:107
+        FlowLoadStage maeFlowLoadState[KU_NUM_FLOWS];                // h:108
+        CgsID maHashToLoad[KU_NUM_FLOWS];                            // h:109
+        char maacNameToLoad[KU_NUM_FLOWS][KI_FSM_NAME_LENGTH];       // h:110
+        CgsID mInitialStateId[KU_NUM_FLOWS];                         // h:111
+        const CgsGui::GuiEventLoadNotification* mapLoadNotification[KU_NUM_FLOWS];     // h:112
+        const CgsGui::GuiEventUnloadNotification* mapUnloadNotification[KU_NUM_FLOWS]; // h:113
+        CgsGui::ModelModule* mpGuiModelModule;                       // h:114
+        CgsMemory::HeapMalloc* mpFSMAllocator;                       // h:115
+        PrepareStage mePrepareStage;                                 // h:116
+        bool mbFsmTransitionPending[KU_NUM_FLOWS];                   // h:117
+        bool mbModeManagerWaitingForResponse[KU_NUM_FLOWS];          // h:118
+        GuiEventRunFsm mFsmToChangeTo[KU_NUM_FLOWS];                 // h:119
+        GuiEventRunFsm mCurrentFsm[KU_NUM_FLOWS];                    // h:120
+        char macNameToUnload[KU_NUM_FLOWS][KI_FSM_NAME_LENGTH];      // h:121
+        CgsGui::GuiEventUnloadNotification mDummyUnloadNotification;  // h:124
     };
 }
