@@ -44,6 +44,12 @@ namespace Attrib
         // GetCount(layout, collection) @ external — element count of an array-typed node
         // (DWARF attribhashmap.h:326); drives Attribute::GetLength.
         unsigned int GetCount(void* lpLayout, const Collection* lpCollection);
+
+        // GetTypeDesc @ own AttribSys TU (todo) — resolve this node's schema TypeDesc from
+        // the attribute database by its mTypeIndex. Declared here (TypeDesc from
+        // attribarray.h, forward-declared via attribinstance.h) so Collection::Clear's
+        // inherited-attribute teardown links against the real out-of-line call.
+        const TypeDesc* GetTypeDesc() const;
     };
 
     // Cursor onto one attribute of a live instance. 16 bytes: instance, collection, node,

@@ -49,6 +49,11 @@ namespace Attrib
     class HashMap
     {
     public:
+        // Attrib::Collection IS-A HashMap and drives the shared table directly: Clear walks
+        // the bucket array to tear it down, and GetNode/GetData/NextKey probe it. Grant the
+        // derived collection access to the private table members its bodies read by name.
+        friend struct Collection;
+
         // One bucket. 16-byte stride (X360 slwi ,4). FREE iff the occupied flag (bit7 of
         // mFlags @ +0xF) is clear; a free bucket reads back key 0.
         struct Node
