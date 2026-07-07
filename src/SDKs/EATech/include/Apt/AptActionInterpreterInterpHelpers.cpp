@@ -786,6 +786,11 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
 //
 extern AptCIH* gpAptEmptyCIH;   // dword_8324D700 -- the pinned "EmptyCIH" AptCIHNone placeholder
 
+// §6.4 DIAG: capture the nested onLoad/RegisterComponent bytecode while the op trace is armed.
+extern "C" int  AptOpTraceIsArmed(void);
+extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
+                               const char* const* ppPool, int nPoolCount);
+
 // AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch of
 // callFunction (tags 34/35/36). HOMED + LIVE (2026-07-04). The full faithful body is the
 // console branch 0x82AE3CB8..0x82AE3FF4, cross-checked against the PS3 External build
@@ -906,6 +911,14 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
 
             // Run the compiled body against the bound CIH + resolved inst (0x82AE3F04).
             const int nSize = pFunc->GetByteCodeSize();                                // vtbl 0x4C
+            // §6.4 DIAG: while the op trace is armed (the onLoad drain), dump this function's
+            // bytecode so the nested RegisterComponent stream (the '_global' arg source) is captured.
+            if (AptOpTraceIsArmed())
+            {
+                const AptConstantPool lDumpPool = pFunc->GetConstantPool();
+                AptFnDumpProbe(pFunc->GetByteCodeBase(), nSize,
+                               lDumpPool.mppEntries, static_cast<int>(lDumpPool.mnCount));
+            }
             pInterp->runStream(static_cast<const unsigned char*>(pFunc->GetByteCodeBase()), // vtbl 0x48
                                static_cast<AptCIH*>(pFunc->GetCIH()), nSize, pRunInst);
 
