@@ -103,6 +103,29 @@ void GuiFsmController::RunQueuedFsm(GuiFlow leFlowToUse)
     mFsmToChangeTo[leFlowToUse].meFlowToUse = E_GUIFLOW_COUNT;
 }
 
+// @ 0x824F1B08
+bool GuiFsmController::HandleHudStateLoadComplete()
+{
+    bool lbTransitionPending = false;
+    bool lbModeManagerWaitingForResponse = false;
+
+    for (u32 luFlow = 0; luFlow < KU_NUM_FLOWS; ++luFlow)
+    {
+        if (mbFsmTransitionPending[luFlow])
+        {
+            lbTransitionPending = true;
+            maeFlowLoadState[luFlow] = E_FLOWLOADSTAGE_FSMSHUTDOWN;
+        }
+        else if (mbModeManagerWaitingForResponse[luFlow])
+        {
+            lbModeManagerWaitingForResponse = true;
+            mbModeManagerWaitingForResponse[luFlow] = false;
+        }
+    }
+
+    return !lbTransitionPending && lbModeManagerWaitingForResponse;
+}
+
 // @ 0x824ECCF8
 bool GuiFsmController::IsTransitionPending(u32 luFlowId) const
 {

@@ -50,6 +50,7 @@ namespace BrnGui
 
         void Construct();
         void RunFsm(const GuiEventRunFsm* lpEvent);
+        bool HandleHudStateLoadComplete();
 
         // @ 0x824ECCF8 -- return whether the flow identified by luFlowId has a state
         // transition pending. Asserts the id is valid and the flow is set (both non-fatal).
