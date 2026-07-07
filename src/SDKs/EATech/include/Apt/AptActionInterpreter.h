@@ -357,6 +357,13 @@ public:
     // the timer slot whose id matches the (integer) argument.
     static AptValue* cbCallMethod_clearInterval(AptValue* pThis, int nArgCount);
 
+    // SetIntervalImpl / ClearIntervalImpl -- the interval-table work of
+    // cbCallMethod_setInterval @0x82B019D8 / _clearInterval @0x82AE3AE0 past their arg
+    // guards. Static: they touch only the interval table + native-arg stack, no this.
+    // Bodies in AptIntervalTimer.cpp.
+    static AptValue* SetIntervalImpl(AptValue* pCallback, int nArgCount);
+    static void      ClearIntervalImpl(int nId);
+
     // ---- ActionScript opcode handlers (static; (interpreter, context)) ----
     // The bytecode dispatch registers these by opcode. Each is a static function
     // taking the interpreter + the execution context; the dispatcher ignores the
