@@ -58,13 +58,14 @@ void AptValue::ClearReleaseAtEnd()
 // incGCRoot @0x82AD8120 -- bump the GC-root count one, under the Apt GC flag
 // lock. X360: acquire the lwarx/stwcx spin lock on unk_8324E75C, then
 //   if ((*(this+4) & 0x3F00) < 0x3F00) <add 0x100 to the field>
-// i.e. if the 6-bit mnGCRootCount is below MAX_GCROOT, increment it (setGCRoot
-// clamps anyway), then release the lock.
+// i.e. if the 6-bit mnGCRootCount is below MAX_GCROOT, increment it, then
+// release the lock. Direct field write (NOT via setGCRoot -- the shipped body
+// manipulates the word inline, and setGCRoot takes this same non-recursive lock).
 void AptValue::incGCRoot()
 {
     AptGCFlagLock_Acquire();
-    if (getGCRoot() < MAX_GCROOT)
-        setGCRoot(getGCRoot() + 1);
+    if (mValueBitfield.mnGCRootCount < MAX_GCROOT)
+        mValueBitfield.mnGCRootCount = mValueBitfield.mnGCRootCount + 1u;
     AptGCFlagLock_Release();
 }
 
@@ -72,11 +73,56 @@ void AptValue::incGCRoot()
 // Apt GC flag lock. X360: acquire the spin lock, then
 //   if (((*(this+4) >> 8) & 0x3F) != 0) <field = field - 1>
 // i.e. if mnGCRootCount is non-zero, decrement it, then release the lock.
+// Direct field write (see incGCRoot).
 void AptValue::decGCRoot()
 {
     AptGCFlagLock_Acquire();
-    if (getGCRoot() > 0)
-        setGCRoot(getGCRoot() - 1);
+    if (mValueBitfield.mnGCRootCount != 0u)
+        mValueBitfield.mnGCRootCount = mValueBitfield.mnGCRootCount - 1u;
+    AptGCFlagLock_Release();
+}
+
+// setRefCount @0x82AD7E90 -- store the reference count under the Apt GC flag
+// lock. X360: acquire the spin lock; a count above MAX_REFCOUNT (cmplwi 0xFFF,
+// ble skips -- STRICTLY greater) first latches the max-hit flag (`*(this+4) |=
+// 0x80`) and clamps to 0xFFF; then insrwi the 12-bit count and release the lock.
+void AptValue::setRefCount(uint32_t n)
+{
+    AptGCFlagLock_Acquire();
+    if (n > MAX_REFCOUNT)
+    {
+        mValueBitfield.mnMaxRefCountHit = 1u;   // X360 ori r10,r10,0x80
+        n = MAX_REFCOUNT;                       // X360 li r4,0xFFF
+    }
+    mValueBitfield.mnReferenceCount = n;        // X360 insrwi r10,r4,12,6
+    AptGCFlagLock_Release();
+}
+
+// setVtblIndex @0x82AD7F20 -- store the 7-bit value-type tag under the Apt GC
+// flag lock (X360 insrwi r9,r4,7,25).
+void AptValue::setVtblIndex(AptVirtualFunctionTable_Indices n)
+{
+    AptGCFlagLock_Acquire();
+    mValueBitfield.meValueType = n;
+    AptGCFlagLock_Release();
+}
+
+// setGCRoot @0x82AD80A8 -- store the 6-bit GC-root count under the Apt GC flag
+// lock. NO clamp in the shipped body (insrwi r9,r4,6,18 just masks the low 6
+// bits); the MAX_GCROOT guard lives in incGCRoot.
+void AptValue::setGCRoot(uint32_t n)
+{
+    AptGCFlagLock_Acquire();
+    mValueBitfield.mnGCRootCount = n & MAX_GCROOT;   // the 6-bit field mask
+    AptGCFlagLock_Release();
+}
+
+// SetAllowDelayedDeletion @0x82AD7E08 -- store the delayed-deletion flag under
+// the Apt GC flag lock (X360 insrwi r8,r9,1,5).
+void AptValue::SetAllowDelayedDeletion(bool bAllowed)
+{
+    AptGCFlagLock_Acquire();
+    mValueBitfield.mbAllowsDelayedDeletion = bAllowed ? 1u : 0u;
     AptGCFlagLock_Release();
 }
 
