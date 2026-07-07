@@ -506,9 +506,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeMovieClip(AptValue* pContext
     // coerces the value to the object it designates under (scope, target), writing it
     // through the out-param). Canonical signature (scope, target, value, ppOut); the
     // console reaches it here with target == 0 (a null AptValue*), receiver == pContext.
-    extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                                   AptValue* pValue, AptValue** ppOut);
-    AptActionInterpreter_valueToObject(pContext, nullptr, pContext, &pResolved);
+    // AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
+    gAptActionInterpreter.valueToObject(pContext, nullptr, pContext, &pResolved);
 
     if (pResolved && IsClipHandleOrCIHNone(pResolved))
     {

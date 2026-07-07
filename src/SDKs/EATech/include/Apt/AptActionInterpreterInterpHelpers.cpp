@@ -396,7 +396,7 @@ bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStrin
 // (The console returns the resolved value in r3; the callers read *ppOut, so this
 // shim is void -- matching every extern declaration of it.)
 // ---------------------------------------------------------------------------
-void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
+void AptActionInterpreter::valueToObject(AptValue* pScope, AptValue* pTarget,
                                         AptValue* pValue, AptValue** ppOut)
 {
     const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();   // (*(v+4)<<25)>>25
@@ -428,8 +428,7 @@ void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
         // console: getObject(scope, target, c_string(value) + 8). getObject is a method
         // on the interpreter, but it touches no interpreter member (a pure (scope,
         // target) resolver), so the console reaches it with this == the scope value.
-        *ppOut = reinterpret_cast<AptActionInterpreter*>(pScope)->getObject(
-            pScope, pTarget, pStr->GetInternalString());
+        *ppOut = getObject(pScope, pTarget, pStr->GetInternalString());
     }
 }
 
@@ -650,7 +649,7 @@ AptValue* AptActionInterpreter::_doCloneSprite(AptCIH* pScope, AptValue* pTarget
 {
     // console: valueToObject(scope, target, parentValue, &resolved).
     AptValue* pResolved = nullptr;
-    AptActionInterpreter_valueToObject(reinterpret_cast<AptValue*>(pScope), pTarget,
+    valueToObject(reinterpret_cast<AptValue*>(pScope), pTarget,
                                        pParentValue, &pResolved);
 
     // console: name = Get_ToString(nameValue, &scratch).
