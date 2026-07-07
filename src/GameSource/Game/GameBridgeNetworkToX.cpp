@@ -41,10 +41,14 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // VariableEventQueue<14000/1536/32768/4096,16>
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                 // CgsGui::GuiEvent<N> (tag-only GUI events)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"        // CgsDev::StrStreamBase (mugshot debug spew)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include "GameSource/Network/BrnNetworkModuleIO.h"                  // BrnNetwork::BrnNetworkModuleIO::OutputBuffer + interfaces
 #include "GameSource/GameState/BrnGameStateModuleIO.h"              // BrnGameState::GameStateModuleIO::PreWorldInputBuffer + events
+#include "GameSource/GameState/BrnCgsPlayerName.h"                  // CgsNetwork::PlayerName (Mole4Avril debug roster)
 
-#include <cstring>   // std::memcpy (PASS bodies)
+#include <cstring>   // std::memcpy / std::strncpy (PASS bodies)
 
 // -------------------------------------------------------------------------
 // File-scope debug switches (X360 byte_82FB5090..92): default-off (retail path unchanged).
@@ -176,6 +180,19 @@ namespace BrnGame
         BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpBuffer =
             BrnGameState::GetPreWorldInputBuffer(lpModule);
         return reinterpret_cast<GameStateEventQueue*>(lpBuffer->GetGameEventQueue());
+    }
+
+    // The GUI module's input event queue the bridge bulk-appends the network GUI event queue into
+    // (X360 sub_8284F238(lpGuiBuffer)). VariableEventQueue<32768,16>. FLAG: the exact queue offset
+    // within the GUI IO buffer lands with the GUI module TU; reached here at the buffer base.
+    typedef CgsModule::VariableEventQueue<32768, 16> GuiInputEventQueue;
+    // The network output's small GUI event queue (OutputBuffer::GetGuiEventQueue() @ +16,
+    // GuiEventQueueSmall == VariableEventQueue<4096,16>): the Append source.
+    typedef CgsModule::VariableEventQueue<4096, 16>  NetworkGuiEventQueue;
+
+    static inline GuiInputEventQueue* GetGuiInputEventQueue(void* lpGuiBuffer)
+    {
+        return reinterpret_cast<GuiInputEventQueue*>(lpGuiBuffer);   // FLAG: buffer base (see above)
     }
 
     // =========================================================================
@@ -532,12 +549,586 @@ namespace BrnGame
         return result;
     }
 
-    // ------------------------------------------------------------------------
-    // TranslateNetworkEventsToGuiEvents (X360 0x823E0900), its inlined helper
-    // TranslateScoreboardResponse, and BridgeNetworkToGui (X360 0x823E9518) are NOT
-    // bodied here: their reconstructions did not pass verification this wave (case-15
-    // NetworkGameParams tail dropped / case-52 dest offsets wrong; NetworkPlayerStatus +
-    // NetworkLobbyPlayerList stack-base and header offsets wrong). They remain declared in
-    // BrnGameModule.hpp so callers resolve, and land once re-verified.
-    // ------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // Scoreboard-response string copy guard (X360 CgsStringUtils inline): scan the source
+    // name to its NUL, assert length < 31 ("String too long: " verbatim, HARD RULE A), then
+    // strncpy 31 bytes into the destination name slot.
+    // -------------------------------------------------------------------------
+    static void CopyScoreboardName(unsigned char* lpDst, const unsigned char* lpcName)
+    {
+        const char* lpcScan = reinterpret_cast<const char*>(lpcName);
+        while (*lpcScan++)
+        {
+        }
+        CGS_ASSERT((lpcScan - reinterpret_cast<const char*>(lpcName) - 1) < 31, "String too long: ");
+        std::strncpy(reinterpret_cast<char*>(lpDst), reinterpret_cast<const char*>(lpcName), 31);
+    }
+
+    // =========================================================================
+    // TranslateScoreboardResponse -- the case-52 heading-type sub-switch (inlined into
+    // 0x823E0900). The scoreboard-response record carries a count word @ +0 and a packed
+    // list of 31-byte names @ +8. The heading type (record accessor, Hex-Rays "BrnNetwo")
+    // selects which scoreboard GUI event the names are copied into.
+    // =========================================================================
+    void BrnGameModule::TranslateScoreboardResponse(void* lpGuiBuffer, const unsigned char* lpRecord)
+    {
+        CgsGui::GuiModule* lpSink = GetGuiEventSink(this);
+        const unsigned int luHeadingType = BrnNetwork::GetScoreboardResponseHeadingType(lpRecord);
+        const int liCount = *reinterpret_cast<const int*>(lpRecord);
+
+        if (luHeadingType == 0)
+        {
+            // category (cap KI_MAX_CATEGORIES == 15)
+            BrnGui::GuiEventScoreboardResponseCategoryEvent lEvent;
+            unsigned char* lpDst = lEvent.maOpaque;
+            *reinterpret_cast<int*>(lpDst) = liCount;
+            CGS_ASSERT(liCount <= 15,
+                "lCategoryEvent.miNumberOfCategories <= BrnGui::GuiEventScoreboardResponseCategoryEvent::KI_MAX_CATEGORIES");
+            for (int i = 0; i < liCount; ++i)
+                CopyScoreboardName(lpDst + 4 + 31 * i, lpRecord + 8 + 31 * i);
+            lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+        }
+        else if (luHeadingType == 1)
+        {
+            // index (cap KI_MAX_INDEXES == 10)
+            BrnGui::GuiEventScoreboardResponseIndexEvent lEvent;
+            unsigned char* lpDst = lEvent.maOpaque;
+            *reinterpret_cast<int*>(lpDst) = liCount;
+            CGS_ASSERT(liCount <= 10,
+                "lIndexEvent.miNumberOfIndexes <= BrnGui::GuiEventScoreboardResponseIndexEvent::KI_MAX_INDEXES");
+            for (int i = 0; i < liCount; ++i)
+                CopyScoreboardName(lpDst + 4 + 31 * i, lpRecord + 8 + 31 * i);
+            lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+        }
+        else if (luHeadingType < 3)
+        {
+            // variation (cap KI_MAX_VARIATIONS == 66); two trailing source bytes @ record +2054/+2055
+            // land at event-buffer +2050/+2051 (X360: lbz r11,0x806/0x807(r26) -> stb var_C1E/var_C1D
+            // == buffer 0x802/0x803), immediately after the last 31-byte name, NOT at +2054/+2055.
+            BrnGui::GuiEventScoreboardResponseVariationEvent lEvent;
+            unsigned char* lpDst = lEvent.maOpaque;
+            *reinterpret_cast<int*>(lpDst) = liCount;
+            CGS_ASSERT(liCount <= 66,
+                "lVariationEvent.miNumberOfVariations <= BrnGui::GuiEventScoreboardResponseVariationEvent::KI_MAX_VARIATIONS");
+            for (int i = 0; i < liCount; ++i)
+                CopyScoreboardName(lpDst + 4 + 31 * i, lpRecord + 8 + 31 * i);
+            lpDst[2050] = lpRecord[2054];
+            lpDst[2051] = lpRecord[2055];
+            lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+        }
+        else
+        {
+            // Invalid heading type (X360 builds "Invalid heading type : <n>\n"; collapsed to the
+            // rodata prefix per HARD RULE A).
+            CGS_ASSERT(false, "Invalid heading type : ");
+        }
+    }
+
+    // =========================================================================
+    // TranslateNetworkEventsToGuiEvents  (X360 0x823E0900)
+    // Drain the network event queue (VariableEventQueue<14000,16>) and translate each GUI-bound
+    // network event into the matching CgsGui::GuiModule event (this + 7252512).
+    // =========================================================================
+    int BrnGameModule::TranslateNetworkEventsToGuiEvents(void* lpGuiBuffer, const OutputBuffer* lpNetworkOutput)
+    {
+        CgsGui::GuiModule* lpSink = GetGuiEventSink(this);
+
+        const NetworkEventQueue* lpNetworkEventQueue = GetNetworkEventQueue(lpNetworkOutput);
+        CGS_ASSERT(lpNetworkEventQueue != 0, "lpNetworkEventQueue");
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        int result = lpNetworkEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        while (lpEvent)
+        {
+            const unsigned char* lpRecord = reinterpret_cast<const unsigned char*>(lpEvent);
+            const int* lpW = reinterpret_cast<const int*>(lpRecord);
+
+            switch (result)
+            {
+                case 1:   // OnlineNumFriendsCount -> word0
+                {
+                    BrnGui::GuiEventOnlineNumFriendsCount lEvent;
+                    *reinterpret_cast<int*>(lEvent.maOpaque) = lpW[0];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 2:   // OnlineReceiveFriendInfo -> 660-byte copy + {word,word,byte} tail
+                {
+                    BrnGui::GuiEventOnlineReceiveFriendInfo lEvent;
+                    unsigned char* lpDst = lEvent.maOpaque;
+                    std::memcpy(lpDst, lpRecord, 660);
+                    *reinterpret_cast<int*>(lpDst + 660) = *reinterpret_cast<const int*>(lpRecord + 660);
+                    *reinterpret_cast<int*>(lpDst + 664) = *reinterpret_cast<const int*>(lpRecord + 664);
+                    lpDst[668] = lpRecord[668];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 8:   // InviteFailed -> word0
+                {
+                    BrnGui::GuiEventInviteFailed lEvent;
+                    *reinterpret_cast<int*>(lEvent.maOpaque) = lpW[0];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 9:   // BuddyNotification -> qword + 16 bytes (24 bytes total)
+                {
+                    BrnGui::GuiEventBuddyNotification lEvent;
+                    std::memcpy(lEvent.maOpaque, lpRecord, 24);
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 10:  // GuiEvent<103>
+                {
+                    CgsGui::GuiEvent<103> lEvent;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 11:  // GuiEvent<95>
+                {
+                    CgsGui::GuiEvent<95> lEvent;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 13:  // FreeburnComplete -> conditional GuiEvent<285> then GuiEvent<95>
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpFreeburnComplete");
+                    if (lpRecord[0] == 0)
+                    {
+                        CgsGui::GuiEvent<285> lEventA;
+                        lpSink->AddGuiEvent(&lEventA, lpGuiBuffer);
+                    }
+                    CgsGui::GuiEvent<95> lEventB;
+                    lpSink->AddGuiEvent(&lEventB, lpGuiBuffer);
+                    break;
+                }
+                case 15:  // NetworkGameParams -> 440-byte copy + reshuffled 40-byte tail
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpParamsChangedEvent");
+                    BrnGui::GuiEventNetworkGameParams lEvent;
+                    unsigned char* lpDst = lEvent.maOpaque;
+                    std::memcpy(lpDst, lpRecord, 440);
+                    *reinterpret_cast<int*>(lpDst + 440) = *reinterpret_cast<const int*>(lpRecord + 440);
+                    *reinterpret_cast<int*>(lpDst + 444) = *reinterpret_cast<const int*>(lpRecord + 444);
+                    *reinterpret_cast<int*>(lpDst + 448) = *reinterpret_cast<const int*>(lpRecord + 448);
+                    *reinterpret_cast<int*>(lpDst + 452) = *reinterpret_cast<const int*>(lpRecord + 452);
+                    *reinterpret_cast<int*>(lpDst + 456) = *reinterpret_cast<const int*>(lpRecord + 456);
+                    *reinterpret_cast<int*>(lpDst + 460) = *reinterpret_cast<const int*>(lpRecord + 472);
+                    *reinterpret_cast<int*>(lpDst + 464) = *reinterpret_cast<const int*>(lpRecord + 460);
+                    *reinterpret_cast<int*>(lpDst + 468) = *reinterpret_cast<const int*>(lpRecord + 464);
+                    *reinterpret_cast<int*>(lpDst + 472) = *reinterpret_cast<const int*>(lpRecord + 468);
+                    lpDst[476] = lpRecord[477];
+                    lpDst[477] = lpRecord[478];
+                    lpDst[478] = lpRecord[479];
+                    lpDst[479] = lpRecord[476];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 17:  // PlayerRemoved -> NetworkPlayerLeftLobby (only when record[21]==0)
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpPlayerRemovedEvent");
+                    if (lpRecord[21] == 0)
+                    {
+                        BrnGui::GuiEventNetworkPlayerLeftLobby lEvent;
+                        unsigned char* lpDst = lEvent.maOpaque;
+                        *reinterpret_cast<int*>(lpDst) = lpW[0];
+                        std::memcpy(lpDst + 4, lpRecord + 4, 16);
+                        lpDst[20] = lpRecord[20];
+                        lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    }
+                    break;
+                }
+                case 22:  // OnlinePostEventScalps -> 64-byte copy + word tail
+                {
+                    BrnGui::GuiEventOnlinePostEventScalps lEvent;
+                    unsigned char* lpDst = lEvent.maOpaque;
+                    std::memcpy(lpDst, lpRecord, 64);
+                    *reinterpret_cast<int*>(lpDst + 64) = *reinterpret_cast<const int*>(lpRecord + 64);
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 24:  // NetworkLeftGame -> {word0, word1}
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpEvent");
+                    BrnGui::GuiEventNetworkLeftGame lEvent;
+                    reinterpret_cast<int*>(lEvent.maOpaque)[0] = lpW[0];
+                    reinterpret_cast<int*>(lEvent.maOpaque)[1] = lpW[1];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 25:  // NetworkPostGameProcessingFinished -> byte0
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpPostGameProcessingFinished");
+                    BrnGui::GuiEventNetworkPostGameProcessingFinished lEvent;
+                    lEvent.maOpaque[0] = lpRecord[0];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 26:  // NetworkLaunching -> {word0, word1}
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpLaunchEvent");
+                    CgsGui::GuiEventNetworkLaunching lEvent;
+                    reinterpret_cast<int*>(lEvent.maOpaque)[0] = lpW[0];
+                    reinterpret_cast<int*>(lEvent.maOpaque)[1] = lpW[1];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 27:  // Launch overlay wait-finish requests (two request names)
+                {
+                    BrnGui::GuiOverlayWaitFinishRequest lRequest;
+                    BrnGui::GuiOverlayWaitFinishRequest::Construct(&lRequest, "CNOnlLchGame");
+                    lpSink->AddGuiEvent(&lRequest, lpGuiBuffer);
+                    BrnGui::GuiOverlayWaitFinishRequest::Construct(&lRequest, "CNOnlLchGmH");
+                    lpSink->AddGuiEvent(&lRequest, lpGuiBuffer);
+                    break;
+                }
+                case 28:  // GuiEvent<271>
+                {
+                    CgsGui::GuiEvent<271> lEvent;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 29:  // LiveRevengeProfileData -> word0
+                {
+                    BrnGui::GuiEventLiveRevengeProfileData lEvent;
+                    *reinterpret_cast<int*>(lEvent.maOpaque) = lpW[0];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 30:  // GuiEvent<280>
+                {
+                    CgsGui::GuiEvent<280> lEvent;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 31:  // OnlineTimeout -> single float: record[4](float) + (float)record[0](int)
+                {
+                    BrnGui::GuiEventOnlineTimeout lEvent;
+                    const float lfBase = *reinterpret_cast<const float*>(lpRecord + 4);
+                    *reinterpret_cast<float*>(lEvent.maOpaque) = lfBase + static_cast<float>(lpW[0]);
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 32:  // AutosaveRequest -> byte0 = 0
+                {
+                    BrnGui::GuiAutosaveRequestEvent lEvent;
+                    lEvent.maOpaque[0] = 0;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 42:  // GuiEvent<109>
+                {
+                    CgsGui::GuiEvent<109> lEvent;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 48:  // OnlineCarStatus -> {word0, byte@+4}
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpPlayerCarSelectStatus");
+                    BrnGui::GuiOnlineCarStatusEvent lEvent;
+                    *reinterpret_cast<int*>(lEvent.maOpaque) = lpW[0];
+                    lEvent.maOpaque[4] = lpRecord[4];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 51:  // ScoreboardResponseTable -> 2924-byte copy
+                {
+                    BrnGui::GuiEventScoreboardResponseTableEvent lEvent;
+                    std::memcpy(lEvent.maOpaque, lpRecord, 2924);
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 52:  // ScoreboardResponse (category / index / variation heading sub-switch)
+                    TranslateScoreboardResponse(lpGuiBuffer, lpRecord);
+                    break;
+                case 56:  // CapturingImage -> MugshotControlEvent (+ filter-gated debug spew)
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpCapturingImageEvent");
+                    BrnGui::GuiMugshotControlEvent lEvent;
+                    unsigned char* lpDst = lEvent.maOpaque;
+                    std::memcpy(lpDst, lpRecord, 8);                              // qword @ +0
+                    *reinterpret_cast<int*>(lpDst + 8) = 1;
+                    *reinterpret_cast<int*>(lpDst + 12) = lpW[2];                 // record[8]
+                    *reinterpret_cast<int*>(lpDst + 16) = lpW[3];                 // record[12]
+                    lpDst[20] = 1;
+                    // FLAG: sub_821F0E50/sub_8229F668/sub_82203EE8 are un-homed StrStreamBase
+                    // insertion overloads; modelled by their operand-typed committed overload.
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "MUGSHOT EVENT : BRIDGE NETWORK TO X (1)\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "IMAGE TYPE : " << lpW[2] << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "LOCAL AGG  : " << static_cast<s32>(1) << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "AGG ARCI   : " << lpW[3] << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "RESPONSE   : " << static_cast<s32>(1) << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "ROAD?      : " << *reinterpret_cast<const u64*>(lpRecord) << "\n";
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 59:  // AbortCapture -> MugshotControlEvent (+ filter-gated debug spew)
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpEvent");
+                    BrnGui::GuiMugshotControlEvent lEvent;
+                    unsigned char* lpDst = lEvent.maOpaque;
+                    const s32 liResponse = (lpRecord[0] == 0) ? 5 : 4;
+                    *reinterpret_cast<u64*>(lpDst) = 0;                           // qword @ +0
+                    *reinterpret_cast<int*>(lpDst + 8) = liResponse;
+                    *reinterpret_cast<int*>(lpDst + 12) = 1;
+                    *reinterpret_cast<int*>(lpDst + 16) = -1;
+                    lpDst[20] = 0;
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "MUGSHOT EVENT : BRIDGE NETWORK TO X (2)\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "IMAGE TYPE : " << static_cast<s32>(1) << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "LOCAL AGG  : " << static_cast<s32>(0) << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "AGG ARCI   : " << static_cast<s32>(-1) << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "RESPONSE   : " << liResponse << "\n";
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                        *CgsDev::Log::gpDebugPrint << "ROAD?      : " << static_cast<u64>(0) << "\n";
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 66:  // ActiveFreeburnChallenge -> ChallengeNotActiveStartEvent (40-byte record)
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpActiveFreeburnChallengeEvent");
+                    BrnGui::GuiChallengeNotActiveStartEvent lEvent;
+                    unsigned char* lpDst = lEvent.maOpaque;
+                    std::memcpy(lpDst, lpRecord + 32, 8);                         // qword @ +0 = record[32..40)
+                    std::memcpy(lpDst + 8, lpRecord, 28);                        // record[0..28)
+                    *reinterpret_cast<int*>(lpDst + 36) = lpW[10];               // record[40]
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 70:  // OnlineAccountSettings -> 3 bytes
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpAccountSettings");
+                    BrnGui::GuiEventOnlineAccountSettings lEvent;
+                    lEvent.maOpaque[0] = lpRecord[0];
+                    lEvent.maOpaque[1] = lpRecord[1];
+                    lEvent.maOpaque[2] = lpRecord[2];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 71:  // GuiEvent<127>
+                {
+                    CgsGui::GuiEvent<127> lEvent;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 72:  // CamPicCompressed -> 3 words
+                {
+                    CGS_ASSERT(lpRecord != 0, "lpCamPicCompressedEvent");
+                    BrnGui::GuiEventCamPicCompressed lEvent;
+                    int* lpDst = reinterpret_cast<int*>(lEvent.maOpaque);
+                    lpDst[0] = lpW[0];
+                    lpDst[1] = lpW[1];
+                    lpDst[2] = lpW[2];
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                case 73:  // GuiEvent<571>
+                {
+                    CgsGui::GuiEvent<571> lEvent;
+                    lpSink->AddGuiEvent(&lEvent, lpGuiBuffer);
+                    break;
+                }
+                default:
+                    break;
+            }
+
+            result = lpNetworkEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        }
+        return result;
+    }
+
+    // =========================================================================
+    // BridgeNetworkToGui  (X360 0x823E9518)
+    // Top-level per-frame network->GUI bridge: run both translators, bulk-append the network
+    // GUI event queue into the GUI input queue, then synthesise the three player-snapshot GUI
+    // events (player-list / player-status / lobby-player-list). Called by DoUpdate_GUI /
+    // LoadingScriptedState::Update.
+    // =========================================================================
+    int BrnGameModule::BridgeNetworkToGui(void* lpGuiBuffer, const OutputBuffer* lpNetworkOutput)
+    {
+        CgsGui::GuiModule* lpSink = GetGuiEventSink(this);
+
+        const void* lpNetworkToGui = lpNetworkOutput->GetNetworkToGuiInterface();
+        const unsigned char* lpStatus =
+            reinterpret_cast<const unsigned char*>(lpNetworkOutput->GetInGamePlayerStatusInterface());
+
+        CGS_ASSERT(lpStatus != 0, "lpNetworkOutput->GetInGamePlayerStatusInterface()");
+        CGS_ASSERT(lpNetworkToGui != 0, "lpNetworkToGuiInterface");
+        CGS_ASSERT(lpNetworkOutput->GetGuiEventQueue() != 0, "lpNetworkOutput->GetGuiEventQueue()");
+
+        TranslateNetworkInterfaceToGuiEvents(lpGuiBuffer, lpNetworkToGui);
+        TranslateNetworkEventsToGuiEvents(lpGuiBuffer, lpNetworkOutput);
+
+        // Bulk-append the network output's GUI event queue into the GUI module input queue.
+        GetGuiInputEventQueue(lpGuiBuffer)->Append(
+            *reinterpret_cast<const NetworkGuiEventQueue*>(lpNetworkOutput->GetGuiEventQueue()));
+
+        int liNumPlayers = *reinterpret_cast<const int*>(lpStatus + 2532);
+
+        // -------- GuiEventNetworkPlayerList (8 x {index(4), PlayerName(16)} + two count words) -----
+        {
+            BrnGui::GuiEventNetworkPlayerList lListEvent;
+            unsigned char* lpList = lListEvent.maOpaque;
+            bool lbBuiltList = false;
+
+            if (byte_82FB5090)
+            {
+                liNumPlayers = 8;
+                CgsNetwork::PlayerName lName;
+                lName.Construct("Mole4Avril");
+                for (int i = 0; i < 8; ++i)
+                {
+                    unsigned char* lpEntry = lpList + 20 * i;
+                    std::memcpy(lpEntry + 4, &lName, 16);
+                    *reinterpret_cast<int*>(lpEntry) = i;
+                }
+                *reinterpret_cast<int*>(lpList + 160) = 8;
+                *reinterpret_cast<int*>(lpList + 164) = 8;
+                lbBuiltList = true;
+            }
+            else if (!lpNetworkOutput->IsPlaying() && lpNetworkOutput->IsConnected())
+            {
+                int i = 0;
+                for (; i < liNumPlayers; ++i)
+                {
+                    const unsigned char* lpRec = lpStatus + 312 * i;   // In(statusInterface, i)
+                    unsigned char* lpEntry = lpList + 20 * i;
+                    std::memcpy(lpEntry + 4, lpRec + 256, 16);
+                    *reinterpret_cast<int*>(lpEntry) = *reinterpret_cast<const int*>(lpRec + 272);
+                }
+                for (; i < 8; ++i)
+                    *reinterpret_cast<int*>(lpList + 20 * i) = -1;
+                *reinterpret_cast<int*>(lpList + 160) = liNumPlayers;
+                *reinterpret_cast<int*>(lpList + 164) = *reinterpret_cast<const int*>(lpStatus + 2536);
+                lbBuiltList = true;
+            }
+
+            if (lbBuiltList)
+                lpSink->AddGuiEvent(&lListEvent, lpGuiBuffer);
+        }
+
+        // -------- GuiEventNetworkPlayerStatus (8 x InGamePlayerStatusData(312) + trailing) --------
+        {
+            BrnGui::GuiEventNetworkPlayerStatus lStatusEvent;
+            unsigned char* lpBuf = lStatusEvent.maOpaque;
+
+            // X360 float pre-init loop: per record, {int@+96, float@+100} = 0.
+            for (int i = 0; i < 8; ++i)
+            {
+                *reinterpret_cast<int*>(lpBuf + 312 * i + 96) = 0;
+                *reinterpret_cast<float*>(lpBuf + 312 * i + 100) = 0.0f;
+            }
+            *reinterpret_cast<int*>(lpBuf + 2496) = 0;
+            lpBuf[2500] = 0;
+            lpBuf[2536] = 0;
+            for (int i = 0; i < 8; ++i)
+                reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(lpBuf + 312 * i)->Clear();
+
+            int liFilled;
+            if (byte_82FB5091)
+            {
+                CgsNetwork::PlayerName lName;
+                lName.Construct("Mole4Avril");
+                int i = 0;
+                for (; i < liNumPlayers; ++i)
+                {
+                    unsigned char* lpRec = lpBuf + 256 + 312 * i;
+                    std::memcpy(lpRec, &lName, 16);
+                    *reinterpret_cast<int*>(lpRec + 16) = i;
+                    *reinterpret_cast<int*>(lpRec + 20) = i;
+                    *reinterpret_cast<int*>(lpRec + 24) = byte_82FB5092;
+                    *reinterpret_cast<int*>(lpRec + 28) = byte_82FB5092;
+                    *reinterpret_cast<int*>(lpRec + 32) = -1;
+                    *reinterpret_cast<int*>(lpRec + 36) = -1;
+                    *reinterpret_cast<int*>(lpRec + 40) = 8;
+                    lpRec[44] = 0;
+                    lpRec[45] = 0;
+                    lpRec[46] = 0;
+                    lpRec[47] = 1;
+                    if (i == static_cast<int>(lpNetworkOutput->GetPlayerActiveRaceCarIndex()))
+                    {
+                        lpRec[45] = 1;
+                        lpRec[46] = 1;
+                    }
+                }
+                liFilled = i;
+            }
+            else
+            {
+                int i = 0;
+                for (; i < liNumPlayers; ++i)
+                {
+                    CGS_ASSERT(i >= 0, "liIndex >= 0");
+                    CGS_ASSERT(i < *reinterpret_cast<const int*>(lpStatus + 2532), "liIndex < miNumPlayers");
+                    std::memcpy(lpBuf + 312 * i, lpStatus + 312 * i, 312);
+                }
+                liFilled = i;
+            }
+
+            // Empty-slot marker: record[i]+276 = -1.
+            for (int i = liFilled; i < 8; ++i)
+                *reinterpret_cast<int*>(lpBuf + 312 * i + 276) = -1;
+
+            // Interface name copy (CgsStringUtils length guard) + flag + count.
+            const char* lpcName = reinterpret_cast<const char*>(lpStatus + 2496);
+            const char* lpcScan = lpcName;
+            while (*lpcScan++)
+            {
+            }
+            CGS_ASSERT((lpcScan - lpcName - 1) < 0x24, "String too long: ");
+            std::strncpy(reinterpret_cast<char*>(lpBuf + 2500), lpcName, 36);
+            lpBuf[2536] = lpStatus[2540];
+            *reinterpret_cast<int*>(lpBuf + 2496) = liNumPlayers;
+
+            lpSink->AddGuiEvent(&lStatusEvent, lpGuiBuffer);
+        }
+
+        // -------- GuiEventNetworkLobbyPlayerList (8 x 56-byte lobby record + count word) ----------
+        {
+            BrnGui::GuiEventNetworkLobbyPlayerList lLobbyEvent;
+            unsigned char* lpLobby = lLobbyEvent.maOpaque;
+            const unsigned char* lpLobbyInterface = reinterpret_cast<const unsigned char*>(
+                BrnNetwork::GetOnlineLobbyPlayerStatusInterface(lpNetworkOutput));
+
+            int i = 0;
+            for (; i < liNumPlayers; ++i)
+            {
+                CGS_ASSERT(i >= 0, "liPlayerIndex >= 0");
+                CGS_ASSERT(i < 8, "liPlayerIndex < KI_MAX_PLAYERS");
+                std::memcpy(lpLobby + 56 * i, lpLobbyInterface + 56 * i, 56);
+            }
+            for (; i < 8; ++i)
+            {
+                unsigned char* lpRec = lpLobby + 56 * i;
+                *reinterpret_cast<int*>(lpRec + 16) = -1;
+                *reinterpret_cast<int*>(lpRec + 20) = 4;
+                *reinterpret_cast<int*>(lpRec + 24) = 0;
+                *reinterpret_cast<int*>(lpRec + 28) = 0;
+                *reinterpret_cast<int*>(lpRec + 32) = 0;
+                *reinterpret_cast<int*>(lpRec + 36) = -1;
+                lpRec[48] = 0;
+                lpRec[49] = 0;
+                lpRec[50] = 0;
+                lpRec[51] = 0;
+            }
+            *reinterpret_cast<int*>(lpLobby + 448) = liNumPlayers;
+
+            lpSink->AddGuiEvent(&lLobbyEvent, lpGuiBuffer);
+        }
+
+        // FLAG: the X360 returns r3 from the final AddGuiEvent<...LobbyPlayerList>; the placeholder
+        // sink returns void, so the bridge returns 0 (the caller discards the result).
+        return 0;
+    }
 }

@@ -70,7 +70,7 @@ namespace BrnGui
     struct alignas(16) GuiEventOnlineReceiveFriendInfo    { u8 maOpaque[672]; };  // 660 + 3 trailing fields
     struct alignas(16) GuiEventInviteFailed               { u8 maOpaque[16]; };
     struct alignas(16) GuiEventBuddyNotification          { u8 maOpaque[32]; };   // qword + 16 bytes
-    struct alignas(16) GuiEventNetworkGameParams          { u8 maOpaque[448]; };  // 440-byte record
+    struct alignas(16) GuiEventNetworkGameParams          { u8 maOpaque[496]; };  // 440-byte body + reshuffled 40-byte tail (writes reach +479)
     struct alignas(16) GuiEventNetworkPlayerLeftLobby     { u8 maOpaque[32]; };   // word + byte + 16
     struct alignas(16) GuiEventOnlinePostEventScalps      { u8 maOpaque[72]; };   // 64 + word
     struct alignas(16) GuiEventNetworkLeftGame            { u8 maOpaque[16]; };
