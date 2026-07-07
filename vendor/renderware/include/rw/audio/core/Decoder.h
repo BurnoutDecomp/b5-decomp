@@ -130,7 +130,9 @@ public:
     void *mpAllocatedBlock;                                      // +0x10
     s32 (*mpDecodeCallback)(Decoder *self, DecoderBuffer *pDst,  // +0x14
                             s32 iCount);
-private:
+protected:
+    // Fixed-header state, exposed to codec subclasses (Xas1Dec, EaLayer3DecBase, ...)
+    // that derive from Decoder and read/advance it from their own decode callbacks.
     u8    mPad18[4];                // +0x18 .. +0x1B  (opaque)
     s32   miCurrentSampleOffset;    // +0x1C
     u8    mPad20[4];                // +0x20 .. +0x23  (opaque)

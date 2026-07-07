@@ -108,4 +108,55 @@ void Trc::_SetMsgOptions(int nPackedCodes)
     }
 }
 
+// ---------------------------------------------------------------------------
+// MessageTrc::MessageTrc (value constructor) @ 0x82C467D0
+//
+//   Message()                    -- base ctor: install base vtable off_821BA2CC,
+//                                    atomically zero the lock word at +4 (the X360
+//                                    interrupt-masked mfmsr/lwarx/stwcx. idiom)
+//   *this = off_821BA37C          -- install the final MessageTrc vtable
+//   mTrc(rTrc)                    -- Trc::Trc copy ctor on this+8 (a1 + 2)
+//   miValue = nValue              -- a1[28] = a3
+//
+// The X360 folds the Message base init inline: it stores the base vtable, runs the
+// atomic lock-zero, then overwrites the vtable with the final one and copy-builds
+// the Trc payload, finally storing the id word at +0x70. IDA reports a spurious
+// fourth register argument (a4) the asm never reads; it is not modelled.
+// ---------------------------------------------------------------------------
+MessageTrc::MessageTrc(const Trc& rTrc, int nValue)
+    : Message()
+    , mTrc(rTrc)          // Trc copy ctor @ 0x82C465C0 on the embedded payload
+    , miValue(nValue)
+{
+}
+
+// ---------------------------------------------------------------------------
+// MessageTrc::~MessageTrc @ 0x82C46428
+//
+//   *this = off_821BA37C          -- (re)install the MessageTrc vtable at entry
+//   mTrc.~Trc()                   -- Trc::~Trc on this+8 (a1 + 2)
+//   *this = off_821BA2CC          -- Message base dtor restores the base vtable
+//
+// The member Trc destructor and the inlined Message base destructor reproduce the
+// two vtable toggles the asm shows; the body itself is empty.
+// ---------------------------------------------------------------------------
+MessageTrc::~MessageTrc()
+{
+}
+
+// ---------------------------------------------------------------------------
+// MessageTrc::Apply @ 0x82C44CF8
+//
+//   return pTarget->DisplayTrcMessage(pThis);   // pTarget->vtable[+0x48](pTarget, pThis)
+//
+// A static double-dispatch thunk: the X360 takes the message in r3 and the target
+// in r4, swaps them so the target becomes `this`, loads the target's vtable and
+// tail-calls its slot +0x48 (18) with (target, message). Mirrors
+// RealmcCore::Message::Apply, only the dispatched slot differs (+0x48 vs +0x54).
+// ---------------------------------------------------------------------------
+int MessageTrc::Apply(MessageTrc* pThis, IRealmcTrcTarget* pTarget)
+{
+    return pTarget->DisplayTrcMessage(pThis);
+}
+
 } // namespace RealmcCore

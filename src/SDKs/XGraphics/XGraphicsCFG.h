@@ -13,13 +13,16 @@
 // this header there, do NOT fork it. `XGRAPHICS` is an X360 graphics-SDK
 // boundary, so its identifiers are preserved verbatim per the naming convention.
 //
-// ATTESTED members (X360 byte displacements from VRegInfo::VRegInfo):
+// ATTESTED members (X360 byte displacements from VRegInfo::VRegInfo and
+// TempValue::TempValue):
+//   +0x584 miNextTempIndex -- monotonic temp-value index counter (read + post-
+//                          incremented in TempValue::TempValue).
 //   +0x598 miNextVRegId -- monotonic vreg-id counter (read + post-incremented,
 //                          the pre-increment value becomes VRegInfo::miId).
 //   +0x5AC mpArena      -- the arena every graph object (VRegInfo, its use/def
 //                          vectors, its def stack) is carved from.
-// FLAG: everything before +0x598 and between the two fields is opaque padding
-// (no DWARF / reference); only these two offsets are grounded in the asm.
+// FLAG: everything before +0x584 and between the named fields is opaque padding
+// (no DWARF / reference); only these offsets are grounded in the asm.
 // ===========================================================================
 
 #include "types.hpp"
@@ -31,7 +34,9 @@ namespace XGRAPHICS
 class CFG
 {
 public:
-    u8     maPad000[0x598];            // +0x000 .. +0x597 opaque (owned by the full CFG TU)
+    u8     maPad000[0x584];            // +0x000 .. +0x583 opaque (owned by the full CFG TU)
+    s32    miNextTempIndex;            // +0x584  next temp-value index (post-incremented)
+    u8     maPad588[0x598 - 0x588];    // +0x588 .. +0x597 opaque
     s32    miNextVRegId;               // +0x598  next virtual-register id (post-incremented)
     u8     maPad59C[0x5AC - 0x59C];    // +0x59C .. +0x5AB opaque
     Arena* mpArena;                    // +0x5AC  arena all graph objects allocate from

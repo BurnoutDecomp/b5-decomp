@@ -28,6 +28,10 @@
 
 #include "types.hpp"
 
+struct cParticleBehaviour;   // ParticleBehaviour.h (sibling home) -- behaviour chain node
+class  cParticleMaterial;    // ParticleMaterial.h (sibling home)
+class  cLionSerialiser;      // LionSerialiser.h (sibling home)
+
 class cParticleDescriptor
 {
 public:
@@ -57,7 +61,23 @@ public:
     // accessor -- the X360 build reads the field directly (no out-of-line call).
     u32 GetRenderMode() const { return mRenderMode; }
 
-private:
+    // Chain / child accessors (DecFIGS DWARF attests GetNextDescriptor / GetBehaviours;
+    // the X360 build reads the fields directly). Members are public (as with the sibling
+    // cParticleMaterial / cParticleBehaviour records) so the owning cLionParticleEffect
+    // serialisation path can relink the descriptor chain by name.
+    cParticleDescriptor* GetNextDescriptor() const { return mpNext; }
+    cParticleBehaviour*  GetBehaviours()    const { return mpBehaviours; }
+
+    // ---- serialise / relocate path (out-of-line in ARTIST; bodies in ParticleDescriptor's
+    // own TUs). cLionParticleEffect walks these over its descriptor chain. ----
+    void Delocate(u32 aEndianTwiddleFlag);
+    void Relocate();
+    void GetSerialiseSize(cLionSerialiser& aSer) const;
+    cParticleDescriptor* Serialise(cLionSerialiser& aSer) const;
+    f32  GetDurationMax() const;
+
+    // ----- serialised record members (console offsets; host pointer widths differ, so the
+    // absolute offsets are NOT host-asserted -- members are accessed BY NAME). -----
     // Opaque leading record preceding mFlags at console +0x20 (32).
     u8  maReserved0[0x20];
 
@@ -67,4 +87,19 @@ private:
     u8  maReserved1[0x2C - 0x24];
 
     u32 mRenderMode;  // console +0x2C (44) -- 0..9 draw/render mode selector
+
+    // Opaque span between mRenderMode (+0x2C) and mpBehaviours (+0x40, 64).
+    u8  maReserved2[0x40 - 0x30];
+
+    cParticleBehaviour* mpBehaviours;  // console +0x40 (64) -- behaviour chain head
+
+    // Opaque span between mpBehaviours (+0x40) and mpMaterial (+0x4C, 76).
+    u8  maReserved3[0x4C - 0x44];
+
+    cParticleMaterial*  mpMaterial;    // console +0x4C (76) -- the descriptor's material
+
+    // Opaque span between mpMaterial (+0x4C) and mpNext (+0x54, 84).
+    u8  maReserved4[0x54 - 0x50];
+
+    cParticleDescriptor* mpNext;       // console +0x54 (84) -- next descriptor in the chain
 };
