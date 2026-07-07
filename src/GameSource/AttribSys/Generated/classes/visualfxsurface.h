@@ -19,6 +19,13 @@ namespace Gen
     {
     public:
         explicit visualfxsurface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // The resolved attribute-data pointer (Attrib::Instance::GetLayoutPointer, public
+        // on the base but reachable only from within the private-derived class). The wheel
+        // FX reads the skid-smoke enable flags (+0x4C / +0x4D) and the two layers' spawn
+        // parameters (+0x20.. / +0x34..) off this (WheelStateMachine::Update 0x82293EB8).
+        // Additive re-export.
+        const void* GetAttributeData() const { return GetLayoutPointer(); }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::visualfxsurface,

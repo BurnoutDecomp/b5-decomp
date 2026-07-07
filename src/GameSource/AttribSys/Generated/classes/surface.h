@@ -18,6 +18,12 @@ namespace Gen
     {
     public:
         explicit surface(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // The resolved attribute-data pointer (Attrib::Instance::GetLayoutPointer, public
+        // on the base but reachable only from within the private-derived class). The wheel
+        // FX reads the surface's visual-FX sub-collection off this (WheelStateMachine::
+        // Update 0x82293EB8: LODWORD(surfaceInstance[1]) + 16). Additive re-export.
+        const void* GetAttributeData() const { return GetLayoutPointer(); }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::surface,

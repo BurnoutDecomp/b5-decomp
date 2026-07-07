@@ -41,6 +41,11 @@ namespace BrnPhysics { namespace Vehicle { struct RaceCarState; } }
 // GetNextAcquireResourceResponse return/param (pointer-only here; full type in
 // GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h, pulled by the .cpp).
 namespace CgsResource { namespace Events { struct AcquireResourceResponse; } }
+// The wheel skid-smoke FX draws its randomiser + contact-surface schema straight from
+// the module (WheelStateMachine 0x82288E38 / 0x82293EB8: module +0x2C3C0 Random,
+// +0x2D3C8 surfacelist). Forward-only here; the accessors are declared on EffectsModule.
+namespace CgsNumeric { class Random; }
+namespace Attrib { namespace Gen { class surfacelist; } }
 
 namespace BrnEffects
 {
@@ -67,9 +72,17 @@ namespace BrnEffects
 
         // +0x10: the per-frame exhaust-smoke blend ramp delta added while the
         // ExhaustSmokeStopping state fades the smoke out (asm case 3:
-        // mfExhaustSmokeBlend += this).
-        f32 mfExhaustSmokeBlendDelta;     // +0x10
-        u8  mPad14[0x1C];                 // +0x14  (params tail + mpBoostInfo/mpCarState ptrs)
+        // mfExhaustSmokeBlend += this). The wheel skid-smoke FX reads the SAME word as
+        // the frame time step (WheelStateMachine::Update 0x82293EB8 / HandleSmokeLayer
+        // 0x82288E38 read lCarState+0x10 as dt), exposed via the anonymous-union alias
+        // mfFrameTimeStep -- same offset/size, additive, no boost/jump breakage.
+        union
+        {
+            f32 mfExhaustSmokeBlendDelta; // +0x10  (boost)
+            f32 mfFrameTimeStep;          // +0x10  (wheel FX per-frame dt)
+        };
+        f32 mfCurrentTime;                // +0x14  (wheel FX skid-smoke spawn-time base)
+        u8  mPad18[0x18];                 // +0x18  (params tail + mpBoostInfo/mpCarState ptrs)
 
         // +0x30: the replay effects serialiser this frame's locators round-trip
         // through (its leading word is the serialiser EMode: 1/2/3 recording,
@@ -116,6 +129,16 @@ namespace BrnEffects
 
         // The embedded particle module (DWARF EffectsModule.h:308).
         BrnParticle::ParticleModule& ParticleModule();
+
+        // The module-embedded pseudo-random generator (X360 byte +0x2C3C0). DWARF
+        // EffectsModule::RandomNumberGenerator; the wheel skid-smoke FX draws its
+        // backward-emission jitter from it. Body in EffectsModule.cpp.
+        CgsNumeric::Random& RandomNumberGenerator();
+
+        // The module-embedded contact-surface schema instance (X360 byte +0x2D3C8),
+        // whose Surfaces[] array the wheel FX indexes by surface id to fetch the skid-
+        // smoke visual-FX attributes. Body in EffectsModule.cpp.
+        Attrib::Gen::surfacelist& SurfaceList();
 
         // One of the KU_MAX_JUNKYARD_VFX junkyard effect handles (maJunkyardEffectHandles[]).
         u32 GetJunkyardEffectHandle(u32 luIndex) const;

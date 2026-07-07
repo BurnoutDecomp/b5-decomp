@@ -45,6 +45,17 @@ namespace Gen
         // this instance onto it, returning the previous collection. REAL X360 function
         // @0x8227EFC8.
         Collection* ChangeWithDefault();
+
+        // The generated "Surfaces" indexed-array accessor (DWARF Attrib::Gen::surfacelist
+        // ::Surfaces): return the attribute pointer for element luIndex of the Surfaces
+        // array. Inlined at its call sites in the X360 build (e.g. WheelStateMachine::
+        // Update 0x82293EB8: GetAttributePointer(0x0ADCE56E_F3DA7F1F, surfaceId)); the
+        // key is the 64-bit "Surfaces" attribute key.
+        void* Surfaces(u32 luIndex) const
+        {
+            static const u64 KU_SURFACES_ATTRIBUTE_KEY = 0x0ADCE56EF3DA7F1Full;
+            return GetAttributePointer(KU_SURFACES_ATTRIBUTE_KEY, luIndex);
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::surfacelist,

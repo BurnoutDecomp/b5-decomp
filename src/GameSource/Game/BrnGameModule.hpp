@@ -83,6 +83,11 @@ namespace BrnGameState { class TrainingManager; }
 // bridge body includes the real homes) to keep the heavy IO headers out of this keystone header.
 namespace BrnReplays { namespace ReplayIO { struct InputBuffer_PostSim; } }
 namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; } } }
+// GUI-output bridge family: the two event-translating bridges (BridgeGuiToGameState /
+// TranslateGuiEventsToNetworkEvents) take/return CgsModule::VariableEventQueue<N,16> pointers.
+// Forward-declared here (the bridge body includes the real CgsVariableEventQueue.h) to keep the
+// heavy template header out of this keystone header.
+namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }
 
 // BrnGameState::GameStateModule is now the REAL (minimal-slice) class -- included below per this
 // header's own ODR-trap instruction (the TrainingManager/BurnoutSkillz/ModeManager TUs include the
@@ -277,6 +282,21 @@ namespace BrnGame
         // buffer (SetGuiEventQueue) so the sound module can drain GUI events.
         void BridgeGuiToSound(BrnSound::Module::Io::RootInputBuffer* lpSoundModuleInputBuffer,
                               const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
+
+        // X360 0x823DDB78 -- drain the GUI output buffer's out-event queue (VariableEventQueue<18432,16>)
+        // and translate each recognised GUI event into the matching game-state event, AddEvent'd into the
+        // game-state module's post-world input GameEventQueue (VariableEventQueue<1536,16>). A handful of
+        // events also drive the training manager (RequestTraining / OnEnableTrainingTips). Returns the
+        // final queue-walk status. Called by DoUpdate_GameStatePostWorld / LoadingScriptedState::Update.
+        int BridgeGuiToGameState(BrnGameState::GameStateModule* lpGameStateInput,
+                                 const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer);
+
+        // X360 0x823DEEB8 -- drain a GUI event queue (VariableEventQueue<18432,16>) and translate each
+        // network-bound GUI event into the matching network IN-event, AddEvent'd into the network module's
+        // in-event queue (VariableEventQueue<14000,16>). Returns the final queue-walk status. Called by
+        // DoUpdate_NetworkPostSim.
+        int TranslateGuiEventsToNetworkEvents(CgsModule::VariableEventQueue<14000, 16>* lpNetworkInputQueue,
+                                              const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue);
 
         // ---- network-output bridge family (GameSource/Unity/../Game/GameBridgeNetworkToX.cpp) -----
         // The mirror of the controller/replay bridges for the network module: each reads the network
