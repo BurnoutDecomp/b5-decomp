@@ -258,6 +258,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // called directly at its one call site (AptCIHNativeFunctionHelper.cpp duplicateMovieClip).
     // AptApt_FlushDeferredReleases RETIRED (2026-07-01): homed in AptGC.cpp as the real
     // gValuesToRelease.ReleaseValues() drain (the {} stub silently dropped every GC drain).
+    // Host URL-fetch callback slot (dword_8324E84C/..850), null on the PC title path (no host
+    // loadVariables installed) -- the same host boundary as AptExtern_SetMember above.
+    // FLAG PC-platform leaf: host callback slot, faithfully null on PC.
     AptValue* AptApt_LoadVariablesFetch(const char* pUrl) { return 0; }   // FLAG link-stub (host URL fetch; null until installed)
     void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY) {}   // FLAG link-stub
     // AptApt_PopValues RETIRED: it IS AptActionInterpreter::stackPop(int) (AptActionInterpreter.cpp:65,
@@ -294,6 +297,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = nullptr;   // FLAG link-stub
     int  AptCIH_snGeneralisedProcessTreeDepth = 0;   // FLAG link-stub (nTreeDepth)
 
+    // Host debug-output sink (console dword_8324E82C, a printf-style hook the host installs).
+    // FLAG PC-platform leaf: host debug sink, faithfully a no-op until the host wires it.
     void AptHook_Trace(const char* szFormat, const char* szMessage) {}   // FLAG link-stub
     void AptKeyManagerAddListener(AptValue* pListener) {}   // FLAG link-stub
     bool AptKeyManagerRemoveListener(AptValue* pListener) { return false; }   // FLAG link-stub

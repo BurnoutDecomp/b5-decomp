@@ -165,6 +165,10 @@ void StringPool::Initialize(int nBucketCount)
 // AptStringPool_Initialize -- the free wrapper AptCommonInitialize calls (so AptInit.cpp
 // need not include the full StringPool.h alongside the interpreter headers, which carry
 // AptNativeHash.h's incompatible mini `class StringPool`).
+// PC-only header-decoupling forwarder: the console calls StringPool::Initialize @0x82AE3630
+// directly; this wrapper only keeps AptNativeHash.h's incompatible mini `class StringPool`
+// out of AptInit.cpp.
+// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
 void AptStringPool_Initialize(int nBucketCount)
 {
     StringPool::Initialize(nBucketCount);
