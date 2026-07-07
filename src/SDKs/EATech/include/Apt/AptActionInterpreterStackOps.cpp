@@ -643,14 +643,11 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
 extern EAStringC** AptValue_GetMethodNameSlot(AptValue* pObject);   // FLAG: (objectValue + 8)
 extern AptValue*   AptValue_GetClassOwnerValue(AptValue* pValue);   // FLAG: (value + 0x1C)
 
-// FLAG (console sub_82AE4058 -- the bounded method-name probe over a value's own
-// native hash: does pValue hold a member whose key == *pNameSlot? returns non-zero).
-extern bool AptInterp_HasMember(AptValue* pValue, EAStringC** pNameSlot);
+// The bounded method-name probe is now the static AptActionInterpreter::HasMember member
+// (console sub_82AE4058; declared in the header).
 
-// FLAG (console Burnout_X360_Artist_0040_0 -- the EAStringC == compare; the same
-// helper Compare/AptLinker use. Here: does the resolved method name *pNameSlot equal
-// the constant pConst (the empty/default-method sentinel)?).
-extern bool AptInterp_NameEquals(EAStringC** pNameSlot, const EAStringC* pConst);
+// The resolved-method-name == compare is now the static AptActionInterpreter::NameEquals
+// member (console Burnout_X360_Artist_0040_0 = EAStringC::operator==; declared in the header).
 
 // FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
 // bring-up TU): traces every AS object construction (see _createObject).
@@ -687,11 +684,8 @@ static const EAStringC gAptPopKey  ("pop");
 static const EAStringC gAptShiftKey("shift");
 static const EAStringC gAptCallKey ("call");
 
-// FLAG (console sub_82AE3DA8 / AptNativeHash::Lookup over the method-name slot -- the
-// object's member resolution when the object exposes a native hash; the v6+8 lookup
-// path. Shares the AptNativeHash::Lookup core, reached over the +8 slot the console
-// does not name as a member yet).
-extern AptValue* AptInterp_HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot);
+// The method-name hash lookup is now the static AptActionInterpreter::HashLookupName
+// member (AptNativeHash::Lookup over the +8 slot; declared in the header).
 
 
 
@@ -795,7 +789,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             if (pMethodName->getVtblIndex() == AptVFT_Extension)
             {
                 AptNativeHash* const pHash = pMethodName->GetNativeHashVirtual();   // console (*(*v7+8))(v7)
-                pMethod = AptInterp_HashLookupName(pHash, pNameSlot);
+                pMethod = AptActionInterpreter::HashLookupName(pHash, pNameSlot);
             }
             else
             {
@@ -830,8 +824,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // the call's argument layout is rewritten: call() shifts off the explicit `this`
     // arg; apply() flattens the trailing array argument onto the stack.
     if ((!pMethod || !pMethod->getIsDefined())
-        && (AptInterp_NameEquals(pNameSlot, &gAptApplyKey)           // console stricmp(*v10+8,"apply")
-            || AptInterp_NameEquals(pNameSlot, &gAptCallKey)))       // console stricmp(*v10+8,"call")
+                && (AptActionInterpreter::NameEquals(pNameSlot, &gAptApplyKey)   // console stricmp(*v10+8,"apply")
+            || AptActionInterpreter::NameEquals(pNameSlot, &gAptCallKey)))  // console stricmp(*v10+8,"call")
     {
         // NOTE: the two console stricmp's are against "apply"/"call"; encapsulated as
         // the AptInterp_NameEquals name compare (the EAStringC == the console folds in).
@@ -873,7 +867,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         }
 
         // apply(): flatten the trailing array argument's elements onto the stack.
-        if (AptInterp_NameEquals(pNameSlot, &gAptApplyKey))  // console stricmp(*v10+8,"apply")
+        if (AptActionInterpreter::NameEquals(pNameSlot, &gAptApplyKey))  // console stricmp(*v10+8,"apply")
         {
             AptValue* const pTopArg = pInterp->mpStack[pInterp->mnStackTop - 1];   // console v34
             if (pTopArg->getVtblIndex() == AptVFT_Array && pTopArg->getIsDefined())
@@ -968,8 +962,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // ---- resolve the `this` instance the method runs against (v14) --------
     // When neither the default name nor the object's own member resolved, walk the
     // object's prototype chain to find the member's defining object (its `this`).
-    if (!AptInterp_NameEquals(pNameSlot, &gAptEmptyMethodName)    // FLAG: !Burnout_X360_Artist_0040_0(v10,&unk_8324E6B8)
-        && !AptInterp_HasMember(pMethodName, pNameSlot))          // FLAG: !sub_82AE4058(v7, v10)
+    if (!AptActionInterpreter::NameEquals(pNameSlot, &gAptEmptyMethodName)    // FLAG: !Burnout_X360_Artist_0040_0(v10,&unk_8324E6B8)
+        && !AptActionInterpreter::HasMember(pMethodName, pNameSlot))   // FLAG: !sub_82AE4058(v7, v10)
     {
         AptValue* pWalk = pMethodName;
         AptValue* pOwner = nullptr;                               // console v50
@@ -978,7 +972,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             AptNativeHash* const pHash = pWalk->GetNativeHashVirtual();   // console (*(v49+8))(v50)
             AptValue* const pProto = pHash ? pHash->Get__Proto__() : nullptr;   // console *(v51+8)
             if (!pProto) break;
-            if (AptInterp_HasMember(pProto, pNameSlot)) { pOwner = pProto; break; }   // FLAG: sub_82AE4058
+            if (AptActionInterpreter::HasMember(pProto, pNameSlot)) { pOwner = pProto; break; }   // FLAG: sub_82AE4058
             pWalk = pProto;
         }
         if (pOwner)
@@ -1063,8 +1057,8 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     if (pResult != gpUndefinedValue)
     {
         if (pMethodName->getVtblIndex() == AptVFT_Array && pMethodName->getIsDefined()
-            && (AptInterp_NameEquals(pNameSlot, &gAptPopKey)                 // console stricmp(*v10+8,"pop")
-                || AptInterp_NameEquals(pNameSlot, &gAptShiftKey)))          // console stricmp(*v10+8,"shift")
+                        && (AptActionInterpreter::NameEquals(pNameSlot, &gAptPopKey)     // console stricmp(*v10+8,"pop")
+                || AptActionInterpreter::NameEquals(pNameSlot, &gAptShiftKey)))  // console stricmp(*v10+8,"shift")
         {
             pInterp->mpStack[pInterp->mnStackTop - 1]->Release();   // console (*(*v67+4))(v67)
         }

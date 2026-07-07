@@ -51,7 +51,7 @@
 // arm falls back to the caller's current dest, which a live parent never
 // exercises -- every placed CIH owns an inst).
 // ---------------------------------------------------------------------------
-AptNativeHash* AptInterp_GetNodeFrameContextHash(AptValue* pContext)
+AptNativeHash* AptActionInterpreter::GetNodeFrameContextHash(AptValue* pContext)
 {
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
     AptCIH* const pParent = pNode->GetDisplayListParent();
@@ -165,7 +165,7 @@ AptValue* AptActionInterpreter::GetDictEntry(unsigned int nIndex)
 // type has no member. pNameSlot is the (object+8) method-name slot the console reads
 // -- an EAStringC* worth of storage, passed straight to AptNativeHash::Lookup.
 // ---------------------------------------------------------------------------
-bool AptInterp_HasMember(AptValue* pValue, EAStringC** pNameSlot)
+bool AptActionInterpreter::HasMember(AptValue* pValue, EAStringC** pNameSlot)
 {
     const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();  // (a1[1]<<25)>>25
     const bool bDefined = pValue->getIsDefined();                          // (a1[1]>>27)&1
@@ -206,7 +206,7 @@ bool AptInterp_HasMember(AptValue* pValue, EAStringC** pNameSlot)
 // path) or same length + byte-equal buffer. The console uses it to test the resolved
 // method name against the apply/call/empty-method/this sentinels.
 // ---------------------------------------------------------------------------
-bool AptInterp_NameEquals(EAStringC** pNameSlot, const EAStringC* pConst)
+bool AptActionInterpreter::NameEquals(EAStringC** pNameSlot, const EAStringC* pConst)
 {
     // The slot address is punned as an EAStringC (its one data member IS the stored
     // pointer). A NULL stored pointer means "no resolved name": the console never
@@ -225,7 +225,7 @@ bool AptInterp_NameEquals(EAStringC** pNameSlot, const EAStringC* pConst)
 // slot. CallMethod's Extension-typed (tag 29) name path resolves the method through
 // the object's own native hash by this slot; a null hash yields no value.
 // ---------------------------------------------------------------------------
-AptValue* AptInterp_HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot)
+AptValue* AptActionInterpreter::HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot)
 {
     if (!pHash)
         return nullptr;
@@ -339,7 +339,7 @@ bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStrin
             return true;
         // FLAG: resolve the node's frame-context hash (the +0x1C boxed object ->
         // +0x20 char-inst -> +0xC hash chain); only a movie-clip-class node has one.
-        pDest = AptInterp_GetNodeFrameContextHash(pContext);
+        pDest = GetNodeFrameContextHash(pContext);
         if (!pDest)
             return true;   // console goto LABEL_16 (handled, nothing to store)
     }
