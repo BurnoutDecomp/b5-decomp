@@ -8,18 +8,29 @@
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                  // CgsNetwork::NetworkPlayer (GetRegisteredSendMessage)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"            // CgsNetwork::Message
 #include "GameShared/GameClasses/Network/Packeting/CgsCompressionAndEncryptionUtils.h" // GetBandwidthUsedInBits + EAverageType
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender (DrawBar: DrawLine + GetVirtualScreenSize + RGBA/Vector2)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::PlayerManagerDebugComponent::_QSortMessageAndMax  @ 0x8287F370
 //   CgsNetwork::PlayerManagerDebugComponent::OnActivate           @ 0x8287F278
 //   CgsNetwork::PlayerManagerDebugComponent::DrawRow              @ 0x82893B50
 //   CgsNetwork::PlayerManagerDebugComponent::RenderHUD            @ 0x82893C88
+//   CgsNetwork::PlayerManagerDebugComponent::DrawBar              @ 0x8288BA28
+
+// The three shared debug-HUD draw helpers DrawBar dispatches to. They live in their own TUs (the
+// X360 bl's them directly); declared here so the compile gate sees their shape, mirroring the
+// sibling DebugComponent reconstructions.
 //
-// DrawBar (@ 0x8288BA28) stays declared-but-unbodied: its per-bar geometry is emitted as an
-// intricate VMX clamp chain (the value/max bar extents are built by vsubfp/vmulfp lane splices
-// off the render's virtual-screen width) whose exact draw-line endpoints did not verify, so it
-// is left blocked rather than reconstructed with uncertain coordinates. RenderHUD / DrawRow only
-// *call* DrawBar (declared in the header), so they compile against it.
+//   MaybeDrawText (X360 0x82824048) -- "draw debug text iff on-screen" -> the renderer's
+//     DrawText(text, x, y, scale, colour) gated on a bounds test. The extra register args the
+//     decompiler shows are artifacts.
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+
+//   DebugDraw2DBox (X360 sub_8281C3E0) -- the corner-based filled 2D box primitive: takes two
+//     screen-space corners (x1,y1)-(x2,y2) and hands the box {x1,y1}+{x2-x1,y2-y1} to DrawBox.
+void DebugDraw2DBox(CgsDev::Debug2DImmediateRender* lpDisplay, f32 lfX1, f32 lfY1, f32 lfX2, f32 lfY2,
+                    CgsDev::RGBA lColour);
 
 namespace CgsNetwork
 {
@@ -239,5 +250,62 @@ namespace CgsNetwork
                 }
             }
         }
+    }
+
+    // ================================================================================================
+    // DrawBar  @ 0x8288BA28
+    // ------------------------------------------------------------------------------------------------
+    // Draw one labelled bandwidth bar for HUD row liIndex: the row label (top line), a filled bar whose
+    // length is the value's fraction of the graph's full scale, the numeric value beneath the label,
+    // and a vertical marker line at the max-bandwidth threshold.
+    //
+    // Rows are 30px tall (label on the row's top line at y=index*30+50, the value + bar on the line
+    // 15px below at y=index*30+65..80). The plot area is the virtual-screen width less a 100px inset;
+    // a value of lfMaxOnGraph maps to (screenWidth-100) * (lfMaxOnGraph / lfX) pixels from the 50px left
+    // margin. The bar is green while under lfMax and red once the value meets/exceeds it. The threshold
+    // marker line is placed at lfMax's scaled position (X360: no left-margin offset on the line's x).
+    //
+    // lfValue (the X360's first float arg) is never read by the body -- it is the callers' baseline
+    // constant, kept only for the call surface.
+    // ================================================================================================
+    void PlayerManagerDebugComponent::DrawBar(s32 liIndex, const char* lpcName, f32 /*lfValue*/,
+                                              f32 lfMax, f32 lfX, f32 lfMaxOnGraph,
+                                              CgsDev::Debug2DImmediateRender* lpRender)
+    {
+        const CgsDev::RGBA KU_TEXT_COLOUR = 0xFFFFFFFFu;   // white (X360 r26 = -1)
+
+        // Bar fill: green under the max-bandwidth threshold, red once value >= lfMax.
+        // (X360: 0xFF000000 | (lfMaxOnGraph >= lfMax ? 0x0000FF : 0x008000).)
+        const CgsDev::RGBA lBarColour = (lfMaxOnGraph >= lfMax) ? 0xFF0000FFu : 0xFF008000u;
+
+        // Horizontal scale: 1 / graph-full-scale; the plot area is the virtual screen width less a
+        // 100px inset. (X360 reads mfVirtualScreenWidth @0x34 directly; reached here by name.)
+        const f32 lfInvMaxGraph = 1.0f / lfX;
+        const f32 lfPlotWidth   = lpRender->GetVirtualScreenSize().x - 100.0f;
+        const f32 lfBarLength   = lfPlotWidth * (lfMaxOnGraph * lfInvMaxGraph);
+
+        // Row geometry.
+        const f32 lfIndex   = static_cast<f32>(liIndex);
+        const f32 lfLabelY  = (lfIndex * 15.0f) * 2.0f + 50.0f;                        // index*30 + 50
+        const f32 lfRowY    = ((lfIndex + 1.0f) * 15.0f + lfIndex * 15.0f) + 50.0f;    // index*30 + 65
+        const f32 lfBottomY = ((lfIndex + 1.0f) * 15.0f) * 2.0f + 50.0f;              // index*30 + 80
+
+        // 1) The row label, top line.
+        MaybeDrawText(lpRender, lpcName, 50.0f, lfLabelY, 15.0f, KU_TEXT_COLOUR, false);
+
+        // 2) The filled bandwidth bar, from the 50px left margin to the scaled length.
+        DebugDraw2DBox(lpRender, 50.0f, lfRowY, lfBarLength + 50.0f, lfBottomY, lBarColour);
+
+        // 3) The numeric value (kbps), streamed and drawn under the label.
+        char              lacValue[128];
+        CgsDev::StrStream lValueStream(lacValue, sizeof(lacValue));
+        lValueStream << lfMaxOnGraph << "\n";
+        MaybeDrawText(lpRender, lValueStream.GetBuffer(), 50.0f, lfRowY, 15.0f, KU_TEXT_COLOUR, false);
+
+        // 4) The max-bandwidth threshold marker: a vertical line at lfMax's scaled position (no +50).
+        const f32     lfMaxLength   = lfPlotWidth * (lfMax * lfInvMaxGraph);
+        const Vector2 lv2LineTop    = { lfMaxLength, lfBottomY, 0.0f, 0.0f };
+        const Vector2 lv2LineBottom = { lfMaxLength, lfRowY,    0.0f, 0.0f };
+        lpRender->DrawLine(lv2LineTop, lv2LineBottom, 0xFFFF0000u);
     }
 }

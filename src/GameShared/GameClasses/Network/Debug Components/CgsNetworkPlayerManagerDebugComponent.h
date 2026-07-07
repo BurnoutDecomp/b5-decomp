@@ -20,10 +20,10 @@
 // lfs 0x14 (mfMaxBandwidth), lbz 0x18 (mbDrawBandwidthUsage), lbz 0x19
 // (mbShowUsedRegisteredMessages), lwz 0x1C (miAverageType).
 //
-// SCOPE: _QSortMessageAndMax, OnActivate, DrawRow and RenderHUD are bodied (in the .cpp).
-// DrawBar stays declared-but-unbodied: its per-bar geometry is an intricate VMX clamp chain
-// whose exact draw-line endpoints did not verify, so it is left blocked rather than
-// reconstructed with uncertain coordinates. RenderHUD / DrawRow only call it.
+// SCOPE: all five functions are bodied in the .cpp. DrawBar's per-bar geometry (the VMX
+// splat/subtract/multiply lane chain that scales the value against the virtual-screen width) is
+// decoded into scalar float math + the shared debug-HUD helpers (MaybeDrawText / DebugDraw2DBox /
+// DrawLine), store-for-store against the X360 asm.
 
 namespace CgsNetwork
 {
