@@ -19,6 +19,41 @@
 namespace BrnProgression
 {
 
+// The alias the original source (and every assert string) uses for the game-state IO namespace.
+namespace GsmIO = BrnGameState::GameStateModuleIO;
+
+// ------------------------------------------------------------------------------------
+// ProfileEvent -- trivial record accessors (the X360 inlines all of these at their call
+// sites; the bodies are attested by the open-coded forms: AddEvent's id/flags stores,
+// DEBUG_ClearMedals' flag clear, and the GetMedalAchievedForEventWithID /
+// GetTotalWinCount bit tests on the u16 flag word @ +4).
+// ------------------------------------------------------------------------------------
+void ProfileEvent::Construct(u32 luEventID)
+{
+    muEventID = luEventID;
+    muFlags   = 0;
+}
+
+u32 ProfileEvent::GetID() const
+{
+    return muEventID;
+}
+
+u16 ProfileEvent::GetFlags() const
+{
+    return muFlags;
+}
+
+void ProfileEvent::SetFlags(u16 lu16Flags)
+{
+    muFlags = lu16Flags;
+}
+
+bool ProfileEvent::IsFlagSet(Flags leFlag) const
+{
+    return (muFlags & leFlag) != 0;
+}
+
 // ------------------------------------------------------------------------------------
 // CarData::Construct -- initialise one owned-car record (X360 inlines this in AddCar).
 // ------------------------------------------------------------------------------------
@@ -104,9 +139,10 @@ void Profile::Construct()
     mi8PowerParkingBetweenOtherPlayersBestRating    = 0;
     muBestNewBurnoutChainScore                      = 0;
 
-    // The four 17-entry game-mode-type tally arrays (X360 unrolls a 13-iteration zero loop
-    // over the first words; the rest land in the wider zeroing below). Zero them whole.
-    for (liIndex = 0; liIndex < 17; ++liIndex)
+    // The four 18-entry game-mode-type tally arrays (X360 layout: [18] each, the DLC island
+    // mode's slot 17 included; the X360 unrolls a 13-iteration zero loop over the first words,
+    // the rest land in the wider zeroing). Zero them whole.
+    for (liIndex = 0; liIndex < 18; ++liIndex)
     {
         maGameModeTypeAmount[liIndex]                       = 0;
         maGameModeTypeAmountDiscovered[liIndex]             = 0;
@@ -116,7 +152,7 @@ void Profile::Construct()
 
     miTotalTakedownCount               = 0;
     miTotalOnlineVerticleTakedownCount = 0;
-    for (liIndex = 0; liIndex < 17; ++liIndex)
+    for (liIndex = 0; liIndex < 13; ++liIndex)
         maiTakedownTypeCounts[liIndex] = 0;
 
     // The three 10-entry win/loss arrays (X360 zeroes them in a single interleaved loop).
@@ -237,11 +273,14 @@ void Profile::Construct()
 
     memset(&mSeenCompleteAllEventTypeArray, 0, sizeof(mSeenCompleteAllEventTypeArray));
 
-    // The flagged late tail (trophy/achievement bit arrays + remaining tail fields) is zeroed
-    // wholesale -- the X360 late stores in this region (at +120032 / +120824 / +120832) are all
-    // zero, matching this clear.
-    memset(&mPad_PostHighRoadRage[0], 0, sizeof(mPad_PostHighRoadRage));
-    memset(&mPad_LateTail[0],         0, sizeof(mPad_LateTail));
+    // Trophy-unlock-sequence-seen bits: all clear on a fresh profile.
+    memset(&mSeenTrophyAwardBitArray, 0, sizeof(mSeenTrophyAwardBitArray));
+
+    // The X360 DLC-era tail: the X360's three late zero stores (+120032 / +120824 / +120832)
+    // are exactly the two Array count-word clears and the developer-challenge bit clear.
+    maTargetEventScores.Clear();               // X360 stw 0 @ +120032
+    maEventScoresToUpload.Clear();             // X360 stw 0 @ +120824
+    mDeveloperChallengesCompleted.Construct(); // X360 8-byte zero @ +120832
 }
 
 // ====================================================================================
@@ -609,6 +648,621 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotUniqueIdArg /*lUniqueID*/,
     }
 
     return liFileId;
+}
+
+// ====================================================================================
+// Profile::AddDriveThru  @ 0x82374DB8
+// Record a discovered drive-thru of the given category. When the category's set reaches
+// its capacity (every drive-thru of that kind found) the matching trophy-unlock id is
+// returned; otherwise 0 (E_UNLOCKTYPE_NONE). The X360 switch covers the five drive-thru
+// GenericRegion types (0..4); anything else fires the streamed assert. The literal
+// unlock ids 17..20 are TrophyUnlockData::UnlockType values (enumerator names
+// unrecovered; only NONE=0/COUNT=35 are committed).
+// ====================================================================================
+s32 Profile::AddDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType)
+{
+    switch (leType)
+    {
+    case BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD:
+        mJunkYardsDriveThruSet.Insert(lId);
+        if (mJunkYardsDriveThruSet.GetLength() == 5)
+            return 18;   // all junk yards found
+        break;
+
+    case BrnTrigger::GenericRegion::E_TYPE_GAS_STATION:
+        mGasStationsDriveThruSet.Insert(lId);
+        if (mGasStationsDriveThruSet.GetLength() == 14)
+            return 17;   // all gas stations found
+        break;
+
+    case BrnTrigger::GenericRegion::E_TYPE_BODY_SHOP:
+        mBodyShopsDriveThruSet.Insert(lId);
+        if (mBodyShopsDriveThruSet.GetLength() == 11)
+            return 20;   // all body shops found
+        break;
+
+    case BrnTrigger::GenericRegion::E_TYPE_PAINT_SHOP:
+        mPaintShopsDriveThruSet.Insert(lId);
+        if (mPaintShopsDriveThruSet.GetLength() == 5)
+            return 19;   // all paint shops found
+        break;
+
+    case BrnTrigger::GenericRegion::E_TYPE_CAR_PARK:
+        mCarParksDriveThruSet.Insert(lId);
+        return 0;
+
+    default:
+        CGS_ASSERT(false, "We must know what type of drive through this is! Right now we don't\n");
+        break;
+    }
+
+    return 0;
+}
+
+// ====================================================================================
+// Profile::AreAllDriveThrusCompleted  @ 0x82361870
+// True when every drive-thru category's set is full (the X360 short-circuits in this
+// exact order: junk yards, body shops, paint shops, gas stations, car parks).
+// ====================================================================================
+bool Profile::AreAllDriveThrusCompleted()
+{
+    return mJunkYardsDriveThruSet.GetLength()   == 5  &&
+           mBodyShopsDriveThruSet.GetLength()   == 11 &&
+           mPaintShopsDriveThruSet.GetLength()  == 5  &&
+           mGasStationsDriveThruSet.GetLength() == 14 &&
+           mCarParksDriveThruSet.GetLength()    == 11;
+}
+
+// ====================================================================================
+// Profile::GetDriveThrusFound  @ 0x82361778
+// Total discovered drive-thrus across the four TROPHY categories -- the X360 sums junk
+// yards + body shops + paint shops + gas stations and deliberately EXCLUDES car parks.
+// ====================================================================================
+s32 Profile::GetDriveThrusFound() const
+{
+    return static_cast<s32>(mJunkYardsDriveThruSet.GetLength() +
+                            mBodyShopsDriveThruSet.GetLength() +
+                            mPaintShopsDriveThruSet.GetLength() +
+                            mGasStationsDriveThruSet.GetLength());
+}
+
+// ====================================================================================
+// Profile::AddGameModeTypeCompleted  @ 0x82354B10
+// Bump the completed (and completed-since-the-start) tallies for one game-mode type.
+// ====================================================================================
+void Profile::AddGameModeTypeCompleted(GsmIO::EGameModeType lEGameModeType)
+{
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+
+    ++maGameModeTypeAmountCompleted[lEGameModeType];
+    ++maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
+}
+
+// ====================================================================================
+// Profile::AddGameModeTypeToDiscovered  @ 0x82354AA0
+// Bump the discovered tally for one game-mode type.
+// ====================================================================================
+void Profile::AddGameModeTypeToDiscovered(GsmIO::EGameModeType lEGameModeType)
+{
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+
+    ++maGameModeTypeAmountDiscovered[lEGameModeType];
+}
+
+// ====================================================================================
+// Profile::GetGameModeTypeAmount  @ 0x82354A38
+// ====================================================================================
+s32 Profile::GetGameModeTypeAmount(GsmIO::EGameModeType lEGameModeType) const
+{
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+
+    return maGameModeTypeAmount[lEGameModeType];
+}
+
+// ====================================================================================
+// Profile::GetGameModeTypeDiscovered  @ 0x8240E940
+// ====================================================================================
+s32 Profile::GetGameModeTypeDiscovered(GsmIO::EGameModeType lEGameModeType) const
+{
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+
+    return maGameModeTypeAmountDiscovered[lEGameModeType];
+}
+
+// ====================================================================================
+// Profile::AddWinForGameMode  @ 0x82354C80
+// Bump both the win and the rank-win tallies for one OFFLINE game-mode.
+// ====================================================================================
+void Profile::AddWinForGameMode(GsmIO::EGameModeType leGameModeType)
+{
+    CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
+               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+
+    ++maiWinsPerOfflineGameMode[leGameModeType];
+    ++maiRankWinsPerOfflineGameMode[leGameModeType];
+}
+
+// ====================================================================================
+// Profile::AddLossForGameMode  @ 0x8230FB20
+// Bump the loss tally for one OFFLINE game-mode, clamping the result to at least 1
+// (the X360 re-stores 1 when the incremented word compares < 1 -- overflow guard).
+// ====================================================================================
+void Profile::AddLossForGameMode(GsmIO::EGameModeType leGameModeType)
+{
+    CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
+               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+
+    ++maiLossesPerOfflineGameMode[leGameModeType];
+    if (maiLossesPerOfflineGameMode[leGameModeType] < 1)
+        maiLossesPerOfflineGameMode[leGameModeType] = 1;
+}
+
+// ====================================================================================
+// Profile::GetNumRankWinsForGameMode  @ 0x8230FA40
+// ====================================================================================
+s32 Profile::GetNumRankWinsForGameMode(GsmIO::EGameModeType leGameModeType) const
+{
+    CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
+               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+
+    return maiRankWinsPerOfflineGameMode[leGameModeType];
+}
+
+// ====================================================================================
+// Profile::GetNumLossesForGameMode  @ 0x8230FAB0
+// ====================================================================================
+s32 Profile::GetNumLossesForGameMode(GsmIO::EGameModeType leGameModeType) const
+{
+    CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
+               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+
+    return maiLossesPerOfflineGameMode[leGameModeType];
+}
+
+// ====================================================================================
+// Profile::AddTakedown  @ 0x82354C00
+// Bump the total takedown count and the per-type tally.
+// ====================================================================================
+void Profile::AddTakedown(BrnGameState::ETakedownType leTakedownType)
+{
+    CGS_ASSERT(leTakedownType > BrnGameState::E_TAKEDOWN_NONE,
+               "leTakedownType > BrnGameState::E_TAKEDOWN_NONE");
+
+    ++miTotalTakedownCount;
+    ++maiTakedownTypeCounts[leTakedownType];
+}
+
+// ====================================================================================
+// Profile::AddStuntElement  @ 0x8236AB00
+// Record one completed stunt element. If the element was not already recorded and the
+// county is valid, bump the per-county tally first; then insert into the type's set
+// (Set<>::Insert is a no-op on a duplicate).
+// ====================================================================================
+void Profile::AddStuntElement(BrnGameState::StuntElementType leStuntElementType, CgsID lId,
+                              BrnWorld::ECounty leCounty)
+{
+    CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
+               "leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT");
+
+    if (maStuntElements[leStuntElementType].Find(lId) == Set<CgsID, 512u>::KU_INVALID &&
+        leCounty < BrnWorld::E_COUNTY_VALID_COUNT)
+    {
+        ++maaiStuntCountsByCounty[leStuntElementType][leCounty];
+    }
+
+    maStuntElements[leStuntElementType].Insert(lId);
+}
+
+// ====================================================================================
+// Profile::IsStuntElementDone  @ 0x823619B0
+// True when the stunt element is already in its type's completed set.
+// ====================================================================================
+bool Profile::IsStuntElementDone(BrnGameState::StuntElementType leStuntElementType, CgsID lId) const
+{
+    return maStuntElements[leStuntElementType].Find(lId) != Set<CgsID, 512u>::KU_INVALID;
+}
+
+// ====================================================================================
+// Profile::GetStuntElementCount  @ 0x82361950
+// Live count of one stunt-element set (no type-range assert on the X360).
+// ====================================================================================
+s32 Profile::GetStuntElementCount(BrnGameState::StuntElementType leStuntElementType) const
+{
+    return static_cast<s32>(maStuntElements[leStuntElementType].GetLength());
+}
+
+// ====================================================================================
+// Profile::GetStuntElementCountByCounty  @ 0x82354D10
+// The per-county tally for one stunt-element type (s16 slot, sign-extended on return).
+// ====================================================================================
+s32 Profile::GetStuntElementCountByCounty(BrnGameState::StuntElementType leStuntElementType,
+                                          BrnWorld::ECounty leCounty) const
+{
+    CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
+               "leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT");
+    CGS_ASSERT(leCounty < BrnWorld::E_COUNTY_VALID_COUNT,
+               "leCounty < BrnWorld::E_COUNTY_VALID_COUNT");
+
+    return maaiStuntCountsByCounty[leStuntElementType][leCounty];
+}
+
+// ====================================================================================
+// Profile::GetCarData  @ 0x82354950
+// Checked indexed access into the owned-car records. The DWARF attests the const shape;
+// the non-const overload (already committed in the declaration set) shares the body.
+// ====================================================================================
+const CarData* Profile::GetCarData(s32 liCarIndex) const
+{
+    CGS_ASSERT(liCarIndex >= 0 && liCarIndex < miCarCount,
+               "liCarIndex >= 0 && liCarIndex < miCarCount");
+
+    return &maCars[liCarIndex];
+}
+
+CarData* Profile::GetCarData(s32 liCarIndex)
+{
+    CGS_ASSERT(liCarIndex >= 0 && liCarIndex < miCarCount,
+               "liCarIndex >= 0 && liCarIndex < miCarCount");
+
+    return &maCars[liCarIndex];
+}
+
+// ====================================================================================
+// Profile::GetTotalCarsToShutDown  @ 0x823549D0
+// Count the rivals still in the E_STATE_UNLOCKED(1) state (the X360 walks all 64 rival
+// records, 4-way unrolled, testing meState @ +0x10 == 1).
+// ====================================================================================
+s32 Profile::GetTotalCarsToShutDown() const
+{
+    s32 liTotal = 0;
+    for (s32 liIndex = 0; liIndex < KI_MAX_RIVAL_COUNT; ++liIndex)
+    {
+        if (maRivals[liIndex].meState == RivalData::E_STATE_UNLOCKED)
+            ++liTotal;
+    }
+    return liTotal;
+}
+
+// ====================================================================================
+// Profile::GetEvent  @ 0x82354DA0
+// Checked indexed access into the discovered-event records.
+// ====================================================================================
+const ProfileEvent* Profile::GetEvent(u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < static_cast<u32>(miEventCount),
+               "luIndex < static_cast<uint32_t>(miEventCount)");
+
+    return &maEvents[luIndex];
+}
+
+// ====================================================================================
+// Profile::GetMedalAchievedForEventWithID  @ 0x82354EB0
+// The medal earned for the event with the given id: 0 (gold) when the rank-win flag is
+// set, 1 (silver) for a non-rank win, 2 (bronze) for a special-event win, -1 when the
+// event is unknown or unwon.
+// ====================================================================================
+s32 Profile::GetMedalAchievedForEventWithID(s32 liEventID) const
+{
+    for (s32 liIndex = 0; liIndex < miEventCount; ++liIndex)
+    {
+        const ProfileEvent& lEvent = maEvents[liIndex];
+        if (lEvent.GetID() == static_cast<u32>(liEventID))
+        {
+            if (lEvent.IsFlagSet(ProfileEvent::E_FLAG_RANK_WIN))
+                return 0;
+            if (lEvent.IsFlagSet(ProfileEvent::E_FLAG_NON_RANK_WIN))
+                return 1;
+            if (lEvent.IsFlagSet(ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE))
+                return 2;
+            return -1;
+        }
+    }
+    return -1;
+}
+
+// ====================================================================================
+// Profile::GetTotalWinCount  @ 0x82354E10
+// Tally every event's best medal into the three out-params (rank win beats non-rank win
+// beats special-event win, mirroring the X360's else-if chain) and return the rank-win
+// count.
+// ====================================================================================
+u32 Profile::GetTotalWinCount(u32& lruRankWins, u32& lruNonRankWins, u32& lruSpecialEventWins) const
+{
+    lruRankWins        = 0;
+    lruNonRankWins     = 0;
+    lruSpecialEventWins = 0;
+
+    for (s32 liIndex = 0; liIndex < miEventCount; ++liIndex)
+    {
+        const ProfileEvent& lEvent = maEvents[liIndex];
+        if (lEvent.IsFlagSet(ProfileEvent::E_FLAG_RANK_WIN))
+        {
+            ++lruRankWins;
+        }
+        else if (lEvent.IsFlagSet(ProfileEvent::E_FLAG_NON_RANK_WIN))
+        {
+            ++lruNonRankWins;
+        }
+        else if (lEvent.IsFlagSet(ProfileEvent::E_FLAG_WON_SPECIAL_EVENT_BEFORE))
+        {
+            ++lruSpecialEventWins;
+        }
+    }
+
+    return lruRankWins;
+}
+
+// ====================================================================================
+// Profile::GetPlayerBaseDeformAmount  @ 0x8230FBA8
+// The persisted deform amount for the owned car with the given id (0.0 when not owned).
+// The X360 tail-calls the (non-const) FindCar; const_cast keeps the DWARF-attested const
+// shape of this getter.
+// ====================================================================================
+f32 Profile::GetPlayerBaseDeformAmount(CgsID lCarId) const
+{
+    CarData* lpCarData = const_cast<Profile*>(this)->FindCar(lCarId);
+    if (lpCarData)
+        return lpCarData->mfUnlockDeformedAmount;
+
+    return 0.0f;
+}
+
+// ====================================================================================
+// Profile::RepairUnlockedVehicle  @ 0x82361EB0
+// Clear the stored deform/damage of the just-repaired owned car (the X360 inlines the
+// FindCar loop, asserts the record exists, then zeroes the deform amount @ +0x0C).
+// ====================================================================================
+CarData* Profile::RepairUnlockedVehicle(CgsID lCarId)
+{
+    CarData* lpCarData = FindCar(lCarId);
+
+    CGS_ASSERT(lpCarData, "lpCarData");
+    lpCarData->mfUnlockDeformedAmount = 0.0f;   // the X360 stores through even after a failed assert
+    return lpCarData;
+}
+
+// ====================================================================================
+// Profile::RecordPropHit  @ 0x82361C48
+// Set the hit bit for one prop (bit index = 600 * zone + prop) in the 300000-bit prop
+// bit array. The two range asserts stream "Zone Index: <z> Prop index: <p>\n" on the
+// X360 (collapsed to the leading rodata fragment per project convention); the third is
+// the BitArray SetBit guard (CgsBitArray.h:222).
+// ====================================================================================
+void Profile::RecordPropHit(s32 liZoneIndex, s32 liPropIndex)
+{
+    CGS_ASSERT(liZoneIndex < 500, "Zone Index: ");   // BrnProfile.h:3137
+    CGS_ASSERT(liPropIndex < 600, "Zone Index: ");   // BrnProfile.h:3138
+
+    const u32 luBitIndex = static_cast<u32>(600 * liZoneIndex + liPropIndex);
+    CGS_ASSERT(luBitIndex < 300000u, "Index: ");     // CgsBitArray.h:222 SetBit guard
+    mabHitPropBitArray.SetBit(luBitIndex);
+}
+
+// ====================================================================================
+// Profile::GetSeenAllEventTypeWonMessage  @ 0x82361F58
+// leModeType is BrnProgression::RaceEventData::EModeType (not yet homed; the X360
+// compares against E_MODE_COUNT == 6).
+// ====================================================================================
+bool Profile::GetSeenAllEventTypeWonMessage(s32 leModeType) const
+{
+    CGS_ASSERT(leModeType > -1, "leModeType > RaceEventData::E_MODE_INVALID");   // :3320
+    CGS_ASSERT(leModeType < 6,  "leModeType < RaceEventData::E_MODE_COUNT");     // :3321
+    CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "invalid index : < 6");        // CgsBitArray.h:203 Get guard
+
+    return mSeenCompleteAllEventTypeArray.IsBitSet(static_cast<u32>(leModeType));
+}
+
+// ====================================================================================
+// Profile::SetSeenAllEventTypeWonMessage  @ 0x823620A8
+// ====================================================================================
+void Profile::SetSeenAllEventTypeWonMessage(s32 leModeType)
+{
+    CGS_ASSERT(leModeType > -1, "leModeType > RaceEventData::E_MODE_INVALID");   // :3336
+    CGS_ASSERT(leModeType < 6,  "leModeType < RaceEventData::E_MODE_COUNT");     // :3337
+    CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "Index: ");                    // CgsBitArray.h:222 SetBit guard
+
+    mSeenCompleteAllEventTypeArray.SetBit(static_cast<u32>(leModeType));
+}
+
+// ====================================================================================
+// Profile::GetSeenTrophyUnlockSequence  @ 0x82475A30
+// leUnlockType is BrnProgression::TrophyUnlockData::UnlockType (DWARF); only NONE=0 /
+// COUNT=35 are committed, so the s32 underlying value is taken.
+// ====================================================================================
+bool Profile::GetSeenTrophyUnlockSequence(s32 leUnlockType) const
+{
+    CGS_ASSERT(leUnlockType > 0,  "leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE");  // :3287
+    CGS_ASSERT(leUnlockType < 35, "leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT"); // :3288
+    CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "invalid index : < 35");    // CgsBitArray.h:203 Get guard
+
+    return mSeenTrophyAwardBitArray.IsBitSet(static_cast<u32>(leUnlockType));
+}
+
+// ====================================================================================
+// Profile::SetSeenTrophyUnlockSequence  @ 0x824BAA30
+// ====================================================================================
+void Profile::SetSeenTrophyUnlockSequence(s32 leUnlockType)
+{
+    CGS_ASSERT(leUnlockType > 0,  "leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE");  // :3303
+    CGS_ASSERT(leUnlockType < 35, "leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT"); // :3304
+    CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "Index: ");                 // CgsBitArray.h:222 SetBit guard
+
+    mSeenTrophyAwardBitArray.SetBit(static_cast<u32>(leUnlockType));
+}
+
+// ====================================================================================
+// Profile::SetTrainingAlreadySeen  @ 0x82361B20
+// Mark one training tip as seen in the 256-bit training bit array.
+// ====================================================================================
+void Profile::SetTrainingAlreadySeen(ETrainingType leTrainingType)
+{
+    CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
+               "leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT");  // :2761
+    CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "Index: ");               // CgsBitArray.h:222 SetBit guard
+
+    maHasPlayerSeenTraining.SetBit(static_cast<u32>(leTrainingType));
+}
+
+// ====================================================================================
+// Profile::SetDeveloperChallengeComplete  @ 0x823621F0
+// Set one developer-challenge-completed bit. The two range asserts stream "Out of range
+// developer challnge<i>.\n" ('challnge' typo is X360 rodata); the third is the
+// FastBitArray SetBit guard (CgsFastBitArray.h:431). 15 == GsmIO::E_DEVELOPER_CHALLENGE_COUNT.
+// ====================================================================================
+void Profile::SetDeveloperChallengeComplete(s32 liChallengeIndex)
+{
+    CGS_ASSERT(liChallengeIndex >= 0, "Out of range developer challnge");   // :3394
+    CGS_ASSERT(liChallengeIndex < 15, "Out of range developer challnge");   // :3395
+    CGS_ASSERT(liChallengeIndex < 15, "Index ");                            // CgsFastBitArray.h:431 SetBit guard
+
+    mDeveloperChallengesCompleted.SetBit(static_cast<u32>(liChallengeIndex));
+}
+
+// ====================================================================================
+// Profile::GetTargetEvent  @ 0x82371458
+// The target-event-score record for the given event id, or NULL (the X360 re-reads the
+// checked live count every iteration -- the Array<>::GetLength constructed-assert,
+// CgsArray.h:336, fires from the loop guard).
+// ====================================================================================
+BrnGameState::GameStateModuleIO::TargetEventScore* Profile::GetTargetEvent(CgsID lEventId)
+{
+    for (u32 luIndex = 0; luIndex < maTargetEventScores.GetLength(); ++luIndex)
+    {
+        if (maTargetEventScores[luIndex].mEventId == lEventId)
+            return &maTargetEventScores[luIndex];
+    }
+    return 0;
+}
+
+// ====================================================================================
+// Profile::SetTargetEventScore  @ 0x823714F8
+// Store (or overwrite) the target score for one event: find the record by id, reserve a
+// fresh slot when absent (asserting the reserve succeeded), then fill the record --
+// event id @ +0x18, score @ +0x20, and the 24-byte by-value head block wholesale.
+// ====================================================================================
+void Profile::SetTargetEventScore(BrnGameState::GameStateModuleIO::TargetEventScore::OpaqueHead lHead,
+                                  CgsID lEventId, s32 liScore)
+{
+    BrnGameState::GameStateModuleIO::TargetEventScore* lpTargetEventScore = 0;
+
+    for (u32 luIndex = 0; luIndex < maTargetEventScores.GetLength(); ++luIndex)
+    {
+        if (maTargetEventScores[luIndex].mEventId == lEventId)
+        {
+            lpTargetEventScore = &maTargetEventScores[luIndex];
+            break;
+        }
+    }
+
+    if (!lpTargetEventScore)
+    {
+        lpTargetEventScore = maTargetEventScores.AddNew();
+        CGS_ASSERT(lpTargetEventScore, "lpTargetEventScore");   // BrnProfile.cpp:1604
+    }
+
+    lpTargetEventScore->mEventId = lEventId;
+    lpTargetEventScore->miScore  = liScore;
+    lpTargetEventScore->mHead    = lHead;
+}
+
+// ====================================================================================
+// Profile::RemoveTargetEventScore  @ 0x82371600
+// Drop the target-event-score record for one event (unordered EraseFast); the streamed
+// "doesn't exist" assert fires when the id is unknown.
+// ====================================================================================
+void Profile::RemoveTargetEventScore(CgsID lEventId)
+{
+    u32 luIndex = 0;
+    while (luIndex < maTargetEventScores.GetLength() &&
+           maTargetEventScores[luIndex].mEventId != lEventId)
+    {
+        ++luIndex;
+    }
+
+    if (luIndex < maTargetEventScores.GetLength())
+    {
+        maTargetEventScores.EraseFast(luIndex);
+    }
+    else
+    {
+        CGS_ASSERT(false, "Tried to remove an event target that doesn't exist\n");   // BrnProfile.cpp:1641
+    }
+}
+
+// ====================================================================================
+// Profile::SetEventScoreToUpload  @ 0x82371740
+// Queue (or better) the player's score for one leaderboard event. Burning Route (mode 5)
+// scores are times -- keep the LOWER; Stunt Attack (mode 7) scores are points -- keep the
+// HIGHER; any other mode fires the streamed "without leaderboard" assert and overwrites.
+// A missing record reserves a fresh slot (asserting the reserve succeeded).
+// ====================================================================================
+void Profile::SetEventScoreToUpload(CgsID lEventId, s32 liScore, GsmIO::EGameModeType leGameMode)
+{
+    BrnNetwork::LocalEventScoreUploadData* lpEventScoreToUpload = 0;
+
+    u32 luIndex = 0;
+    while (luIndex < maEventScoresToUpload.GetLength())
+    {
+        if (maEventScoresToUpload[luIndex].mu64EventID == lEventId)
+        {
+            lpEventScoreToUpload = &maEventScoresToUpload[luIndex];
+            break;
+        }
+        ++luIndex;
+    }
+
+    if (lpEventScoreToUpload)
+    {
+        if (leGameMode == GsmIO::E_MODE_BURNING_ROUTE)
+        {
+            if (liScore >= static_cast<s32>(lpEventScoreToUpload->muScore))
+                return;   // times: only a LOWER score replaces the pending upload
+        }
+        else if (leGameMode == GsmIO::E_MODE_STUNT_ATTACK)
+        {
+            if (liScore <= static_cast<s32>(lpEventScoreToUpload->muScore))
+                return;   // points: only a HIGHER score replaces the pending upload
+        }
+        else
+        {
+            // X360 streams "Trying to set score to upload for event without leaderboard: <mode>\n".
+            CGS_ASSERT(false, "Trying to set score to upload for event without leaderboard: ");   // BrnProfile.cpp:1698
+        }
+    }
+
+    if (!lpEventScoreToUpload)
+    {
+        lpEventScoreToUpload = maEventScoresToUpload.AddNew();
+        CGS_ASSERT(lpEventScoreToUpload, "lpEventScoreToUpload");   // BrnProfile.cpp:1714
+    }
+
+    lpEventScoreToUpload->mu64EventID = lEventId;
+    lpEventScoreToUpload->muScore     = static_cast<u32>(liScore);
+    lpEventScoreToUpload->meGameMode  = static_cast<s32>(leGameMode);
+}
+
+// ====================================================================================
+// Profile::RemoveEventScoreToUpload  @ 0x823718F0
+// Drop the pending upload record for one event (unordered EraseFast); the streamed
+// "doesn't exist" assert fires when the id is unknown.
+// ====================================================================================
+void Profile::RemoveEventScoreToUpload(CgsID lEventId)
+{
+    u32 luIndex = 0;
+    while (luIndex < maEventScoresToUpload.GetLength() &&
+           maEventScoresToUpload[luIndex].mu64EventID != lEventId)
+    {
+        ++luIndex;
+    }
+
+    if (luIndex < maEventScoresToUpload.GetLength())
+    {
+        maEventScoresToUpload.EraseFast(luIndex);
+    }
+    else
+    {
+        CGS_ASSERT(false, "Tried to remove an upload event score that doesn't exist\n");   // BrnProfile.cpp:1751
+    }
 }
 
 } // namespace BrnProgression
