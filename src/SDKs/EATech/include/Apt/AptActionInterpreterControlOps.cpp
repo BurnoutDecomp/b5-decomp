@@ -200,8 +200,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
 }
 
 // The value->object resolver (homed in AptActionInterpreterInterpHelpers.cpp).
-extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                               AptValue* pValue, AptValue** ppOut);
+// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
 
 // ---------------------------------------------------------------------------
 // With (0x94; PS3 @0x82016C) -- AS `with (obj) { ... }`. The aligned inline operand
@@ -229,7 +228,7 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
         AptValue* pObject = nullptr;   // FLAG: the console leaves the out slot uninitialised
                                        // on a no-object value and AddRefs it regardless; the
                                        // null init + guard below keep that hazard out.
-        AptActionInterpreter_valueToObject(pContext->mpCIH, nullptr, pTarget, &pObject);
+        pInterp->valueToObject(pContext->mpCIH, nullptr, pTarget, &pObject);
         if (pObject)
         {
             pContext->mpPendingReleaseValue = pObject;    // ctx[2] -- the with-scope

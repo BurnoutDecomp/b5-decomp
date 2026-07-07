@@ -233,8 +233,7 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
 // matching the sibling AptActionInterpreterSpecialOps.cpp): coerce pValue to the
 // object it designates under (pScope, pTarget), writing the result through *ppOut.
 //   AptActionInterpreter::valueToObject @0x82B0... (X360).
-extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                               AptValue* pValue, AptValue** ppOut);
+// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
 
 // FLAG (engine rodata -- the static AS builtin-property name table + its id remap;
 // console dword_8324E580[dword_82F73010[index]]): gAptPropertyIndexRemap maps a
@@ -269,7 +268,7 @@ void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* p
     AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the object
 
     AptValue* pObject = nullptr;
-    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+    pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pObjectOper, &pObject);   // FLAG: un-homed valueToObject
 
     if (pObject)
@@ -304,7 +303,7 @@ void AptActionInterpreter::_FunctionAptActionSetProperty(AptActionInterpreter* p
     AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 3];   // the object
 
     AptValue* pObject = nullptr;
-    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+    pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pObjectOper, &pObject);   // FLAG: un-homed valueToObject
 
     const int nProperty = pIndexValue->toInteger();

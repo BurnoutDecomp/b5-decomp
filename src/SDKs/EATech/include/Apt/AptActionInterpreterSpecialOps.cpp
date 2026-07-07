@@ -183,8 +183,7 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
 // matching the sibling AptCIHNativeFunctionHelper.cpp): coerce pValue to the object
 // it designates under (pScope, pTarget), writing the result through *ppOut.
 //   AptActionInterpreter::valueToObject @0x82B0... (X360).
-extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                               AptValue* pValue, AptValue** ppOut);
+// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
 
 // FLAG (AptGC layer -- AptValueVector::ReleaseValues over off_8324E51C): drain the
 // deferred-release value vector once the operand stack empties. Shared with the
@@ -396,7 +395,7 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
     if (pTop->getIsDefined())
     {
         AptValue* pResolved = nullptr;
-        AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+        pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                            pTop, &pResolved);   // FLAG: un-homed valueToObject
         if (pResolved && IsClipHandleOrCIHNone(pResolved))
         {
@@ -602,7 +601,7 @@ void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pI
     AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
 
     AptValue* pResolved = nullptr;
-    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+    pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pTop, &pResolved);   // FLAG: un-homed valueToObject
 
     if (pResolved)

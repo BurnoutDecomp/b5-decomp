@@ -222,6 +222,12 @@ public:
     // to the AptValue object it designates (findChild on the parsed context), or
     // null. Used by the SetTarget / valueToObject paths.
     AptValue* getObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pName);
+
+    // valueToObject @0x82B07FB8 -- coerce pValue to the AptValue object it designates
+    // under (pScope, pTarget) via *ppOut: a clip-handle (12)/CIHNone (37) boxes itself;
+    // else an object-ness probe; else a defined string value resolves through getObject.
+    // Body in AptActionInterpreterInterpHelpers.cpp.
+    void valueToObject(AptValue* pScope, AptValue* pTarget, AptValue* pValue, AptValue** ppOut);
     // ExecuteScriptFunction -- callFunction @0x82AE3C08's AptScriptFunctionBase frame-
     // execution branch (tags 34/35/36): install the fn + constant pool, Setup/Setup-
     // Argument/runStream/Cleanup, restore state. CallFunctionDispatch drives it. Body in
