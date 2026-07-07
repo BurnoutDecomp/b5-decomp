@@ -2,6 +2,7 @@
 
 #include "types.hpp"          // s32 / f32
 #include "BrnCommonTypes.h"   // Vector3
+#include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact
 
 // BrnPhysics::PotentialContactOrderer -- keeps a small (<= 5) list of candidate contacts
 // ordered by ascending impact time, then prunes the list so no kept contact sits behind an
@@ -14,22 +15,23 @@
 
 namespace BrnPhysics
 {
-    // FLAG (foreign type): the broad-phase potential-contact record. Its full body is homed
-    // elsewhere; this orderer only reads its contact point (mPointOnB @+16) and normal
-    // (mNormal @+32), so it is modelled here as a minimal record with those two Vector3 fields
-    // at their asm-attested offsets plus opaque padding. Member offsets are SEMANTIC (the two
-    // read fields are exact); the record's full width is deferred to its owning TU.
-    struct PotentialContact
-    {
-        u8      maOpaqueHead[16];   // +0x00 .. +0x10
-        Vector3 mPointOnB;          // +0x10 (16)
-        Vector3 mNormal;            // +0x20 (32)
-    };
+    // The broad-phase potential-contact record. The orderer keeps pointers to these and only
+    // reads their contact point (mPointOnB @+16) and normal (mNormal @+32). This is the SAME record
+    // its clients pass in (VehicleManager::HandleCrashPredictionForRaceCarAndWorld feeds contacts
+    // straight from the scene-manager potential-contact queue), so the type is unified onto its
+    // canonical home CgsSceneManager::SceneManagerIO::PotentialContact (was a minimal 16+16+16 stand-in;
+    // the read fields land at the identical byte offsets mPointOnB @+16 / mNormal @+32).
+    typedef CgsSceneManager::SceneManagerIO::PotentialContact PotentialContact;
 
     struct PotentialContactOrderer
     {
         // The list holds at most 5 entries (KI_MAX_CONTACTS).
         static const s32 KI_MAX_CONTACTS = 5;
+
+        // Reset the orderer to empty (miNumEntries = 0). The X360 inlines this at each call site
+        // (e.g. the crash-prediction driver clears the orderer at start and after every group flush,
+        // asm `stw 0, +0x3C`). DWARF PotentialContactOrderer.h:44.
+        void Construct() { miNumEntries = 0; }
 
         // @ 0x825C0B30 -- ordered insert (by ascending impact time), dropping overflow.
         void AddContact(const PotentialContact* lpContact, f32 lfImpactTime);

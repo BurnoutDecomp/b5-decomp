@@ -99,6 +99,15 @@ struct State
     // sound-logic recon slice.
     // FLAG: declaration-only un-homed base member (do not body here).
     void Attach(void* lpvAttachment);
+
+    // CgsSound::Logic::State::IsAttached() const -- true once the state is bound to
+    // an attachment (reads the mbIsAttached flag the canonical CgsState.h homes at
+    // +72, i.e. the `this+0x48` byte the derived EmitterState::IsAttachedToThis
+    // (X360 @0x826BADA0) tests via its inlined GetSoundEntity()/IsAttached() assert).
+    // Declaration-only un-homed base member, same idiom as DestroyEffects/Attach
+    // above -- exists so derivers can call it BY NAME without fabricating its body.
+    // FLAG: declaration-only un-homed base member (do not body here).
+    bool IsAttached() const;
 };
 
 } // namespace Logic
