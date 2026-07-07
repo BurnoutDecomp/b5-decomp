@@ -78,6 +78,11 @@ namespace renderengine
         // Returns 1 on success, 0 if the buffer has no GPU address or the D3D lock failed.
         static int Lock(IndexBufferHeader* lpBuffer, char liFlags, IndexBufferLockInfo* lpLockInfoOut);
 
+        // Release a mapping taken by Lock (the platform D3DIndexBuffer unlock). External platform
+        // shim (no Burnout-side home); only the signature the BrnSkyDomeManager call site needs is
+        // declared -- the reconstructed callers pass the locked buffer and the lock descriptor.
+        static int Unlock(IndexBufferHeader* lpBuffer, IndexBufferLockInfo* lpLockInfo);
+
         // 0x82B60818 -- set/clear the system-memory protection bit (0x200000) on muCommon from the
         // GPU page's protection class; returns the queried protection (0 if no base address).
         static u32 Xbox2CheckPhysicalMemoryFlags(u32* lpHeaderDwords);
