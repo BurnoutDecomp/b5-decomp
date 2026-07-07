@@ -33,8 +33,19 @@
 
 namespace BrnPhysics
 {
+// Forward decl of the streamed deformation model spec (real home
+// BrnPhysics::Deformation::StreamedDeformationSpec, BrnStreamedDeformationSpec.h) --
+// PhysicalTrafficVehicle::PreparePhysical takes it by pointer and reads its bounding box.
+namespace Deformation { struct StreamedDeformationSpec; }
 namespace Vehicle
 {
+
+// Forward decls for the PhysicalTrafficVehicle wave-8 method params (real homes elsewhere; only
+// pointers/refs are taken here so incomplete types suffice):
+struct CreatePhysicalTrafficEvent;   // spawn event -- SharedIO/BrnVehicleEvents.h
+struct VehicleAttribs;               // per-car attribs -- VehiclePhysics.h
+class  RaceCarPhysics;               // the checking race car -- RaceCarPhysics.h
+class  BrnPlayerDriverControls;      // per-frame driver controls -- SharedIO/BrnPlayerDriverControls.h
 
 // VecFloat: a single 16-byte VMX float lane (the DWARF spells the members below as VecFloat).
 // Its canonical home is rw::math::vpu; here it is the 16-byte 4-lane vector value used for the
@@ -137,6 +148,26 @@ struct PhysicalTrafficVehicle
     // @0x825C0220 / @0x825C0538: the articulation point in world / local space.
     Vector3         GetArticulationPointWorldSpace() const;
     Vector3         GetArticulationPointLocalSpace() const;
+
+    // ---- wave-8 methods (bodied in BrnPhysicalTrafficManager.cpp) --------------------------------
+    // @0x82641058: seed this vehicle's id/state fields from the spawn event; when fully physical,
+    // delegate the full-physics body prepare to the TrafficPhysics TU.
+    bool PreparePhysical(const CreatePhysicalTrafficEvent* lpEvent, VehicleAttribs* lpAttribs,
+                         const Deformation::StreamedDeformationSpec* lpModelData,
+                         const Vector3* lpWheelPositions, const f32* lpafWheelRadii);
+    // @0x8261E360: latch the checking race car + reset the check-notify timer; when the checker is
+    // hard enough and this car is fully physical, arm the full body's crashing state.
+    void OnChecked(EActiveRaceCarIndex leOwner, const RaceCarPhysics* lpRaceCarPhysics,
+                   Vector3 lContactPointOnTraffic);
+    // @0x826411C0: per-frame update -- accumulate the check-notify timer; forward the full-physics
+    // per-frame tick to the TrafficPhysics TU.
+    void Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeStep, const Matrix44Affine* lpCameraMatrix,
+                const BrnPlayerDriverControls* lpControls, bool lbImpactTime,
+                bool lbDoForceAdditiveAftertouch, bool lbUseSixaxis);
+    // @0x825F3B68: mark this vehicle as an articulated cab/trailer + (delegated) compute its
+    // articulation point from the deformation model's hitch locator.
+    void SetArticulated(const CreatePhysicalTrafficEvent& lrCreateTrafficEvent,
+                        EArticulatedVehicleType leVehicleType);
 
     Vector3                 mArticulationPointLocal;     // +0
     CgsID                   mCgsID;                      // +16 (u64; +12..15 padding)
