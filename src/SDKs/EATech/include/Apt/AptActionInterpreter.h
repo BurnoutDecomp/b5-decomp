@@ -150,14 +150,12 @@ public:
     // Release the nCount popped, store the new at the collapsed slot).
     void       stackPopAndPush(int nCount, AptValue* pValue);   // @0x7FB288
 
-    // popCallStackB / popCIHStack -- DECOMP HELPERS (no standalone console function): the
-    // console punned the interpreter's {count,cap,array} call-frame-register (a1+3) and
-    // CIH/target (a1+9) stack triples as AptValueVectors and INLINED AptValueVector::pop()
-    // at each use. The x64 recon stores those triples as named members, so the single-element
-    // pop is factored into these named members rather than an unfaithful reinterpret_cast of
-    // the loose members back into an AptValueVector. Bodies in AptActionInterpreterStackOps.cpp.
-    void       popCallStackB();   // console AptValue_::pop(a1 + 3)  (mnCallStackB / mpCallStackB)
-    void       popCIHStack();     // console AptValue_::pop(a1 + 9)  (mnCIHStackTop / mpCIHStack)
+    // NOTE: the five interpreter stacks are each a contiguous {count, capacity, array}
+    // triple laid out EXACTLY as an AptValueVector (operand @[c:0x00], call-frame-register
+    // @[c:0x0C], stack-C @[c:0x18], CIH/target @[c:0x24]). The console reaches single-element
+    // pops via `AptValueVector::pop(a1 + wordOffset)` -- punning a pointer to the triple as an
+    // AptValueVector* and calling the real pop(). Reproduced verbatim at the call sites (see
+    // _FunctionAptActionCallMethod), so no per-stack pop shim is needed.
 
     // stackAt @0x82ADC060 -- the operand nDepth slots below the top (0 = top).
     AptValue*  stackAt(int nDepth) const { return mpStack[mnStackTop - nDepth - 1]; }
