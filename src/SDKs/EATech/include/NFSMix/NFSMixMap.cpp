@@ -1,6 +1,11 @@
 #include "SDKs/EATech/include/NFSMix/NFSMixMap.hpp"
 #include "SDKs/EATech/include/NFSMix/NFSMixMaster.hpp"
 #include "SDKs/EATech/include/NFSMix/NFSMixRecords.hpp" // stMixCtlProc / stMixMapHeader for the helpers
+#include "SDKs/EATech/include/NFSMix/NFSMixMapState.hpp" // GetMasterMixChProc / placement-construct
+#include "SDKs/EATech/include/NFSMix/NFSMixShape.hpp"    // per-frame curve / dB / Q15 conversions
+#include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp" // g_pMixerAllocator (off_83250004)
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include <new>                                            // placement new (NFSMixMapState object memory)
 
 // ===========================================================================
 //  NFSMixMap -- ctor / Init / dtor. Store-for-store from BURNOUT_X360_ARTIST.XEX.
@@ -71,13 +76,13 @@ void NFSMixMap::InitMixMap(int* lpMixMap, NFSMixMap* lpMasterMixMap)
 
 // ---------------------------------------------------------------------------
 // NFSMixMap::ProcessMixMap @0x82B4C548 (vtable slot 2) -- per-frame drive.
-// The delta-time / cam-state bookkeeping (head of the function) is reproduced faithfully.
-// FLAG (deferred, RODATA-BLOCKED): the per-frame mix graph below the bookkeeping (curve
-// eval over m_pCurveDataArray via NFSMixShape::GetCurveOutput, then mix-ctl/channel
-// accumulation via NFSMixShape::GetdBFromQ15) needs the NFSMixShape conversion tables,
-// which are not in the X360 export. flt_82F87958 (the delta-ratio divisor) is likewise an
-// unrecovered rodata const. The bookkeeping is faithful; the DSP loop is wired once the
-// NFSMixShape rodata is recovered (ProStreet .exe PE extraction).
+// Delta-time / cam-state bookkeeping, then the per-frame DSP: (1) evaluate every
+// curve-proc into its Q15 output via NFSMixShape::GetCurveOutput; (2) compound each
+// mix-control's dB/scale ratios (NFSMixShape::GetdBFromQ15); (3) drive the 3D / event /
+// sub / master channel passes. NFSMixShape is now homed, so the DSP is wired.
+// FLAG (RODATA): the delta-ratio store still uses the raw dt -- the X360 divides by
+// flt_82F87958 (an unrecovered rodata const, not in this per-function export). Kept as a
+// faithful-shape store with the divisor FLAGged (matches the committed treatment).
 // ---------------------------------------------------------------------------
 void NFSMixMap::ProcessMixMap(float lfDeltaTime, int liCamState)
 {
@@ -88,7 +93,40 @@ void NFSMixMap::ProcessMixMap(float lfDeltaTime, int liCamState)
     m_fDeltaTime         = lfDeltaTime;            // +0x84
     m_msDeltaTime        = lfDeltaTime * 1000.0f;  // +0x88  (flt_82009E10 == 1000.0, ms/sec)
 
-    // FLAG: per-frame mix graph deferred (rodata-blocked NFSMixShape) -- see header note.
+    // (1) curve pass: each curve-proc's Q15 output = curve(nINPUTID&0xF) at its live input.
+    for (int li = 0; li < m_CurveProcsAdded; ++li)  // +0xD0
+    {
+        stCurveDataProc& lrProc = m_pCurveDataArray[li];               // +0x184, stride 16
+        lrProc.Q15Output = NFSMixShape::GetCurveOutput(
+            lrProc.nINPUTID & 0xF, *lrProc.pInputParam, /*lbDb=*/0);   // +0xC
+    }
+
+    // (2) mix-control pass: compound curve dB + shared offset, scaled by the unique
+    //     scale-ratio product, into each mix-control's CmpdBOut.
+    for (int li = 0; li < m_MixCtlsAdded; ++li)                        // +0x1D0
+    {
+        stMixCtlProc&       lrProc = m_pMixCtlProc[li];                // +0x190, stride 8
+        stMixCtlUniqueData* lpU    = lrProc.pudata;                    // +4
+        stMixCtlSharedData* lpS    = lrProc.psdata;                    // +0
+
+        const int liDb = NFSMixShape::GetdBFromQ15(
+            0x7FFF - (((0x7FFF - lpU->pstCurveData->Q15Output) * lpS->nRatio) >> 15));
+
+        int** lppScale = reinterpret_cast<int**>(lpU->ppScaleRatios);  // int** (double-deref)
+        int liScale = 0x7FFF;
+        if (lppScale)
+        {
+            // X360 lbz at the int's byte-0 == the big-endian MSB (the scale count).
+            int liN = (lpS->pstMixCtlParms->nUScaleCntSwing >> 24) & 0xFF;
+            while (liN) { --liN; const int liV = **lppScale++; liScale = (liV * liScale) >> 15; }
+        }
+        lpU->CmpdBOut = (liScale * (liDb + lpS->nOffset)) >> 15;       // +8
+    }
+
+    Update3DMixCtls();      // @0x82B4BB98 (blocked -- declared)
+    UpdateEvtMixCtls();     // @0x82B4C2A8 (blocked -- declared)
+    UpdateSubChannels();    // @0x82B4AC10
+    UpdateMasterChannels(); // @0x82B4ACD8 (blocked -- declared)
 }
 
 // ---------------------------------------------------------------------------
@@ -293,4 +331,282 @@ void NFSMixMap::ResetMapData()
     m_pMasterChannelInputs = 0;          // +0x204
     m_pSubChannelInputs = 0;             // +0x208
     m_pMasterChannelOutputArrayBlock = 0;// +0x178
+}
+
+// ===========================================================================
+//  Wave-F1 additions -- the remaining faithfully-recoverable NFSMixMap bodies.
+//  Store-for-store from BURNOUT_X360_ARTIST.XEX. See NFSMixMap.hpp for the layout.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::AssignSFXCallbacks @0x82B481B8 -- *(this+0x6C) = a2 (the driving host).
+// ---------------------------------------------------------------------------
+void NFSMixMap::AssignSFXCallbacks(void* lpOwner)
+{
+    mpMixerInterface = reinterpret_cast<Nicotine::IDynamicMixer*>(lpOwner); // +0x6C
+}
+
+// ---------------------------------------------------------------------------
+// "Next slot" UNIQUE-record allocators (twins of the committed shared/proc getters).
+// ---------------------------------------------------------------------------
+
+// GetNextEvtMixCtlUnique @0x82B48FF0 -- zero the fresh record (flt_82001CC0 == 0.0),
+// return &m_pEvtMixCtlData_U[m_nAssignedEvtMixCtlUnique]; bump the count if advancing.
+stEvtMixCtlUniqueData* NFSMixMap::GetNextEvtMixCtlUnique(char lbAdvance)
+{
+    stEvtMixCtlUniqueData* lp = &m_pEvtMixCtlData_U[m_nAssignedEvtMixCtlUnique]; // +0x19C / +0x174
+    lp->msStageElapsed = 0.0f;              // +0x04
+    lp->qStart         = 0;                 // +0x08
+    lp->msStart        = 0.0f;              // +0x0C
+    lp->eCurrentStage  = eEnvelopeStage_Off;// +0x00 (== 0)
+    lp->qoutput        = 0;                 // +0x1C
+    lp->output         = 0;                 // +0x18
+    if (lbAdvance) ++m_nAssignedEvtMixCtlUnique;
+    return lp;
+}
+
+// GetNextMasterMixUnique @0x82B49140 -- &m_pMasterChData_U[m_nAssignedMasterMixUnique].
+stMasterMixChUniqueData* NFSMixMap::GetNextMasterMixUnique(char lbAdvance)
+{
+    stMasterMixChUniqueData* lp = &m_pMasterChData_U[m_nAssignedMasterMixUnique]; // +0x1BC / +0x15C
+    if (lbAdvance) ++m_nAssignedMasterMixUnique;
+    return lp;
+}
+
+// GetNextSubMixUnique @0x82B491A8 -- &m_pSubChData_U[m_nAssignedSubMixUnique].
+stMixChUniqueData* NFSMixMap::GetNextSubMixUnique(char lbAdvance)
+{
+    stMixChUniqueData* lp = &m_pSubChData_U[m_nAssignedSubMixUnique]; // +0x1B0 / +0x150
+    if (lbAdvance) ++m_nAssignedSubMixUnique;
+    return lp;
+}
+
+// GetNextMapState @0x82B49210 -- byte-offset cursor over the NFSMixMapState object memory
+// (m_pStateProcMemBlock, +0x9C). FLAG (PC pointer-width): the X360 cursor steps 0x60
+// (== X360 sizeof NFSMixMapState); the object block is allocated at PC sizeof stride, so
+// the raw 0x60 step diverges on x64. Kept X360-faithful; reconciled with AllocateMixerMemory's
+// stride when the (currently absent) NFSMixMapState build chain lands.
+NFSMixMapState* NFSMixMap::GetNextMapState(char lbAdvance)
+{
+    const int liOff = m_CurrentStateProcBlockOffset;   // +0x20C (byte offset)
+    NFSMixMapState* lp = reinterpret_cast<NFSMixMapState*>(
+        reinterpret_cast<char*>(m_pStateProcMemBlock) + liOff);
+    if (lbAdvance) m_CurrentStateProcBlockOffset = liOff + 0x60;
+    return lp;
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::GetCurveDataPtr @0x82B49238 -- find (or append) the curve-proc slot for a
+// mix-control parameter. The curve type is bits[24..27] of the param id; the slot lives
+// in the m_pCurveDataArray sub-range for that type (offset = sum of earlier types' curve
+// counts, held in m_CurveProcsTotal[type][0]); m_CurveProcsTotal[type][1] tracks how many
+// are already present. On a miss it appends a fresh proc (Q15Output = 0x7FFF).
+// ---------------------------------------------------------------------------
+stCurveDataProc* NFSMixMap::GetCurveDataPtr(int* lpParam)
+{
+    stCurveDataProc* lpBase = m_pCurveDataArray;   // +0x184
+    if (!lpBase)
+        return 0;
+
+    const int liType = (*lpParam >> 24) & 0xF;
+    int liOffset = 0;
+    for (int li = 0; li < liType; ++li)
+        liOffset += m_CurveProcsTotal[li][0];      // +0xDC..: sum earlier types' counts
+
+    stCurveDataProc* lpProc = &lpBase[liOffset];
+    const int liAdded = m_CurveProcsTotal[liType][1];
+    bool lbAppend = (liAdded <= 0);
+    if (!lbAppend)
+    {
+        int li = 0;
+        while (lpProc->nINPUTID != *lpParam)
+        {
+            ++li;
+            ++lpProc;
+            if (li >= m_CurveProcsTotal[liType][1]) { lbAppend = true; break; }
+        }
+    }
+    if (lbAppend)
+    {
+        m_CurveProcsTotal[liType][1] = liAdded + 1;
+        lpProc->Q15Output   = 0x7FFF;   // +0xC
+        lpProc->pInputParam = 0;        // +0x4
+        lpProc->nINPUTID    = *lpParam; // +0x0
+    }
+    return lpProc;
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::AddScaleIDs @0x82B492F8 -- expand a mix-control's scale-input list into the
+// packed scale-ptr array. For each scale entry: if its state matches the control's own
+// state, one packed id is written; otherwise one packed id per active copy of that state
+// (m_StateRefCount[state]). The produced count is written back into the param blob's
+// count byte and added to m_ScaleParamsIDCount. Returns the base of the written range.
+// FLAG (PC pointer-width): the packed 32-bit ids are stored through the m_pScalePtrArray
+// pointer slots (reinterpret) so the stride matches ConnectMixMap's later object-ptr fill.
+// ---------------------------------------------------------------------------
+int* NFSMixMap::AddScaleIDs(unsigned short* lpScaleParams, int liProcIdx)
+{
+    const int liCount = lpScaleParams[2] & 0x1F;         // u16 @ byte4, low 5 bits
+    if (liCount == 0)
+        return 0;
+
+    int** lpArray = m_pScalePtrArray;                    // +0x180
+    int** lpBase  = &lpArray[m_ScaleParamsIDCount];
+    const int liSelfType = lpScaleParams[0] & 0xFF;      // low byte of u16 @ byte0
+    const int* lpEntry   = reinterpret_cast<const int*>(lpScaleParams + 4); // scale list @ byte8
+
+    int liAdded = 0;
+    for (int li = 0; li < liCount; ++li)
+    {
+        const int liVal      = *lpEntry++;
+        const int liEntryType = (liVal >> 16) & 0xFF;
+        if (liEntryType == liSelfType)
+        {
+            ++liAdded;
+            lpArray[m_ScaleParamsIDCount + li] =
+                reinterpret_cast<int*>(static_cast<intptr_t>((liProcIdx << 11) | liVal));
+        }
+        else
+        {
+            const int liCopies = m_StateRefCount[liEntryType]; // this+8+4*type
+            for (int lj = 0; lj < liCopies; ++lj)
+            {
+                ++liAdded;
+                lpArray[m_ScaleParamsIDCount + lj + li] =
+                    reinterpret_cast<int*>(static_cast<intptr_t>((lj << 11) | liVal));
+            }
+        }
+    }
+
+    // write the produced count into the top byte of the u32 @ byte4 of the param blob.
+    int* lpCountWord = reinterpret_cast<int*>(lpScaleParams + 2); // byte4
+    *lpCountWord = (liAdded << 24) | (*lpCountWord & 0xFFFFFF);
+    m_ScaleParamsIDCount += liAdded;
+    return reinterpret_cast<int*>(lpBase);
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::GetMasterMixChProc @0x82B4A840 -- route a packed master-channel id to its
+// per-state proc: state = bits[16..23], copy = bits[11..15], proc = bits[0..7]. The X360
+// host-assert ("State out of bounds.") collapses to CGS_ASSERT.
+// ---------------------------------------------------------------------------
+stMasterMixChProc* NFSMixMap::GetMasterMixChProc(int liPackedID)
+{
+    const int liState = (liPackedID >> 16) & 0xFF;
+    const int liCopy  = (liPackedID >> 11) & 0x1F;
+
+    const bool lbInBounds = (m_pMMHdr != 0) && (liState < m_pMMHdr->NumStates); // +0x74 -> NumStates
+    CGS_ASSERT(lbInBounds, "State out of bounds.");
+
+    NFSMixMapState* lpState = m_pStateProcs[liState];  // +0x98
+    if (lpState)
+        return lpState->GetMasterMixChProc(
+            static_cast<unsigned char>(liPackedID & 0xFF), liCopy);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::UpdateSubChannels @0x82B4AC10 -- per-frame: for each active sub-channel, sum
+// its input Q15 values into Output, then clamp to the shared param's [lower,upper] swing.
+// FLAG (PC pointer-width): the input array holds pointers-to-values on the runtime side
+// (double-deref), matching ConnectMixMap's object-ptr fill; modelled with int** casts.
+// ---------------------------------------------------------------------------
+void NFSMixMap::UpdateSubChannels()
+{
+    stSubMixChProc* lpProc = m_pSubChProc;             // +0x1B4
+    for (int li = 0; li < m_SubMixChannelsAdded; ++li, ++lpProc) // +0x1D8, stride 8
+    {
+        stMixChUniqueData* lpU = lpProc->pMixChData_U; // +0x4
+        stMixChSharedData* lpS = lpProc->pMixChData_S; // +0x0
+        int** lppInputs = reinterpret_cast<int**>(lpU->pInputs);
+        if (!lppInputs)
+            continue;
+
+        int liN = lpS->NumInputs & 0xFF;               // +0x8, low byte
+        lpU->Output = 0;                               // +0x4
+        int** lpp = lppInputs;
+        while (liN) { --liN; const int liV = **lpp++; lpU->Output += liV; }
+
+        const int liSwing = lpS->pMapParams->UpperLowerSwing; // *pMapParams -> +0x4
+        const int liMin = liSwing | static_cast<int>(0xFFFF0000);
+        const int liMax = (liSwing >> 16) & 0x7FFF;
+        if (lpU->Output > liMax) lpU->Output = liMax;
+        if (lpU->Output < liMin) lpU->Output = liMin;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMap::AllocateMixerMemory @0x82B48AF8 -- allocate every runtime block of the mixer
+// graph (proc arrays + shared/unique record arrays + input/output blocks) from the mixer
+// allocator, sized from the counts PreProcessMixMap accumulated, and construct the
+// NFSMixMapState object memory. FLAG (PC pointer-width): the X360 sizes each block with
+// 32-bit element strides (4/8/12/16/20/32/64/96); the PC reconstruction sizes them with
+// sizeof(element) so the typed accessors stay self-consistent on x64. Blocks the runtime
+// fills with pointers (state procs, input arrays, scale array) use sizeof(void*).
+// ---------------------------------------------------------------------------
+int NFSMixMap::AllocateMixerMemory()
+{
+    MixerAllocator* lpAlloc = g_pMixerAllocator;
+    const int liNumStates = m_pMMHdr->NumStates;   // +0x74 -> NumStates
+
+    if (!m_pStateProcs)                             // +0x98
+        m_pStateProcs = static_cast<NFSMixMapState**>(
+            lpAlloc->Allocate(sizeof(NFSMixMapState*) * liNumStates, 16, "Dyn Mix Proc Array"));
+    for (int li = 0; li < liNumStates; ++li)
+        m_pStateProcs[li] = 0;
+
+    m_pMasterChannelInputs = static_cast<int*>(     // +0x204 (ptr array on runtime)
+        lpAlloc->Allocate(sizeof(int*) * m_nTotalMasterChannelInputs, 16, "Master Channel Input Array Block"));
+    m_pSubChannelInputs = static_cast<int*>(        // +0x208 (ptr array on runtime)
+        lpAlloc->Allocate(sizeof(int*) * m_nTotalSubChannelInputs, 16, "Sub Channel Input Array Block"));
+    m_pMasterChannelOutputArrayBlock = static_cast<int*>( // +0x178 (16 int slots per channel)
+        lpAlloc->Allocate(64 * m_nTotalUniqueMasterChannels, 16, "Master Channel Output Array Block"));
+
+    NFSMixMapState* lpStateMem = static_cast<NFSMixMapState*>( // +0x9C object memory
+        lpAlloc->Allocate(sizeof(NFSMixMapState) * m_nStateMapCount, 16, "NFSMixMapState Object Memory"));
+    m_pStateProcMemBlock = reinterpret_cast<NFSMixMapState**>(lpStateMem);
+    for (int li = 0; li < m_nStateMapCount; ++li)   // +0xA8
+        new (&lpStateMem[li]) NFSMixMapState();
+
+    m_pScalePtrArray = static_cast<int**>(          // +0x180 (packed ids / object ptrs)
+        lpAlloc->Allocate(sizeof(int*) * m_ScaleParamsAdded, 16, "Scale Input Ptr Array Block"));
+    m_pCurveDataArray = static_cast<stCurveDataProc*>( // +0x184
+        lpAlloc->Allocate(sizeof(stCurveDataProc) * m_CurveProcsAdded, 16, "Curve Proc Data Array"));
+
+    m_pMixCtlData_S = static_cast<stMixCtlSharedData*>(  // +0x188
+        lpAlloc->Allocate(sizeof(stMixCtlSharedData) * m_SharedMixCtlCount, 16, "NFSMixCtl Shared Data Array"));
+    m_pMixCtlData_U = static_cast<stMixCtlUniqueData*>(  // +0x18C
+        lpAlloc->Allocate(sizeof(stMixCtlUniqueData) * m_MixCtlsAdded, 16, "NFSMixCtl Unique Data Array"));
+    m_pMixCtlProc = static_cast<stMixCtlProc*>(          // +0x190
+        lpAlloc->Allocate(sizeof(stMixCtlProc) * m_MixCtlsAdded, 16, "NFSMixCtl Process Data Array"));
+
+    m_pSubChData_S = static_cast<stMixChSharedData*>(    // +0x1AC
+        lpAlloc->Allocate(sizeof(stMixChSharedData) * m_SharedSubMixCount, 16, "SubMix Shared Data Block"));
+    m_pSubChData_U = static_cast<stMixChUniqueData*>(    // +0x1B0
+        lpAlloc->Allocate(sizeof(stMixChUniqueData) * m_SubMixChannelsAdded, 16, "SubMix Unique Data Block"));
+    m_pSubChProc = static_cast<stSubMixChProc*>(         // +0x1B4
+        lpAlloc->Allocate(sizeof(stSubMixChProc) * m_SubMixChannelsAdded, 16, "SubMix Proc Data Block"));
+
+    m_pMasterChData_S = static_cast<stMasterMixChSharedData*>( // +0x1B8
+        lpAlloc->Allocate(sizeof(stMasterMixChSharedData) * m_SharedMasterMixCount, 16, "MasterMix Shared Data Block"));
+    m_pMasterChData_U = static_cast<stMasterMixChUniqueData*>( // +0x1BC
+        lpAlloc->Allocate(sizeof(stMasterMixChUniqueData) * m_MasterChannelsAdded, 16, "MasterMix Unique Data Block"));
+    m_pMasterChProc = static_cast<stMasterMixChProc*>(        // +0x1C0
+        lpAlloc->Allocate(sizeof(stMasterMixChProc) * m_MasterChannelsAdded, 16, "MasterMix Proc Data Block"));
+
+    m_p3DMixCtlData_S = static_cast<st3DMixCtlSharedData*>(   // +0x1A4
+        lpAlloc->Allocate(sizeof(st3DMixCtlSharedData) * m_3DMixCtlsAdded, 16, "3DMixCtl Shared Data Block"));
+    m_p3DMixCtlData_U = static_cast<st3DMixCtlUniqueData*>(   // +0x1A8
+        lpAlloc->Allocate(sizeof(st3DMixCtlUniqueData) * m_3DMixCtlsAdded, 16, "3DMixCtl Unique Data Block"));
+    m_p3DMixCtlProc = static_cast<st3DMixCtlProc*>(          // +0x1A0
+        lpAlloc->Allocate(sizeof(st3DMixCtlProc) * m_3DMixCtlsAdded, 16, "3DMixCtl Proc Data Block"));
+
+    m_pEvtMixCtlData_S = static_cast<stEvtMixCtlSharedData*>( // +0x198
+        lpAlloc->Allocate(sizeof(stEvtMixCtlSharedData) * m_EventCtlsAdded, 16, "EvtMixCtl Shared Data Block"));
+    m_pEvtMixCtlData_U = static_cast<stEvtMixCtlUniqueData*>( // +0x19C
+        lpAlloc->Allocate(sizeof(stEvtMixCtlUniqueData) * m_EventCtlsAdded, 16, "EvtMixCtl Unique Data Block"));
+    m_pEvtMixCtlProc = static_cast<stEvtMixCtlProc*>(        // +0x194
+        lpAlloc->Allocate(sizeof(stEvtMixCtlProc) * m_EventCtlsAdded, 16, "EvtMixCtl Proc Data Block"));
+    return 0;
 }
