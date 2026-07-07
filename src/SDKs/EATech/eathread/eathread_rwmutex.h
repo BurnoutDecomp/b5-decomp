@@ -77,13 +77,25 @@ namespace Thread
         // (kLockTypeWrite) lock, blocking on the matching condition with the absolute
         // deadline pTimeoutAbsolute. Returns the post-acquire reader count (read),
         // 1 (write), or kResultTimeout(-2) if a wait was cancelled.
-        int Lock(LockType lockType, const u32* pTimeoutAbsolute);
+        int Lock(LockType lockType, const u32* pTimeoutAbsolute = 0);
 
         // @ 0x82B438A8 -- release the held lock. A writer clears mThreadIdWriter; a
         // reader decrements mnReaders. When the lock is fully released, wake a writer
         // (Signal(false) on mWriteCondition) if any wait, else broadcast the readers
         // (Signal(true) on mReadCondition). Returns the remaining reader count (or 0).
         int Unlock();
+
+        // Vendor RWMutex::GetLockCount(LockType) (eathread_rwmutex.h:149) -- the active
+        // count for the requested lock type. Inlined at its call sites in the X360 build
+        // (e.g. CgsModule::DataBuffer::IsBufferLocked reads mnReaders / mThreadIdWriter
+        // directly); homed here as the trivial accessor over the recovered X360 fields:
+        // read == mnReaders, write == (mThreadIdWriter != 0) ? 1 : 0.
+        int GetLockCount(LockType lockType) const
+        {
+            if (lockType == kLockTypeRead)  return mnReaders;
+            if (lockType == kLockTypeWrite) return mThreadIdWriter != 0 ? 1 : 0;
+            return 0;
+        }
 
     private:
         s32              mnReadWaiters;     // +0x00
@@ -104,6 +116,13 @@ namespace Thread
         // is not in this dossier, so this is the trivial member-wise construction
         // that lets the object be declared. mMutex is left uninitialised until Init.
         RWMutex();
+
+        // Vendor RWMutex(const RWMutexParameters* = 0, bool = true) (eathread_rwmutex.h:119):
+        // the module ctors placement-new this with (0, true) -- default params, intra-process
+        // -- e.g. CgsSoundLogicModule/CgsModelModule at this+0x18040 (X360 r4=0/r5=1). Declared
+        // here (no default args, to avoid ambiguity with RWMutex()); the ctor body -- which
+        // forwards to Init(pRWMutexParameters) -- is homed by its own recovered TU.
+        RWMutex(const RWMutexParameters* pRWMutexParameters, bool bDefaultParameters);
     };
 }
 }
