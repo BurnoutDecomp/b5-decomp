@@ -108,7 +108,26 @@ namespace Native
         // bucket back onto the pool free list. Caller: ParticleModule::ProcessEventQueue.
         void ClearAllBuckets();
 
+        // BrnParticle::Native::BrnDebrisArray::SpawnDebris @ 0x82294DC8. Claim a fresh debris
+        // particle (GetNewDebris) and fill it in: position + rotational velocity, rotation axis +
+        // angle, linear velocity + size scale, diffuse colour tinted by the array's diffuse
+        // factor, and a pseudo-randomly seeded bounce count. No-op if the pool is exhausted.
+        // Callers: ParticleModule::{HandleFireDebrisBurstEvent, ProcessEventQueue}.
+        void SpawnDebris(rw::math::vpu::Vector3 lPos,
+                         rw::math::vpu::Vector3 lLinearVelocity,
+                         rw::math::vpu::Vector3 lRotationAxis,
+                         rw::math::vpu::Vector4 lDiffuseColour,
+                         f32 lrRotationalVelocity,
+                         f32 lrSizeScale,
+                         f32 lrSpawnTime);
+
     private:
+        // BrnParticle::Native::BrnDebrisArray::GetNewDebris (BrnDebrisRenderer.cpp:250). Claim the
+        // next free debris slot from the tail bucket, threading in a fresh bucket from the pool
+        // when the current one fills up. Reconstructed in a later pass; declared here so
+        // SpawnDebris can dispatch to it.
+        BrnDebris* GetNewDebris(f32 lfBirthTime);
+
         const BrnDebrisArrayParams*                            mpParams;        // this[0] @ +0x00
         DebrisBucket*                                          mpBuckets;       // this[1] @ +0x04
         FXBucketManager*                                       mpBucketManager; // this[2] @ +0x08
