@@ -292,16 +292,7 @@ AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStr
     return pOut;
 }
 
-// ---------------------------------------------------------------------------
-// AptValue_EmbeddedNativeHash (HOMED 2026-07-02, retiring the null stub). The
-// X360 reads an AptValueWithHash's embedded property hash at value +8 -- the
-// typed mHash member (localToGlobal's point-object x/y lookups etc.).
-// ---------------------------------------------------------------------------
-AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue)
-{
-    // The AptValueWithHash override returns &mHash -- the same +8 sub-object.
-    return static_cast<AptValueWithHash*>(pValue)->GetNativeHashVirtual();
-}
+// AptValue_EmbeddedNativeHash inlined at its call site (localToGlobal).
 
 // ---------------------------------------------------------------------------
 // AptInterp_BuildTargetPath -- the recursive display-path builder (X360
@@ -688,8 +679,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
     // FLAG: the point's embedded per-instance native hash (the X360 reads it at the
     // value's +8 -- an AptValueWithHash's hash sub-object). Declared as an extern
     // shim so the key lookups/stores stay typed without re-narrowing the value here.
-    extern AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue);   // pValue + 8
-    AptNativeHash* const pHash = AptValue_EmbeddedNativeHash(pPoint);
+    AptNativeHash* const pHash = static_cast<AptValueWithHash*>(pPoint)->GetNativeHashVirtual();
 
     AptValue* const pValX = pHash->Lookup(strKeyX);
     AptValue* const pValY = pHash->Lookup(strKeyY);
