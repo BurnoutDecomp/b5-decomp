@@ -789,4 +789,37 @@ void CollectionHashMap::Clear()
     mWorstCollision = 0;
 }
 
+// ============================================================================
+// Attrib::Class -- collection-table wrappers
+// ============================================================================
+
+// @ 0x82807DD0 -- GetCollectionWithDefault(key): look up the collection stored under
+// luKey; if absent, retry with the class's literal default-collection key. Both probes
+// hit the same table (ClassPrivate::mCollections @ mpPrivates+0x1C).
+Collection* Class::GetCollectionWithDefault(u64 luKey) const
+{
+    CollectionHashMap* lpTable = GetCollectionTable();
+
+    Collection* lpCollection = lpTable->Find(luKey);
+    if (lpCollection == NULL)
+        lpCollection = lpTable->Find(KU_DEFAULT_COLLECTION_KEY);
+
+    return lpCollection;
+}
+
+// @ 0x8280ADD8 -- RemoveCollection(collection): remove the given collection from this
+// class's collection table, located by the collection's own 64-bit key (collection+0x10).
+// Returns true iff a live bucket was actually vacated.
+bool Class::RemoveCollection(Collection* lpCollection)
+{
+    CGS_ASSERT(lpCollection != NULL, "Cannot remove NULL collection.");
+
+    const u64 luKey =
+        *reinterpret_cast<const u64*>(reinterpret_cast<const u8*>(lpCollection) + 0x10);
+
+    CollectionHashMap* lpTable = GetCollectionTable();
+    const u32 luIndex = lpTable->FindIndex(luKey);
+    return lpTable->RemoveIndex(luIndex) != NULL;
+}
+
 } // namespace Attrib

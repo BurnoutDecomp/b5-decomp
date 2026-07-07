@@ -26,6 +26,13 @@
 
 namespace BrnNetwork
 {
+    // Update's per-frame input payload (owned by GameSource/Network/BrnNetworkModuleIO.{h,cpp});
+    // reached only by pointer here, so a forward declaration keeps this header light.
+    namespace BrnNetworkModuleIO
+    {
+        struct PostSimulationInputBuffer;
+    }
+
     class BrnServerInterfaceTelemetry : public CgsNetwork::ServerInterfaceTelemetry
     {
     public:
@@ -34,6 +41,18 @@ namespace BrnNetwork
         // Polymorphic teardown slot (the X360 deleting destructor restores the shared
         // component vtable at this+0 and conditionally frees).
         virtual ~BrnServerInterfaceTelemetry();
+
+        // Prepare @ 0x82583650 -- run the base telemetry Prepare with the Burnout country-block
+        // list + buffer caps, then latch the game's event-id -> keys mapping table.
+        virtual bool Prepare(CgsNetwork::ServerInterfaceDirtySock* lpServerInterface,
+                             bool lbConnectImmediately);
+
+        // Release @ 0x825836C8 -- run the base telemetry Release, then wipe the mapping table.
+        virtual bool Release();
+
+        // Update @ 0x8258EF90 -- pump the base telemetry feed, then drain the inbound post-sim
+        // network-event queue, capturing each telemetry event (type 16) into the component.
+        void Update(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput);
     };
 }
 
