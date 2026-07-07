@@ -187,6 +187,18 @@ namespace Attrib
         // bucket array unless it is a fixed allocation, then zero the counts.
         void Clear();
 
+        // Find(key) -- resolve the slot via FindIndex and return the stored collection,
+        // or NULL when the key is absent. Real X360 symbol in its own ledger TU
+        // (declaration-only here); Attrib::Class::GetCollectionWithDefault calls it.
+        Collection* Find(u64 luKey) const;
+
+        // X360 0x82808980 -- RemoveIndex(index): vacate the bucket at luIndex (running
+        // UpdateSearchLength to preserve the probe-run invariant) and return the
+        // collection that was removed, or NULL when the index does not name a live
+        // bucket. Own ledger TU (declaration-only here); Attrib::Class::RemoveCollection
+        // calls it.
+        Collection* RemoveIndex(u32 luIndex);
+
     private:
         // X360 0x82806570 -- open-addressing insert of (luKey -> lpPtr) with linear probing.
         bool InternalAdd(u64 luKey, Collection* lpPtr);
@@ -213,4 +225,49 @@ namespace Attrib
                   "CollectionHashMap Node mKey must sit at +0 (X360 std/ld doubleword)");
     static_assert(offsetof(CollectionHashMap::Node, mPtr) == 8,
                   "CollectionHashMap Node mPtr must sit at +8 (X360 self-pointer sentinel slot)");
+
+    // -------------------------------------------------------------------------
+    // Attrib::Class -- the two collection-table wrappers off the X360 spine.
+    // -------------------------------------------------------------------------
+    // A Class is the {key, privates} handle onto an Attrib::ClassPrivate. The two
+    // ledger functions homed here both drive the class's collection table
+    // (ClassPrivate::mCollections == the VecHashMap<...Collection...,true,96u>
+    // instantiation, reached at mpPrivates+0x1C). Only these two members are attested
+    // as real X360 functions off this spine; the rest of the Class API is inlined away
+    // at its call sites, so -- like the sibling attribinstance.h reconstruction -- this
+    // is the minimal layout the recovered bodies need rather than the full SDK class.
+    //
+    // Layout by X360 byte offset (attribclassprivate.h agrees: mKey@+0, mpPrivates@+8):
+    //   +0x00  mKey        : Attrib::Key  (class key)
+    //   +0x08  mpPrivates  : ClassPrivate*  (owns mCollections @ +0x1C)
+    class Class
+    {
+    public:
+        // @ 0x82807DD0 -- look up the collection stored under luKey; when the key is
+        // absent, fall back to the class's default collection (the on-spine literal
+        // default key). Returns NULL only when neither is present.
+        Collection* GetCollectionWithDefault(u64 luKey) const;
+
+        // @ 0x8280ADD8 -- remove lpCollection (located by its own 64-bit key at
+        // collection+0x10) from this class's collection table. Returns true iff a live
+        // bucket was actually vacated.
+        bool RemoveCollection(Collection* lpCollection);
+
+    private:
+        // The class's default-collection key, materialised as a literal immediate in the X360 asm
+        // (0x82807DF8-E10): r4 low = ori(lis 0x2D7D, 0x2152) = 0x2D7D2152; then insrdi r4,r10,32,0
+        // inserts r10's low dword 0xD7EDBD36 into r4's HIGH half -> 0xD7EDBD36_2D7D2152.
+        static const u64 KU_DEFAULT_COLLECTION_KEY = 0xD7EDBD362D7D2152ull;
+
+        // ClassPrivate::mCollections lives at mpPrivates+0x1C (X360 lwz 8(this) + addi 0x1C).
+        CollectionHashMap* GetCollectionTable() const
+        {
+            return reinterpret_cast<CollectionHashMap*>(
+                reinterpret_cast<u8*>(mpPrivates) + 0x1C);
+        }
+
+        Key   mKey;        // +0x00  class key
+        u32   muPad0;      // +0x04
+        void* mpPrivates;  // +0x08  ClassPrivate* (owns mCollections @ +0x1C)
+    };
 }
