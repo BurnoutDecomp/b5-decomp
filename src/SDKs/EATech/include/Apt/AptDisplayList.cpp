@@ -1271,8 +1271,9 @@ void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
 // apt_state (hover) + apt_labeltxt (prompt) -- log confirms both are still
 // (APPLIED) by the shim, then overwritten. Off = shim-only drive, working menu.
 // Re-enable together with deleting the AptRuntimeSetComponent* shim (single driver).
-static const bool KB_CLASS_BINDING = false;  // preserve working shim menu; flip to true once
-                                             // PERSISTENTAPT composes the BurnoutComponent ancestor (§6.4)
+static const bool KB_CLASS_BINDING = false;  // MAIN+PERSISTENTAPT now resident + the BurnoutComponent
+                                             // framework is defined; next blocker is onLoad NOT dispatching
+                                             // (registration chain never starts). Flip on once that lands.
 
 int AptCIH::AssociateInstToClass()
 {
