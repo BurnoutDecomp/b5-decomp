@@ -20,10 +20,10 @@
 // lfs 0x14 (mfMaxBandwidth), lbz 0x18 (mbDrawBandwidthUsage), lbz 0x19
 // (mbShowUsedRegisteredMessages), lwz 0x1C (miAverageType).
 //
-// SCOPE: only _QSortMessageAndMax is bodied in this wave (self-contained: the comparator +
-// the MessageTypeAndMax record). OnActivate / DrawRow depend on subsystem hooks not yet
-// grounded in-tree (the debug-menu option list KA_AVERAGE_TYPES and CgsNetwork::Message's
-// type-name accessor); DrawBar / RenderHUD did not pass verification. They stay declared.
+// SCOPE: _QSortMessageAndMax, OnActivate, DrawRow and RenderHUD are bodied (in the .cpp).
+// DrawBar stays declared-but-unbodied: its per-bar geometry is an intricate VMX clamp chain
+// whose exact draw-line endpoints did not verify, so it is left blocked rather than
+// reconstructed with uncertain coordinates. RenderHUD / DrawRow only call it.
 
 namespace CgsNetwork
 {

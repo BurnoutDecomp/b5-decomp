@@ -105,6 +105,20 @@ namespace CgsNetwork
         SignalMessage* GetAck(s32 liIndex);
         SignalMessage* GetNack(s32 liIndex);
 
+        // --- bandwidth accounting (PlayerManagerDebugComponent HUD view) ---
+        // The per-frame DirtySock send-byte tallies the bandwidth overlay reads (in bytes):
+        // the application payload, the actual sent bytes, and the estimated bytes-with-overhead.
+        // ADDITIVE GROW (CgsNetworkPlayerManagerDebugComponent TU): the network PlayerManager
+        // bandwidth HUD (RenderHUD @ 0x82893C88) calls these on mpPlayerManager. Declared-only;
+        // the bodies live in the CgsPlayerManager.cpp registry TU.
+        s32 GetTotalBytesSentToDirtySock() const;
+        s32 GetTotalBytesSent() const;
+        s32 GetTotalBytesSentWithOverhead() const;
+        // Iterate the remote (non-local) player ids: seed *lpPlayerID with -1, then call; returns
+        // false when the walk is exhausted. ADDITIVE GROW (same HUD TU): declared-only, body in
+        // the registry TU.
+        bool GetNextRemotePlayerID(NetworkPlayerID* lpPlayerID) const;
+
         // --- identity ---
         NetworkPlayerID GetLocalPlayerID() const;   // reads mLocalPlayerID (DWARF h:162)
         u8              GetGameID() const;           // DWARF :297
