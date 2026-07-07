@@ -22,6 +22,7 @@ extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8
 
 #include <cstring>   // strncpy
 #include <cstdlib>   // atof
+#include <cstdio>    // std::snprintf (§6.4 SendAptEvent registration probe)
 #include <cstdio>    // std::snprintf (the bring-up probes)
 
 // ============================================================================
@@ -827,6 +828,29 @@ namespace CgsGui
             && ((lpNameVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpNameVal->getVtblIndex() == AptVFT_StringObject))
             && lpNameVal->getIsDefined();
+        // DIAG (2026-07-07 §6.4): trace every SendAptEvent -- is the ONLOAD registration
+        // reached, and does BuildName supply a DEFINED name? The shim exists only because this
+        // never yields a valid ONLOAD registration (the name overruns to undefined). Shows, per
+        // call: the guard bits, the event id, the resolved name, and whether the clip param is set.
+        {
+            static int s_iSaeHits = 0;
+            if (s_iSaeHits < 150)
+            {
+                ++s_iSaeHits;
+                EAStringC lDbgName;
+                if (lbNameOk)
+                    lpNameVal->toString(&lDbgName);
+                char lacSae[192];
+                std::snprintf(lacSae, sizeof(lacSae),
+                    "[AptRT] SendAptEvent#%d: ev=%d(id=%d) uid=%d name=%d('%s') clip=%d\n",
+                    s_iSaeHits, lbEventOk ? 1 : 0,
+                    lbEventOk ? lpEventId->toInteger() : -1,
+                    lbUniqueOk ? 1 : 0, lbNameOk ? 1 : 0,
+                    lbNameOk ? lDbgName.GetBuffer() : "<undef>",
+                    (AptExtObject::GetParam(3) != 0) ? 1 : 0);
+                CgsDev::Log::WriteToLog(lacSae);
+            }
+        }
         // FLAG (x64 interim guard -- ONE_TO_ONE §6.4): the console asserts here because
         // it always receives valid args; on x64 the AS component onLoad currently passes
         // an undefined component name + a bad clip receiver (a class-instance `this` /
