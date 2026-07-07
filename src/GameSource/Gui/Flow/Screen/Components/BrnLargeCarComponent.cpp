@@ -2,10 +2,9 @@
 // BrnGui::LargeCarComponent -- out-of-line bodies (class:BrnGui::LargeCarComponent).
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   Construct @0x8241B658, SetCarInfo @0x8241B6B0, ShowCar @0x8241B738,
-//   HandleLoadNotification @0x8241B7A8, HandleAptLoadTriggers @0x8241B928,
-//   HandleAptTransitionTriggers @0x8241B9F8, OnLoad @0x8243DAF8, ReleaseResources @0x8243DB98.
-// (HandleUnloadNotification @0x8241B868 is SKIPPED this wave -- its event record type is
-//  not yet homed.)
+//   HandleLoadNotification @0x8241B7A8, HandleUnloadNotification @0x8241B868,
+//   HandleAptLoadTriggers @0x8241B928, HandleAptTransitionTriggers @0x8241B9F8,
+//   OnLoad @0x8243DAF8, ReleaseResources @0x8243DB98.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnLargeCarComponent.h"
@@ -72,6 +71,21 @@ namespace BrnGui
                        "E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState");
             CGS_ASSERT(muResourceIdType != 0, "muResourceIdType != 0");
             meCurrentState = E_INTERNAL_STATE_READY;
+        }
+    }
+
+    // @ 0x8241B868
+    void LargeCarComponent::HandleUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpUnloadEvent)
+    {
+        CGS_ASSERT(lpUnloadEvent != 0, "lpUnloadEvent");
+
+        if (lpUnloadEvent->meRequestType == CgsGui::E_GUI_RESOURCETYPE_APT &&
+            muResourceIdType == lpUnloadEvent->muLoadRequestId)
+        {
+            CGS_ASSERT(E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState,
+                       "E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState");
+            CGS_ASSERT(muResourceIdType != 0, "muResourceIdType != 0");
+            meCurrentState = E_INTERNAL_STATE_DATA_SUPPLIED;
         }
     }
 

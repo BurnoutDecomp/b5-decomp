@@ -1,19 +1,33 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnJunctionInfoComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT + CgsDev::Assert::{Begin,Fire,End}Assert
+#include "GameShared/GameClasses/Core/CgsID.h"                                     // CgsIDConvertToString
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                            // CgsCore::SnPrintf
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                        // CgsDev::StrStream (streamed assert message)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                             // BrnFlapt::MovieClipRef (GotoAnd*Label)
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"  // AttachToTextFieldComponent
 
 // BrnGui::JunctionInfoComponent -- the in-race junction/event-start HUD panel,
 // reconstructed from BURNOUT_X360_ARTIST.XEX. This slice homes the eight functions whose
 // bodies are fully grounded by the X360 asm: Construct / Prepare / HandleJunctionChange /
-// Refresh / Run / GetMedalFrameNameFromMedal / TransitionInMainClip / TransitionOutMainClip.
-// SetupAptVariables / SetEventNameText are left declaration-only (they index per-gamemode
-// static tables whose full contents are not in the export, and SetupAptVariables builds a
-// GuiEventTickerCustomMessage whose exact size the ledger does not reconcile).
+// Refresh / Run / GetMedalFrameNameFromMedal / TransitionInMainClip / TransitionOutMainClip /
+// SetEventNameText. SetEventNameText's per-gamemode name-string table (gGameModeNameStringIds
+// @0x82F27840) is referenced but declaration-only -- only entry 0 ("GAMEMODE_RACE") is
+// attested by the export, so its full contents are defined by this class's data TU.
+// SetupAptVariables is still declaration-only (it indexes further per-gamemode static tables
+// whose contents are not in the export, and builds a GuiEventTickerCustomMessage whose exact
+// size the ledger does not reconcile).
 
 namespace BrnGui
 {
+    // @0x82F27840 -- per-gamemode event-name localisation string-id table, indexed by
+    // GuiEventJunctionInfo::meGameModeType (0..E_MODE_OFFLINE_COUNT). Entry 0
+    // (E_MODE_OFFLINE_RACE) is X360-attested "GAMEMODE_RACE"; the remaining entries are
+    // serialised label data not present in this function export, so the table is
+    // declaration-only here (defined by this class's data TU once every gamemode label is
+    // recovered). Not a DWARF class member -- it is the .cpp's file-scope name table.
+    extern const char* const gGameModeNameStringIds[];
+
     // @ 0x82423DE0 -- base init (adopt the state interface, invalidate the clip; the
     // h:113 lpStateInterface tripwire fires here), zero the pending junction-info event,
     // construct the three animator children and the two start-hint button icons under this
@@ -149,5 +163,65 @@ namespace BrnGui
         }
         GetMovieClipRef().GotoAndPlayLabel(lpTransOutFrameName);
         mbInJunction = false;
+    }
+
+    // @ 0x82414E60 -- (re)populate the event-name text field(s) for the current junction.
+    // Both name fields are first cleared and the 2-line flag reset. A special-event car
+    // challenge takes precedence: the car id is stringified, formatted as "CAR_CAPS_<car>",
+    // and passed as the single positional parameter of the JNC_INFO_SPECIAL_EVENT_X_CHALLENGE
+    // localised string into the TWO-line field (setting mbShowing2LineName). Otherwise an
+    // unlocked event shows its per-gamemode localised name in the one-line field; a locked,
+    // non-special junction is a design error -- the X360 streams a diagnostic assert message
+    // (gamemode value interpolated) and falls back to the literal "LOCKED EVENT".
+    void JunctionInfoComponent::SetEventNameText()
+    {
+        mbShowing2LineName = false;
+        mEventNameTextfield.ClearText();
+        mEventNameTextfield2Line.ClearText();
+
+        if (mJunctionInfo.mSpecialEventCarId != 0)
+        {
+            const s32 KI_TEMP_STRING_LENGTH = 31;
+
+            char lacCarID[13];
+            CgsIDConvertToString(mJunctionInfo.mSpecialEventCarId, lacCarID);
+
+            char lacTempCarStringID[32];
+            CgsCore::SnPrintf(lacTempCarStringID, KI_TEMP_STRING_LENGTH, "CAR_CAPS_%s", lacCarID);
+            lacTempCarStringID[KI_TEMP_STRING_LENGTH] = 0;
+
+            const char* lapStringParams[1]     = { lacTempCarStringID };
+            s32         laStringFormatTypes[1]  = { 9 };
+            mEventNameTextfield2Line.SetLocalisedText(
+                "JNC_INFO_SPECIAL_EVENT_X_CHALLENGE", 9, 1, lapStringParams, laStringFormatTypes);
+
+            mbShowing2LineName = true;
+        }
+        else if (mJunctionInfo.mbEventUnlocked)
+        {
+            mEventNameTextfield.SetLocalisedText(
+                gGameModeNameStringIds[mJunctionInfo.meGameModeType], 9);
+        }
+        else
+        {
+            // Streamed diagnostic message (gamemode value interpolated). Lowered to the committed
+            // CgsID.cpp house idiom: build into a local KI_MESSAGEBUFFERSIZE buffer, then
+            // BeginAssert/FireAssert/EndAssert. (The X360 streams into the global gpcMessageBuffer,
+            // which the reconstruction folds to this local buffer, as every committed streamed-assert
+            // site does; gpcMessageBuffer is not a materialised symbol here.)
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Junction with gamemode ";
+            lStrStream << (s32)mJunctionInfo.meGameModeType;
+            lStrStream << " is locked (and is not a car special event) - is this correct?\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                lacMessage,
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp",
+                429);
+            CgsDev::Assert::EndAssert();
+
+            mEventNameTextfield.SetText("LOCKED EVENT", 0);
+        }
     }
 }

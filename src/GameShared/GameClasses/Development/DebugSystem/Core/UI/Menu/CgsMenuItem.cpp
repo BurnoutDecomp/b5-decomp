@@ -16,7 +16,16 @@ namespace CgsDev
         {
         }
 
-        void MenuItem::Prepare() {}
+        // Prepare resets the layout extents + intrusive list link. The X360 inlines these three
+        // base stores into every derived ::Prepare (e.g. MenuItemVariableLineGraph::Prepare @0x828167C0
+        // does stfs 0->+4/+8, stw 0->+0xC); mpDebugLinkedListNext is private to MenuItem, so the base
+        // owns the reset. Not dead here - derived Prepare bodies are reconstructed and depend on it.
+        void MenuItem::Prepare()
+        {
+            mfWidth = 0.0f;
+            mfHeight = 0.0f;
+            mpDebugLinkedListNext = nullptr;
+        }
 
         f32  MenuItem::GetWidth() const  { return mfWidth; }
         f32  MenuItem::GetHeight() const { return mfHeight; }

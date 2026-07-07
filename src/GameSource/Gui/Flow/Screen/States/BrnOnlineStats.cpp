@@ -3,9 +3,8 @@
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   HandleControllerInputPressed @0x82487670, HandleStatsData @0x82487728,
 //   OnEnter @0x82487470, OnLeave @0x824A18E8, UpdatePermanent @0x82492908,
-//   UpdateWFInit @0x82487608.
-// (ClearExpectedComponent @0x82487590 / UpdateGetCache / UpdateRunning are SKIPPED --
-//  declared-only.)
+//   UpdateWFInit @0x82487608, UpdateGetCache @0x82492820, UpdateRunning @0x824A19C8.
+// (ClearExpectedComponent @0x82487590 is SKIPPED -- declared-only.)
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
@@ -114,6 +113,65 @@ namespace BrnGui
         {
             if (liEventId == KI_EVENT_GO_BACK)
                 SendStateEvent("GO_BACK");
+
+            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        }
+    }
+
+    // ---- UpdateGetCache @ 0x82492820 ----------------------------------------------
+    void OnlineStats::UpdateGetCache()
+    {
+        CGS_ASSERT(mpGuiCache == NULL, "NULL == mpGuiCache");   // cpp:270
+
+        OnlineStatsInQueue* lpInQueue = reinterpret_cast<OnlineStatsInQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = NULL;
+        s32 liSize = 0;
+        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        // Scan the in-queue for the cache-ready event (id 0x40); stop at the first one.
+        while (lpEvent != NULL && liEventId != KI_EVENT_CACHE_READY)
+            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+
+        if (lpEvent != NULL)
+        {
+            GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
+            CGS_ASSERT(lpCache != NULL, "NULL != lpCacheEvent->mpCachePointer");   // cpp:280
+            mpGuiCache = lpCache;   // X360 +0x38
+        }
+
+        CGS_ASSERT(mpGuiCache != NULL, "NULL != mpGuiCache");   // cpp:289
+    }
+
+    // ---- UpdateRunning @ 0x824A19C8 -----------------------------------------------
+    void OnlineStats::UpdateRunning()
+    {
+        OnlineStatsInQueue* lpInQueue = reinterpret_cast<OnlineStatsInQueue*>(mpInGuiEventQueue);
+
+        const CgsModule::Event* lpEvent = NULL;
+        s32 liSize = 0;
+        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent != NULL)
+        {
+            switch (liEventId)
+            {
+                case KI_EVENT_CONTROLLER_INPUT_PRESSED:   // 6
+                    HandleControllerInputPressed(
+                        reinterpret_cast<const CgsGui::GuiEventControllerInputPressed*>(lpEvent));
+                    break;
+
+                case KI_EVENT_REQUEST_STATS:   // 0xF1 -- post the stats request on the output queue
+                {
+                    GuiEventOnlineStatsRequest lRequestEvent;
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lRequestEvent), 40, 36);
+                    break;
+                }
+
+                case KI_EVENT_STATS_RESPONSE:   // 0xF2
+                    HandleStatsData(reinterpret_cast<const GuiEventOnlineStatsResponse*>(lpEvent));
+                    break;
+            }
 
             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }

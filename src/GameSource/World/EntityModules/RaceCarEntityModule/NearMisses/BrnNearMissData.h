@@ -235,6 +235,20 @@ namespace BrnWorld
 
         // ---- queries (const) ----
 
+        // GetNumPreviousFrameNearElements / GetPreviousFrameNearElement -- read back the
+        // previous frame's near-section working list (the maNearSectionsBackup snapshot that
+        // BackupNearArray populated). NearMissManager::Update iterates these to replay each
+        // remembered vehicle. The X360 inlines both as maNearSectionsBackup.GetLength()/GetItem
+        // (count @ +0x24, GetItem on the +0x14 array) -- see NearMissManager::Update.
+        u32 GetNumPreviousFrameNearElements() const
+        {
+            return maNearSectionsBackup.GetLength();
+        }
+        u32 GetPreviousFrameNearElement(u32 luIndex) const
+        {
+            return static_cast<u32>(maNearSectionsBackup.GetItem(luIndex));
+        }
+
         // HasRecentlyCrashed -- <4,7> @0x822E46F0 / <4,8> @0x822E3DB0.
         bool HasRecentlyCrashed(u32 luEntityId) const
         {

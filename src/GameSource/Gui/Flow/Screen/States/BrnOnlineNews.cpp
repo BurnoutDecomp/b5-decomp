@@ -30,6 +30,18 @@ namespace BrnGui
     };
     const s32 OnlineNews::miNumResourcesToLoad = 1;
 
+    // ---- file-local boundaries / helpers ------------------------------------------
+    // The apt-component watcher half of the cache the X360 reaches (BrnGui::GuiCache::
+    // ClearExpectedAptComponentList) is not on the committed GuiCache public API; faithful
+    // default is a no-op (mirrors the committed CrashNavStatsCacheBoundary sibling). GROW
+    // when the accessor lands.
+    namespace OnlineNewsCacheBoundary
+    {
+        void ClearExpectedAptComponentList(GuiCache* /*lpCache*/, GuiFlow /*leFlow*/)
+        {
+        }
+    }
+
     // ---- HandleControllerAxis @ 0x82486B58 ----------------------------------------
     void OnlineNews::HandleControllerAxis(const GuiEventControllerAxis* lpEvent)
     {
@@ -129,5 +141,32 @@ namespace BrnGui
         // copies from the reused scratch (last word uninitialised -> reproduced as 0). Channel 40, 32 bytes.
         u32 lauRecord2[8] = { 20u, 323u, 12u, 42u, 266u, 12u, 0u, 0u };
         lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord2), 40, 32);
+    }
+
+    // ---- CheckForCompletedLoads @ 0x824AA420 --------------------------------------
+    void OnlineNews::CheckForCompletedLoads()
+    {
+        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+
+        if (meSubState == E_SUBSTATE_LOADING_SCREEN)
+        {
+            if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
+                                                     static_cast<u32>(miNumResourcesToLoad)))
+            {
+                mpStateInterface->PlayAptMovie("ON_NEWS", 3);
+                meSubState = E_SUBSTATE_LOADING_COMPONENTS;
+            }
+        }
+        else if (meSubState == E_SUBSTATE_LOADING_COMPONENTS)
+        {
+            if (mpGuiCache != NULL &&
+                mpGuiCache->AreAllAptComponentsInitialised(static_cast<GuiFlow>(0)))
+            {
+                OnlineNewsCacheBoundary::ClearExpectedAptComponentList(mpGuiCache,
+                                                                       static_cast<GuiFlow>(0));
+                meSubState = E_SUBSTATE_SELECTING_PARAMS;
+                ShowText();
+            }
+        }
     }
 }

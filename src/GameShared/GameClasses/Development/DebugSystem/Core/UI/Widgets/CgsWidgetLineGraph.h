@@ -48,6 +48,16 @@ namespace CgsDev
             static const s32 KI_MAX_FLOATS   = 5;
             static const s32 KI_HISTORY_SIZE = 360;
 
+            // Default-constructs an empty plot (miHistoryCount seeded to KI_HISTORY_SIZE, everything
+            // else cleared); the caller populates it through the setters below. DWARF-attested API
+            // (CgsWidgetLineGraph.h:38-40/87-108) driven by MenuItemVariableLineGraph::Render.
+            WidgetLineGraph();
+
+            void SetValues(f32* lpafValues, s32 liFloatCount);
+            void SetFirstValue(s32 liFirstValueIndex);
+            void SetColours(RGBA* lpaColours, s32 liColoursArraySize);
+            void SetCustomBackgroundColour(RGBA lColour);
+
             // @0x82824558 -- plot the widget into the background box (lfX,lfY,lfWidth,lfHeight).
             void Render(Debug2DImmediateRender* lpRender, f32 lfX, f32 lfY, f32 lfWidth, f32 lfHeight);
 

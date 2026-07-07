@@ -221,4 +221,24 @@ namespace BrnGui
             break;
         }
     }
+
+    // @ 0x82412B40 -- static frame-trigger callback installed on the county container clip.
+    // The registered user-data is the owning component; forward to the county completion
+    // handler (the u16 frame arg is unused).
+    void DistrictMarkerComponent::CountyTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
+    {
+        CGS_ASSERT(lpUserData != 0, "lpUserData");
+
+        DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
+        lpThis->ProcessCountyTransitionComplete(0);
+    }
+
+    // @ 0x82412BA0 -- district counterpart of CountyTransitionCompleteCallback.
+    void DistrictMarkerComponent::DistrictTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
+    {
+        CGS_ASSERT(lpUserData != 0, "lpUserData");
+
+        DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
+        lpThis->ProcessDistrictTransitionComplete(0);
+    }
 }

@@ -2,6 +2,9 @@
 
 #include "SharedClasses/Gui/SatNav/BrnSatNavTile.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (RecvEvent resource load)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple / ResourceRequestTypes
+#include "pc/gcm/renderengine/renderstates.h"        // renderengine::TextureState (Initialize + GetResourceDescriptor)
 
 #include <new>       // placement new (ctor)
 #include <cstdlib>   // qsort (RefreshActiveTextureArray)
@@ -255,5 +258,150 @@ namespace BrnGui
         }
 
         meZoomLevel = leZoomLevel;
+    }
+
+    // @0x8244F898 -- receive a GUI event. Only the cache-ready event (type 64) is handled: it
+    // carries the resolved GuiCache pointer in its first word. The first time it arrives (before
+    // the low-res backdrop texture exists) the manager loads the map's low-res texture resource,
+    // builds a sampler texture-state for it through the resource allocator, and latches it as the
+    // backdrop texture.
+    void MapManager::RecvEvent(const CgsModule::Event* lpEvent, int32_t liParam)
+    {
+        CGS_ASSERT(lpEvent != NULL, " invalid event passed ");
+
+        const int32_t KI_GUI_CACHE_EVENT = 64;
+        if (liParam != KI_GUI_CACHE_EVENT)
+        {
+            return;
+        }
+
+        GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
+
+        // Build the low-res backdrop texture-state exactly once.
+        if (mLowResTexture.mpTextureState != NULL)
+        {
+            return;
+        }
+
+        // The low-res sat-nav map texture resource (id 199, a localised-text-class resource).
+        const uint32_t luMapTextureResourceId = 199u;
+
+        CgsGui::sResourceTuple lResourceTuple;
+        lResourceTuple.muId   = luMapTextureResourceId;
+        lResourceTuple.meType = CgsGui::E_GUI_RESOURCETYPE_LOCALISED_TEXT;   // 11
+
+        if (!lpCache->EnsureResourceIsLoaded(lResourceTuple))
+        {
+            return;
+        }
+
+        const void* lpTexture2D = lpCache->GetLoadedResource(luMapTextureResourceId);
+        CGS_ASSERT(lpTexture2D != NULL, "lpTexture2D != NULL");
+
+        // Sampler parameters for the backdrop texture-state (clamp-ish addressing, point/linear
+        // filter, no mip bias). Field values mirror the X360 stores store-for-store.
+        renderengine::TextureState::Parameters lParams;
+        lParams.muAddressU      = 2u;
+        lParams.muAddressV      = 2u;
+        lParams.muAddressW      = 0u;
+        lParams.muMagFilter     = 1u;
+        lParams.muMinFilter     = 1u;
+        lParams.muMipFilter     = 2u;
+        lParams.muField6        = 0u;
+        lParams.muField7        = 0u;
+        lParams.muMaxAnisotropy = 13u;
+        lParams.muField9        = 0u;
+        lParams.muField10       = 1u;
+        lParams.mfMipLodBias    = 0.0f;   // flt_82001CC0 == 0.0f
+        lParams.mfField12       = 0.0f;   // flt_82001CC0 == 0.0f
+        lParams.muField13       = 0u;
+        lParams.muField14       = 0u;
+        lParams.muField15       = 0u;
+        lParams.mu8Field40      = 0u;
+        lParams.mu8Field41      = 0u;
+        lParams.mu8Field42      = 0u;
+        lParams.mu8Field43      = 1u;
+        lParams.mu8Field44      = 1u;
+        lParams.mpTexture       = reinterpret_cast<renderengine::Texture*>(
+            const_cast<void*>(lpTexture2D));
+
+        // Size the texture-state resource, carve it from the manager's allocator, initialise the
+        // sampler+raster state in it, and latch the result into the low-res cache slot + backdrop.
+        uint32_t laDescriptor[10];
+        renderengine::TextureState::GetResourceDescriptor(laDescriptor);
+
+        rw::Resource lAllocatedResource = mpAllocator->DoAllocate(
+            *reinterpret_cast<const rw::ResourceDescriptor*>(laDescriptor), NULL);
+
+        mLowResTextureCache.mTextureStateResources[0] = lAllocatedResource;
+
+        renderengine::TextureState* lpState = renderengine::TextureState::Initialize(
+            &mLowResTextureCache.mTextureStateResources[0], &lParams);
+
+        mLowResTextureCache.mapTextureStates[0] =
+            reinterpret_cast<CgsGraphics::TextureState*>(lpState);
+        mLowResTexture.mpTextureState =
+            reinterpret_cast<CgsGraphics::TextureState*>(lpState);
+    }
+
+    // @0x8244FA80 -- rebuild the working tile set for the current world rect and zoom level. At
+    // high zoom the sampled world rect is pulled inward by a quarter on every edge. Directory
+    // tiles overlapping the (possibly inflated) rect would be added to the set; loaded tiles that
+    // fell outside it would be dropped. In this build AddTileToSet / RemoveTileFromSet fold away,
+    // leaving only their pre-condition asserts -- reproduced store-for-store against the asm.
+    // Gated on the low-res backdrop texture being present (the map is only worked once loaded).
+    void MapManager::CalculateCurrentTileSet()
+    {
+        const uint32_t luDirectoryIndex = static_cast<uint32_t>(meZoomLevel);
+
+        if (mLowResTexture.mpTextureState == NULL)
+        {
+            return;
+        }
+
+        SatNavTile::sRect lWorldRect = mWorldRect;
+        if (meZoomLevel == E_ZOOM_HIGH)
+        {
+            const float lfFactor = 0.25f;
+            lWorldRect.mfLeft   = MyAbs(lWorldRect.mfLeft   * lfFactor) + lWorldRect.mfLeft;
+            lWorldRect.mfTop    = MyAbs(lWorldRect.mfTop    * lfFactor) + lWorldRect.mfTop;
+            lWorldRect.mfRight  = lWorldRect.mfRight  - (lWorldRect.mfRight  * lfFactor);
+            lWorldRect.mfBottom = lWorldRect.mfBottom - (lWorldRect.mfBottom * lfFactor);
+        }
+
+        const SatNavTileDirectory* lpDirectory = mapDirectories[luDirectoryIndex];
+        if (lpDirectory == NULL)
+        {
+            return;
+        }
+
+        // Directory tiles overlapping the world rect would be added (AddTileToSet inlined away).
+        for (uint32_t luIndex = 0; luIndex < lpDirectory->muItemCount; ++luIndex)
+        {
+            const SatNavTileDirectory::sTileItem& lTileItem = lpDirectory->mpaItems[luIndex];
+            if (lTileItem.IsWithinWorldRect(lWorldRect))
+            {
+                const char* lpcName = lTileItem.macBundleName;
+                CGS_ASSERT(lpcName != NULL, "lpcName != NULL");
+            }
+        }
+
+        // Loaded tiles that fell outside the world rect would be removed (RemoveTileFromSet inlined).
+        for (uint32_t luIndex = 0; luIndex < KU_TILE_ARRAY_SIZE; ++luIndex)
+        {
+            const SatNavTile::sTileCache& lTile = maRequestedTiles[luIndex];
+            if (lTile.meState != SatNavTile::E_STATE_LOADED)
+            {
+                continue;
+            }
+            if (lTile.mpTile->IsWithinWorldRect(lWorldRect))
+            {
+                continue;
+            }
+
+            CGS_ASSERT(lTile.mpTile != NULL, "lpTile != NULL");
+            CGS_ASSERT(GetTileState(lTile.mpTile->muID) == SatNavTile::E_STATE_LOADED,
+                       "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED");
+        }
     }
 }

@@ -38,6 +38,28 @@ namespace BrnGui
         s32 miDisconnectRate; // +0x14
     };
 
+    // The "please fetch my online stats" request the RUNNING state posts on the output
+    // queue (channel 40) when it receives the trigger event id 0xF1. X360-attested by
+    // OnlineStats::UpdateRunning @0x824A19C8: the queued record is a GuiEvent<242> header
+    // { muHeader0 = 24, muEventType = 242, muHeader2 = 12 } followed by six stat-id words
+    // { 37, 42, 67, 41, 15, 7 }, 36 bytes total. (muHeader0 = 24 = payload byte count,
+    // muHeader2 = 12 = payload offset -- the same header idiom as the other GuiEvent<N>s.)
+    struct GuiEventOnlineStatsRequest : public CgsGui::GuiEvent<242>
+    {
+        u32 mauStatIds[6];   // +0x0C .. +0x23
+
+        GuiEventOnlineStatsRequest()
+            : CgsGui::GuiEvent<242>(24, 12)
+        {
+            mauStatIds[0] = 37;
+            mauStatIds[1] = 42;
+            mauStatIds[2] = 67;
+            mauStatIds[3] = 41;
+            mauStatIds[4] = 15;
+            mauStatIds[5] = 7;
+        }
+    };
+
     struct OnlineStats : public CgsGui::State
     {
         // DWARF BrnOnlineStats.h:70.
@@ -75,7 +97,9 @@ namespace BrnGui
         void HandleControllerInputPressed(const CgsGui::GuiEventControllerInputPressed* lpEvent);  // @0x82487670
         void HandleStatsData(const GuiEventOnlineStatsResponse* lpEvent);                  // @0x82487728
         void ClearExpectedComponent();                                                     // @0x82487590 (SKIPPED; declared-only)
+        void UpdateGetCache();                                                             // @0x82492820
         bool UpdateWFInit();                                                               // @0x82487608
+        void UpdateRunning();                                                              // @0x824A19C8
         void UpdatePermanent();                                                            // @0x82492908
 
         // ---- statics (DWARF cpp:28-58) ----
@@ -96,6 +120,12 @@ namespace BrnGui
         static const s32 KI_ACTION_START = 50;
         // The permanently-observed "go back" event id drained by UpdatePermanent.
         static const s32 KI_EVENT_GO_BACK = 6;
+        // In-queue event ids handled by the RUNNING state (asm cmpwi 6 / 0xF1 / 0xF2) and
+        // the cache-ready event scanned for by UpdateGetCache (asm cmpwi 0x40).
+        static const s32 KI_EVENT_CONTROLLER_INPUT_PRESSED = 6;
+        static const s32 KI_EVENT_REQUEST_STATS            = 241;   // 0xF1
+        static const s32 KI_EVENT_STATS_RESPONSE           = 242;   // 0xF2
+        static const s32 KI_EVENT_CACHE_READY              = 64;    // 0x40
 
         // ---- members (DWARF; X360 byte offsets) ----
         GuiCache*      mpGuiCache;                                 // X360 +0x38
