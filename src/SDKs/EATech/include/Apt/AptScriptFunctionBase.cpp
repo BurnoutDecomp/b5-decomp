@@ -47,7 +47,7 @@
 
 // FLAG (CIH / GC leaf couplings -- see header above; wired with the AptCIH + AptInit TUs).
 extern void      AptApt_PrepareCallContextScope(AptValue* pCallContext);          // ctor: vtbl prepare
-extern AptValue* AptApt_DeriveFunctionAnimation(AptValue* pCIH);                  // ctor/derive timeline
+
 
 // FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
 // bring-up TU): script-function birth/teardown tracing for the init-action pass
@@ -80,17 +80,7 @@ int32_t        AptScriptFunctionBase::snRegisterBlockSize        = 0;   // dword
 // ctor @0x82AF1030 -- bind to pCIH, capture the enclosing call frame as the closure
 // scope (when defined inside a call), derive the owning timeline animation, and
 // optionally build a fresh prototype object.
-// AptApt_DeriveFunctionAnimation -- the timeline animation a function value is
-// defined on (HOMED 2026-07-01; was the AptRenderLinkStubs null-stub, which AV'd
-// the ctor's unconditional mpParentAnim->AddRef() the first time a ByteCodeBlock
-// was built): the nearest enclosing movie-clip(9)/stage(15) node up the CIH's
-// display-list parent chain -- exactly AptCIH::GetRootAnimation (the homed walk;
-// its CIHNone/empty placeholder resolves to the level-0 root).
-AptValue* AptApt_DeriveFunctionAnimation(AptValue* pCIH)
-{
-    return static_cast<AptValue*>(
-        reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());
-}
+// AptApt_DeriveFunctionAnimation inlined at its call sites (AptCIH::GetRootAnimation).
 
 AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eType,
                                              AptValue* pCallContext,
@@ -116,7 +106,7 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     const AptVirtualFunctionTable_Indices eCIH = pCIH->getVtblIndex();
     if ((eCIH == AptVFT_CharacterInstHandle && pCIH->getIsDefined())
         || eCIH == static_cast<AptVirtualFunctionTable_Indices>(37))
-        mpParentAnim = AptApt_DeriveFunctionAnimation(pCIH);   // FLAG: CIH-chain walk (-> AptGetAnimationAtLevel)
+        mpParentAnim = static_cast<AptValue*>(reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());   // CIH-chain walk (-> AptGetAnimationAtLevel)
     else
         mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
 
@@ -157,7 +147,7 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     const AptVirtualFunctionTable_Indices eCIH = pCIH->getVtblIndex();
     if ((eCIH == AptVFT_CharacterInstHandle && pCIH->getIsDefined())
         || eCIH == static_cast<AptVirtualFunctionTable_Indices>(37))
-        mpParentAnim = AptApt_DeriveFunctionAnimation(pCIH);   // FLAG: CIH-chain walk (-> AptGetAnimationAtLevel)
+        mpParentAnim = static_cast<AptValue*>(reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());   // CIH-chain walk (-> AptGetAnimationAtLevel)
     else
         mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
 
