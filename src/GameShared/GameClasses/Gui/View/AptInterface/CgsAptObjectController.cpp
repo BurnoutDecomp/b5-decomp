@@ -127,6 +127,28 @@ namespace CgsGui
         return GetVariable(mpComponentReference, &lKey);
     }
 
+    // X360 0x824E23E0. Read the named ActionScript float variable from the bound
+    // reference: assert the key, look up its AptValue (GetObjectValue), assert the
+    // lookup succeeded (streamed message naming the key), then coerce it to a float.
+    f32 ObjectController::GetObjectVariableFloat(const char* lpacVariable)
+    {
+        CGS_ASSERT(lpacVariable != 0, "Invalid key");
+
+        AptValue* lpObjectValue = GetObjectValue(lpacVariable);
+        if (lpObjectValue == 0)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Invalid value with key "
+                       << (lpacVariable ? lpacVariable : "<NULLSTRING>");
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+
+        return lpObjectValue->toFloat();
+    }
+
     // X360 0x8284ADD8. Set the named ActionScript boolean variable on the reference.
     void ObjectController::SetObjectVariableBoolean(const char* lpacVariable, bool lbValue)
     {

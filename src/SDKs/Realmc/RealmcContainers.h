@@ -142,6 +142,40 @@ public:
     //                 and reseat begin/end/capEnd.
     void reserve(unsigned int nCapacity);
 
+    // ---- element-level helpers de-inlined from RealmcCore::MemcardState ----
+    // These reproduce the eastl::vector front()/back()/push_back()/pop_back()
+    // operations the X360 folded inline into MemcardState's task-stack methods
+    // (GetMainTask / GetCurrentTask / StartTask / StopTask / StopAndStartTask).
+    // They are NOT their own X360 functions; homing them here keeps MemcardState
+    // free of raw offset access into this container.
+
+    // front() with the X360's empty guard: 0 when begin == end, else *mpBegin.
+    int GetFront() const { return mpBegin == mpEnd ? 0 : *mpBegin; }
+
+    // back() with the X360's empty guard: 0 when begin == end, else *(mpEnd - 1).
+    int GetBack() const { return mpBegin == mpEnd ? 0 : mpEnd[-1]; }
+
+    // pop_back(): drop the last element (the X360 decrements mpEnd unconditionally).
+    void pop_back() { --mpEnd; }
+
+    // push_back(): when at capacity (mpEnd >= mpCapEnd) grow through DoInsertValue
+    //   at mpEnd; otherwise advance mpEnd first, then write the value at the old
+    //   slot (matching the X360 store order).
+    void push_back(const int& iValue)
+    {
+        if (mpEnd >= mpCapEnd)
+        {
+            DoInsertValue(mpEnd, &iValue);
+        }
+        else
+        {
+            int* pSlot = mpEnd;
+            ++mpEnd;
+            if (pSlot)
+                *pSlot = iValue;
+        }
+    }
+
 private:
     // @ external (eastl::vector<int,RealmcCore::allocator>::DoRealloc<int*>) --
     // allocates the grown buffer and moves the live elements. Defined by its own

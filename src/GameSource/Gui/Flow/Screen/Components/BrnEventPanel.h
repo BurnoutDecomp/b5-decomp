@@ -48,6 +48,12 @@ namespace BrnGui
 {
     class EventPanel /* : public IconComponent (DWARF: struct EventPanel : public BrnGui::IconComponent) */
     {
+        // CrashNavPanel embeds an EventPanel and reads meCurrentGameMode @+0x8AC through the
+        // private ConvertLocalEventDefToProgressionEventDef (X360 CrashNavPanel accessor
+        // @0x824BAE58). Friend rather than widening either to public (neither is X360-attested
+        // as a public entry point).
+        friend class CrashNavPanel;
+
     public:
         // Local event-filter classification (DWARF BrnEventPanel.h:53).
         enum EEventType
@@ -74,10 +80,13 @@ namespace BrnGui
         BrnProgression::RaceEventData::EModeType
         ConvertLocalEventDefToProgressionEventDef(EEventType eLocalType);
 
-        // Reserved storage for the unrecovered panel head that precedes the rank block
-        // (base IconComponent + mTextfields[6] + mModeLogo + mCarIcon + meCurrentGameMode +
-        // muCurrentEventID). Layout-recovery padding only; miPlayerRank must land at +0x8B4.
-        u8  maHeadReserved[0x8B4];
+        // Reserved storage for the unrecovered panel head that precedes the game-mode field
+        // (base IconComponent + mTextfields[6] + mModeLogo + mCarIcon). Layout-recovery
+        // padding only; meCurrentGameMode must land at +0x8AC.
+        u8         maHeadReserved[0x8AC];
+
+        EEventType meCurrentGameMode;  // +0x8AC  (converted by CrashNavPanel::GetPanelActiveGameModeType)
+        u32        muCurrentEventID;   // +0x8B0
 
         s32 miPlayerRank;              // +0x8B4  (DWARF BrnEventPanel.h:176)
         s32 miCurrentRaceRank;         // +0x8B8  (h:178)
