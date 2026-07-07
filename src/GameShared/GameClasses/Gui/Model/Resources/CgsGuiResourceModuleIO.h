@@ -86,6 +86,29 @@ namespace CgsGui
                   "ResourceHandle is two x64 pointers on PC");
     static_assert(sizeof(GuiEventLoadNotification) == 24,
                   "GuiEventLoadNotification PC layout (X360 payload size is 16 with 4-byte ptrs)");
+
+    // CgsGuiResourceModuleIO.h:134 (Feb-2007 ground truth): GuiEventUnloadNotification :
+    // public GuiEvent<E_GUI_UNLOAD_NOTIFICATION>, members { ResourceRequestTypes meRequestType;
+    // u32 muLoadRequestId; u32 muFileNameHash; }. OutputBuffer::AddUnloadNotification
+    // (@0x8285AB50) pushes it onto mLoadNotifications as queue-type 16, SIZE 12 -- proving
+    // (exactly as with GuiEventLoadNotification above) that the GuiEvent<N> base is EMPTY on
+    // the X360 build and the 12-byte payload is precisely the three words:
+    //     X360 +0x00  meRequestType    (the value the consumer switches on)
+    //     X360 +0x04  muLoadRequestId
+    //     X360 +0x08  muFileNameHash
+    // The X360 consumer BrnGui::LargeCarComponent::HandleUnloadNotification (@0x8241B868)
+    // reads meRequestType as the word at event+0 (`lwz r11, 0(r31); cmpwi 4`) and muLoadRequestId
+    // as the word at event+4 (`lwz r10, 4(r31)`), confirming both the empty base and the field
+    // order. Modelled flat (not `: public GuiEvent<16>`) to match the asm, mirroring
+    // GuiEventLoadNotification. No pointer members, so the PC layout is identical (12 bytes).
+    struct GuiEventUnloadNotification
+    {
+        ResourceRequestTypes meRequestType;   // X360 +0x00
+        u32                  muLoadRequestId; // X360 +0x04
+        u32                  muFileNameHash;  // X360 +0x08
+    };
+    static_assert(sizeof(GuiEventUnloadNotification) == 12,
+                  "GuiEventUnloadNotification payload is 12 bytes (X360 AddUnloadNotification size)");
 }
 
 namespace CgsGui

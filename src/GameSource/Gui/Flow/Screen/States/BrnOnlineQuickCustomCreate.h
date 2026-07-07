@@ -87,6 +87,15 @@ namespace BrnGui
             E_INTERNALSTATE_COUNT                  = 9,
         };
 
+        // @0x824A1420 / @0x824A1538 -- the FSM enter/leave virtuals. OnEnter registers the four
+        // observed GUI events, builds the main-menu (3 rows) + "new news" transition components,
+        // null-latches the cache into E_INTERNALSTATE_GETCACHE, posts the screen's two open
+        // apt/view-state events and creates the XNotify listener. OnLeave unregisters, posts the
+        // teardown apt-movie + close view-state events, clears the menu into E_INTERNALSTATE_LEFT
+        // and closes the listener handle.
+        virtual void OnEnter();
+        virtual void OnLeave();
+
         // @0x8250xxxx (declared-only; the freeburn flavour override pins the vtable slot) --
         // dispatch the picked main-menu option through the option -> state-event table. Body
         // links from another slice of this TU.
@@ -106,6 +115,9 @@ namespace BrnGui
         // @0x824A17D8 (cpp:359) -- wait for the screen resources to finish loading, then post
         // the load-string command, prime the expected-apt-component list and return done.
         bool UpdateLoadComponents();   // @0x8248DEF0 (cpp:390)
+        // @0x824A17D8 (cpp:359) -- once the screen resources have finished loading, post the
+        // load-string apt movie ("ON_QMCMCM", level 3), prime the expected-apt-component list
+        // (menu rows + the news-transition component) and report done.
         bool UpdateLoadResources();    // @0x824A17D8 (cpp:359)
         void UpdateRunning();          // @0x824926A8 (cpp:425)
         void UpdatePermanent();        // @0x82492728 (cpp:527)
@@ -129,6 +141,13 @@ namespace BrnGui
         void* mpNotifyListenerHandle;           // X360 +0x1190 (XNotifyCreateListener HANDLE)
 
         // ---- statics (X360 .rdata) ----
+        // The four GUI event ids this state observes (X360 dword_8205F9B4, count 4). Shared by
+        // OnEnter (RegisterForEvents) / OnLeave (UnRegisterForEvents). FLAG: the id VALUES are not
+        // attested in scope (only the base address + the count of 4); placeholders so the state
+        // links, adopted with the XEX-recovered ids when decoded.
+        static const s32 maiEventToObserve[];                      // @0x8205F9B4 (values not decoded)
+        static const s32 miNumEventsObserved;                      // == 4
+
         static const CgsGui::sResourceTuple maResourcesToLoad[];   // @0x8205F9C8 (count 2)
         static const u32                    muNumResourcesToLoad;  // @0x8205F9D8 == 2
 

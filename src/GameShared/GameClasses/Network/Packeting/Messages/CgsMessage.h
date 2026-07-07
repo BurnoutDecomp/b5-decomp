@@ -85,6 +85,12 @@ namespace CgsNetwork
         // vtable slot 0 in the X360 build: the base reports "not reliable"; only
         // ReliableMessage overrides it. Subclass PrepareForSend asserts on it.
         bool IsReliable() const;
+        // vtable slot 1 in the X360 build (DWARF CgsMessage.cpp:393): reports whether
+        // messages of this type tolerate out-of-order (older-frame) arrivals. The base
+        // reports false; ordered subclasses override. Bodied in its own TU; declared here
+        // so ReliableMessageManager::MessageIsDuplicate can dispatch it to reject stale
+        // reliable messages.
+        bool OldMessagesAreValid() const;
         Message* SetType(s32 leType);
 
         // --- inline flag/scalar accessors (used by the NetworkPlayer send pump) ------------

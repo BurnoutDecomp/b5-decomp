@@ -83,6 +83,10 @@ namespace BrnGui
         // @0x82486B58 -- accumulate the controller stick axis for scrolling (past the dead zone).
         void HandleControllerAxis(const GuiEventControllerAxis* lpEvent);
 
+        // @0x824AA420 -- drive the load state machine: ensure resources are loaded then play the
+        // "ON_NEWS" movie, and once all apt components come up, advance to param selection.
+        void CheckForCompletedLoads();
+
         // @0x824A0458 -- push the current toggle item's text into the two fields. (SKIPPED;
         // declared-only -- HandleNewsAndTOSEvent calls it, the body lands with its own slice.)
         void ShowText();

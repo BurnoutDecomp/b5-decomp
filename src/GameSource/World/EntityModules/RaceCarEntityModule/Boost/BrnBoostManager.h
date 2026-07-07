@@ -60,6 +60,13 @@ public:
     // offsets and dispatches through entity vtable ordinals.
     bool Prepare();
 
+    // OnNearMiss -- notify the owning race-car entity of a near miss. The X360 inlines this
+    // at NearMissManager::NearMissEvent into a dispatch through the owning entity held at
+    // +0x450 (entity vtable slot +0x18); its source name is recovered from the Feb-2007
+    // partial (BrnNearMissManager.cpp). Declared here additively; its body is part of the
+    // deferred BoostManager entity-vtable keystone and is not modelled in this build.
+    void OnNearMiss();
+
 private:
     // +0x00: boost-earning-enabled flag (SetBoostEarningEnabled stores here). Modelled
     // BY NAME; the remaining ~0x450 bytes of manager/sub-manager state up to the entity

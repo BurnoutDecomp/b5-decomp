@@ -98,9 +98,13 @@ struct alignas(16) GetZoneResponse
 struct InputBuffer : public CgsModule::DataStructure
 {
     void Construct() { mZoneRequestQueue.Construct(); }
-    bool Prepare()   { return true; }
+    // X360 0x822D8C20 -- real body (clears the zone-request queue length, returns true).
+    // De-inlined; body in BrnPVSModuleIO.cpp.
+    bool Prepare();
     bool Release()   { return true; }
-    void Destruct()  {}
+    // X360 0x822D8C38 -- real body (clears the zone-request queue length). De-inlined;
+    // body in BrnPVSModuleIO.cpp.
+    void Destruct();
     void Clear()     {}
 
     CgsModule::EventQueue<GetZoneRequest, 8> mZoneRequestQueue;   // +0x00
@@ -139,12 +143,15 @@ struct alignas(16) OutputBuffer : public CgsModule::DataStructure
         // mGameDataRequestInterface (a VariableEventQueue<512,16>) Constructs via its
         // own per-instance hook; OutputBuffer::Construct drives both.
     }
-    bool Prepare()  { return true; }
+    // X360 0x822EE6A0 -- real body (clears the zone-response queue + the game-data request
+    // interface, returns true). De-inlined; body in BrnPVSModuleIO.cpp.
+    bool Prepare();
     // X360 0x822EE6D8 -- real body (clears the zone-response queue + the game-data request
-    // interface, returns true). De-inlined; body in BrnPVSModuleIO.cpp. (Prepare @0x822EE6A0
-    // and Destruct @0x822EE710 share this real-body shape and are de-inlined when their TUs land.)
+    // interface, returns true). De-inlined; body in BrnPVSModuleIO.cpp.
     bool Release();
-    void Destruct() {}
+    // X360 0x822EE710 -- real body (clears the zone-response queue + the game-data request
+    // interface; tail-calls VariableEventQueue<512,16>::Clear). De-inlined; body in BrnPVSModuleIO.cpp.
+    void Destruct();
     void Clear()    {}
 
     CgsModule::EventQueue<GetZoneResponse, 8>     mZoneResponseQueue;          // +0x0000

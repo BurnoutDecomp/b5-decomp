@@ -23,6 +23,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "rw/math/vpu/types.h"                                        // rw::math::vpu::Vector4 (gradient colours)
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsID (u64)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent (identity base)
 #include "GameSource/Gui/BrnGuiTextField.h"                           // BrnGui::TextField (mTitleText)
@@ -46,6 +47,23 @@ namespace BrnGui
         // One colour picker occupies 0x1338 (4920) bytes on the console.
         static const u32 KU_COLOUR_SELECTION_STRIDE = 0x1338;
 
+        // muFlags state bits sampled by Update() to pick the apt view-state name (inferred
+        // from the state ladder: bit0 active, bit2 enabled, bit3 highlighted).
+        static const u8 KU_FLAG_ACTIVE      = 0x01;
+        static const u8 KU_FLAG_ENABLED     = 0x04;
+        static const u8 KU_FLAG_HIGHLIGHTED = 0x08;
+
+        // DWARF BrnColourMenuToggle.h:164 -- the apt view-state ladder Update() maps to.
+        enum MenuToggleStates
+        {
+            E_MENUTOGGLESTATES_UNUSED        = 0,
+            E_MENUTOGGLESTATES_INVISIBLE     = 1,
+            E_MENUTOGGLESTATES_DISABLED      = 2,
+            E_MENUTOGGLESTATES_UNHIGHLIGHTED = 3,
+            E_MENUTOGGLESTATES_HIGHLIGHTED   = 4,
+            E_MENUTOGGLESTATES_COUNT         = 5,
+        };
+
         // @ 0x824E5670 -- clear every embedded colour selection.
         void Clear();
         // @ 0x824E8B70 -- construct the five pickers + title text; mark loaded.
@@ -59,6 +77,15 @@ namespace BrnGui
         bool HighlightPrevious();
         // @ 0x824E56C8 -- tail-call the focused picker's Select().
         void Select();
+        // @ 0x824EA110 -- set the title text, push a top/bottom colour gradient into all five
+        // pickers, then dirty the component.
+        void SetupMenuToggleGradient(s32 liActiveCount, bool lbActive, const char* lpacText,
+                                     const rw::math::vpu::Vector4** lppTopColours,
+                                     const rw::math::vpu::Vector4** lppBottomColours,
+                                     u64* lpu64Ids);
+        // @ 0x824E8D08 -- when dirtied, resolve the current apt view-state and re-push it,
+        // then Update every embedded colour selection.
+        void Update();
 
     private:
         // Owned by a sibling recon pass (verdict=fail here); declared so the nav entry points
@@ -90,5 +117,8 @@ namespace BrnGui
 
         // The five child colour-selection component names (off_82F27474). Defined in the .cpp.
         static const char* const KAC_ITEM_COLOUR_COMPONENT[KI_NUM_ITEMS];
+
+        // The per-state apt view-state names (off_82F27488). Defined in the .cpp.
+        static const char* const KAC_STATE_NAMES[E_MENUTOGGLESTATES_COUNT];
     };
 }

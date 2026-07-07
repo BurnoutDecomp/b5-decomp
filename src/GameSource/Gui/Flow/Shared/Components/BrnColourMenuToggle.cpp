@@ -19,6 +19,14 @@ namespace BrnGui
                                   CgsGui::StateInterface* lpStateInterface,
                                   const char* lpacParentName, u64 lu64Id);
 
+    // Thin forwarder for BrnGui::ColourSelection::SetupColourSelectionGradient, bodied
+    // co-located with that (not-yet-sized) type. Declared free here for the same reason as
+    // ColourSelectionConstruct: the toggle need not fully size the picker.
+    void ColourSelectionSetupGradient(void* lpSelection, s32 liActiveCount, bool lbActive,
+                                      const rw::math::vpu::Vector4** lppTopColours,
+                                      const rw::math::vpu::Vector4** lppBottomColours,
+                                      u64* lpu64Ids);
+
     // off_82F27474 -- the five child colour-selection component names, by offset-from-centre.
     // Only entry [0] "ItemColourM2" is rodata-attested for this TU; [1..4] follow the M2..P2
     // pattern the class uses everywhere. Verify against off_82F27474 when the block is dumped.
@@ -29,6 +37,20 @@ namespace BrnGui
         "ItemColour",     // [2] (pattern, centre)
         "ItemColourP1",   // [3] (pattern)
         "ItemColourP2",   // [4] (pattern)
+    };
+
+    // off_82F27488 -- per-state apt view-state names, indexed by MenuToggleStates. Update()
+    // only ever reads [1..4] (INVISIBLE..HIGHLIGHTED); [0] (UNUSED) aliases INVISIBLE's string
+    // exactly as the sibling MenuItem::KAC_STATE_NAMES does. Only [0] ("Invisible") is
+    // rodata-attested for this TU; [2..4] follow the toggle's enum-named apt states -- verify
+    // against off_82F27488 when the block is dumped.
+    const char* const ColourMenuToggle::KAC_STATE_NAMES[ColourMenuToggle::E_MENUTOGGLESTATES_COUNT] =
+    {
+        "Invisible",       // [0] E_MENUTOGGLESTATES_UNUSED (aliases INVISIBLE, attested)
+        "Invisible",       // [1] E_MENUTOGGLESTATES_INVISIBLE
+        "Disabled",        // [2] E_MENUTOGGLESTATES_DISABLED
+        "Unhighlighted",   // [3] E_MENUTOGGLESTATES_UNHIGHLIGHTED
+        "Highlighted",     // [4] E_MENUTOGGLESTATES_HIGHLIGHTED
     };
 
     // @ 0x824E5670 -- Clear each of the 5 embedded colour selections via their component
@@ -126,5 +148,63 @@ namespace BrnGui
     void ColourMenuToggle::Select()
     {
         GetFocusedSelectionNav()->Select();
+    }
+
+    // @ 0x824EA110 -- push the title text into mTitleText (@ +0x60C0), then fan a top/bottom
+    // colour gradient into each of the five embedded colour selections (stride 0x1338); finally
+    // dirty the component. The X360 forwards (count, active, top, bottom, ids) to each picker's
+    // SetupColourSelectionGradient -- the title text goes ONLY to the text field.
+    void ColourMenuToggle::SetupMenuToggleGradient(s32 liActiveCount, bool lbActive,
+                                                   const char* lpacText,
+                                                   const rw::math::vpu::Vector4** lppTopColours,
+                                                   const rw::math::vpu::Vector4** lppBottomColours,
+                                                   u64* lpu64Ids)
+    {
+        // unk_820046A7 sentinel -> empty string when no title text is supplied.
+        mTitleText.SetText(lpacText ? lpacText : "");
+
+        ColourSelectionSlot* lpSel = &maColourSelection[0];   // this + 0xA8
+        for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
+        {
+            ColourSelectionSetupGradient(lpSel, liActiveCount, lbActive,
+                                         lppTopColours, lppBottomColours, lpu64Ids);
+            lpSel = reinterpret_cast<ColourSelectionSlot*>(reinterpret_cast<u8*>(lpSel) + 0x1338);
+        }
+
+        muFlags |= KU_FLAG_DIRTY;   // *(this+0xC) |= 0x10
+    }
+
+    // @ 0x824E8D08 -- lazy apt refresh. When the dirty bit is set: clear it, resolve the
+    // current view-state off muFlags (bit0 active / bit2 enabled / bit3 highlighted), re-push
+    // the "apt_state" output, then Update every embedded colour selection (vtable slot 5 ==
+    // byte +0x14). When not dirty, do nothing.
+    void ColourMenuToggle::Update()
+    {
+        if ((muFlags & KU_FLAG_DIRTY) == 0)
+            return;
+
+        muFlags ^= KU_FLAG_DIRTY;   // clear the dirty bit (it was set)
+
+        MenuToggleStates leState;
+        if ((muFlags & KU_FLAG_ACTIVE) == 0)
+            leState = E_MENUTOGGLESTATES_INVISIBLE;
+        else if ((muFlags & KU_FLAG_ENABLED) == 0)
+            leState = E_MENUTOGGLESTATES_DISABLED;
+        else if ((muFlags & KU_FLAG_HIGHLIGHTED) == 0)
+            leState = E_MENUTOGGLESTATES_UNHIGHLIGHTED;
+        else
+            leState = E_MENUTOGGLESTATES_HIGHLIGHTED;
+
+        // X360: CgsGui::GuiComponent::AddOutputAptViewState(this + 0x18, ...).
+        mGuiComponentBase.AddOutputAptViewState("apt_state", KAC_STATE_NAMES[leState], false);
+
+        // Update each embedded colour selection via its component Update virtual.
+        ColourSelectionSlot* lpSel = &maColourSelection[0];   // this + 0xA8
+        for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
+        {
+            void** lppVTable = *reinterpret_cast<void***>(lpSel);
+            reinterpret_cast<void (*)(ColourSelectionSlot*)>(lppVTable[5])(lpSel); // slot 5 == +0x14
+            lpSel = reinterpret_cast<ColourSelectionSlot*>(reinterpret_cast<u8*>(lpSel) + 0x1338);
+        }
     }
 }

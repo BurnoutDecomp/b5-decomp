@@ -24,6 +24,7 @@
 
 namespace rw { class IResourceAllocator; }
 namespace CgsGui { struct StateInterface; }   // held by pointer only (out-of-batch Construct)
+namespace CgsModule { struct Event; }          // RecvEvent payload base (empty marker; carries the GuiCache* in its first word)
 
 namespace BrnGui
 {
@@ -55,10 +56,18 @@ namespace BrnGui
 
         void            SetZoomLevel(EZoomLevel leZoomLevel);         // @0x8244F768
 
+        // @0x8244F898 -- on the cache-ready event (type 64), lazily build the low-res backdrop
+        // texture state from the loaded map texture resource (once).
+        void            RecvEvent(const CgsModule::Event* lpEvent, int32_t liParam);
+
     private:
         SatNavTile::EBundleState GetTileState(uint32_t luID) const;   // @0x82448760
         void            RemoveTileFromSet(SatNavTile* lpTile);        // @0x82448820
         void            RefreshActiveTextureArray();                  // @0x82448540
+
+        // @0x8244FA80 -- rebuild the working tile set for the current world rect + zoom: add
+        // directory tiles overlapping the (zoom-inflated) rect, drop loaded tiles that fell out.
+        void            CalculateCurrentTileSet();
 
     private:
         SatNavTile::sRect       mWorldRect;               // +0x000

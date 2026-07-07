@@ -1,20 +1,31 @@
 // ===================================================================================
-// BrnGui::OnlineQuickCustomCreate -- out-of-line bodies (internal Update* slice).
+// BrnGui::OnlineQuickCustomCreate -- out-of-line bodies.
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
-//   ProcessSelectedMenuOption @0x824873C8, UpdateLoadComponents @0x8248DEF0,
+//   OnEnter @0x824A1420, OnLeave @0x824A1538, ProcessSelectedMenuOption @0x824873C8,
+//   UpdateLoadComponents @0x8248DEF0, UpdateLoadResources @0x824A17D8,
 //   UpdateRunning @0x824926A8, UpdatePermanent @0x82492728.
-// (HandleControllerInputPressed / OnEnter / OnLeave / UpdateLoadResources are SKIPPED
-//  this wave -- declared-only.)
-// The drain-loop / expected-component wiring mirrors the committed OnlineMarkMan twin.
+// (HandleControllerInputPressed is declared-only -- linked from another slice.)
+// The drain-loop / expected-component / event-post wiring mirrors the committed
+// OnlineMarkMan / OnlineNews / ReplayMain twins.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineQuickCustomCreate.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsModule::Event
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsModule::Event, GuiEventQueueLarge
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (Register/PlayAptMovie/GetOutputEventQueue)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<18432,16>
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache, GuiFlow
+
+// The Xbox XNotify listener plumbing OnEnter/OnLeave key on. The XNotify* / CloseHandle entry
+// points are the Xbox 360 XDK C-API; declared extern "C" at file scope with plain types
+// (void* / int / unsigned long long), mirroring the committed BrnNetworkNotificationManagerX360
+// precedent -- the Xbox HANDLE / DWORD typedefs are NOT modelled in types.hpp.
+extern "C"
+{
+    void* XNotifyCreateListener(unsigned long long luqwAreas);
+    int   CloseHandle(void* lhObject);
+}
 
 namespace BrnGui
 {
@@ -38,10 +49,27 @@ namespace
         void ClearExpectedAptComponentList(GuiCache* /*lpCache*/, s32 /*liFlow*/) {}
         // X360 *(mpGuiCache + 0x4B40) = picked menu option id (or 0 when the event has no payload).
         void StoreSelectedMenuOption(GuiCache* /*lpCache*/, s32 /*liOption*/) {}
+        // X360 MenuComponent::AppendExpectedAptComponent(&mMainMenuComponent, flow, mpGuiCache):
+        // register each active menu row's apt component with the cache watcher. That MenuComponent
+        // method (@0x824E2DE0) is deferred (GuiCache::AppendExpectedAptComponent is not yet bodied),
+        // so it is reached through this boundary (same convention as ClearExpectedAptComponentList).
+        void AppendMenuExpectedAptComponents(MenuComponent* /*lpMenu*/, s32 /*liFlow*/,
+                                             GuiCache* /*lpCache*/) {}
+        // X360 sub_824F87C0(mpGuiCache, flow, lpacComponentName): register a single expected apt
+        // component (the "new news" transition component) by name with the cache watcher. The
+        // collaborator is un-homed in scope, so it is reached through this boundary.
+        void AppendExpectedAptComponentByName(GuiCache* /*lpCache*/, s32 /*liFlow*/,
+                                              const char* /*lpacName*/) {}
     }
 }   // anonymous namespace
 
 // ---- statics -----------------------------------------------------------------
+// The four GUI event ids observed by this state (X360 dword_8205F9B4, count 4). FLAG: the id
+// VALUES are not attested in scope (only the base address + count of 4); placeholders so the state
+// links, adopted with the XEX-recovered ids when decoded.
+const s32 OnlineQuickCustomCreate::maiEventToObserve[] = { 0, 0, 0, 0 };   // @0x8205F9B4 (values not decoded)
+const s32 OnlineQuickCustomCreate::miNumEventsObserved = 4;
+
 // The main-menu row localisation-key table (X360 off_82F268EC, 3 entries). Only the first
 // pointer's rodata is attested in scope; the other two are the sibling CUSTOM/CREATE keys.
 const char* const OnlineQuickCustomCreate::KAPC_MAIN_MENU_TEXT[E_MAIN_MENU_OPTIONS_COUNT] =
@@ -72,11 +100,92 @@ const CgsGui::sResourceTuple OnlineQuickCustomCreate::maResourcesToLoad[] =
 };
 const u32 OnlineQuickCustomCreate::muNumResourcesToLoad = 2u;
 
+// ------------------------------------------------ OnEnter @ 0x824A1420
+// Register the four observed GUI events, build the main-menu (3 rows) + "new news" transition
+// components, null-latch the cache into GetCache, post the two "open screen" apt/view-state events
+// onto the output queue and create the XNotify system listener.
+void OnlineQuickCustomCreate::OnEnter()
+{
+    mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+    // Main-menu component: 3 rows, no parent name, apt-id 0xFFFFFFFF (X360 li -1 ; clrldi 32).
+    mMainMenuComponent.Construct("MenuItem", mpStateInterface, E_MAIN_MENU_OPTIONS_COUNT, 0,
+                                 0xFFFFFFFFull);
+    // "New news" transition component (virtual GuiComponent::Construct, no parent name).
+    mNewNewsAnimation.Construct("NewNewsTransition", mpStateInterface, 0);
+
+    mpGuiCache      = 0;                          // this+0x38
+    meInternalState = E_INTERNALSTATE_GETCACHE;   // this+0x3C = 0
+
+    CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
+        mpStateInterface->GetOutputEventQueue();
+
+    // Record 1: GuiEvent<191> { header0=8, type=191, header2=12, payload=0,0 } -- channel 40, 20 bytes.
+    u32 lauRecord1[5] = { 8u, 191u, 12u, 0u, 0u };
+    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord1), 40, 20);
+
+    // Record 2: GuiEvent<148> { header0=1, type=148, header2=12, payload=0 } -- channel 40, 16 bytes.
+    u32 lauRecord2[4] = { 1u, 148u, 12u, 0u };
+    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord2), 40, 16);
+
+    mpNotifyListenerHandle = XNotifyCreateListener(1);   // this+0x1190 (XNOTIFY_SYSTEM areas)
+}
+
+// ------------------------------------------------ OnLeave @ 0x824A1538
+// Unregister the observed events, post the teardown apt-movie + "close screen" view-state events,
+// clear the main-menu into the Left state, and close the XNotify listener handle.
+void OnlineQuickCustomCreate::OnLeave()
+{
+    mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+
+    // Inlined GuiEventPlayAptMovie (type 18, channel 41, size 20): the movie name is the rodata
+    // sentinel &unk_820046A7 (reconstructed as ""), level 3.
+    mpStateInterface->PlayAptMovie("", 3);
+
+    meInternalState = E_INTERNALSTATE_LEFT;   // this+0x3C = 4
+    mMainMenuComponent.Clear();               // component vtable slot 6
+
+    // Record: GuiEvent<536> { header0=2, type=536, header2=12, payload=0 } -- channel 40, 16 bytes.
+    CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
+        mpStateInterface->GetOutputEventQueue();
+    u32 lauRecord[4] = { 2u, 536u, 12u, 0u };
+    lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauRecord), 40, 16);
+
+    if (mpNotifyListenerHandle != 0)
+    {
+        CloseHandle(mpNotifyListenerHandle);
+        mpNotifyListenerHandle = 0;
+    }
+}
+
 // ------------------------------------------------ ProcessSelectedMenuOption @ 0x824873C8
 void OnlineQuickCustomCreate::ProcessSelectedMenuOption(EMainMenuOptions leOption)
 {
     // Tail-call through the option -> state-event table (X360 lwzx + b SendStateEvent).
     SendStateEvent(KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[leOption]);
+}
+
+// ------------------------------------------------ UpdateLoadResources @ 0x824A17D8
+// Wait for the screen's static resources to finish loading. Once loaded, post the load-string
+// apt movie ("ON_QMCMCM", level 3), clear + rebuild the expected-apt-component list (the menu rows
+// plus the "new news" transition component) and report done. Keep waiting otherwise.
+bool OnlineQuickCustomCreate::UpdateLoadResources()
+{
+    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:361 (non-gating)
+
+    if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+    {
+        return false;
+    }
+
+    // Inlined GuiEventPlayAptMovie (type 18, channel 41, size 20): load the screen's apt movie.
+    mpStateInterface->PlayAptMovie(KAC_LOAD_STRING_APT_NAME, 3);
+
+    OnlineQCCCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, 0);
+    OnlineQCCCacheBoundary::AppendMenuExpectedAptComponents(&mMainMenuComponent, 0, mpGuiCache);
+    OnlineQCCCacheBoundary::AppendExpectedAptComponentByName(mpGuiCache, 0,
+                                                             mNewNewsAnimation.GetName());
+    return true;
 }
 
 // ------------------------------------------------ UpdateLoadComponents @ 0x8248DEF0

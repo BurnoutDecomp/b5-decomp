@@ -23,6 +23,12 @@ namespace BrnGui
     const CgsGui::sResourceTuple OnlineRivals::maResourceTuplesToLoad[] = { {} };
     const s32 OnlineRivals::miNumResourcesToLoad = 1;   // @0x8205F85C (dword_8205F85C)
 
+    // X360 .rdata @0x8205F83C (dword_8205F83C): the 5 gui-event ids OnEnter registers to
+    // observe. FLAG: element VALUES not decoded this pass (only base addr + count 5 attested);
+    // zeros are placeholders. The attested count (5) is load-bearing.
+    const s32 OnlineRivals::maiEventToObserve[] = { 0, 0, 0, 0, 0 };   // @0x8205F83C (5 entries)
+    const s32 OnlineRivals::miNumEventsObserved = 5;
+
     // The apt movie bound by CheckForCompletedLoads (X360 off_82F27BB0 = "ON_RIVAL", level 3).
     static const char* const KPC_RIVALS_MOVIE_NAME = "ON_RIVAL";
     static const s32         KI_RIVALS_MOVIE_LEVEL = 3;
@@ -80,5 +86,25 @@ namespace BrnGui
             *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4);
         if (liAction == KI_ACTION_START)
             SendStateEvent("GO_BACK");
+    }
+
+    // @ 0x82486E18 -- latch the GuiCache carried by a GuiEventCache the first time one arrives;
+    // once set, mpGuiCache is never overwritten.
+    void OnlineRivals::HandleGuiCacheEvent(const GuiEventCache* lpEvent)
+    {
+        // The event's carried cache rides in its leading word (the X360 asserts on *a2).
+        GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
+        CGS_ASSERT(lpCache != NULL, "Invalid cache in HandleGuiCacheEvent::Update");
+
+        if (mpGuiCache == NULL)
+            mpGuiCache = lpCache;
+    }
+
+    // @ 0x82486D18 -- register this screen's observed events and reset the load state machine.
+    void OnlineRivals::OnEnter()
+    {
+        mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
+        meSubState = E_SUBSTATE_LOADING_SCREEN;   // +0x38
+        mpGuiCache = NULL;                         // +0x3C
     }
 }

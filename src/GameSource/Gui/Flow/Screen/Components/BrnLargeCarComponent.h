@@ -74,8 +74,7 @@ namespace BrnGui
         void HandleLoadNotification(const CgsGui::GuiEventLoadNotification* lpLoadEvent);
 
         // 0x8241B868 -- resource unload notification: UNLOAD_REQUESTED -> DATA_SUPPLIED.
-        // (SKIPPED in this wave -- the GuiEventUnloadNotification record type is not yet
-        //  homed on the committed CgsGuiResourceModuleIO; the body lands with that TU.)
+        void HandleUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpUnloadEvent);
 
     private:
         // DWARF BrnLargeCarComponent.h:127 -- car-name buffer capacity.

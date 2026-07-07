@@ -24,6 +24,44 @@ namespace BrnWorld
 {
 namespace PVSIO
 {
+    // X360 0x822D8C20. Readies the input buffer for a new frame and reports success.
+    // Store-for-store: reset the zone-request queue length (this+8 -> miLength=0),
+    // return true (li r3,1).
+    bool InputBuffer::Prepare()
+    {
+        mZoneRequestQueue.Clear();   // miLength = 0  -> stw 0,8(this)
+        return true;
+    }
+
+    // X360 0x822D8C38. Tears down the input buffer. Store-for-store: reset the
+    // zone-request queue length (this+8 -> miLength=0). No return value in the asm
+    // (li r11,0; stw r11,8(r3); blr).
+    void InputBuffer::Destruct()
+    {
+        mZoneRequestQueue.Clear();   // miLength = 0  -> stw 0,8(this)
+    }
+
+    // X360 0x822EE6A0. Readies the output buffer for a new frame and reports success.
+    // Same store-for-store effects as Release @0x822EE6D8: reset the zone-response
+    // queue length (this+8 -> miLength=0), Clear the embedded game-data request
+    // interface (this+0x1718), return true.
+    bool OutputBuffer::Prepare()
+    {
+        mZoneResponseQueue.Clear();                      // miLength = 0  -> stw 0,8(this)
+        mGameDataRequestInterface.mRequestQueue.Clear(); // VariableEventQueue<512,16>::Clear @ this+0x1718
+        return true;
+    }
+
+    // X360 0x822EE710. Tears down the output buffer. Store-for-store: reset the
+    // zone-response queue length (this+8 -> miLength=0), then tail-call
+    // VariableEventQueue<512,16>::Clear on the embedded game-data request interface
+    // (this+0x1718). No own return value (the asm `b` tail-jumps into Clear).
+    void OutputBuffer::Destruct()
+    {
+        mZoneResponseQueue.Clear();                      // miLength = 0  -> stw 0,8(this)
+        mGameDataRequestInterface.mRequestQueue.Clear(); // tail: VariableEventQueue<512,16>::Clear @ this+0x1718
+    }
+
     // X360 0x822EE6D8. Clears the output buffer for reuse and reports success.
     // Store-for-store: reset the zone-response queue length (this+8 -> miLength=0),
     // Clear the embedded game-data request interface (this+0x1718), return true.
