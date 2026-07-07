@@ -51,6 +51,47 @@ namespace CgsGui
         ResourceRequestTypes meType;
     };
 
+    // CgsGuiResourceModuleIO.h:150 (Feb-2007 source) / DecFIGS DWARF:
+    // request records are { request type, load/unload, file-name pointer, request id,
+    // resource id }. The X360 AddResourceRequests body copies a 24-byte record because
+    // pointers are 4 bytes there; on the PC/x64 gate the file-name pointer widens, so
+    // the queue payload is sizeof(GuiEventLoadRequest) == 32. Event id 39 is carried by
+    // the variable-event queue header, not by an in-payload GuiEvent<39> base.
+    struct GuiEventLoadRequest : public CgsModule::Event
+    {
+        ResourceRequestTypes      meRequestType;
+        ResourceRequestLoadUnload meLoadUnload;
+        const char*               mpacFileToLoad;
+        u32                       muLoadRequestId;
+        u64                       muResourceId;
+
+        GuiEventLoadRequest()
+            : meRequestType(E_GUI_RESOURCETYPE_START)
+            , meLoadUnload(E_GUI_RESOURCEREQUEST_LOAD)
+            , mpacFileToLoad(0)
+            , muLoadRequestId(0)
+            , muResourceId(0)
+        {
+        }
+
+        void Construct(ResourceRequestTypes leRequestType,
+                       ResourceRequestLoadUnload leLoadUnload,
+                       const char* lpacFileToLoad,
+                       u32 luLoadRequestId)
+        {
+            meRequestType   = leRequestType;
+            meLoadUnload    = leLoadUnload;
+            mpacFileToLoad  = lpacFileToLoad;
+            muLoadRequestId = luLoadRequestId;
+            muResourceId    = 0;
+        }
+
+        s32 GetEventType() const { return 39; }
+    };
+
+    static_assert(sizeof(GuiEventLoadRequest) == 32,
+                  "GuiEventLoadRequest PC layout (X360 payload size is 24 with 4-byte ptrs)");
+
     // CgsGuiResourceModuleIO.h:114 (DWARF): GuiEventLoadNotification : public GuiEvent<14>,
     // with members { ResourceHandle mResourceHandle; ResourceRequestTypes meRequestType;
     // u32 muLoadRequestId; }. This is the concrete record the resource loader pushes onto the
@@ -75,7 +116,7 @@ namespace CgsGui
     // the pointers in ResourceHandle widen to 8 bytes (handle = 16, so meRequestType lands at
     // +0x10 and the record is 24 bytes) -- the standard "widen pointers for PC" rule. The
     // size pin below records the PC layout; the X360 figure (16) is noted above.
-    struct GuiEventLoadNotification
+    struct GuiEventLoadNotification : public CgsModule::Event
     {
         CgsResource::ResourceHandle mResourceHandle; // X360 +0x00 (8) / PC +0x00 (16)
         ResourceRequestTypes        meRequestType;   // X360 +0x08    / PC +0x10
@@ -91,14 +132,14 @@ namespace CgsGui
     // carry only the request type, the original load-request id, and the file-name hash. The X360
     // output buffer records both variants as flat 12-byte payloads: queue type 15 for unload-request
     // notifications and type 16 for unload-complete notifications.
-    struct GuiEventUnloadRequestNotification
+    struct GuiEventUnloadRequestNotification : public CgsModule::Event
     {
         ResourceRequestTypes meRequestType;   // X360 +0x00
         u32                  muLoadRequestId; // X360 +0x04
         u32                  muFileNameHash;  // X360 +0x08
     };
 
-    struct GuiEventUnloadNotification
+    struct GuiEventUnloadNotification : public CgsModule::Event
     {
         ResourceRequestTypes meRequestType;   // X360 +0x00
         u32                  muLoadRequestId; // X360 +0x04
@@ -194,9 +235,11 @@ namespace CgsGui
             // mLoadNotifications (this+0x814) via VariableEventQueue<18432,16>::AddEvent(
             // lpEvent, type, size). The (type, size) literals are the X360 AddEvent arguments.
             // Returns the AddEvent result. Bodied in CgsGuiResourceModuleIO_OutputBuffer.cpp.
-            //   AddLoadNotification          @0x8285AA98 : type 14, size 16
+            //   AddLoadNotification          @0x8285AA98 : type 14, X360 size 16
             //   AddUnloadNotification        @0x8285AB50 : type 16, size 12
             //   AddUnloadRequestNotification @0x8285AC08 : type 15, size 12
+            // The load-notification payload contains a ResourceHandle; on PC/x64 the
+            // copied size is sizeof(GuiEventLoadNotification) so both pointer slots survive.
             bool AddLoadNotification(const CgsModule::Event* lpEvent);
             bool AddUnloadNotification(const CgsModule::Event* lpEvent);
             bool AddUnloadRequestNotification(const CgsModule::Event* lpEvent);

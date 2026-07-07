@@ -11,7 +11,7 @@
 //
 //   GetResourceRequestQueue()         @ 0x8284DF50 -> write-lock (bit 3), &mRequestQueue (this+4)
 //   GetLoadNotifications() const      @ 0x8284DFF8 -> read-lock  (bit 4), &mLoadNotifications (this+0x814)
-//   AddLoadNotification(ev)           @ 0x8285AA98 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,14,16)
+//   AddLoadNotification(ev)           @ 0x8285AA98 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,14,widened size)
 //   AddUnloadNotification(ev)         @ 0x8285AB50 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,16,12)
 //   AddUnloadRequestNotification(ev)  @ 0x8285AC08 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,15,12)
 //
@@ -27,7 +27,7 @@
 //   - The three Add* functions all target the SAME member (this+0x814 == &mLoadNotifications)
 //     via VariableEventQueue<18432,16>::AddEvent(lpEvent, liType, liSize) and return its result.
 //     The (liType, liSize) register loads taken store-for-store from the assembly:
-//       AddLoadNotification          @0x8285AB34: li r5,0xE  (14), li r6,0x10 (16)
+//       AddLoadNotification          @0x8285AB34: li r5,0xE  (14), li r6,0x10 (16, X360)
 //       AddUnloadNotification        @0x8285ABEC: li r5,0x10 (16), li r6,0xC  (12)
 //       AddUnloadRequestNotification @0x8285ACA4: li r5,0xF  (15), li r6,0xC  (12)
 //     (Hex-Rays renders the call as AddEvent(a1+2068, a2, type, size); a1+2068 is the implicit
@@ -60,11 +60,11 @@ namespace GuiResourceModuleIO
         return &mLoadNotifications;
     }
 
-    // X360 0x8285AA98: AddEvent type 14, size 16.
+    // X360 0x8285AA98: AddEvent type 14; payload size widens on PC with ResourceHandle.
     bool OutputBuffer::AddLoadNotification(const CgsModule::Event* lpEvent)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return mLoadNotifications.AddEvent(lpEvent, 14, 16);
+        return mLoadNotifications.AddEvent(lpEvent, 14, static_cast<s32>(sizeof(GuiEventLoadNotification)));
     }
 
     // X360 0x8285AB50: AddEvent type 16, size 12.
