@@ -185,11 +185,11 @@ extern "C" void AptGetMemberProbe(int nObjType, int nResType, int nResDefined)
 extern "C" void AptClassBindProbe(const char* pcExport)
 {
     static int s_iCbHits = 0;
-    if (s_iCbHits >= 220)
+    if (s_iCbHits >= 300)
         return;
     ++s_iCbHits;
-    char lac[144];
-    std::snprintf(lac, sizeof(lac), "[AptRT] class-bind: '%s'\n", pcExport ? pcExport : "<null>");
+    char lac[288];
+    std::snprintf(lac, sizeof(lac), "[AptRT] class-bind: %s\n", pcExport ? pcExport : "<null>");
     CgsDev::Log::WriteToLog(lac);
 }
 

@@ -1271,7 +1271,8 @@ void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
 // apt_state (hover) + apt_labeltxt (prompt) -- log confirms both are still
 // (APPLIED) by the shim, then overwritten. Off = shim-only drive, working menu.
 // Re-enable together with deleting the AptRuntimeSetComponent* shim (single driver).
-static const bool KB_CLASS_BINDING = false;
+static const bool KB_CLASS_BINDING = false;  // preserve working shim menu; flip to true once
+                                             // PERSISTENTAPT composes the BurnoutComponent ancestor (§6.4)
 
 int AptCIH::AssociateInstToClass()
 {
@@ -1432,6 +1433,31 @@ int AptCIH::AssociateInstToClass()
 
     // 5. wire the clip-event member mask + mark the render item class-bound.
     pNode->FindAndSetEvents();
+
+    // DIAG (2026-07-07): dump this bound node's display-parent chain -- this is exactly
+    // what BuildName's `_parent`-walk sees when onLoad fires on the next tick. Each
+    // "[cN]" is the ancestor's class-bound bit (GetHasClass). If NO ancestor shows [c1],
+    // the walk finds no BurnoutComponent ancestor -> BuildName returns undefined ->
+    // SendAptEvent's name guard rejects -> AddNewAptComponent fires 0x (the §6.4 core).
+    {
+        char lacChain[240];
+        int nLen = std::snprintf(lacChain, sizeof(lacChain), "chain '%s'[c%d]",
+                                 pExportName, pNode->GetHasClass() ? 1 : 0);
+        AptCIH* pAnc = pNode->GetDisplayListParent();
+        int nGuard = 0;
+        while (pAnc != nullptr && nGuard < 8 && nLen < static_cast<int>(sizeof(lacChain)) - 40)
+        {
+            const char* const pcNm = pAnc->GetInstanceName().GetBuffer();
+            nLen += std::snprintf(lacChain + nLen, sizeof(lacChain) - nLen, " <- '%s'[c%d]",
+                                  (pcNm && *pcNm) ? pcNm : "-", pAnc->GetHasClass() ? 1 : 0);
+            pAnc = pAnc->GetDisplayListParent();
+            ++nGuard;
+        }
+        std::snprintf(lacChain + nLen, sizeof(lacChain) - nLen, "%s",
+                      pAnc ? " <-.." : " <-#ROOT");
+        AptClassBindProbe(lacChain);
+    }
+
     // The console "tick once" (moved here from before the ctor, see the FLAG above):
     // now the event-handler mask is set, so the fresh(0x80) clip's tick dispatches
     // onLoad -> the queued handler runs -> gAptCommunicator.SendAptEvent(ONLOAD) ->
