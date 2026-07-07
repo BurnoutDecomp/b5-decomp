@@ -659,6 +659,14 @@ namespace
     AptMovieSlot s_FlowSlot =
         { "flow",      { 0 }, false, false, false, false, /*miLevel*/ 1,
           nullptr, nullptr, 0, 0, nullptr, nullptr, nullptr, 33u, 0.0, -1, 0 };
+    // The PERSISTENT component library (PERSISTENTAPT.bundle -- the BurnoutComponent base +
+    // the menu component classes: SelectionMenu / *AnimatorComponent). The console keeps it
+    // resident alongside MAIN (§6.4). Placed at display level 2 (above the flow) so its own
+    // timeline ticks (its embedded component movies' init/class registration run); MAIN stays
+    // the level-0 AS core (new AptCommunicator + the 24-class registerClass bootstrap).
+    AptMovieSlot s_PersistentSlot =
+        { "persist",   { 0 }, false, false, false, false, /*miLevel*/ 2,
+          nullptr, nullptr, 0, 0, nullptr, nullptr, nullptr, 33u, 0.0, -1, 0 };
 
     // The flow left BF_LEGAL (accept path) -- parks the FLOW slot only (tick + render);
     // the FRAMEWORK movie keeps ticking (the console keeps the persistent level-0 apt
@@ -679,8 +687,11 @@ namespace
     const u32 KU_FRAMEWORK_POOL_BYTES = 12u * 1024u * 1024u;
     u8 s_aFlowPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FLOW_POOL_BYTES];
     u8 s_aFrameworkPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
+    // PERSISTENTAPT is the 11.5 MB library -> its own 12 MiB/type pool (as the framework's).
+    u8 s_aPersistentPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
     CgsResource::Pool s_FlowPoolStorage;
     CgsResource::Pool s_FrameworkPoolStorage;
+    CgsResource::Pool s_PersistentPoolStorage;
 
     // The Apt-data resource type id (X360 0x1E == 30; CgsResource::AptDataHeaderType::GetTypeID).
     const u32 KU_APTDATA_RESOURCE_TYPE_ID = 30u;
@@ -1425,16 +1436,12 @@ namespace BrnGui
             return;
         s_FrameworkSlot.mbRequested = true;
         s_FrameworkSlot.miLevel     = 0;   // the framework core sits at display level 0
-        // §6.4 (2026-07-07): the console composes PERSISTENTAPT (the persistent component
-        // library -- defines BurnoutComponent + the menu component classes; imports MAIN) at
-        // level 0, NOT MAIN alone. Loading only MAIN left the menu clips with no BurnoutComponent
-        // ancestor so BuildName returned undefined -> 0 registrations. Point the level-0 slot at
-        // PERSISTENTAPT so its class library registers and the ancestor binds.
-        std::strncpy(s_FrameworkSlot.macName, "PERSISTENTAPT", sizeof(s_FrameworkSlot.macName) - 1);
+        // MAIN is the AS core: its frame-0 DoAction runs `new AptCommunicator` + the 24-class
+        // registerClass bootstrap. It carries no display (childNodes=0), so level 0 is free for it.
+        std::strncpy(s_FrameworkSlot.macName, "MAIN", sizeof(s_FrameworkSlot.macName) - 1);
         s_FrameworkSlot.macName[sizeof(s_FrameworkSlot.macName) - 1] = '\0';
 
-        CgsDev::Log::WriteToLog("[AptRT] framework: loading the persistent component library "
-                                "'PERSISTENTAPT' at level 0 ...\n");
+        CgsDev::Log::WriteToLog("[AptRT] framework: loading the AS core 'MAIN' at level 0 ...\n");
 
         u8* lapBacking[CgsResource::E_MEMTYPE_NUMTYPES];
         for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
@@ -1448,6 +1455,28 @@ namespace BrnGui
             lbLoaded ? "up" : "NOT loaded (FLAG -- flow movie continues without it)",
             s_FrameworkSlot.mbLoaded ? 1 : 0, s_FrameworkSlot.mbInstantiated ? 1 : 0,
             s_FrameworkSlot.miLevel);
+        CgsDev::Log::WriteToLog(lac);
+
+        // §6.4 (2026-07-07): ALSO compose PERSISTENTAPT -- the persistent component library that
+        // defines the BurnoutComponent base + the menu component classes (SelectionMenu /
+        // *AnimatorComponent). Without it the menu clips have no BurnoutComponent ancestor so
+        // BuildName returns undefined -> 0 registrations. The console keeps it resident alongside
+        // MAIN. Loaded at level 2 so its own timeline ticks (its component-class init runs).
+        s_PersistentSlot.mbRequested = true;
+        std::strncpy(s_PersistentSlot.macName, "PERSISTENTAPT", sizeof(s_PersistentSlot.macName) - 1);
+        s_PersistentSlot.macName[sizeof(s_PersistentSlot.macName) - 1] = '\0';
+        CgsDev::Log::WriteToLog("[AptRT] persist: loading the component library "
+                                "'PERSISTENTAPT' at level 2 ...\n");
+        u8* lapPersistBacking[CgsResource::E_MEMTYPE_NUMTYPES];
+        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+            lapPersistBacking[lt] = s_aPersistentPoolBacking[lt];
+        const bool lbPersistLoaded = AptLoadMovieSlot(s_PersistentSlot, &s_PersistentPoolStorage,
+                                                      lapPersistBacking, KU_FRAMEWORK_POOL_BYTES);
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] persist: 'PERSISTENTAPT' %s (loaded=%d instantiated=%d level=%d).\n",
+            lbPersistLoaded ? "up" : "NOT loaded (FLAG)",
+            s_PersistentSlot.mbLoaded ? 1 : 0, s_PersistentSlot.mbInstantiated ? 1 : 0,
+            s_PersistentSlot.miLevel);
         CgsDev::Log::WriteToLog(lac);
     }
 
@@ -2414,12 +2443,16 @@ namespace BrnGui
             CgsGui::AptAuxPointer::mpAptAuxInst->UpdateComponents();
 
         // Nothing loaded yet -> nothing to tick this frame.
-        if (!s_FrameworkSlot.mbLoaded && !s_FlowSlot.mbLoaded)
+        if (!s_FrameworkSlot.mbLoaded && !s_FlowSlot.mbLoaded && !s_PersistentSlot.mbLoaded)
             return;
 
-        // ---- PER-SLOT paced tick: framework (level 0) first, then flow (level 1) ----
+        // ---- PER-SLOT paced tick: framework (level 0) first, then the persistent library
+        // (level 2), then flow (level 1). The persistent component library ticks so its
+        // component-class registration runs. ----
         if (s_FrameworkSlot.mbLoaded)
             AptTickMovieSlot(s_FrameworkSlot, lbProbeFrame);
+        if (s_PersistentSlot.mbLoaded)
+            AptTickMovieSlot(s_PersistentSlot, lbProbeFrame);
 
         s32 liFlowTicks = 0;
         if (s_FlowSlot.mbLoaded && !s_bMovieStopped)   // the stop parks the FLOW slot only
