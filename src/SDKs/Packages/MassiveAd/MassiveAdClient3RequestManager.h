@@ -22,6 +22,7 @@ namespace MassiveAdClient3
 {
 
 class CRequestObject;
+class CMassiveCriticalSection;
 
 class CRequestManager
 {
@@ -34,6 +35,15 @@ public:
     // Direct bl target of CRequestObject::Submit. Returns 0 when the request was
     // accepted into the queue. Body in the CRequestManager TU.
     int SubmitRequest(CRequestObject* pRequest);
+
+    // FLAG additive accessor (not its own X360 function): the request manager
+    // embeds a CMassiveCriticalSection at manager+0x2C that serialises access to
+    // the request collections. CRequestBuilder::Suspend / Resume lock it (through
+    // spRequestManager -- the X360 loads the singleton pointer and adds 0x2C to
+    // reach the section) around their iteration. Exposed BY NAME here; the
+    // CRequestManager TU homes the real member and defines this as its direct
+    // &member load.
+    CMassiveCriticalSection* GetSharedCriticalSection();
 };
 
 // off_8327F368 -- the live CRequestManager singleton pointer (null before init /

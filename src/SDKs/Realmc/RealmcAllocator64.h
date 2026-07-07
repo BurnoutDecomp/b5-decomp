@@ -78,6 +78,24 @@ public:
     //                 range [ppBegin, ppEnd) through the backend (256 bytes each).
     static void DoFreeSubar(char** ppBegin, char** ppEnd);
 
+    // ---- element-level helpers de-inlined from RealmcCore::MemcardState ----
+    // These reproduce the deque front-dequeue / back-enqueue the X360 folded
+    // inline into MemcardState::GetWaitingToStartTask / PutInStartWaitingQueue.
+    // They operate on 4-byte (int) elements -- the same element model DoPushBack
+    // commits to -- and defer to DoPopFront / DoPushBack at a page boundary. They
+    // are NOT their own X360 functions; homing them here keeps MemcardState free
+    // of raw offset access into this deque.
+
+    // Front-dequeue one element (X360 GetWaitingToStartTask): 0 when empty (the
+    //   front cursor has met the back cursor), else read the front int and advance
+    //   the front cursor, freeing the exhausted page via DoPopFront at a boundary.
+    int PopFront();
+
+    // Back-enqueue one element (X360 PutInStartWaitingQueue): write iValue at the
+    //   back cursor and advance it, allocating a fresh page via DoPushBack when the
+    //   current page is full.
+    void PushBack(int iValue);
+
 private:
     char** mppPageArray;  // +0x00
     int    mnPageSlots;   // +0x04

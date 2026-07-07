@@ -170,4 +170,62 @@ void Allocator64::DoFreeSubar(char** ppBegin, char** ppEnd)
     }
 }
 
+// ---------------------------------------------------------------------------
+// allocator<,64>::PopFront -- the deque front-dequeue folded inline into
+// RealmcCore::MemcardState::GetWaitingToStartTask @ 0x82C46528:
+//
+//   if (mpFrontBegin == mpBackCur) return 0;         -> empty
+//   value = *(int*)mpFrontBegin;
+//   next  = mpFrontBegin + 4;
+//   if (next == mpFrontEnd) DoPopFront();             -> page exhausted
+//   else mpFrontBegin = next;
+//   return value;
+//
+// mpFrontBegin (X360 +0x08) is the live front read cursor; mpFrontEnd (+0x10) is
+// one past the current front page; mpBackCur (+0x18) is the back write cursor,
+// so front == back means the deque is empty. The value/advance width is a 4-byte
+// int -- the same element model DoPushBack writes.
+// ---------------------------------------------------------------------------
+int Allocator64::PopFront()
+{
+    if (mpFrontBegin == mpBackCur)
+        return 0;
+
+    const int iValue = *reinterpret_cast<const int*>(mpFrontBegin);
+    char* lpNext = mpFrontBegin + sizeof(int);
+    if (lpNext == mpFrontEnd)
+        DoPopFront();
+    else
+        mpFrontBegin = lpNext;
+    return iValue;
+}
+
+// ---------------------------------------------------------------------------
+// allocator<,64>::PushBack -- the deque back-enqueue folded inline into
+// RealmcCore::MemcardState::PutInStartWaitingQueue @ 0x82C468B8:
+//
+//   cur = mpBackCur;
+//   if (cur + 4 == mpBackEnd) DoPushBack(&iValue);    -> page full
+//   else { mpBackCur = cur + 4; if (cur) *(int*)cur = iValue; }
+//
+// mpBackCur (X360 +0x18) is the back write cursor and mpBackEnd (+0x20) one past
+// the current back page; when the write would reach the page end the value is
+// handed to DoPushBack (which stages a fresh page), otherwise the cursor advances
+// and the value is written at the old slot (matching the X360 store order).
+// ---------------------------------------------------------------------------
+void Allocator64::PushBack(int iValue)
+{
+    char* lpCur = mpBackCur;
+    if (lpCur + sizeof(int) == mpBackEnd)
+    {
+        DoPushBack(&iValue);
+    }
+    else
+    {
+        mpBackCur = lpCur + sizeof(int);
+        if (lpCur)
+            *reinterpret_cast<int*>(lpCur) = iValue;
+    }
+}
+
 } // namespace RealmcCore

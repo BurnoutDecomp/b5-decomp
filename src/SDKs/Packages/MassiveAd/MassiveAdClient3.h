@@ -245,6 +245,14 @@ public:
     // tag passed straight through to the log.
     void Enter(const char* pcWho);
 
+    // Non-blocking acquire (separate ledger TU; body lives in the
+    // CMassiveCriticalSection TU). Attempts to enter the OS critical section and
+    // returns non-zero when it was acquired, 0 when it was already held. pcWho is
+    // the caller tag. Attested by CRequestBuilder::Suspend / Resume, which lock
+    // the request manager's section (via spRequestManager) before walking the
+    // outstanding-request collection.
+    int TryEnter(const char* pcWho);
+
     // @ 0x82BD28C0. Releases the OS critical section and logs an
     // "Exit succeeded on <section> by <who>" trace.
     void Exit(const char* pcWho);
@@ -297,6 +305,13 @@ private:
 class CMassiveList
 {
 public:
+    // Default constructor: an empty list (head/tail/cursor null, count 0). The
+    // X360 compiler inlined this into every embedding class's constructor -- e.g.
+    // CRequestBuilder::CRequestBuilder zeroes the four list dwords in place at
+    // +0x14..+0x20 -- so it never appears as its own function; reconstructed here
+    // as the real member initialisation the inline stores perform.
+    CMassiveList() : mpHead(0), mpTail(0), mpCurrent(0), mnCount(0) {}
+
     // @ 0x82BCF1F0. Tail-calls RemoveAll: destroys and frees every remaining
     // node. The X360 dtor is non-virtual (a plain branch into RemoveAll).
     ~CMassiveList();
@@ -330,6 +345,12 @@ public:
     // decide whether to keep walking. This exposes that cursor BY NAME so the
     // owning record does not reach into the private link member.
     CMassiveListNode* GetCurrent() const { return mpCurrent; }
+
+    // Additive accessor (FLAG: not its own X360 function). CRequestBuilder::
+    // Suspend / Resume read the live node count directly (mnCount at list +0x0C)
+    // to skip the iteration entirely when the collection is empty. Exposes that
+    // count BY NAME so the owning builder does not reach into the private member.
+    int GetCount() const { return mnCount; }
 
 private:
     CMassiveListNode* mpHead;    // +0x00
