@@ -673,7 +673,10 @@ namespace
     // keep the 8 MB/type backing; the FRAMEWORK movie (MAIN.bundle) is 236 KB -> 4 MB/type
     // is generous (the bundle's main-memory resources + the heap node overhead).
     const u32 KU_FLOW_POOL_BYTES      = 8u * 1024u * 1024u;
-    const u32 KU_FRAMEWORK_POOL_BYTES = 4u * 1024u * 1024u;
+    // PERSISTENTAPT (the persistent component library) is an 11.5 MB, 101-resource package:
+    // ~3.5 MiB main + ~8.13 MiB graphics per the console Gui_Persistent_Apt_Pool
+    // ({0x369AF0, 0x820000, 0} in BrnMemoryMapData.h). 12 MiB/type covers its largest section.
+    const u32 KU_FRAMEWORK_POOL_BYTES = 12u * 1024u * 1024u;
     u8 s_aFlowPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FLOW_POOL_BYTES];
     u8 s_aFrameworkPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
     CgsResource::Pool s_FlowPoolStorage;
@@ -803,7 +806,8 @@ namespace
     // so each gets a persistent pool + AptData span, kept in this small name-keyed registry (dedup:
     // an import referenced by >1 movie loads once). Static BSS storage (no runtime heap growth).
     // ====================================================================================
-    const u32 KU_MAX_IMPORT_BUNDLES  = 8u;                        // the title graph pulls ~6-8 distinct
+    const u32 KU_MAX_IMPORT_BUNDLES  = 16u;                       // PERSISTENTAPT's master movie has 13 imports
+                                                                 // (was 8 for the title graph's ~6-8 distinct)
     const u32 KU_IMPORT_POOL_BYTES   = 2u * 1024u * 1024u;        // per-import pool (largest import ~282KB)
 
     struct ImportBundleSlot
@@ -1290,7 +1294,7 @@ namespace BrnGui
             lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = luPoolBytes;
             lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
         }
-        lOptions.muMaxResources         = 64u;
+        lOptions.muMaxResources         = 128u;   // PERSISTENTAPT packs 101 resources (61 AptData + ~40 tex)
         lOptions.muMaxImports           = 64u;
         lOptions.miRefCountThreshold    = 0;
         lOptions.miNumDependencies      = 0;
@@ -1421,10 +1425,16 @@ namespace BrnGui
             return;
         s_FrameworkSlot.mbRequested = true;
         s_FrameworkSlot.miLevel     = 0;   // the framework core sits at display level 0
-        std::strncpy(s_FrameworkSlot.macName, "MAIN", sizeof(s_FrameworkSlot.macName) - 1);
+        // §6.4 (2026-07-07): the console composes PERSISTENTAPT (the persistent component
+        // library -- defines BurnoutComponent + the menu component classes; imports MAIN) at
+        // level 0, NOT MAIN alone. Loading only MAIN left the menu clips with no BurnoutComponent
+        // ancestor so BuildName returned undefined -> 0 registrations. Point the level-0 slot at
+        // PERSISTENTAPT so its class library registers and the ancestor binds.
+        std::strncpy(s_FrameworkSlot.macName, "PERSISTENTAPT", sizeof(s_FrameworkSlot.macName) - 1);
         s_FrameworkSlot.macName[sizeof(s_FrameworkSlot.macName) - 1] = '\0';
 
-        CgsDev::Log::WriteToLog("[AptRT] framework: loading the AS framework movie 'MAIN' at level 0 ...\n");
+        CgsDev::Log::WriteToLog("[AptRT] framework: loading the persistent component library "
+                                "'PERSISTENTAPT' at level 0 ...\n");
 
         u8* lapBacking[CgsResource::E_MEMTYPE_NUMTYPES];
         for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
