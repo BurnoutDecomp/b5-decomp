@@ -44,22 +44,7 @@ typedef void (*AptFreeAnimationHook)(void* pDataBlock);
 extern AptFreeAnimationHook gpAptFreeAnimationHook;   // dword_1071B1F4 / off_1059C66C
 AptFreeAnimationHook gpAptFreeAnimationHook = nullptr;
 
-// AptFile_UnresolveAnimation -- the inverse of the load-time Fixup over the loaded
-// movie root: run AptCharacterAnimation::Unresolve on the AptCharacterAnimation
-// embedded at the movie root + 0x10, passing the load base (the resolve context)
-// as nBase. PS3: AptCharacterAnimation::Unresolve(*(this+5) + 16, *(this+4)).
-void AptFile_UnresolveAnimation(void* pLoadedData, void* pResolveContext)
-{
-    // The movie root (mpData) carries its AptCharacterAnimation by value at +0x10
-    // (the AptMovieData embedded-timeline layout AptFile.h documents); Unresolve is
-    // a method on that embedded animation.
-    AptCharacterAnimation* pAnimation = reinterpret_cast<AptCharacterAnimation*>(
-        reinterpret_cast<char*>(pLoadedData) + 0x10);   // [c:] *(this+5) + 16
-
-    // FLAG (raw-ptr-as-id): the console passes the load base (mpResolveContext, a
-    // pointer) into Unresolve's int32_t nBase param; preserved verbatim.
-    pAnimation->Unresolve(static_cast<int32_t>(reinterpret_cast<intptr_t>(pResolveContext)));
-}
+// AptFile_UnresolveAnimation inlined at its call site in ~AptFile (see above).
 
 // AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to the
 // registered Apt free callback (PS3 (*dword_1071B1F4)(*(this+6))).
@@ -85,7 +70,15 @@ AptFile::~AptFile()
     //    this branch is currently unreachable and its ops are extern hooks.
     if (mnState >= 3 && mnState <= 6 && mpData)
     {
-        AptFile_UnresolveAnimation(mpData, mpResolveContext);
+        // Inverse of the load-time Fixup: run AptCharacterAnimation::Unresolve on the
+        // AptCharacterAnimation embedded at the movie root (mpData) + 0x10, passing the
+        // load base (mpResolveContext) as nBase.
+        // PS3: AptCharacterAnimation::Unresolve(*(this+5) + 16, *(this+4)).
+        AptCharacterAnimation* pAnimation = reinterpret_cast<AptCharacterAnimation*>(
+            reinterpret_cast<char*>(mpData) + 0x10);   // [c:] *(this+5) + 16
+        // FLAG (raw-ptr-as-id): the load base (mpResolveContext, a pointer) is passed
+        // into Unresolve's int32_t nBase param; preserved verbatim.
+        pAnimation->Unresolve(static_cast<int32_t>(reinterpret_cast<intptr_t>(mpResolveContext)));
         AptFile_FreeLoadedBlock(mpDataBlock);
     }
 

@@ -227,13 +227,7 @@ struct AptDragState
     float     mGrabOffsetY;   // dir mGrabOffset[1]  [c:0x54]
 };
 
-// HOMED 2026-07-02 (retiring the null stub): the view over the director's
-// drag member run.
-AptDragState* AptApt_GetDragState()
-{
-    return reinterpret_cast<AptDragState*>(
-        &gpAptTarget->mpAnimationTarget->mpDragMC);
-}
+// AptApt_GetDragState inlined at its call site(s).
 
 // FLAG (host mouse position -- the engine's current cursor coords, console
 // dword_8324E534 / dword_8324E538, advanced by the input layer each frame; the
@@ -456,7 +450,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
     int nPopCount = 3;                                  // console v8 = 3 (becomes 7 with bounds)
     pTarget->AddRef();                                  // console (**Variable)(Variable)
 
-    AptDragState* const pDrag = AptApt_GetDragState();  // FLAG: host drag-state singleton
+    AptDragState* const pDrag = reinterpret_cast<AptDragState*>(&gpAptTarget->mpAnimationTarget->mpDragMC);  // host drag-state view off the director
     pDrag->mpDragTarget = pTarget;
     pDrag->mGrabOffsetX = 0.0f;
     pDrag->mGrabOffsetY = 0.0f;
@@ -500,7 +494,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
 void AptActionInterpreter::_FunctionAptActionStopDragMovie(AptActionInterpreter* /*pInterp*/,
                                                            LocalContextT* /*pContext*/)
 {
-    AptDragState* const pDrag = AptApt_GetDragState();  // FLAG: host drag-state singleton
+    AptDragState* const pDrag = reinterpret_cast<AptDragState*>(&gpAptTarget->mpAnimationTarget->mpDragMC);  // host drag-state view off the director
     if (pDrag->mpDragTarget)
         pDrag->mpDragTarget->Release();
     pDrag->mpDragTarget = gpUndefinedValue;

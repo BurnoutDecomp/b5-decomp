@@ -44,12 +44,8 @@
 #include <cmath>   // sqrtf
 
 
-// FLAG (Apt context singleton -- console off_8324E574; owned by the AptTarget /
-// linker boot TU): cancel this node's in-flight asset load + drop the ActionScript
-// actions queued against it. Declared here as the x64-native accessors; their
-// bodies (the linker CancelLoad + the action-queue removal) land with that TU.
-void AptApt_CancelLoad(AptCIH* pNode);
-void AptApt_RemoveActionFor(AptCIH* pNode);
+
+
 
 // The "null input" context id queueClipEvents stamps on an enterFrame enqueue
 // (console gNullInput; defined in AptGlobals.cpp).
@@ -316,8 +312,8 @@ void AptCIH::Remove(bool bClearGCRoots)
 {
     // Cancel any in-flight asset load + drop the queued ActionScript actions
     // (through the Apt context singleton -- see the FLAG'd accessors above).
-    AptApt_CancelLoad(this);
-    AptApt_RemoveActionFor(this);
+    gpAptTarget->mpLinker->CancelLoad(this);   // X360 @0x82AFC0C8 (inlined accessor)
+    gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(this);   // X360 @0x82AFC0D8 (inlined accessor; AptValue* return discarded)
 
     // Tear down the placed/character state.
     ClearCIH(bClearGCRoots);
@@ -2171,21 +2167,6 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 // free-function form is the decompile-time split. Homed here next to Remove.
 // ===========================================================================
 
-// AptApt_CancelLoad -- cancel this node's in-flight asset load through the context's
-// file linker. X360 @0x82AFC0C8: r3 = gpAptTarget->mpLinker (+0x20); r4 = pNode;
-// AptLinker::CancelLoad(linker, pNode). pNode (an AptCIH) is an AptValue, the
-// CancelLoad arg type.
-void AptApt_CancelLoad(AptCIH* pNode)
-{
-    gpAptTarget->mpLinker->CancelLoad(pNode);
-}
+// AptApt_CancelLoad inlined at its call site (AptCIH::Remove).
 
-// AptApt_RemoveActionFor -- drop every ActionScript action queued against this node.
-// X360 @0x82AFC0D8: r11 = gpAptTarget->mpAnimationTarget (+0x18); r3 =
-// animTarget->mpActionQueue (+0x0C); r4 = pNode; AptActionQueueC::RemoveActionFor(
-// queue, pNode). The console discards the AptValue* return; void here to match the
-// call-site declaration.
-void AptApt_RemoveActionFor(AptCIH* pNode)
-{
-    gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(pNode);
-}
+// AptApt_RemoveActionFor inlined at its call site (AptCIH::Remove).
