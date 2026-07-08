@@ -137,6 +137,14 @@ extern char gacHMACKey[36];
 extern char* gpcThirdPartyID;
 extern char* gpcThirdPartyService;
 
+// dword_8327F2CC / dword_8327F2D0 -- the client-wide MassiveAd session / player
+// IDs, stamped into every outgoing request block (e.g. CRequestExitZone::
+// WriteExitZoneRequest writes gnMassivePlayerID under wire tag 42 and
+// gnMassiveSessionID under tag 43). Written elsewhere in the client (the
+// session-open path); read here by the request writers.
+extern unsigned int gnMassiveSessionID; // dword_8327F2CC
+extern unsigned int gnMassivePlayerID;  // dword_8327F2D0
+
 // unk_8327F2D8 -- the 144-byte public-key block SetPublicKey memcpy's in.
 extern unsigned char gabPublicKey[144];
 

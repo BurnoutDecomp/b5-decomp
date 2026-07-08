@@ -35,6 +35,11 @@ namespace CgsFileSystem
     class FileSystem;
     class FileLog;
 
+    // The async device file handle (X360 CgsDeviceManager Handle). Identical to the typedef in
+    // CgsDeviceManager.h; declared here too so the stream can store/pass it without pulling in the
+    // whole DeviceManager header (a repeated identical typedef is legal in the same namespace).
+    typedef s32 Handle;
+
     // ---- DWARF CgsStreamDeviceDiskRead.h:99 ----
     // One entry of the read-stream's block ring: where in the file it maps, how much has been
     // streamed into it, and its load state.
@@ -85,7 +90,7 @@ namespace CgsFileSystem
         s32                   miLogIndex;              // :233
         u32                   muCacheId;               // :234
         const void*           mpDEBUGCacheEntry;       // :235 (DiskCacheEntry*, opaque here)
-        void*                 mpHandle;                // :238 (Handle, opaque here)
+        Handle                mHandle;                 // :238 (the async device file handle)
         ReadStreamBlock       maBlocks[KI_MAX_STREAM_BLOCKS]; // :241
         volatile u64          muAmountRequested;       // :250
         volatile u64          muLastOperationSize;     // :251
@@ -109,7 +114,7 @@ namespace CgsFileSystem
         void                Construct(FileSystem* lpFileSystem, FileLog* lpLog); // :134
         void                Prepare();                                           // :138
         void                Open(const char* lpcName, void* lpBuffer, u32 luBufferSize,
-                                  u32 luBlockSize, s32 liNormalPriority, s32 liHighPriority,
+                                  u32 luNumBlocks, s32 liNormalPriority, s32 liHighPriority,
                                   bool lbPrintToLog, s32 liLogIndex);            // :151
         void                Close();                                            // :155
         void                Seek(u64 luPosition);                               // :159
@@ -123,6 +128,27 @@ namespace CgsFileSystem
         u32                 GetBufferSize() const;                              // :197
         EReadStreamStatus   GetStatus() const;                                  // :200
         void                LogAmountOfDataInBuffer() const;                    // :203
+
+    private:
+        // ---- internal streaming machinery (DWARF CgsStreamDeviceDiskRead.h:274-297) ----
+        // Bodies live in CgsStreamDeviceDiskRead.cpp; all run under mFutex (held by the public
+        // entry point that calls them). ResetStreamBlocks/Service/Submit* are the ring-buffer
+        // engine; the On*/callback pairs are the device-completion handlers.
+        void ResetStreamBlocks();                                               // :274
+        void Service();                                                         // :277
+        bool SubmitReadRequest();                                              // :280
+        bool SubmitCloseRequest();                                             // :283
+        void OnOpen(s32 liResult, Handle lHandle, u64 luSize, void* lpContext); // :286
+        void OnRead(s32 liResult, Handle lHandle, u64 luSize, void* lpContext); // :289
+        void OnClose(s32 liResult, Handle lHandle, u64 luSize, void* lpContext);// :292
+        bool StartAsyncReadInternal(void** lppData, u32* lpuAmount);            // :297
+        void StopAsyncReadInternal(u32 luAmount);
+
+        // Device-completion trampolines handed to DeviceManager::{Open,Read,Close} as the async
+        // callback; each recovers the owning stream and forwards to the matching On* handler.
+        static void OpenCallback (s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
+        static void ReadCallback (s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
+        static void CloseCallback(s32 liResult, Handle lHandle, u64 luSize, void* lpContext);
     };
 
 } // namespace CgsFileSystem

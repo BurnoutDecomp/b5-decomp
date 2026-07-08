@@ -28,6 +28,11 @@ char gacHMACKey[36];
 char* gpcThirdPartyID = 0;
 char* gpcThirdPartyService = 0;
 
+// dword_8327F2CC / dword_8327F2D0 -- the client-wide session / player IDs.
+// Zero-initialised .data, stamped in by the session-open path elsewhere.
+unsigned int gnMassiveSessionID = 0;
+unsigned int gnMassivePlayerID = 0;
+
 // unk_8327F2D8 -- the 144-byte public-key block.
 unsigned char gabPublicKey[144];
 
