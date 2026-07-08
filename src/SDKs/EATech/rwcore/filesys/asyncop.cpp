@@ -195,7 +195,7 @@ namespace rw
             //   a1=this a2=path a3=flags a4=callback a5=userData a6=priority
             // -----------------------------------------------------------------------------
             s32 AsyncOp::Open(const char* lpcPath, u32 luFlags, CompletionCallback lpfnComplete,
-                              u32 luUserData, s32 liPriority)
+                              uintptr_t luUserData, s32 liPriority)
             {
                 ::MemoryBarrier();              // lwsync
                 miResult = 0;                   // *(a1+4) = 0
@@ -243,9 +243,9 @@ namespace rw
             //   a1=this a2=stream a3=buffer a4=position a5=callback a6=userData a7=priority
             // -----------------------------------------------------------------------------
             s32 AsyncOp::Read(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                              CompletionCallback lpfnComplete, u32 luUserData, s32 liPriority)
+                              CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority)
             {
-                Stream* lpStrm = static_cast<Stream*>(lpStream);
+                IoStream* lpStrm = static_cast<IoStream*>(lpStream);
 
                 ::MemoryBarrier();              // lwsync
                 miResult = 0;                   // *(a1+4) = 0
@@ -271,9 +271,9 @@ namespace rw
             }
 
             s32 AsyncOp::Write(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                               CompletionCallback lpfnComplete, u32 luUserData, s32 liPriority)
+                               CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority)
             {
-                Stream* lpStrm = static_cast<Stream*>(lpStream);
+                IoStream* lpStrm = static_cast<IoStream*>(lpStream);
 
                 ::MemoryBarrier();              // lwsync
                 miResult = 0;                   // *(a1+4) = 0
@@ -306,9 +306,9 @@ namespace rw
             //   a1=this a2=stream a3=callback a4=userData a5=priority
             // -----------------------------------------------------------------------------
             s32 AsyncOp::Close(void* lpStream, CompletionCallback lpfnComplete,
-                               u32 luUserData, s32 liPriority)
+                               uintptr_t luUserData, s32 liPriority)
             {
-                Stream* lpStrm = static_cast<Stream*>(lpStream);
+                IoStream* lpStrm = static_cast<IoStream*>(lpStream);
 
                 ::MemoryBarrier();              // lwsync
                 miResult = 0;                   // *(a1+4) = 0
@@ -396,7 +396,7 @@ namespace rw
             {
                 s32 liDone = 0;
 
-                Stream* lpStream = reinterpret_cast<Stream*>(lpOp->mpStream);
+                IoStream* lpStream = reinterpret_cast<IoStream*>(lpOp->mpStream);
                 StreamIo* lpIo = lpStream->mpIo;
                 StreamContext* lpCtx = lpStream->mpContext;
                 void* lpDriver = lpCtx->mpDevice->GetDriver();   // *(*(ctx+0xC))+0x140
@@ -450,7 +450,7 @@ namespace rw
             // -----------------------------------------------------------------------------
             s32 AsyncOp::DoWrite(AsyncOp* lpOp)
             {
-                Stream* lpStream = reinterpret_cast<Stream*>(lpOp->mpStream);
+                IoStream* lpStream = reinterpret_cast<IoStream*>(lpOp->mpStream);
                 StreamIo* lpIo = lpStream->mpIo;
                 StreamContext* lpCtx = lpStream->mpContext;
                 void* lpDriver = lpCtx->mpDevice->GetDriver();

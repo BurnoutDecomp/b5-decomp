@@ -219,6 +219,13 @@ protected:
     // same field to subclasses by NAME without widening the layout).
     const char* GetName() const { return mpcName; }
 
+    // Additive setter (FLAG: not its own X360 function). Some derived MassiveAd
+    // ctors/handlers write the base valid/state dword at +0x10 directly on the
+    // X360 -- e.g. CMassiveZoneManager's ctor clears it on a bad zone name and
+    // HandleError clears it when an Enter-Zone request fails (`stw 0, 0x10`).
+    // Exposes that field BY NAME to subclasses instead of an offset poke.
+    void SetValid(int bValid) { mbIsValid = bValid; }
+
 private:
     int         mnLastError;     // +0x04
     int         mnReportedError; // +0x08

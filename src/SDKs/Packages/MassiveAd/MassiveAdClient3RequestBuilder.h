@@ -20,8 +20,8 @@
 //
 // Layout over the 0x14-byte CMassiveBaseObject base (offsets X360-relative,
 // reproduced BY NAME -- the host base and list are wider):
-//   +0x00  vftable        (off_82186008; slot 0 dtor, slot 1 OnRequestComplete,
-//                          slot 2 OnRequestError)
+//   +0x00  vftable        (off_82186008; slot 0 dtor, slot 1 HandleResponse,
+//                          slot 2 HandleError)
 //   +0x14  mRequestList   (CMassiveList, embedded by value; the ctor zeroes its
 //                          four dwords in place, the dtor Cancels+deletes every
 //                          entry then RemoveAll's + destroys it)
@@ -58,12 +58,15 @@ public:
 
     // Slot 1 (+0x04). Invoked by CRequestObject::Complete on a successfully
     // parsed, non-cancelled request. Pure in the base; every request-owning
-    // subsystem overrides it in its own TU.
-    virtual int OnRequestComplete(CRequestObject* pRequest) = 0;
+    // subsystem overrides it in its own TU. The real override name is attested by
+    // CMassiveZoneManager::HandleResponse (0x82BD3410) -- the earlier minimal home
+    // guessed OnRequestComplete; corrected here to the ledger name.
+    virtual int HandleResponse(CRequestObject* pRequest) = 0;
 
     // Slot 2 (+0x08). Invoked by CRequestObject::Error on a non-cancelled
-    // request. Pure in the base (overridden per subsystem).
-    virtual int OnRequestError(CRequestObject* pRequest, int nErrorCode) = 0;
+    // request. Pure in the base (overridden per subsystem). The real override name
+    // is attested by CMassiveZoneManager::HandleError (0x82BD3368).
+    virtual int HandleError(CRequestObject* pRequest, int nErrorCode) = 0;
 
     // @ 0x82BD4868. Under the request manager's critical section, suspends every
     // pending request in the collection. Returns 0 on success, -998 on an empty
