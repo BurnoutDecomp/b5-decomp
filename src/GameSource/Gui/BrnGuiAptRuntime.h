@@ -10,9 +10,9 @@ namespace BrnGui
     // Gui-owned Apt movie host.
     //
     // This is the public ownership boundary used by GuiModule and the renderer. The
-    // underlying Apt load/tick/render helpers still live in the former bring-up TU
-    // until the remaining AptDataHandler/ViewModule/resource ownership can be split
-    // into their final reconstructed homes.
+    // remaining Apt load/tick/render implementation is private to BrnGuiAptRuntime.cpp
+    // until AptDataHandler/ViewModule/resource ownership can be split into the final
+    // reconstructed homes.
     class AptRuntimeHost
     {
     public:

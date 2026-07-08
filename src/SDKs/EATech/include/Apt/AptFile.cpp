@@ -32,14 +32,10 @@
 // here against the named x64 members (console offsets in [c:] comments).
 // ---------------------------------------------------------------------------
 
-// FLAG (un-homed deferred subsystem callback): the loaded-block free hook the Apt
-// runtime installs at GUI bring-up. PS3 dword_1071B1F4 (X360 off_1059C66C) is set
-// to `&CgsGui::AptCallbackFile::FreeAnimation` by CgsGui::AptAux::ConstructApt --
-// the registered "free a loaded .apt data block" user-function. It is owned by the
-// (not-yet-homed) GUI Apt-callback TU; declared here as a named function-pointer
-// hook so the teardown calls through it faithfully without fabricating its body.
-// Null until ConstructApt installs it (the request layer never reaches this path
-// during bring-up).
+// The loaded-block free hook the Apt runtime installs at GUI bring-up. PS3
+// dword_1071B1F4 (X360 off_1059C66C) is set to
+// `&CgsGui::AptCallbackFile::FreeAnimation` by CgsGui::AptAux::ConstructApt -- the
+// registered "free a loaded .apt data block" user-function.
 typedef void (*AptFreeAnimationHook)(void* pDataBlock);
 extern AptFreeAnimationHook gpAptFreeAnimationHook;   // dword_1071B1F4 / off_1059C66C
 AptFreeAnimationHook gpAptFreeAnimationHook = nullptr;

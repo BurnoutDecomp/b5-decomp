@@ -15,6 +15,8 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // the zombie entries
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (the reap's file-state swap)
 #include "SDKs/EATech/include/Apt/AptFile.h"                      // mnState / mnField12 (the saved-state slot)
+#include "SDKs/EATech/include/Apt/AptTarget.h"                    // gpAptTarget / current target
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"           // queued-input counter clear
 
 // ---------------------------------------------------------------------------
 // The Apt GC globals. FLAG: defined by the Apt GC startup data (AptInit); declared
@@ -24,6 +26,7 @@
 // ---------------------------------------------------------------------------
 extern AptGCReleaseVector      gValuesToRelease;
 extern AptValueGC_PoolManager  gAptValueGCPool;
+extern int                     gbAptSavedInputActive;
 
 // ---------------------------------------------------------------------------
 // sReferenceRegistrationCb @0x82AD9C80 -- mark-walk callback.
@@ -183,4 +186,29 @@ void* AptUpdateZombieVector(char bClear)
 void AptApt_FlushDeferredReleases()
 {
     gValuesToRelease.ReleaseValues();
+}
+
+// ---------------------------------------------------------------------------
+// AptPartialGarbageCollection @0x82ADD2A0 -- the tiny load-complete hook. The
+// shipped body only raises byte_8324E38F, the same zombies-dirty flag the zombie
+// vector maintenance code raises when a deferred sweep must run.
+// ---------------------------------------------------------------------------
+void AptPartialGarbageCollection()
+{
+    gbAptZombiesDirty = true;
+}
+
+// ---------------------------------------------------------------------------
+// AptFlushInputQueue @0x82ADD270 -- unless saved-input playback is active,
+// clear the queued input count on the current target's animation director.
+// ---------------------------------------------------------------------------
+void AptFlushInputQueue()
+{
+    if (gbAptSavedInputActive != 0)
+        return;
+
+    AptAnimationTarget* pAnimationTarget =
+        (gpAptTarget != nullptr) ? gpAptTarget->mpAnimationTarget : nullptr;
+    if (pAnimationTarget != nullptr)
+        pAnimationTarget->SetQueuedInputsSize(0);
 }

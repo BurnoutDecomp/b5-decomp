@@ -42,3 +42,11 @@ public:
     // CleanAll @0x82AE4A40 -- the full Apt value-pool teardown (see the header).
     static void CleanAll();
 };
+
+// AptPartialGarbageCollection @0x82ADD2A0 -- mark that a partial sweep is
+// needed after animation load completion.
+void AptPartialGarbageCollection();
+
+// AptFlushInputQueue @0x82ADD270 -- clear the current target's queued inputs
+// unless saved-input playback is active.
+void AptFlushInputQueue();

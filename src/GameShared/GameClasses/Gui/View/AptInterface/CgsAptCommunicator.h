@@ -184,6 +184,11 @@ namespace CgsGui
         // the per-frame dirty flags and the key/value pool.
         void UpdateAllComponents();
 
+        // X360 0x82851818. Remove the component whose bound AptValue is being unloaded:
+        // find the matching component reference, move the final active slot into its place,
+        // then shrink the active count.
+        static void RemoveExpiredAptComponent(AptValue* lpAptValue);
+
     private:
         // X360 0x82849F48. Hash lpacName and return its registered component index, or -1.
         // Static: it only touches the file-static class data (no `this`), and the static

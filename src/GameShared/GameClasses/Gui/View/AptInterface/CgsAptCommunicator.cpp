@@ -463,6 +463,29 @@ namespace CgsGui
     }
 
     // ========================================================================
+    // RemoveExpiredAptComponent  @ 0x82851818
+    //
+    // The Apt OnUnload callback passes the movieclip value that is leaving the display
+    // tree. Remove the matching component registration by compacting the last active
+    // component into its slot, preserving the fixed-size component list semantics.
+    // ========================================================================
+    void AptCommunicator::RemoveExpiredAptComponent(AptValue* lpAptValue)
+    {
+        for (s32 liComponent = 0; liComponent < static_cast<s32>(muNumActivecomponents); ++liComponent)
+        {
+            CGS_ASSERT(liComponent >= 0, "Invalid Component Index");
+            CGS_ASSERT(liComponent < AptComponentList::KU_MAX_COMPONENTS, "Invalid Component Index");
+
+            if (mAptComponentList.GetAptValue(liComponent) == lpAptValue)
+            {
+                mAptComponentList.MoveComponent(static_cast<s32>(muNumActivecomponents) - 1, liComponent);
+                --muNumActivecomponents;
+                return;
+            }
+        }
+    }
+
+    // ========================================================================
     // UpdateComponent  @ 0x82850958
     //
     // Mirror one (key,value) text pair onto the named component's bound reference:

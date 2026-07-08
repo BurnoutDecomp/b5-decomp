@@ -490,7 +490,7 @@ int AptCIH::jumpToFrame(int nFrame)
 // clip movie (char + embed) WITHOUT null guards -- everything is always live in the
 // shipped game. On our partial bring-up the render-tree / AS scope is not fully stood up
 // yet, so this faithful body is NOT ticked at boot: the host driver holds it off
-// (BrnAptRuntimeBringUp AptRuntimeUpdate: lbTickReady=false) until the converter delivers
+// (BrnGuiAptRuntime UpdateRuntime: lbTickReady=false) until the converter delivers
 // a uniformly-64-bit bundle. The body below is the single faithful X360 decompile.
 
 int AptCIH::tick()
