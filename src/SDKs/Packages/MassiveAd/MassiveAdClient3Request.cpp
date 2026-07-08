@@ -163,7 +163,7 @@ int CRequestObject::Complete()
         return Error(5);
 
     if ((mnStatus & 0xF00000) == 0)
-        return mpBuilder->OnRequestComplete(this);  // builder vtable slot 1
+        return mpBuilder->HandleResponse(this);  // builder vtable slot 1
 
     return lnResult;
 }
@@ -176,7 +176,7 @@ int CRequestObject::Error(int nErrorCode)
     int lnResult = SetStatus(0x2000);
 
     if ((mnStatus & 0xF00000) == 0)
-        return mpBuilder->OnRequestError(this, nErrorCode);  // builder vtable slot 2
+        return mpBuilder->HandleError(this, nErrorCode);  // builder vtable slot 2
 
     return lnResult;
 }

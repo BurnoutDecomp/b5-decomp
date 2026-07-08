@@ -128,7 +128,11 @@ namespace rw
                 u64      mu64LeadPos;      // +0x20  leading-position result store
             };
 
-            struct Stream
+            // NOTE: this is the low-level file-IO transfer object an AsyncOp reads/writes
+            // through (AsyncOp::mpStream). It is NOT rw::core::filesys::Stream, the high-level
+            // streaming reader (QueueFile/GetChunk/Kill, homed in stream.h/.cpp) -- that is a
+            // different class; this one is named IoStream to avoid the collision.
+            struct IoStream
             {
                 u8             macReserved00[4]; // +0x00 .. +0x03
                 StreamContext* mpContext;        // +0x04  per-open context
@@ -148,7 +152,11 @@ namespace rw
                 u8                 macReserved0A[2]; // +0x0A .. +0x0B
                 s32                miPriority;      // +0x0C  scheduling priority
                 OpStream*          mpStream;        // +0x10  owning Stream/File (or result Handle)
-                u32                mUserData;       // +0x14  opaque user word for the callback
+                uintptr_t          mUserData;       // +0x14  opaque user word for the callback
+                                                    //        (pointer-width: the filesys Stream
+                                                    //        stashes its engine pointer here and
+                                                    //        recovers it in its op callbacks --
+                                                    //        X360 stored a 32-bit word)
                 union                               // +0x18
                 {
                     CompletionCallback mpfnComplete; // scheduler: `stw 0x18`, then call
@@ -173,13 +181,13 @@ namespace rw
                 // The four request entry points (@0x82BC00C0 / @0x82BC01D0 / @0x82BBFCF0 /
                 // @0x82BBFB48): fill the op, pick the Device, and Device::InsertOp it.
                 s32 Open(const char* lpcPath, u32 luFlags, CompletionCallback lpfnComplete,
-                         u32 luUserData, s32 liPriority);
+                         uintptr_t luUserData, s32 liPriority);
                 s32 Read(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                         CompletionCallback lpfnComplete, u32 luUserData, s32 liPriority);
+                         CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority);
                 s32 Write(void* lpStream, void* lpBuffer, u64 lu64Position, u64 lu64Count,
-                          CompletionCallback lpfnComplete, u32 luUserData, s32 liPriority);
+                          CompletionCallback lpfnComplete, uintptr_t luUserData, s32 liPriority);
                 s32 Close(void* lpStream, CompletionCallback lpfnComplete,
-                          u32 luUserData, s32 liPriority);
+                          uintptr_t luUserData, s32 liPriority);
 
                 // The transfer callbacks the scheduler invokes (@0x82BBFA70 / @0x82BBFBB8 /
                 // @0x82BBD450 / @0x82BBE010). Static because mpfnDoIo points at them.
@@ -242,6 +250,9 @@ namespace rw
                 u32         mbIsOpen;   // +0x08
                 u32         mField3;    // +0x0C
                 DeviceBase* mpDevice;   // +0x10
+                u64         mu64Size;   // +0x18  file size (Stream open/close callbacks
+                                        //         copy it into StreamState::mu64FileSize;
+                                        //         `ld 0x18(handle)` in the X360 asm)
             };
 
             // The device base the Handle releases through on close. Modelled as a single

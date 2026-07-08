@@ -13,7 +13,8 @@
 // after mCellManager (the X360 Construct sets mpaProps = this + 2432), so
 // sizeof(PropCellManager) == 2432. The member offsets below are pinned by the X360
 // PropZoneManager::Construct stores (0x822F0568):
-//     miNumLoadedCells   @ +1900   (stw 0)
+//     miNumLoadedCells   @ +1800   (stw 0; asm 0x708, read by IsCellLoaded/ClearPropsNearPosition)
+//     (a second PropCellRecord array @ +1804 with its own count @ +1900 / asm 0x76C)
 //     mpaProps           @ +1904   (stw this+2432  -> &PropZoneManager::maProps[0])
 //     mpaPropParts       @ +1908   (stw this+435968)
 //     mPhysicalProps     @ +1912   (std 0, BitArray<15> -> 1 u64)
@@ -25,9 +26,9 @@
 //     mu16NumberOfPropVolumesInScene   @ +2316 (sth 0)
 //     mu16NumberOfPropEntitiesInScene  @ +2318 (sth 0)
 // The leading maCells[150] PropCellRecord span (DWARF BrnPropCellManager.h:309) fills
-// [0, 1900); its per-record sub-layout is owned by the PropCellManager TU and is NOT
-// re-derived here -- it is modelled as a sized opaque span so the embed size is exact
-// without forking PropCellRecord's interior (recovered by its own TU).
+// [0, 1800) (asm stride 0xC * 150). Its per-record sub-layout is owned by the
+// PropCellManager TU and is modelled below as a real PropCellRecord (the interior the
+// IsCellLoaded/ClearPropsNearPosition/GetPart bodies index by name).
 //
 // Member names/types are the DecFIGS DWARF (BrnPropCellManager.h), X360-gated.
 #include "types.hpp"
@@ -104,6 +105,28 @@ namespace BrnWorld
         void IncrementPropsTimeInSim(u32 luPhysicsIndex, f32 lfTimeStep);
         void IncrementPartsTimeInSim(u32 luPhysicsIndex, f32 lfTimeStep);
 
+        // @ 0x822BBE08 -- resolve a prop-part entity id to its part instance:
+        // &mpaPropParts[ liEntityId.GetPartIndex() + mpaProps[liEntityId.GetEntityIndex()]
+        // .mu16PartsIndex - 1 ]. Called by AddPropPartsToScene.
+        PropPartEntityInstance* GetPart(PropEntityID lEntityId);
+
+        // @ 0x822A4130 -- linear scan of maCells[0..miNumLoadedCells) for luCellId.
+        bool IsCellLoaded(u32 luCellId) const;
+
+        // BrnPropCellManager.h:309 (DWARF PropCellRecord) -- one loaded cell's registry
+        // entry. 12 bytes (asm stride 0xC in IsCellLoaded/ClearPropsNearPosition). The cell
+        // coordinate id (packed {u16 x, u16 y}) is compared as a unit; [mu16StartIndex,
+        // mu16EndIndex) is the half-open span of this cell's prop slots inside mpaProps.
+        struct PropCellRecord
+        {
+            u32 muCellId;         // +0   packed {u16 x, u16 y} cell coordinate
+            u16 mu16StartIndex;   // +4   first prop slot in mpaProps
+            u16 mu16EndIndex;     // +6   one-past-last prop slot
+            u16 mu16Pad0;         // +8
+            u8  mu8Loaded;        // +10  cell-active flag (ClearPropsNearPosition gate)
+            u8  mu8Pad1;          // +11  -> sizeof 12
+        };
+
         // BrnPropCellManager.h:302 -- per-physical-slot bookkeeping record.
         struct PhysicalParams
         {
@@ -113,10 +136,16 @@ namespace BrnWorld
 
     public:
         // ---- DWARF-faithful layout (offsets asm-pinned by PropZoneManager::Construct) ----
-        // maCells[150] PropCellRecord fills [0,1900); interior owned by PropCellManager TU.
-        u8                          maCells[1900];        // +0     PropCellRecord[150] (opaque span)
-        s32                         miNumLoadedCells;     // +1900
-        PropEntityInstance*         mpaProps;             // +1904  -> PropZoneManager::maProps
+        // maCells[150] PropCellRecord fills [0,1800) (asm stride 0xC * 150).
+        PropCellRecord              maCells[150];         // +0     [0,1800)
+        s32                         miNumLoadedCells;     // +1800  (asm 0x708)
+        // [+1804,+1904): a second 12-byte PropCellRecord array (asm base this+0x712, its own
+        // count at +1900 / asm 0x76C) that RecordPropPositions walks to snapshot each cell's
+        // prop range into the replay serialiser. Its exact element count/role is owned by the
+        // RecordPropPositions TU; modelled here as a sized opaque span so mpaProps stays at the
+        // asm-pinned +1904 without forking that array's interior.
+        u8                          maReplayRecordCellsSpan[100]; // +1804 -> +1904
+        PropEntityInstance*         mpaProps;             // +1904  (asm 0x770) -> PropZoneManager::maProps
         PropPartEntityInstance*     mpaPropParts;         // +1908  -> PropZoneManager::maParts
         CgsContainers::BitArray<15u> mPhysicalProps;      // +1912  (1 u64)
         CgsContainers::BitArray<30u> mPhysicalParts;      // +1920  (1 u64)

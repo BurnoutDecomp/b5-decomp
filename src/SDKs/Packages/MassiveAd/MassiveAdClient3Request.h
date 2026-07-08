@@ -227,6 +227,14 @@ public:
     // @ 0x82BCF4F0. Low nibble of the ctor's server-index word.
     int GetServerIndex();
 
+    // Additive accessor (FLAG: not its own X360 function). The request-owning
+    // subsystems dispatch on the FULL server-index/type word at +0x14 (e.g.
+    // CMassiveZoneManager::HandleResponse/HandleError switch on it: EnterZone=0x33,
+    // ExitZone=0x43, ImpressionUpdate=0x65 -- the same values the ctors pass, 51/
+    // 67/101). GetServerIndex masks to the low nibble, so this exposes the whole
+    // field BY NAME for the request-type switch.
+    int GetServerType() const { return mnServerIndex; }
+
     // @ 0x82BCF500. Non-zero while the status sits in the pending band (&0xF0).
     int IsPending();
 
