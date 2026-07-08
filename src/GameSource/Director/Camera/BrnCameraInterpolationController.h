@@ -26,8 +26,10 @@
 
 namespace BrnDirector
 {
-    // BrnDirector::CameraInterpolationController -- stateless math helper (the bodied
-    // function takes its matrices by pointer; no instance members are touched by it).
+    // BrnDirector::CameraInterpolationController -- the Director's camera-blend helper. Carries
+    // two direction-preserving Interpolaters (mInterpolaterA/mInterpolaterB, DWARF h:71/:72);
+    // the rotate-about-pivot math helpers below take their matrices by pointer/ref and touch no
+    // instance state.
     struct CameraInterpolationController
     {
         // The blend parameter set of the rotate-about-pivot camera interpolation mode
@@ -52,13 +54,41 @@ namespace BrnDirector
                                     RotateAboutPivotParams* lpOut);
         };
 
-        // @0x821F8220. Build a rotation-about-pivot affine in *lpResult from the two source
-        // matrices. r3=lpResult (four stvx128 rows @ stride 16), r5=lpSource (lvx128 rows at
-        // +0x00/+0x10/+0x20/+0x30/+0x50/+0x60 -- the +0x60 scalar is negated into the build),
-        // r6=lpPivot (lvx128 rows at +0x00/+0x10/+0x20/+0x30). Returns lpResult.
+        // @0x821F8220. Build a rotation-about-pivot affine in *lpResult from the interpolated
+        // pivot params and the car transform. r3=lpResult (four stvx128 rows @ stride 16),
+        // r5=lpParams (the blended RotateAboutPivotParams -- rotation rows at +0x00/+0x10/+0x20/
+        // +0x30/+0x50 and the negated radius scalar at +0x60), r6=lpPivot (lvx128 rows at
+        // +0x00/+0x10/+0x20/+0x30). Returns lpResult. (DWARF h:109 spells the source param as
+        // `const RotateAboutPivotParams&`; VMX keystone -- see the .cpp, body is an honest floor.)
         rw::math::vpu::Matrix44Affine* Matrix44AffineFromRota(
             rw::math::vpu::Matrix44Affine* lpResult,
-            const rw::math::vpu::Matrix44Affine* lpSource,
+            const RotateAboutPivotParams* lpParams,
             const rw::math::vpu::Matrix44Affine* lpPivot) const;
+
+        // @0x8223DA28 (DWARF h:98). Blend between two camera transforms (lFrom -> lTo by lvT)
+        // about a pivot expressed by lCarTransform: assert lvT in [0,1], move both transforms
+        // into car-local space (via the orthonormal inverse of lCarTransform), extract each
+        // one's rotate-about-pivot params, blend those (rotations through the two direction-
+        // preserving interpolaters, radius linearly), then rebuild a world affine. Returns the
+        // blended transform.
+        Matrix44Affine RotateAboutPivot(const Matrix44Affine& lCarTransform,
+                                        const Matrix44Affine& lFrom,
+                                        const Matrix44Affine& lTo,
+                                        VecFloat lvT,
+                                        Camera::Utils::Interpolater& lrInterpolaterA,
+                                        Camera::Utils::Interpolater& lrInterpolaterB);
+
+        // @0x8221EAC0 (DWARF h:104). Extract the rotate-about-pivot params of lIn expressed in
+        // car-local space (lInverseCarTransform). DECLARATION-ONLY: the body is a dense hand-
+        // vectorised VMX pipeline (a look-at build + Matrix33 transpose/compose + rsqrt
+        // normalisation) whose lane routing is not reconstructable store-for-store without
+        // guessing -- left as its own ledger target (same floor as Matrix44AffineFromRota).
+        void ExtractRotateAboutPivotParams(const Matrix44Affine& lIn,
+                                           const Matrix44Affine& lInverseCarTransform,
+                                           RotateAboutPivotParams* lpOut);
+
+    private:
+        Camera::Utils::Interpolater mInterpolaterA;   // DWARF h:71 (+0x00)
+        Camera::Utils::Interpolater mInterpolaterB;   // DWARF h:72 (+0x20)
     };
 }

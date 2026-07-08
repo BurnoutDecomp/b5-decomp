@@ -25,16 +25,38 @@
 // This is vendor/SDK code reconstructed in its canonical vendor home; the
 // MassiveAdClient3 namespace and CMassiveAdObject class name are external
 // middleware identifiers PRESERVED VERBATIM.
+//
+// RECONCILE (W28, CMassiveAdObjectTexture): the ad-object subtype
+// CMassiveAdObjectTexture chains this class's constructor and, in its vector
+// deleting destructor @ 0x82BDBCC8, frees through CMassiveBaseObject::operator
+// delete; CMassiveAdObject::GetBestImpression @ 0x82BD6898 calls
+// CMassiveBaseObject::SetLastError(this, ...). Both prove CMassiveAdObject
+// derives from CMassiveBaseObject (the two calls resolve the base's static
+// operator delete and the base SetLastError on the ad-object `this`). The base
+// is therefore pinned in additively below (deriving from CMassiveBaseObject +
+// the name-taking ctor the subtype chains); the full CMassiveAdObject body stays
+// its own separate ledger TU.
 // ===========================================================================
+
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"  // CMassiveBaseObject
 
 namespace MassiveAdClient3
 {
 
 class CMassiveAdObjectSubscriber;
 
-class CMassiveAdObject
+class CMassiveAdObject : public CMassiveBaseObject
 {
 public:
+    // The base constructor CMassiveAdObjectTexture::CMassiveAdObjectTexture
+    // @ 0x82BDAB18 chains: `bl CMassiveAdObject::CMassiveAdObject` with r3=this,
+    // r4=name, r5=a3, r6=a7, r7=a8 -- i.e. (pcName, a3, a7, a8) (the subtype's a6
+    // is clobbered before the chain and never reaches the base). The first arg is
+    // a const char* name (it flows into the CMassiveBaseObject name copy); the
+    // three trailing ints' roles are recovered in the CMassiveAdObject TU. Body
+    // lives in that separate TU; declared here so the subtype ctor can chain it.
+    CMassiveAdObject(const char* pcName, int a3, int a7, int a8);
+
     // Polymorphic base -- the X360 object carries a vftable (the subscriber's
     // ctor dispatches SubscriberAdd through it). The full dtor body lives in the
     // CMassiveAdObject TU; declared virtual here to model the vftable.

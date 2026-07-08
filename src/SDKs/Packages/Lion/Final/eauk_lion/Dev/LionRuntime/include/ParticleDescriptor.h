@@ -76,6 +76,12 @@ public:
     cParticleDescriptor* Serialise(cLionSerialiser& aSer) const;
     f32  GetDurationMax() const;
 
+    // True when arOther is this descriptor or one of its ancestors up the mpParent chain.
+    // Body lives in a cParticleDescriptor TU; declared here for cParticleEmitterManager::
+    // RegisterSubEmitter (X360 @0x82913668 calls it to find a sub-emitter's parent emitter).
+    // DWARF: U32 IsChildOf(const cParticleDescriptor&) const (ParticleDescriptor.h:219).
+    u32 IsChildOf(const cParticleDescriptor& arOther) const;
+
     // ----- serialised record members (console offsets; host pointer widths differ, so the
     // absolute offsets are NOT host-asserted -- members are accessed BY NAME). -----
     // Opaque leading record preceding mFlags at console +0x20 (32).
@@ -102,4 +108,8 @@ public:
     u8  maReserved4[0x54 - 0x50];
 
     cParticleDescriptor* mpNext;       // console +0x54 (84) -- next descriptor in the chain
+
+    cParticleDescriptor* mpParent;     // console +0x58 (88) -- parent descriptor (DWARF
+                                       // ParticleDescriptor.h:292 mpParent). RegisterSubEmitter
+                                       // reads it to locate the used emitter to attach under.
 };

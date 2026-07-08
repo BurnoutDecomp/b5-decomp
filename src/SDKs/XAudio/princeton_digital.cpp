@@ -5,6 +5,8 @@
 
 #include "SDKs/XAudio/princeton_digital.h"
 
+#include <string.h>   // memcpy (whole-block I3DL2 parameter copy in set)
+
 namespace princeton_digital
 {
 
@@ -199,6 +201,83 @@ T *vardelay_t<T, N>::preprocess(T *in, T *out)
 }
 
 // ---------------------------------------------------------------------------
+// i3dl2_to_properties -- file-local (anonymous-namespace) helper that converts
+// an I3DL2 parameter block into a stereo_room_t::properties_t, given the room's
+// sample rate. Its body is NOT recovered in this dossier (no pseudocode/asm was
+// provided for `anonymous namespace'::i3dl2_to_properties); it is a callee to be
+// reconstructed in its own pass, declared here only so stereo_room_3dl2_t::set
+// can forward into it faithfully. Signature matches the X360 call site
+// (@0x829674AC): (out, i3dl2, out2, sampleRate) with out == out2 (in place).
+// ---------------------------------------------------------------------------
+namespace
+{
+void i3dl2_to_properties(stereo_room_t<f32>::properties_t *pOut,
+                         const i3dl2_reverb_t<f32> *pI3dl2,
+                         stereo_room_t<f32>::properties_t *pOut2,
+                         f32 fSampleRate);
+} // namespace
+
+// ---------------------------------------------------------------------------
+// stereo_room_3dl2_t<T>::stereo_room_3dl2_t -- @0x829674D8. Seed the I3DL2
+// parameter block with the "generic" preset. The virtual base stereo_room_t<T>
+// is constructed by the compiler-inserted most-derived path (the `if (a2)`
+// guard + the vbtable/vftable stores the asm performs before this body). The
+// store order below follows the asm exactly.
+// ---------------------------------------------------------------------------
+template <typename T>
+stereo_room_3dl2_t<T>::stereo_room_3dl2_t()
+{
+    mProps.mfRoomRolloffFactor = static_cast<T>(0.0);        // +12
+    mProps.mfDecayTime         = static_cast<T>(1.0);        // +16
+    mProps.miRoom              = -10000;                     // +4
+    mProps.miRoomHF            = 0;                          // +8
+    mProps.miReflections       = -10000;                    // +24
+    mProps.mfDecayHFRatio      = static_cast<T>(0.5);        // +20
+    mProps.miReverb            = -10000;                     // +32
+    mProps.mfReflectionsDelay  = static_cast<T>(0.02);       // +28
+    mProps.mfReverbDelay       = static_cast<T>(0.039999999);// +36
+    mProps.mfDiffusion         = static_cast<T>(100.0);      // +40
+    mProps.mfDensity           = static_cast<T>(100.0);      // +44
+    mProps.mfHFReference       = static_cast<T>(5000.0);     // +48
+}
+
+// ---------------------------------------------------------------------------
+// stereo_room_3dl2_t<T>::set -- @0x82967380. `index` selects which I3DL2 field
+// to overwrite from `src` (0 = the whole 48-byte block, 1..12 = one field in
+// I3DL2 order); any other index leaves the block unchanged. Then, regardless of
+// index, re-derive the DSP parameter block (i3dl2_to_properties) and push it
+// into the underlying room (stereo_room_t::properties_set). The jump-table
+// switch is preserved store-for-store from the asm.
+// ---------------------------------------------------------------------------
+template <typename T>
+stereo_room_t<T> *stereo_room_3dl2_t<T>::set(int index, const i3dl2_reverb_t<T> *src)
+{
+    stereo_room_t<T> &room = *this;   // virtual-base subobject (asm: this + vbtable[1])
+
+    switch (index)
+    {
+        case 0:  memcpy(&mProps, src, 48);                              break;
+        case 1:  mProps.miRoom             = src->miRoom;               break;
+        case 2:  mProps.miRoomHF           = src->miRoomHF;             break;
+        case 3:  mProps.mfRoomRolloffFactor = src->mfRoomRolloffFactor; break;
+        case 4:  mProps.mfDecayTime        = src->mfDecayTime;          break;
+        case 5:  mProps.mfDecayHFRatio     = src->mfDecayHFRatio;       break;
+        case 6:  mProps.miReflections      = src->miReflections;        break;
+        case 7:  mProps.mfReflectionsDelay = src->mfReflectionsDelay;   break;
+        case 8:  mProps.miReverb           = src->miReverb;             break;
+        case 9:  mProps.mfReverbDelay      = src->mfReverbDelay;        break;
+        case 10: mProps.mfDiffusion        = src->mfDiffusion;          break;
+        case 11: mProps.mfDensity          = src->mfDensity;            break;
+        case 12: mProps.mfHFReference      = src->mfHFReference;        break;
+        default:                                                        break;
+    }
+
+    typename stereo_room_t<T>::properties_t props;   // v6: default-constructed
+    i3dl2_to_properties(&props, &mProps, &props, room.mSampleRate);
+    return room.properties_set(props);
+}
+
+// ---------------------------------------------------------------------------
 // Explicit instantiations -- one per <float,N> that the X360 image emits.
 // ---------------------------------------------------------------------------
 
@@ -229,5 +308,9 @@ template struct occlusion_t<f32, 2>;
 
 // stereo_room_t<float>::properties_t::properties_t
 template struct stereo_room_t<f32>;
+
+// stereo_room_3dl2_t<float> -- ctor @0x829674D8, set @0x82967380, and the
+// compiler-emitted scalar deleting destructor @0x82962B40.
+template struct stereo_room_3dl2_t<f32>;
 
 } // namespace princeton_digital
