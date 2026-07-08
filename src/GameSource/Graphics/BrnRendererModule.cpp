@@ -2,7 +2,7 @@
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (owns the movie player)
-#include "GameSource/Gui/BrnAptRuntimeBringUp.h" // BrnGui::AptRuntimeRender (draw the Apt geometry via mIm2dRenderer)
+#include "GameSource/Gui/BrnGuiAptRuntime.h"     // BrnGui::gpActiveAptRuntimeHost (GUI-owned Apt host)
 
 // Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
 // (Option B). The job system and the buffered dispatch frame are reconstructed with the
@@ -110,12 +110,13 @@ void BrnRendererModule::Render()
         BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
     }
 
-    // Apt (ActionScript movie) render: draw the loaded Title_Screen02 geometry through THIS module's
-    // own immediate-mode 2D renderer (mIm2dRenderer -- the proven path the loading screen + debug HUD
-    // use). The Apt runtime walks the movie's GuiGeometry + draws each mesh's quad via Im2d::Render.
+    // Apt (ActionScript movie) render: draw through the active GuiModule-owned Apt host using THIS
+    // module's immediate-mode 2D renderer (mIm2dRenderer -- the proven path the loading screen +
+    // debug HUD use). The Apt runtime walks the movie's GuiGeometry + draws each mesh's quad via Im2d::Render.
     // Clean no-op until a movie's geometry is resolved. This is how BootLegal's Title_Screen02 Apt
     // geometry reaches the screen. [Apt render path]
-    BrnGui::AptRuntimeRender(&mIm2dRenderer);
+    if (BrnGui::gpActiveAptRuntimeHost != 0)
+        BrnGui::gpActiveAptRuntimeHost->Render(&mIm2dRenderer);
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
 

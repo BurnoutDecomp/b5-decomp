@@ -19,7 +19,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // CgsGui::sResourceTuple
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"      // BrnGui::MenuComponent
-#include "GameSource/Gui/BrnAptRuntimeBringUp.h"                         // BrnGui::AptRuntimeSetComponentViewState (PC shim)
+#include "GameSource/Gui/BrnGuiAptRuntime.h"                             // BrnGui::gpActiveAptRuntimeHost (GUI-owned Apt host)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"             // CgsSound::Playback::Name::MakeHash (homed)
 
 #include <cstdio>   // std::snprintf (the menu facade component names)
@@ -82,7 +82,8 @@ namespace BootLegalCacheBoundary
     // tick and the HDComp/esrb transins were lost -- clip-not-found.)
     bool AreAllAptComponentsInitialised(const GuiCache* /*lpCache*/, s32 /*liFlow*/)
     {
-        return BrnGui::AptRuntimeIsMovieComposed();
+        return BrnGui::gpActiveAptRuntimeHost != 0 &&
+               BrnGui::gpActiveAptRuntimeHost->IsMovieComposed();
     }
 
     // The legal screen's static resources are resident (PC loads synchronously).

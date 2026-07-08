@@ -12,7 +12,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> (read the loading-event subtype)
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                          // CgsFsm::Event (drive BF_PROCEED through the FSM)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
-#include "GameSource/Gui/BrnAptRuntimeBringUp.h"                          // BrnGui::AptRuntime* (the Apt runtime bring-up + driver)
+#include "GameSource/Gui/BrnGuiAptRuntime.h"                              // BrnGui::AptRuntimeHost (Gui-owned Apt host)
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (BF_LEGAL interface wiring)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
@@ -74,6 +74,21 @@ namespace
 
 namespace BrnGui
 {
+    AptRuntimeHost* gpActiveAptRuntimeHost = 0;
+
+    bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState)
+    {
+        return gpActiveAptRuntimeHost != 0 &&
+               gpActiveAptRuntimeHost->SetComponentViewState(lpacInstName, lpacViewState);
+    }
+
+    bool AptRuntimeSetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
+                                        const char* lpacValue)
+    {
+        return gpActiveAptRuntimeHost != 0 &&
+               gpActiveAptRuntimeHost->SetComponentKeyValue(lpacInstName, lpacKey, lpacValue);
+    }
+
     // NOTE: this minimal GuiModule is driven DIRECTLY by BrnGameModule (Construct/Prepare/Update called
     // inline), not through the module dispatch, so it does NOT run the base ModuleSingleBuffered lifecycle.
     // The base Prepare() builds the module's input/output DataStructures via CreateInputDataStructure, which
@@ -166,12 +181,12 @@ namespace BrnGui
         lpOutBase->Clear();
     }
 
-    // Route the BF_LEGAL state's emitted Apt-movie events to the Apt runtime. BootLegal emits
+    // Route the BF_LEGAL state's emitted Apt-movie events to the active GuiModule-owned Apt host. BootLegal emits
     // GuiEventPlayAptMovie on channel 41 (type 18) carrying the movie name ("Title_Screen02") +
     // level num; StateInterface::PlayAptMovie posted it. This is the channel-41 consumer the Apt
     // runtime needed -- the parallel of RouteLoadingScreenEvents (which reads channel 40). It
-    // hands the movie name to the Apt runtime (load + tick + render). Defensive: every step the
-    // runtime takes is itself null-checked + logged + bails cleanly (see BrnAptRuntimeBringUp.cpp).
+    // hands the movie name to the Apt host (load + tick + render). Defensive: every step the
+    // host takes is itself null-checked + logged + bails cleanly.
     // NOTE: this does NOT clear the output queue -- BootLegal's other channel-41/40 outputs
     // (apt-view-state, music, etc.) are consumed elsewhere; here we only OBSERVE channel 41.
     static void RouteAptMovieEvents(CgsGui::StateInterface& lStateInterface)
@@ -191,8 +206,12 @@ namespace BrnGui
                     reinterpret_cast<const CgsGui::GuiEventPlayAptMovie*>(lpEvent);
                 if (lpPlay->muEventType == 18)   // GuiEventPlayAptMovie -> consume + (attempt to) load
                 {
-                    BrnGui::AptRuntimeBringUp();   // ensure the runtime is up (idempotent)
-                    BrnGui::AptRuntimePlayMovie(lpPlay->mpacMovieName, lpPlay->miLevelNum);
+                    if (BrnGui::gpActiveAptRuntimeHost != nullptr)
+                    {
+                        BrnGui::gpActiveAptRuntimeHost->Prepare();   // idempotent
+                        BrnGui::gpActiveAptRuntimeHost->PlayMovie(lpPlay->mpacMovieName,
+                                                                  lpPlay->miLevelNum);
+                    }
                 }
             }
             const CgsModule::Event* lpNext = 0;
@@ -297,6 +316,7 @@ namespace BrnGui
         // it through the GUI's own ViewIO ImRenderers via UpdateAndRenderMovieManager 0x82511240).
         mMovieManager.Prepare(0);
         gpActiveMovieManager = &mMovieManager;
+        gpActiveAptRuntimeHost = &mAptRuntimeHost;
 
         mbBootStarted = false;
         mbLoadingHasShown = false;
@@ -355,10 +375,10 @@ namespace BrnGui
         mBootLegalStateInterface.Construct();
         mbBootLegalFsmReady = false;
 
-        // Stand up the Apt runtime host (allocator + interpreter + AptAux host callback table +
-        // the render buffer) so it is live before BF_LEGAL posts PlayAptMovie("Title_Screen02").
-        // Idempotent + defensive (logs [AptRT] probes; bails cleanly at the first un-homed piece).
-        BrnGui::AptRuntimeBringUp();
+        // Stand up the GUI-owned Apt runtime host (allocator + interpreter + AptAux host callback
+        // table + the render buffer) so it is live before BF_LEGAL posts
+        // PlayAptMovie("Title_Screen02"). Idempotent + defensive.
+        mAptRuntimeHost.Prepare();
 
         // Wire BF_LEGAL's state interface to the shared access pointers so the GUI
         // components' faithful apt output chain (FillAptViewMessage -> AptAux::
@@ -387,6 +407,8 @@ namespace BrnGui
             mbBootFsmReady = false;
         }
         mBootLuaHeap.Destruct();
+        if (gpActiveAptRuntimeHost == &mAptRuntimeHost)
+            gpActiveAptRuntimeHost = 0;
         gpActiveMovieManager = 0;
         mMovieManager.Release();
         return true;
@@ -498,7 +520,7 @@ namespace BrnGui
             // The cache watcher isn't reconstructed; post it once when the apt movie is live.
             {
                 static bool sbResourceReadyFed = false;
-                if (!sbResourceReadyFed && BrnGui::AptRuntimeIsMovieLive())
+                if (!sbResourceReadyFed && mAptRuntimeHost.IsMovieLive())
                 {
                     CgsModule::Event lReady;
                     mBootLegalInQueue.AddEvent(&lReady, 567, static_cast<s32>(sizeof(lReady)));
@@ -642,7 +664,7 @@ namespace BrnGui
                         "(frontend flow un-reconstructed; FLAG follow-on).\n");
                     if (!mbBootLegalFsmReady)
                         mBootLegal.OnLeave();
-                    BrnGui::AptRuntimeStopMovie();
+                    mAptRuntimeHost.StopMovie();
                     // Leaving the state stops the menu stream on console (the sound logic
                     // reacts to the flow change); mirror that here.
                     CgsSystem::MenuMusicPC::Stop();
@@ -679,7 +701,7 @@ namespace BrnGui
             // movie stream is idle (the attract video borrows the single device voice).
             CgsSystem::MenuMusicPC::Update();
 
-            BrnGui::AptRuntimeUpdate();
+            mAptRuntimeHost.Update();
             return;
         }
 

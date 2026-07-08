@@ -1,4 +1,4 @@
-#include "GameSource/Gui/BrnAptRuntimeBringUp.h"
+#include "GameSource/Gui/BrnGuiAptRuntime.h"
 
 #include <cstdio>    // std::snprintf (probe logging)
 #include <cstring>   // std::strncpy
@@ -68,12 +68,23 @@
 
 #include <cstdlib>   // malloc (font pool backing, language file block)
 
+#ifndef BRN_GUI_APT_RUNTIME_DIAGNOSTICS
+#define BRN_GUI_APT_RUNTIME_DIAGNOSTICS 0
+#endif
+
+namespace
+{
+    constexpr bool kAptRuntimeDiagnostics = BRN_GUI_APT_RUNTIME_DIAGNOSTICS != 0;
+}
 
 // The pass-3 import-registration probe sink (declared weak in AptCharacterAnimation.cpp). Logs each
 // import the movie references (movie name / class name) + the loader handle Load() returned, so a run
 // names the exact cross-bundle imports (e.g. charId 30 = B5HelperComponents) that must be sync-loaded.
 extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     char lac[224];
     std::snprintf(lac, sizeof(lac), "[AptRT] import[%d]: movie='%s' class='%s' handle=%p\n",
                   nIndex, pcMovieName ? pcMovieName : "?", pcClassName ? pcClassName : "?", pHandle);
@@ -85,6 +96,9 @@ extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const ch
 // character index + type + record offset reached before any (now-guarded) skip.
 void CgsApt_FixupProbe(int nCharIndex, int nType, long long nCharOffset)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     char lac[96];
     std::snprintf(lac, sizeof(lac), "[AptRT] fixup: char[%d] type=%d @off=0x%llX\n",
                   nCharIndex, nType, static_cast<unsigned long long>(nCharOffset));
@@ -96,6 +110,9 @@ void CgsApt_FixupProbe(int nCharIndex, int nType, long long nCharOffset)
 // strong definition overrides the weak CgsApt_GalProbeDefault no-op in that TU.
 extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     char lac[128];
     std::snprintf(lac, sizeof(lac), "[AptRT] gal: %s = %p\n", pcStep ? pcStep : "?", p);
     CgsDev::Log::WriteToLog(lac);
@@ -106,6 +123,9 @@ extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p)
 // names whether the object/vtbl/hash was reused-or-corrupted before the dying deref.
 extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     char lac[160];
     std::snprintf(lac, sizeof(lac), "[AptRT] findChild-probe #%d: ext=%p vtbl=%p hash=%p\n",
                   nCall, pExt, pVtbl, pHash);
@@ -119,6 +139,9 @@ extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl
 extern AptActionInterpreter gAptActionInterpreter;
 extern "C" void AptGCFreeOnStackProbe(void* pFreed)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iHits = 0;
     if (s_iHits >= 32)
         return;
@@ -143,6 +166,9 @@ extern "C" void AptGCFreeOnStackProbe(void* pFreed)
 extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
                                            const void* pSlot, const void* pPushed)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iHits = 0;
     if (s_iHits >= 32)
         return;
@@ -159,6 +185,9 @@ extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
 extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
                                      const void* pCIH, const void* pAnim)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iLifeHits = 0;
     if (s_iLifeHits >= 96)
         return;
@@ -172,6 +201,9 @@ extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
 // The GetMember(.prototype) probe. First 40.
 extern "C" void AptGetMemberProbe(int nObjType, int nResType, int nResDefined)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iGmHits = 0;
     if (s_iGmHits >= 40)
         return;
@@ -184,6 +216,9 @@ extern "C" void AptGetMemberProbe(int nObjType, int nResType, int nResDefined)
 // The clip-placement class-bind probe. First 32.
 extern "C" void AptClassBindProbe(const char* pcExport)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iCbHits = 0;
     if (s_iCbHits >= 300)
         return;
@@ -202,6 +237,9 @@ static const unsigned char* s_pOpTraceBase = 0;
 
 extern "C" void AptOpTraceArmForClass(const char* pcExport, int nOn)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iTraced = 0;
     if (!pcExport || std::strcmp(pcExport, "TransitionComponent") != 0)
         return;
@@ -225,6 +263,9 @@ static int s_iOpEarlyBudget = 0;   // §6.4: don't spend the trace budget on fra
 
 extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iOpHits = 0;
     const bool bEarly = (s_iOpEarlyBudget > 0);
     if (bEarly)
@@ -245,19 +286,25 @@ extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp)
 // armed-state accessor so ExecuteScriptFunction can dump ONLY the nested handler bytecode.
 extern "C" void AptOpTraceArmDrain(int nOn)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iDrains = 0;
     if (nOn) { if (s_iDrains >= 6) return; s_iOpTraceArmed = 1; s_pOpTraceBase = 0;
                CgsDev::Log::WriteToLog("[AptRT] optrace ARM (drain)\n"); }
     else if (s_iOpTraceArmed) { s_iOpTraceArmed = 0; ++s_iDrains;
                                 CgsDev::Log::WriteToLog("[AptRT] optrace DISARM (drain)\n"); }
 }
-extern "C" int AptOpTraceIsArmed(void) { return s_iOpTraceArmed; }
+extern "C" int AptOpTraceIsArmed(void) { return kAptRuntimeDiagnostics ? s_iOpTraceArmed : 0; }
 
 // §6.4 DIAG: dump a handler's raw bytecode + constant pool (hex) so the nested onLoad /
 // RegisterComponent stream can be disassembled offline (the '_global' literal arg source).
 extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
                                const char* const* ppPool, int nPoolCount)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iFnDump = 0;
     if (s_iFnDump >= 12 || pBase == nullptr || nSize <= 0 || nSize > 8192)
         return;
@@ -292,6 +339,9 @@ extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
 extern "C" void AptPushIndirectProbe(int nRawType, int nRawDefined, int nRegIndex,
                                      int nResType, int nResDefined, const char* pcText)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     if (!s_iOpTraceArmed && s_iOpEarlyBudget <= 0)
         return;
     char lac[176];
@@ -308,6 +358,9 @@ extern "C" void AptSetArgumentProbe(int nIndex, int nCount, int nRegister,
                                     const char* pcName, const char* pcFnName,
                                     const void* pTable)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iSaHits = 0;
     if (s_iSaHits >= 64)
         return;
@@ -326,6 +379,9 @@ extern "C" void AptSetArgumentProbe(int nIndex, int nCount, int nRegister,
 extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nType,
                                   const char* pcText)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iDfHits = 0;
     if (s_iDfHits >= 120)
         return;
@@ -339,6 +395,9 @@ extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nT
 // The null-dictionary-slot probe (AptInterp_GetDictEntry). First 32.
 extern "C" void AptDictNullEntryProbe(unsigned int nIndex, const void* pPool)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iDnHits = 0;
     if (s_iDnHits >= 32)
         return;
@@ -351,6 +410,9 @@ extern "C" void AptDictNullEntryProbe(unsigned int nIndex, const void* pPool)
 // The RunActions stale-ring-slot probe. First 16.
 extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iSsHits = 0;
     if (s_iSsHits >= 16)
         return;
@@ -364,6 +426,9 @@ extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH)
 // (exit top must equal entry top - (args+3) + 1) plus the last entry before one.
 extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, const char* pcNote)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iEntryTop = -1, s_iEntryArgs = -1;
     static char s_acNote[24];
     if (pcWhere[0] == 'e' && pcWhere[1] == 'n')
@@ -390,6 +455,9 @@ extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, con
 // traces store names + context so class definitions can be followed. First 96.
 extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, int nContextType)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iSvHits = 0;
     if (s_iSvHits >= 400)
         return;
@@ -405,6 +473,9 @@ extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, in
 extern "C" void AptCreateObjectProbe2(const char* pcClass, const void* pValue,
                                       int nType, int nDefined, int nCanCreate)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iCoHits = 0;
     if (s_iCoHits >= 48)
         return;
@@ -419,6 +490,9 @@ extern "C" void AptCreateObjectProbe2(const char* pcClass, const void* pValue,
 // registration so the boot log shows the framework's class wiring run. First 24.
 extern "C" void AptRegisterClassProbe(const char* pcName)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iRcHits = 0;
     if (s_iRcHits >= 24)
         return;
@@ -432,6 +506,9 @@ extern "C" void AptRegisterClassProbe(const char* pcName)
 // logs a Push/dictionary constant slot revisited after a prior resolve pass. First 16 hits.
 extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iDrHits = 0;
     if (s_iDrHits >= 16)
         return;
@@ -448,6 +525,9 @@ extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nV
 // the weak default in AptCIH.cpp.
 extern "C" void CgsApt_TickProbe(const char* pcStep, const void* p)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iTickProbeBudget = 0;
     if (s_iTickProbeBudget >= 120)
         return;
@@ -463,6 +543,9 @@ extern "C" void CgsApt_TickProbe(const char* pcStep, const void* p)
 extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
                                    const void* pRenderItem, const void* pItemCharacter)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iMkItemBudget = 0;
     if (s_iMkItemBudget >= 32)
         return;
@@ -478,6 +561,9 @@ extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const v
 // movie's relocated frameCount + frameTable + the count of command records relocated. Throttled.
 void CgsApt_TimelineProbe(const void* pMovie, int nFrameCount, const void* pFrameTable, int nCmdsTotal)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iTimelineBudget = 0;
     if (s_iTimelineBudget >= 32)
         return;
@@ -494,6 +580,9 @@ void CgsApt_TimelineProbe(const void* pMovie, int nFrameCount, const void* pFram
 void CgsApt_TimelineFrameProbe(int nFrame, int nCmdCount, unsigned long long luCmdsBefore,
                               unsigned long long luCmdsAfter)
 {
+    if (!kAptRuntimeDiagnostics)
+        return;
+
     static int s_iTLFrameBudget = 0;
     if (s_iTLFrameBudget >= 16)
         return;
@@ -2652,7 +2741,7 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimeSetComponentViewState -- PC bring-up shim for the GuiComponent apt-view
+    // AptRuntimeApplyComponentViewState -- PC bring-up shim for the GuiComponent apt-view
     // protocol (FLAG; see the header note). Finds the root movie's placed child clip by
     // its PLACE instance name and jumps it to the view-state frame label, playing.
     // The label lives in the clip's own embedded AptMovie label hash (registered by
@@ -2883,7 +2972,7 @@ namespace BrnGui
     // component->clip pair map -- this is behavioral scaffolding, NOT faithful decompiled code. Kept
     // (user decision 2026-07-04) so the title keeps animating; delete the whole cluster when the faithful
     // GuiComponent::FillAptViewMessage -> AptCommunicator AS routing is homed (Phase 4d).
-    bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState)
+    static bool AptRuntimeApplyComponentViewState(const char* lpacInstName, const char* lpacViewState)
     {
         char lac[224];
         if (lpacInstName == nullptr || lpacViewState == nullptr || !AptRuntimeIsMovieLive())
@@ -2961,7 +3050,7 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimeSetComponentKeyValue -- the faithful KEY dispatch of the GuiComponent
+    // AptRuntimeApplyComponentKeyValue -- the faithful KEY dispatch of the GuiComponent
     // apt-view protocol (GuiComponent::AddOutputAptViewState(key, value) -> FillAptView
     // Message -> AptAux::UpdateComponents -> AptCommunicator key-values -> the movie AS).
     // The AS framework movie (MAIN.bundle's gAptCommunicator/BurnoutComponent classes) is
@@ -2979,14 +3068,14 @@ namespace BrnGui
     //   apt_updatestate (B5MenuItem)            -> no-op (the AS Update trigger; the
     //                    invalidate above already re-lays out).
     // -------------------------------------------------------------------------
-    bool AptRuntimeSetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
-                                        const char* lpacValue)
+    static bool AptRuntimeApplyComponentKeyValue(const char* lpacInstName, const char* lpacKey,
+                                                 const char* lpacValue)
     {
         if (lpacInstName == nullptr || lpacKey == nullptr || lpacValue == nullptr)
             return false;
 
         if (_stricmp(lpacKey, "apt_Transition") == 0)
-            return AptRuntimeSetComponentViewState(lpacInstName, lpacValue);
+            return AptRuntimeApplyComponentViewState(lpacInstName, lpacValue);
 
         if (!AptRuntimeIsMovieLive())
             return false;
@@ -3100,6 +3189,58 @@ namespace BrnGui
         CgsDev::Log::WriteToLog(lac);
         return false;
     }
+
+    bool AptRuntimeHost::Prepare()
+    {
+        return AptRuntimeBringUp();
+    }
+
+    void AptRuntimeHost::PlayMovie(const char* lpacMovieName, s32 liLevelNum)
+    {
+        AptRuntimePlayMovie(lpacMovieName, liLevelNum);
+    }
+
+    void AptRuntimeHost::Update()
+    {
+        AptRuntimeUpdate();
+    }
+
+    void AptRuntimeHost::Render(CgsGraphics::Im2d* lpIm2d)
+    {
+        AptRuntimeRender(lpIm2d);
+    }
+
+    void AptRuntimeHost::StopMovie()
+    {
+        AptRuntimeStopMovie();
+    }
+
+    bool AptRuntimeHost::IsReady() const
+    {
+        return AptRuntimeIsReady();
+    }
+
+    bool AptRuntimeHost::IsMovieLive() const
+    {
+        return AptRuntimeIsMovieLive();
+    }
+
+    bool AptRuntimeHost::IsMovieComposed() const
+    {
+        return AptRuntimeIsMovieComposed();
+    }
+
+    bool AptRuntimeHost::SetComponentViewState(const char* lpacInstName, const char* lpacViewState)
+    {
+        return AptRuntimeApplyComponentViewState(lpacInstName, lpacViewState);
+    }
+
+    bool AptRuntimeHost::SetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
+                                              const char* lpacValue)
+    {
+        return AptRuntimeApplyComponentKeyValue(lpacInstName, lpacKey, lpacValue);
+    }
+
 }
 
 // =============================================================================
