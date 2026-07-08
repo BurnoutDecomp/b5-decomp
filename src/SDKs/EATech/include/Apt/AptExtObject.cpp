@@ -125,7 +125,10 @@ AptExtObject::~AptExtObject()
 {
     if (mpNativeHash)   // a1[2] != 0
     {
-        mpNativeHash->DestroyGCPointers();
+        // The asm runs only AptNativeHash's scalar-deleting destructor (hash, 1) ==
+        // ~AptNativeHash() + Deallocate. ~AptNativeHash itself runs DestroyGCPointers
+        // when a table was allocated, so DO NOT call DestroyGCPointers explicitly here
+        // (that would tear the GC pointers down twice).
         mpNativeHash->~AptNativeHash();
         gpNonGCPoolManager->Deallocate(mpNativeHash, sizeof(AptNativeHash));   // [c:0x14]
         mpNativeHash = nullptr;

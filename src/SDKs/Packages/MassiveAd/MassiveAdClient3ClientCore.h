@@ -22,6 +22,11 @@
 namespace MassiveAdClient3
 {
 
+// The client's ad-zone manager (its own ledger TU); GetCurrentZone returns the
+// active one. Pointer-only use here -- the owning home is
+// MassiveAdClient3ZoneManager.h.
+class CMassiveZoneManager;
+
 // Custom heap-hook function-pointer types installed via
 // CMassiveClientCore::SetCustomMemoryFunctions -- the game routes MassiveAd
 // allocations through its own heap (see BrnMassive::System360HWMassive::
@@ -60,6 +65,12 @@ public:
     // Direct (non-virtual) bl target: the client clock, returned 64-bit (the
     // X360 stores the result with std). Body in the CMassiveClientCore TU.
     long long GetTime();
+
+    // Direct (non-virtual) bl target: the client's currently-active ad zone, or
+    // null when no zone is entered. Called on the Instance() result by
+    // CMassiveAdObjectSubscriber's constructor @ 0x82BCEA18 / 0x82BCEA58. Body in
+    // the CMassiveClientCore TU.
+    CMassiveZoneManager* GetCurrentZone();
 
     // Install the game-supplied heap hooks. Static; body in its own ledger TU.
     static void SetCustomMemoryFunctions(TMassiveMallocFn pfnMalloc, TMassiveFreeFn pfnFree);
