@@ -34,6 +34,7 @@
 
 // Resource payload types held only by pointer (via ResourcePtr) -> forward decls.
 namespace BrnTraffic { struct TrafficData; }
+namespace BrnTraffic { struct Hull; }        // WalkLaneLeft takes a (const Hull*)
 namespace BrnTrigger { struct TriggerData; }
 namespace BrnAI      { struct AISectionsData; }
 
@@ -91,13 +92,35 @@ namespace BrnDirector
 
         // BrnDirectorWorldMap.h:67 -- find the nearest safe position to lPosition
         // along lDisplacement; true on success with the result written into lOut.
-        // Declaration-only here (its own body slice, DWARF cpp:426); consumed by
-        // BrnDirector::Camera::Utils::PositionFinder::Update @0x8223FD50.
+        // Consumed by BrnDirector::Camera::Utils::PositionFinder::Update @0x8223FD50.
+        // X360 @0x8223BA78: for a tiny displacement it forwards to GetSafePositionNearest;
+        // otherwise it walks the lane (see .cpp) picking the direction from the displacement.
         bool GetSafePositionNearestPointWithDisplacement(Vector3 lPosition,
                                                          Vector3 lDisplacement,
                                                          Vector3& lOut) const;
 
+        // BrnDirectorWorldMap.h:61 -- nearest safe position to lPosition (no displacement
+        // bias). X360 @0x8223B750. Walks the containing hull's lane to the rung whose lane
+        // frame straddles lPosition, then drops the point 2.25 below the lane along its up.
+        bool GetSafePositionNearest(Vector3 lPosition, Vector3& lOut) const;
+
+        // BrnDirectorWorldMap.h:82 -- the lane rung nearest lPosition (no direction bias).
+        // X360 @0x8221CE98; returns the result by value (hidden sret).
+        LanePosition GetLanePositionNearestPoint(Vector3 lPosition) const;
+
+        // BrnDirectorWorldMap.h:109 -- the nearest Picture-Paradise generic region within
+        // lfRadius of lNearTo. On a hit returns true and writes the region's box extents and
+        // world transform. X360 @0x8221D2A0. Consumed by Camera::BehaviourRoadRunner::Update.
+        bool GetInterestingPointNear(Vector3 lNearTo, f32 lfRadius, Vector3* lpExtentsOut,
+                                     Matrix44Affine* lpTransformOut) const;
+
     private:
+        // BrnDirectorWorldMap.h:121 -- follow left-lane neighbours from the current
+        // (section, rung, parameter), rewriting all three in place into the reached lane's
+        // frame, until no further left neighbour exists. X360 @0x821F7800.
+        void WalkLaneLeft(const BrnTraffic::Hull* lpHull, u8* lpu8Section, u8* lpu8Rung,
+                          f32* lpfParameterOnSection) const;
+
         // -- BrnDirectorWorldMap.h:143..149 layout (DWARF order) --------------
         CgsResource::ResourcePtr<BrnTraffic::TrafficData>    mpTrafficData;    // :143  X360 +0x00
         CgsResource::ResourcePtr<BrnTrigger::TriggerData>    mpTriggerData;    // :144

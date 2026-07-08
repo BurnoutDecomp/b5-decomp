@@ -144,6 +144,8 @@ void _CDeviceAssertLayout()
     static_assert(offsetof(CDevice, muRingPut)   == 0x30, "muRingPut @ +0x30 (word[12])");
     static_assert(offsetof(CDevice, muRingEnd)   == 0x34, "muRingEnd @ +0x34 (word[13])");
     static_assert(offsetof(CDevice, muRingLimit) == 0x38, "muRingLimit @ +0x38 (word[14])");
+    static_assert(offsetof(CDevice, muOwnerThreadId) == 0x2A88,
+                  "owning-thread id @ +0x2A88 (pointer-invariant, before mpGpuReadback)");
     static_assert(offsetof(CDevice, mpGpuReadback) == 0x2A90,
                   "GPU read-back pointer @ +0x2A90");
     static_assert(offsetof(CGpuReadback, muSecondaryRead) == 0x00,
@@ -158,6 +160,15 @@ void _CDeviceAssertLayout()
                   "six contiguous saved-state words");
     static_assert(offsetof(CDevice, muLiveSave3) - offsetof(CDevice, muLiveSave0) == 12,
                   "four contiguous live-state words");
+    // GPU-block profiling fields poked by ~CBlocker: the seconds-per-tick scalar
+    // precedes the two 64-bit tick accumulators. Only ORDER is pinned for the
+    // scalar->counter step: on the LLP64 host the 8-byte-aligned u64 lands after
+    // the misaligned-pointer shift, so its X360-absolute +8 spacing is not
+    // reproducible (all access is by name). The two u64 counters ARE adjacent.
+    static_assert(offsetof(CDevice, mfSecondsPerTick) < offsetof(CDevice, mu64BlockTicks),
+                  "seconds-per-tick scalar precedes the block-ticks counters");
+    static_assert(offsetof(CDevice, mu64BlockTicks3) - offsetof(CDevice, mu64BlockTicks) == 8,
+                  "two contiguous 64-bit block-tick accumulators");
 }
 
 } // namespace D3D

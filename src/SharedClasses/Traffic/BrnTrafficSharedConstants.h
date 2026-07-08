@@ -20,4 +20,14 @@ namespace BrnTraffic
     // Maximum number of hulls tracked in the Potentially-Visible-Set per active race car
     // (DWARF :31). Sizes TrafficNetworkOutputInterface::mau16ActiveHulls[].
     static const u32 KU_MAX_HULLS_IN_PVS = 8;
+
+    // Which lateral side of a lane a neighbour / lane-change is on (DWARF
+    // BrnTrafficSharedConstants.h:76). Consumed by Section::FindNeighbourForRung (the
+    // WorldMap lane walk passes E_LEFT). Additive grow of this canonical home.
+    enum Side
+    {
+        E_LEFT       = 0,
+        E_RIGHT      = 1,
+        E_SIDE_COUNT = 2,
+    };
 }
