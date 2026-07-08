@@ -6,6 +6,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                // GuiCache accessors
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // IsRunning/IsShowingResults
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"   // HudMessageDirector::AddMessage
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData (online name / ARCI)
 
 // BrnGui::HudMessageAnalyzer -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -147,6 +148,218 @@ void HudMessageAnalyzer::HandleLiveRevengeUpdate(const GuiLiveRevengeUpdateEvent
             TriggerMessage(&lMessage);
         }
     }
+}
+
+// @ 0x824ECE10
+const char* HudMessageAnalyzer::GetOnlineName(EActiveRaceCarIndex leActiveRaceCarIndex,
+                                              bool* lpbValid) const
+{
+    // Non-gating range tripwires (h:792-794).
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+
+    // Linear-search the cache's online-player records for the one whose active-race-car index
+    // matches; return that player's online name and flag the result valid.
+    for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+    {
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
+            mpGuiCache->GetOnlinePlayerInfo(liIndex);
+
+        if (static_cast<EActiveRaceCarIndex>(lpPlayerInfo->meActiveRaceCarIndex) == leActiveRaceCarIndex)
+        {
+            *lpbValid = true;
+            return lpPlayerInfo->mPlayerName.macName;
+        }
+    }
+
+    // No matching player: empty name, flagged invalid (callers skip the message).
+    *lpbValid = false;
+    return "";
+}
+
+// The event payloads carry the remote player's network id; -1 is the "no player" sentinel
+// (CgsNetwork::K_INVALID_PLAYER_ID).
+static const s32 KI_INVALID_PLAYER_ID = -1;
+
+// @ 0x8251FA90
+void HudMessageAnalyzer::HandleOnlineStuntRunElimination(
+        const GuiOnlineStuntRunEliminationEvent* lpEliminationEvent)
+{
+    CGS_ASSERT(lpEliminationEvent != NULL, "lpEliminationEvent != NULL");
+
+    GuiHudMessage lMessage;
+
+    if (lpEliminationEvent->mbIsLocalPlayer)
+    {
+        CGS_ASSERT(lpEliminationEvent->mPlayerId == KI_INVALID_PLAYER_ID,
+                   "lpEliminationEvent->mPlayerId == CgsNetwork::K_INVALID_PLAYER_ID");
+
+        if (lpEliminationEvent->mbIsTeammate)
+            lMessage.Construct("OnlSrPtElim");
+        else
+            lMessage.Construct("OnlSrRtElim");
+
+        TriggerMessage(&lMessage);
+        return;
+    }
+
+    CGS_ASSERT(lpEliminationEvent->mPlayerId != KI_INVALID_PLAYER_ID,
+               "lpEliminationEvent->mPlayerId != CgsNetwork::K_INVALID_PLAYER_ID");
+
+    if (lpEliminationEvent->mbIsLastPlayer)
+    {
+        lMessage.Construct("OnlSrLpElim");
+    }
+    else
+    {
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpEliminatedPlayer =
+            mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEliminationEvent->mPlayerId);
+
+        lMessage.Construct(lpEliminationEvent->mbIsTeammate ? "OnlSRTpElim" : "OnlSrRiElim");
+        lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
+                          lpEliminatedPlayer->mPlayerName.macName);
+    }
+
+    TriggerMessage(&lMessage);
+}
+
+// @ 0x8251FC08
+void HudMessageAnalyzer::HandleOnlineStuntRunLeading(
+        const GuiOnlineStuntRunLeadingEvent* lpLeadingEvent)
+{
+    CGS_ASSERT(lpLeadingEvent != NULL, "lpLeadingEvent != NULL");
+
+    GuiHudMessage lMessage;
+
+    if (lpLeadingEvent->mbIsLocalPlayer)
+    {
+        CGS_ASSERT(lpLeadingEvent->mPlayerId == KI_INVALID_PLAYER_ID,
+                   "lpLeadingEvent->mPlayerId == CgsNetwork::K_INVALID_PLAYER_ID");
+
+        if (lpLeadingEvent->mbIsTeammate)
+            lMessage.Construct("OnlSrPtLead");
+        else
+            lMessage.Construct("OnlSrRtLead");
+    }
+    else
+    {
+        CGS_ASSERT(lpLeadingEvent->mPlayerId != KI_INVALID_PLAYER_ID,
+                   "lpLeadingEvent->mPlayerId != CgsNetwork::K_INVALID_PLAYER_ID");
+
+        if (lpLeadingEvent->mbIsLastPlayer)
+        {
+            lMessage.Construct("OnlSrLpLead");
+        }
+        else
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpLeadingPlayer =
+                mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLeadingEvent->mPlayerId);
+
+            lMessage.Construct("OnlSrRiLead");
+            lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
+                              lpLeadingPlayer->mPlayerName.macName);
+        }
+    }
+
+    TriggerMessage(&lMessage);
+}
+
+// @ 0x8251FD68
+void HudMessageAnalyzer::HandleOnlineStuntRunVictory(
+        const GuiOnlineStuntRunVictoryEvent* lpVictoryEvent)
+{
+    CGS_ASSERT(lpVictoryEvent != NULL, "lpVictoryEvent != NULL");
+
+    GuiHudMessage lMessage;
+
+    if (lpVictoryEvent->mbIsLocalPlayer)
+    {
+        CGS_ASSERT(lpVictoryEvent->mPlayerId == KI_INVALID_PLAYER_ID,
+                   "lpVictoryEvent->mPlayerId == CgsNetwork::K_INVALID_PLAYER_ID");
+
+        if (lpVictoryEvent->mbIsTeammate)
+            lMessage.Construct("OnlSrPtWin");
+        else
+            lMessage.Construct("OnlSrRtWin");
+    }
+    else
+    {
+        CGS_ASSERT(lpVictoryEvent->mPlayerId != KI_INVALID_PLAYER_ID,
+                   "lpVictoryEvent->mPlayerId != CgsNetwork::K_INVALID_PLAYER_ID");
+
+        if (lpVictoryEvent->mbIsLastPlayer)
+        {
+            lMessage.Construct("OnlSrLpWin");
+        }
+        else
+        {
+            const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpVictoryPlayer =
+                mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpVictoryEvent->mPlayerId);
+
+            lMessage.Construct("OnlSrRiWin");
+            lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
+                              lpVictoryPlayer->mPlayerName.macName);
+        }
+    }
+
+    TriggerMessage(&lMessage);
+}
+
+// @ 0x8251FEC8
+void HudMessageAnalyzer::HandleOnlineStuntRunLastRun(
+        const GuiOnlineStuntRunLastRunEvent* lpLastRunEvent)
+{
+    CGS_ASSERT(lpLastRunEvent != NULL, "lpLastRunEvent");
+    (void)lpLastRunEvent;   // pointer-only tripwire; no field is read.
+
+    GuiHudMessage lMessage;
+    lMessage.Construct("OnlSRLastRun");
+    TriggerMessage(&lMessage);
+}
+
+// @ 0x8251FF38
+void HudMessageAnalyzer::HandleOnlineStuntRunMessage(
+        const GuiOnlineStuntRunMessageEvent* lpMessageEvent)
+{
+    CGS_ASSERT(lpMessageEvent != NULL, "lpMessageEvent");
+
+    GuiHudMessage lMessage;
+
+    if (lpMessageEvent->meMessageType == GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_SCORE)
+    {
+        // A team-scored / rival-scored notification: pick the message by comparing the local
+        // player's online team to the scoring player's online team, and tag it with that
+        // player's name.
+        const s32 liLocalPlayerTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(
+            static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()));
+
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpEliminatedPlayer =
+            mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpMessageEvent->mPlayerId);
+        CGS_ASSERT(lpEliminatedPlayer != NULL, "lpEliminatedPlayer");
+
+        const s32 liScoringPlayerTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(
+            static_cast<EActiveRaceCarIndex>(lpEliminatedPlayer->meActiveRaceCarIndex));
+
+        lMessage.Construct(liLocalPlayerTeam == liScoringPlayerTeam ? "OnlSrTpScore" : "OnlSrRiScore");
+        lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
+                          lpEliminatedPlayer->mPlayerName.macName);
+    }
+    else if (lpMessageEvent->meMessageType == GuiOnlineStuntRunMessageEvent::E_ONLINE_STUNT_RUN_MESSAGE_TIME)
+    {
+        lMessage.Construct("OnlSRTime");
+    }
+    else
+    {
+        CGS_ASSERT(false, "Unknown stunt run message type");
+        return;
+    }
+
+    // Both surviving branches append the score/time value as an int param, then fire.
+    lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 0, lpMessageEvent->miValue);
+    TriggerMessage(&lMessage);
 }
 
 }

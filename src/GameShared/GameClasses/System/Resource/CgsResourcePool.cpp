@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead / per-pool allocators (InitPool)
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // gpDebugPrint / gxMessageFilterFlags (PrintOverheadMemoryRequired)
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
 
@@ -593,5 +594,74 @@ namespace CgsResource
                 lbAllResolved = false;
         }
         return lbAllResolved;
+    }
+
+    // ---- dependencies -------------------------------------------------------------
+
+    // 0x828D63D8 - the dependency pool at liIndex (bounds-checked against miNumDependencies).
+    Pool* Pool::GetDependency(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex >= 0 && liIndex < miNumDependencies, "Dependency out of range\n");   // CgsResourcePool.h:1009
+        return mapDependencies[liIndex];
+    }
+
+    // ---- per-heap forwards --------------------------------------------------------
+    // These select maHeaps[liMemType] (asserting the type is in range) and forward to the Heap
+    // method of the same name. The X360 computes the heap pointer as this + liMemType*sizeof(Heap)
+    // (stride 64); here it is the named maHeaps[] index.
+
+    // 0x828F3828 - build a linear (address-ordered) heap view for the given memory pool.
+    u16 Pool::GenerateLinearHeap(s32 liMemType, LinearHeapNode* lpInputLinearHeap, u16 luMaxLength)
+    {
+        CGS_ASSERT(liMemType >= 0 && liMemType <= 2, "Mem type out of range\n");   // CgsResourcePool.h:1086
+        return maHeaps[liMemType].GenerateLinearHeap(lpInputLinearHeap, luMaxLength);
+    }
+
+    // 0x828FADD0 - run a batch of address-targeted allocations against the given memory pool.
+    EBatchAllocResult Pool::ExecuteBatchAddressedAllocation(s32 liMemType, AllocRequestAddressed* lpRequests, AllocResult* lpResults, u32 luNumRequests, bool lbFreeOnFailure)
+    {
+        CGS_ASSERT(liMemType >= 0 && liMemType <= 2, "Mem type out of range\n");   // CgsResourcePool.h:1103
+        return maHeaps[liMemType].ExecuteBatchAddressedAllocation(lpRequests, lpResults, luNumRequests, lbFreeOnFailure);
+    }
+
+    // ---- overhead reporting -------------------------------------------------------
+
+    // 0x828E0BB8 - the overhead-memory estimate for a pool built from lpOptions, printed to the
+    // debug log (gated on the message filter) and returned. STATIC: the X360 reads the InitOptions
+    // straight from r3 with no `this` (the sibling ScratchPool::GetOverheadMemoryRequired is static
+    // for the same reason). The estimate is the hash table (next power of two >= 3*muMaxResources
+    // slots x 16 bytes) + a flat 100 bytes/entry management figure + each heap's node array
+    // (muMaxNodes x 16 bytes). This is the X360's own reporting estimate; InitPool computes the
+    // exact overhead from sizeof.
+    u32 Pool::PrintOverheadMemoryRequired(const InitOptions* lpOptions)
+    {
+        const u32 luMaxResources = lpOptions->muMaxResources;
+
+        u32 luHashLength = 3u * luMaxResources;
+        --luHashLength;
+        luHashLength |= luHashLength >> 1;
+        luHashLength |= luHashLength >> 2;
+        luHashLength |= luHashLength >> 4;
+        luHashLength |= luHashLength >> 8;
+        luHashLength |= luHashLength >> 16;
+        ++luHashLength;
+
+        u32 luOverhead = 16u * luHashLength + 100u * luMaxResources;
+
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "    Entry management overhead: " << luOverhead << "\n";
+
+        for (u32 luHeap = 0; luHeap < KI_NUM_TYPES; ++luHeap)
+        {
+            const u32 luHeapOverhead = 16u * lpOptions->maHeapInfo[luHeap].muMaxNodes;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "Heap [" << luHeap << "] overhead: " << luHeapOverhead << "\n";
+            luOverhead += luHeapOverhead;
+        }
+
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "    Total: " << luOverhead << "\n";
+
+        return luOverhead;
     }
 }

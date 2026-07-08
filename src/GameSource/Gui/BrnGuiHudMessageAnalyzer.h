@@ -76,6 +76,25 @@ namespace BrnGui
         // is in progress.
         void HandleLiveRevengeUpdate(const GuiLiveRevengeUpdateEvent* lpEvent);
 
+        // @0x8251FA90 -- online-stunt-run "rival/team-mate eliminated" HUD messages (keyed on
+        // whether the local player was eliminated, the team-mate flag and the "last player
+        // standing" flag; the remote case tags the message with the player's online name).
+        void HandleOnlineStuntRunElimination(const GuiOnlineStuntRunEliminationEvent* lpEliminationEvent);
+
+        // @0x8251FC08 -- online-stunt-run "now leading" HUD messages (same keying as elimination;
+        // the remote-rival case tags the message with the player's online name).
+        void HandleOnlineStuntRunLeading(const GuiOnlineStuntRunLeadingEvent* lpLeadingEvent);
+
+        // @0x8251FD68 -- online-stunt-run "victory" HUD messages (same keying as leading).
+        void HandleOnlineStuntRunVictory(const GuiOnlineStuntRunVictoryEvent* lpVictoryEvent);
+
+        // @0x8251FEC8 -- online-stunt-run "last run" HUD message (parameterless "OnlSRLastRun").
+        void HandleOnlineStuntRunLastRun(const GuiOnlineStuntRunLastRunEvent* lpLastRunEvent);
+
+        // @0x8251FF38 -- online-stunt-run score/time notification HUD message (a team-scored /
+        // rival-scored score line, or a "time" line, plus the score/time value as an int param).
+        void HandleOnlineStuntRunMessage(const GuiOnlineStuntRunMessageEvent* lpMessageEvent);
+
     private:
         // DWARF h:300/h:303 -- their own ledger functions (declaration-only here).
         const char* GetOnlineName(EActiveRaceCarIndex leActiveRaceCarIndex, bool* lpbValid) const;
