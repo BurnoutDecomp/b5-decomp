@@ -18,17 +18,26 @@
 //      Nicotine::SnapshotChannel::GetCurrentVolume  @ 0x82B47200
 //      Nicotine::SnapshotChannel::GetFinalVolume    @ 0x82B472B8
 //
-//  LAYOUT (offsets reproduced from the accessor loads):
+//  LAYOUT (offsets reproduced from the accessor loads + the SnapshotMixer bodies
+//  that drive the channel -- AttachToMixMap @0x82B47648 / Update @0x82B47C68 /
+//  UpdateNicotineChannelData @0x82B47760):
 //      +0x00  mi16TargetVolume  target / destination millibel volume (s16)
+//      +0x02  mi16ProcVolume    cached master-mix-channel volume (s16; proc MixData hi16)
 //      +0x04  mi16BaseVolume    base / starting millibel volume (s16)
+//      +0x08  mpMixChProc       bound NFS master-mix-channel proc, or null
 //      +0x0C  mpCeiling         parent "ceiling" channel, or null
 //      +0x10  mfElapsed         seconds elapsed into the ramp (f32)
 //      +0x14  mfDuration        total ramp duration in seconds (f32)
-//  Holes (+0x06..+0x0B) are explicit padding so the named members land at the
-//  binary offsets; their contents are owned/initialised by another TU.
+//  The +0x06..+0x07 hole is explicit padding so the named members land at the
+//  binary offsets; its contents are owned/initialised by another TU.
 // ===========================================================================
 
 #include "types.hpp"
+
+// The bound master-mix channel proc lives in the NFS mix record vocabulary; the
+// channel holds it by pointer only, so a forward declaration suffices here (the
+// SnapshotMixer TU includes NFSMixRecords.hpp to walk it).
+struct stMasterMixChProc;
 
 // FLAG (rwaudio/Nicotine PDB cross-check -- IDA Files/ProStreet08Milestone.pdb):
 // ProStreet's Nicotine::SnapshotChannel [sizeof=20, : public MixerMemBase] is a DIFFERENT
@@ -60,10 +69,12 @@ double SnapshotVolumeCurve(double lfRatio, int liCurveType);
 
 struct SnapshotChannel
 {
-    // ---- layout (offsets verified against the X360 accessors) ----
+    // ---- layout (offsets verified against the X360 accessors + mixer bodies) ----
     s16   mi16TargetVolume;  // [0x00] target millibel volume
+    s16   mi16ProcVolume;    // [0x02] cached master-mix-channel volume (proc MixData hi16)
     s16   mi16BaseVolume;    // [0x04] base millibel volume
-    u8    maPad06[6];        // [0x06] (owned elsewhere)  -- spans 0x06..0x0B
+    u8    maPad06[2];        // [0x06] (owned elsewhere)
+    stMasterMixChProc* mpMixChProc;  // [0x08] bound NFS master-mix channel proc, or null
     SnapshotChannel* mpCeiling;  // [0x0C] parent channel, or null
     f32   mfElapsed;         // [0x10] seconds into the ramp
     f32   mfDuration;        // [0x14] total ramp duration (seconds)

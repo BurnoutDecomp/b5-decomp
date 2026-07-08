@@ -49,7 +49,8 @@
 // mnNextParticlePositionToFill@0x50 -- so this is the type's owning header, not a fork.
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
 
-class cParticleEmitter;   // owning emitter (chained list head) -- opaque here
+class cParticleEmitter;         // owning emitter (chained list head) -- opaque here
+struct cParticleBucketManager;  // pool owner (ParticleBucketManager.h) -- befriended below
 
 // ----------------------------------------------------------------------------
 // HONEST PLACEHOLDER: 4-lane vector. AllocateParticle only computes the address
@@ -102,6 +103,12 @@ struct sParticleNucleus
 // ParticleBucket.h:33
 struct cParticleBucket
 {
+    // The bucket manager owns the free/used pools and performs the list surgery,
+    // per-particle side-array (matrix/vector) allocation and the birth-time eviction
+    // over these members (AppInit / BucketAlloc / Free / AllocateBucket). It reads and
+    // writes them by name, so it is a friend rather than duplicating accessors.
+    friend struct cParticleBucketManager;
+
 public:
     // Maximum live particles per bucket (the `cmplwi r10,0x10` cap on the count).
     static const u32 KU_MAX_PARTICLES = 16;

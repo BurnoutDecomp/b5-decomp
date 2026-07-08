@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault, TypeID, ExportID
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribiexportpolicy.h" // Attrib::IExportPolicy
 
 // AttribSys export policies -- the per-scope serialisation policy objects the
 // AttribSys ExportManager hands out (Attrib::Database::GetExportPolicies()).
@@ -95,5 +96,51 @@ namespace Attrib
     {
     public:
         virtual ~DatabaseExportPolicy();
+    };
+
+    // -----------------------------------------------------------------------
+    // Attrib::ExportManager -- a Database's registry of export policies. When a
+    // Database is sealed it registers one policy per attribute granularity (whole
+    // Database / Class / Collection) into a fixed, TypeID-sorted table; a Vault then
+    // looks a policy up by TypeID (eastl::lower_bound over that table) as it exports,
+    // initializes, or deinitializes its assets.
+    //
+    // The three-field layout is X360-attested from AddExportPolicy (0x82803138),
+    // which reads the table base, the reserved capacity, and the live count and
+    // appends one row: mpPolicies@+0 / mMaxPolicies@+4 / mNumPolicies@+8 on the X360
+    // (pointer widened here for the PC target). Export @ 0x8280A988 confirms the same
+    // base@+0 / count@+8 pair when it binary-searches the table.
+    // -----------------------------------------------------------------------
+    class ExportManager
+    {
+    public:
+        // One (TypeID -> policy) row of the sorted policy table. Members from the
+        // DecFIGS DWARF (attribloadandgo.cpp:29/30). The table is kept sorted on
+        // mType so a Vault can binary-search it by attribute type.
+        struct ExportPolicyPair
+        {
+            TypeID         mType;    // attribute type this policy serialises
+            IExportPolicy* mPolicy;  // the policy object (owned by the Database)
+
+            bool operator<(const ExportPolicyPair& lrOther) const;
+        };
+
+        // Reserve a fixed policy table of luReserve rows (Database::GetExportPolicies
+        // fills it). X360 0x82803110 region; body in its own TU.
+        explicit ExportManager(unsigned int luReserve);
+
+        // Append one policy row (X360 0x82803138). Asserts the reserved table still
+        // has room, then stores {luType, lpPolicy} at the next free slot and bumps
+        // the live count.
+        void AddExportPolicy(TypeID luType, IExportPolicy* lpPolicy);
+
+        // Deinitialize every registered policy against lrVault (X360 0x828031A8).
+        // Body lives in the AttribSys load-and-go TU (attribloadandgo.cpp).
+        void PrepareToDeinitialize(const Vault& lrVault);
+
+    private:
+        ExportPolicyPair* mpPolicies;    // X360 +0 : reserved, TypeID-sorted table
+        unsigned int      mMaxPolicies;  // X360 +4 : reserved capacity
+        unsigned int      mNumPolicies;  // X360 +8 : live entry count
     };
 }

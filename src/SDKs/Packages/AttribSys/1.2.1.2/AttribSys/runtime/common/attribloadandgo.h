@@ -80,6 +80,10 @@ namespace Attrib
         // Commit the vault into the live attribute database (X360 0x8280A660).
         void Initialize();
 
+        // The payload pointer of exported block luIndex (X360 0x82803420). Asserts
+        // the index is within the loaded export count.
+        void* GetExportData(unsigned int luIndex) const;
+
     private:
         // --- DWARF member layout (attribloadandgo.h). Pointer widths are x64 here;
         //     the load-bearing pair for this TU is mNumDependencies / mResolvedCount. ---
