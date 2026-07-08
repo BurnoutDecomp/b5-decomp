@@ -182,6 +182,11 @@ namespace CgsResource
         // receiver-queue path stood up (for cross-pool dependency wiring).
         Pool* GetPool(s32 liPoolId);
 
+        // Direct slot accessor over the fixed bank of 128 pools (X360 mpPoolModule + 0x1A38 + i*stride).
+        // The live-update pass sweeps every slot: FindPoolToUpdate polls each pool for the list's
+        // resources, and AllocateNewResources re-resolves every pool that depends on the updated one.
+        Pool& GetPoolByIndex(s32 liIndex) { return maPools[liIndex]; }
+
         // @ 0x828FCD48 - acquire a single resource by id: GetPoolIndex(poolId) -> Pool::FindResource(
         // resourceId, checkRefCount, statusMask=2) -> reply with an AcquireResourceResponse carrying the
         // resolved handle (or null if absent) on the pool output queue (tag 6). Dispatched by

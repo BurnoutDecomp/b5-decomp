@@ -23,15 +23,29 @@ namespace Attrib
     // instance's attribute-data block (its body lives in the Node slice / SDK).
     struct Node
     {
-        u8  mPad0[8];      // +0x00  attribute key (8 bytes)
+        u64 mKey;          // +0x00  attribute key (8 bytes)
         u32 muValue;       // +0x08  value word: a byte offset into a data area (laid-out /
                            //         inherited nodes) or the 32-bit Array pointer image
                            //         (plain array node). X360 width -- the byte-exact node
                            //         keeps muFlags at +0xF (see attribute_embed_check.cpp).
         u16 mTypeIndex;    // +0x0C  attribute type index
         u8  mMax;          // +0x0E  cached probe-run length (bucket role; unused by cursors)
-        u8  muFlags;       // +0x0F : bit1(0x2)=no-pointer, bit4(0x10)=laid-out/local,
-                           //         bit5(0x20)=inherited
+        u8  muFlags;       // +0x0F : bit1(0x2)=array, bit4(0x10)=laid-out/local,
+                           //         bit5(0x20)=inherited, bit7(0x80)=occupied
+
+        // Node @ 0x82809430 — placement-construct a node/bucket for (key, type, value).
+        // Resolves the node's schema type index from the attribute database, sets the
+        // occupied bit (0x80) into the flags byte, and -- for a laid-out/inherited node
+        // being placed into a data area (lbComputeOffset && flags & (0x10|0x20)) -- rewrites
+        // its value word as the byte offset of lpValue relative to that data-area base
+        // (lpBase). Own AttribSys ledger TU. (attribhashmap.h declares the same ctor on its
+        // Bucket alias so HashMap::Add can placement-new a slot.)
+        Node(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbComputeOffset,
+             u8 lu8Flags, void* lpBase);
+
+        // Default construct — leaves the node uninitialised (the embed check builds one on
+        // the stack). Declared so the bodied ctor above does not suppress it.
+        Node() {}
 
         // GetPointer @ external — resolve this node's value pointer inside lpLayout
         // (the instance's mpAttributeData block).

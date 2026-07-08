@@ -214,6 +214,14 @@ public:
     // declared here because Voice::RemoveActiveVoice @0x82B6C1A8 calls it (r3=System, r4=voice).
     static void RemoveVoiceFromExpulsionCandidateList(System *self, Voice *voice);
 
+    // Take / release the audio-core System mutex that guards the shared voice/module-bank
+    // registries and the deferred-command ring. The bodies live in the System TU (mangled
+    // ?Lock@System@core@audio@rw@@ / ?Unlock@System@core@audio@rw@@); declared here (r3=System)
+    // because the game AEMS code (Snd9::Aems::BeginRemoveModuleBank / IsModuleBankRemoved)
+    // and the RWAC scoped-lock guard bracket their registry walks with them.
+    static void Lock(System *self);
+    static void Unlock(System *self);
+
     // ----------------------------------------------------------------------------------
     // Layout. The +0xNN annotations are the X360 (32-bit-pointer) offsets from the asm and
     // are documentary only; members are declared with x64 widths so only the ORDER is

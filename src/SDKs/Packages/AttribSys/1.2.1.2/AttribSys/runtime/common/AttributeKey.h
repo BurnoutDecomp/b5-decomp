@@ -20,9 +20,12 @@ namespace Attrib
     // Attrib::StringToKey(const char*, unsigned int) with the seed baked in; the
     // X360 symbol @0x82802940 takes it as the third argument -- declared per the
     // X360 ABI. Declaration-only (its own ledger function).
-    Attribute::Key StringToKey(const char* lpcText, u32 luLength, u64 luSeed);
+    // Fully qualify ::Attribute -- inside namespace Attrib an unqualified `Attribute::`
+    // binds to the Attrib::Attribute cursor class in any TU where attribute.h is also
+    // visible (e.g. attribute.cpp). ::Attribute is this file's own Key/Type namespace.
+    ::Attribute::Key StringToKey(const char* lpcText, u32 luLength, u64 luSeed);
 
     // The NUL-terminated convenience form (@0x82805828; MomentPlayerStunt hashes
     // its take-guid strings through it). DECLARATION-ONLY.
-    Attribute::Key StringToKey(const char* lpcText);
+    ::Attribute::Key StringToKey(const char* lpcText);
 }
