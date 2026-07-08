@@ -71,6 +71,13 @@ public:
     // (flt_82001CC0), every integer/u16 slot to 0.
     void Reset();
 
+    // Additive setter (FLAG: not its own X360 function). CMassiveAsset::RecordFind
+    // clears this one accumulator slot (mnField30 at impression+0x30) on a re-found
+    // record -- a targeted subset of the full Reset above. Routed through the owning
+    // CMassiveRecord::ClearImpressionField30; exposed BY NAME so the record does not
+    // poke this private slot by offset.
+    void SetField30(int nValue) { mnField30 = nValue; }
+
 private:
     int           mnParentRecord; // +0x14 (a2)
     int           mnField18;      // +0x18

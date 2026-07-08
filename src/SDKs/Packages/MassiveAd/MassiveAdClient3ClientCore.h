@@ -66,6 +66,15 @@ public:
     // X360 stores the result with std). Body in the CMassiveClientCore TU.
     long long GetTime();
 
+    // Direct (non-virtual) bl target from CMassiveAsset::HandleResponse
+    // @ 0x82BDA418: on a completed asset download it records a benchmark sample
+    // on the live client-core singleton. The call site fixes the argument shape --
+    // a2 is the downloaded payload length (the request's mnDataLength, a 32-bit
+    // lwz) and a3 is the request's +0x38 field (an i64 ld, a timestamp/duration).
+    // Declared here (CMassiveClientCore is its home); body in the CMassiveClientCore
+    // TU.
+    void AddBenchmarkData(int nDataLength, long long nBenchmarkTime);
+
     // Direct (non-virtual) bl target: the client's currently-active ad zone, or
     // null when no zone is entered. Called on the Instance() result by
     // CMassiveAdObjectSubscriber's constructor @ 0x82BCEA18 / 0x82BCEA58. Body in

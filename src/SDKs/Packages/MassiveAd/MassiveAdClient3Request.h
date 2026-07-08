@@ -179,6 +179,16 @@ public:
     // a successfully parsed response.
     virtual int Parse() = 0;
 
+    // Vftable slot 2 (+0x08): the per-request-type server endpoint / URL getter.
+    // Attested as a slot-2 virtual by CMassiveAsset::HandleError / HandleResponse
+    // (both call `(*(*request + 8))(request)` and log the returned string), and
+    // overridden by CRequestImpressionUpdate::GetRequestURL. Non-pure here (each
+    // concrete request supplies its own; the base body lives in its own ledger
+    // slice) so the existing request subclasses that do not name an endpoint stay
+    // instantiable. Reproduced from the asm, not the pseudocode (which renders the
+    // virtual as a direct call).
+    virtual const char* GetRequestURL();
+
     // ----- lifecycle ------------------------------------------------------
 
     // @ 0x82BD03E0. Wires the request to its owning builder, records the a4
@@ -234,6 +244,15 @@ public:
     // 67/101). GetServerIndex masks to the low nibble, so this exposes the whole
     // field BY NAME for the request-type switch.
     int GetServerType() const { return mnServerIndex; }
+
+    // Additive accessors (FLAG: not their own X360 functions). CMassiveAsset::
+    // HandleResponse reads the request's live payload length (mnDataLength at
+    // +0x24) to reject an empty response and to feed CMassiveClientCore::
+    // AddBenchmarkData, and reads the +0x38 field (mnField38, an i64) as the
+    // second AddBenchmarkData argument. Both are attested reads in that TU's asm;
+    // exposed here BY NAME so the asset does not reach into the protected members.
+    int       GetDataLength() const { return mnDataLength; }
+    long long GetField38() const { return mnField38; }
 
     // @ 0x82BCF500. Non-zero while the status sits in the pending band (&0xF0).
     int IsPending();

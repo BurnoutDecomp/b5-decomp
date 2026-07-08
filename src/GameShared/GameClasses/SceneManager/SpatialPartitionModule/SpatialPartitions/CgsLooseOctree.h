@@ -75,6 +75,27 @@ namespace CgsSceneManager
     static const u32 KU_NUM_FRUSTUM_TEST_JOBS = 4;
 
     // ------------------------------------------------------------------
+    // The 12-byte header of a node's intrusive entity list
+    // (IndexedLinkedList<SpatialPartitionEntity,u16>). Only the element count is
+    // consumed by the adaptive-depth update walk (the assert in
+    // AdaptiveDepthUpdateAddNodesRecursive spells mEntityList.CountElements()).
+    // The X360 stores a 32-bit base-pool pointer at +0x04 and the u16 head index
+    // at +0x08; they are not dereferenced by the update recursion, so the pointer
+    // slot is kept as a 32-bit field to preserve the 0x0C-byte node-list stride on
+    // the x64 target (no 8-byte pointer widening -- that would break the 0x60 node
+    // stride the whole layout is pinned to).
+    // ------------------------------------------------------------------
+    struct SpatialPartitionEntityList
+    {
+        u32 muNumElements;   // +0x00 : CountElements()
+        u32 muListBase;      // +0x04 : X360 base-pool pointer (32-bit; not deref'd here)
+        u16 mu16HeadIndex;   // +0x08
+        u16 mu16Pad0A;       // +0x0A
+
+        u32 CountElements() const { return muNumElements; }
+    };
+
+    // ------------------------------------------------------------------
     // LooseOctreeNode -- one cell of the loose octree. Geometry lives in the
     // four leading 16-byte vectors; lane accessors mirror the DWARF Get*/Set*.
     // Member order + offsets are DWARF-attested (CgsLooseOctreeNode.h).
@@ -89,9 +110,8 @@ namespace CgsSceneManager
         u16 muParentIndex;          // +0x40
         u16 muFirstChildIndex;      // +0x42
 
-        // 12-byte intrusive entity list (IndexedLinkedList<SpatialPartitionEntity,u16>);
-        // opaque here -- its body lives with the container TUs.
-        unsigned char maEntityList[0x0C]; // +0x44
+        // 12-byte intrusive entity list (IndexedLinkedList<SpatialPartitionEntity,u16>).
+        SpatialPartitionEntityList mEntityList; // +0x44
 
         u32 muFlags;                // +0x50
         u32 mxNodeEntityFlags;      // +0x54
@@ -129,6 +149,25 @@ namespace CgsSceneManager
         // The 4 embedded frustum-test jobs begin here (ctor loop stride 0x350).
         static const u32 KU_FRUSTUM_TEST_JOBS_BYTE_OFFSET = 0x8D960;
 
+        // Attested byte offsets of the scalar octree bookkeeping members within the
+        // (huge, not field-modelled) class layout. Each is reached with the same
+        // reach-by-offset helper the class uses for mpNodes; DWARF names them
+        // (CgsLooseOctree.h:573..599), the asm displacements pin the offsets:
+        //   Update                              lwzx *(this+0x446A0) -> mpRootNode
+        //   AdaptiveDepthUpdateAddNodesRecursive lwzx *(this+0x44680) -> muDepth
+        //                                        lhzx *(this+0x446B2) -> mFreeNodeGroupPool.GetNumFree()
+        //                                        lwzx *(this+0x8D950) -> muAdaptiveNodeSplitThreshold
+        //                                        lwzx *(this+0x8D954) -> muAdaptiveMaxDepth
+        //   AdaptiveDepthUpdateRemoveNodesRecursive lhzx *(this+0x446B0) -> mFreeNodeGroupPool used count
+        //                                        lwzx *(this+0x44684) -> miNumStaticNodes
+        static const u32 KU_ROOT_NODE_PTR_BYTE_OFFSET        = 0x446A0;
+        static const u32 KU_DEPTH_BYTE_OFFSET                = 0x44680;
+        static const u32 KU_NUM_STATIC_NODES_BYTE_OFFSET     = 0x44684;
+        static const u32 KU_FREE_NODE_GROUP_USED_BYTE_OFFSET = 0x446B0;
+        static const u32 KU_FREE_NODE_GROUP_FREE_BYTE_OFFSET = 0x446B2;
+        static const u32 KU_ADAPTIVE_SPLIT_THRESHOLD_BYTE_OFFSET = 0x8D950;
+        static const u32 KU_ADAPTIVE_MAX_DEPTH_BYTE_OFFSET       = 0x8D954;
+
         LooseOctree();
 
         // @ 0x828BADD8 -- placement-new: carve a LooseOctree out of the scene
@@ -158,13 +197,75 @@ namespace CgsSceneManager
         // drain its per-query result runs into the shared output buffer.
         void WaitForFrustumTestJobResults(CoarseQueryResultBuffer<16384>* lpResultBufferOut);
 
+        // @ 0x828D0180 -- per-frame update entry: if the root wants an update, run the
+        // adaptive-depth remove/add passes then the recursive bounds update.
+        void Update();
+
+        // @ 0x828CA360 -- descend the (needs-update) branch splitting nodes whose sub-tree
+        // entity count exceeds the split threshold, while free node groups remain and the
+        // adaptive max depth is not yet reached.
+        void AdaptiveDepthUpdateAddNodesRecursive(u16 lu16NodeIndex, u32 luDepth);
+
+        // @ 0x828CA4F8 -- descend the (needs-update) branch merging sub-trees back once the
+        // adaptive depth/threshold criteria no longer justify the extra subdivision.
+        void AdaptiveDepthUpdateRemoveNodesRecursive(u16 lu16NodeIndex, u32 luDepth);
+
     private:
+        // --- collaborators reconstructed in their own passes (declared-only here so the
+        // compile gate resolves the calls; bodies land with the rest of this TU). ---
+
+        // @ 0x828BBBD0 -- split a leaf and propagate its entities into the new children.
+        LooseOctreeNode* SplitAndPropogateRecursive(u16 lu16NodeIndex, u32 luDepth);
+        // @ (LooseOctree) -- collapse a fully-merged sub-tree back into its parent.
+        LooseOctreeNode* MergeSubTreeRecursive(u16 lu16NodeIndex, LooseOctreeNode* lpNode, u32 luDepth);
+        // @ 0x828B12A0 -- recompute a node's loose Y bounds over its entity list, recursively.
+        void UpdateRecursive(u16 lu16NodeIndex);
+
         // mpNodes lives at KU_NODES_PTR_BYTE_OFFSET; reached via the attested offset
         // rather than a modelled member (the intervening layout is not field-modelled).
         LooseOctreeNode* GetNodes() const
         {
             return *reinterpret_cast<LooseOctreeNode* const*>(
                 reinterpret_cast<const unsigned char*>(this) + KU_NODES_PTR_BYTE_OFFSET);
+        }
+
+        // Scalar octree bookkeeping members, reached by attested byte offset (same
+        // reach-by-offset convention as GetNodes(); the intervening layout is not
+        // field-modelled). DWARF names each member; the asm displacements pin the offset.
+        LooseOctreeNode* GetRootNode() const
+        {
+            return *reinterpret_cast<LooseOctreeNode* const*>(
+                reinterpret_cast<const unsigned char*>(this) + KU_ROOT_NODE_PTR_BYTE_OFFSET);
+        }
+        u32 GetDepth() const
+        {
+            return *reinterpret_cast<const u32*>(
+                reinterpret_cast<const unsigned char*>(this) + KU_DEPTH_BYTE_OFFSET);
+        }
+        s32 GetNumStaticNodes() const
+        {
+            return *reinterpret_cast<const s32*>(
+                reinterpret_cast<const unsigned char*>(this) + KU_NUM_STATIC_NODES_BYTE_OFFSET);
+        }
+        u16 GetFreeNodeGroupNumFree() const
+        {
+            return *reinterpret_cast<const u16*>(
+                reinterpret_cast<const unsigned char*>(this) + KU_FREE_NODE_GROUP_FREE_BYTE_OFFSET);
+        }
+        u16 GetFreeNodeGroupNumUsed() const
+        {
+            return *reinterpret_cast<const u16*>(
+                reinterpret_cast<const unsigned char*>(this) + KU_FREE_NODE_GROUP_USED_BYTE_OFFSET);
+        }
+        u32 GetAdaptiveNodeSplitThreshold() const
+        {
+            return *reinterpret_cast<const u32*>(
+                reinterpret_cast<const unsigned char*>(this) + KU_ADAPTIVE_SPLIT_THRESHOLD_BYTE_OFFSET);
+        }
+        u32 GetAdaptiveMaxDepth() const
+        {
+            return *reinterpret_cast<const u32*>(
+                reinterpret_cast<const unsigned char*>(this) + KU_ADAPTIVE_MAX_DEPTH_BYTE_OFFSET);
         }
     };
 }

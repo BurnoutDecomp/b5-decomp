@@ -198,6 +198,7 @@ private:
     friend void _CDeviceAssertLayout();
     friend class CBlocker;
     friend class CCommandBuffer; // unlinks itself from mpCommandBufferList under mCommandBufferLock
+    friend class CRingAllocList; // reads muOutOfMemoryBase on the ring-alloc failure path
 };
 
 } // namespace D3D
