@@ -1,8 +1,11 @@
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. CgsSceneManager::CgsCollision result
 // containers:
 //   CollisionResultList::SetNumResults @ 0x8280FFE8 — set the 16-bit result count.
+//   CollisionResultList::GetResult     @ 0x828A9EF8 — bounds-checked result accessor.
 //   PrimitiveTestResult::IsValid       @ 0x82921378 — VMX validity test (KEYSTONE).
 
 namespace CgsSceneManager
@@ -23,6 +26,26 @@ namespace CgsCollision
     {
         munNumResults = static_cast<u16>(liNumResults);
         return this;
+    }
+
+    // -------------------------------------------------------------------------
+    // CollisionResultList::GetResult @ 0x828A9EF8
+    //
+    //   clrlwi r30, r4, 16                 ; lu16Index (zero-extended)
+    //   lhz    r11, 0xC(r31)               ; munNumResults
+    //   cmplw  cr6, r30, r11 ; blt ...     ; if (lu16Index >= munNumResults) assert
+    //   lwz    r10, 0(r31)                 ; mpResults
+    //   mulli  r11, r30, 0x70              ; 112 * lu16Index
+    //   add    r3,  r11, r10               ; &mpResults[lu16Index]
+    //
+    // Returns the lu16Index'th 112-byte result record, bounds-checked against the
+    // live count. The assert message + source path are verbatim X360 rodata
+    // (CgsCollisionResultList.h:143; file/line dropped by CGS_ASSERT).
+    // -------------------------------------------------------------------------
+    CollisionResult* CollisionResultList::GetResult(u16 lu16Index)
+    {
+        CGS_ASSERT(lu16Index < munNumResults, "lu16Index < mu16NumResults");
+        return &mpResults[lu16Index];
     }
 
     // -------------------------------------------------------------------------

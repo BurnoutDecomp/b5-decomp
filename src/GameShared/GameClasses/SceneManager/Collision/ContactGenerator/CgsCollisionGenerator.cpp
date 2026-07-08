@@ -4,6 +4,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h" // CollisionResultList (complete: by-value return)
 
 // GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp
 //
@@ -104,6 +105,17 @@ u16 BaseCollisionGenerator::CreateNewBatch()
 
     mabUsedBatches[lu16BatchIndex] = true;
     return lu16BatchIndex;
+}
+
+// X360 0x825B2AE0. Return a by-value copy of the luIndex'th result list. Bounds-checked
+// against mu16NumUsedResultLists first, then the CollisionResultList the slot points to is
+// copied into the caller's sret storage (the asm loads the 4-word list header from
+// mapCollisionResultLists[luIndex] and stores it into the return buffer). The assert
+// message is verbatim X360 rodata (CgsCollisionGenerator.h:303; file/line dropped).
+CollisionResultList BaseCollisionGenerator::GetResultList(u16 luIndex) const
+{
+    CGS_ASSERT(luIndex < mu16NumUsedResultLists, "luIndex < mu16NumUsedResultLists");
+    return *mapCollisionResultLists[luIndex];
 }
 
 }

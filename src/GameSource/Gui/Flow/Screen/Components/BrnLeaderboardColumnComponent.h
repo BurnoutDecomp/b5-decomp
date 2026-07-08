@@ -10,8 +10,16 @@
 // FinaliseColumn (DWARF cpp:130) is its own ledger function (declaration-only here).
 namespace BrnGui
 {
+    struct LeaderboardTableComponent;   // owns the columns by value and drives their cell cursor
+
     struct LeaderboardColumnComponent : public CgsGui::GuiComponent
     {
+        // The owning table lays its columns out directly: DrawScoreboard reads each used
+        // column's miCellCount (the "apt_CellsUsed" count) and zeroes it when blanking an
+        // unused column. The X360 accesses the field inline from the table body, so the
+        // table is a friend rather than going through an accessor.
+        friend struct LeaderboardTableComponent;
+
         // DWARF BrnLeaderboardColumnComponent.h:72.
         static const s8 KI_MAX_CELLS = 8;
 

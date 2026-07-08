@@ -46,6 +46,18 @@ namespace MassiveAdClient3
         // (BrnMassive::Destruct calls operator delete on the SDK base pointer).
         static void operator delete(void* lpMemory);
 
+        // ----- SDK ad accessors (bodies live in the MassiveAd client package;
+        // separate TUs). BrnMassiveSubscriber calls these non-virtually on
+        // download-complete / per-tick. Declarations only here (compile gate is
+        // per-TU cl /c); the addresses are attested in the X360 ledger:
+        //   GetInvElementID -> the delivered ad's inventory-element id.
+        //   GetCrexID       -> the delivered ad's creative id.
+        //   SetImpression   -> record a viewed impression from the impression
+        //                      data block (BrnMassiveSubscriber passes &+0x58).
+        int GetInvElementID();
+        int GetCrexID();
+        int SetImpression(void* lpImpressionData);
+
     private:
         // Opaque SDK body. Size pinned by the ASM: CreateSubscriber's first own
         // store lands at +0x58, so the base occupies bytes [0x00, 0x58). The
@@ -83,23 +95,46 @@ namespace BrnMassive
     class BrnMassiveSubscriber : public MassiveAdClient3::CMassiveAdObjectSubscriber
     {
     public:
-        // @ separate TU. Constructs the SDK subscriber with the given zone name.
+        // @ 0x823AB6C8. Constructs the SDK subscriber and logs "Creating Massive
+        // Subscriber IE: <zone>" when message logging is enabled.
         explicit BrnMassiveSubscriber(const char* lpcZoneName);
 
-        u8  maPad58[0x60 - 0x58]; // +0x58 : 8-DWORD block (this region zeroed by CreateSubscriber)
-        u8  mbHasContent;         // +0x60 : non-zero -> a rendered ad is available (Update)
+        // ----- MassiveAd ad-download callbacks (BrnMassiveSubscriber.cpp) -------
+        // FLAG: these are the subscriber's MassiveAd callbacks; the constructor
+        // installs the derived vtable (off_820369E8), so the class is polymorphic
+        // via the inherited virtual dtor. No DWARF/base vtable is available for this
+        // TU, so the callbacks' vtable slot order cannot be grounded - they are
+        // declared as plain members (faithful bodies) rather than fabricating
+        // `virtual` slot positions. Signatures/return match the X360 asm.
+        int MediaDownload(int liAdvertId, int liArg3);                       // @ 0x823AB778
+        int MediaDownloadComplete(int liDataValid, int liDataSize,
+                                  int liFormat, int liAdvertId);            // @ 0x823AB858
+        int SetImpressionData(u8 luFlags, f32 lfValue, int liArg4,
+                              u32 luSize, u16 luWidth, u16 luHeight);        // @ 0x823AB9E0
+        int Tick();                                                          // @ 0x823ABA20
+
+        // Impression-data block @ +0x58 (SetImpression is handed &muField58). The
+        // two leading dwords are reset accumulators; the trailing fields carry the
+        // impression's flags/size/dimensions and a scalar. Zeroed by CreateSubscriber
+        // and re-armed by SetImpressionData.
+        u32 muField58;            // +0x58 : impression accumulator (reset 0)
+        u32 muField5C;            // +0x5C : impression accumulator (reset 0)
+        u8  mbHasContent;         // +0x60 : impression flags byte; non-zero -> a rendered ad is available (Update)
         u8  maPad61;              // +0x61
         u16 muWidth;              // +0x62 : default 1280
         u16 muHeight;             // +0x64 : default 720
-        u8  maPad66[0x78 - 0x66]; // +0x66
-        u32 muField78;            // +0x78 : 0
-        u32 muField7C;            // +0x7C : 0
+        u8  maPad66[0x68 - 0x66]; // +0x66
+        u32 muField68;            // +0x68 : impression size threshold (SetImpressionData gate/store)
+        f32 mfField6C;            // +0x6C : impression scalar (stored single-precision)
+        u8  maPad70[0x78 - 0x70]; // +0x70
+        u32 muField78;            // +0x78 : delivered ad CrexID (MediaDownloadComplete)
+        u32 muField7C;            // +0x7C : delivered ad InvElementID (MediaDownloadComplete)
         u32 muIE;                 // +0x80 : impression-event / zone index (GetSubscriberWithIE key)
-        u32 muField84;            // +0x84 : CreateSubscriber arg a4
+        u32 muField84;            // +0x84 : expected payload size (CreateSubscriber arg a4)
         u32 muIdleFrames;         // +0x88 : frame counter, +1/Update until > 300
-        u32 muField8C;            // +0x8C : CreateSubscriber arg a3
+        u32 muField8C;            // +0x8C : texture-data pointer (CreateSubscriber arg a3)
         u32 muState;              // +0x90 : download/render state (0..3; 2 == ready-after-timeout)
-        u8  mbField94;            // +0x94 : 1
+        u8  mbField94;            // +0x94 : impression-pending flag (Tick sets 1, SetImpressionData clears)
         u8  maPad95[0x98 - 0x95]; // +0x95 : tail padding to sizeof 0x98
     };
 

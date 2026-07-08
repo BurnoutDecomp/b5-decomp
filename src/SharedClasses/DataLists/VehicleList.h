@@ -42,6 +42,12 @@ struct VehicleList
     // declare-only accessor so this caller stays offset-agnostic.
     s32 GetVehicleCount() const;
 
+    // X360 0x82233A28 (unnamed export). Resolve a vehicle record straight from its car id --
+    // GetVehicleData(GetVehicleIndex(lCarId)) -- returning nullptr when the id is not present
+    // (the asm asserts the result non-null at the call site). ADDITIVE GROW: declaration-only
+    // (body in the VehicleList TU). Consumed by BrnGui::LeaderboardTableComponent::SetCell.
+    const VehicleListEntry* GetVehicleFromId(CgsID lCarId) const;
+
     // X360 GetVehicleIndex/GetVehicleData read `this->miCount`. FLAG: leading-member offset assumed
     // 0; the real preamble (resource header) lands with the full TU.
     s32 miCount;

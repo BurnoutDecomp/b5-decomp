@@ -209,6 +209,14 @@ public:
     // rw::audio::core::System::Free(off_83271928, ptr, 0).
     static void Free(System *self, void *mem, s32 flags);
 
+    // Allocate `size` bytes through the System's ICoreAllocator (slot +0x14), tagged with
+    // the `name` debug string and aligned to `align`. `flags` is the allocator flag word.
+    // Additive counterpart to Free; the body lives in the System allocator TU (mangled
+    // ?Alloc@System@core@audio@rw@@). Grounded in CMpegBase::AllocateSynth @0x82B8BFF0,
+    // which calls rw::audio::core::System::Alloc(off_83271928, size, "PolySynthHistoryF",
+    // 16, 0) with the argument order (self=r3, size=r4, name=r5, align=r6, flags=r7).
+    static void *Alloc(System *self, u32 size, const char *name, u32 align, s32 flags);
+
     // Unlink `voice` from the System's expulsion-candidate bookkeeping. The body lives in
     // the System TU (mangled ?RemoveVoiceFromExpulsionCandidateList@System@core@audio@rw@@);
     // declared here because Voice::RemoveActiveVoice @0x82B6C1A8 calls it (r3=System, r4=voice).
