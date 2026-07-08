@@ -47,8 +47,12 @@ public:
     // mFlags bits the runtime tests here.
     enum Flags
     {
-        E_FLAG_NEEDS_BUCKET = 0x10,  // descriptor draws particles -> needs a bucket
-        E_FLAG_FORCE_HEAVY  = 0x20,  // force the heavyweight bucket type
+        E_FLAG_NEEDS_BUCKET      = 0x10,    // descriptor draws particles -> needs a bucket
+        E_FLAG_FORCE_HEAVY       = 0x20,    // force the heavyweight bucket type
+        // Asm-attested bit (cLionParticleEffectManager::BindingsAttach masks 0x8000 to skip
+        // a descriptor); name inferred -- sub/child descriptors are spawned by their parent
+        // emitter, so they are excluded from top-level binding attach.
+        E_FLAG_SKIP_AUTO_EMITTER = 0x8000,
     };
 
     // cParticleDescriptor::GetRequiredBucketType @ 0x82908660. Decides which bucket

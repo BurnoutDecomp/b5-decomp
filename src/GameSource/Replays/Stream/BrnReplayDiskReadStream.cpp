@@ -243,4 +243,154 @@ namespace BrnReplays
         CGS_ASSERT(lpContext != nullptr, "Invalid stream\n");
         static_cast<DiskReadStream*>(lpContext)->OnClose(liResult, lHandle, luSize, lpContext);
     }
+
+    // =====================================================================================
+    // ChopEOFBlocks @ 0x8264DCD0 -- retire fully-consumed FULL slots at the ring front.
+    // =====================================================================================
+    void DiskReadStream::ChopEOFBlocks()
+    {
+        while (miBlocksUsed > 0)
+        {
+            ReadStreamBlock& lBlock = maBlocks[miOutputBlock];
+            if ((lBlock.muFlags & KU_RSBFLAG_FULL) == 0)
+                break;
+            if (lBlock.miDataEnd != lBlock.miDataStart)
+                break;
+
+            lBlock.muFlags = KU_RSBFLAG_EMPTY;
+            --miBlocksUsed;
+            miOutputBlock = (miOutputBlock + 1) % miNumBlocks;
+        }
+    }
+
+    // =====================================================================================
+    // GetAmountOfDataInBuffer @ 0x82650CB8 -- readable bytes held across the contiguous run
+    // of FULL slots from the output cursor.
+    // =====================================================================================
+    s32 DiskReadStream::GetAmountOfDataInBuffer()
+    {
+        RtlEnterCriticalSection(mMutex);
+
+        s32 liAmount = 0;
+        if (miBlocksUsed > 0)
+        {
+            s32 li = 0;
+            do
+            {
+                ReadStreamBlock& lBlock = maBlocks[(miOutputBlock + li) % miNumBlocks];
+                if ((lBlock.muFlags & KU_RSBFLAG_FULL) == 0)
+                    break;
+                ++li;
+                liAmount += lBlock.miDataEnd - lBlock.miDataStart;
+            }
+            while (li < miBlocksUsed);
+        }
+
+        RtlLeaveCriticalSection(mMutex);
+        return liAmount;
+    }
+
+    // =====================================================================================
+    // GetCurrentFilePriority @ 0x826526E0 -- pick the relaxed priority while the buffer is
+    // serviced or at least a quarter full, otherwise the urgent priority.
+    // =====================================================================================
+    s32 DiskReadStream::GetCurrentFilePriority()
+    {
+        if (mbServiced)
+            return miNormalPriority;
+
+        double lfFraction = static_cast<double>(static_cast<u32>(GetAmountOfDataInBuffer()))
+                          / static_cast<double>(miBufferSize);
+        if (lfFraction >= 0.25)
+            return miNormalPriority;
+
+        return miUrgentPriority;
+    }
+
+    // =====================================================================================
+    // StartAsyncReadInternal @ 0x8264DD80 -- lock the contiguous run of loaded blocks at the
+    // output cursor for direct reading, handing back a pointer/size, or report "not ready".
+    // =====================================================================================
+    bool DiskReadStream::StartAsyncReadInternal(void** lppData, s32* lpiSize)
+    {
+        CGS_ASSERT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
+        CGS_ASSERT(!mbLockedForRead, "Already reading data\n");
+
+        *lppData = nullptr;
+        *lpiSize = 0;
+
+        if (miBlocksUsed == 0 || mbAdjustingRange)
+            return false;
+
+        ChopEOFBlocks();
+
+        // Scan forward (no wrap) over the run of FULL slots starting at the output cursor.
+        s32 liEnd = miOutputBlock;
+        while (liEnd < miNumBlocks && (maBlocks[liEnd].muFlags & KU_RSBFLAG_FULL) != 0)
+            ++liEnd;
+
+        if (liEnd == miOutputBlock)
+            return false;
+
+        s32 liAvailable = 0;
+        for (s32 li = miOutputBlock; li < liEnd; ++li)
+            liAvailable += maBlocks[li].miDataEnd - maBlocks[li].miDataStart;
+
+        if (liAvailable == 0)
+            return false;
+
+        ReadStreamBlock& lBlock = maBlocks[miOutputBlock];
+        *lppData = mpBuffer + lBlock.miStreamPos + lBlock.miDataStart;
+        *lpiSize = liAvailable;
+        mbLockedForRead = true;
+        return true;
+    }
+
+    // =====================================================================================
+    // StopAsyncReadInternal @ 0x8265A000 -- release liBlockSize bytes previously locked by
+    // StartAsyncReadInternal, retiring whole slots and partially advancing the last, then
+    // advance the read position and re-service.
+    // =====================================================================================
+    void DiskReadStream::StopAsyncReadInternal(s32 liBlockSize)
+    {
+        CGS_ASSERT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
+        CGS_ASSERT(mbLockedForRead, "Already reading data\n");
+        CGS_ASSERT(miBlocksUsed > 0, "No blocks used but somehow started a read operation?\n");
+
+        s32 liRemaining = liBlockSize;
+        if (liBlockSize > 0)
+        {
+            bool lbPartial = true;
+            while (true)
+            {
+                CGS_ASSERT(miOutputBlock < miNumBlocks, "Gone past end of buffer\n");
+                ReadStreamBlock& lBlock = maBlocks[miOutputBlock];
+                CGS_ASSERT((lBlock.muFlags & KU_RSBFLAG_FULL) != 0, "Block not loaded\n");
+
+                s32 liBlockRemaining = lBlock.miDataEnd - lBlock.miDataStart;
+                if (liBlockRemaining > liRemaining)
+                    break;
+
+                liRemaining -= liBlockRemaining;
+                lBlock.miDataStart = lBlock.miDataEnd;
+                lBlock.muFlags     = KU_RSBFLAG_EMPTY;
+                ++miOutputBlock;
+                --miBlocksUsed;
+                if (liRemaining <= 0)
+                {
+                    lbPartial = false;
+                    break;
+                }
+            }
+
+            if (lbPartial)
+                maBlocks[miOutputBlock].miDataStart += liRemaining;
+        }
+
+        miOutputBlock   = miOutputBlock % miNumBlocks;
+        mbLockedForRead = false;
+        miReadPosition += static_cast<u32>(liBlockSize);
+
+        Service();
+    }
 }

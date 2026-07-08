@@ -99,6 +99,14 @@ namespace BrnReplays
         // legal while unlocked with no requests/ops outstanding).
         void ResetStreamBlocks();
 
+        // @0x8264DCD0. Drop already-consumed (fully-read, data-empty) FULL slots from the
+        // front of the ring, advancing the output cursor.
+        void ChopEOFBlocks();
+
+        // @0x82650CB8. Total readable bytes currently buffered across the contiguous run of
+        // FULL slots from the output cursor (locks the subsystem mutex).
+        s32  GetAmountOfDataInBuffer();
+
         // @0x82659D40. Per-service pump: refresh the file priority, then -- once no ops
         // are outstanding -- close, rebuild the range, and/or submit the next read.
         void Service();
@@ -128,6 +136,13 @@ namespace BrnReplays
         s32             miBufferSize;                        // X360 +0x128
         s32             miNumBlocks;                         // X360 +0x12C ring slot count in use
         s32             miBlockSize;                         // X360 +0x130 bytes per stream block
+        // Two configured device-read priorities picked by GetCurrentFilePriority: the
+        // relaxed one is used while the buffer is healthy (>=25% full) or already serviced,
+        // the urgent one while the buffer is starved. Set at Open (its own TU); their
+        // existence + read sites are grounded in the GetCurrentFilePriority asm
+        // (lwz 0x134 / lwz 0x138), the names are inferred from that use.
+        s32             miNormalPriority;                    // X360 +0x134 priority when buffered
+        s32             miUrgentPriority;                    // X360 +0x138 priority when starved
         // DWARF: rw::core::filesys::Handle* volatile mpHandle. Read/written as 8 bytes and
         // truncated to CgsFileSystem::Handle at the Read call (same as the sibling's u64).
         u64             muHandle;                            // X360 +0x140 open device file handle
