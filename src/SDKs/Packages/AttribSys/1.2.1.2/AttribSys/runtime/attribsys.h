@@ -41,16 +41,20 @@ namespace Attrib
         // --- declared-only query API (bodies in attribdatabase.cpp) ---
         ExportManager& GetExportPolicies();
         void           ReleaseExportPolicies();
-        Class*         GetClass(Attribute::Key key) const;
-        unsigned int   GetNumClasses() const;
-        Attribute::Key GetFirstClass() const;
-        Attribute::Key GetNextClass(Attribute::Key key) const;
-        unsigned int   GetNumIndexedTypes() const;
-        const TypeDesc& GetIndexedTypeDesc(u16 index) const;
-        const TypeDesc& GetTypeDesc(Attribute::Type type) const;
-        Attribute::Type AddType(const char* name, unsigned int bytes);
-        void            CollectGarbage();
-        void            DumpContents(Attribute::Key key) const;
+        // NOTE: fully qualify the top-level ::Attribute namespace here. Inside namespace
+        // Attrib an unqualified `Attribute::` binds to the Attrib::Attribute cursor class
+        // whenever attribute.h is also visible in the TU (as in attribute.cpp), which broke
+        // these declarations. ::Attribute is AttributeKey.h's Key/Type namespace.
+        Class*           GetClass(::Attribute::Key key) const;
+        unsigned int     GetNumClasses() const;
+        ::Attribute::Key GetFirstClass() const;
+        ::Attribute::Key GetNextClass(::Attribute::Key key) const;
+        unsigned int     GetNumIndexedTypes() const;
+        const TypeDesc&  GetIndexedTypeDesc(u16 index) const;
+        const TypeDesc&  GetTypeDesc(::Attribute::Type type) const;
+        ::Attribute::Type AddType(const char* name, unsigned int bytes);
+        void             CollectGarbage();
+        void             DumpContents(::Attribute::Key key) const;
 
     private:
         explicit Database(DatabasePrivate& privates);

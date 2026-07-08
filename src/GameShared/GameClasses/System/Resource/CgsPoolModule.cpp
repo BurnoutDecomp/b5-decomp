@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags (filtered prints)
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h" // PoolIO::OutputBuffer / PoolOutputQueue (event posts)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // Events::AllocateResourceListResponse (live-update reply)
 
 // ======================================================================================
 // CgsResource::PoolModule -- reconstructed from BURNOUT_X360_ARTIST.XEX (source CgsPoolModule.cpp).
@@ -346,19 +347,18 @@ namespace CgsResource
         {
         case LiveUpdatePoolModuleState::E_RESULT_DONE:
         {
-            // The X360 records a 48-byte response: GenerateResponse fills the body, then the driver
-            // clears the trailing flag byte ([+0x2C]=0) and stamps the request event id ([+0x04] =
-            // *(this+0x19B34) == miAllocateRequestEventId) before posting (queue event id 17).
-            struct LiveUpdateResponseEvent { u8 mPayload[48]; } lEvent;
-            for (s32 li = 0; li < (s32)sizeof(lEvent.mPayload); ++li)
-                lEvent.mPayload[li] = 0;
+            // The X360 records a 48-byte response: GenerateResponse fills the body (the state owns its
+            // layout), then the driver clears the trailing flag byte ([+0x2C]=0) and stamps the request
+            // event id ([+0x04] = *(this+0x19B34) == miAllocateRequestEventId) before posting (queue
+            // event id 17). Modelled with the typed response record (x64-widened; see CgsResourceIOEvents.h).
+            Events::AllocateResourceListResponse lEvent;
             mLiveUpdateState.GenerateResponse(&lEvent);
-            lEvent.mPayload[0x2C] = 0;                                                   // X360 stb r30(0)
-            *reinterpret_cast<s32*>(lEvent.mPayload + 0x04) = miAllocateRequestEventId;  // X360 stw *(this+0x19B34)
+            lEvent.mbSimpleFrag = false;                    // X360 stb r30(0) into [+0x2C]
+            lEvent.miEventId    = miAllocateRequestEventId; // X360 stw *(this+0x19B34) into [+0x04]
 
             PoolIO::OutputBuffer* lpOut = static_cast<PoolIO::OutputBuffer*>(lpOutputBuffer);
             lpOut->GetPoolOutputQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), 17, 48);
+                reinterpret_cast<const CgsModule::Event*>(&lEvent), 17, sizeof(lEvent));
 
             mProcessState = E_UPDATESTATE_IDLE;   // X360 *(this+0x19B30) = 0
             break;

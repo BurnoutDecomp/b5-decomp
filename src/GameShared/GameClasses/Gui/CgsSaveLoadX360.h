@@ -11,37 +11,14 @@ class LanguageManager;
 class SystemUserProfile;
 
 // RealmcIface - the Realm memory-card (mc) interface family the X360 save/load path drives.
-// These are the SDK-shaped types the in-scope SaveLoadSystem functions call into. Only the
-// surface the X360 ASM exercises is reconstructed here; the full SDK lives in its own TUs.
+// These are the SDK-shaped types the in-scope SaveLoadSystem functions call into. The memory-card
+// interface object itself (RealmcIface::MemcardInterface -- the four vtable slots this front-end
+// dispatches: Update @+0x08, WriteSave @+0x2C, CheckSave @+0x30, SetActive @+0x34) is homed in its
+// own SDK TU; include it so the type is defined once.
+#include "SDKs/Realmc/RealmcMemcardInterface.h"   // RealmcIface::MemcardInterface
+
 namespace RealmcIface
 {
-    // The memory-card interface object. The X360 dispatches four of its vtable slots:
-    //   slot 2  (+0x08)  Update(int)            -- SaveLoadSystem::Update forwards here
-    //   slot 11 (+0x2C)  WriteSave(...)         -- SaveLoadSystem::Save
-    //   slot 12 (+0x30)  CheckSave(int, void*)  -- SaveLoadSystem::Save
-    //   slot 13 (+0x34)  SetSomething(int)      -- SaveLoadSystem::Prepare (passes 1)
-    // The intervening slots are reserved to pin those four at their attested byte offsets; their
-    // semantics are not recovered by this TU, so they are declared (not invented) as reserved.
-    class MemcardInterface
-    {
-    public:
-        virtual void Reserved00() = 0;                          // slot 0  (+0x00)
-        virtual void Reserved01() = 0;                          // slot 1  (+0x04)
-        virtual int  Update(int liArg) = 0;                     // slot 2  (+0x08)
-        virtual void Reserved03() = 0;                          // slot 3  (+0x0C)
-        virtual void Reserved04() = 0;                          // slot 4  (+0x10)
-        virtual void Reserved05() = 0;                          // slot 5  (+0x14)
-        virtual void Reserved06() = 0;                          // slot 6  (+0x18)
-        virtual void Reserved07() = 0;                          // slot 7  (+0x1C)
-        virtual void Reserved08() = 0;                          // slot 8  (+0x20)
-        virtual void Reserved09() = 0;                          // slot 9  (+0x24)
-        virtual void Reserved10() = 0;                          // slot 10 (+0x28)
-        virtual void WriteSave(void* lpSaveInfo, int liCount, void* lpEntries,
-                               int liFlags, void* lpTitleInfo) = 0;       // slot 11 (+0x2C)
-        virtual void CheckSave(int liArg, void* lpCheckParams) = 0;       // slot 12 (+0x30)
-        virtual void SetActive(int liActive) = 0;               // slot 13 (+0x34)
-    };
-
     // Forward-declared SDK helpers used by Save/Prepare; full bodies live in their own TUs.
     class GameInfo;
     class MemcardInterfaceFactory;

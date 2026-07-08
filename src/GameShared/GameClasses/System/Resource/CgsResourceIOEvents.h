@@ -172,6 +172,25 @@ namespace Events
         bool                                mbCompressedBundle;  // +46
     };
 
+    // CgsResourceIOEvents.h -- the reply an allocate/live-update pass posts to the pool output queue
+    // (queue event id 17) when it finishes. The step state's GenerateResponse fills the working-set body
+    // (list id + the caller's bundle-entry array/count/output arrays + the resolved pool id); the driver
+    // (PoolModule::UpdateAllocating / UpdateLiveUpdate) then stamps the request's event id (miEventId)
+    // and the trailing simple-frag flag before posting. X360 store offsets (from GenerateResponse
+    // 0x828E4200): miPoolId@+0x08, mListId@+0x10, mpEntries@+0x18, miNumEntries@+0x1C, mpNeeds@+0x20,
+    // mpResources@+0x24, mpListEntry@+0x28, mbSimpleFrag@+0x2C (48-byte record on the 32-bit target;
+    // x64-widened here). Field order mirrors AllocateResourceListRequest.
+    struct AllocateResourceListResponse : public PoolEvent
+    {
+        ID                             mListId;       // +0x10
+        const BundleV2::ResourceEntry* mpEntries;     // +0x18
+        s32                            miNumEntries;  // +0x1C
+        bool*                          mpNeeds;       // +0x20
+        void*                          mpResources;   // +0x24  (ResourceHandle::Resource*)
+        Entry*                         mpListEntry;   // +0x28  the list's own entry-list resource entry
+        bool                           mbSimpleFrag;  // +0x2C  driver-stamped (simple-frag / result flag)
+    };
+
     // Acquire a single already-loaded resource by id from a pool (resource request id 4 -> pool input).
     // PoolModule::DoAcquireResourceRequest (X360 0x828FCD48) resolves it via Pool::FindResource and replies
     // with an AcquireResourceResponse carrying the resolved handle. [X360 element size 24 on the 32-bit

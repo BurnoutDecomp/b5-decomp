@@ -140,8 +140,11 @@ public:
     int SubscribeMemberDataFast(ClassClientNode* lpNode);
 
     // @ 0x82B0FE28 -- validate the handle, then unlink lpNode from the constructor-
-    // client list; return 0 or the negative ValidHandle Result.
-    int UnsubscribeConstructorFast(ClassHandle** phHandle, ClassClientNode* lpNode);
+    // client list; return 0 or the negative ValidHandle Result. STATIC: the X360 call
+    // passes only (phHandle, lpNode) with no `this` (the body resolves everything through
+    // the handle and never touches a member), e.g. Snd9::Aems::BeginRemoveModuleBank calls
+    // Csis::Class::UnsubscribeConstructorFast(&record.mpHandle, &record.mNode) with 2 args.
+    static int UnsubscribeConstructorFast(ClassHandle** phHandle, ClassClientNode* lpNode);
 
     // @ 0x82B0F630 -- unlink lpNode from the destructor-client list (+0xC), DecRef,
     // and notify the global observer when the count reaches zero; return 0.
