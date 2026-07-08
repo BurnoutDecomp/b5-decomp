@@ -70,6 +70,19 @@ public:
     // interaction records (tail-calls RemoveInteractionRecords).
     void Reset();
 
+    // Additive accessor (FLAG: not its own X360 function). CMassiveAsset::RecordFind
+    // @ 0x82BDA590 walks the asset's record list and matches on this field
+    // (record+0x18 == the search key); exposed BY NAME so the asset does not read
+    // the private member by offset.
+    int GetField18() const { return mnField18; }
+
+    // Additive helper (FLAG: not its own X360 function). CMassiveAsset::RecordFind,
+    // on RE-finding an existing record, zeroes record+0x50 and record+0x80+0x30 --
+    // i.e. mnField30 of each embedded impression (0x20+0x30 and 0x80+0x30). Since
+    // the impressions are this record's private members, the two stores are homed
+    // here BY NAME as this helper instead of a cross-object offset poke.
+    void ClearImpressionField30();
+
 private:
     int                      mnField14;            // +0x14 (a3)
     int                      mnField18;            // +0x18 (a4)

@@ -275,4 +275,94 @@ namespace CgsSceneManager
             *lpuNumQueries = 0;
         }
     }
+
+    // 0x828CA360 -- AdaptiveDepthUpdateAddNodesRecursive: walk the branch rooted at
+    // lu16NodeIndex, subdividing nodes that have accumulated more entities than the
+    // adaptive split threshold. Proceeds only while the free-node-group pool has spare
+    // capacity and we are shallower than muAdaptiveMaxDepth-1. A leaf (no first child)
+    // that reaches here is split via SplitAndPropogateRecursive; an interior node
+    // recurses into each of its 4 children whose sub-tree count still exceeds the
+    // threshold and which is flagged NEEDS_UPDATE.
+    void LooseOctree::AdaptiveDepthUpdateAddNodesRecursive(u16 lu16NodeIndex, u32 luDepth)
+    {
+        LooseOctreeNode* lpNodes = GetNodes();
+        LooseOctreeNode* lpNode  = &lpNodes[lu16NodeIndex];
+
+        if (GetFreeNodeGroupNumFree() == 0)
+            return;
+        if (luDepth >= GetAdaptiveMaxDepth() - 1)
+            return;
+
+        if (lpNode->muFirstChildIndex == KU_INVALID_NODE)
+        {
+            CGS_ASSERT(lpNode->mEntityList.CountElements() > GetAdaptiveNodeSplitThreshold(),
+                       "(uint32_t)lpNode->mEntityList.CountElements() > muAdaptiveNodeSplitThreshold");
+            CGS_ASSERT(GetFreeNodeGroupNumFree() > 0, "mFreeNodeGroupPool.GetNumFree() > 0");
+            CGS_ASSERT(luDepth >= GetDepth() - 1, "luDepth >= muDepth-1");
+
+            SplitAndPropogateRecursive(lu16NodeIndex, luDepth);
+        }
+        else
+        {
+            const u16 lu16FirstChild = lpNode->muFirstChildIndex;
+            for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+            {
+                const u16 lu16ChildIndex = static_cast<u16>(lu16FirstChild + luChild);
+                LooseOctreeNode* lpChild = &lpNodes[lu16ChildIndex];
+                if (lpChild->muSubTreeEntityCount > GetAdaptiveNodeSplitThreshold() &&
+                    (lpChild->muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
+                {
+                    AdaptiveDepthUpdateAddNodesRecursive(lu16ChildIndex, luDepth + 1);
+                }
+            }
+        }
+    }
+
+    // 0x828CA4F8 -- AdaptiveDepthUpdateRemoveNodesRecursive: the inverse pass. Walk the
+    // branch and, once no dynamic node groups are outstanding beyond the static set,
+    // either recurse into the flagged children (while still deep enough or still busy) or
+    // merge the sub-tree back into this node (MergeSubTreeRecursive) when the adaptive
+    // depth/threshold criteria no longer justify the subdivision.
+    void LooseOctree::AdaptiveDepthUpdateRemoveNodesRecursive(u16 lu16NodeIndex, u32 luDepth)
+    {
+        LooseOctreeNode* lpNodes = GetNodes();
+        LooseOctreeNode* lpNode  = &lpNodes[lu16NodeIndex];
+
+        if (GetFreeNodeGroupNumUsed() == GetNumStaticNodes())
+            return;
+        if (lpNode->muFirstChildIndex == KU_INVALID_NODE)
+            return;
+
+        const u32 luChildDepth = luDepth + 1;
+        if (luChildDepth < GetDepth() ||
+            lpNode->muSubTreeEntityCount > GetAdaptiveNodeSplitThreshold())
+        {
+            const u16 lu16FirstChild = lpNode->muFirstChildIndex;
+            for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+            {
+                const u16 lu16ChildIndex = static_cast<u16>(lu16FirstChild + luChild);
+                LooseOctreeNode* lpChild = &lpNodes[lu16ChildIndex];
+                if ((lpChild->muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
+                    AdaptiveDepthUpdateRemoveNodesRecursive(lu16ChildIndex, luChildDepth);
+            }
+        }
+        else
+        {
+            MergeSubTreeRecursive(lu16NodeIndex, lpNode, luChildDepth);
+        }
+    }
+
+    // 0x828D0180 -- Update: per-frame maintenance. Only does work when the root node is
+    // flagged NEEDS_UPDATE; then it runs the adaptive-depth remove pass, the add pass, and
+    // finally the recursive loose-bounds update, all from the root (node index 0, depth 0).
+    void LooseOctree::Update()
+    {
+        LooseOctreeNode* lpRootNode = GetRootNode();
+        if ((lpRootNode->muFlags & KU_OCTREE_NODE_FLAG_NEEDS_UPDATE) != 0)
+        {
+            AdaptiveDepthUpdateRemoveNodesRecursive(0, 0);
+            AdaptiveDepthUpdateAddNodesRecursive(0, 0);
+            UpdateRecursive(0);
+        }
+    }
 }

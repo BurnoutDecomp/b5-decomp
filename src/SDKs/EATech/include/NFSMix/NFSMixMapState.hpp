@@ -59,6 +59,23 @@ public:
     stSubMixChProc*    GetSubMixChProc(unsigned char procIdx, int copyIdx);    // @0x82B4C800 base+0x0C bnd+0x54
     stMasterMixChProc* GetMasterMixChProc(unsigned char procIdx, int copyIdx); // @0x82B4C848 base+0x10 bnd+0x58
 
+    // ---- state-array cursor + builder passes (called from NFSMixMap::CreateMainMapState /
+    //      SetupStateProcArrays; ARTIST-verified against the X360 asm). ----
+    NFSMixMapState* GetMixMapProc(int liIndex);   // @0x82B4D648 -- &m_pFirstInstance[liIndex]
+    NFSMixMapState* AddMixState(int liObjectIndex, NFSMixMapState* lpFirstInstance); // @0x82B4D660
+    void CreateSubMixChannels();      // @0x82B4CB00 -- build this state's sub-mix channel procs
+    void CreateMasterMixChannels();   // @0x82B4CC48 -- build this state's master-mix channel procs
+    void InitializeSubChannels();     // @0x82B4D2A8 -- wire sub-channel input arrays from the blob
+    void InitializeMasterChannels();  // @0x82B4D420 -- wire master-channel input arrays from the blob
+
+    // ---- BLOCKED (declared so future callers compile; bodies deferred) ----
+    //   * CreateMixCtls    @0x82B4C890 -- needs the X360 dB->Q15 table word_82F8677A (guessed
+    //     rodata, bytes not in this export) AND NFSMixMap::AssignMixCtlDataPtrs (un-homed callee).
+    //   * CreateEvtMixCtls @0x82B4CE00 -- needs word_82F8677A (guessed rodata) AND the un-named
+    //     NFSMixMap helper sub_82B493F8 (un-homed callee).
+    void CreateMixCtls();     // @0x82B4C890  BLOCKED
+    void CreateEvtMixCtls();  // @0x82B4CE00  BLOCKED
+
     // vtable pointer occupies +0x00 (virtual dtor above).
     NFSMixMap*        m_pNFSMixMap;        // +0x04
     stMixStateParams  m_MixStateParams;    // +0x08 (5 proc-array bases)

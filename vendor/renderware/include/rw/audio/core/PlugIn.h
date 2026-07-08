@@ -23,6 +23,12 @@
 
 #include "types.hpp" // f32, u32 (project primitives)
 #include "coreallocator/icoreallocator_interface.h" // EA::Allocator::ICoreAllocator
+#include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager -- embedded by value in System (+0x60)
+
+// EA::Thread::Mutex is used only through pointer members of System here; the full
+// definition (eathread_mutex.h) is pulled in by the System .cpp, not by this widely
+// included header.
+namespace EA { namespace Thread { class Mutex; } }
 
 namespace rw
 {
@@ -38,6 +44,18 @@ class System;
 class Voice;              // rwaudio PDB: PlugIn::mpVoice (+0x08)
 struct VoiceListLink;     // intrusive expelled-voice list node (defined in Voice.h)
 struct VoiceActiveNode;   // one entry of System::mppVoiceListNodes (defined in Voice.h)
+
+// The System's swappable lock/unlock/is-locked hooks (function slots @+0x3C/+0x40/+0x44).
+// Each is tail-called with the System in r3 (the pseudocode renders it as a nullary call
+// because r3 is preserved), so the real prototype takes the System. When null the System
+// falls back to its own EA::Thread::Mutex; when set (VectorToCsisMutex) they route to the
+// Csis integration's mutex primitives.
+typedef int (*SystemLockHook)(System *self);
+// Physical (non-cached) memory allocator hooks (@+0x18/+0x1C). PhysicalAlloc lazily seeds
+// them to the Xbox defaults. The alloc hook is called with four words (only the first three
+// are consumed by the default); the free hook with the block pointer.
+typedef void *(*PhysicalAllocHook)(u32 size, u32 align, u32 protect, u32 unused);
+typedef void (*PhysicalFreeHook)(void *block);
 
 // -------------------------------------------------------------------------------------
 // PlugIn -- base class for a node in the audio processing graph.
@@ -202,12 +220,17 @@ public:
     static void New2(System *self, T **outResult, const char *name, unsigned size,
                      unsigned align, EA::Allocator::ICoreAllocator *allocator);
 
-    // Free `mem` back through the System's ICoreAllocator (slot +0x14). `flags` is the
-    // allocator flag word (always 0 at the call sites seen so far). Declared here as the
-    // additive counterpart to New2; the body lives in the System allocator TU (mangled
-    // ?Free@System@core@audio@rw@@). Grounded in Decoder::Release @0x82691528, which calls
-    // rw::audio::core::System::Free(off_83271928, ptr, 0).
-    static void Free(System *self, void *mem, s32 flags);
+    // Placement-construct the System's leaf fields: clear the expelled-voice list head and
+    // the per-frame processor list head, default-construct the embedded TimerManager, and
+    // wire the object table pointer. (The full CreateInstance allocate-and-init path is a
+    // separate ledger function.) X360 @0x82B6DD20.
+    static System *System_ctor(System *self);
+
+    // Free `mem` back through `allocatorOverride` (or, when null, the System's own
+    // ICoreAllocator @+0x14). Grounded in Free @0x82B6BE48: v3 = a3 ? a3 : this->mpAllocator;
+    // v3->vtable[Free](v3, mem, 0). The third argument is an OPTIONAL ALLOCATOR OVERRIDE
+    // (the asm dispatches through it directly), not a flag word -- every call site passes 0.
+    static void Free(System *self, void *mem, EA::Allocator::ICoreAllocator *allocatorOverride);
 
     // Allocate `size` bytes through the System's ICoreAllocator (slot +0x14), tagged with
     // the `name` debug string and aligned to `align`. `flags` is the allocator flag word.
@@ -230,22 +253,85 @@ public:
     static void Lock(System *self);
     static void Unlock(System *self);
 
+    // ---- additional System-TU bodies (grounded in the System.cpp disassembly) ----
+
+    // Xbox physical-memory default hooks (installed lazily by PhysicalAlloc). @0x82B6BE88 /
+    // @0x82B6BE98. DefaultPhysicalAlloc forwards to XPhysicalAlloc(size, MAXULONG_PTR, align,
+    // protect); DefaultPhysicalFree tail-calls XPhysicalFree(block).
+    static void *DefaultPhysicalAlloc(u32 size, u32 align, u32 protect, u32 unused);
+    static void DefaultPhysicalFree(void *block);
+
+    // Allocate/free through the physical hooks (@+0x18/+0x1C), seeding them to the defaults
+    // on first use. @0x82B6DCD8 / @0x82B6BE70.
+    static void *PhysicalAlloc(System *self, u32 size, u32 align, u32 protect, u32 unused);
+    static void PhysicalFree(System *self, void *block);
+
+    // Take / release the command-execution mutex (@+0x48; distinct from the +0x4C system
+    // mutex used by Lock/Unlock). @0x82B6BCA0 / @0x82B6BCB0.
+    static int ExecuteCommandsLock(System *self);
+    static int ExecuteCommandsUnlock(System *self);
+
+    // Query the current-lock hook (@+0x3C); 0 when unset. @0x82B6BD10.
+    static int IsLocked(System *self);
+
+    // Under a scratch mutex, test whether command `commandId` has been executed
+    // (commandId < the executed-frame counter @+0x10E4). @0x82B6BD30.
+    static bool IsCommandComplete(System *self, u32 commandId);
+
+    // Lazily create + return the plug-in registry (@+0x28). @0x82B6DDC0.
+    static PlugInRegistry *GetPlugInRegistry(System *self);
+
+    // Deferred-teardown handler queued into the command ring by Release: release every
+    // active voice, then every voice on the expelled list. Returns its own 8-byte record
+    // size. @0x82B6EA50.
+    static int ReleaseHandler(void *cmd);
+
+    // Remove the manager's timer (@+0x60). @0x82B6EB80.
+    static void RemoveTimer(System *self, TimerHandle *handle);
+
+    // Publish the calling thread's id into the thread-id slot (@+0x54). @0x82B6BCB8.
+    static System *SetRwAudioCoreThreadId(System *self, u32 *pThreadId);
+
+    // Record which hardware thread the audio update runs on (@+0x10FA). @0x82B6BC98.
+    static System *SetThreadProcessor(System *self, u8 processor);
+
+    // Walk the expel-after-decay candidate list; expel each fully-faded voice and compact
+    // the list. @0x82B6EAD0.
+    static Voice *UpdateExpellingVoices(System *self);
+
+    // Swap the lock/unlock hooks (@+0x40/+0x44) over to the Csis mutex primitives. @0x82B6FC50.
+    static System *VectorToCsisMutex(System *self);
+
     // ----------------------------------------------------------------------------------
     // Layout. The +0xNN annotations are the X360 (32-bit-pointer) offsets from the asm and
     // are documentary only; members are declared with x64 widths so only the ORDER is
     // load-bearing, and every access is by name. The additional members below (over the
-    // original PlugIn-family surface) are the fields Voice::* touch, grounded in the
-    // Voice.cpp disassembly (mpDeferredRingBase/muDeferredRingCursor keep their names/roles
-    // so PlugIn/Route/RawPuller2/Decoder are unaffected).
+    // original PlugIn-family surface) are the fields the System-TU bodies touch, grounded in
+    // the System.cpp / Voice.cpp disassembly (mpDeferredRingBase/muDeferredRingCursor keep
+    // their names/roles so PlugIn/Route/RawPuller2/Decoder are unaffected). Slots the System
+    // TU does not read (the CreateInstance-only init fields and the tail-carved mutex storage)
+    // stay as opaque padding.
     // ----------------------------------------------------------------------------------
-    u8 mHeader00[0x10];                          // +0x00  opaque header
+    void *mpObjectTable;                          // +0x00  points at a shared 4-word table (ctor)
+    u8 mHeader08[0x10 - 0x08];                     // +0x08..0x0F  (config double; CreateInstance-only)
     VoiceListLink *mpExpelledVoiceList;          // +0x10  head of the expelled/pending Voice list
     EA::Allocator::ICoreAllocator *mpAllocator;  // +0x14  the sub-system allocator
-    u8 mPad18[0x20 - 0x18];                       // +0x18..0x1F
+    PhysicalAllocHook mpfnPhysicalAlloc;         // +0x18  physical alloc hook (lazy-seeded)
+    PhysicalFreeHook mpfnPhysicalFree;           // +0x1C  physical free hook (lazy-seeded)
     char *mpDeferredRingBase;                     // +0x20  deferred-command ring base
-    u8 mPad24[0x58 - 0x24];                        // +0x24..0x57
+    u8 mPad24[0x28 - 0x24];                        // +0x24..0x27
+    PlugInRegistry *mpPlugInRegistry;            // +0x28  lazily-created plug-in registry
+    u8 mPad2C[0x3C - 0x2C];                        // +0x2C..0x3B  (Release-torn sub-objects; opaque)
+    SystemLockHook mpfnIsLocked;                 // +0x3C  "is locked" hook (0 = unlocked)
+    SystemLockHook mpfnLock;                     // +0x40  lock hook (0 = use mpSystemMutex)
+    SystemLockHook mpfnUnlock;                   // +0x44  unlock hook (0 = use mpSystemMutex)
+    EA::Thread::Mutex *mpCommandMutex;           // +0x48  guards ExecuteCommands
+    EA::Thread::Mutex *mpSystemMutex;            // +0x4C  the general system mutex
+    u8 mPad50[0x54 - 0x50];                        // +0x50  (extra tail-mutex slot)
+    u32 *mppThreadId;                            // +0x54  points at the tail thread-id storage
     VoiceActiveNode *mppVoiceListNodes;          // +0x58  sorted active-voice array
-    u8 mPad5C[0xA8 - 0x5C];                        // +0x5C..0xA7
+    void *mpProcessorListHead;                    // +0x5C  per-frame processor list head
+    TimerManager mTimerManager;                   // +0x60  embedded profiling-timer manager
     // +0xA8  inline "expel after decay" candidate list (Voice::ExpelAfterDecay stores into
     // it at index muExpelAfterDecayCount). Capacity inferred from the 0xA8..0x10A8 gap
     // (1024 slots on the X360 image); indexed by name so the exact span is not load-bearing.
@@ -253,11 +339,13 @@ public:
     u32 muExpelAfterDecayCount;                   // +0x10A8  live entries in mpExpelAfterDecayList
     u8 mPad10AC[0x10B8 - 0x10AC];                  // +0x10AC..0x10B7
     u32 muDeferredRingCursor;                     // +0x10B8  byte cursor into the command ring
-    u8 mPad10BC[0x10E4 - 0x10BC];                  // +0x10BC..0x10E3
-    u32 muFrameCounter;                           // +0x10E4  free-running counter snapshotted per Voice
+    u8 mPad10BC[0x10E4 - 0x10BC];                  // +0x10BC..0x10E3  (ring stats + timing; System-TU-only paths blocked)
+    u32 muFrameCounter;                           // +0x10E4  executed-frame counter (IsCommandComplete)
     u8 mPad10E8[0x10F4 - 0x10E8];                  // +0x10E8..0x10F3
     u16 muActiveVoiceCount;                       // +0x10F4  live entries in mppVoiceListNodes
     u16 muActiveVoiceCapacity;                    // +0x10F6  capacity of mppVoiceListNodes
+    u8 mPad10F8[0x10FA - 0x10F8];                  // +0x10F8..0x10F9
+    u8 mucThreadProcessor;                        // +0x10FA  hardware thread for the audio update
 };
 
 // New2<T> reconstruction (FLAGGED): the real templated allocator helper is defined in

@@ -117,4 +117,18 @@ void CMassiveRecord::Reset()
     RemoveInteractionRecords();
 }
 
+// ---------------------------------------------------------------------------
+// CMassiveRecord::ClearImpressionField30 (additive helper -- see the header)
+//
+// Models the two stores CMassiveAsset::RecordFind @ 0x82BDA590 makes on a
+// re-found record (`*(record + 0x50) = 0; *(record + 0xB0) = 0`) -- i.e. mnField30
+// of each embedded impression (mImpression0 @ +0x20, mImpression1 @ +0x80). Done
+// BY NAME on this record's own members instead of an offset poke from the asset.
+// ---------------------------------------------------------------------------
+void CMassiveRecord::ClearImpressionField30()
+{
+    mImpression0.SetField30(0);  // record + 0x50
+    mImpression1.SetField30(0);  // record + 0xB0
+}
+
 } // namespace MassiveAdClient3
