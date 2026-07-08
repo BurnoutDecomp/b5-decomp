@@ -111,8 +111,14 @@ struct AudioFormat
 //   +0x3000C  mpSrcBuffer   (the "0" channel-buffer pointer slot; swapped with dst)
 //   +0x30010  mpDstBuffer   (the "1" channel-buffer pointer slot)
 //   +0x30018  mpFormat      (-> +0x0C = sample rate)
+//   +0x30020  mNumSamples   (the frame's active sample count; 0 == a silent frame. Read by
+//                             Rechannel::Process @0x82B9A728 as both a has-work guard and
+//                             the sample count it forwards to ReChannelGainWrite.)
 //   +0x30028  mfResampleGain (a downstream gain the Resample stage scales by its clamped
 //                             ratio -- see Resample::PreProcess @0x82B9AC10)
+//   +0x3002C  mbChannelCount (the channel count of the currently-active src buffer;
+//                             Rechannel::Process latches it and rewrites it to its own
+//                             output channel count after remapping/swapping the buffers.)
 // The 0x30000 base + opaque body are preserved as a byte span so the named fields land
 // exactly. Process swaps the src/dst slots after filtering (ping-pong).
 // -------------------------------------------------------------------------------------
@@ -123,8 +129,11 @@ struct AudioProcessContext
     AudioChannelBuffer *mpDstBuffer;                    // +0x30010
     char                mPad30014[0x30018 - 0x30014];   // +0x30014
     AudioFormat        *mpFormat;                       // +0x30018
-    char                mPad3001C[0x30028 - 0x3001C];   // +0x3001C .. +0x30027
+    char                mPad3001C[0x30020 - 0x3001C];   // +0x3001C .. +0x3001F
+    u32                 mNumSamples;                    // +0x30020 -- active frame sample count
+    char                mPad30024[0x30028 - 0x30024];   // +0x30024 .. +0x30027
     f32                 mfResampleGain;                 // +0x30028 -- Resample-scaled gain
+    u8                  mbChannelCount;                 // +0x3002C -- active src-buffer channel count
 };
 
 // -------------------------------------------------------------------------------------

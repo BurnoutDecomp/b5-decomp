@@ -515,6 +515,80 @@ struct GuiLiveRevengeUpdateEvent : public CgsGui::GuiEvent<364>
 };
 
 // ===================================================================================
+// Online Stunt Run HUD-event family -- the events BrnOnlineStuntRunMode publishes to the
+// GUI that BrnGui::HudMessageAnalyzer::Handle* consume (X360 @0x8251FA90..0x8252006C). No
+// DecFIGS DWARF entry exists for these payloads, so the member LAYOUT (offsets/widths) is
+// X360-asm-authoritative (the handlers' lwz/lbz displacements) and only `mPlayerId` is named
+// verbatim -- it appears in the X360 assert rodata
+// ("lp<Event>->mPlayerId == CgsNetwork::K_INVALID_PLAYER_ID").
+//
+// FLAG: the remaining member NAMES are inferred from the handlers' behaviour and the HUD
+// message-ids they select (OnlSr == Online Stunt Run; Pt/Tp == teammate variant, Rt/Ri ==
+// rival variant, Lp == "last player standing"); their DWARF names are not recovered. The
+// GuiEvent<N> base is EBO-empty (the handlers touch no base bytes), so these payloads are
+// modelled as plain structs and their event-id N is not recovered. `mPlayerId` is a
+// BrnNetwork::NetworkPlayerID (typedef s32); modelled as s32 to keep this GUI header off the
+// network include (K_INVALID_PLAYER_ID == -1).
+// ===================================================================================
+
+// The three player-keyed status events (elimination / leading / victory) share the IDENTICAL
+// X360 layout but are distinct event types with distinct handlers/assert-strings, so each is
+// its own named struct.
+//
+//   +0x00  mbIsLocalPlayer  (s32; set == the event concerns the LOCAL player, no remote id)
+//   +0x04  mPlayerId        (s32; the remote player's network id, -1 when local)   [asm-named]
+//   +0x08  mbIsTeammate     (bool; selects the Pt/Tp teammate message vs the Rt/Ri rival one)
+//   +0x09  mbIsLastPlayer   (bool; selects the Lp "last player standing" message)
+
+struct GuiOnlineStuntRunEliminationEvent
+{
+    s32  mbIsLocalPlayer;   // +0x00
+    s32  mPlayerId;         // +0x04
+    bool mbIsTeammate;      // +0x08
+    bool mbIsLastPlayer;    // +0x09
+};
+
+struct GuiOnlineStuntRunLeadingEvent
+{
+    s32  mbIsLocalPlayer;   // +0x00
+    s32  mPlayerId;         // +0x04
+    bool mbIsTeammate;      // +0x08
+    bool mbIsLastPlayer;    // +0x09
+};
+
+struct GuiOnlineStuntRunVictoryEvent
+{
+    s32  mbIsLocalPlayer;   // +0x00
+    s32  mPlayerId;         // +0x04
+    bool mbIsTeammate;      // +0x08
+    bool mbIsLastPlayer;    // +0x09
+};
+
+// The stunt-run score/time notification (HandleOnlineStuntRunMessage @0x8251FF38).
+//   +0x00  mPlayerId      (s32; the scoring player, resolved to a name for the team branch)
+//   +0x04  meMessageType  (s32; 1 == score notification, 3 == time notification)
+//   +0x08  miValue        (s32; the score or the time -- appended as an INT HUD param)
+struct GuiOnlineStuntRunMessageEvent
+{
+    // FLAG: only the two values the handler branches on are recovered (1 == score, 3 == time);
+    // 0/2 are not observed in the asm.
+    enum EMessageType
+    {
+        E_ONLINE_STUNT_RUN_MESSAGE_SCORE = 1,
+        E_ONLINE_STUNT_RUN_MESSAGE_TIME  = 3,
+    };
+
+    s32 mPlayerId;      // +0x00
+    s32 meMessageType;  // +0x04
+    s32 miValue;        // +0x08
+};
+
+// The "last run started" notification (HandleOnlineStuntRunLastRun @0x8251FEC8). The handler
+// only null-checks the pointer and fires the parameterless "OnlSRLastRun" message; no field is
+// read, so the payload layout is not recovered. FLAG: opaque pointer-only payload.
+struct GuiOnlineStuntRunLastRunEvent {};
+
+// ===================================================================================
 // BrnGui::GuiOverlayFullInfoRequest -- "send me the current overlay's full info"
 // (posted by BaseOverlayState::Update's WFINIT phase @0x824B2BD8: a header-only
 // record {muHeader0=1, muEventType=186, muHeader2=12} on channel 40, 16 bytes;

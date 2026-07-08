@@ -313,6 +313,15 @@ namespace BrnGui
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
              GetOnlinePlayerInfo(s32 liIndex) const;
 
+        // ADDITIVE GROW (BrnGuiHudMessageAnalyzer online-stunt-run TU): resolve a network
+        // player id to its in-game online-player record (X360 @0x82482738). The analyzer's
+        // online-stunt-run handlers pass mpGuiCache + the event's mPlayerId, then read the
+        // returned record's online name (@+256) and active-race-car index (@+276). May return
+        // NULL (the message handler asserts non-NULL before use). Returned by pointer (the same
+        // committed 312-byte InGamePlayerStatusData record). Body links from the GuiCache TU.
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
+             GetOnlinePlayerInfoFromPlayerId(s32 liPlayerId) const;
+
     private:
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps

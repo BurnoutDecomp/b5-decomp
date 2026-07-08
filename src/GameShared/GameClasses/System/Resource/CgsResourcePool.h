@@ -129,7 +129,9 @@ namespace CgsResource
 
         // ---- lifecycle ----------------------------------------------------------------
         u32  GetOverheadMemoryRequired(const InitOptions* lpOptions);
-        u32  PrintOverheadMemoryRequired(const InitOptions* lpOptions);
+        // X360 0x828E0BB8 - reads the InitOptions from r3 with no `this` use (mirrors the sibling
+        // ScratchPool::GetOverheadMemoryRequired), so this is a static overhead estimator.
+        static u32 PrintOverheadMemoryRequired(const InitOptions* lpOptions);
         void Construct();
         bool Prepare();
         bool Release();

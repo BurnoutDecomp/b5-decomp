@@ -32,10 +32,13 @@ namespace BrnStreetData
     struct StreetData;                 // const StreetData* GetStreetData();   (DWARF :326)
     struct ChallengeData;              // Player-column high-score record
     class  ChallengeHighScoreEntry;    // Net-column online high-score record
+    struct ChallengePlayerScoreEntry;  // Local-player score record built by CreateUserChallengeScoreFr
     // (BrnStreetData::RoadIndex == int32_t in the committed BrnStreetData.h; the
     //  debug accessors below take a plain int32_t row index to avoid re-declaring
     //  that typedef in this forward-only header.)
 }
+
+namespace CgsNetwork { struct PlayerName; }   // pointer-only param of CreateHighScoreEntryFromDown
 
 namespace BrnGameState
 {
@@ -70,5 +73,44 @@ namespace BrnGameState
         // replaced by the real member tables when the full StreetManager is committed.
         const BrnStreetData::ChallengeData*           GetPlayerChallengeData( int32_t liRoad );
         const BrnStreetData::ChallengeHighScoreEntry* GetNetChallengeData( int32_t liRoad );
+
+        // ---- Recovered out-of-line methods (StreetManager wave) -------------
+        // These do NOT touch the (still-deferred) StreetManager member layout: the
+        // forwarders read no members and the two factories operate purely on the
+        // passed-in score record. They are declared here so their bodies
+        // (BrnGameStateStreetManager.cpp) resolve under cl /c; the member-layout
+        // dependent methods (CanContinueWalking / PushSectionIndex / GetParRivalId /
+        // GetRoadIndexFromAISectionIndex / SetChallengeFriendHighScore) stay out
+        // until the full member layout is committed.
+
+        // Prepare2 @ 0x823509D8. Loads the street data for lpReceiverQueue into
+        // lpOutput; on success sets up the par rivals from lpParRivalData. Returns
+        // true iff LoadStreetData succeeded. (lpReceiverQueue / lpParRivalData are
+        // opaque here -- their owning types are not yet committed.)
+        bool Prepare2( void* lpOutput, void* lpReceiverQueue, void* lpParRivalData );
+
+        // Callees of Prepare2, declared-only (bodies land with their own TUs).
+        // LoadStreetData is the recovered street-data loader; SetupParRivals is
+        // still todo. Void params match the forwarded, not-yet-homed argument types.
+        bool LoadStreetData( void* lpOutput, void* lpReceiverQueue );
+        void SetupParRivals( void* lpParRivalData );
+
+        // CreateHighScoreEntryFromDown @ 0x82324A28. Builds an online high-score
+        // entry from a downloaded record: constructs lpEntry, then for each score
+        // type with a non-empty owner name AND a non-zero score, stores it. The
+        // second argument is unreferenced by the X360 body. Returns lpEntry.
+        static BrnStreetData::ChallengeHighScoreEntry* CreateHighScoreEntryFromDown(
+            BrnStreetData::ChallengeHighScoreEntry* lpEntry,
+            int                                     liUnused,
+            const CgsNetwork::PlayerName*           lpPlayerNames,
+            const int32_t*                          lpScores );
+
+        // CreateUserChallengeScoreFr @ 0x82324AC0. Builds a local-player challenge
+        // score entry: constructs lpEntry, then stores each non-zero score. The
+        // second argument is unreferenced by the X360 body. Returns lpEntry.
+        static BrnStreetData::ChallengePlayerScoreEntry* CreateUserChallengeScoreFr(
+            BrnStreetData::ChallengePlayerScoreEntry* lpEntry,
+            int                                       liUnused,
+            const int32_t*                            lpScores );
     };
 }
