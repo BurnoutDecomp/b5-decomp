@@ -333,6 +333,77 @@ struct stereo_room_t
         mWetDryMix = static_cast<T>(mix * static_cast<T>(0.0099999998));
         return this;
     }
+
+    // @0x829656A8 -- push a fully-computed properties_t block into the DSP
+    // sub-filter bank (recomputes tap lengths / gains for the reverb-time and
+    // room parameters). Body lives in its own not-yet-reconstructed TU; declared
+    // here as the callee stereo_room_3dl2_t<T>::set forwards into. Returns `this`.
+    stereo_room_t *properties_set(const properties_t &props);
+};
+
+// ---------------------------------------------------------------------------
+// i3dl2_reverb_t<T> -- the I3DL2 / EAX reverb parameter block (12 fields,
+// 48 bytes), in the standard I3DL2 field order. This is the value `set` copies
+// (whole-block or one field at a time) and that i3dl2_to_properties converts
+// into a stereo_room_t::properties_t. The default values below are baked into
+// the stereo_room_3dl2_t ctor (@0x829674D8): they are the I3DL2 "generic"
+// preset (Room/RoomHF/Reflections/Reverb in millibels, times in seconds,
+// diffusion/density in percent, HFReference in Hz).
+// ---------------------------------------------------------------------------
+template <typename T>
+struct i3dl2_reverb_t
+{
+    s32 miRoom;               // +0   attenuation at/above 0 Hz, mB   (default -10000)
+    s32 miRoomHF;             // +4   extra HF attenuation, mB        (default 0)
+    T   mfRoomRolloffFactor;  // +8   distance rolloff               (default 0.0)
+    T   mfDecayTime;          // +12  reverb decay time, s           (default 1.0)
+    T   mfDecayHFRatio;       // +16  HF-to-mid decay ratio          (default 0.5)
+    s32 miReflections;        // +20  early-reflection level, mB     (default -10000)
+    T   mfReflectionsDelay;   // +24  early-reflection delay, s      (default 0.02)
+    s32 miReverb;             // +28  late-reverb level, mB          (default -10000)
+    T   mfReverbDelay;        // +32  late-reverb delay, s           (default 0.04)
+    T   mfDiffusion;          // +36  echo density, %                (default 100.0)
+    T   mfDensity;            // +40  modal density, %               (default 100.0)
+    T   mfHFReference;        // +44  HF reference, Hz               (default 5000.0)
+};
+
+// ---------------------------------------------------------------------------
+// stereo_room_3dl2_t<T> -- an I3DL2-parameterised front end over stereo_room_t.
+// It owns an i3dl2_reverb_t parameter block and, on every parameter change,
+// converts it (via i3dl2_to_properties) into a stereo_room_t::properties_t and
+// pushes that into the underlying DSP room (stereo_room_t::properties_set).
+//
+// LAYOUT (from the ctor/set/destructor X360 asm @0x829674D8 / 0x82967380 /
+// 0x82962B40): the object begins with an MSVC vbptr at +0, the 48-byte
+// i3dl2_reverb_t block at +4..+51, and the stereo_room_t<T> subobject at +52.
+// A base placed AFTER the derived's own members, reached through a vbtable
+// offset (`*(*this + 4) + this`, giving this+52), and constructed only under
+// the most-derived flag (`if (a2)`), is exactly MSVC virtual inheritance -- so
+// stereo_room_t<T> is modelled as a virtual base. The derived overrides the
+// (virtual) destructor, which is why the base subobject's vftable is rewritten
+// from off_82109030 (stereo_room_t's own) to off_82109024 (this class's).
+// ---------------------------------------------------------------------------
+template <typename T>
+struct stereo_room_3dl2_t : virtual stereo_room_t<T>
+{
+    i3dl2_reverb_t<T> mProps;   // +4  the live I3DL2 parameter block
+
+    // @0x829674D8 -- construct: seed mProps with the I3DL2 "generic" preset.
+    // The virtual base stereo_room_t<T> is constructed by the compiler-inserted
+    // most-derived path (the `if (a2)` guard in the asm); its real body lives in
+    // the still-unrecovered stereo_room_t() ctor @0x829664D8.
+    stereo_room_3dl2_t();
+
+    // @0x82967380 -- update the I3DL2 parameters, then re-derive and apply the
+    // DSP properties. `index` selects one field (1..12) or the whole block
+    // (0); `src` is a bare I3DL2 parameter block. Returns the underlying room.
+    stereo_room_t<T> *set(int index, const i3dl2_reverb_t<T> *src);
+
+    // @0x82962B40 -- scalar deleting destructor. This class owns no heap
+    // members (the I3DL2 block is POD and the DSP filters live inside the
+    // stereo_room_t base), so the destructor body is empty; the X360 image
+    // emits the vtable-restoring + XMemFree-routing thunk from this declaration.
+    virtual ~stereo_room_3dl2_t() {}
 };
 
 } // namespace princeton_digital

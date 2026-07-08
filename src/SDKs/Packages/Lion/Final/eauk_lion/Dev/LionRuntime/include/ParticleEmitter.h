@@ -21,6 +21,7 @@
 
 class  cParticleDescriptor;
 struct cParticleBucket;
+struct cTime;   // monotonic game-time stamp (ParticleBucket.h placeholder home) -- ref only here
 
 class cParticleEmitter
 {
@@ -34,6 +35,27 @@ public:
     // (X360: r3 = emitter, r4 = bucket). Body lives in the cParticleEmitter TU; declared
     // here so the pool manager can compile against the real signature.
     void BucketRemove(cParticleBucket* apBucket);
+
+    // ---- emitter lifecycle / pool-threading surface used by cParticleEmitterManager ----
+    // Bodies live in the cParticleEmitter TU (not yet reconstructed); declared here so the
+    // manager (AppInit / Register / RegisterSubEmitter / Update) compiles against the real
+    // DWARF signatures (ParticleEmitter.h:40/79/100/179 + GetNextEmitter@:60). The X360
+    // manager folds SetActiveFlag / SetNext / GetNextEmitter inline; they are re-outlined
+    // here as the calls the original source made.
+
+    // Bring the emitter to its initial state for apDescriptor (nullptr while pooling). :40
+    void Init(cParticleDescriptor* apDescriptor);
+
+    // Advance one frame; returns non-zero while still alive (0 -> manager unregisters it). :179
+    u32 Update(const cTime& arTime);
+
+    // Set the "active" flag word (bit 0 == active). :100
+    void SetActiveFlag(u32 aFlag);
+
+    // Manager free/used list link (emitter console +0x204). SetNext writes it; :79
+    void SetNext(cParticleEmitter* apNext);
+    // GetNextEmitter returns it by reference. :60
+    cParticleEmitter*& GetNextEmitter();
 
 private:
     // Opaque leading simulation state preceding mpDescriptor at console +0x1F8 (504):
