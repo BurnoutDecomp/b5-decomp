@@ -19,20 +19,28 @@
 //
 // Lowercase rw::audio:: namespaces match the third-party middleware API.
 //
-// FLAG (rwaudio PDB reconcile): DIVERGE from the NFS ProStreet 08 X360 PDB. The PDB's
-//   rw::audio::core::SeekTableParser is a 32-byte parser-STATE object with 8 instance
-//   members (void* mpSeekData @0x00; int mStreamSkip @0x04; int mDecoderSkip @0x08;
-//   int mPlayerSkip @0x0c; unsigned int mChunkOffset @0x10; int mSeekDataVersion @0x14;
-//   int mLatency @0x18; bool mIsNewFeedChunk @0x1c; 3 bytes pad), sizeof=32. This
-//   reconstructed header instead models only the recovered static 16-byte copy helper
-//   (ParseChunkSection0) plus a local ChunkSection0 POD -- it has NO instance data
-//   members, so the PDB names cannot be mapped onto it (no field order / sizeof to align).
-//   Keeping the ARTIST-attested layout unchanged; the PDB state members belong to the
-//   full SeekTableParser TU that is not yet homed here. Do not retrofit until that TU is
-//   decompiled (the static copy step is the only attested piece).
+// STATE LAYOUT (32 bytes) -- adopted from the NFS ProStreet 08 X360 rwaudio PDB and now
+//   OFFSET-CONFIRMED against the ARTIST asm of the four parser methods below (Parse
+//   @0x82B6FBD8, ParseHeader0 @0x82B6F8E0, ParseChunkSection0 @0x82B6F328, ParseChunkSection1
+//   @0x82B6E908). The earlier revision of this header modelled only the static 16-byte copy
+//   helper because no offsets were attested; the state members are now grounded (see the
+//   per-member stores called out below), so the PDB names are mapped on.
+//
+// Members and where each store/read is attested:
+//   +0x00 mpSeekData       ParseHeader0 sets = apSeekData + word[+4] (or 0); the section loop
+//                          rewrites it to mpSeekData_base + running seek-offset delta.
+//   +0x04 mStreamSkip      section loop `stw pos, 4`  -- accumulated chunk length (position).
+//   +0x08 mDecoderSkip     section loop `stw target-player-pos, 8`.
+//   +0x0C mPlayerSkip      section loop `stw min(target-pos, mLatency), 0xC`.
+//   +0x10 mChunkOffset     section loop `stw accChunkOffset, 0x10`.
+//   +0x14 mSeekDataVersion ParseHeader0 `stw versionByte, 0x14` (version>>4 selects section).
+//   +0x18 mLatency         ParseHeader0 `stw latencyHalfword, 0x18`; section reads it (a1[6]).
+//   +0x1C mIsNewFeedChunk  section loop `stb (flag==1), 0x1C`.
+// PDB types mpSeekData as void*; modelled here as u8* for the byte-pointer arithmetic the
+// asm performs. (The static copy helper ParseChunkSection0 below is unchanged.)
 // =====================================================================================
 
-#include "types.hpp" // u8
+#include "types.hpp" // u8, s32
 
 namespace rw
 {
@@ -41,18 +49,62 @@ namespace audio
 namespace core
 {
 
-// A 16-byte chunk-section header block the seek-table parser copies verbatim.
+// A 16-byte serialised chunk-section record. The seek-table parser copies it verbatim
+// (ParseChunkSection0 copy helper) and reads it as four 32-bit columns: a per-row
+// chunk-offset delta, a per-row seek-data byte delta, the chunk length, and a new-feed
+// flag. These are the same four columns ParseChunkSection1 pulls from a PackedTableReader.
 struct ChunkSection0
 {
-    u8 mau8Bytes[16];
+    union
+    {
+        u8 mau8Bytes[16];
+        struct
+        {
+            s32 miChunkOffsetDelta; // +0x00 -- accumulates into mChunkOffset
+            s32 miSeekOffsetDelta;  // +0x04 -- accumulates into mpSeekData
+            s32 miLength;           // +0x08 -- chunk length (negative terminates the table)
+            s32 miFlag;             // +0x0C -- 1 == new-feed chunk
+        };
+    };
 };
 
 class SeekTableParser
 {
 public:
-    // @ 0x82B6E880 -- copy the 16-byte chunk-section block from `apSource` into
+    u8* mpSeekData;        // +0x00 -- PDB void*; base + running seek-offset delta
+    s32 mStreamSkip;       // +0x04
+    s32 mDecoderSkip;      // +0x08
+    s32 mPlayerSkip;       // +0x0C
+    s32 mChunkOffset;      // +0x10
+    s32 mSeekDataVersion;  // +0x14
+    s32 mLatency;          // +0x18
+    u8  mIsNewFeedChunk;   // +0x1C (3 bytes pad follow to 32)
+
+    // @ 0x82B6FBD8 -- entry point. If the blob's first byte is non-zero, treat it as
+    // "no usable table" (result true); otherwise parse the header. When the result is
+    // true (target not resolved within the table) reset the resolved output members.
+    bool Parse(u8* apSeekData, s32 aTargetPos);
+
+    // @ 0x82B6F8E0 -- read the 8-byte header (version byte, latency halfword, seek-data
+    // offset word), then dispatch on (version >> 4): 0 -> ParseChunkSection0,
+    // 1 -> ParseChunkSection1, anything else -> false. The section table starts at
+    // apSeekData + 8.
+    bool ParseHeader0(u8* apSeekData, s32 aTargetPos);
+
+    // @ 0x82B6F328 -- walk raw 16-byte chunk-section records (copied one at a time via the
+    // copy helper below), resolving the chunk that contains aTargetPos into the state
+    // members. Returns false once aTargetPos is covered (found), true if the table's
+    // terminator is reached first (not found).
+    bool ParseChunkSection0(u8* apRecords, s32 aTargetPos);
+
+    // @ 0x82B6E908 -- same walk as ParseChunkSection0 but the rows come from a
+    // PackedTableReader over the packed column stream at apTableData.
+    bool ParseChunkSection1(u8* apTableData, s32 aTargetPos);
+
+    // @ 0x82B6E880 -- copy the 16-byte chunk-section record from `apSource` into
     // `apDest` byte-for-byte (lbz/stb x16), then return `apDest`. Store-for-store with
-    // the X360 (no widening, no reordering -- a plain 16-byte copy).
+    // the X360 (no widening, no reordering -- a plain 16-byte copy). This is the private
+    // per-row read step ParseChunkSection0 calls.
     static ChunkSection0* ParseChunkSection0(ChunkSection0* apDest, const ChunkSection0* apSource);
 };
 

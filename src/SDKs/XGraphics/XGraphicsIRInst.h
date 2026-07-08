@@ -60,6 +60,12 @@ struct IRInst : public DListNode
     u8    maUnk9E[6];           // +0x9E  FLAG per-operand byte flags (Init = 0)
     u8    muUnkA4;              // +0xA4  FLAG (Init = 0)
     s32   maUnkC8[6];           // +0xC8  FLAG per-operand (Init = 0)
+    // +0xE0 is an unmodeled gap word (no attested reader/writer). muUnkE4 @+0xE4
+    // is a node-flags word: IRInst::Init does not touch it, but the IRLoadInterp
+    // ctor sets bit 0x40 into it (lwz 0xE4; ori 0x40; stw 0xE4). Its only
+    // grounding is that OR, so its wider purpose is FLAGged unattested.
+    u32   muUnkE0;              // +0xE0  FLAG unattested gap word
+    u32   muUnkE4;              // +0xE4  FLAG node flags (IRLoadInterp sets 0x40)
     VReg* maSourceRegs[32];     // +0xE8  per-channel source registers
     s32   maSwizzle[32][4];     // +0x16C per-channel swizzle (Init = 3)
     s32   maUnk380[8];          // +0x380 FLAG (Init = 0)

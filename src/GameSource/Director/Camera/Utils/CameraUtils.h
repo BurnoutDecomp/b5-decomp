@@ -69,6 +69,16 @@ namespace Utils
     // Used by Track when applying the fixed look offset.
     void RotateMatrix44AffineByEulerAnglesZXY(Matrix44Affine& lrMatrix, Vector3 lEulerAngles);
 
+    // DWARF CameraUtils.cpp:453 (._ZN11BrnDirector6Camera5Utils32EulerAnglesZXYFromMatrix44Affine
+    // EN2rw4math3vpu14Matrix44AffineEPNS4_7Vector3Ef). The ZXY Euler angles (radians) of an
+    // affine's rotation -- the inverse of RotateMatrix44AffineByEulerAnglesZXY. lpLastAngles
+    // (optional) disambiguates the near-vertical gimbal-degenerate branch toward the previous
+    // frame's angles; lfVerticalComparisonEpsilon is the near-vertical tolerance. Used by
+    // BehaviourDebugFlyWorld::WarpToLookAt / ::Update. Declaration-only here -- the body lands
+    // with CameraUtils.cpp's own TU (the per-TU `cl /c` gate does not link).
+    Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngles = 0,
+                                             f32 lfVerticalComparisonEpsilon = 0.0099999998f);
+
     // DWARF CameraUtils.cpp:44. The projected on-screen size (width/height in screen units)
     // of an AABB as seen by the camera transform. Used by Zoom.
     Vector2 GetSizeOnScreen(Matrix44Affine lCameraTransform,

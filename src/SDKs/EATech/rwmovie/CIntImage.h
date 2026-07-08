@@ -52,6 +52,14 @@ public:
     // Constructs the image and immediately calls allocate(); the resulting status code
     // is written back through lpiResult.
     explicit CIntImage(s32* lpiResult);
+
+    // Extent-taking constructor used by CPictureFYUV420: copies lrRect into mRect and
+    // allocates, writing the status back through lpiResult. This overload is attested only
+    // by its call site (CPictureFYUV420::CPictureFYUV420 @0x82A7DC..: bl CIntImage__CIntImage
+    // with r4=s32* result, r5=CRct*, r6=0); its body lives in the CIntImage TU. iFlags is
+    // passed 0 at every attested call.
+    CIntImage(s32* lpiResult, const CRct& lrRect, s32 iFlags);
+
     ~CIntImage();
 
     // (Re)allocates the pixel buffer for the current mRect. Returns 0 on success (or on a
