@@ -167,7 +167,12 @@ public:
     static void* CopyBufferHelper(SVideoBuffer* pSrc, SVideoBuffer* pDst,
                                   u32 uRowSize, u32 uRowCount);
 
-private:
+    // `protected`, not `private`: the concrete derived outputs (CI420VideoOutput,
+    // CYUY2VideoOutput) share this prefix and reach these members by name -- their
+    // asm loads/stores land inside this base subobject (mpDevice @0x00, the quad
+    // resources @0x04..0x10, miWidth/miHeight @0x74/0x78, the plane-0 ring at
+    // mpBufferResource @0x7C / mBuffers @0x88, and the shared cursors @0xA0..0xA8).
+protected:
     D3DDevice*            mpDevice;            // +0x00
     D3DVertexDeclaration* mpVertexDeclaration; // +0x04
     D3DVertexShader*      mpVertexShader;      // +0x08
