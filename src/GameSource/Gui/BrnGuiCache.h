@@ -276,6 +276,19 @@ namespace BrnGui
         // which inlines the byte load mpGuiCache+0x4B4A): the "use in-event sign
         // colouring" gate byte.
         bool GetInEventColouringGate() const                     { return mbInEventColouringGate; }
+
+        // ADDITIVE GROW (BrnOnlinePlay TU). The online-play main-menu state's multiplayer /
+        // invite / online-start surface. IsMultiplayerAllowed is a real out-of-line X360 method
+        // (BrnGuiCache.cpp; CheckPrivileges @0x82485980 calls it) -- declaration-only here, body
+        // links from the GuiCache TU. The invite/start flag accessors read/write the +0x4B4C..
+        // +0x4B53 cluster carved into the layout below. FLAG: consumer-named.
+        bool IsMultiplayerAllowed() const;                                       // X360 far member (decl-only)
+        bool IsOnlineStartInProgress() const  { return mbOnlineStartInProgress; }  // +0x4B4C
+        bool IsInviteInProgress() const       { return mbInviteInProgress; }       // +0x4B4D
+        bool IsPerformingInvite() const       { return mbPerformingInvite; }       // +0x4B4F
+        void SetOnlineMatchRanked(bool lbRanked)     { mbOnlineMatchRanked = lbRanked; }     // +0x4B51
+        void SetOnlineMatchUnranked(bool lbUnranked) { mbOnlineMatchUnranked = lbUnranked; } // +0x4B52
+        void SetOnlineStartPending(bool lbPending)   { mbOnlineStartPending = lbPending; }   // +0x4B53
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
 
@@ -343,7 +356,20 @@ namespace BrnGui
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
         u8   mPad_4B04[0x46];                             // +0x4B04..+0x4B49
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
-        u8   mPad_4B4B[0x527F - 0x4B4A];                 // +0x4B4B..+0x527F
+        u8   mPad_4B4B[1];                                // +0x4B4B
+        // ADDITIVE GROW (BrnOnlinePlay TU): the online-play main-menu invite / online-start flag
+        // cluster the online-play state reads/writes (X360 far bytes GuiCache+0x4B4C..+0x4B53).
+        // Carved from the former mPad_4B4B WITHOUT shifting any following member. Names are inferred
+        // from the OnlinePlay consumer; FLAG: consumer-named (no standalone DWARF for these bytes).
+        bool mbOnlineStartInProgress;                    // +0x4B4C (19276) HandleControllerInputMainMenu confirm gate
+        bool mbInviteInProgress;                         // +0x4B4D (19277) HandleGuiCacheEvent source
+        u8   mPad_4B4E[1];                                // +0x4B4E
+        bool mbPerformingInvite;                         // +0x4B4F (19279) HandleGuiCacheEvent source
+        u8   mPad_4B50[1];                                // +0x4B50
+        bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
+        bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption
+        bool mbOnlineStartPending;                       // +0x4B53 (19283) SelectOnlineMenuOption (cleared)
+        u8   mPad_4B54[0x527F - 0x4B53];                 // +0x4B54..+0x527F
         s32 miNumPresetRaces;                            // +0x5280 (21120)
         u8  mPad_5284[19408];                            // +0x5284..+0x9E53
         s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker

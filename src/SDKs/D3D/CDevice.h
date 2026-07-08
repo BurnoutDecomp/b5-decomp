@@ -168,8 +168,19 @@ private:
     u32 muLiveSave2;        // +0x3A50  live word[3732]
     u32 muLiveSave3;        // +0x3A54  live word[3733]
 
+    // ---- debug growable-command-buffer list (words [3744]..[3751]) ----
+    // The X360 debug build threads every growable D3D::CCommandBuffer onto a
+    // device-global singly-linked list (via CCommandBuffer::mpNextDebug) guarded
+    // by an RTL_CRITICAL_SECTION. CCommandBuffer::DebugDestroy unlinks itself
+    // here and GrowableAllocate/GrowableFree take the lock; CCommandBuffer is a
+    // `friend` so it reaches these fields by name (no offset-hack).
+    u8  mPad3A58[0x3A80 - (0x3A54 + 4)]; // +0x3A58
+    u8  mCommandBufferLock[0x1C];        // +0x3A80  RTL_CRITICAL_SECTION (X360: 28 bytes)
+    CCommandBuffer* mpCommandBufferList; // +0x3A9C  head of the debug command-buffer list
+
     // ---- out-of-memory fallback buffer base (word [4183]) ----
-    u8  mPad3A58[0x415C - (0x3A54 + 4)]; // +0x3A58
+    u8  mPad3AA0[0x415C - (0x3A9C + 4)]; // +0x3AA0 (X360 layout; host offsets past
+                                         //          mpGpuReadback shift by pointer widening)
     u32 muOutOfMemoryBase;  // +0x415C  fallback ring base used by MarkAsOutOfMemory
 
     // ---- GPU-block profiling accumulators (read/written by ~CBlocker) ----
@@ -186,6 +197,7 @@ private:
 
     friend void _CDeviceAssertLayout();
     friend class CBlocker;
+    friend class CCommandBuffer; // unlinks itself from mpCommandBufferList under mCommandBufferLock
 };
 
 } // namespace D3D

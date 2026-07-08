@@ -46,13 +46,15 @@ public:
     // Class-specific deallocation routing through the XAudio XMem manager.
     void operator delete(void* pMemory);
 
-private:
-    // +4: a reserved word that precedes mpContext in the X360 layout. Neither
-    // function in this TU reads it; FLAGGED -- modelled only to place mpContext
-    // at the asm's byte offset +8.
+protected:
+    // +4: a reserved word that precedes mpContext in the X360 layout. This TU's
+    // own functions do not read it; the derived CSourceEffect ctor seats it to 1
+    // (`this[1] = 1`), so it is protected rather than private.
     u32   muReserved4; // +4
 
-    // +8: the context pointer GetContext returns (lwz r11, 8(r3)).
+    // +8: the context pointer GetContext returns (lwz r11, 8(r3)). The derived
+    // CSourceEffect seats it in its ctor and reads it in CompletePacket, so it is
+    // protected rather than private.
     void* mpContext;   // +8
 };
 
