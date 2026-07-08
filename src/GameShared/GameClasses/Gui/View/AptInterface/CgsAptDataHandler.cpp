@@ -33,6 +33,14 @@
 
 namespace CgsGui
 {
+    bool AptDataHandler::Prepare(CgsMemory::HeapMalloc* lpAllocator)
+    {
+        CGS_ASSERT(lpAllocator != 0,
+                   "Passed in allocator to AptDataHandler::Prepare is null");
+        mpAllocator = lpAllocator;
+        return true;
+    }
+
     // X360 0x82847250.
     void* AptDataHandler::AptAlloc(size_t lnSize)
     {

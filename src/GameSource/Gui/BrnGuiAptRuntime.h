@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 namespace CgsGraphics { struct Im2d; }
+namespace CgsGui { class ViewModule; }
 
 namespace BrnGui
 {
@@ -16,6 +17,7 @@ namespace BrnGui
     class AptRuntimeHost
     {
     public:
+        bool Prepare(CgsGui::ViewModule* lpViewModule);
         bool Prepare();
         void PlayMovie(const char* lpacMovieName, s32 liLevelNum);
         void Update();
@@ -29,6 +31,9 @@ namespace BrnGui
         bool SetComponentViewState(const char* lpacInstName, const char* lpacViewState);
         bool SetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
                                   const char* lpacValue);
+
+    private:
+        CgsGui::ViewModule* mpViewModule = nullptr;
     };
 
     // Interim renderer bridge, matching gpActiveMovieManager: GuiModule publishes

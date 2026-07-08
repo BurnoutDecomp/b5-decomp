@@ -46,6 +46,9 @@ namespace CgsGui
         // valid and the block pointer is non-null, then frees it via mpAllocator->Free.
         void  AptFree(void* lpBlock);
 
+        // X360 0x8284A290. Install the allocator used by AptAlloc/AptFree.
+        bool Prepare(CgsMemory::HeapMalloc* lpAllocator);
+
         // X360 0x828518F0 (CgsAptDataHandler.cpp). Look up a registered AptDataHeader by its
         // movie name (hash the name, linear-scan the (hash,header) table); null if absent.
         AptDataHeader* FindAptData(const char* lpacName);

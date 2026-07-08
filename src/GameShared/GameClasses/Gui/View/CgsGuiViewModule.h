@@ -1,7 +1,13 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEventQueueBase (AddViewState source)
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
+#include "GameShared/GameClasses/Gui/View/CgsGuiFontCollection.h"
+#include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"
 
 // ============================================================================
 // b5-decomp/src/GameShared/GameClasses/Gui/View/CgsGuiViewModule.h
@@ -12,17 +18,9 @@
 // the DWARF-attested home. BrnGui::ViewModule (GameSource/Gui/View/BrnViewModule.cpp)
 // derives from this class.
 //
-// LAYOUT NOTE (authoritative byte offsets, pinned by the X360 bodies in
-// CgsGuiViewModule.cpp): ViewModule is a very large subsystem-module object
-// (~0x28C80 bytes) built in the standard CgsModule::ModuleSingleBuffered shape --
-// base-most vtable + two read/write locks, then the most-derived vtable, then a
-// long run of embedded sub-objects (a CgsLanguage::LanguageManager at +0x7C0C, a
-// CgsGui::AptRenderHandler at +0xE430, a trailing EA::Thread::Mutex at +0x28C78,
-// etc.). The full layout is dominated by uncommitted sub-objects, so -- exactly as
-// the sibling module homes do (CgsGuiModule.cpp / CgsModelModule.cpp) -- the body
-// addresses each field it writes by its X360 byte offset through a char* view of
-// `this`, with named KI_ offset constants. This is a declaration-only skeleton; the
-// constructor body and the three accessor bodies live in CgsGuiViewModule.cpp.
+// The member order below is the DecFIGS CgsGuiViewModule.h declaration, gated by
+// the ARTIST Construct/Prepare/Update/RenderInternal bodies. PC pointer widening
+// changes byte offsets, so runtime code addresses these members by name.
 //
 // Only the four ledger functions in scope are declared:
 //   ViewModule()              X360 0x827E2728  (ctor; EXECUTED in the boot trace)
@@ -40,9 +38,6 @@ struct RGBA;                          // GUI clear/tint colour (passed by const 
 namespace CgsModule { struct Event; } // base module event record (ProcessIncomingLoadNotification arg)
 namespace CgsMemory { class HeapMalloc; class LinearMalloc; }
 namespace rw { class IResourceAllocator; }
-namespace CgsGui { class ImRendererSet; class FontCollection; }
-namespace CgsGraphics { class TextRenderer; }
-namespace CgsLanguage { class LanguageManager; }
 namespace CgsGui
 {
 namespace ViewIO
@@ -55,15 +50,43 @@ namespace ViewIO
 
 namespace CgsGui
 {
+    struct ImRendererSet
+    {
+        CgsGui::AptIm2dRenderBuffer* mpIm2dRenderer;
+        void* mpReserved04;
+        void* mpReserved08;
+        void* mpReserved0C;
+        void* mp3dRenderer;
+    };
+
     // KI_NUM_MOVIE_LEVELS -- the assert "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS"
     // fires for liLevel > 8 (X360 `cmpwi r31,9; blt` -> valid range [0,8]), so the
     // count is 9. (Grounded: the asm range check, not a fabricated constant.)
     static const int KI_NUM_MOVIE_LEVELS = 9;
 
-    class ViewModule
+    class ViewModule : public CgsModule::ModuleSingleBuffered
     {
     public:
-        // X360 0x827E2728. Standard subsystem-module bring-up (see .cpp).
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_MANAGER = 1,
+            E_PREPARESTAGE_LANGUAGE = 2,
+            E_PREPARESTAGE_MOVIE = 3,
+            E_PREPARESTAGE_APT = 4,
+            E_PREPARESTAGE_DONE = 5,
+        };
+
+        enum EReleaseStage
+        {
+            E_RELEASESTAGE_START = 0,
+            E_RELEASESTAGE_APT = 1,
+            E_RELEASESTAGE_MOVIE = 2,
+            E_RELEASESTAGE_LANGUAGE = 3,
+            E_RELEASESTAGE_MANAGER = 4,
+            E_RELEASESTAGE_DONE = 5,
+        };
+
         ViewModule();
         virtual ~ViewModule() {}
 
@@ -118,29 +141,22 @@ namespace CgsGui
         void AddViewState(const GuiEventQueueBase<BUFSIZE, ALIGN>* lpGuiEvents,
                           ViewIO::InputBuffer* lpInput);
 
-        // -------------------------------------------------------------------------------
-        // Named accessors for the owned sub-objects a DERIVED module needs to wire up
-        // (BrnGui::ViewModule hands these to its FlaptManager and reads the per-frame
-        // time-step from the base each Update). The base is a declaration-only skeleton
-        // whose interior sub-objects are not modelled as named C++ members (their full
-        // x64 layouts are uncommitted and their X360 byte offsets cannot be reproduced
-        // with named members on the wider PC ABI -- see LAYOUT NOTE). These accessors are
-        // the BY-NAME interface to those sub-objects: each returns the X360-attested
-        // sub-object the derived code uses, encapsulating the offset inside the base (the
-        // same house style the base bodies use for their own fields), so derived TUs never
-        // do offset arithmetic themselves. The offsets are the ones the X360
-        // BrnGui::ViewModule::Construct/Update bodies pass/read.
-        ImRendererSet*            GetImRendererSet()
-        { return reinterpret_cast<ImRendererSet*>(_BaseField(KI_OFF_IMRENDERERS)); }
+        ImRendererSet* GetImRendererSet()
+        { return &mImRenderers; }
         CgsGraphics::TextRenderer* GetTextRenderer()
-        { return reinterpret_cast<CgsGraphics::TextRenderer*>(_BaseField(KI_OFF_TEXTRENDERER)); }
+        { return &mTextRenderer; }
         CgsLanguage::LanguageManager* GetLanguageManager()
-        { return reinterpret_cast<CgsLanguage::LanguageManager*>(_BaseField(KI_OFF_LANGUAGEMANAGER)); }
-        const FontCollection*     GetFontCollection() const
-        { return reinterpret_cast<const FontCollection*>(_BaseFieldC(KI_OFF_FONTCOLLECTION)); }
-        // The per-frame update time-step the base maintains (X360 Update reads lfs at +0x23C).
+        { return &mLanguageManager; }
+        const FontCollection* GetFontCollection() const
+        { return &mFonts; }
+        FontCollection* GetFontCollection()
+        { return &mFonts; }
+        AptAux* GetAptAux()
+        { return &mAptAux; }
+        const AptAux* GetAptAux() const
+        { return &mAptAux; }
         f32 GetUpdateTimeStep() const
-        { return *reinterpret_cast<const f32*>(_BaseFieldC(KI_OFF_UPDATE_TIMESTEP)); }
+        { return mfUpdateTimeDelta; }
 
     protected:
         // X360 0x82858AF8 (vtable slot after Update; see DWARF). Renders the shared view
@@ -151,16 +167,29 @@ namespace CgsGui
         // notification routed to this module. Overridden by BrnGui::ViewModule.
         virtual void ProcessIncomingLoadNotification(const CgsModule::Event* lpEvent);
 
+    protected:
+        bool mbUpdateFlash;
+        f32 mfHack_LastValidTimeStep;
+        f32 mfCurrentTime;
+        f32 mfLastUpdateTime;
+        f32 mfLastRenderTime;
+        f32 mfUpdateTimeDelta;
+        f32 mfRenderTimeDelta;
+        ImRendererSet mImRenderers;
+        CgsGraphics::TextRenderer mTextRenderer;
+        FontCollection mFonts;
+        CgsLanguage::LanguageManager mLanguageManager;
+        GuiEventQueueBase<256, 16> mOutputEventQueue;
+
     private:
-        // X360 byte offsets of the owned sub-objects the accessors above expose (from the
-        // BrnGui::ViewModule::Construct/Update asm; the base file's own constants cover the
-        // fields its own bodies touch). Kept private -- the offset never leaves this class.
-        static const u32 KI_OFF_UPDATE_TIMESTEP  = 0x23C;   // f32, fed to the flapt manager
-        static const u32 KI_OFF_IMRENDERERS      = 0x250;   // ImRendererSet
-        static const u32 KI_OFF_TEXTRENDERER     = 0x3E0;   // TextRenderer (early sub-object block)
-        static const u32 KI_OFF_FONTCOLLECTION   = 0x7BF4;  // FontCollection
-        static const u32 KI_OFF_LANGUAGEMANAGER  = 0x7C0C;  // CgsLanguage::LanguageManager
-        char*       _BaseField(u32 luOffset)        { return reinterpret_cast<char*>(this) + luOffset; }
-        const char* _BaseFieldC(u32 luOffset) const { return reinterpret_cast<const char*>(this) + luOffset; }
+        EPrepareStage mePrepareStage;
+        EReleaseStage meReleaseStage;
+        const char* mpcLoadingMovieName;
+        s32 miLoadingScreenLevel;
+        char macCurrentlyPlayingMovies[KI_NUM_MOVIE_LEVELS][32];
+        bool mbClearScreenEnabled;
+        f32 mfClearScreenAlpha;
+        CustomRendererManager* mpCustomRendererManager;
+        AptAux mAptAux;
     };
 }

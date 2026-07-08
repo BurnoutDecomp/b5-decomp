@@ -12,6 +12,7 @@
 // ---- the Apt host adaptor + render handler (the render bridge) --------------
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"          // CgsGui::AptAux / AptAuxPointer
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"// CgsGui::AptImRendererSet / AptIm2dRenderBuffer
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"                // CgsGui::ViewModule (real Apt/text owner)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                       // CgsGuiModuleIO::ImRendererSet
 
 // ---- the Apt engine leaves that ARE bodied (the bring-up drives these) ------
@@ -654,11 +655,7 @@ namespace
     bool s_bRuntimeReady     = false;   // the whole bring-up succeeded
     bool s_bBringUpAttempted = false;   // ran the (idempotent) bring-up at least once
 
-    // ---- the host AptAux singleton ---------------------------------------------
-    // The real AptAux is large (mRenderHandler alone is ~108 KB); allocate it as one
-    // static object (the X360 holds a single static instance the callbacks resolve
-    // through AptAuxPointer::mpAptAuxInst). Constructed in AptRuntimeHost::Prepare.
-    CgsGui::AptAux s_AptAux;
+    CgsGui::ViewModule* s_pViewModule = nullptr;
 
     // ---- the Apt render buffer the engine's render callbacks fill --------------
     // AptRenderHandler::GetIm2dRendererType() returns mpImRenderers->mpIm2dRenderer
@@ -671,16 +668,6 @@ namespace
     CgsGui::AptIm2dRenderBuffer s_AptRenderBuffer;
     bool                        s_bRenderBufferReady = false;
 
-    // ---- the ImRendererSet handed to AptAux::Construct -------------------------
-    // AptAux::Construct reinterpret_cast<AptImRendererSet*>(this set) and reads:
-    //   +0x00 mpIm2dRenderer  -> our s_AptRenderBuffer  (the 2D render buffer)
-    //   +0x10 mp3dRenderer    -> a non-null sentinel    (Render asserts it != 0)
-    // CgsGuiModuleIO::ImRendererSet's leading bytes are an opaque 5-dword blob
-    // (maRendererPtrs[20]); the AptImRendererSet view aliases the same first/4th
-    // pointer slots. We build the AptImRendererSet directly and hand its address
-    // (re-typed) to Construct so the aliasing is exact + obvious.
-    CgsGui::AptRenderHandler::AptImRendererSet s_AptImRendererSet;
-
     // A non-null 3D-renderer sentinel so AptRenderHandler::Render's
     // `mpImRenderers->mp3dRenderer != 0` assert passes. The Apt boot/title movies are
     // 2D-only, so the 3D renderer is never dereferenced on this path; a sentinel keeps
@@ -689,15 +676,8 @@ namespace
     // title movie draws 2D). If a 3D Apt path is ever exercised this must become real.
     int s_i3dRendererSentinel = 0;
 
-    // ---- the Apt TEXT system (PC stand-in for the ViewModule's owned text sub-objects) ----
-    // FLAG: on the X360 these live inside CgsGui::ViewModule (GetFontCollection() /
-    // GetTextRenderer() / GetLanguageManager()) and are handed to AptAux::Construct by the
-    // view bring-up. That module's full bring-up is not reconstructed, so the Apt bring-up
-    // owns its own instances here and loads them from the SAME staged data the console used
-    // (LANGUAGE\FONTS\*.font typeface bundles + the LANGUAGE\000N.bundle string table).
-    CgsGraphics::TextRenderer    s_AptTextRenderer;      // zero-init BSS (RenderString* self-arms)
-    CgsGui::FontCollection       s_AptFontCollection;    // zero-init BSS (empty handles == free slots)
-    CgsLanguage::LanguageManager s_AptLanguageManager;   // ctor seeds the hash bins/lists
+    // The language allocator and staged resources remain in this loader bridge for now;
+    // the objects they prepare are owned by CgsGui::ViewModule.
     CgsMemory::HeapMalloc        s_AptLanguageAllocator; // backs the manager's element allocs
     bool s_bTextSystemReady = false;                     // fonts + strings loaded (one-shot)
     CgsResource::Font* s_pAptBodyFont = nullptr;         // the FIRST loaded typeface (B5EAConDisS --
@@ -1077,7 +1057,7 @@ namespace BrnGui
         CgsResource::SafeResourceHandle<CgsResource::Font> lHandle;
         lHandle.mpResourceMemory = &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
         lHandle.mpSourceEntry    = lpEntry;
-        s_AptFontCollection.AddFont(lHandle);
+        s_pViewModule->GetFontCollection()->AddFont(lHandle);
 
         std::snprintf(lac, sizeof(lac),
             "[AptRT] text: font '%s' registered (family='%s' chars=%u heightPx=%u atlas=%s).\n",
@@ -1164,7 +1144,7 @@ namespace BrnGui
             const u64 luStr  = *reinterpret_cast<const u64*>(lpSlot + 8);
             if (luStr == 0 || luStr >= luResSize)
                 continue;   // out-of-range slot: skip (defensive; the staged tables are clean)
-            if (s_AptLanguageManager.AddStringPointerByHash(luHash, lpResource + luStr))
+            if (s_pViewModule->GetLanguageManager()->AddStringPointerByHash(luHash, lpResource + luStr))
                 ++liInstalled;
         }
 
@@ -1204,8 +1184,8 @@ namespace BrnGui
 
         // The language manager: allocator + faithful default formatting, then the string table.
         s_AptLanguageAllocator.Construct(s_aLanguageHeap, static_cast<s32>(KU_LANGUAGE_HEAP_BYTES));
-        s_AptLanguageManager.Prepare(&s_AptLanguageAllocator);
-        s_AptLanguageManager.PrepareDefaultFormattingStrings();
+        s_pViewModule->GetLanguageManager()->Prepare(&s_AptLanguageAllocator);
+        s_pViewModule->GetLanguageManager()->PrepareDefaultFormattingStrings();
         const bool lbStrings = AptLoadLanguageStrings(KC_APT_LANGUAGE_BUNDLE);
 
         s_bTextSystemReady = (liFonts > 0);
@@ -1223,6 +1203,8 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     static bool PrepareRuntime()
     {
+        if (s_pViewModule == nullptr)
+            return false;
         if (s_bRuntimeReady)
             return true;
         // Idempotent: each step is guarded by its own *Ready flag, so re-entry only runs
@@ -1265,42 +1247,25 @@ namespace BrnGui
         // AptRenderHandler::Render through it).
         if (!s_bAuxReady)
         {
-            s_AptImRendererSet.mpIm2dRenderer = &s_AptRenderBuffer;     // GetIm2dRendererType() target
-            s_AptImRendererSet.mpReserved04   = nullptr;
-            s_AptImRendererSet.mpReserved08   = nullptr;
-            s_AptImRendererSet.mpReserved0C   = nullptr;
-            s_AptImRendererSet.mp3dRenderer   = &s_i3dRendererSentinel; // Render asserts != 0
+            CgsGui::ImRendererSet* lpImRenderers = s_pViewModule->GetImRendererSet();
+            lpImRenderers->mpIm2dRenderer = &s_AptRenderBuffer;
+            lpImRenderers->mpReserved04   = nullptr;
+            lpImRenderers->mpReserved08   = nullptr;
+            lpImRenderers->mpReserved0C   = nullptr;
+            lpImRenderers->mp3dRenderer   = &s_i3dRendererSentinel;
 
             // Bring the TEXT system up first (fonts + language + glyph batcher) so the
             // handler's text-layout inputs are live from the start. One-shot; device-gated.
             AptBringUpTextSystem();
 
-            // AptAux::Construct args:
-            //   ImRendererSet*       -> our AptImRendererSet (re-typed; bit-aliased, see header)
-            //   TextRenderer*        -> the bring-up's glyph batcher (FLAG: PC stand-in for
-            //                           ViewModule::GetTextRenderer(); drives the buffered path)
-            //   LanguageManager*     -> the bring-up's manager (FLAG: stand-in for
-            //                           ViewModule::GetLanguageManager(); $LANGID keys resolve)
-            //   FontCollection*      -> the bring-up's collection (FLAG: stand-in for
-            //                           ViewModule::GetFontCollection(); 3 western typefaces)
-            //   aspectRatio          -> 16:9 (1280/720) so the stage resolution lands at 1280x720
-            //   alt-colour table     -> null / 0 entries (the '^N' colour codes are unused here)
-            const f32 lfAspect = 1280.0f / 720.0f;
-            CgsDev::Log::WriteToLog("[AptRT] step4 aux: calling AptAux::Construct ...\n");
-            s_AptAux.Construct(reinterpret_cast<CgsGuiModuleIO::ImRendererSet*>(&s_AptImRendererSet),
-                               &s_AptTextRenderer,
-                               &s_AptLanguageManager,
-                               &s_AptFontCollection,
-                               lfAspect,
-                               /*AlternateTextColours*/ nullptr,
-                               /*NumAlternateColours*/  0);
-            s_bAuxReady = (CgsGui::AptAuxPointer::mpAptAuxInst == &s_AptAux);
+            CgsGui::AptAux* lpAptAux = s_pViewModule->GetAptAux();
+            s_bAuxReady = (CgsGui::AptAuxPointer::mpAptAuxInst == lpAptAux);
 
             char lac[200];
             std::snprintf(lac, sizeof(lac),
                 "[AptRT] step4 aux: Construct done. singleton=%p im2d=%p (== &renderbuf %p)\n",
                 (void*)CgsGui::AptAuxPointer::mpAptAuxInst,
-                (void*)s_AptImRendererSet.mpIm2dRenderer, (void*)&s_AptRenderBuffer);
+                (void*)lpImRenderers->mpIm2dRenderer, (void*)&s_AptRenderBuffer);
             CgsDev::Log::WriteToLog(lac);
         }
 
@@ -1337,7 +1302,7 @@ namespace BrnGui
             {
                 CgsDev::Log::WriteToLog("[AptRT] step5 InitializeApt: calling AptAux::InitializeApt "
                                         "(alloc + update + render + target) ...\n");
-                s_AptAux.InitializeApt();
+                s_pViewModule->GetAptAux()->InitializeApt();
 
                 // Reflect the faithful init into the facade's step flags (for the channel-41
                 // readiness gate + the log). InitializeApt wires the pools + interpreter and
@@ -3115,7 +3080,7 @@ namespace BrnGui
                 const char* lpcResolved = lpacValue;
                 if (lpacValue[0] == '$' || lpacValue[0] == '~')
                 {
-                    const u8* lpLoc = s_AptLanguageManager.FindString(lpacValue + 1);
+                    const u8* lpLoc = s_pViewModule->GetLanguageManager()->FindString(lpacValue + 1);
                     if (lpLoc != nullptr)
                         lpcResolved = reinterpret_cast<const char*>(lpLoc);
                 }
@@ -3151,8 +3116,16 @@ namespace BrnGui
         return false;
     }
 
+    bool AptRuntimeHost::Prepare(CgsGui::ViewModule* lpViewModule)
+    {
+        mpViewModule = lpViewModule;
+        s_pViewModule = lpViewModule;
+        return PrepareRuntime();
+    }
+
     bool AptRuntimeHost::Prepare()
     {
+        s_pViewModule = mpViewModule;
         return PrepareRuntime();
     }
 

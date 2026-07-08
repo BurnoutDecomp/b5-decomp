@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                          // CgsFsm::Event (drive BF_PROCEED through the FSM)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
 #include "GameSource/Gui/BrnGuiAptRuntime.h"                              // BrnGui::AptRuntimeHost (Gui-owned Apt host)
+#include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"        // AlwaysAvailableComponentsManager + free accessor (bodied below)
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (BF_LEGAL interface wiring)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
@@ -311,6 +312,8 @@ namespace BrnGui
 
     void GuiModule::Construct()
     {
+        static_cast<CgsGui::ViewModule&>(mViewModule).Construct(
+            "BrnGuiView", 0, 1280.0f / 720.0f, nullptr, 0);
         mMovieManager.Construct();
         mbBootStarted = false;
         mbLoadingHasShown = false;
@@ -389,7 +392,7 @@ namespace BrnGui
         // Stand up the GUI-owned Apt runtime host (allocator + interpreter + AptAux host callback
         // table + the render buffer) so it is live before BF_LEGAL posts
         // PlayAptMovie("Title_Screen02"). Idempotent + defensive.
-        mAptRuntimeHost.Prepare();
+        mAptRuntimeHost.Prepare(&mViewModule);
 
         // Wire BF_LEGAL's state interface to the shared access pointers so the GUI
         // components' faithful apt output chain (FillAptViewMessage -> AptAux::
@@ -823,5 +826,23 @@ namespace BrnGui
             miBootPhase   = 2;
             mbBootStarted = false;   // re-arm cache-ready for BF_LEGAL
         }
+    }
+}
+
+// ---- GetAlwaysAvailableComponentsManager (free accessor) ----------------------------
+// Header-declared in BrnGuiAlwaysAvailableComponentsManager.h; homed here because this TU
+// owns the GuiModule layout. Encapsulates the X360-attested byte offset of the manager
+// within GuiModule (mpGuiModule + 0x17D670, from BrnGui::ViewModule::
+// ProcessIncomingLoadNotification @0x824F9468). The returned pointer is only reached on the
+// FLAPT-load notification path; on the current boot it is fetched but its PrepareFlapt target
+// is a link stub, so the offset pointer is never dereferenced.
+// [FLAG: uncommitted GuiModule-layout offset -- self-corrects to &mMember when the full
+// GuiModule view/components block is reconstructed.]
+namespace BrnGui
+{
+    AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager(GuiModule* lpGuiModule)
+    {
+        return reinterpret_cast<AlwaysAvailableComponentsManager*>(
+            reinterpret_cast<u8*>(lpGuiModule) + GuiModule::KU_OFF_AAC_MANAGER);
     }
 }
