@@ -1,6 +1,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // FreeWithCensusIf
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribexportmanager.h" // Attrib::ExportManager
 
 // Attrib::Vault::DataBlock member functions, reconstructed store-for-store from
 // BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2):
@@ -56,4 +57,53 @@ void* Attrib::Vault_ScalarDeletingDtor(Attrib::Vault* lpVault, int liDeleteFlag)
     if ((liDeleteFlag & 1) != 0)
         Attrib::HashMapTablePolicy::FreeWithCensusIf(lpVault, 88, NULL);
     return lpVault;
+}
+
+// GetExportData @ 0x82803420. The payload pointer of exported data block luIndex.
+// The X360 asserts the index against the loaded export count (+0x44 = mNumExports)
+// then returns mExportData[luIndex].mpData (the DataBlock array has an 8-byte stride;
+// only the first word -- the payload pointer -- is read).
+void* Attrib::Vault::GetExportData(unsigned int luIndex) const
+{
+    CGS_ASSERT(luIndex < mNumExports, "Attrib::Vault given bad index.");
+    return mExportData[luIndex].GetData();
+}
+
+// ResolveDependency @ 0x82803338. Bind a resolved dependency's payload into the
+// vault. Dependency data blocks live in the shared mDepData array AFTER the vault's
+// own block at [0], so dependency luIndex maps to mDepData[luIndex + 1] (the X360
+// computes mDepData + 8*luIndex + 8). If that block was not already fully resolved
+// (a live payload AND a non-zero kind) the resolved-dependency counter advances.
+// The store itself is DataBlock::Set, which re-checks the 24-bit size limit.
+void Attrib::Vault::ResolveDependency(unsigned int luIndex, void* lpData,
+                                      unsigned int luSize, u8 lbIsAsset)
+{
+    CGS_ASSERT((luIndex + 1) < mNumDependencies, "Attrib::Vault invalid dependency index.");
+
+    DataBlock& lrBlock = mDepData[luIndex + 1];
+
+    const bool lbAlreadyResolved = (lrBlock.GetData() != nullptr) && (lrBlock.GetKind() != 0);
+    if (!lbAlreadyResolved)
+        ++mResolvedCount;
+
+    CGS_ASSERT(lbIsAsset != 0, "Kind of zero is not allowed");
+
+    lrBlock.Set(lpData, luSize, lbIsAsset);
+}
+
+// ExportManager::AddExportPolicy @ 0x82803138. Append one (type -> policy) row to the
+// Database's reserved, TypeID-sorted policy table. The X360 asserts the reserved table
+// is not already full, writes {type, policy} into the next free slot, then bumps the
+// live count. The slot is taken from the OLD count before it is incremented (store-for-
+// store with the X360, which computes &table[count] then stores count+1 first).
+void Attrib::ExportManager::AddExportPolicy(TypeID luType, IExportPolicy* lpPolicy)
+{
+    CGS_ASSERT(mNumPolicies < mMaxPolicies,
+               "ExportManager::AddExportPolicy -- insufficient entries reserved in policy table.");
+
+    ExportPolicyPair& lrSlot = mpPolicies[mNumPolicies];
+    ++mNumPolicies;
+
+    lrSlot.mType   = luType;
+    lrSlot.mPolicy = lpPolicy;
 }

@@ -19,7 +19,8 @@
 
 #include "types.hpp"
 
-class cParticleDescriptor;
+class  cParticleDescriptor;
+struct cParticleBucket;
 
 class cParticleEmitter
 {
@@ -27,6 +28,12 @@ public:
     // The descriptor this emitter is playing (console +0x1F8). LionParticleRender::Render
     // switches on its render mode to pick the draw shape.
     const cParticleDescriptor* GetDescriptor() const { return mpDescriptor; }
+
+    // Detach apBucket from this emitter's bucket list. Called by
+    // cParticleBucketManager::Free @ 0x8290F378 as it recycles a bucket back to the pool
+    // (X360: r3 = emitter, r4 = bucket). Body lives in the cParticleEmitter TU; declared
+    // here so the pool manager can compile against the real signature.
+    void BucketRemove(cParticleBucket* apBucket);
 
 private:
     // Opaque leading simulation state preceding mpDescriptor at console +0x1F8 (504):
