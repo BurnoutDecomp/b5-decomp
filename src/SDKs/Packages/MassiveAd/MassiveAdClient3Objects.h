@@ -192,6 +192,12 @@ public:
     // rewrites the vftable first).
     virtual ~CAddressIndexPair();
 
+    // The owned address string (read from +0x18 for the trace line in
+    // CRequestLocateService::Parse, which logs each pair's address after it has
+    // copied it in). Additive accessor (FLAG: not its own X360 function) so the
+    // consumer reads the field BY NAME rather than reaching into the private copy.
+    const char* GetAddress() const { return mpcAddress; }
+
 private:
     char  mbIndex;     // +0x14 (a3)
     char* mpcAddress;  // +0x18 (owned copy of a2, or 0)
