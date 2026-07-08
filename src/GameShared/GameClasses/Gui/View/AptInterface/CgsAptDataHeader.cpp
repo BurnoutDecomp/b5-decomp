@@ -43,13 +43,13 @@ namespace CgsGui
     //       in the libapt2 6-field GUIAPT writer order, which does NOT match the
     //       loader's CgsGui::AptDataHeader field order/type here, so even a
     //       widened relocate would not locate the movie root; the host scan in
-    //       BrnAptRuntimeBringUp finds the root instead. (Being fixed separately;
+    //       BrnGuiAptRuntime finds the root instead. (Being fixed separately;
     //       do NOT adapt the loader to libapt2's format -- that would be
     //       non-faithful. The loader stays faithful to the EATech header.)
     //
     // So on x64 the resource-load FixUp/FixDown are kept as the x64-safe path
     // (leave the fields as raw file-relative OFFSETS): the single consumer
-    // (BrnAptRuntimeBringUp) then transcodes each pointer as `(T*)(realBase64 +
+    // (BrnGuiAptRuntime) then transcodes each pointer as `(T*)(realBase64 +
     // offset)` using the FULL 64-bit base it holds. Enabling the in-place
     // relocate on the current bundle REGRESSES the boot (verified: garbage
     // pointer -> AV), so it is gated behind KB_APT_DATAHEADER_INPLACE_FIXUP,

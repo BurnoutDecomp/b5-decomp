@@ -52,7 +52,7 @@ extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const v
 // AptRenderItem::Manager_CreateItem FACTORY DIRECTLY. That factory needs no render-tree manager (it
 // just DOGMA-pool-allocates the typed render item off the character), so there is no manager routing
 // here at all; the render item is created iff an Apt target is active. gpAptTarget is live once the
-// bring-up runs AptCreateTargetInstance/AptChangeTargetInstance (BrnAptRuntimeBringUp), so every
+// GUI Apt host runs AptCreateTargetInstance/AptChangeTargetInstance (BrnGuiAptRuntime), so every
 // AptCharacterInst gets a real, type-correct render item carrying mpCharacter.
 AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
 {

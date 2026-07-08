@@ -240,7 +240,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // movie def-base; on the current TITLE_SCREEN02 bundle it is NOT (char[1] un-widened +
     // the def-base charCount/table at +0x18/+0x20 vs the runtime struct's +0x0C/+0x10), so
     // the host facade DEFERS calling this factory until the converter fix (see
-    // BrnAptRuntimeBringUp: the movie-root instantiation is held off with the tick). The
+    // BrnGuiAptRuntime: the movie-root instantiation is held off with the tick). The
     // body here stays the faithful, un-gated console decompile.
     CgsApt_GalProbe("MakeCAI: IncCharacterList (renderItem)", pInst->mpRenderItem);
     AptFilePtr laIncArg;

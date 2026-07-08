@@ -186,7 +186,7 @@ AptTarget::AptTarget(const u32* pParams)
 //  These are the pieces CgsGui::AptAux::InitializeApt @0x82848E50 runs after the
 //  allocator/update/render inits to stand up + select the per-process Apt context;
 //  the X360 InitializeApt is itself un-reconstructed (its callees are these), so the
-//  host bring-up (BrnAptRuntimeBringUp.cpp) calls these directly. Homed here in the
+//  GUI Apt host (BrnGuiAptRuntime.cpp) calls these directly. Homed here in the
 //  AptTarget TU (it owns the target globals + the ctor these drive).
 //
 //  LIST: off_8324E570 (gpAptTargetCurrent) is the HEAD of the instance list; each

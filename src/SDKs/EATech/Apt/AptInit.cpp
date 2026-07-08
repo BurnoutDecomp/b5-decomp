@@ -4,7 +4,7 @@
 // Decompiled store-for-store from the X360 ARTIST.XEX (the `assembly` field is
 // authoritative for the call order + which register/global each store touches).
 // These are the functions CgsGui::AptAux::InitializeApt @0x82848E50 chains to
-// stand up the Apt runtime; the host bring-up (BrnAptRuntimeBringUp.cpp) previously
+// stand up the Apt runtime; the GUI Apt host (BrnGuiAptRuntime.cpp) previously
 // stood these pieces up with an invented facade, which this TU retires.
 //
 // PHYSICALLY-REQUIRED PC DEVIATIONS (each // FLAG'd at its site):

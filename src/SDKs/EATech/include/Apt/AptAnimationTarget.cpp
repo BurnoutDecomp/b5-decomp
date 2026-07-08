@@ -1334,7 +1334,13 @@ extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH)
 #endif
 
 // §6.4 DIAG: arm the opcode trace over the deferred onLoad drain + its nested calls.
+#if defined(_MSC_VER)
 extern "C" void AptOpTraceArmDrain(int nOn);
+#pragma comment(linker, "/alternatename:AptOpTraceArmDrain=AptOpTraceArmDrainDefault")
+extern "C" void AptOpTraceArmDrainDefault(int) {}
+#else
+extern "C" void AptOpTraceArmDrain(int nOn);
+#endif
 
 int AptAnimationTarget::RunActions()
 {

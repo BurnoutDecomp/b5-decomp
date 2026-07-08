@@ -304,7 +304,7 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     bool AptKeyManagerRemoveListener(AptValue* pListener) { return false; }   // FLAG link-stub
     void AptLinker_GetUrlLoad(AptLinker* pLinker, EAStringC* pUrl, EAStringC* pTarget) {}   // FLAG link-stub
     void AptLoader_CancelAsyncLoad(void* pDataBlock) {}   // FLAG link-stub
-    // AptLoader_StartAsyncLoad is HOMED in BrnAptRuntimeBringUp.cpp (the platform stream hook: it
+    // AptLoader_StartAsyncLoad is HOMED in BrnGuiAptRuntime.cpp (the platform stream hook: it
     // synchronously content-loads the import bundle + drives AptCompleteAnimationAsyncLoad). The
     // FLAG link-stub that used to live here is removed so the strong host definition is the only one.
     // AptMovie_runFrameActions RETIRED (2026-07-01): homed as the real const member

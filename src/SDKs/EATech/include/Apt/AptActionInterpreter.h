@@ -37,7 +37,7 @@ class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/
 // FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
 // reads; not serialised, so it is modelled by its console field offsets). DEFINED
 // here (was a TU-local struct in AptActionInterpreterStackOps.cpp; promoted to the
-// header so the host bring-up -- BrnAptRuntimeBringUp.cpp -- can construct one to call
+// header so the GUI Apt host -- BrnGuiAptRuntime.cpp -- can construct one to call
 // AptActionInterpreter::initialize, the X360 AptUpdateInitialize's job). Layout is
 // byte-identical to the prior local definition (console offsets 0x20/0x24/0x40).
 struct AptInitParmsT

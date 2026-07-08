@@ -14,7 +14,7 @@
 //     AptUpdateInitialize       @0x82B02D08   (the sim/update state + the AS interpreter)
 //
 // (AptAllocatorInitialize @0x82ADD118 -- the first entry -- is already homed inside
-// BrnAptRuntimeBringUp.cpp; StringPool::Initialize @0x82AE3630, homed in AptInit.cpp,
+// BrnGuiAptRuntime.cpp; StringPool::Initialize @0x82AE3630, homed in AptInit.cpp,
 // is a leaf AptCommonInitialize calls.)
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).

@@ -77,6 +77,7 @@ namespace
     constexpr bool kAptRuntimeDiagnostics = BRN_GUI_APT_RUNTIME_DIAGNOSTICS != 0;
 }
 
+#if BRN_GUI_APT_RUNTIME_DIAGNOSTICS
 // The pass-3 import-registration probe sink (declared weak in AptCharacterAnimation.cpp). Logs each
 // import the movie references (movie name / class name) + the loader handle Load() returned, so a run
 // names the exact cross-bundle imports (e.g. charId 30 = B5HelperComponents) that must be sync-loaded.
@@ -593,6 +594,7 @@ void CgsApt_TimelineFrameProbe(int nFrame, int nCmdCount, unsigned long long luC
         nFrame, nCmdCount, luCmdsBefore, luCmdsAfter);
     CgsDev::Log::WriteToLog(lac);
 }
+#endif
 
 // =============================================================================
 // THE APT RUNTIME BRING-UP / PER-FRAME DRIVER.
@@ -625,32 +627,6 @@ extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased 
 // The interpreter VM singleton (X360 &dword_8324E760) -- defined in AptGlobals.cpp.
 extern AptActionInterpreter gAptActionInterpreter;
 
-// ---- the Apt text render-data hooks (AptGlobals.cpp; null until the host installs them) ----
-// The dynamic-text render item (AptRenderItemDynamicText) reaches the host through these two
-// function-pointer slots: the draw hook (dword_8324E868) batches a resolved text handle's glyphs,
-// the release hook (dword_8324E864) frees a text handle. On the console they call the render
-// callbacks directly; here the bring-up installs bridges that forward to CgsGui::AptCallbackRender.
-// The engine passes the ZID (AptRenderItemDynamicText::mZID) -- our x64 slot-index handle.
-enum AptMaskRenderOperation : int;
-extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
-extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                        // dword_8324E864
-
-// The bring-up bridges the two hooks forward to. DrawString batches the ZID's glyphs;
-// DeallocateString frees the ZID's pooled string. (leFlags/nOp carried for parity.)
-static void AptRT_DrawTextRenderData(intptr_t nZId, AptMaskRenderOperation eOp, int nTick)
-{
-    (void)nTick;   // the render callback keys off the ZID + mask op (level unused on this path)
-    CgsGui::AptCallbackRender::DrawString(
-        reinterpret_cast<AptAssetString>(nZId), eOp, 0);
-}
-
-static void AptRT_ReleaseTextRenderData(intptr_t nZId, int nOp)
-{
-    CgsGui::AptCallbackRender::DeallocateString(
-        reinterpret_cast<AptAssetString>(nZId),
-        static_cast<u32>(nOp));
-}
-
 // The faithful per-frame dynamic-text refresh pass (AptCIHBehaviour.cpp): install
 // AptCIH::ProcessTextInst as the generalised-process callback + walk the root subtree,
 // so every dynamic-text node re-resolves its bound text + (re)lays it out through
@@ -681,7 +657,7 @@ namespace
     // ---- the host AptAux singleton ---------------------------------------------
     // The real AptAux is large (mRenderHandler alone is ~108 KB); allocate it as one
     // static object (the X360 holds a single static instance the callbacks resolve
-    // through AptAuxPointer::mpAptAuxInst). Constructed in AptRuntimeBringUp.
+    // through AptAuxPointer::mpAptAuxInst). Constructed in AptRuntimeHost::Prepare.
     CgsGui::AptAux s_AptAux;
 
     // ---- the Apt render buffer the engine's render callbacks fill --------------
@@ -987,7 +963,7 @@ namespace
     // interpreter init + AptCreateTargetInstance) is RETIRED: it is now the faithful
     // CgsGui::AptAux::InitializeApt @0x82848E50 (CgsAptAux.cpp), which chains the homed
     // AptAllocatorInitialize/AptUpdateInitialize/AptRenderInitialize/AptCreateTargetInstance/
-    // AptChangeTargetInstance (SDKs/EATech/Apt/AptInit.cpp). AptRuntimeBringUp() below drives
+    // AptChangeTargetInstance (SDKs/EATech/Apt/AptInit.cpp). PrepareRuntime() below drives
     // it after the (host-adaptor) render buffer + AptAux::Construct are up.
 }
 
@@ -1013,9 +989,9 @@ namespace BrnGui
     static bool LoadImportBundle(const char* lpacMovieName, AptFilePtr* lpFile);
     // (STEP 4 nested-content dirty propagation retired 2026-07-04 -- the AptCIH ctor births
     // fresh sprite/animation children dirty, so no host propagation pass is needed. See the
-    // per-frame tick in AptRuntimeUpdate.)
+    // per-frame tick in UpdateRuntime.)
 
-    bool AptRuntimeIsReady() { return s_bRuntimeReady; }
+    static bool IsRuntimeReady() { return s_bRuntimeReady; }
 
     // -------------------------------------------------------------------------
     // AptLoadOneGuiFont -- load one typeface bundle into its resident pool and register
@@ -1240,12 +1216,12 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimeBringUp -- the once-only host bring-up (idempotent). Mirrors the
+    // PrepareRuntime -- the once-only host bring-up (idempotent). Mirrors the
     // X360 CgsGui::AptAux::InitializeApt @0x82848E50 + AptAllocatorInitialize
     // @0x82ADD118, but only the pieces whose engine bodies exist; every step that
     // crosses an un-homed engine routine is // FLAG'd and skipped defensively.
     // -------------------------------------------------------------------------
-    bool AptRuntimeBringUp()
+    static bool PrepareRuntime()
     {
         if (s_bRuntimeReady)
             return true;
@@ -1320,16 +1296,9 @@ namespace BrnGui
                                /*NumAlternateColours*/  0);
             s_bAuxReady = (CgsGui::AptAuxPointer::mpAptAuxInst == &s_AptAux);
 
-            // Install the dynamic-text render-data hooks (draw + release). ConstructApt wires the
-            // gAptFuncs render family (incl. pfnAllocateString/DrawString/DeallocateString); these two
-            // engine .data slots are separate (AptRenderItemDynamicText reaches them directly), so the
-            // bring-up installs them here so a dynamic-text field's Render()/SetZID reach the host.
-            gpfnAptDrawTextRenderData    = &AptRT_DrawTextRenderData;
-            gpfnAptReleaseTextRenderData = &AptRT_ReleaseTextRenderData;
-
             char lac[200];
             std::snprintf(lac, sizeof(lac),
-                "[AptRT] step4 aux: Construct done. singleton=%p im2d=%p (== &renderbuf %p) textHooks=installed\n",
+                "[AptRT] step4 aux: Construct done. singleton=%p im2d=%p (== &renderbuf %p)\n",
                 (void*)CgsGui::AptAuxPointer::mpAptAuxInst,
                 (void*)s_AptImRendererSet.mpIm2dRenderer, (void*)&s_AptRenderBuffer);
             CgsDev::Log::WriteToLog(lac);
@@ -1538,7 +1507,7 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     // EnsureFrameworkMovie -- lazily load + instantiate the AS FRAMEWORK movie ("MAIN")
     // into s_FrameworkSlot at display level 0, through the SAME load path the flow movie
-    // takes (AptLoadMovieSlot). Called by AptRuntimePlayMovie BEFORE the flow movie loads,
+    // takes (AptLoadMovieSlot). Called by PlayRuntimeMovie BEFORE the flow movie loads,
     // so the framework core composes BENEATH it (level 0 under level 1) and its exported
     // classes are resident when the flow movie's imports link.
     // FLAG (host bring-up choice): the console composes PERSISTENTAPT (which imports MAIN)
@@ -1616,12 +1585,12 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimePlayMovie -- consume a channel-41 GuiEventPlayAptMovie. Records the
+    // PlayRuntimeMovie -- consume a channel-41 GuiEventPlayAptMovie. Records the
     // movie name in the FLOW slot and ATTEMPTS to load it through the homed Apt
     // loader (after lazily standing the framework movie up at level 0). Defensive:
     // bails (logs) wherever the load path crosses an un-homed piece.
     // -------------------------------------------------------------------------
-    void AptRuntimePlayMovie(const char* lpacMovieName, s32 liLevelNum)
+    static void PlayRuntimeMovie(const char* lpacMovieName, s32 liLevelNum)
     {
         if (lpacMovieName == nullptr || lpacMovieName[0] == '\0')
         {
@@ -2048,7 +2017,7 @@ namespace BrnGui
         // MakeCharacterAnimationInst(pFile) -> AptCIH::SetCharacterInst(animInst, moveRenderData) ->
         // seed the sprite-instance state (mnGotoFrame = -1 "none", mnClipActionFlags |= 0x80) the tick
         // reads. The initial in-line tick AptLinker::Update also does is driven per-frame by
-        // AptRuntimeUpdate (Step 3) instead. DEFENSIVE: guarded; a null animInst leaves the empty root
+        // UpdateRuntime (Step 3) instead. DEFENSIVE: guarded; a null animInst leaves the empty root
         // CIH in place (game stays up, geometry fallback still available).
         AptCharacterAnimationInst* lpAnimInst = MakeCharacterAnimationInst(lpFile);
         if (lpAnimInst != nullptr)
@@ -2097,7 +2066,7 @@ namespace BrnGui
     // bundle stays resident (registered in s_aImportBundles). Idempotent by name.
     //
     // The import bundle is a "1:7:8" apt movie corrected offline by fix_apt_bundle.py (so its char
-    // table + movie root are clean). The load mirrors AptRuntimePlayMovie's parent load exactly:
+    // table + movie root are clean). The load mirrors PlayRuntimeMovie's parent load exactly:
     // BundleLoader::LoadBundle -> the AptData (0x1E) resource -> AddAptData(name) -> LocateMovieRoot8
     // -> AptCompleteAnimationAsyncLoad. // FLAG (x64 converted bundle): the movie-root location uses
     // the signature scan (LocateMovieRoot8) exactly as the parent path does.
@@ -2265,7 +2234,7 @@ namespace BrnGui
 
     // -------------------------------------------------------------------------
     // RETIRED (2026-07-01): the invented direct-geometry render (RenderLoadedGeometryDirect +
-    // ResolveMeshTexture) is GONE. AptRuntimeRender now drives the FAITHFUL render-tree walk
+    // ResolveMeshTexture) is GONE. RenderRuntime now drives the FAITHFUL render-tree walk
     // (AptRender) which flushes through the real display-list -> render-tree -> AptRenderHandler::
     // Render -> ImRenderBuffer -> D3D9 path. The prior fallback walked the movie geometry directly
     // (offset transcode) + drew via the Im2d immediate wrapper -- invention that bypassed the engine
@@ -2282,7 +2251,7 @@ namespace BrnGui
     // accumulator / authored msPerFrame / root re-dirty / one-shot probe counters).
     // Returns the number of timeline ticks run this update (the caller gates the
     // flow-only follow-ons -- the help-item defaults -- on the FLOW slot's count).
-    // Called from AptRuntimeUpdate AFTER the single per-frame UpdateComponents flush
+    // Called from UpdateRuntime AFTER the single per-frame UpdateComponents flush
     // (the flush is per-TARGET on the console, not per-movie, so it stays with the
     // caller and runs exactly once).
     // -------------------------------------------------------------------------
@@ -2423,7 +2392,7 @@ namespace BrnGui
             }   // ---- end of the per-msPerFrame catch-up tick loop (console pacing) ----
 
             // (The title help-item defaults retry -- a FLOW-slot-only follow-on -- moved to
-            //  AptRuntimeUpdate, gated on the FLOW slot's tick count for this update.)
+            //  UpdateRuntime, gated on the FLOW slot's tick count for this update.)
 
             // DYNAMIC-TEXT REFRESH: run the generalised-process pass with ProcessTextInst
             // installed, so every dynamic-text node (type tag 2) re-resolves its bound text +
@@ -2552,14 +2521,14 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimeUpdate -- per-frame TICK only. Flushes the communicator ONCE, then runs
+    // UpdateRuntime -- per-frame TICK only. Flushes the communicator ONCE, then runs
     // the paced tick PER SLOT: the framework movie (level 0) first, then the flow movie
     // (level 1). s_bMovieStopped parks the FLOW slot only -- the framework movie keeps
     // ticking (the console keeps the persistent level-0 apt composed across flow-state
-    // changes). The RENDER moved to AptRuntimeRender (the proven immediate-mode Im2d
+    // changes). The RENDER moved to RenderRuntime (the proven immediate-mode Im2d
     // path). Called from GuiModule::Update (runs before the render hook).
     // -------------------------------------------------------------------------
-    void AptRuntimeUpdate()
+    static void UpdateRuntime()
     {
         if (!s_bRuntimeReady)
             return;
@@ -2623,7 +2592,7 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimeRender -- FAITHFUL render-tree flush. Called from BrnRendererModule::Render each
+    // RenderRuntime -- FAITHFUL render-tree flush. Called from BrnRendererModule::Render each
     // frame. Drives the homed X360 render-tree walk (AptRender @0x82AF33E8): it traverses the
     // current target's render-item tree (built by the tick's AptRenderTreeManager::Update_* calls)
     // and, per visible node, calls the render item's Render() virtual -> AptCharacter::render ->
@@ -2643,7 +2612,7 @@ namespace BrnGui
     // (s_bRenderBufferReady). Until the tick populates the render-root list the walk finds an empty
     // root and draws nothing -- a clean no-op, no AV.
     // -------------------------------------------------------------------------
-    void AptRuntimeRender(CgsGraphics::Im2d* lpIm2d)
+    static void RenderRuntime(CgsGraphics::Im2d* lpIm2d)
     {
         (void)lpIm2d;   // the walk draws through the Apt render handler's own command buffer
         if (!s_bRuntimeReady || !s_bAuxReady || !s_bRenderBufferReady)
@@ -2695,7 +2664,7 @@ namespace BrnGui
         }
     }
 
-    bool AptRuntimeIsMovieLive()
+    static bool IsRuntimeMovieLive()
     {
         // FLOW-slot semantics: BootLegal drives this query off its channel-41 movie
         // (the framework movie's liveness is internal to the runtime).
@@ -2703,7 +2672,7 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptRuntimeStopMovie -- the flow left BF_LEGAL (the accept path posted command
+    // StopRuntimeMovie -- the flow left BF_LEGAL (the accept path posted command
     // 70). On the console, leaving the state unloads the title movie (OnLeave's
     // channel-41 {"",1} post -> CgsAptAux unload). The async unload path is not
     // homed, so the observable equivalent: stop ticking + rendering the movie
@@ -2711,7 +2680,7 @@ namespace BrnGui
     // FLAG (follow-on): the faithful unload (resource release + target-instance
     // teardown) lands with the CgsAptAux unload chain.
     // -------------------------------------------------------------------------
-    void AptRuntimeStopMovie()
+    static void StopRuntimeMovie()
     {
         if (s_bMovieStopped)
             return;
@@ -2725,11 +2694,11 @@ namespace BrnGui
     // clips the view-state bridge targets exist). The console's equivalent gate is the
     // GuiCache apt-component handshake (AreAllAptComponentsInitialised): a component
     // reports initialised only once its clip is placed.
-    bool AptRuntimeIsMovieComposed()
+    static bool IsRuntimeMovieComposed()
     {
         // FLOW-slot semantics (BootLegal's compose gate): the framework movie's own
         // composition is NOT part of this handshake.
-        if (!AptRuntimeIsMovieLive())
+        if (!IsRuntimeMovieLive())
             return false;
         AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
         AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
@@ -2975,7 +2944,7 @@ namespace BrnGui
     static bool AptRuntimeApplyComponentViewState(const char* lpacInstName, const char* lpacViewState)
     {
         char lac[224];
-        if (lpacInstName == nullptr || lpacViewState == nullptr || !AptRuntimeIsMovieLive())
+        if (lpacInstName == nullptr || lpacViewState == nullptr || !IsRuntimeMovieLive())
             return false;
 
         // The AnimatorComponent instances are CONTAINERS (the imported TransitionComponent);
@@ -3077,7 +3046,7 @@ namespace BrnGui
         if (_stricmp(lpacKey, "apt_Transition") == 0)
             return AptRuntimeApplyComponentViewState(lpacInstName, lpacValue);
 
-        if (!AptRuntimeIsMovieLive())
+        if (!IsRuntimeMovieLive())
             return false;
 
         char lac[224];
@@ -3192,42 +3161,42 @@ namespace BrnGui
 
     bool AptRuntimeHost::Prepare()
     {
-        return AptRuntimeBringUp();
+        return PrepareRuntime();
     }
 
     void AptRuntimeHost::PlayMovie(const char* lpacMovieName, s32 liLevelNum)
     {
-        AptRuntimePlayMovie(lpacMovieName, liLevelNum);
+        PlayRuntimeMovie(lpacMovieName, liLevelNum);
     }
 
     void AptRuntimeHost::Update()
     {
-        AptRuntimeUpdate();
+        UpdateRuntime();
     }
 
     void AptRuntimeHost::Render(CgsGraphics::Im2d* lpIm2d)
     {
-        AptRuntimeRender(lpIm2d);
+        RenderRuntime(lpIm2d);
     }
 
     void AptRuntimeHost::StopMovie()
     {
-        AptRuntimeStopMovie();
+        StopRuntimeMovie();
     }
 
     bool AptRuntimeHost::IsReady() const
     {
-        return AptRuntimeIsReady();
+        return IsRuntimeReady();
     }
 
     bool AptRuntimeHost::IsMovieLive() const
     {
-        return AptRuntimeIsMovieLive();
+        return IsRuntimeMovieLive();
     }
 
     bool AptRuntimeHost::IsMovieComposed() const
     {
-        return AptRuntimeIsMovieComposed();
+        return IsRuntimeMovieComposed();
     }
 
     bool AptRuntimeHost::SetComponentViewState(const char* lpacInstName, const char* lpacViewState)

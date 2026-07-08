@@ -787,9 +787,19 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
 extern AptCIH* gpAptEmptyCIH;   // dword_8324D700 -- the pinned "EmptyCIH" AptCIHNone placeholder
 
 // §6.4 DIAG: capture the nested onLoad/RegisterComponent bytecode while the op trace is armed.
+#if defined(_MSC_VER)
+extern "C" int  AptOpTraceIsArmed(void);
+#pragma comment(linker, "/alternatename:AptOpTraceIsArmed=AptOpTraceIsArmedDefault")
+extern "C" int AptOpTraceIsArmedDefault(void) { return 0; }
+extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
+                               const char* const* ppPool, int nPoolCount);
+#pragma comment(linker, "/alternatename:AptFnDumpProbe=AptFnDumpProbeDefault")
+extern "C" void AptFnDumpProbeDefault(const void*, int, const char* const*, int) {}
+#else
 extern "C" int  AptOpTraceIsArmed(void);
 extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
                                const char* const* ppPool, int nPoolCount);
+#endif
 
 // AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch of
 // callFunction (tags 34/35/36). HOMED + LIVE (2026-07-04). The full faithful body is the

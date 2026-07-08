@@ -299,7 +299,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // Store the returned host render-data handle on the render item (X360 SetZID(v22)).
         // On x64 the handle is a host id (see AptRenderItemDynamicText.h mZID note); the
         // host returns a small slot-based id (see the draw/release hooks in
-        // BrnAptRuntimeBringUp.cpp), so it fits the int32 mZID without truncation.
+        // BrnGuiAptRuntime.cpp), so it fits the int32 mZID without truncation.
         AptRenderItemDynamicText* pWritable =
             static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable());
         pWritable->SetZID(reinterpret_cast<intptr_t>(hHandle));

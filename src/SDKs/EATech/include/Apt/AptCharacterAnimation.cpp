@@ -30,7 +30,7 @@
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
 
 // The pass-3 import-registration probe sink (host-implemented; weak no-op default so this TU
-// links standalone). The host (BrnAptRuntimeBringUp) provides the strong definition that logs
+// links standalone). The GUI Apt host (BrnGuiAptRuntime) provides the strong definition that logs
 // each import's movie/class name + the loader handle, and then SYNC-loads the import bundle.
 #if defined(_MSC_VER)
 extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle);
@@ -732,7 +732,7 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
     // "requested" AptFile) and assign that handle into the entry's AptFile slot (+0x18). The
     // loader IS live now (gpAptTarget->mpLoader is initialised by AptCreateTargetInstance, and
     // DriveFaithfulLoad already drives Load/CompleteLoad on it), so the prior "loader
-    // under-initialised -> AV" deferral is retired. The host (BrnAptRuntimeBringUp) then SYNC-
+    // under-initialised -> AV" deferral is retired. The GUI Apt host (BrnGuiAptRuntime) then SYNC-
     // loads the referenced import bundles (GuiApt\<name>.bundle) and resolves them, so
     // charTable[importId] becomes a real character; an import bundle that is missing/unconvertable
     // is left in the "requested" state (AptFile slot resolved but mpData null) -- an honest data

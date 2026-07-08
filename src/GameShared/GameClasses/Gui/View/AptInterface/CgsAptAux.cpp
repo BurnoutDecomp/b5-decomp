@@ -10,9 +10,33 @@
 #include "SDKs/EATech/include/Apt/AptLoader.h"                                  // AptCompleteAnimationAsyncLoad (LoadAnimation forwards to it)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"                               // AptSharedPtrIncRef/DecRef/Delete (LoadAnimation refcount)
 #include "SDKs/EATech/include/Apt/AptConstFile.h"                               // AptConstFile (the resolved const-file pointer type)
+#include "SDKs/EATech/include/Apt/AptGC.h"                                      // AptPartialGarbageCollection / AptFlushInputQueue
 
 #include <cstring>   // memset (zero-install the gAptFuncs slots)
 #include <cstdint>   // uintptr_t / uint64_t (x64 header-field resolution)
+
+// Dynamic-text render-data hooks: the Apt engine stores these next to the render
+// callback slots and AptRenderItemDynamicText calls them directly.
+extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
+extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                             // dword_8324E864
+extern void (*gpAptFreeAnimationHook)(void* pDataBlock);                                        // off_1059C66C
+
+namespace
+{
+    void DrawTextRenderData(intptr_t nZId, AptMaskRenderOperation eOp, int nTick)
+    {
+        (void)nTick;
+        CgsGui::AptCallbackRender::DrawString(
+            reinterpret_cast<AptAssetString>(nZId), eOp, 0);
+    }
+
+    void ReleaseTextRenderData(intptr_t nZId, int nOp)
+    {
+        CgsGui::AptCallbackRender::DeallocateString(
+            reinterpret_cast<AptAssetString>(nZId),
+            static_cast<u32>(nOp));
+    }
+}
 
 // =============================================================================
 // CgsGui::AptAux / CgsGui::AptAuxPointer + the Apt host user-function table.
@@ -133,32 +157,39 @@ namespace CgsGui
         gAptFuncs.pfnPushRenderFlags     = &AptCallbackRenderFlags::Push;
         gAptFuncs.pfnPopRenderFlags      = &AptCallbackRenderFlags::Pop;
 
+        // Dynamic text render-data slots live beside the host render table, but
+        // AptRenderItemDynamicText reaches them directly rather than through gAptFuncs.
+        gpfnAptDrawTextRenderData    = &DrawTextRenderData;
+        gpfnAptReleaseTextRenderData = &ReleaseTextRenderData;
+
         // ---- the non-render families this TU now homes (their hosts above) -------------------
         gAptFuncs.pfnMemFree               = &AptCallbackMemory::Free;
         gAptFuncs.pfnDebugAddSavedInput    = &AptCallbackDebug::AddSavedInput;
         gAptFuncs.pfnDebugSetScreenGrabPending = &AptCallbackDebug::SetScreenGrabPending;
-        gAptFuncs.pfnGetBytesTotal         = &AptCallbackFile::GetBytesTotal;
-        gAptFuncs.pfnGetBytesLoaded        = &AptCallbackFile::GetBytesLoaded;
-        gAptFuncs.pfnSetExternVariable     = &AptCallbackVariable::SetExternVariable;
-        gAptFuncs.pfnGetExternVariable     = &AptCallbackVariable::GetExternVariable;
-        gAptFuncs.pfnSendVariables         = &AptCallbackDeprecated::SendVariables;
-        gAptFuncs.pfnCommand               = &AptCallbackDeprecated::FsCommand;
-        gAptFuncs.pfnLoadVariablesNULL     = &AptCallbackDeprecated::LoadVariablesNULL;
-        gAptFuncs.pfnPointHitTest          = &AptCallbackDeprecated::PointHitTest;
-        gAptFuncs.pfnGetRealTimeClock      = &AptCallbackDeprecated::GetRealTimeClock;
+        gAptFuncs.pfnFreeAnimation          = &AptCallbackFile::FreeAnimation;
+        gAptFuncs.pfnLoadAnimationCompleted = &AptCallbackFile::LoadAnimationCompleted;
+        gAptFuncs.pfnGetBytesTotal          = &AptCallbackFile::GetBytesTotal;
+        gAptFuncs.pfnGetBytesLoaded         = &AptCallbackFile::GetBytesLoaded;
+        gAptFuncs.pfnOnUnload               = &AptCallbackFile::OnUnload;
+        gAptFuncs.pfnSetExternVariable      = &AptCallbackVariable::SetExternVariable;
+        gAptFuncs.pfnGetExternVariable      = &AptCallbackVariable::GetExternVariable;
+        gAptFuncs.pfnSendVariables          = &AptCallbackDeprecated::SendVariables;
+        gAptFuncs.pfnCommand                = &AptCallbackDeprecated::FsCommand;
+        gAptFuncs.pfnLoadVariablesNULL      = &AptCallbackDeprecated::LoadVariablesNULL;
+        gAptFuncs.pfnPointHitTest           = &AptCallbackDeprecated::PointHitTest;
+        gAptFuncs.pfnGetRealTimeClock       = &AptCallbackDeprecated::GetRealTimeClock;
+        gpAptFreeAnimationHook              = &AptCallbackFile::FreeAnimation;
 
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
         //   Memory      (pfnMemAlloc / pfnMemFreeSize)
         //   Debug       (pfnAssertFail / pfnDebugPrint)
-        //   File        (pfnLoadAnimation / pfnFreeAnimation / pfnFreeConstantTable /
-        //                pfnLoadAnimationCompleted / pfnOnUnload)
+        //   File        (pfnLoadAnimation / pfnFreeConstantTable)
         //   Variable    (pfnLoadVariables)
         //   Custom      (pfnCustomControlRender / pfnCustomControlUpdate / the Zid family)
         //   Deprecated  (pfnUninitializedVarAccess / pfnCustomSavedInputHandler /
         //                pfnPlaySavedInputsDone / pfnHandleZombieState)
         // are NOT installed here: those hosts are not reconstructed yet (several depend on the
-        // undeclared Apt C-API -- AptLoadAnimation / AptPartialGarbageCollection / ... -- or on
-        // CgsGui::AptCommunicator, neither of which has a reconstructed home). They remain null
+        // callbacks that do not yet have a reconstructed Apt/GUI owner. They remain null
         // (the ctor's value-init); installing them is a follow-on once those families land.
     }
 
@@ -315,6 +346,31 @@ namespace CgsGui
     {
         CGS_ASSERT(false, "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.");
         return 0;
+    }
+
+    // X360 0x828495A8 (CgsGui::AptCallbackFile::FreeAnimation). The whole body is
+    // `li r11, 1; stw r11, 0x14(r3); blr`: mark the AptDataHeader state as loaded/free.
+    void AptCallbackFile::FreeAnimation(void* lpDataBlock)
+    {
+        static_cast<AptDataHeader*>(lpDataBlock)->meCurrentState =
+            AptDataHeader::E_APTDATASTATE_LOADED;
+    }
+
+    // X360 0x828540E0 (CgsGui::AptCallbackFile::OnUnload). Assert the AptAux singleton
+    // exists, then remove the unloading movieclip from the communicator component table.
+    void AptCallbackFile::OnUnload(AptValue* lpValue)
+    {
+        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != nullptr, "AptAuxPointer::mpAptAuxInst");
+        AptCommunicator::RemoveExpiredAptComponent(lpValue);
+    }
+
+    // X360 0x828495B8 (CgsGui::AptCallbackFile::LoadAnimationCompleted). The
+    // whole body is two calls: AptPartialGarbageCollection(); AptFlushInputQueue().
+    void AptCallbackFile::LoadAnimationCompleted(const char* /*lpacBaseName*/,
+                                                 const char* /*lpacTargetName*/)
+    {
+        AptPartialGarbageCollection();
+        AptFlushInputQueue();
     }
 
     // =========================================================================

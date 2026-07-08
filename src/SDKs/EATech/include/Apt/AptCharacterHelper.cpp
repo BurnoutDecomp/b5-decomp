@@ -207,7 +207,7 @@ void AptCharacterHelper::Shutdown()
 // via AptDisplayListState::insert(root, depth, node) (the X360's sub_82AEE788 is the
 // same findInst+insert+stamp-depth, folded here to the one insert).
 // ---------------------------------------------------------------------------
-// DEFENSIVE PROBE SINK (implemented by the host, BrnAptRuntimeBringUp.cpp): logs a step tag + a
+// DEFENSIVE PROBE SINK (implemented by the GUI Apt host, BrnGuiAptRuntime.cpp): logs a step tag + a
 // pointer so a single run names the exact line AptGetAnimationAtLevel reaches before any AV. A weak
 // no-op default is provided so other callers / TUs that do not define it still link.
 #if defined(_MSC_VER)

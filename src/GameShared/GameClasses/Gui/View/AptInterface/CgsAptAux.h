@@ -189,6 +189,18 @@ namespace CgsGui
 
     namespace AptCallbackFile
     {
+        // X360 0x828495A8 (gAptFuncs pfnFreeAnimation). Mark a loaded AptDataHeader as
+        // loaded/free again: the binary stores 1 to the header state word at +0x14.
+        void FreeAnimation(void* lpDataBlock);
+
+        // X360 0x828540E0 (gAptFuncs pfnOnUnload). Assert the AptAux singleton exists,
+        // then ask AptCommunicator to remove the expired component registration.
+        void OnUnload(AptValue* lpValue);
+
+        // X360 0x828495B8 (gAptFuncs pfnLoadAnimationCompleted). The binary ignores
+        // both name arguments, raises the partial-GC flag, then flushes queued input.
+        void LoadAnimationCompleted(const char* lpacBaseName, const char* lpacTargetName);
+
         // X360 0x828495E0 / 0x82849620. Guarded not-yet-implemented file-progress callbacks;
         // each fires the not-implemented assert and returns 0. (gAptFuncs pfnGetBytesTotal /
         // pfnGetBytesLoaded(const char*, AptGetBytesEnum).)
