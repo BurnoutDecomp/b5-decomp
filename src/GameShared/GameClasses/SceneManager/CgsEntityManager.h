@@ -22,6 +22,7 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                           // Vector3 / Matrix44Affine
 #include "GameShared/GameClasses/Containers/CgsIndexedHashTable.h"    // IndexedHashTable(Element)
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"          // ObjectPool<T,N,TIndex>
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"          // EntityId
@@ -35,6 +36,10 @@ namespace CgsSceneManager
     // Capacities the DWARF declares for the pools / index range.
     const s32 KI_MAX_NUM_ENTITIES         = 10000;
     const s32 KI_MAX_NUM_VOLUME_INSTANCES = 5048;
+
+    // Sentinel returned by GetVolumeInstanceIndexByID for an id with no live pool slot
+    // (the X360 asserts liIndex != this value in SetVolumePadding, baked as -1).
+    const s32 KI_INVALID_VOLUME_INSTANCE_INDEX = -1;
 
     // DWARF CgsEntityManager.h:64 -- one registered entity: its public id plus the
     // head of its volume-instance chain.
@@ -58,6 +63,31 @@ namespace CgsSceneManager
 
         VolumeInstance*       GetVolumeInstance(s32 liIndex);
         const VolumeInstance* GetVolumeInstance(s32 liIndex) const;
+
+        // @ 0x828C5DC0 -- the first volume instance registered against an entity slot.
+        // Optionally writes that instance's pool index through lpiFirstVolumeInstanceIndex
+        // (nullable), then returns the instance itself.
+        VolumeInstance* GetFirstEntityVolumeInstance(u16 lu16EntityIndex,
+                                                     s32* lpiFirstVolumeInstanceIndex);
+
+        // @ 0x828B9E10 -- the public id of the volume instance at a pool index.
+        VolumeInstanceId GetVolumeInstanceIdByIndex(s32 liIndex) const;
+
+        // @ 0x828CD658 -- toggle the "for collision" flag on the instance named by an id
+        //                 (resolves the id to a pool index first).
+        VolumeInstance* SetVolumeForCollision(const VolumeInstanceId& lrVolumeInstanceId,
+                                              bool lbForCollision);
+
+        // @ 0x828B9E80 -- toggle the "for collision" flag on the instance at a pool index.
+        VolumeInstance* SetVolumeForCollisionByIndex(s32 liIndex, bool lbForCollision);
+
+        // @ 0x828CD580 -- overwrite an instance's world transform (named by id) and return
+        //                 the resulting position delta (new translation - old translation).
+        Vector3 SetVolumeInstanceTransform(const VolumeInstanceId& lrVolumeInstanceId,
+                                           const Matrix44Affine& lrTransform);
+
+        // @ 0x828BA088 -- set the collision-padding vector on the instance at a pool index.
+        VolumeInstance* SetVolumePadding(s32 liIndex, Vector3 lPadding);
 
     private:
         // DWARF h:239-248 (member order verbatim). The element arrays are shared by
