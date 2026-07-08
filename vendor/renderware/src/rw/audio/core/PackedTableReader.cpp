@@ -18,6 +18,28 @@ namespace core
 {
 
 // ---------------------------------------------------------------------------
+// PackedTableReader::PackedTableReader (inlined into ParseChunkSection1 @0x82B6E908)
+//
+// Seat the shared byte cursor at the stream start (mpCursor = apTableData, the
+// `stw a2, mUnknown0` store) and initialise the four columns: each is cleared
+// (mppCursor/mValue/mCount/mbLiteral = 0 -- the do-loop that zeroes four 16-byte
+// blocks) and then re-pointed at the shared cursor (mppCursor = &mpCursor -- the
+// four `stw &mUnknown0` stores at the column offsets). All columns therefore read
+// and advance the one mpCursor.
+// ---------------------------------------------------------------------------
+PackedTableReader::PackedTableReader(u8* apTableData)
+    : mpCursor(apTableData)
+{
+    for (int li = 0; li < 4; ++li)
+    {
+        maColumns[li].mppCursor = &mpCursor;
+        maColumns[li].mValue    = 0;
+        maColumns[li].mCount    = 0;
+        maColumns[li].mbLiteral = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // PackedTableReader::UnpackNextRow @ 0x82B6DC68
 //
 // Pull one value from each of the four columns (this+0x04/0x14/0x24/0x34, one
