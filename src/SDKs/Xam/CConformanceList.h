@@ -75,6 +75,12 @@ public:
     // size) out through the slot's destination span, byte-swapping per lbSwapEndian.
     s32 UpdateConformance(u32 luIndex, u64 luValue, u32 lbSwapEndian);
 
+    // Release the acquired slot `luIndex` (clears the 0x40000000 in-use bit). Called by
+    // CMarshaller::RecursiveMarshal once a conforming field's dependent scope is done.
+    // Body lives in the CConformanceList marshalling TU; declared here so callers link
+    // against the real member.
+    s32 ReleaseConformanceInfo(u32 luIndex);
+
 private:
     Entry maEntries[KU_MAX_ENTRIES]; // +0x00  the conformance slot table
 };

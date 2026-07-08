@@ -57,6 +57,18 @@ public:
     // declared here so GetWord links against the real member.
     s32 GetDataAndAdvance(void* lpOut, u32* lpSize, u32 lbSwapEndian);
 
+    // Cursor / span inspectors. CMarshaller reads the bound span base (+0x00), its length
+    // (+0x08) and the live cursor (+0x0C) directly while marshalling (e.g. computing the
+    // current output pointer mpData+muOffset, or saving/restoring the schema read position).
+    u8* GetBase()   const { return mpData; }   // +0x00 bound span base
+    u32 GetSize()   const { return muSize; }   // +0x08 span length
+    u32 GetOffset() const { return muOffset; } // +0x0C read/write cursor
+
+    // Clear the bound span + cursor (mpData / mReserved4 / muSize / muOffset), preserving
+    // mbSwapEndian. CMarshaller::Initialize inlines exactly this 4-word zeroing of its
+    // embedded buffer and schema cursor when a schema bind fails (it leaves +0x10 alone).
+    void Reset() { mpData = 0; mReserved4 = 0; muSize = 0; muOffset = 0; }
+
 private:
     u8* mpData;       // +0x00  bound span base
     u32 mReserved4;   // +0x04  stored from Bind (opaque; never read in scope)
