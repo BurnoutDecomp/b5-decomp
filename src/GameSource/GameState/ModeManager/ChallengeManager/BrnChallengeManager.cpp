@@ -12,7 +12,14 @@
 // BODIED (this TU):
 //   Construct, UpdateResultsTimer, ReceivedSuccessUpdatesFromAllPlayers,
 //   GetNumPlayerSucceeding, GetNumPlayersContributing,
-//   GetFreeburnChallengeList, GetProgressionManager, GetLocalChallengeCompletionData.
+//   GetFreeburnChallengeList, GetProgressionManager, GetLocalChallengeCompletionData,
+//   GetChallengeStyle, CountCompletedChallenges, UpdateStuntScores.
+//
+// BLOCKED (NOT bodied): ResetActionData @0x823246F0 -- its per-action reset dispatch indexes an
+//   un-recovered 41-entry rodata lookup table (dword_82021288: EChallengeActionType -> skill index,
+//   with the 38==skip / 17==special cases) that is not present in the dossier or the committed tree.
+//   Reconstructing it would require fabricating the table's 41 mapping values, so it stays for the
+//   slice that recovers that rodata.
 //
 // DECLARATION-ONLY (FLAGGED, own slices): the other 52 functions in the postmortem (Update*,
 // Handle*, NetworkPlayer*, Check*, BeginChallenge/EndChallenge/Trigger/Cancel, ProcessEvent,
@@ -272,6 +279,121 @@ BrnProgression::ProgressionManager* ChallengeManager::GetProgressionManager()
 CgsContainers::FastBitArray<2000>& ChallengeManager::GetLocalChallengeCompletionData()
 {
     return FieldAt<CgsContainers::FastBitArray<2000> >(maOpaque, 0xD00);  // this+0xD00
+}
+
+// ----------------------------------------------------------------------------
+// GetChallengeStyle -- X360 0x82355FA8 (DWARF BrnChallengeManager.h:196). Returns the active
+// challenge's freeburn style, or E_FREEBURN_STYLE_NONE unless the manager is RUNNING. The X360
+// reads meChallengeManagerStatus @+0xE08 (the field immediately before mpCurrentChallenge @+0xE0C
+// in the DWARF member order), compares it to RUNNING(2), asserts mpCurrentChallenge is set, and
+// tail-calls ChallengeListEntry::GetChallengeStyle.
+// ----------------------------------------------------------------------------
+BrnResource::ChallengeListEntry::EFreeburnChallengeStyle ChallengeManager::GetChallengeStyle() const
+{
+    if (FieldAt<s32>(maOpaque, 0xE08) != E_CHALLENGE_MANAGER_STATUS_RUNNING)
+    {
+        return BrnResource::ChallengeListEntry::E_FREEBURN_STYLE_NONE;
+    }
+
+    const BrnResource::ChallengeListEntry* lpCurrentChallenge =
+        FieldAt<const BrnResource::ChallengeListEntry*>(maOpaque, 0xE0C);
+    CGS_ASSERT(lpCurrentChallenge != nullptr, "mpCurrentChallenge");
+
+    return lpCurrentChallenge->GetChallengeStyle();
+}
+
+// ----------------------------------------------------------------------------
+// CountCompletedChallenges -- X360 0x8233E530. Number of set bits in the local completion bit
+// array (mLocalChallengeCompletionData @+0xD00). The X360 body is the container's set-bit iterator
+// fully inlined: it walks 32 u64 fields (v1 bound 0x20) with a 2000-bit index bound (0x7D0), which
+// is exactly FastBitArray<2000> (ceil(2000/64)==32 fields). The iterator lives entirely on the
+// stack (the apparent `*HIDWORD(v33)=...` writes are stack var_140->var_B0 copies, not container
+// mutations), so the function only reads the array. This is the value-identical
+// GetFirstBitSet/GetNextBitSet scan over the same FastBitArray<2000> the accessor above exposes.
+// ----------------------------------------------------------------------------
+s32 ChallengeManager::CountCompletedChallenges()
+{
+    const CgsContainers::FastBitArray<2000>& lCompletion =
+        FieldAt<CgsContainers::FastBitArray<2000> >(maOpaque, 0xD00);
+
+    s32 liNumCompleted = 0;
+    for (s32 liBit = lCompletion.GetFirstBitSet();
+         liBit != CgsContainers::FastBitArray<2000>::KI_INVALID_BIT_INDEX;
+         liBit = lCompletion.GetNextBitSet(liBit))
+    {
+        ++liNumCompleted;
+    }
+    return liNumCompleted;
+}
+
+// ----------------------------------------------------------------------------
+// UpdateStuntScores -- X360 0x82334740. Push a completed stunt run's per-skill tallies into the
+// current-frame freeburn skill scores: for each non-zero field of the incoming stunt-score struct,
+// call SetCurrentSkillScore with the matching skill id and the field value (as f32).
+//
+// lpStuntScoreInfo is an un-homed external stunt-score snapshot handed in by PostWorldUpdate. It is
+// not reconstructable as a named type here, so its fields are read by attested byte offset
+// (external-data allowance). The X360 first block-copies [0x00..0x06] (7 bytes) then [0x08..0x13]
+// (six u16s) into stack scratch before reading them back; that copy is a no-op for our purposes, so
+// the fields are read directly at their source offsets: per-skill count bytes at [0x00..0x06], a
+// 1-byte gap at [0x07], three u16 counts interleaved with bytes across [0x08..0x12], a s32
+// air-distance value at [0x14], and a flag byte at [0x18]. Each non-zero field is pushed with
+// lbScoredThisFrame==true, except the [0x14] branch which forwards the [0x18] flag.
+//
+// X360/PS3-DWARF DRIFT: the skill ids below (21..36) exceed the committed PS3 EFreeburnSkill enum
+// (E_FREEBURN_SKILL_COUNT==19). The X360 build's EFreeburnSkill carries additional stunt-combo
+// skills; the literal ids are attested verbatim in the X360 asm (li r4,0x15..0x24) and are cast to
+// the enum without inventing names for the drifted enumerators.
+// ----------------------------------------------------------------------------
+void ChallengeManager::UpdateStuntScores(const void* lpStuntScoreInfo)
+{
+    CGS_ASSERT(lpStuntScoreInfo != nullptr, "lpStuntScoreInfo");
+
+    const u8* lpInfo = static_cast<const u8*>(lpStuntScoreInfo);
+
+    if (FieldAt<u8>(lpInfo, 0x06) != 0)
+    {
+        SetCurrentSkillScore(static_cast<EFreeburnSkill>(27), static_cast<f32>(FieldAt<u8>(lpInfo, 0x06)), true);
+        if (FieldAt<u8>(lpInfo, 0x00) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(21), static_cast<f32>(FieldAt<u8>(lpInfo, 0x00)), true);
+        if (FieldAt<u8>(lpInfo, 0x01) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(22), static_cast<f32>(FieldAt<u8>(lpInfo, 0x01)), true);
+        if (FieldAt<u8>(lpInfo, 0x02) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(23), static_cast<f32>(FieldAt<u8>(lpInfo, 0x02)), true);
+        if (FieldAt<u8>(lpInfo, 0x03) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(24), static_cast<f32>(FieldAt<u8>(lpInfo, 0x03)), true);
+        if (FieldAt<u8>(lpInfo, 0x04) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(25), static_cast<f32>(FieldAt<u8>(lpInfo, 0x04)), true);
+        if (FieldAt<u8>(lpInfo, 0x05) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(26), static_cast<f32>(FieldAt<u8>(lpInfo, 0x05)), true);
+    }
+
+    if (FieldAt<u8>(lpInfo, 0x12) != 0)
+    {
+        SetCurrentSkillScore(static_cast<EFreeburnSkill>(35), static_cast<f32>(FieldAt<u8>(lpInfo, 0x12)), true);
+        if (FieldAt<u8>(lpInfo, 0x0E) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(28), static_cast<f32>(FieldAt<u8>(lpInfo, 0x0E)), true);
+        if (FieldAt<u16>(lpInfo, 0x08) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(29), static_cast<f32>(FieldAt<u16>(lpInfo, 0x08)), true);
+        if (FieldAt<u16>(lpInfo, 0x0A) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(30), static_cast<f32>(FieldAt<u16>(lpInfo, 0x0A)), true);
+        if (FieldAt<u8>(lpInfo, 0x0F) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(31), static_cast<f32>(FieldAt<u8>(lpInfo, 0x0F)), true);
+        if (FieldAt<u8>(lpInfo, 0x10) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(32), static_cast<f32>(FieldAt<u8>(lpInfo, 0x10)), true);
+        if (FieldAt<u16>(lpInfo, 0x0C) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(33), static_cast<f32>(FieldAt<u16>(lpInfo, 0x0C)), true);
+        if (FieldAt<u8>(lpInfo, 0x11) != 0)
+            SetCurrentSkillScore(static_cast<EFreeburnSkill>(34), static_cast<f32>(FieldAt<u8>(lpInfo, 0x11)), true);
+    }
+
+    const s32 liAirDistance = FieldAt<s32>(lpInfo, 0x14);
+    if (liAirDistance > 0)
+    {
+        SetCurrentSkillScore(static_cast<EFreeburnSkill>(36),
+                             static_cast<f32>(liAirDistance),
+                             FieldAt<u8>(lpInfo, 0x18) != 0);
+    }
 }
 
 // ----------------------------------------------------------------------------

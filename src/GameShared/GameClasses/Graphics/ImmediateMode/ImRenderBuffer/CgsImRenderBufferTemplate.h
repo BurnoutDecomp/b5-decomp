@@ -64,6 +64,7 @@ namespace renderengine
     class RasterizerState;
     class RenderTargetState;
     class SamplerState;
+    class TextureState;
     struct ClearColorParameters;
 }
 
@@ -294,6 +295,14 @@ namespace CgsGraphics
         // BeginRendering/EndRendering block, then the same 16-byte overflow-checked append
         // as SetTexture/SetProgram (payload @ +8 is the state pointer).
         void SetState(const renderengine::RasterizerState* lpRasterizerState);               // @0x824599C0
+        // The typed SetState overloads the buffered GUI renderers append (X360-attested via the
+        // <Basic2dColouredTexturedVertex> instantiation driven by CgsGui::BillboardRenderer::Render
+        // @0x828577E0: SetState(TextureState*) @0x82458C.., SetState(BlendState*) @0x82458EC0,
+        // SetState(DepthStencilState*) @0x82458DC8). Each appends a 16-byte command binding one state
+        // (IM_CMD_SET_STATE_TEXTURE / _BLEND / _DEPTH); the payload @ +8 is the state pointer.
+        void SetState(const renderengine::TextureState* lpTextureState);
+        void SetState(const renderengine::BlendState* lpBlendState);
+        void SetState(const renderengine::DepthStencilState* lpDepthStencilState);
         // Append a 16-byte {type:IM_CMD_SET_STATE_TEXTURE} command binding a resolved
         // renderengine::TextureState. Decompiled from the inline writer in
         // AptRenderHandler::Render @0x5CB230 (stores muType=9, muSize=16, the state ptr @ +8).
