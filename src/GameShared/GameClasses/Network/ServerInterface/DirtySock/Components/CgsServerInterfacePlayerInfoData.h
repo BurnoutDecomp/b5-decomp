@@ -86,6 +86,11 @@ namespace CgsNetwork
         ServerInterfacePlayerInfoDataBase();
         virtual ~ServerInterfacePlayerInfoDataBase();
 
+        // CgsServerInterfacePlayerInfoData.cpp:167 (virtual; DWARF). Resets the whole
+        // record to its empty default -- clears every string/attr buffer and scalar,
+        // seeds miID to -1 -- ready to be filled from a lobby user. Returns true.
+        virtual bool Prepare();
+
         // CgsServerInterfacePlayerInfoData.cpp (virtual; SerialiseFromUser fills the
         // record from a DirtySDK lobby user struct then parses the custom blob).
         virtual bool SerialiseFromUser(const void* lpUser);

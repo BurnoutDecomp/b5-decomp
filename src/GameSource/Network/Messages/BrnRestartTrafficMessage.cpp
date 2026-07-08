@@ -8,9 +8,11 @@
 #include <cstring>                                        // memcpy (the X360 XMemCpy payload copy)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnNetwork::RestartTrafficMessage::Construct        @ 0x8257BB90
-//   BrnNetwork::RestartTrafficMessage::PrepareForSend   @ 0x8257BBD0
-//   BrnNetwork::RestartTrafficMessage::PackOrUnpack     @ 0x8257BCF8
+//   BrnNetwork::RestartTrafficMessage::Construct           @ 0x8257BB90
+//   BrnNetwork::RestartTrafficMessage::PrepareForSend      @ 0x8257BBD0
+//   BrnNetwork::RestartTrafficMessage::GetPackedMessageSize @ 0x8257BCA0
+//   BrnNetwork::RestartTrafficMessage::PackOrUnpack        @ 0x8257BCF8
+//   BrnNetwork::RestartTrafficMessage::Retrieve            @ 0x8257EBB0
 //
 // A RELIABLE message broadcasting a traffic restart: the eight active traffic hulls,
 // the eight player ids owning those hulls, and the game-logic frame at which traffic
@@ -66,6 +68,40 @@ namespace BrnNetwork
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_RESTART_TRAFFIC_MESSAGE_TYPE, lu16CurrentFrame);
         CGS_ASSERT(IsReliable(), "IsReliable()");
+    }
+
+    s32 RestartTrafficMessage::GetPackedMessageSize()
+    {
+        // Clear the payload back to its empty default (frame -> 0, then both arrays
+        // zeroed -- the sth @+0x58 followed by the two XMemSet moves), then return the
+        // base reliable size. The base call folds (ICF) with TestConnectionMessage::
+        // GetPackedMessageSize in the X360 image; the source calls the ReliableMessage
+        // base per the DWARF (RestartTrafficMessage : ReliableMessage).
+        mu16FrameSinceStartToResetTraffic = 0;                             // sth 0, +0x58
+        memset(mau16ActiveTrafficHulls,   0, 16);                          // +0x48, 8 x u16
+        memset(maPlayerIDsForActiveHulls, 0, 32);                          // +0x28, 8 x s32
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
+    }
+
+    bool RestartTrafficMessage::Retrieve(u16* lpu16FrameSinceStartToResetTraffic,
+                                         u16* lpau16ActiveTrafficHulls,
+                                         NetworkPlayerID* lpaPlayerIDsForActiveHulls)
+    {
+        // Only hand back a payload that was actually received (the VALID flag set).
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
+        {
+            return false;
+        }
+
+        *lpu16FrameSinceStartToResetTraffic = mu16FrameSinceStartToResetTraffic;   // lhz +0x58
+        memcpy(lpau16ActiveTrafficHulls,   mau16ActiveTrafficHulls,   16);          // +0x48, 8 x u16
+        memcpy(lpaPlayerIDsForActiveHulls, maPlayerIDsForActiveHulls, 32);          // +0x28, 8 x s32
+
+        // Consume the message: clear VALID, then assert it is no longer valid (the
+        // X360 re-reads +0x19 and fires the IsMessageValid assert -- always passes here).
+        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+        CGS_ASSERT(!IsMessageValid(), "!CgsNetwork::ReliableMessage::IsMessageValid()");
+        return true;
     }
 
     CgsNetwork::PackOrUnpackResult RestartTrafficMessage::PackOrUnpack()
