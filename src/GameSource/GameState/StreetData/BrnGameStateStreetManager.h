@@ -74,6 +74,14 @@ namespace BrnGameState
         const BrnStreetData::ChallengeData*           GetPlayerChallengeData( int32_t liRoad );
         const BrnStreetData::ChallengeHighScoreEntry* GetNetChallengeData( int32_t liRoad );
 
+        // Stores a local-player challenge score record into the player table for one road.
+        // Used by the StreetManager debug component's "populate/win road rules" actions.
+        // (X360 lands the entry at StreetManager+0xE08 + liRoadIndex*0x28; declared-only here
+        // -- its body reaches the deferred player-table layout and lands with its own TU.)
+        void SetChallengeUserScore( int32_t liRoadIndex,
+                                    BrnStreetData::ChallengePlayerScoreEntry* lpEntry,
+                                    bool lbUpdateHighScore );
+
         // ---- Recovered out-of-line methods (StreetManager wave) -------------
         // These do NOT touch the (still-deferred) StreetManager member layout: the
         // forwarders read no members and the two factories operate purely on the
