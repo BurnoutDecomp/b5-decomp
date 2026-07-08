@@ -93,7 +93,11 @@ public:
     // bump.)
     virtual u32 GetFreeHeapSize();
 
-private:
+protected:
+    // protected (not private): the heap words are set up directly by derived
+    // allocators that co-allocate their backing store with the object -- see
+    // CStaticBatchAllocator, whose constructor seats mpHeapBase to the inline
+    // heap and whose destructor nulls it before this base dtor's XMemFree runs.
     u32   muUnused08;        // +0x08 -- not read by this TU
     u32   muXMemAttributes;  // +0x0C
     u32   muCapacity;        // +0x10
