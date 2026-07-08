@@ -290,6 +290,49 @@ struct stereo_room_t
             a11 = 4;
         }
     };
+
+    // -----------------------------------------------------------------------
+    // PARTIAL LAYOUT. Only the leading fields the recovered accessors touch are
+    // named here. The huge DSP sub-filter bank that follows (a vardelay ->
+    // occlusion -> threetap -> allpass -> ... chain per channel, occupying
+    // offsets +104 .. ~+301000, constructed by the still-unrecovered
+    // stereo_room_t() ctor @0x829664D8 and walked by process() @0x829610D0 /
+    // properties_set() @0x829656A8) is NOT laid out yet, so those three ledger
+    // functions remain unreconstructed. X360 `this`-relative dword offsets
+    // (4-byte vptr) are noted per field for when that work lands.
+    //
+    // vtable ptr @ +0 (off_82109030) -- implicit; see ~stereo_room_t below.
+    properties_t mProperties;   // +4   84-byte parameter block (memcpy target /
+                                //      field-by-field init in the ctor)
+    T   mSampleRate;            // +88  time/rate scale (ctor sets 48000.0; the
+                                //      reverb-time math in properties_set is
+                                //      *this multiplied through it)
+    T   mWetDryMix;             // +92  wet/dry blend, 0..1 (ctor default 1.0)
+    T   mReserved96;            // +96  ctor stores a computed value here (v4)
+    s32 mInputMode;            // +100  0=stereo, 1=mono-left, 2=mono-right
+                                //      (ctor default 0; branched on by process)
+
+    // Scalar-deleting-destructor @0x82962770 is the compiler thunk emitted from
+    // this virtual destructor: it re-stores the vtable at +0 then, when the
+    // delete flag is set, hands the block to operator delete
+    // (XAUDIO::CXMemMemoryManager::XMemFree). The room owns no heap members and
+    // the sub-filters are POD ring buffers, so the destructor body is empty.
+    virtual ~stereo_room_t() {}
+
+    // @0x82965688 -- select the input channel mixing mode. Returns `this`.
+    stereo_room_t *input_mode_set(s32 mode)
+    {
+        mInputMode = mode;
+        return this;
+    }
+
+    // @0x82965690 -- set the wet/dry blend from a 0..100 percentage
+    // (flt_82002138 = 0.0099999998f == 1/100). Returns `this`.
+    stereo_room_t *wet_dry_mix_set(T mix)
+    {
+        mWetDryMix = static_cast<T>(mix * static_cast<T>(0.0099999998));
+        return this;
+    }
 };
 
 } // namespace princeton_digital

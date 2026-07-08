@@ -70,6 +70,12 @@ struct IRInst : public DListNode
 
     // ---- reconstructed bodies (XGraphicsIRInst.cpp) -----------------------
 
+    // Base constructor taking the operation index. Attested as the callee
+    // `IRInst::IRInst(this, opcode)` at the head of every derived node ctor
+    // (e.g. IRLoadTemp passes opcode 118). Declared here as the delegation
+    // target for the derived-node ctors; its body is its own TU.
+    explicit IRInst(s32 aiOpcode);
+
     // @ 0x82C2A9C0 -- factory: dispatch to the per-opcode Make function.
     static IRInst* Make(int aiOpcode);
 

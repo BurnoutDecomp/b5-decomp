@@ -5,6 +5,7 @@
 #include <cstring>                                            // std::strlen / std::strncpy
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
+//   CgsNetwork::ServerInterfacePlayerInfoDataBase::Prepare           @ 0x828797E0
 //   CgsNetwork::ConvertHWFlags                                  @ 0x82879768
 //   CgsNetwork::ServerInterfacePlayerInfoDataBase::SerialiseFromUser @ 0x828798A8
 //
@@ -99,6 +100,38 @@ s32 ConvertHWFlags(s32 liFlags, EConversionFlags leDirection)
     return static_cast<s32>(FoldFlags(static_cast<u32>(liFlags),
                                       KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS,
                                       KI_NUM_HW_FLAGS));
+}
+
+bool ServerInterfacePlayerInfoDataBase::Prepare()
+{
+    // Zero the string / attr buffers (the X360 XMemSet moves @ 0x828797FC..0x82879840)
+    // then reset each scalar (the run of stw @ 0x82879850..0x82879890). miID starts at -1.
+    std::memset(macName,     0, sizeof(macName));      // +0x04, 16
+    std::memset(macMotto,    0, sizeof(macMotto));     // +0x14, 132
+    std::memset(macLocation, 0, sizeof(macLocation));  // +0x98, 20
+    std::memset(macClanTag,  0, sizeof(macClanTag));   // +0xAC, 8
+    std::memset(macTitleId,  0, sizeof(macTitleId));   // +0xB4, 8
+
+    maAttr[0]   = 0;   // +0xBC
+    maAttr[1]   = 0;   // +0xBD
+    maAttr[2]   = 0;   // +0xBE
+    maAttr[3]   = 0;   // +0xBF
+
+    miID        = -1;  // +0xC0
+    muInfoFlags = 0;   // +0xC4
+    miRank      = 0;   // +0xC8
+    miLocality  = 0;   // +0xCC
+    miGameID    = 0;   // +0xD0
+    miField_D4  = 0;   // +0xD4
+    miField_D8  = 0;   // +0xD8
+    miField_DC  = 0;   // +0xDC
+    miField_E0  = 0;   // +0xE0
+    miField_E4  = 0;   // +0xE4
+    muHWFlags   = 0;   // +0xE8
+    miField_EC  = 0;   // +0xEC
+    miField_F0  = 0;   // +0xF0
+
+    return true;
 }
 
 bool ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const void* lpUser)

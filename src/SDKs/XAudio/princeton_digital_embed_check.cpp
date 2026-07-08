@@ -103,5 +103,10 @@ extern "C" int princeton_digital_embed_check_main()
     stereo_room_t<f32>::properties_t props;
     gSink += props.f13 + static_cast<f32>(props.a0) + props.f18 + props.f19;
 
+    stereo_room_t<f32> room;
+    room.wet_dry_mix_set(75.0f);
+    room.input_mode_set(2);
+    gSink += room.mWetDryMix + static_cast<f32>(room.mInputMode);
+
     return static_cast<int>(gSink);
 }
