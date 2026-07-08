@@ -196,6 +196,17 @@ namespace CgsNetwork
                                           s32 liRollBits, s32 liPitchBits, s32 liYawBits,
                                           s32 liPosXBits, s32 liPosYBits, s32 liPosZBits,
                                           rw::math::vpu::Vector3 lPosMin, rw::math::vpu::Vector3 lPosMax);
+    //   PackOrUnpackVector -- sub_8288E390: quantise a Vector3 (a bounded-magnitude direction)
+    //                        with a per-axis bit width and a magnitude bound, returning the
+    //                        per-field OR status. First needed by BrnNetwork::AggressiveDriving-
+    //                        Message::PackOrUnpack (direction packed as 8/8/8 bits, magnitude 1.01).
+    //                        The X360 ABI arg order sandwiches the f32 magnitude bound between the
+    //                        second and third axis-bit-width slots (the FP arg reserves the r7 GPR
+    //                        slot, so the third bit width lands in r8) -- preserved here verbatim.
+    //                        The vector is passed by pointer; the body lives in its own
+    //                        not-yet-reconstructed bitstream TU.
+    PackOrUnpackResult PackOrUnpackVector(Message* lpMessage, rw::math::vpu::Vector3* lpvField,
+                                          s32 liXBits, s32 liYBits, f32 lfMagnitudeBound, s32 liZBits);
 
     // CgsNetwork::MessageWithPlayerIDs and CgsNetwork::ReliableMessage are the next two
     // rungs of the message hierarchy. They now live in their proper home headers

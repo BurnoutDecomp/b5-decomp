@@ -163,15 +163,18 @@ static const short kDbToQ15[602] = {
 // ---------------------------------------------------------------------------
 int GetdBFromQ15(int liQ15)
 {
+    // Silence / underflow floors to -100 dB (-10000 hundredths): the asm's
+    // loc_82B45154 does `li r3,-0x2710; blr` for both the q15==0 early-out and the
+    // leading-bit-not-found exit (0x82B45068 beq). Returning 0 (=0 dB, max) was wrong.
     if (liQ15 == 0)
-        return 0;
+        return -10000;
     static const int kMantissaMask[12] = { 0, 1, 3, 7, 0xF, 0x1F, 0x3F, 0x7F, 0xFF, 0x1FF, 0x3FF, 0x7FF };
     int liBit = 0;                                   // leading-bit search from 0x4000
     if (!(liQ15 & 0x4000))
     {
         do {
             if (liBit == 0x10)
-                return 0;
+                return -10000;
             ++liBit;
         } while (!((0x4000 >> liBit) & liQ15));
     }
