@@ -64,6 +64,17 @@ namespace
     // the AptAux singleton). The console's view module owns the equivalent
     // module-shared GuiAccessPointers instance.
     CgsGui::GuiAccessPointers s_BootLegalAccessPointers;
+
+    // Transition hook for the current boot/menu slice. On the X360 this update belongs to
+    // CgsGui::ViewModule::Update @0x82860708: it computes the view delta, then calls
+    // CgsGui::AptAux::Update, whose first step is the component communicator flush. The
+    // real ViewModule dispatch is not live in this minimal GuiModule yet, so keep the
+    // ownership at the GUI-frame level and leave BrnGuiAptRuntime to tick movie slots only.
+    static void UpdateGuiOwnedAptComponents()
+    {
+        if (CgsGui::AptAuxPointer::mpAptAuxInst != 0)
+            CgsGui::AptAuxPointer::mpAptAuxInst->UpdateComponents();
+    }
 }
 
 // BrnGui::GuiModule -- the GUI module (minimal movie-hosting slice; see BrnGuiModule.h). X360
@@ -701,6 +712,7 @@ namespace BrnGui
             // movie stream is idle (the attract video borrows the single device voice).
             CgsSystem::MenuMusicPC::Update();
 
+            UpdateGuiOwnedAptComponents();
             mAptRuntimeHost.Update();
             return;
         }

@@ -2251,9 +2251,9 @@ namespace BrnGui
     // accumulator / authored msPerFrame / root re-dirty / one-shot probe counters).
     // Returns the number of timeline ticks run this update (the caller gates the
     // flow-only follow-ons -- the help-item defaults -- on the FLOW slot's count).
-    // Called from UpdateRuntime AFTER the single per-frame UpdateComponents flush
-    // (the flush is per-TARGET on the console, not per-movie, so it stays with the
-    // caller and runs exactly once).
+    // Called from UpdateRuntime AFTER GuiModule has run the single per-frame
+    // UpdateComponents flush (the flush is per-TARGET on the console, not per-movie, so
+    // it stays with the GUI frame owner and runs exactly once).
     // -------------------------------------------------------------------------
     static s32 AptTickMovieSlot(AptMovieSlot& lrSlot, bool lbProbeFrame)
     {
@@ -2521,12 +2521,14 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // UpdateRuntime -- per-frame TICK only. Flushes the communicator ONCE, then runs
-    // the paced tick PER SLOT: the framework movie (level 0) first, then the flow movie
-    // (level 1). s_bMovieStopped parks the FLOW slot only -- the framework movie keeps
-    // ticking (the console keeps the persistent level-0 apt composed across flow-state
-    // changes). The RENDER moved to RenderRuntime (the proven immediate-mode Im2d
-    // path). Called from GuiModule::Update (runs before the render hook).
+    // UpdateRuntime -- per-frame TICK only. GuiModule owns the per-frame Apt component
+    // communicator flush in this transition slice (the real owner is CgsGui::ViewModule::
+    // Update -> AptAux::Update); this bridge only advances the paced movie slots: the
+    // framework movie (level 0), persistent library (level 2), then flow movie (level 1).
+    // s_bMovieStopped parks the FLOW slot only -- the framework movie keeps ticking (the
+    // console keeps the persistent level-0 apt composed across flow-state changes). The
+    // RENDER moved to RenderRuntime (the proven immediate-mode Im2d path). Called from
+    // GuiModule::Update (runs before the render hook).
     // -------------------------------------------------------------------------
     static void UpdateRuntime()
     {
@@ -2535,16 +2537,6 @@ namespace BrnGui
 
         ++s_iFrameCounter;
         const bool lbProbeFrame = (s_iFrameCounter % 30) == 1;   // ~every 30 frames
-
-        // FAITHFUL per-frame order (CgsGui::AptAux::Update @0x82853B20, XB1
-        // sub_1400C7090): flush the communicator's stored key/values to the movie AS
-        // FIRST (UpdateComponents -> UpdateAllComponents -> "UpdateAll", perfmon
-        // "AptAux - Upd Comps"), THEN tick the movies (AptUpdateTarget, "Upd Tgt").
-        // With no components registered yet the flush is a no-op, exactly the console
-        // before a movie's ONLOAD registrations arrive. ONE flush per frame (the flush
-        // is per-TARGET, not per-movie) -- both slot ticks run after it.
-        if (CgsGui::AptAuxPointer::mpAptAuxInst != nullptr)
-            CgsGui::AptAuxPointer::mpAptAuxInst->UpdateComponents();
 
         // Nothing loaded yet -> nothing to tick this frame.
         if (!s_FrameworkSlot.mbLoaded && !s_FlowSlot.mbLoaded && !s_PersistentSlot.mbLoaded)
