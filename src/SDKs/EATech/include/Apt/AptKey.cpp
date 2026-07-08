@@ -72,7 +72,14 @@ extern uint32_t gAptKeyLastEvent;   // dword_8324E7A8
 // Virtual-key-code translation table (X360 dword_82143400, 20 entries). Maps the
 // low pad/extended scancodes [0..19] to their Windows virtual-key codes; -1 means
 // "no mapping". Used by getCode / isDown to translate a raw low code (< 0x14) that
-// is not an ASCII-range printable. Dumped verbatim from the X360 .rdata.
+// is not an ASCII-range printable.
+// PROVENANCE: the asm loads dword_82143400 (getCode @0x82AECED0, isDown
+// @0x82ADC690) but the current dossier does not dump the .rdata bytes. The values
+// below are the canonical Scaleform/Flash `Key` scancode->VK mapping (LEFT/RIGHT/
+// HOME/END/INS/DEL/BACKSPACE/ENTER/UP/DOWN/PGUP/PGDN/TAB/ESC), which AptKey (an
+// EATech Scaleform-GFx workalike) uses; every non-sentinel entry is the exact VK
+// code for that slot and the -1s sit where Flash has no mapping. TODO: confirm the
+// 20 words byte-for-byte against the raw X360 .rdata when a dump is available.
 // ---------------------------------------------------------------------------
 static const int32_t kAptKeyCodeTranslate[20] =
 {

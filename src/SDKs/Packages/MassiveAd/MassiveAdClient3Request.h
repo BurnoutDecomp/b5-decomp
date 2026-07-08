@@ -288,6 +288,14 @@ public:
     // invalid/exhausted).
     float ReadFloat();
 
+    // Next 8 bytes through the 64-bit byte-order hook (0 when invalid/exhausted);
+    // the read mirror of WriteU64. NOT part of this header's original ledger
+    // slice, but CRequestObject is its home -- declared here because
+    // CRequestLocateService::Parse reads the server-time field with it (attested
+    // by a named `bl ...CRequestObject::ReadU64` in that TU's asm). Body lives in
+    // the base reader slice.
+    unsigned long long ReadU64();
+
     // @ 0x82BD0330. Reads a u16 length then MassiveMalloc's a NUL-terminated
     // copy of that many bytes. Returns the owned string, or 0 on any failure.
     char* ReadString();
