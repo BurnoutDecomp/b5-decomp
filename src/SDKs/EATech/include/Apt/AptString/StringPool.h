@@ -21,6 +21,8 @@
 
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"   // EAStringC saConstant
 
+class AptString;   // the pooled node (SDKs/EATech/include/Apt/AptValue/AptString.h)
+
 class StringPool
 {
 public:
@@ -43,6 +45,22 @@ public:
     // the string-pool bucket array (sized to the config's string-pool count).
     // Called once by AptCommonInitialize during the Apt bring-up.
     static void Initialize(int nBucketCount);
+
+    // Teardown @0x82AE3720 -- the Apt-shutdown counterpart of Initialize: Release
+    // every pooled node in every bucket chain, free the bucket array back to the
+    // pool, and reset the interned AS-name table to empty. Called by AptCommonShutdown.
+    static void Teardown();
+
+    // GetFromPool @0x82AF2F68 -- intern an AS name: hash pName into a bucket chain and
+    // return the pooled AptString for it, allocating + inserting (and AddRef'ing) a
+    // fresh node on a miss. The returned value is GC-rooted (incGCRoot) so it survives
+    // the collector. Called by AptActionInterpreter::_parseStream.
+    static AptString* GetFromPool(const char* pName);
+
+    // RemoveFromPool @0x82AD8C98 -- drop one GC-root reference to a pooled AptString;
+    // permanently-pinned (root == MAX_GCROOT) values are untouched, and when the last
+    // root goes away the node is unlinked from its bucket chain and Release()'d.
+    static AptString* RemoveFromPool(AptString* pValue);
 
     // ClearTemporaryPool @0x82AD8E20 -- release every temporary string node back
     // to its pool (the GC teardown's final step).

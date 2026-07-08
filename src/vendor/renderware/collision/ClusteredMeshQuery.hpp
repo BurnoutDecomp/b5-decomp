@@ -4,6 +4,7 @@
 #include "vendor/renderware/collision/AABBox.hpp"
 #include "vendor/renderware/collision/FeatureEdge.hpp"        // Vec4
 #include "vendor/renderware/collision/LineSegIntersect.hpp"   // VolumeLineSegIntersectResult
+#include "vendor/renderware/collision/TriangleVolume.hpp"     // rw::collision::TriangleVolume (real home)
 
 // ===========================================================================
 // rw::collision clustered-mesh query helpers -- the free functions of the
@@ -61,21 +62,10 @@ f32 ComputeEdgeCos(u8* lpConvexFlag,
                    const Vec4* lpEdgeEnd,
                    const Vec4* lpApexB);
 
-// ---------------------------------------------------------------------------
-// FLAG: TriangleVolume is its own (as-yet un-homed) RenderWare collision TU.
-// GetNormal is declared here from its attested call shape at 0x82BB1658
-// (bl rw__collision__TriangleVolume__GetNormal with r3 = the volume, r4 = the
-// normal out-slot, r5 = the transform rows) so AddQueryResult can call it by
-// name; the body is NOT reconstructed here (declaration-only cross-TU
-// dependency, not a fabricated body).
-// ---------------------------------------------------------------------------
-class TriangleVolume
-{
-public:
-    // Writes the triangle's world-space normal (transformed by the optional
-    // instance transform rows) to rNormal.
-    void GetNormal(Vec4& rNormal, const Vec4* lpTransform) const;
-};
+// rw::collision::TriangleVolume is homed by
+// vendor/renderware/collision/TriangleVolume.hpp (included above); AddQueryResult
+// calls its GetNormal @ 0x82BB0580 (bl rw__collision__TriangleVolume__GetNormal
+// with r3 = the volume, r4 = the normal out-slot, r5 = the transform rows).
 
 // The query object; defined (TU-locally) by the committed
 // src/SDKs/EATech/rwcollision/volumelinequery.cpp. Opaque here -- the fields

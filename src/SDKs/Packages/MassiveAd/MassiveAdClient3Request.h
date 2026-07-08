@@ -145,6 +145,12 @@ extern unsigned char gabPublicKey[144];
 // ---------------------------------------------------------------------------
 class CRequestObject : public CMassiveBaseObject
 {
+    // CRequestManager::PrepareForShutdown inspects a queued request's stored
+    // index/type word (mnServerIndex at +0x14) directly to decide whether to
+    // cancel it during shutdown. Granting friendship keeps that a named-member
+    // read rather than an offset hack; the manager owns the queue of requests.
+    friend class CRequestManager;
+
 public:
     // @ 0x82BCF1F8. Chains the base ctor with the derived class's name, installs
     // this class's vftable (off_82184858 -- modelled by the virtuals), stores the
@@ -340,6 +346,12 @@ public:
     // @ 0x82BCF460. Frees gpcThirdPartyService through the MassiveAd heap hook
     // and nulls it. (The X360 r3 return is incidental; modelled as void.)
     static void ClearThirdPartyService();
+
+    // Symmetric clear for gpcThirdPartyID (separate ledger TU; body lives in the
+    // MassiveAd third-party-state slice). Declared here -- CRequestObject is its
+    // home -- because CRequestManager::Shutdown bl's into it. (The X360 r3 return
+    // is incidental; modelled as void.)
+    static void ClearThirdPartyID();
 
     // @ 0x82BCF4B0. Copies the 144-byte public-key block into gabPublicKey.
     // Returns 1, or 0 on a null source.

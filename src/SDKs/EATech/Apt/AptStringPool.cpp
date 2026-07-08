@@ -12,10 +12,11 @@
 
 #include "SDKs/EATech/include/Apt/AptString/StringPool.h"   // StringPool (saConstant + ClearTemporaryPool + Initialize)
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"     // AptString (the pooled node) + gpNonGCPoolManager
+#include "SDKs/EATech/include/Apt/AptValue/AptGCReleaseVector.h" // gValuesToRelease (Teardown drains it)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager (StringPool::Initialize bucket array)
 
 #include <intrin.h>   // _InterlockedExchange (the Apt string-pool spin lock)
-#include <cstring>    // memset (StringPool::Initialize bucket-array clear)
+#include <cstring>    // memset / strcmp (bucket-array clear + pool key compare)
 
 // ---------------------------------------------------------------------------
 // saConstant -- the interned AS-name TABLE (X360 dword_8324E580, 88 entries).
@@ -126,10 +127,35 @@ EAStringC StringPool::saConstant[StringPool::KU_CONSTANT_COUNT] = {
 extern DOGMA_PoolManager* gpAptPseudoDataPool;
 
 // The string-pool bucket array + count (off_8324E4F4 / dword_8324E4F8). Owned here.
+// The bucket array is a flat AptString*[nCount] hash table: each slot is the head of
+// a singly-linked chain threaded through AptString::mpNext (the +0xC link).
 namespace
 {
     void*        gpAptStringPoolBuckets = nullptr;   // off_8324E4F4
     unsigned int gnAptStringPoolCount   = 0;         // dword_8324E4F8
+
+    inline AptString** AptStringPoolBuckets()
+    {
+        return reinterpret_cast<AptString**>(gpAptStringPoolBuckets);
+    }
+}
+
+// FLAG: the string-pool TABLE spin lock (X360 unk_8324E7D4) -- a SEPARATE lock from
+// the free-list lock (unk_8324E8E8) above. GetFromPool / RemoveFromPool / Teardown
+// bracket their bucket-array mutations with the console's lwarx/stwcx. interrupt-
+// masked test-and-set idiom; modelled here as a host-portable interlocked TAS
+// (uncontended on the single-thread bring-up path).
+namespace
+{
+    volatile long gStringPoolTableLock = 0;
+    inline void StringPoolTableLock_Acquire()
+    {
+        while (_InterlockedExchange(&gStringPoolTableLock, 1) != 0) {}
+    }
+    inline void StringPoolTableLock_Release()
+    {
+        _InterlockedExchange(&gStringPoolTableLock, 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -226,4 +252,151 @@ void StringPool::ClearTemporaryPool()
     }
 
     StringPoolFreeListLock_Release();
+}
+
+// ---------------------------------------------------------------------------
+// GetFromPool @0x82AF2F68 -- intern an AS name into the string pool.
+//
+// Hash pName (EAStringC::CalculateHashValue) to a bucket, then walk that bucket's
+// mpNext chain for a node whose cached hash + buffer match. On a HIT, GC-root the
+// existing node (incGCRoot, unless it is already permanently pinned at MAX_GCROOT)
+// and return it. On a MISS, allocate a fresh pooled AptString holding pName, cache
+// its hash, prepend it to the chain, AddRef + incGCRoot it, and return it.
+//
+// The whole probe/insert runs under the pool-table lock (X360 unk_8324E7D4).
+// ---------------------------------------------------------------------------
+AptString* StringPool::GetFromPool(const char* pName)
+{
+    StringPoolTableLock_Acquire();
+
+    const unsigned int uHash  = EAStringC::CalculateHashValue(pName);   // u16 (masked)
+    const unsigned int uIndex = uHash % gnAptStringPoolCount;
+    AptString** const  paBuckets = AptStringPoolBuckets();
+
+    // Probe the bucket chain: hash short-circuit, then a full string compare.
+    AptString* pNode = paBuckets[uIndex];
+    while (pNode != nullptr)
+    {
+        if (pNode->GetInternalString()->GetHashValue() == uHash
+            && std::strcmp(pNode->GetInternalString()->GetBuffer(), pName) == 0)
+            break;
+        pNode = pNode->mpNext;
+    }
+
+    if (pNode == nullptr)
+    {
+        // Miss: build a fresh pooled node holding pName. Create("") hands back an
+        // empty node; assign a temp EAStringC built from pName into its embedded
+        // string, then cache that string's hash (the X360 recomputes + stores it).
+        pNode = AptString::Create("");
+        {
+            EAStringC strKey(pName);
+            *pNode->GetInternalString() = strKey;
+        }
+        pNode->GetInternalString()->CalculateHashValue();
+
+        // Prepend to the bucket chain.
+        pNode->mpNext      = paBuckets[uIndex];
+        paBuckets[uIndex]  = pNode;
+
+        pNode->AddRef();      // X360 vtable slot 0
+        pNode->incGCRoot();   // pin against the collector
+    }
+    else if (pNode->getGCRoot() != AptValue::MAX_GCROOT)
+    {
+        // Hit: take another GC root (unless already permanently pinned).
+        pNode->incGCRoot();
+    }
+
+    StringPoolTableLock_Release();
+    return pNode;
+}
+
+// ---------------------------------------------------------------------------
+// RemoveFromPool @0x82AD8C98 -- drop one GC-root reference to a pooled AptString.
+//
+// Under the pool-table lock: a value whose root count is MAX_GCROOT is a permanently
+// pinned constant -- left untouched. Otherwise decGCRoot; and when the original root
+// count was exactly 1 (so it has now reached 0) the node is unlinked from its bucket
+// chain and Release()'d (X360 vtable slot +4). Any higher root count just decrements.
+// ---------------------------------------------------------------------------
+AptString* StringPool::RemoveFromPool(AptString* pValue)
+{
+    StringPoolTableLock_Acquire();
+
+    const unsigned int uOrigRoot = pValue->getGCRoot();
+    if (uOrigRoot == AptValue::MAX_GCROOT)
+    {
+        // Permanently pinned: never pooled-removed.
+        StringPoolTableLock_Release();
+        return pValue;
+    }
+
+    pValue->decGCRoot();
+    if (uOrigRoot == 1)
+    {
+        // Last root gone: unlink from the bucket chain, then Release the node.
+        const unsigned int uHash   = pValue->GetInternalString()->GetHashValue();
+        const unsigned int uIndex  = uHash % gnAptStringPoolCount;
+        AptString** const  paBuckets = AptStringPoolBuckets();
+
+        if (paBuckets[uIndex] == pValue)
+        {
+            paBuckets[uIndex] = pValue->mpNext;
+        }
+        else
+        {
+            AptString* pCur = paBuckets[uIndex];
+            while (pCur->mpNext != pValue)
+                pCur = pCur->mpNext;
+            pCur->mpNext = pValue->mpNext;
+        }
+
+        pValue->Release();   // X360 vtable slot +4
+    }
+
+    StringPoolTableLock_Release();
+    return pValue;
+}
+
+// ---------------------------------------------------------------------------
+// Teardown @0x82AE3720 -- the Apt-shutdown counterpart of Initialize.
+//
+// Under the pool-table lock: for every bucket, Release() each node in its mpNext
+// chain; when a bucket held any nodes, drain the GC deferred-release vector
+// (gValuesToRelease) so the just-Released values are actually reclaimed. Then free
+// the bucket array back to the pool, zero the count, and reset the interned AS-name
+// table (saConstant) to empty strings (X360 stores the empty-string sentinel into
+// each of the 88 slots).
+// ---------------------------------------------------------------------------
+void StringPool::Teardown()
+{
+    StringPoolTableLock_Acquire();
+
+    AptString** const  paBuckets = AptStringPoolBuckets();
+    const unsigned int nCount    = gnAptStringPoolCount;
+
+    for (unsigned int i = 0; i < nCount; ++i)
+    {
+        bool bReleasedAny = false;
+        for (AptString* pNode = paBuckets[i]; pNode != nullptr; )
+        {
+            AptString* const pNext = pNode->mpNext;
+            pNode->Release();   // X360 vtable slot +4
+            pNode = pNext;
+            bReleasedAny = true;
+        }
+        if (bReleasedAny)
+            gValuesToRelease.ReleaseValues();
+    }
+
+    gpAptPseudoDataPool->Deallocate(gpAptStringPoolBuckets, sizeof(void*) * nCount);
+    gnAptStringPoolCount = 0;
+
+    // Reset the interned AS-name table to empty (X360 writes the empty-string
+    // sentinel into each slot; the object-model equivalent is an empty EAStringC).
+    for (int i = 0; i < StringPool::KU_CONSTANT_COUNT; ++i)
+        saConstant[i] = EAStringC();
+
+    StringPoolTableLock_Release();
 }
