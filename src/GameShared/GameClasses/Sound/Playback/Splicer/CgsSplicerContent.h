@@ -26,11 +26,8 @@ namespace CgsSound
 namespace Playback
 {
 
-// CgsSplicerContent.h (DWARF). The splice family enum meType selects.
-enum SPLICE_TYPE
-{
-    E_SPLICE_TYPE_INVALID = 0
-};
+// SPLICE_TYPE (the splice family enum meType selects) is homed in SpliceManager.h and
+// reaches this header through the CgsSpliceBankStatistics.h include above.
 
 struct SplicerContent : public Content
 {
