@@ -264,6 +264,15 @@ public:
     int            GetStatus() const     { return mnStatus; }
     unsigned char* GetDataBuffer() const { return mpDataBuffer; }
 
+    // Additive accessors (FLAG: not their own X360 functions). CTransactionHTTP::
+    // ProcessRequest gates its HTTP-header wrapping on the request's +0x40 dword
+    // (`if (!*(req+0x40)) { ...wrap...; *(req+0x40) = 1; }`) so the outgoing block
+    // is framed exactly once; the field is otherwise 0 from the ctor and untouched
+    // in the request TU. Exposed here BY NAME so the transport does not reach into
+    // the protected member with an offset poke.
+    int  IsHTTPWrapped() const   { return mnField40; }
+    void SetHTTPWrapped(int bWrapped) { mnField40 = bWrapped; }
+
     // @ 0x82BCF500. Non-zero while the status sits in the pending band (&0xF0).
     int IsPending();
 

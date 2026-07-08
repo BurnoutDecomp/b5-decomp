@@ -119,6 +119,17 @@ void  MassiveFileClose(void* pFile);
 int MassiveFormatString(char* pcBuffer, unsigned int nCount, const char* pcFormat, ...);
 
 // ---------------------------------------------------------------------------
+// MassiveAd unbounded string formatter (sub_82C0CB70).
+//
+// The size-less sibling of MassiveFormatString: a plain sprintf-style vendor
+// wrapper that writes a NUL-terminated printf-format string into pcBuffer and
+// returns the formatted length. CTransactionHTTP::ProcessRequest builds the Host
+// string ("%s" then "%s:%d") through it into a fixed stack buffer. Declared here,
+// defined by the MassiveAd platform string layer (another TU).
+// ---------------------------------------------------------------------------
+int MassiveSprintf(char* pcBuffer, const char* pcFormat, ...);
+
+// ---------------------------------------------------------------------------
 // MassiveAd platform clock hooks (FLAGGED platform APIs).
 //
 // On the X360 these are the Win32-style GetTickCount() and GetSystemTime():

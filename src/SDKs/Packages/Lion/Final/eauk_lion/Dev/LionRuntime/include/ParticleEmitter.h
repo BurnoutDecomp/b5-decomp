@@ -22,6 +22,7 @@
 class  cParticleDescriptor;
 struct cParticleBucket;
 struct cTime;   // monotonic game-time stamp (ParticleBucket.h placeholder home) -- ref only here
+struct cLionBindings;   // LionBindings.h (sibling home) -- Bind() attaches one to this emitter
 
 class cParticleEmitter
 {
@@ -29,6 +30,13 @@ public:
     // The descriptor this emitter is playing (console +0x1F8). LionParticleRender::Render
     // switches on its render mode to pick the draw shape.
     const cParticleDescriptor* GetDescriptor() const { return mpDescriptor; }
+
+    // Bind arBindings onto this emitter: store the binding pointer and back-link the
+    // binding's emitter (cLionBindings::SetEmitter). Called (inlined) by
+    // cLionParticleEffectManager::BindingsAttach @ 0x82914530. Body lives in the
+    // cParticleEmitter TU (ParticleEmitter.cpp:206); declared here so the effect
+    // manager compiles against the real DWARF signature (ParticleEmitter.h:158).
+    void Bind(cLionBindings& arBindings);
 
     // Detach apBucket from this emitter's bucket list. Called by
     // cParticleBucketManager::Free @ 0x8290F378 as it recycles a bucket back to the pool

@@ -46,10 +46,16 @@
 struct cTime;                  // ParticleBucket.h placeholder home -- Update takes it by ref
 struct sParticleEmitterClone;  // clone-pool record (DWARF sParticleEmitterClone) -- not homed;
                                // referenced only by pointer here
+struct cLionBindings;          // LionBindings.h (sibling home) -- UnRegister(descriptor,...) takes it
 
 struct cParticleEmitterManager
 {
 public:
+    // The manager singleton (DecFIGS DWARF ParticleEmitterManager.h:44). The X360 build
+    // reaches its static storage (dword_831238E8) directly at the call sites that
+    // register/unregister effect bindings; Instance() is the accessor that resolves to it.
+    // Body lives in the manager's own TU; declared here so callers compile against it.
+    static cParticleEmitterManager& Instance();
     // App lifetime: allocate the emitter array through the tagged allocator, Init every
     // emitter, thread the free list, and clear the used list. X360 @0x82913470.
     void AppInit(EA::Allocator::ITaggedAllocator* apAllocator, u32 aEmitterCount);
@@ -72,6 +78,14 @@ public:
     // Recycle apEmitter off the used list back onto the free list. Body lives in a sibling
     // TU (ParticleEmitterManager.cpp:380); declared here because Update calls it.
     void UnRegister(cParticleEmitter* apEmitter);
+
+    // Unregister the emitter bound to arDescriptor for the given binding set (arBindBase
+    // locates the sibling binding chain the manager walks). Called by
+    // cLionParticleEffectManager::BindingsRemove @ 0x82914CE0 (X360 sub_829146D0). Body
+    // lives in the manager's own TU; declared here per the DWARF signature
+    // (ParticleEmitterManager.h:64).
+    void UnRegister(const cParticleDescriptor& arDescriptor, cLionBindings& arBindings,
+                    cLionBindings* apBindBase);
 
 private:
     // ----- members (DWARF order; offsets verified against the X360 asm) -----
