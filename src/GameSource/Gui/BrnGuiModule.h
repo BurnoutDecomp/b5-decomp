@@ -3,6 +3,7 @@
 
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered base
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
+#include "GameSource/Gui/BrnGuiAptRuntime.h"                             // BrnGui::AptRuntimeHost (embedded)
 #include "GameSource/Gui/Flow/HUD/States/BrnBootVideos.h"               // BrnGui::BootVideos (the boot-logo state)
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLoading.h"              // BrnGui::BootLoading (the boot loading state)
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLegal.h"                // BrnGui::BootLegal (the boot legal/title-screen state)
@@ -36,6 +37,7 @@ namespace BrnGui
         void Update() override;
 
         MovieManager* GetMovieManager() { return &mMovieManager; }
+        AptRuntimeHost* GetAptRuntimeHost() { return &mAptRuntimeHost; }
 
         // The always-available GUI components manager the module owns (the in-game EATrax
         // banner / achievement pop-up / save-icon / etc.) lives at a far offset in a part of
@@ -59,6 +61,7 @@ namespace BrnGui
         void UpdateBootVideoFlow();
 
         MovieManager mMovieManager;   // X360 +301600 (drives the boot/attract videos)
+        AptRuntimeHost mAptRuntimeHost; // GUI-owned Apt host published while the module is prepared
 
         // The boot-logo flow this module drives (the in-game GUI model/view/full HudFlow is data-gated).
         BootVideos             mBootVideos;

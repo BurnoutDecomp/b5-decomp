@@ -1168,8 +1168,9 @@ AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, 
 // AptDL_FramePlacementDispatch -- sub_82B0B080 (no standalone export; its placement
 // logic is folded inline in the X360's AddToDisplayList caller). The dispatcher
 // creates/re-uses the placed node for a serialised .apt frame-placement command and
-// returns it. ppPlacement[1] is the AptFramePlacementProps; placeObject takes the
-// frame value + colour/position/placement payload straight off the props record.
+// returns it. ppPlacement[1] is the AptFramePlacementProps/pseudo-data overlay; the
+// authored name / clip-depth / clip-actions live in ppPlacement[0]'s raw PlaceObject
+// record, the same native-8 body layout AptMovie_PlaceCommand parses.
 //
 // FLAG: sub_82B0B080's own body is folded (no per-address dossier in the X360 export
 // and absent as a named function in the PS3 DWARF). The faithful observable behaviour
@@ -1180,18 +1181,38 @@ AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, 
 AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode)
 {
     AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
-    const int32_t nDepth = static_cast<const int32_t*>(ppPlacement[0])[3];   // native-8 depth @cmd+0x0C (body+4) [c: dword 2]
+    const AptPlaceObjectInfo_t* const pInfo =
+        static_cast<const AptPlaceObjectInfo_t*>(ppPlacement[0]);
 
-    // Apply the command's position matrix only when its flag bit (bit2) requests it
-    // (the same gate the merge path uses); the colour transform is owned by the props
-    // record and merged by placeObject's own colour path, so null here.
+    const uint32_t nFlags = pInfo->muxFlags;
+    const int32_t  nDepth = pInfo->mi32Depth;
+
+    EAStringC nameStr;
+    const EAStringC* pName = nullptr;
+    if ((nFlags & 0x20u) != 0u)
+    {
+        const char* const pNamePtr = pInfo->mpName;
+        if (pNamePtr != nullptr)
+        {
+            nameStr = EAStringC(pNamePtr);
+            pName = &nameStr;
+        }
+    }
+
     const float* const pPosition =
         ((pProps->mnFlags & 0x4) != 0) ? pProps->mpPositionMatrix : nullptr;
+    const AptUint32CXForm* const pPackedColor =
+        ((pProps->mnFlags & 0x8) != 0) ? pProps->mpColorTransform : nullptr;
+    const double fFrameValue = static_cast<double>(pInfo->mfRatio);
+    const int16_t nClipDepth = static_cast<int16_t>(pInfo->miClipDepth);
 
-    return pThis->placeObject(
-        /*pExistingNode*/ nullptr, nDepth, pProps->mpCharacter, nullptr, pParentNode,
-        /*bForceRemove*/ 0, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
-        /*pColorXForm*/ nullptr, pPosition, /*pPlacementClipActions*/ nullptr, /*pClassObject*/ nullptr);
+    const void* pClipActions = nullptr;
+    if ((nFlags & 0x80u) != 0u)
+        pClipActions = pInfo->mpClipActions;
+
+    return pThis->placeObjectNCXForm(
+        /*pExistingNode*/ nullptr, nDepth, pProps->mpCharacter, pName, pParentNode,
+        /*bForceRemove*/ 0, nClipDepth, fFrameValue, pPosition, pClipActions, pPackedColor);
 }
 
 // (AptCharInst_Get/SetPlacementField18 RETIRED 2026-07-07: the console inlines a single
@@ -1388,6 +1409,13 @@ int AptCIH::AssociateInstToClass()
     if (pClassProto != nullptr && pClassProto->getIsDefined())
         pNodeHash->Set__Proto__(pClassProto);
 
+    // The instance is class-bearing before its constructor/onLoad method calls run.
+    // Method dispatch tests AptValue::GetHasClass on the receiver to bind `this`;
+    // leaving the CIH flag clear made nested RegisterComponent calls execute on
+    // _global instead of this clip.
+    pNode->SetHasClass(1);
+    pInst->GetRenderItemWritable()->mFlags |= (1u << 27);
+
     // SetDirtyState(1) so the node keeps ticking. FLAG (x64 onLoad-ORDER fix,
     // boot-verified): the console's "tick once" here fires the fresh(0x80) clip's
     // onLoad, but AptCIH::tick clears the 0x80 fresh bit while HasEvent(onLoad) is
@@ -1430,7 +1458,7 @@ int AptCIH::AssociateInstToClass()
         gAptActionInterpreter.stackPop();   // the constructor's result
     AptScriptFunctionBase::PopStaticData(lppSavedRegs);
 
-    // 5. wire the clip-event member mask + mark the render item class-bound.
+    // 5. wire the clip-event member mask.
     pNode->FindAndSetEvents();
 
     // DIAG (2026-07-07): dump this bound node's display-parent chain -- this is exactly
@@ -1464,6 +1492,5 @@ int AptCIH::AssociateInstToClass()
     // the console fires onLoad from this binding tick or leaves 0x80 set for a later
     // per-frame tick -- either way onLoad must fire AFTER the event mask is set.
     pNode->tick();
-    pInst->GetRenderItemWritable()->mFlags |= (1u << 27);
     return 1;
 }
