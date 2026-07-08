@@ -111,6 +111,8 @@ struct AudioFormat
 //   +0x3000C  mpSrcBuffer   (the "0" channel-buffer pointer slot; swapped with dst)
 //   +0x30010  mpDstBuffer   (the "1" channel-buffer pointer slot)
 //   +0x30018  mpFormat      (-> +0x0C = sample rate)
+//   +0x30028  mfResampleGain (a downstream gain the Resample stage scales by its clamped
+//                             ratio -- see Resample::PreProcess @0x82B9AC10)
 // The 0x30000 base + opaque body are preserved as a byte span so the named fields land
 // exactly. Process swaps the src/dst slots after filtering (ping-pong).
 // -------------------------------------------------------------------------------------
@@ -121,6 +123,8 @@ struct AudioProcessContext
     AudioChannelBuffer *mpDstBuffer;                    // +0x30010
     char                mPad30014[0x30018 - 0x30014];   // +0x30014
     AudioFormat        *mpFormat;                       // +0x30018
+    char                mPad3001C[0x30028 - 0x3001C];   // +0x3001C .. +0x30027
+    f32                 mfResampleGain;                 // +0x30028 -- Resample-scaled gain
 };
 
 // -------------------------------------------------------------------------------------
