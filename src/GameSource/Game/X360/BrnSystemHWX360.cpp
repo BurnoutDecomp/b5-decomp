@@ -44,9 +44,12 @@ static const unsigned int KU_LAUNCHDATA_SIZE = 0x98u;
 // CgsStringUtils.h:65 caps the launched command line at 64 bytes (the `>= 0x40` test).
 static const int KI_COMMANDLINE_BUFFER_SIZE = 64;
 
-// The Massive heap allocator carved from the game-data bank registry. File-scope in
-// the X360 Massive TU; the bank id 0x3F is the cmpwi/li immediate in PrepareMassiveMemory.
-static CgsMemory::HeapMalloc* spHeapMalloc = nullptr;
+// The Massive heap allocator carved from the game-data bank registry. In the X360 it is
+// a single .data global (spHeapMalloc) shared between this prepare path and the Massive
+// custom heap hooks (System360HWMassive::BurnoutMassiveMalloc/Free); it is therefore
+// defined once in the Massive TU (BrnSystemHWX360Massive.cpp) and declared in
+// BrnSystemHWX360.h as BrnMassive::gpMassiveHeapMalloc. The bank id 0x3F is the cmpwi/li
+// immediate in PrepareMassiveMemory.
 static const s32 KI_MASSIVE_HEAP_BANK_ID = 0x3F;
 
 namespace BrnHW
@@ -144,8 +147,8 @@ namespace BrnHW
     int System360HW::PrepareMassiveMemory(int /*liUnused*/,
                                           BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
     {
-        spHeapMalloc = lpAllocatorList->GetHeapAllocator(KI_MASSIVE_HEAP_BANK_ID);
-        CGS_ASSERT(spHeapMalloc != nullptr, "spHeapMalloc != NULL");
+        BrnMassive::gpMassiveHeapMalloc = lpAllocatorList->GetHeapAllocator(KI_MASSIVE_HEAP_BANK_ID);
+        CGS_ASSERT(BrnMassive::gpMassiveHeapMalloc != nullptr, "spHeapMalloc != NULL");
         return 1;
     }
 

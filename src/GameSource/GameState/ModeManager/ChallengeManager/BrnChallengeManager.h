@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray<2000> (mLocalChallengeCompletionData accessor return)
+#include "SharedClasses/DataLists/ChallengeListEntry.h"         // BrnResource::ChallengeListEntry (GetChallengeStyle return enum + mpCurrentChallenge->GetChallengeStyle())
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManager.h
@@ -131,6 +132,11 @@ namespace BrnGameState
         // walks the unhomed progression/challenge-list interiors -- FLAGGED, own slice).
         void CheckForOnlineChallengeUnlocks();
 
+        // X360 0x82355FA8 (DWARF BrnChallengeManager.h:196). The active challenge's freeburn style,
+        // or E_FREEBURN_STYLE_NONE unless the manager is RUNNING. Pure `this`-offset read plus a
+        // forward to mpCurrentChallenge->GetChallengeStyle(). Bodied by THIS TU.
+        BrnResource::ChallengeListEntry::EFreeburnChallengeStyle GetChallengeStyle() const;
+
         // ----- Named accessors the committed ChallengeManagerDebugComponent reaches (X360-asm-
         // attested offsets; bodied here over the opaque storage). -------------------------------
         const BrnResource::ChallengeList*    GetFreeburnChallengeList() const;   // X360 *(this+0xE38)
@@ -139,6 +145,22 @@ namespace BrnGameState
 
     private:
         friend class ChallengeManagerDebugComponent;
+
+        // X360 0x8233E530. Count the set bits in the local completion bit array
+        // (mLocalChallengeCompletionData @ +0xD00, a FastBitArray<2000> == 32 u64 fields). The X360
+        // body is the container's set-bit iterator fully inlined (32 fields / 2000-bit bound);
+        // reconstructed here as the equivalent GetFirstBitSet/GetNextBitSet scan. Bodied by THIS TU.
+        s32 CountCompletedChallenges();
+
+        // X360 0x82334740. Push a completed stunt run's per-skill tallies into the current-frame skill
+        // scores: for each non-zero field of the incoming stunt-score struct, call SetCurrentSkillScore
+        // with the matching freeburn-skill id. Bodied by THIS TU.
+        void UpdateStuntScores(const void* lpStuntScoreInfo);
+
+        // DWARF BrnChallengeManager.h:686. Latches one freeburn-skill score for the current frame.
+        // DECLARATION ONLY here (its body -- the per-skill scratch arrays + VMX -- is its own slice);
+        // UpdateStuntScores calls it.
+        void SetCurrentSkillScore(EFreeburnSkill leSkill, f32 lfScore, bool lbScoredThisFrame);
 
         static void _AssertLayout();   // never called; documents the attested offsets the bodies use
 
