@@ -49,6 +49,23 @@ public:
     // recursion depth governs how deeply nested fields are indented in the text file.
     void FormatName(char* lpcDest, const char* lpcSrc);
 
+    // Open the destination text file `lpcFilename` (mode "w") and reset muRecursionDepth to 0.
+    // @Serialisation.h:634 (DWARF `void Construct(const char*)`). Body is a separate TU;
+    // declared here so callers can drive it by name -- e.g. BehaviourParameterBank::
+    // SaveParameters, which the X360 compiler inlines this into.
+    void Construct(const char* lpcFilename);
+
+    // Assert the nesting fully unwound (CGS_ASSERT muRecursionDepth == 0 @Serialisation.h:643)
+    // and close mpFile. @Serialisation.h:641 (DWARF `void Destruct()`). Body is a separate TU;
+    // declared here for the same reason as Construct.
+    void Destruct();
+
+    // Write a single named f32 field as one "<formatted-name> : <value>\n" text line. @0x82208878.
+    // If mpFile is open: build the indented/space-escaped label into a fixed stack buffer via
+    // FormatName, then fprintf it followed by the float value (promoted to double for the varargs
+    // "%f"). A no-op when the file failed to open.
+    void Serialise(const char* lpcName, f32& lrValue);
+
 private:
     u32        muRecursionDepth;   // +0x00 -- current nesting depth (indent = 4*depth)
     std::FILE* mpFile;             // +0x04 -- the destination text file handle

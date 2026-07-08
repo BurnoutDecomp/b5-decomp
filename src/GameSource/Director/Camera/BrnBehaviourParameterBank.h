@@ -129,6 +129,20 @@ namespace BrnDirector
             // BehaviourPassengerCam.h include's BehaviourRig.h base slice.
             const BehaviourRig::Parameters&          GetPlayerJumpingRigShotParams(s32 liIndex) const;
             const BehaviourBystanderCam::Parameters& GetPlayerJumpingBystanderShotParams(s32 liIndex) const;
+
+            // X360 0x822732D0. Dumps the whole parameter bank to the debug text file
+            // "d:\\camera.txt". The X360 compiler inlines TextFileWriteSerialiser::
+            // Construct("d:\\camera.txt") (fopen "w", muRecursionDepth = 0) and Destruct()
+            // (CGS_ASSERT muRecursionDepth == 0; fclose) into this body; reconstructed as the
+            // three calls the source made. Lives in BrnBehaviourParameterBank.cpp.
+            void SaveParameters();
+
+            // The bank's serialiser-visitor template: walks every named Parameters sub-block,
+            // handing each field to the supplied serialiser. Attested by the X360 mangled call
+            // in SaveParameters (`public: void Serialise<TextFileWriteSerialiser>(
+            // TextFileWriteSerialiser&)`). The per-instantiation bodies are separate (still-todo)
+            // TUs; declared here so SaveParameters can call it. T is deduced from the argument.
+            template<class T> void Serialise(T& lrSerialiser);
         };
     }
 }
