@@ -72,6 +72,18 @@ struct Heap
 
 struct SpliceManager
 {
+    // The per-source splice bank descriptor (DWARF CgsSplicerContent.h:136 names it
+    // SpliceManager::SpliceContainer). MINIMAL: only its per-source splice count at
+    // +0x08 is load-bearing -- SpliceBankStatistics's ctor reads *(container + 8) as
+    // the number of Stats entries to allocate. The preceding 8 bytes are opaque and
+    // pinned so muEntryCount lands at the guest offset. FLAG: host-width -- pinned BY
+    // NAME; the remaining container storage is DEFERRED to the SpliceManager keystone.
+    struct SpliceContainer
+    {
+        u8  mau8Opaque[8];   // +0x00
+        u32 muEntryCount;    // +0x08  per-source splice count
+    };
+
     // @ 0x826AD630. Allocate a `luSize`-byte splice block tagged `lpcTag` through
     // the owned heap. Builds the X360 allocation descriptor (alignment 4, four
     // (size,1) pool hints) and forwards to the heap's polymorphic Allocate slot,

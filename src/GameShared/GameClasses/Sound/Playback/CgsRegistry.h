@@ -29,6 +29,12 @@ struct Entity
     Name mName;      // CgsDataStructures.h:201  (+0) interned entry name
     Name mTypeName;  // CgsDataStructures.h:202  (+4) interned entry type-name
 
+    // CgsDataStructures.h (DWARF, part of the deferred Entity surface above). The
+    // interned entry name accessor. FLAG (additive home-grow): the SpliceBankStatistics
+    // TTY dump reads a ContentSpec's name via GetName() (X360 SpliceBankStatistics::
+    // DumpToTty inlines the `*(spec + 0)` mName read). Shape-only trivial getter.
+    const Name& GetName() const { return mName; }
+
     // CgsDataStructures.h:178/187/198 (DWARF). The serialization member-pointer
     // fixup helpers, static templates on Entity. A serialized entity stores every
     // referenced entity pointer as a low-bit-tagged interned-Name index; these

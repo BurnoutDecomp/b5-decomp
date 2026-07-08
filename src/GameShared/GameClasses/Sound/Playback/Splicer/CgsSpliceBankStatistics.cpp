@@ -20,29 +20,30 @@ namespace CgsSound { namespace Playback {
 
 SpliceBankStatistics* SpliceBankStatistics::spHead = 0;
 
-SpliceBankStatistics::SpliceBankStatistics(SourceDescriptor* lprSource, int liTag, int liHandle)
+SpliceBankStatistics::SpliceBankStatistics(const SpliceManager::SpliceContainer* lpSpliceBank,
+                                           const SplicerContent* lpSpliceContent, u32 luIndex)
 {
-    miTag    = liTag;        // +0x00  (a3 / r5)
-    mpSource = lprSource;    // +0x04  (a2 / r4)
-    mpBuffer = 0;            // +0x08
-    muCount  = 0;            // +0x0C
-    mHandle  = liHandle;     // +0x14  (a4 / r6)
+    mpSpliceContent = lpSpliceContent;  // +0x00  (a3 / r5)
+    mpSpliceBank    = lpSpliceBank;     // +0x04  (a2 / r4)
+    mpaStats        = 0;                // +0x08
+    muStatCount     = 0;                // +0x0C
+    muIndex         = luIndex;          // +0x14  (a4 / r6)
 
-    if (lprSource)
+    if (lpSpliceBank)
     {
-        const u32 luCount = lprSource->muEntryCount; // *(a2 + 8)
-        muCount = luCount;
+        const u32 luCount = lpSpliceBank->muEntryCount; // *(a2 + 8)
+        muStatCount = luCount;
 
-        mpBuffer = static_cast<u16*>(
-            gpSpliceManager->Allocate(2 * luCount, "SpliceBankStatistics"));
+        mpaStats = static_cast<Stats*>(
+            gpSpliceManager->Allocate(sizeof(Stats) * luCount, "SpliceBankStatistics"));
 
-        if (muCount > 0)
+        if (muStatCount > 0)
         {
-            for (u16 lu = 0; lu < muCount; ++lu)
+            for (u16 lu = 0; lu < muStatCount; ++lu)
             {
-                u16* lpSlot = mpBuffer + lu;
+                Stats* lpSlot = mpaStats + lu;
                 if (lpSlot)          // asm's redundant `cmplwi r10,0; beq` preserved
-                    *lpSlot = 0;
+                    lpSlot->muPlayCount = 0;
             }
         }
 
@@ -80,12 +81,12 @@ namespace
 
 SpliceBankStatistics::~SpliceBankStatistics()
 {
-    if (mpBuffer)
+    if (mpaStats)
     {
         SpliceFreeRequest lRequest;
         for (int li = 0; li < 4; ++li)
             lRequest.maiZero[li] = 0;
-        lRequest.mpBlock = mpBuffer;
+        lRequest.mpBlock = mpaStats;
 
         // mgr -> mpHeap(+0x6C4) -> embedded allocator(+0x30) -> vtable slot 0x14.
         // Raw-offset walk into external heap internals (documented external data).
@@ -94,7 +95,7 @@ SpliceBankStatistics::~SpliceBankStatistics()
             *reinterpret_cast<SpliceEmbeddedAllocator**>(lpHeap + 0x30);
         lpAllocator->mpVTable->mpfnFree(lpAllocator, &lRequest);
 
-        mpBuffer = 0;   // +0x08
+        mpaStats = 0;   // +0x08
     }
 
     // Unlink from the intrusive statistics list headed by spHead.
@@ -119,8 +120,8 @@ SpliceBankStatistics::~SpliceBankStatistics()
         }
     }
 
-    mpSource = 0; // +0x04
-    muCount  = 0; // +0x0C
+    mpSpliceBank = 0; // +0x04
+    muStatCount  = 0; // +0x0C
 }
 
 }} // namespace CgsSound::Playback

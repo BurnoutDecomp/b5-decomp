@@ -47,6 +47,77 @@ private:
     SPLICE_TYPE meType;                 // :240
 };
 
+// =============================================================================
+// CgsSound::Playback::SplicerContentSlot  (DWARF home CgsSplicerContent.h:248)
+//
+// The splicer bank's ISlotImplementation: it owns the per-voice Splice object and,
+// on stop / pre-detach, tears it down (`delete voice->mpSplice; voice->mpSplice=0`).
+// The two boot-relevant teardown overrides live in CgsSplicerContent.cpp:
+//   SplicerContentSlot::DoStop      @ 0x826FA7E8
+//   SplicerContentSlot::DoPreDetach @ 0x826FA840
+//
+// FLAG (collaborators are MINIMAL, un-homed elsewhere -- same treatment as the AEMS
+// slot in CgsAemsContent.h): Slot / Voice / PlayerVoice / System / ISlotImplementation
+// are large engine types with their own DWARF homes (CgsVoice.h etc.). Here only the
+// polymorphic-base shape and the one collaborator field the teardown touches -- the
+// Splice pointer at voice +0x88 (the same SplicerPlayerVoice::mpSplice modelled in
+// CgsSplicerPlayerVoice.h) -- are modelled BY NAME; the exact voice layout slot is
+// DEFERRED to the Voice keystone TU and is intentionally NOT offset-asserted.
+// =============================================================================
+
+// Forward-declared engine collaborator (full home CgsSystem.h).
+struct System;
+
+// The per-voice splice object. Full home elsewhere; only its destructor + class
+// operator delete are exercised here (the teardown does `delete splice`).
+struct Splice
+{
+    ~Splice();                              // own TU -- declared only
+    static void operator delete(void* apMem); // own TU -- declared only
+};
+
+// CgsVoice.h:195 (DWARF). One slot on a voice. MINIMAL: the overrides receive it by
+// const-ref but read nothing from it, so only the type identity is load-bearing.
+class Slot {};
+
+// CgsVoice.h (DWARF). The base voice. MINIMAL: only the Splice pointer the teardown
+// nulls is modelled. FLAG: exact layout slot (+0x88) DEFERRED to the Voice keystone.
+class Voice
+{
+public:
+    Splice* mpSplice;   // X360 voice +0x88 (== SplicerPlayerVoice::mpSplice)
+};
+
+// The player voice the slot drives; derives from Voice so both the PlayerVoice&
+// (DoStop) and Voice& (DoPreDetach) references reach mpSplice by name.
+class PlayerVoice : public Voice {};
+
+// CgsVoice.h:676 (DWARF). The slot-implementation interface. The splicer slot
+// overrides all four hooks; only stop/pre-detach are bodied in this TU.
+struct ISlotImplementation
+{
+    virtual ~ISlotImplementation() {}
+
+    virtual bool DoPlay(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent, u32 au32Param) = 0;
+    virtual bool DoStop(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent) = 0;
+    virtual bool DoUpdatePlaying(System* apSystem, const Slot& aSlot, PlayerVoice& aVoice,
+                                 Content& aContent, f32 af32Dt) = 0;
+    virtual void DoPreDetach(const Slot& aSlot, Voice& aVoice, Content& aContent) = 0;
+};
+
+struct SplicerContentSlot : public ISlotImplementation
+{
+    // own TU @ 0x826FA... (CgsSplicerContent.cpp:101 DWARF) -- declared only.
+    virtual bool DoPlay(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent, u32 au32Param);
+    // this TU @ 0x826FA7E8.
+    virtual bool DoStop(const Slot& aSlot, PlayerVoice& aVoice, Content& aContent);
+    // own TU (CgsSplicerContent.cpp:66 DWARF) -- declared only.
+    virtual bool DoUpdatePlaying(System* apSystem, const Slot& aSlot, PlayerVoice& aVoice,
+                                 Content& aContent, f32 af32Dt);
+    // this TU @ 0x826FA840.
+    virtual void DoPreDetach(const Slot& aSlot, Voice& aVoice, Content& aContent);
+};
+
 } // namespace Playback
 } // namespace CgsSound
 

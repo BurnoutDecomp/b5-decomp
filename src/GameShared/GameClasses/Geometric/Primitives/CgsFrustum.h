@@ -11,6 +11,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"  // Vector4 (16-byte SIMD lane)
+#include "vendor/renderware/collision/Plane.hpp"  // rw::collision::Plane (VectorToPlane return)
 
 namespace CgsGraphics
 {
@@ -44,5 +45,12 @@ namespace CgsGeometric
 
         // CgsFrustum.h:159 (DWARF). 8 swizzled plane lanes = 128 bytes.
         Vector4 maSwizzledPlanes[8];
+
+    private:
+        // CgsFrustum.h:145 (DWARF) -- pack a stored swizzled lane back into a
+        // Plane. @ 0x82840DB0: negate all four lanes of the packed vector and
+        // return it as a plane (the stored lane is the negation of the plane).
+        // Body in CgsFrustum.cpp.
+        rw::collision::Plane VectorToPlane(const Vector4& lrVector) const;
     };
 }
