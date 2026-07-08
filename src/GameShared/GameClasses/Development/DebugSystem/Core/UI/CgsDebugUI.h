@@ -39,6 +39,7 @@ namespace CgsDev
         struct ErrorWindow;
         struct ScriptInterface;
         struct CommandWindow;
+        struct LogWindow;
         struct DebugManagerPad;
 
         enum DockEdge
@@ -90,6 +91,7 @@ namespace CgsDev
             FunctionManager& GetFunctionManager();
             Console&         GetConsole();
             ScriptInterface& GetScriptInterface();
+            LogWindow&       GetLogWindow();
             CommandWindow&   GetCommandWindow();
             DebugController&  GetController();
             bool             IsVisible();
@@ -113,19 +115,9 @@ namespace CgsDev
             DebugManager& GetDebugManager() const;
         };
 
-        // MINIMAL SLICE -- the debug console's script runner. Only the Execute entry
-        // point CgsDev::DebugGameTalkInterface::GameTalkMsgHandler (X360 @0x82833D20)
-        // drives is modelled; the full ScriptInterface (its parser/state, an
-        // mScriptInterface by-value member of DebugUI at this+0x200) is the DebugUI
-        // subsystem follow-on. GROW this in place when that subsystem is reconstructed;
-        // do NOT fork a parallel type.
-        struct ScriptInterface
-        {
-            // X360 @ ScriptInterface::Execute: run a console script. The GameTalk
-            // "ExecuteScript" handler forwards the message's script text here. The asm
-            // passes the script source pointer in r4 (declaration-only; body owned by
-            // the DebugUI script-runner TU, the /c gate does not link it).
-            void Execute(const char* lpcScript);
-        };
+        // The debug console's script runner is homed in its own header
+        // (Core/UI/ScriptInterface/CgsScriptInterface.h). DebugUI only names it by reference
+        // (GetScriptInterface), so the forward declaration above is enough here; consumers that
+        // drive it (e.g. the GameTalk "ExecuteScript" handler) include that header directly.
     }
 }

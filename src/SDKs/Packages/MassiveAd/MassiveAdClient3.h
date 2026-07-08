@@ -226,6 +226,13 @@ protected:
     // Exposes that field BY NAME to subclasses instead of an offset poke.
     void SetValid(int bValid) { mbIsValid = bValid; }
 
+    // Additive clear (FLAG: not its own X360 function). CNetworkManager::Tick
+    // opens each tick by zeroing the base last-error dword at +0x04 directly
+    // (`stw 0, 0x04`) -- a bare store, distinct from the SetLastError setter which
+    // also folds mnReportedError and returns the code. Exposes that field BY NAME
+    // to subclasses instead of an offset poke.
+    void ClearLastError() { mnLastError = 0; }
+
 private:
     int         mnLastError;     // +0x04
     int         mnReportedError; // +0x08

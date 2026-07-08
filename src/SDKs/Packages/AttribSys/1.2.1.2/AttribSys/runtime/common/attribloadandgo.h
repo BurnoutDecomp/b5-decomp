@@ -27,6 +27,15 @@ namespace Attrib
     class ExportManager;   // owned by attribexportmanager.h (declared opaquely here)
     class Vault;
 
+    // Namespace-scope key aliases the export subsystem passes by const-reference
+    // (DecFIGS attribloadandgo.h:24/25). Both are the 32-bit attribsys hash id:
+    //   TypeID   -- names an attribute TYPE (the gDatabaseType / gClassType /
+    //               gCollectionType granularity keys, and every ExportPolicy method's
+    //               `const TypeID&` parameter).
+    //   ExportID -- names one exported attribute instance within a Vault.
+    typedef Attribute::HashInt TypeID;    // attribloadandgo.h:25
+    typedef Attribute::HashInt ExportID;  // attribloadandgo.h:24
+
     // The host garbage-collector callback. AttribSys calls ReleaseData when it
     // reclaims a vault's asset so the host can free any transient data it attached.
     // Vtable order from DWARF (attribloadandgo.h:507): [0] ~IGarbageCollector,

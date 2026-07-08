@@ -51,13 +51,18 @@ enum SPLICE_TYPE
 };
 
 // SPLICE_Data (DWARF) -- one loaded splice record. The 24-byte stride is grounded in
-// FindSplice (returns mpHeadSplice + 24*index); the individual fields are not recovered
-// by this TU, so the record is pinned as an opaque 24-byte span (external loaded-blob
-// data walked by stride, documented per the external-serialised-data exception).
+// FindSplice (returns mpHeadSplice + 24*index). The two fields the splice-object bodies
+// read (SpliceObjects.cpp: Splice::Play/Update/IsPlaying/GetCpuTicks) are recovered by
+// name from those bodies' X360 asm; the remainder of the 24-byte record is external
+// loaded-blob data preserved as opaque padding (external-serialised-data exception).
 struct SPLICE_Data
 {
-    u8 mau8Record[24];
+    u8  mau8Header[7];     // +0x00..0x06  (unrecovered blob header)
+    u8  mucNumSampleRefs;  // +0x07  splice sample-slot count (Play/IsPlaying/GetCpuTicks loop bound)
+    f32 mfVolumeScale;     // +0x08  master volume scale applied to Play/Update input volume
+    u8  mau8Tail[12];      // +0x0C..0x17  (unrecovered) -> total 24-byte stride
 };
+static_assert( sizeof( SPLICE_Data ) == 24, "SPLICE_Data must keep its 24-byte FindSplice stride" );
 
 namespace SpliceManagerDetail
 {
@@ -193,6 +198,26 @@ struct SpliceManager
     // Free a block previously handed out by Allocate, through the same heap (declared
     // only; own ledger func -- de-inlined call site in ~SpliceBankStatistics).
     void  Free( void* lpMemory );
+
+    // Fill a stereo (voice, plug-in-chain) pair for a splice sample that could not be
+    // served from the stereo pool -- the dynamic-voice fallback path. @ own ledger func;
+    // called by StereoSpliceSample::StartVoice (r3=this, r4=&sample->mDynamicVoicePluginPair).
+    void  CreateStereoVoice( VoicePluginPair* apOutPair );
+
+    // The SpliceManager's assertion sink getter (DWARF SpliceManager::GetAssertCallbackFunction).
+    // Inlined at every X360 call site (a direct load of the global instance's +0x610 field), so
+    // it is a header inline here; the splice objects read the sink through it. Grounded in
+    // Splice::operator new @0x826C33A0 and StereoSpliceSample::StartVoice @0x826A3F98.
+    AssertCallbackFunc GetAssertCallbackFunction() { return mAssertCallbackFunc; }
+
+    // De-inlined stereo-pool voice acquisition: the X360 inlines
+    // `mStereoVoicePool.AllocateVoicePluginPairToSpliceSample(sample)` (a direct call on
+    // this+0x308) into StereoSpliceSample::StartVoice. Exposed here so the pool stays
+    // private while the call site reproduces the exact behaviour.
+    VoicePluginPair* AllocateStereoVoicePluginPair( SpliceSample* apSpliceSample )
+    {
+        return mStereoVoicePool.AllocateVoicePluginPairToSpliceSample( apSpliceSample );
+    }
 
 private:
     VoicePool          mMonoVoicePool;                       // :224 (+0x000)

@@ -254,6 +254,16 @@ public:
     int       GetDataLength() const { return mnDataLength; }
     long long GetField38() const { return mnField38; }
 
+    // Additive accessors (FLAG: not their own X360 functions). CNetworkManager
+    // drives a request through the wire directly on the X360: Send/Receive read the
+    // raw wire buffer (mpDataBuffer at +0x1C) and its live length (mnDataLength),
+    // and the state machine compares the exact status word (mnStatus at +0x18) to
+    // the sending band 0x200 / receiving band 0x300. All are attested reads in the
+    // CNetworkManager asm; exposed here BY NAME so the transport does not reach into
+    // the protected members.
+    int            GetStatus() const     { return mnStatus; }
+    unsigned char* GetDataBuffer() const { return mpDataBuffer; }
+
     // @ 0x82BCF500. Non-zero while the status sits in the pending band (&0xF0).
     int IsPending();
 

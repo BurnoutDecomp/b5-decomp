@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault, TypeID, ExportID
 
 // AttribSys export policies -- the per-scope serialisation policy objects the
 // AttribSys ExportManager hands out (Attrib::Database::GetExportPolicies()).
@@ -41,10 +42,31 @@ namespace Attrib
         static void operator delete(void* lpBlock, size_t lnBytes);
     };
 
+    // The eight-method IExportPolicy interface each concrete policy overrides, in DWARF
+    // vtable order (DecFIGS attribdatabase.cpp:182 ClassExportPolicy / :297
+    // CollectionExportPolicy). Declared on the concrete classes (not hoisted onto the
+    // minimally-modelled IExportPolicy/ExportPolicy base above, whose reconstruction is
+    // deliberately vptr-only) so the per-policy vtable carries the right slots. Bodies land
+    // in the policies' own AttribSys TUs; the two/three trivial "should never happen" asserts
+    // this batch grounds are defined in attribdatabase.cpp (their X360 primary_file).
+
     // Per-Class export policy. Vtable off_820D8E08; deleting-destructor @ 0x82808018.
     class ClassExportPolicy : public ExportPolicy
     {
     public:
+        virtual bool IsExported(const TypeID& lrType);                                // own TU
+        virtual void Initialize(Vault& lrVault, const TypeID& lrType,
+                                const ExportID& lrExport, void* lpData,
+                                unsigned int luSize);                                 // own TU
+        virtual bool AnyReferences(const Vault& lrVault);                             // @ 0x8280B2F0 (own TU)
+        virtual bool IsReferenced(const Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport);                          // own TU
+        virtual void PrepareToClean(Vault& lrVault);                                  // @ 0x8280B450 (own TU)
+        virtual void Clean(Vault& lrVault, const TypeID& lrType,
+                           const ExportID& lrExport);                                 // @ 0x82805620
+        virtual void PrepareToDeinitialize(Vault& lrVault);                           // own TU
+        virtual void Deinitialize(Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport);                          // @ 0x82805660
         virtual ~ClassExportPolicy();
     };
 
@@ -52,6 +74,19 @@ namespace Attrib
     class CollectionExportPolicy : public ExportPolicy
     {
     public:
+        virtual bool IsExported(const TypeID& lrType);                               // own TU
+        virtual void Initialize(Vault& lrVault, const TypeID& lrType,
+                                const ExportID& lrExport, void* lpData,
+                                unsigned int luSize);                                // own TU
+        virtual bool AnyReferences(const Vault& lrVault);                            // @ 0x8280B728 (own TU)
+        virtual bool IsReferenced(const Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport);                         // @ 0x828056A0
+        virtual void PrepareToClean(Vault& lrVault);                                 // @ 0x8280B9F8 (own TU)
+        virtual void Clean(Vault& lrVault, const TypeID& lrType,
+                           const ExportID& lrExport);                                // @ 0x828056E0
+        virtual void PrepareToDeinitialize(Vault& lrVault);                          // @ 0x8280CD80 (own TU)
+        virtual void Deinitialize(Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport);                         // @ 0x82805720
         virtual ~CollectionExportPolicy();
     };
 

@@ -2,6 +2,8 @@
 
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"     // GetEaStlAllocator()
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"  // AttribSysPackageAllocator::Free(void*,s32,const char*)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribexportmanager.h" // Class/CollectionExportPolicy
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 
 #include <cstring>   // memcpy (AttribVectorReserve)
 
@@ -97,6 +99,53 @@ AttribVectorBase* AttribVectorReserve(AttribVectorBase* lpVector, unsigned int l
         lpSelf->mpEnd         = lpNewBuffer + liLiveElems;
     }
     return lpSelf;
+}
+
+// =============================================================================
+// Export-policy "should never happen" guards -- reconstructed from BURNOUT_X360_ARTIST.XEX
+// (AttribSys v1.2.1.2, attribdatabase.cpp). A Class or Collection is never entered into the
+// export table, so the Class/Collection export policies' per-export Clean / Deinitialize
+// hooks (and the Collection's IsReferenced) are dead paths that only fire an assert if ever
+// reached. Each X360 body is exactly an unconditional Begin/Fire/EndAssert of a verbatim
+// rodata message (== CGS_ASSERT(false, msg)); the parameters are untouched. The remaining
+// virtuals declared on these policies (IsExported/Initialize/AnyReferences/PrepareToClean/
+// PrepareToDeinitialize, and the Class IsReferenced) carry real per-attribute logic and are
+// reconstructed in their own AttribSys TUs.
+// =============================================================================
+
+// @ 0x82805620 (attribdatabase.cpp:274). Classes hold no export entries, so a per-export
+// Clean is a programming error.
+void ClassExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
+{
+    CGS_ASSERT(false, "Classes should not have export entries!\n");
+}
+
+// @ 0x82805660 (attribdatabase.cpp:292). Same guard on the per-export Deinitialize hook.
+void ClassExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
+{
+    CGS_ASSERT(false, "Classes should not have export entries!\n");
+}
+
+// @ 0x828056A0 (attribdatabase.cpp:341). A Collection is never placed in the export table,
+// so IsReferenced can only be reached in error; it asserts and reports "not referenced".
+bool CollectionExportPolicy::IsReferenced(const Vault&, const TypeID&, const ExportID&)
+{
+    CGS_ASSERT(false, "Collections should not be in export table!\n");
+    return false;
+}
+
+// @ 0x828056E0 (attribdatabase.cpp:366). Collections carry no export entries either; the
+// per-export Clean hook is a dead path. (Shares the Class rodata message.)
+void CollectionExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
+{
+    CGS_ASSERT(false, "Classes should not have export entries!\n");
+}
+
+// @ 0x82805720 (attribdatabase.cpp:391). Same guard on the Collection per-export
+// Deinitialize hook.
+void CollectionExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
+{
+    CGS_ASSERT(false, "Classes should not have export entries!\n");
 }
 
 } // namespace Attrib
