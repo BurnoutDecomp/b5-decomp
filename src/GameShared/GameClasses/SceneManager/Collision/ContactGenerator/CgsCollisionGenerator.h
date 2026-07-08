@@ -56,6 +56,12 @@ namespace CgsCollision
         bool Prepare(void* lpResultBuffer, s32 liResultBufferSize); // h:73 / X360 0x82810660
         void Finish();                           // h:80  / X360 0x828128D8
 
+        // Copy of the luIndex'th result list (by value, bounds-checked against
+        // mu16NumUsedResultLists). X360 0x825B2AE0. (Incomplete return type is fine
+        // for a declaration — CollisionResultList is forward-declared above and the
+        // definition in the .cpp includes its owning header.)
+        CollisionResultList GetResultList(u16 luIndex) const;   // X360 0x825B2AE0
+
     private:
         u16  CreateNewBatch();                   // h:350 / X360 0x82810960
         void FinishBatch(u16 lu16BatchIndex);    // h:353 / X360 0x82810718

@@ -152,12 +152,12 @@ int BrnMassive::CreateSubscriber(int liIE, int liArg3, int liArg4)
     lpSubscriber->mbField94 = 1;       // +0x94
     lpSubscriber->muIdleFrames = 0;    // +0x88
 
-    // Zero the 8-DWORD block at +0x58.
-    u8* lpBlock = lpSubscriber->maPad58;
-    for (s32 li = 0; li < 8; ++li)
-    {
-        reinterpret_cast<u32*>(lpBlock)[li] = 0;
-    }
+    // Zero the impression-data block at +0x58 (the X360 clears 8 dwords here).
+    lpSubscriber->muField58 = 0;       // +0x58
+    lpSubscriber->muField5C = 0;       // +0x5C
+    lpSubscriber->mbHasContent = 0;    // +0x60
+    lpSubscriber->muField68 = 0;       // +0x68
+    lpSubscriber->mfField6C = 0.0f;    // +0x6C
 
     lpSubscriber->muWidth = 1280;      // +0x62
     lpSubscriber->muHeight = 720;      // +0x64

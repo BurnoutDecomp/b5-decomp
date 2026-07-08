@@ -22,27 +22,51 @@ namespace CgsSceneManager
 namespace CgsCollision
 {
     // -------------------------------------------------------------------------
+    // CollisionResult
+    //
+    // One entry of a CollisionResultList: the per-hit collision-query record a
+    // broad-phase tester job produces (line/sphere/volume test outcome). The X360
+    // asm pins the ELEMENT STRIDE only — CollisionResultList::GetResult indexes the
+    // results buffer with `112 * index` (mulli rN, index, 0x70) — so the record is
+    // 0x70 = 112 bytes. Its individual fields are not observed by any recovered
+    // function here, so the body is modelled as a size-only reserved span (the
+    // stride is asm-authoritative; the field breakdown lands when a consumer that
+    // reads them is worked). This is the singular type the header file is named for.
+    // -------------------------------------------------------------------------
+    struct CollisionResult
+    {
+        u8 maReserved[0x70];  // 112-byte record (stride from GetResult: mulli x0x70)
+    };
+
+    // -------------------------------------------------------------------------
     // CollisionResultList
     //
     // The result list a broad-phase tester job (PolygonSoupTesterJob) writes its
-    // hit count into. The only recovered accessor is SetNumResults, which stores a
-    // 16-bit count at offset 0xC:
+    // hits into. Two accessors are recovered:
     //
     //   SetNumResults @ 0x8280FFE8:  sth r4, 0xC(r3) ; blr
-    //
-    // i.e. `this->munNumResults = (u16)liNumResults; return this;`. The store is a
-    // halfword (sth) → the count field is 16-bit at offset 0xC. The 12 bytes ahead
-    // of it are the list header/cursor the job populates elsewhere; modelled here as
-    // a reserved span so munNumResults lands at the asm-observed offset 0xC. Returns
-    // `this` (the Hex-Rays `return result;`).
+    //       → `this->munNumResults = (u16)liNumResults; return this;`. A halfword
+    //         store → the count field is 16-bit at offset 0xC.
+    //   GetResult     @ 0x828A9EF8:  lwz r10, 0(r31) ; mulli r11, r30, 0x70
+    //                                add r3, r11, r10
+    //       → `return &mpResults[index];`. Offset 0 is therefore the results-buffer
+    //         base pointer (mpResults); the 8 bytes between it and the count are the
+    //         list cursor/header the job populates elsewhere (reserved span so
+    //         munNumResults keeps the asm-observed console offset 0xC). Note: host
+    //         pointer width differs from the X360's 4-byte pointer, so the PC layout
+    //         widens mpResults — semantic parity by named member, not byte offsets.
     // -------------------------------------------------------------------------
     struct CollisionResultList
     {
-        u8  maHeaderReserved[0xC];  // +0x00  list header/cursor (populated elsewhere)
-        u16 munNumResults;          // +0x0C  live result count (sth target)
+        CollisionResult* mpResults;         // +0x00  results-buffer base (GetResult base)
+        u8               maCursorReserved[8]; // +0x04  list cursor/header (X360 offsets)
+        u16              munNumResults;      // +0x0C  live result count (sth target)
 
         // SetNumResults @ 0x8280FFE8
         CollisionResultList* SetNumResults(s32 liNumResults);
+
+        // GetResult @ 0x828A9EF8 — the lu16Index'th result record (asserts in range).
+        CollisionResult* GetResult(u16 lu16Index);
     };
 
     // -------------------------------------------------------------------------

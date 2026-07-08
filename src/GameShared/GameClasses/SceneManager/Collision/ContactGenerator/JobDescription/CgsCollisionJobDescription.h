@@ -49,6 +49,10 @@ namespace CgsCollision
         f32                  mfRadius;       // X360 +0xF4  contact radius / padding (0.0)
         s32                  miStatus;       // X360 +0xF8  status / result count (init 0)
         u8                   muJobType;      // X360 +0xFF  E_CollisionJobType id
+
+        // X360 0x82916EB0: `lwz r3, 0xF0(r3)` — return the job's results list.
+        // Called by PolygonSoupTesterJob::ExecuteFillTriangleCache.
+        CollisionResultList* GetResultsList() const { return mpResultsList; }
     };
 }
 }

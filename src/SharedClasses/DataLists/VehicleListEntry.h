@@ -80,6 +80,14 @@ struct VehicleListEntry
     CgsID GetParentId() const;
 
     // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
+    // BrnGui::LeaderboardTableComponent::SetCell car-name path. The livery/"Finish Type" tag
+    // the leaderboard uses to decide whether to display a livery variant under its own id or
+    // its parent car's id. X360 SetCell reads it as `lbz r11,0xE9(entry)`; the +0xE9 offset is
+    // the wiki-named muLiveryType byte (Vehicle List / Burnout Paradise). FLAG: offset recovered
+    // from the asm; the field name is taken from the burnout.wiki VehicleListEntry table.
+    u8 GetLiveryType() const;
+
+    // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
     // BrnGameState::ResetPlayerDebugComponent change-car menu label. The car's display name
     // C-string. Per the Vehicle-List wiki macVehicleName is the char[64] at entry+0x30 (the X360
     // OnChangeCarFilter streams `entry+0x30` into the menu label). Returns nullptr/empty-safe.
