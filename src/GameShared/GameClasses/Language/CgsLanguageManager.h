@@ -217,6 +217,8 @@ namespace CgsLanguage
         // Add/RemoveString* body's Malloc/Free) and registers the embedded debug component with
         // the debug menu. Body links from this TU.
         bool Prepare(CgsMemory::HeapMalloc* lpLanguageAllocator);
+        bool Release();
+        void Destruct();
 
         // X360 0x82860940. Stamps every per-locale format separator/template member with its
         // English-default literal and sets the metric flag to true. Body links from this TU.

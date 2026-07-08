@@ -363,6 +363,21 @@ namespace CgsLanguage
         return true;
     }
 
+    bool LanguageManager::Release()
+    {
+        meReleaseStage = E_RELEASESTAGE_DONE;
+        mePrepareStage = E_PREPARESTAGE_START;
+        mpLanguageAllocator = 0;
+        return true;
+    }
+
+    void LanguageManager::Destruct()
+    {
+        mpResource = 0;
+        mpStringElements = 0;
+        mpLanguageAllocator = 0;
+    }
+
     // X360 0x82860940 CgsLanguage::LanguageManager::PrepareDefaultFormattingStrings.
     //
     // Faithful decompile: stamp every per-locale format separator/template member with its

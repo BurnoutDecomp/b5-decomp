@@ -10,6 +10,8 @@
 // declares AptValue / AptSavedInputRecord / AptSysClock and aliases AptGetBytesEnum / the
 // movie-clip handle, which is all these callback signatures need (none deref them here).
 #include "SDKs/EATech/include/Apt/Apt.h"
+#include "SDKs/EATech/include/Apt/AptTarget.h"
+#include <eathread/eathread_mutex.h>
 
 // Forward declarations for AptAux::Construct's collaborators (passed straight through to
 // AptRenderHandler::Construct; only pointers are held here).
@@ -93,6 +95,10 @@ namespace CgsGui
         // AptCommunicator extension into mpAptCommunicator). Body in CgsAptAux.cpp.
         void InitializeApt();
 
+        // X360 0x828503E0 / 0x828504B0. AptDataHandler and Apt engine lifecycle.
+        bool Prepare(CgsMemory::HeapMalloc* lpAllocator);
+        bool Release();
+
         // X360 0x82850570 (CgsGui::AptAux::UpdateComponents) -- the per-frame component
         // flush AptAux::Update @0x82853B20 runs FIRST each frame (perfmon "AptAux - Upd
         // Comps"), BEFORE AptUpdateTarget ticks the movies (XB1 sub_1400C7090 preserves
@@ -121,6 +127,7 @@ namespace CgsGui
         // meaning is owned by the apt-engine bookkeeping; only that they are set is in scope.
         s32 miState0;   // [guest +0x00] set to 0
         s32 miState4;   // [guest +0x04] set to 3
+        AptTarget* mpAptTargetInstance; // [guest +0x08]
 
         // The embedded APT data registry/allocator front-end (Construct builds it). [guest +12]
         AptDataHandler mAptDataHandler;
@@ -137,6 +144,7 @@ namespace CgsGui
         // behind the ~108KB render handler; addressed by name here. UpdateComponents
         // asserts it, UpdateFlashComponent stores through it. [guest +0x1AC60]
         AptCommunicator* mpAptCommunicator;
+        EA::Thread::Mutex mAptMutex;
     };
 
     // The AptAux singleton handle the render callbacks resolve through. The guest holds a

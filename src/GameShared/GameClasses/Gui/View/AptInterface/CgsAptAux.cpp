@@ -102,6 +102,7 @@ namespace CgsGui
         // The two leading state words the guest seeds (`*(a1+4) = 3; *a1 = 0`).
         miState4 = 3;
         miState0 = 0;
+        mpAptTargetInstance = nullptr;
 
         // The communicator ext object does not exist yet (InitializeApt's ext phase
         // creates + registers it); null until then so UpdateComponents can gate on it.
@@ -237,14 +238,8 @@ namespace CgsGui
         AptRenderInitialize(liUpdated);
 
         // 4. *(this+8) = AptCreateTargetInstance(v7); 5. AptChangeTargetInstance(target).
-        AptTarget* lpTarget = AptCreateTargetInstance(lauCreateCfg);
-        // FLAG (partial AptAux slice): the console caches the created target at *(this+8);
-        // this AptAux slice models only mAptDataHandler/mRenderHandler (the +8 word overlaps
-        // mAptDataHandler), so the cache store is OMITTED. The target is globally reachable
-        // via GetTarget() (AptChangeTargetInstance publishes it into gpAptTarget + the TLS
-        // mirror), which is what every downstream reader actually uses -- so the observable
-        // "current context" is set faithfully without corrupting the partial-slice AptAux.
-        AptChangeTargetInstance(lpTarget);
+        mpAptTargetInstance = AptCreateTargetInstance(lauCreateCfg);
+        AptChangeTargetInstance(mpAptTargetInstance);
 
         // 6. The ext-object phase (UN-DEFERRED 2026-07-05): build the AS communicator
         //    extension and register it with the AS VM. The console does
@@ -260,6 +255,56 @@ namespace CgsGui
         //    AptUpdateInitialize, so the registration lands on a live hash.
         mpAptCommunicator = new AptCommunicator();   // pooled AptExtObject::operator new
         AptRegisterExtension(mpAptCommunicator);
+    }
+
+    bool AptAux::Prepare(CgsMemory::HeapMalloc* lpAllocator)
+    {
+        switch (miState0)
+        {
+        case 0:
+            miState0 = 1;
+            // fall through
+        case 1:
+            if (!mAptDataHandler.Prepare(lpAllocator))
+                return false;
+            miState0 = 2;
+            // fall through
+        case 2:
+            InitializeApt();
+            miState0 = 3;
+            // fall through
+        case 3:
+            miState4 = 0;
+            return true;
+        default:
+            CGS_ASSERT(false, "CgsGUI::AptAux::Prepare() Invalid State!");
+            return false;
+        }
+    }
+
+    bool AptAux::Release()
+    {
+        switch (miState4)
+        {
+        case 0:
+            miState4 = 1;
+            // The engine shutdown chain is reconstructed separately from ownership.
+            // Keep the live target intact until that chain is available.
+            // fall through
+        case 1:
+            miState4 = 2;
+            // fall through
+        case 2:
+            miState4 = 3;
+            miState0 = 0;
+            return true;
+        case 3:
+            miState0 = 0;
+            return true;
+        default:
+            CGS_ASSERT(false, "CgsGUI::AptAux::Release() Invalid State!");
+            return false;
+        }
     }
 
     // -------------------------------------------------------------------------
