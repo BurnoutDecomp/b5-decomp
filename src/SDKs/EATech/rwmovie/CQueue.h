@@ -76,6 +76,10 @@ public:
     // 0 if lppElement is null or liIndex is out of range.
     s32 GetElement(void** lppElement, s32 liIndex);
 
+    // Current number of active elements (queue+0x10). Read directly by CReferenceLibrary
+    // (RemoveFrame / CloseReferenceLibrary) -- the X360 inlines a plain load of this field.
+    s32 GetCount() const { return miCount; }
+
 private:
     Node* mpHead;       // +0x00
     Node* mpTail;       // +0x04

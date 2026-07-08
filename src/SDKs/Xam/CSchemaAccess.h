@@ -79,6 +79,11 @@ public:
     // field descriptor against the wire data (bounded to depth 0x10).
     s32 SkipScope(u32 luDepth);
 
+    // The bound schema descriptor (read at +0x14). CConformanceList::GetConforming-
+    // ScopeAndValue reads it back off the cursor (lwz r3,0x14(r31)) to resolve a
+    // constant through the schema's constant table.
+    CSchemaData* GetSchema() const { return mpSchema; }
+
 private:
     CSchemaData* mpSchema; // +0x14  bound schema descriptor
 };
