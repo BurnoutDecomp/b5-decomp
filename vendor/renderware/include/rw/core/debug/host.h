@@ -7,6 +7,9 @@
 
 namespace rw { namespace core { namespace debug { namespace host {
 
+    // Open a host file by name (ScriptInterface ExecuteScript/SaveState). Returns an integer file
+    // handle (< 0 on failure). OpenFlag is the CRT low-level _open flag set.
+    int Open(const char* FileName, int OpenFlag);
     int Close(int FileHandle);
     int Read(int FileHandle, void* DstBuf, unsigned int MaxCharCount);
     int Write(int FileHandle, const void* Buf, unsigned int MaxCharCount);

@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"  // full ScriptInterface (GetScriptInterface().Execute)
 #include "SDKs/EA/GameTalk/GameTalk.h"
 
 // ============================================================================

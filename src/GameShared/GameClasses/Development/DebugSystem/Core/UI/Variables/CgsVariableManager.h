@@ -29,11 +29,13 @@ namespace CgsDev
         struct Variable;
         struct MenuItemVariable;
         struct VariableMetadata;
+        struct ScriptInterface;
 
         struct VariableManager : public Internal::DebugInternal
         {
             friend class CgsDev::DebugComponent;
             friend class CgsDev::DebugManager;   // registers a component's mbActive toggle via the core
+            friend struct ScriptInterface;       // the console resolves a variable by path (FindVariableFromPath)
 
         private:
             Internal::DebugStaticPool<Variable>         mVariablePool;

@@ -79,6 +79,10 @@ namespace MassiveAdClient3
 typedef void* MassiveThreadHandle;
 void MassiveCloseThreadHandle(MassiveThreadHandle hThread);
 
+// One OS thread entry point: the routine CMassiveThread::Create spins up (the X360
+// passes MassiveAdClient3::DNS to it from CNetworkManager::ResolveAddresses).
+typedef unsigned long (*MassiveThreadProc)(void* pParam);
+
 // ---------------------------------------------------------------------------
 // CLog -- the MassiveAd client's debug-log object (a lazy process singleton).
 //
@@ -224,6 +228,13 @@ public:
     // and chains the base dtor. The X360 dtor is virtual (it rewrites the
     // vftable first).
     virtual ~CMassiveThread();
+
+    // Starts the OS thread on pfnProc(pParam), storing its handle into mhThread.
+    // Separate ledger TU (its body wraps the platform thread-create primitive);
+    // declared here -- CMassiveThread is its home -- because CNetworkManager::
+    // ResolveAddresses spins the DNS thread up through it (a direct bl in that TU's
+    // asm).
+    void Create(MassiveThreadProc pfnProc, void* pParam);
 
 private:
     MassiveThreadHandle mhThread;  // +0x14 (OS thread HANDLE, 0 until started)
