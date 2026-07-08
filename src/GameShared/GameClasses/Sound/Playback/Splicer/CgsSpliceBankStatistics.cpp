@@ -31,7 +31,7 @@ SpliceBankStatistics::SpliceBankStatistics(const SpliceManager::SpliceContainer*
 
     if (lpSpliceBank)
     {
-        const u32 luCount = lpSpliceBank->muEntryCount; // *(a2 + 8)
+        const u32 luCount = lpSpliceBank->mNumSplices; // *(a2 + 8)
         muStatCount = luCount;
 
         mpaStats = static_cast<Stats*>(
@@ -53,48 +53,15 @@ SpliceBankStatistics::SpliceBankStatistics(const SpliceManager::SpliceContainer*
     }
 }
 
-namespace
-{
-    // The embedded block allocator reached via mpHeap+0x30. Only its Free entry
-    // (vtable slot index 5 / byte 0x14) is exercised here. This is an external
-    // heap-internal object (raw-offset walk documented) modelled locally so the free
-    // forwards faithfully without mutating the committed SpliceManager.h.
-    struct SpliceEmbeddedAllocator
-    {
-        struct VTable
-        {
-            void* mapReserved[5];                                  // slots 0..4
-            void  (*mpfnFree)( SpliceEmbeddedAllocator*, void* );   // slot 5 / +0x14
-        };
-        const VTable* mpVTable; // +0x00
-    };
-
-    // 20-byte free descriptor: block pointer in word 0, remaining four words zero.
-    // (asm: 5 zero-stores at var_30+{0,4,8,0xC,0x10}, then var_30+0 overwritten with
-    // the block pointer -- net 1 pointer word + 4 zero words, not 5.)
-    struct SpliceFreeRequest
-    {
-        void* mpBlock;        // [0]
-        s32   maiZero[4];     // [1..4]
-    };
-}
-
 SpliceBankStatistics::~SpliceBankStatistics()
 {
     if (mpaStats)
     {
-        SpliceFreeRequest lRequest;
-        for (int li = 0; li < 4; ++li)
-            lRequest.maiZero[li] = 0;
-        lRequest.mpBlock = mpaStats;
-
-        // mgr -> mpHeap(+0x6C4) -> embedded allocator(+0x30) -> vtable slot 0x14.
-        // Raw-offset walk into external heap internals (documented external data).
-        u8* lpHeap  = *reinterpret_cast<u8**>(reinterpret_cast<u8*>(gpSpliceManager) + 0x6C4);
-        SpliceEmbeddedAllocator* lpAllocator =
-            *reinterpret_cast<SpliceEmbeddedAllocator**>(lpHeap + 0x30);
-        lpAllocator->mpVTable->mpfnFree(lpAllocator, &lRequest);
-
+        // The X360 inlines SpliceManager::Free here (build a zeroed free descriptor and
+        // forward the block through the manager's heap allocator, mgr->mEnvironment's
+        // +0x30 block allocator). De-inlined to the owning call: free through the global
+        // SpliceManager (DWARF-attested SpliceManager::Free, own TU).
+        gpSpliceManager->Free(mpaStats);
         mpaStats = 0;   // +0x08
     }
 

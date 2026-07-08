@@ -149,6 +149,12 @@ public:
     static void ApcNormalRoutine(void* pNormalContext, void* pSystemArgument1,
                                  void* pSystemArgument2);
 
+    // Owners that embed this helper (e.g. XCAM::CEncoder, which keeps a pair of
+    // COverlappedIO as a double-buffered request queue) test whether a request is
+    // still in flight -- the X360 call sites read the +0 mpOverlapped field
+    // directly -- and reach its overlapped to pull the queued context out.
+    XOVERLAPPED* GetOverlapped() const { return mpOverlapped; }
+
 private:
     XOVERLAPPED* mpOverlapped;   // +0x00
     KAPC*        mpApc;          // +0x04
