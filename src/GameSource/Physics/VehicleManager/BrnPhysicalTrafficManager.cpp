@@ -384,6 +384,40 @@ bool PhysicalTrafficVehicle::IsSimple() const
     return mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
 }
 
+// PhysicalTrafficVehicle::HasNonBrokenJoint (const)   @0x825B3418
+//   Range-assert meArticulatedJointState (+0x28); then validate the joint invariants per state:
+//   NONE -> miJointIndex (+0x2C) must be the -1 sentinel; ATTACHED -> miJointIndex >= 0 and the
+//   articulated vehicle type is CAB or TRAILER; any other state fires the "Invalid joint state"
+//   assert. Returns true only for the ATTACHED state. Pure member reads -- no body type needed.
+bool PhysicalTrafficVehicle::HasNonBrokenJoint() const
+{
+    CGS_ASSERT(meArticulatedJointState >= E_ARTICULATE_JOINT_NONE
+                   && meArticulatedJointState < E_ARTICULATE_JOINT_COUNT,
+               "meArticulatedJointState >= E_ARTICULATE_JOINT_NONE && meArticulatedJointState < E_ARTICULATE_JOINT_COUNT");
+
+    if (meArticulatedJointState == E_ARTICULATE_JOINT_NONE)
+    {
+        CGS_ASSERT(miJointIndex == -1, "miJointIndex == -1");
+    }
+    else if (meArticulatedJointState == E_ARTICULATE_JOINT_ATTACHED)
+    {
+        CGS_ASSERT(miJointIndex >= 0, "miJointIndex >= 0");
+        CGS_ASSERT(GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_CAB
+                       || GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_TRAILER,
+                   "GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_CAB || GetArticulatedVehicleType() == E_ARTICULATE_VEHICLE_TRAILER");
+    }
+    else
+    {
+        // X360: an inlined StrStream builds "Invalid joint state: <meArticulatedJointState>" and
+        // fires the assert at BrnPhysicalTrafficVehicle.h:628. The streamed value is approximated by
+        // the static prefix (same convention as the other StrStream asserts in this TU); the branch
+        // is only reachable for an out-of-range state, so the fire is unconditional here.
+        CGS_ASSERT(false, "Invalid joint state: ");
+    }
+
+    return meArticulatedJointState == E_ARTICULATE_JOINT_ATTACHED;
+}
+
 // PhysicalTrafficVehicle::SetCheckOwner   @0x825C01B8
 //   Assert the car has not already been checked (miCheckOwner at +0x33 == 0xFF sentinel) ->
 //   '!HasBeenChecked()'; store the owner byte.

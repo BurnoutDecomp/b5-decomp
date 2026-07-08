@@ -12,6 +12,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"  // Vector4 (16-byte SIMD lane)
 #include "vendor/renderware/collision/Plane.hpp"  // rw::collision::Plane (VectorToPlane return)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"  // CgsGeometric::Sphere (IsSphereInFrustum arg)
 
 namespace CgsGraphics
 {
@@ -43,6 +44,20 @@ namespace CgsGeometric
         // @call 0x827C0064: write the 8 corner vertices.
         void CalcVertices(Vector4* lapVerts) const;
 
+        // GetPlaneByIndex @ 0x8274EFE8 (CgsFrustum.h:242 assert) -- gather the
+        // plane at luPlaneIndex out of the swizzled SoA lanes into an AoS vector
+        // and return it (via VectorToPlane). Asserts luPlaneIndex < 8.
+        rw::collision::Plane GetPlaneByIndex(u32 luPlaneIndex) const;
+
+        // SetPlaneByIndex @ 0x827BAA48 (CgsFrustum.h:296 assert) -- pack lrPlane
+        // (via PlaneToVector) and scatter its four components into the swizzled
+        // SoA lane for luPlaneIndex. Asserts luPlaneIndex < 8.
+        void SetPlaneByIndex(u32 luPlaneIndex, const rw::collision::Plane& lrPlane);
+
+        // IsSphereInFrustum @ 0x828AF020 -- true iff lrSphere is on the inside
+        // half-space of all 8 stored planes (SoA per-plane signed-distance test).
+        bool IsSphereInFrustum(const Sphere& lrSphere) const;
+
         // CgsFrustum.h:159 (DWARF). 8 swizzled plane lanes = 128 bytes.
         Vector4 maSwizzledPlanes[8];
 
@@ -52,5 +67,10 @@ namespace CgsGeometric
         // return it as a plane (the stored lane is the negation of the plane).
         // Body in CgsFrustum.cpp.
         rw::collision::Plane VectorToPlane(const Vector4& lrVector) const;
+
+        // Inverse of VectorToPlane: pack a Plane into its stored (negated) lane
+        // form. Declared here (sibling ledger func, its own TU); called by
+        // SetPlaneByIndex @ 0x827BAA48.
+        Vector4 PlaneToVector(const rw::collision::Plane& lrPlane) const;
     };
 }

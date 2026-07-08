@@ -33,10 +33,28 @@
 // is included first.
 // =============================================================================
 
-#include "BrnCommonTypes.h"   // Vector3, VecFloat (= rw::math::vpu::Vector3 / Vector4)
+#include "BrnCommonTypes.h"               // Vector3, VecFloat (= rw::math::vpu::Vector3 / Vector4)
+#include "BrnTrafficSharedConstants.h"    // BrnTraffic::Side (FindNeighbourForRung arg)
 
 namespace BrnTraffic
 {
+    struct Hull;   // fwd: FindNeighbourForRung takes a (const Hull*); real home BrnTrafficHull.h
+
+    // BrnTrafficSection.h:81 -- a cross-hull lane join. Two adjacent hulls that share a
+    // stretch of lane record, per neighbour, the target section plus how our rungs map onto
+    // theirs (WorldMap::WalkLaneLeft converts our rung/parameter into the neighbour's frame:
+    // theirStart + (ours - ourStart)). 4-byte record (X360 GetNeighbour stride == 4).
+    struct Neighbour
+    {
+        u8 muSection;        // +0  (:83)  neighbour section index in the target hull
+        u8 muSharedLength;   // +1  (:84)
+        u8 muOurStartRung;   // +2  (:85)  first shared rung on our section
+        u8 muTheirStartRung; // +3  (:86)  first shared rung on the neighbour section
+
+        // BrnTrafficSection.h:92 -- own TU (not this slice); declaration only.
+        f32 ConvertOurParameterToTheirs(f32 lfParameter) const;
+    };
+
     // BrnTrafficSection.h:50 -- a lane "rung": the two cross-lane endpoints that span
     // one lane at one point along a section. maPoints[0]/[1] are the left/right (or
     // start/end) endpoints; their difference is the lateral "right" direction.
@@ -91,6 +109,21 @@ namespace BrnTraffic
         // interpolated from the global rung table lpaGlobalRungs.
         void  CalcPositionAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,   // :146  @ 0x821F4BD8
                                       u32 luSegment, Vector3& lrResult) const;
+
+        // Lane tangent (forward direction) at the parameter; same rung-table sampling as
+        // CalcPositionAtParameter. Consumed by BrnDirector::WorldMap::GetSafePositionNearest.
+        void  CalcDirectionAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,  // :150 (DWARF)
+                                       u32 luSegment, Vector3& lrDirection) const;
+
+        // Full lane frame (position + forward + up) at the parameter. WorldMap uses the
+        // position and the up vector (drops the safe camera point 2.25 below the lane).
+        void  CalcTransformAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,  // :156 (DWARF)
+                                       u32 luSegment, Vector3& lrPosition,
+                                       Vector3& lrDirection, Vector3& lrUp) const;
+
+        // First neighbouring section reachable from luRung on the given side, or 0xFFFF if
+        // none. lpHull owns the neighbour table. Consumed by WorldMap::WalkLaneLeft.
+        u16   FindNeighbourForRung(u32 luRung, Side leSide, const Hull* lpHull) const;    // :129 (DWARF)
 
         // Global (whole-graph) rung id of the given local segment index.
         s32   GetGlobalRungForSegment(VecFloat lfParam, u32 luSegment) const;             // :160  @ 0x821F5068

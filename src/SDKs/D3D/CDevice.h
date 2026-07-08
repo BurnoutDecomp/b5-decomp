@@ -46,9 +46,11 @@
 namespace D3D
 {
 
-// Forward-declared sibling D3D types -- NOT yet homed. Declared by name + used
-// only through opaque pointers so the declaration-only methods can name them
-// in their signatures without fabricating their internals.
+// Forward-declared sibling D3D types. CBlocker is now homed in D3DBlocker.h
+// (its ctor/dtor/Check poke the device fields added below via `friend class
+// CBlocker`); CCommandBuffer / CRingAllocList are still un-homed and used only
+// through opaque pointers so the declaration-only methods can name them in
+// their signatures without fabricating their internals.
 class CBlocker;
 class CCommandBuffer;
 class CRingAllocList;
@@ -118,7 +120,10 @@ private:
     u32 muRingLimit;        // +0x0038  segment fence limit             (word[14])
 
     // ---- up to the GPU read-back pointer (first real host pointer) ----
-    u8  mPad003C[0x2A90 - 0x3C]; // +0x003C
+    u8  mPad003C[0x2A88 - 0x3C]; // +0x003C
+    u32 muOwnerThreadId;         // +0x2A88  thread id that owns the primary ring
+                                 //          (read by CBlocker::Check)
+    u8  mPad2A8C[0x2A90 - (0x2A88 + 4)]; // +0x2A8C
     CGpuReadback* mpGpuReadback; // +0x2A90  GPU progress read-back block
 
     // ---- flag byte at +0x2ABD (bit 0x20 == out-of-memory / segment-stalled) -
@@ -129,7 +134,10 @@ private:
     u8  muFlags;            // +0x2ABD  device flag byte (0x20 == OOM/stalled)
 
     // ---- stop-point segment / marker (words [3308]/[3309]) ----
-    u8  mPad2ABE[0x33B0 - (0x2ABD + 1)]; // +0x2ABE
+    u8  mPad2ABE[0x2AFC - (0x2ABD + 1)]; // +0x2ABE
+    u32 muHangDetectArmed;  // +0x2AFC  non-zero while a submit is in flight on the
+                            //          owning thread; gates CBlocker's fence reset
+    u8  mPad2B00[0x33B0 - (0x2AFC + 4)]; // +0x2B00
     u32 muStopSegment;      // +0x33B0  active stop-point segment (0 == none)
     u32 muStopMarker;       // +0x33B4  stop-point marker value
 
@@ -146,8 +154,15 @@ private:
     u32 muSaved4;           // +0x3470  saved word[3730] (word[3356])
     u32 muSaved5;           // +0x3474  saved word[3731] (word[3357])
 
+    // ---- GPU-block profiling callback (word [3359]) ----
+    // Optional hook invoked by D3D::CBlocker::~CBlocker when a block completes;
+    // null when GPU-block profiling is off. Held opaque here -- the call
+    // signature is defined at its only call site in D3DBlocker.cpp.
+    u8   mPad3478[0x347C - (0x3474 + 4)]; // +0x3478
+    void* mpProfileCallback;              // +0x347C  GPU-block profiling hook
+    u8   mPad3480[0x3A48 - (0x347C + sizeof(void*))]; // +0x3480
+
     // ---- live ring-buffer-state source slots (words [3730]..[3733]) ----
-    u8  mPad3478[0x3A48 - (0x3474 + 4)]; // +0x3478
     u32 muLiveSave0;        // +0x3A48  live word[3730]
     u32 muLiveSave1;        // +0x3A4C  live word[3731]
     u32 muLiveSave2;        // +0x3A50  live word[3732]
@@ -157,9 +172,20 @@ private:
     u8  mPad3A58[0x415C - (0x3A54 + 4)]; // +0x3A58
     u32 muOutOfMemoryBase;  // +0x415C  fallback ring base used by MarkAsOutOfMemory
 
+    // ---- GPU-block profiling accumulators (read/written by ~CBlocker) ----
+    // mfSecondsPerTick scales an elapsed time-base delta to seconds; the two
+    // 64-bit counters accumulate blocked time-base ticks, split by blocker type
+    // (type 3 -> the second counter, every other type -> the first).
+    u8  mPad4160[0x5458 - (0x415C + 4)]; // +0x4160
+    f32 mfSecondsPerTick;   // +0x5458  seconds per CPU time-base tick
+    u8  mPad545C[0x5460 - (0x5458 + 4)]; // +0x545C
+    u64 mu64BlockTicks;     // +0x5460  accumulated blocked ticks (type != 3)
+    u64 mu64BlockTicks3;    // +0x5468  accumulated blocked ticks (type == 3)
+
     // (remainder of the device object is opaque and not modelled)
 
     friend void _CDeviceAssertLayout();
+    friend class CBlocker;
 };
 
 } // namespace D3D

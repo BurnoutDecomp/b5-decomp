@@ -141,6 +141,8 @@ struct PhysicalTrafficVehicle
                               Vector3 lvCustomImpulse, Vector3 lvCustomPosition, f32 lfTimerTillFire);
     // @0x825B33B8: true iff this is a SIMPLE (non-full-physics) traffic vehicle.
     bool            IsSimple() const;
+    // @0x825B3418: true iff this vehicle has an ATTACHED (non-broken) articulation joint.
+    bool            HasNonBrokenJoint() const;
     // @0x825C01B8: latch the active-race-car that "checked" this vehicle (asserts not already checked).
     void            SetCheckOwner(EActiveRaceCarIndex leCheckOwner);
     // has miCheckOwner been set to a valid race-car (!= 0xFF sentinel)?
