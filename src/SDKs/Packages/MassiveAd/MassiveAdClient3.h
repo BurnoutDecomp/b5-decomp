@@ -80,6 +80,28 @@ void* MassiveMalloc(std::size_t nSize);
 void  MassiveFree(void* pBlock);
 
 // ---------------------------------------------------------------------------
+// MassiveAd file-I/O hooks (FLAGGED platform APIs).
+//
+// The MassiveAd media-cache path writes each downloaded ad asset to disk through
+// this small fopen/fwrite/fflush/fclose-shaped hook family (the X360 routes them
+// to the title's own file system). MassiveFileOpen returns an opaque file handle
+// (null on failure); the write/flush/close hooks take that handle back.
+// CMassiveAdObjectSubscriber::MediaDownloadComplete @ 0x82BCEC70 is the recovered
+// consumer. Declared here and supplied by the MassiveAd platform file layer
+// (another TU). FLAG: these wrap the OS file primitives -- external/platform, not
+// project-owned.
+//   MassiveFileOpen(name, mode)            -> opaque file handle (0 on failure)
+//   MassiveFileWrite(data, size, count, f) -> bytes/records written
+//   MassiveFileFlush(f)                    -> flush buffered writes
+//   MassiveFileClose(f)                    -> close the handle
+// ---------------------------------------------------------------------------
+void* MassiveFileOpen(const char* pcFilename, const char* pcMode);
+int   MassiveFileWrite(const void* pData, unsigned int nElemSize, unsigned int nCount,
+                       void* pFile);
+void  MassiveFileFlush(void* pFile);
+void  MassiveFileClose(void* pFile);
+
+// ---------------------------------------------------------------------------
 // MassiveAd string-format helper (sub_82C10930).
 //
 // Every MassiveAd identifier-building path (GUID, MAC address, server-time
