@@ -78,12 +78,16 @@ struct VRegInfo
     // deduped across its input operand slots (1 .. aiNumOperands-1).
     void BumpUses(s32 aiNumOperands, IRInst* apInst);
 
-    // @ 0x82C28E58 -- static factory dispatching to the per-kind maker.
-    // BLOCKED: needs the unrecovered VRegTable factory dispatch table
-    // (rodata off_821B5108, 3-word entries of registered factory pointers);
-    // the entry layout and contents are not in the dossier, so reconstructing
-    // it would fabricate rodata. Left declared-only.
-    // static VRegInfo* Make(CFG* apContext, s32 aiKind);
+    // @ 0x82C28E58 -- static factory: allocate + construct a VRegInfo of the value
+    // kind selected by register type `aiType` in graph context `apContext`, stamped
+    // with `aiIndex`, and return it. Signature grounded from the VRegTable::Create
+    // call site (Make(aiIndex, aiType, mpContext) -- mirrors this class's ctor arg
+    // order). The BODY is owned by the VRegInfo factory TU and is NOT defined here:
+    // it dispatches by kind through the unrecovered rodata table (off_821B5108,
+    // 3-word entries of registered factory pointers), which the dossier does not
+    // resolve, so reconstructing it would fabricate rodata. Declared-only so
+    // VRegTable::Create compiles/links against it.
+    static VRegInfo* Make(s32 aiIndex, s32 aiType, CFG* apContext);
 };
 
 // The IR-instruction operand descriptor IS a VRegInfo (identical operand-facing
