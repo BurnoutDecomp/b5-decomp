@@ -67,5 +67,31 @@ void TextFileWriteSerialiser::FormatName(char* lpcDest, const char* lpcSrc)
     lpcDest[luOut] = '\0';
 }
 
+// ----------------------------------------------------------------------------
+// TextFileWriteSerialiser::Serialise(const char* name, f32& value) @0x82208878
+//
+// Writes one named float field to the text file. Store-for-store from the asm:
+//   if (mpFile /* *(this+4) */) {
+//       FormatName(&lacBuffer, name);                 ; bl FormatName(this, buf, name)
+//       fprintf(mpFile, "%s : %f\n", lacBuffer,       ; the f32 is promoted to double and
+//               (double)value);                       ;   passed as the varargs %f arg (stfd/ld)
+//   }
+// The label buffer is the fixed KI_CHARBUFFERLENGTH (64) stack buffer the sibling
+// Serialise<...> template instances also use (DWARF `char lacBuffer[64]`); the X360 sized
+// its stack slot at 72 bytes with alignment padding.
+//
+// (this/r3 is returned unchanged when mpFile is null -- a leftover-register artifact; the
+// DWARF signature returns void.)
+// ----------------------------------------------------------------------------
+void TextFileWriteSerialiser::Serialise(const char* lpcName, f32& lrValue)
+{
+    if (mpFile != nullptr)
+    {
+        char lacBuffer[64];                 // KI_CHARBUFFERLENGTH label buffer
+        FormatName(lacBuffer, lpcName);
+        std::fprintf(mpFile, "%s : %f\n", lacBuffer, lrValue);
+    }
+}
+
 } // namespace Camera
 } // namespace BrnDirector
