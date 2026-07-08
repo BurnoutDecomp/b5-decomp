@@ -57,25 +57,11 @@
 
 namespace BrnFlapt
 {
-    // --- FlaptManager lifecycle (bodies un-homed; see audit) -----------------------
-    void FlaptManager::Construct(CgsGui::ImRendererSet*, CgsGraphics::TextRenderer*,
-                                 CgsLanguage::LanguageManager*, const CgsGui::FontCollection*,
-                                 const RGBA*, int) {}
-    bool FlaptManager::Prepare(CgsMemory::LinearMalloc*) { return true; }
-    bool FlaptManager::Release() { return true; }
-    void FlaptManager::Destruct() {}
     void FlaptManager::RegisterFlaptFile(FlaptFiles, CgsResource::ResourceHandle) {}
 
     // --- Per-frame drive referenced by the homed FlaptManager::Update/Render --------
     void FlaptFileInstance::Update(f32) {}
     void FlaptFileInstance::Render(FlaptRenderer*) {}
-    void FlaptRenderer::StartRenderingFrame() {}
-
-    // --- PerfMon CPU-monitor handles (invalid => Start/StopMonitor no-op) -----------
-    s32 giFlaptUpdateMonitor      = -1;   // dword_82F2765C
-    s32 giFlaptUpdateMonitorTotal = -1;   // dword_82FB3B0C
-    s32 giFlaptRenderMonitor      = -1;   // dword_82F27680
-    s32 giFlaptRenderMonitorTotal = -1;   // dword_82FB3B10
 }
 
 namespace BrnGui
@@ -86,7 +72,6 @@ namespace BrnGui
     void AlwaysAvailableComponentsManager::PrepareFlapt(const BrnFlapt::FileRef&) {}
 }
 
-// --- GuiEventQueueBase<256,16> lifecycle: forward to the homed VariableEventQueue base ---
 template <> void CgsGui::GuiEventQueueBase<256, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<256, 16>::Construct();

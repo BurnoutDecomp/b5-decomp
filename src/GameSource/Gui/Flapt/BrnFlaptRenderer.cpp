@@ -53,8 +53,24 @@ const u8 KU_BATCH_FLAG_SETBLEND   = 2;
 //                               submission binds.
 // Declared extern (data references the render path reads), to be resolved by the
 // renderer's own state-initialisation TU once it is recovered.
-extern renderengine::Texture* const         gpFlaptNoTexture;
-extern const CgsGraphics::BlendState* const gpFlaptDefaultBlendState;
+// FLAG PC-platform leaf: the D3D9 immediate renderer represents the untextured
+// and standard-blend states directly; no console state-library objects exist.
+renderengine::Texture* const         gpFlaptNoTexture = 0;
+const CgsGraphics::BlendState* const gpFlaptDefaultBlendState = 0;
+
+void FlaptRenderer::StartRenderingFrame()
+{
+    mpCurrentTexture = 0;
+    mpCurrentBlendState = 0;
+
+    CgsGraphics::Im2d* lpRenderBuffer = mpImRenderSet->mpIm2dRenderBuffer;
+    CGS_ASSERT(lpRenderBuffer != 0, "mpImRenderSet->mpIm2dRenderBuffer");
+
+    // FLAG PC-platform leaf: the console appends explicit CullNone and ZBufferOff
+    // state commands after BeginRendering. The PC Im2d backend applies those same
+    // D3D9 states inside BeginRendering and has no console StateLibrary object.
+    lpRenderBuffer->BeginRendering();
+}
 
 // ---- SetShader @ 0x82470718 ----------------------------------------------
 // Cache-then-set the immediate-mode render buffer's vertex/pixel program. The X360
@@ -138,11 +154,11 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
     }
 
     // A non-special mesh must resolve to a real texture.
-    if (!lbIsSpecialTexture)
+    if (!lbIsSpecialTexture && lpTexture != 0 && gpFlaptNoTexture != 0)
     {
         CGS_ASSERT(lpTexture != 0, "lbIsSpecialTexture || lpTexture");
     }
-    if (lpTexture == 0)
+    if (lpTexture == 0 && liTextureId >= 0)
     {
         return;
     }

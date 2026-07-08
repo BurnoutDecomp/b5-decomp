@@ -29,8 +29,8 @@
 // Construct(ImRendererSet*, TextRenderer*, CgsLanguage::LanguageManager*,
 //           const CgsGui::FontCollection*, const RGBA*, int32_t).
 struct RGBA;
-namespace CgsGui { class ImRendererSet; class FontCollection; }
-namespace CgsGraphics { class TextRenderer; }
+namespace CgsGui { struct ImRendererSet; struct FontCollection; }
+namespace CgsGraphics { struct TextRenderer; }
 namespace CgsLanguage { class LanguageManager; }
 namespace CgsMemory { class LinearMalloc; }
 namespace CgsResource { struct ResourceHandle; }
@@ -47,6 +47,18 @@ namespace BrnFlapt
 
     struct FlaptManager
     {
+        enum PrepareStage
+        {
+            E_PREPARESTAGE_START = 0,
+            E_PREPARESTAGE_DONE = 1,
+        };
+
+        enum ReleaseStage
+        {
+            E_RELEASESTAGE_START = 0,
+            E_RELEASESTAGE_DONE = 1,
+        };
+
         // GetFile @ 0x82473078 : index maFlaptFileInstances[luFile], assert the
         // entry IsActive(), and return a FileRef {&entry} by value into the
         // caller-provided out buffer.
@@ -81,8 +93,9 @@ namespace BrnFlapt
         // @0x824729?? RegisterFlaptFile : bind a loaded resource handle to a flapt file slot.
         void RegisterFlaptFile(FlaptFiles leFile, CgsResource::ResourceHandle lResourceHandle);
 
-        u8                mau8Opaque00[8];          // +0x00..0x07  (not attested here)
-        FlaptFileInstance maFlaptFileInstances[1];  // +0x08  (true length not attested; >=1)
+        PrepareStage      mePrepareStage;
+        ReleaseStage      meReleaseStage;
+        FlaptFileInstance maFlaptFileInstances[E_FLAPTFILES_COUNT];
         // [c:+0x40] the embedded renderer Render() drives (StartRenderingFrame + the
         // per-frame texture/blend cache it resets). Named member -- the console byte
         // offset folds away on x64. Render reads mRenderer.mpImRenderSet->mpIm2dRenderBuffer

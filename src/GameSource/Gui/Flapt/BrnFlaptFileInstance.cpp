@@ -20,6 +20,30 @@
 namespace BrnFlapt
 {
 
+void FlaptFileInstance::Construct(const RGBA* lpAlternateTextColours,
+                                  s32 liNumAlternateColours)
+{
+    CGS_ASSERT(lpAlternateTextColours != 0, "lpAlternateTextColours");
+
+    mbIsActive = false;
+    mpRootMovieClipInstance = 0;
+    mpAlternateTextColours = lpAlternateTextColours;
+    miNumAlternateColours = liNumAlternateColours;
+    mpLinearAlloc = 0;
+}
+
+void FlaptFileInstance::Prepare(CgsMemory::LinearMalloc* lpFlaptAllocator)
+{
+    mpLinearAlloc = lpFlaptAllocator;
+}
+
+void FlaptFileInstance::Destruct()
+{
+    mbIsActive = false;
+    mpRootMovieClipInstance = 0;
+    mpLinearAlloc = 0;
+}
+
 // ---- GetRootMovieClip @ 0x8246B360 ---------------------------------------
 MovieClipRef* FlaptFileInstance::GetRootMovieClip(MovieClipRef* lpOutRef) const
 {

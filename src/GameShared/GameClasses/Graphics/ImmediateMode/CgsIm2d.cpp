@@ -122,6 +122,14 @@ namespace CgsGraphics
     }
 
     template <typename V>
+    bool ImRenderer<V>::SetProgram(s8 /*li8Program*/)
+    {
+        // FLAG PC-platform leaf: the PC 2D path uses the D3D9 fixed-function
+        // vertex/texture pipeline, so the console shader slot has no host object.
+        return false;
+    }
+
+    template <typename V>
     void ImRenderer<V>::Render(renderengine::PrimitiveType /*lePrimitiveType*/, const V* lpVertices, u32 luCount)
     {
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
@@ -220,6 +228,80 @@ namespace CgsGraphics
     void Im2dBase<V>::SetTransform(const Im2dTransform& lTransform)
     {
         mCurrentTransform = lTransform;
+    }
+
+    template <typename V>
+    void Im2dBase<V>::BatchTransformTextureBlendRenderStatic(
+        const Im2dTransform& lrTransform,
+        renderengine::Texture* lpTexture,
+        const BlendState* lpBlendState,
+        renderengine::PrimitiveType lePrimitiveType,
+        const V* lpVertices,
+        u32 luNumVertices,
+        u8 /*luFlags*/)
+    {
+        if (lpVertices == nullptr || luNumVertices == 0)
+        {
+            return;
+        }
+
+        SetTransform(lrTransform);
+        this->SetTexture(lpTexture);
+        this->SetState(lpBlendState);
+
+        enum { KI_MAX_FLAPT_BATCH = 256 };
+        V laTransformed[KI_MAX_FLAPT_BATCH];
+        if (luNumVertices > KI_MAX_FLAPT_BATCH)
+        {
+            luNumVertices = KI_MAX_FLAPT_BATCH;
+        }
+
+        for (u32 luVertex = 0; luVertex < luNumVertices; ++luVertex)
+        {
+            laTransformed[luVertex] = lpVertices[luVertex];
+
+            const f32 lfNdcX =
+                lrTransform.mOriginXYZ.x +
+                lrTransform.mRightUp.x * lpVertices[luVertex].mv2Pos.x +
+                lrTransform.mRightUp.y * lpVertices[luVertex].mv2Pos.y;
+            const f32 lfNdcY =
+                lrTransform.mOriginXYZ.y +
+                lrTransform.mRightUp.z * lpVertices[luVertex].mv2Pos.x +
+                lrTransform.mRightUp.w * lpVertices[luVertex].mv2Pos.y;
+
+            // FLAG PC-platform leaf: ImRenderer::Render consumes the engine's
+            // 1280x720 logical coordinates, while the console command carries NDC.
+            laTransformed[luVertex].mv2Pos.x = (lfNdcX + 1.0f) * 640.0f;
+            laTransformed[luVertex].mv2Pos.y = (1.0f - lfNdcY) * 360.0f;
+        }
+
+        this->Render(lePrimitiveType, laTransformed, luNumVertices);
+    }
+
+    template <typename V>
+    void Im2dBase<V>::PushMask(renderengine::Texture* lpTexture, V* lpaMaskVertices)
+    {
+        if (lpaMaskVertices == nullptr)
+        {
+            return;
+        }
+
+        // FLAG PC-platform leaf: materialise the console's two-corner mask as a
+        // D3D9 scissor rectangle. PopMask restores it through the Flapt mask path.
+        IDirect3DDevice9* lpDevice = renderengine::gDevice;
+        if (lpDevice == nullptr)
+        {
+            return;
+        }
+
+        RECT lRect;
+        lRect.left = static_cast<LONG>(lpaMaskVertices[0].mv2Pos.x);
+        lRect.top = static_cast<LONG>(lpaMaskVertices[0].mv2Pos.y);
+        lRect.right = static_cast<LONG>(lpaMaskVertices[1].mv2Pos.x);
+        lRect.bottom = static_cast<LONG>(lpaMaskVertices[1].mv2Pos.y);
+        lpDevice->SetScissorRect(&lRect);
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+        this->SetTexture(lpTexture);
     }
 
     // Instantiate the coloured+textured 2D renderer the loading screen uses.
