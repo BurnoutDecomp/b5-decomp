@@ -18,9 +18,6 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // base dtor (chained)
 
-// The instantiation step-probe sink (host-implemented; weak no-op default in AptCharacterHelper.cpp).
-extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
-
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetRenderItemWritable / mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"               // mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"       // ClearCharacterList / ResetInitIndicators / IncCharacterList
@@ -154,11 +151,9 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 // ---------------------------------------------------------------------------
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
 {
-    CgsApt_GalProbe("MakeCAI: enter pFile", pFile);
     if (pFile == nullptr)
         return nullptr;
     void* lpMem = gpAptSharedPtrPool->Allocate(sizeof(AptCharacterAnimationInst));    // Allocate(off_8324D808, 0x2C)
-    CgsApt_GalProbe("MakeCAI: alloc inst", lpMem);
     if (lpMem == nullptr)
         return nullptr;
 
@@ -166,7 +161,6 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // the movie root (pFile->mpData) is the AptCharacter the base ctor builds over,
     // and the held file reference is an incref'd AptFilePtr(pFile).
     AptCharacter* lpCharacter = reinterpret_cast<AptCharacter*>(pFile->mpData);   // r4 = *(pFile+0x14)
-    CgsApt_GalProbe("MakeCAI: mpData(character)", lpCharacter);
     AptFilePtr    laHeldFile;
     laHeldFile.pData = pFile;
     if (pFile != nullptr)
@@ -179,10 +173,8 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(this, character).
     // (The AnimInst vtable store `*this = off_82145FE8` is the manual-vtable family's
     // automatic codegen -- not hand-written here, matching the dtor + the base ctor.)
-    CgsApt_GalProbe("MakeCAI: SpriteInstBase ctor ...", nullptr);
     ::new (static_cast<void*>(static_cast<AptCharacterSpriteInstBase*>(pInst)))
         AptCharacterSpriteInstBase(lpCharacter);
-    CgsApt_GalProbe("MakeCAI: SpriteInstBase done; renderItem", pInst->mpRenderItem);
 
     pInst->mAnimationFilePtr.pData = nullptr;    // *(this+0x28) = 0 (pre-op= clear)
     pInst->mAnimationState_unknown = 0;          // *(this+0x24) = 0
@@ -242,7 +234,6 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // the host facade DEFERS calling this factory until the converter fix (see
     // BrnGuiAptRuntime: the movie-root instantiation is held off with the tick). The
     // body here stays the faithful, un-gated console decompile.
-    CgsApt_GalProbe("MakeCAI: IncCharacterList (renderItem)", pInst->mpRenderItem);
     AptFilePtr laIncArg;
     laIncArg.pData = laHeldFile.pData;                // v16[0] = *a3
     if (laIncArg.pData != nullptr)

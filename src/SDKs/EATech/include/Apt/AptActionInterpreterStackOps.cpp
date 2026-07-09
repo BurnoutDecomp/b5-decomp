@@ -649,17 +649,6 @@ extern AptValue*   AptValue_GetClassOwnerValue(AptValue* pValue);   // FLAG: (va
 // The resolved-method-name == compare is now the static AptActionInterpreter::NameEquals
 // member (console Burnout_X360_Artist_0040_0 = EAStringC::operator==; declared in the header).
 
-// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
-// bring-up TU): traces every AS object construction (see _createObject).
-#if defined(_MSC_VER)
-extern "C" void AptCreateObjectProbe2(const char* pcClass, const void* pValue,
-                                      int nType, int nDefined, int nCanCreate);
-#pragma comment(linker, "/alternatename:AptCreateObjectProbe2=AptCreateObjectProbe2Default")
-extern "C" void AptCreateObjectProbe2Default(const char*, const void*, int, int, int) {}
-#else
-extern "C" void AptCreateObjectProbe(const char* pcClass, bool bResolved);
-#endif
-
 // FLAG (console dword_8324D818 -- the destroyed/movie-end clip placeholder value the
 // "this"-binding walk re-targets through; the same 0xF sentinel Compare collapses).
 extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818
@@ -671,14 +660,6 @@ extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818
 extern const EAStringC gAptEmptyMethodName;   // unk_8324E6B8
 extern const EAStringC gAptThisKey;           // dword_8324E6C0
 // The apply()/call() method-name keys the console stricmp's inline (rodata literals).
-#if defined(_MSC_VER)
-extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, const char* pcNote);
-#pragma comment(linker, "/alternatename:AptCallMethodProbe=AptCallMethodProbeDefault")
-extern "C" void AptCallMethodProbeDefault(const char*, int, int, const char*) {}
-#else
-extern "C" void AptCallMethodProbe(const char* pcWhere, int nTop, int nArgs, const char* pcNote);
-#endif
-
 static const EAStringC gAptApplyKey("apply");
 static const EAStringC gAptPopKey  ("pop");
 static const EAStringC gAptShiftKey("shift");
@@ -698,9 +679,6 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     AptValue*       pMethodName = pInterp->mpStack[pInterp->mnStackTop - 2];   // v7 (r27)
 
     int       nArgs       = pCountValue->toInteger();   // v8/v9/v25
-    // FLAG (bring-up probe): entry/exit stack accounting trace.
-    AptCallMethodProbe("entry", pInterp->mnStackTop, nArgs,
-                       pObject && pObject->isString() ? "strname" : "othername");
     EAStringC** pNameSlot  = nullptr;                    // v10 (r23): method-name slot
     bool      bPushedFrame = false;                      // v11 (r15)
     AptValue* pMethod      = nullptr;                    // v12 (r26): resolved method value
@@ -808,8 +786,6 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
 
     // ---- pop the object operand + drop the name/count slots (console Pop; then the
     //      top-- / top-- pair that drops the name + count without releasing) ----
-    AptCallMethodProbe("pre-pop", pInterp->mnStackTop, nArgs,
-                       pMethod ? (pMethod->getIsDefined() ? "resolved" : "undef") : "null");
     pInterp->stackPop();                                       // console AptValue>::Pop (the NAME slot, top)
     if (pInterp->mnStackTop > 0)
     {
@@ -1073,7 +1049,6 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     reinterpret_cast<AptValueVector*>(&pInterp->mnCIHStackTop)->pop();
     pMethodNameSaved->Release();     // console (*(*v19+4))(v19)
     pCountValue->Release();          // console (*(*v5+4))(v5)
-    AptCallMethodProbe("exit", pInterp->mnStackTop, nArgs, "");
 
     // LABEL_140: the string scratch (v69[0]) is released by EAStringC's RAII dtor.
 }
@@ -1309,13 +1284,6 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
 
     // Resolve the class value: getVariable(scope, target, name, bRead=1, ..., 0).
     AptValue* pClass = getVariable(pScope, pTarget, pClassName, 1, 1, 0);   // console Variable / r16
-
-    // FLAG (bring-up probe; weak sink pattern): name every AS `new <Class>` and
-    // whether the class resolved -- the framework-bootstrap visibility trace.
-    AptCreateObjectProbe2(pClassName->GetBuffer(), pClass,
-                          pClass ? static_cast<int>(pClass->getVtblIndex()) : -1,
-                          pClass ? (pClass->getIsDefined() ? 1 : 0) : -1,
-                          pClass ? (pClass->CanCreateScriptObject() ? 1 : 0) : -1);
 
     // Only a defined class value that CanCreateScriptObject is constructible. The bit
     // ((Variable[1] >> 27) & 1) is mbIsDefined; when not constructible the operands are

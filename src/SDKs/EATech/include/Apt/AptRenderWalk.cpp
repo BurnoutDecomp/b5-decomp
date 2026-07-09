@@ -53,9 +53,6 @@
 #include "SDKs/EATech/Apt/AptMath.h"                    // AptMath::ClipStackMakeUnit
 #include "SDKs/EATech/include/Apt/AptRenderManagerQueue.h"  // AptRenderManagerQueue::Clean
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log (one-shot walk probe)
-#include <cstdio>
-
 // The global render-manager teardown queue (X360 dword_8324E7D8) -- defined in AptGlobals.cpp.
 // sub_82AF3278 flushes it each render pass (it only holds cells deferred off the render thread,
 // which does not happen on the single-threaded PC path, so the flush is normally a no-op).
@@ -459,18 +456,6 @@ static void AptRenderInternal(AptRenderingContext* pCtx, int nLayerMask)
     AptRenderTreeManager* lpMgr =
         reinterpret_cast<AptRenderTreeManager*>(lpTarget->mppRenderRootAnchor);
     AptRenderItem* lpRoot = lpMgr->Render_GetRoot(ppHead, nTick);
-
-    static bool s_bWalkProbed = false;
-    if (!s_bWalkProbed)
-    {
-        s_bWalkProbed = true;
-        char lac[160];
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] walk: headCell=%p root=%p tick=%d -> %s\n",
-            (void*)*ppHead, (void*)lpRoot, nTick,
-            lpRoot ? "traverse" : "empty (nothing placed yet)");
-        CgsDev::Log::WriteToLog(lac);
-    }
 
     if (lpRoot != nullptr)
         AptDecoupleTreeTraversal(lpRoot, nTick, pCtx, NormalOp(), 0, nLayerMask, 1);

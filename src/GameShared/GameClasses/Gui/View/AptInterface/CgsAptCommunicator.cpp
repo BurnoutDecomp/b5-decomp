@@ -22,8 +22,6 @@ extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8
 
 #include <cstring>   // strncpy
 #include <cstdlib>   // atof
-#include <cstdio>    // std::snprintf (§6.4 SendAptEvent registration probe)
-#include <cstdio>    // std::snprintf (the bring-up probes)
 
 // ============================================================================
 // CgsGui::AptCommunicator - reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -326,17 +324,6 @@ namespace CgsGui
 
         mAptComponentList.SetName(liNew, lpacName);
         ++muNumActivecomponents;
-        // FLAG (bring-up probe): every ONLOAD registration is a title clip announcing
-        // itself to the communicator -- surface the first ones in the boot log.
-        if (muNumActivecomponents <= 16)
-        {
-            char lacProbe[192];
-            std::snprintf(lacProbe, sizeof(lacProbe),
-                          "[AptComm] component registered: '%s' (count=%u)\n",
-                          lpacName ? lpacName : "<null>",
-                          static_cast<unsigned>(muNumActivecomponents));
-            CgsDev::Log::WriteToLog(lacProbe);
-        }
         // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
     }
 
@@ -830,7 +817,7 @@ namespace CgsGui
     // For an ONLOAD event (id 1) also fetches Param 3 (the movieclip) and registers a
     // new component. Pushes a GuiEventAptTrigger for the start/onload/transition kinds.
     // ========================================================================
-    AptValue* AptCommunicator::sMethod_SendAptEvent(AptValue* /*pContext*/, int iNumParams)
+    AptValue* AptCommunicator::sMethod_SendAptEvent(AptValue* /*pContext*/, int /*iNumParams*/)
     {
         AptValue* lpEventId  = AptExtObject::GetParam(0);   // FLAG: GetParam un-homed
         AptValue* lpUniqueId = AptExtObject::GetParam(1);
@@ -851,39 +838,6 @@ namespace CgsGui
             && ((lpNameVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpNameVal->getVtblIndex() == AptVFT_StringObject))
             && lpNameVal->getIsDefined();
-        // DIAG (2026-07-07 §6.4): trace every SendAptEvent -- is the ONLOAD registration
-        // reached, and does BuildName supply a DEFINED name? The shim exists only because this
-        // never yields a valid ONLOAD registration (the name overruns to undefined). Shows, per
-        // call: the guard bits, the event id, the resolved name, and whether the clip param is set.
-        {
-            static int s_iSaeHits = 0;
-            if (s_iSaeHits < 150)
-            {
-                ++s_iSaeHits;
-                EAStringC lDbgName;
-                if (lbNameOk)
-                    lpNameVal->toString(&lDbgName);
-                AptValue* const lpClip = AptExtObject::GetParam(3);
-                // Dump the actual arg COUNT + each param's type/value. If iNumParams != 4 or the
-                // name string shows up at the wrong index, the AS/C++ param protocol is misaligned
-                // (GetParam is flagged un-homed) -- a different bug than BuildName returning undefined.
-                EAStringC lP2, lP3;
-                if (lpNameVal && lpNameVal->getIsDefined()) lpNameVal->toString(&lP2);
-                if (lpClip && lpClip->getIsDefined())       lpClip->toString(&lP3);
-                char lacSae[256];
-                std::snprintf(lacSae, sizeof(lacSae),
-                    "[AptRT] SendAptEvent#%d np=%d: ev(id=%d) uid=%d | p2Vft=%d p2='%s' | "
-                    "p3Vft=%d p3CIH=%d p3='%s'\n",
-                    s_iSaeHits, iNumParams,
-                    lbEventOk ? lpEventId->toInteger() : -1, lbUniqueOk ? 1 : 0,
-                    lpNameVal ? static_cast<int>(lpNameVal->getVtblIndex()) : -1,
-                    (lpNameVal && lpNameVal->getIsDefined()) ? lP2.GetBuffer() : "<undef>",
-                    lpClip ? static_cast<int>(lpClip->getVtblIndex()) : -1,
-                    (lpClip && lpClip->isCIH()) ? 1 : 0,
-                    (lpClip && lpClip->getIsDefined()) ? lP3.GetBuffer() : "<undef>");
-                CgsDev::Log::WriteToLog(lacSae);
-            }
-        }
         // FLAG (x64 interim guard -- ONE_TO_ONE §6.4): the console asserts here because
         // it always receives valid args; on x64 the AS component onLoad currently passes
         // an undefined component name + a bad clip receiver (a class-instance `this` /

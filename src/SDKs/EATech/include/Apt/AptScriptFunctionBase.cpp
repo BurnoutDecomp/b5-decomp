@@ -48,19 +48,6 @@
 // FLAG (CIH / GC leaf couplings -- see header above; wired with the AptCIH + AptInit TUs).
 extern void      AptApt_PrepareCallContextScope(AptValue* pCallContext);          // ctor: vtbl prepare
 
-
-// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
-// bring-up TU): script-function birth/teardown tracing for the init-action pass
-// lifetime defect (see DestroyGCPointers).
-#if defined(_MSC_VER)
-extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
-                                     const void* pCIH, const void* pAnim);
-#pragma comment(linker, "/alternatename:AptScriptFnLifeProbe=AptScriptFnLifeProbeDefault")
-extern "C" void AptScriptFnLifeProbeDefault(const char*, const void*, const void*, const void*) {}
-#else
-extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
-                                     const void* pCIH, const void* pAnim);
-#endif
 extern void      AptApt_AnimationAddCharacterRef(AptValue* pAnimation);           // ctor: +0x0C ref++
 extern void      AptApt_AnimationReleaseCharacterRef(AptValue* pAnimation);       // dtor: +0x0C ref-- (+zombie)
 extern AptValue* gpAptFunctionPrototypeRoot;                                      // dword_8324E4EC
@@ -114,9 +101,6 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     mpParentAnim->AddRef();
     AptApt_AnimationAddCharacterRef(mpParentAnim);   // FLAG: +0x0C character ref-counter ++
 
-    // FLAG (bring-up diagnostic; see the probe sink + the destroy twin).
-    AptScriptFnLifeProbe("birth", this, mpCIH, mpParentAnim);
-
     if (bMakePrototype)
     {
         AptPrototype* pProto = new AptPrototype();
@@ -159,9 +143,6 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     mpCIH->AddRef();
     mpParentAnim->AddRef();
     AptApt_AnimationAddCharacterRef(mpParentAnim);   // FLAG: +0x0C character ref-counter ++
-
-    // FLAG (bring-up diagnostic; see the probe sink + the destroy twin).
-    AptScriptFnLifeProbe("birth-copy", this, mpCIH, mpParentAnim);
 
     // Copy the prototype + __proto__ links from the original (a3[5] / a3[4]).
     // GetNativeHashVirtual is non-const (the SDK accessor is not const-qualified), so
@@ -441,11 +422,6 @@ void AptScriptFunctionBase::RegisterReferences()
 // animation's character reference) and tear down the hash.
 void AptScriptFunctionBase::DestroyGCPointers()
 {
-    // FLAG (bring-up diagnostic; see the probe sink): report the teardown state
-    // BEFORE the unguarded scope derefs -- the init-action bring-up dies here on a
-    // dangling member and the probe names which one.
-    AptScriptFnLifeProbe("destroy", this, mpCIH, mpParentAnim);
-
     if (mpParentScope)
         mpParentScope->Release();
     mpParentScope = 0;

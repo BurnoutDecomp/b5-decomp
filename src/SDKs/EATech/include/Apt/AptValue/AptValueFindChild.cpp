@@ -77,16 +77,6 @@ extern AptValue* gpAptStringObject;     // off_8324D82C  (String)
 extern AptValue* gpAptExternObject;     // off_8324E2CC  (extern)
 extern AptValue* gpUndefinedValue;      // off_8324D814  (the shared AS `undefined`)
 
-// Probe sink for the global-arm instrumentation (weak default no-op; the host
-// bring-up TU overrides it to log). Same alternatename pattern as CgsApt_GalProbe.
-#if defined(_MSC_VER)
-extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash);
-#pragma comment(linker, "/alternatename:AptFindChildProbe=AptFindChildProbeDefault")
-extern "C" void AptFindChildProbeDefault(int, const void*, const void*, const void*) {}
-#else
-extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash);
-#endif
-
 namespace
 {
     // Look a name up in an object's native hash (null-safe).
