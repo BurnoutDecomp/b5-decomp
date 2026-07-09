@@ -107,6 +107,30 @@ namespace CgsGui
         virtual void Update(ViewIO::IOBufferStack* lpInStack, ViewIO::IOBufferStack* lpOutStack,
                             const ViewIO::InputBuffer* lpInput, ViewIO::OutputBuffer* lpOutput);
 
+        // X360 0x8285FCE8 -- the per-frame view-event dispatch Update runs under the
+        // input read lock: iterate the input buffer's view-state queue and route each
+        // event by id (language 10-12, load notification 14 via the virtual, unload 15,
+        // apt 17-20, clear-screen 25, time-step 26, ...). Body in CgsGuiViewModule.cpp.
+        void ProcessIncomingViewEvents(const GuiEventQueueBase<65536, 16>* lpEvents,
+                                       ViewIO::OutputBuffer* lpOutput);
+
+        // X360 0x8285EAE8 -- the apt view events: 17 asserts (view-side apt message is
+        // invalid), 18 = play movie on a level (record the name in
+        // macCurrentlyPlayingMovies + AptAux::LoadFlashAnimation), 19/20 = post the
+        // bool show/hide event (type 33) onto the output queue.
+        void ProcessIncomingAptEvent(const void* lpEvent, s32 liEventId);
+
+        // X360 0x8285ED00 -- NOT YET RECONSTRUCTED (ledger dossier holds the reviewed
+        // body): the language view events (10-12). Land with the language-ownership
+        // slice.
+        void ProcessIncomingLanguageEvent(const void* lpEvent, s32 liSize, s32 liEventId,
+                                          ViewIO::OutputBuffer* lpOutput);
+
+        // X360 0x828586E8 -- NOT YET RECONSTRUCTED (ledger dossier holds the reviewed
+        // body): the unload-request notification (15). Land with the load-ownership
+        // slice.
+        void ProcessIncomingUnloadRequestNotification(const void* lpEvent);
+
         // X360 0x824EBCA8. Returns the name of the movie playing on a level. The guest
         // arithmetic `return 32*(liLevel+1783) + this` is &macCurrentlyPlayingMovies
         // [liLevel] (the array base sits at [c:+57056] == 32*1783, stride 32); the
