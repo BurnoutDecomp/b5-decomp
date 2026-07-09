@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue (output GUI queue)
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID, EActiveRaceCarIndex
 
@@ -66,10 +67,12 @@ namespace BrnWorld {
 
 namespace BrnNetwork
 {
-    struct GuiEventQueueSmall
-    {
-        u8 maOpaque[16];
-    };
+    // The module's output GUI event queue is a VariableEventQueue<4096,16>: the X360
+    // AddOutputGuiEvent<T> instances (e.g. @0x82595788) publish through
+    // GetOutputGuiEventQueue()->AddEvent(event, T::GetEventType(), sizeof(T)) with the queue's
+    // 4096-byte capacity (matching CgsGui::KI_SMALL_QUEUE_SIZE_KB). Modelled as the real queue so
+    // AddEvent is callable; it is the trailing member so the pinned offsets above do not move.
+    typedef CgsModule::VariableEventQueue<4096, 16> GuiEventQueueSmall;
 
     namespace BrnNetworkModuleIO
     {
@@ -114,18 +117,23 @@ namespace BrnNetwork
             return reinterpret_cast<GuiEventQueueSmall*>(&mOutputGuiEventQueueStorage);
         }
 
-        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
-        // Publish one GUI event onto the module's output GUI event queue. The X360 call sites
-        // (BrnNetwork::LoginManagerBase::AnswerAgreeTOS @ 0x82566478 /
-        //  ::UpdateDownloadingTOS @ 0x82566320) build the event on the stack and call the templated
-        //  AddOutputGuiEvent<TEvent>(this, &event). The template is a thin forward to the
-        //  type-erased queue append (which copies the first sizeof(TEvent) bytes of the event); the
-        //  byte-level append helper is declared-only here, its body landing with the output GUI
-        //  event-queue TU. Modelled as a forward so no queue internals are fabricated.
+        // ---- output GUI event publisher (X360-attested instances) -------------------------
+        // Publish one GUI event onto the module's output GUI event queue. The X360 body (e.g.
+        // AddOutputGuiEvent<BrnGui::GuiEventCamStatus> @0x82595788): asserts the module is
+        // updating (BrnNetworkModule.h:479), then
+        //   GetOutputGuiEventQueue()->AddEvent(&event, TEvent::GetEventType(), sizeof(TEvent))
+        // on the VariableEventQueue<4096,16>. The event-type id and byte size fall out of TEvent,
+        // so one body reproduces every per-T (id,size) instance store-for-store. Call sites build
+        // the event on the stack and call AddOutputGuiEvent<TEvent>(&event) (e.g.
+        // BrnNetwork::LoginManagerBase::AnswerAgreeTOS @0x82566478, ::UpdateDownloadingTOS
+        // @0x82566320); only instantiated where TEvent is complete.
         template<typename TEvent>
-        void AddOutputGuiEvent(const TEvent& lEvent)
+        int AddOutputGuiEvent(const TEvent& lrEvent)
         {
-            EnqueueOutputGuiEvent(&lEvent, static_cast<s32>(sizeof(TEvent)));
+            CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+            return GetOutputGuiEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lrEvent),
+                lrEvent.GetEventType(), static_cast<s32>(sizeof(TEvent)));
         }
 
         // The embedded GameState->Network IO interface (X360 GetGameStateToNetworkInterface @
@@ -173,12 +181,6 @@ namespace BrnNetwork
 
         // X360 0x825819A0 IsRecvUpdateMessageToBeShown (const, lbz this+614665).
         bool IsRecvUpdateMessageToBeShown() const;
-
-        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
-        // Type-erased byte append behind the AddOutputGuiEvent<TEvent> template above: copy
-        // liEventSize bytes of *lpEvent onto the output GUI event queue. Declared-only here; the
-        // body lands with the output GUI event-queue TU.
-        void EnqueueOutputGuiEvent(const void* lpEvent, s32 liEventSize);
 
     private:
         // Offsets are absolute from `this`. Only the pinned anchors are load-bearing for this TU;

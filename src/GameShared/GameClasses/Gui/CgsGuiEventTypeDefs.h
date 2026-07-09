@@ -146,6 +146,23 @@ namespace CgsGui
         s32 GetEventType() const { return 57; }
     };
 
+    // ============================================================================
+    // OUTPUT-FAMILY CgsGui network/UI GUI-event PAYLOAD homes (ADDITIVE GROW).
+    // The CgsGui network GUI events referenced by the note above (Connected 43 / Disconnected 44 /
+    // InGame 50 / Launched 58) plus InGameFailed 51 / ShowLoginQuestion 47 / SetCircleButtonConfig 32,
+    // homed here by the output GUI event wave. These are OutputGuiEvent / AddOutputGuiEvent /
+    // AddGuiOutEvent payloads (plain-add: only GetEventType()==id and sizeof matter). Same honest
+    // placeholder recipe: (id,size) are the two X360 AddEvent literals; size>=12&4-aligned derives
+    // from GuiEvent<id>, else a raw byte struct carrying its own GetEventType()==id.
+    // ============================================================================
+    struct GuiEventNetworkConnected { u8 maData[2]; s32 GetEventType() const { return 43; } };  // id 43 size 2
+    struct GuiEventNetworkDisconnected : public CgsGui::GuiEvent<44> { u8 maPayload[120]; };  // id 44 size 132
+    struct GuiEventNetworkInGame { u8 maData[1]; s32 GetEventType() const { return 50; } };  // id 50 size 1
+    struct GuiEventNetworkInGameFailed { u8 maData[4]; s32 GetEventType() const { return 51; } };  // id 51 size 4
+    struct GuiEventNetworkLaunched { u8 maData[4]; s32 GetEventType() const { return 58; } };  // id 58 size 4
+    struct GuiEventSetCircleButtonConfig { u8 maData[1]; s32 GetEventType() const { return 32; } };  // id 32 size 1
+    struct GuiEventShowLoginQuestion { u8 maData[4]; s32 GetEventType() const { return 47; } };  // id 47 size 4
+
     // X360-pinned payload offsets. CgsModule::Event is an empty base, so the GuiEvent<N>
     // header (muHeader0/muEventType/muHeader2 == 3 x u32) occupies +0x00..+0x0B and the
     // first payload member lands at +0x0C. This matches CgsSku::Update, which reads/writes
