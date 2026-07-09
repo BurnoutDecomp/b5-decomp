@@ -312,8 +312,13 @@ namespace BrnGui
 
     void GuiModule::Construct()
     {
-        static_cast<CgsGui::ViewModule&>(mViewModule).Construct(
-            "BrnGuiView", 0, 1280.0f / 720.0f, nullptr, 0);
+        // Route through the real BrnGui::ViewModule::Construct @0x824F13B8 (stores
+        // mpGuiModule + constructs the embedded FlaptManager + seeds the Brn staging
+        // enums), not the base-class bypass. FLAG (argument values): the name/aspect/
+        // colour-table arguments of the real X360 GuiModule::Construct caller are not
+        // yet recovered; the null colour table fires the (non-fatal) console asserts
+        // until it is. Replace the values when GuiModule::Construct @X360 is homed.
+        mViewModule.Construct(this, "BrnGuiView", 0, 1280.0f / 720.0f, nullptr, 0);
         mMovieManager.Construct();
         mbBootStarted = false;
         mbLoadingHasShown = false;

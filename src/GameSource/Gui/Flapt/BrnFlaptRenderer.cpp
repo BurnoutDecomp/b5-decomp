@@ -45,31 +45,30 @@ const u8 KU_BATCH_FLAG_SETBLEND   = 2;
 
 
 // The immediate renderer's two default render-state singletons that RenderMesh binds.
-// These are global state objects with no reconstructed C++ home (the immediate-mode
-// renderer's default-state pool); the X360 reads each as a pointer-valued global:
+// These are REAL console globals (X360 reads each as a pointer-valued global):
 //   gpFlaptNoTexture          = *(0x83010F58)  - the "no texture" texture bound for an
 //                               untextured mesh (miTextureId < 0).
 //   gpFlaptDefaultBlendState  = *(0x83010F20)  - the default blend state every mesh
 //                               submission binds.
-// Declared extern (data references the render path reads), to be resolved by the
-// renderer's own state-initialisation TU once it is recovered.
-// FLAG PC-platform leaf: the D3D9 immediate renderer represents the untextured
-// and standard-blend states directly; no console state-library objects exist.
+// FLAG (un-homed console globals): the renderer state-initialisation TU that
+// populates them is not yet recovered, so they are defined null here as link
+// placeholders. RenderMesh's faithful guard below then asserts-and-skips an
+// untextured mesh until that TU lands (a real gpFlaptNoTexture makes the guard
+// pass, exactly as on the console). Replace these definitions with externs when
+// the owning TU is homed.
 renderengine::Texture* const         gpFlaptNoTexture = 0;
 const CgsGraphics::BlendState* const gpFlaptDefaultBlendState = 0;
 
+// ---- StartRenderingFrame @ 0x82470698 --------------------------------------
 void FlaptRenderer::StartRenderingFrame()
 {
     mpCurrentTexture = 0;
     mpCurrentBlendState = 0;
 
-    CgsGraphics::Im2d* lpRenderBuffer = mpImRenderSet->mpIm2dRenderBuffer;
-    CGS_ASSERT(lpRenderBuffer != 0, "mpImRenderSet->mpIm2dRenderBuffer");
-
     // FLAG PC-platform leaf: the console appends explicit CullNone and ZBufferOff
     // state commands after BeginRendering. The PC Im2d backend applies those same
     // D3D9 states inside BeginRendering and has no console StateLibrary object.
-    lpRenderBuffer->BeginRendering();
+    mpImRenderSet->mpIm2dRenderBuffer->BeginRendering();
 }
 
 // ---- SetShader @ 0x82470718 ----------------------------------------------
@@ -153,12 +152,11 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
         }
     }
 
-    // A non-special mesh must resolve to a real texture.
-    if (!lbIsSpecialTexture && lpTexture != 0 && gpFlaptNoTexture != 0)
-    {
-        CGS_ASSERT(lpTexture != 0, "lbIsSpecialTexture || lpTexture");
-    }
-    if (lpTexture == 0 && liTextureId >= 0)
+    // A non-special mesh must resolve to a real texture; any mesh without one is
+    // skipped (the special texture may legitimately be unbound while its provider
+    // component has not produced a frame yet).
+    CGS_ASSERT(lbIsSpecialTexture || lpTexture != 0, "lbIsSpecialTexture || lpTexture");
+    if (lpTexture == 0)
     {
         return;
     }

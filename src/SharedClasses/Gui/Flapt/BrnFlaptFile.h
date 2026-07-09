@@ -183,7 +183,11 @@ namespace BrnFlapt
         // through). Body reconstructed with FlaptFile's own member TU. ADDITIVE GROW.
         FlaptFile* SetSpecialTexture(const char* lpcSpecialTextureName);
 
-        u8   mau8Opaque00[0x14];                 // +0x00..0x13  (header + movie-clip table)
+        u8   mau8Opaque00[0x0C];                 // +0x00..0x0B  (header + movie-clip table)
+        u32  muNumMovieClips;                    // +0x0C (FlaptFileInstance::Update @0x82471820 /
+                                                 //        Render @0x82472480 read mpFile+0xC for the
+                                                 //        "mpFile->muNumMovieClips > 0" guard)
+        u8   mau8Opaque10[0x04];                 // +0x10..0x13  pad to +0x14
         u32  muNumTextures;                      // +0x14 (DWARF BrnFlaptFile.h:563)
         GuiTexture** mpapTextures;               // +0x18 (DWARF BrnFlaptFile.h:564)
         u32  muNumVerts;                         // +0x1C (DWARF BrnFlaptFile.h:566)

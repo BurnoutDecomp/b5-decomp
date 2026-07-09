@@ -41,6 +41,12 @@ namespace CgsGraphics
         // 20-byte screen-space coloured+textured vertex (== V here).
         void PushMask(renderengine::Texture* lpTexture, V* lpaMaskVertices);
 
+        // Append a "pop stencil mask" command: undo the innermost PushMask (X360
+        // ImCommandPopMask, DWARF CgsImRenderBuffer.h:208; the pop side of the Flapt
+        // mask path, driven by BrnFlapt::FlaptRenderer::PopMask). On the PC fold the
+        // mask is a scissor rect, so the pop disables the scissor test.
+        void PopMask();
+
         Im2dTransform mCurrentTransform;
     };
 

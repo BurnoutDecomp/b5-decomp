@@ -29,7 +29,6 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"
-#include <cstdio>   // snprintf (the class-bind diagnostic probe)
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"   // delegated list ops
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // the listed nodes + AddRef/Release/ClearCIH
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"      // GetCharacterInst()->GetDepth() (removeClonedObject)
@@ -343,9 +342,11 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
 // ---------------------------------------------------------------------------
 // FLAG (un-homed callees, bodies their own TUs):
 //   AptDL_FramePlacementDispatch (sub_82B0B080) -- the frame-placement dispatcher:
-//     creates/re-uses the AptCIH for the placement and returns it. No standalone
-//     export (its placement logic is folded inline in the X360); declared as the
-//     callee whose result AddToDisplayList consumes.
+//     creates/re-uses the AptCIH for the placement and returns it. A REAL standalone
+//     X360 function (AddToDisplayList @0x82B0B150 does `bl sub_82B0B080`) that has no
+//     per-address dossier in the export set yet -- export + decompile it to convert
+//     the role-reconstruction below into attestation. Declared as the callee whose
+//     result AddToDisplayList consumes.
 // The freshly-placed node's just-instantiated hook -- the X360 calls its vtable[0] with
 // (node, &node->mInstanceName) right after pushing it to the new-instance table -- is
 // AptValue::AddRef (vtbl[0], arg2 discarded), invoked directly at the AddToDisplayList call site.
@@ -652,20 +653,6 @@ extern AptNativeHash* gpAptClassRegistry;             // dword_8324E2D4 (AptObje
 extern AptValueWithHash* gpAptGlobalFallback;         // off_8324E380 (the live _global)
 extern const EAStringC gAptSpriteClassKey;            // dword_8324E640 "MovieClip"
 extern AptActionInterpreter gAptActionInterpreter;    // &dword_8324E760
-
-#if defined(_MSC_VER)
-extern "C" void AptClassBindProbe(const char* pcExport);
-#pragma comment(linker, "/alternatename:AptClassBindProbe=AptClassBindProbeDefault")
-extern "C" void AptClassBindProbeDefault(const char*) {}
-
-// FLAG bring-up: arms the runStream opcode trace around a class-ctor run (the
-// strong sink filters by export name). Weak no-op default.
-extern "C" void AptOpTraceArmForClass(const char* pcExport, int nOn);
-#pragma comment(linker, "/alternatename:AptOpTraceArmForClass=AptOpTraceArmForClassDefault")
-extern "C" void AptOpTraceArmForClassDefault(const char*, int) {}
-#else
-extern "C" void AptClassBindProbe(const char* pcExport);
-#endif
 
 // ---------------------------------------------------------------------------
 // instantiateCharacter @0x82B061D0 -- find-or-create the placed node at a depth and
@@ -1165,8 +1152,13 @@ AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, 
 }
 
 // ---------------------------------------------------------------------------
-// AptDL_FramePlacementDispatch -- sub_82B0B080 (no standalone export; its placement
-// logic is folded inline in the X360's AddToDisplayList caller). The dispatcher
+// AptDL_FramePlacementDispatch -- sub_82B0B080. A real standalone X360 function
+// (`bl sub_82B0B080` in AddToDisplayList @0x82B0B150) with no per-address dossier in
+// the export set yet, so this body is a ROLE reconstruction: field-for-field it
+// mirrors the fully attested sibling AptMovie_PlaceCommand (sub_82B0AE08), which
+// parses the same native-8 PlaceObject record; the caller's post-dispatch instance-
+// name check proves the dispatcher binds the record's name. Export + decompile
+// sub_82B0B080 to upgrade this to attestation. The dispatcher
 // creates/re-uses the placed node for a serialised .apt frame-placement command and
 // returns it. ppPlacement[1] is the AptFramePlacementProps/pseudo-data overlay; the
 // authored name / clip-depth / clip-actions live in ppPlacement[0]'s raw PlaceObject
@@ -1281,23 +1273,8 @@ void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
 // result during bring-up is the gated early-out: bind nothing, return 0. This is the
 // same deferred AS-execution sub-path queueClipEvents / ClearCIH route through a cluster
 // callee -- modelled here as a no-op tail so the homed gate links with no new extern.
-// ---------------------------------------------------------------------------
-// FLAG (bring-up gate, 2026-07-05): the binding chain WORKS through its first class
-// (class-bind 'TransitionComponent' -> the ctor runs), but the constructor's deeper
-// execution still AVs -- gated OFF so the title boot stays green while the ctor-run
-// frontier is debugged; flip to continue.
-//
-// REGATED OFF 2026-07-06: with binding ON the placed menu clips re-run their AS
-// ctor at placement and reset to authored frame 0, stomping the shim's applied
-// apt_state (hover) + apt_labeltxt (prompt) -- log confirms both are still
-// (APPLIED) by the shim, then overwritten. Off = shim-only drive, working menu.
-// Re-enable together with deleting the AptRuntimeSetComponent* shim (single driver).
-static const bool KB_CLASS_BINDING = true;   // DIAG 2026-07-07g: dump nested RegisterComponent bytecode + op trace
-
 int AptCIH::AssociateInstToClass()
 {
-    if (!KB_CLASS_BINDING)
-        return 0;
     AptCIH* const pNode = this;   // console r3 (`result`) is the node `this`
     AptCharacterInst* const pInst = pNode->GetCharacterInst();   // *(node+32)
     if (!pInst)
@@ -1310,20 +1287,6 @@ int AptCIH::AssociateInstToClass()
     const bool bSpriteLike = (nTag == 5u || nTag == 16u);
     if (!bSpriteLike && (pInst->mTypeFlags & 0xFC000000u) != 0x24000000u)
         return 0;
-    {
-        char lacGate[64];
-        // sprite-like entry: show the bit-27 gate value (diagnostic probe).
-        lacGate[0] = 0;
-        AptCharacter* const pProbeChar = pInst->GetRenderItem()->mpCharacter;
-        std::snprintf(lacGate, sizeof(lacGate), "<sprite f27=%u chr=%d fix=%d exp=%d>",
-                      (pInst->GetRenderItem()->mFlags >> 27) & 1u,
-                      pProbeChar ? 1 : 0,
-                      (pProbeChar && pProbeChar->mpFixupLink) ? 1 : 0,
-                      (pProbeChar && pProbeChar->mpFixupLink)
-                          ? reinterpret_cast<const AptMovieData*>(pProbeChar->mpFixupLink)->mnExportCount
-                          : -1);
-        AptClassBindProbe(lacGate);
-    }
     if (((pInst->GetRenderItem()->mFlags >> 27) & 1u) != 0u)   // already class-bound
         return 0;
 
@@ -1336,9 +1299,10 @@ int AptCIH::AssociateInstToClass()
     //      match charTable[entry.id] == the char);
     //   3. look the name up in the class registry (dword_8324E2D4); on a defined hit:
     //      node.__proto__ = class.prototype; tick the node once (byte_82F733F7 gate,
-    //      boot default 0) + SetDirtyState; RUN THE CLASS CONSTRUCTOR on the node under
-    //      GC-root protection (interp stacks B(+0x0C)/E(+0x30) pushes + the register-
-    //      window save, callFunction(node, class, 0), pops + restore);
+    //      boot default 0) + SetHasClass(1) (vtbl slot 5, `(*(*v1+20))(v1, 1)`); RUN
+    //      THE CLASS CONSTRUCTOR on the node under GC-root protection (interp stacks
+    //      B(+0x0C)/E(+0x30) pushes + the register-window save,
+    //      callFunction(node, class, 0), pops + restore);
     //   4. FindAndSetEvents (the clip-event member mask the dispatcher consumes).
     //      FLAG: the console then adds the node to the director's event-target set
     //      (off_8324E574 listener list) when events were found -- that container is
@@ -1354,10 +1318,7 @@ int AptCIH::AssociateInstToClass()
     // NOT the CIH's value hash (which is null for placed clips).
     AptNativeHash* const pNodeHash = pInst->mpProperties;
     if (pNodeHash == nullptr)
-    {
-        AptClassBindProbe("<no-props-hash>");
         return 0;
-    }
 
     // 1. fresh prototype + the MovieClip builtin's prototype as __proto__.
     AptPrototype* const pFreshProto = new AptPrototype();
@@ -1388,45 +1349,30 @@ int AptCIH::AssociateInstToClass()
         }
     }
     if (pExportName == nullptr || gpAptClassRegistry == nullptr)
-    {
-        AptClassBindProbe(pExportName ? "<no-registry>" : "<no-export-name>");
         return 0;
-    }
 
     // 3. the registered class.
     EAStringC lName(pExportName);
     AptValue* const pClass = gpAptClassRegistry->Lookup(lName);
     if (pClass == nullptr || !pClass->getIsDefined())
-    {
-        AptClassBindProbe("<no-class-for-export>");
         return 0;
-    }
-
-    AptClassBindProbe(pExportName);   // FLAG bring-up probe (weak sink pattern)
 
     AptNativeHash* const pClassHash = pClass->GetNativeHashVirtual();
     AptValue* const pClassProto = pClassHash ? pClassHash->GetPrototype() : nullptr;
     if (pClassProto != nullptr && pClassProto->getIsDefined())
         pNodeHash->Set__Proto__(pClassProto);
 
-    // The instance is class-bearing before its constructor/onLoad method calls run.
-    // Method dispatch tests AptValue::GetHasClass on the receiver to bind `this`;
-    // leaving the CIH flag clear made nested RegisterComponent calls execute on
-    // _global instead of this clip.
+    // The instance is class-bearing before its constructor/onLoad method calls run
+    // (X360 vtbl slot 5 call `(*(*v1+20))(v1, 1)` == SetHasClass(1)). Method dispatch
+    // tests AptValue::GetHasClass on the receiver to bind `this`; leaving the CIH flag
+    // clear made nested RegisterComponent calls execute on _global instead of this clip.
     pNode->SetHasClass(1);
+    // FLAG (stand-in for the un-homed real setter): the X360 @0x82B073B8 body performs
+    // NO store to the render item's flags -- something else marks the item class-bound
+    // (bit 27) so this function's entry gate skips already-bound items on later passes.
+    // Until that setter's home is recovered, set the gate bit here so a placed clip is
+    // bound exactly once (removing it would re-run class ctors every placement pass).
     pInst->GetRenderItemWritable()->mFlags |= (1u << 27);
-
-    // SetDirtyState(1) so the node keeps ticking. FLAG (x64 onLoad-ORDER fix,
-    // boot-verified): the console's "tick once" here fires the fresh(0x80) clip's
-    // onLoad, but AptCIH::tick clears the 0x80 fresh bit while HasEvent(onLoad) is
-    // still FALSE -- FindAndSetEvents (step 5 below) has not set the event-handler mask
-    // yet. So onLoad was never queued (0 SendAptEvent -> no AddNewAptComponent ->
-    // UpdateAll no-op -> clips hidden -> black). The tick is moved to AFTER
-    // FindAndSetEvents (below) so the fresh clip dispatches onLoad with the mask set;
-    // verified: all 9 title-clip onLoad handlers then RUN (RunActions FUNCTION drains).
-    // The ctor still runs before onLoad (Flash order) and against a valid display list
-    // (the subtree is composed by doFrameControls at placement, not by this tick).
-    pNode->SetDirtyState(true, false);
 
     // 4. run the class constructor on the node (GC-root protected).
     AptValue** const lppSavedRegs = AptScriptFunctionBase::PushStaticData();
@@ -1435,9 +1381,7 @@ int AptCIH::AssociateInstToClass()
     gAptActionInterpreter.mpCallStackE[gAptActionInterpreter.mnCallStackE_Count++] = pNode;
     pNode->AddRef();
     pNode->mFlagsA |= 0x8000000u;
-    AptOpTraceArmForClass(pExportName, 1);   // FLAG bring-up trace window
     gAptActionInterpreter.callFunction(static_cast<AptValue*>(pNode), pClass, 0, nullptr, nullptr);
-    AptOpTraceArmForClass(pExportName, 0);
     pNode->mFlagsA &= ~0x8000000u;
 
     if (gAptActionInterpreter.mnCallStackE_Count > 0)
@@ -1461,36 +1405,18 @@ int AptCIH::AssociateInstToClass()
     // 5. wire the clip-event member mask.
     pNode->FindAndSetEvents();
 
-    // DIAG (2026-07-07): dump this bound node's display-parent chain -- this is exactly
-    // what BuildName's `_parent`-walk sees when onLoad fires on the next tick. Each
-    // "[cN]" is the ancestor's class-bound bit (GetHasClass). If NO ancestor shows [c1],
-    // the walk finds no BurnoutComponent ancestor -> BuildName returns undefined ->
-    // SendAptEvent's name guard rejects -> AddNewAptComponent fires 0x (the §6.4 core).
-    {
-        char lacChain[240];
-        int nLen = std::snprintf(lacChain, sizeof(lacChain), "chain '%s'[c%d]",
-                                 pExportName, pNode->GetHasClass() ? 1 : 0);
-        AptCIH* pAnc = pNode->GetDisplayListParent();
-        int nGuard = 0;
-        while (pAnc != nullptr && nGuard < 8 && nLen < static_cast<int>(sizeof(lacChain)) - 40)
-        {
-            const char* const pcNm = pAnc->GetInstanceName().GetBuffer();
-            nLen += std::snprintf(lacChain + nLen, sizeof(lacChain) - nLen, " <- '%s'[c%d]",
-                                  (pcNm && *pcNm) ? pcNm : "-", pAnc->GetHasClass() ? 1 : 0);
-            pAnc = pAnc->GetDisplayListParent();
-            ++nGuard;
-        }
-        std::snprintf(lacChain + nLen, sizeof(lacChain) - nLen, "%s",
-                      pAnc ? " <-.." : " <-#ROOT");
-        AptClassBindProbe(lacChain);
-    }
-
-    // The console "tick once" (moved here from before the ctor, see the FLAG above):
-    // now the event-handler mask is set, so the fresh(0x80) clip's tick dispatches
-    // onLoad -> the queued handler runs -> gAptCommunicator.SendAptEvent(ONLOAD) ->
-    // AddNewAptComponent. FLAG: verify vs XB1 AssociateInstToClass @0x82B073B8 whether
-    // the console fires onLoad from this binding tick or leaves 0x80 set for a later
-    // per-frame tick -- either way onLoad must fire AFTER the event mask is set.
+    // The console's "tick once" (byte_82F733F7 gate, boot default 0) runs BEFORE the
+    // ctor on the X360. FLAG (x64 onLoad-ORDER fix, boot-verified): ticked there, the
+    // fresh(0x80) clip clears its fresh bit while HasEvent(onLoad) is still FALSE --
+    // FindAndSetEvents (step 5) has not set the event-handler mask yet -- so onLoad was
+    // never queued (0 SendAptEvent -> no AddNewAptComponent -> clips hidden -> black).
+    // The tick is moved AFTER FindAndSetEvents so the fresh clip dispatches onLoad with
+    // the mask set; verified: all 9 title-clip onLoad handlers then RUN. The ctor still
+    // runs before onLoad (Flash order) and against a valid display list (the subtree is
+    // composed by doFrameControls at placement, not by this tick). Verify vs XB1
+    // AssociateInstToClass whether the retail builds fire onLoad from this binding tick
+    // or leave 0x80 set for a later per-frame tick -- either way onLoad must fire AFTER
+    // the event mask is set.
     pNode->tick();
     return 1;
 }

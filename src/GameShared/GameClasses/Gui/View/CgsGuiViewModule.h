@@ -107,11 +107,11 @@ namespace CgsGui
         virtual void Update(ViewIO::IOBufferStack* lpInStack, ViewIO::IOBufferStack* lpOutStack,
                             const ViewIO::InputBuffer* lpInput, ViewIO::OutputBuffer* lpOutput);
 
-        // X360 0x824EBCA8. Returns the movie-name id for a level: a fixed string-id
-        // base offset by (liLevel * 32) plus this module's id-table base. The level is
-        // asserted to be in [0, KI_NUM_MOVIE_LEVELS). Pure arithmetic; no member writes.
-        //   guest: return 32 * (liLevel + 1783) + this    (the `this`-relative base id table)
-        int GetMovieNameByLevel(int liLevel) const;
+        // X360 0x824EBCA8. Returns the name of the movie playing on a level. The guest
+        // arithmetic `return 32*(liLevel+1783) + this` is &macCurrentlyPlayingMovies
+        // [liLevel] (the array base sits at [c:+57056] == 32*1783, stride 32); the
+        // level is asserted in [0, KI_NUM_MOVIE_LEVELS). DWARF return: const char*.
+        const char* GetMovieNameByLevel(int liLevel) const;
 
         // X360 0x82847500. Sets the per-frame clear-screen alpha (asserted in [0,1]).
         void SetClearScreenAlpha(f32 lfAlpha);

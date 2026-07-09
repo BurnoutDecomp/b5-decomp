@@ -363,6 +363,11 @@ namespace CgsLanguage
         return true;
     }
 
+    // X360 0x82864000 -- UNVERIFIED body: that address is not in the export set, so
+    // this reconstruction is inferred from the ViewModule::Release call contract (the
+    // caller loops until true) and the <=0x28-byte size budget: reset the lifecycle
+    // stages, drop the allocator, report done. Export 0x82864000 to verify the exact
+    // stores before trusting this beyond the boot path.
     bool LanguageManager::Release()
     {
         meReleaseStage = E_RELEASESTAGE_DONE;
@@ -371,11 +376,11 @@ namespace CgsLanguage
         return true;
     }
 
+    // The X360 Destruct is the ICF-folded EMPTY function (resolved to
+    // BaseCollisionGenerator::Destruct @0x8284CB38, body `;`): the guest tears nothing
+    // down here, so neither does this body.
     void LanguageManager::Destruct()
     {
-        mpResource = 0;
-        mpStringElements = 0;
-        mpLanguageAllocator = 0;
     }
 
     // X360 0x82860940 CgsLanguage::LanguageManager::PrepareDefaultFormattingStrings.
