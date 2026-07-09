@@ -111,3 +111,17 @@ extern int gAptTargetInstanceCount;     // X360 dword_8324E57C
 // ---------------------------------------------------------------------------
 AptTarget* AptCreateTargetInstance(const u32* pParams);
 AptTarget* AptChangeTargetInstance(AptTarget* pTarget);
+
+// ---------------------------------------------------------------------------
+// The per-frame update drivers (bodies in AptUpdate.cpp).
+//   AptUpdate @0x82B0DB68        -- run the CURRENT target's frame pacer (bank the
+//       elapsed ms on the root movie, tick once per authored frame period, run the
+//       deferred generalised-process pass), then flush the GC deferred releases.
+//       B4Extern PDB names the entry `void AptUpdate(unsigned int nDeltaTime)`;
+//       the Paradise build adds the depth-layer mask + banked-frame cap.
+//   AptUpdateTarget @0x82B0DE80  -- AptUpdate with pTarget swapped in as the
+//       current context (the CgsGui::AptAux::Update entry point: (ms, -1, 16)).
+// ---------------------------------------------------------------------------
+void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames);
+void AptUpdateTarget(AptTarget* pTarget, int nElapsedMs, int nDepthLayerMask,
+                     int nMaxBankedFrames);

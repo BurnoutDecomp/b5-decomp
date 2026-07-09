@@ -333,6 +333,8 @@ void (*gpAptBackToScriptHook)(void* pPayload)                            = nullp
 void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = nullptr;   // dword_8324E820
 AptVarNotFoundCb gpAptVarNotFoundCb                                      = nullptr;
 int  (*gpAptInputRecorderSink)(void*, int)                               = nullptr;   // dword_8324E830
+// The recorder's text-tag sink (AptUpdate's per-frame "%06d" stamp goes through it).
+void (*gpAptInputRecorderTagSink)(const char*)                           = nullptr;   // dword_8324E834
 void (*gpfnAptDestroyCustomControl)(intptr_t nZId)                       = nullptr;   // dword_8324E898
 void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName)    = nullptr;   // dword_8324E8CC
 void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName)     = nullptr;   // dword_8324E8D0
@@ -365,7 +367,10 @@ int gnAptActionFrameId          = 0;   // dword_8324E514
 // dumps (a bss dword); zero until one surfaces.
 int gAptNullInputId             = 0;   // console gNullInput
 int gnAptNativeArgCount         = 0;   // dword_8324E760
-int gnCurrUpdateTick            = 0;
+int gnCurrUpdateTick            = 0;   // dword_8324E520 (the update-side tick bank AptUpdate advances)
+// The render-side consumed tick AptUpdate banks against (the update side never runs
+// more than the banked-frame cap ahead of it). Advanced by the render drive.
+int gnCurrRenderTickConsumed    = 0;   // dword_8324E524
 // (gAptParseArgHeapCount retired 2026-07-01: dword_8324E3D4 is
 //  AptScriptFunctionBase::snRegBlockCurrentFrameCount.)
 

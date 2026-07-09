@@ -130,7 +130,11 @@ struct AptMovieData
     int32_t         mnCharacterCount;    // def+0x18  (root+0x38)
     int32_t         _pad3C;              // def+0x1C  (pad to the def+0x20 pointer slot)
     AptCharacter**  mpCharacterTable;    // def+0x20  (root+0x40)
-    char            _defMid[0x0C];       // def+0x28..0x34 (screenW/H@0x28/0x2C, ms@0x30)
+    int32_t         mnScreenWidth;           // def+0x28  (root+0x48)
+    int32_t         mnScreenHeight;          // def+0x2C  (root+0x4C)
+    int32_t         mnMillisecondsPerFrame;  // def+0x30  (root+0x50) -- the authored frame
+                                             // period the AptUpdate pacer banks against
+                                             // (console char+44 == def+0x1C in the 4-byte form)
     int32_t         mnImportCount;       // def+0x34  (root+0x54)
     AptImportEntry* mpImportTable;       // def+0x38  (root+0x58, stride 0x20)
     int32_t         mnExportCount;       // def+0x40  (root+0x60)  (== initCount)
@@ -139,6 +143,7 @@ struct AptMovieData
 };
 static_assert(offsetof(AptMovieData, mnCharacterCount) == 0x38, "AptMovieData.charCount@root+0x38");
 static_assert(offsetof(AptMovieData, mpCharacterTable) == 0x40, "AptMovieData.charTable@root+0x40");
+static_assert(offsetof(AptMovieData, mnMillisecondsPerFrame) == 0x50, "AptMovieData.msPerFrame@root+0x50");
 static_assert(offsetof(AptMovieData, mnImportCount)    == 0x54, "AptMovieData.importCount@root+0x54");
 static_assert(offsetof(AptMovieData, mpImportTable)    == 0x58, "AptMovieData.importTable@root+0x58");
 static_assert(offsetof(AptMovieData, mnExportCount)    == 0x60, "AptMovieData.exportCount@root+0x60");

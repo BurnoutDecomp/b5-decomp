@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"     // CgsGui::AptCommunicator (the ext-object phase + the flush)
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"        // CgsDev::PerfMonCpu (the Update phase brackets)
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
@@ -305,6 +306,35 @@ namespace CgsGui
             CGS_ASSERT(false, "CgsGUI::AptAux::Release() Invalid State!");
             return false;
         }
+    }
+
+    // The two per-frame CPU monitors AptAux::Update brackets its phases with
+    // (X360 dword_82F33138 "AptAux - Upd Comps" / dword_82F33134 the movie-tick
+    // phase). Registered by the un-homed perf-monitor setup TU; -1 handles no-op
+    // Start/StopMonitor until it lands.
+    static s32 giAptAuxUpdateComponentsMonitor = -1;   // dword_82F33138
+    static s32 giAptAuxUpdateTargetMonitor     = -1;   // dword_82F33134
+
+    // -------------------------------------------------------------------------
+    // AptAux::Update - X360 0x82853B20. The per-frame Apt drive: assert Prepare
+    // finished (miState0 == 3), flush the component key/value store to the movie
+    // AS (UpdateComponents), then -- under the Apt mutex -- run the engine's
+    // per-target frame pacer (AptUpdateTarget(mpAptTargetInstance, ms, -1, 16):
+    // every depth layer, at most 16 banked frames). The X360 hard-returns 1.
+    // -------------------------------------------------------------------------
+    void AptAux::Update(s32 liDeltaMs)
+    {
+        CGS_ASSERT(miState0 == 3, "Update being called before Prepare is finished.");
+
+        CgsDev::PerfMonCpu::StartMonitor(giAptAuxUpdateComponentsMonitor);
+        UpdateComponents();
+        CgsDev::PerfMonCpu::StopMonitor(giAptAuxUpdateComponentsMonitor);
+
+        CgsDev::PerfMonCpu::StartMonitor(giAptAuxUpdateTargetMonitor);
+        mAptMutex.Lock();
+        AptUpdateTarget(mpAptTargetInstance, liDeltaMs, -1, 16);
+        mAptMutex.Unlock();
+        CgsDev::PerfMonCpu::StopMonitor(giAptAuxUpdateTargetMonitor);
     }
 
     // -------------------------------------------------------------------------

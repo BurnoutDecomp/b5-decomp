@@ -87,6 +87,13 @@ namespace CgsGui
         // render-slot installs reference the CgsAptCallbackRender.cpp family this TU defines.
         void ConstructApt();
 
+        // X360 0x82853B20 (CgsGui::AptAux::Update) -- the per-frame Apt drive: assert
+        // Prepare finished, flush the component key/value store (UpdateComponents),
+        // then run the engine frame pacer under the Apt mutex
+        // (AptUpdateTarget(mpAptTargetInstance, liDeltaMs, -1, 16)). The X360
+        // hard-returns 1; no caller consumes it. Body in CgsAptAux.cpp.
+        void Update(s32 liDeltaMs);
+
         // X360 0x82848E50 (CgsGui::AptAux::InitializeApt) -- the keystone Apt runtime
         // bring-up AptAux::Prepare runs after AptAux::Construct: build the AptUpdate /
         // AptCreateTarget param blocks, then in order AptAllocatorInitialize ->
