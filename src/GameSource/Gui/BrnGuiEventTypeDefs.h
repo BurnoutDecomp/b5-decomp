@@ -189,6 +189,12 @@ struct GuiEventUpdateSatNav
     SatNavIconInfo maIconInfo[KI_MAX_SAT_NAV_ICONS]; // @0x000 .. 0x8FF
     s32            miNumIcons;                        // @0x900
 
+    // ADDITIVE GROW (CgsGui::GuiModule::AddGuiEvent<GuiEventUpdateSatNav> @0x823D93A0):
+    // the producer queues this event with the compile-time id 199 (inlined GetEventType()).
+    // The type is not GuiEvent<N>-derived (flat icon array), so the id is carried by this
+    // method. X360-attested by the AddEvent(&event, 199, 2320) literal.
+    s32 GetEventType() const { return 199; }
+
     // ---- reconstructed out-of-line bodies (X360 ARTIST) ----
     // @0x823B1980 — recompute the "worst case" sat-nav icon set: validate the active
     // icons, compact the located player-position icon to the front, then synthesise a
@@ -306,6 +312,12 @@ public:
     // the first button record sits immediately after these two slots (+0x88).
     static const s32 KI_MAX_MESSAGES = 2;
 
+    // ADDITIVE GROW (CgsGui::GuiModule::AddGuiEvent<GuiOverlayRequest> @0x823D5180): the
+    // producer queues this request with the compile-time id 184 (inlined GetEventType()).
+    // The type is not GuiEvent<N>-derived, so the id is carried by this method. X360-attested
+    // by the AddEvent(&request, 184, 288) literal.
+    s32 GetEventType() const { return 184; }
+
     // @0x823B1CC8 -- initialise the request from an overlay-id string. Asserts the string
     // is non-NULL ("Invalid Overlay Id", BrnGuiEventTypeDefs.h:7404), compresses it to the
     // leading CgsID (stored over the first param record's 8-byte head at +0x00), and clears
@@ -373,7 +385,8 @@ private:
 //   meActiveRaceCarIndex  (which active race-car scored)
 //   mSkillzData           (the 14-skill score array; SetSkillsData reads mafBurnoutSkilz[i])
 //   mbUpdateHUDMessage    (gate: only emit the HUD message when set; X360 lbz @event+0x40)
-struct GuiNewBurnoutSkillzEvent : public CgsGui::GuiEvent<526>
+// X360 AddGuiEvent<GuiNewBurnoutSkillzEvent> @0x823D8260 bakes id 541 (was PS3-DWARF 526).
+struct GuiNewBurnoutSkillzEvent : public CgsGui::GuiEvent<541>
 {
     // DWARF type is RoadRulesRecvData::NetworkPlayerID, a typedef of s32 (see
     // BrnNetwork::RoadRulesRecvData). Modelled as s32 here to avoid dragging the network
@@ -395,7 +408,8 @@ struct GuiNewBurnoutSkillzEvent : public CgsGui::GuiEvent<526>
 //   meSkill         -- the skill whose record changed
 //   meNewOwner      -- the active race-car that now holds the record
 //   mePreviousOwner -- the active race-car that previously held it (-1 if none)
-struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<527>
+// X360 AddGuiEvent<GuiNewBurnoutHudMessageEvent> @0x823D8318 bakes id 542 (was PS3-DWARF 527).
+struct GuiNewBurnoutHudMessageEvent : public CgsGui::GuiEvent<542>
 {
     // BrnGuiEventTypeDefs.h:6351 -- which of the four HUD flash strings to show.
     enum EBurnoutSkillzMessageTypes
@@ -506,7 +520,8 @@ private:
 // HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E1F0 (which reads the four
 // payload fields in declaration order).
 // ===================================================================================
-struct GuiLiveRevengeUpdateEvent : public CgsGui::GuiEvent<364>
+// X360 AddGuiEvent<GuiLiveRevengeUpdateEvent> @0x823CF580 bakes id 369 (was PS3-DWARF 364).
+struct GuiLiveRevengeUpdateEvent : public CgsGui::GuiEvent<369>
 {
     s32                 miDifference;                   // DWARF h:3725 (the points delta)
     s32                 meNewStatus;                    // DWARF h:3726 (BrnNetwork LiveRevengeStatus; raw s32 -- enum home pending)
@@ -717,7 +732,8 @@ struct UpcomingRoadChangeAction;
 // (EnterRoad @0x82441460 `ld r11,0x3E8(this)`; HandleLeaveRoadEvent @0x82413D98
 // `cmpld` against it) -- the X360 layout pins mRoadId FIRST; the remaining member
 // order is kept from the DWARF (unverified interior).
-struct GuiEventRoadRuleEnter : public CgsGui::GuiEvent<329>
+// X360 AddGuiEvent<GuiEventRoadRuleEnter> @0x823D69F0 bakes id 333 (was PS3-DWARF 329).
+struct GuiEventRoadRuleEnter : public CgsGui::GuiEvent<333>
 {
     // X360-PINNED head: mRoadId @+0x00 (EnterRoad/HandleLeaveRoadEvent read it as
     // the event's leading u64) and maeRoadRuleLeaderType @+0x18 (EnterRoad passes
@@ -743,7 +759,8 @@ struct GuiEventRoadRuleEnter : public CgsGui::GuiEvent<329>
 
 // DWARF :1215 -- the two upcoming junction roads (sides, states, rulers). X360
 // sizeof 128 (RoadRuleComponent block-copies it @+0x460 / to a local).
-struct GuiEventRoadRuleUpcomingRoads : public CgsGui::GuiEvent<337>
+// X360 AddGuiEvent<GuiEventRoadRuleUpcomingRoads> @0x823D6E40 bakes id 341 (was PS3-DWARF 337).
+struct GuiEventRoadRuleUpcomingRoads : public CgsGui::GuiEvent<341>
 {
     // DWARF :1218 / :1226.
     enum ERoadSide
@@ -787,7 +804,10 @@ struct GuiEventRoadRuleEnd;
 // JunctionInfoComponent::HandleJunctionChange (a 4-qword *lpEvent copy into this+0x100 with
 // stb 0 @ this+0x10C == mi8Difficulty at struct+0x0C, requiring CgsID==8B) and
 // SetupAptVariables (ld @+0x100 == mSpecialEventCarId, lwz @+0x108 == meGameModeType).
-struct GuiEventJunctionInfo : public CgsGui::GuiEvent<309>
+// X360 AddGuiEvent<GuiEventJunctionInfo> @0x823D1AE0 bakes id 311 (was PS3-DWARF 309);
+// corrected to the X360 event id. (The record SIZE the producer copies is 32 bytes -- see
+// GuiModule::AddGuiEvent; the base is layout-neutral so only GetEventType() changes.)
+struct GuiEventJunctionInfo : public CgsGui::GuiEvent<311>
 {
     CgsID  mSpecialEventCarId;                                        // +0x00
     BrnGameState::GameStateModuleIO::EGameModeType meGameModeType;    // +0x08

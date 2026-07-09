@@ -26,6 +26,9 @@ namespace BrnGui
         // Number of option records the X360 Construct loop initialises (10 reps).
         static const s32 KI_NUM_OPTION_RECORDS = 10;
 
+        // AddGuiEvent<GuiEventNetworkGameParams> @0x823CFA88 -> AddEvent(&event, 257, 480).
+        s32 GetEventType() const { return 257; }
+
         // One configurable-option record. The X360 loop writes three words per record
         // (the selected value, a low bound, and a high/flag word) and advances by 0x2C
         // bytes, so the record is 44 bytes; the unwritten tail is preserved as reserved

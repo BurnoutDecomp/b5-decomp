@@ -39,6 +39,11 @@ namespace BrnGui
     {
         CgsID mChallengeID;     // @+0x00  (ld; 8-byte id)
         bool  mbIsLocalHost;    // @+0x08  (lbz; one-byte host flag)
+
+        // CgsGui::GuiModule::AddGuiEvent<GuiChallengeStartEvent> @0x823D5DB8 queues this with
+        // the compile-time id 574 (AddEvent(&event, 574, 16)); carried by GetEventType() since
+        // the type derives from the empty CgsModule::Event.
+        s32 GetEventType() const { return 574; }
     };
 
     // GuiChallengeTriggerResponse (DWARF: BrnGuiEventTypes.h:81, forward-declared only).
@@ -50,6 +55,9 @@ namespace BrnGui
     {
         CgsID mChallengeID;     // @+0x00  (ld; 8-byte id)
         bool  mbIsLocalHost;    // @+0x08  (lbz; one-byte host flag)
+
+        // AddGuiEvent<GuiChallengeTriggerResponse> @0x823D5E70 -> AddEvent(&event, 576, 16).
+        s32 GetEventType() const { return 576; }
     };
 
     // GuiChallengeUpdateEvent (DWARF: BrnGuiEventTypes.h:83, forward-declared only).
@@ -72,6 +80,9 @@ namespace BrnGui
         s32 miCurrentAction;                                              // @+0x00
         s32 miNumTargetsUsed;                                             // @+0x04
         f32 maafIndividualTargetContributions[KI_MAX_TARGETS][KI_MAX_ARCI]; // @+0x08 (0x40)
+        // AddGuiEvent<GuiChallengeUpdateEvent> @0x823D6208 -> AddEvent(&event, 577, 144).
+        s32 GetEventType() const { return 577; }
+
         s32 maiOverallTargetRemaining[KI_MAX_TARGETS];                   // @+0x48 (0x08)
         // Per-ARCI completion state. Real element type is
         // BrnGameState::GameStateModuleIO::EFreeburnChallengeSuccess (mirrored by

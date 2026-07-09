@@ -36,6 +36,9 @@ namespace BrnGui
         // "finished last rank" sentinel (the X360 returns the value regardless).
         s32 GetPlayerRank() const;
 
+        // AddGuiEvent<GuiEventRankProgressResponse> @0x823D7290 -> AddEvent(&event, 438, 36).
+        s32 GetEventType() const { return 438; }
+
     private:
         u8  maHeadReserved[0x20]; // @0x00 .. 0x1F  (event header + earlier response fields)
         s32 miCurrentRank;        // @0x20  (read by GetPlayerRank; X360-pinned)
