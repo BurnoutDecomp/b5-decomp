@@ -70,19 +70,20 @@ struct AptCIH : public AptValueGC
     virtual void RegisterReferences();   // @0x7E9C78 (GC mark: parent + char props)
     virtual void DestroyGCPointers();    // @0x80553C (release parent + char inst)
     virtual void PreDestroy();           // @0x7ECBAC
-    // FLAG: AptCIH also overrides GetHasClass/SetHasClass (@0x7E1E18/0x7E1DF0) +
-    // objectMemberSet; deferred (AptValue's defaults inherited for now).
-    // objectMemberLookup override (PARTIAL, 2026-07-06): the console CIH resolves the
-    // built-in read-only MovieClip properties here (a clip read via GetMember/GetProperty
-    // -> getVariable -> objectMemberLookup, BEFORE findChild). Only `_name`
-    // (-> GetInstanceName) is reconstructed so far -- the drive-critical one: a class-
-    // bound clip's ctor does `this.msName = this._name`, and with the base's `return 0`
-    // `_name` fell through findChild to `undefined`, so msName (and every component name
-    // handed to SendAptEvent) was undefined. The rest of the MovieClip property set
-    // (_x/_y/_width/_visible/_currentframe/...) is a follow-on. Returns 0 for any other
-    // name so the existing findChild path is unchanged.
+    // objectMemberLookup @0x82B0DF70 / objectMemberSet @0x82B09E58 -- the built-in
+    // MovieClip/TextField member recognizers (FULL reconstruction, 2026-07-09; bodies
+    // in AptCIHMembers.cpp). The interpreter consults them on every member access
+    // against a clip (get/setVariable, BEFORE findChild / the property-hash store):
+    // the gperf indexes (Text/SpriteMembersIndex) resolve the name, the console jump
+    // tables' id -> case mapping routes it -- procedural transforms through Get/Set-
+    // ProceduralProperty, the TextField surface through the tick-writable render item,
+    // the MovieClip methods as lazy AptNativeFunction singletons, the AS event-handler
+    // members into the property hash + event mask (+ the director's input set).
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
                                          const AptNativeString* const pName) const override;
+    virtual bool objectMemberSet(AptValue* const pThis,
+                                 const AptNativeString* const pName,
+                                 AptValue* const pValue) override;
 
     // ---- name -------------------------------------------------------------
     const EAStringC& GetInstanceName() const { return mInstanceName; }   // @0x7DF0A8

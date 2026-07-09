@@ -722,10 +722,23 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
     {
         // console: v15 = *(a1+64) (mnConstantPoolCount, saved across the native call).
         const uint32_t nSavedField40 = pInterp->mnConstantPoolCount;
+        // The console natives read their AS arguments straight off the LIVE interpreter
+        // object (dword_8324E760 == mnStackTop / off_8324E768 == mpStack). The repo's
+        // gnAptNativeArgCount / gppAptNativeArgStack globals mirror those two members
+        // for the native bodies; publish this dispatch's view for the duration of the
+        // call (saved/restored so a nested dispatch keeps the outer native coherent).
+        extern int        gnAptNativeArgCount;    // dword_8324E760 (== mnStackTop)
+        extern AptValue** gppAptNativeArgStack;   // off_8324E768   (== mpStack)
+        const int nSavedArgCount        = gnAptNativeArgCount;
+        AptValue** const pSavedArgStack = gppAptNativeArgStack;
+        gnAptNativeArgCount  = pInterp->mnStackTop;
+        gppAptNativeArgStack = pInterp->mpStack;
         // console: v16 = (*(a3+32))(a2, a4) -- call the wrapped AptExtFunctionPtr.
         typedef AptValue* (*AptExtCall)(AptValue* pThis, int nArgCount);
         AptValue* const pRet = reinterpret_cast<AptExtCall>(
             static_cast<AptNativeFunction*>(pFunction)->GetFunction())(pScope, nArgs);
+        gnAptNativeArgCount  = nSavedArgCount;
+        gppAptNativeArgStack = pSavedArgStack;
         // console: AptValue_::PopAndPush(a1, a4, v16) -- collapse the args, push result.
         pInterp->stackPopAndPush(nArgs, pRet);
         pInterp->mnConstantPoolCount = nSavedField40;   // console *(a1+64) = v15

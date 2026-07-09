@@ -152,6 +152,12 @@ struct AptRenderItemDynamicText : public AptRenderItem
         mFlagsAndBorderColor = ((static_cast<uint32_t>(nBoxAlignment) << 2) & 0x3Cu)
                              | (mFlagsAndBorderColor & 0xFFFFFFC3u);
     }
+    // Sign-extended read of the 4-bit box-align field (the X360 `(x << 26) >> 28`
+    // idiom in AptCIH::objectMemberLookup's autoSize/_x/_y arms).
+    int GetBoxAlignment() const
+    {
+        return static_cast<int32_t>(mFlagsAndBorderColor << 26) >> 28;
+    }
 
     bool GetMouseWheelEnabled() const { return ((mFlagsAndBorderColor >> 6) & 1u) != 0; }       // @0x82AD5980
     void SetMouseWheelEnabled(bool bEnabled)                                                     // @0x82AE21B0
