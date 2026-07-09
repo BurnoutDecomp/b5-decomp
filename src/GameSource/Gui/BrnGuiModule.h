@@ -2,6 +2,7 @@
 #define BRN_GUI_MODULE_H
 
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered base
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Gui/BrnGuiAptRuntime.h"                             // BrnGui::AptRuntimeHost (embedded)
 #include "GameSource/Gui/BrnGuiViewModule.h"                             // BrnGui::ViewModule (embedded)
@@ -63,6 +64,16 @@ namespace BrnGui
         void UpdateBootVideoFlow();
 
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
+
+        // The view-module IO pair the per-frame bridge fills (the GuiFsmController /
+        // BridgeFromInputToView stand-in): the input buffer carries the view-state
+        // events (frame time step 26 + the play-movie events 18) into
+        // CgsGui::ViewModule::Update; the output buffer receives the view's outbound
+        // events. FLAG (bridge stand-in): the console fills these through the module
+        // scheduler's IO stacks.
+        CgsGui::ViewIO::InputBuffer  mViewInputBuffer;
+        CgsGui::ViewIO::OutputBuffer mViewOutputBuffer;
+        s64 miLastViewFrameMs;        // PC frame clock for the time-step event (FLAG: wall clock)
         MovieManager mMovieManager;   // X360 +301600 (drives the boot/attract videos)
         AptRuntimeHost mAptRuntimeHost; // GUI-owned Apt host published while the module is prepared
 

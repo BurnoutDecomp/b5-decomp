@@ -25,8 +25,10 @@ namespace EA { namespace GameTalk { class GameTalkMessage; } }
 // Per-frame IO-buffer payload types the game module pushes/pops on the update IO stacks.
 // PLACEHOLDER (empty) definitions so the loading-screen build can allocate them; the real
 // layouts are owned by each module's IO TU and replace these when reconstructed.
+// (The former ViewIO::InputBuffer placeholder is DELETED per the ODR-trap rule below:
+// the REAL CgsGui::ViewIO::InputBuffer now arrives via BrnGuiModule.h ->
+// CgsGuiViewModuleIO.h, so the IO stack allocates the real 65KB buffer.)
 namespace CgsGui { namespace CgsGuiModuleIO { struct InputBuffer {}; struct OutputBuffer {}; }
-                   namespace ViewIO         { struct InputBuffer {}; }
                    namespace ModelIO        { struct OutputBuffer {}; } }
 namespace BrnDirector { namespace DirectorIO { struct OutputBuffer {}; } }
 

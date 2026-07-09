@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> (read the loading-event subtype)
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"                          // CgsFsm::Event (drive BF_PROCEED through the FSM)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
+#include <chrono>   // the PC frame clock for the view time-step event (FLAG: wall clock)
 #include "GameSource/Gui/BrnGuiAptRuntime.h"                              // BrnGui::AptRuntimeHost (Gui-owned Apt host)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"        // AlwaysAvailableComponentsManager + free accessor (bodied below)
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (BF_LEGAL interface wiring)
@@ -67,15 +68,6 @@ namespace
     CgsGui::GuiAccessPointers s_BootLegalAccessPointers;
 
     // Transition hook for the current boot/menu slice. On the X360 this update belongs to
-    // CgsGui::ViewModule::Update @0x82860708: it computes the view delta, then calls
-    // CgsGui::AptAux::Update, whose first step is the component communicator flush. The
-    // real ViewModule dispatch is not live in this minimal GuiModule yet, so keep the
-    // ownership at the GUI-frame level and leave BrnGuiAptRuntime to tick movie slots only.
-    static void UpdateGuiOwnedAptComponents()
-    {
-        if (CgsGui::AptAuxPointer::mpAptAuxInst != 0)
-            CgsGui::AptAuxPointer::mpAptAuxInst->UpdateComponents();
-    }
 }
 
 // BrnGui::GuiModule -- the GUI module (minimal movie-hosting slice; see BrnGuiModule.h). X360
@@ -201,7 +193,8 @@ namespace BrnGui
     // host takes is itself null-checked + logged + bails cleanly.
     // NOTE: this does NOT clear the output queue -- BootLegal's other channel-41/40 outputs
     // (apt-view-state, music, etc.) are consumed elsewhere; here we only OBSERVE channel 41.
-    static void RouteAptMovieEvents(CgsGui::StateInterface& lStateInterface)
+    static void RouteAptMovieEvents(CgsGui::StateInterface& lStateInterface,
+                                    CgsGui::ViewIO::InputBuffer::ViewStateQueue* lpViewEvents)
     {
         CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue = lStateInterface.GetOutputEventQueue();
         if (lpOutQueue == 0)
@@ -216,13 +209,21 @@ namespace BrnGui
             {
                 const CgsGui::GuiEventPlayAptMovie* lpPlay =
                     reinterpret_cast<const CgsGui::GuiEventPlayAptMovie*>(lpEvent);
-                if (lpPlay->muEventType == 18)   // GuiEventPlayAptMovie -> consume + (attempt to) load
+                if (lpPlay->muEventType == 18)   // GuiEventPlayAptMovie -> bridge to the view module
                 {
                     if (BrnGui::gpActiveAptRuntimeHost != nullptr)
+                        BrnGui::gpActiveAptRuntimeHost->Prepare();   // idempotent (the load path needs the host up)
+
+                    // Post the play-movie VIEW event (type 18) onto the bridged view-state
+                    // queue; the next CgsGui::ViewModule::Update dispatches it through the
+                    // real chain (ProcessIncomingAptEvent -> AptAux::LoadFlashAnimation).
+                    if (lpViewEvents != nullptr)
                     {
-                        BrnGui::gpActiveAptRuntimeHost->Prepare();   // idempotent
-                        BrnGui::gpActiveAptRuntimeHost->PlayMovie(lpPlay->mpacMovieName,
-                                                                  lpPlay->miLevelNum);
+                        struct { const char* mpacMovieName; s32 miLevelNum; } lBody =
+                            { lpPlay->mpacMovieName, lpPlay->miLevelNum };
+                        lpViewEvents->CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lBody), 18,
+                            static_cast<s32>(sizeof(lBody)));
                     }
                 }
             }
@@ -398,6 +399,18 @@ namespace BrnGui
         // table + the render buffer) so it is live before BF_LEGAL posts
         // PlayAptMovie("Title_Screen02"). Idempotent + defensive.
         mAptRuntimeHost.Prepare(&mViewModule);
+
+        // The view-module IO pair the per-frame bridge fills. The output buffer's own
+        // Construct (@0x82858E40) initialises the status byte + its queue; the input
+        // buffer is constructed member-wise (base status byte, then the view-state
+        // queue under the write lock).
+        mViewInputBuffer.Construct();
+        mViewInputBuffer.LockForWrite();
+        mViewInputBuffer.GetViewStateQueue()
+            .CgsModule::VariableEventQueue<65536, 16>::Construct();
+        mViewInputBuffer.UnlockForWrite();
+        mViewOutputBuffer.Construct();
+        miLastViewFrameMs = -1;
 
         // Wire BF_LEGAL's state interface to the shared access pointers so the GUI
         // components' faithful apt output chain (FillAptViewMessage -> AptAux::
@@ -604,7 +617,10 @@ namespace BrnGui
 
             // Consume BootLegal's channel-41 PlayAptMovie("Title_Screen02") output -> the Apt runtime
             // (load the title movie), then tick the Apt runtime for this frame (advance + render).
-            RouteAptMovieEvents(mBootLegalStateInterface);
+            mViewInputBuffer.LockForWrite();
+            RouteAptMovieEvents(mBootLegalStateInterface,
+                                &mViewInputBuffer.GetViewStateQueue());
+            mViewInputBuffer.UnlockForWrite();
 
             // ---- BF_LEGAL attract-video pump (the BF_VIDEOS steps 3/3b/4/5 for this phase) ----
             // BootLegal's attract loop posts play(508)/stop(509) onto its state interface; deliver
@@ -720,8 +736,55 @@ namespace BrnGui
             // movie stream is idle (the attract video borrows the single device voice).
             CgsSystem::MenuMusicPC::Update();
 
-            UpdateGuiOwnedAptComponents();
-            mAptRuntimeHost.Update();
+            // Bridge the frame into the REAL per-frame owner: post the frame time step
+            // (view event 26) onto the view-state queue and run CgsGui::ViewModule::
+            // Update -- which dispatches the view events (incl. the bridged play-movie
+            // 18), advances the view clock, and ticks AptAux::Update (the component
+            // flush + the engine AptUpdateTarget frame pacer). This replaces the
+            // former GuiModule-level flush + the host's per-slot movie ticking.
+            // FLAG (PC time source): the console's step rides the module scheduler's
+            // clock; the wall clock is the host stand-in.
+            {
+                const s64 liNowMs = static_cast<s64>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch()).count());
+                f32 lfStepSeconds = 0.0f;
+                if (miLastViewFrameMs >= 0)
+                    lfStepSeconds = static_cast<f32>(liNowMs - miLastViewFrameMs) * 0.001f;
+                miLastViewFrameMs = liNowMs;
+
+                // Clamp the stand-in step (FLAG PC time source): a synchronous movie
+                // load can consume seconds inside ONE frame, and an unclamped step
+                // makes the engine pacer faithfully run hundreds of catch-up AS
+                // frames in a single call (the console's scheduler-fed step never
+                // exceeds a frame or two). 100ms == the pacer's worst case of ~6
+                // banked frames.
+                if (lfStepSeconds > 0.1f)
+                    lfStepSeconds = 0.1f;
+
+                mViewInputBuffer.LockForWrite();
+                if (lfStepSeconds > 0.0f)
+                {
+                    mViewInputBuffer.GetViewStateQueue()
+                        .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lfStepSeconds), 26,
+                            static_cast<s32>(sizeof(lfStepSeconds)));
+                }
+                mViewInputBuffer.UnlockForWrite();
+
+                mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
+
+                // The view consumed this frame's bridged events; reset the queue for
+                // the next frame's bridge fill.
+                mViewInputBuffer.LockForWrite();
+                mViewInputBuffer.GetViewStateQueue()
+                    .CgsModule::VariableEventQueue<65536, 16>::Clear();
+                mViewInputBuffer.UnlockForWrite();
+            }
+
+            // The remaining shim-side drive (the title help-item defaults retry) --
+            // the last AptRuntimeHost residue, deleted with the component shim.
+            mAptRuntimeHost.UpdateShimResidue();
             return;
         }
 
