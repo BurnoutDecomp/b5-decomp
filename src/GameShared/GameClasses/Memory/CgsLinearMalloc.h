@@ -22,6 +22,7 @@ namespace CgsMemory
         void StopRWAllocation();
         void SetAlignment(size_t lnAlignment);
         size_t GetFreeMemory() const;
+        size_t GetUsage() const;       // 0x82866D40 - bytes consumed (bump pointer - region start)
         void* GetStartAddress() const;
 
     private:

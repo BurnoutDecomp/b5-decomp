@@ -2,11 +2,14 @@
 
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"   // BrnFlapt::MovieClipInstance (Update/Render forward targets)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // gpDebugPrint / gxMessageFilterFlags (SetData usage print)
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"    // CgsMemory::LinearMalloc (root clip allocation)
 
 // BrnFlapt::FlaptFileInstance member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX:
 //
 //   GetRootMovieClip @ 0x8246B360
+//   SetData          @ 0x82471620
 //   Update           @ 0x82471820
 //   Render           @ 0x82472480
 //   Construct / Prepare / Destruct (inlined into FlaptManager::Construct
@@ -65,6 +68,47 @@ void FlaptFileInstance::Destruct()
         mpFile = skInvalidHandle;
         mpLinearAlloc = 0;
     }
+}
+
+// ---- SetData @ 0x82471620 --------------------------------------------------
+// Bind a loaded FlaptFile resource to this (inactive) instance: rebind mpFile from
+// the handle, allocate the root MovieClipInstance from the flapt allocator,
+// construct it over the file's first serialised MovieClip as "_root" (no parent),
+// rewind it to frame 0, and mark the instance active.
+void FlaptFileInstance::SetData(CgsResource::ResourceHandle lHandle,
+                                FlaptRenderer* lpRenderer)
+{
+    CGS_ASSERT(!mbIsActive, "!IsActive()");
+    CGS_ASSERT(lpRenderer != 0, "lpRenderer");
+
+    mpFile = lHandle;
+
+    CGS_ASSERT(mpFile->muNumMovieClips > 0,
+               "Error - invalid FLApt file with mo movieclips");
+
+    // The root clip instance. The console allocates the literal sizeof
+    // (MovieClipInstance) == 0x38. FLAG: replace the literal with
+    // sizeof(MovieClipInstance) once the timeline type's x64 layout lands (its
+    // bodies are still un-homed no-ops, so nothing writes past the console extent
+    // yet and the constant only under-sizes a region nothing dereferences).
+    mpRootMovieClipInstance =
+        static_cast<MovieClipInstance*>(mpLinearAlloc->Malloc(0x38));
+    CGS_ASSERT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance");
+
+    mpRootMovieClipInstance->Construct(mpFile->mpaMovieClips, "_root", 0,
+                                       mpLinearAlloc, lpRenderer,
+                                       mpAlternateTextColours,
+                                       miNumAlternateColours);
+    mpRootMovieClipInstance->GotoFrame(0);
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "FLApt: allocated "
+                                   << static_cast<s32>(mpLinearAlloc->GetUsage())
+                                   << "b runtime data for file\n";
+    }
+
+    mbIsActive = true;
 }
 
 // ---- Update @ 0x82471820 ---------------------------------------------------

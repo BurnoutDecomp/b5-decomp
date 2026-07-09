@@ -27,15 +27,32 @@
 // them `void`.
 // ============================================================================
 
+struct RGBA;
+namespace CgsMemory { class LinearMalloc; }
+
 namespace BrnFlapt
 {
     struct FlaptRenderer;
+    struct MovieClip;
     struct MovieClipRef;
     struct TextFieldRef;
     struct TriggerParameters;
 
     struct MovieClipInstance
     {
+        // ---- lifecycle ------------------------------------------------------
+        // Construct / GotoFrame (DWARF BrnFlaptMovieClipInstance.h:73/:109): bind
+        // this instance to its serialised MovieClip timeline and rewind to a frame.
+        // Called by FlaptFileInstance::SetData @0x82471620 on the root clip
+        // (clip = &mpFile->mpaMovieClips[0], name "_root", no parent). Declared here
+        // so the registration path compiles; the timeline bodies land with this
+        // class's own TUs.
+        void Construct(const MovieClip* lpClip, const char* lpcName,
+                       MovieClipInstance* lpParent, CgsMemory::LinearMalloc* lpAllocator,
+                       const FlaptRenderer* lpRenderer, const RGBA* lpAlternateTextColours,
+                       s32 liNumAlternateColours);
+        void GotoFrame(u32 luFrame);
+
         // ---- per-frame drive ------------------------------------------------
         // Update / Render: advance / draw this clip node and its children. Called
         // by FlaptFileInstance::Update @0x82471820 / Render @0x82472480 on the
