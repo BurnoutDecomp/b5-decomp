@@ -205,9 +205,16 @@ namespace CgsGui
         // content for one frame. Overridden by BrnGui::ViewModule (which chains to this).
         virtual void RenderInternal(const ViewIO::InputBuffer* lpInput);
 
-        // X360 vtable slot after RenderInternal (DWARF). Handles a resource-load
-        // notification routed to this module. Overridden by BrnGui::ViewModule.
+        // X360 0x8285BD30 (vtable slot after RenderInternal; DWARF). Handles a resource-load
+        // notification routed to this module: APT data registers with the Apt data handler,
+        // the localised-text bundle loads the string table, a font is collected into the
+        // font collection. Overridden by BrnGui::ViewModule (which intercepts FLAPT loads).
         virtual void ProcessIncomingLoadNotification(const CgsModule::Event* lpEvent);
+
+        // Collect a loaded font handle into mFonts. X360-attested call site in
+        // ProcessIncomingLoadNotification; the body itself is un-exported -- reconstructed
+        // as the observable forward into FontCollection::AddFont @0x82853030.
+        void AddFont(CgsResource::SafeResourceHandle<CgsResource::Font>& lrTypeface);
 
     protected:
         bool mbUpdateFlash;

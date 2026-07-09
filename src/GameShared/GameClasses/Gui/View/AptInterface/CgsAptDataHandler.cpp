@@ -108,9 +108,18 @@ namespace CgsGui
     // The X360 body reads the name from the header's first word (`*a2` == mpacMovieName)
     // and stores the header pointer (`a2`) itself. On x64 the header's mpacMovieName field
     // is an UN-RELOCATED file offset (the no-op FixUp; see CgsAptDataHeader.cpp), so the
-    // resolved name string is passed in explicitly. // FLAG (x64 fork): the console reads
-    // the name from the relocated mpacMovieName; here the caller supplies the resolved name.
+    // console form resolves it as header base + offset (the converted 6-field header's name
+    // offset is the 8-byte slot at +0x00); the two-arg form takes an already-resolved name
+    // (// FLAG x64: the import fallback's spelling of the same registration).
     // =========================================================================
+    AptDataHeader* AptDataHandler::AddAptData(AptDataHeader* lpHeader)
+    {
+        const uintptr_t luBase    = reinterpret_cast<uintptr_t>(lpHeader);
+        const uintptr_t luNameOff = static_cast<uintptr_t>(
+            *reinterpret_cast<const unsigned long long*>(luBase));
+        return AddAptData(lpHeader, reinterpret_cast<const char*>(luBase + luNameOff));
+    }
+
     AptDataHeader* AptDataHandler::AddAptData(AptDataHeader* lpHeader, const char* lpacName)
     {
         AptDataHeader* lpFound = FindAptData(lpacName);

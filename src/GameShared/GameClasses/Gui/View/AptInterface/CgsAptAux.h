@@ -247,18 +247,14 @@ namespace CgsGui
         void LoadAnimation(const char* lpacName, AptFilePtr* lpHandle);
     }
 
-    // FLAG (x64 converted 8-byte bundle): the located movie-root character header the host
-    // stashes before LoadAnimation (see CgsAptAux.cpp). Null => CompleteLoad uses the console
-    // pConstFile->mnDataRootOffset formula. Defined in CgsAptAux.cpp.
-    extern void* gAptLoadAnimRootOverride;
-
-    // FLAG (x64 native-8 relocation bounds): the AptData resource span the host stashes before
-    // LoadAnimation, so the native-8 AptMovie::resolve64 relocation walk (driven by
-    // AptCharacterAnimation::Fixup) can bounds-check every serialised offset slot -- a slot
-    // holds a file-relative offset iff (0 < off < gAptResourceSpanSize), and a relocated pointer
-    // is safe to deref iff it lands in [gAptResourceSpanBase, +gAptResourceSpanSize). This makes
-    // the walk robust against non-pointer / already-relocated / garbage slots. Defined in
-    // CgsAptAux.cpp. (base == the load base pBase == the AptData resource base on our path.)
+    // FLAG (x64 native-8 relocation bounds): the AptData resource span LoadAnimation derives
+    // from the registered header (base == the header address; size == the converted 6-field
+    // header's size slot @+0x28) before driving the completion, so the native-8
+    // AptMovie::resolve64 relocation walk (driven by AptCharacterAnimation::Fixup) can
+    // bounds-check every serialised offset slot -- a slot holds a file-relative offset iff
+    // (0 < off < gAptResourceSpanSize), and a relocated pointer is safe to deref iff it lands
+    // in [gAptResourceSpanBase, +gAptResourceSpanSize). This makes the walk robust against
+    // non-pointer / already-relocated / garbage slots. Defined in CgsAptAux.cpp.
     extern uintptr_t gAptResourceSpanBase;
     extern uint32_t  gAptResourceSpanSize;
 

@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"          // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"            // CgsUnicode::IsValidUtf8String
+#include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResource (LoadStringTable)
 
 namespace CgsLanguage
 {
@@ -240,6 +241,96 @@ namespace CgsLanguage
         mStrings.Insert(lpElement);
 
         return true;
+    }
+
+    // X360 0x828664B8 CgsLanguage::LanguageManager::LoadStringTable.
+    //
+    // Faithful decompile: assert the language id ("Language ID <id> is invalid" for ids >= 24;
+    // streamed on the console -- the StrStream text collapses to the plain string per project
+    // convention), unload any prior table, CAlloc the bulk static element block (one hash
+    // element per entry, mpStringElements), then insert every {hash, string} pair into
+    // mStrings, UTF-8-validating each string. Records the resource (mpResource), re-derives
+    // the formatting strings, picks the language's default font ("dfheic" only for language
+    // 16, the wide-glyph locale), and stamps meLanguage last (the X360 store order).
+    // The entry/offset widths are the x64-widened data layout (see CgsLanguageResourceType.h);
+    // parity is by named member.
+    void LanguageManager::LoadStringTable(CgsResource::LanguageResource* lpResource)
+    {
+        CGS_ASSERT(lpResource->meLanguageID < 0x18u, "Language ID is invalid");
+
+        UnloadStringTable();
+
+        // The X360 ctor leaves mStrings' bins at the uninitialised sentinel; the table must be
+        // live before the inserts (UnloadStringTable only re-Inits when a table was loaded).
+        if (mpResource == 0 && mpStringElements == 0)
+            mStrings.Init();
+
+        mpStringElements = static_cast<HashIDStringArray::Element*>(
+            mpLanguageAllocator->CAlloc(lpResource->muSize,
+                                        static_cast<s32>(sizeof(HashIDStringArray::Element))));
+        if (lpResource->muSize)
+        {
+            const CgsResource::LanguageResourceHashEntry* lpEntries = lpResource->GetEntries();
+            for (s32 li = 0; li < lpResource->muSize; ++li)
+            {
+                const u8* lpcString = reinterpret_cast<const u8*>(
+                    static_cast<uintptr_t>(lpEntries[li].mpString));
+                CGS_ASSERT(CgsUnicode::IsValidUtf8String(lpcString),
+                           "CgsUnicode::IsValidUtf8String( resource.mpEntries[luIndex].GetString() )");
+
+                HashIDStringArray::Element* lpElement = &mpStringElements[li];
+                lpElement->Set(static_cast<u32>(lpEntries[li].muHash), lpcString);
+                mStrings.Insert(lpElement);
+            }
+        }
+
+        mpResource = lpResource;
+        const u32 luLanguageId = lpResource->meLanguageID;
+        // The console re-derives the PER-LOCALE formatting strings here
+        // (PrepareFormattingStrings @0x82865B70, reading the loaded table). NOT YET
+        // RECONSTRUCTED -- the boot language (English) formats identically through the
+        // defaults; land the per-locale variant with the localisation slice.
+        PrepareDefaultFormattingStrings();
+        mpcDefaultFontName = (luLanguageId == 16u) ? "dfheic" : "NODEFAULTFONTSPECIFIED";
+        meLanguage = static_cast<CgsLanguage::ELanguage>(luLanguageId);
+    }
+
+    // X360 0x82862540 CgsLanguage::LanguageManager::UnloadStringTable.
+    //
+    // Faithful decompile: only acts when a table is loaded (mpResource non-null). Re-Init the
+    // mStrings bins, null the resource, drain both dynamic-string live lists head-first back
+    // to their free sublists -- freeing each dynamic entry's heap string copy (+ its element)
+    // for the owned list, and just the element for the pointer list -- then free the bulk
+    // static element block and re-derive the default formatting strings.
+    void LanguageManager::UnloadStringTable()
+    {
+        if (mpResource == 0)
+            return;
+
+        mStrings.Init();
+        mpResource = 0;
+
+        while (DynamicHashElementsList::Node* lpNode = mDynamicStringElements.GetHead())
+        {
+            HashIDStringArray::Element* lpElement = lpNode->mData;
+            mDynamicStringElements.RecycleNode(lpNode);
+            // The owned list heap-copied its string (AddString): free the copy, then the element.
+            mpLanguageAllocator->Free(const_cast<CgsUnicode::CgsUtf8*>(lpElement->GetValue()));
+            mpLanguageAllocator->Free(lpElement);
+        }
+
+        while (DynamicHashElementsList::Node* lpNode = mDynamicStringPointerElements.GetHead())
+        {
+            HashIDStringArray::Element* lpElement = lpNode->mData;
+            mDynamicStringPointerElements.RecycleNode(lpNode);
+            // The pointer list stores the caller's string (caller-owned): free the element only.
+            mpLanguageAllocator->Free(lpElement);
+        }
+
+        mpLanguageAllocator->Free(mpStringElements);
+        mpStringElements = 0;
+
+        PrepareDefaultFormattingStrings();
     }
 
     // X360 0x82864950 CgsLanguage::LanguageManager::RemoveString.

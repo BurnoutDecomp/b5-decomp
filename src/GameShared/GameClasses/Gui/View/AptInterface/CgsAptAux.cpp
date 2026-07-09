@@ -493,20 +493,11 @@ namespace CgsGui
         AptFlushInputQueue();
     }
 
-    // =========================================================================
-    // FLAG (x64 converted 8-byte bundle): the host bring-up pre-locates the movie-root
-    // CHARACTER HEADER (0x09876543 signature scan -- it has the resource size the scan
-    // needs) and stashes it here before calling LoadAnimation. The console reads the root
-    // via pConstFile->mnDataRootOffset, but our converted .apt's dataRootOffset does not
-    // locate the type-9 movie root (its console layout diverged). When null, CompleteLoad
-    // falls back to the faithful console formula. Reset to null by the host after each load.
-    // =========================================================================
-    void* gAptLoadAnimRootOverride = nullptr;   // the located root char header (x64)
-
-    // The AptData resource span (base + size) the host stashes before LoadAnimation, so the
-    // native-8 AptMovie::resolve64 relocation walk can bounds-check every serialised offset
-    // slot (see the header). Zero => the walk treats every non-zero slot as a live offset
-    // (the pre-bounds behaviour). base == the load base == the AptData resource base.
+    // The AptData resource span (base + size) LoadAnimation derives from the registered
+    // header before driving the completion, so the native-8 AptMovie::resolve64 relocation
+    // walk can bounds-check every serialised offset slot (see the header note). Zero => the
+    // walk treats every non-zero slot as a live offset (the pre-bounds behaviour). base ==
+    // the load base == the AptData resource base (the header sits at the resource start).
     uintptr_t gAptResourceSpanBase = 0;
     uint32_t  gAptResourceSpanSize = 0;
 
@@ -575,6 +566,16 @@ namespace CgsGui
                                 ? reinterpret_cast<void*>(luHeaderBase + luConstOff)
                                 : lpBase;   // degenerate header: keep the old collapse
 
+        // Publish the resource span for the native-8 relocation walk's bounds checks
+        // (FLAG x64; see the gAptResourceSpan* note): base = the header (== the resource
+        // start), size = the converted 6-field header's size slot @+0x28. Restored after
+        // the completion so nested loads (the import graph) re-derive their own span.
+        const uintptr_t luPrevSpanBase = gAptResourceSpanBase;
+        const uint32_t  luPrevSpanSize = gAptResourceSpanSize;
+        gAptResourceSpanBase = luHeaderBase;
+        gAptResourceSpanSize = static_cast<uint32_t>(
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x28u));  // serialized .apt header: size @+0x28
+
         // Pin the caller's handle (the asm's leading lwarx/stwcx. IncRef on *a2).
         AptFilePtr laHandle;
         laHandle.pData = lpHandle->pData;
@@ -584,8 +585,10 @@ namespace CgsGui
         // Forward to the async-completion glue (-> AptLoader::CompleteLoad -> Resolve -> Fixup).
         AptCompleteAnimationAsyncLoad(&laHandle, lpBase,
                                       reinterpret_cast<AptConstFile*>(lpConstFile),
-                                      /*pAptDataHeader (a5)*/ lpAptData,
-                                      /*pPreResolvedRoot (x64 FLAG)*/ gAptLoadAnimRootOverride);
+                                      /*pAptDataHeader (a5)*/ lpAptData);
+
+        gAptResourceSpanBase = luPrevSpanBase;
+        gAptResourceSpanSize = luPrevSpanSize;
 
         // (The console then sets AptData[5] = 2 (ACTIVE). FLAG-skipped -- see the state note above:
         // the widened header's state slot is ambiguous and the host's load-once guard covers it.)
