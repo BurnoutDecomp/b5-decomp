@@ -73,13 +73,22 @@ namespace ViewIO
     static_assert(sizeof(CgsGraphicsCameraStorage) % 16 == 0, "Camera storage 16-byte multiple");
 
     // ---- ImRendererSet (foreign type; mirrors CgsGuiModuleIO.h) ----------------------------
-    // SetImRenderers @0x82856EC8 copies the leading 5 dwords (20 bytes, +0x00..+0x13) then the
-    // camera at +0x20; GetImRenderers @0x824F7A10 returns &mRendererSet. The alignas(16) mCamera
-    // lands at +0x20 (12 bytes +0x14..+0x1F are pad).
+    // SetImRenderers @0x82856EC8 copies the leading 5 renderer-pointer slots (console 5 dwords,
+    // +0x00..+0x13) then the camera (console +0x20); GetImRenderers @0x824F7A10 returns
+    // &mRendererSet. The five slots carry the assert-attested names ViewModule::Render
+    // @0x82858810 checks ("lpViewInput->GetImRenderers().mpIm2dRenderBuffer" / the three
+    // mpIm3dRenderBuffer* fields); slot 1 is never asserted/derefed (name unrecovered). x64:
+    // the slots widen to 8-byte pointers (semantic parity by named member -- the console's
+    // byte offsets shift; typed void* here so this IO header does not drag the renderer
+    // types in -- ViewModule::Render casts slot 0 back to CgsGui::AptIm2dRenderBuffer*).
     struct ImRendererSet
     {
-        unsigned char            maRendererPtrs[20]; // +0x00..+0x13 (5 dwords copied by SetImRenderers)
-        CgsGraphicsCameraStorage mCamera;            // +0x20 (X360 camera @ this+0x10040)
+        void* mpIm2dRenderBuffer;                    // console +0x00 (CgsGui::AptIm2dRenderBuffer*)
+        void* mpReserved04;                          // console +0x04
+        void* mpIm3dRenderBufferUntex;               // console +0x08
+        void* mpIm3dRenderBufferRacePosition;        // console +0x0C
+        void* mpIm3dRenderBufferMenusAndHud;         // console +0x10
+        CgsGraphicsCameraStorage mCamera;            // console +0x20 (X360 camera @ this+0x10040)
     };
 
     // The view->input buffer. Derives CgsModule::IOBuffer and embeds a large GUI event queue at

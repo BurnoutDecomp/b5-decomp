@@ -38,6 +38,17 @@ namespace BrnGui
         void Destruct() override;
         void Update() override;
 
+        // The per-frame GUI render drive (X360 BrnGui::GuiModule::Render @0x825146B8 ->
+        // CgsGui::GuiModule::Render @0x8285AF38's core): publish the active renderer set
+        // into the view input buffer (SetImRenderers), run the view module's render entry
+        // (ViewModule::Render @0x82858810 -> the RenderInternal virtual -> AptAux::Render
+        // -> the engine render walk), then flush the filled Apt command buffer to D3D9
+        // (the host's PC dispatch leaf). FLAG PC-ABI adapter: the console signature takes
+        // the scheduler's view/GUI IO buffers + the render output buffer and gates on the
+        // module-prepared byte (+949208); this PC drive owns its IO pair and gates on the
+        // Apt bring-up. Called from BrnRendererModule::Render (the PC render thread).
+        void Render();
+
         MovieManager* GetMovieManager() { return &mMovieManager; }
         ViewModule* GetViewModule() { return &mViewModule; }
         AptRuntimeHost* GetAptRuntimeHost() { return &mAptRuntimeHost; }
@@ -119,6 +130,10 @@ namespace BrnGui
         bool                   mbBootLegalFsmReady;                  // the BRNLEGALFSM Lua FSM loaded + entered BF_LEGAL
         s32                    miBootPhase;                          // 0 = BF_LOADING, 1 = BF_VIDEOS, 2 = BF_LEGAL
     };
+
+    // Renderer bridge, matching gpActiveMovieManager: GuiModule publishes itself while
+    // prepared; BrnRendererModule drives GuiModule::Render (the GUI render chain) through it.
+    extern GuiModule* gpActiveGuiModule;
 }
 
 #endif

@@ -79,6 +79,7 @@ namespace
 namespace BrnGui
 {
     AptRuntimeHost* gpActiveAptRuntimeHost = 0;
+    GuiModule*      gpActiveGuiModule      = 0;
 
     bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState)
     {
@@ -337,6 +338,7 @@ namespace BrnGui
         mMovieManager.Prepare(0);
         gpActiveMovieManager = &mMovieManager;
         gpActiveAptRuntimeHost = &mAptRuntimeHost;
+        gpActiveGuiModule = this;
 
         mbBootStarted = false;
         mbLoadingHasShown = false;
@@ -441,6 +443,8 @@ namespace BrnGui
         mBootLuaHeap.Destruct();
         if (gpActiveAptRuntimeHost == &mAptRuntimeHost)
             gpActiveAptRuntimeHost = 0;
+        if (gpActiveGuiModule == this)
+            gpActiveGuiModule = 0;
         gpActiveMovieManager = 0;
         mMovieManager.Release();
         return true;
@@ -456,6 +460,57 @@ namespace BrnGui
     void GuiModule::Update()
     {
         UpdateBootVideoFlow();
+    }
+
+    // The per-frame GUI render drive. X360 BrnGui::GuiModule::Render @0x825146B8 gates on
+    // the module-prepared byte (+949208), runs CgsGui::GuiModule::Render @0x8285AF38 --
+    // whose core copies the GUI input buffer's renderer set into the view input buffer
+    // (SetImRenderers) and calls ViewModule::Render @0x82858810 -- then
+    // UpdateAndRenderMovieManager + the effects arbitrator. This PC drive reproduces the
+    // view-render core: the renderer set arrives from the Apt host's wiring residue
+    // instead of the (un-homed) GUI IO chain, the movie manager renders through the
+    // renderer's gpActiveMovieManager hook, and the effects arbitrator is data-gated.
+    // FLAG PC-ABI adapter: gates on the Apt bring-up (the console's prepared byte).
+    void GuiModule::Render()
+    {
+        if (!mAptRuntimeHost.IsReady())
+            return;
+
+        // FLAG (presentation stand-in ordering): the boot logos are presented through
+        // the renderer's gpActiveMovieManager hook (drawn BEFORE this), not through the
+        // GUI view's MovieVideoRenderer as on console -- so the view's black clear
+        // (RenderBlackScreen, enabled by default) would paint over them. Drive the view
+        // render only from BF_LEGAL on (phase 2, when the view owns the frame); the gate
+        // dies when the movie presentation moves under the real view IO chain.
+        if (miBootPhase < 2)
+            return;
+
+        CgsGui::AptIm2dRenderBuffer* lpAptBuffer = mAptRuntimeHost.GetAptRenderBuffer();
+        if (lpAptBuffer == nullptr)
+            return;
+
+        // CgsGui::GuiModule::Render @0x8285AF38 core: publish the active renderer set
+        // into the view input buffer. Slot 0 is the Apt Im2d command buffer the engine's
+        // render callbacks fill; the MenusAndHud 3D slot carries the host's non-null
+        // stand-in (AptRenderHandler::Render asserts it; the 2D-only boot path never
+        // dereferences it). The camera is FLAG-deferred with the ViewModule camera member.
+        CgsGui::ViewIO::ImRendererSet lRendererSet = {};
+        lRendererSet.mpIm2dRenderBuffer            = lpAptBuffer;
+        lRendererSet.mpIm3dRenderBufferMenusAndHud = mAptRuntimeHost.Get3dRendererAssertSatisfier();
+
+        mViewInputBuffer.LockForWrite();
+        mViewInputBuffer.SetImRenderers(lRendererSet);
+        mViewInputBuffer.UnlockForWrite();
+
+        // The view module's render entry (Render @0x82858810 -> the RenderInternal
+        // virtual -> the black-screen clear + AptAux::Render -> the engine render walk
+        // -> FlaptManager::Render, all filling the published command buffer).
+        mViewModule.Render(&mViewInputBuffer);
+
+        // PC dispatch leaf: freeze + flush the filled Apt command buffer to D3D9 (the
+        // console render thread consumes the buffers via the custom-renderer-manager
+        // bracket RenderInternal notifies).
+        mAptRuntimeHost.DispatchRenderResidue();
     }
 
     // Drive the boot-logo flow for one frame: feed BootVideos its events, tick it, deliver its output to

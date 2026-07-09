@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf (the playing-movie record)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu (the Update phase brackets)
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"            // ViewIO::InputBuffer / OutputBuffer (Update IO)
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h" // Im2dTransform (RenderBlackScreen's unit-to-screen)
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // the clear-quad vertices
 
 namespace CgsGui
 {
@@ -91,10 +93,10 @@ namespace CgsGui
 
         // The guest zeroes render-set slots 0/2/3/4 (+592/+600/+604/+608) individually;
         // slot 1 (+596) is left untouched.
-        mImRenderers.mpIm2dRenderer = 0;
-        mImRenderers.mpReserved08 = 0;
-        mImRenderers.mpReserved0C = 0;
-        mImRenderers.mp3dRenderer = 0;
+        mImRenderers.mpIm2dRenderBuffer = 0;
+        mImRenderers.mpIm3dRenderBufferUntex = 0;
+        mImRenderers.mpIm3dRenderBufferRacePosition = 0;
+        mImRenderers.mpIm3dRenderBufferMenusAndHud = 0;
         mTextRenderer.Construct();
 
         // The inlined FontCollection::Construct (the guest seeds the three slot pairs
@@ -469,19 +471,168 @@ namespace CgsGui
         mAptAux.mRenderHandler.SetCustomRendererManager(mpCustomRendererManager);
     }
 
-    // X360 @0x82858988 -- NOT YET RECONSTRUCTED: the real body draws the
-    // alpha-modulated black clear quad (mbClearScreenEnabled / mfClearScreenAlpha)
-    // through the immediate-mode renderer. Land it with the render-ownership slice.
+    // RenderBlackScreen @0x82858988 -- when the clear screen is enabled (+0xE000), draw
+    // the alpha-modulated black clear quad through the Im2d command buffer: open a render
+    // block, install the unit-to-screen transform (the X360 reads the constant transform
+    // at flt_830112D0), bind the untextured/cull-none/standard-blend frame states from
+    // the shared state library, then submit a 4-vertex triangle strip over the unit
+    // square whose colour is black at mfClearScreenAlpha (+0xE004), and close the block.
     void ViewModule::RenderBlackScreen()
     {
+        if (!mbClearScreenEnabled)
+            return;
+
+        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
+            mImRenderers.mpIm2dRenderBuffer->mCommandBuffer;
+
+        lrBuffer.BeginRendering();
+
+        // The constant unit-to-screen transform (X360 flt_830112D0): the body draws the
+        // quad over the UNIT square, so the batch transform maps it onto the full
+        // 1280x720 logical screen (the fixed logical space the 2D dispatch scales from),
+        // with the identity colour transform (scale 255 / shift 0 in the CXForm
+        // (A,R,G,B) channel order the dispatch decodes). The X360 data global is not
+        // exported; the values are pinned by that observable contract (full-screen
+        // clear + unmodified vertex colour).
+        CgsGraphics::Im2dTransform lUnitToScreen;
+        lUnitToScreen.mOriginXYZ.SetZero();          // origin (0,0)
+        lUnitToScreen.mRightUp.x = 1280.0f;          // right = (1280, 0)
+        lUnitToScreen.mRightUp.y = 0.0f;
+        lUnitToScreen.mRightUp.z = 0.0f;             // up    = (0, 720)
+        lUnitToScreen.mRightUp.w = 720.0f;
+        lUnitToScreen.mColourShift.SetZero();        // (A,R,G,B) shift 0
+        lUnitToScreen.mColourScale.x = 255.0f;       // (A,R,G,B) scale identity
+        lUnitToScreen.mColourScale.y = 255.0f;
+        lUnitToScreen.mColourScale.z = 255.0f;
+        lUnitToScreen.mColourScale.w = 255.0f;
+        lrBuffer.SetTransform(lUnitToScreen);
+
+        // Frame states: the X360 binds the shared state library's untextured texture
+        // state (dword_83010F5C), cull-none rasteriser (dword_83010F3C) and standard
+        // alpha-blend (dword_83010F20). The ImRendererBase::StateLibrary global is not
+        // modelled in this slice (see AptRenderHandler::Construct's white-texture note);
+        // the PC dispatch installs exactly those defaults in its prologue, and the
+        // untextured contract is carried by the null-texture command (the dispatch's
+        // SELECTARG2/diffuse-only path). FLAG: bind the three library states here once
+        // the state-library global lands.
+        lrBuffer.SetTexture(0);
+
+        // The unit-square strip: (0,0) (0,1) (1,0) (1,1), UV == position, colour black
+        // at the clear-screen alpha (the X360 packs (alpha*255) into the byte-swizzled
+        // vertex colour word; the PC vertex carries named colour bytes).
+        u8 lu8Alpha = static_cast<u8>(mfClearScreenAlpha * 255.0f);
+        CgsGraphics::Basic2dColouredTexturedVertex laVertices[4];
+        const f32 lafCorners[4][2] = { { 0.0f, 0.0f }, { 0.0f, 1.0f },
+                                       { 1.0f, 0.0f }, { 1.0f, 1.0f } };
+        for (int liIndex = 0; liIndex < 4; ++liIndex)
+        {
+            laVertices[liIndex].mv2Pos.x    = lafCorners[liIndex][0];
+            laVertices[liIndex].mv2Pos.y    = lafCorners[liIndex][1];
+            laVertices[liIndex].mv2Tex0UV.x = lafCorners[liIndex][0];
+            laVertices[liIndex].mv2Tex0UV.y = lafCorners[liIndex][1];
+            laVertices[liIndex].mv4Colour.r = 0;
+            laVertices[liIndex].mv4Colour.g = 0;
+            laVertices[liIndex].mv4Colour.b = 0;
+            laVertices[liIndex].mv4Colour.a = lu8Alpha;
+        }
+        lrBuffer.Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
+
+        lrBuffer.EndRendering();
     }
 
-    // X360 @0x82858AF8 -- NOT YET RECONSTRUCTED: the real body renders the shared view
-    // content for one frame (clear quad + AptAux render drive). Land it with the
-    // render-ownership slice.
+    // RenderInternal @0x82858AF8 -- render the shared view content for one frame:
+    // bracket the frame with the custom-renderer-manager render notifies (guest vtbl
+    // slot +0x18, phase 1 open / phase 2 close -- the handoff that publishes the
+    // filled renderer set to the console's render-side consumer), open the Im2d (and
+    // MenusAndHud Im3d) command buffers, bind the frame-default states, run the Apt
+    // render walk with the render-side elapsed milliseconds, then close the buffers.
     void ViewModule::RenderInternal(const ViewIO::InputBuffer* lpInput)
     {
-        (void)lpInput;
+        CGS_ASSERT(lpInput != 0, "lpViewInput");
+
+        // Custom-renderer-manager phase-1 notify (mgr->vtbl[+0x18](mgr, &mImRenderers, 1)).
+        // No manager is installed on the PC boot path and the manager's real vtable order
+        // is un-recovered (the same deferred hook as ProcessIncomingViewEvents'); the PC
+        // consumption of the filled buffers is the dispatch the render drive runs after
+        // this returns. FLAG (deferred dispatch): wire both notifies when the
+        // CustomRendererManager type lands.
+
+        const s32 liDeltaMs = static_cast<s32>(mfRenderTimeDelta * 1000.0f);
+
+        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
+            mImRenderers.mpIm2dRenderBuffer->mCommandBuffer;
+
+        lrBuffer.BeginRendering();
+        // The MenusAndHud Im3d buffer bracket (guest +0x260: BeginRendering here, its
+        // EndRendering below). The 3D immediate buffers are not wired on the PC-minimal
+        // path -- the slot carries the host's non-null assert-satisfier, not a real
+        // buffer (the boot/title movies are 2D-only) -- so the bracket is STRUCTURALLY
+        // GATED on the Im3d render-buffer instantiations landing.
+
+        // Frame-default states (standard blend dword_83010F20, cull-none rasteriser
+        // dword_83010F3C, z-buffer-off depth dword_83010F54 from the shared state
+        // library). The StateLibrary global is not modelled in this slice; the PC
+        // dispatch prologue installs exactly those defaults (blend on/src-alpha,
+        // cull none, z off). FLAG: bind the three library states here once the
+        // state-library global lands.
+
+        mAptAux.Render(liDeltaMs);
+
+        lrBuffer.EndRendering();
+
+        // Custom-renderer-manager phase-2 notify (mgr->vtbl[+0x18](mgr, &mImRenderers, 2))
+        // -- deferred with phase 1 above.
+    }
+
+    // Render @0x82858810 -- the public per-frame render entry (CgsGui::GuiModule::Render
+    // @0x8285AF38 drives it with the view input buffer the GUI module owns): under the
+    // input read lock, assert + copy the input buffer's renderer set into mImRenderers,
+    // assign the input camera, advance the render-side time bookkeeping
+    // (mfRenderTimeDelta = mfCurrentTime - mfLastRenderTime -- the milliseconds feed the
+    // Apt consumed-render-tick bank), dispatch the RenderInternal virtual (guest vtbl
+    // +0x4C), then re-null the copied renderer slots (slot 1 excepted: the X360 leaves
+    // +0x254 untouched).
+    void ViewModule::Render(const ViewIO::InputBuffer* lpViewInput)
+    {
+        lpViewInput->LockForRead();
+
+        const ViewIO::ImRendererSet& lrRenderers = lpViewInput->GetImRenderers();
+        CGS_ASSERT(lrRenderers.mpIm2dRenderBuffer != 0,
+                   "lpViewInput->GetImRenderers().mpIm2dRenderBuffer");
+        // The X360 also asserts mpIm3dRenderBufferUntex / mpIm3dRenderBufferRacePosition /
+        // mpIm3dRenderBufferMenusAndHud non-null. The 3D immediate buffers are not wired
+        // on the PC-minimal path (RenderInternal's 3D bracket is structurally gated on
+        // their instantiations landing), so those three asserts return with that slice.
+
+        mImRenderers.mpIm2dRenderBuffer =
+            static_cast<CgsGui::AptIm2dRenderBuffer*>(lrRenderers.mpIm2dRenderBuffer);
+        mImRenderers.mpReserved04                   = lrRenderers.mpReserved04;
+        mImRenderers.mpIm3dRenderBufferUntex        = lrRenderers.mpIm3dRenderBufferUntex;
+        mImRenderers.mpIm3dRenderBufferRacePosition = lrRenderers.mpIm3dRenderBufferRacePosition;
+        mImRenderers.mpIm3dRenderBufferMenusAndHud  = lrRenderers.mpIm3dRenderBufferMenusAndHud;
+
+        // FLAG (deferred member): the guest assigns the input camera (set+0x20) into the
+        // module's embedded CgsGraphics::Camera at [c:+624] (Camera::operator=). The
+        // module's camera member is not modelled yet (see Construct's camera note); land
+        // the copy with the Camera lifecycle TU.
+
+        // Render-side time bookkeeping: the delta between the update-side accumulated
+        // time (mfCurrentTime, advanced by Update) and the last render's view of it.
+        const f32 lfLastRenderTime = mfLastRenderTime;
+        mfLastRenderTime  = mfCurrentTime;
+        mfRenderTimeDelta = mfCurrentTime - lfLastRenderTime;
+
+        // The RenderInternal virtual dispatch (guest vtbl slot +0x4C -- BrnGui::ViewModule
+        // overrides it with the black-screen + base + Flapt chain).
+        RenderInternal(lpViewInput);
+
+        // Re-null the copied renderer slots (0/2/3/4; slot 1 is left as copied).
+        mImRenderers.mpIm2dRenderBuffer             = 0;
+        mImRenderers.mpIm3dRenderBufferUntex        = 0;
+        mImRenderers.mpIm3dRenderBufferRacePosition = 0;
+        mImRenderers.mpIm3dRenderBufferMenusAndHud  = 0;
+
+        lpViewInput->UnlockForRead();
     }
 
     // X360 @0x8285BD30 -- NOT YET RECONSTRUCTED: the real body registers the loaded

@@ -3,8 +3,7 @@
 
 #include "types.hpp"
 
-namespace CgsGraphics { struct Im2d; }
-namespace CgsGui { class ViewModule; }
+namespace CgsGui { class ViewModule; struct AptIm2dRenderBuffer; }
 
 namespace BrnGui
 {
@@ -26,8 +25,26 @@ namespace BrnGui
         // AptUpdateTarget (the engine frame pacer). Deleted with the component
         // shim.
         void UpdateShimResidue();
-        void Render(CgsGraphics::Im2d* lpIm2d);
         void StopMovie();
+
+        // ---- PC-minimal render wiring residue --------------------------------------
+        // The movie RENDER ownership moved to the real chain -- GuiModule::Render ->
+        // CgsGui::ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 ->
+        // AptAux::Render -> AptRenderTarget (the engine render walk). What remains
+        // host-side is the WIRING the console gets from its renderer/IO chain:
+        //   * the Apt Im2d command buffer the engine's render callbacks fill (owned by
+        //     the bring-up until the GUI resource slice lands) -- GuiModule::Render
+        //     publishes it into the view input buffer's renderer set each frame;
+        //   * the non-null 3D-slot stand-in that keeps AptRenderHandler::Render's
+        //     `mp3dRenderer != 0` assert quiet (the boot/title movies are 2D-only;
+        //     becomes the real Im3d buffer when that slice lands);
+        //   * the PC-platform dispatch leaf: freeze + flush the filled command buffer
+        //     to D3D9 (Swap -> Clear -> Dispatch) after the view render returns -- the
+        //     console's equivalent consumption is the render thread draining the
+        //     buffers through the custom-renderer-manager bracket.
+        CgsGui::AptIm2dRenderBuffer* GetAptRenderBuffer() const;
+        void* Get3dRendererAssertSatisfier() const;
+        void DispatchRenderResidue();
 
         bool IsReady() const;
         bool IsMovieLive() const;

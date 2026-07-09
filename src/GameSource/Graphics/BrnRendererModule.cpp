@@ -2,7 +2,7 @@
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (owns the movie player)
-#include "GameSource/Gui/BrnGuiAptRuntime.h"     // BrnGui::gpActiveAptRuntimeHost (GUI-owned Apt host)
+#include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 
 // Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
 // (Option B). The job system and the buffered dispatch frame are reconstructed with the
@@ -110,13 +110,15 @@ void BrnRendererModule::Render()
         BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
     }
 
-    // Apt (ActionScript movie) render: draw through the active GuiModule-owned Apt host using THIS
-    // module's immediate-mode 2D renderer (mIm2dRenderer -- the proven path the loading screen +
-    // debug HUD use). The Apt runtime walks the movie's GuiGeometry + draws each mesh's quad via Im2d::Render.
-    // Clean no-op until a movie's geometry is resolved. This is how BootLegal's Title_Screen02 Apt
-    // geometry reaches the screen. [Apt render path]
-    if (BrnGui::gpActiveAptRuntimeHost != 0)
-        BrnGui::gpActiveAptRuntimeHost->Render(&mIm2dRenderer);
+    // GUI render drive (the Apt/view frame): the X360 render pass runs the GUI module's
+    // Render (BrnGui::GuiModule::Render @0x825146B8 -> CgsGui::GuiModule::Render
+    // @0x8285AF38 -> ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 ->
+    // AptAux::Render -> the engine render walk), which fills the published Apt command
+    // buffer; the PC dispatch leaf then flushes it to D3D9. Clean no-op until the GUI
+    // module is prepared. This is how BootLegal's Title_Screen02 movie reaches the
+    // screen. [GUI render path]
+    if (BrnGui::gpActiveGuiModule != 0)
+        BrnGui::gpActiveGuiModule->Render();
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
 
