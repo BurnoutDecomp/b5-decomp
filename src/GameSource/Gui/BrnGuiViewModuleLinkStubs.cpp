@@ -11,15 +11,13 @@
 // already noted). Delete each stub (and add the real TU to the source list) as its
 // body lands.
 //
-// AUDIT (2026-07-09, vs the on-disk tree + the exe source list):
-//   - BrnFlapt::FlaptManager::RegisterFlaptFile -- declared in BrnFlaptManager.h;
-//     the real body (@0x82472188: already-active assert + FlaptFileInstance::SetData)
-//     is not yet homed. No-op: no flapt file ever becomes active.
-//   - BrnFlapt::MovieClipInstance::{Update,Render} -- the timeline drive the homed
-//     FlaptFileInstance::Update/Render (@0x82471820/@0x82472480) forward to on the
-//     root clip. Their real bodies are the big unreconstructed timeline TUs. No-op:
-//     unreachable until RegisterFlaptFile activates an instance (the file-instance
-//     guards assert first on a live instance).
+// AUDIT (2026-07-09b, vs the on-disk tree + the exe source list):
+//   - BrnFlapt::MovieClipInstance::{Construct,GotoFrame,Update,Render} -- the
+//     timeline layer the homed registration/drive path reaches (SetData @0x82471620
+//     constructs + rewinds the root clip; FlaptFileInstance::Update/Render
+//     @0x82471820/@0x82472480 tick/draw it). Their real bodies are the big
+//     unreconstructed timeline TUs. No-op: a registered instance goes active but its
+//     clip tree neither composes nor draws until they land.
 //   - BrnGui::AlwaysAvailableComponentsManager::PrepareFlapt -- has a real body in
 //     BrnGuiAlwaysAvailableComponentsManager.cpp, but that body dereferences the far
 //     embedded manager (GuiModule + 0x17D670, not modelled by the minimal GuiModule) and
@@ -57,9 +55,12 @@
 
 namespace BrnFlapt
 {
-    void FlaptManager::RegisterFlaptFile(FlaptFiles, CgsResource::ResourceHandle) {}
-
-    // --- Timeline drive referenced by the homed FlaptFileInstance::Update/Render ----
+    // --- Timeline bodies referenced by the homed FlaptFileInstance --------------
+    // (SetData @0x82471620 constructs/rewinds the root clip; Update/Render drive it.)
+    void MovieClipInstance::Construct(const MovieClip*, const char*, MovieClipInstance*,
+                                      CgsMemory::LinearMalloc*, const FlaptRenderer*,
+                                      const RGBA*, s32) {}
+    void MovieClipInstance::GotoFrame(u32) {}
     void MovieClipInstance::Update(f32) {}
     void MovieClipInstance::Render(FlaptRenderer*) {}
 }

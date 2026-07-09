@@ -39,6 +39,12 @@ namespace BrnFlapt
         void Prepare(CgsMemory::LinearMalloc* lpFlaptAllocator);
         void Destruct();
 
+        // SetData @ 0x82471620 : bind a loaded FlaptFile resource to this instance --
+        // rebind mpFile from the handle, allocate + construct the root
+        // MovieClipInstance from the flapt allocator, rewind it to frame 0 and mark
+        // the instance active. DWARF: SetData(ResourceHandle, FlaptRenderer*).
+        void SetData(CgsResource::ResourceHandle lHandle, FlaptRenderer* lpRenderer);
+
         // GetRootMovieClip @ 0x8246B360 : assert IsActive() and a live root clip,
         // then return a MovieClipRef {mpRootMovieClipInstance, 0} by value (written
         // into the caller-provided out buffer).

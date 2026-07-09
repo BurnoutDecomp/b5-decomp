@@ -90,7 +90,8 @@ namespace BrnFlapt
         // @0x82472908 Render : draw the live flapt files through the view module's renderers.
         void Render();
 
-        // @0x824729?? RegisterFlaptFile : bind a loaded resource handle to a flapt file slot.
+        // @0x82472188 RegisterFlaptFile : bind a loaded resource handle to a flapt file
+        // slot (already-active assert + FlaptFileInstance::SetData with the embedded renderer).
         void RegisterFlaptFile(FlaptFiles leFile, CgsResource::ResourceHandle lResourceHandle);
 
         PrepareStage      mePrepareStage;

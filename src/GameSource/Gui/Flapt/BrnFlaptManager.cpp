@@ -162,6 +162,22 @@ void FlaptManager::Destruct()
         maFlaptFileInstances[luFile].Destruct();
 }
 
+// ---- RegisterFlaptFile @ 0x82472188 ---------------------------------------
+// Bind a loaded FlaptFile resource handle to a flapt file slot: assert the slot
+// is not already live (the X360 streams the slot index into the message; the
+// StrStream-built text collapses to the plain string per project convention),
+// then hand the handle + the embedded renderer to the instance's SetData.
+void FlaptManager::RegisterFlaptFile(FlaptFiles leFile,
+                                     CgsResource::ResourceHandle lResourceHandle)
+{
+    FlaptFileInstance* lpFileInst = &maFlaptFileInstances[leFile];
+
+    CGS_ASSERT(!lpFileInst->mbIsActive,
+               "Tried to register FLApt file  more than once");
+
+    lpFileInst->SetData(lResourceHandle, &mRenderer);
+}
+
 // ---- GetFile @ 0x82473078 ------------------------------------------------
 FileRef* FlaptManager::GetFile(FileRef* lpOutRef, u32 luFile)
 {
