@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // HashMapTablePolicy::Free
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabase.h"           // AttribListNode/Base + delete-queue seam
 
 // AttribSys runtime -- Attrib::ClassPrivate bodies, reconstructed store-for-store from
 // BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2):
@@ -70,11 +71,44 @@ namespace Attrib
         __debugbreak();
     }
 
+    // Attrib::DatabasePrivate::QueueForDelete<Attrib::Class> @ 0x8280BF78. The Class twin of the
+    // Collection delete-queue push (attribcollection.cpp). Identical ring logic; the only
+    // difference is the referenced-check: a Class carries its shared refcount indirectly -- the
+    // X360 loads the ClassPrivate pointer at Class+0x08 and reads the u16 refcount at
+    // ClassPrivate+0x18 (Class is opaque here, so this stays a byte-offset reach, per the
+    // AttribSys convention). Reached from Attrib::ClassPrivate::Release on the final drop.
     void* DatabasePrivate_QueueClassForDelete(void* lpClass, void* lpGarbageList)
     {
-        (void)lpClass; (void)lpGarbageList;
-        __debugbreak();
-        return NULL;
+        AttribListBase* lpQueue = reinterpret_cast<AttribListBase*>(lpGarbageList);
+
+        // X360: refcount = *(u16*)( *(void**)(class + 0x08) + 0x18 ).
+        bool lbNullOrReferenced = (lpClass == NULL);
+        if (!lbNullOrReferenced)
+        {
+            const void* lpClassPrivate =
+                *reinterpret_cast<void* const*>(reinterpret_cast<const u8*>(lpClass) + 0x08);
+            const u16 lu16RefCount =
+                *reinterpret_cast<const u16*>(reinterpret_cast<const u8*>(lpClassPrivate) + 0x18);
+            lbNullOrReferenced = (lu16RefCount != 0);
+        }
+        CGS_ASSERT(!lbNullOrReferenced,
+                   "Cannot queue NULL or referenced object for delete.");
+
+        // Already queued? (walk the ring; the X360 leaves r3 = the object, unused by the caller.)
+        for (AttribListNode* lpNode = lpQueue->mNode.mpNext;
+             lpNode != &lpQueue->mNode; lpNode = lpNode->mpNext)
+        {
+            if (lpNode->mpValue == lpClass)
+                return lpClass;
+        }
+
+        // Allocate a node holding the class and link it at the tail (insert-before-sentinel).
+        AttribListNode* lpNewNode = AttribListAllocateNode(lpQueue, &lpClass);
+        lpNewNode->mpNext              = &lpQueue->mNode;
+        lpNewNode->mpPrev              = lpQueue->mNode.mpPrev;
+        lpQueue->mNode.mpPrev->mpNext  = lpNewNode;
+        lpQueue->mNode.mpPrev          = lpNewNode;
+        return lpNewNode;
     }
 
     // Attrib::Vault scalar deleting destructor -- real body now landed in the Vault home TU

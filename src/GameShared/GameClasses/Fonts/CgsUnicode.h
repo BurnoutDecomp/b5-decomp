@@ -96,6 +96,71 @@ namespace CgsUnicode
     // UTF-8 character (backs up to the last lead byte). Returns the target. Body lives in
     // CgsUnicode.cpp's own TU. Used by GuiHudMessage::GetParam after SnPrintf.
     CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 lnMaxTargetLength);
+
+    // The variadic-string formatter engine (X360 ARTIST 0x82834AF0). Copies lpUtf8SourceString
+    // into lpUtf8TargetString (never writing past lnTargetStringSize bytes), substituting each
+    // "%N" token (N in 1..9) with the (N-1)th converted parameter string from lppArgs. Returns
+    // the advanced target pointer. Bodied in its own file TU (GameShared/.../CgsUnicode.cpp);
+    // declared here in its canonical home so the Print<...> formatters below resolve it under
+    // the per-TU compile gate.
+    CgsUtf8* _Print(CgsUtf8*       lpUtf8TargetString,
+                    const CgsUtf8* lpUtf8SourceString,
+                    s32            lnTargetStringSize,
+                    const CgsUtf8** lppArgs,
+                    u8             luArgCount);
+
+    // Print<...> -- the per-arity string formatters the GUI in-game message renderer uses
+    // (X360 ARTIST 0x824490E8 = 2-arg, 0x82449150 = 3-arg). Each stages its N string arguments
+    // through a scratch UnicodeBuffer (UnicodeBuffer::Convert stages the text into maBuffer, the
+    // buffer's first member, so &buffer aliases its text), gathers the N converted buffers into a
+    // pointer array, and forwards to _Print with the argument count. The parameters are taken by
+    // const-reference exactly as the X360 threads them (r6/r7/... = &stringPtr), and _Print
+    // receives (target, source, size, args, count) -- note the X360 swaps source/target into
+    // _Print's (target, source) slots. Bodies are out-of-line here; the two instantiations the
+    // build uses are pinned by explicit instantiation in CgsUnicode.cpp.
+    template< typename T0, typename T1 >
+    CgsUtf8* Print(const CgsUtf8* lpUtf8SourceString,
+                   CgsUtf8*       lpUtf8TargetString,
+                   s32            lnTargetStringSize,
+                   const T0&      lrArg0,
+                   const T1&      lrArg1)
+    {
+        UnicodeBuffer laBuffer0;
+        UnicodeBuffer laBuffer1;
+        laBuffer0.Convert(lrArg0);
+        laBuffer1.Convert(lrArg1);
+
+        const CgsUtf8* lapArgs[2] =
+        {
+            laBuffer0.GetBuffer(),
+            laBuffer1.GetBuffer(),
+        };
+        return _Print(lpUtf8TargetString, lpUtf8SourceString, lnTargetStringSize, lapArgs, 2);
+    }
+
+    template< typename T0, typename T1, typename T2 >
+    CgsUtf8* Print(const CgsUtf8* lpUtf8SourceString,
+                   CgsUtf8*       lpUtf8TargetString,
+                   s32            lnTargetStringSize,
+                   const T0&      lrArg0,
+                   const T1&      lrArg1,
+                   const T2&      lrArg2)
+    {
+        UnicodeBuffer laBuffer0;
+        UnicodeBuffer laBuffer1;
+        UnicodeBuffer laBuffer2;
+        laBuffer0.Convert(lrArg0);
+        laBuffer1.Convert(lrArg1);
+        laBuffer2.Convert(lrArg2);
+
+        const CgsUtf8* lapArgs[3] =
+        {
+            laBuffer0.GetBuffer(),
+            laBuffer1.GetBuffer(),
+            laBuffer2.GetBuffer(),
+        };
+        return _Print(lpUtf8TargetString, lpUtf8SourceString, lnTargetStringSize, lapArgs, 3);
+    }
 }
 
 #endif

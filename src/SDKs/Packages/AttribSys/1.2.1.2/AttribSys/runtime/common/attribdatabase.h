@@ -50,6 +50,14 @@ const s32 KI_ATTRIB_LIST_NODE_SIZE = 12;
 // --- container helpers bodied in attribdatabase.cpp -------------------------------------
 AttribListBase* AttribListClearNodes(AttribListBase* lpList);         // DoClear    @ 0x828054B0
 void            AttribListFreeNode(void* lpUnusedList, void* lpNode); // DoFreeNode @ 0x82803FC8
+
+// The DoInsertValue / allocate-node-with-value counterpart the delete-queue push sites call
+// (eastl::list<const Class*/Collection*, AttribSysPackageAllocator>): allocate a 12-byte node
+// from lpList's AttribSys package allocator, store *lppValue into its mpValue slot, and return
+// it (the caller links it into the ring). X360 sub_82809228 (Class list) / sub_828091A8
+// (Collection list) -- one behaviour, two pointer-type instantiations; declared once here as the
+// shared cross-TU seam (bodied in the list-container TUs), matching AttribListFreeNode above.
+AttribListNode* AttribListAllocateNode(AttribListBase* lpList, void* const* lppValue);
 AttribVectorBase* AttribVectorReserve(AttribVectorBase* lpVector,     // reserve    @ 0x8280C258
                                       unsigned int luCapacity);
 
