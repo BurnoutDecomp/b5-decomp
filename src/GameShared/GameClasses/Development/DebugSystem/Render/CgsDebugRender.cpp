@@ -28,7 +28,7 @@ namespace CgsDev
         Internal::CInEventDrawText2D lEvent;
         lEvent.mfX     = lfX;
         lEvent.mfY     = lfY;
-        lEvent.mfScale = lfScale;
+        lEvent.mfSize  = lfScale;
         lEvent.mColour = lColour;
         m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
                               Internal::E_INEVENT_2D_TEXT, static_cast<s32>(sizeof(lEvent)));
@@ -38,24 +38,25 @@ namespace CgsDev
     void DebugRender::Draw2DLine(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour)
     {
         Internal::CInEventDrawLine2D lEvent;
-        lEvent.mfX0    = lfX0;
-        lEvent.mfY0    = lfY0;
-        lEvent.mfX1    = lfX1;
-        lEvent.mfY1    = lfY1;
+        lEvent.mfX1    = lfX0;
+        lEvent.mfY1    = lfY0;
+        lEvent.mfX2    = lfX1;
+        lEvent.mfY2    = lfY1;
         lEvent.mColour = lColour;
         m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
                               Internal::E_INEVENT_2D_LINE, static_cast<s32>(sizeof(lEvent)));
     }
 
-    // X360 Draw2DBox 0x8282B2D8 (CInEventDrawBox2D, ID 3): min/max corners + colour.
+    // X360 Draw2DBox 0x8282B2D8 (CInEventDrawBox2D, ID 3): screen rect as origin + extent + colour.
+    // The record stores {mfX, mfY, mfWidth, mfHeight} (DWARF); the min/max interface converts here.
     void DebugRender::Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
     {
         Internal::CInEventDrawBox2D lEvent;
-        lEvent.mfMinX  = lfMinX;
-        lEvent.mfMinY  = lfMinY;
-        lEvent.mfMaxX  = lfMaxX;
-        lEvent.mfMaxY  = lfMaxY;
-        lEvent.mColour = lColour;
+        lEvent.mfX      = lfMinX;
+        lEvent.mfY      = lfMinY;
+        lEvent.mfWidth  = lfMaxX - lfMinX;
+        lEvent.mfHeight = lfMaxY - lfMinY;
+        lEvent.mColour  = lColour;
         m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
                               Internal::E_INEVENT_2D_BOX, static_cast<s32>(sizeof(lEvent)));
     }
@@ -84,7 +85,7 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawText2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawText2D*>(lpEvent);
-                    lpRenderer->DrawText(lpcPendingString, lpEv->mfX, lpEv->mfY, lpEv->mfScale, lpEv->mColour);
+                    lpRenderer->DrawText(lpcPendingString, lpEv->mfX, lpEv->mfY, lpEv->mfSize, lpEv->mColour);
                     break;
                 }
 
@@ -92,8 +93,8 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawLine2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawLine2D*>(lpEvent);
-                    Vector2 lv2Start = { lpEv->mfX0, lpEv->mfY0, 0.0f, 0.0f };
-                    Vector2 lv2End   = { lpEv->mfX1, lpEv->mfY1, 0.0f, 0.0f };
+                    Vector2 lv2Start = { lpEv->mfX1, lpEv->mfY1, 0.0f, 0.0f };
+                    Vector2 lv2End   = { lpEv->mfX2, lpEv->mfY2, 0.0f, 0.0f };
                     lpRenderer->DrawLine(lv2Start, lv2End, lpEv->mColour);
                     break;
                 }
@@ -102,8 +103,7 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawBox2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawBox2D*>(lpEvent);
-                    lpRenderer->DrawBox(lpEv->mfMinX, lpEv->mfMinY,
-                                        lpEv->mfMaxX - lpEv->mfMinX, lpEv->mfMaxY - lpEv->mfMinY, lpEv->mColour);
+                    lpRenderer->DrawBox(lpEv->mfX, lpEv->mfY, lpEv->mfWidth, lpEv->mfHeight, lpEv->mColour);
                     break;
                 }
 
