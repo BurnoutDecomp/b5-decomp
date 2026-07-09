@@ -134,7 +134,7 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 //   AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(this, a2);  // base ctor
 //   *this = off_82145FE8;                       // AnimInst vtable (automatic codegen)
 //   *(this+0x28) = 0;                           // mAnimationFilePtr.pData = 0
-//   *(this+0x24) = 0;                           // mAnimationState_unknown = 0
+//   *(this+0x24) = 0;                           // mnAccumulatedUpdateMs = 0
 //   if(a2+0xC != a3) AptSharedPtr<AptFile>::operator=(a2+0xC, a3);   // (a2's embedded AptFilePtr) = a3
 //   if(this+0x28 != a3) AptSharedPtr<AptFile>::operator=(this+0x28, a3);// mAnimationFilePtr = a3
 //   held = a3; if(held) incref(held);               // pinned copy of the file
@@ -177,7 +177,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
         AptCharacterSpriteInstBase(lpCharacter);
 
     pInst->mAnimationFilePtr.pData = nullptr;    // *(this+0x28) = 0 (pre-op= clear)
-    pInst->mAnimationState_unknown = 0;          // *(this+0x24) = 0
+    pInst->mnAccumulatedUpdateMs = 0;            // *(this+0x24) = 0
 
     // (1) @0x82AFFDF8..: the movie root's own embedded AptFilePtr (a2+0xC) = a3.
     // AptSharedPtr<AptFile>::operator=(character+0xC, &held). The PS3 lift gates this

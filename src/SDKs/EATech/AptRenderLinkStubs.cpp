@@ -297,6 +297,26 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     unsigned int (*AptCIH_sCIHProcessCb2)(AptCIH*, AptCIH*, void*) = nullptr;   // FLAG link-stub
     int  AptCIH_snGeneralisedProcessTreeDepth = 0;   // FLAG link-stub (nTreeDepth)
 
+    // AptCIH::ProcessCustomControls -- the per-frame custom-control refresh pass the
+    // AptUpdate slot install (dword_8324E420) targets. Its X360 body has no
+    // per-address export in the dump set; returns false (nothing refreshed) until
+    // it is exported + reconstructed.
+    bool AptCIH::ProcessCustomControls() { return false; }
+
+    // AptGC::CleanUnreachable -- the partial sweep AptUpdate runs on the
+    // zombies-dirty flag (raised by AptPartialGarbageCollection). No per-address
+    // export in the dump set; the empty body leaves the values to the full
+    // CleanAll teardown until it is exported + reconstructed (AptUpdate still
+    // clears the flag, matching the state before AptUpdate existed, where
+    // nothing consumed the flag at all).
+    void AptGC::CleanUnreachable() {}
+
+    // The saved-input REPLAY driver (sub_82B0D7E8, ~4.3KB): drains the recorded
+    // input stream instead of live-ticking. Gated on gbAptSavedInputActive (boot
+    // default 0); the empty body is unreachable until a host arms the replay,
+    // and its own TU lands before that feature does.
+    void AptUpdateReplaySavedInputs(int, int) {}
+
     // Host debug-output sink (console dword_8324E82C, a printf-style hook the host installs).
     // FLAG PC-platform leaf: host debug sink, faithfully a no-op until the host wires it.
     void AptHook_Trace(const char* szFormat, const char* szMessage) {}   // FLAG link-stub

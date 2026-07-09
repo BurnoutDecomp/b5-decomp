@@ -95,10 +95,11 @@ AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter);
 
 struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
 {
-    // +0x24 -- unattested extra dword (see the layout note above); reserved by name
-    // so mAnimationFilePtr lands at its asm-pinned +0x28. Never accessed by the two
-    // reconstructed bodies.
-    uint32_t   mAnimationState_unknown;   // +0x24 placeholder
+    // +0x24 -- the banked update milliseconds the AptUpdate frame pacer accumulates
+    // (AptUpdate @0x82B0DB68 / its per-target driver @0x82B0D608 read v7[9], add the
+    // elapsed ms, subtract one authored frame per tick, and store the remainder
+    // back). Zeroed by the ctor. ATTESTED (was an unattested placeholder dword).
+    uint32_t   mnAccumulatedUpdateMs;     // +0x24
 
     // +0x28 -- the ref-counted source .apt file the animation was imported from.
     AptFilePtr mAnimationFilePtr;         // +0x28
