@@ -72,6 +72,7 @@ const unsigned char* AptActionInterpreter::runStream(
     mnStackBase = mnStackTop;
 
     bool bRanOffEnd = false;
+    int  nLastOpcode = -1;   // console v12 (r30, init -1): the last DISPATCHED opcode
     if (bRun)
     {
         const unsigned char* const pEnd = pStream + nLength;  // only meaningful when bounded
@@ -92,6 +93,7 @@ const unsigned char* AptActionInterpreter::runStream(
 
             const unsigned char opcode = *ctx.mpProgramCounter;
             ++ctx.mpProgramCounter;
+            nLastOpcode = opcode;
 
             // Bounded run that has walked past its end -> result is `undefined`.
             if (!bTopLevel && ctx.mpProgramCounter > pEnd)
@@ -107,9 +109,16 @@ const unsigned char* AptActionInterpreter::runStream(
         }
     }
 
-    if (bRanOffEnd)
+    // The bounded-run RESULT INVARIANT (X360 @0x82ADD440 LABEL_14, `if (!v12 && v16)`):
+    // a bounded run that stopped on the 0x00 terminator -- i.e. a function body that
+    // fell off its end with NO explicit return value -- pushes the `undefined`
+    // singleton as its result, exactly like the ran-past-the-end exit. Every caller
+    // (CallMethodPop's unconditional result pop, the class-binding constructor pop,
+    // ExecuteScriptFunction's result read) relies on one result per call; without
+    // this push a void AS function made each of them consume an ENCLOSING operand
+    // (the SendAptEvent undefined-name cascade). The abort exit skips it (LABEL_15).
+    if (bRanOffEnd || (bRun && !mpAbortValue && !bTopLevel && nLastOpcode == 0))
     {
-        // Push the `undefined` result the off-end exit leaves behind.
         mpStack[mnStackTop] = gpUndefinedValue;
         ++mnStackTop;
         gpUndefinedValue->AddRef();

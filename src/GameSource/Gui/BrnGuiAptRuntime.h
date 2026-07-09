@@ -3,6 +3,11 @@
 
 #include "types.hpp"
 
+
+
+
+
+
 namespace CgsGui { class ViewModule; struct AptIm2dRenderBuffer; struct GuiEventLoadNotification; }
 
 namespace BrnGui
@@ -58,9 +63,9 @@ namespace BrnGui
         bool IsMovieLive() const;
         bool IsMovieComposed() const;
 
-        bool SetComponentViewState(const char* lpacInstName, const char* lpacViewState);
-        bool SetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
-                                  const char* lpacValue);
+        // RETIRED (2026-07-09, step 6): SetComponentViewState / SetComponentKeyValue --
+        // the REAL component framework drives the clips (AddNewAptComponent +
+        // UpdateComponent/UpdateAllComponents -> the movie AS).
 
     private:
         CgsGui::ViewModule* mpViewModule = nullptr;

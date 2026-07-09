@@ -60,7 +60,9 @@
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // gAptActionInterpreter.setVariable (AptCIH_CloneClassMembers / AssociateInstToClass)
 
-#include <new>   // placement new (AptCIH::operator new + ctor for AptDLState_CreateInstAtDepth)
+#include <new>      // placement new (AptCIH::operator new + ctor for AptDLState_CreateInstAtDepth)
+#include <cstdio>   // snprintf (FLAG bring-up probe in AssociateInstToClass)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // FLAG bring-up probe log sink
 
 // ---------------------------------------------------------------------------
 // FLAG (module-static, owned by the Apt GC layer, not yet homed): the X360 drains
