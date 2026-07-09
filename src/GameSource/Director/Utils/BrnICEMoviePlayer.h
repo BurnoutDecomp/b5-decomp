@@ -195,6 +195,10 @@ struct SharedPlaylists
     static const u32 KU_NUM_PAUSE_PLAYLISTS = 3;
 
     void                    Construct();              // body in BrnICEMoviePlayer.cpp
+    // X360 visitor: `void Serialise<S>(S&)` -- writes/reads the three pause playlists (each a nested
+    // ICEMoviePlaylist::Serialise recursion) plus the current-pause-playlist index, through the
+    // camera-tunings serialiser S. Body + explicit instantiations in BrnICEMoviePlayer.cpp.
+    template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
     const ICEMoviePlaylist& GetRaceIntroPlaylist() const;
     const ICEMoviePlaylist& GetPostRacePlaylist() const;
     const ICEMoviePlaylist& GetPausePlaylist() const;

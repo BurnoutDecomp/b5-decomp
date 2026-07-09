@@ -67,6 +67,16 @@ public:
     // "%f"). A no-op when the file failed to open.
     void Serialise(const char* lpcName, f32& lrValue);
 
+    // Write a single named integer field as one "<formatted-name> : <value>\n" ("%s : %d\n") text
+    // line -- the s32/u32 counterparts of the f32 overload above. Always inlined by the X360
+    // compiler into the owning Parameters/playlist Serialise<TextFileWriteSerialiser> visitor
+    // bodies (e.g. the External-cam "Version Number (dont change)" field @0x8224D448, the playlist
+    // "Ignore this" movie-count @0x8224CBE8, and the SharedPlaylists "Playlists/Current playlist"
+    // index @0x82258C7C), so they carry no standalone ledger symbol; declared here so those
+    // visitors drive them by name. Body in the .cpp.
+    void Serialise(const char* lpcName, s32& lrValue);
+    void Serialise(const char* lpcName, u32& lrValue);
+
     // The nested-block serialiser-visitor template (X360: `public: void Serialise<T>(const char*,
     // T&)`). One shared body per instance: write the field's formatted section-header label line
     // ("<formatted-name>\n"), bump muRecursionDepth (asserting it stays < KI_MAX_RECURSION_DEPTH),

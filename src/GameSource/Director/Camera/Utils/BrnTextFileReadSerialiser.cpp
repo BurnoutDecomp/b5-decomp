@@ -44,6 +44,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourPassengerCam.h"
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"     // BehaviourRig::Parameters + Utils::{CameraShake,Looker}::Parameters
+#include "GameSource/Director/Utils/BrnICEMoviePlayer.h"            // BrnDirector::{IceMovie,ICEMoviePlaylist}
 
 namespace BrnDirector
 {
@@ -111,6 +112,42 @@ int TextFileReadSerialiser::Serialise(FILE** lppFile, const char* lpcName, f32* 
     }
 
     return liResult;
+}
+
+// ----------------------------------------------------------------------------
+// TextFileReadSerialiser::Serialise(const char*, f32&/s32&/u32&) -- the scalar field readers.
+//
+// The READ counterparts of the write serialiser's scalar writers. Store-for-store from the inlined
+// form the X360 emits at every scalar-field read site: if mpFile is open, fscanf one
+// "<label> : <value>\n" line into lrValue, discarding the label token ("%s"). The value is read
+// into the current value first so a missing "%f"/"%d" leaves it unchanged (fscanf default). Always
+// inlined at the call sites (no standalone address); the name arg is unused on read.
+// ----------------------------------------------------------------------------
+void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, f32& lrValue)
+{
+    if (mpFile != nullptr)
+    {
+        char lacLabel[64];                          // the discarded "<name> :" token
+        std::fscanf(mpFile, "%s : %f\n", lacLabel, &lrValue);
+    }
+}
+
+void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, s32& lrValue)
+{
+    if (mpFile != nullptr)
+    {
+        char lacLabel[64];
+        std::fscanf(mpFile, "%s : %d\n", lacLabel, &lrValue);
+    }
+}
+
+void TextFileReadSerialiser::Serialise(const char* /*lpcName*/, u32& lrValue)
+{
+    if (mpFile != nullptr)
+    {
+        char lacLabel[64];
+        std::fscanf(mpFile, "%s : %d\n", lacLabel, &lrValue);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -196,6 +233,8 @@ template void TextFileReadSerialiser::Serialise<BehaviourPassengerCam::Parameter
 template void TextFileReadSerialiser::Serialise<BehaviourRig::Parameters>(const char*, BehaviourRig::Parameters&);
 template void TextFileReadSerialiser::Serialise<Utils::CameraShake::Parameters>(const char*, Utils::CameraShake::Parameters&);
 template void TextFileReadSerialiser::Serialise<Utils::Looker::Parameters>(const char*, Utils::Looker::Parameters&);
+template void TextFileReadSerialiser::Serialise< ::BrnDirector::ICEMoviePlaylist>(const char*, ::BrnDirector::ICEMoviePlaylist&);
+template void TextFileReadSerialiser::Serialise< ::BrnDirector::IceMovie>(const char*, ::BrnDirector::IceMovie&);
 
 template FILE* TextFileReadSerialiser::Serialise<0>(const char*, f32**);   // X lane
 template FILE* TextFileReadSerialiser::Serialise<1>(const char*, f32**);   // Y lane

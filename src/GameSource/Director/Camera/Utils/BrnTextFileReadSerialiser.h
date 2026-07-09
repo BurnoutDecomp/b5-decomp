@@ -41,6 +41,20 @@ public:
     // (z) reader.
     int Serialise(FILE** lppFile, const char* lpcName, f32* lpfVec3);
 
+    // Read a single named scalar field back from the wrapped text file: consume one
+    // "<label> : <value>\n" line, parsing the value into lrValue (leaving it unchanged when the
+    // file is closed or the "%f"/"%d" is absent -- the current value is the fscanf default). The
+    // f32 form uses "%s : %f\n"; the s32/u32 forms use "%s : %d\n". These are the READ counterparts
+    // of the write serialiser's scalar overloads; the X360 always inlines them into the owning
+    // Parameters/playlist Serialise<TextFileReadSerialiser> visitor bodies (e.g. the bumper-cam
+    // float walk @0x82202B50, the External-cam version+float reads @0x822312E8, the playlist
+    // movie-count @0x8224CDE8, the SharedPlaylists current-playlist index @0x82258D54), so they
+    // carry no standalone ledger symbol. The name arg is unused on read (only the value line is
+    // consumed). Bodies in the .cpp.
+    void Serialise(const char* lpcName, f32& lrValue);
+    void Serialise(const char* lpcName, s32& lrValue);
+    void Serialise(const char* lpcName, u32& lrValue);
+
     // The nested-block reader-visitor template (X360: `FILE* Serialise<T>(const char*, T&)`). One
     // shared body per instance: consume+discard the field's section-header label line, then recurse
     // into T's own Serialise (which reads T's fields back). The X360 compiler folded the header-line

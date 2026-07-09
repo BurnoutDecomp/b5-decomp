@@ -110,6 +110,35 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, f32& lrValue)
 }
 
 // ----------------------------------------------------------------------------
+// TextFileWriteSerialiser::Serialise(const char* name, s32&/u32&) -- the integer field writers.
+//
+// The f32 overload's "%d" twins. Store-for-store from the inlined form the X360 emits at every
+// integer-field call site (e.g. External-cam version @0x8224D448, playlist count @0x8224CBE8,
+// current-playlist index @0x82258C7C): if mpFile is open, FormatName the label into the fixed
+// stack buffer then fprintf "%s : %d\n" with the integer. Always inlined at those call sites
+// (no standalone address); the u32 form uses the same "%d" the X360 does.
+// ----------------------------------------------------------------------------
+void TextFileWriteSerialiser::Serialise(const char* lpcName, s32& lrValue)
+{
+    if (mpFile != nullptr)
+    {
+        char lacBuffer[64];                 // KI_CHARBUFFERLENGTH label buffer
+        FormatName(lacBuffer, lpcName);
+        std::fprintf(mpFile, "%s : %d\n", lacBuffer, lrValue);
+    }
+}
+
+void TextFileWriteSerialiser::Serialise(const char* lpcName, u32& lrValue)
+{
+    if (mpFile != nullptr)
+    {
+        char lacBuffer[64];                 // KI_CHARBUFFERLENGTH label buffer
+        FormatName(lacBuffer, lpcName);
+        std::fprintf(mpFile, "%s : %d\n", lacBuffer, static_cast<s32>(lrValue));
+    }
+}
+
+// ----------------------------------------------------------------------------
 // TextFileWriteSerialiser::Serialise<T> -- the ONE shared nested-block visitor body.
 //
 // Store-for-store from the asm shared by every instance (e.g. @0x82232BF8 / 0x82230B68 / ...):
