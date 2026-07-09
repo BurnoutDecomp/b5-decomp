@@ -277,7 +277,7 @@ void AptLoader::Invalidate(AptFile* pFile)
 // pBlock (a5) is the AptDataHeader: it is what f->mpDataBlock is set to AND what flows to
 // Resolve->Fixup so the case-1 pfnLoadRenderingUnit reads AptData+12 (the geometry object).
 void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pConstFile,
-                             void* pBlock, void* pPreResolvedRoot)
+                             void* pBlock)
 {
     if (!pBase)
     {
@@ -295,11 +295,6 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     // computes the absolute address without the 32-bit write-back. The +pBase relocation is
     // GUARDED on a nonzero offset (asm @0x82AFFA44 beq): a zero offset leaves the root null.
     //
-    // FLAG (x64 converted 8-byte bundle): our converted .apt's mnDataRootOffset does not
-    // locate the type-9 movie root (its console layout diverged), so the host pre-locates the
-    // root character header (signature scan) and passes it in pPreResolvedRoot; the def base is
-    // root + the native-8 header (0x20). The console 4-byte formula (pBase + dataRootOffset,
-    // def base at root+16) is used when no pre-resolved root is supplied.
     // The pointer-size discriminator reads the "<n>:<v>:<p>" signature, which lives in the
     // APT DATA chunk ("Apt Data:1:7:8\x1a") == pBase on both formats (the console file leads
     // with it; our converted bundle's pBase is that chunk). pConstFile is now the REAL
@@ -328,7 +323,7 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
         }
         else
         {
-            pRoot = pPreResolvedRoot;   // FLAG: host signature-scan fallback (belt-and-braces)
+            pRoot = nullptr;   // a zero offset leaves the root null (the console's beq arm)
         }
         luHdrSize = 0x20u;
     }
@@ -378,11 +373,9 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
 //     return r;
 //
 // The loader is gpAptTarget->mpLoader (X360 *(off_8324E574 + 7) == gpAptTarget[+0x1C]).
-// pPreResolvedRoot is threaded through for the x64 converted-bundle root location (FLAG;
-// see CompleteLoad) -- it is not a console argument (defaulted null on the console path).
 // ---------------------------------------------------------------------------
 void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, AptConstFile* pConstFile,
-                                   void* pAptDataHeader, void* pPreResolvedRoot)
+                                   void* pAptDataHeader)
 {
     // Pin the handle for the duration of the completion (asm's leading lwarx/stwcx. IncRef).
     if (pHandle->pData)
@@ -392,7 +385,7 @@ void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, AptConstFil
     // copy of *pHandle (the asm passes v15 = a copy of *a1).
     AptFilePtr laHandle;
     laHandle.pData = pHandle->pData;
-    gpAptTarget->mpLoader->CompleteLoad(laHandle, pBase, pConstFile, pAptDataHeader, pPreResolvedRoot);
+    gpAptTarget->mpLoader->CompleteLoad(laHandle, pBase, pConstFile, pAptDataHeader);
 
     // Drop the pin (asm's trailing lwarx/stwcx. DecRef + delete-if-zero), and null the handle.
     AptFile* pConsumed = pHandle->pData;

@@ -14,6 +14,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
 #include <chrono>   // the PC frame clock for the view time-step event (FLAG: wall clock)
 #include "GameSource/Gui/BrnGuiAptRuntime.h"                              // BrnGui::AptRuntimeHost (Gui-owned Apt host)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::GuiEventLoadNotification (the drained records)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"        // AlwaysAvailableComponentsManager + free accessor (bodied below)
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (BF_LEGAL interface wiring)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
@@ -670,9 +671,26 @@ namespace BrnGui
             else
                 mBootLegal.Update();                            // fallback: drive BootLegal directly
 
+            // Drain the pending LOAD NOTIFICATIONS into the view queue FIRST (event 14 --
+            // the GuiResourceModule output-buffer stand-in): the real ViewModule::
+            // ProcessIncomingLoadNotification @0x8285BD30 performs every registration
+            // (AddAptData / LoadStringTable / AddFont) when the queue dispatches, BEFORE
+            // any play-movie event (18) posted below consumes the registered data --
+            // the console's notification-before-play ordering.
+            mViewInputBuffer.LockForWrite();
+            {
+                CgsGui::GuiEventLoadNotification lNotification;
+                while (mAptRuntimeHost.PopPendingLoadNotification(&lNotification))
+                {
+                    mViewInputBuffer.GetViewStateQueue()
+                        .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lNotification), 14,
+                            static_cast<s32>(sizeof(lNotification)));
+                }
+            }
+
             // Consume BootLegal's channel-41 PlayAptMovie("Title_Screen02") output -> the Apt runtime
             // (load the title movie), then tick the Apt runtime for this frame (advance + render).
-            mViewInputBuffer.LockForWrite();
             RouteAptMovieEvents(mBootLegalStateInterface,
                                 &mViewInputBuffer.GetViewStateQueue());
             mViewInputBuffer.UnlockForWrite();

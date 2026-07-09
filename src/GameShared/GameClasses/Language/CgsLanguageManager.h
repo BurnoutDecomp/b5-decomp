@@ -133,11 +133,27 @@ namespace CgsLanguage
 
         // FLAG (PC bring-up shim; NOT an X360 method): install one loaded string-table entry by
         // its PRECOMPUTED key hash. The serialised LanguageResource carries only {hash, string}
-        // pairs (no key strings), and the X360 member that installs the whole loaded table into
-        // mStrings (LanguageManager::Construct) is not reconstructed yet -- this is its
-        // per-entry observable effect (an AddStringPointer minus the re-hash; the caller owns
-        // the string's lifetime, exactly like AddStringPointer). Remove when Construct lands.
+        // pairs (no key strings) -- this is LoadStringTable's per-entry observable effect (an
+        // AddStringPointer minus the re-hash; the caller owns the string's lifetime, exactly
+        // like AddStringPointer). Retained for the dynamic-string consumers; the STATIC table
+        // install is LoadStringTable below.
         bool AddStringPointerByHash(unsigned int luHash, const u8* lpcString);
+
+        // X360 0x828664B8. Install a loaded (FixUp-relocated) string table: assert the language
+        // id, unload any prior table, CAlloc one hash element per entry from the language
+        // allocator (mpStringElements -- the bulk static block), insert every {hash, string}
+        // pair into mStrings (each string UTF-8-validated), record the resource
+        // (mpResource), re-derive the formatting strings, pick the language's default font
+        // ("dfheic" for language 16, the wide-glyph locale, else "NODEFAULTFONTSPECIFIED"),
+        // and stamp meLanguage. ViewModule::ProcessIncomingLoadNotification (the
+        // localised-text load notification) is its only X360 caller. Body in this TU.
+        void LoadStringTable(CgsResource::LanguageResource* lpResource);
+
+        // X360 0x82862540. Tear the loaded table down (only when one is loaded): re-Init the
+        // mStrings bins, null mpResource, drain both dynamic-string lists back to their free
+        // sublists (freeing each dynamic entry's heap copy + node), free the bulk static
+        // element block (mpStringElements), and re-derive the default formatting strings.
+        void UnloadStringTable();
 
         // X360 0x828651A0 / 0x82866450 (DWARF CgsLanguageManager.h:200/:231). Resolve
         // lpcSourceText through the given format (E_FORMAT_ID_LOOKUP resolves it as a

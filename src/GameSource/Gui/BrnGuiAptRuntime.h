@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 
-namespace CgsGui { class ViewModule; struct AptIm2dRenderBuffer; }
+namespace CgsGui { class ViewModule; struct AptIm2dRenderBuffer; struct GuiEventLoadNotification; }
 
 namespace BrnGui
 {
@@ -45,6 +45,14 @@ namespace BrnGui
         CgsGui::AptIm2dRenderBuffer* GetAptRenderBuffer() const;
         void* Get3dRendererAssertSatisfier() const;
         void DispatchRenderResidue();
+
+        // ---- the load-notification drain (the GuiResourceModule output-buffer stand-in) ----
+        // Every bundle the host's [PC IO] leaf loads queues one GuiEventLoadNotification per
+        // carried resource; GuiModule's frame bridge pops them here and posts each as a view
+        // event (14), so the REAL CgsGui::ViewModule::ProcessIncomingLoadNotification
+        // @0x8285BD30 performs every registration (AddAptData / LoadStringTable / AddFont).
+        // Returns false when the ring is empty.
+        bool PopPendingLoadNotification(CgsGui::GuiEventLoadNotification* lpOut);
 
         bool IsReady() const;
         bool IsMovieLive() const;

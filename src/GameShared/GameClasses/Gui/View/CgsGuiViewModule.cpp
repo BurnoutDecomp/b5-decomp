@@ -6,6 +6,10 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf (the playing-movie record)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu (the Update phase brackets)
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"            // ViewIO::InputBuffer / OutputBuffer (Update IO)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // GuiEventLoadNotification (the load-notification record)
+#include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResource (the string-table load)
+#include "GameShared/GameClasses/Fonts/CgsFont.h"                          // CgsResource::Font (the loaded-font trace)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags (the font trace)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h" // Im2dTransform (RenderBlackScreen's unit-to-screen)
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // the clear-quad vertices
 
@@ -635,11 +639,87 @@ namespace CgsGui
         lpViewInput->UnlockForRead();
     }
 
-    // X360 @0x8285BD30 -- NOT YET RECONSTRUCTED: the real body registers the loaded
-    // resource with the Apt data handler (AddAptData), loads the string table, and
-    // validates/collects fonts. Land it with the load-ownership slice.
+    // ProcessIncomingLoadNotification @0x8285BD30 -- route a resource-load notification
+    // by its request type: the APT-data types register the loaded header with the Apt
+    // data handler (stamping the header's loaded-state field first), the localised-text
+    // bundle loads the string table, and a font is validated + collected into the font
+    // collection (with the debug-print trace). Unhandled types fall through silently
+    // (the X360 jumptable default). The type numerics are the X360 ARTIST values --
+    // the PS3 DecFIGS ResourceRequestTypes enum drifted in the merge window (see
+    // BrnGuiViewModule.cpp's KE_REQUESTTYPE_FLAPT_LOAD note), so they are pinned here
+    // as the raw switch values the asm attests (4..7 / 12 / 16).
     void ViewModule::ProcessIncomingLoadNotification(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");
+        CGS_ASSERT(lpEvent != 0, "Invalid event in ViewModule::ProcessIncomingLoadNotification");
+
+        const GuiEventLoadNotification* lpNotification =
+            reinterpret_cast<const GuiEventLoadNotification*>(lpEvent);
+
+        switch (static_cast<s32>(lpNotification->meRequestType))
+        {
+        case 4:   // the APT-data family (the X360 jumptable's 4..7 arm)
+        case 5:
+        case 6:
+        case 7:
+        {
+            // `*(**a2 + 20) = 1`: stamp the header's loaded-state field (console header
+            // +0x14, meCurrentState = LOADED) before registering. FLAG (x64 widened
+            // header): the converted 6-field header's state slot is ambiguous (+0x14
+            // overlaps mpConstData's high half -- see LoadAnimation's state note), so the
+            // store is skipped; the load-once guards carry the state contract.
+            AptDataHeader* lpHeader = *static_cast<AptDataHeader* const*>(
+                lpNotification->mResourceHandle.mpResourceMemory);
+            mAptAux.mAptDataHandler.AddAptData(lpHeader);
+            break;
+        }
+
+        case 12:  // the localised-text bundle (the language string table)
+        {
+            CgsResource::LanguageResource* lpResource =
+                *static_cast<CgsResource::LanguageResource* const*>(
+                    lpNotification->mResourceHandle.mpResourceMemory);
+            CGS_ASSERT(lpResource != 0 && lpResource->muSize != 0,
+                       "Language Resource pointer is null in ViewModule::ProcessIncomingLoadNotification");
+            mLanguageManager.LoadStringTable(lpResource);
+            break;
+        }
+
+        case 16:  // a loaded font
+        {
+            CgsResource::SafeResourceHandle<CgsResource::Font> lHandle;
+            lHandle.mpResourceMemory = lpNotification->mResourceHandle.mpResourceMemory;
+            lHandle.mpSourceEntry    = lpNotification->mResourceHandle.mpSourceEntry;
+            // The X360 compares the by-value handle against the module-static default-
+            // handle sentinel (dword_8305F174/_8305F178); the x64-native empty handle is
+            // the null handle (the FontCollection emptiness convention).
+            CGS_ASSERT(!lHandle.IsNull(),
+                       "Invalid font resource in ViewModule::ProcessIncomingLoadNotification");
+
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                const CgsResource::Font* lpFont = *static_cast<const CgsResource::Font* const*>(
+                    lHandle.mpResourceMemory);
+                *CgsDev::Log::gpDebugPrint << "GuiViewModule: loaded font "
+                                           << lpFont->macTypefaceFamilyName << " / "
+                                           << lpFont->macTypefaceStyleName << "\n";
+            }
+
+            AddFont(lHandle);
+            break;
+        }
+
+        default:
+            break;
+        }
+    }
+
+    // AddFont -- collect a loaded font handle into the module's font collection. The X360
+    // emits the call in ProcessIncomingLoadNotification (`bl CgsGui__ViewModule__AddFont`);
+    // the body itself is un-exported (no per-address dossier), so it is reconstructed as
+    // the observable forward into the collection's slot registration (FontCollection::
+    // AddFont @0x82853030, the only collection insert point).
+    void ViewModule::AddFont(CgsResource::SafeResourceHandle<CgsResource::Font>& lrTypeface)
+    {
+        mFonts.AddFont(lrTypeface);
     }
 }

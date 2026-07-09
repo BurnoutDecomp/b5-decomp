@@ -55,8 +55,15 @@ namespace CgsGui
 
         // X360 0x82851990 (CgsAptDataHandler.cpp). Register a loaded AptDataHeader keyed by
         // its movie name (idempotent -- returns the existing header if already registered).
-        // lpacName is the resolved name string (// FLAG x64: the console reads it from the
-        // header's relocated mpacMovieName, which is an un-relocated offset on x64).
+        // The console form reads the name from the header itself (its relocated
+        // mpacMovieName, the header's leading field) -- the form
+        // ViewModule::ProcessIncomingLoadNotification calls. On x64 the field is an
+        // un-relocated file offset (the no-op FixUp; see CgsAptDataHeader.cpp), resolved
+        // as header base + offset. Body in CgsAptDataHandler.cpp.
+        AptDataHeader* AddAptData(AptDataHeader* lpHeader);
+
+        // The resolved-name form (// FLAG x64: kept for callers whose name string is
+        // already resolved -- the import fallback path).
         AptDataHeader* AddAptData(AptDataHeader* lpHeader, const char* lpacName);
 
         // The remaining methods (Construct / Prepare / Release / Destruct / RemoveAptData)
