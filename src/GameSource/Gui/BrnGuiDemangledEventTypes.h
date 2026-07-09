@@ -241,4 +241,87 @@ namespace BrnGui
     struct GuiTookLeadEvent : public CgsGui::GuiEvent<484> { u8 maPayload[4]; };  // id 484 size 16 (12B GuiEvent header + opaque payload)
     struct GuiTrafficCheckEvent { u8 maData[4]; s32 GetEventType() const { return 383; } };  // id 383 size 4 (raw; size not GuiEvent-shaped)
     struct GuiTraitorousTakedownEvent { u8 maData[4]; s32 GetEventType() const { return 453; } };  // id 453 size 4 (raw; size not GuiEvent-shaped)
+
+    // ============================================================================
+    // OUTPUT-FAMILY GUI-event PAYLOAD homes (ADDITIVE GROW -- output GUI event wave).
+    // Canonical homes for the BrnGui payload types queued by CgsGui::StateInterface::
+    // OutputGuiEvent<T> (channel 40), BrnNetwork::BrnNetworkModule::AddOutputGuiEvent<T>
+    // (VEQ<4096,16>) and CgsGui::CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<T> (VEQ<18432,16>)
+    // and not previously homed. Same honest-placeholder recipe as the block above: the (id,size)
+    // pair is the two compile-time literals read straight from each instance's X360 AddEvent asm.
+    //   * size >= 12 and 4-aligned: CgsGui::GuiEvent<id> (12B header carrying GetEventType()==id)
+    //     + u8 maPayload[size-12].
+    //   * otherwise: a raw byte struct of the attested size with its own GetEventType()==id.
+    // `alignas(8)` is added where the OutputGuiEvent<T> asm writes offset 16 for the payload
+    // (i.e. the X360 type is 8-aligned): it forces alignof==8 so the wrapper's miOutEventOffset /
+    // record size match the asm, while preserving the X360 sizeof (all such sizes are 8-multiples).
+    // ============================================================================
+    struct CalculateRoute : public CgsGui::GuiEvent<494> { u8 maPayload[68]; };  // id 494 size 80
+    // Mirror of BrnGui::GuiOverlayShowingNotification (real home BrnGuiOverlaysDirector.h, id 190,
+    // 8-byte { CgsID } record). BrnGuiDemangledEventTypes.h and BrnGuiOverlaysDirector.h are
+    // mutually-exclusive includes (both also define GuiOverlayWaitFinishRequest), so the event-queue
+    // template TUs that include this header carry the overlay-showing payload here too. alignas(8)
+    // matches the OutputGuiEvent<T> asm (offset 16 -- the real payload is an 8-byte CgsID).
+    struct alignas(8) GuiOverlayShowingNotification { u8 maData[8]; s32 GetEventType() const { return 190; } };  // id 190 size 8 [8-aligned: OGE off16]
+    struct alignas(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
+    struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<457> { u8 maPayload[88]; };  // id 457 size 100
+    struct alignas(8) GuiChallengeSelectedEvent : public CgsGui::GuiEvent<573> { u8 maPayload[4]; };  // id 573 size 16 [8-aligned: OGE off16]
+    struct GuiEvent100PerCentComplete { u8 maData[1]; s32 GetEventType() const { return 469; } };  // id 469 size 1
+    struct GuiEventActivateCarSelect { u8 maData[8]; s32 GetEventType() const { return 192; } };  // id 192 size 8
+    struct GuiEventAudioGenericSequence { u8 maData[4]; s32 GetEventType() const { return 468; } };  // id 468 size 4
+    // BrnGui::GuiEventAudioSettings -- genuinely un-homed here (the same-named type in
+    // BrnMixerControl.h is BrnSound::Logic::GuiEventAudioSettings, a different type). id 463 size 8,
+    // OutputGuiEvent offset 12 (payload 4-aligned per @0x82493728).
+    struct GuiEventAudioSettings { u8 maData[8]; s32 GetEventType() const { return 463; } };  // id 463 size 8
+    // Mirror of BrnGui::GuiEventAudioTraxUpdate (real home BrnGuiOptionsDataProfile.h). That header
+    // carries several other-namespace redefinitions (EBoostType / GameStateModuleIO) that clash with
+    // the event-queue instantiation TUs' other includes, so the payload is mirrored here (its .cpp
+    // consumers do not include this header). id 458 size 32, OutputGuiEvent off16 (8-aligned).
+    struct alignas(8) GuiEventAudioTraxUpdate : public CgsGui::GuiEvent<458> { u8 maPayload[20]; };  // id 458 size 32 [8-aligned: OGE off16]
+    struct alignas(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459> { u8 maPayload[12]; };  // id 459 size 24 [8-aligned: OGE off16]
+    struct GuiEventAudioTraxPreview { u8 maData[8]; s32 GetEventType() const { return 460; } };  // id 460 size 8
+    struct GuiEventAudioVoiceOver { u8 maData[4]; s32 GetEventType() const { return 466; } };  // id 466 size 4
+    struct GuiEventCamStatus { u8 maData[4]; s32 GetEventType() const { return 570; } };  // id 570 size 4
+    struct alignas(8) GuiEventChallengedEventDataRequest { u8 maData[8]; s32 GetEventType() const { return 331; } };  // id 331 size 8 [8-aligned: OGE off16]
+    struct GuiEventControllerSettings { u8 maData[3]; s32 GetEventType() const { return 472; } };  // id 472 size 3
+    struct alignas(8) GuiEventCustomeEventCreate : public CgsGui::GuiEvent<172> { u8 maPayload[108]; };  // id 172 size 120 [8-aligned: OGE off16]
+    struct GuiEventKeyboardResponse { u8 maData[4]; s32 GetEventType() const { return 142; } };  // id 142 size 4
+    struct GuiEventNetworkConnect { u8 maData[4]; s32 GetEventType() const { return 272; } };  // id 272 size 4
+    struct GuiEventNetworkCustomMatchJoin { u8 maData[4]; s32 GetEventType() const { return 255; } };  // id 255 size 4
+    struct GuiEventNetworkCustomMatchResults : public CgsGui::GuiEvent<254> { u8 maPayload[592]; };  // id 254 size 604
+    struct GuiEventNetworkCustomMatchSearch : public CgsGui::GuiEvent<252> {};  // id 252 size 12
+    struct GuiEventNetworkLeavingGameFailed { u8 maData[1]; s32 GetEventType() const { return 275; } };  // id 275 size 1
+    struct GuiEventNetworkNewsAndTOS { u8 maData[4]; s32 GetEventType() const { return 266; } };  // id 266 size 4
+    struct GuiEventNetworkOutputPlayerTexture { u8 maData[8]; s32 GetEventType() const { return 264; } };  // id 264 size 8
+    struct GuiEventNetworkQuickMatch { u8 maData[2]; s32 GetEventType() const { return 251; } };  // id 251 size 2
+    struct GuiEventNetworkSelectedPlayerOption { u8 maData[8]; s32 GetEventType() const { return 246; } };  // id 246 size 8
+    struct GuiEventOnlineInviteEvent : public CgsGui::GuiEvent<100> { u8 maPayload[12]; };  // id 100 size 24
+    struct GuiEventOnlineShowProfile : public CgsGui::GuiEvent<99> { u8 maPayload[4]; };  // id 99 size 16
+    struct alignas(8) GuiEventPostEventFreeCarSequenceStart { u8 maData[8]; s32 GetEventType() const { return 302; } };  // id 302 size 8 [8-aligned: OGE off16]
+    struct GuiEventPostEventRankUpSequenceStart { u8 maData[8]; s32 GetEventType() const { return 303; } };  // id 303 size 8
+    struct GuiEventRequestCompressedCamPic : public CgsGui::GuiEvent<568> {};  // id 568 size 12
+    struct GuiEventRequestSpecificPreSetRaces { u8 maData[4]; s32 GetEventType() const { return 193; } };  // id 193 size 4
+    struct GuiEventRequestTraining { u8 maData[4]; s32 GetEventType() const { return 572; } };  // id 572 size 4
+    struct alignas(8) GuiEventRoadRuleDataRequest { u8 maData[8]; s32 GetEventType() const { return 327; } };  // id 327 size 8 [8-aligned: OGE off16]
+    struct alignas(8) GuiEventRoadRuleFail : public CgsGui::GuiEvent<337> { u8 maPayload[36]; };  // id 337 size 48 [8-aligned: OGE off16]
+    struct GuiEventRoadRuleModeRequest { u8 maData[8]; s32 GetEventType() const { return 326; } };  // id 326 size 8
+    struct GuiEventScoreboardRequestEvScoreTarget : public CgsGui::GuiEvent<121> { u8 maPayload[24]; };  // id 121 size 36
+    struct GuiEventScoreboardRequestGamercardEvent : public CgsGui::GuiEvent<120> { u8 maPayload[4]; };  // id 120 size 16
+    struct GuiEventScoreboardRequestIndexEvent { u8 maData[4]; s32 GetEventType() const { return 111; } };  // id 111 size 4
+    struct GuiEventScoreboardRequestTableEvent { u8 maData[4]; s32 GetEventType() const { return 113; } };  // id 113 size 4
+    struct GuiEventScoreboardRequestVariationEvent { u8 maData[4]; s32 GetEventType() const { return 112; } };  // id 112 size 4
+    struct GuiEventSetPlayer0ControllerPort { u8 maData[4]; s32 GetEventType() const { return 143; } };  // id 143 size 4
+    struct GuiEventVoipSettings { u8 maData[4]; s32 GetEventType() const { return 474; } };  // id 474 size 4
+    struct GuiImageGalleryRequestCollectedDataEvent { u8 maData[4]; s32 GetEventType() const { return 521; } };  // id 521 size 4
+    struct GuiImageGalleryRequestEvent : public CgsGui::GuiEvent<517> { u8 maPayload[4]; };  // id 517 size 16
+    struct GuiMuteDac { u8 maData[1]; s32 GetEventType() const { return 88; } };  // id 88 size 1
+    struct GuiNetworkCustomRouteCreated { u8 maData[8]; s32 GetEventType() const { return 286; } };  // id 286 size 8
+    struct GuiPFXHookEnumeration : public CgsGui::GuiEvent<501> { u8 maPayload[392]; };  // id 501 size 404
+    struct GuiReplayDeleteReelEvent { u8 maData[4]; s32 GetEventType() const { return 527; } };  // id 527 size 4
+    struct GuiReplayRegisterSerialiser { u8 maData[4]; s32 GetEventType() const { return 595; } };  // id 595 size 4
+    struct GuiReplaySetModeEvent { u8 maData[4]; s32 GetEventType() const { return 525; } };  // id 525 size 4
+    struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
+    struct GuiResponseTimeDateString : public CgsGui::GuiEvent<594> { u8 maPayload[24]; };  // id 594 size 36
+    struct GuiSaveLoadImageExportRequested { u8 maData[17]; s32 GetEventType() const { return 361; } };  // id 361 size 17
+    struct GuiTelemetryEvent : public CgsGui::GuiEvent<323> { u8 maPayload[8]; };  // id 323 size 20
 }

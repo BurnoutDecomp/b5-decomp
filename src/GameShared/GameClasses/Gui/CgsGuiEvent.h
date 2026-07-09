@@ -45,53 +45,60 @@ namespace CgsGui
         s32 GetEventType() const { return EventTypeId; }
     };
 
-    // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). A GuiEvent<leEventType>
-    // that boxes an arbitrary payload T, recording where the payload sits relative to the
-    // wrapper (miOutEventOffset), its byte size (miOutEventSize) and its own GetEventType()
-    // (miOutEventType). The GUI output path stores the wrapper by value on a queue and later
-    // hands observers the inner T back via GetRawEvent(). Layout from the DWARF
-    // (CgsGuiEvent.h:80/81/93/94): two public bookkeeping words, then the private offset word,
-    // then the payload, all after the GuiEvent<leEventType> 12-byte base:
-    //     base GuiEvent<leEventType>   (+0x00 .. +0x0B: muHeader0/muEventType/muHeader2)
-    //     +0x0C  miOutEventSize   (s32)
-    //     +0x10  miOutEventType   (s32)
-    //     +0x14  miOutEventOffset (s32)
-    //     +0x18  T  mOutEvent
-    // The wrapper instances seen in the X360 build (DWARF) include
+    // GuiEventWrapper<T, leEventType> (DecFIGS CgsGuiEvent.h:77). The stack record the GUI
+    // output path (CgsGui::StateInterface::OutputGuiEvent<T> and its sibling OutputViewState /
+    // OutputInternalState channels) builds and hands to VariableEventQueue::AddEvent. It boxes an
+    // arbitrary payload T, recording the payload's byte size (miOutEventSize), its own
+    // GetEventType() (miOutEventType) and where it sits relative to the record (miOutEventOffset).
+    //
+    // LAYOUT -- from the X360 ARTIST asm (rung 1, authoritative). Every OutputGuiEvent<T> body
+    // (e.g. @0x824367D8 OutputGuiEvent<GuiAudioEvent>) stack-builds
+    //     +0x00  miOutEventSize   (s32) = sizeof(T)
+    //     +0x04  miOutEventType   (s32) = T::GetEventType()
+    //     +0x08  miOutEventOffset (s32) = offsetof(this, mOutEvent)
+    //     +0x0C  T  mOutEvent            (aligned to alignof(T): +0x0C for align<=4, +0x10 for align 8)
+    // then calls AddEvent(&record, /*channel*/ leEventType, /*size*/ sizeof(record)). There is NO
+    // GuiEvent<leEventType> base in front of miOutEventSize: the asm's offset word is 12 for an
+    // align<=4 payload and 16 for an align-8 payload (GuiAudioEvent @0x824367D8), which is exactly
+    // offsetof(mOutEvent) for this 3-word header -- a GuiEvent<N> base (12 bytes) would force
+    // offset 24. AddEvent writes its own CBufferEntry{id,size} queue header from the channel arg;
+    // it does not prepend a GuiEvent header. The leEventType template arg is the AddEvent channel
+    // (40 = OutputGuiEvent, 41 = OutputViewState, 42 = OutputInternalState) and names the record
+    // type; it is not a stored field. Wrapper instances seen in the DWARF include
     // GuiEventWrapper<CgsGui::GuiEventPlayAptMovie,41>, GuiEventWrapper<BrnGui::GuiChallengeSelectedEvent,40>,
     // GuiEventWrapper<BrnGui::GuiAudioEvent,40>, GuiEventWrapper<CgsGui::GuiEvent<155>,40>, etc.
     template <class T, s32 leEventType>
-    class GuiEventWrapper : public GuiEvent<leEventType>
+    class GuiEventWrapper
     {
     public:
-        s32 miOutEventSize;
-        s32 miOutEventType;
+        s32 miOutEventSize;    // +0x00  sizeof(T)
+        s32 miOutEventType;    // +0x04  T::GetEventType()
+        s32 miOutEventOffset;  // +0x08  offsetof(mOutEvent)
+        T   mOutEvent;         // +0x0C  payload (aligned to alignof(T))
 
-        // DWARF CgsGuiEvent.h:238 -- the boxed payload lives miOutEventOffset bytes past
-        // the wrapper's own address; reinterpret it back to the queued Event base.
+        // Box the payload: copy it in and capture its size / type / record-relative offset. The
+        // X360 body copies the event bytes into the record then writes the three header words; this
+        // copy-constructs mOutEvent (so payloads without a default constructor still work -- the asm
+        // never default-constructs the payload) and fills the header. miOutEventOffset is the
+        // "offsetof via a 1-based dummy" idiom the X360 build emits for the offset word.
+        explicit GuiEventWrapper(T& lrEvent)
+            : miOutEventSize(static_cast<s32>(sizeof(T)))
+            , miOutEventType(lrEvent.GetEventType())
+            , miOutEventOffset(static_cast<s32>(reinterpret_cast<size_t>(
+                  reinterpret_cast<char*>(&(reinterpret_cast<GuiEventWrapper*>(1)->mOutEvent)) - 1)))
+            , mOutEvent(lrEvent)
+        {
+        }
+
+        // The AddEvent channel this record is queued under (leEventType); names the record type.
+        s32 GetChannel() const { return leEventType; }
+
+        // The boxed payload lives miOutEventOffset bytes past the record's own address.
         const CgsModule::Event* GetRawEvent() const
         {
             return reinterpret_cast<const CgsModule::Event*>(
                 reinterpret_cast<const unsigned char*>(this) + miOutEventOffset);
         }
-
-        // DWARF CgsGuiEvent.h:217 -- copy the payload in and capture its size/type plus the
-        // wrapper-relative offset of mOutEvent (the standard "offsetof via a 1-based dummy"
-        // idiom the X360 build emits for the offset word).
-        void SetRawEvent(T& lrEvent)
-        {
-            typedef CgsGui::GuiEventWrapper<T, leEventType> WrappedEventType;
-
-            mOutEvent        = lrEvent;
-            miOutEventOffset = static_cast<s32>(reinterpret_cast<size_t>(
-                reinterpret_cast<char*>(&(reinterpret_cast<WrappedEventType*>(1)->mOutEvent)) - 1));
-            miOutEventSize   = static_cast<s32>(sizeof(T));
-            miOutEventType   = lrEvent.GetEventType();
-        }
-
-    private:
-        s32 miOutEventOffset;
-        T   mOutEvent;
     };
 
     template <s32 BUFSIZE, s32 ALIGN>

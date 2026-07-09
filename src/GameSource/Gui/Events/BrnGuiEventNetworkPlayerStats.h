@@ -31,5 +31,10 @@ namespace BrnGui
 
         // Owned by THIS TU: member-wise copy assignment (@0x82485830).
         GuiEventNetworkPlayerStats& operator=(const GuiEventNetworkPlayerStats& lOther);
+
+        // The queued event-type id. Not GuiEvent<N>-derived, so the id is carried here;
+        // X360-attested by BrnNetworkModule::AddOutputGuiEvent<GuiEventNetworkPlayerStats>
+        // @0x82565C60 -> AddEvent(&event, 248, 156).
+        s32 GetEventType() const { return 248; }
     };
 }

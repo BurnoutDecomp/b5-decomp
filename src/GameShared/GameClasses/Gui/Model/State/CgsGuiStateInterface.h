@@ -102,15 +102,24 @@ namespace CgsGui
         GuiStackEventQueue::GuiEventQueueLarge* GetOutputEventQueue();
         void SetEventObserver(CgsGui::EventObserver* lpObserver);
 
-        // Push a GUI event onto the state's output queue, keyed by its GuiEvent<N> type id. The X360
-        // boot states (e.g. BrnGui::BootVideos) emit BrnGui::GuiEventPlayVideo/StopVideo through this; the
-        // template is generic so it can carry a higher-layer (GameSource) event type without this GameShared
-        // header depending on it -- it is only instantiated where TEvent is complete. The queued event is
-        // then routed to the registered observers (the MovieManager for the video events).
+        // Push a GUI event onto the state's output queue. The X360 body (e.g.
+        // OutputGuiEvent<BrnGui::GuiAudioEvent> @0x824367D8) stack-builds a
+        // GuiEventWrapper<TEvent,40> -- { miOutEventSize = sizeof(TEvent),
+        // miOutEventType = TEvent::GetEventType(), miOutEventOffset = offsetof(mOutEvent),
+        // mOutEvent = copy of the event } -- then pushes it onto mOutEventQueue
+        // (VariableEventQueue<65536,16>, this+12) via AddEvent(&wrapper, /*channel*/40,
+        // /*record size*/sizeof(wrapper)). Channel 40 is the OutputGuiEvent output-event tag
+        // (OutputViewState uses 41, OutputInternalState 42). The template is generic so it can
+        // carry a higher-layer (GameSource) event type without this GameShared header depending
+        // on it -- it is only instantiated where TEvent is complete. The queued wrapper is then
+        // routed to the registered observers (e.g. the MovieManager for the video events).
         template <typename TEvent>
-        void OutputGuiEvent(TEvent& lrEvent)
+        int OutputGuiEvent(TEvent& lrEvent)
         {
-            mOutEventQueue.AddEvent(&lrEvent, lrEvent.GetEventType(), static_cast<s32>(sizeof(TEvent)));
+            CgsGui::GuiEventWrapper<TEvent, 40> lWrapper(lrEvent);
+            return mOutEventQueue.AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lWrapper),
+                40, static_cast<s32>(sizeof(lWrapper)));
         }
 
         void PlayAptMovie(const char* lpacMovieName, s32 liLevelNum);

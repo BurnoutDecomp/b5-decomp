@@ -44,5 +44,10 @@ namespace CgsGui
         s32                  miMarker;                          // +0x00 (publish site stores 1)
         CgsUnicode::CgsUtf8* mpText;                            // +0x04
         char                 macId[KI_MAX_ADD_ID_STRING_LENGTH]; // +0x08
+
+        // The queued event-type id. Not GuiEvent<N>-derived, so the id is carried here;
+        // X360-attested by BrnNetworkModule::AddOutputGuiEvent<GuiEventAddLocalisedTextPointer>
+        // @0x825658C8 -> AddEvent(&event, 12, 136).
+        s32 GetEventType() const { return 12; }
     };
 }

@@ -69,5 +69,10 @@ namespace BrnGui
         // of the ten Events via Event::Construct (gathering lrSource's landmark indices) and
         // copy the scalar option / count block verbatim.
         void SetFromGameParams(const GuiEventNetworkCreateGame& lrSource);
+
+        // The queued event-type id. Not GuiEvent<N>-derived, so the id is carried here;
+        // X360-attested by StateInterface::OutputGuiEvent<GuiEventNetworkCreateGame>
+        // @0x82493ED8 -> AddEvent(&wrapper, 40, ...) with the inner record type 256, size 480.
+        s32 GetEventType() const { return 256; }
     };
 }
