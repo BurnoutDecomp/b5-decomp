@@ -25,6 +25,14 @@ namespace ViewIO
         static_assert(offsetof(OutputBuffer, mGuiEvents) == 0x0004, "mGuiEvents @0x0004");
     }
 
+    // X360 0x82858E40: mark the buffer constructed (the IOBuffer status byte), then
+    // construct the embedded GUI event queue at this+4.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGuiEvents.CgsModule::VariableEventQueue<18432, 16>::Construct();
+    }
+
     // X360 0x8284F040: read-lock handle to the embedded GUI event queue (this+4).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetGuiEventQueue() const
     {
@@ -60,6 +68,14 @@ namespace ViewIO
     InputBuffer::ViewStateQueue& InputBuffer::GetViewStateQueue()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return mViewStateQueue;
+    }
+
+    // X360 0x8284EF98 (baked CgsGuiViewModuleIO.h:172): read-lock (bit 4) handle to the
+    // view-state queue -- the ViewModule::Update-side reader.
+    const InputBuffer::ViewStateQueue& InputBuffer::GetEvents() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return mViewStateQueue;
     }
 

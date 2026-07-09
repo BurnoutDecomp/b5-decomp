@@ -94,6 +94,13 @@ namespace CgsGui
         // hard-returns 1; no caller consumes it. Body in CgsAptAux.cpp.
         void Update(s32 liDeltaMs);
 
+        // X360 0x82849080 (CgsGui::AptAux::LoadFlashAnimation) -- load a movie onto a
+        // GUI level: assert the name/level, format the "_level%d" target path, and hand
+        // it to the engine's AptLoadAnimation. Called by
+        // ViewModule::ProcessIncomingAptEvent (the play-movie view event). Body in
+        // CgsAptAux.cpp; DWARF: LoadFlashAnimation(const char*, int32_t).
+        void LoadFlashAnimation(const char* lpacFileName, s32 liTargetLevel);
+
         // X360 0x82848E50 (CgsGui::AptAux::InitializeApt) -- the keystone Apt runtime
         // bring-up AptAux::Prepare runs after AptAux::Construct: build the AptUpdate /
         // AptCreateTarget param blocks, then in order AptAllocatorInitialize ->

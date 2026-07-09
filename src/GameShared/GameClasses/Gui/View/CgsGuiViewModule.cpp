@@ -3,6 +3,9 @@
 #include <cstring>
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf (the playing-movie record)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu (the Update phase brackets)
+#include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"            // ViewIO::InputBuffer / OutputBuffer (Update IO)
 
 namespace CgsGui
 {
@@ -26,6 +29,23 @@ namespace CgsGui
         // +0x40: receives the caller-supplied argument (guest r6).
         virtual void SetExtraWiring(int liArg) = 0;
     };
+
+    // The two per-frame CPU monitors ViewModule::Update brackets its phases with
+    // (X360 dword_82F3312C the view-event dispatch / dword_82F33128 the Apt update).
+    // Registered by the un-homed perf-monitor setup TU; -1 handles no-op
+    // Start/StopMonitor until it lands.
+    static s32 giViewEventsMonitor = -1;   // dword_82F3312C
+    static s32 giViewAptMonitor    = -1;   // dword_82F33128
+
+    namespace
+    {
+        // The view-state payload BODIES (the AddViewState writers queue the event body
+        // -- the fields after the GuiEvent<N> 12-byte header; the X360 dispatch reads
+        // the first payload field at +0). Local views of the CgsGuiStateInterface.h
+        // GuiEvent bodies.
+        struct PlayAptMovieBody { const char* mpacMovieName; s32 miLevelNum; };
+        struct ClearScreenBody  { s32 miMode; f32 mfAlpha; };
+    }
 
     ViewModule::ViewModule()
         : mbUpdateFlash(false),
@@ -209,10 +229,11 @@ namespace CgsGui
         CgsModule::ModuleSingleBuffered::Destruct();
     }
 
-    // X360 @0x82860708 -- NOT YET RECONSTRUCTED (evidence in the ledger dossier): the
-    // real body pumps the module IO buffer stacks, advances mfCurrentTime and the
-    // update/render time deltas, and (when prepared) ticks CgsGui::AptAux::Update
-    // @0x82853B20. Land it with the update-ownership slice.
+    // Update @0x82860708 -- the per-frame view drive: clear the output event queue,
+    // dispatch the incoming view-state events under the input read lock, advance the
+    // update-time bookkeeping, then (when the flash update is enabled) tick the Apt
+    // host by the elapsed milliseconds. The IO buffer stacks ride the module
+    // scheduler signature; the X360 body never touches them.
     void ViewModule::Update(ViewIO::IOBufferStack* lpInStack,
                             ViewIO::IOBufferStack* lpOutStack,
                             const ViewIO::InputBuffer* lpInput,
@@ -220,8 +241,193 @@ namespace CgsGui
     {
         (void)lpInStack;
         (void)lpOutStack;
-        (void)lpInput;
+
+        mOutputEventQueue.CgsModule::VariableEventQueue<256, 16>::Clear();
+
+        lpInput->LockForRead();
+        lpOutput->LockForWrite();
+
+        CgsDev::PerfMonCpu::StartMonitor(giViewEventsMonitor);
+        ProcessIncomingViewEvents(&lpInput->GetEvents(), lpOutput);
+        CgsDev::PerfMonCpu::StopMonitor(giViewEventsMonitor);
+
+        lpInput->UnlockForRead();
+
+        mfCurrentTime += mfHack_LastValidTimeStep;
+        const f32 lfPrevUpdateTime = mfLastUpdateTime;
+        mfLastUpdateTime = mfCurrentTime;
+        mfUpdateTimeDelta = mfCurrentTime - lfPrevUpdateTime;
+        const s32 liDeltaMs = static_cast<s32>(mfUpdateTimeDelta * 1000.0f);
+
+        CgsDev::PerfMonCpu::StartMonitor(giViewAptMonitor);
+        if (mbUpdateFlash)
+            mAptAux.Update(liDeltaMs);
+        CgsDev::PerfMonCpu::StopMonitor(giViewAptMonitor);
+
+        lpOutput->UnlockForWrite();
+    }
+
+    // ProcessIncomingViewEvents @0x8285FCE8 -- route each queued view-state event by
+    // id. Unhandled ids fall through silently (the X360 default case is empty).
+    void ViewModule::ProcessIncomingViewEvents(const GuiEventQueueBase<65536, 16>* lpEvents,
+                                               ViewIO::OutputBuffer* lpOutput)
+    {
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        s32 liEventId =
+            lpEvents->CgsModule::VariableEventQueue<65536, 16>::GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent != nullptr)
+        {
+            switch (liEventId)
+            {
+            case 10:
+            case 11:
+            case 12:
+                ProcessIncomingLanguageEvent(lpEvent, liSize, liEventId, lpOutput);
+                break;
+
+            case 14:
+                // The load notification routes through the virtual (guest vtbl slot
+                // +0x50), so the BrnGui::ViewModule override handles a FLAPT load.
+                ProcessIncomingLoadNotification(lpEvent);
+                break;
+
+            case 15:
+                ProcessIncomingUnloadRequestNotification(lpEvent);
+                break;
+
+            case 17:
+            case 18:
+            case 19:
+            case 20:
+                ProcessIncomingAptEvent(lpEvent, liEventId);
+                break;
+
+            case 25:
+            {
+                const ClearScreenBody* lpBody =
+                    reinterpret_cast<const ClearScreenBody*>(lpEvent);
+                if (lpBody->miMode == 0)
+                {
+                    mbClearScreenEnabled = true;
+                    SetClearScreenAlpha(lpBody->mfAlpha);
+                }
+                else if (lpBody->miMode == 1)
+                {
+                    mbClearScreenEnabled = false;
+                }
+                else
+                {
+                    CGS_ASSERT(false, "Unhandled enum");
+                }
+                break;
+            }
+
+            case 26:
+            {
+                const f32 lfTimeStep = *reinterpret_cast<const f32*>(lpEvent);
+                if (lfTimeStep > 0.0f)
+                    mfHack_LastValidTimeStep = lfTimeStep;
+                break;
+            }
+
+            case 32:
+                // FLAG (deferred store): the guest raises the global byte_8305A6DC
+                // here; its consumer is un-recovered, so the flag has no named home
+                // yet. Reproduce the store when its owner TU lands.
+                break;
+
+            case 61:
+            case 62:
+                // FLAG (deferred stores): the guest cycles a 0..4 counter (61, module
+                // +166996) and stores the asserted spacing value (62, +167000) -- both
+                // land in the un-modelled tail of mAptAux (past the render handler).
+                // Reproduce them when those AptAux members gain named homes.
+                break;
+
+            default:
+                break;
+            }
+
+            // The custom-renderer manager per-event hook (guest vtbl slot +0x10 on
+            // mpCustomRendererManager, called for every event when a manager is
+            // installed). FLAG (deferred dispatch): no manager is installed on the
+            // boot path and the manager real vtable order is un-recovered; wire the
+            // hook when the CustomRendererManager type lands.
+
+            liEventId = lpEvents->CgsModule::VariableEventQueue<65536, 16>::GetNextEvent(
+                lpEvent, &lpEvent, &liSize);
+        }
+    }
+
+    // ProcessIncomingAptEvent @0x8285EAE8 -- the apt view events.
+    void ViewModule::ProcessIncomingAptEvent(const void* lpEvent, s32 liEventId)
+    {
+        switch (liEventId)
+        {
+        case 17:
+            CGS_ASSERT(false,
+                "This should never happen - we have a message for Apt View, seriously that's mental!");
+            break;
+
+        case 18:
+        {
+            const PlayAptMovieBody* lpBody =
+                reinterpret_cast<const PlayAptMovieBody*>(lpEvent);
+
+            CGS_ASSERT(lpBody->mpacMovieName != 0,
+                       "Invalid movie to play in ViewModule::ProcessIncomingAptEvent");
+            CGS_ASSERT(static_cast<u32>(lpBody->miLevelNum) <= 8u,
+                       "lpPlayMovieEvent->miLevelNum >= 0 && lpPlayMovieEvent->miLevelNum < KI_NUM_MOVIE_LEVELS");
+            CGS_ASSERT(std::strlen(lpBody->mpacMovieName) < 31,
+                       "strlen( lpPlayMovieEvent->mpacMovieName ) < KI_MOVIE_NAME_LEN-1");
+
+            // Record the movie now playing on the level (GetMovieNameByLevel reads it).
+            if (std::strlen(lpBody->mpacMovieName) > 1)
+            {
+                CgsCore::SPrintf(macCurrentlyPlayingMovies[lpBody->miLevelNum], 32,
+                                 "%s", lpBody->mpacMovieName);
+            }
+
+            mAptAux.LoadFlashAnimation(lpBody->mpacMovieName, lpBody->miLevelNum);
+            break;
+        }
+
+        case 19:
+        case 20:
+        {
+            // Post the bool show/hide apt state (type 33) onto the output queue.
+            u8 lbShow = (liEventId == 19) ? 1u : 0u;
+            mOutputEventQueue.CgsModule::VariableEventQueue<256, 16>::AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lbShow), 33, 1);
+            break;
+        }
+
+        default:
+            CGS_ASSERT(false, "Unexpected event sent to ViewModule::ProcessIncomingAptEvent");
+            break;
+        }
+    }
+
+    // X360 @0x8285ED00 -- NOT YET RECONSTRUCTED (the ledger dossier holds the
+    // reviewed body): the language view events (10-12). Land with the
+    // language-ownership slice.
+    void ViewModule::ProcessIncomingLanguageEvent(const void* lpEvent, s32 liSize,
+                                                  s32 liEventId,
+                                                  ViewIO::OutputBuffer* lpOutput)
+    {
+        (void)lpEvent;
+        (void)liSize;
+        (void)liEventId;
         (void)lpOutput;
+    }
+
+    // X360 @0x828586E8 -- NOT YET RECONSTRUCTED (the ledger dossier holds the
+    // reviewed body): the unload-request notification (15). Land with the
+    // load-ownership slice.
+    void ViewModule::ProcessIncomingUnloadRequestNotification(const void* lpEvent)
+    {
+        (void)lpEvent;
     }
 
     // GetMovieNameByLevel @0x824EBCA8. The guest arithmetic `32*(liLevel+1783) + this`

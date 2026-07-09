@@ -95,6 +95,11 @@ namespace ViewIO
         // X360 0x824F7AB8: write-lock (bit 3); returns &mViewStateQueue (this+4). A Get* that
         // checks the WRITE lock -- the AddViewState writers hold it while Append'ing.
         ViewStateQueue& GetViewStateQueue();
+
+        // X360 0x8284EF98 (baked CgsGuiViewModuleIO.h:172): READ-lock (bit 4) handle to the
+        // view-state queue ("Not locked for reading\n"), returns this+4. The
+        // ViewModule::Update-side reader (ProcessIncomingViewEvents iterates it).
+        const ViewStateQueue& GetEvents() const;
         // X360 0x82856EC8: write-lock (bit 3); copies the source set's 5-dword head into
         // mRendererSet then assigns the source camera (src+0x20) into mRendererSet.mCamera.
         void SetImRenderers(const ImRendererSet& lrRenderers);

@@ -2683,6 +2683,26 @@ namespace BrnGui
 // Fixup), the AptCharacterAnimation_Link -> FindExport link, and the AptLoader::Update state machine
 // it drives are all the faithful console flow.
 // =============================================================================
+// =============================================================================
+// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
+// (CgsGui::AptAux::LoadFlashAnimation @0x82849080 calls it with the "_level%d"
+// path). Its X360 body has no per-address export in the dump set, so this host
+// definition is the PC stand-in: parse the level index back out of the target
+// path and drive the host movie-load machinery (the same load the engine body
+// kicks through the loader + the pfnLoadAnimation host callback). Replace with
+// the faithful engine body once it is exported + reconstructed.
+// FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
+// =============================================================================
+int AptLoadAnimation(const char* pName, const char* pTargetPath)
+{
+    int liLevel = 0;
+    if (pTargetPath != nullptr)
+        std::sscanf(pTargetPath, "_level%d", &liLevel);
+    if (BrnGui::gpActiveAptRuntimeHost != nullptr)
+        BrnGui::gpActiveAptRuntimeHost->PlayMovie(pName, liLevel);
+    return 1;
+}
+
 void AptLoader_StartAsyncLoad(const char* pFileName, AptFilePtr* pFile)
 {
     // Re-entrancy guard: LoadImportBundle drives AptCompleteAnimationAsyncLoad which does NOT

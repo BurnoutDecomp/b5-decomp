@@ -5,6 +5,7 @@
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"        // CgsDev::PerfMonCpu (the Update phase brackets)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf (the "_level%d" target path)
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
@@ -21,6 +22,12 @@
 extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
 extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                             // dword_8324E864
 extern void (*gpAptFreeAnimationHook)(void* pDataBlock);                                        // off_1059C66C
+
+// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
+// (LoadFlashAnimation @0x82849080 calls it with the "_level%d" path). Its X360 body
+// has no per-address export in the dump set; the PC definition is the host stand-in
+// in BrnGuiAptRuntime.cpp until it is exported + reconstructed.
+extern int AptLoadAnimation(const char* pName, const char* pTargetPath);
 
 namespace
 {
@@ -314,6 +321,23 @@ namespace CgsGui
     // Start/StopMonitor until it lands.
     static s32 giAptAuxUpdateComponentsMonitor = -1;   // dword_82F33138
     static s32 giAptAuxUpdateTargetMonitor     = -1;   // dword_82F33134
+
+    // -------------------------------------------------------------------------
+    // AptAux::LoadFlashAnimation - X360 0x82849080. Load a movie onto a GUI level:
+    // assert the name (the console streams it -- the StrStream text collapses to the
+    // plain string per project convention) and the level (< 100), format the
+    // "_level%d" target path, and hand it to the engine's AptLoadAnimation.
+    // -------------------------------------------------------------------------
+    void AptAux::LoadFlashAnimation(const char* lpacFileName, s32 liTargetLevel)
+    {
+        CGS_ASSERT(lpacFileName != 0,
+                   "Invalid Flash file to load in AptDataHandler::LoadFlashAnimation");
+        CGS_ASSERT(liTargetLevel < 100, "Invalid level in AptAux::LoadFlashAnimation");
+
+        char lacTargetPath[16];
+        CgsCore::SPrintf(lacTargetPath, sizeof(lacTargetPath), "_level%d", liTargetLevel);
+        AptLoadAnimation(lpacFileName, lacTargetPath);
+    }
 
     // -------------------------------------------------------------------------
     // AptAux::Update - X360 0x82853B20. The per-frame Apt drive: assert Prepare
