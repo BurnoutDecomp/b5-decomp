@@ -62,6 +62,9 @@ namespace BrnGui
         // and liNumActive in a GPR.)
         GuiRaceCarInfoEvent* DoWorstCase(Vector4 lvInput, s32 liNumActive);
 
+        // AddGuiEvent<GuiRaceCarInfoEvent> @0x823DA738 -> AddEvent(&event, 207, 240).
+        s32 GetEventType() const { return 207; }
+
     private:
         Vector4 maPosition[KI_NUM_ENTRIES];  // @0x00 -- per-entry screen-space position
         u64     maIdentity[KI_NUM_ENTRIES];  // @0x80 -- per-entry identity qword

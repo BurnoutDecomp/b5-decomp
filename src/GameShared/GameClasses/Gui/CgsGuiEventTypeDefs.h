@@ -21,6 +21,10 @@ namespace CgsGui
         // widened to double, matching the X360's lfs->return of the f32.
         f64 GetTime() const;
 
+        // AddGuiEvent<GuiEventTimeInfo> @0x823D1468 -> AddEvent(&event, 26, 8). The type is a
+        // plain payload (not GuiEvent<N>-derived), so the queued event id is carried here.
+        s32 GetEventType() const { return 26; }
+
     private:
         f32 mfTimeDelta;    // +0x00 - leading frame-delta companion to mfTimeNow
         f32 mfTimeNow;      // +0x04 - current time stamp (-FLT_MAX while unset)
@@ -126,6 +130,20 @@ namespace CgsGui
     // A bare request-for-language event (no payload beyond the header). DWARF :294/:652.
     struct GuiEventRequestLanguage : public GuiEvent<30>
     {
+    };
+
+    // GuiEventNetworkLaunching -- the "network session is launching" GUI event. The only
+    // CgsGui AddGuiEvent instance absent from any prior home: CgsGui::GuiModule::AddGuiEvent<
+    // GuiEventNetworkLaunching> @0x823CFCB0 -> AddEvent(&event, 57, 8). The 8-byte record is
+    // smaller than the 12-byte GuiEvent<N> header, so it is a raw payload carrying its own
+    // GetEventType()==57 (honest placeholder -- the total size 8 + id 57 are the X360 facts;
+    // the inner field breakdown is not recovered). A sibling of the other CgsGui network GUI
+    // events (Connected 43 / Disconnected 44 / InGame 50 / Launched 58) which are OutputGuiEvent
+    // instances homed by their own task.
+    struct GuiEventNetworkLaunching
+    {
+        u8  maData[8];
+        s32 GetEventType() const { return 57; }
     };
 
     // X360-pinned payload offsets. CgsModule::Event is an empty base, so the GuiEvent<N>

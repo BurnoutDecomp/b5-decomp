@@ -45,6 +45,9 @@ namespace BrnGui
         // Number of 12-byte index triplets (X360 Clear second loop = 6 reps, stride 0x0C).
         static const s32 KI_NUM_INDEX_TRIPLETS = 6;
 
+        // AddGuiEvent<GuiEventOnlinePostEvent> @0x823D1240 -> AddEvent(&event, 318, 568).
+        s32 GetEventType() const { return 318; }
+
         // One per-result record (56 bytes; X360 stride 0x38). Offsets are relative to the
         // record base. Clear seeds miIndex = -1, mfValue04 = 0, mTime = 0 and mfValue10 = 0
         // plus the trailing scalar/byte fields; the copy proves the full 0x37-byte extent.

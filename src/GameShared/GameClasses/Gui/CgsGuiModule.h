@@ -58,6 +58,20 @@ namespace CgsGui
         void BridgeFromModelToOutput(CgsGuiModuleIO::OutputBuffer* lpOutput,
                                      const ModelIO::OutputBuffer* lpModelOutput);
 
+        // ---- GUI input-event publisher template (270 X360-attested instantiations) -------
+        // X360 0x823CEB70..0x823DAE68 -- one out-of-line body per event type T (e.g.
+        // AddGuiEvent<BrnGui::GuiAftertouchEvent> @0x823D4490). A producer that has
+        // write-locked the module input buffer pushes one typed GUI event onto that buffer's
+        // inbound VariableEventQueue<32768,16> (mInputQueue @+4, reached through the buffer's
+        // GetGuiEvents() write handle == the X360 sub_8284F238 lock+queue accessor). The
+        // queued record's event-type id and byte size are lpEvent->GetEventType() (the
+        // GuiEvent<N> id, inlined to a per-T constant) and sizeof(T), so ONE body reproduces
+        // all 270 AddEvent(&event, id, size) stores. The null-checked argument is the buffer
+        // (X360 FireAssert message "Input hasn't been locked for write", CgsGuiModule.h:286;
+        // non-gating). Bodied + explicitly instantiated in CgsGuiModule_AddGuiEvent_Inst.cpp.
+        template <class T>
+        int AddGuiEvent(const T* lpEvent, CgsGuiModuleIO::InputBuffer* lpBuffer);
+
     private:
         // EXPLICIT PADDING: the X360 +0x00..+0x1B3FF head span -- the
         // ModuleSingleBuffered base (vtable slot @+0x00, RW locks @+0x10/+0x118) and
