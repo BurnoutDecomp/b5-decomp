@@ -121,39 +121,13 @@ done_scan:
 // record resolved to nothing at parse (e.g. an AptLookup pool miss -- the
 // console pre-seeds its pools, so its slots are never null). The dict-byte
 // opcodes AddRef the slot unconditionally; a null here AV'd MAIN's first init
-// actions (2026-07-05, cdb: StringDictByteGetMember+0x75). Log + `undefined`.
+// actions (2026-07-05, cdb: StringDictByteGetMember+0x75). Return `undefined`.
 // ---------------------------------------------------------------------------
-#if defined(_MSC_VER)
-extern "C" void AptDictNullEntryProbe(unsigned int nIndex, const void* pPool);
-#pragma comment(linker, "/alternatename:AptDictNullEntryProbe=AptDictNullEntryProbeDefault")
-extern "C" void AptDictNullEntryProbeDefault(unsigned int, const void*) {}
-extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nType,
-                                  const char* pcText);
-#pragma comment(linker, "/alternatename:AptDictFetchProbe=AptDictFetchProbeDefault")
-extern "C" void AptDictFetchProbeDefault(unsigned int, const void*, int, const char*) {}
-#else
-extern "C" void AptDictNullEntryProbe(unsigned int nIndex, const void* pPool);
-extern "C" void AptDictFetchProbe(unsigned int nIndex, const void* pPool, int nType,
-                                  const char* pcText);
-#endif
-
 AptValue* AptActionInterpreter::GetDictEntry(unsigned int nIndex)
 {
     AptValue* pEntry = mpConstantPool[nIndex];
     if (!pEntry)
-    {
-        AptDictNullEntryProbe(nIndex, mpConstantPool);
         pEntry = gpUndefinedValue;
-    }
-    else
-    {
-        // FLAG bring-up trace: name + type of every dictionary fetch (first N).
-        const char* pcText = nullptr;
-        if (pEntry->getVtblIndex() == AptVFT_StringValue && pEntry->getIsDefined())
-            pcText = static_cast<AptString*>(pEntry)->GetInternalString()->GetBuffer();
-        AptDictFetchProbe(nIndex, mpConstantPool,
-                          static_cast<int>(pEntry->getVtblIndex()), pcText);
-    }
     return pEntry;
 }
 
@@ -786,21 +760,6 @@ AptValue* AptActionInterpreter::CallFunctionDispatch(AptValue* pScope, AptValue*
 //
 extern AptCIH* gpAptEmptyCIH;   // dword_8324D700 -- the pinned "EmptyCIH" AptCIHNone placeholder
 
-// §6.4 DIAG: capture the nested onLoad/RegisterComponent bytecode while the op trace is armed.
-#if defined(_MSC_VER)
-extern "C" int  AptOpTraceIsArmed(void);
-#pragma comment(linker, "/alternatename:AptOpTraceIsArmed=AptOpTraceIsArmedDefault")
-extern "C" int AptOpTraceIsArmedDefault(void) { return 0; }
-extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
-                               const char* const* ppPool, int nPoolCount);
-#pragma comment(linker, "/alternatename:AptFnDumpProbe=AptFnDumpProbeDefault")
-extern "C" void AptFnDumpProbeDefault(const void*, int, const char* const*, int) {}
-#else
-extern "C" int  AptOpTraceIsArmed(void);
-extern "C" void AptFnDumpProbe(const void* pBase, int nSize,
-                               const char* const* ppPool, int nPoolCount);
-#endif
-
 // AptInterp_ExecuteScriptFunction -- the AptScriptFunctionBase frame-execution branch of
 // callFunction (tags 34/35/36). HOMED + LIVE (2026-07-04). The full faithful body is the
 // console branch 0x82AE3CB8..0x82AE3FF4, cross-checked against the PS3 External build
@@ -921,14 +880,6 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
 
             // Run the compiled body against the bound CIH + resolved inst (0x82AE3F04).
             const int nSize = pFunc->GetByteCodeSize();                                // vtbl 0x4C
-            // §6.4 DIAG: while the op trace is armed (the onLoad drain), dump this function's
-            // bytecode so the nested RegisterComponent stream (the '_global' arg source) is captured.
-            if (AptOpTraceIsArmed())
-            {
-                const AptConstantPool lDumpPool = pFunc->GetConstantPool();
-                AptFnDumpProbe(pFunc->GetByteCodeBase(), nSize,
-                               lDumpPool.mppEntries, static_cast<int>(lDumpPool.mnCount));
-            }
             pInterp->runStream(static_cast<const unsigned char*>(pFunc->GetByteCodeBase()), // vtbl 0x48
                                static_cast<AptCIH*>(pFunc->GetCIH()), nSize, pRunInst);
 

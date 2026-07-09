@@ -25,17 +25,6 @@
 
 #include <new>   // placement new (factory)
 
-// The mkitem step-probe sink (host-implemented; weak no-op default so this TU links standalone).
-#if defined(_MSC_VER)
-extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
-                                   const void* pRenderItem, const void* pItemCharacter);
-#pragma comment(linker, "/alternatename:CgsApt_MkItemProbe=CgsApt_MkItemProbeDefault")
-extern "C" void CgsApt_MkItemProbeDefault(const void*, int, const void*, const void*, const void*) {}
-#else
-extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
-                                   const void* pRenderItem, const void* pItemCharacter);
-#endif
-
 // ctor @0x82AF7E70 (X360 ARTIST; PS3 @0x81431C)
 //   *this = off_82145F80;                              // vtable (family models it as the
 //                                                      //   manual mpVTable_unused; not written)
@@ -62,9 +51,6 @@ AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
     if (gpAptTarget)   // off_8324E574 -- create the render item only when an Apt target is active
         pItem = AptRenderItem::Manager_CreateItem(pCharacter, gnCurrUpdateTick);
     mpRenderItem = pItem;
-
-    CgsApt_MkItemProbe(this, pCharacter ? pCharacter->mnType : -1, pCharacter, pItem,
-                       pItem ? pItem->mpCharacter : nullptr);
 
     // High 6 bits of mTypeFlags = the character's type tag (15 when none).
     const uint32_t uType = pCharacter ? static_cast<uint32_t>(pCharacter->mnType) : 15u;

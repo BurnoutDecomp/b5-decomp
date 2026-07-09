@@ -29,17 +29,6 @@
 #include <cstdint>
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
 
-// The pass-3 import-registration probe sink (host-implemented; weak no-op default so this TU
-// links standalone). The GUI Apt host (BrnGuiAptRuntime) provides the strong definition that logs
-// each import's movie/class name + the loader handle, and then SYNC-loads the import bundle.
-#if defined(_MSC_VER)
-extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle);
-#pragma comment(linker, "/alternatename:CgsApt_ImportProbe=CgsApt_ImportProbeDefault")
-extern "C" void CgsApt_ImportProbeDefault(int, const char*, const char*, void*) {}
-#else
-extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle);
-#endif
-
 // ===========================================================================
 // Fixup walk -- un-homed callees / globals.   The serialised .apt records are the
 // in-place file blob (no recovered runtime struct), so this TU addresses them by
@@ -758,9 +747,6 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                 // Assign the loader handle into the import entry's AptFile slot (+0x18, native-8).
                 AptFilePtr* const pSlot = reinterpret_cast<AptFilePtr*>(pEntry + 0x18);
                 pSlot->pData = lHandle.pData;   // share the loader's counted ref (the entry owns one)
-                CgsApt_ImportProbe(i, pcMovieName,
-                                   reinterpret_cast<const char*>(BlobPtr(pEntry, 0x08)),
-                                   lHandle.pData);
             }
         }
     }

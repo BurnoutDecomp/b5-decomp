@@ -1325,23 +1325,6 @@ char* AptAnimationTarget::GetAStickRight(int nPlayer)
 //   word +0x1C) are interpreter-private value subtypes not yet modelled by name;
 //   reproduced verbatim through the recovered console offsets, each flagged below.
 // ---------------------------------------------------------------------------
-#if defined(_MSC_VER)
-extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
-#pragma comment(linker, "/alternatename:AptRunActionsStaleSlotProbe=AptRunActionsStaleSlotProbeDefault")
-extern "C" void AptRunActionsStaleSlotProbeDefault(const void*, const void*) {}
-#else
-extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
-#endif
-
-// §6.4 DIAG: arm the opcode trace over the deferred onLoad drain + its nested calls.
-#if defined(_MSC_VER)
-extern "C" void AptOpTraceArmDrain(int nOn);
-#pragma comment(linker, "/alternatename:AptOpTraceArmDrain=AptOpTraceArmDrainDefault")
-extern "C" void AptOpTraceArmDrainDefault(int) {}
-#else
-extern "C" void AptOpTraceArmDrain(int nOn);
-#endif
-
 int AptAnimationTarget::RunActions()
 {
     CleanRemList();
@@ -1368,13 +1351,11 @@ int AptAnimationTarget::RunActions()
             // The CIH handle must be "defined" (mnValueData bit 27 set).
             // (Guarded: the console never queues a null/dead CIH; an x64 bring-up
             // path can leave a STALE ring cell (observed 0xbaadf000ffffffff) -- the
-            // standard plausibility screen skips + logs it rather than AV.
+            // standard plausibility screen skips it rather than AV.
             // FLAG hardening; the ring-lifetime reconstruction is the follow-on.)
             const uintptr_t luCIH = reinterpret_cast<uintptr_t>(lpNode);
             const bool lbCIHPlausible =
                 luCIH >= 0x10000u && (luCIH >> 47) == 0u;
-            if (!lbCIHPlausible && lpNode != nullptr)
-                AptRunActionsStaleSlotProbe(lpSlot, lpNode);
             if (lbCIHPlausible && ((lpNode->mnValueData >> 27) & 1u) != 0u)
             {
                 // Named members (2026-07-01; were the console raw offsets on x64
@@ -1507,14 +1488,12 @@ int AptAnimationTarget::RunActions()
             // inlines PushStaticData here).
             AptValue** lpSavedHeap = AptScriptFunctionBase::PushStaticData();         // v14
 
-            AptOpTraceArmDrain(1);   // §6.4 DIAG: trace this queued onLoad + its nested calls
             gAptActionInterpreter.callFunction(
                 lpSlot->function.mpContext,    // a2 == *(v3+8)  (scope/this)
                 lpSlot->function.mpFuncDef,    // a3 == *(v3+12) (function def)
                 lpSlot->function.miReturnReg,  // a4 == *(v3+16) (arg count / return reg)
                 nullptr,
                 nullptr);
-            AptOpTraceArmDrain(0);
 
             // Pop the window back to the saved base (the 2-arg console form).
             gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);

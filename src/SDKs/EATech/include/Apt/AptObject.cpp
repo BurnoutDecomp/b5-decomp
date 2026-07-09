@@ -185,14 +185,6 @@ AptNativeHash* gpAptClassRegistry = nullptr;
 
 extern AptActionInterpreter gAptActionInterpreter;   // the native-arg stack
 
-#if defined(_MSC_VER)
-extern "C" void AptRegisterClassProbe(const char* pcName);
-#pragma comment(linker, "/alternatename:AptRegisterClassProbe=AptRegisterClassProbeDefault")
-extern "C" void AptRegisterClassProbeDefault(const char*) {}
-#else
-extern "C" void AptRegisterClassProbe(const char* pcName);
-#endif
-
 AptValue* AptObject::RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
 {
     if (nNumParams == 2)
@@ -218,9 +210,6 @@ AptValue* AptObject::RegisterClassNative(AptValue* /*pContext*/, int nNumParams)
                 {
                     EAStringC nameText;
                     pName->toString(&nameText);
-                    // FLAG (bring-up probe; weak sink pattern): surface the first
-                    // registrations so the boot log shows the AS class wiring run.
-                    AptRegisterClassProbe(nameText.GetBuffer());
                     if (pClass != nullptr && pClass->getVtblIndex() == AptVFT_None)
                         gpAptClassRegistry->Unset(nameText);
                     else

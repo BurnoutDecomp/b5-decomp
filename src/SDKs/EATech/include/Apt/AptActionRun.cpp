@@ -32,31 +32,6 @@
 // FLAG (wired at AptInit; see AptValueConvert.cpp).
 extern AptValue* gpUndefinedValue;
 
-// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
-// bring-up TU): reports a CIH-stack push/pop imbalance detected at a top-level
-// runStream exit (see the exit pop).
-#if defined(_MSC_VER)
-extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
-                                           const void* pSlot, const void* pPushed);
-#pragma comment(linker, "/alternatename:AptRunStreamImbalanceProbe=AptRunStreamImbalanceProbeDefault")
-extern "C" void AptRunStreamImbalanceProbeDefault(int, int, const void*, const void*) {}
-#else
-extern "C" void AptRunStreamImbalanceProbe(int nSavedTop, int nExitTop,
-                                           const void* pSlot, const void* pPushed);
-#endif
-
-// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
-// bring-up TU): per-opcode execution trace. The sink arms itself (via
-// AptOpTraceArmForClass around the class-ctor run) so the default cost is one
-// predictable call per dispatched opcode during bring-up only.
-#if defined(_MSC_VER)
-extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp);
-#pragma comment(linker, "/alternatename:AptOpTraceProbe=AptOpTraceProbeDefault")
-extern "C" void AptOpTraceProbeDefault(const void*, unsigned int) {}
-#else
-extern "C" void AptOpTraceProbe(const void* pcOp, unsigned int nOp);
-#endif
-
 // FLAG (string-pool key): the scope ("this") variable name runStream binds at entry
 // (console stru_1059C8A0). Homed with the StringPool constants. getVariable's body
 // is deferred too (see AptActionInterpreter.h), so this run-scope bind is a FLAG'd
@@ -71,8 +46,8 @@ const unsigned char* AptActionInterpreter::runStream(
     // Top-level run: push the running CIH onto the target/CIH stack.
     // (The entry top is snapshotted so the exit pop releases EXACTLY the pushed CIH
     // and restores the entry depth -- observably identical to the console's push/pop
-    // when the nested handlers stay balanced, and it self-heals + logs when an
-    // un-homed nested path drifts the top. FLAG diagnostic; see the exit pop.)
+    // when the nested handlers stay balanced, and it self-heals when an
+    // un-homed nested path drifts the top; see the exit pop.)
     const int nSavedCIHTop = mnCIHStackTop;
     if (bTopLevel)
     {
@@ -113,10 +88,7 @@ const unsigned char* AptActionInterpreter::runStream(
                 ctx.mpPendingReleasePC    = 0;
             }
             if (ctx.mbStop)
-            {
-                AptOpTraceProbe(ctx.mpProgramCounter, 0x100u);   // exit: mbStop
                 break;
-            }
 
             const unsigned char opcode = *ctx.mpProgramCounter;
             ++ctx.mpProgramCounter;
@@ -124,20 +96,14 @@ const unsigned char* AptActionInterpreter::runStream(
             // Bounded run that has walked past its end -> result is `undefined`.
             if (!bTopLevel && ctx.mpProgramCounter > pEnd)
             {
-                AptOpTraceProbe(ctx.mpProgramCounter - 1, 0x101u);   // exit: off-end
                 bRanOffEnd = true;
                 break;
             }
 
-            AptOpTraceProbe(ctx.mpProgramCounter - 1, opcode);   // FLAG bring-up trace
-
             sGlobalTable[opcode](this, &ctx);
 
             if (mpAbortValue)
-            {
-                AptOpTraceProbe(ctx.mpProgramCounter, 0x102u);   // exit: abort
                 break;
-            }
         }
     }
 
@@ -167,18 +133,11 @@ const unsigned char* AptActionInterpreter::runStream(
     mnStackBase = nSavedBase;
 
     // Top-level run: pop the CIH off the target stack. Release the exact CIH this
-    // run pushed (pCIH) and restore the entry depth; a drifted top (an unbalanced
-    // nested handler) is logged instead of dereferencing an unwritten slot (the
-    // 0xbaadf00d AV this replaces -- FLAG diagnostic, see the entry note).
+    // run pushed (pCIH) and restore the entry depth rather than dereferencing an
+    // unwritten slot on a drifted top (the 0xbaadf00d AV this replaces -- see the
+    // entry note).
     if (bTopLevel)
     {
-        if (mnCIHStackTop != nSavedCIHTop + 1
-            || mpCIHStack[mnCIHStackTop - 1] != pCIH)
-        {
-            AptRunStreamImbalanceProbe(nSavedCIHTop, mnCIHStackTop,
-                                       mnCIHStackTop > 0 ? mpCIHStack[mnCIHStackTop - 1] : nullptr,
-                                       pCIH);
-        }
         pCIH->Release();
         mnCIHStackTop = nSavedCIHTop;
     }

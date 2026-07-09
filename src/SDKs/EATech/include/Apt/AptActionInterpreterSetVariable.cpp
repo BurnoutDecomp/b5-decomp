@@ -37,14 +37,6 @@
 // paths -- the interpreter frame context + AptFrameStack::CreateFrameStack).
 // AptActionInterpreter::SetVariableFallback is now a member (declared in the header).
 
-#if defined(_MSC_VER)
-extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, int nContextType);
-#pragma comment(linker, "/alternatename:AptSetVariableProbe=AptSetVariableProbeDefault")
-extern "C" void AptSetVariableProbeDefault(const char*, const void*, int) {}
-#else
-extern "C" void AptSetVariableProbe(const char* pcName, const void* pContext, int nContextType);
-#endif
-
 int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
     const EAStringC* pName, AptValue* pValue, int nAllowScopeChain, int nSearchScopeChain, int nDirect)
 {
@@ -65,12 +57,6 @@ int AptActionInterpreter::setVariable(AptValue* pScope, AptValue* pTarget,
 
     if (!pContext)
         return 0;
-
-    // FLAG (bring-up probe; weak sink pattern): trace the store names + routes so
-    // the framework-bootstrap class definitions can be followed.
-    AptSetVariableProbe(name.GetBuffer(), pContext,
-                        static_cast<int>(pContext->getVtblIndex()) * 1000
-                        + (pValue ? static_cast<int>(pValue->getVtblIndex()) : -1));
 
     const bool bRemoving = (!pValue || !pValue->getIsDefined());
 

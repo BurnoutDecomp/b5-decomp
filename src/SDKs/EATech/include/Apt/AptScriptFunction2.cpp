@@ -49,20 +49,6 @@ extern AptValueWithHash* gpAptGlobalFallback;
 extern const EAStringC gAptKeyThis;        // unk_8324E6C0 -- "this"
 extern const EAStringC gAptKeyArguments;   // unk_8324E6B8 -- "arguments"
 
-// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
-// bring-up TU): traces SetArgument's arg-record decode (reg/name/table pointers).
-#if defined(_MSC_VER)
-extern "C" void AptSetArgumentProbe(int nIndex, int nCount, int nRegister,
-                                    const char* pcName, const char* pcFnName,
-                                    const void* pTable);
-#pragma comment(linker, "/alternatename:AptSetArgumentProbe=AptSetArgumentProbeDefault")
-extern "C" void AptSetArgumentProbeDefault(int, int, int, const char*, const char*, const void*) {}
-#else
-extern "C" void AptSetArgumentProbe(int nIndex, int nCount, int nRegister,
-                                    const char* pcName, const char* pcFnName,
-                                    const void* pTable);
-#endif
-
 // ---------------------------------------------------------------------------
 // operator new @ 0x82AE61C8
 //
@@ -146,11 +132,6 @@ AptConstantPool AptScriptFunction2::GetConstantPool() const
 void AptScriptFunction2::SetArgument(int32_t nArgIndex, AptValue* pValue)
 {
     const AptScriptFunction2Arg& arg = mpByteCode->mpArgTable[nArgIndex];
-
-    // FLAG bring-up probe (weak sink pattern): trace the arg-record decode.
-    AptSetArgumentProbe(nArgIndex, static_cast<int>(mpByteCode->mnNumArguments),
-                        arg.mnRegister, arg.mpName, mpByteCode->mpName,
-                        mpByteCode->mpArgTable);
 
     if (arg.mnRegister)
     {
