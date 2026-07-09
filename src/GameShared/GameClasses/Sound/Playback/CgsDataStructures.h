@@ -239,6 +239,17 @@ struct ContentClass : public Entity
     static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
 };
 
+// CgsDataStructures.h (DWARF). The generic-RWAC "feature implementation" entity. FLAG:
+// MINIMAL home-grow -- an Entity subclass carrying only its interned type-name, added so
+// Registry::GetEntity<GenericRwacFeatureImplementation> (the X360 word dword_83008368)
+// can key on it. The full feature-implementation surface is DEFERRED to its own RWAC TU;
+// only SK_TYPE_NAME is load-bearing for the registry lookup. Definition DEFERRED (lives
+// with the GenericRwacFeatureImplementation registration TU).
+struct GenericRwacFeatureImplementation : public Entity
+{
+    static const Name SK_TYPE_NAME;   // FLAG: definition DEFERRED.
+};
+
 // CgsDataStructures.h:440 (DWARF). ContentType : public Entity. Carries the resolved
 // ContentClass* it points at, at +8.
 struct ContentType : public Entity

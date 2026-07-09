@@ -1,5 +1,11 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"
 
+// The element types Registry::GetEntity<T> is instantiated over. Each must be a
+// complete Entity subclass carrying its interned SK_TYPE_NAME (the per-type static
+// type-name word the lookup matches on).
+#include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // ContentClass, ContentType, FeatureSchema, ParameterSchema, SlotSchema, VoiceSchema, VoiceSpec, GenericRwacFeatureImplementation
+#include "GameShared/GameClasses/Sound/Playback/CgsContent.h"        // ContentSpec
+
 // CgsSound::Playback::Registry out-of-line members.
 //
 // Reconstructed store-for-store from the X360:
@@ -144,6 +150,29 @@ bool Registry::AddEntity(const Entity& lEntity)
     ++mu32EntityCount;
     return true;
 }
+
+// =============================================================================
+// Registry::GetEntity<T>  explicit instantiations (the shared template body lives
+// in CgsRegistry.h). One line per X360 GetEntity<T> instance:
+//   GetEntity<ContentClass>                     @ 0x8268FFA0
+//   GetEntity<ContentSpec>                      @ 0x8268FAF0
+//   GetEntity<ContentType>                      @ 0x826906A8
+//   GetEntity<FeatureSchema>                    @ 0x826903D8
+//   GetEntity<GenericRwacFeatureImplementation> @ 0x8268E388
+//   GetEntity<ParameterSchema>                  @ 0x82690108
+//   GetEntity<SlotSchema>                       @ 0x82690270
+//   GetEntity<VoiceSchema>                      @ 0x82690540
+//   GetEntity<VoiceSpec>                        @ 0x8268F988
+// =============================================================================
+template const ContentClass*                     Registry::GetEntity<ContentClass>(Name&) const;
+template const ContentSpec*                      Registry::GetEntity<ContentSpec>(Name&) const;
+template const ContentType*                      Registry::GetEntity<ContentType>(Name&) const;
+template const FeatureSchema*                     Registry::GetEntity<FeatureSchema>(Name&) const;
+template const GenericRwacFeatureImplementation*  Registry::GetEntity<GenericRwacFeatureImplementation>(Name&) const;
+template const ParameterSchema*                   Registry::GetEntity<ParameterSchema>(Name&) const;
+template const SlotSchema*                         Registry::GetEntity<SlotSchema>(Name&) const;
+template const VoiceSchema*                         Registry::GetEntity<VoiceSchema>(Name&) const;
+template const VoiceSpec*                            Registry::GetEntity<VoiceSpec>(Name&) const;
 
 }
 }

@@ -62,6 +62,14 @@ namespace Playback
     // SEQUENCE (host-width FLAG: the pointer member widens on the 64-bit host).
     struct ContentSpec : public Entity
     {
+        // The interned type-name the Registry keys a ContentSpec entity on. FLAG
+        // (ADDITIVE home-grow, by-name): Registry::GetEntity<ContentSpec> compares a
+        // slot's mTypeName against this per-type static Name (the X360 word
+        // dword_830080B8). DECLARED here for the lookup; its interned DEFINITION lives
+        // with the ContentSpec/EntityFixer<ContentSpec> registration TU (DEFERRED),
+        // mirroring the other Entity subclasses in CgsDataStructures.h.
+        static const Name SK_TYPE_NAME;
+
         // '|' path-zone separator (DWARF CgsDataStructures.h:1792 / :430).
         static const char SK_PATH_SEPERATOR = '|';
 

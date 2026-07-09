@@ -118,14 +118,89 @@ public:
     // X360 AddEntity @ 0x82692DA0.
     bool AddEntity(const Entity& lEntity);
 
-    // CgsRegistry.h (DWARF). Type-checked entity lookup by interned Name. FLAG
-    // (DEFER): declared-only template forwarder -- the resolve-pass fixers look a
-    // serialized-index Name up to recover its live entity; the X360 `bl
-    // Registry::GetEntity<T>` body lives in its own Registry TU. Non-const Name&
-    // per DWARF. Returns 0 when the name is not present.
+    // CgsRegistry.h (DWARF). Type-checked entity lookup by interned Name. The X360
+    // `bl Registry::GetEntity<T>` body is reconstructed out-of-line below (ONE shared
+    // template body; the explicit instantiations live in CgsRegistry.cpp). Non-const
+    // Name& per DWARF. Returns 0 when the name is not present.
     template <typename T>
     const T* GetEntity(Name& arName) const;
 };
+
+// =============================================================================
+// Registry::GetEntity<T>  (X360 family @ 0x8268E388 .. 0x826906A8; representative
+// GetEntity<ContentClass> @ 0x8268FFA0). ONE shared out-of-line template body --
+// every instantiation is identical apart from T::SK_TYPE_NAME (the X360 per-type
+// static type-name word `dword_XXXX` loaded once before the probe). Reconstructed
+// store-for-store from the asm:
+//
+//   lppSlot   = this + 0x1C            (the open-addressing slot array, GetFirstEntity)
+//   maskedHash = (name >> 1) & mask    ((*a2 >> 1) & *(this+0x18))
+//   assert maskedHash < capacity       (CgsRegistry.h:432 "Masked hash ...")
+//   typeName  = T::SK_TYPE_NAME        (the per-T static word read into r7)
+//   -- forward probe [maskedHash, capacity): first empty slot => miss (return 0);
+//      first slot whose mName == name AND mTypeName == typeName => hit (return it);
+//      running past capacity falls through to the wrap span.
+//   -- wrap probe [0, maskedHash): same empty-slot/match test; exhausting => miss.
+//
+// The matched slot is returned as the raw Entity* re-typed to T* -- the X360 does
+// `result = mapEntity[i]` with NO pointer adjustment (Entity is the sole base at
+// offset 0 for every element type), so reinterpret_cast is the faithful form and
+// also tolerates element types modelled as standalone (non-Entity-derived) structs.
+// =============================================================================
+template <typename T>
+const T* Registry::GetEntity(Name& arName) const
+{
+    // this + 0x1C == the slot array (GetFirstEntity()). Const-view of mapEntity.
+    const Entity* const* lppSlot = mapEntity;
+
+    // Masked hash = (name >> 1) & (capacity - 1). X360: (*a2 >> 1) & *(this+0x18).
+    const uintptr_t luMaskedHash = (arName.GetValue() >> 1) & muNameHashMask;
+    CGS_ASSERT(luMaskedHash < mu32EntityCapacity, "Masked hash has gone out of range\n");
+
+    // The per-T interned type-name the matching slot must also carry (X360 dword_XXXX,
+    // loaded once into r7 before the probe).
+    const uintptr_t luTypeName = T::SK_TYPE_NAME.GetValue();
+    const uintptr_t luName     = arName.GetValue();
+
+    // Forward probe span [maskedHash, capacity). X360: entered only when
+    // maskedHash < capacity (else it jumps straight to the wrap span).
+    if (luMaskedHash < mu32EntityCapacity)
+    {
+        for (u32 luI = static_cast<u32>(luMaskedHash); luI < mu32EntityCapacity; ++luI)
+        {
+            const Entity* lpEntity = lppSlot[luI];
+            if (lpEntity == 0)
+            {
+                return 0;   // empty slot -> not present
+            }
+            if (luName == lpEntity->mName.GetValue() &&
+                luTypeName == lpEntity->mTypeName.GetValue())
+            {
+                return reinterpret_cast<const T*>(lpEntity);
+            }
+        }
+    }
+
+    // Wrap probe span [0, maskedHash). X360 LABEL_9: only entered when maskedHash != 0.
+    if (luMaskedHash != 0)
+    {
+        for (u32 luI = 0; luI < static_cast<u32>(luMaskedHash); ++luI)
+        {
+            const Entity* lpEntity = lppSlot[luI];
+            if (lpEntity == 0)
+            {
+                return 0;
+            }
+            if (luName == lpEntity->mName.GetValue() &&
+                luTypeName == lpEntity->mTypeName.GetValue())
+            {
+                return reinterpret_cast<const T*>(lpEntity);
+            }
+        }
+    }
+
+    return 0;
+}
 
 }
 }
