@@ -33,6 +33,7 @@
 
 #include "types.hpp"
 #include "GameSource/Replays/BrnReplayShared.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<BUFSIZE,ALIGN> + Event (Read/WriteVariableQueue)
 
 namespace BrnReplays
 {
@@ -96,11 +97,15 @@ namespace BrnReplays
         // *lpSrc (the record mirror of ReadFloat).
         s32 WriteFloat(const void* lpSrc);
 
-        // Read/WriteVariableQueue -- pop / push a packed VariableEventQueue<512,16> off / onto
-        // the stream (the sound frame's embedded event queue). Templated only on the buffer /
-        // alignment; declared as void* here to keep this base home free of the queue header.
-        s32 ReadVariableQueue(void* lpQueue);
-        s32 WriteVariableQueue(void* lpQueue);
+        // Read/WriteVariableQueue -- pop / push a packed VariableEventQueue<BUFSIZE,ALIGN> off /
+        // onto the stream (e.g. the sound frame's embedded <512,16> event queue, the director
+        // bridge's <13312,16> game-action queue). X360-attested as templates on the queue's
+        // <BUFSIZE,ALIGN> (ReadVariableQueue<13312,16> @0x82653A60, <512,16> @0x82656CF0;
+        // WriteVariableQueue<13312,16> @0x826539B8). The generic bodies are out-of-line below.
+        template <s32 BUFSIZE, s32 ALIGN>
+        s32 ReadVariableQueue(CgsModule::VariableEventQueue<BUFSIZE, ALIGN>* lpQueue);
+        template <s32 BUFSIZE, s32 ALIGN>
+        s32 WriteVariableQueue(CgsModule::VariableEventQueue<BUFSIZE, ALIGN>* lpQueue);
 
         // IsKeyFrame() -- expose the protected mbIsKeyFrame flag (asm reads lbz 0x50) so the
         // delta serialisers (BrnReplayArray<T,N>, SoundSerialiser) can select the key-frame
@@ -194,4 +199,54 @@ namespace BrnReplays
         // is BY NAME, so this is immaterial; the maX360Extension20[8] placeholder keeps the X360
         // field SEQUENCE (meId after 8 extra X360 words) faithful, which is what matters.
     };
+
+    // -------- ReadVariableQueue<BUFSIZE,ALIGN> @ X360 0x82653A60 (<13312,16>) / 0x82656CF0 (<512,16>) --------
+    // Pop a packed variable-event queue off the playback stream and rebuild it in lpQueue:
+    //   read the event count, then for each event read {type, size}, allocate the record in the
+    //   destination queue (VariableEventQueue::AllocateEvent) and read the payload into it.
+    // Per-event copy loop (NOT a bulk memcpy) -- each record is streamed individually because the
+    // records are variable-length.
+    template <s32 BUFSIZE, s32 ALIGN>
+    s32 BaseSerialiser::ReadVariableQueue(CgsModule::VariableEventQueue<BUFSIZE, ALIGN>* lpQueue)
+    {
+        s32 liNumEvents;
+        s32 liResult = Read(&liNumEvents, static_cast<s32>(sizeof(s32)));
+        for (s32 liEvent = liNumEvents; liEvent > 0; --liEvent)
+        {
+            s32 liEventType;
+            s32 liEventSize;
+            Read(&liEventType, static_cast<s32>(sizeof(s32)));
+            Read(&liEventSize, static_cast<s32>(sizeof(s32)));
+            void* lpEventData = lpQueue->AllocateEvent(liEventType, liEventSize);
+            liResult = Read(lpEventData, liEventSize);
+        }
+        return liResult;
+    }
+
+    // -------- WriteVariableQueue<BUFSIZE,ALIGN> @ X360 0x826539B8 (<13312,16>) --------
+    // Push a packed variable-event queue onto the record stream:
+    //   write the event count, then walk the queue with GetFirstEvent/GetNextEvent, writing
+    //   {type, size, payload} for each event. Per-event copy loop (variable-length records).
+    // FAITHFUL X360 QUIRK: the event TYPE id is captured ONCE from GetFirstEvent and re-written
+    // for every event -- the type returned by GetNextEvent is discarded (the binary never
+    // re-stores it into the write slot; only its next-event pointer + size outputs are used).
+    template <s32 BUFSIZE, s32 ALIGN>
+    s32 BaseSerialiser::WriteVariableQueue(CgsModule::VariableEventQueue<BUFSIZE, ALIGN>* lpQueue)
+    {
+        s32 liLength = lpQueue->GetLength();
+        Write(&liLength, static_cast<s32>(sizeof(s32)));
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liEventSize);
+        s32 liResult = liEventType;
+        while (lpEvent != 0)
+        {
+            Write(&liEventType, static_cast<s32>(sizeof(s32)));  // NOTE: liEventType is NOT refreshed in-loop (see banner)
+            Write(&liEventSize, static_cast<s32>(sizeof(s32)));
+            Write(lpEvent, liEventSize);
+            liResult = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+        }
+        return liResult;
+    }
 }

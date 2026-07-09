@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT (AppendRequestInterface<N> template body)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // BrnResource::GameDataIO::RequestInterface<N>
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
@@ -110,6 +111,22 @@ namespace GameDataIO
         // const AttribSysRequestInterface<32768>*; opaque storage -> const void* (see header note).
         const void* GetAttribSysRequestInterface() const;                                    // DWARF h:112
 
+        // AppendRequestInterface<N> -- bulk-append a source RequestInterface<N>'s packed request
+        // bytes into the embedded mRequestInterface's VariableEventQueue<32768,16>. X360-attested
+        // as a member template on the SOURCE interface capacity N (BrnGameModule::DoUpdate /
+        // BridgeGuiToResource / LoadingScriptedState::LoadNetworkModule). Each instance:
+        //   AppendRequestInterface<256>  @ 0x823EDED8   AppendRequestInterface<512>  @ 0x823CEAC0
+        //   AppendRequestInterface<1024> @ 0x823EE038   AppendRequestInterface<3072> @ 0x823EDF88
+        //   AppendRequestInterface<4096> @ 0x823C76B8
+        // The asm asserts write-locked, then calls VariableEventQueue<32768,16>::Append<N,16> on
+        // &mRequestInterface (this+4). Because RequestInterface<N> holds its RequestQueue<N> (a
+        // VariableEventQueue<N,16>) at offset 0, the source interface reference IS its queue
+        // reference (no null check in the asm -> a reference param). The bulk Append body is the
+        // committed VariableEventQueue<BUFSIZE,ALIGN>::Append<SRCBUF,SRCALIGN> (memcpy of the
+        // source's packed bytes; see CgsVariableEventQueue.h). Generic body out-of-line below.
+        template <s32 N>
+        bool AppendRequestInterface(const RequestInterface<N>& lrSourceInterface);
+
     private:
         // DWARF h:123 -- lands at this+4 (after the 1-byte IOBuffer base padded to 4-byte queue
         // alignment) -- matching the asm's `return a1 + 4` in both GetRequestInterface overloads.
@@ -121,6 +138,18 @@ namespace GameDataIO
         // Pointer-only; forward-declared type.
         CgsGraphics::Im2dRenderBuffer* mpDebug2dRenderBuffer;
     };
+
+    // -------- InputBuffer::AppendRequestInterface<N> (generic body; instances in the .cpp) --------
+    // Assert the buffer is write-locked, then bulk-append the source interface's queue into the
+    // embedded request queue. mRequestInterface.mRequestQueue is the destination
+    // VariableEventQueue<32768,16>; lrSourceInterface.mRequestQueue is the source
+    // VariableEventQueue<N,16> (Append<SRCBUF,SRCALIGN> deduces SRCBUF=N, SRCALIGN=16).
+    template <s32 N>
+    bool InputBuffer::AppendRequestInterface(const RequestInterface<N>& lrSourceInterface)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return mRequestInterface.mRequestQueue.Append(lrSourceInterface.mRequestQueue);
+    }
 
     // BrnResource::GameDataIO::OutputBuffer : public IOBuffer -- the GameData module's per-frame output
     // payload. DWARF home BrnGameDataModuleIO.h:142. It carries a POINTER to the AllocatorList (the

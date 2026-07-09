@@ -138,4 +138,13 @@ namespace BrnReplays
 
         return 0;
     }
+
+    // -------- explicit instantiations (force the out-of-line emission the X360 ARTIST build
+    //          produced for each queue capacity; generic bodies live in the header) --------
+    //   ReadVariableQueue<13312,16>  @ 0x82653A60 (DirectorBridgeSerialiser::SerialiseGameActionQueue)
+    //   ReadVariableQueue<512,16>    @ 0x82656CF0 (SoundSerialiser::Read)
+    //   WriteVariableQueue<13312,16> @ 0x826539B8 (DirectorBridgeSerialiser::SerialiseGameActionQueue)
+    template s32 BaseSerialiser::ReadVariableQueue<13312, 16>(CgsModule::VariableEventQueue<13312, 16>*);
+    template s32 BaseSerialiser::ReadVariableQueue<512, 16>(CgsModule::VariableEventQueue<512, 16>*);
+    template s32 BaseSerialiser::WriteVariableQueue<13312, 16>(CgsModule::VariableEventQueue<13312, 16>*);
 }

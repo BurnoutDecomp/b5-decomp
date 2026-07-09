@@ -110,5 +110,17 @@ namespace GameDataIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         mbLiveUpdateStatus = *lpStatus;
     }
+
+    // -------- explicit instantiations: InputBuffer::AppendRequestInterface<N> --------
+    // Force the out-of-line emission the X360 ARTIST build produced for each source-interface
+    // capacity (generic body in BrnGameDataModuleIO.h). Each asserts write-locked then bulk-appends
+    // the source queue into mRequestInterface's VariableEventQueue<32768,16>.
+    //   <256>  @ 0x823EDED8   <512>  @ 0x823CEAC0   <1024> @ 0x823EE038
+    //   <3072> @ 0x823EDF88   <4096> @ 0x823C76B8
+    template bool InputBuffer::AppendRequestInterface<256>(const RequestInterface<256>&);
+    template bool InputBuffer::AppendRequestInterface<512>(const RequestInterface<512>&);
+    template bool InputBuffer::AppendRequestInterface<1024>(const RequestInterface<1024>&);
+    template bool InputBuffer::AppendRequestInterface<3072>(const RequestInterface<3072>&);
+    template bool InputBuffer::AppendRequestInterface<4096>(const RequestInterface<4096>&);
 }
 }
