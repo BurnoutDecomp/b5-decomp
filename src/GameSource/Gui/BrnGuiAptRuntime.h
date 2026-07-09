@@ -20,7 +20,12 @@ namespace BrnGui
         bool Prepare(CgsGui::ViewModule* lpViewModule);
         bool Prepare();
         void PlayMovie(const char* lpacMovieName, s32 liLevelNum);
-        void Update();
+        // The remaining shim-side per-frame drive (the title help-item defaults
+        // retry). The movie TICK ownership moved to the real chain --
+        // GuiModule::Update -> CgsGui::ViewModule::Update -> AptAux::Update ->
+        // AptUpdateTarget (the engine frame pacer). Deleted with the component
+        // shim.
+        void UpdateShimResidue();
         void Render(CgsGraphics::Im2d* lpIm2d);
         void StopMovie();
 

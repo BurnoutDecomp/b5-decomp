@@ -130,8 +130,19 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     AptCharacterAnimationInst* pRootAnimInst =
         static_cast<AptCharacterAnimationInst*>(pRootInst);
     uint32_t nBankedMs = pRootAnimInst->mnAccumulatedUpdateMs + nElapsedMs;
-    const uint32_t nMsPerFrame = reinterpret_cast<const AptMovieData*>(
+    uint32_t nMsPerFrame = reinterpret_cast<const AptMovieData*>(
         pRootInst->mpRenderItem->mpCharacter)->mnMillisecondsPerFrame;
+
+    // The console TRAPS on a non-positive frame period (the twllei before the
+    // banked-credit divide) -- a 0-period movie cannot be paced (both this loop
+    // and the console's would never bank down). The MAIN framework bundle carries
+    // an authored 0 in this field -- a known bundle-data defect (see the GUIAPT
+    // bundle-defect notes). FLAG (PC guard, host-driver precedent): pace an
+    // invalid period at the 30fps stand-in the retired host driver used. (A
+    // CGS_ASSERT here PAUSES the game loop on the dev-assert screen every boot, so
+    // the guard is silent by design.)
+    if (nMsPerFrame == 0 || nMsPerFrame > 1000u)
+        nMsPerFrame = 33;
 
     if (nBankedMs >= nMsPerFrame)
     {

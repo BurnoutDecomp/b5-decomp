@@ -20,10 +20,12 @@
 //     clip tree neither composes nor draws until they land.
 //   - BrnGui::AlwaysAvailableComponentsManager::PrepareFlapt -- has a real body in
 //     BrnGuiAlwaysAvailableComponentsManager.cpp, but that body dereferences the far
-//     embedded manager (GuiModule + 0x17D670, not modelled by the minimal GuiModule) and
-//     calls into more unreconstructed component bodies, so it stays out of the build and
-//     is no-op'd here. This keeps the FLAPT-load notification path benign: the offset
-//     `this` returned by GetAlwaysAvailableComponentsManager is never dereferenced.
+//     embedded manager (GuiModule + 0x17D670) and the PC-minimal GuiModule does NOT
+//     CONTAIN that component block at all -- the accessor's offset `this` points
+//     outside the object, so enabling the real body is STRUCTURALLY GATED on
+//     reconstructing the GuiModule component block (not just on this stub). No-op'd
+//     here; the FLAPT-load notification path stays benign (the offset `this` is
+//     never dereferenced).
 //   - CgsGui::GuiEventQueueBase<256,16>::{Construct,Prepare,Release} -- the tiny GUI
 //     output queue the view module owns (mOutputEventQueue). CgsGuiEvent.h declares them
 //     out-of-line; no TU instantiates them. Forwarded to the homed CgsModule::

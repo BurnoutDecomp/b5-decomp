@@ -168,6 +168,11 @@ namespace
     // The language allocator and staged resources remain in this loader bridge for now;
     // the objects they prepare are owned by CgsGui::ViewModule.
     CgsMemory::HeapMalloc        s_AptLanguageAllocator; // backs the manager's element allocs
+    // The AptAux data-handler allocator (AptAlloc/AptFree service the engine's
+    // pfnMemFree + the data-handler loads through it). Host heap for the faithful
+    // AptAux::Prepare drive (step 5).
+    unsigned char                s_aAptDataHeap[256 * 1024];
+    CgsMemory::HeapMalloc        s_AptDataAllocator;
     bool s_bTextSystemReady = false;                     // fonts + strings loaded (one-shot)
     CgsResource::Font* s_pAptBodyFont = nullptr;         // the FIRST loaded typeface (B5EAConDisS --
                                                          // the menu-label font; the AS-autofit measure)
@@ -791,7 +796,14 @@ namespace BrnGui
             {
                 CgsDev::Log::WriteToLog("[AptRT] step5 InitializeApt: calling AptAux::InitializeApt "
                                         "(alloc + update + render + target) ...\n");
-                s_pViewModule->GetAptAux()->InitializeApt();
+                // Drive the faithful AptAux::Prepare state machine (@0x828503E0): the
+                // data-handler prepare (giving AptAlloc/AptFree a real heap), then
+                // InitializeApt, then the miState0=3 seed AptAux::Update asserts on.
+                s_AptDataAllocator.Construct(s_aAptDataHeap,
+                                             static_cast<s32>(sizeof(s_aAptDataHeap)));
+                while (!s_pViewModule->GetAptAux()->Prepare(&s_AptDataAllocator))
+                {
+                }
 
                 // Reflect the faithful init into the facade's step flags (for the channel-41
                 // readiness gate + the log). InitializeApt wires the pools + interpreter and
@@ -1700,319 +1712,20 @@ namespace BrnGui
     static bool AptApplyTitleHelpItemDefaults(AptCIH* lpMenuClip);
 
     // -------------------------------------------------------------------------
-    // AptTickMovieSlot -- the paced per-frame TICK for ONE movie slot (the framework
-    // movie at level 0 and the flow movie at level 1 each travel this with their OWN
-    // accumulator / authored msPerFrame / root re-dirty / one-shot probe counters).
-    // Returns the number of timeline ticks run this update (the caller gates the
-    // flow-only follow-ons -- the help-item defaults -- on the FLOW slot's count).
-    // Called from UpdateRuntime AFTER GuiModule has run the single per-frame
-    // UpdateComponents flush (the flush is per-TARGET on the console, not per-movie, so
-    // it stays with the GUI frame owner and runs exactly once).
+    // ShimResidueUpdate -- the LAST shim-side per-frame drive: the title help-item
+    // defaults retry (armed by the SelectionMenu transin; applied once the
+    // StaticHelpItem + its ControllerButtons icon subtree have composed). The movie
+    // TICK ownership moved to the real chain (GuiModule::Update ->
+    // CgsGui::ViewModule::Update -> AptAux::Update -> the engine AptUpdateTarget
+    // frame pacer in AptUpdate.cpp), so this residue no longer paces or ticks
+    // anything. Deleted with the component shim.
     // -------------------------------------------------------------------------
-    static s32 AptTickMovieSlot(AptMovieSlot& lrSlot, bool lbProbeFrame)
-    {
-        s32 liTicksThisUpdate = 0;
-
-        // ---- STEP 2: TICK the instantiated faithful root CIH ---------------------------------------
-        // The homed AptCIH::tick advances the clip's play-head; for a fresh clip it runs frame 0's
-        // place/remove timeline commands (doFrameControls -> placeObject), POPULATING the display list
-        // with child AptCIHs, then queues the frame's ActionScript. We drive it on the instantiated root
-        // CIH each frame. The render-tree manager is the null stub, but AptRTM_CreateItem now falls back
-        // to the homed Manager_CreateItem factory, so each placed inst gets a real render item (carrying
-        // its character) -- which is what tick / AptCIH_GetClipMovie reach the movie through. Every deref
-        // is guarded (the engine null-safety we added) so the tick completes structurally or bails.
-        // UN-DEFERRED (2026-07-01): the three timeline-engine blockers that held the faithful tick
-        // off are ALL homed, so the tick now runs frame 0's place commands and composes the movie:
-        //   (a) FRAME TABLE RELOCATED. AptCharacterAnimation::Fixup case-5/9 now drives the native-8
-        //       AptMovie::resolve64 (AptMovie.cpp) on the embedded movie (char+0x20), relocating
-        //       mpFrames @movie+0x08 (the 0x5180 offset) + the per-frame command arrays/pointers into
-        //       live pointers. VERIFIED at load: "STEP5 frame-table: ... relocated=YES frame0.cmdCount=13".
-        //   (b) NATIVE-8 doFrameControls. AptMovie::doFrameControls (AptMovie.cpp) is re-typed to
-        //       (AptDisplayList*, AptCIH*, int) and reads the movie char-anim def-base + charTable /
-        //       import table through the parent CIH's named char-inst chain (char+0x20 embed,
-        //       charTable/importTable named members) -- the native-8 layout, not console offsets.
-        //   (c) placeObject IS HOMED. sub_82B0AE08 is decompiled faithfully as AptMovie_PlaceCommand
-        //       (AptMovie.cpp): it reads the serialised place-info record and calls the fully-homed
-        //       AptDisplayList::placeObjectNCXForm, which creates/inserts the placed AptCharacterInst.
-        // Frame 0 of TITLE_SCREEN02 carries 12 place commands + 1 back-to-script (verified vs the
-        // bundle), so the tick populates the root clip's child display list with the title's characters.
-        // FLAG (re-deferred 2026-07-01, boot-stability): resolve64 + native-8 doFrameControls +
-        // AptMovie_PlaceCommand are homed and frame-0 composition is PROVEN (childNodes=7, no AV).
-        // But the tick ADVANCES the 103-frame timeline and silently AVs (~25s) on a LATER frame that
-        // places the deferred pieces: the imported char (charId 30 -> charTable[30] null because
-        // Fixup pass-3 import-load is deferred) and shape chars whose geometry is deferred (case-1
-        // pfnLoadRenderingUnit). Re-enabling the full tick regresses the stable boot, so it stays
-        // deferred until the import-load + shape-geometry (+ the render-tree flush for pixels) land.
-        // The render-leaf BODIES stay faithful + committed; the per-frame drive is now ENABLED
-        // (2026-07-01): the faithful per-frame tick composes the movie AND recurses into the nested
-        // imported sprite CONTAINERS (born dirty in the AptCIH ctor), so the title's actual visible
-        // content (the "Paradise City" logo art, which lives one display-list level deeper inside the
-        // imported clips) places + draws (PROVEN via screenshot). The prior AV blockers are closed:
-        //   - resolve64 now relocates EVERY per-frame command record's pointer slots (XB1-verified),
-        //     so a nested container's doFrameControls/queueFrameActions read their records without AV;
-        //   - the AS-VM EXECUTION stays deferred (relocated stream POINTERS, but runStream is stubbed
-        //     and never runs -- an un-run action queue is a valid state);
-        //   - the LOOP-WRAP (frame == frameCount -> jumpToFrame(0)) no longer AVs: jumpToFrame's
-        //     arbitrary-jump path (AptMovie::DoTemporaryFrameControls + the AptPseudoDisplayList
-        //     temporary-frame skip resolver) is UN-HOMED for the native-8 layout, so AptCIH::tick's
-        //     wrap now RESETS the play-head to frame 0 directly (a plain loop) instead of the
-        //     un-homed replay-merge -- see the FLAG in AptCIH::tick.
-        // The tick runs every frame the slot is instantiated (the tick + nested recursion run
-        // continuously, stable 60s).
-        // FLAG (honest boundaries that remain): (a) 3 nested sprite movies have a CONVERTER-malformed
-        // frame table (command-array ptr at frame+0x04 not native-8 frame+0x08) and are safely skipped
-        // (doFrameControls/queueFrameActions null-mpCommands guard) -- their sub-content stays unplaced;
-        // (b) without the AS VM to GATE the transitions (hold-on-label / wait-for-input), the timeline
-        // auto-advances through its transin/fade/transout frames, so the title is transient rather than
-        // held. Both are the deferred AS-VM / offline-bundle-fix follow-ons, not invention.
-        if (lrSlot.mbInstantiated && lrSlot.mpRootCIH != nullptr)
-        {
-            AptCIH* lpRoot = static_cast<AptCIH*>(lrSlot.mpRootCIH);
-
-            // ---- FAITHFUL TIMELINE PACING (console AptUpdate / sub_82B0D608) ------------
-            // Accumulate the elapsed wall-clock milliseconds (the console's a1, fed from the
-            // frame clock) and tick the movie once per authored msPerFrame (character+44;
-            // TITLE_SCREEN02 = 33ms == 30fps), catch-up looping while a full frame is
-            // banked -- with RunActions per TICK, exactly the console's per-tick sequence.
-            // The catch-up is capped (the console smooths via its frame-time governor; a
-            // fixed cap is the host stand-in) so a debugger stall doesn't spiral.
-            // PER SLOT: the clock + accumulator live on the slot, so each movie paces on
-            // its own authored frame rate (the console paces each level root separately).
-            {
-                const s64 liNowMs = static_cast<s64>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::steady_clock::now().time_since_epoch()).count());
-                if (lrSlot.miLastUpdateQpcMs >= 0)
-                    lrSlot.mdTickAccumMs += static_cast<double>(liNowMs - lrSlot.miLastUpdateQpcMs);
-                lrSlot.miLastUpdateQpcMs = liNowMs;
-            }
-            const double ldMsPerFrame = static_cast<double>(
-                lrSlot.muMsPerFrame >= 10u && lrSlot.muMsPerFrame <= 100u ? lrSlot.muMsPerFrame : 33u);
-            // Clamp a runaway backlog to 4 frames of catch-up.
-            if (lrSlot.mdTickAccumMs > 4.0 * ldMsPerFrame)
-                lrSlot.mdTickAccumMs = 4.0 * ldMsPerFrame;
-
-            int liTickResult = 0;
-            while (lrSlot.mdTickAccumMs >= ldMsPerFrame)
-            {
-            lrSlot.mdTickAccumMs -= ldMsPerFrame;
-            ++liTicksThisUpdate;
-
-            // Mark the root clip "dirty" so AptCIH::tick processes it (mFlagsA bit25 == GetDirtyState,
-            // the tick gate). The AptCIH ctor births the root dirty, but tick clears/recomputes bit25
-            // at its tail each frame (AptCIH.cpp), so the root must be re-dirtied for the NEXT frame.
-            // FLAG (host driver, Phase 4c/4d): the console re-drives this per frame from AptUpdate
-            // (sub_82B0D608) / the AptTarget update; the host stands in by re-dirtying the root here.
-            if (!lpRoot->GetDirtyState())
-                lpRoot->SetDirtyState(true, false);
-
-            if (lrSlot.miTickFrame < 4)   // probe the slot's first few frames (frame 0 is where placement happens)
-            {
-                char lacp[144];
-                std::snprintf(lacp, sizeof(lacp), "[AptRT] %s: tick: frame=%d -> AptCIH::tick(root %p) ...\n",
-                              lrSlot.mpcTag, lrSlot.miTickFrame, (void*)lpRoot);
-                CgsDev::Log::WriteToLog(lacp);
-            }
-
-            liTickResult = lpRoot->tick();   // advance frame 0 -> place + recurse the whole subtree
-
-            // STEP 4 nested composition is now FAITHFUL and needs no host propagation pass: a
-            // freshly-placed sprite/animation child is born dirty in the AptCIH ctor (@0x82B00638
-            // tail: SetDirtyState(true,true) keyed on char type -- AptCIH.cpp), so the root tick's own
-            // child-list recursion (AptCIH::tick -> mDisplayList.tick, AptCIH.cpp) ticks each new child
-            // IN THE SAME FRAME and runs its doFrameControls -> its nested shapes/images place. (This
-            // retired the PropagateDirtyToChildren stand-in, which batch-dirtied children a level per
-            // frame; the ctor mechanism composes the whole subtree per frame, as the console does.)
-            // (AS-VM EXECUTION note, corrected 2026-07-04: the interpreter's runStream is NOT stubbed
-            // -- it is the fully-homed dispatch loop in AptActionRun.cpp, and RunActions below drains
-            // the per-frame action queue through it every frame, so queued frame actions DO execute.
-            // What remains deferred is narrower: individual AS opcodes / host-callbacks (e.g. the
-            // getVariable scope resolve, callFunction) are FLAGged at their own sites, and the
-            // GuiComponent->AptCommunicator view-message injection that DRIVES the component
-            // transitions is the un-homed C++ side that the title view-state shims stand in for -- 4d.)
-
-            // DRAIN THE DEFERRED ACTION QUEUE (ACTIVATED 2026-07-01): the faithful per-frame
-            // sequence -- tick queues each frame's tag-1 actions (AptMovie::queueFrameActions ->
-            // AddActionBack, live now); AptAnimationTarget::RunActions (@0x82B0C9B0) drains them
-            // through runStream. This is the console's per-frame VM step (the host stands in for
-            // the console AptUpdate driver here, as it does for the tick itself).
-            {
-                AptTarget* lpVmTgt = GetTarget();
-                if (lpVmTgt != nullptr && lpVmTgt->mpAnimationTarget != nullptr
-                    && !s_bDisableRunActions)   // (retired switch; permanently false)
-                    lpVmTgt->mpAnimationTarget->RunActions();
-            }
-
-            }   // ---- end of the per-msPerFrame catch-up tick loop (console pacing) ----
-
-            // (The title help-item defaults retry -- a FLOW-slot-only follow-on -- moved to
-            //  UpdateRuntime, gated on the FLOW slot's tick count for this update.)
-
-            // DYNAMIC-TEXT REFRESH: run the generalised-process pass with ProcessTextInst
-            // installed, so every dynamic-text node (type tag 2) re-resolves its bound text +
-            // (re)lays it out through EnsureStringAllocated -> pfnAllocateString. The console
-            // runs this inside AptUpdate (sub_82B0D608) ONCE PER UPDATE and only when at
-            // least one timeline tick ran this update (the v5 gate) -- matched here.
-            if (liTicksThisUpdate > 0)
-            {
-                static bool s_bTextProbe = false;
-                AptCIH_RunGeneralisedTextProcess(lpRoot);
-                if (!s_bTextProbe)
-                {
-                    s_bTextProbe = true;
-                    CgsDev::Log::WriteToLog("[AptRT] text: ran generalised-process text pass "
-                                            "(ProcessTextInst installed).\n");
-                }
-            }
-
-            // Walk the director's root display list + count the placed nodes (the placement result).
-            s32 liNodes = 0;
-            AptTarget* lpTgt = GetTarget();
-            if (lpTgt != nullptr && lpTgt->mpAnimationTarget != nullptr)
-            {
-                AptDisplayList* lpRootList = lpTgt->mpAnimationTarget->GetRootDisplayList();
-                AptDisplayListState* lpState = (lpRootList != nullptr) ? lpRootList->AsState() : nullptr;
-                if (lpState != nullptr)
-                {
-                    for (AptCIH* lpN = lpState->mpFirst; lpN != nullptr && liNodes < 4096;
-                         lpN = lpN->GetDisplayListNext())
-                    {
-                        ++liNodes;
-                        if (lrSlot.miTickFrame < 2 && liNodes <= 6)
-                        {
-                            AptCharacterInst* lpCI = lpN->GetCharacterInst();
-                            char lacn[160];
-                            std::snprintf(lacn, sizeof(lacn),
-                                "[AptRT] tick:   node %p charInst=%p renderItem=%p depth=%d\n",
-                                (void*)lpN, (void*)lpCI,
-                                (void*)(lpCI ? lpCI->GetRenderItem() : nullptr),
-                                lpCI ? lpCI->GetDepth() : -1);
-                            CgsDev::Log::WriteToLog(lacn);
-                        }
-                    }
-                }
-            }
-
-            // Also count the ROOT CIH's CHILD display list -- doFrameControls places into the animInst's
-            // own mDisplayList (the sprite/animation child list), not the director root. This is where the
-            // native-8 place path's nodes land.
-            s32 liChildNodes = 0;
-            {
-                AptCharacterInst* lpRootCI = lpRoot->GetCharacterInst();
-                if (lpRootCI != nullptr)
-                {
-                    AptCharacterSpriteInstBase* lpSprite =
-                        static_cast<AptCharacterSpriteInstBase*>(lpRootCI);
-                    AptDisplayListState* lpChildState = lpSprite->mDisplayList.AsState();
-                    if (lpChildState != nullptr)
-                    {
-                        for (AptCIH* lpN = lpChildState->mpFirst; lpN != nullptr && liChildNodes < 4096;
-                             lpN = lpN->GetDisplayListNext())
-                        {
-                            ++liChildNodes;
-                            if (lrSlot.miTickFrame < 2 && liChildNodes <= 8)
-                            {
-                                AptCharacterInst* lpCI = lpN->GetCharacterInst();
-                                AptRenderItem* lpRI = lpCI ? lpCI->GetRenderItem() : nullptr;
-                                AptCharacter* lpChar = lpRI ? lpRI->mpCharacter : nullptr;
-                                // char+0x20 == the shape geometry rendering unit (set by Fixup case-1).
-                                const void* lpGeom = lpChar
-                                    ? *reinterpret_cast<void* const*>(reinterpret_cast<const char*>(lpChar) + 0x20)
-                                    : nullptr;
-                                const int liType = lpChar
-                                    ? *reinterpret_cast<const int*>(lpChar) : -999;   // AptCharacter::mnType @+0
-                                // DIAG: the child's dirty bit (mFlagsA bit25), its sprite play-state
-                                // flags (mnClipActionFlags), and its OWN nested display-list count --
-                                // to see whether the imported sprite CONTAINERS place their content.
-                                const unsigned luFlagsA = lpN->mFlagsA;
-                                unsigned luClipFlags = 0;
-                                s32 liGrandKids = -1;
-                                if (lpCI != nullptr && (lpCI->GetTypeTag() == 5 || lpCI->GetTypeTag() == 9))
-                                {
-                                    AptCharacterSpriteInstBase* lpChildSprite =
-                                        static_cast<AptCharacterSpriteInstBase*>(lpCI);
-                                    luClipFlags = lpChildSprite->mnClipActionFlags;
-                                    AptDisplayListState* lpGK = lpChildSprite->mDisplayList.AsState();
-                                    liGrandKids = 0;
-                                    if (lpGK != nullptr)
-                                        for (AptCIH* lpG = lpGK->mpFirst; lpG != nullptr && liGrandKids < 4096;
-                                             lpG = lpG->GetDisplayListNext())
-                                            ++liGrandKids;
-                                }
-                                char lacn[288];
-                                std::snprintf(lacn, sizeof(lacn),
-                                    "[AptRT] tick:   child node %p charInst=%p typeTag=%u char=%p charType=%d geom@+0x20=%p depth=%d dirty=%d clipFlags=0x%X grandKids=%d\n",
-                                    (void*)lpN, (void*)lpCI, lpCI ? lpCI->GetTypeTag() : 0u,
-                                    (void*)lpChar, liType, lpGeom,
-                                    lpCI ? lpCI->GetDepth() : -1,
-                                    (luFlagsA >> 25) & 1u, luClipFlags, liGrandKids);
-                                CgsDev::Log::WriteToLog(lacn);
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (lrSlot.miTickFrame < 3 || lrSlot.miTickFrame == 100)
-            {
-                char lacd[192];
-                std::snprintf(lacd, sizeof(lacd),
-                    "[AptRT] %s: tick: frame=%d displayList nodes=%d childNodes=%d (tick result=%d)\n",
-                    lrSlot.mpcTag, lrSlot.miTickFrame, liNodes, liChildNodes, liTickResult);
-                CgsDev::Log::WriteToLog(lacd);
-            }
-            ++lrSlot.miTickFrame;
-        }
-        else if (lbProbeFrame)
-        {
-            char lacf[128];
-            std::snprintf(lacf, sizeof(lacf),
-                "[AptRT] %s: frame: no faithful root CIH -- tick skipped (FLAG).\n", lrSlot.mpcTag);
-            CgsDev::Log::WriteToLog(lacf);
-        }
-
-        return liTicksThisUpdate;
-    }
-
-    // -------------------------------------------------------------------------
-    // UpdateRuntime -- per-frame TICK only. GuiModule owns the per-frame Apt component
-    // communicator flush in this transition slice (the real owner is CgsGui::ViewModule::
-    // Update -> AptAux::Update); this bridge only advances the paced movie slots: the
-    // framework movie (level 0), persistent library (level 2), then flow movie (level 1).
-    // s_bMovieStopped parks the FLOW slot only -- the framework movie keeps ticking (the
-    // console keeps the persistent level-0 apt composed across flow-state changes). The
-    // RENDER moved to RenderRuntime (the proven immediate-mode Im2d path). Called from
-    // GuiModule::Update (runs before the render hook).
-    // -------------------------------------------------------------------------
-    static void UpdateRuntime()
+    static void ShimResidueUpdate()
     {
         if (!s_bRuntimeReady)
             return;
 
-        ++s_iFrameCounter;
-        const bool lbProbeFrame = (s_iFrameCounter % 30) == 1;   // ~every 30 frames
-
-        // Nothing loaded yet -> nothing to tick this frame.
-        if (!s_FrameworkSlot.mbLoaded && !s_FlowSlot.mbLoaded && !s_PersistentSlot.mbLoaded)
-            return;
-
-        // ---- PER-SLOT paced tick: framework (level 0) first, then the persistent library
-        // (level 2), then flow (level 1). The persistent component library ticks so its
-        // component-class registration runs. ----
-        if (s_FrameworkSlot.mbLoaded)
-            AptTickMovieSlot(s_FrameworkSlot, lbProbeFrame);
-        if (s_PersistentSlot.mbLoaded)
-            AptTickMovieSlot(s_PersistentSlot, lbProbeFrame);
-
-        s32 liFlowTicks = 0;
-        if (s_FlowSlot.mbLoaded && !s_bMovieStopped)   // the stop parks the FLOW slot only
-            liFlowTicks = AptTickMovieSlot(s_FlowSlot, lbProbeFrame);
-
-        // The pending title help-item defaults (armed by the SelectionMenu transin):
-        // retried per update until the StaticHelpItem + its ControllerButtons icon
-        // subtree have composed (they place over the transin's first ticks). FLOW slot
-        // only -- the title menu lives in the flow movie.
-        if (s_bHelpDefaultsPending && liFlowTicks > 0 && s_FlowSlot.mpRootCIH != nullptr)
+        if (s_bHelpDefaultsPending && s_FlowSlot.mbLoaded && s_FlowSlot.mpRootCIH != nullptr)
         {
             static int s_iHelpAttempts = 0;
             AptCIH* lpFlowRoot = static_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
@@ -2021,16 +1734,8 @@ namespace BrnGui
             {
                 s_bHelpDefaultsPending = false;
             }
-            else if ((++s_iHelpAttempts % 300) == 0)   // heartbeat ~every 10s at 30 ticks/s
+            else if ((++s_iHelpAttempts % 300) == 0)   // heartbeat ~every 10s
             {
-                // KEEP RETRYING (2026-07-05): the StaticHelpItem + its Controller-
-                // Buttons icon subtree only compose once the SELECTION MENU opens
-                // (they place over its transin ticks) -- which can be minutes after
-                // boot, so the old boot-anchored give-up cap was wrong (the glyph
-                // only appeared when the menu was opened within ~10s of composing).
-                // The cap dated from when the icon subtree could NEVER compose (the
-                // GUIAPT64 record-misalignment data defect, since repaired -- see
-                // references/GUIAPT64_FRAMETABLE_BUG.md). Heartbeat, don't give up.
                 CgsDev::Log::WriteToLog(
                     "[AptRT] helpitem: defaults still pending (icon subtree not composed yet) -- retrying.\n");
             }
@@ -2623,9 +2328,9 @@ namespace BrnGui
         PlayRuntimeMovie(lpacMovieName, liLevelNum);
     }
 
-    void AptRuntimeHost::Update()
+    void AptRuntimeHost::UpdateShimResidue()
     {
-        UpdateRuntime();
+        ShimResidueUpdate();
     }
 
     void AptRuntimeHost::Render(CgsGraphics::Im2d* lpIm2d)
@@ -2693,6 +2398,34 @@ namespace BrnGui
 // the faithful engine body once it is exported + reconstructed.
 // FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
 // =============================================================================
+// =============================================================================
+// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
+// (CgsGui::AptAux::LoadFlashAnimation @0x82849080 calls it with the "_level%d"
+// path). Its X360 body has no per-address export in the dump set, so this host
+// definition is the PC stand-in: parse the level index back out of the target
+// path and drive the host movie-load machinery (the same load the engine body
+// kicks through the loader + the pfnLoadAnimation host callback). Replace with
+// the faithful engine body once it is exported + reconstructed.
+// FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
+// =============================================================================
+// TEMP-DIAG (delete before commit)
+void AptUpdateTempDiagChain(AptCIH* pFirst)
+{
+    char lac[512];
+    int n = std::snprintf(lac, sizeof(lac), "[AptRT] TEMPDIAG chain:");
+    AptCIH* p = pFirst;
+    for (int i = 0; i < 10 && p != nullptr && n < 460; ++i)
+    {
+        n += std::snprintf(lac + n, sizeof(lac) - n, " %p(d%d,f%08X)",
+                           (void*)p,
+                           p->GetCharacterInst() ? p->GetCharacterInst()->GetRenderItem()->GetDepth() : -1,
+                           p->mFlagsA);
+        p = p->GetDisplayListNext();
+    }
+    std::snprintf(lac + n, sizeof(lac) - n, p ? " ...MORE\n" : " <end>\n");
+    CgsDev::Log::WriteToLog(lac);
+}
+
 int AptLoadAnimation(const char* pName, const char* pTargetPath)
 {
     int liLevel = 0;
