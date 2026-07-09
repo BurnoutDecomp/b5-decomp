@@ -77,6 +77,16 @@ void*     gpAptRenderingContext       = nullptr;   // dword_8324E2AC (the shared
 // arms silently looked up empty objects. Every reader now binds gpAptGlobalFallback /
 // gpAptGlobalExtensionObject above -- the pair AptValueInitialize actually builds.)
 AptValue* gpObjRegistrationFunc       = nullptr;   // the Object-registration native fn
+// The AS global-function singletons AptCIH::objectMemberLookup returns for the
+// setInterval/clearInterval/isNaN/unescape/escape/Boolean member names. Created
+// by the deferred sub_82AF6B68 builtin-table init (see AptInit.cpp); null until
+// that init homes -- the lookup's null return continues the findChild resolution.
+AptValue* gpAptFnSetInterval          = nullptr;   // off_8324D828
+AptValue* gpAptFnClearInterval        = nullptr;   // off_8324D81C
+AptValue* gpAptFnIsNaN                = nullptr;   // off_8324D824
+AptValue* gpAptFnUnescape             = nullptr;   // off_8324E1FC
+AptValue* gpAptFnEscape               = nullptr;   // off_8324D80C
+AptValue* gpAptFnBoolean              = nullptr;   // off_8324D74C
 
 // ===========================================================================
 // 2. The 27 gpAptNativeFn_8324E4xx per-built-in native-function singletons.

@@ -152,7 +152,10 @@ TextFormat* AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
 
 AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg)
 {
-    AptTextFormat* const pThis = ::new (pBlock) AptTextFormat(nullptr);
+    // The X360 does NOT run the TextFormat copy ctor here (it cannot take a null
+    // source): the AptValueWithHash base + vtable + zeroed class flags construct,
+    // then the field ctor stamps the raw embedded record directly.
+    AptTextFormat* const pThis = ::new (pBlock) AptTextFormat();
     AptTextFormat_ConstructRecord(&pThis->mFormat, pSource,
                                   static_cast<float>(dArg),
                                   -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);
@@ -288,7 +291,11 @@ TextFormat* AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
 {
     pRecord->mfSize = fSize;          // *(a1+4) = a3
     pRecord->mnColor = nColor;        // *(a1+8) = a5
-    pRecord->mFontName = EAStringC(); // *a1 = &s_EmptyInternalData (empty == inherit)
+    // *a1 = &s_EmptyInternalData (empty == inherit). The console STORES the empty
+    // sentinel raw -- this ctor stamps RAW record memory (the sub_82AFB2A8 /
+    // Allocate(record) call sites), so the slot must be CONSTRUCTED, not assigned:
+    // an operator= here would release whatever garbage the raw slot holds.
+    ::new (static_cast<void*>(&pRecord->mFontName)) EAStringC();
 
     // ---- pack the bold/italic/underline style flags (base 2, then per-attr) ----
     uint32_t uStyle = 2u;                                  // *(a1+16) = 2

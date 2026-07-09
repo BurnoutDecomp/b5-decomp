@@ -87,6 +87,13 @@ struct TextFormat
     // ctor @0x82AEC320 -- seed the inherit sentinels then copyTextFormatObj(this, pSrc).
     // FLAG: body its own TU (needs copyTextFormatObj). Declared for the embedders.
     explicit TextFormat(const TextFormat* pSource);   // FLAG: body its own TU
+
+    // Uninitialised-record construction: on the X360 the sub_82AFB2A8 path leaves the
+    // embedded record raw pool memory (the AptValueWithHash base ctor stops at +0x20)
+    // and the field ctor (AptTextFormat_ConstructRecord) stamps every field right
+    // after. The scalars are left unwritten exactly like the console's raw block;
+    // mFontName still default-constructs (an EAStringC cannot be raw).
+    TextFormat() {}
 };
 
 // ---------------------------------------------------------------------------
@@ -106,6 +113,11 @@ struct AptTextFormat : public AptObject
     // the embedded TextFormat(pSource) record. dtor @0x82AF17F8 releases mFontName and
     // chains ~AptObject (RAII + base, so the body is empty).
     explicit AptTextFormat(const TextFormat* pSource);   // @0x82AF1730
+    // The sub_82AFB2A8 construction shape: the base + vtable + zeroed class flags
+    // WITHOUT the record copy -- the caller stamps mFormat via the field ctor
+    // (AptTextFormat_ConstructRecord) immediately after. (The console never routes
+    // this path through TextFormat's copy ctor -- it cannot take a null source.)
+    AptTextFormat() : AptObject(AptVFT_TextFormat, 8) {}
     virtual ~AptTextFormat() {}                          // @0x82AF17F8
 
     // objectMemberLookup @0x82AF18E0 -- resolve a scriptable TextFormat property name

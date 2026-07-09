@@ -33,11 +33,10 @@
 //     header 0x20 + name slot 0 -- the same native-8 character layout the XB1
 //     AptCharacterAnimation::Fixup / AptMovie::resolve64 walk; verify vs the XB1 char
 //     record, never a converter script).
-//   * The TextFormat object (mpTextFormat) is still an opaque AptValue* in this slice
-//     (its value-type layout is a follow-on). The console overrides colour/style/
-//     indent/margins from it by fixed offsets; modelled here by documented offset
-//     reads behind a null gate + FLAG. TITLE_SCREEN02's fields carry no TextFormat, so
-//     the taken path is the null-TextFormat branch.
+//   * The TextFormat overrides (colour/style/indent/margins/font name) read the
+//     +0x68 slot as the embedded TextFormat RECORD by named member (AptTextFormat.h;
+//     the member's AptValue* typing is the opaque pass-through FLAG). The console's
+//     fixed offsets map onto those members; the font name is mFontName.GetBuffer().
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -53,6 +52,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"     // the movie def (font-char table walk)
 #include "SDKs/EATech/include/Apt/AptStd/AptRect.h"
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"       // mpPositionMatrix->tx (the box-align anchor)
+#include "SDKs/EATech/include/Apt/AptTextFormat.h"          // the TextFormat record (mpTextFormat overrides)
 #include "SDKs/EATech/include/Apt/Apt.h"                    // AptAllocateStringParameters + gAptFuncs
 
 // ---------------------------------------------------------------------------
@@ -161,19 +161,14 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         params.bMultiline = static_cast<int>(pItem->mFlagsAndBorderColor & 1u);         // GetMultiline
         params.bWordWrap  = static_cast<int>((pItem->mFlagsAndBorderColor >> 1) & 1u);  // GetWordWrap
 
-        // Text colour: overridden by the TextFormat object when it carries a valid
-        // colour (its +8 word != -1), else the render item's authored text colour.
+        // Text colour: overridden by the TextFormat record when it carries a valid
+        // colour (console +8 == mnColor; -1 == "no override"), else the render item's
+        // authored text colour. The +0x68 slot holds the embedded TextFormat RECORD
+        // (the AptValue* typing on the member is the opaque pass-through FLAG).
+        const TextFormat* const pFmt = reinterpret_cast<const TextFormat*>(pTextFormat);
         unsigned int nColour = pItem->mTextColor;
-        if (pTextFormat != nullptr)
-        {
-            // FLAG (opaque TextFormat): the console reads the colour override at
-            // TextFormat+8 (a packed RGB; -1 == "no override"). Documented offset read
-            // behind the null gate until the TextFormat value type is homed.
-            const int nFmtColour = *reinterpret_cast<const int*>(
-                reinterpret_cast<const uint8_t*>(pTextFormat) + 8);
-            if (nFmtColour != -1)
-                nColour = static_cast<unsigned int>(nFmtColour) | 0xFF000000u;
-        }
+        if (pFmt != nullptr && pFmt->mnColor != -1)
+            nColour = static_cast<unsigned int>(pFmt->mnColor) | 0xFF000000u;
         params.nColour = nColour;
 
         params.nBackColor   = (pItem->mFlagsAndBackColor   >> 8) | 0xFF000000u;   // GetBackgroundColor
@@ -194,19 +189,16 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         params.szString = pResolvedText->GetBuffer();
         params.eFlags   = pItem->mStateFlags;
 
-        // Font style / indent / margins: overridden by the TextFormat object, else the
-        // "no format" defaults (style 0, indent/margins -1).
-        if (pTextFormat != nullptr)
+        // Font style / indent / margins: overridden by the TextFormat record (console
+        // style @+16 == mnStyleFlags, indent @+20, left/right margins @+24/+28), else
+        // the "no format" defaults (style 0, indent/margins -1).
+        if (pFmt != nullptr)
         {
-            // FLAG (opaque TextFormat): console reads style @+16, indent @+20,
-            // left-margin @+24, right-margin @+28. Documented offset reads behind the
-            // null gate until the TextFormat value type is homed.
-            const uint8_t* pFmt = reinterpret_cast<const uint8_t*>(pTextFormat);
-            const int nStyle = *reinterpret_cast<const int*>(pFmt + 16);   // FLAG opaque TextFormat: style @+16
+            const int nStyle = pFmt->mnStyleFlags;
             params.nFontStyle   = static_cast<unsigned int>((nStyle == 2) ? 0 : nStyle);
-            params.nIndent      = *reinterpret_cast<const int*>(pFmt + 20);   // FLAG opaque TextFormat: indent @+20
-            params.nLeftMargin  = *reinterpret_cast<const int*>(pFmt + 24);   // FLAG opaque TextFormat: leftMargin @+24
-            params.nRightMargin = *reinterpret_cast<const int*>(pFmt + 28);   // FLAG opaque TextFormat: rightMargin @+28
+            params.nIndent      = pFmt->mnIndent;
+            params.nLeftMargin  = pFmt->mnLeftMargin;
+            params.nRightMargin = pFmt->mnRightMargin;
         }
         else
         {
@@ -223,16 +215,15 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
                                  : reinterpret_cast<AptAssetString>(
                                        static_cast<intptr_t>(pItem->mZID));
 
-        // The font NAME: from the TextFormat object (+8) when set, else -- when the
-        // character carries a font index (>= 0) -- resolved off the parent movie's
-        // font-character table; else null.
+        // The font NAME: from the TextFormat record's mFontName when a format is set
+        // (the console's `+8` in this arm is the name BUFFER inside the EAStringC's
+        // internal node, i.e. mFontName.GetBuffer(), NOT a record field), else --
+        // when the character carries a font index (>= 0) -- resolved off the parent
+        // movie's font-character table; else null.
         const char* pFontName = nullptr;
-        if (pTextFormat != nullptr)
+        if (pFmt != nullptr)
         {
-            // FLAG (opaque TextFormat): the console uses TextFormat+8 as the font name
-            // pointer in the format path.
-            pFontName = *reinterpret_cast<const char* const*>(
-                reinterpret_cast<const uint8_t*>(pTextFormat) + 8);
+            pFontName = pFmt->mFontName.GetBuffer();
         }
         else if (pCharacter != nullptr && pCharacter->mnDefaultGlyphIndex >= 0 && pParent != nullptr)
         {

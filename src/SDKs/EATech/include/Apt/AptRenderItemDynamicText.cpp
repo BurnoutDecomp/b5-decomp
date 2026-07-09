@@ -29,6 +29,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemDynamicText.h"
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"   // authored text-field defaults
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"          // mpTextFormat (TextFormat object)
+#include "SDKs/EATech/include/Apt/AptTextFormat.h"              // the TextFormat record (sizeof for the pool free)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"         // mTextValue / mVarValue teardown
 #include "SDKs/EATech/include/Apt/AptDefine.h"                  // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                     // DOGMA_PoolManager
@@ -192,19 +193,21 @@ void AptRenderItemDynamicText::SetZID(intptr_t nZID)
 }
 
 // ---------------------------------------------------------------------------
-// SetTextFormat @0x82AEC1D0 -- swap the field's TextFormat object: release + free
-// the old one (drop its embedded string's refcount, return the 0x20-byte block to
-// the non-GC pool), then store the new one.
+// SetTextFormat @0x82AEC1D0 -- swap the field's TextFormat record: release + free
+// the old one (drop its embedded string's refcount, return the record block to the
+// non-GC pool), then store the new one. (Console Deallocate(.., 0x20) == its
+// sizeof(TextFormat); the x64 record widens to sizeof(TextFormat) -- a literal
+// 0x20 would return the block to the wrong per-size free-list bucket.)
 // ---------------------------------------------------------------------------
 void AptRenderItemDynamicText::SetTextFormat(AptValue* pTextFormat)
 {
     if (mpTextFormat)
     {
-        // The TextFormat object embeds an EAStringC at offset 0; its dtor drops that
+        // The TextFormat record embeds an EAStringC at offset 0; its dtor drops that
         // shared string's internal refcount (console: EAStringC::DecreaseInternalRefCount
-        // on *mpTextFormat, inlined), then the 0x20-byte block returns to the non-GC pool.
+        // on *mpTextFormat, inlined), then the record block returns to the non-GC pool.
         reinterpret_cast<EAStringC*>(mpTextFormat)->~EAStringC();
-        gpNonGCPoolManager->Deallocate(mpTextFormat, 0x20u);
+        gpNonGCPoolManager->Deallocate(mpTextFormat, sizeof(TextFormat));
     }
     mpTextFormat = pTextFormat;
 }

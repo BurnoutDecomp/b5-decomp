@@ -823,7 +823,10 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setTextFormat(AptValue* pContext, 
     else
     {
         // No TextFormat yet: allocate a fresh one (copy-ctor from the source) and set it.
-        void* const lpMem = gpAptPseudoDataPool->Allocate(32);
+        // (Console Allocate(32) == its sizeof(TextFormat); the x64 record widens to 40
+        // under the 8-byte EAStringC -- a literal 32 overruns the pool block and
+        // corrupts the adjacent free-list node.)
+        void* const lpMem = gpAptPseudoDataPool->Allocate(sizeof(TextFormat));
         TextFormat* const pNewFmt = lpMem ? new (lpMem) TextFormat(pSrc) : nullptr;
         pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
         pItem->SetTextFormat(reinterpret_cast<AptValue*>(pNewFmt));

@@ -497,66 +497,11 @@ int AptValueInitialize()
                 pClass->setGCRoot(1);
                 if (pProto)
                     pProto->setGCRoot(1);
-
-                // ---- the MovieClip builtin's prototype METHODS ----------------
-                // Every sprite instance's __proto__ chain terminates at this
-                // prototype (the AptCharacterSpriteInstBase ctor wires fresh
-                // instances to it; class binding re-chains through Extends), so
-                // the AS clip methods -- gotoAndPlay / play / getTextFormat / ...
-                // -- resolve here. The method BODIES are the reconstructed
-                // AptCIHNativeFunctionHelper natives (each console-attested at
-                // its listed address); each is wrapped in an AptNativeFunction
-                // and installed as a prototype member, the same install pattern
-                // as Object.registerClass above. FLAG: the console resolves these
-                // through the CIH-family objectMemberLookup recognizer (the
-                // AptString gperf pattern); the prototype install is observable-
-                // identical for AS lookups -- re-home when that recognizer TU lands.
-                if (li == 2 && pProto != nullptr)
-                {
-                    struct ClipMethodEntry { const char* pcName; AptExtFunctionPtr pfnMethod; };
-                    static const ClipMethodEntry lakClipMethods[] =
-                    {
-                        { "attachMovie",          reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_attachMovie) },
-                        { "createEmptyMovieClip", reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_createEmptyMovieClip) },
-                        { "createTextField",      reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_createTextField) },
-                        { "duplicateMovieClip",   reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_duplicateMovieClip) },
-                        { "getBounds",            reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_getBounds) },
-                        { "getBytesTotal",        reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_getBytesTotal) },
-                        { "getDepth",             reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_getDepth) },
-                        { "getNewTextFormat",     reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_getNewTextFormat) },
-                        { "getTextFormat",        reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_getTextFormat) },
-                        { "gotoAndPlay",          reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_gotoAndPlay) },
-                        { "gotoAndStop",          reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_gotoAndStop) },
-                        { "hitTest",              reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_hitTest) },
-                        { "loadMovie",            reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_loadMovie) },
-                        { "loadVariables",        reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_loadVariables) },
-                        { "localToGlobal",        reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_localToGlobal) },
-                        { "nextFrame",            reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_nextFrame) },
-                        { "play",                 reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_play) },
-                        { "removeMovieClip",      reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_removeMovieClip) },
-                        { "removeTextField",      reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_removeTextField) },
-                        { "setMask",              reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_setMask) },
-                        { "setTextFormat",        reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_setTextFormat) },
-                        { "startDrag",            reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_startDrag) },
-                        { "swapDepths",           reinterpret_cast<AptExtFunctionPtr>(&AptCIHNativeFunctionHelper::sMethod_swapDepths) },
-                    };
-                    AptNativeHash* const pProtoHash = pProto->GetNativeHashVirtual();
-                    if (pProtoHash != nullptr)
-                    {
-                        for (unsigned lu = 0;
-                             lu < sizeof(lakClipMethods) / sizeof(lakClipMethods[0]); ++lu)
-                        {
-                            AptNativeFunction* const pFn = AptExtObject::CreateNewAptFunction(
-                                lakClipMethods[lu].pfnMethod);
-                            if (pFn != nullptr)
-                            {
-                                EAStringC lName(lakClipMethods[lu].pcName);
-                                pProtoHash->Set(lName, pFn);
-                                pFn->setGCRoot(1);
-                            }
-                        }
-                    }
-                }
+                // (The MovieClip clip METHODS -- gotoAndPlay / play / getTextFormat /
+                // ... -- are NOT prototype members: the console resolves them through
+                // AptCIH::objectMemberLookup's SpriteMembersIndex recognizer, homed in
+                // AptCIHMembers.cpp 2026-07-09. The interim prototype install this TU
+                // carried was retired with that landing.)
             }
         }
     }

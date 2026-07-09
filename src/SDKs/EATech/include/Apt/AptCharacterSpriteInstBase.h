@@ -77,10 +77,10 @@ struct AptClipEventHandler
 
 // The sprite instance's registered-clip-event-handler list -- the placement's
 // clipActions BLOCK view, the XB1 native-8 layout: {i32 count @0; pad;
-// recArray ptr 8-aligned @+0x08}. (The 4-packed "converter accommodation" view
-// matched the retired apt_convert data; the GUIAPT64 drive set is uniformly
-// XB1-form now -- apt8_repair.py normalizes every naturally-packed clipActions
-// block -- so the faithful natural layout is restored, 2026-07-09.)
+// recArray ptr 8-aligned @+0x08}. (An earlier 4-packed view of this struct is
+// retired; the GUIAPT64 drive set is uniformly XB1-form now -- apt8_repair.py
+// normalizes every naturally-packed clipActions block -- so the faithful
+// natural layout is restored, 2026-07-09.)
 struct AptClipEventHandlerList
 {
     int32_t             mnCount;       // +0x00
