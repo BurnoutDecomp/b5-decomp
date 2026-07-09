@@ -13,6 +13,28 @@
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
 
+// ----------------------------------------------------------------------------
+// NOTE -- BehaviourGameplayExternal::Parameters::Serialise<S> is BLOCKED (all three instances:
+//   Serialise<TextFileWriteSerialiser> @0x8224D418, <TextFileReadSerialiser> @0x822312E8,
+//   <DebugMenuSerialiser> @0x8224BBB0).
+//
+// The visitor is a versioned walk (miField08 = latest 3; switch over versions 1/2/3 + a
+// "code/data version mismatch" assert). Its latest (case 3) branch recurses into two by-value
+// Utils::CameraShake::Parameters sub-blocks at +0x0C and +0x1C (labels "Air Shake Params" /
+// "Impact Shake Params"), so a faithful reconstruction must re-type those offsets from the current
+// individual f32 fields (mfField0C..mfField28) to CameraShake::Parameters members. That change is
+// blocked here because:
+//   1. The only reconstructed home for CameraShake::Parameters is BehaviourRig.h, and pulling it
+//      into this widely-consumed header (7 consumers) triggers a PRE-EXISTING Utils::Tweaker ODR
+//      double-definition (BehaviourRig.h vs BrnCameraTweaker.h) that breaks BrnBehaviourManager.cpp.
+//      CameraShake needs its own header (its DWARF home is BrnCameraShake.h) + a Tweaker de-dup
+//      first -- a shared-header refactor outside this TU's scope.
+//   2. It would also re-shape the reviewed Parameters::Set (below), which writes those offsets as
+//      individual f32s.
+// The DebugMenuSerialiser instance additionally needs the un-homed DebugMenuSerialiser type.
+// Deferred to the CameraShake-layout pass; blocked precisely rather than offset-hacking or forking.
+// ----------------------------------------------------------------------------
+
 namespace BrnDirector
 {
 namespace Camera

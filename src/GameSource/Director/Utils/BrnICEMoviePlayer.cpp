@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"    // CgsCore::SPrintf
 #include "GameSource/Director/BrnDirectorICEWrapper.h"     // BrnDirector::ICEWrapper (PlayMovie / IsPlayingMovie / GetCamera)
+#include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"  // Camera::TextFileWriteSerialiser (SharedPlaylists::Serialise<S>)
+#include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"   // Camera::TextFileReadSerialiser  (SharedPlaylists::Serialise<S>)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnICEMoviePlayer.cpp
@@ -630,5 +632,64 @@ SharedPlaylists::GetPausePlaylist() const
                "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS");
     return maPausePlaylists[muCurrentPausePlaylist];
 }
+
+// ----------------------------------------------------------------------------
+// NOTE -- BrnDirector::ICEMoviePlaylist::Serialise<S> is BLOCKED (all three instances:
+//   <TextFileWriteSerialiser> @0x8224CBE8, <TextFileReadSerialiser> @0x8224CDE8,
+//   <DebugMenuSerialiser> @0x8224B240).
+//
+// Unlike the SharedPlaylists visitor below, the playlist visitor is not a field walk: it drives the
+// movie ObjectPool/Array machinery -- serialise a movie count through a "Ignore this" scratch slot,
+// Construct() when the file count is smaller than the live list, InsertMovieBefore() a fresh default
+// IceMovie when it is larger, then recurse into each movie via IceMovie::Serialise labelling them
+// from a per-movie "MovieN" rodata name table. Three faithfulness gaps block a precise reconstruction:
+//   1. The movie-count scratch slot (X360 stores it at playlist +0x4DC, label "Ignore this") is not
+//      pinned to a named trailing member -- resolving it needs the ObjectPool<...,20,s32> sizings
+//      verified so +0x4DC maps to miDebugMenuNewMovieIndex vs miDebugSize.
+//   2. The per-movie label table is a 10-byte-stride "Movie1".."Movie20" rodata blob of which only
+//      "Movie1" is symbolised; the rest are inferred from the stride, not recovered.
+//   3. The InsertMovieBefore default IceMovie is a partial inline init (refType INVALID, startPos 0,
+//      vehicleType 0, flash true; other fields left uninitialised) whose shape (Construct-inlined vs
+//      explicit) is not pinned.
+// The DebugMenuSerialiser instance additionally needs the un-homed DebugMenuSerialiser type (its
+// per-movie path is AddToPath + CgsDev::DebugComponent (Un)RegisterVariable, not IceMovie::Serialise).
+// Deferred; blocked precisely rather than fabricating the name table / mis-mapping the scratch slot.
+// (SharedPlaylists::Serialise below recurses into this visitor; it compiles against the declaration,
+// so its own reconstruction is unaffected by this block.)
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// BrnDirector::SharedPlaylists::Serialise<S> -- the ONE shared-playlists field-walk visitor body.
+//
+// Serialises only the three pause-camera playlists and the current-pause-playlist index (the race
+// intro / post-race playlists are NOT part of the debug save). Hands each of the three pause
+// playlists to the serialiser as a nested block (S recurses into ICEMoviePlaylist::Serialise), then
+// the current-playlist index as a scalar u32. The body is uniform across S; only S's inlined
+// helpers differ:
+//   - TextFileWriteSerialiser @0x82258C18: three Serialise<ICEMoviePlaylist> section writes, then
+//     FormatName + fprintf "%s : %d\n" for the index.
+//   - TextFileReadSerialiser  @0x82258CC0: three nested-block reads (consume header line + recurse),
+//     then fscanf "%s : %d\n" for the index.
+// The DebugMenuSerialiser instance (@0x82252D30) shares this source body but is NOT instantiated
+// here -- its serialiser type has no reconstructed home yet (see note below).
+//
+// Playlist offsets verified against the asm: maPausePlaylists[0/1/2] at +0x09D0/+0x0EB8/+0x13A0
+// (0x4E8-byte stride) and muCurrentPausePlaylist at +0x1888.
+// ----------------------------------------------------------------------------
+template<class TSerialiser>
+void SharedPlaylists::Serialise(TSerialiser& lrSerialiser)
+{
+    lrSerialiser.Serialise("Playlists/Pause playlist 0", maPausePlaylists[0]);
+    lrSerialiser.Serialise("Playlists/Pause playlist 1", maPausePlaylists[1]);
+    lrSerialiser.Serialise("Playlists/Pause playlist 2", maPausePlaylists[2]);
+    lrSerialiser.Serialise("Playlists/Current playlist", muCurrentPausePlaylist);
+}
+
+// Explicit instantiations -- one per file serialiser the shared playlists are saved/loaded through.
+// BLOCKED (not instantiated): Serialise<Camera::DebugMenuSerialiser> @0x82252D30 -- DebugMenuSerialiser
+// has no reconstructed home yet (its pause-playlist recursion is the un-homed sub_8224F218 nested-block
+// helper + Process<unsigned int> for the index). It lands with the DebugMenuSerialiser TU.
+template void SharedPlaylists::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
+template void SharedPlaylists::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
 
 } // namespace BrnDirector

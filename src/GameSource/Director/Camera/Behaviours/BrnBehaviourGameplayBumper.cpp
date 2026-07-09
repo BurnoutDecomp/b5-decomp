@@ -15,10 +15,25 @@
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"
 
+// The bumper-cam Parameters::Serialise<S> visitor drives the camera-tunings serialiser S by name;
+// each S provides the scalar/nested field helpers. Pull in the two file serialisers this TU
+// instantiates the visitor over (the DebugMenuSerialiser instance has no reconstructed serialiser
+// home yet -- see the note above the explicit instantiations).
+#include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"
+#include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"
+
 namespace BrnDirector
 {
 namespace Camera
 {
+
+// FLAG (unrecovered rodata @0x820051C0): the field label the bumper-cam Serialise passes for
+// mfFOV (the +0x24 field, sibling to "FOV during boost" at +0x30). The X360 references only the
+// address (lis/addi unk_820051C0) in both the write @0x822150DC and debug-menu @0x82214B40
+// visitors; the literal string bytes are not in the export, so the label is declared extern and
+// NOT fabricated (same treatment as the read serialiser's unrecovered component suffixes). When
+// that rodata is recovered, define it with the literal bytes at @0x820051C0.
+extern const char* const KPC_LABEL_820051C0;   // @0x820051C0 -- mfFOV field label
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourGameplayBumper::Parameters::Set @0x821F94C8
@@ -76,6 +91,50 @@ void BehaviourGameplayBumper_SetParametersAnchor(
 {
     lrBehaviour.SetParameters(lpParameters);
 }
+
+// ----------------------------------------------------------------------------
+// BehaviourGameplayBumper::Parameters::Serialise<S> -- the ONE bumper-cam field-walk visitor body.
+//
+// Walks the block's eleven tunable f32 fields in ascending-offset order, handing each to the
+// serialiser S by name. S supplies the per-field direction: TextFileWriteSerialiser writes each as
+// a "<label> : <value>\n" line (FormatName + fprintf, inlined -> @0x82214F10); TextFileReadSerialiser
+// reads each back (fscanf "%s : %f\n", inlined -> @0x82202B50). The body is uniform across S -- the
+// field sequence + labels are identical in the write and read instances' asm; only S's inlined
+// scalar helper differs. The DebugMenuSerialiser instance (@0x82214A08, Process<float> + SetStep per
+// field) shares this same source body but is NOT instantiated here (its serialiser type has no
+// reconstructed home yet -- see the note below).
+//
+// Field/label map (from the write+read asm, ascending offset):
+//   +0x08 mfField08 "Y Offset"          +0x1C mfField1C "Yaw Spring"
+//   +0x0C mfField0C "Z Offset"          +0x20 mfField20 "Roll Spring"
+//   +0x10 mfField10 "Accel. Dampening"  +0x24 mfFOV      <unk_820051C0>
+//   +0x14 mfField14 "Accel. Response"   +0x28 mfField28 "Body Roll Scale"
+//   +0x18 mfField18 "Pitch Spring"      +0x2C mfField2C "Body Pitch Scale"
+//                                       +0x30 mfBoostFOV "FOV during boost"
+// ----------------------------------------------------------------------------
+template<class TSerialiser>
+void BehaviourGameplayBumper::Parameters::Serialise(TSerialiser& lrSerialiser)
+{
+    lrSerialiser.Serialise("Y Offset", mfField08);
+    lrSerialiser.Serialise("Z Offset", mfField0C);
+    lrSerialiser.Serialise("Accel. Dampening", mfField10);
+    lrSerialiser.Serialise("Accel. Response", mfField14);
+    lrSerialiser.Serialise("Pitch Spring", mfField18);
+    lrSerialiser.Serialise("Yaw Spring", mfField1C);
+    lrSerialiser.Serialise("Roll Spring", mfField20);
+    lrSerialiser.Serialise(KPC_LABEL_820051C0, mfFOV);      // +0x24 -- label unrecovered (extern)
+    lrSerialiser.Serialise("Body Roll Scale", mfField28);
+    lrSerialiser.Serialise("Body Pitch Scale", mfField2C);
+    lrSerialiser.Serialise("FOV during boost", mfBoostFOV);
+}
+
+// Explicit instantiations -- one per file serialiser this block is saved/loaded through.
+// BLOCKED (not instantiated): Serialise<DebugMenuSerialiser> @0x82214A08 -- BrnDirector::Camera::
+// DebugMenuSerialiser has no reconstructed home yet (it needs Process<float> + CgsDev::DebugComponent
+// SetStep wiring), so instantiating the body over it would require fabricating that serialiser type.
+// It lands when the DebugMenuSerialiser TU is homed.
+template void BehaviourGameplayBumper::Parameters::Serialise<TextFileWriteSerialiser>(TextFileWriteSerialiser&);
+template void BehaviourGameplayBumper::Parameters::Serialise<TextFileReadSerialiser>(TextFileReadSerialiser&);
 
 } // namespace Camera
 } // namespace BrnDirector
