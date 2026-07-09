@@ -25,3 +25,12 @@ template s32    CgsModule::VariableEventQueue<131072, 16>::GetLength() const;
 template s32    CgsModule::VariableEventQueue<131072, 16>::GetNextEvent(const CgsModule::Event*, const CgsModule::Event**, s32*) const;
 template s32    CgsModule::VariableEventQueue<131072, 16>::GetSizeInBytes() const;
 template void   CgsModule::VariableEventQueue<131072, 16>::OutputQueueContents() const;
+
+// ==== VEQ typed-AddEvent<EventT> family (Pass-A re-home finish) ====
+// Explicit instantiation of the templated AddEvent<EventT>/Append<SRCBUF,16>/
+// AppendSafe<SRCBUF,16> members the X360 emits out-of-line for THIS <131072,16>
+// instance. Bodies are the shared generic templates in CgsVariableEventQueue.h
+// (typed AddEvent = assert-then-forward with sizeof(EventT); Append = bulk
+// memcpy; AppendSafe = per-event GetFirst/Next + AddEventSafe). Element-type
+// homes are #included above so each EventT is a complete type.
+template bool CgsModule::VariableEventQueue<131072, 16>::Append<131072, 16>(const CgsModule::VariableEventQueue<131072, 16>&);

@@ -111,6 +111,37 @@ namespace BrnAI
             u8                  muNumberOfMedalsToUnlock;   // :341
         };
 
+        // ADDITIVE GROW (VEQ typed-AddEvent family): three more management-queue event records
+        // this module publishes via VariableEventQueue<16384,16>::AddEvent<EventT>. Layout/order
+        // /types verbatim from the DWARF (BrnRaceCarAIInterfaces.h:353/347/366); the X360 typed
+        // AddEvent liSize confirms each byte size (AddCarToCurrentModeEvent==20 @0x822FD028,
+        // PlayerControlChangedEvent==1 @0x822FCF70, RemoveCarFromCurrentModeEvent==4 @0x822FD0E0).
+        // (AttachAIControlEvent is deliberately NOT homed here -- it carries an Attribute::Key and
+        // a BrnAI::EPersonalityType, the latter un-homed, so its typed AddEvent stays blocked.)
+
+        // BrnRaceCarAIInterfaces.h:353 -- sizeof 20.
+        struct AddCarToCurrentModeEvent : public CgsModule::Event
+        {
+            EGlobalRaceCarIndex meGlobalRaceCarIndex;       // :355
+            s32                 miOpponentIndex;            // :356
+            u16                 muDestinationAISection;     // :357
+            bool                mbDeviateFromRoute;         // :358
+            f32                 mfProgressionRankAsRatio;   // :359
+            f32                 mfOvertakingDifficulty;     // :360
+        };
+
+        // BrnRaceCarAIInterfaces.h:347 -- sizeof 1.
+        struct PlayerControlChangedEvent : public CgsModule::Event
+        {
+            bool mbPlayerIsInControl;                       // :348
+        };
+
+        // BrnRaceCarAIInterfaces.h:366 -- sizeof 4.
+        struct RemoveCarFromCurrentModeEvent : public CgsModule::Event
+        {
+            EGlobalRaceCarIndex meGlobalRaceCarIndex;       // :368
+        };
+
         // ====================================================================
         // BrnAI::AIModuleIO::RaceCarAIInterface  (DWARF BrnRaceCarAIInterfaces.h:56)
         // ====================================================================

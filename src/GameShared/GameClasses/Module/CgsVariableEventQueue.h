@@ -83,6 +83,19 @@ namespace CgsModule
         template <typename EventT>
         bool AddEvent(const EventT* lpEvent, s32 liType);
 
+        // ADDITIVE GROW (FLAG): typed-size convenience form of AddEventSafe -- the
+        // non-asserting, overflow-guarded sibling of the typed AddEvent<EventT> above. The
+        // X360 emits this as a distinct templated member of VariableEventQueue<BUFSIZE,ALIGN>
+        // (e.g. ??$AddEventSafe@VCInEventDrawAxis@Internal@CgsDev@@...@?$VariableEventQueue@
+        // $0EAAA@$0BA@@CgsModule@@ == VariableEventQueue<16384,16>::AddEventSafe<
+        // CgsDev::Internal::CInEventDrawAxis> @ 0x82828868): it asserts the queue is
+        // constructed (CgsVariableEventQueue.h:711 inline), then forwards to the three-arg
+        // AddEventSafe with liSize == sizeof(EventT). Used by the CgsDev debug-draw publishers
+        // (CgsDev::DebugRender::Draw*). DWARF declares only the three-arg AddEventSafe; this
+        // typed form is an X360-attested additional member, added here additively.
+        template <typename EventT>
+        bool AddEventSafe(const EventT* lpEvent, s32 liType);
+
         // ADDITIVE GROW (FLAG): bulk-append another (smaller) VariableEventQueue's packed
         // event bytes into this one. The X360 emits this as a distinct templated member of
         // VariableEventQueue<BUFSIZE,ALIGN> parameterised on the *source* queue's
@@ -98,6 +111,18 @@ namespace CgsModule
         // this bulk Append is X360-attested and added here additively.
         template <s32 SRCBUF, s32 SRCALIGN>
         bool Append(const VariableEventQueue<SRCBUF, SRCALIGN>& lrSource);
+
+        // ADDITIVE GROW (FLAG): non-asserting, per-event safe variant of Append. Where Append
+        // bulk-memcpy's the source's packed bytes (and asserts on overflow), AppendSafe walks
+        // the source queue event-by-event (GetFirstEvent/GetNextEvent) and re-adds each through
+        // this queue's AddEventSafe, returning false the moment an AddEventSafe would overflow
+        // (no assert, no partial-record copy). The X360 emits it as a distinct templated member
+        // parameterised on the source <SRCBUF,SRCALIGN>: AppendSafe<32768,16> @ 0x828529D8 and
+        // AppendSafe<65536,16> @ 0x82852AE8 (dest VariableEventQueue<65536,16>). Asserts this
+        // queue is constructed (CgsVariableEventQueue.h:805). DWARF declares only Append; this
+        // safe form is X360-attested and added here additively.
+        template <s32 SRCBUF, s32 SRCALIGN>
+        bool AppendSafe(const VariableEventQueue<SRCBUF, SRCALIGN>& lrSource);
 
         void* AllocateEvent(s32 liType, s32 liSize);
         void* AllocateEventSafe(s32 liType, s32 liSize);
@@ -448,6 +473,29 @@ namespace CgsModule
         return AddEvent(reinterpret_cast<const Event*>(lpEvent), liType, (s32)sizeof(EventT));
     }
 
+    // -------- AddEventSafe<EventT> (typed convenience, safe) --------
+    // X360: 0x82828868 (EventT = CgsDev::Internal::CInEventDrawAxis) and the sibling
+    // CInEventDraw* debug-draw records. Asserts constructed (inline at
+    // CgsVariableEventQueue.h:711) then forwards to the three-arg AddEventSafe with the
+    // compile-time event size. Mirror of AddEvent<EventT> above but over the non-asserting
+    // overflow-guarded AddEventSafe.
+    template <s32 BUFSIZE, s32 ALIGN>
+    template <typename EventT>
+    bool VariableEventQueue<BUFSIZE, ALIGN>::AddEventSafe(const EventT* lpEvent, s32 liType)
+    {
+        if (!mbIsConstructed)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 711);
+            CgsDev::Assert::EndAssert();
+        }
+
+        return AddEventSafe(reinterpret_cast<const Event*>(lpEvent), liType, (s32)sizeof(EventT));
+    }
+
     // -------- Append<SRCBUF,SRCALIGN> @ X360 0x82504F68 (dest <18432,16>, src <4096,16>) --------
     template <s32 BUFSIZE, s32 ALIGN>
     template <s32 SRCBUF, s32 SRCALIGN>
@@ -483,6 +531,36 @@ namespace CgsModule
         memcpy(&macData[miBufferWritePos], lpSrc, liSizeInBytes);
         miBufferWritePos += liSizeInBytes;
         miLength += lrSource.GetLength();
+        return true;
+    }
+
+    // -------- AppendSafe<SRCBUF,SRCALIGN> @ X360 0x828529D8 (dest <65536,16>, src <32768,16>) --------
+    // Per-event safe append: walk the source queue with GetFirstEvent/GetNextEvent and re-add
+    // each event through this queue's AddEventSafe. Returns false the instant an AddEventSafe
+    // overflows (no assert, no partial copy); returns true once every source event is added.
+    template <s32 BUFSIZE, s32 ALIGN>
+    template <s32 SRCBUF, s32 SRCALIGN>
+    bool VariableEventQueue<BUFSIZE, ALIGN>::AppendSafe(const VariableEventQueue<SRCBUF, SRCALIGN>& lrSource)
+    {
+        if (!mbIsConstructed)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 805);
+            CgsDev::Assert::EndAssert();
+        }
+
+        const Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liType = lrSource.GetFirstEvent(&lpEvent, &liSize);
+        while (lpEvent != 0)
+        {
+            if (!AddEventSafe(lpEvent, liType, liSize))
+                return false;
+            liType = lrSource.GetNextEvent(lpEvent, &lpEvent, &liSize);
+        }
         return true;
     }
 

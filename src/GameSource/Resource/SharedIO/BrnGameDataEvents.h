@@ -101,6 +101,25 @@ namespace GameDataIO
     // `ld r10,0x10(event)`). ADDITIVE GROW of this header's event family; the BrnBaseStreamer
     // forward-decl stays compatible. GROW with its Construct when the GameDataEvents TU lands.
     struct UnloadGameDataResponse : public GameDataAssetEvent {};
+
+    // ADDITIVE GROW (VEQ typed-AddEvent family): three more typed GameData request events the
+    // per-N RequestInterface builders push via VariableEventQueue<N,16>::AddEvent<EventT>.
+    //
+    //   * UnloadGameDataEvent : public GameDataAssetEvent (DWARF BrnGameDataEvents.h) -- the
+    //     asset-unload request; empty derivative like LoadGameDataEvent. The X360 typed
+    //     AddEvent<UnloadGameDataEvent> (VariableEventQueue<2048,16> @ 0x827D10D0) forwards
+    //     liSize == 32 == sizeof(GameDataAssetEvent), so it is an asset event.
+    //
+    //   * SwapInCollisionWorldRequest / SwapOutCollisionWorldRequest : public GameDataEvent
+    //     (DWARF BrnGameDataEvents.h:431 "struct SwapInCollisionWorldRequest : public
+    //     GameDataEvent"; only a Construct(BaseEventReceiverQueue*, s32), no own members). The
+    //     X360 typed AddEvent<Swap*CollisionWorldRequest> (VariableEventQueue<2048,16> @
+    //     0x82512E10 / 0x82512D58) forwards liSize == 8 == sizeof(GameDataEvent) (miEventId@0 +
+    //     mpReceiverQueue@4 on the X360), confirming the plain GameDataEvent base (NOT the
+    //     0x20 asset event). Empty derivatives; the swap builder sets the base fields by name.
+    struct UnloadGameDataEvent : public GameDataAssetEvent {};
+    struct SwapInCollisionWorldRequest : public GameDataEvent {};
+    struct SwapOutCollisionWorldRequest : public GameDataEvent {};
 }
 }
 
