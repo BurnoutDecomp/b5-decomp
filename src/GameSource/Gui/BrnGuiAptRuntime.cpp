@@ -52,8 +52,8 @@
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"       // AptAnimationTarget::GetRootDisplayList (the director's root list)
 #include "SDKs/EATech/include/Apt/AptDisplayList.h"           // AptDisplayList::AsState
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // AptDisplayListState::mpFirst (the placed-node chain)
-#include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCharacterInst::GetRenderItem/GetDepth (probe)
-#include "SDKs/EATech/include/Apt/AptRenderWalk.h"            // AptRender (the faithful render-tree flush)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"         // AptCurrentRenderTreeManager / gnCurrUpdateTick (StopMovie's removal op)
+#include "SDKs/EATech/include/Apt/AptRenderTreeManager.h"     // AptRenderTreeManager::Update_ItemRemoved (StopMovie's park)
 
 // ---- the Apt TEXT system (fonts + glyph batcher + localisation) --------------
 // The PC stand-in for CgsGui::ViewModule's owned text sub-objects (GetFontCollection() /
@@ -741,12 +741,16 @@ namespace BrnGui
         // AptRenderHandler::Render through it).
         if (!s_bAuxReady)
         {
+            // Seed the view module's renderer set for the bring-up window (before the
+            // first frame; from then on the real ViewModule::Render @0x82858810 copies
+            // the set in from the view input buffer each frame -- GuiModule::Render
+            // publishes these same values -- and re-nulls it after RenderInternal).
             CgsGui::ImRendererSet* lpImRenderers = s_pViewModule->GetImRendererSet();
-            lpImRenderers->mpIm2dRenderer = &s_AptRenderBuffer;
-            lpImRenderers->mpReserved04   = nullptr;
-            lpImRenderers->mpReserved08   = nullptr;
-            lpImRenderers->mpReserved0C   = nullptr;
-            lpImRenderers->mp3dRenderer   = &s_i3dRendererSentinel;
+            lpImRenderers->mpIm2dRenderBuffer            = &s_AptRenderBuffer;
+            lpImRenderers->mpReserved04                  = nullptr;
+            lpImRenderers->mpIm3dRenderBufferUntex       = nullptr;
+            lpImRenderers->mpIm3dRenderBufferRacePosition = nullptr;
+            lpImRenderers->mpIm3dRenderBufferMenusAndHud = &s_i3dRendererSentinel;
 
             // Bring the TEXT system up first (fonts + language + glyph batcher) so the
             // handler's text-layout inputs are live from the start. One-shot; device-gated.
@@ -759,7 +763,7 @@ namespace BrnGui
             std::snprintf(lac, sizeof(lac),
                 "[AptRT] step4 aux: Construct done. singleton=%p im2d=%p (== &renderbuf %p)\n",
                 (void*)CgsGui::AptAuxPointer::mpAptAuxInst,
-                (void*)lpImRenderers->mpIm2dRenderer, (void*)&s_AptRenderBuffer);
+                (void*)lpImRenderers->mpIm2dRenderBuffer, (void*)&s_AptRenderBuffer);
             CgsDev::Log::WriteToLog(lac);
         }
 
@@ -1700,11 +1704,13 @@ namespace BrnGui
 
     // -------------------------------------------------------------------------
     // RETIRED (2026-07-01): the invented direct-geometry render (RenderLoadedGeometryDirect +
-    // ResolveMeshTexture) is GONE. RenderRuntime now drives the FAITHFUL render-tree walk
-    // (AptRender) which flushes through the real display-list -> render-tree -> AptRenderHandler::
-    // Render -> ImRenderBuffer -> D3D9 path. The prior fallback walked the movie geometry directly
-    // (offset transcode) + drew via the Im2d immediate wrapper -- invention that bypassed the engine
-    // render tree; removed per the render-tree-flush milestone.
+    // ResolveMeshTexture) is GONE -- the movie renders through the real display-list ->
+    // render-tree -> AptRenderHandler::Render -> ImRenderBuffer -> D3D9 path.
+    // RETIRED (2026-07-09): the host render DRIVE (RenderRuntime's per-slot AptRender walk +
+    // its s_bMovieStopped layer gating) moved to the real chain -- GuiModule::Render ->
+    // CgsGui::ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 -> AptAux::Render
+    // @0x82848FB8 -> AptRenderTarget @0x82AF4ED0 (every layer, the engine's consumed-tick
+    // bank). Only the DispatchRenderBuffer platform leaf below remains host-side.
     // -------------------------------------------------------------------------
 
     // Forward declarations (bodies below, with the component view-state bridge).
@@ -1743,60 +1749,31 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // RenderRuntime -- FAITHFUL render-tree flush. Called from BrnRendererModule::Render each
-    // frame. Drives the homed X360 render-tree walk (AptRender @0x82AF33E8): it traverses the
-    // current target's render-item tree (built by the tick's AptRenderTreeManager::Update_* calls)
-    // and, per visible node, calls the render item's Render() virtual -> AptCharacter::render ->
-    // AptHook_DrawShape -> gAptFuncs.pfnDrawRenderingUnit == CgsGui::AptCallbackRender::
-    // DrawRenderingUnit -> CgsGui::AptRenderHandler::Render, which APPENDS the shape's mesh batches
-    // to s_AptRenderBuffer.mCommandBuffer (mpImRenderers->mpIm2dRenderer, wired in step 4). We then
-    // flush that buffer to D3D9: BeginRendering (open the block AptRenderHandler::Render appends
-    // into) -> AptRender (walk fills it) -> EndRendering -> Swap -> Dispatch (the faithful PC D3D9
-    // command re-issue -- the same ImRenderBuffer<V> path the loading screen/debug HUD dispatch).
+    // DispatchRenderBuffer -- the PC-platform dispatch leaf that remains after the
+    // render DRIVE moved to the real chain (GuiModule::Render -> CgsGui::ViewModule::
+    // Render @0x82858810 -> RenderInternal @0x82858AF8 -> AptAux::Render @0x82848FB8
+    // -> AptRenderTarget @0x82AF4ED0 -> the AptRender walk). The walk fills
+    // s_AptRenderBuffer.mCommandBuffer (the renderer set GuiModule::Render publishes
+    // into the view input buffer each frame) inside RenderInternal's Begin/End block;
+    // this freezes + flushes it to D3D9 afterwards: Swap -> Clear -> Dispatch (the
+    // same ImRenderBuffer<V> path the loading screen/debug HUD dispatch). On the
+    // console the render THREAD consumes the filled buffers through the custom-
+    // renderer-manager bracket RenderInternal notifies; this leaf is the PC's
+    // single-threaded equivalent of that consumption.
     //
-    // This RETIRES the invented direct-geometry fallback (RenderLoadedGeometryDirect + the word[4]
-    // header hack): the movie now composes + renders through the real Apt display-list -> render-tree
-    // -> D3D9 path. lpIm2d (BrnRendererModule's own live Im2d) is unused by the walk (the walk draws
-    // through the Apt render handler's own buffer), but the D3D device it shares is already frame-open.
-    //
-    // Hard-gated: only runs once the runtime + AptAux render handler + the Apt render buffer are up
-    // (s_bRenderBufferReady). Until the tick populates the render-root list the walk finds an empty
-    // root and draws nothing -- a clean no-op, no AV.
+    // Hard-gated on the bring-up flags: never swaps a buffer RenderInternal did not
+    // just fill (the view render itself is gated by GuiModule::Render on IsReady()).
     // -------------------------------------------------------------------------
-    static void RenderRuntime(CgsGraphics::Im2d* lpIm2d)
+    static void DispatchRenderBuffer()
     {
-        (void)lpIm2d;   // the walk draws through the Apt render handler's own command buffer
         if (!s_bRuntimeReady || !s_bAuxReady || !s_bRenderBufferReady)
-            return;
-
-        // PER-SLOT render gating: the FRAMEWORK movie (level 0) always draws once live;
-        // the FLOW movie (level 1) is parked by s_bMovieStopped (the flow left BF_LEGAL).
-        const bool lbFrameworkUp =
-            s_FrameworkSlot.mbInstantiated && s_FrameworkSlot.mpRootCIH != nullptr;
-        const bool lbFlowUp =
-            s_FlowSlot.mbInstantiated && s_FlowSlot.mpRootCIH != nullptr && !s_bMovieStopped;
-        if (!lbFrameworkUp && !lbFlowUp)
             return;
 
         const bool lbFirst = !s_bFlushProbed;
 
-        // Open the render block the Apt render handler appends into, walk the render tree (which
-        // fills the buffer via AptRenderHandler::Render), close, then freeze + dispatch to D3D9.
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
             s_AptRenderBuffer.mCommandBuffer;
 
-        lrBuffer.BeginRendering();
-        // PER-LEVEL render-tree walks: AptRender's top-level layer mask keys on the root
-        // item's stamped depth (1 << level -- AptDecoupleTreeTraversal's bTopLevel gate),
-        // so each call walks exactly ONE slot's tree. The FRAMEWORK slot walks first
-        // (level 0 composes BENEATH the flow movie), then the FLOW slot -- skipped while
-        // parked, which is how s_bMovieStopped hides the title without touching the
-        // framework movie's persistent level-0 composition.
-        if (lbFrameworkUp)
-            AptRender(1 << s_FrameworkSlot.miLevel);
-        if (lbFlowUp)
-            AptRender(1 << s_FlowSlot.miLevel);
-        lrBuffer.EndRendering();
         lrBuffer.Swap();               // freeze the write buffer for dispatch
         // Reset the NEW write buffer's stream positions for the next frame (the faithful
         // ImRenderBuffer::Clear @0x1EA7D4 -- Swap alone does NOT reset them). Without this the
@@ -1811,7 +1788,7 @@ namespace BrnGui
         {
             s_bFlushProbed = true;
             CgsDev::Log::WriteToLog(
-                "[AptRT] render: render-tree walk (AptRender) -> D3D9 via ImRenderBuffer::Dispatch (OK; per-frame).\n");
+                "[AptRT] render: ViewModule::Render chain -> D3D9 via ImRenderBuffer::Dispatch (OK; per-frame).\n");
         }
     }
 
@@ -1825,9 +1802,13 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     // StopRuntimeMovie -- the flow left BF_LEGAL (the accept path posted command
     // 70). On the console, leaving the state unloads the title movie (OnLeave's
-    // channel-41 {"",1} post -> CgsAptAux unload). The async unload path is not
-    // homed, so the observable equivalent: stop ticking + rendering the movie
-    // (the title disappears, exactly as on console). Idempotent.
+    // channel-41 {"",1} post -> CgsAptAux unload), whose render-side observable is
+    // the movie's render root leaving the tree. The async unload path is not homed,
+    // so the stand-in parks the FLOW movie through the ENGINE'S OWN removal op:
+    // deletion-mark its render root (AptRenderTreeManager::Update_ItemRemoved) so
+    // Render_GetRoot / the sibling walk prune it -- the title disappears exactly as
+    // on console. (The render drive walks every layer faithfully now, so the old
+    // host-side per-layer render gate is gone with RenderRuntime.) Idempotent.
     // FLAG (follow-on): the faithful unload (resource release + target-instance
     // teardown) lands with the CgsAptAux unload chain.
     // -------------------------------------------------------------------------
@@ -1836,8 +1817,22 @@ namespace BrnGui
         if (s_bMovieStopped)
             return;
         s_bMovieStopped = true;
-        CgsDev::Log::WriteToLog("[AptRT] StopMovie: BF_LEGAL left -- FLOW slot tick+render parked "
-                                "(framework movie keeps ticking; unload deferred).\n");
+
+        if (s_FlowSlot.mbInstantiated && s_FlowSlot.mpRootCIH != nullptr)
+        {
+            AptCIH* lpRoot = static_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
+            AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
+            if (lpCI != nullptr && (lpCI->GetTypeTag() == 5 || lpCI->GetTypeTag() == 9))
+            {
+                AptRenderItem* lpItem =
+                    static_cast<AptCharacterSpriteInstBase*>(lpCI)->mpRenderItem;
+                if (lpItem != nullptr)
+                    AptCurrentRenderTreeManager()->Update_ItemRemoved(lpItem, gnCurrUpdateTick);
+            }
+        }
+
+        CgsDev::Log::WriteToLog("[AptRT] StopMovie: BF_LEGAL left -- FLOW render root "
+                                "deletion-marked (framework movie keeps running; unload deferred).\n");
     }
 
     // True once the movie has COMPOSED: the root clip's first paced tick has run its
@@ -2333,9 +2328,19 @@ namespace BrnGui
         ShimResidueUpdate();
     }
 
-    void AptRuntimeHost::Render(CgsGraphics::Im2d* lpIm2d)
+    CgsGui::AptIm2dRenderBuffer* AptRuntimeHost::GetAptRenderBuffer() const
     {
-        RenderRuntime(lpIm2d);
+        return s_bRenderBufferReady ? &s_AptRenderBuffer : nullptr;
+    }
+
+    void* AptRuntimeHost::Get3dRendererAssertSatisfier() const
+    {
+        return &s_i3dRendererSentinel;
+    }
+
+    void AptRuntimeHost::DispatchRenderResidue()
+    {
+        DispatchRenderBuffer();
     }
 
     void AptRuntimeHost::StopMovie()

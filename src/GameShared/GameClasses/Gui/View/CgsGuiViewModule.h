@@ -50,13 +50,21 @@ namespace ViewIO
 
 namespace CgsGui
 {
+    // The five renderer slots ViewModule::Render @0x82858810 copies in from the view
+    // input buffer each frame (and re-nulls after RenderInternal -- slot 1 excepted).
+    // Slot names are the X360 assert-attested field names ("lpViewInput->
+    // GetImRenderers().mpIm2dRenderBuffer" / "...mpIm3dRenderBufferUntex" /
+    // "...mpIm3dRenderBufferRacePosition" / "...mpIm3dRenderBufferMenusAndHud");
+    // slot 1 (+0x04) is never asserted/derefed by the render bodies (name unrecovered).
+    // The 3D buffers stay void* -- their ImRenderBuffer instantiations are not wired
+    // on the PC-minimal path yet (RenderInternal null-guards them).
     struct ImRendererSet
     {
-        CgsGui::AptIm2dRenderBuffer* mpIm2dRenderer;
-        void* mpReserved04;
-        void* mpReserved08;
-        void* mpReserved0C;
-        void* mp3dRenderer;
+        CgsGui::AptIm2dRenderBuffer* mpIm2dRenderBuffer;             // +0x00
+        void* mpReserved04;                                          // +0x04 (kept across the post-render re-null)
+        void* mpIm3dRenderBufferUntex;                               // +0x08
+        void* mpIm3dRenderBufferRacePosition;                        // +0x0C
+        void* mpIm3dRenderBufferMenusAndHud;                         // +0x10 (RenderInternal's 3D bracket target)
     };
 
     // KI_NUM_MOVIE_LEVELS -- the assert "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS"
@@ -151,8 +159,18 @@ namespace CgsGui
                                       int liArg3, int liArg4);
 
         // X360 0x82858988 -- clear the frame to the configured clear-screen colour/alpha
-        // before the derived view renders (non-virtual; called first by RenderInternal).
+        // before the derived view renders (non-virtual; called first by the BrnGui
+        // RenderInternal override). Draws an alpha-modulated black unit quad through
+        // the Im2d command buffer under the unit-to-screen transform.
         void RenderBlackScreen();
+
+        // X360 0x82858810 -- the public per-frame render entry (CgsGui::GuiModule::
+        // Render @0x8285AF38 drives it): under the input read lock, copy the input
+        // buffer's renderer set into mImRenderers, advance the render-side time
+        // bookkeeping (mfRenderTimeDelta = mfCurrentTime - mfLastRenderTime), dispatch
+        // the RenderInternal virtual, then re-null the copied renderer slots (slot 1
+        // excepted -- the X360 leaves +0x254 untouched).
+        void Render(const ViewIO::InputBuffer* lpViewInput);
 
         // ADDITIVE GROW (GuiModule::BridgeFromInputToView @0x8285B088): build the view
         // state for one frame from an inbound GUI-event queue + the view input buffer.

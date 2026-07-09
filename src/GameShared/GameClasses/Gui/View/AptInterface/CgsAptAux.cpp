@@ -9,6 +9,7 @@
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
+#include "SDKs/EATech/include/Apt/AptRenderWalk.h"                              // AptRenderTarget (the AptAux::Render walk entry)
 #include "SDKs/EATech/include/Apt/AptLoader.h"                                  // AptCompleteAnimationAsyncLoad (LoadAnimation forwards to it)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"                               // AptSharedPtrIncRef/DecRef/Delete (LoadAnimation refcount)
 #include "SDKs/EATech/include/Apt/AptConstFile.h"                               // AptConstFile (the resolved const-file pointer type)
@@ -315,12 +316,13 @@ namespace CgsGui
         }
     }
 
-    // The two per-frame CPU monitors AptAux::Update brackets its phases with
+    // The per-frame CPU monitors AptAux::Update/Render bracket their phases with
     // (X360 dword_82F33138 "AptAux - Upd Comps" / dword_82F33134 the movie-tick
-    // phase). Registered by the un-homed perf-monitor setup TU; -1 handles no-op
-    // Start/StopMonitor until it lands.
+    // phase / dword_82F33130 the render walk). Registered by the un-homed
+    // perf-monitor setup TU; -1 handles no-op Start/StopMonitor until it lands.
     static s32 giAptAuxUpdateComponentsMonitor = -1;   // dword_82F33138
     static s32 giAptAuxUpdateTargetMonitor     = -1;   // dword_82F33134
+    static s32 giAptAuxRenderMonitor           = -1;   // dword_82F33130
 
     // -------------------------------------------------------------------------
     // AptAux::LoadFlashAnimation - X360 0x82849080. Load a movie onto a GUI level:
@@ -359,6 +361,25 @@ namespace CgsGui
         AptUpdateTarget(mpAptTargetInstance, liDeltaMs, -1, 16);
         mAptMutex.Unlock();
         CgsDev::PerfMonCpu::StopMonitor(giAptAuxUpdateTargetMonitor);
+    }
+
+    // -------------------------------------------------------------------------
+    // AptAux::Render - X360 0x82848FB8. The per-frame Apt render drive
+    // ViewModule::RenderInternal @0x82858AF8 runs: assert Prepare finished
+    // (miState0 == 3; the console streams "Render being called before Prepare is
+    // finished." -- the StrStream text collapses to the plain string per project
+    // convention), then walk the target's render tree: AptRenderTarget(
+    // mpAptTargetInstance, liDeltaMs, -1) -- the elapsed milliseconds feed the
+    // consumed render-tick bank, every layer drawn. No mutex (the walk only READS
+    // the tree the update side committed). The X360 hard-returns 1.
+    // -------------------------------------------------------------------------
+    void AptAux::Render(s32 liDeltaMs)
+    {
+        CGS_ASSERT(miState0 == 3, "Render being called before Prepare is finished.");
+
+        CgsDev::PerfMonCpu::StartMonitor(giAptAuxRenderMonitor);
+        AptRenderTarget(mpAptTargetInstance, liDeltaMs, -1);
+        CgsDev::PerfMonCpu::StopMonitor(giAptAuxRenderMonitor);
     }
 
     // -------------------------------------------------------------------------

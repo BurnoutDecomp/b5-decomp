@@ -37,12 +37,15 @@
 // buffered PC path (the update tick never advances mid-frame) GetRenderRevision returns
 // the live item, so the walk draws the current tree exactly.
 //
-// GLOBALS: the render tick is gnCurrUpdateTick (X360 dword_8324E524 == the render tick,
-// equal to the dword_8324E520 update tick the items were created with -- single-buffer);
-// the active target/manager is gpAptTargetTLS (off_8324E578), whose mppRenderRootAnchor
-// (+0x2C) is the render-root chain head Render_GetRoot walks. The render CONTEXT (X360
-// dword_8324E2AC) is a single AptRenderingContext this TU owns (the console allocates one
-// at render bring-up; here it is a file-static, brought up on first use).
+// GLOBALS: the render tick is the CONSUMED bank gnCurrRenderTickConsumed (X360
+// dword_8324E524): each pass banks the caller's elapsed milliseconds onto it, clamped
+// strictly below the gnCurrUpdateTick (dword_8324E520) update bank -- the decoupled
+// update/render tick pair AptUpdate.cpp's credit gate pairs with. The active
+// target/manager is gpAptTargetTLS (off_8324E578, the render-side current target
+// AptRenderTarget swaps), whose mppRenderRootAnchor (+0x2C) is the render-root chain
+// head Render_GetRoot walks. The render CONTEXT (X360 dword_8324E2AC) is a single
+// AptRenderingContext this TU owns (the console allocates one at render bring-up;
+// here it is a file-static, brought up on first use).
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"
@@ -57,6 +60,37 @@
 // sub_82AF3278 flushes it each render pass (it only holds cells deferred off the render thread,
 // which does not happen on the single-threaded PC path, so the flush is normally a no-op).
 extern AptRenderManagerQueue gAptRenderManagerQueue;
+
+// The update/render tick bank pair (AptGlobals.cpp) -- the render pass consumes elapsed
+// milliseconds against the update side's banked credit (see the file-header GLOBALS note).
+extern int gnCurrRenderTickConsumed;   // dword_8324E524
+
+// The VM deferred-release queue the render pass drains first (font units unresolved off the
+// VM thread park here; see AptCharacterAnimation.cpp's unresolve notes). Single-threaded PC
+// unresolves release directly, so the drain is normally empty -- kept for the faithful shape.
+extern int   gAptDeferredReleaseCount;               // dword_8324E508
+extern void* gAptDeferredReleaseQueue;               // off_8324E2C8
+extern void  AptFreeFontUnit(void* pUnit);           // dword_8324E870 host thunk
+extern void* gAptUnresolveMutex;                     // unk_8324E728
+extern void* gAptUnresolveMutexName;                 // unk_82143270
+namespace EA { namespace Thread {
+    extern void Mutex_Lock(void* pMutex, void* pName);
+    extern void Mutex_Unlock(void* pMutex);
+} }
+
+// The render-thread current-target TLS mirror (unk_8324E814; the same object AptUpdate.cpp
+// stores through -- defined in AptRenderLinkStubs.cpp, single-threaded slot on the PC).
+namespace EA { namespace Thread {
+    class ThreadLocalStorage
+    {
+    public:
+        ThreadLocalStorage() : mTlsIndex(0) {}
+        bool  SetValue(const void* pData);
+        void* GetValue();
+        u32   mTlsIndex;
+    };
+} }
+extern EA::Thread::ThreadLocalStorage gAptTargetTls;
 
 #include <new>
 
@@ -415,21 +449,23 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
         AptDecoupleTreeTraversalClipper(lpClipPending, nTick, pCtx, eOp, nDepth - 1, nLayerMask,
                                         bTopLevel, lpClipResume);
 }
-
 // ---------------------------------------------------------------------------
 // AptRenderInternal (X360 sub_82AF3278) -- the render pass body.
-//   * flush the render-manager queue (release retired items) if dirty;
-//   * bump the render-depth counter, reset the clip stack to identity;
-//   * bump the render tick (single-buffer: keep it == the update tick);
-//   * get the root render item (Render_GetRoot prunes expired roots), and if present
-//     kick AptDecoupleTreeTraversal(root, tick, ctx, 0, 0, layerMask, 1).
-// FLAG: the console also drains the per-render-thread deferred-delete queue (off_8324E2C8)
-// under a mutex and derives the render tick from an atomic ring counter (dword_8324E524);
-// on the single-threaded PC path those are the queue-flush + a plain tick, reproduced without
-// the interrupt-masked atomics. The layer mask (dword_8324E2AC in the console arg-3 slot is the
-// render context; the layer mask is the a2 the caller passes) defaults to all-layers (~0).
+//   * drain the VM deferred-release queue (font units unresolved off the VM thread)
+//     under the unresolve mutex;
+//   * flush the render-manager teardown queue when it holds deferred cells;
+//   * push a fresh identity/full-screen clip (++word_8324E390 + the unit store);
+//   * bank the caller's elapsed milliseconds onto the CONSUMED render tick, clamped
+//     strictly below the update side's banked credit (dword_8324E524 vs dword_8324E520;
+//     the console commits the new value with an interrupt-masked lwarx/stwcx. --
+//     single-threaded here, a plain store reproduces the observable state);
+//   * get the root render item (Render_GetRoot prunes expired roots + resolves the
+//     newest renderable revision for the tick), and if present kick
+//     AptDecoupleTreeTraversal(root, tick, ctx, 0, 0, layerMask, 1);
+//   * pop the clip stack (--word_8324E390).
+// The console reads the render context from dword_8324E2AC (this TU's GetRenderContext).
 // ---------------------------------------------------------------------------
-static void AptRenderInternal(AptRenderingContext* pCtx, int nLayerMask)
+static void AptRenderInternal(int nElapsedMs, int nLayerMask)
 {
     AptTarget* lpTarget = gpAptTargetTLS;
     if (lpTarget == nullptr)
@@ -438,40 +474,82 @@ static void AptRenderInternal(AptRenderingContext* pCtx, int nLayerMask)
     if (lpTarget->mpAnimationTarget == nullptr)
         return;
 
-    // Flush the render-manager teardown queue (release items retired last frame).
-    gAptRenderManagerQueue.Clean();
+    // Drain the VM deferred-release queue (dword_8324E508 / off_8324E2C8 under unk_8324E728):
+    // each parked font unit goes back through the host free thunk, its slot zeroed. The
+    // single-threaded PC unresolve releases directly, so the queue is normally empty.
+    if (gAptDeferredReleaseCount != 0)
+    {
+        EA::Thread::Mutex_Lock(gAptUnresolveMutex, gAptUnresolveMutexName);
+        void** lppQueue = static_cast<void**>(gAptDeferredReleaseQueue);
+        for (int liIndex = 0; liIndex < gAptDeferredReleaseCount; ++liIndex)
+        {
+            AptFreeFontUnit(lppQueue[liIndex]);
+            lppQueue[liIndex] = nullptr;
+        }
+        gAptDeferredReleaseCount = 0;
+        EA::Thread::Mutex_Unlock(gAptUnresolveMutex);
+    }
 
-    // Reset the clip stack to the identity/full-screen clip for this pass.
+    // Flush the render-manager teardown queue only when it holds deferred cells (the X360
+    // gates the Clean call on the dword_8324E7D8 head word).
+    if (gAptRenderManagerQueue.mpHead != nullptr)
+        gAptRenderManagerQueue.Clean();
+
+    // Push a fresh identity/full-screen clip for this pass (X360 ++word_8324E390 then the
+    // unit store == ClipStackPush + ClipStackMakeUnit; popped after the walk).
+    AptMath::ClipStackPush();
     AptMath::ClipStackMakeUnit();
 
-    // The render tick (single-buffer: the same tick the items were created with, so every
-    // committed item is renderable). FLAG: the console derives it from the atomic ring counter.
-    const int nTick = gnCurrUpdateTick;
+    // Consume the elapsed milliseconds against the update side's banked tick credit: the
+    // render tick may never reach the update tick (strictly below), so items committed
+    // this update become renderable once the render bank catches up (the decoupled pair).
+    int nTick = gnCurrRenderTickConsumed + nElapsedMs;
+    if (nTick - gnCurrUpdateTick >= 0)
+        nTick = gnCurrUpdateTick - 1;
+    gnCurrRenderTickConsumed = nTick;   // console: interrupt-masked lwarx/stwcx. commit
 
     // The render-root chain head lives in the target's anchor slot (mppRenderRootAnchor).
     AptRenderTreeManager::_AptRenderItemRootList** ppHead = lpTarget->mppRenderRootAnchor;
-    if (ppHead == nullptr)
-        return;
+    if (ppHead != nullptr)
+    {
+        AptRenderTreeManager* lpMgr =
+            reinterpret_cast<AptRenderTreeManager*>(lpTarget->mppRenderRootAnchor);
+        AptRenderItem* lpRoot = lpMgr->Render_GetRoot(ppHead, nTick);
 
-    AptRenderTreeManager* lpMgr =
-        reinterpret_cast<AptRenderTreeManager*>(lpTarget->mppRenderRootAnchor);
-    AptRenderItem* lpRoot = lpMgr->Render_GetRoot(ppHead, nTick);
+        if (lpRoot != nullptr)
+            AptDecoupleTreeTraversal(lpRoot, nTick, GetRenderContext(), NormalOp(), 0, nLayerMask, 1);
+    }
 
-    if (lpRoot != nullptr)
-        AptDecoupleTreeTraversal(lpRoot, nTick, pCtx, NormalOp(), 0, nLayerMask, 1);
+    AptMath::ClipStackPop();
 }
 
 // ---------------------------------------------------------------------------
-// AptRender @0x82AF33E8 -- the public entry the AptAux render path calls. Sets the render-
-// thread TLS (the console stores off_8324E578 into unk_8324E814) then runs the internal walk.
-// FLAG: the TLS store is a single-threaded no-op here (GetTarget() already returns the live
-// context via the AptTarget TLS mirror); the walk is what matters. nLayerMask defaults to all
-// layers (~0) -- the console passes the target's saved layer set; on the boot title all layers
-// are drawn.
+// AptRender @0x82AF33E8 -- the public render entry for the CURRENT target: store the
+// render-side current target (off_8324E578) into the TLS mirror (unk_8324E814), then
+// run the internal walk with the caller's elapsed milliseconds + layer mask.
 // ---------------------------------------------------------------------------
-void AptRender(int nLayerMask)
+void AptRender(int nElapsedMs, int nLayerMask)
 {
-    if (gpAptTargetTLS == nullptr)
-        return;
-    AptRenderInternal(GetRenderContext(), (nLayerMask != 0) ? nLayerMask : ~0);
+    gAptTargetTls.SetValue(gpAptTargetTLS);
+    AptRenderInternal(nElapsedMs, nLayerMask);
+}
+
+// ---------------------------------------------------------------------------
+// AptRenderTarget @0x82AF4ED0 -- run AptRender with pTarget swapped in as the render-side
+// current context (off_8324E578 + the TLS mirror), restoring the previous context after.
+// The X360 body is un-exported; the PS3 External ELF exports the full body
+// (_Z15AptRenderTargetPvj13AptAnimLevelE @0x7FBFCC) and the X360 span (0x82AF4ED0..
+// 0x82AF4F30, whose only outbound calls are the TLS SetValue + AptRender this body makes)
+// matches it -- the exact mirror of AptUpdateTarget @0x82B0DE80 on the render side.
+// ---------------------------------------------------------------------------
+void AptRenderTarget(AptTarget* pTarget, int nElapsedMs, int nLevelMask)
+{
+    AptTarget* lpPrevTarget = gpAptTargetTLS;
+    gpAptTargetTLS = pTarget;
+    gAptTargetTls.SetValue(pTarget);
+
+    AptRender(nElapsedMs, nLevelMask);
+
+    gpAptTargetTLS = lpPrevTarget;
+    gAptTargetTls.SetValue(lpPrevTarget);
 }

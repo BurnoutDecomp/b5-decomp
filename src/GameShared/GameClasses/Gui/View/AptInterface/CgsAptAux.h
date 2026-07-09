@@ -94,6 +94,15 @@ namespace CgsGui
         // hard-returns 1; no caller consumes it. Body in CgsAptAux.cpp.
         void Update(s32 liDeltaMs);
 
+        // X360 0x82848FB8 (CgsGui::AptAux::Render) -- the per-frame Apt render drive
+        // ViewModule::RenderInternal @0x82858AF8 runs: assert Prepare finished, then
+        // walk the target's render tree (AptRenderTarget(mpAptTargetInstance,
+        // liDeltaMs, -1) -- the elapsed ms feed the consumed render-tick bank; every
+        // layer). Bracketed by the dword_82F33130 perf monitor; no mutex (the render
+        // walk only READS the tree the update side committed). The X360 hard-returns
+        // 1; no caller consumes it. Body in CgsAptAux.cpp.
+        void Render(s32 liDeltaMs);
+
         // X360 0x82849080 (CgsGui::AptAux::LoadFlashAnimation) -- load a movie onto a
         // GUI level: assert the name/level, format the "_level%d" target path, and hand
         // it to the engine's AptLoadAnimation. Called by
