@@ -66,6 +66,15 @@ extern AptGCReleaseVector gValuesToRelease;    // off_8324E51C / xb1 qword_14147
 // (StringPool exposes only ClearTemporaryPool); reached only on movie UNLOAD.
 extern void AptStringPool_ReleaseString(AptString* pString);
 
+// The pool-string INTERNER (xb1 sub_140838AE0 == StringPool::FindOrCreate; free
+// forwarder in AptStringPool.cpp -- the full StringPool.h collides with
+// AptNativeHash.h's mini StringPool in this TU's include set). Every serialized
+// constant string resolves through it: the interned node is chain-AddRef'd +
+// GC-rooted, which is what survives the per-op deferred-release drains below --
+// a plain temp AptString::Create dies at the next drain when its node was a
+// recycled allocation (the 'BuildName' pool-string death, 2026-07-09).
+extern AptString* AptStringPool_FindOrCreate(const char* pName);
+
 namespace
 {
     // The 8-aligned operand cursor (xb1: (pc + 7) & ~7).
@@ -107,12 +116,15 @@ namespace
         // xb1 0x14084AA67: `mov eax,[rcx]` -- the record type is a DWORD load.
         const int32_t nType = RecI32(pRec, 0x00);
 
-        if (nType == 1)   // string: rebase payload against the ctx, intern, un-rebase
+        if (nType == 1)   // string: rebase payload against the ctx, INTERN, un-rebase
         {
             uintptr_t& rPayload = Slot(pRec, 0x08);
             if (rPayload)
                 rPayload += reinterpret_cast<uintptr_t>(pCtx);
-            AptValue* pValue = AptString::Create(reinterpret_cast<const char*>(rPayload));
+            // xb1 sub_140838AE0: the string-pool interner (chain-AddRef'd + GC-rooted),
+            // NOT the temporary Create -- the interned ref is what the "Create's ref
+            // transfers" slot convention below relies on.
+            AptValue* pValue = AptStringPool_FindOrCreate(reinterpret_cast<const char*>(rPayload));
             if (rPayload)
                 rPayload -= reinterpret_cast<uintptr_t>(pCtx);
             else

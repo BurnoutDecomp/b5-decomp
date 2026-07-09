@@ -24,6 +24,7 @@
 #include <new>       // placement new (construct an AptString into pooled storage)
 #include <stdio.h>   // sprintf (charCodeAt renders the code as decimal text)
 #include <cstdint>   // uintptr_t (the StringMembersIndex wordlist member-id payload)
+#include <cstring>   // strcmp (FLAG bring-up probe canary)
 
 // FLAG (homed by the apt VM native-call dispatch): the global native-method
 // argument stack -- the dispatch layer pushes the AS call args here before

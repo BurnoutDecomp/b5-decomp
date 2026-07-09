@@ -82,18 +82,11 @@ namespace BrnGui
     AptRuntimeHost* gpActiveAptRuntimeHost = 0;
     GuiModule*      gpActiveGuiModule      = 0;
 
-    bool AptRuntimeSetComponentViewState(const char* lpacInstName, const char* lpacViewState)
-    {
-        return gpActiveAptRuntimeHost != 0 &&
-               gpActiveAptRuntimeHost->SetComponentViewState(lpacInstName, lpacViewState);
-    }
-
-    bool AptRuntimeSetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
-                                        const char* lpacValue)
-    {
-        return gpActiveAptRuntimeHost != 0 &&
-               gpActiveAptRuntimeHost->SetComponentKeyValue(lpacInstName, lpacKey, lpacValue);
-    }
+    // RETIRED (2026-07-09, step 6): the AptRuntimeSetComponentViewState /
+    // AptRuntimeSetComponentKeyValue shim wrappers are GONE -- the REAL component
+    // framework owns the drive (GuiComponent::AddOutputAptViewState ->
+    // FillAptViewMessage -> AptAux::UpdateFlashComponent -> AptCommunicator::
+    // UpdateComponent, flushed per frame by UpdateAllComponents into the movie AS).
 
     // NOTE: this minimal GuiModule is driven DIRECTLY by BrnGameModule (Construct/Prepare/Update called
     // inline), not through the module dispatch, so it does NOT run the base ModuleSingleBuffered lifecycle.

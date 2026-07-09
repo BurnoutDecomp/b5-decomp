@@ -1128,8 +1128,8 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
                     // {count@+0x00 (i32); recArrayPtr@block+0x08 (XB1/native-8)}; each
                     // record is STRIDE 16 (XB1 v17+=16) with its action-stream pointer at rec+0x08 (an
                     // 8-byte native-8 slot). Relocate the record-array pointer + each record's stream
-                    // pointer so a clipActions read never AVs; the stream CONTENTS stay un-parsed
-                    // (VM deferred) -- XB1's sub_14084A920 (_parseStream) is NOT called.
+                    // pointer, then PARSE each stream (XB1 sub_1408567D0 case-3 calls
+                    // sub_14084A920 == _parseStream per record -- verified 2026-07-09).
                     if (luClip != 0 && inRes(luClip))
                     {
                         void* const pClip = reinterpret_cast<void*>(luClip);

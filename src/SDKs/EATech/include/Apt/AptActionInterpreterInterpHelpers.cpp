@@ -39,6 +39,8 @@
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"
 #include "SDKs/EATech/include/Apt/AptConstFile.h"
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"   // AptGetAnimationAtLevel (script-fn root-anim resolve)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // FLAG bring-up probe log sink
+#include <cstdio>                                          // snprintf (FLAG bring-up probe)
 
 // ---------------------------------------------------------------------------
 // AptInterp_GetNodeFrameContextHash (HOMED 2026-07-02, retiring the null
@@ -877,6 +879,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
                 }
             }
             AptCharacterInst* const pRunInst = pNode ? pNode->GetCharacterInst() : nullptr;
+
 
             // Run the compiled body against the bound CIH + resolved inst (0x82AE3F04).
             const int nSize = pFunc->GetByteCodeSize();                                // vtbl 0x4C

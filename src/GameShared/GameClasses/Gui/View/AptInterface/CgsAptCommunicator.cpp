@@ -22,6 +22,7 @@ extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8
 
 #include <cstring>   // strncpy
 #include <cstdlib>   // atof
+#include <cstdio>    // snprintf (FLAG bring-up probes)
 
 // ============================================================================
 // CgsGui::AptCommunicator - reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -324,6 +325,17 @@ namespace CgsGui
 
         mAptComponentList.SetName(liNew, lpacName);
         ++muNumActivecomponents;
+        // FLAG (bring-up probe): surface each real registration in the boot log.
+        static s32 siAddLogs = 0;
+        if (siAddLogs < 40)
+        {
+            ++siAddLogs;
+            char lacProbe[192];
+            std::snprintf(lacProbe, sizeof(lacProbe),
+                          "[AptComm] AddNewAptComponent #%u: '%s'\n",
+                          muNumActivecomponents, lpacName ? lpacName : "<null>");
+            CgsDev::Log::WriteToLog(lacProbe);
+        }
         // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
     }
 
@@ -805,6 +817,20 @@ namespace CgsGui
             ++liData;
         }
 
+        // FLAG (bring-up probe): surface the AS-side component-data queries.
+        {
+            static s32 siGetLogs = 0;
+            if (siGetLogs < 60)
+            {
+                ++siGetLogs;
+                char lacProbe[192];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[AptComm] GetComponentData comp=%d key='%s' -> '%s'\n",
+                              liComponent, lpacKey ? lpacKey : "<null>", lpacResult);
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
+        }
+
         AptValue* lpReturn = AptString::Create(lpacResult);
         // lKeyText's internal refcount drops here (X360 DecreaseInternalRefCount).
         return lpReturn;
@@ -846,7 +872,30 @@ namespace CgsGui
         // to null) rather than firing the halting assert. Restore the CGS_ASSERTs once
         // the onLoad `this`/msName context is faithful.
         if (!lbEventOk || !lbUniqueOk || !lbNameOk)
+        {
+            // FLAG (bring-up probe): surface the rejected registration in the boot log.
+            static s32 siRejectLogs = 0;
+            if (siRejectLogs < 20)
+            {
+                ++siRejectLogs;
+                AptValue* lpClip = AptExtObject::GetParam(3);
+                const char* lpacClip = "<n/a>";
+                if (lpClip != 0 && (lpClip->getVtblIndex() == AptVFT_CharacterInstHandle))
+                    lpacClip = static_cast<AptCIH*>(lpClip)->GetInstanceName().GetBuffer();
+                char lacProbe[224];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[AptComm] SendAptEvent REJECTED (evOk=%d uidOk=%d nameOk=%d) "
+                              "vfts p0=%d p1=%d p2=%d p3=%d clip='%s'\n",
+                              lbEventOk ? 1 : 0, lbUniqueOk ? 1 : 0, lbNameOk ? 1 : 0,
+                              lpEventId ? (int)lpEventId->getVtblIndex() : -1,
+                              lpUniqueId ? (int)lpUniqueId->getVtblIndex() : -1,
+                              lpNameVal ? (int)lpNameVal->getVtblIndex() : -1,
+                              lpClip ? (int)lpClip->getVtblIndex() : -1,
+                              lpacClip ? lpacClip : "<null>");
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
             return AptInteger::Create(0);
+        }
 
         const s32 liEventId  = lpEventId->toInteger();
         const s32 liUniqueId = lpUniqueId->toInteger();

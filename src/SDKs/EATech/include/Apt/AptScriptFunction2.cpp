@@ -26,6 +26,8 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpGCPoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"               // AptValueGC_PoolManager + gAptValueGCSizeOffset
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"                 // AptValueGC_MemItem (alloc bookkeeping)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"       // FLAG bring-up probe log sink
+#include <cstdio>                                                // snprintf (FLAG bring-up probe)
 
 // ---------------------------------------------------------------------------
 // FLAG (homed elsewhere; declared here like the rest of the interpreter):
