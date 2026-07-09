@@ -34,7 +34,25 @@ namespace PhysicsSimulationIO
         static_assert(offsetof(InputBuffer, mfTimeStep)         == 0x0004, "mfTimeStep @ +0x0004");
         static_assert(offsetof(InputBuffer, muMaxIterations)    == 0x0008, "muMaxIterations @ +0x0008");
         static_assert(offsetof(InputBuffer, mAddRigidBodyQueue) == 0x0010, "mAddRigidBodyQueue @ +0x0010");
+        // AppendXxxQueue destination offsets, each read off the method's `addi rD, this, off` in the
+        // X360 asm (self-validating the padding chain -- a wrong pad or dest capacity fails here).
+        static_assert(offsetof(InputBuffer, mChangeRigidBodyInertiaQueue) == 84864,  "mChangeRigidBodyInertiaQueue @ 0x14B80 (AppendChangeRigidBodyInertiaQueue @0x825AC2E8)");
+        static_assert(offsetof(InputBuffer, mRemoveRigidBodyQueue)        == 104096, "mRemoveRigidBodyQueue @ 0x196A0 (AppendRemoveRigidBodyQueue @0x825A83E0)");
+        static_assert(offsetof(InputBuffer, mAddJointQueue)              == 189280, "mAddJointQueue @ 0x2E360 (AppendAddJointQueue @0x825A8598)");
+        static_assert(offsetof(InputBuffer, mRemoveJointQueue)           == 196208, "mRemoveJointQueue @ 0x2FE70 (AppendRemoveJointQueue @0x825A8678)");
+        static_assert(offsetof(InputBuffer, mUpdateExternalBodyQueue)    == 203856, "mUpdateExternalBodyQueue @ 0x31C50 (AppendUpdateExternalBodyQueue @0x825AC208)");
     }
+
+    // -------- explicit instantiations: InputBuffer::AppendXxxQueue<N> --------
+    // Force the out-of-line emission the X360 ARTIST build produced for each source-queue capacity
+    // (generic bodies live in CgsPhysicsSimulationModuleIO.h). Templated on the SOURCE queue's N.
+    template bool InputBuffer::AppendAddJointQueue<10>(CgsModule::EventQueue<InAddJoint, 10>*);                          // @0x825A8598
+    template bool InputBuffer::AppendAddRigidBodyQueue<1>(CgsModule::EventQueue<InAddRigidBody, 1>*);                    // @0x825A8298
+    template bool InputBuffer::AppendAddRigidBodyQueue<50>(CgsModule::EventQueue<InAddRigidBody, 50>*);                  // @0x825A84C0
+    template bool InputBuffer::AppendChangeRigidBodyInertiaQueue<200>(CgsModule::EventQueue<InChangeRigidBodyInertia, 200>*); // @0x825AC2E8
+    template bool InputBuffer::AppendRemoveJointQueue<10>(CgsModule::EventQueue<InRemoveJoint, 10>*);                    // @0x825A8678
+    template bool InputBuffer::AppendRemoveRigidBodyQueue<50>(CgsModule::EventQueue<InRemoveRigidBody, 50>*);            // @0x825A83E0
+    template bool InputBuffer::AppendUpdateExternalBodyQueue<60>(CgsModule::EventQueue<InUpdateExternalBody, 60>*);      // @0x825AC208
 
     // X360 0x8289E338. Read-lock guard, then asserts muMaxIterations > 0 before returning it.
     int InputBuffer::GetMaxIterations() const
