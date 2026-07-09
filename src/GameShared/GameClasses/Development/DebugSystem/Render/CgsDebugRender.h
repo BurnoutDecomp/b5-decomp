@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                              // VariableEventQueue<16384,16> (the event buffer)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // Debug2DImmediateRender, RGBA, Vector2
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h"        // CgsDev::Internal::CInEventDraw* records (canonical home)
 
 // CgsDev::DebugRender - the BUFFERED debug renderer (the DebugManager's mBufferedRenderer). Debug draws
 // are QUEUED here as byte-image events in a VariableEventQueue and replayed once per frame by Dispatch2D
@@ -30,31 +31,10 @@ namespace CgsDev
             E_INEVENT_2D_BOX    = 3,
         };
 
-        // Queued 2D events, stored by byte image (POD; cast to CgsModule::Event* for the queue API).
-        // Field order mirrors the X360 (Dispatch2D reads them as a float array).
-        struct CInEventDrawText2D   // ID 1 (+ a preceding STRING event with the text)
-        {
-            f32  mfX;
-            f32  mfY;
-            f32  mfScale;
-            RGBA mColour;
-        };
-        struct CInEventDrawLine2D   // ID 2
-        {
-            f32  mfX0;
-            f32  mfY0;
-            f32  mfX1;
-            f32  mfY1;
-            RGBA mColour;
-        };
-        struct CInEventDrawBox2D    // ID 3
-        {
-            f32  mfMinX;
-            f32  mfMinY;
-            f32  mfMaxX;
-            f32  mfMaxY;
-            RGBA mColour;
-        };
+        // The queued 2D/3D event records (CInEventDrawText2D / CInEventDrawLine2D / CInEventDrawBox2D
+        // + the world-space CInEventDraw* family) are homed canonically in CgsDebugRenderCommon.h
+        // (DWARF-authoritative layout, sizeof cross-checked against each AddEventSafe instance).
+        // #include'd above; consumed here by the DebugRender bodies (CgsDebugRender.cpp).
     }
 
     class DebugRender
