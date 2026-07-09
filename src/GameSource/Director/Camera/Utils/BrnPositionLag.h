@@ -47,6 +47,10 @@ public:
     class Parameters
     {
     public:
+        // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
+        // Per-instance body is a separate TU.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
         // Reset to defaults. Body in BrnPositionLag.cpp.
         void Construct();
 

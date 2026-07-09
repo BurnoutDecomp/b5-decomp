@@ -400,6 +400,19 @@ namespace Camera
         template <typename TBehaviour>
         static TBehaviour** GetBehaviourSlotFromHandle(u32 luHelperIndex, u32 luAllocationKey);
 
+        // Reserve a slot for a fresh TBehaviour from the size-appropriate behaviour pool and
+        // hand back the four-word type-erased pool handle. X360-attested template family
+        // (BehaviourManager::AllocateBehaviour<TBehaviour> @0x82263370 and its 19 siblings): the
+        // compiler bakes the pool choice per instantiation from sizeof(TBehaviour) -- a behaviour
+        // that fits the small pool's bucket (<=100 Vector4 == 1600 bytes) shares the many-slot
+        // small pool (mSmallBehaviourPool), otherwise it takes one of the few large slots
+        // (mLargeBehaviourPool). Asserts the chosen pool has a free slot (dumping the manager's
+        // behaviour table first when exhausted), then returns pool.AllocateVoid<TBehaviour>().
+        // Out-of-line template body below (needs the pool members complete). The concrete
+        // instantiations are emitted by BrnBehaviourManager.cpp (one per behaviour type).
+        template <typename TBehaviour>
+        AbstractPoolVoidHandle AllocateBehaviour();
+
         // Allocate a fresh TBehaviour into lrHandle, owned by lpOwningState. The
         // BrnDirector::Camera::BehaviourManager::NewBehaviour<TBehaviour> family the arbitrator
         // states drive; generic over the handle type so the states' own 5-word BehaviourHandle<>
@@ -488,6 +501,48 @@ namespace Camera
         template <typename> friend class BehaviourHandle;
         friend void _BehaviourManagerAssertLayout();
     };
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::AllocateBehaviour<TBehaviour> @0x82263370 (and its 19 per-behaviour-type
+    // siblings) -- reserve a pool slot for a fresh TBehaviour and return the four-word type-erased
+    // handle. ONE shared body; the compiler folds the sizeof compare to a single pool at each
+    // instantiation, exactly reproducing each sibling's asm (one pool access, one assert message):
+    //   * fits the small bucket  (sizeof(TBehaviour) <= 1600) -> mSmallBehaviourPool, "small
+    //     behaviour" out-of-slots message (BrnBehaviourManager.h:1137 on the X360);
+    //   * otherwise               (sizeof up to the large bucket 4000)  -> mLargeBehaviourPool,
+    //     "large behaviour" message (:1148).
+    // The out-of-slots pre-check reads the pool's free counter, DebugDumpToTTY()s the manager, then
+    // trips the non-gating assert (the X360 falls through into AllocateVoid regardless, matching
+    // CGS_ASSERT). AbstractPool::AllocateVoid<TBehaviour> pops a slot, constructs the behaviour in
+    // it, and returns the (object, free-interface, slot, size) handle.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour()
+    {
+        // Compile-time pool selection: a behaviour that fits the small pool's bucket shares the
+        // many-slot small pool; anything larger takes one of the few large slots. The X360 bakes
+        // this to a single pool per instantiation (the dead branch is folded away).
+        if (sizeof(TBehaviour) <= sizeof(decltype(mSmallBehaviourPool)::Bucket))
+        {
+            const s32 liNumFree = mSmallBehaviourPool.GetNumFreeObjects();
+            if (liNumFree <= 0)
+            {
+                DebugDumpToTTY();
+                CGS_ASSERT(liNumFree > 0, "Ran out of slots when trying to allocate a small behaviour");
+            }
+            return mSmallBehaviourPool.AllocateVoid<TBehaviour>();
+        }
+        else
+        {
+            const s32 liNumFree = mLargeBehaviourPool.GetNumFreeObjects();
+            if (liNumFree <= 0)
+            {
+                DebugDumpToTTY();
+                CGS_ASSERT(liNumFree > 0, "Ran out of slots when trying to allocate a large behaviour");
+            }
+            return mLargeBehaviourPool.AllocateVoid<TBehaviour>();
+        }
+    }
 
     // ------------------------------------------------------------------------
     // BehaviourControllerLockInterface -- the per-behaviour lock interface the manager hands

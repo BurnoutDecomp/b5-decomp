@@ -65,6 +65,11 @@ public:
         return liFreeObjectIndex;
     }
 
+    // Number of currently-free slots (the pool's own running free counter). The X360 reads
+    // this word directly before allocating (e.g. BehaviourManager::AllocateBehaviour's
+    // out-of-slots pre-check) -- exposed by name so callers never poke the counter by offset.
+    s32 GetNumFreeObjects() const { return miNumObjectsFree; }
+
     // True when the slot at liIndex is currently allocated.
     bool IsObjectAllocated(TIndex liIndex) const
     {

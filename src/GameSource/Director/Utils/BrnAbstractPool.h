@@ -95,6 +95,11 @@ public:
 
     bool IsObjectAllocated(IndexType liIndex) { return mObjectPool.IsObjectAllocated(liIndex); }
 
+    // Free-slot count of the underlying object pool. The X360 reads this word directly for its
+    // pre-allocation "ran out of slots" guard (BehaviourManager::AllocateBehaviour); forwarded
+    // to the ObjectPool's named counter so callers never reach it by raw offset.
+    s32 GetNumFreeObjects() const { return mObjectPool.GetNumFreeObjects(); }
+
     void*       operator[](IndexType liIndex)       { return mObjectPool[liIndex]; }
     const void* operator[](IndexType liIndex) const { return mObjectPool[liIndex]; }
 

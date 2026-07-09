@@ -45,6 +45,11 @@ public:
     class Parameters
     {
     public:
+        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
+        // serialiser S (TextFile{Read,Write}Serialiser); the per-instance body is a separate TU.
+        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
         EBehaviourTypeHeliCam GetType() const
         {
             return static_cast<EBehaviourTypeHeliCam>(meType);
