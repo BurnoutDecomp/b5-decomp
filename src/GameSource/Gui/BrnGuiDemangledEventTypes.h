@@ -324,4 +324,23 @@ namespace BrnGui
     struct GuiResponseTimeDateString : public CgsGui::GuiEvent<594> { u8 maPayload[24]; };  // id 594 size 36
     struct GuiSaveLoadImageExportRequested { u8 maData[17]; s32 GetEventType() const { return 361; } };  // id 361 size 17
     struct GuiTelemetryEvent : public CgsGui::GuiEvent<323> { u8 maPayload[8]; };  // id 323 size 20
+
+    // ============================================================================
+    // VIEW / INTERNAL-STATE GUI-event PAYLOAD homes (ADDITIVE GROW -- output view/internal-state
+    // wave). Canonical homes for the BrnGui payload types queued by CgsGui::StateInterface::
+    // OutputViewState<T> (channel 41) and OutputInternalState<T> (channel 42) and not previously
+    // homed. Same honest-placeholder recipe as the blocks above: the (id,size) pair is the two
+    // compile-time literals read straight from each instance's X360 AddEvent asm (offset word 12
+    // = 4-aligned payload, 16 = 8-aligned payload -> alignas(8)).
+    // (GuiEventShowHideHud id 148 / GuiEventNetworkPlayerImage id 258 are already homed above and
+    // reused; GuiEventRenderMainMap has its real field-layout home in BrnMainMap.h and is NOT
+    // duplicated here.)
+    // ============================================================================
+    struct GuiEventPerformOnlineMainMenuOption { u8 maData[4]; s32 GetEventType() const { return 284; } };  // id 284 size 4
+    struct GuiEventPerformOnlinePauseOption { u8 maData[4]; s32 GetEventType() const { return 283; } };  // id 283 size 4
+    struct GuiEventFilterEventIcons { u8 maData[4]; s32 GetEventType() const { return 557; } };  // id 557 size 4
+    struct GuiEventSetInspectedEventIcon { u8 maData[4]; s32 GetEventType() const { return 558; } };  // id 558 size 4 (OutputViewState + OutputInternalState)
+    struct GuiEventShowHideBoostBar { u8 maData[1]; s32 GetEventType() const { return 214; } };  // id 214 size 1
+    struct GuiEventShowHideSatNav : public CgsGui::GuiEvent<213> {};  // id 213 size 12 (bare 12B GuiEvent header)
+    struct alignas(8) GuiEventSetHoveredEventIcon : public CgsGui::GuiEvent<559> { u8 maPayload[12]; };  // id 559 size 24 [8-aligned: OViewState off16]
 }
