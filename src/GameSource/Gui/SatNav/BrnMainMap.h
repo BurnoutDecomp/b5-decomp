@@ -33,10 +33,14 @@
 
 namespace BrnGui
 {
-    // BrnMainMap.h:52 -- the per-frame "render the sat-nav map" GUI event (GuiEvent<221>).
+    // BrnMainMap.h:52 -- the per-frame "render the sat-nav map" GUI event (GuiEvent<223>).
     // Carries the current map + view rects, the flattened active-texture set to draw, the
     // interpolated zoom level, which map surface it targets, and whether the map is live.
-    struct GuiEventRenderMainMap : public CgsGui::GuiEvent<221>
+    // EVENT ID (X360-attested = 223, corrected from an earlier reconstruction's 221): the
+    // OutputViewState<GuiEventRenderMainMap> instantiation @0x82465E50 bakes T::GetEventType()==223
+    // (miOutEventType word), and id 221 is independently owned by GuiEventSetBlackBars
+    // (AddGuiEvent<GuiEventSetBlackBars> @0x823CEE50 passes AddEvent type 221) -- so this event is 223.
+    struct GuiEventRenderMainMap : public CgsGui::GuiEvent<223>
     {
         // BrnMainMap.h:54
         enum EMapType
