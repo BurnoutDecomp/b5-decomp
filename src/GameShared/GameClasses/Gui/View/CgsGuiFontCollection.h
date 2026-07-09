@@ -13,10 +13,11 @@
 // Source path baked into both methods' asserts:
 //   ..\..\..\GameShared\GameClasses\Gui/View/CgsGuiFontCollection.cpp  (lines 86/100/144).
 //
-// DWARF (CgsGuiFontCollection.h:50) also declares Construct() and CountLoadedFonts(),
-// but neither is attested in the X360 ledger for this TU (only AddFont/FindFont have
-// ARTIST asm) -- per AGENTS.md "DWARF supplies names/types; the X360 ledger decides
-// what exists", they are left undeclared here rather than fabricated.
+// DWARF (CgsGuiFontCollection.h:50) also declares Construct() and CountLoadedFonts().
+// Construct() is X360-attested INLINED into ViewModule::Construct @0x828605A0 (the
+// three-slot sentinel seeding) and is declared below; CountLoadedFonts() has no X360
+// attestation and stays undeclared -- per AGENTS.md "DWARF supplies names/types; the
+// X360 ledger decides what exists".
 //
 // DWARF also attests FindFont as a CONST method returning
 // `const SafeResourceHandle<CgsResource::Font>&` (CgsGuiFontCollection.h:65); the X360
@@ -50,6 +51,20 @@ namespace CgsGui
         // FindFont returns a pointer to the matching slot (or the collection base itself
         // as a degenerate fallback when nothing matches).
         CgsResource::SafeResourceHandle<CgsResource::Font> maFonts[KI_MAX_FONTS];   // [c:+0x00 .. +0x18]
+
+        // DWARF CgsGuiFontCollection.h:50; X360-attested INLINED into
+        // CgsGui::ViewModule::Construct @0x828605A0, which seeds each of the three
+        // slot pairs from the module-static default-handle sentinel
+        // (dword_8305F174/_8305F178). The x64-native empty/default handle is the
+        // null handle -- the same emptiness AddFont/FindFont test via IsNull().
+        void Construct()
+        {
+            for (int i = 0; i < KI_MAX_FONTS; ++i)
+            {
+                maFonts[i].mpResourceMemory = 0;
+                maFonts[i].mpSourceEntry = 0;
+            }
+        }
 
         // @ 0x82853030 -- register a font handle in the first free (empty/default) slot.
         // Asserts ("No room to add font <name>", CgsGuiFontCollection.cpp:86) if every

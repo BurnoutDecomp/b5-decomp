@@ -45,7 +45,7 @@ namespace CgsGraphics
 }
 
 namespace CgsLanguage    { class LanguageManager; }       // held by Construct (mpLanguageManager)
-namespace CgsGui         { struct FontCollection; }        // the text-layout font collection
+namespace CgsGui         { struct FontCollection; class CustomRendererManager; }   // text-layout fonts + the custom-renderer wiring mirror
 namespace CgsGuiModuleIO { struct ImRendererSet; }         // the active 2D/3D renderer set (a2)
 
 
@@ -173,6 +173,15 @@ namespace CgsGui
         // for the callbacks (the cache + transform members stay private).
         void* GetWhiteTexture() const { return mpWhiteTexture; }
 
+        // The custom-renderer manager mirror slot (guest RenderHandler+0xB4 ==
+        // ViewModule+58596): CgsGui::ViewModule::Construct @0x828605A0 zeroes it and
+        // ViewModule::SetCustomRendererManager @0x824EBBF8 mirrors the module's manager
+        // pointer into it (the render callbacks' side of the custom-renderer wiring).
+        // The guest stores the field directly from the ViewModule bodies; the inline
+        // setter is the access path (the layout stays private).
+        void SetCustomRendererManager(CustomRendererManager* lpManager)
+        { mpCustomRendererManager = lpManager; }
+
         // The active 2D command buffer (GetIm2dRendererType()->mCommandBuffer == base+4). The
         // mask-push/pop callbacks (DrawRenderingUnit) append raw mask commands through it.
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>* GetCommandBuffer()
@@ -244,6 +253,9 @@ namespace CgsGui
     private:
         // ---- white fallback texture (guest +0x80 == +128; SetWhiteTexture / mesh mode 0) ----
         void* mpWhiteTexture;
+
+        // ---- custom-renderer manager mirror (guest +0xB4; see SetCustomRendererManager) ------
+        CustomRendererManager* mpCustomRendererManager;
 
         // ---- the per-batch screen-space + colour transform (mColourScale.w gates the batch) --
         CgsGraphics::Im2dTransform mVertexTransform;

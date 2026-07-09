@@ -29,12 +29,21 @@
 
 namespace BrnFlapt
 {
+    struct FlaptRenderer;
     struct MovieClipRef;
     struct TextFieldRef;
     struct TriggerParameters;
 
     struct MovieClipInstance
     {
+        // ---- per-frame drive ------------------------------------------------
+        // Update / Render: advance / draw this clip node and its children. Called
+        // by FlaptFileInstance::Update @0x82471820 / Render @0x82472480 on the
+        // root clip. Declared here so the file-instance drive compiles; the
+        // timeline bodies land with this class's own TUs.
+        void Update(f32 lfTimeStep);
+        void Render(FlaptRenderer* lpRenderer);
+
         // BrnFlaptTypes.h:36 -- per-frame trigger callback signature
         // (DWARF: void (*)(void*, uint16_t)).
         typedef void (*FrameTriggerCallback)(void* lpUserData, u16 luFrame);

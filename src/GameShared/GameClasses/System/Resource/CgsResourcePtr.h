@@ -74,8 +74,8 @@ namespace CgsResource
     struct BaseResourcePtr
     {
     public:
-        BaseResourcePtr();
-        ~BaseResourcePtr();
+        BaseResourcePtr();      // @0x82204E20 (bodied in CgsBaseResourcePtr.cpp)
+        ~BaseResourcePtr();     // @0x821F1E18 (bodied in CgsBaseResourcePtr.cpp)
 
         void           GetResource(void** lppResource) const;          // :76
         void           GetResourceHandle(ResourceHandle* lpHandle) const; // :80
@@ -143,7 +143,18 @@ namespace CgsResource
 
         ResourcePtr<Type>& operator=(const ResourcePtr<Type>& lrOther);
         ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther);
-        ResourcePtr<Type>& operator=(const ResourceHandle& lrHandle);
+
+        // Assign-from-handle: rebind the resource memory from the handle. X360-attested
+        // by inline shape at every assign site -- FlaptManager::Construct @0x82472530 and
+        // Destruct @0x8246E298 (mpFile = <invalid handle>), and the ChallengeList/
+        // WheelList slot resets -- each compiles to exactly ONE call,
+        // BaseResourcePtr::CreateFromHandle(this, &handle), with no list unlink or
+        // re-init around it. Defined inline so assign sites emit it per-type.
+        ResourcePtr<Type>& operator=(const ResourceHandle& lrHandle)
+        {
+            CreateFromHandle(&lrHandle);
+            return *this;
+        }
 
         // CgsResourcePtr.h:538 -> baked assert line 544 (non-const).
         Type* operator->()
