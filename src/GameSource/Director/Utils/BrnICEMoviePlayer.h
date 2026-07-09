@@ -100,6 +100,10 @@ struct IceMovie
     };
 
     void              Construct();
+    // X360 visitor: `void Serialise<S>(S&)` -- writes/reads this movie entry through the
+    // camera-tunings serialiser S; TextFileWriteSerialiser drives it (recursed into from
+    // ICEMoviePlaylist::Serialise). The per-instance body is a separate TU.
+    template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
     const CgsResource::ID  GetCgsID() const;        // body in BrnICEMoviePlayer.cpp
     f32               GetStartPosition() const;
     VehicleRef::EType GetVehicleRefType() const;
@@ -147,6 +151,10 @@ struct ICEMoviePlaylist
     };
 
     void                       Construct();
+    // X360 visitor: `void Serialise<S>(S&)` -- writes/reads the whole playlist through the
+    // camera-tunings serialiser S, recursing into each IceMovie::Serialise. TextFileWriteSerialiser
+    // drives it (from SharedPlaylists::Serialise). The per-instance body is a separate TU.
+    template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
     void                       InsertMovieBefore(s32 liDesiredZeroBasedIndex, const IceMovie& lrMovie);
     void                       AddMovie(const IceMovie& lrMovie);
     void                       AddMovie(IceMovie::EIceGroup leGroup, u32 luTake, bool lbShouldFlash,

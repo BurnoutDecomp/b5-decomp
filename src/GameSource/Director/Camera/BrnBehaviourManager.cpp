@@ -34,9 +34,22 @@
 //         CgsDev::Log debug print -- reaches the same opaque BehaviourHelper::Get() name)
 //     * BehaviourManager::GenerateSceneQueries   @0x8221F1C0  (per-slot
 //         BehaviourHelper::GenerateSceneQueries -> Behaviour interior collision policy)
-//     * BehaviourManager::NewBehaviour<>         @0x82267418  (the AllocateBehaviour<T>
-//         template family + per-behaviour SetParameters + AttribSys instance decode --
-//         un-homed template + opaque parameter-bank interior)
+//     * BehaviourManager::NewBehaviour<>         @0x82267418  (STILL BLOCKED, but no longer for
+//         the AllocateBehaviour<T> family -- that is now homed, see below). The shared NewBehaviour
+//         body resolves the freshly-prepared behaviour through the handle and stores lpOwningState /
+//         lpOwner into the Behaviour object's interior at console +0x170 / +0x174 -- offsets no
+//         homed Behaviour base slice models (there is no shared Behaviour base; each concrete
+//         behaviour is a standalone minimal slice), and NewBehaviour is generic over TBehaviour so
+//         a named setter cannot be added across all 20 types. Writing them raw would be an
+//         un-homed-interior offset hack (forbidden); dropping them would drop a side effect. Left
+//         declaration-only until the Behaviour base is homed with those named fields.
+//
+//   NOW HOMED THIS WAVE (Pass-A re-homed template instantiations):
+//     * BehaviourManager::AllocateBehaviour<TBehaviour>  @0x82263370 + 19 siblings -- the ONE
+//         shared body lives out-of-line in BrnBehaviourManager.h (sizeof-based pool split proven
+//         against every sibling's asm); the 20 concrete instantiations are emitted below (17) and
+//         in BrnBehaviourManager_AllocateBehaviour_{IceAnim,RenderMetrics,Rig}.cpp (3, isolated
+//         because those behaviour headers' shared-slice re-declarations collide).
 //     * BehaviourManager::ProcessSceneQueryResults @0x8221F438 (per-slot
 //         BehaviourHelper::ProcessSceneQueryResults -> Behaviour interior)
 //     * BehaviourManager::PostCollisionUpdateAllBehaviours @0x8221F870  VMX-PIPELINE
@@ -75,6 +88,34 @@
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState (owner identity + GetName)
+
+// The behaviour-type homes, pulled in so each AllocateBehaviour<TBehaviour> explicit
+// instantiation (below) sees a COMPLETE TBehaviour (AllocateVoid<T> needs sizeof(T) + a
+// placement-new). These minimal-slice behaviour headers each re-declare the shared Camera
+// support types (Behaviour base / collision policies / looker / shake), so the three that
+// derive the Behaviour base and pull the REAL shared headers (IceAnim, RenderMetrics, Rig)
+// mutually collide and are instantiated in their own isolated TUs
+// (BrnBehaviourManager_AllocateBehaviour_{IceAnim,RenderMetrics,Rig}.cpp); the 16 flat-slice
+// behaviours below coexist here. BehaviourInterpolate uses this header's own declaration-only
+// slice (the real Behaviours/BrnBehaviourInterpolate.h is mutually exclusive with it -- same
+// class name; see the manager header's BehaviourInterpolate FLAG), which is complete enough
+// to instantiate against and routes to the same (small) pool.
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugOrbitPlayer.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourFailsafe.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourPassengerCam.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"
 
 namespace BrnDirector
 {
@@ -169,5 +210,36 @@ namespace Camera
 
         return mBehaviourNeedsPreparingFlags.IsBitSet(luAllocationKey);
     }
+
+    // ========================================================================
+    // AllocateBehaviour<TBehaviour> explicit instantiations (X360 @0x82263370 &c.)
+    //
+    // The ONE shared body lives out-of-line in BrnBehaviourManager.h; these lines emit the
+    // concrete per-behaviour-type symbols the X360 ledger tracks. Each compiler-baked
+    // instantiation picks its pool from sizeof(TBehaviour): a behaviour that fits the small
+    // pool's 1600-byte bucket -> mSmallBehaviourPool ("small behaviour"); larger -> the 4000-byte
+    // mLargeBehaviourPool ("large behaviour"). Measured routing (matches every sibling's asm):
+    //   LARGE pool: Failsafe(2656) GameplayBumper(2112) GameplayExternal(2840) IceAnim(3904)
+    //   SMALL pool: all others (GyroCam is 1600 -- it exactly fills a small bucket).
+    // IceAnim / RenderMetrics / Rig are instantiated in their own isolated TUs (their headers'
+    // shared-slice re-declarations collide with each other and with the real shared headers).
+    // ========================================================================
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCam>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCrash>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourBystanderCam>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourDebugFlyWorld>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourDebugOrbitPlayer>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourFailsafe>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourFixedCam>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGameplayBumper>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGameplayExternal>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGyroCam>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourHeliCam>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourInterpolate>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourLooseAttachment>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourPassengerCam>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRoadRunner>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRotateAboutVehicle>();
+    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourSpirallingDeathcam>();
 }
 } // namespace BrnDirector

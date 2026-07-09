@@ -149,6 +149,10 @@ public:
     // (each Vector3 aligns to 16 bytes on the SIMD ISA; the bool is padded to 16).
     struct Params
     {
+        // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
+        // Per-instance body is a separate TU.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
         Vector3    mOffsetFromTarget;            // +0x00
         Vector3    mOffsetFromRotationCentre;    // +0x10
         f32        mfFOV;                        // +0x20
@@ -181,6 +185,10 @@ class CameraShake
 public:
     struct Parameters
     {
+        // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
+        // Per-instance body is a separate TU.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
         f32  mfXYShakeMagnitudeDegs;   // +0x00
         f32  mfZShakeMagnitudeDegs;    // +0x04
         f32  mfXYWobbleMagnitudeDegs;  // +0x08
@@ -209,6 +217,10 @@ class OrientationLag
 public:
     struct Parameters
     {
+        // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
+        // Per-instance body is a separate TU.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
         VersionNumber muVersion;       // +0x00
         f32  mfPitchSpring;            // +0x04
         f32  mfYawSpring;              // +0x08
@@ -354,6 +366,11 @@ public:
     class Parameters : public Behaviour::Parameters
     {
     public:
+        // X360 visitor: `void Serialise<S>(S&)` -- walks the rig block's fields (recursing into
+        // mRigParams/mShakeParams/mLookerParams/mOrientationLagParams/mPositionLagParams) into the
+        // camera-tunings serialiser S. Per-instance body is a separate TU.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
         void Construct();
 
         Utils::VersionNumber            muVersion;           // version tag

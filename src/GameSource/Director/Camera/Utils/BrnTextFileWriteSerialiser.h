@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_UTILS_BRN_TEXT_FILE_WRITE_SERIALISER_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (muRecursionDepth guard in Serialise<T>)
 
 #include <cstdio>   // std::FILE (the serialiser writes to a text file handle held by it)
 
@@ -66,9 +67,22 @@ public:
     // "%f"). A no-op when the file failed to open.
     void Serialise(const char* lpcName, f32& lrValue);
 
+    // The nested-block serialiser-visitor template (X360: `public: void Serialise<T>(const char*,
+    // T&)`). One shared body per instance: write the field's formatted section-header label line
+    // ("<formatted-name>\n"), bump muRecursionDepth (asserting it stays < KI_MAX_RECURSION_DEPTH),
+    // recurse into T's own Serialise (which walks T's fields, each nested one level deeper), then
+    // unwind the depth. The body lives in BrnTextFileWriteSerialiser.cpp with an explicit
+    // instantiation per behaviour/utility Parameters block the camera tunings bank saves. Each T
+    // supplies `template<class S> void Serialise(S&)` (attested as a separate X360 function).
+    template<class T> void Serialise(const char* lpcName, T& lrParams);
+
 private:
     u32        muRecursionDepth;   // +0x00 -- current nesting depth (indent = 4*depth)
     std::FILE* mpFile;             // +0x04 -- the destination text file handle
+
+    // Nesting cap (Serialisation.h:663 assert "muRecursionDepth < KI_MAX_RECURSION_DEPTH"): the
+    // X360 compares the post-increment depth against 8 (cmplwi r11,8 ; blt skip-assert).
+    static const u32 KI_MAX_RECURSION_DEPTH = 8u;
 };
 
 } // namespace Camera
