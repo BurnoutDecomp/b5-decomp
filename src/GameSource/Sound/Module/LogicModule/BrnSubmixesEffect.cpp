@@ -49,7 +49,7 @@ SubmixesEffect::~SubmixesEffect()
 //       mbHoldVolumes = <payload byte @ +0x10>;    ; lbz 0x10; stb 0x39
 //
 // Type-15 messages carry a single-byte hold-volumes flag in their body at +0x10, past the
-// committed 12-byte MessageHeader; read BY OFFSET off the base header (the concrete type-15
+// committed 16-byte MessageHeader; read BY OFFSET off the base header (the concrete type-15
 // message struct is un-homed and NOT fabricated).
 // ---------------------------------------------------------------------------
 void SubmixesEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)

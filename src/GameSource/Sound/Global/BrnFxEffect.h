@@ -46,6 +46,54 @@ namespace BrnSound
 namespace Logic
 {
 
+// =============================================================================
+// BrnSound::Logic::FxMessage family (DWARF home BrnFxEffect.h:32/33) -- the small
+// "FX" command messages the sound logic module posts onto the command queue as
+// CgsSound::Io::Message<FxMessage_*>. Distinct from the FxEffect runtime object
+// below; homed here alongside it because BrnFxEffect.h is their DWARF home.
+//
+// The base FxMessage holds a single 4-byte FxType discriminant; each concrete
+// FxMessage_* is an EMPTY subclass whose only job is to fix meType to its FxType
+// (the DWARF declares each derived default ctor and adds no members), so
+// sizeof(FxMessage_*) == sizeof(FxMessage) == 4. X360-attested: every
+// CgsModule::VariableEventQueue<*,16>::AddEvent<CgsSound::Io::Message<FxMessage_*>>
+// bakes sizeof(Message<...>) == 0x14 == 16 (MessageHeader) + 4 (payload) as its
+// record-size argument.
+// =============================================================================
+struct FxMessage
+{
+    // BrnFxEffect.h:33 (DWARF). The kind of FX event this message carries.
+    enum FxType
+    {
+        E_WINDOW_SMASH       = 0,
+        E_CAMERA_CUT         = 1,
+        E_STUNT_SMASH        = 2,
+        E_STUNT_STUNT        = 3,
+        E_STUNT_JUMP         = 4,
+        E_RESET_ON_TRACK     = 5,
+        E_CAMERA_PHOTO       = 6,
+        E_QUIT_EVENT         = 7,
+        E_CRASH_IN_WATER     = 8,
+        E_ONLINE_RIVAL_SWEEP = 9,
+    };
+
+    // BrnFxEffect.h:46 (DWARF). The only data member (4 bytes).
+    FxType meType;
+
+    // DWARF declares FxMessage() and FxMessage(FxType). The default ctor body is not
+    // recovered, so meType is left default-initialised (no fabricated value); the
+    // FxType-taking ctor is what the derived types below use to fix the discriminant.
+    FxMessage() {}
+    explicit FxMessage(FxType leType) : meType(leType) {}
+};
+
+// Empty FxMessage subclasses that only fix the discriminant (DWARF BrnFxEffect.h:65..).
+struct FxMessage_CameraCut  : public FxMessage { FxMessage_CameraCut()  : FxMessage(E_CAMERA_CUT)  {} };
+struct FxMessage_StuntSmash : public FxMessage { FxMessage_StuntSmash() : FxMessage(E_STUNT_SMASH) {} };
+struct FxMessage_StuntStunt : public FxMessage { FxMessage_StuntStunt() : FxMessage(E_STUNT_STUNT) {} };
+struct FxMessage_StruntJump : public FxMessage { FxMessage_StruntJump() : FxMessage(E_STUNT_JUMP)  {} };
+struct FxMessage_QuitEvent  : public FxMessage { FxMessage_QuitEvent()  : FxMessage(E_QUIT_EVENT)  {} };
+
 // DWARF home inferred: struct BrnSound::Logic::FxEffect : public BrnEffectObject.
 // Reuses the committed BrnEffectObject dual base BY NAME and embeds a 4-element
 // CgsSound::Logic::VoiceWrapper array. The two leaf vptrs the X360 ctor installs
