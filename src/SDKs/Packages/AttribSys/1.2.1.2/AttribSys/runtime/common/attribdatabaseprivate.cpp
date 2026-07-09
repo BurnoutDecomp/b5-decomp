@@ -1,6 +1,9 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabaseprivate.h"
 
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // shared AttribSys census-free
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabase.h"           // AttribListNode/Base + node-free seam
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"           // Attrib::Collection (~Collection)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                             // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2).
 //   Attrib::DatabasePrivate::`scalar deleting destructor' @ 0x8280CA40
@@ -39,5 +42,41 @@ namespace Attrib
     void DatabasePrivate::operator delete(void* lpBlock, size_t lnBytes)
     {
         HashMapTablePolicy::FreeWithCensusIf(lpBlock, lnBytes, NULL);
+    }
+
+    // Attrib::DatabasePrivate::CollectGarbageBag<Attrib::Collection> @ 0x8280E3C0. Drain the
+    // database's deferred-collection garbage list (an intrusive eastl::list ring, AttribListBase):
+    // for each queued node, when the collection it holds is now unreferenced (its shared HashMap
+    // refcount at +0x08 is zero) run its destructor and hand the 40-byte object back to the
+    // AttribSys package allocator through the shared unconditional census-free; then unlink the
+    // node from the ring and free the node itself. Reached from Attrib::Database::CollectGarbage.
+    // Homed here as the DatabasePrivate free-function seam (matching the DatabasePrivate_Queue*
+    // ForDelete convention); the Class twin (@own TU) frees its nodes the same way.
+    AttribListBase* DatabasePrivate_CollectCollectionGarbageBag(AttribListBase* lpGarbageList)
+    {
+        while (lpGarbageList->mNode.mpNext != &lpGarbageList->mNode)
+        {
+            AttribListNode*     lpNode       = lpGarbageList->mNode.mpNext;
+            Attrib::Collection* lpCollection = reinterpret_cast<Attrib::Collection*>(lpNode->mpValue);
+
+            CGS_ASSERT(lpCollection != NULL, "NULL object found in garbage bag.");
+
+            // X360 reads the collection's shared refcount at +0x08 (HashMap base's muRefCount).
+            const u16 lu16RefCount =
+                *reinterpret_cast<const u16*>(reinterpret_cast<const u8*>(lpCollection) + 0x08);
+            if (lu16RefCount == 0)
+            {
+                lpCollection->~Collection();
+                // Unconditional census-and-free of the 40-byte collection object (already inside
+                // the should-free branch; the object is non-NULL, so no null guard is emitted).
+                HashMapTablePolicy::FreeWithCensus(lpCollection, 40, NULL);
+            }
+
+            // Unlink the (first) node from the ring and free it.
+            lpNode->mpPrev->mpNext = lpNode->mpNext;
+            lpNode->mpNext->mpPrev = lpNode->mpPrev;
+            AttribListFreeNode(lpGarbageList, lpNode);
+        }
+        return lpGarbageList;
     }
 }

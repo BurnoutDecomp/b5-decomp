@@ -283,4 +283,17 @@ namespace CgsUnicode
 
         Copy(maBuffer, lUtf8String);
     }
+
+    // Explicit instantiations of the Print<...> string formatters the build actually emits.
+    // The template body lives in CgsUnicode.h (it stages each argument through a scratch
+    // UnicodeBuffer then forwards to _Print); these pin the out-of-line copies the X360 keeps
+    // at 0x824490E8 (2 args) and 0x82449150 (3 args), each over three UTF-8 string parameters
+    // (const CgsUtf8* == unsigned char const *). Only caller: BrnGui::InGameMessageRenderer::
+    // InGameMessage::SetupMessage.
+    template CgsUtf8* Print<const CgsUtf8*, const CgsUtf8*>(
+        const CgsUtf8*, CgsUtf8*, s32, const CgsUtf8* const&, const CgsUtf8* const&);
+
+    template CgsUtf8* Print<const CgsUtf8*, const CgsUtf8*, const CgsUtf8*>(
+        const CgsUtf8*, CgsUtf8*, s32,
+        const CgsUtf8* const&, const CgsUtf8* const&, const CgsUtf8* const&);
 }

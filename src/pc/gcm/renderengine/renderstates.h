@@ -185,6 +185,17 @@ public:
 
     MeshData* Initialize(const u32* lpaParameters);
 
+    // Bind a compiled MeshData to the device (X360 0x8227B530). The primary values are the
+    // index buffers (bound one after another via TDevice's SetIndices) and the secondary values
+    // are the vertex-stream buffers (bound to stream slots 0.. via SetStreamSource). TDevice is
+    // the render-backend tag the X360 compile-time-selected and inlined to the D3D fast-path on
+    // the renderengine device singleton; the only instantiation the build emits is
+    // Dispatch<renderengine::Device>. Static: the X360 takes the MeshData directly (no MeshHelper
+    // this). Body + explicit instantiation live in MeshHelper.cpp so the D3D fast-path externs
+    // stay out of this shared header. Called by the debris + post-fx quad renderers.
+    template< typename TDevice >
+    static void Dispatch(const MeshData* lpData);
+
 private:
     MeshData* mpData;
 };
