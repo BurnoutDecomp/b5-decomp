@@ -32,7 +32,9 @@ namespace EA { namespace GameTalk { class GameTalkMessage; } }
 // arrive via CgsGuiModuleIO.h below -- the controller bridge pushes real GUI events into
 // the real 33KB inbound queue now.)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
-namespace CgsGui { namespace ModelIO        { struct OutputBuffer {}; } }
+// (The former ModelIO::OutputBuffer placeholder is DELETED per the same ODR-trap rule:
+// the REAL CgsGui::ModelIO::OutputBuffer now arrives via BrnGuiModule.h ->
+// CgsModelModuleIO.h -- the IO stack allocates the real 86KB buffer.)
 namespace BrnDirector { namespace DirectorIO { struct OutputBuffer {}; } }
 
 // Engine module member types - placeholders that derive from the REAL module base
@@ -241,6 +243,43 @@ namespace BrnGame
         void BridgeControllerToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                                    const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
 
+        // X360 0x823DCA10 -- the game->GUI flow-FSM bridge: when the main flow requested a
+        // GUI FSM stage (miGuiFsmStage 1..5), post the matching GuiEventRunFsm record(s)
+        // (event 144, 24 bytes) into the GUI module INPUT buffer's inbound queue, then park
+        // the stage at 6 (idle) and clear the phase-complete flag:
+        //   1 -> BrnVideoFsm (HUD)      2 -> BrnLegalFsm (HUD)     3 -> BrnCmpLdFsm (HUD)
+        //   4 -> BrnBFProFsm (HUD)      5 -> BrnScreenFsm@LOADING (SCREEN) + BrnFBFsm (HUD)
+        void BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
+
+        // X360 0x823CB758 -- the GUI->game out-event consumer: walk the GUI module's out
+        // events and latch the flow commands (19/20 loading screen, 70 phase complete,
+        // 71 pre-accept/resume-world, 90 profile-first, 189 sign-out, 86/87/89 quit,
+        // 138/589/590 render modes). FLAG PC-ABI adapter: the console form reads the GUI
+        // module OUTPUT buffer's out-event queue; the PC module publishes the same queue
+        // via BrnGui::GuiModule::GetGuiOutQueue().
+        void BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+
+        // The main-flow states' pending GUI FSM stage request (the X360 +2523537 byte the
+        // MainGameFlowState OnEnters write; BridgeGameToGui consumes it).
+        void RequestGuiFsmStage(s32 liStage) { miGuiFsmStage = liStage; }
+
+        // The GUI phase-complete flag (X360 +10094152; command 70). Stays latched until
+        // the next BridgeGameToGui stage post clears it -- the X360 lifecycle.
+        bool IsGuiPhaseComplete() const { return mbGuiPhaseComplete; }
+
+        // The pre-accept flag (X360 +10094153; command 71 -- "resume the world load while
+        // the accept dwell plays"). Read-and-clear, as MainGameFlowStateStartScreen does.
+        bool ConsumeGuiPreAccept()
+        {
+            const bool lbSet = mbGuiPreAccept;
+            mbGuiPreAccept = false;
+            return lbSet;
+        }
+
+        // This sub-step's GUI module INPUT buffer (live between CreateStaticIOBuffers /
+        // DestroyStaticIOBuffers; the flow states' initial-FSM post reaches it here).
+        CgsGui::CgsGuiModuleIO::InputBuffer* GetGuiInputBuffer() { return mpGuiInputBuffer; }
+
         // ---- replay-output bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) -------
         // The mirror of the controller bridges: each reads the replay module's pre/post-sim OUTPUT
         // buffer and republishes it into a subsystem's INPUT buffer.
@@ -344,6 +383,11 @@ namespace BrnGame
         // These are the game-module fields the BridgeControllerTo* family reads each frame. They sit
         // far past the boot-path members above (X360 absolute offsets in comments); declared here in
         // the omitted tail per the LAYOUT NOTE (semantic parity, not byte-exact).
+        // ---- the GUI flow-FSM bridge state (X360-attested offsets) -----------------------
+        s32  miGuiFsmStage;             // @ +10094148 (1..5 = pending RunFsm post; 6 = idle)
+        bool mbGuiPhaseComplete;        // @ +10094152 (command 70 -- the flow-advance flag)
+        bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
+
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)
         s32  miSecondaryControllerPort; // @ +10094144 (the rumble/debug-controller read port)

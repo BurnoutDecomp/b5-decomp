@@ -75,6 +75,33 @@ namespace BrnGui
     void AlwaysAvailableComponentsManager::PrepareFlapt(const BrnFlapt::FileRef&) {}
 }
 
+// The ModelIO buffer queues the GUI flow controller's IO pair constructs/drains
+// (BrnGuiModule::Prepare / ServiceFsmBundleRequests): the 32768 inbound event queue and
+// the 4096 load-request queue. Same thin forwarders to the VariableEventQueue base as
+// the <256,16> family below (the X360 emits one body per instantiation).
+template <> void CgsGui::GuiEventQueueBase<32768, 16>::Construct()
+{
+    this->CgsModule::VariableEventQueue<32768, 16>::Construct();
+}
+template <> void CgsGui::GuiEventQueueBase<4096, 16>::Construct()
+{
+    this->CgsModule::VariableEventQueue<4096, 16>::Construct();
+}
+template <> void CgsGui::GuiEventQueueBase<4096, 16>::Clear()
+{
+    this->CgsModule::VariableEventQueue<4096, 16>::Clear();
+}
+template <> s32 CgsGui::GuiEventQueueBase<4096, 16>::GetFirstEvent(
+    const CgsModule::Event** lppEvent, s32* lpiSize) const
+{
+    return this->CgsModule::VariableEventQueue<4096, 16>::GetFirstEvent(lppEvent, lpiSize);
+}
+template <> s32 CgsGui::GuiEventQueueBase<4096, 16>::GetNextEvent(
+    const CgsModule::Event* lpEvent, const CgsModule::Event** lppNextEvent, s32* lpiSize) const
+{
+    return this->CgsModule::VariableEventQueue<4096, 16>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
+}
+
 template <> void CgsGui::GuiEventQueueBase<256, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<256, 16>::Construct();

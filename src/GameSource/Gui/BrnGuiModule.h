@@ -6,28 +6,36 @@
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Gui/BrnGuiAptRuntime.h"                             // BrnGui::AptRuntimeHost (embedded)
 #include "GameSource/Gui/BrnGuiViewModule.h"                             // BrnGui::ViewModule (embedded)
-#include "GameSource/Gui/Flow/HUD/States/BrnBootVideos.h"               // BrnGui::BootVideos (the boot-logo state)
-#include "GameSource/Gui/Flow/HUD/States/BrnBootLoading.h"              // BrnGui::BootLoading (the boot loading state)
-#include "GameSource/Gui/Flow/HUD/States/BrnBootLegal.h"                // BrnGui::BootLegal (the boot legal/title-screen state)
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"// CgsGui::StateInterface (BootVideos' channel)
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue (BootVideos' in-queue)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                  // CgsGui::CgsGuiModuleIO::InputBuffer (the inbound GUI event buffer)
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateMachine.h"  // CgsGui::StateMachine (runs the boot FSM Lua script)
+#include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"          // CgsGui::ModelIO Input/OutputBuffer (the FSM controller's IO pair)
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"     // CgsResource::Pool (holds the loaded FSM bundle)
-#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc (the boot FSM Lua VM heap)
+#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc (the FSM Lua VM heap)
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"             // CgsMemory::LinearMalloc (the HUD state pool)
+#include "GameSource/Gui/BrnGuiFsmController.h"                         // BrnGui::GuiFsmController (the flow FSM controller)
+#include "GameSource/Gui/Flow/HUD/BrnHudFlow.h"                         // BrnGui::BrnHudFlow (the 14-state HUD flow)
+#include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
 
 // BrnGui::GuiModule -- the GUI module (a dispatched CgsModule, like BrnRendererModule). The X360 module
 // (Construct 0x82518028 / Prepare 0x82518D68 / Update 0x82527A58 / Render 0x825146B8) builds the entire
 // GUI subsystem (model + view + the HUD/Screen flows) and EMBEDS the MovieManager (X360 +301600), driving
-// it each frame via UpdateAndRenderMovieManager (0x82511240: MovieManager::Update + MoviePlayer::Render
-// through the ViewIO ImRenderers).
+// it each frame via UpdateAndRenderMovieManager (0x82511240).
 //
-// [MINIMAL MOVIE-HOSTING SLICE] This reconstructs only the slice that hosts + drives the MovieManager (the
-// movie-relevant part of GuiModule); the in-game GUI model/view/APT + the full HUD-flow sequencing are
-// data-gated follow-ons (the established pattern for big modules). The boot HUD flow (BrnHudFlow ->
-// BootVideos) that fires the play-video events is reconstructed in the next phases and driven from Update;
-// the movie frame is presented through the renderer's existing gpActiveMovieManager draw hook (the X360
-// renders it through the GUI's own ViewIO ImRenderers -- a follow-on once the GUI view path is reconstructed).
+// THE BOOT/MENU FLOW IS THE REAL CONTROLLER CHAIN (2026-07-10): the module owns the real
+// BrnGui::GuiFsmController + BrnHudFlow (the 14-state pool BF_PRELOAD..PRE_FLY_BY in ONE
+// CgsGui::StateMachine), sequenced exactly as the X360 GuiModule::Update does --
+//   * GuiEventRunFsm posts (event 144, from the game module's BridgeGameToGui) ->
+//     GuiFsmController::RunFsm;
+//   * the controller's load machine posts GuiEventLoadRequest records into the ModelIO
+//     input buffer; the FSM LuaCode bundle loads land as GuiEventLoadNotification (14)
+//     records on the ModelIO output buffer; PrepareLua enters the script's state;
+//   * the flow's states register their observed events (records 34/35 on the state
+//     interface output queue); the module fans matching inbound GUI events into the
+//     flow's in-queue (the EventInterpreterModule observer-subscription dispatch);
+//   * each boot state posts command 70 (channel 40) at phase end; the game module's
+//     BridgeGuiToGame consumes it and the game main flow requests the next FSM stage.
+// The [PC IO] leaf that remains module-side is the synchronous FSM-bundle load standing
+// in for the GuiResourceModule module dispatch (ServiceFsmBundleRequests).
 namespace BrnGui
 {
     class GuiModule : public CgsModule::ModuleSingleBuffered
@@ -55,21 +63,26 @@ namespace BrnGui
         AptRuntimeHost* GetAptRuntimeHost() { return &mAptRuntimeHost; }
 
         // Hand this sub-step's GUI module INPUT buffer (filled by BrnGameModule's
-        // BridgeControllerToGui) to the update drive; Update drains its inbound controller
-        // events into the active boot flow's in-queue. FLAG (bridge stand-in): on the
-        // console the buffer arrives through the module scheduler's IO set and the
-        // Model/EventInterpreter observer dispatch fans it out to the registered flows.
+        // BridgeControllerToGui + BridgeGameToGui) to the update drive; Update dispatches
+        // its inbound events (144 -> RunFsm, 14/16/481 -> the model notifications,
+        // 504/508/513 -> the MovieManager) and fans the rest into the HUD flow's in-queue
+        // per the observer subscriptions. FLAG (bridge stand-in): on the console the
+        // buffer arrives through the module scheduler's IO set.
         void SetGuiEventInputBuffer(CgsGui::CgsGuiModuleIO::InputBuffer* lpBuffer)
         {
             mpGuiEventInputBuffer = lpBuffer;
         }
 
-        // The always-available GUI components manager the module owns (the in-game EATrax
-        // banner / achievement pop-up / save-icon / etc.) lives at a far offset in a part of
-        // the GuiModule layout this MINIMAL movie-hosting slice does not yet model. It is
+        // The module's GUI OUT event queue for this frame (the flow states' channel-40
+        // command records and the module's own out events). BrnGameModule::BridgeGuiToGame
+        // drains it after the module update -- the PC stand-in for the console GUI module
+        // OUTPUT buffer's out-event queue the bridge reads. Cleared by the bridge.
+        CgsModule::VariableEventQueue<18432, 16>* GetGuiOutQueue() { return &mGuiOutQueue; }
+
+        // The always-available GUI components manager the module owns lives at a far
+        // offset in a part of the GuiModule layout this slice does not yet model; it is
         // reached BY NAME through the free accessor GetAlwaysAvailableComponentsManager()
-        // declared in BrnGuiAlwaysAvailableComponentsManager.h (bodied in BrnGuiModule.cpp),
-        // which encapsulates the X360-attested byte offset there. See KU_OFF_AAC_MANAGER.
+        // (bodied in BrnGuiModule.cpp). See KU_OFF_AAC_MANAGER.
 
     public:
         // X360 byte offset of the always-available components manager within GuiModule
@@ -79,21 +92,29 @@ namespace BrnGui
         static const u32 KU_OFF_AAC_MANAGER = 0x17D670;
 
     private:
-        // Route the boot HUD flow <-> the MovieManager for one frame: feed BootVideos its input events,
-        // tick it, deliver its play/stop output to the manager, tick the manager, and feed video-finished
-        // back. [MINIMAL boot driver -- the X360 runs BootVideos inside BrnHudFlow + routes via EventObserver;
-        // here the GuiModule drives the single boot state + bridges the queues, marked.]
-        void UpdateBootVideoFlow();
+        // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
+        // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
+        // 14/16 -> the model-out notification queue, 504/508/513 -> MovieManager), and fan
+        // every event the flow subscribed to (records 34/35) into the HUD flow's in-queue
+        // -- the EventInterpreterModule observer dispatch.
+        void DispatchInboundGuiEvents();
 
-        // Deliver this sub-step's inbound controller GUI events (the BridgeControllerToGui
-        // output in mpGuiEventInputBuffer) into the active boot flow's in-queue, filtered to
-        // the event ids the flow state REGISTERED for (the observer-subscription filter the
-        // console EventInterpreterModule applies). FLAG (dispatch stand-in): the console fans
-        // these out through ModelModule/EventInterpreterModule::ProcessInEvents to every
-        // registered observer; the boot phases each own a single state, so the hybrid routes
-        // to the active phase queue directly.
-        void RouteControllerGuiEvents(CgsModule::VariableEventQueue<18432, 16>* lpTargetQueue,
-                                      const s32* lpaiObservedIds, s32 liNumObservedIds);
+        // Drain the HUD flow's StateInterface output queue -- the single per-frame
+        // dispatch point for everything the states post: subscription records (34/35),
+        // movie play/stop (508/509), the channel-40 command records (-> mGuiOutQueue for
+        // the game bridge), the channel-41 view-state records (-> the view input queue),
+        // and the menu-music / audio-trigger events (155/201, the PC sound leaves).
+        void DrainFlowOutputQueue();
+
+        // [PC IO] the GuiResourceModule module-dispatch stand-in: drain the ModelIO input
+        // buffer's FSM-bundle load requests (GuiEventLoadRequest, queue type 39), load
+        // "FSM/<NAME>.BUNDLE" synchronously, and post the GuiEventLoadNotification (14)
+        // into the ModelIO output buffer's notification queue the controller reads.
+        void ServiceFsmBundleRequests();
+
+        // Post one event into the HUD flow's in-queue if the flow subscribed to it
+        // (the observer-subscription filter).
+        void RouteEventToFlow(const CgsModule::Event* lpEvent, s32 liId, s32 liSize);
 
         // This sub-step's GUI module INPUT buffer (set by BrnGameModule each sub-step; the
         // buffer itself lives on the update IO stack and is re-created per sub-step).
@@ -101,64 +122,54 @@ namespace BrnGui
 
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
 
-        // The view-module IO pair the per-frame bridge fills (the GuiFsmController /
-        // BridgeFromInputToView stand-in): the input buffer carries the view-state
-        // events (frame time step 26 + the play-movie events 18) into
-        // CgsGui::ViewModule::Update; the output buffer receives the view's outbound
-        // events. FLAG (bridge stand-in): the console fills these through the module
-        // scheduler's IO stacks.
+        // The view-module IO pair the per-frame bridge fills (the input buffer carries the
+        // view-state events -- frame time step 26, the play-movie events 18, the load
+        // notifications 14 -- into CgsGui::ViewModule::Update). FLAG (bridge stand-in):
+        // the console fills these through the module scheduler's IO stacks.
         CgsGui::ViewIO::InputBuffer  mViewInputBuffer;
         CgsGui::ViewIO::OutputBuffer mViewOutputBuffer;
         s64 miLastViewFrameMs;        // PC frame clock for the time-step event (FLAG: wall clock)
         MovieManager mMovieManager;   // X360 +301600 (drives the boot/attract videos)
         AptRuntimeHost mAptRuntimeHost; // GUI-owned Apt host published while the module is prepared
 
-        // The boot-logo flow this module drives (the in-game GUI model/view/full HudFlow is data-gated).
-        BootVideos             mBootVideos;
-        CgsGui::StateInterface mBootStateInterface;                  // BootVideos' output channel
-        CgsModule::VariableEventQueue<18432, 16> mBootInQueue;       // BootVideos' input queue (cache-ready/video-finished)
-        bool                   mbBootStarted;                        // fed the initial cache-ready event yet?
-        bool                   mbLoadingHasShown;                    // the initial loading screen has been displayed
+        // ---- the real flow-controller chain (X360 GuiModule members) --------------------
+        GuiCache          mGuiCache;        // X360 +1005376 (the flow states' cache; event-64 payload)
+        BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)
+        GuiFsmController  mFsmController;   // X360 +638904 (the flow FSM controller)
+        CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)
+        CgsMemory::LinearMalloc mHudStatePool; // the 14-state pool allocator (HudFlow::Prepare)
 
-        // Boot through the REAL Lua FSM: a CgsGui::StateMachine runs the BRNVIDEOFSM Lua script (loaded
-        // from FSM/BRNVIDEOFSM.BUNDLE) which SetStates() the BF_VIDEOS state -> mBootVideos. This is the
-        // first slice of the faithful flow (the X360 runs this inside BrnHudFlow + the GuiFsmController,
-        // sequenced via ModelIO; see [[lua-system]]). If the bundle/script fails to come up, the module
-        // falls back to driving mBootVideos directly (mbBootFsmReady=false) so the boot videos still play.
-        CgsGui::StateMachine   mBootStateMachine;                    // runs the BRNVIDEOFSM Lua FSM
-        CgsResource::Pool      mBootFsmPool;                         // holds the loaded FSM LuaCode bundle
-        CgsMemory::HeapMalloc  mBootLuaHeap;                         // backing heap for the boot FSM Lua VMs (shared)
-        bool                   mbBootFsmReady;                       // the Lua FSM loaded + entered BF_VIDEOS
+        // The ModelIO pair the controller exchanges with the (module-dispatch) resource
+        // loader: requests out through the input buffer, notifications back on the output
+        // buffer. On the console these are per-frame stack buffers ("GUIModel"); the PC
+        // module owns a persistent pair and clears the queues per frame as the real
+        // Update does (Clear @ the update tail).
+        CgsGui::ModelIO::InputBuffer  mModelInputBuffer;
+        CgsGui::ModelIO::OutputBuffer mModelOutputBuffer;
 
-        // Boot-phase sequencer: the boot runs BF_LOADING (BRNFLOADFSM) then BF_VIDEOS (BRNVIDEOFSM), each a
-        // single-state FSM in its own StateMachine, advancing at loading-complete (the PC stand-in for the
-        // X360 GuiFsmController, which sequences these via ModelIO; see [[lua-system]]). BF_LOADING runs the
-        // real BootLoading state through its Lua script; its show/stop-loading-screen events are emitted but
-        // not yet routed to the visual (the game-flow loading screen drives that) -- FLAG, routing is a
-        // follow-on. Phase 0 = BF_LOADING, phase 1 = BF_VIDEOS.
-        BootLoading            mBootLoading;                         // BF_LOADING state
-        CgsGui::StateMachine   mBootLoadingStateMachine;             // runs the BRNFLOADFSM Lua FSM
-        CgsGui::StateInterface mBootLoadingStateInterface;           // BootLoading's output channel
-        CgsModule::VariableEventQueue<18432, 16> mBootLoadingInQueue;// BootLoading's input queue (cache-ready/loading-complete)
-        CgsResource::Pool      mBootLoadingPool;                     // holds the BRNFLOADFSM LuaCode bundle
-        bool                   mbBootLoadingFsmReady;                // the BRNFLOADFSM Lua FSM loaded + entered BF_LOADING
-        bool                   mbBootLoadingCompleteFed;             // fed BootLoading the loading-complete (137) input yet
+        // The HUD flow's in-queue (every observed event is fanned into it) + the module
+        // GUI-OUT queue the game bridge drains.
+        CgsModule::VariableEventQueue<18432, 16> mHudInQueue;
+        CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
 
-        // Phase 2 = BF_LEGAL: BootLegal (the legal / title screen that shows title_screen02) run through
-        // the BRNLEGALFSM Lua FSM, loaded when BF_VIDEOS signals "done" (the PC stand-in for the X360
-        // GuiFsmController loading the next single-state FSM on the boot-videos-done state event).
-        BootLegal              mBootLegal;                           // BF_LEGAL state
-        CgsGui::StateMachine   mBootLegalStateMachine;               // runs the BRNLEGALFSM Lua FSM
-        CgsGui::StateInterface mBootLegalStateInterface;             // BootLegal's output channel
-        CgsModule::VariableEventQueue<18432, 16> mBootLegalInQueue;  // BootLegal's input queue
-        CgsResource::Pool      mBootLegalPool;                       // holds the BRNLEGALFSM LuaCode bundle
-        bool                   mbBootLegalFsmReady;                  // the BRNLEGALFSM Lua FSM loaded + entered BF_LEGAL
-        s32                    miBootPhase;                          // 0 = BF_LOADING, 1 = BF_VIDEOS, 2 = BF_LEGAL
+        // The observer-subscription table (records 34/35 from the state interface output
+        // queue). One observer (the HUD flow) -> a flat per-id flag set.
+        static const s32 KI_MAX_OBSERVED_EVENT_ID = 1024;
+        bool mabObservedEventIds[KI_MAX_OBSERVED_EVENT_ID];
+
+        // One resident pool per flow slot for the loaded FSM LuaCode bundle (the [PC IO]
+        // servicer reloads it on every FSM change; request ids 13/14/15 = SCREEN/HUD/OVERLAY).
+        CgsResource::Pool mFsmBundlePool;
+        bool              mbResourcesReadyFed;   // fed BF_LEGAL its resources-ready (567) yet
     };
 
     // Renderer bridge, matching gpActiveMovieManager: GuiModule publishes itself while
     // prepared; BrnRendererModule drives GuiModule::Render (the GUI render chain) through it.
     extern GuiModule* gpActiveGuiModule;
+
+    // The current menu-music stream hash (X360 dword_830082A8): the last hash posted on
+    // the menu-music channel; 0 == silence. Read by the post-title intro handoff.
+    extern s32 gCurrentMenuMusicHash;
 }
 
 #endif

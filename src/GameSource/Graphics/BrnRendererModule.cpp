@@ -124,11 +124,19 @@ void BrnRendererModule::Render()
 
     // Mirror the flow state's loading-screen signal into the renderer's command queue -
     // the X360 Render issues this state-driven AddCommand each frame (Render line ~344).
-    if (gBrnLoadingScreenShouldShow && !mLoadingScreenRenderer.IsRenderingLoadingScreen())
+    // While a fullscreen video is presenting, the console layers the video OVER the
+    // loading-screen apt; the PC stand-in draws the loading screen LAST, so it hides the
+    // loading screen for the video's duration instead (else the boot logos play
+    // audio-only behind it).
+    const bool lbMoviePresenting =
+        BrnGui::gpActiveMovieManager != 0 &&
+        BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
+    const bool lbShowLoadingScreen = gBrnLoadingScreenShouldShow && !lbMoviePresenting;
+    if (lbShowLoadingScreen && !mLoadingScreenRenderer.IsRenderingLoadingScreen())
     {
         mLoadingScreenRenderer.AddCommand(BrnGame::E_LSC_SHOW);
     }
-    else if (!gBrnLoadingScreenShouldShow && mLoadingScreenRenderer.IsRenderingLoadingScreen())
+    else if (!lbShowLoadingScreen && mLoadingScreenRenderer.IsRenderingLoadingScreen())
     {
         mLoadingScreenRenderer.AddCommand(BrnGame::E_LSC_HIDE);
     }

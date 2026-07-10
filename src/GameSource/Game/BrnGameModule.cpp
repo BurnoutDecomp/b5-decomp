@@ -213,6 +213,134 @@ namespace BrnGame
         miInputModuleState        = 4;
         miPlayer0ControllerPort   = 0;
         mbGuiAcceptsControllerInput = true;
+
+        // ---- the GUI flow-FSM bridge state (X360 Construct zeroes the slots; the bridge
+        //      parks the stage at 6 after the first pass) --------------------------------
+        miGuiFsmStage      = 0;
+        mbGuiPhaseComplete = false;
+        mbGuiPreAccept     = false;
+    }
+
+    // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
+    // pending stage's GuiEventRunFsm record(s) as raw 24-byte event-144 AddEvents (the
+    // X360 posts these raw, not through the AddGuiEvent<T> template), then parks the
+    // stage and clears the phase-complete flag.
+    void BrnGameModule::BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
+    {
+        if (lpGuiInputBuffer == 0)
+            return;
+
+        struct RunFsmPost
+        {
+            static void Post(CgsGui::CgsGuiModuleIO::InputBuffer* lpBuffer, const char* lpacFsmName,
+                             const char* lpacInitialState, s32 liFsmToRun, s32 liFlowToUse)
+            {
+                BrnGui::GuiEventRunFsm lEvent;
+                lEvent.mFsmId          = CgsIDCompress(lpacFsmName);
+                lEvent.mInitialStateId = (lpacInitialState != 0) ? CgsIDCompress(lpacInitialState)
+                                                                 : static_cast<CgsID>(0);
+                lEvent.meFsmToRun      = static_cast<BrnGui::EHUDFSMs>(liFsmToRun);
+                lEvent.meFlowToUse     = static_cast<BrnGui::GuiFlow>(liFlowToUse);
+                lpBuffer->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+                    static_cast<s32>(sizeof(lEvent)));
+            }
+        };
+
+        switch (miGuiFsmStage)
+        {
+            case 1:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnVideoFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 2:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnLegalFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 3:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnCmpLdFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 4:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnBFProFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 5:
+                // The in-game handoff: the front-end SCREEN flow at its LOADING state plus
+                // the freeburn HUD FSM.
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnScreenFsm", "LOADING",
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_SCREEN);
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnFBFsm", 0,
+                                 BrnGui::E_GUI_HUD_FREEBURN, BrnGui::E_GUIFLOW_HUD);
+                break;
+            default:
+                break;
+        }
+
+        if (miGuiFsmStage != 6)
+        {
+            miGuiFsmStage      = 6;
+            mbGuiPhaseComplete = false;
+        }
+    }
+
+    // @ 0x823CB758 -- the GUI->game out-event consumer (see BrnGameModule.hpp). The PC
+    // consumers map the console's dispatch-buffer render states onto the renderer's
+    // loading-screen signal; the quit-to-dash (86/87/89 -> XLaunchNewImage) and the
+    // brightness/contrast forwards (545/546) are platform follow-ons.
+    void BrnGameModule::BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+    {
+        if (lpGuiOutQueue == 0)
+            return;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (liId >= 0 && lpEvent != 0)
+        {
+            if (liId == 40)   // channel 40: GuiEventOut command records (muEventType @+4)
+            {
+                const u32 luCommand = reinterpret_cast<const u32*>(lpEvent)[1];
+                switch (luCommand)
+                {
+                    case 19:   // PlayAptLoadingMovie -> the loading screen shows
+                        gBrnLoadingScreenShouldShow = true;
+                        break;
+                    case 20:   // StopAptLoadingMovie -> the loading screen drops
+                        gBrnLoadingScreenShouldShow = false;
+                        break;
+                    case 70:   // GUI phase complete -- the main flow advances on it
+                        mbGuiPhaseComplete = true;
+                        break;
+                    case 71:   // pre-accept -- resume the world load during the accept dwell
+                        mbGuiPreAccept = true;
+                        break;
+                    case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
+                        if (miInputModuleState == 0)
+                            miInputModuleState = 1;
+                        break;
+                    case 86: case 87: case 89:
+                        // Quit-to-dash (X360: XGetLaunchData + XLaunchNewImage). [FLAG PC
+                        // platform: no dash relaunch; logged so the request is visible.]
+                        CgsDev::Log::WriteToLog("[GameModule] GUI quit-to-dash command (86/87/89) -- "
+                                                "PC platform no-op (FLAG).\n");
+                        break;
+                    case 138:  // dispatch render state 3
+                    case 589:  // dispatch render state 4
+                    case 590:  // dispatch render state 5 (the accept fade)
+                        // The console writes the dispatch-thread input buffer's render-state
+                        // byte (+39312). [FLAG: the PC renderer's mode consumer lands with
+                        // the loading-screen render slice.]
+                        break;
+                    default:
+                        break;
+                }
+            }
+            const CgsModule::Event* lpNext = 0;
+            liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+        lpGuiOutQueue->Clear();
     }
 
     // @ BrnGameModule.cpp:1047 (X360 0x823BC868) - tear down the owned modules + the module base.
@@ -474,6 +602,10 @@ namespace BrnGame
                     mPcInputOutputBuffer.LockForRead();
                     mpGuiInputBuffer->LockForWrite();
                     BridgeControllerToGui(mpGuiInputBuffer, &mPcInputOutputBuffer);
+                    // The game->GUI flow-FSM bridge (X360 0x823DCA10, run under the same
+                    // write bracket the console's LoadingScriptedState::Update uses): post
+                    // any pending GuiEventRunFsm stage the main flow requested.
+                    BridgeGameToGui(mpGuiInputBuffer);
                     mpGuiInputBuffer->UnlockForWrite();
                     mPcInputOutputBuffer.UnlockForRead();
 
@@ -481,9 +613,12 @@ namespace BrnGame
                     // stand-in: the console passes it through the module scheduler's IO set).
                     mGuiModule.SetGuiEventInputBuffer(mpGuiInputBuffer);
                 }
-                // GUI module per-frame tick (drives the MovieManager state machine; Phase 2/3 drive the
-                // boot BrnHudFlow -> BootVideos here). The X360 ticks this through the module dispatch.
+                // GUI module per-frame tick (drives the FSM controller + the HUD flow + the
+                // MovieManager). The X360 ticks this through the module dispatch.
                 mGuiModule.Update();
+                // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
+                // commands (70/71, the loading screen 19/20, ...) the states posted.
+                BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)

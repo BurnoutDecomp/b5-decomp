@@ -535,4 +535,8 @@ namespace CgsLanguage
     void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatLargeDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
+    // X360 0x82864C48 (per the header cite): resolve lpcSourceText through the given
+    // format into the caller's buffer. Referenced by TextField::SetLocalisedText (the
+    // in-game IdleHudState text path) -- never on the boot path.
+    bool LanguageManager::FormatText(char*, u32, const char*, ParameterFormatType)        { __debugbreak(); return false; }   // FLAG trap-stub
 }

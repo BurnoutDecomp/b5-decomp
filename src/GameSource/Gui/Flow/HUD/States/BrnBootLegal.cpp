@@ -382,12 +382,17 @@ namespace BrnGui
         mSelectionMenu.Clear();
         mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
 
-        // Post the second leave command (GuiEvent<18> { 8, 18, 12, "", 1 }, ch 41, size 20 -- the
-        // X360 packs the empty apt-name pointer + a 1 flag; event type 18, not 25).
+        // Post the second leave command (GuiEvent<18> { 8, 18, 12, "", 1 }, ch 41 -- the
+        // X360 packs the empty apt-name pointer + a 1 flag at size 20 with 4-byte
+        // pointers; on the PC/x64 gate the name pointer widens, so the copied payload is
+        // sizeof(GuiAptNameFlagEvent20) -- the standard x64 record-width rule (a 20-byte
+        // copy truncates the pointer and drops the level word, which the view-module
+        // dispatch then reads as garbage).
         {
             GuiAptNameFlagEvent20 lOption("", 1);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE,
+                static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
         }
 
         // Unload the legal screen's resources from the cache and clear its expected apt list.
