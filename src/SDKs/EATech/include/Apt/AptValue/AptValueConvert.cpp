@@ -38,8 +38,7 @@
 #include "SDKs/EATech/include/Apt/AptMovie.h"   // homes the AptValue_toInteger thunk
 #include "SDKs/EATech/include/Apt/AptCIH.h"            // GetCharacterInst (the CIH toString arm)
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"  // GetTypeTag (the CIH toString arm)
-
-struct AptArray;   // AptArray.h -- the array join renderer (AptValue_AptArrayToString thunk)
+#include "SDKs/EATech/include/Apt/AptArray.h"          // AptArray::toString (the array join arm)
 
 #include <cstdio>    // snprintf (the "[Type=0x%X]" / "%d" / "%f" / "%p" renders)
 #include <cstring>   // strcmp (the "_proto__" / "type" key compares)
@@ -230,11 +229,9 @@ float AptValue::toFloat() const
 //       observable string -- rather than referencing the private empty-string
 //       sentinel s_EmptyInternalData. (FLAG per use below.)
 //   AptArray::toString is private; the X360 calls it directly across the inlined
-//       TU. Routed through this FLAG'd thunk (the array join renderer follow-on).
+//       TU -- modelled by the AptValue friendship in AptArray.h (called directly below).
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;                 // dword_8324E760
-extern void AptValue_AptArrayToString(AptArray* pArray, EAStringC* pOut,
-                                      const char* pSeparator);     // FLAG: AptArray::toString @0x82AED040
 
 // ---------------------------------------------------------------------------
 // toString @0x82AF8FA0 -- render this value into *pOut as an ActionScript string.
@@ -311,9 +308,10 @@ void AptValue::toString(EAStringC* pOut) const
         return;
     }
 
-    // --- ARRAY (loc_82AF90F8): join the elements with "," (AptArray::toString).
+    // --- ARRAY (loc_82AF90F8): join the elements with "," (AptArray::toString
+    //     @0x82AED040 -- the private member, reached via the AptValue friendship).
     case AptVFT_Array:              // 0xE
-        AptValue_AptArrayToString(reinterpret_cast<AptArray*>(pThis), pOut, ",");   // unk_82144058 = ","
+        static_cast<AptArray*>(pThis)->toString(pOut, ",");   // unk_82144058 = ","
         return;
 
     // --- NATIVE FUNCTION (loc_82AF9114): "[native function 0x%p]" of the fn ptr@+0x20.

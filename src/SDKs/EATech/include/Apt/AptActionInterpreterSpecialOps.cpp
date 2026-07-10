@@ -189,7 +189,7 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
 // deferred-release value vector once the operand stack empties. Shared with the
 // Var/Member/Control opcodes (declared there too); the host-side vector type/global
 // are not reconstructed yet, so the flush is encapsulated.
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 // FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
 extern AptValue* gpUndefinedValue;
@@ -197,7 +197,7 @@ extern AptValue* gpUndefinedValue;
 // FLAG (host path-context resolver -- console sub_82B02F80, the same one CallFunction
 // uses): parse pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget). Shared
 // with the StackOps call opcodes (declared there too).
-extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
                                            const EAStringC* pName,
                                            AptValue** ppOutContext, EAStringC* pOutLeaf);
 
@@ -271,7 +271,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
     // Flush the AptGC deferred-release vector once the operand stack has drained
     // (console: off_8324E51C->count != 0 && mnStackTop == 0).
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +441,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
             : (*reinterpret_cast<AptString**>(reinterpret_cast<char*>(pTarget) + 0x20))
                   ->GetInternalString();   // FLAG: type-33 box (console *(Variable+32) then +8)
 
-        AptInterp_ResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+        AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pName, &pResolvedContext, &leafName);   // FLAG: sub_82B02F80
         pTarget = pInterp->getVariable(pResolvedContext, pContext->mpPendingReleaseValue,
                                        &leafName, 1, 1, 0);

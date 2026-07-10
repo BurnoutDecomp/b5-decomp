@@ -108,4 +108,11 @@ struct AptLinker
     // @0x82AFAE18 -- cancel a pending load for pValue: find the thingy keyed on
     // pValue and pop it from the list (releasing its file ref). No-op if not found.
     void CancelLoad(AptValue* pValue);
+
+    // isFileImported @0x82AECC58 (AptLinker__isFileImported) -- true when
+    // *ppCandidate's file is imported by ANY movie the linker tracks: for each
+    // thingy, hand its file a fresh counted copy of the candidate (AptFile::
+    // isFileImported consumes it). CONSUMES the candidate handle either way
+    // (disposes + nulls ppCandidate->pData). Body in AptLinker.cpp.
+    bool isFileImported(AptFilePtr* ppCandidate);
 };

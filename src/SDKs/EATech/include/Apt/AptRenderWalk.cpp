@@ -94,14 +94,37 @@ extern EA::Thread::ThreadLocalStorage gAptTargetTls;
 
 #include <new>
 
-// FLAG (un-homed, edge path): AptCleanupInvisibleMovieClipInternal @0x82ADF590 -- releases
-// the render-tree references of a movie clip that became invisible (mFlags bit26 set) this
-// frame. Only reached from AptDecoupleTreeCleanUpInvisibleRI for a node whose child/mask link
-// is an invisible movie clip. The Title_Screen02 boot movie has no such transition on frame 0,
-// so this is a faithful boundary stub until the invisible-clip GC path is homed.
-static void AptCleanupInvisibleMovieClipInternal(AptRenderItem* /*pItem*/, int /*a2*/)
+// AptCleanupInvisibleMovieClipInternal @0x82ADF590 (HOMED 2026-07-10, retiring the
+// {} body -- menus toggle _visible constantly, so the invisible-clip cleanup IS a
+// menu-path walk): recursively visit an invisible movie clip's render subtree
+// through the render-tree manager's invisible-revision getters -- for each node in
+// the sibling run, fetch its invisible child + mask revisions and recurse into any
+// that is itself an invisible movie clip (mFlags bit26). The manager getters
+// perform the revision bookkeeping; the walk's job is reaching every invisible
+// descendant exactly once (asm: the do/while sibling loop + the two recursions).
+static void AptCleanupInvisibleMovieClipInternal(AptRenderItem* pItem, int nTick)
 {
-    // FLAG: invisible-movie-clip render-ref cleanup deferred (off the title-frame-0 path).
+    if (gpAptTargetTLS == nullptr)
+        return;
+    AptRenderTreeManager* const lpMgr =
+        reinterpret_cast<AptRenderTreeManager*>(gpAptTargetTLS->mppRenderRootAnchor);
+    if (lpMgr == nullptr)
+        return;
+
+    while (pItem != nullptr)   // console: the loc_82ADF5BC sibling loop
+    {
+        AptRenderItem* const lpChild = lpMgr->Render_GetChildInvisible(pItem, nTick);
+        AptRenderItem* const lpMask  = lpMgr->Render_GetMaskInvisible(pItem, nTick);
+
+        // console order: the MASK recursion first, then the child (bit26 == the
+        // went-invisible-this-frame flag, `extrwi r11,1,5` on mFlags).
+        if (lpMask && ((lpMask->mFlags >> 26) & 1u) != 0)
+            AptCleanupInvisibleMovieClipInternal(lpMask, nTick);
+        if (lpChild && ((lpChild->mFlags >> 26) & 1u) != 0)
+            AptCleanupInvisibleMovieClipInternal(lpChild, nTick);
+
+        pItem = lpMgr->Render_GetSiblingInvisible(pItem, nTick);
+    }
 }
 
 namespace

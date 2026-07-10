@@ -240,7 +240,7 @@ AptCIH* AptGetAnimationAtLevel(int nLevel)
     // mpCharacterInst [8]) fell OUTSIDE the allocation and overlapped adjacent pool objects --
     // the child-placement AddRef/insert on the root then corrupted the root's parent link (an AV
     // in SetGeneralizedProcessDirtyState during the first frame-0 place). Use sizeof(AptCIH), the
-    // same size AptDLState_CreateInstAtDepth already uses for the placed child nodes.
+    // same size AptCreateInstAtDepth already uses for the placed child nodes.
     void* pMem = AptCIH::operator new(sizeof(AptCIH));  // AptValueGC pool (x64 size)
     if (pMem == nullptr)
         return nullptr;                                  // GC carve failed -> bail (no AV)

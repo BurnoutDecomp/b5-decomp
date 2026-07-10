@@ -97,11 +97,10 @@ struct AptArray : public AptObject
     static void CleanNativeFunctions();
 
     // The X360 reaches the private join renderer (toString @0x82AED040) directly from
-    // AptValue::toString's `case AptVFT_Array` across the inlined TU; that cross-TU
-    // private call is modelled by the AptValue_AptArrayToString thunk (homed in
-    // AptArray.cpp). Befriend it so it can call the private toString by name.
-    friend void AptValue_AptArrayToString(struct AptArray* pArray, class EAStringC* pOut,
-                                          const char* pSeparator);
+    // AptValue::toString's `case AptVFT_Array` across the inlined TU; model that
+    // cross-TU private access by befriending the value base (the thunk that used to
+    // stand in was retired 2026-07-10 -- the caller now names the member directly).
+    friend struct AptValue;
 
 private:
     void _reserve(int32_t nCount);   // @0x7F01D0 (grow to pow2, min 8)

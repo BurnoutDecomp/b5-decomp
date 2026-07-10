@@ -171,8 +171,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AptVFT_Extern (type-11) script objects -- none are registered on the PC title path, so the
     // un-installed slot faithfully answers null (matches the X360 null fn-ptr slot, not an engine stub).
     AptValue* AptExtern_GetMember(const char* szName) { return nullptr; }   // FLAG PC-platform leaf
-    // AptInterp_FrameStackFirstLocal RETIRED (2026-07-02): homed in AptArray.cpp (a tag-14 ARRAY's first element).
-    // AptInterp_LookupScopeChain RETIRED (2026-07-02): homed in AptFrameStack.cpp (spFrameStack->GetInScopeChain).
+    // AptFrameStackFirstLocal RETIRED (2026-07-02): homed in AptArray.cpp (a tag-14 ARRAY's first element).
+    // AptLookupScopeChain RETIRED (2026-07-02): homed in AptFrameStack.cpp (spFrameStack->GetInScopeChain).
     // AptUpdateZombieVector RETIRED (2026-07-02): homed in AptGC.cpp (the real
     // reap over gpAptZombieVector -- XB1 sub_140830A40; the vector itself is
     // allocated by AptUpdateInitialize from config word 14). The old "absent
@@ -182,7 +182,9 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // GetNativeHashVirtual()->mp__Proto__ directly (corrected in AptValue.cpp).
     // isNaN RETIRED (2026-07-02): homed in AptActionInterpreterBuiltins.cpp
     // (the full @0x82AF9768 ECMA-ish NaN classification incl. the SWF7 arm).
-    bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate) { return false; }   // FLAG link-stub
+    // AptLinkerIsFileImported RETIRED (2026-07-10): homed as the real member
+    // AptLinker::isFileImported @0x82AECC58 (AptLinker.cpp) -- the false stub made
+    // the cancel path treat every candidate import as un-imported.
     // AptResolveTextFieldFontName RETIRED (2026-07-10): homed in AptCIHText.cpp (the
     // fontID -> owning movie charTable -> type-3 font-char name walk; the "" stub
     // blanked the getTextFormat/setTextFormat round-trip's font name -- every
@@ -199,8 +201,8 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // (the host pfnPointHitTest dispatch, X360 dword_8324E8A4 == gAptFuncs+0x8C).
     // AptInterp_LabelToFrame RETIRED (2026-07-02): homed in AptCIHNativeFunctionHelper.cpp
     // (the clip movie's label-hash lookup, X360 @0x82B0C618 chain).
-    int GetThreadId() { return 0; }   // FLAG link-stub
-    uint32_t AptValue_CurrentThreadId() { return 0; }   // FLAG link-stub
+    int GetThreadId() { return 0; }   // FLAG PC-platform leaf: single-threaded PC (one thread id)
+    uint32_t AptCurrentThreadId() { return 0; }   // FLAG PC-platform leaf: single-threaded PC (one thread id)
     // AptGetSwfVersion RETIRED (2026-07-02): homed in AptLinker.cpp -- the
     // dword_8324E530 SWF-version cache (parsed from the .apt "Apt Data:1:7:8"
     // header at first link; NOT a frame rate as previously misread).
@@ -208,41 +210,37 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // variant @0x82AE04F0 -- custom tempering b 0x9D2C56FF, auto-seed 0x1105).
     // AptActionInterpreter_ClearIntervalImpl RETIRED (2026-07-02): homed in
     // AptIntervalTimer.cpp (the X360 cbCallMethod_clearInterval @0x82AE3AE0 body).
-    void      AptApt_AnimationAddCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
-    void      AptApt_AnimationReleaseCharacterRef(AptValue* pAnimation) {}   // FLAG link-stub
-    void      AptApt_PrepareCallContextScope(AptValue* pCallContext) {}   // FLAG link-stub
+    // AptAnimationAdd/ReleaseCharacterRef RETIRED (2026-07-10): the "+0x0C character
+    // ref" is the CIH ZOMBIE-COUNT bitfield (bits 7-22, step 0x80 -- decoded from the
+    // ScriptFunctionBase ctor asm); the ctor/dtor call Inc/DecZombieCount directly.
+    // The {} stubs dropped every function-value zombie-count balance.
+    // AptPrepareCallContextScope RETIRED (2026-07-10): the ctor's vtbl+0x60 dispatch
+    // is CreateFrameStack (@0x82AF1260) -- the ScriptFunctionBase ctor calls the
+    // member directly. The {} stub left nested closures with a null parent frame.
     // host extern-object member-SET callback slot (X360 dword_8324E854); un-installed on the PC
     // title path (no type-11 extern objects) -> faithful no-op, matching the X360 null fn-ptr slot.
     void      AptExtern_SetMember(const char* szName, const char* szValue) {}   // FLAG PC-platform leaf
     // AptActionInterpreter_runStream RETIRED (IGNITION 2026-07-01): the init passes call the real
     // member gAptActionInterpreter.runStream (AptActionRun.cpp dispatch loop) -- ActionScript executes.
 
-    // FLAG link-stub (dormant movie-UNLOAD path): the per-string return to the temporary
-    // string pool (xb1 sub_14083F2A0), reached only by _parseStream's unresolve direction;
-    // StringPool exposes only ClearTemporaryPool so far. Home with the unload bring-up.
-    class AptString;
-    void AptStringPool_ReleaseString(AptString* pString) { (void)pString; }
+    // AptStringPoolReleaseString RETIRED (2026-07-10): homed as
+    // StringPool::ReleaseString (XB1 sub_14083F2A0, AptStringPool.cpp) -- decGCRoot
+    // + last-use bucket unchain/Release, the inverse of FindOrCreate's hit path.
     // FLAG deferred (NOT a clean swap -- boot-verified 2026-07-04): the real member
     // AptCharacterAnimation::ExecuteInitActions (AptCharacterAnimation.cpp, X360 0x82AF4340) is homed
     // but its init-action VM path RUNS AWAY at boot frame 3 (a flood of mkitem instantiation -> crash)
     // because the deeper import->AptFile->embedded-movie chase is still deferred. Keep this no-op until
     // that sub-record path is homed, THEN swap the AptMovie::doFrameControls tag-8 caller to the member.
-    void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId) {}
-    void  AptFreeFontUnit(void* pUnit) {}   // FLAG link-stub
-    void  AptFreeRenderingUnit(void* pUnit) {}   // FLAG link-stub
+    void  AptExecuteInitActionsGate(void* pAnim, void* pCIH, int nId) {}
+    void  AptFreeFontUnit(void* pUnit) {}   // FLAG PC-platform leaf: host render-unit free callback (un-installed on PC)
+    void  AptFreeRenderingUnit(void* pUnit) {}   // FLAG PC-platform leaf: host render-unit free callback (un-installed on PC)
     // AptPseudoDisplayList_Insert RETIRED (2026-07-01): homed member AptPseudoDisplayList::Insert
     // (AptPseudoDisplayList.cpp, faithful list-insert) called directly in AptMovie; the {} stub dropped it.
-    // The 6-arg place-command resolver the temporary-frame timeline path calls (X360
-    // DoTemporaryFrameControls @0x82AEEB98 reaches it for the place tag). It is the
-    // larger AptDisplayListState::findInst-family callee (X360 @0x82AD99F0 takes this
-    // + key + a3 + ppPred + ppExisting; the AptMovie call site threads the extra
-    // place-info context/record words). NOT the 3-arg AptPseudoDisplayList::FindInst
-    // method (that one is homed faithfully in AptPseudoDisplayList.cpp); this deferred
-    // VM-timeline callee is a FLAG link-stub until the temporary-frame skip path is
-    // brought up (it is off the boot trace -- reached only via AptCIH::jumpToFrame).
-    void* AptPseudoDisplayList_FindInst(void* pList, void* pSource, unsigned char* pOutHit,
-                                        void** ppExisting, void* pContext, void* pInfo)
-    { if (pOutHit) *pOutHit = 0; if (ppExisting) *ppExisting = 0; return 0; }   // FLAG link-stub
+    // AptPseudoDisplayListFindInst RETIRED (2026-07-10): the console
+    // DoTemporaryFrameControls @0x82AEEB98 place arm calls the real 3-arg member
+    // AptPseudoDisplayList::FindInst (homed in AptPseudoDisplayList.cpp) -- the
+    // invented 6-arg shape here nulled every lookup, so jumpToFrame replays
+    // re-created every already-live pseudo node instead of merging onto it.
     // AptValue_setGCRoot RETIRED: the real member AptValue::setGCRoot(int) is called directly
     // (AptAnimationTarget.cpp, AptLinker.cpp, AptString.cpp).
     // AptActionInterpreter_UnEscape RETIRED (2026-07-02): homed in
@@ -252,15 +250,16 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // sub_82AF7400 target-path builder).
     // AptActionInterpreter_stackPushIndirect RETIRED (2026-07-01): homed as the real member
     // AptActionInterpreter::stackPushIndirect in AptActionInterpreter.cpp; caller uses the member.
-    // AptAnimationTargetSet_Construct is now HOMED faithfully in AptAnimationTarget.cpp
+    // AptAnimationTargetSetConstruct is now HOMED faithfully in AptAnimationTarget.cpp
     // (sub_82AE1708: allocate the slot array + set capacity; native-8 pointer stride).
-    void AptAnimationTargetSet_Destruct (AptAnimationTargetSet* pSet) {}   // FLAG link-stub
-    void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet) {}   // FLAG link-stub
+    // AptAnimationTargetSetDestruct/2 RETIRED (2026-07-10): homed in
+    // AptAnimationTarget.cpp (sub_82AE1670/sub_82AE1780, ICF twins -- Release each
+    // live slot + free the slot array; the {} stubs leaked both at teardown).
     // AptAnimationTarget_TickNewInsts RETIRED: the real static AptAnimationTarget::TickNewInsts()
     // (AptAnimationTarget.cpp:562, X360 0x82B0C8E0 -- drains the module new-instance table) is now
     // called directly at its one call site (AptCIHNativeFunctionHelper.cpp duplicateMovieClip).
-    // AptApt_FlushDeferredReleases RETIRED (2026-07-01): homed in AptGC.cpp as the real
-    // gValuesToRelease.ReleaseValues() drain (the {} stub silently dropped every GC drain).
+    // AptFlushDeferredReleases RETIRED (2026-07-01): homed in AptGC.cpp as the real
+    // gValuesToRelease.ReleaseValues() drain (the {} stub dropped every GC drain).
     // Host URL-fetch callback slot (dword_8324E84C/..850), null on the PC title path (no host
     // loadVariables installed) -- the same host boundary as AptExtern_SetMember above.
     // FLAG PC-platform leaf: host callback slot, faithfully null on PC.
@@ -268,12 +267,12 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void AptApt_GetDragTargetTranslate(AptValue* pDragTarget, float* pOutX, float* pOutY) {}   // FLAG link-stub
     // AptApt_PopValues RETIRED: it IS AptActionInterpreter::stackPop(int) (AptActionInterpreter.cpp:65,
     // @0x7FDB68 -- "pop nCount values, releasing each"; ICF-folded as Burnout_X360_Artist_01e3_0). The
-    // ControlOps/StackOps call sites call the member directly; the {} shim silently skipped every collapse.
+    // ControlOps/StackOps call sites call the member directly; the {} shim skipped every collapse.
     // AptCIH_GetWorldBounds RETIRED: its body IS the shared GetBoundingRectClamped
     // (AptCIHBehaviour.cpp, X360 sub_82AE2C58, asm-verified 2-arg (AptCIH* r3, float* r4)); the
     // getBounds/hitTest native methods now call it directly (AptValue clip -> AptCIH via static_cast).
     // AptCIH_SetDirtyState RETIRED (2026-07-01): the real member AptCIH::SetDirtyState
-    // (AptCIH.cpp, faithful) is called directly; the {} stub silently dropped the dirty latch.
+    // (AptCIH.cpp, faithful) is called directly; the {} stub dropped the dirty latch.
     // AptCIH_SetProceduralProperty RETIRED: the real member AptCIH::SetProceduralProperty
     // (AptCIHBehaviour.cpp:963, X360 0x82AE73C0 -- 4th arg bASChanged is r6, asm-verified) is called
     // directly by createTextField; the invented shim dropped the value AND the bASChanged flag.
@@ -286,12 +285,15 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // AddToDelayReleaseList / PreDestroyHook) FLAG out. Faithful "deferred subsystem"
     // defaults until the AS-interpreter execution / generalised-process gate / GC zombie
     // subsystems land. -------------------------------------------------------------------
-    void AptAnimationTarget_AddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem) {}   // FLAG link-stub
+    // AptAnimationTargetAddToRemList RETIRED (2026-07-10): homed in
+    // AptAnimationTarget.cpp (@0x82AEE3F8 -- queue on the shared delayed-release
+    // table with the bit26 latch + CleanRemList overflow flush; the {} stub
+    // dropped every delay-released clip).
     void (*gpAptCIHPreDestroyHook)(AptCIH* pCIH) = nullptr;   // FLAG link-stub (dword_8324E8A0; null until installed)
-    // AptCIH_queueClipEvents_RunMatched RETIRED (2026-07-01): homed faithfully in
+    // AptQueueClipEventsRunMatched RETIRED (2026-07-01): homed faithfully in
     // AptCIHBehaviour.cpp from the PS3 body @0x815BD0 (the clip-event record scan +
     // AddActionFront/Back enqueues; the byte-code-block + __proto__ tails staged there).
-    // AptCIH_ClearCIH_DrainQueuesAndZombie RETIRED (2026-07-02): homed in
+    // AptClearCIHDrainQueuesAndZombie RETIRED (2026-07-02): homed in
     // AptCIHBehaviour.cpp (the director-set/new-inst drain + the unload-event tail;
     // the zombie-vector decision stays a documented staged FLAG there).
     bool AptCIH_sbGeneralisedProcessEarlyReturn = false;   // FLAG link-stub (bEarlyReturn; gate off by default)
@@ -325,9 +327,14 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     void AptHook_Trace(const char* szFormat, const char* szMessage) {}   // FLAG link-stub
     void AptKeyManagerAddListener(AptValue* pListener) {}   // FLAG link-stub
     bool AptKeyManagerRemoveListener(AptValue* pListener) { return false; }   // FLAG link-stub
-    void AptLinker_GetUrlLoad(AptLinker* pLinker, EAStringC* pUrl, EAStringC* pTarget) {}   // FLAG link-stub
-    void AptLoader_CancelAsyncLoad(void* pDataBlock) {}   // FLAG link-stub
-    // AptLoader_StartAsyncLoad is HOMED in BrnGuiAptRuntime.cpp (the platform stream hook: it
+    // AptLinkerGetUrlLoad RETIRED (2026-07-10): the getURL/getURL2 .swf arm calls
+    // the homed member AptLinker::Load(EAStringC*, EAStringC*) @0x82B06660 directly
+    // (the {} forwarder dropped every getURL movie load).
+    // FLAG PC-platform leaf: host async-stream cancel hook (dword_8324E83C) -- the
+    // PC stream hook (AptLoaderStartAsyncLoad) loads synchronously, so nothing is
+    // ever in flight to cancel; the empty body matches the un-installed slot.
+    void AptLoaderCancelAsyncLoad(void* pDataBlock) {}
+    // AptLoaderStartAsyncLoad is HOMED in BrnGuiAptRuntime.cpp (the platform stream hook: it
     // synchronously content-loads the import bundle + drives AptCompleteAnimationAsyncLoad). The
     // FLAG link-stub that used to live here is removed so the strong host definition is the only one.
     // AptMovie_runFrameActions RETIRED (2026-07-01): homed as the real const member
@@ -340,20 +347,24 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // stub left the block unallocated, so the AS register file never existed).
     // AptScriptFunctionBase_PopStaticData RETIRED (2026-07-01): homed as the real static member
     // AptScriptFunctionBase::PopStaticData (AptScriptFunctionBase.cpp, asm-decoded register-block pop).
-    void GlobalNotificationFunction(AptFilePtr* pFile) {}   // FLAG link-stub
-    void Mutex_Lock(void* pMutex, void* pName) {}   // FLAG link-stub
-    void Mutex_Unlock(void* pMutex) {}   // FLAG link-stub
-    void TextFormat_copyTextFormatObj(TextFormat* pDest, const TextFormat* pSource) {}   // FLAG link-stub
-    void escape(EAStringC* pString) {}   // FLAG link-stub
-    void unescape(EAStringC* pString) {}   // FLAG link-stub
+    void GlobalNotificationFunction(AptFilePtr* pFile) {}   // FLAG link-stub (movie load-notify; deferred with the unload bring-up)
+    void Mutex_Lock(void* pMutex, void* pName) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
+    void Mutex_Unlock(void* pMutex) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
+    // TextFormat_copyTextFormatObj RETIRED (2026-07-10): homed as the real member
+    // TextFormat::copyTextFormatObj @0x82AE5820 (AptTextFormat.cpp) -- the {} stub
+    // dropped every get/setTextFormat record copy.
+    // escape/unescape RETIRED (2026-07-10): homed as AptActionInterpreter::escape
+    // @0x82AEE008 / ::unEscape @0x82AEE110 (AptActionInterpreter.cpp) -- the {}
+    // stubs made the AS escape()/unescape() builtins identity transforms.
     // AptActionInterpreter_CleanupAfterExecution RETIRED (IGNITION 2026-07-01): the real member
     // (thrown-value drop + PopStaticData window pop) is called directly with the saved base.
-    void* AptFile_operator(void* pDst, void* pSrc) { return nullptr; }   // FLAG link-stub
+    // AptFileAssign DELETED (2026-07-10): the AptFile::operator= wrapper had no
+    // remaining callers (the loader paths use the AptSharedPtr refcount helpers).
     // sub_82AFD150 (the remove-command dispatcher @0x82AFD150) is now HOMED faithfully as
-    // AptMovie_RemoveCommand in AptMovie.cpp (findInst by depth + removeObject). The null
-    // link-stub -- which silently dropped every timeline remove -- is retired.
+    // AptDispatchRemoveCommand in AptMovie.cpp (findInst by depth + removeObject). The null
+    // link-stub -- which dropped every timeline remove -- is retired.
     // sub_82B0AE08 (the place-command dispatcher @0x82B0AE08) is now HOMED faithfully as
-    // AptMovie_PlaceCommand in AptMovie.cpp (reads the PlaceObject record + calls the homed
+    // AptDispatchPlaceCommand in AptMovie.cpp (reads the PlaceObject record + calls the homed
     // AptDisplayList::placeObjectNCXForm). The null link-stub is retired.
     // AptValueGC_PoolManager_GetAllAllocatedAptValues RETIRED (2026-07-02): homed in
     // AptValueGCPoolManager.cpp (the CleanAll pool-walk snapshotted flat).
@@ -423,20 +434,20 @@ namespace rw { namespace core { namespace filesys {
         (void)lpcPath;   // FLAG link-stub: path not opened (DeviceManager replay path used)
     }
 
-    Device* Manager::RegisterDevice(const void* lpDeviceDesc, int liFlags)   // FLAG link-stub
+    Device* Manager::RegisterDevice(const void* lpDeviceDesc, int liFlags)   // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path
     { (void)lpDeviceDesc; (void)liFlags; return nullptr; }
 
-    int Manager::UnregisterDevice() { return 0; }   // FLAG link-stub
+    int Manager::UnregisterDevice() { return 0; }   // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path
 
-    Device* Device::GetInstance(const char* lpcPath, char* lpScratch)        // FLAG link-stub
+    Device* Device::GetInstance(const char* lpcPath, char* lpScratch)        // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path
     { (void)lpcPath; (void)lpScratch; return nullptr; }
 
-    int Device::Wait(AsyncOp* lpOp, const void* lpTimeout)                    // FLAG link-stub
+    int Device::Wait(AsyncOp* lpOp, const void* lpTimeout)                    // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path
     { (void)lpOp; (void)lpTimeout; return 0; }
 
-    int Device::InsertOp(AsyncOp* lpOp) { (void)lpOp; return 0; }             // FLAG link-stub
+    int Device::InsertOp(AsyncOp* lpOp) { (void)lpOp; return 0; }             // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path
 
-    int Device::ChangeOpPriority(AsyncOp* lpOp, int liPriority)               // FLAG link-stub
+    int Device::ChangeOpPriority(AsyncOp* lpOp, int liPriority)               // FLAG PC-platform leaf: PC bundle FS is the DeviceManager replay path
     { (void)lpOp; (void)liPriority; return 0; }
 
     Manager* gpFileSysManager = nullptr;                                      // FLAG link-stub (off_8327F078)
@@ -499,20 +510,20 @@ namespace EA { namespace Thread {
         u32   mTlsIndex;
     };
 
-    void Mutex_Lock(void* pMutex, void* pName)  { (void)pMutex; (void)pName; }   // FLAG link-stub (single-threaded)
-    void Mutex_Unlock(void* pMutex)             { (void)pMutex; }                // FLAG link-stub (single-threaded)
-    int  GetThreadId()                          { return 0; }                    // FLAG link-stub (single-threaded)
+    void Mutex_Lock(void* pMutex, void* pName)  { (void)pMutex; (void)pName; }   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
+    void Mutex_Unlock(void* pMutex)             { (void)pMutex; }                // FLAG PC-platform leaf: single-threaded PC (no lock needed)
+    int  GetThreadId()                          { return 0; }                    // FLAG PC-platform leaf: single-threaded PC (one thread id)
 
     Thread::Status Thread::WaitForEnd(intptr_t* pThreadReturnValue, const int* pTimeoutAbsolute)
-    { (void)pThreadReturnValue; (void)pTimeoutAbsolute; return kStatusEnded; }   // FLAG link-stub
+    { (void)pThreadReturnValue; (void)pTimeoutAbsolute; return kStatusEnded; }   // FLAG PC-platform leaf: single-threaded PC (thread already ended)
 
     // One file-scope slot mirroring the single TLS value the bring-up needs.
     static void* gThreadLocalStorageSlot = nullptr;   // FLAG link-stub (single-threaded TLS)
     bool  ThreadLocalStorage::SetValue(const void* pData)
-    { gThreadLocalStorageSlot = const_cast<void*>(pData); return true; }         // FLAG link-stub
-    void* ThreadLocalStorage::GetValue() { return gThreadLocalStorageSlot; }     // FLAG link-stub
+    { gThreadLocalStorageSlot = const_cast<void*>(pData); return true; }         // FLAG PC-platform leaf: single-threaded TLS (one slot)
+    void* ThreadLocalStorage::GetValue() { return gThreadLocalStorageSlot; }     // FLAG PC-platform leaf: single-threaded TLS (one slot)
 
-    IRunnable::~IRunnable() {}   // FLAG link-stub (empty virtual dtor)
+    IRunnable::~IRunnable() {}   // FLAG PC-platform leaf: single-threaded PC (empty virtual dtor)
 
 }}
 
@@ -529,18 +540,18 @@ EA::Thread::ThreadLocalStorage gAptTargetTls;   // FLAG link-stub
 // BrnEAThreadX360.h and would collide with the int GetThreadId() above).
 namespace EA { namespace Jobs {
 
-    Event::Event() {}   // FLAG link-stub (ctor no-op)
+    Event::Event() {}   // FLAG PC-platform leaf: synchronous jobs on PC (no event state)
 
-    JobThreadHandle::JobThreadHandle(Detail::SchedulerBackend* pBackend, u32 uHandle)   // FLAG link-stub
+    JobThreadHandle::JobThreadHandle(Detail::SchedulerBackend* pBackend, u32 uHandle)   // FLAG PC-platform leaf: synchronous jobs on PC
     { (void)pBackend; (void)uHandle; }
-    JobThreadHandle::JobThreadHandle() {}   // FLAG link-stub
+    JobThreadHandle::JobThreadHandle() {}   // FLAG PC-platform leaf: synchronous jobs on PC
 
     JobAffinity    EntryPoint::GetAffinity()    const { return JOB_AFFINITY_NONE; }    // FLAG link-stub
     JobEnvironment EntryPoint::GetEnvironment() const { return JOB_ENVIRONMENT_LOCAL; }// FLAG link-stub
     JobPriority    EntryPoint::GetPriority()    const { return JOB_PRIORITY_HIGH; }    // FLAG link-stub
-    void           EntryPoint::SetName(const char* lpcName) { (void)lpcName; }         // FLAG link-stub
+    void           EntryPoint::SetName(const char* lpcName) { (void)lpcName; }         // FLAG PC-platform leaf: synchronous jobs on PC (no worker names)
 
-    int Job::GetNumDependencies() const { return 0; }   // FLAG link-stub
+    int Job::GetNumDependencies() const { return 0; }   // FLAG PC-platform leaf: synchronous jobs on PC (no dependencies)
 
     // Minimal LocalBackend-scope decls for the two worker entry points (jobs run
     // synchronously on the main thread, so both are no-ops).
@@ -549,8 +560,8 @@ namespace EA { namespace Jobs {
         struct JobInstance { void Run(); };
         class  JobThread   { public: void Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend); };
 
-        void JobInstance::Run() {}   // FLAG link-stub (synchronous)
-        void JobThread::Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend)   // FLAG link-stub
+        void JobInstance::Run() {}   // FLAG PC-platform leaf: synchronous jobs on PC (main-thread run)
+        void JobThread::Start(const EA::Jobs::JobThreadParameters* pParameters, LocalBackend* pBackend)   // FLAG PC-platform leaf: synchronous jobs on PC (no worker threads)
         { (void)pParameters; (void)pBackend; }
     }
 

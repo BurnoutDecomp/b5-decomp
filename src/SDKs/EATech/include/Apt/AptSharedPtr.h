@@ -59,7 +59,7 @@ int AptSharedPtrDelete(AptFile* pData);
 // no-op so the store/branch ORDER around it is preserved without fabricating a
 // body.
 // ---------------------------------------------------------------------------
-inline void AptSharedPtr_DisposeDebugHook(const void* /*a1*/, int /*a2*/, const char* /*a3*/) {}
+inline void AptSharedPtrDisposeDebugHook(const void* /*a1*/, int /*a2*/, const char* /*a3*/) {}
 
 // ---------------------------------------------------------------------------
 // FLAG (un-homed global): off_8324D808 is the DOGMA_PoolManager* that backs the

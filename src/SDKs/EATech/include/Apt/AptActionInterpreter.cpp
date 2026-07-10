@@ -172,8 +172,9 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager::Deallocate
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // gpAptOperandStackPool (off_8324D808)
 #include <cstring>                                          // strncmp / strlen
-#include <cctype>    // isxdigit (the un-escape codec)
+#include <cctype>    // isxdigit (the un-escape codec) / isalnum (the escape codec)
 #include <cstdlib>   // strtoul (the %XX decode)
+#include <cstdio>    // snprintf (the %XX encode)
 
 // gpUndefinedValue -- the shared `undefined` singleton (console off_8324D814). The
 // dispatch handlers and the builtins reuse it; declared extern here too.
@@ -278,19 +279,19 @@ int AptActionInterpreter::doFSCommand(const char* pUrl, const char* pArgs)
 // walk (console sub_82AF7400, the (value, out, mode) builder) is the path-builder
 // follow-on; declared extern so this entry layer is faithful and links.
 // ---------------------------------------------------------------------------
-extern int AptActionInterpreter_BuildPathName(AptActionInterpreter* pInterp,
+extern int AptBuildPathName(AptActionInterpreter* pInterp,
                                               AptValue* pValue, EAStringC* pOut, int nMode);  // FLAG: sub_82AF7400
 
 void AptActionInterpreter::getName(AptValue* pValue, EAStringC* pOut)
 {
     *pOut = "";   // EAStringC::operator= from the empty seed (console InitFromBuffer + assign)
-    AptActionInterpreter_BuildPathName(this, pValue, pOut, 1);   // FLAG: path-builder follow-on
+    AptBuildPathName(this, pValue, pOut, 1);   // FLAG: path-builder follow-on
 }
 
 void AptActionInterpreter::getName2(AptValue* pValue, EAStringC* pOut)
 {
     *pOut = "";
-    AptActionInterpreter_BuildPathName(this, pValue, pOut, 0);   // FLAG: path-builder follow-on
+    AptBuildPathName(this, pValue, pOut, 0);   // FLAG: path-builder follow-on
     if (pOut->GetLength() == 0)
         *pOut = "/";
 }
@@ -299,12 +300,12 @@ void AptActionInterpreter::getName2(AptValue* pValue, EAStringC* pOut)
 // getObject @0x82B07F18 -- resolve the path name pName (under the (pScope,pTarget)
 // context) to the AptValue object it designates: parse the path context, findChild
 // the leaf, and accept it only if it is a real object (the vtbl "is object" probe).
-// An empty name resolves to pScope unchanged. FLAG: the path-context parser (console
-// sub_82B02F80) is the same path follow-on; declared extern.
+// An empty name resolves to pScope unchanged. The path-context parser is the single
+// sub_82B02F80 recon (AptResolveTargetContext, AptActionInterpreterInterpHelpers.cpp).
 // ---------------------------------------------------------------------------
-extern void AptActionInterpreter_ParsePathContext(AptActionInterpreter* pInterp,
-                                                  AptValue* pTarget, const EAStringC* pName,
-                                                  AptValue** ppOutContext, EAStringC* pOutLeaf);  // FLAG: sub_82B02F80
+extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+                                    const EAStringC* pName,
+                                    AptValue** ppOutContext, EAStringC* pOutLeaf);   // sub_82B02F80
 
 AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pName)
 {
@@ -313,7 +314,10 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 
     EAStringC  leaf;
     AptValue*  pContext = 0;
-    AptActionInterpreter_ParsePathContext(this, pTarget, pName, &pContext, &leaf);  // FLAG: path-context parser
+    // console sub_82B02F80(a1=scope, a2=target, a3=name, a4=&ctx, a5=&leaf): the parser
+    // is a pure (scope, target) resolver -- the X360 reaches it with r3 == the SCOPE
+    // value (it collapses scope == the implicit `this`), so pass pScope, not `this`.
+    AptResolveTargetContext(pScope, pTarget, pName, &pContext, &leaf);
 
     AptValue* pResult = 0;
     if (pContext)
@@ -460,6 +464,36 @@ void AptActionInterpreter::unEscape(EAStringC* pStr)
         lDecoded += aOne;
     }
     *pStr = lDecoded;
+}
+
+// ---------------------------------------------------------------------------
+// escape @0x82AEE008 -- the URL percent-ENCODER (the inverse of unEscape): every
+// byte that is not an ASCII alphanumeric is emitted as "%XX" (uppercase hex);
+// alphanumerics copy through. Original-source corroboration: the leak's _escape
+// is the same isalnum-gated sprintf("%%%X") walk into a fresh string, assigned
+// back over the input. Was the {} `escape` link-stub, which made the AS escape()
+// builtin an identity transform.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::escape(EAStringC* pStr)
+{
+    EAStringC lEncoded("");
+    const char* p = pStr->GetBuffer();
+    while (*p != 0)
+    {
+        const unsigned char c = static_cast<unsigned char>(*p++);
+        if (c < 0x80 && isalnum(c))
+        {
+            const char aOne[2] = { static_cast<char>(c), 0 };
+            lEncoded += aOne;
+        }
+        else
+        {
+            char aHex[8];
+            snprintf(aHex, sizeof(aHex), "%%%X", c);   // leak: sprintf(strBuffer, "%%%X", cChar)
+            lEncoded += aHex;
+        }
+    }
+    *pStr = lEncoded;
 }
 
 const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue)

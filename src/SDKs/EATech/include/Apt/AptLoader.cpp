@@ -28,6 +28,7 @@
 #include "SDKs/EATech/include/Apt/AptFile.h"               // AptMovieData (AllImportsAvailable)
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
 #include "SDKs/EATech/include/Apt/AptTarget.h"    // gpAptTarget->mpLinker (off_8324E574+0x20)
+#include "SDKs/EATech/include/Apt/AptLinker.h"    // AptLinker::isFileImported (the cancel-path probe)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"        // DOGMA_PoolManager::Allocate/Deallocate
 
 #include "eathread/eathread_mutex.h"               // EA::Thread::Mutex
@@ -45,19 +46,17 @@ EA::Thread::Mutex MutexAptLoader;
 // AptLinker; routed here through named externs (not the literal console offsets)
 // so the x64 layout stays correct. Each lands when its owning TU is reconstructed.
 //
-//   AptLoader_StartAsyncLoad  (dword_8324E838) -- kick off the async .apt stream
+//   AptLoaderStartAsyncLoad  (dword_8324E838) -- kick off the async .apt stream
 //        for a freshly-requested file: takes the file name buffer + the AptFile
 //        handle. Called from Update on the state 1 -> 2 transition.
-//   AptLoader_CancelAsyncLoad (dword_8324E83C) -- abort an in-flight stream
+//   AptLoaderCancelAsyncLoad (dword_8324E83C) -- abort an in-flight stream
 //        (state 2 with a pending data block). Called from CancelPreloadedAnimation.
-//   AptLinker_isFileImported  (AptLinker__isFileImported) -- true when the
+//   AptLinker::isFileImported is the real member (AptLinker.cpp) -- true when the
 //        candidate AptFile is still imported by any movie the linker tracks;
-//        CONSUMES the candidate handle (disposes + nulls *ppCandidate), matching
-//        the AptFile::isFileImported it wraps.
+//        CONSUMES the candidate handle.
 // ---------------------------------------------------------------------------
-extern void AptLoader_StartAsyncLoad(const char* pFileName, AptFilePtr* pFile);   // dword_8324E838
-extern void AptLoader_CancelAsyncLoad(void* pDataBlock);                          // dword_8324E83C
-extern bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate); // AptLinker__isFileImported
+extern void AptLoaderStartAsyncLoad(const char* pFileName, AptFilePtr* pFile);   // dword_8324E838
+extern void AptLoaderCancelAsyncLoad(void* pDataBlock);                          // dword_8324E83C
 
 // ---------------------------------------------------------------------------
 // FileNameCompare @0x7E3E94 -- case-insensitive, slash-normalised ('\' == '/')
@@ -297,7 +296,7 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
     //
     // The pointer-size discriminator reads the "<n>:<v>:<p>" signature, which lives in the
     // APT DATA chunk ("Apt Data:1:7:8\x1a") == pBase on both formats (the console file leads
-    // with it; our converted bundle's pBase is that chunk). pConstFile is now the REAL
+    // with it; the native-8 bundle's pBase is that chunk). pConstFile is now the REAL
     // "Apt constant file" chunk (un-collapsed 2026-07-01), which carries no signature.
     const int liPtrSize = reinterpret_cast<AptConstFile*>(pBase)->GetPointerSizeBytes();
 
@@ -506,7 +505,7 @@ void AptLoader::Update()
                     pFile->mnState     = 2;             // [c:+0x08] loading
                     AptSharedPtrIncRef(pFile);          // handle's reference
                     // FLAG: dword_8324E838 -- the async-load-start hook (extern).
-                    AptLoader_StartAsyncLoad(pFile->mFileName.c_str(), &handle);
+                    AptLoaderStartAsyncLoad(pFile->mFileName.c_str(), &handle);
                     node = mpHead;                       // restart from the (possibly mutated) head
                     // Drop the per-iteration ref (asm tail @0x82B02218: unconditional
                     // DecRef + delete-if-zero), matching every other state branch.
@@ -604,7 +603,7 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
             {
                 // In-flight stream: abort it (only when a data block is pending).
                 if (pFile->mpDataBlock)              // [c:+0x18]
-                    AptLoader_CancelAsyncLoad(pFile->mpDataBlock);   // FLAG: dword_8324E83C
+                    AptLoaderCancelAsyncLoad(pFile->mpDataBlock);   // FLAG: dword_8324E83C
             }
             else if (nState == 3 || nState == 4 || nState == 5)
             {
@@ -624,9 +623,9 @@ void AptLoader::CancelPreloadedAnimation(const EAStringC& fileName)
                             AptSharedPtrIncRef(pImp);
                             AptFilePtr candidate;
                             candidate.pData = pImp;
-                            // AptLinker_isFileImported consumes `candidate`. If no
-                            // linked movie still imports it, recurse to cancel it.
-                            if (!AptLinker_isFileImported(gpAptTarget->mpLinker, &candidate))   // off_8324E574->mpLinker
+                            // isFileImported consumes `candidate`. If no linked
+                            // movie still imports it, recurse to cancel it.
+                            if (!gpAptTarget->mpLinker->isFileImported(&candidate))   // off_8324E574->mpLinker
                             {
                                 const AptMovieData* pSelfMovie =
                                     static_cast<const AptMovieData*>(pFile->mpData);

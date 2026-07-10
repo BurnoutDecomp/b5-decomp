@@ -124,7 +124,7 @@ extern AptActionInterpreter gAptActionInterpreter;
 // so every dynamic-text node re-resolves its bound text + (re)lays it out through
 // EnsureStringAllocated. The console runs this inside AptUpdate (sub_82B0D608).
 struct AptCIH;
-void AptCIH_RunGeneralisedTextProcess(AptCIH* pRoot);
+void AptRunGeneralisedTextProcess(AptCIH* pRoot);
 
 // The Apt input-recorder/replay gate (X360 byte_82F733F7; defined in AptGlobals.cpp, default 0).
 // When SHUT (0) a freshly-placed clip's play-head does NOT auto-advance (deterministic replay);
@@ -395,9 +395,9 @@ namespace
     // IMPORT bundles (B5MenuItem / B5HelperComponents / B5ControllerButtons / B5HelpItem). The
     // parent movie's Fixup pass-3 REGISTERS each import with the loader (AptLoader::Load -> a
     // "requested" AptFile, mnState==1) but does NOT stream its data -- on the console that is the
-    // async .apt stream kicked off by AptLoader::Update state 1->2 (AptLoader_StartAsyncLoad), whose
+    // async .apt stream kicked off by AptLoader::Update state 1->2 (AptLoaderStartAsyncLoad), whose
     // completion (AptCompleteAnimationAsyncLoad -> CompleteLoad -> Resolve -> Fixup) fills the import
-    // in. PC has no async stream, so AptLoader_StartAsyncLoad is HOMED below to load the import bundle
+    // in. PC has no async stream, so AptLoaderStartAsyncLoad is HOMED below to load the import bundle
     // SYNCHRONOUSLY + drive that same completion. AptLoader::Update (the faithful console state
     // machine) then drives the whole recursive import graph bottom-up: leaf imports 3->4 (Link),
     // then the parent 3->4 -> AptCharacterAnimation_Link -> AptFile::FindExport -> the referenced
@@ -491,7 +491,7 @@ namespace BrnGui
     // and drive AptCompleteAnimationAsyncLoad on `lpFile` so the import's AptFile is fully
     // loaded+resolved (mpData = root, mnState = 3). Returns true on success (idempotent: a second
     // call for the same name is a no-op that still completes the handle). Called by the homed
-    // AptLoader_StartAsyncLoad (the platform stream hook).
+    // AptLoaderStartAsyncLoad (the platform stream hook).
     static bool LoadImportBundle(const char* lpacMovieName, AptFilePtr* lpFile);
     // (STEP 4 nested-content dirty propagation retired 2026-07-04 -- the AptCIH ctor births
     // fresh sprite/animation children dirty, so no host propagation pass is needed. See the
@@ -1361,7 +1361,7 @@ namespace BrnGui
         // --- STEP 3: CONTENT-LOAD THE IMPORTS -----------------------------------------------------
         // The parent's Fixup pass-3 just REGISTERED each import (AptLoader::Load -> "requested"
         // AptFile). Drive the faithful console loader state machine (AptLoader::Update): the homed
-        // AptLoader_StartAsyncLoad synchronously loads each import bundle + completes it (state 1->3),
+        // AptLoaderStartAsyncLoad synchronously loads each import bundle + completes it (state 1->3),
         // then Update links the graph bottom-up (leaf imports 3->4, then the parent 3->4 ->
         // AptCharacterAnimation_Link -> AptFile::FindExport -> parent charTable[importId] populated).
         // After this, the parent's charTable holds the real imported characters, so the instantiation
@@ -1496,7 +1496,7 @@ namespace BrnGui
     // =========================================================================
     // LoadImportBundle -- content-load ONE import movie by name and drive its AptFile
     // through the faithful completion, the PC substitute for the console's async .apt
-    // stream (the stream AptLoader_StartAsyncLoad kicks off).
+    // stream (the stream AptLoaderStartAsyncLoad kicks off).
     //
     // REGISTERED-DATA FIRST (the console shape): a framework bundle load registers EVERY
     // AptData it carries through the load-notification chain (PERSISTENTAPT alone carries
@@ -1862,7 +1862,7 @@ namespace BrnGui
 }
 
 // =============================================================================
-// AptLoader_StartAsyncLoad (dword_8324E838) -- the platform "kick off the .apt stream" hook the
+// AptLoaderStartAsyncLoad (dword_8324E838) -- the platform "kick off the .apt stream" hook the
 // faithful AptLoader::Update calls on the state 1->2 (requested -> loading) transition. On the
 // console this starts an ASYNC stream whose completion posts AptCompleteAnimationAsyncLoad; PC has
 // no such stream, so it is HOMED here to load the import bundle SYNCHRONOUSLY + drive that exact
@@ -1926,7 +1926,7 @@ int AptLoadAnimation(const char* pName, const char* pTargetPath)
     return 1;
 }
 
-void AptLoader_StartAsyncLoad(const char* pFileName, AptFilePtr* pFile)
+void AptLoaderStartAsyncLoad(const char* pFileName, AptFilePtr* pFile)
 {
     // Re-entrancy guard: LoadImportBundle drives AptCompleteAnimationAsyncLoad which does NOT
     // re-enter Update, but a nested import's own Fixup pass-3 could register further imports; those

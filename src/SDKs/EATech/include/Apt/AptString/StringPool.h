@@ -55,4 +55,12 @@ public:
     // this; the chain reference keeps pool strings alive across the deferred-
     // release drains for the life of the pool.
     static class AptString* FindOrCreate(const char* pName);
+
+    // ReleaseString (XB1 sub_14083F2A0) -- the inverse of FindOrCreate's hit path:
+    // decGCRoot the pooled string (a 63/pinned count is left alone); when the last
+    // rooted use drops (pre-decrement count 1), unlink it from its intern bucket
+    // chain and Release the chain's owning reference. The _parseStream unresolve
+    // direction releases every dictionary string through this. Body in
+    // AptStringPool.cpp.
+    static void ReleaseString(class AptString* pString);
 };

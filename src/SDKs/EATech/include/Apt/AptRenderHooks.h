@@ -23,7 +23,7 @@
 // the gAptFuncs.pfnDrawRenderingUnit slot, which CgsGui::AptAux::ConstructApt installs
 // to CgsGui::AptCallbackRender::DrawRenderingUnit -> AptRenderHandler::Render. So the
 // hook reads the shape's geometry sub-field (AptCharacter +0x20, the console's v6[8])
-// and calls through the installed slot. AptHook_DrawImportGlyph / AptHook_ResolveImport
+// and calls through the installed slot. AptHookDrawImportGlyph / AptHookResolveImport
 // are the imported-sub-character path -- still deferred with the .apt parse (FLAG).
 //
 // (The PC hook takes the whole AptCharacter and reads the geometry from it -- the host
@@ -38,8 +38,8 @@ enum AptMaskRenderOperation : int;
 // Wired to gAptFuncs.pfnDrawRenderingUnit (see AptRenderHooks.cpp).
 void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTick);
 // FLAG: the imported-sub-character path, homed with the .apt parse.
-void AptHook_DrawImportGlyph(AptCharacter* pImport, int nIndex, void* pGlyphData);
-int  AptHook_ResolveImport(void* pImportFileData, int nImportId);
+void AptHookDrawImportGlyph(AptCharacter* pImport, int nIndex, void* pGlyphData);
+int  AptHookResolveImport(void* pImportFileData, int nImportId);
 
 // ---------------------------------------------------------------------------
 // Custom-control host hooks (AptRenderItemCustomControl). A custom control is a

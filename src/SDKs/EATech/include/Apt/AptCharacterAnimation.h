@@ -10,7 +10,7 @@
 // SERIALIZED 64-BIT DEF-BASE / IN-PLACE (the faithful GUIAPT64 "1:7:8" format).
 // The struct below IS the on-disk movie def-base overlaid directly (the loader
 // relocates it IN PLACE via Fixup, then the runtime reads it through this struct
-// -- AptMovieCharacter_GetAnimation returns `char + KU_AptEmbeddedMovieOff`, a
+// -- AptGetMovieCharacterAnimation returns `char + KU_AptEmbeddedMovieOff`, a
 // pointer straight into the 64-bit file blob). So the member OFFSETS are the
 // VERIFIED 64-bit serialized offsets (vs TITLE_SCREEN02.bundle), NOT a transcoded
 // runtime layout: charCount@0x18, charTable@0x20, importCount@0x34, importTable@

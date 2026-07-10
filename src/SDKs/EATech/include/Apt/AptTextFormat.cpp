@@ -33,7 +33,7 @@
 #include "SDKs/EATech/include/Apt/AptTextFormat.h"
 #include <new>   // placement new (ConstructDefault)
 
-#include <cstring>   // strcmp (align keyword classify in AptTextFormat_ConstructRecord)
+#include <cstring>   // strcmp (align keyword classify in the TextFormat field ctor)
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"      // AptValue, AptVFT_TextFormat
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"     // AptString::Create / GetInternalString
@@ -101,24 +101,37 @@ TextFormat::TextFormat(const TextFormat* pSource)
     mnLeftMargin  = -1;
     mnRightMargin = -1;
 
-    // --- copyTextFormatObj(this, pSource) @0x82AE5820: overlay non-inherit fields ---
-    if (pSource->mnAlign != 3)
-        mnAlign = pSource->mnAlign;                  // v4 != 3
-    if (pSource->mnColor != -1)
-        mnColor = pSource->mnColor;                  // v5 != -1
-    // Font: copy when the source font is non-empty (X360 byte-compares against "").
+    copyTextFormatObj(pSource);   // X360 TextFormat::TextFormat+60: bl copyTextFormatObj
+}
+
+// ---------------------------------------------------------------------------
+// TextFormat::copyTextFormatObj @0x82AE5820 -- the SELECTIVE field overlay: each
+// of pSource's fields is copied only when it is NOT at its own inherit sentinel
+// (asm-verified per-field compares; original-source corroboration: the leak's
+// TextFormat::copyTextFormatObj is the same defined-only merge). Was the
+// TextFormat_copyTextFormatObj {} link-stub -- which made a no-op of every
+// get/setTextFormat record copy.
+// ---------------------------------------------------------------------------
+void TextFormat::copyTextFormatObj(const TextFormat* pSource)
+{
+    if (pSource->mnAlign != 3)                       // lwz 0xC(r31); cmpwi 3
+        mnAlign = pSource->mnAlign;
+    if (pSource->mnColor != -1)                      // lwz 8(r31); cmpwi -1
+        mnColor = pSource->mnColor;
+    // Font: copy when the source font is non-empty (X360 byte-compares the source
+    // buffer against the "" constant @unk_82143A57 before EAStringC::operator=).
     if (pSource->mFontName.GetBuffer()[0] != '\0')
-        mFontName = pSource->mFontName;              // EAStringC::operator=
-    if (pSource->mfSize != -1.0f)
-        mfSize = pSource->mfSize;                    // *(a2+4) != -1.0
-    if (pSource->mnStyleFlags != 2)
-        mnStyleFlags = pSource->mnStyleFlags;        // v9 != 2
-    if (pSource->mnIndent != -1)
-        mnIndent = pSource->mnIndent;                // v10 != -1
-    if (pSource->mnLeftMargin != -1)
-        mnLeftMargin = pSource->mnLeftMargin;        // v11 != -1
-    if (pSource->mnRightMargin != -1)
-        mnRightMargin = pSource->mnRightMargin;      // v12 != -1
+        mFontName = pSource->mFontName;
+    if (pSource->mfSize != -1.0f)                    // lfs 4(r31); fcmpu flt_820037C8
+        mfSize = pSource->mfSize;
+    if (pSource->mnStyleFlags != 2)                  // lwz 0x10(r31); cmplwi 2
+        mnStyleFlags = pSource->mnStyleFlags;
+    if (pSource->mnIndent != -1)                     // lwz 0x14(r31)
+        mnIndent = pSource->mnIndent;
+    if (pSource->mnLeftMargin != -1)                 // lwz 0x18(r31)
+        mnLeftMargin = pSource->mnLeftMargin;
+    if (pSource->mnRightMargin != -1)                // lwz 0x1C(r31)
+        mnRightMargin = pSource->mnRightMargin;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,29 +150,21 @@ AptTextFormat::AptTextFormat(const TextFormat* pSource)
 }
 
 // ---------------------------------------------------------------------------
-// AptTextFormat_ConstructDefault -- sub_82AFB2A8 (HOMED 2026-07-02, retiring
-// the LAST engine link-stub). The X360: AptValueWithHash(0x1C == AptVFT_
-// TextFormat, hash cap 8) base-construct into the given GC block, install the
-// AptTextFormat vtable, zero the +0x1C class-flags byte (all of which IS the
-// public ctor above), then build the embedded record via the field ctor
-// (sub_82AFAEB8 == the homed AptTextFormat_ConstructRecord) with the caller's
-// font value + size and the forwarded argument tail -- the sole call site
-// (getNewTextFormat) passes the all-inherit set.
+// AptTextFormat::AptTextFormat(font, size, ...) -- the AS-object field ctor
+// (X360 sub_82AFB2A8): AptValueWithHash(0x1C == AptVFT_TextFormat, hash cap 8)
+// base-construct, install the AptTextFormat vtable, zero the +0x1C class-flags
+// byte (the AptObject base ctor), then build the embedded record via the
+// TextFormat field ctor (sub_82AFAEB8) from the forwarded arguments. The
+// original source constructs exactly this shape in getTextFormat
+// (`new AptTextFormat(gpUndefinedValue, 0.0f, ...)`).
 // ---------------------------------------------------------------------------
-TextFormat* AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
-    float fSize, int nColor, int nBold, int nItalic, int nUnderline,
-    int nLeftMargin, int nRightMargin, int nIndent, AptValue* pAlign);   // defined below
-
-AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg)
+AptTextFormat::AptTextFormat(AptValue* pFont, float fSize, s32 nColor, s32 nBold,
+                             s32 nItalic, s32 nUnderline, s32 nLeftMargin,
+                             s32 nRightMargin, s32 nIndent, AptValue* pAlign)
+    : AptObject(AptVFT_TextFormat, 8)
+    , mFormat(pFont, fSize, nColor, nBold, nItalic, nUnderline,
+              nLeftMargin, nRightMargin, nIndent, pAlign)
 {
-    // The X360 does NOT run the TextFormat copy ctor here (it cannot take a null
-    // source): the AptValueWithHash base + vtable + zeroed class flags construct,
-    // then the field ctor stamps the raw embedded record directly.
-    AptTextFormat* const pThis = ::new (pBlock) AptTextFormat();
-    AptTextFormat_ConstructRecord(&pThis->mFormat, pSource,
-                                  static_cast<float>(dArg),
-                                  -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);
-    return pThis;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,10 +268,10 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
 }
 
 // ---------------------------------------------------------------------------
-// AptTextFormat_ConstructRecord -- the AS `TextFormat(...)` field ctor: stamp a
-// 32-byte TextFormat record from the call's arguments. X360 sub_82AFAEB8; the field
-// map + style packing are attested verbatim by the PS3 DecFIGS ctor
-// _ZN10TextFormatC1EP8AptValuefjiiiiiS1_iiii @0xF37268.
+// TextFormat::TextFormat(font, size, ...) -- the AS `TextFormat(...)` field ctor:
+// stamp a 32-byte TextFormat record from the call's arguments. X360 sub_82AFAEB8;
+// the field map + style packing are attested verbatim by the PS3 DecFIGS ctor
+// _ZN10TextFormatC1EP8AptValuefjiiiiiS1_iiii @0xF37268 (a REAL TextFormat ctor).
 //
 //   font   : when defined, AptValue::toString(pFont) -> mFontName (else stays empty/inherit)
 //   fSize  : mfSize
@@ -285,17 +290,13 @@ AptValue* AptTextFormat::objectMemberLookup(AptValue* const pThis,
 // objectMemberLookup masks never read (it only tests the *_DEFINED/*_VALUE bits), so
 // it is reproduced by the explicit base store to keep the word bit-identical.
 // ---------------------------------------------------------------------------
-TextFormat* AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
-                         float fSize, int nColor, int nBold, int nItalic, int nUnderline,
-                         int nLeftMargin, int nRightMargin, int nIndent, AptValue* pAlign)
+TextFormat::TextFormat(AptValue* pFont, float fSize, s32 nColor, s32 nBold,
+                       s32 nItalic, s32 nUnderline, s32 nLeftMargin,
+                       s32 nRightMargin, s32 nIndent, AptValue* pAlign)
+    : mFontName()   // *a1 = &s_EmptyInternalData (empty == inherit)
 {
-    pRecord->mfSize = fSize;          // *(a1+4) = a3
-    pRecord->mnColor = nColor;        // *(a1+8) = a5
-    // *a1 = &s_EmptyInternalData (empty == inherit). The console STORES the empty
-    // sentinel raw -- this ctor stamps RAW record memory (the sub_82AFB2A8 /
-    // Allocate(record) call sites), so the slot must be CONSTRUCTED, not assigned:
-    // an operator= here would release whatever garbage the raw slot holds.
-    ::new (static_cast<void*>(&pRecord->mFontName)) EAStringC();
+    mfSize  = fSize;                  // *(a1+4) = a3
+    mnColor = nColor;                 // *(a1+8) = a5
 
     // ---- pack the bold/italic/underline style flags (base 2, then per-attr) ----
     uint32_t uStyle = 2u;                                  // *(a1+16) = 2
@@ -305,36 +306,34 @@ TextFormat* AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
     else if (nItalic == 1) uStyle |= 0x00100010u;          // a7==1
     if (nUnderline == 0)   uStyle |= 0x01000000u;          // !a8
     else if (nUnderline == 1) uStyle |= 0x01000100u;       // a8==1
-    pRecord->mnStyleFlags = static_cast<int32_t>(uStyle);  // *(a1+16)
+    mnStyleFlags = static_cast<int32_t>(uStyle);           // *(a1+16)
 
-    pRecord->mnIndent      = nIndent;       // *(a1+20) = a37 (mnIndent)
-    pRecord->mnLeftMargin  = nLeftMargin;   // *(a1+24) = a33 (mnLeftMargin)
-    pRecord->mnRightMargin = nRightMargin;  // *(a1+28) = a35 (mnRightMargin)
+    mnIndent      = nIndent;       // *(a1+20) = a37 (mnIndent)
+    mnLeftMargin  = nLeftMargin;   // *(a1+24) = a33 (mnLeftMargin)
+    mnRightMargin = nRightMargin;  // *(a1+28) = a35 (mnRightMargin)
 
     // ---- font: render the value to mFontName only when it is a defined value ----
     if (pFont->getIsDefined())                              // (*(a2+4)>>27)&1
-        pFont->toString(&pRecord->mFontName);               // AptValue::toString(a2, a1)
+        pFont->toString(&mFontName);                        // AptValue::toString(a2, a1)
 
     // ---- align: undefined -> inherit (3); else keyword-classify ----------------
     if (!pAlign->getIsDefined())                            // (*(a31+4)>>27)&1 == 0
     {
-        pRecord->mnAlign = 3;                               // *(a1+12) = 3
-        return pRecord;
+        mnAlign = 3;                                        // *(a1+12) = 3
+        return;
     }
 
     EAStringC lAlign;
     pAlign->toString(&lAlign);                              // AptValue::toString(a31, &v53)
     const char* szAlign = lAlign.GetBuffer();
     if (std::strcmp(szAlign, "left") == 0 || std::strcmp(szAlign, "true") == 0)
-        pRecord->mnAlign = 0;                               // "left"/"true" -> 0
+        mnAlign = 0;                                        // "left"/"true" -> 0
     else if (std::strcmp(szAlign, "center") == 0)
-        pRecord->mnAlign = 2;                               // "center" -> 2
+        mnAlign = 2;                                        // "center" -> 2
     else if (std::strcmp(szAlign, "right") == 0)
-        pRecord->mnAlign = 1;                               // "right" -> 1
+        mnAlign = 1;                                        // "right" -> 1
     else
-        pRecord->mnAlign = 3;                               // anything else -> inherit
+        mnAlign = 3;                                        // anything else -> inherit
     // (lAlign's internal-ref drop is the X360's DecreaseInternalRefCount; the
     //  EAStringC dtor performs it at scope end.)
-
-    return pRecord;                                         // result = a1
 }

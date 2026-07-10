@@ -84,15 +84,26 @@ struct TextFormat
         KU_UNDERLINE_DEFINED = 0x01000000u
     };
 
-    // ctor @0x82AEC320 -- seed the inherit sentinels then copyTextFormatObj(this, pSrc).
-    // FLAG: body its own TU (needs copyTextFormatObj). Declared for the embedders.
-    explicit TextFormat(const TextFormat* pSource);   // FLAG: body its own TU
+    // ctor @0x82AEC320 -- seed the inherit sentinels then copyTextFormatObj(pSource).
+    explicit TextFormat(const TextFormat* pSource);
+
+    // The AS `TextFormat(...)` field ctor -- stamp every field from the call's
+    // arguments (X360 sub_82AFAEB8; the ctor SHAPE is attested by the PS3 DecFIGS
+    // symbol _ZN10TextFormatC1EP8AptValuefjiiiiiS1_iiii -- a real TextFormat ctor).
+    TextFormat(AptValue* pFont, float fSize, s32 nColor, s32 nBold, s32 nItalic,
+               s32 nUnderline, s32 nLeftMargin, s32 nRightMargin, s32 nIndent,
+               AptValue* pAlign);   // sub_82AFAEB8
+
+    // copyTextFormatObj @0x82AE5820 -- SELECTIVE overlay: copy each of pSource's
+    // fields only when it is NOT at its inherit sentinel (align 3 / color -1 /
+    // font "" / size -1.0 / style 2 / indent + margins -1).
+    void copyTextFormatObj(const TextFormat* pSource);   // @0x82AE5820
 
     // Uninitialised-record construction: on the X360 the sub_82AFB2A8 path leaves the
     // embedded record raw pool memory (the AptValueWithHash base ctor stops at +0x20)
-    // and the field ctor (AptTextFormat_ConstructRecord) stamps every field right
-    // after. The scalars are left unwritten exactly like the console's raw block;
-    // mFontName still default-constructs (an EAStringC cannot be raw).
+    // and the field ctor stamps every field right after. The scalars are left
+    // unwritten exactly like the console's raw block; mFontName still
+    // default-constructs (an EAStringC cannot be raw).
     TextFormat() {}
 };
 
@@ -113,10 +124,12 @@ struct AptTextFormat : public AptObject
     // the embedded TextFormat(pSource) record. dtor @0x82AF17F8 releases mFontName and
     // chains ~AptObject (RAII + base, so the body is empty).
     explicit AptTextFormat(const TextFormat* pSource);   // @0x82AF1730
-    // The sub_82AFB2A8 construction shape: the base + vtable + zeroed class flags
-    // WITHOUT the record copy -- the caller stamps mFormat via the field ctor
-    // (AptTextFormat_ConstructRecord) immediately after. (The console never routes
-    // this path through TextFormat's copy ctor -- it cannot take a null source.)
+    // The AS-object field ctor (X360 sub_82AFB2A8): the AptObject base + the embedded
+    // record built by the TextFormat field ctor. The original-source getTextFormat
+    // constructs exactly this shape (`new AptTextFormat(gpUndefinedValue, 0.0f, ...)`).
+    AptTextFormat(AptValue* pFont, float fSize, s32 nColor, s32 nBold, s32 nItalic,
+                  s32 nUnderline, s32 nLeftMargin, s32 nRightMargin, s32 nIndent,
+                  AptValue* pAlign);   // sub_82AFB2A8
     AptTextFormat() : AptObject(AptVFT_TextFormat, 8) {}
     virtual ~AptTextFormat() {}                          // @0x82AF17F8
 

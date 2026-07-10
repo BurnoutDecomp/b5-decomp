@@ -106,12 +106,12 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 // counter. After the side-effect each flushes the AptGC deferred-release value
 // vector once the operand stack has drained (the console guards the flush by
 // `off_8324E51C->count != 0 && mnStackTop == 0`; the count side of the guard is
-// folded into AptApt_FlushDeferredReleases, exactly as the sibling Var/Member
+// folded into AptFlushDeferredReleases, exactly as the sibling Var/Member
 // opcodes do).
 //
 // FLAG -- the AptGC deferred-release vector flush (console off_8324E51C /
 // AptValueVector::ReleaseValues; the AptGC layer). Encapsulated as
-// AptApt_FlushDeferredReleases (the same hook the Var/Member opcodes use); the
+// AptFlushDeferredReleases (the same hook the Var/Member opcodes use); the
 // stack-empty guard that triggers it is faithful + engine-side.
 // ===========================================================================
 
@@ -119,7 +119,7 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 // the deferred-release value vector once the operand stack empties. Shared with
 // the Var/Member opcodes (declared there too); the host-side vector type/global
 // are not reconstructed yet, so the flush is encapsulated.
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 namespace
 {
@@ -149,7 +149,7 @@ void AptActionInterpreter::_FunctionAptActionCallFuncSetVar(AptActionInterpreter
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodPop(AptActionInterpreter*
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ void AptActionInterpreter::_FunctionAptActionCallFuncAndPop(AptActionInterpreter
     _FunctionAptActionCallFunction(pInterp, pContext);
     pInterp->stackPop();                  // drop the call result (Release)
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // console: vector-count && top==0 -> ReleaseValues
+        AptFlushDeferredReleases();   // console: vector-count && top==0 -> ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
     _FunctionAptActionCallFunction(pInterp, pContext);
     pInterp->stackPop();                                       // drop the call result (Release)
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();
+        AptFlushDeferredReleases();
 }
 
 // The value->object resolver (homed in AptActionInterpreterInterpHelpers.cpp).
@@ -254,7 +254,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodSetVar(AptActionInterpret
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +268,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncSetVar(AptActionInterpr
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -282,7 +282,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodPop(AptActionInterpre
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +296,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ===========================================================================

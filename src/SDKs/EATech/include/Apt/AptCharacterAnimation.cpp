@@ -39,13 +39,9 @@
 // FLAG: each lands when its owning TU is reconstructed.
 // ===========================================================================
 
-// AptLoader::Load @0x82AEEA70 -- the X360 3-arg overload (DISTINCT from the PS3
-// AptLoader::Load(const EAStringC&) homed in AptLoader.cpp): registers/looks up the
-// named .apt and writes the resulting AptFilePtr into *pOut, returning pOut. The
-// loader object is gpAptTarget[+0x1C]. Declared free-standing (the X360 AptLoader
-// runtime layout is a follow-on); the call site passes the raw pointers faithfully.
-struct AptLoader;
-extern AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName);   // AptLoader::Load @0x82AEEA70 (FLAG)
+// (The X360 AptLoader::Load @0x82AEEA70 by-value-return wrapper extern was
+// DELETED 2026-07-10 -- the import pass below calls the homed member
+// `lpLoader->Load(lName)` directly.)
 
 // FLAG (x64 native-8 relocation bounds): the AptData resource span the host stashes so the
 // Fixup case-5/9 -> AptMovie::resolve64 walk can bounds-check every serialised offset slot

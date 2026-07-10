@@ -58,9 +58,9 @@
 #include "SDKs/EATech/include/Apt/AptCharacterTextInst.h"    // SetText (instantiateCharacter)
 #include "SDKs/EATech/include/Apt/AptCharacterMorphInst.h"   // morph blend slot (placeObject)
 
-#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // gAptActionInterpreter.setVariable (AptCIH_CloneClassMembers / AssociateInstToClass)
+#include "SDKs/EATech/include/Apt/AptActionInterpreter.h"    // gAptActionInterpreter.setVariable (AptCloneClassMembers / AssociateInstToClass)
 
-#include <new>      // placement new (AptCIH::operator new + ctor for AptDLState_CreateInstAtDepth)
+#include <new>      // placement new (AptCIH::operator new + ctor for AptCreateInstAtDepth)
 #include <cstdio>   // snprintf (FLAG bring-up probe in AssociateInstToClass)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // FLAG bring-up probe log sink
 
@@ -69,10 +69,10 @@
 // the deferred-release value vector (off_8324E51C / AptValueVector::ReleaseValues,
 // guarded by the dword_8324E760 latch) every time a node is released during a
 // clear. Encapsulated -- exactly as the AptActionInterpreter siblings do -- in
-// AptApt_FlushDeferredReleases(); declared extern by name so this TU compiles
+// AptFlushDeferredReleases(); declared extern by name so this TU compiles
 // against the same GC drain. (FLAG: off_8324E51C / dword_8324E760.)
 // ---------------------------------------------------------------------------
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 
 // ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ void AptDisplayList::PreDestroy()
 //       node->AddRef();                 // (**node)(node)   vtbl[0]
 //       removeObject(node);
 //       if (bClearGCRoots) { node->setGCRoot(0); node->ClearCIH(true); }
-//       AptApt_FlushDeferredReleases(); // off_8324E51C drain (guarded)
+//       AptFlushDeferredReleases(); // off_8324E51C drain (guarded)
 //       node->Release();                // (*(*node+4))(node) vtbl[1]
 //     }
 //   }
@@ -170,7 +170,7 @@ void AptDisplayList::clear(bool bClearGCRoots)
             pNode->ClearCIH(true);
         }
 
-        AptApt_FlushDeferredReleases();   // drain the GC deferred-release vector
+        AptFlushDeferredReleases();   // drain the GC deferred-release vector
 
         pNode->Release();         // drop the pin (destroys the node at refcount 0)
         pNode = pNext;
@@ -343,7 +343,7 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
 
 // ---------------------------------------------------------------------------
 // FLAG (un-homed callees, bodies their own TUs):
-//   AptDL_FramePlacementDispatch (sub_82B0B080) -- the frame-placement dispatcher:
+//   AptFramePlacementDispatch (sub_82B0B080) -- the frame-placement dispatcher:
 //     creates/re-uses the AptCIH for the placement and returns it. A REAL standalone
 //     X360 function (AddToDisplayList @0x82B0B150 does `bl sub_82B0B080`) that has no
 //     per-address dossier in the export set yet -- export + decompile it to convert
@@ -353,7 +353,7 @@ int AptDisplayList::GeneralisedProcess(int nFlags, int nDepthLayerMask, uint8_t 
 // (node, &node->mInstanceName) right after pushing it to the new-instance table -- is
 // AptValue::AddRef (vtbl[0], arg2 discarded), invoked directly at the AddToDisplayList call site.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode);
+extern AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode);
 
 // ---------------------------------------------------------------------------
 // AddToDisplayList @0x82B0B150
@@ -435,7 +435,7 @@ AptCIH* AptDisplayList::AddToDisplayList(AptNativeHash* pParentHash, void** ppPl
         *reinterpret_cast<AptFilePtr*>(&pPlacedChar->mpAnimationFile) = *pSrc;
     }
 
-    AptCIH* const pPlaced = AptDL_FramePlacementDispatch(this, ppPlacement, pParentNode);
+    AptCIH* const pPlaced = AptFramePlacementDispatch(this, ppPlacement, pParentNode);
 
     // Register the placed node under its instance name (when it has one).
     if (!pPlaced->GetInstanceName().IsEmpty())
@@ -636,18 +636,18 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
 
 // ---------------------------------------------------------------------------
 // FLAG (un-homed leaf-first callees / globals; bodies in their own TUs):
-//   AptDLState_CreateInstAtDepth (sub_82B008B0) -- create a fresh AptCIH(char,parent),
+//   AptCreateInstAtDepth (sub_82B008B0) -- create a fresh AptCIH(char,parent),
 //     find its insert-after slot at nDepth, stamp the render-item depth, insert; returns it.
-//   AptDLState_ReinsertInstAtDepth (sub_82AEE788) -- re-insert an existing node at nDepth.
-//   AptCIH_CloneClassMembers -- copy every non-reserved (__proto__/prototype-skipped)
+//   AptReinsertInstAtDepth (sub_82AEE788) -- re-insert an existing node at nDepth.
+//   AptCloneClassMembers -- copy every non-reserved (__proto__/prototype-skipped)
 //     member of an AS class object onto a freshly placed instance (AptActionInterpreter::
 //     setVariable over the class hash); reached only with a non-null class object.
 //   AptCIH_AssociateInstToClass (@0x82B073B8) -- register the placed instance with its class.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
+extern AptCIH* AptCreateInstAtDepth(AptDisplayListState* pState, int nDepth,
                                             AptCharacter* pCharacter, AptCIH* pParentNode);
-extern AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode);
-extern void    AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
+extern AptCIH* AptReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode);
+extern void    AptCloneClassMembers(AptCIH* pNode, AptValue* pClassObject);
 // AptCIH::AssociateInstToClass is now a member of AptCIH (declared in AptCIH.h).
 
 // The class-binding tail's collaborators (see AptCIH_AssociateInstToClass below).
@@ -702,14 +702,14 @@ AptRenderItem* AptDisplayList::instantiateCharacter(int nDepth, AptCharacter* pC
             if (nDepth != pNode->GetCharacterInst()->GetRenderItem()->GetDepth())
             {
                 AsState()->remove(pNode);
-                AptDLState_ReinsertInstAtDepth(AsState(), nDepth, pNode);
+                AptReinsertInstAtDepth(AsState(), nDepth, pNode);
                 pNode->Release();   // vtbl[1] -- drop the old list slot's reference
             }
             pNode->SetCharacterInst(AptCharacterInst::CreateCharacterInst(pCharacter), true);
         }
         else
         {
-            pNode = AptDLState_CreateInstAtDepth(AsState(), nDepth, pCharacter, pParentNode);
+            pNode = AptCreateInstAtDepth(AsState(), nDepth, pCharacter, pParentNode);
         }
 
         // Created-on-frame: inherit the parent sprite/animation's current goto-frame.
@@ -868,7 +868,7 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
         // When the supplied AS class object carries a class (mnValueData bit 27), clone
         // its non-reserved members onto the freshly placed instance.
         if (pClassObject != nullptr && ((pClassObject->mnValueData >> 27) & 1u) != 0u)
-            AptCIH_CloneClassMembers(pNode, pClassObject);
+            AptCloneClassMembers(pNode, pClassObject);
         pNode->AssociateInstToClass();
     }
 
@@ -1108,7 +1108,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 extern AptActionInterpreter gAptActionInterpreter;
 
 // ---------------------------------------------------------------------------
-// AptDLState_CreateInstAtDepth -- sub_82B008B0.
+// AptCreateInstAtDepth -- sub_82B008B0.
 //   Create a fresh AptCIH(pCharacter, pParentNode), locate the insert-after slot
 //   at nDepth (findInst's prev output; the match output is ignored here), stamp the
 //   new node's render-item depth, insert it after that slot, return it.
@@ -1116,7 +1116,7 @@ extern AptActionInterpreter gAptActionInterpreter;
 //   depth, 0, &prev, &match); GetRenderItemWritable(node->mpCharacterInst); *(item+0x14)
 //   = depth (sth); insert(state, prev, node).
 // ---------------------------------------------------------------------------
-AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
+AptCIH* AptCreateInstAtDepth(AptDisplayListState* pState, int nDepth,
                                      AptCharacter* pCharacter, AptCIH* pParentNode)
 {
     void* const pMem = AptCIH::operator new(sizeof(AptCIH));
@@ -1134,13 +1134,13 @@ AptCIH* AptDLState_CreateInstAtDepth(AptDisplayListState* pState, int nDepth,
 }
 
 // ---------------------------------------------------------------------------
-// AptDLState_ReinsertInstAtDepth -- sub_82AEE788.
+// AptReinsertInstAtDepth -- sub_82AEE788.
 //   Re-insert an existing node at nDepth: locate the insert-after slot (findInst),
 //   insert pNode there, then stamp the (re)inserted node's render-item depth.
 //   X360 order: findInst(state, depth, 0, &prev, &match); node2 = insert(state, prev,
 //   node); GetRenderItemWritable(node2->mpCharacterInst); *(item+0x14) = (i16)depth.
 // ---------------------------------------------------------------------------
-AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode)
+AptCIH* AptReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, AptCIH* pNode)
 {
     const int16_t nDepth16 = static_cast<int16_t>(nDepth);   // console v5 = (__int16)a2
 
@@ -1154,17 +1154,17 @@ AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, 
 }
 
 // ---------------------------------------------------------------------------
-// AptDL_FramePlacementDispatch -- sub_82B0B080. A real standalone X360 function
+// AptFramePlacementDispatch -- sub_82B0B080. A real standalone X360 function
 // (`bl sub_82B0B080` in AddToDisplayList @0x82B0B150) with no per-address dossier in
 // the export set yet, so this body is a ROLE reconstruction: field-for-field it
-// mirrors the fully attested sibling AptMovie_PlaceCommand (sub_82B0AE08), which
+// mirrors the fully attested sibling AptDispatchPlaceCommand (sub_82B0AE08), which
 // parses the same native-8 PlaceObject record; the caller's post-dispatch instance-
 // name check proves the dispatcher binds the record's name. Export + decompile
 // sub_82B0B080 to upgrade this to attestation. The dispatcher
 // creates/re-uses the placed node for a serialised .apt frame-placement command and
 // returns it. ppPlacement[1] is the AptFramePlacementProps/pseudo-data overlay; the
 // authored name / clip-depth / clip-actions live in ppPlacement[0]'s raw PlaceObject
-// record, the same native-8 body layout AptMovie_PlaceCommand parses.
+// record, the same native-8 body layout AptDispatchPlaceCommand parses.
 //
 // FLAG: sub_82B0B080's own body is folded (no per-address dossier in the X360 export
 // and absent as a named function in the PS3 DWARF). The faithful observable behaviour
@@ -1172,7 +1172,7 @@ AptCIH* AptDLState_ReinsertInstAtDepth(AptDisplayListState* pState, int nDepth, 
 // reconstructed through the homed placeObject, reading the placement command's named
 // fields (the same AptFramePlacementProps the sibling ReplaceDisplyListItem reads).
 // ---------------------------------------------------------------------------
-AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode)
+AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, AptCIH* pParentNode)
 {
     AptFramePlacementProps* const pProps = static_cast<AptFramePlacementProps*>(ppPlacement[1]);
     const AptPlaceObjectInfo_t* const pInfo =
@@ -1215,7 +1215,7 @@ AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, 
 //  member directly at their call sites, so no free-function accessor remains.)
 
 // ---------------------------------------------------------------------------
-// AptCIH_CloneClassMembers -- the AS class-object member copy folded into the X360's
+// AptCloneClassMembers -- the AS class-object member copy folded into the X360's
 // InsertChild / placeObject AS-class tail (@0x82B09CA0): walk the class object's
 // native hash and copy every member -- skipping the two reserved keys __proto__
 // (StringPool::saConstant, console dword_8324E580) and prototype (gAptKeyPrototype,
@@ -1227,7 +1227,7 @@ AptCIH* AptDL_FramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, 
 // (The reserved-key match in the X360 is the same EAStringC compare the sibling
 // init-object copy in AptActionInterpreterInterpHelpers.cpp uses.)
 // ---------------------------------------------------------------------------
-void AptCIH_CloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
+void AptCloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
 {
     AptNativeHash* const pHash = pClassObject->GetNativeHashVirtual();   // (*(*classObj+8))(classObj)
     if (!pHash)
