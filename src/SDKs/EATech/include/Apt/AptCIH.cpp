@@ -69,7 +69,7 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // AptDisplayList::mergeState is now called directly as a member (AptDisplayList.h is included above).
 
 // ---------------------------------------------------------------------------
-// AptCIH_GetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
+// AptGetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
 // AptCharacter subclass. The X360 reaches it as `mpRenderItem->mpCharacter + 0x10`;
 // the project models that un-homed subclass field with the same FLAGged reinterpret
 // AptCharacterAnimation.cpp uses (the AptCharacter base header stops before it).
@@ -79,7 +79,7 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // FLAG (x64 fork): the console reaches it at char+0x10; the 8-byte GUIAPT64 "1:7:8"
 // layout widens the AptCharacter header so it lands at char+0x20 (KU_AptEmbeddedMovieOff,
 // AptCIH.h). We ship only the 8-byte format, so this is the single native-64 offset.
-static AptMovie* AptCIH_GetClipMovie(const AptCharacterSpriteInstBase* pInst)
+static AptMovie* AptGetClipMovie(const AptCharacterSpriteInstBase* pInst)
 {
     AptCharacter* pCharacter = pInst->mpRenderItem->mpCharacter;
     return reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pCharacter) + KU_AptEmbeddedMovieOff);
@@ -377,7 +377,7 @@ int AptCIH::jumpToFrame(int nFrame)
     if (nFrame < 0)
         return 0;
 
-    AptMovie* pMovie = AptCIH_GetClipMovie(pInst);
+    AptMovie* pMovie = AptGetClipMovie(pInst);
     if (nFrame >= pMovie->mnFrameCount)
         return 0;
 
@@ -429,7 +429,7 @@ int AptCIH::jumpToFrame(int nFrame)
             // clip's end). The play-head (mnGotoFrame) is the loop variable.
             while (pInst->mnGotoFrame <= nFrame)
             {
-                if (pInst->mnGotoFrame >= AptCIH_GetClipMovie(pInst)->mnFrameCount)
+                if (pInst->mnGotoFrame >= AptGetClipMovie(pInst)->mnFrameCount)
                     break;
                 // FLAG: the X360 call site (sub_82B0BE60) only fills r3 (the AptMovie)
                 // and r4 (the scratch list); the frame index + trailing args are not
@@ -490,7 +490,7 @@ int AptCIH::tick()
     const bool bNeedsAction = ((nFlags >> 6) & 1u) != 0;   // v12 = (v11 >> 6) & 1  (state bit6 0x40)
     const bool bFreshPlaced = (nFlags & 0x80u) != 0;       // state bit7 (0x80)
 
-    AptMovie* const pClipMovie = AptCIH_GetClipMovie(pInst);   // *(v6[1]+4) + embed
+    AptMovie* const pClipMovie = AptGetClipMovie(pInst);   // *(v6[1]+4) + embed
 
     // ---- (1) auto-advance the play-head -----------------------------------
     // The play-head steps this frame when the clip needs an action (v12), or it is
@@ -593,7 +593,7 @@ label_27:
     else
     {
         if ((pInst->mnClipActionFlags & 0x40u) != 0 &&
-            AptCIH_GetClipMovie(pInst)->mnFrameCount != 1)
+            AptGetClipMovie(pInst)->mnFrameCount != 1)
         {
             return (mFlagsA >> 25) & 1u;
         }
@@ -604,9 +604,9 @@ label_27:
     return (mFlagsA >> 25) & 1u;
 }
 
-// (_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is homed as the
-// free AptCIH_gotoAndX in AptCIHNativeFunctionHelper.cpp, the sole caller family's
-// TU. The duplicate member body this TU carried was RETIRED 2026-07-10: two homes
-// for one console function drifted -- the member had the play-arm SetDirtyState
-// right while the live free function had it inverted onto the stop arm, freezing
-// every gotoAndPlay'd transition on a settled node.)
+// (AptCIH::_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is the
+// static member homed in AptCIHNativeFunctionHelper.cpp, the sole caller family's
+// TU. The duplicate body this TU carried was RETIRED 2026-07-10: two homes for one
+// console function drifted -- one had the play-arm SetDirtyState right while the
+// live one had it inverted onto the stop arm, freezing every gotoAndPlay'd
+// transition on a settled node.)

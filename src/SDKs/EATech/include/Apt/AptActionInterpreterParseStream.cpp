@@ -64,7 +64,7 @@ extern AptGCReleaseVector gValuesToRelease;    // off_8324E51C / xb1 qword_14147
 // FLAG (dormant unresolve path): the per-string return to the temporary string pool
 // (xb1 sub_14083F2A0). The pool's per-string release entry point is not yet homed
 // (StringPool exposes only ClearTemporaryPool); reached only on movie UNLOAD.
-extern void AptStringPool_ReleaseString(AptString* pString);
+extern void AptStringPoolReleaseString(AptString* pString);
 
 // The pool-string INTERNER (xb1 sub_140838AE0 == StringPool::FindOrCreate; free
 // forwarder in AptStringPool.cpp -- the full StringPool.h collides with
@@ -327,7 +327,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                             if (pRaw->getVtblIndex() != AptVFT_StringValue)
                                 pRaw = *reinterpret_cast<AptValue**>(
                                     reinterpret_cast<char*>(pRaw) + 0x40);   // the boxed slot
-                            AptStringPool_ReleaseString(static_cast<AptString*>(pRaw));
+                            AptStringPoolReleaseString(static_cast<AptString*>(pRaw));
                         }
                         else
                         {

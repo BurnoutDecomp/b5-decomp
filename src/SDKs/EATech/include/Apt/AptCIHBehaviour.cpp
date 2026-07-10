@@ -1317,26 +1317,26 @@ bool AptCIH::ProcessTextInst()
 // dword_8324E41C/420/424 around AptDisplayList::GeneralisedProcess each frame; the
 // registered callbacks are invoked per node by AptCIH::GeneralisedProcess (above).
 //
-// AptCIH_ProcessTextInstCb is the free-function adapter matching the callback slot
+// AptProcessTextInstCb is the free-function adapter matching the callback slot
 // signature (AptCIH*, AptCIH*, void*) -> unsigned int; it forwards to the node's
 // ProcessTextInst (which reads only its `this`, like the console's r3-in call).
-// AptCIH_RunGeneralisedTextProcess installs it, walks pRoot's subtree via
+// AptRunGeneralisedTextProcess installs it, walks pRoot's subtree via
 // GeneralisedProcess, and restores the slot -- the faithful text-refresh pass a host
 // per-frame driver runs (the console does it inside AptUpdate).
 // ---------------------------------------------------------------------------
 extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);   // dword_8324E41C
 
-unsigned int AptCIH_ProcessTextInstCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx*/)
+unsigned int AptProcessTextInstCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx*/)
 {
     return pNode->ProcessTextInst() ? 1u : 0u;
 }
 
-void AptCIH_RunGeneralisedTextProcess(AptCIH* pRoot)
+void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 {
     if (pRoot == nullptr)
         return;
     unsigned int (*pPrev)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb;
-    AptCIH_sCIHProcessCb = &AptCIH_ProcessTextInstCb;
+    AptCIH_sCIHProcessCb = &AptProcessTextInstCb;
     pRoot->GeneralisedProcess(pRoot, nullptr);
     AptCIH_sCIHProcessCb = pPrev;
 }
@@ -1358,7 +1358,7 @@ void AptCIH_RunGeneralisedTextProcess(AptCIH* pRoot)
 // AS-interpreter, GC, and Apt-runtime boot TUs) ------------------------------------
 // AddToRemList (console AptAnimationTarget::AddToRemList @0x82B...): queue a node that
 // is still externally referenced onto the animation director's removal list.
-void AptAnimationTarget_AddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
+void AptAnimationTargetAddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
 
 // PreDestroy hook (console dword_8324E8A0): the optional process-wide pre-destroy notify
 // callback; null until a host installs it. Owned by the Apt-runtime boot TU.
@@ -1436,7 +1436,7 @@ bool AptCIH::HasEvent(int nEventMask)
 // aClipEvents pairs): the masks-512/4/0x40000 immediate byte-code-block run and
 // the bDeferred __proto__ event-member dispatch are BOTH live below. The only
 // remaining FLAG is the cross-CIH handler rebind sub-branch (see inline).
-int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId,
+int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId,
                                       int bDeferred)
 {
     AptCharacterSpriteInstBase* const pSprite =
@@ -1444,7 +1444,7 @@ int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned in
     AptClipEventHandlerList* pList = pSprite->mpClipEventHandlers;   // charInst word[6]
 
     int nResult = 0;
-    // The same converter-data plausibility guard as _addToSetCaches (see there): a
+    // The same malformed-record pointer gate as _addToSetCaches (see there): a
     // 4-byte-straddled record-array slot marks an unusable (never-relocated) block.
     if (pList != nullptr)
     {
@@ -1631,7 +1631,7 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
     // live in the deferred AS-execution sub-path (FLAG). The integer result the X360
     // returns (0 / 1) is what every caller treats truthily; carried back as the shared
     // value pointer's int role.
-    const int nRan = AptCIH_queueClipEvents_RunMatched(this, nEventMask, nFrameId, bDeferred);
+    const int nRan = AptQueueClipEventsRunMatched(this, nEventMask, nFrameId, bDeferred);
     return reinterpret_cast<AptValue*>(static_cast<intptr_t>(nRan));
 }
 
@@ -1729,7 +1729,7 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // the director / input target hold it in. The unload-event tail + the zombie
 // decision live in ClearCIH itself (shipped order); the helper's int return is
 // vestigial (always 0) and ignored.
-int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
+int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
 
 // ---- the zombie-vector surface (AptGC.cpp) --------------------------------
 // The vector (X360 off_8324E528), the zombies-dirty flag (byte_8324E38F), the
@@ -1743,7 +1743,7 @@ extern void          (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
 extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
 extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 
-// AptCIH_ClearCIH_DrainQueuesAndZombie -- ClearCIH's director-table DRAIN
+// AptClearCIHDrainQueuesAndZombie -- ClearCIH's director-table DRAIN
 // (HOMED 2026-07-02 from the X360 body @0x82AF6020; was the return-0 link-stub,
 // which left cleared nodes dangling in the director's sets/tables -- the bulk
 // removeObject path under mergeState walked them freed): remove the node from
@@ -1755,7 +1755,7 @@ extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 // master/slave teardown -- X360 bl chain @0x82AF6374, XB1 sub_1408333D0).
 // Returns nonzero when the node became a zombie -- the zombie arm is still a
 // staged FLAG (see the note at the ClearCIH call site), so 0 for now.
-int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
+int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 {
     // ---- the director-set / event-slot / new-inst DRAIN --------------------
     AptAnimationTarget* const pDir =
@@ -1824,7 +1824,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     // target's drag/focus slots, the new-insts table, and (when it became externally
     // referenced) the zombie vector + partial GC; run the unload-event tail. Returns
     // nonzero when the node was queued as a zombie (the instance is NOT freed below).
-    AptCIH_ClearCIH_DrainQueuesAndZombie(this, bClearGCRoots);
+    AptClearCIHDrainQueuesAndZombie(this, bClearGCRoots);
 
     // Animation node (type tag 9) -> remove its per-frame timer functions.
     if (mpCharacterInst->GetTypeTag() == 9u && gpAptTarget != nullptr)
@@ -2153,7 +2153,7 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 
     // refcount > 1 (an outside reference survives) -> queue on the director's rem list.
     if (pItem->getRefCount() > 1u && gpAptTarget != nullptr)
-        AptAnimationTarget_AddToRemList(gpAptTarget->mpAnimationTarget, pItem);
+        AptAnimationTargetAddToRemList(gpAptTarget->mpAnimationTarget, pItem);
 
     pItem->Release();   // X360 vtable[1]
     return pItem;

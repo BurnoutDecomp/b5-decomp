@@ -88,10 +88,10 @@ struct AptCharacterAnimation;
 // FLAG (x64 fork): the console reaches it as `addi r3, mpCharacter, 0x10` (the console
 // sizeof(AptCharacter)). On the x64 gate the serialised AptCharacter header widens
 // under the 8-byte pointer rule (GUIAPT64 "1:7:8" layout) so the embedded body lands
-// at char+0x20 -- the same def-base offset AptCIH_GetClipMovie uses (KU_AptEmbeddedMovieOff,
+// at char+0x20 -- the same def-base offset AptGetClipMovie uses (KU_AptEmbeddedMovieOff,
 // AptCIH.h). Where the fixed-up character table / frame count live. Null-safe.
 // ---------------------------------------------------------------------------
-AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter);
+AptCharacterAnimation* AptGetMovieCharacterAnimation(AptCharacter* pCharacter);
 
 struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
 {

@@ -71,9 +71,9 @@ extern EA::Thread::ThreadLocalStorage gAptTargetTls;
 void AptUpdateReplaySavedInputs(int nElapsedMs, int nDepthLayerMask);
 
 // The free-function adapters matching the process-callback slot signature; forward
-// to the node's member pass (same pattern as AptCIH_ProcessTextInstCb in
+// to the node's member pass (same pattern as AptProcessTextInstCb in
 // AptCIHBehaviour.cpp, which homes the text adapter).
-extern unsigned int AptCIH_ProcessTextInstCb(AptCIH* pNode, AptCIH* pRoot, void* pCtx);
+extern unsigned int AptProcessTextInstCb(AptCIH* pNode, AptCIH* pRoot, void* pCtx);
 // FLAG PC-platform leaf: the console installs the member entry point into the plain
 // callback slot directly (r3 == this); the x64 ABI needs a free-function adapter.
 unsigned int AptCIH_ProcessCustomControlsCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx*/)
@@ -188,7 +188,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
         unsigned int (*pPrevCb)(AptCIH*, AptCIH*, void*)  = AptCIH_sCIHProcessCb;
         unsigned int (*pPrevCb1)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb1;
         unsigned int (*pPrevCb2)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb2;
-        AptCIH_sCIHProcessCb  = &AptCIH_ProcessTextInstCb;
+        AptCIH_sCIHProcessCb  = &AptProcessTextInstCb;
         AptCIH_sCIHProcessCb1 = &AptCIH_ProcessCustomControlsCb;
         AptCIH_sCIHProcessCb2 = &AptCIH_ProcessMaskMatriciesCb;
         pAnim->mDisplayList.GeneralisedProcess(0, nDepthLayerMask, 1);

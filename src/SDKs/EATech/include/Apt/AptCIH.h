@@ -49,7 +49,7 @@ struct AptNativeHash;
 // (GUIAPT64 "1:7:8" layout) so the embedded body lands at char+0x20 (VERIFIED vs TITLE_SCREEN02.bundle:
 // movie/sprite body @ char+0x20, where the fixed-up frame count + character table live). We ship ONLY
 // the 8-byte format, so this is a compile-time constant (single native-64 path, matching Fixup). Read by
-// AptCIH_GetClipMovie + AptMovieCharacter_GetAnimation.
+// AptGetClipMovie + AptGetMovieCharacterAnimation.
 static const unsigned int KU_AptEmbeddedMovieOff = 0x20u;
 
 struct AptCIH : public AptValueGC
@@ -229,9 +229,10 @@ struct AptCIH : public AptValueGC
     // string-value placeholder, a negative frame, or a frame past the clip's end.
     int jumpToFrame(int nFrame);   // @0x82B0BD50
 
-    // (_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is homed as
-    // the free AptCIH_gotoAndX in AptCIHNativeFunctionHelper.cpp, its sole caller
-    // family's TU; the duplicate member declaration was retired 2026-07-10.)
+    // _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core (the original
+    // source declares it exactly so). Static: pThis carries the receiver. Body in
+    // AptCIHNativeFunctionHelper.cpp (the caller family's TU; single home).
+    static AptValue* _gotoAndX(AptValue* pThis, int nParams, int bPlay);   // @0x82B0D2F0
 
     // ---- packed state / flags (mFlagsA bit-fields) -----------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110

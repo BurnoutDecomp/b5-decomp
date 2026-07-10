@@ -46,13 +46,13 @@ bool AptExtern::objectMemberSet(AptValue* const /*pThis*/,
 
     // Forward (name, value-string) to the host's extern-variable setter
     // (gAptFuncs.pfnSetExternVariable, X360 dword_8324E854).
-    AptHost_SetExternVariable(pName->c_str(), lValueString.c_str());
+    AptHostSetExternVariable(pName->c_str(), lValueString.c_str());
 
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// AptHost_SetExternVariable -- forward an ActionScript extern-variable write to the
+// AptHostSetExternVariable -- forward an ActionScript extern-variable write to the
 // host's installed callback. The X360 objectMemberSet @0x82AF95F8 issues a single
 // unconditional indirect call `dword_8324E854(name+8, value+8)`; dword_8324E854 is
 // the gAptFuncs (X360 dword_8324E818) host-callback table slot pfnSetExternVariable
@@ -63,7 +63,7 @@ bool AptExtern::objectMemberSet(AptValue* const /*pThis*/,
 // guarded for null here so a write before the host wires the table is a safe no-op
 // during PC bring-up (the slot is null until CgsAptAux installs gAptFuncs).
 // ---------------------------------------------------------------------------
-void AptHost_SetExternVariable(const char* szVar, const char* szValue)
+void AptHostSetExternVariable(const char* szVar, const char* szValue)
 {
     if (gAptFuncs.pfnSetExternVariable != nullptr)   // dword_8324E854
         gAptFuncs.pfnSetExternVariable(szVar, szValue);

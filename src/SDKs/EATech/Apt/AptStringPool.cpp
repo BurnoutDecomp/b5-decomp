@@ -269,6 +269,72 @@ AptString* AptStringPool_FindOrCreate(const char* pName)
 }
 
 // ---------------------------------------------------------------------------
+// ReleaseString (XB1 sub_14083F2A0) -- HOMED 2026-07-10 (retiring the {} stub):
+// the INVERSE of FindOrCreate's hit path, called by _parseStream's unresolve
+// direction per released pool string. Under the intern lock:
+//   * a PINNED node (GC-root count == 63, the clamp) is left alone;
+//   * otherwise decGCRoot (the XB1 (v4-1)<<18 merge under the GC flag lock);
+//   * when the PRE-decrement count was 1 (the last rooted use), UNLINK the node
+//     from its intern bucket chain (the XB1 walks the chain via the +24 next
+//     link) and drop the chain's owning reference (vtbl[1] Release).
+// The bucket is re-derived through the same case-insensitive hash FindOrCreate
+// uses (the XB1 short-cuts through the 16-bit hash cached in the string record;
+// the equality is the chain-pointer identity either way).
+// ---------------------------------------------------------------------------
+void StringPool::ReleaseString(AptString* pString)
+{
+    if (pString == nullptr)
+        return;
+
+    while (_InterlockedExchange(&gStringPoolInternLock, 1) != 0) {}   // XB1 dword_14147A5A0
+
+    const uint32_t nRoot = pString->getGCRoot();      // (v3 = bits 18-23 of the value word)
+    if (nRoot != 63u)                                  // pinned/clamped nodes are permanent
+    {
+        pString->decGCRoot();                          // the (v4-1)<<18 merge (GC flag lock inside)
+
+        if (nRoot == 1u)                               // the last rooted use -> unchain + Release
+        {
+            AptString** const ppBuckets = static_cast<AptString**>(gpAptStringPoolBuckets);
+            if (ppBuckets != nullptr && gnAptStringPoolCount != 0)
+            {
+                const char* const pText = pString->str.GetBuffer();
+                const unsigned int nBucket =
+                    StringPoolHashName(pText != nullptr ? pText : "") % gnAptStringPoolCount;
+
+                if (ppBuckets[nBucket] == pString)     // head hit (XB1 *v5 == a1)
+                {
+                    ppBuckets[nBucket] = pString->GetNext();
+                    pString->Release();                // (*(*a1+8))(a1) -- the chain's ref
+                }
+                else if (ppBuckets[nBucket] != nullptr)
+                {
+                    // Walk to the predecessor whose next is pString (XB1 do/while).
+                    AptString* pPrev = ppBuckets[nBucket];
+                    while (pPrev->GetNext() != nullptr && pPrev->GetNext() != pString)
+                        pPrev = pPrev->GetNext();
+                    if (pPrev->GetNext() == pString)
+                    {
+                        pPrev->SetNext(pString->GetNext());
+                        pString->Release();
+                    }
+                }
+            }
+        }
+    }
+
+    _InterlockedExchange(&gStringPoolInternLock, 0);
+}
+
+// The free forwarder the _parseStream TU calls (the same header-decoupling
+// pattern as the pair above).
+// FLAG PC-platform leaf: header-decoupling forwarder, no console counterpart.
+void AptStringPoolReleaseString(AptString* pString)
+{
+    StringPool::ReleaseString(pString);
+}
+
+// ---------------------------------------------------------------------------
 // The AptString recycle free-list head (X360 off_8324E4FC / PS3 StringPool::
 // spFirstFree). Its single DEFINITION lives in AptGlobals.cpp (the globals home);
 // declared extern here (this TU's ClearTemporaryPool empties it, and the built EATech

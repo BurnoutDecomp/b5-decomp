@@ -232,7 +232,7 @@ AptValue* AptString::sMethod_toUpperCase(AptString* pThis)
 }
 
 // ---------------------------------------------------------------------------
-// AptUTF8_SubString (sub_82AE8ED8) -- the shared UTF-8 substring extractor the
+// AptUTF8SubString (sub_82AE8ED8) -- the shared UTF-8 substring extractor the
 // slice/substring (and the SubString opcode) methods call. Build *pOut from the
 // run of iCount UTF-8 chars starting at the iStart-th char of pSrc. (== the body
 // of EAStringC::UTF8_Mid; kept as the distinct symbol the VM calls.)
@@ -244,7 +244,7 @@ AptValue* AptString::sMethod_toUpperCase(AptString* pThis)
 // (so e.g. start=-2,count=5 -> start=0,count=7, preserving the end). This is the open-coded body of
 // EAStringC::UTF8_Mid(iStart, iCount): walk the buffer to the UTF-8 char
 // boundaries, then do a byte-range Mid.
-static EAStringC* AptUTF8_SubString(EAStringC* pOut, const EAStringC* pSrc, int iStart, int iCount)
+static EAStringC* AptUTF8SubString(EAStringC* pOut, const EAStringC* pSrc, int iStart, int iCount)
 {
     if (iStart < 0)
     {
@@ -301,7 +301,7 @@ AptValue* AptString::sMethod_slice(AptString* pThis, int nArgCount)
     if (nEnd   > nLength) nEnd   = nLength;
 
     EAStringC strSlice;
-    AptUTF8_SubString(&strSlice, &strThis, nStart, nEnd - nStart);
+    AptUTF8SubString(&strSlice, &strThis, nStart, nEnd - nStart);
 
     AptString* pResult = AptString::Create("");
     *pResult->GetInternalString() = strSlice;
@@ -343,7 +343,7 @@ AptValue* AptString::sMethod_substring(AptString* pThis, int nArgCount)
     pThis->toString(&strThis);
 
     AptString* pResult = AptString::Create("");
-    AptUTF8_SubString(pResult->GetInternalString(), &strThis, nStart, nEnd - nStart);
+    AptUTF8SubString(pResult->GetInternalString(), &strThis, nStart, nEnd - nStart);
     return pResult;
 }
 
@@ -358,7 +358,7 @@ AptValue* AptString::sMethod_substring(AptString* pThis, int nArgCount)
 // DECOMPILED from the PS3 body: a2 is the script arg count (undefined when 0); start
 // is toInteger(arg-stack top), defaulting -1; the second arg's toInteger is the
 // length; the negative-start fold is `if (start < 0) start += UTF8_Size`; the extract
-// is UTF8_Mid(start, length) via the shared AptUTF8_SubString helper (a missing/large
+// is UTF8_Mid(start, length) via the shared AptUTF8SubString helper (a missing/large
 // length runs to the end, matching the PS3 one-arg UTF8_Mid tail).
 // ---------------------------------------------------------------------------
 AptValue* AptString::sMethod_substr(AptString* pThis, int nArgCount)
@@ -379,13 +379,13 @@ AptValue* AptString::sMethod_substr(AptString* pThis, int nArgCount)
 
     // PS3 (0xF41074): v10 = start + UTF8_Size; if (start < 0) start = v10 (negative -> from
     // end). NB there is NO clamp-to-0 here: a still-negative start is passed straight into
-    // AptUTF8_SubString, whose own `iCount -= iStart; iStart = 0` GROWS the count to preserve
+    // AptUTF8SubString, whose own `iCount -= iStart; iStart = 0` GROWS the count to preserve
     // the end. Pre-clamping start to 0 (without growing nLength) would drop |start+size| chars.
     if (nStart < 0)
         nStart += nUtf8Size;
 
     EAStringC strSlice;
-    AptUTF8_SubString(&strSlice, &strThis, nStart, nLength);   // start + COUNT
+    AptUTF8SubString(&strSlice, &strThis, nStart, nLength);   // start + COUNT
 
     AptString* pResult = AptString::Create("");
     *pResult->GetInternalString() = strSlice;

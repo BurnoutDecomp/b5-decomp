@@ -144,7 +144,7 @@ AptRenderItem* AptCharacterInst::GetRenderItem() const { return mpRenderItem; }
 AptRenderItem* AptCharacterInst::GetRenderItemWritable()
 {
     AptRenderItem* pWritable =
-        AptRTM_GetTickItemWritable(AptCurrentRenderTreeManager(), mpRenderItem, gnCurrUpdateTick);
+        AptGetTickItemWritable(AptCurrentRenderTreeManager(), mpRenderItem, gnCurrUpdateTick);
     if (mpRenderItem != pWritable)
     {
         pWritable->AddReference();
@@ -223,9 +223,9 @@ void AptCharacterInst::SetIsVisible(bool bVisible)
 // AptRenderTreeManager.cpp (AptRTM_*). Declared extern here (this TU calls them);
 // the earlier no-op stubs were removed to resolve the LNK2005 double-definition.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, AptCIH* pNode,
+extern AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, AptCIH* pNode,
                                 int nSourceArg, int nTick);
-extern AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int nTick);
+extern AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int nTick);
 
 // The X360 render-tree helpers read the live manager through gpCurrentTargetSim's
 // field [11] (console +0x2C) and the current update tick through dword_8324E520.
@@ -238,11 +238,11 @@ extern AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int n
 //                                                 dword_8324E520);
 // Tail-call into the manager's clone entry point; passes the scene node, the
 // source argument (r4->r5), and the current update tick. FLAG: the live
-// double-buffer clone is deferred -- AptRTM_CloneItem is the manager facade.
+// double-buffer clone is deferred -- AptCloneManagedItem is the manager facade.
 // ---------------------------------------------------------------------------
 AptCIH* AptCharacterInst::CloneItem(AptCIH* pNode, int nArg)
 {
-    return AptRTM_CloneItem(AptCurrentRenderTreeManager(), pNode, nArg, gnCurrUpdateTick);
+    return AptCloneManagedItem(AptCurrentRenderTreeManager(), pNode, nArg, gnCurrUpdateTick);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +326,7 @@ AptCIH* AptCharacterInst::ItemInserted(AptCIH* pNode)
     AptRenderTreeManager* pMgr = AptCurrentRenderTreeManager();   // gpCurrentTargetSim[11]
     pNode->mpCharacterInst->GetRenderItemWritable()->Manager_SetDeletionMark(false);  // [c:0x20]
     if (pMgr)
-        AptRTM_ItemMoved(pMgr, pNode, gnCurrUpdateTick);
+        AptManagedItemMoved(pMgr, pNode, gnCurrUpdateTick);
     return pNode;
 }
 
@@ -337,7 +337,7 @@ AptCIH* AptCharacterInst::ItemInserted(AptCIH* pNode)
 // ---------------------------------------------------------------------------
 AptCIH* AptCharacterInst::ItemMoved(AptCIH* pNode)
 {
-    return AptRTM_ItemMoved(AptCurrentRenderTreeManager(), pNode, gnCurrUpdateTick);
+    return AptManagedItemMoved(AptCurrentRenderTreeManager(), pNode, gnCurrUpdateTick);
 }
 
 // ---------------------------------------------------------------------------

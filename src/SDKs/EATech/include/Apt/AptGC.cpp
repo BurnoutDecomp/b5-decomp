@@ -177,13 +177,13 @@ void* AptUpdateZombieVector(char bClear)
 }
 
 // ---------------------------------------------------------------------------
-// AptApt_FlushDeferredReleases -- the per-opcode / stack-empty deferred-release
+// AptFlushDeferredReleases -- the per-opcode / stack-empty deferred-release
 // drain the console inlines as ReleaseValues(off_8324E51C) at each call site (the
 // AS interpreter opcode handlers + the display-list teardown). Homed here as the
 // single de-inlined helper over the real gValuesToRelease vector, retiring the
 // AptRenderLinkStubs {} no-op that dropped every drain. Empty-vector safe.
 // ---------------------------------------------------------------------------
-void AptApt_FlushDeferredReleases()
+void AptFlushDeferredReleases()
 {
     gValuesToRelease.ReleaseValues();
 }

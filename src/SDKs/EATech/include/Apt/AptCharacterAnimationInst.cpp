@@ -28,7 +28,7 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"                      // KU_AptEmbeddedMovieOff (native-8 header size 0x20)
 
 // ---------------------------------------------------------------------------
-// AptMovieCharacter_GetAnimation -- a movie/animation AptCharacter embeds its
+// AptGetMovieCharacterAnimation -- a movie/animation AptCharacter embeds its
 // AptCharacterAnimation movie root by value immediately after the AptCharacter base
 // (X360: `addi r3, mpCharacter, 0x10; blr` -- the embedded timeline, the same embedded
 // movie AptMovie.h documents). The owning character-subtype that would carry it as a
@@ -40,11 +40,11 @@
 // sizeof(AptCharacter)); on the x64 gate the SERIALIZED header widens to 0x20 under the
 // 8-byte pointer rule (the .apt converter's GUIAPT64 "1:7:8" layout). The embedded-root
 // offset is therefore KU_AptEmbeddedMovieOff (0x20 -- the SAME def-base offset
-// AptCIH_GetClipMovie uses; VERIFIED vs TITLE_SCREEN02.bundle), so the returned
+// AptGetClipMovie uses; VERIFIED vs TITLE_SCREEN02.bundle), so the returned
 // AptCharacterAnimation* lands on the real def-base region (where the frame count / the
 // fixed-up character table live). Null-safe.
 // ---------------------------------------------------------------------------
-AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter)
+AptCharacterAnimation* AptGetMovieCharacterAnimation(AptCharacter* pCharacter)
 {
     if (pCharacter == nullptr)
         return nullptr;
@@ -85,7 +85,7 @@ void AptCharacterAnimationInst::PreDestroy()
 //
 // The movie root the two AptCharacterAnimation calls operate on is the
 // AptCharacterAnimation embedded at char+0x10 (reached by name through
-// AptMovieCharacter_GetAnimation -- see the header FLAG). The first call reads the
+// AptGetMovieCharacterAnimation -- see the header FLAG). The first call reads the
 // CURRENT render item's character directly (this->mpRenderItem); the init-indicator
 // reset uses the tick-WRITABLE render item (GetRenderItemWritable, evaluated twice
 // in the asm: once for the null guard, once for the character pointer).
@@ -104,13 +104,13 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
     // Tear down the imported movie's character list (drop a character reference per
     // table entry). The movie root is embedded in the current render item's
     // character at char+0x10.
-    AptMovieCharacter_GetAnimation(mpRenderItem->mpCharacter)->ClearCharacterList();
+    AptGetMovieCharacterAnimation(mpRenderItem->mpCharacter)->ClearCharacterList();
 
     // If the writable render item still owns a character, restore that movie's init
     // indicators (the instance is going away before all its init actions ran).
     if (GetRenderItemWritable()->mpCharacter)
     {
-        AptMovieCharacter_GetAnimation(GetRenderItemWritable()->mpCharacter)->ResetInitIndicators();
+        AptGetMovieCharacterAnimation(GetRenderItemWritable()->mpCharacter)->ResetInitIndicators();
     }
 
     // Drop one reference on the imported source .apt file; delete the shared AptFile
@@ -238,7 +238,7 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     laIncArg.pData = laHeldFile.pData;                // v16[0] = *a3
     if (laIncArg.pData != nullptr)
         AptSharedPtrIncRef(laIncArg.pData);           // lwarx/+1/stwcx. @0x82AFFE50
-    AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter)
+    AptGetMovieCharacterAnimation(pInst->mpRenderItem->mpCharacter)
         ->IncCharacterList(laIncArg);                 // IncCharacterList(*(mpRenderItem->mpChar)+embed, v16) @0x82AFFE74
 
     // Drop the by-value pin (v16[0]): the asm decrefs it after the call and deletes at

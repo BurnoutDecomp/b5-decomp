@@ -42,9 +42,9 @@ struct AptCIH;
 // home file can reference them without editing the manager header; the live
 // double-buffer bodies are deferred (single-buffer bring-up).
 // ---------------------------------------------------------------------------
-struct AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
+struct AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
                                 int nSourceArg, int nTick);
-struct AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick);
+struct AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick);
 
 // ---------------------------------------------------------------------------
 // FLAG (homed by the AptRenderTreeManager / AptTargetSim TUs, not yet built):
@@ -53,11 +53,11 @@ struct AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode
 // gpCurrentTargetSim+0x2C offset) so the x64 layout stays correct. Null until a
 // target sim is active.
 //   AptCurrentRenderTreeManager() -> gpCurrentTargetSim's manager, or null.
-//   AptRTM_GetTickItemWritable   -> AptRenderTreeManager::Update_GetTickItemWritable
+//   AptGetTickItemWritable   -> AptRenderTreeManager::Update_GetTickItemWritable
 // (AptRTM_CreateItem removed -- unused; the manager path calls Update_CreateItem directly.)
 // ---------------------------------------------------------------------------
 AptRenderTreeManager* AptCurrentRenderTreeManager();
-AptRenderItem*        AptRTM_GetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick);
+AptRenderItem*        AptGetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick);
 extern int            gnCurrUpdateTick;
 
 struct AptCharacterInst

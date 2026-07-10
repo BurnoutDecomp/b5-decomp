@@ -109,25 +109,26 @@ extern void (*gpAptBackToScriptHook)(void* pPayload);   // dword_8324E828 (FLAG)
 // raw-but-faithful call-site signatures so the timeline driver links):
 struct AptCIH;
 extern AptCIH* AptGetAnimationAtLevel(int nLevel);                       // _AptGetAnimationAtLevel @0x82B00788 (canonical AptCIH*; void* blob walk binds)
-extern void* AptPseudoDisplayList_FindInst(void* pList, void* pSource,   // AptPseudoDisplayList::FindInst
-                                           unsigned char* pOutHit, void** ppExisting,
-                                           void* pContext, void* pInfo);
+// (The invented 6-arg AptPseudoDisplayListFindInst extern was RETIRED 2026-07-10:
+// the console DoTemporaryFrameControls place arm calls the real 3-arg member
+// AptPseudoDisplayList::FindInst(key, &existing, &pred) -- asm-verified r4=depth
+// key, r5=&pred, r6=&existing. The stub it bound to nulled every lookup, so a
+// jumpToFrame replay re-created every already-live pseudo node.)
 // AptPseudoDisplayList_Insert retired: the real member AptPseudoDisplayList::Insert is called directly.
-extern void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions (FLAG deferred; see AptRenderLinkStubs.cpp)
-extern void* AptFile_operator(void* pDst, void* pSrc);                   // AptFile::operator=
+extern void  AptExecuteInitActionsGate(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions (FLAG deferred; see AptRenderLinkStubs.cpp)
 
 // sub_82B0AE08 @0x82B097D8's caller-side dispatcher (the place-command handler doFrameControls
-// invokes for each tag-3 record). HOMED below (2026-07-01) as AptMovie_PlaceCommand -- it reads
+// invokes for each tag-3 record). HOMED below (2026-07-01) as AptDispatchPlaceCommand -- it reads
 // the serialised place-info record + calls the faithfully-homed AptDisplayList::placeObjectNCXForm.
-static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent);
+static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent);
 
 // sub_82AFD150 @0x82AFD150 -- the remove-command dispatcher (doFrameControls' tag-4 twin of
-// AptMovie_PlaceCommand). HOMED (2026-07-04; was an AptRenderLinkStubs no-op, which left every
+// AptDispatchPlaceCommand). HOMED (2026-07-04; was an AptRenderLinkStubs no-op, which left every
 // timeline-removed element on screen -- the title menu items stacked their whole state band).
 // X360 body (two calls, both already homed):
 //   AptDisplayListState::findInst(*a1, a2, 0, &prev, &match);   // r3=*list (the state), r4=depth
 //   AptDisplayList::removeObject(a1, match);
-static void AptMovie_RemoveCommand(AptDisplayList* pDisplayList, int nDepth)
+static void AptDispatchRemoveCommand(AptDisplayList* pDisplayList, int nDepth)
 {
     AptCIH* pPrev  = nullptr;   // the console's 12-byte prev triple; only the out-pointers matter
     AptCIH* pMatch = nullptr;
@@ -213,12 +214,13 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
             const int32_t nFlags = CmdI32(pBody, 0x00);   // serialized .apt place record
             const int32_t nDepth = CmdI32(pBody, 0x04);   // [c: cmd+0x08]
 
-            unsigned char chMode = 0;                  // var_60 (BYREF)
-            void* pExisting = nullptr;                  // the existing-node out
-            // FindInst keys by the placement depth (the console passes the depth word).
-            AptPseudoDisplayList_FindInst(pPseudoList,
-                                          reinterpret_cast<void*>(static_cast<intptr_t>(nDepth)),
-                                          &chMode, &pExisting, a5, pBody);
+            // FindInst keys by the placement depth (console r4 = the depth word;
+            // r5 = &pred (var_5C), r6 = &existing (var_60) -- the real 3-arg member).
+            AptPseudoCIH_t* lpPred     = nullptr;   // var_5C (BYREF; unused by this arm)
+            AptPseudoCIH_t* lpExisting = nullptr;   // var_60 (the existing-node out)
+            pPseudoList->FindInst(reinterpret_cast<void*>(static_cast<intptr_t>(nDepth)),
+                                  &lpExisting, &lpPred);
+            void* const pExisting = lpExisting;
 
             int32_t nResolvedId = CmdI32(pBody, 0x08);   // [c: cmd+0x0C] serialized .apt place record
             void* pCharacter = nullptr;
@@ -279,7 +281,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
             // native-8 bundles keep imports as genuine import-table entries). Feeding a
             // null-character node into the replay would hand mergeState's AddToDisplayList
             // a null character to instantiate (AV -- reproduced on the drive bundles' menu
-            // state jumps). Skip it, exactly as AptMovie_PlaceCommand skips the fresh place.
+            // state jumps). Skip it, exactly as AptDispatchPlaceCommand skips the fresh place.
             if (nResolvedId != -1 && pCharacter == nullptr)
                 continue;
 
@@ -497,7 +499,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 const int32_t nId = CmdI32(reinterpret_cast<void*>(luBody), 0x08);   // serialized .apt place record: charId @body+0x08
 
                 // ---- place: run the placed character's init actions -----------
-                AptCharacterAnimation_ExecuteInitActions(pAnim, pParent, nId);   // FLAG deferred: the real member runs away at boot frame 3 (init-action VM path incomplete) -- see AptRenderLinkStubs.cpp
+                AptExecuteInitActionsGate(pAnim, pParent, nId);   // FLAG deferred: the real member runs away at boot frame 3 (init-action VM path incomplete) -- see AptRenderLinkStubs.cpp
 
                 // Bind the placed character's animation file (native-8 named members): a
                 // placed char with no file yet takes the import-table entry matching its id,
@@ -524,14 +526,14 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 }
 
                 // Dispatch the place: the info record is at cmd+4 (the console r31 base).
-                AptMovie_PlaceCommand(pDisplayList, reinterpret_cast<char*>(pCmd) + 4, pParent);
+                AptDispatchPlaceCommand(pDisplayList, reinterpret_cast<char*>(pCmd) + 4, pParent);
             }
             else if (eTag == 4)
             {
                 // remove: drop the node at the command's depth (sub_82AFD150; XB1 inlines
                 // the same walk). Native-8 payload @cmd+8 (XB1 asm `mov r8d,[rbx+8]`);
                 // dual-format read while converter-era bundles are still staged.
-                AptMovie_RemoveCommand(pDisplayList, CmdPayloadI32(pCmd));
+                AptDispatchRemoveCommand(pDisplayList, CmdPayloadI32(pCmd));
             }
             else if (eTag == 5 && !gbAptBackToScriptFired)
             {
@@ -552,7 +554,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
 }
 
 // ===========================================================================
-// AptMovie_PlaceCommand -- sub_82B0AE08 @0x82B0AE08 (the place-command dispatcher the
+// AptDispatchPlaceCommand -- sub_82B0AE08 @0x82B0AE08 (the place-command dispatcher the
 // timeline path invokes for each tag-3 record). DECOMPILED FAITHFULLY from the X360
 // ARTIST.XEX. It reads the serialised PlaceObject record and calls the faithfully-homed
 // AptDisplayList::placeObjectNCXForm to create/update the placed AptCharacterInst at the
@@ -579,7 +581,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
 // (bit0). It resolves the character, builds the EAStringC name (when HasName), and calls
 // placeObjectNCXForm. Reconstructed by ROLE using the homed placeObjectNCXForm (named types).
 // ===========================================================================
-static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent)
+static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent)
 {
     // The record body is pointer-aligned after the tag (FrameItem::Write Align()); the caller
     // passes record+4, so align it up to the 8-byte pointer boundary to reach the body base.

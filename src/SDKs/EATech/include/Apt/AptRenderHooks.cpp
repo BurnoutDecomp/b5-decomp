@@ -51,16 +51,16 @@ void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTi
         gAptFuncs.pfnDrawRenderingUnit(lpRenderingUnit, eOp, nTick);
 }
 
-// AptHook_DrawImportGlyph / AptHook_ResolveImport -- the imported-sub-character draw/resolve
+// AptHookDrawImportGlyph / AptHookResolveImport -- the imported-sub-character draw/resolve
 // path. FLAG: deferred with the .apt parse (the import-resolution branch in AptCharacter::render
 // couples to the full loaded-.apt data layout). Homed as no-ops so the link is satisfied; the
 // common (non-importing) shape path -- the boot-UI case -- renders correctly through DrawShape.
-void AptHook_DrawImportGlyph(AptCharacter* /*pImport*/, int /*nIndex*/, void* /*pGlyphData*/)
+void AptHookDrawImportGlyph(AptCharacter* /*pImport*/, int /*nIndex*/, void* /*pGlyphData*/)
 {
     // FLAG: imported-glyph draw deferred (the .apt import table is reconstructed with the parse).
 }
 
-int AptHook_ResolveImport(void* /*pImportFileData*/, int /*nImportId*/)
+int AptHookResolveImport(void* /*pImportFileData*/, int /*nImportId*/)
 {
     // FLAG: imported-id resolution deferred (the .apt import table is reconstructed with the parse).
     return 0;

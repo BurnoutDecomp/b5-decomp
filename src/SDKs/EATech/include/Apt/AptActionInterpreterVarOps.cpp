@@ -24,7 +24,7 @@
 //     tag for an indirect string; the raw offset is noted at its one use.
 //   * the deferred-release value-vector drain after a SetVariable empties the
 //     operand stack (console off_8324E51C / AptValueVector::ReleaseValues) is the
-//     AptGC layer (Adriwin's TU); encapsulated in AptApt_FlushDeferredReleases.
+//     AptGC layer (Adriwin's TU); encapsulated in AptFlushDeferredReleases.
 //     The stack-empty guard that triggers it is faithful + engine-side.
 //
 // The member opcodes GetMember/SetMember (0x4E/0x4F) are the follow-on: they add
@@ -45,7 +45,7 @@
 // `if (vector.count) vector.ReleaseValues()`). The vector type + global are not
 // reconstructed yet, so the flush is encapsulated here; SetVariable's stack-empty
 // guard (faithful, engine-side) decides when to call it.
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 // ---------------------------------------------------------------------------
 // AptValue::Get_ToString @0x82AD8558 -- coerce a value to an EAStringC name.
@@ -115,5 +115,5 @@ void AptActionInterpreter::_FunctionAptActionSetVariable(AptActionInterpreter* p
     pInterp->stackPop(2);                                 // pop name + value
 
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }

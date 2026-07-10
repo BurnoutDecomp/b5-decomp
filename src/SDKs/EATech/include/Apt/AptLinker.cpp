@@ -761,14 +761,47 @@ void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst)
 //   X360: if(dword_8324E844) dword_8324E844(file->name+8, cih->assetString+8);
 //         if(dword_8324E518){ build a 6-tag string from file->name; dword_8324E830(&s); }
 // Both are host-installed function-pointer slots (the gAptFuncs host-callback
-// family, the same indirection as pfnSetExternVariable). They are null until the
-// host installs them; the console guards each call with its slot, so when unwired
-// nothing fires. FLAG: host notify hooks deferred -- no-op while the slots are null
-// (faithful to the `if(slot)` console guards during bring-up).
+// family, the same indirection as pfnSetExternVariable). The console guards each
+// call with its slot, so with no host installer the empty body IS the shipped
+// behaviour.
+// FLAG PC-platform leaf: host link-notify fn-ptr slots (dword_8324E844/8324E830),
+// un-installed on the PC title path -- the console's if(slot) guards skip both.
 // ---------------------------------------------------------------------
 void FireLinkNotifyCallbacks(AptFile* /*pFile*/, AptCIH* /*pCIH*/)
 {
-    // dword_8324E844 / dword_8324E830 host hooks -- deferred (null during bring-up).
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::isFileImported @0x82AECC58 -- HOMED 2026-07-10 (retiring the
+// return-false link-stub, which made CancelPreloadedAnimation treat every
+// candidate as un-imported). For each thingy the linker tracks, hand its file a
+// FRESH COUNTED COPY of the candidate (AptFile::isFileImported consumes its
+// argument each probe -- the console's per-iteration lwarx/stwcx IncRef); a hit
+// answers true. Either way the ORIGINAL candidate handle is consumed at exit
+// (Dispose + null), matching the asm's shared tail.
+// ---------------------------------------------------------------------
+bool AptLinker::isFileImported(AptFilePtr* ppCandidate)
+{
+    bool bImported = false;
+    for (AptSingleListNode* pNode = mpThingyListHead; pNode != nullptr; pNode = pNode->mpNext)
+    {
+        // A fresh counted copy of the candidate for this probe (consumed by the callee).
+        AptFile* pLocal = ppCandidate->pData;          // lwz r11, 0(r31)
+        if (pLocal != nullptr)
+            AptSharedPtrIncRef(pLocal);                // the lwarx/stwcx ++ on +0
+
+        if (pNode->mpThingy->mpFile.pData->isFileImported(&pLocal))   // r3 = *(thingy+4)
+        {
+            bImported = true;                          // loc_82AECCF4
+            break;
+        }
+    }
+
+    // Shared tail: consume the original candidate (Dispose + null the slot).
+    AptFile* const pOld = ppCandidate->pData;
+    ppCandidate->pData = nullptr;
+    AptFilePtr::Dispose(pOld);                         // bl AptFile___Dispose
+    return bImported;
 }
 
 // ---------------------------------------------------------------------

@@ -7,7 +7,7 @@
 // assembly. x64-native: 8-byte pointers, NAMED members, console offsets only in
 // [c:0xNN] comments.
 //
-//   AptInterp_ResolveTargetContext  <- console sub_82B02F80 (the path-context
+//   AptResolveTargetContext  <- console sub_82B02F80 (the path-context
 //       resolver getVariable/CallFunction/StartDrag/GotoFrame2 all wrap)
 //   AptInterp_HasMember             <- console sub_82AE4058 (the bounded own/proto
 //       member probe)
@@ -66,7 +66,7 @@ AptNativeHash* AptActionInterpreter::GetNodeFrameContextHash(AptValue* pContext)
 extern AptValue* gpUndefinedValue;   // off_8324D814 (AptValueConvert.cpp)
 
 // ---------------------------------------------------------------------------
-// AptInterp_ResolveTargetContext @0x82B02F80 -- resolve pName into (*ppOutContext,
+// AptResolveTargetContext @0x82B02F80 -- resolve pName into (*ppOutContext,
 // *pOutLeaf) under (pScope, pTarget). When the name is a plain identifier (no path
 // separator: no byte < '0' and no ':') AND there is no explicit target, the scope
 // IS the context and the whole name IS the leaf -- copy it through and return. Any
@@ -74,7 +74,7 @@ extern AptValue* gpUndefinedValue;   // off_8324D814 (AptValueConvert.cpp)
 // whose leaf-name out-param is copied into pOutLeaf. The console returns the context
 // kind (int); the callers ignore it, so the shim is void.
 // ---------------------------------------------------------------------------
-void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
                                     const EAStringC* pName,
                                     AptValue** ppOutContext, EAStringC* pOutLeaf)
 {
@@ -348,9 +348,9 @@ bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStrin
 // x64-native: 8-byte pointers, NAMED members, console offsets only in [c:0xNN].
 //
 //   AptActionInterpreter_valueToObject       <- valueToObject       X360 @0x82B07FB8 / PS3 0xF563DC
-//   AptActionInterpreter_ParsePathContext    <- sub_82B02F80 (alias of ResolveTargetContext above)
+//   (the ParsePathContext alias of sub_82B02F80 was retired; ResolveTargetContext is the single home)
 //   AptActionInterpreter_EnumerateMembers    <- _doEnumerate        X360 @0x82B036D8
-//   AptActionInterpreter_BuildPathName       <- sub_82AF7400 (the getName/getName2 path walk)
+//   AptBuildPathName       <- sub_82AF7400 (the getName/getName2 path walk)
 //   AptActionInterpreter_loadVariables       <- loadVariables       X360 @0x82B07DF8 / PS3 0xF54764
 //   AptActionInterpreter_doCloneSprite       <- _doCloneSprite      X360 @0x82B0DC60 / PS3 0xF608AC
 //   AptActionInterpreter_CallFunctionDispatch <- callFunction       X360 @0x82AE3C08 / PS3 0xF57A90
@@ -408,24 +408,10 @@ void AptActionInterpreter::valueToObject(AptValue* pScope, AptValue* pTarget,
     }
 }
 
-// ---------------------------------------------------------------------------
-// AptActionInterpreter_ParsePathContext -- the same console path-context resolver
-// (sub_82B02F80) AptInterp_ResolveTargetContext already homes above; getObject /
-// getName declare this second extern alias of it. Forward to the single body.
-// ---------------------------------------------------------------------------
-void AptActionInterpreter_ParsePathContext(AptActionInterpreter* pInterp,
-                                           AptValue* pTarget, const EAStringC* pName,
-                                           AptValue** ppOutContext, EAStringC* pOutLeaf)
-{
-    // console sub_82B02F80(a1, a2=target, a3=name, a4=&ctx, a5=&leaf): a1 is the scope
-    // value the parser resolves against (and the value it stores into *ppOutContext in
-    // the plain-identifier branch). getObject reaches this with a1 == its own first
-    // argument (the X360 collapses scope == the implicit `this`), so the interpreter
-    // pointer it forwards IS that scope value -- pass it straight through, exactly as
-    // the already-homed ResolveTargetContext (the same routine) does.
-    AptInterp_ResolveTargetContext(reinterpret_cast<AptValue*>(pInterp),
-                                   pTarget, pName, ppOutContext, pOutLeaf);
-}
+// (The AptActionInterpreter_ParsePathContext alias-forwarder of the resolver above
+// was RETIRED 2026-07-10: getObject calls AptResolveTargetContext directly with the
+// SCOPE value -- the forwarder passed the interpreter pointer as the scope, which
+// mis-resolved every valueToObject path whose scope was not the interpreter.)
 
 // FLAG (host URL-variable fetch -- console indirect through dword_8324E84C (named-URL
 // fetch) / dword_8324E850 (default no-arg fetch); each returns the AptValue whose
@@ -546,7 +532,7 @@ void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
 // "instance<idx>" name (which is also bound back into the parent's property hash so
 // the name sticks); the root contributes "_level<idx>".
 // ---------------------------------------------------------------------------
-int AptActionInterpreter_BuildPathName(AptActionInterpreter* /*pInterp*/,
+int AptBuildPathName(AptActionInterpreter* /*pInterp*/,
                                        AptValue* pValue, EAStringC* pOut, int nMode)
 {
     const char* const szSep = nMode ? "." : "/";        // console v5 = a3 ? "." : "/"
@@ -556,7 +542,7 @@ int AptActionInterpreter_BuildPathName(AptActionInterpreter* /*pInterp*/,
     if (pParent)
     {
         // Recurse up to the root first (the console threads pOut through as a2).
-        AptActionInterpreter_BuildPathName(nullptr, pParent, pOut, nMode);
+        AptBuildPathName(nullptr, pParent, pOut, nMode);
 
         EAStringC& strName = pNode->mInstanceName;                 // console *(v3+8)
         if (strName.GetInternalSize() == 0)   // console: *(v3+8) == &unk_82F72FF8 (the empty sentinel)
@@ -937,10 +923,10 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
 
 // FLAG (the AptGC deferred-release flush -- console AptValueVector::ReleaseValues over
 // off_8324E51C / gpValuesToRelease; the same boundary the sibling SpecialOps TUs reach
-// through AptApt_FlushDeferredReleases): _parseStream drains it once per processed
+// through AptFlushDeferredReleases): _parseStream drains it once per processed
 // opcode (resolve direction) and once up front (unresolve direction). Declared here so
 // the transcode walk stays faithful; the host vector type/global are not reconstructed.
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 // FLAG (the per-opcode inline-operand POINTER REBASE -- the only part of _parseStream
 // that touches the .apt constant-pool / function-record / dictionary operand SHAPES.
@@ -953,7 +939,7 @@ extern void AptApt_FlushDeferredReleases();
 // the documented .apt-resolve follow-on -- encapsulated, NOT fabricated. The PC-advance
 // walk below (which determines this routine's return value, the only thing _parseStream
 // consumes) is reconstructed exactly from the PS3 opcode-length switch.):
-static void AptInterp_RebaseActionOperands(const unsigned char* /*pAction*/, int /*nOpcode*/,
+static void AptRebaseActionOperands(const unsigned char* /*pAction*/, int /*nOpcode*/,
                                            int /*nRelocBase*/, AptConstFile* /*pResolveCtx*/,
                                            int /*nDirection*/)
 {
@@ -985,7 +971,7 @@ const unsigned char* AptActionInterpreter::ResolveTranscode(const unsigned char*
 
     // console: the unresolve direction drains the deferred-release vector up front.
     if (bUnresolve)
-        AptApt_FlushDeferredReleases();          // console: ReleaseValues(off_8324E51C)
+        AptFlushDeferredReleases();          // console: ReleaseValues(off_8324E51C)
 
     const unsigned char* p = pStream;
     while (true)
@@ -1014,45 +1000,45 @@ const unsigned char* AptActionInterpreter::ResolveTranscode(const unsigned char*
             // GetUrl-style: two 4-byte-aligned pointer operands.
             case 131:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 8);
-                AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
+                AptRebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
             // DefineDictionary / constant-pool: {count, array-ptr}.
             case 136: case 150:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 8);
-                AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
+                AptRebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
             // a single 4-byte-aligned pointer operand (push-string / get-member forms).
             case 139: case 140: case 161: case 164: case 165: case 166: case 167:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 4);
-                AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
+                AptRebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
             // DefineFunction record (0x1C bytes of name/arg/body pointers).
             case 142:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 28);
-                AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
+                AptRebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
             // Try record (0x14 bytes); the 0x4 flag bit means no rebase.
             case 143:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 20);
                 if ((*reinterpret_cast<const int*>(aligned4 + 0xC) & 4) == 0)   // serialized .apt Try record: flag @+0xC
-                    AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
+                    AptRebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
             // BranchAlways/If: a single 4-byte-aligned signed PC offset (rebased by the
             // post-operand position, not nRelocBase -- the console adds/subtracts a1).
             case 148:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 4);
-                AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
+                AptRebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
             // DefineFunction2 record (0x18 bytes + register-preload list).
             case 155:
                 p = reinterpret_cast<const unsigned char*>(aligned4 + 24);
-                AptInterp_RebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
+                AptRebaseActionOperands(pAction, nOpcode, nRelocBase, pCtx, nDirection);
                 break;
 
             // one trailing operand byte.
@@ -1073,6 +1059,6 @@ const unsigned char* AptActionInterpreter::ResolveTranscode(const unsigned char*
         // console (@0x82AF3AB0): the per-opcode ReleaseValues drain runs on the UNRESOLVE
         // path only (r25==0 i.e. a3!=0); the resolve direction never drains between opcodes.
         if (bUnresolve)
-            AptApt_FlushDeferredReleases();
+            AptFlushDeferredReleases();
     }
 }

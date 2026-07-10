@@ -469,10 +469,10 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
 // the deep node->timeline/native-hash chains are not yet reconstructed as named
 // members, so they are encapsulated as flagged externs rather than raw console
 // offset arithmetic):
-//   * AptInterp_ResolveTargetContext (console sub_82B02F80) -- parse the path
+//   * AptResolveTargetContext (console sub_82B02F80) -- parse the path
 //     context out of a name into (out context-value, out leaf-name) under
 //     (scope, target). The same path-context resolver getObject uses.
-//   * AptInterp_LabelToFrame (console: AptNativeHash::Lookup of the node's frame-
+//   * AptLabelToFrame (console: AptNativeHash::Lookup of the node's frame-
 //     label hash, then AptValue::toInteger) -- the frame index for a label, or -1.
 //   * AptCIH_jumpToFrame / AptCIH_SetDirtyState -- the play-head seek + dirty
 //     latch (un-homed AptCIH play-head subsystem; shared with SpecialOps).
@@ -490,7 +490,7 @@ void AptActionInterpreter::_FunctionAptActionStringDictByteGetVar(AptActionInter
 // FLAG (console sub_82B02F80 -- path-context resolver; the same one getObject's
 // AptActionInterpreter_ParsePathContext wraps, here in its raw asm arg shape):
 // resolve pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget).
-extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
                                            const EAStringC* pName,
                                            AptValue** ppOutContext, EAStringC* pOutLeaf);
 
@@ -499,7 +499,7 @@ extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
 // or -1 when absent. The node->char-inst->AptMovie->labelHash chain is not yet a
 // named-member path, so the lookup is encapsulated (AptMovie::labelToFrame is its
 // VM-free sibling).
-extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
+extern int AptLabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 
 // FLAG (un-homed AptCIH play-head subsystem -- shared shims, matching SpecialOps):
 // AptCIH_jumpToFrame retired: the real member AptCIH::jumpToFrame (AptCIH.cpp) is used directly.
@@ -532,7 +532,7 @@ extern int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel);
 // FLAG (console: a FrameStack-typed (tag 14) function name owning >=1 local resolves
 // to its first slot's captured value -- *Variable[8] when Variable[10] (local count)
 // > 0; the AptFrameStack slot array is not yet a named member, so it is encapsulated).
-extern AptValue* AptInterp_FrameStackFirstLocal(AptValue* pFrameStack);
+extern AptValue* AptFrameStackFirstLocal(AptValue* pFrameStack);
 
 // AptActionInterpreter::_createObject @0x82B08088 -- the value-materialiser; HOMED in
 // this TU (defined at the bottom of this file, declared in AptActionInterpreter.h).
@@ -607,7 +607,7 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
     if (pFunction->getVtblIndex() == AptVFT_Array && pFunction->getIsDefined())
     {
         // console: Variable[10] (local count) > 0 && *Variable[8] (first slot) != 0
-        AptValue* const pFirst = AptInterp_FrameStackFirstLocal(pFunction);  // FLAG: frame-stack slot
+        AptValue* const pFirst = AptFrameStackFirstLocal(pFunction);  // FLAG: frame-stack slot
         pFunction = pFirst ? pFirst : gpUndefinedValue;
     }
 
@@ -619,7 +619,7 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
     {
         const EAStringC* const pName = AptValue::Get_ToString(pFunction, &scratch);
 
-        AptInterp_ResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+        AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pName, &pResolvedScope, &scratch);
         // console getVariable(this, resolvedContext, target, &leafName, 1, 1, 0).
         pFunction = pInterp->getVariable(pResolvedScope, pContext->mpPendingReleaseValue,
@@ -665,8 +665,8 @@ void AptActionInterpreter::_FunctionAptActionCallFunction(AptActionInterpreter* 
 //   * GetBoxedStringSlot -- the boxed-string indirection the console takes at
 //     (value + 0x20) (console *(v6 + 32)) when a boxed string (tag 33) holds its real
 //     EAStringC one indirection deeper.
-extern EAStringC** AptValue_GetMethodNameSlot(AptValue* pObject);   // FLAG: (objectValue + 8)
-extern AptValue*   AptValue_GetClassOwnerValue(AptValue* pValue);   // FLAG: (value + 0x1C)
+extern EAStringC** AptGetMethodNameSlot(AptValue* pObject);   // FLAG: (objectValue + 8)
+extern AptValue*   AptGetClassOwnerValue(AptValue* pValue);   // FLAG: (value + 0x1C)
 
 // The bounded method-name probe is now the static AptActionInterpreter::HasMember member
 // (console sub_82AE4058; declared in the header).
@@ -725,7 +725,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         {
             // FLAG: v12 = *(v7 + 7) -- the name slot holds the resolved method value
             // (a raw word the console reads as an AptValue*).
-            pMethod = AptValue_GetClassOwnerValue(pMethodName);   // console v12 = *(v7 + 7) (the +0x1C owner/ctor slot; FLAG stub -> null -> falls to the resolve arm)
+            pMethod = AptGetClassOwnerValue(pMethodName);   // console v12 = *(v7 + 7) (the +0x1C owner/ctor slot; FLAG stub -> null -> falls to the resolve arm)
             const int nReg = pInterp->mnCallStackB_Count;          // console a1[12] (+0x30)
             if (nReg)
             {
@@ -920,7 +920,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
              || nNameType == 37;                                   // CIHNone
             // console: a class-matched name whose owner slot (v7+0x1C) == pTopFrame, or
             // v7 == pTopFrame, is already bound.
-            if ((!bClassMatch || AptValue_GetClassOwnerValue(pMethodName) != pTopFrame)
+            if ((!bClassMatch || AptGetClassOwnerValue(pMethodName) != pTopFrame)
                 && pMethodName != pTopFrame)
             {
                 // console: v46 = (*(*v44+8))(v44); while (v46) { v47 = *(v46+8);
@@ -1138,11 +1138,11 @@ void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pIn
         const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
 
         AptValue* pResolved = nullptr;                     // console v15
-        AptInterp_ResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+        AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pName, &pResolved, &scratch);
         // console: AptNativeHash::Lookup(resolved's frame-label hash, &scratch) -> toInteger
         if (pResolved)
-            nFrame = AptInterp_LabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
+            nFrame = AptLabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
     }
     else if (eType == AptVFT_Integer && pTop->getIsDefined())
     {
@@ -1155,7 +1155,7 @@ void AptActionInterpreter::_FunctionAptActionCallFrame(AptActionInterpreter* pIn
     {
         // Console: runFrameActions(<node->charInst->renderItem->character + movie body>,
         // node, nFrame) -- the bound clip's embedded AptMovie (the same char+movie-off
-        // chain AptCIH_GetClipMovie models), run against the node.
+        // chain AptGetClipMovie models), run against the node.
         AptCIH* const pNode = pContext->mpCIH;
         AptCharacter* const pCharacter =
             pNode->GetCharacterInst()->mpRenderItem->mpCharacter;
@@ -1195,7 +1195,7 @@ void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*p
             pNode = static_cast<AptCIH*>(pContext->mpPendingReleaseValue);
     }
 
-    const int nFrame = AptInterp_LabelToFrame(pNode, &label);   // FLAG: node frame-label hash
+    const int nFrame = AptLabelToFrame(pNode, &label);   // FLAG: node frame-label hash
     if (nFrame >= 0)
     {
         pNode->jumpToFrame(nFrame);                             // real member (play-head seek)
@@ -1252,7 +1252,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
         const EAStringC* const pName = AptValue::Get_ToString(pTop, &scratch);
 
         AptValue* pResolved = nullptr;                     // console v31
-        AptInterp_ResolveTargetContext(pContext->mpCIH, pTarget, pName,
+        AptResolveTargetContext(pContext->mpCIH, pTarget, pName,
                                        &pResolved, &scratch);
         if (pResolved)
         {
@@ -1260,7 +1260,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
             // console: a clip / CIHNone resolved node -> look up the label in its hash
             if ((eRes == AptVFT_CharacterInstHandle && pResolved->getIsDefined())
                 || eRes == AptVFT_CIHNone)
-                nFrame = AptInterp_LabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
+                nFrame = AptLabelToFrame(static_cast<AptCIH*>(pResolved), &scratch);
         }
     }
     else if (eType == AptVFT_Integer && pTop->getIsDefined())
@@ -1556,7 +1556,7 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
 
 // ===========================================================================
 // FLAG-stub homes for the two object-internal offset accessors declared extern
-// above (AptValue_GetMethodNameSlot / AptValue_GetClassOwnerValue).
+// above (AptGetMethodNameSlot / AptGetClassOwnerValue).
 //
 // These are NOT standalone functions in any of the three dumps (X360 ARTIST,
 // PS3 DecFIGS/External, BurnoutPR PC): they are inline pointer-arithmetic reads
@@ -1574,7 +1574,7 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
 //   (Listed in functions_blocked: absent from all three dumps + unrecovered
 //    object layout.)
 // ===========================================================================
-EAStringC** AptValue_GetMethodNameSlot(AptValue* /*pObject*/)
+EAStringC** AptGetMethodNameSlot(AptValue* /*pObject*/)
 {
     // FLAG: console (object + 8) -- the method-name EAStringC* slot; the x64 member
     // is not recovered. Inert until the AS call-method opcode is brought up (not on
@@ -1582,7 +1582,7 @@ EAStringC** AptValue_GetMethodNameSlot(AptValue* /*pObject*/)
     return nullptr;
 }
 
-AptValue* AptValue_GetClassOwnerValue(AptValue* /*pValue*/)
+AptValue* AptGetClassOwnerValue(AptValue* /*pValue*/)
 {
     // FLAG: console *(value + 0x1C) -- the defining-class/owner AptValue* slot; the
     // x64 member is not recovered. Inert until the AS call-method opcode is brought

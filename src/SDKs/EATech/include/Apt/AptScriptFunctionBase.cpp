@@ -17,15 +17,15 @@
 //
 // FLAG -- the CIH / GC leaf couplings (the value-object lifecycle, not the frame
 // machinery the interpreter needs):
-//   * AptApt_PrepareCallContextScope -- the ctor calls pCallContext's prepare
-//     virtual before capturing the live frame as the closure scope (the call
-//     context type is not pinned, so the call is encapsulated).
+//   * The ctor's pCallContext vtbl+0x60 dispatch is CreateFrameStack (the slot
+//     after CleanupAfterExecution): lazily build the caller's activation frame
+//     before capturing it as the closure scope. Called directly as the member.
 //   * AptApt_DeriveFunctionAnimation -- derive the timeline animation a function is
 //     defined on from its CIH (the X360 walks the CIH/character chain; uses the
 //     reconstructed AptGetAnimationAtLevel at the leaf).
-//   * AptApt_AnimationAddCharacterRef / ReleaseCharacterRef -- the +0x0C character
-//     ref-counter twiddle on the owning animation (+ AptUpdateZombieVector on the
-//     drop to zero); CIH internals.
+//   * The owning animation's "+0x0C character ref" is the CIH ZOMBIE-COUNT field
+//     (bits 7-22, step 0x80): Inc/DecZombieCount are called directly (the drop-
+//     to-zero reap lives inside DecZombieCount).
 //   * gpAptFunctionPrototypeRoot (dword_8324E4EC) -- the Function.prototype object a
 //     freshly-made function prototype's __proto__ links to (wired at AptInit).
 //   * AptValue::sReferenceRegistrationCb -- the GC mark callback (null until AptInit).
@@ -45,11 +45,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                  // DOGMA_PoolManager
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h" // gpAptOperandStackPool
 
-// FLAG (CIH / GC leaf couplings -- see header above; wired with the AptCIH + AptInit TUs).
-extern void      AptApt_PrepareCallContextScope(AptValue* pCallContext);          // ctor: vtbl prepare
-
-extern void      AptApt_AnimationAddCharacterRef(AptValue* pAnimation);           // ctor: +0x0C ref++
-extern void      AptApt_AnimationReleaseCharacterRef(AptValue* pAnimation);       // dtor: +0x0C ref-- (+zombie)
+// FLAG (GC leaf couplings -- see header above; wired at AptInit).
 extern AptValue* gpAptFunctionPrototypeRoot;                                      // dword_8324E4EC
 extern AptValue* gpUndefinedValue;                                               // register-array fill (AptInit)
 
@@ -82,7 +78,11 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     // Defined inside a live call -> capture the current frame stack as the closure scope.
     if (pCallContext)
     {
-        AptApt_PrepareCallContextScope(pCallContext);   // FLAG: console pCallContext->vtbl prepare
+        // The console dispatches pCallContext's vtbl+0x60 -- the slot after
+        // CleanupAfterExecution (+0x5C) -- then immediately captures spFrameStack:
+        // it is CreateFrameStack (@0x82AF1260, lazily build the caller's activation
+        // frame so the nested function has a live frame to close over).
+        static_cast<AptScriptFunctionBase*>(pCallContext)->CreateFrameStack();
         mpParentScope = reinterpret_cast<AptValue*>(spFrameStack);
         if (spFrameStack)
             spFrameStack->AddRef();
@@ -99,7 +99,9 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
 
     mpCIH->AddRef();
     mpParentAnim->AddRef();
-    AptApt_AnimationAddCharacterRef(mpParentAnim);   // FLAG: +0x0C character ref-counter ++
+    // The +0x0C "character ref" the console bumps IS the CIH zombie-count field
+    // (bits 7-22, step 0x80 -- the ctor asm's extlwi/addi 0x80/rlwimi on anim+0xC).
+    static_cast<AptCIH*>(mpParentAnim)->IncZombieCount();
 
     if (bMakePrototype)
     {
@@ -136,13 +138,15 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
         mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
 
     // AddRef the inherited scope (when present) + the CIH + the owning animation, then
-    // bump the animation's +0x0C character ref-counter (the same twiddle the primary
-    // ctor performs via AptApt_AnimationAddCharacterRef).
+    // bump the animation's zombie-count field (the same IncZombieCount the primary
+    // ctor performs).
     if (mpParentScope)
         mpParentScope->AddRef();
     mpCIH->AddRef();
     mpParentAnim->AddRef();
-    AptApt_AnimationAddCharacterRef(mpParentAnim);   // FLAG: +0x0C character ref-counter ++
+    // The +0x0C "character ref" the console bumps IS the CIH zombie-count field
+    // (bits 7-22, step 0x80 -- the ctor asm's extlwi/addi 0x80/rlwimi on anim+0xC).
+    static_cast<AptCIH*>(mpParentAnim)->IncZombieCount();
 
     // Copy the prototype + __proto__ links from the original (a3[5] / a3[4]).
     // GetNativeHashVirtual is non-const (the SDK accessor is not const-qualified), so
@@ -429,7 +433,9 @@ void AptScriptFunctionBase::DestroyGCPointers()
     mpCIH->Release();
     mpCIH = 0;
 
-    AptApt_AnimationReleaseCharacterRef(mpParentAnim);   // FLAG: +0x0C ref-- (+zombie vector)
+    // The inverse of the ctor's IncZombieCount (the zombie-vector reap arm lives
+    // inside DecZombieCount itself, firing when the count reaches zero).
+    static_cast<AptCIH*>(mpParentAnim)->DecZombieCount();
     mpParentAnim->Release();
     mpParentAnim = 0;
 

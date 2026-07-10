@@ -840,28 +840,19 @@ void AptArray::CleanNativeFunctions()
     if (gpArrayMethod_sortOn)  { gpArrayMethod_sortOn->Release();  gpArrayMethod_sortOn  = nullptr; }
 }
 
-// ---------------------------------------------------------------------------
-// AptValue_AptArrayToString -- the free-function thunk AptValue::toString reaches
-// the (private, cross-TU) AptArray::toString @0x82AED040 through (AptValueConvert.cpp
-// declares it extern; the X360 inlines the private call across the folded TU). Homed
-// here, where the full AptArray type + the toString body live, so the thunk is the
-// one-line forward the convert TU's `case AptVFT_Array` needs. (PS3 EXTERNAL
-// 0xF39520 == this EAStringC& overload; the char* overload 0xF39624 just strcpy's
-// out of it and is not the path AptValue::toString takes.)
-// ---------------------------------------------------------------------------
-void AptValue_AptArrayToString(AptArray* pArray, EAStringC* pOut, const char* pSeparator)
-{
-    pArray->toString(pOut, pSeparator);
-}
+// (The AptValue_AptArrayToString thunk was RETIRED 2026-07-10: AptValue::toString's
+// `case AptVFT_Array` now calls the private member AptArray::toString @0x82AED040
+// directly -- the folded-TU private access is modelled by the AptValue friend
+// declaration in AptArray.h. PS3 EXTERNAL 0xF39520 == the EAStringC& overload.)
 
 // ===========================================================================
-// AptInterp_FrameStackFirstLocal (HOMED 2026-07-02, retiring the stub null).
+// AptFrameStackFirstLocal (HOMED 2026-07-02, retiring the stub null).
 // Misnomer kept for the call-site contract: the CallFunction opcode's tag-14
 // operand is an AptARRAY (the console reads value[10] = mnLength and
 // *value[8] = mpArray[0]); a non-empty array's first element is the captured
 // function value, null otherwise.
 // ===========================================================================
-AptValue* AptInterp_FrameStackFirstLocal(AptValue* pValue)
+AptValue* AptFrameStackFirstLocal(AptValue* pValue)
 {
     AptArray* const pArray = static_cast<AptArray*>(pValue);
     if (pArray->mnLength > 0 && pArray->mpArray != nullptr && pArray->mpArray[0] != nullptr)

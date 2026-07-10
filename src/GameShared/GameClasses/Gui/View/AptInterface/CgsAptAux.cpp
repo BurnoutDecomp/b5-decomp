@@ -535,10 +535,10 @@ namespace CgsGui
         if (lpAptData == nullptr)
             return;
 
-        // FLAG (x64 converted 8-byte bundle): the console asserts AptData[5] (meCurrentState) is
-        // LOADED(1)/ACTIVE(2) and then sets it to ACTIVE(2). Our converted header is 8-byte-widened,
+        // FLAG (x64 native-8 bundle): the console asserts AptData[5] (meCurrentState) is
+        // LOADED(1)/ACTIVE(2) and then sets it to ACTIVE(2). The native-8 header is 8-byte-widened,
         // so meCurrentState does NOT sit at the u32-struct's +20 (that overlaps mpConstData's high
-        // half at +16); its real offset is ambiguous in the converted layout. The state precondition
+        // half at +16); its real offset is ambiguous in the widened layout. The state precondition
         // is moot here anyway -- the host loads the .apt SYNCHRONOUSLY before this call, so it is
         // always fully loaded, and the host's own load-once guard replaces the console's state=2
         // re-load gate. So the on-disk state read/write is skipped (not asserted / not written) to
@@ -548,10 +548,10 @@ namespace CgsGui
         // console's relocated mpAptData/mpConstData -- FLAG). The header sits at the resource base,
         // so base == the header address.
         //
-        // UN-COLLAPSED (2026-07-01): the converted (libapt2 SerializeChunks) header carries SIX
+        // UN-COLLAPSED (2026-07-01): the native-8 (libapt2 SerializeChunks) header carries SIX
         // 8-byte fields [name@0, baseName@8, aptData@0x10, const@0x18, geom@0x20, size@0x28] -- the
         // extra baseName shifts every field one slot past the console's [name, aptData, const, ...]
-        // order (FLAG: converter-format accommodation, see APT_CONVERTER_BUGS.md #2). pBase = the
+        // order (FLAG: native-8 header field order, see APT_CONVERTER_BUGS.md #2). pBase = the
         // "Apt Data:1:7:8" chunk (every serialised offset is chunk-relative), pConstFile = the
         // "Apt constant file" chunk (movieOffset@+0x18 locates the root; itemStart@+0x28 is the
         // constant-record table _parseStream resolves Push/DefineDictionary entries through) --

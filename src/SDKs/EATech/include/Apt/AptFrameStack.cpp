@@ -134,11 +134,11 @@ bool AptFrameStack::SetWhereExistsInScopeChain(const EAStringC& key, AptValue* p
 // ===========================================================================
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"   // spFrameStack
 
-// AptInterp_LookupScopeChain -- getVariable's function-local arm. The X360
+// AptLookupScopeChain -- getVariable's function-local arm. The X360
 // getVariable @0x82B03550 loads spFrameStack (off_8324E3DC), null-checks it,
 // and calls AptFrameStack::GetInScopeChain (the innermost-outward locals walk).
 class AptActionInterpreter;   // fwd (the interp arg is unused; X360 reads the static)
-AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* /*pInterp*/,
+AptValue* AptLookupScopeChain(AptActionInterpreter* /*pInterp*/,
                                      const EAStringC* pName)
 {
     AptFrameStack* const pFrame = AptScriptFunctionBase::GetActiveFrameStack();
