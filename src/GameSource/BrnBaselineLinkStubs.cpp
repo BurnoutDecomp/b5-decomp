@@ -32,6 +32,8 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                      // BrnPhysics::Vehicle::RaceCarState
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"          // InGamePlayerStatusInterface (+ NetworkPlayerStats / LiveRevengeRelationship)
 
 namespace CgsResource
 {
@@ -50,6 +52,36 @@ namespace BrnReplays
     // member sub-objects default-construct; the real ctor body is in BrnReplayModule.cpp
     // (out of the exe build -- see the header audit note).
     ReplayModule::ReplayModule() {}
+}
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // Link stub: the controller-bridge closure links BrnPlayerInfo.cpp (Director camera
+    // VehicleInfo::operator=), whose race-car-state copy calls this user-declared
+    // operator= ("own TU" in BrnVehicleEvents.h; body unreconstructed). Only the Director
+    // camera path -- OFF the boot/title/menu path -- reaches it. Inert no-op until the
+    // real body lands; DELETE when that TU is reconstructed.
+    void RaceCarState::operator=(const RaceCarState&) {}
+}
+}
+
+namespace BrnNetwork
+{
+    // Link stubs: the controller-bridge closure links BrnGameStateModuleIO.cpp ->
+    // BrnNetworkModuleIO.cpp -> the in-game-player-status interface TU, whose record
+    // Clear/operator= call these "own TU" (unreconstructed) leaves. All are network/
+    // multiplayer state -- OFF the boot/title/menu path. Inert until the real bodies
+    // land; DELETE each when its TU is reconstructed.
+    void NetworkPlayerStats::Clear() {}
+    void LiveRevengeRelationship::Construct() {}
+
+namespace BrnNetworkModuleIO
+{
+    s32 InGamePlayerStatusInterface::GetNumPlayers() const { return 0; }
+    const InGamePlayerStatusData* InGamePlayerStatusInterface::GetPlayerStatusData(s32) const { return 0; }
+}
 }
 
 namespace BrnGameState

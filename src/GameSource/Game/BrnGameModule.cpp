@@ -5,6 +5,9 @@
 
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
+#include <chrono>    // the ToGui repeat-clock feed (FLAG PC time source: wall clock)
+
+#include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
 
 // ---- Xbox 360 XDK entry point (real prototype lives in the XDK). Displays the system
 // "dirty disc" error UI for the given signed-in user. ------------------------------------
@@ -52,8 +55,7 @@ namespace BrnGame
         , mbGuiAcceptsControllerInput(false)
         , mbGuiSuppressMenuAccept(false)
         , miLanguageCycleTimerLo(0)
-        , miLanguageCycleTimerHi(0)
-        , mpCgsGuiModule(0)
+        , mfLanguageCycleTimerFrac(0.0f)
         , miRenderMetricsRequested(0)
     {
         // (The X360 ctor does not touch mCpuMonitors -- Construct() sentinel-fills and
@@ -200,6 +202,17 @@ namespace BrnGame
         // dispatch; this is the minimal PC hookup (Update runs in GameMain). It stays idle until a
         // 508 GuiEventPlayVideo is queued (BrnBootVideos in Phase 3).
         mGuiModule.Prepare();
+
+        // ---- input bring-up (PC stand-in for the unreconstructed input setup pass) --------
+        // The console input module's Prepare constructs its output buffer, scans the pads and
+        // flips the module state to "ready / player-0 assigned"; none of that pass is
+        // reconstructed, so seed the observable outcome here: the real OutputBuffer::Construct
+        // (@0x828F85E0), port 0 assigned, module ready (==4), and the GUI accepting controller
+        // input (the console sets it from the GUI flow state -- FLAG follow-on).
+        mPcInputOutputBuffer.Construct();
+        miInputModuleState        = 4;
+        miPlayer0ControllerPort   = 0;
+        mbGuiAcceptsControllerInput = true;
     }
 
     // @ BrnGameModule.cpp:1047 (X360 0x823BC868) - tear down the owned modules + the module base.
@@ -439,6 +452,35 @@ namespace BrnGame
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
                 }
+                // ---- controller -> GUI input pass (the console per-substep bridge) ---------
+                // Fill the player-0 pad record (InputPadsPC, the PC stand-in for the input
+                // module's own fill), then run the REAL BridgeControllerToGui: it synthesises
+                // the GUI controller events from the pad record and pushes them through
+                // CgsGui::GuiModule::AddGuiEvent into this sub-step's GUI input buffer. The
+                // GUI module drains that buffer during its Update below.
+                {
+                    // Advance the ToGui repeat/language-cycle clock (FLAG PC time source: the
+                    // console words ride the game module's timer pass, unreconstructed).
+                    const s64 liNowMs = static_cast<s64>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count());
+                    miLanguageCycleTimerLo   = static_cast<s32>(liNowMs / 1000);
+                    mfLanguageCycleTimerFrac = static_cast<f32>(liNowMs % 1000) * 0.001f;
+
+                    mPcInputOutputBuffer.LockForWrite();
+                    CgsInput::InputPadsPC::UpdatePlayer0(&mPcInputOutputBuffer);
+                    mPcInputOutputBuffer.UnlockForWrite();
+
+                    mPcInputOutputBuffer.LockForRead();
+                    mpGuiInputBuffer->LockForWrite();
+                    BridgeControllerToGui(mpGuiInputBuffer, &mPcInputOutputBuffer);
+                    mpGuiInputBuffer->UnlockForWrite();
+                    mPcInputOutputBuffer.UnlockForRead();
+
+                    // Hand this sub-step's filled buffer to the GUI drive (FLAG bridge
+                    // stand-in: the console passes it through the module scheduler's IO set).
+                    mGuiModule.SetGuiEventInputBuffer(mpGuiInputBuffer);
+                }
                 // GUI module per-frame tick (drives the MovieManager state machine; Phase 2/3 drive the
                 // boot BrnHudFlow -> BootVideos here). The X360 ticks this through the module dispatch.
                 mGuiModule.Update();
@@ -485,6 +527,10 @@ namespace BrnGame
     void BrnGameModule::CreateStaticIOBuffers()
     {
         mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer, "Gui");
+        // The X360 CreateIOBuffer<InputBuffer> instantiation (@0x823AC898) runs the buffer's
+        // Construct after the stack alloc; the generic PC template placement-news only, so
+        // run the real Construct (@0x82857378) here.
+        mpGuiInputBuffer->Construct();
         mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer, "GuiView");
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer, "Gui");
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer, "GuiModel");
