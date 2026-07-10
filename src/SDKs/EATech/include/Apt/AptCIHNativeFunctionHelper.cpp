@@ -1240,9 +1240,16 @@ static void OverlayFieldTextAttributes(AptCIH* pNode, AptRenderItemDynamicText* 
         pResult->mFormat.mnColor = static_cast<int32_t>(uColor);
     }
 
-    // Default font name from the serialised .apt font table.
-    EAStringC lFontName(AptResolveTextFieldFontName(pNode->GetCharacterInst()));
-    pResult->mFormat.mFontName = lFontName;
+    // Default font name from the serialised .apt font table. Assigned only when the
+    // field's font id RESOLVES (original source: `if (fontID in range && slot is a
+    // FONT char) texFormat->pFontName = font.szName;` -- on a miss, incl. the
+    // setTextFormat negative-id latch, the record's COPIED font name is kept).
+    const char* const pcFontName = AptResolveTextFieldFontName(pNode->GetCharacterInst());
+    if (pcFontName != nullptr && pcFontName[0] != '\0')
+    {
+        EAStringC lFontName(pcFontName);
+        pResult->mFormat.mFontName = lFontName;
+    }
 
     // Alignment = the field's packed alignment (mFlagsAndBackColor bits 3-6, signed).
     pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 25) >> 28;

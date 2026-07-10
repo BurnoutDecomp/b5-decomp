@@ -359,6 +359,31 @@ void AptActionInterpreter::_FunctionAptActionPushStringSetMember(AptActionInterp
 }
 
 // ---------------------------------------------------------------------------
+// _FunctionAptActionPushString @0x82AF4128 (opcode 0xA1; the address extracted from
+// the console dispatch table @0x82F73068 entry 0xA1) -- build an AptString from the
+// INLINE string operand and push it: the push half of the fused Get/Set forms below
+// (_parseStream treats 0xA1's operand identically to 0xA4..0xA7 -- one 8-aligned
+// relocated string pointer). This opcode is what PLACE clipAction construct blocks
+// use to seed instance variables (mPromptType/mText/mAlignment/...); the unwired
+// slot made every construct block a silent no-op (undefined help-bar prompt vars).
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::_FunctionAptActionPushString(AptActionInterpreter* pInterp,
+                                                        LocalContextT* pCtx)
+{
+    const unsigned char* pAligned =
+        reinterpret_cast<const unsigned char*>(
+            (reinterpret_cast<uintptr_t>(pCtx->mpProgramCounter) + 7) & ~static_cast<uintptr_t>(7));
+    const char* szName = *reinterpret_cast<const char* const*>(pAligned);   // 8-aligned qword (GUIAPT64)
+    pCtx->mpProgramCounter = pAligned + 8;
+
+    AptString* pStr = AptString::Create("");                // FLAG: seed const @0x820046A7 ("")
+    *pStr->GetInternalString() = EAStringC(szName);
+
+    pInterp->mpStack[pInterp->mnStackTop++] = pStr;         // inlined stackPush (store + advance)
+    pStr->AddRef();
+}
+
+// ---------------------------------------------------------------------------
 // _FunctionAptActionPushStringSetVar @0x82B05788 -- build an AptString from the
 // inline dictionary string, push it, then run the SetVariable opcode (name = value).
 // ---------------------------------------------------------------------------

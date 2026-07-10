@@ -63,6 +63,49 @@
 extern intptr_t gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
 
 // ---------------------------------------------------------------------------
+// AptResolveTextFieldFontName -- the text field's AUTHORED font name, resolved via
+// its font id through the owning movie's character table (HOMED 2026-07-10,
+// retiring the AptRenderLinkStubs "" stub; original-source corroboration:
+// AptCIH::getTextFormat resolves texFormat->pFontName as
+//   pParentAnim->animation.apCharacters[text.nFontID]->font.szName
+// when the id is in range and the slot is a FONT character). The walk is the SAME
+// native-8 chain EnsureStringAllocated's draw path uses below: the field char's
+// mpFixupLink back-link -> the def base at +KU_AptEmbeddedMovieOff ->
+// mpCharacterTable[fontId] -> the type-3 font char's name pointer @+0x20
+// (serialised native-8 record; Fixup case 3 relocated it live). A negative id
+// (setTextFormat's "explicit font installed" latch), an out-of-range id, or a
+// non-font slot yields "" -- the contract's no-font value (the getTextFormat
+// overlay then KEEPS the record's copied font name).
+// ---------------------------------------------------------------------------
+const char* AptResolveTextFieldFontName(AptCharacterInst* pTextInst)
+{
+    AptRenderItem* const pItem = pTextInst ? pTextInst->GetRenderItem() : nullptr;
+    AptCharacter*  const pChar = pItem ? pItem->mpCharacter : nullptr;
+    if (pChar == nullptr || pChar->mpFixupLink == nullptr)
+        return "";
+
+    const int32_t nFontIdx =
+        static_cast<const AptRenderItemDynamicText*>(pItem)->mFontID;
+    if (nFontIdx < 0)
+        return "";
+
+    AptCharacterAnimation* const pDef = reinterpret_cast<AptCharacterAnimation*>(
+        reinterpret_cast<char*>(pChar->mpFixupLink) + KU_AptEmbeddedMovieOff);
+    if (pDef->mpCharacterTable == nullptr || nFontIdx >= pDef->mnCharacterCount)
+        return "";
+
+    const AptCharacter* const pFontChar = pDef->mpCharacterTable[nFontIdx];
+    if (pFontChar == nullptr || pFontChar->mnType != 3)   // not a FONT character
+        return "";
+
+    // type-3 font char: name pointer at font-char native-8 +0x20 (console +0x10;
+    // relocated live by Fixup case 3 -- the same slot the draw path reads below).
+    const char* const pName = *reinterpret_cast<const char* const*>(
+        reinterpret_cast<const uint8_t*>(pFontChar) + 0x20);
+    return (pName != nullptr) ? pName : "";
+}
+
+// ---------------------------------------------------------------------------
 // AptCIH::EnsureStringAllocated @0x82B06F08.
 //
 // a1 (r3) = this (the dynamic-text CIH node); a2 (r4) = pParent (the display-list

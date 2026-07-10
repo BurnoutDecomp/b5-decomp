@@ -576,6 +576,7 @@ public:
     // Dictionary-aware constant/variable push opcodes (the .apt string-dictionary
     // shortcut forms of Push + the Get/Set fused ops):
     static void _FunctionAptActionPush                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushString           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringDictByte   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringDictWord   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringGetMember  (AptActionInterpreter* pInterp, LocalContextT* pContext);

@@ -36,6 +36,8 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"   // AptNativeHash / AptHashItem (urlEncode walk)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"   // gAptActionInterpreter.getName (MC name path)
 #include "SDKs/EATech/include/Apt/AptMovie.h"   // homes the AptValue_toInteger thunk
+#include "SDKs/EATech/include/Apt/AptCIH.h"            // GetCharacterInst (the CIH toString arm)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"  // GetTypeTag (the CIH toString arm)
 
 struct AptArray;   // AptArray.h -- the array join renderer (AptValue_AptArrayToString thunk)
 
@@ -402,19 +404,22 @@ void AptValue::toString(EAStringC* pOut) const
     }
 
     // X360 loc_82AF91F0 (table type 0xC, AptVFT_CharacterInstHandle): the CIH's
-    // display node at +0x20 names itself, with shape/unnamed fallbacks.
+    // character instance names itself, with shape/unnamed fallbacks.
+    // (x64 FIX 2026-07-10: the console reads the char inst at CIH+0x20 and its packed
+    // type word at inst+8 -- raw offsets that do NOT survive the x64 widening. The
+    // transliterated reads returned null/garbage, so every movieclip toString'd to
+    // ""/"No Instance Name" -- the empty component name behind the SendAptSoundEvent
+    // halting assert. Read the NAMED members instead.)
     if (eType == AptVFT_CharacterInstHandle)
     {
-        AptValue* const pNode =
-            *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(pThis) + 0x20);
-        if (pNode == 0)
+        AptCharacterInst* const pInst = static_cast<AptCIH*>(pThis)->GetCharacterInst();
+        if (pInst == 0)
         {
             *pOut = "";   // X360 beq loc_82AF9048 -> assign the empty embedded string
             return;
         }
-        // X360 reads *(node+8)>>0x1A (the node's packed type tag) to classify it.
-        const int nNodeType = *reinterpret_cast<const int*>(
-                                  reinterpret_cast<char*>(pNode) + 8) >> 0x1A;
+        // X360 reads *(inst+8)>>0x1A -- the char inst's packed type tag (mTypeFlags).
+        const int nNodeType = static_cast<int>(pInst->GetTypeTag());
         const bool lbButtonOrSprite = (nNodeType == 5) || (nNodeType == 9);
         if (!lbButtonOrSprite
             && nNodeType != 4 && nNodeType != 2 && nNodeType != 0xA && nNodeType != 0xF)
@@ -424,9 +429,8 @@ void AptValue::toString(EAStringC* pOut) const
             return;
         }
         // X360 loc_82AF9270: the named-instance path -> the interpreter builds the
-        // node's slash/dot path. FLAG: getName needs the live interpreter + the
-        // path-builder follow-on; dormant (empty) until they are up.
-        gAptActionInterpreter.getName(pThis, pOut);   // FLAG: path-builder follow-on
+        // node's slash/dot path.
+        gAptActionInterpreter.getName(pThis, pOut);
         return;
     }
 
