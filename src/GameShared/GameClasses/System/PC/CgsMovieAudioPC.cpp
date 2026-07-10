@@ -282,6 +282,43 @@ namespace
     }
 } // namespace
 
+// ---------------------------------------------------------------------------
+// In-memory SNR (GenericRwacWaveContent) sample -> interleaved stereo s16 PCM.
+// The presentation splice-bank samples are fully-resident SNR images (header +
+// inline EA-XMA data -- the same record shape as a prefetch-bearing stream
+// header, with ALL the audio inline). Shared by GuiSoundPC (the menu blips).
+// ---------------------------------------------------------------------------
+bool SnrSampleDecodePC(const std::uint8_t* lpData, std::size_t luLen,
+                       std::vector<std::int16_t>& lrPcm, int& lrRate, int& lrChannels)
+{
+    // Sample image = the 8-byte EAAC header {codec/channels/rate, type/num_samples}
+    // followed directly by the SNS BLOCK STREAM (the same block format the .SNS
+    // files carry -- RestorePackets is the existing deblocker).
+    if (lpData == nullptr || luLen < 0x10) return false;
+    const std::uint32_t h1 = ReadBe32(lpData);
+    const std::uint32_t h2 = ReadBe32(lpData + 4);
+    if (int((h1 >> 24) & 0xF) != 3) return false;   // 3 == EA-XMA
+    lrChannels = int((h1 >> 18) & 0x3F) + 1;
+    lrRate     = int(h1 & 0x3FFFF);
+    const std::uint32_t luSamples = h2 & 0x1FFFFFFF;
+    if (lrRate <= 0 || luSamples == 0) return false;
+    try {
+        std::vector<std::uint8_t> lBlocks(lpData + 8, lpData + luLen);
+        RestoredXma restored = RestorePackets(lBlocks);
+        const std::vector<FrameBits> frames = ExtractFrames(restored.packets);
+        // DecodeAll reads the file-scope stream rate for its codec context; feed the
+        // sample's own rate through it and restore the movie stream's value after.
+        const int liSavedRate = g_sampleRate;
+        g_sampleRate = lrRate;
+        lrPcm = DecodeAll(frames, lrChannels, luSamples);
+        g_sampleRate = liSavedRate;
+    } catch (const std::exception& lEx) {
+        AUDIO_LOG << "[GuiSound] sample decode error: " << lEx.what() << "\n";
+        return false;
+    }
+    return !lrPcm.empty();
+}
+
 void MovieAudioPC::Construct()
 {
     g_pcm = nullptr; g_frames = 0; g_cursor = 0; g_finished = true; g_loaded = false;

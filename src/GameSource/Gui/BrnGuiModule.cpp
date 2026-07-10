@@ -20,6 +20,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::AptCommunicator (the per-frame trigger publish)
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
+#include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h"               // CgsSystem::GuiSoundPC (the GUI presentation blips)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 
 // (The former PC keyboard injection helper is RETIRED: input now arrives through the real
@@ -728,19 +729,19 @@ namespace BrnGui
                         // Event 201: a GUI audio trigger ("Accept"...). Console consumer:
                         // SoundLogicModule::ProcessGuiEvents @0x826ED6C8 (its case 457 wraps the
                         // 112-byte GuiAudioTriggerEvent record into a CgsSound::Io::Message and
-                        // posts it to the sound-logic message queue), then the logic state
-                        // managers key the AEMS patch (the blip sample in the Splicer bank).
-                        // That logic cluster is blocked; consume + log until it lands -- playing
-                        // a guessed sample would be invention.
+                        // posts it to the sound-logic message queue) -> PresentationEffect::
+                        // Notify @0x826FF840 resolves it through the presentationactionlist
+                        // data to a splice in the presentation Splicer bank. The sound-logic
+                        // message layer is blocked; GuiSoundPC is the PC leaf reproducing the
+                        // observable from the same real data set (see CgsGuiSoundPC.h).
                         if (lbPastCursor && liId == 201)
                         {
-                            const char* lpacTrigger =
-                                reinterpret_cast<const char*>(lpEvent) + 0x0C + 4;
-                            char lacT[140];
-                            std::snprintf(lacT, sizeof(lacT),
-                                "[GuiModule] audio trigger '%.63s' consumed -- AEMS patch playback deferred (FLAG).\n",
-                                lpacTrigger);
-                            CgsDev::Log::WriteToLog(lacT);
+                            // Record shape per BootLegal's bring-up carrier: 12B GuiEvent
+                            // header, then action ENUM @body+0 (7 == OnChange), the label/
+                            // trigger name @body+4, apt/screen name @body+68.
+                            const char* lpacBody  = reinterpret_cast<const char*>(lpEvent) + 0x0C;
+                            const s32   liActEnum = *reinterpret_cast<const s32*>(lpacBody);
+                            CgsSystem::GuiSoundPC::OnTrigger(lpacBody + 4, 0, lpacBody + 68, liActEnum);
                         }
                         if (lpEvent == s_pVideoPumpCursor)
                             lbPastCursor = true;
@@ -852,6 +853,34 @@ namespace BrnGui
                 mViewOutputBuffer.LockForWrite();
                 CgsGui::AptCommunicator::FlushTriggerEventsTo(mViewOutputBuffer.GetGuiEventQueue());
                 mViewOutputBuffer.UnlockForWrite();
+                // Deliver this frame's SOUND triggers (event 22 -- the AS SendAptSoundEvent
+                // records: type[32] action[32] label[32] + layer) to the GUI sound leaf --
+                // the console route is the sound-logic message layer (blocked cluster);
+                // GuiSoundPC keys the same presentationactionlist data (CgsGuiSoundPC.h).
+                mViewOutputBuffer.LockForRead();
+                {
+                    const CgsModule::VariableEventQueue<18432, 16>* lpTrigQueue =
+                        static_cast<const CgsGui::ViewIO::OutputBuffer&>(mViewOutputBuffer).GetGuiEventQueue();
+                    const CgsModule::Event* lpTrig = 0;
+                    s32 liTrigSize = 0;
+                    s32 liTrigId = lpTrigQueue->GetFirstEvent(&lpTrig, &liTrigSize);
+                    while (liTrigId >= 0 && lpTrig != 0)
+                    {
+                        if (liTrigId == 22 && liTrigSize >= 100)
+                        {
+                            // {type[32], action[32], label[32], layer}. Key rule (the
+                            // trigger-resolve): string key = label unless 'uninitialised',
+                            // then the component/type name; the enum parses from the AS
+                            // action string ('ON_FOCUS' -> OnFocus).
+                            const char* lpacT = reinterpret_cast<const char*>(lpTrig);
+                            CgsSystem::GuiSoundPC::OnTrigger(lpacT + 64, lpacT + 32, lpacT, -1);
+                        }
+                        const CgsModule::Event* lpTrigNext = 0;
+                        liTrigId = lpTrigQueue->GetNextEvent(lpTrig, &lpTrigNext, &liTrigSize);
+                        lpTrig = lpTrigNext;
+                    }
+                }
+                mViewOutputBuffer.UnlockForRead();
                 // [PC] the downstream consumer (BridgeFromViewToOutput -> the module output
                 // -> the sound-logic/flow observers) is un-homed, and the console's view
                 // output buffer is re-created per frame off the IO stack; reset the queue

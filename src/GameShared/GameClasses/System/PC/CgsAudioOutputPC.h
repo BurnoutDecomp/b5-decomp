@@ -45,6 +45,11 @@ public:
     // Swap the active fill source at runtime (e.g. test tone -> the real Dac pull).
     static void SetFill(FillFn lpFill, void* lpUser);
 
+    // Register the additive OVERLAY fill (the one-shot GUI blips), mixed saturating
+    // on top of the primary stream. Persists across Open/Close -- the primary fill
+    // owner churns as the movie/music streams swap the voice; the overlay must not.
+    static void SetOverlayFill(FillFn lpFill, void* lpUser);
+
     // Diagnostic: route a finite 440 Hz sine through the backend (lfSeconds) to confirm
     // output works by ear, then fall silent. Opens the device first if needed.
     static void PlayTestTone(float lfSeconds);

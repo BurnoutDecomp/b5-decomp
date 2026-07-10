@@ -40,7 +40,13 @@ int                     g_channels    = 2;
 int                     g_openRate    = 0;      // sample rate the voice was opened at (0 = closed)
 AudioOutputPC::FillFn   g_fill        = nullptr;
 void*                   g_user        = nullptr;
+// The additive OVERLAY fill (the one-shot GUI blips): mixed saturating on top of
+// the primary stream each refill. Persistent across Open/Close (the primary fill
+// owner churns as the movie/music streams swap the voice; the overlay must not).
+AudioOutputPC::FillFn   g_overlayFill = nullptr;
+void*                   g_overlayUser = nullptr;
 s16                     g_buf[kBuffers][kFrames * kMaxChannels];
+s16                     g_overlayBuf[kFrames * kMaxChannels];
 
 void SubmitBuffer(int liIndex)
 {
@@ -49,6 +55,19 @@ void SubmitBuffer(int liIndex)
         g_fill(lpBuf, kFrames, g_user);
     else
         std::memset(lpBuf, 0, sizeof(s16) * kFrames * g_channels);
+
+    if (g_overlayFill)
+    {
+        g_overlayFill(g_overlayBuf, kFrames, g_overlayUser);
+        const int liValues = kFrames * g_channels;
+        for (int i = 0; i < liValues; ++i)
+        {
+            int liMix = int(lpBuf[i]) + int(g_overlayBuf[i]);
+            if (liMix >  32767) liMix =  32767;
+            if (liMix < -32768) liMix = -32768;
+            lpBuf[i] = s16(liMix);
+        }
+    }
 
     XAUDIO2_BUFFER lBuf;
     std::memset(&lBuf, 0, sizeof(lBuf));
@@ -179,6 +198,8 @@ bool AudioOutputPC::IsOpen() { return g_pSource != nullptr; }
 int AudioOutputPC::GetOpenSampleRate() { return g_openRate; }
 
 void AudioOutputPC::SetFill(FillFn lpFill, void* lpUser) { g_fill = lpFill; g_user = lpUser; }
+
+void AudioOutputPC::SetOverlayFill(FillFn lpFill, void* lpUser) { g_overlayFill = lpFill; g_overlayUser = lpUser; }
 
 void AudioOutputPC::PlayTestTone(float lfSeconds)
 {
