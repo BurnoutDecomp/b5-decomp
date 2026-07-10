@@ -75,11 +75,18 @@ namespace
     std::vector<ActionRow>* g_pRows = nullptr;
 
     // ---- the presentation Splicer bank ------------------------------------------
+    struct SampleRef
+    {
+        u16 mu16Sample;
+        f32 mfVolume;      // ref volume (multiplied with the splice volume)
+        f32 mfPitch;       // playback-rate multiplier
+        f32 mfDuration;    // seconds; clamps the played extent
+        f32 mfFadeOut;     // seconds; linear ramp at the tail of the played extent
+    };
     struct Splice
     {
-        u16 mu16FirstSample;   // sample index of the first sample ref
-        u8  mu8NumRefs;
         f32 mfVolume;
+        std::vector<SampleRef> mRefs;
     };
     std::vector<Splice>*            g_pSplices    = nullptr;
     std::vector<std::vector<u8>>*   g_pSamples    = nullptr;   // raw SNR sample images
@@ -90,13 +97,15 @@ namespace
     bool g_bInitTried = false;
     bool g_bReady     = false;
 
-    // ---- the one-shot voice pool (mirrors the effect's small aging pool) --------
-    const int KI_NUM_VOICES = 4;
+    // ---- the one-shot voice pool (mirrors the effect's small aging pool; sized
+    //      for the multi-ref splices -- the accept sound alone layers 3 refs) -----
+    const int KI_NUM_VOICES = 8;
     struct OneShot
     {
         volatile bool  mbActive;
         const s16*     mpPcm;       // interleaved stereo
-        s64            mnFrames;
+        s64            mnFrames;    // played extent (duration-clamped)
+        s64            mnFadeFrom;  // frame where the linear fade-out begins (== mnFrames: none)
         s64            mnCursor;    // fixed-point 16.16 source frame cursor (64-bit:
         s64            mnStep;      //   a 32-bit 16.16 cursor overflows at ~0.74 s)
         f32            mfVolume;
@@ -228,16 +237,26 @@ namespace
         g_pSplices = new std::vector<Splice>();
         g_pSplices->reserve(liSplices);
         u32 luRefCursor = luRefs;
+        union { u32 u; f32 f; } v;
         for (s32 i = 0; i < liSplices; ++i)
         {
             const u8* h = &res[luHdrs + u32(i) * 0x18];
             Splice lS;
-            lS.mu8NumRefs = h[7];
-            union { u32 u; f32 f; } v; v.u = Be32(h + 8);
+            const u8 lu8Refs = h[7];
+            v.u = Be32(h + 8);
             lS.mfVolume = v.f;
-            lS.mu16FirstSample = (lS.mu8NumRefs > 0 && luRefCursor + 2 <= res.size())
-                                     ? Be16(&res[luRefCursor]) : 0xFFFF;
-            luRefCursor += u32(lS.mu8NumRefs) * 0x2C;
+            for (u8 r = 0; r < lu8Refs && luRefCursor + 0x2C <= res.size(); ++r)
+            {
+                const u8* rf = &res[luRefCursor];
+                SampleRef lRef;
+                lRef.mu16Sample = Be16(rf);
+                v.u = Be32(rf + 4);  lRef.mfVolume   = v.f;
+                v.u = Be32(rf + 8);  lRef.mfPitch    = v.f;
+                v.u = Be32(rf + 20); lRef.mfDuration = v.f;
+                v.u = Be32(rf + 28); lRef.mfFadeOut  = v.f;
+                lS.mRefs.push_back(lRef);
+                luRefCursor += 0x2C;
+            }
             g_pSplices->push_back(lS);
         }
 
@@ -307,8 +326,11 @@ void GuiSoundPC::FillStatic(s16* lpOut, int liFrames, void* /*lpUser*/)
         {
             const s64 liSrc = lrV.mnCursor >> 16;
             if (liSrc >= lrV.mnFrames) { lrV.mbActive = false; break; }
-            const int liL = int(f32(lrV.mpPcm[liSrc * 2 + 0]) * lrV.mfVolume);
-            const int liR = int(f32(lrV.mpPcm[liSrc * 2 + 1]) * lrV.mfVolume);
+            f32 lfGain = lrV.mfVolume;
+            if (liSrc >= lrV.mnFadeFrom && lrV.mnFrames > lrV.mnFadeFrom)
+                lfGain *= f32(lrV.mnFrames - liSrc) / f32(lrV.mnFrames - lrV.mnFadeFrom);
+            const int liL = int(f32(lrV.mpPcm[liSrc * 2 + 0]) * lfGain);
+            const int liR = int(f32(lrV.mpPcm[liSrc * 2 + 1]) * lfGain);
             int liMixL = int(lpOut[i * 2 + 0]) + liL;
             int liMixR = int(lpOut[i * 2 + 1]) + liR;
             if (liMixL >  32767) liMixL =  32767;
@@ -422,37 +444,65 @@ void GuiSoundPC::OnTrigger(const char* lpacTypeName, const char* lpacActionName,
         return;
 
     const Splice& lrSplice = (*g_pSplices)[lpRow->mu16Splice];
-    if (lrSplice.mu16FirstSample == 0xFFFF)
+    if (lrSplice.mRefs.empty())
         return;
-    int liRate = 0, liChannels = 0;
-    const std::vector<s16>* lpPcm = SamplePcm(lrSplice.mu16FirstSample, liRate, liChannels);
-    if (lpPcm == nullptr || liRate <= 0)
-        return;
+    const f32 lfSpliceVol = (lrSplice.mfVolume > 0.0f && lrSplice.mfVolume <= 4.0f)
+                                ? lrSplice.mfVolume : 1.0f;
 
-    // Start it on a free (or the first) voice slot; the device may be closed when
-    // no stream owns it -- open at the sample's rate so the blip is still audible.
-    if (!AudioOutputPC::IsOpen())
-        AudioOutputPC::Open(liRate, 2, nullptr, nullptr);
-    const int liDevRate = AudioOutputPC::GetOpenSampleRate();
-    if (liDevRate <= 0)
-        return;
+    // Start ONE voice per sample ref (the authored composite: e.g. the accept sound
+    // layers three refs at different volumes/pitches). Each ref applies its own
+    // volume, pitch (playback-rate multiplier), duration clamp and tail fade-out.
+    int liStarted = 0;
+    for (const SampleRef& lrRef : lrSplice.mRefs)
+    {
+        if (lrRef.mu16Sample == 0xFFFF)
+            continue;
+        int liRate = 0, liChannels = 0;
+        const std::vector<s16>* lpPcm = SamplePcm(lrRef.mu16Sample, liRate, liChannels);
+        if (lpPcm == nullptr || liRate <= 0)
+            continue;
 
-    int liSlot = 0;
-    for (int v = 0; v < KI_NUM_VOICES; ++v)
-        if (!g_aVoices[v].mbActive) { liSlot = v; break; }
-    OneShot& lrV = g_aVoices[liSlot];
-    lrV.mbActive = false;
-    lrV.mpPcm    = lpPcm->data();
-    lrV.mnFrames = s64(lpPcm->size() / 2);
-    lrV.mnCursor = 0;
-    lrV.mnStep   = (s64(liRate) << 16) / liDevRate;
-    lrV.mfVolume = (lrSplice.mfVolume > 0.0f && lrSplice.mfVolume <= 4.0f) ? lrSplice.mfVolume : 1.0f;
-    lrV.mbActive = true;
+        // The device may be closed when no stream owns it; open at the sample's
+        // rate so the blip is still audible.
+        if (!AudioOutputPC::IsOpen())
+            AudioOutputPC::Open(liRate, 2, nullptr, nullptr);
+        const int liDevRate = AudioOutputPC::GetOpenSampleRate();
+        if (liDevRate <= 0)
+            continue;
 
-    char lac[160];
-    std::snprintf(lac, sizeof(lac), "[GuiSound] '%s' -> splice %u sample %u (%d Hz, vol %.2f)",
-                  lpacKey, unsigned(lpRow->mu16Splice), unsigned(lrSplice.mu16FirstSample),
-                  liRate, double(lrV.mfVolume));
+        int liSlot = 0;
+        for (int v = 0; v < KI_NUM_VOICES; ++v)
+            if (!g_aVoices[v].mbActive) { liSlot = v; break; }
+        OneShot& lrV = g_aVoices[liSlot];
+        lrV.mbActive = false;
+        lrV.mpPcm    = lpPcm->data();
+        s64 liFrames = s64(lpPcm->size() / 2);
+        const f32 lfPitch = (lrRef.mfPitch > 0.01f && lrRef.mfPitch < 8.0f) ? lrRef.mfPitch : 1.0f;
+        if (lrRef.mfDuration > 0.0f)
+        {
+            // Duration is authored in OUTPUT seconds; the source extent covers
+            // duration * rate * pitch source frames.
+            const s64 liCap = s64(f64(lrRef.mfDuration) * f64(liRate) * f64(lfPitch));
+            if (liCap > 0 && liCap < liFrames) liFrames = liCap;
+        }
+        lrV.mnFrames  = liFrames;
+        lrV.mnFadeFrom = liFrames;
+        if (lrRef.mfFadeOut > 0.0f)
+        {
+            const s64 liFade = s64(f64(lrRef.mfFadeOut) * f64(liRate) * f64(lfPitch));
+            if (liFade > 0 && liFade < liFrames) lrV.mnFadeFrom = liFrames - liFade;
+        }
+        lrV.mnCursor = 0;
+        lrV.mnStep   = s64(f64(s64(liRate) << 16) * f64(lfPitch)) / liDevRate;
+        const f32 lfRefVol = (lrRef.mfVolume > 0.0f && lrRef.mfVolume <= 4.0f) ? lrRef.mfVolume : 1.0f;
+        lrV.mfVolume = lfSpliceVol * lfRefVol;
+        lrV.mbActive = true;
+        ++liStarted;
+    }
+
+    char lac[176];
+    std::snprintf(lac, sizeof(lac), "[GuiSound] '%s' -> splice %u (%d ref voice(s), splice vol %.2f)",
+                  lpacKey, unsigned(lpRow->mu16Splice), liStarted, double(lfSpliceVol));
     GUISND_LOG(lac);
 }
 
