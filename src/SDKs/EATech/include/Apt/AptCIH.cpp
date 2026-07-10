@@ -604,69 +604,9 @@ label_27:
     return (mFlagsA >> 25) & 1u;
 }
 
-// _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core (static: the CIH is
-// passed in r3, the arg count in r4, the play flag in r5).
-void* AptCIH::_gotoAndX(int nArgCount, unsigned int bPlay)
-{
-    if (nArgCount >= 1)
-    {
-        AptCharacterInst* pInst = mpCharacterInst;
-        // The goto target is the top of the interpreter operand stack.
-        AptValue* pTarget = gAptActionInterpreter.stackAt(0);
-
-        // The custom-control 0x3C char family does not seek by this path.
-        if ((pInst->mTypeFlags & 0xFC000000u) != 0x3C000000u)
-        {
-            int nFrame;
-            // A defined string-value (vtbl 1) / string-object (vtbl 33) operand names
-            // a frame LABEL; anything else is a numeric frame number. Read the value's
-            // type/defined state through the named bitfield accessors (the x64-native
-            // form of the console `(*(v6+4)<<25)>>25` / `(*(v6+4)>>27)&1`).
-            const int nVtbl = static_cast<int>(pTarget->getVtblIndex());
-            const bool bIsLabel = (nVtbl == AptVFT_StringValue || nVtbl == AptVFT_StringObject)
-                                  && pTarget->getIsDefined();
-
-            if (bIsLabel)
-            {
-                // FLAG (x64): the X360 hands AptNativeHash::Lookup the label value's
-                // embedded EAStringC (console `v6 + 8`; for a register value it first
-                // dereferences the register's stored value). AptValue::Get_ToString is
-                // the blessed value-layer accessor for that name EAStringC (returning the
-                // embedded string, or rendering the value into the scratch), used here in
-                // place of the x64-shifted raw +8 / register-deref offsets.
-                EAStringC strScratch;
-                const EAStringC* pName = AptValue::Get_ToString(pTarget, &strScratch);
-
-                AptMovie* pMovie = AptCIH_GetClipMovie(
-                    static_cast<AptCharacterSpriteInstBase*>(pInst));
-                AptValue* pLabelMatch = (pMovie->mpLabelHash && pName)
-                    ? pMovie->mpLabelHash->Lookup(*pName)
-                    : nullptr;
-                nFrame = pLabelMatch ? (pLabelMatch->toInteger() + 1) : 0;   // (-1)+1 == 0 on miss
-            }
-            else
-            {
-                nFrame = pTarget->toInteger();
-            }
-
-            // The stored/label frame is 1-based; seek to the 0-based index.
-            const int nSeek = nFrame - 1;
-            if (nSeek >= 0)
-            {
-                jumpToFrame(nSeek);
-
-                // Set/clear the clip's auto-play state bit (bit6 / 0x40 of the sprite
-                // mnClipActionFlags) from bPlay, then -- when it is PLAYING (bPlay set)
-                // -- re-dirty the node so it keeps ticking.
-                const bool bWantPlay = (bPlay != 0);
-                AptCharacterSpriteInstBase* pSprite =
-                    static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
-                pSprite->mnClipActionFlags =
-                    (pSprite->mnClipActionFlags & 0xFFFFFFBFu) | (bWantPlay ? 0x40u : 0u);
-                if (bWantPlay)
-                    SetDirtyState(true, true);
-            }
-        }
-    }
-    return gpUndefinedValue;
-}
+// (_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is homed as the
+// free AptCIH_gotoAndX in AptCIHNativeFunctionHelper.cpp, the sole caller family's
+// TU. The duplicate member body this TU carried was RETIRED 2026-07-10: two homes
+// for one console function drifted -- the member had the play-arm SetDirtyState
+// right while the live free function had it inverted onto the stop arm, freezing
+// every gotoAndPlay'd transition on a settled node.)

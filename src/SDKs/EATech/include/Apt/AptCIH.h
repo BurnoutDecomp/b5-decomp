@@ -229,13 +229,9 @@ struct AptCIH : public AptValueGC
     // string-value placeholder, a negative frame, or a frame past the clip's end.
     int jumpToFrame(int nFrame);   // @0x82B0BD50
 
-    // _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core. Reads the goto
-    // target off the interpreter operand stack: a numeric value is the 1-based frame
-    // number; a string/label value resolves through the clip's label hash. Seeks via
-    // jumpToFrame, then sets/clears the clip's auto-play flag from bPlay and re-dirties
-    // the node when it stopped. Returns the shared `undefined` value. nArgCount gates
-    // the whole op (must be >= 1). Static: the X360 passes the CIH in r3, no `this`.
-    void* _gotoAndX(int nArgCount, unsigned int bPlay);   // @0x82B0D2F0
+    // (_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is homed as
+    // the free AptCIH_gotoAndX in AptCIHNativeFunctionHelper.cpp, its sole caller
+    // family's TU; the duplicate member declaration was retired 2026-07-10.)
 
     // ---- packed state / flags (mFlagsA bit-fields) -----------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110

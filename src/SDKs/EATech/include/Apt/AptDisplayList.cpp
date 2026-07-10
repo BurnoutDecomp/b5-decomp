@@ -1283,8 +1283,9 @@ int AptCIH::AssociateInstToClass()
         return 0;
 
     // Gate: sprite(5) / animation(tag 0x10) instance, or a class-tagged instance
-    // (mTypeFlags 0xFC000000 == 0x24000000), whose render item is not yet class-bound
-    // (item->mFlags bit27 clear).
+    // (mTypeFlags 0xFC000000 == 0x24000000), that is NOT created-dynamic
+    // (item->mFlags bit27 == AptRenderItem::mbCreatedDynamic -- a runtime
+    // createEmptyMovieClip/createTextField child has no library export name to bind).
     const uint32_t nTag = pInst->mTypeFlags >> 26;            // v2[2] >> 26
     const bool bSpriteLike = (nTag == 5u || nTag == 16u);
     if (!bSpriteLike && (pInst->mTypeFlags & 0xFC000000u) != 0x24000000u)
@@ -1369,12 +1370,13 @@ int AptCIH::AssociateInstToClass()
     // tests AptValue::GetHasClass on the receiver to bind `this`; leaving the CIH flag
     // clear made nested RegisterComponent calls execute on _global instead of this clip.
     pNode->SetHasClass(1);
-    // FLAG (stand-in for the un-homed real setter): the X360 @0x82B073B8 body performs
-    // NO store to the render item's flags -- something else marks the item class-bound
-    // (bit 27) so this function's entry gate skips already-bound items on later passes.
-    // Until that setter's home is recovered, set the gate bit here so a placed clip is
-    // bound exactly once (removing it would re-run class ctors every placement pass).
-    pInst->GetRenderItemWritable()->mFlags |= (1u << 27);
+    // (2026-07-10, original-source confirmation: render-item mFlags bit27 is the
+    // CREATED-DYNAMIC flag -- AptRenderItem::mbCreatedDynamic, set only by
+    // createEmptyMovieClip/createTextField. The entry gate above SKIPS dynamic
+    // items, it is not a "bound once" latch; the once-only property is the caller's
+    // bWasInstantiated gate in placeObject. The earlier stand-in that stored bit27
+    // here clamped every class-bound clip's playhead to frame 0 in tick() -- the
+    // invisible-menu freeze -- and is retired.)
 
     // 4. run the class constructor on the node (GC-root protected).
     AptValue** const lppSavedRegs = AptScriptFunctionBase::PushStaticData();
