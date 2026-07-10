@@ -141,6 +141,15 @@ namespace CgsGui
     const char* AptCommunicator::mpacReservedVariableNames[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
     u32         AptCommunicator::mauReservedVariablesHashes[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
 
+    // The console GuiModule::Update @0x828602C8 tail: publish this frame's trigger
+    // records into the view output buffer's GUI event queue, then clear the source.
+    void AptCommunicator::FlushTriggerEventsTo(CgsModule::VariableEventQueue<18432, 16>* lpDest)
+    {
+        if (lpDest != 0)
+            lpDest->Append(mOutAptTriggerEvents);
+        mOutAptTriggerEvents.Clear();
+    }
+
     // @ dword_8305A6E0..8305A6F4 - the cached native-function wrappers Initialize fills.
     AptValue* AptCommunicator::psMethod_SendAptEvent            = 0;
     AptValue* AptCommunicator::psMethod_SendAptSoundEvent       = 0;

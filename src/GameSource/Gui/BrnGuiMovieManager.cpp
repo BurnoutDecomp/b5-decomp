@@ -623,6 +623,12 @@ namespace BrnGui
             else
             {
                 // [diag] the (synchronous) player open failed -> skip rather than spin/retry every frame.
+                // [PC] QueueNextMovie already decoded this movie's sound stream and claimed the
+                // (silent) output voice for it; release it on the skip exactly as the finished
+                // path does, or the never-started stream pins the voice (g_finished stays false)
+                // and the menu-music stream can never reclaim the output afterwards -- the
+                // "menu music stops for good after the first missing-attract skip" fault.
+                g_movieAudio.Stop();
                 meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
             }
             break;
