@@ -713,13 +713,24 @@ namespace BrnGui
                                 lbLegalAccepted = true;
                         }
                         // Event 155: the menu-stream music request (hash @+0x0C; 0 = stop).
+                        // Console consumer chain: the module dispatch hands the GUI out-events to
+                        // the sound module (RootInputBuffer::SetGuiEventQueue), whose
+                        // SoundLogicModule::ProcessGuiEvents @0x826ED6C8 re-posts them as typed
+                        // CgsSound::Io::Message records to the MusicEffect logic (a blocked
+                        // behavioural cluster); MenuMusicPC is the sanctioned PC leaf for the
+                        // observable (hash -> named stream playing/looping, 0 -> stop).
                         if (lbPastCursor && liId == 155)
                         {
                             HandleMenuMusicEvent(*reinterpret_cast<const s32*>(
                                 reinterpret_cast<const char*>(lpEvent) + 0x0C));
                         }
-                        // Event 201: a GUI audio trigger ("Accept"...). Consume + log; the AEMS
-                        // patch playback (the blip sample in the Splicer bank) is the follow-on.
+                        // Event 201: a GUI audio trigger ("Accept"...). Console consumer:
+                        // SoundLogicModule::ProcessGuiEvents @0x826ED6C8 (its case 457 wraps the
+                        // 112-byte GuiAudioTriggerEvent record into a CgsSound::Io::Message and
+                        // posts it to the sound-logic message queue), then the logic state
+                        // managers key the AEMS patch (the blip sample in the Splicer bank).
+                        // That logic cluster is blocked; consume + log until it lands -- playing
+                        // a guessed sample would be invention.
                         if (lbPastCursor && liId == 201)
                         {
                             const char* lpacTrigger =
