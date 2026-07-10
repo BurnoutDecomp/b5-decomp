@@ -48,6 +48,7 @@
 //   0x8E DefineFunction2   0x8F Try               0x96 Push
 //   0x99 BranchAlways(*)   0x9A GetUrl2           0x9B DefineFunction
 //   0x9D BranchIfTrue(*)   0x9E CallFrame         0x9F GotoFrame2
+//   0xA1 PushString (@0x82AF4128)
 //   0xA2 PushStringDictByte 0xA3 PushStringDictWord
 //   0xA4 PushStringGetVar  0xA5 PushStringGetMember
 //   0xA6 PushStringSetVar  0xA7 PushStringSetMember
@@ -245,6 +246,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x9B] = &_FunctionAptActionDefineFunction;
 
     // -- string-dictionary push / fused forms --
+    sGlobalTable[0xA1] = &_FunctionAptActionPushString;   // @0x82AF4128 (table entry extracted 2026-07-10)
     sGlobalTable[0xA2] = &_FunctionAptActionPushStringDictByte;
     sGlobalTable[0xA3] = &_FunctionAptActionPushStringDictWord;
     sGlobalTable[0xA4] = &_FunctionAptActionPushStringGetVar;

@@ -183,7 +183,10 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // isNaN RETIRED (2026-07-02): homed in AptActionInterpreterBuiltins.cpp
     // (the full @0x82AF9768 ECMA-ish NaN classification incl. the SWF7 arm).
     bool AptLinker_isFileImported(AptLinker* pLinker, AptFilePtr* ppCandidate) { return false; }   // FLAG link-stub
-    const char*    AptResolveTextFieldFontName(AptCharacterInst* pTextInst) { return ""; }   // FLAG link-stub ("" == the contract's no-font value; the caller constructs an EAStringC from it)
+    // AptResolveTextFieldFontName RETIRED (2026-07-10): homed in AptCIHText.cpp (the
+    // fontID -> owning movie charTable -> type-3 font-char name walk; the "" stub
+    // blanked the getTextFormat/setTextFormat round-trip's font name -- every
+    // AS-re-formatted field fell back to the collection's first typeface).
     // Apt_atoff RETIRED (2026-07-02): homed in AptValueConvert.cpp
     // (PS3 @0x7E2990 == (float)strtod; the stub's 0 broke every string->number).
     // AptValueGCPool_GetAllocatedCount RETIRED (2026-07-02): homed in
