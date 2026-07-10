@@ -257,8 +257,13 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                     static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
                 pSprite->mnClipActionFlags =
                     (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
-                if (!bPlay)
-                    pNode->SetDirtyState(true, true);   // X360 (r4=1, r5=1) on the stop arm
+                // X360 @0x82B0D3F8: `if (v14 == 1) SetDirtyState(1, 1)` where v14 IS the
+                // play flag -- a gotoAndPlay must RE-DIRTY the node so tick() picks the
+                // playing clip back up (tick early-outs on a clean node; without this a
+                // settled clip's transition never advances -- the alpha-0 freeze). The
+                // earlier recon had the arm INVERTED onto the stop path.
+                if (bPlay)
+                    pNode->SetDirtyState(true, true);
             }
         }
     }
