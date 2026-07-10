@@ -13,7 +13,7 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnBootVideos.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLegal.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootAttract.h"
-#include "GameSource/Gui/Flow/HUD/States/BrnBootCompoundLoad.h"
+#include "GameSource/Gui/Flow/HUD/States/BrnPostTitleScreenLoad.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootProfile.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLoading.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
@@ -79,12 +79,12 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     CgsGui::StateMachine& lStateMachine = GetStateMachine();
 
     // Allocate the 14 states (X360 build order = the SetStates table order).
-    mpPreload      = NewPoolState<BootPreload>(lpLinearMalloc);
-    mpVideos       = NewPoolState<BootVideos>(lpLinearMalloc);
-    mpLegal        = NewPoolState<BootLegal>(lpLinearMalloc);
-    mpAttract      = NewPoolState<BootAttract>(lpLinearMalloc);
-    mpCompoundLoad = NewPoolState<BootCompoundLoad>(lpLinearMalloc);
-    mpProfile      = NewPoolState<BootProfile>(lpLinearMalloc);
+    mpPreload             = NewPoolState<BootPreload>(lpLinearMalloc);
+    mpVideos              = NewPoolState<BootVideos>(lpLinearMalloc);
+    mpLegal               = NewPoolState<BootLegal>(lpLinearMalloc);
+    mpAttract             = NewPoolState<BootAttract>(lpLinearMalloc);
+    mpPostTitleScreenLoad = NewPoolState<PostTitleScreenLoad>(lpLinearMalloc);
+    mpProfile             = NewPoolState<BootProfile>(lpLinearMalloc);
     mpLoading      = NewPoolState<BootLoading>(lpLinearMalloc);
     mpRaceMain     = NewPoolState<RaceMainHudState>(lpLinearMalloc);
     mpFBurnMain    = NewPoolState<FBurnMainHudState>(lpLinearMalloc);
@@ -99,7 +99,7 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     mpVideos->Construct(CgsIDCompress("BF_VIDEOS"), &lStateMachine);
     mpLegal->Construct(CgsIDCompress("BF_LEGAL"), &lStateMachine);
     mpAttract->Construct(CgsIDCompress("BF_ATTR"), &lStateMachine);
-    mpCompoundLoad->Construct(CgsIDCompress("BF_COMPLOAD"), &lStateMachine);
+    mpPostTitleScreenLoad->Construct(CgsIDCompress("BF_COMPLOAD"), &lStateMachine);
     // FLAG: the X360 BF_PROFILE uses a wider Construct(id, fsm, ProfileManager*) virtual (slot 9)
     // that threads the profile manager in. BootProfile's ProfileTaskResultHandler base + that 3-arg
     // Construct are not reconstructed yet (see BrnBootProfile.h), so BF_PROFILE is Construct'd via
@@ -122,7 +122,7 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     lapStates[1]  = mpVideos;
     lapStates[2]  = mpLegal;
     lapStates[3]  = mpAttract;
-    lapStates[4]  = mpCompoundLoad;
+    lapStates[4]  = mpPostTitleScreenLoad;
     lapStates[5]  = mpProfile;
     lapStates[6]  = mpLoading;
     lapStates[7]  = mpRaceMain;

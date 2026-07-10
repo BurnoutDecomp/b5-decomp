@@ -1,6 +1,8 @@
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+#include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior)
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. StateLoadingHelper tracks how many of
 // its watched resources are pending an unload. Increment/Decrement adjust the count
 // and then run a debug consistency check: the count must equal the number of resources
@@ -27,6 +29,19 @@ namespace BrnGui
             }
             return luRealPending;
         }
+    }
+
+    // @ 0x827E05B8 -- the cache constructor: a long per-field init list against the X360
+    // layout (sentinels to -1, counters/times to 0). The PC model names only the members
+    // the recovered accessors touch (the rest is explicit padding), so the faithful PC
+    // form zero-fills the aggregate (the unmodelled fields' X360 init value is 0) and
+    // applies the named non-zero inits: the mEvents array ctor sentinel at +40532 is the
+    // one modelled member the X360 sets to -1 (the other -1 sentinels at +3800/+30560/
+    // +40664/+40704/+41936/+42976 fall inside the reserved padding spans).
+    GuiCache::GuiCache()
+    {
+        std::memset(this, 0, sizeof(GuiCache));
+        mEventsCtorSentinel = -1;
     }
 
     // @ 0x824EC008

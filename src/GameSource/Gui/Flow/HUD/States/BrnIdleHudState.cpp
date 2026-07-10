@@ -19,8 +19,17 @@
 namespace BrnGui
 {
 
-// One observed GUI event id (value resolved at link time; see header).
+// One observed GUI event id. FLAG (unrecovered .data @0x8205B224): the exports carry no
+// value; 0 is a never-posted placeholder id until the table is recovered (the idle HUD
+// is in-game territory, not on the boot path).
+const s32 IdleHudState::maiEventToObserve[1] = { 0 };
 const s32 IdleHudState::miNumEventsObserved = 1;
+
+// FLAG (unrecovered .data @0x82F264BC/@0x82F264CC): the idle HUD's resource-tuple table
+// carries no exported values; empty until recovered.
+const CgsGui::sResourceTuple IdleHudState::maResourcesToLoad[1] =
+    { { 0u, CgsGui::E_GUI_RESOURCETYPE_START } };
+u32 IdleHudState::muNumResourcesToLoad = 0;
 
 // @ 0x824759C0
 void IdleHudState::OnEnter()

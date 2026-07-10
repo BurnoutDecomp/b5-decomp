@@ -266,6 +266,13 @@ namespace
     AptMovieSlot s_PersistentSlot =
         { "persist",   { 0 }, false, false, false, false, /*miLevel*/ 2,
           nullptr, nullptr, 0, 0, nullptr, nullptr, nullptr, 33u, 0.0, -1, 0 };
+    // The AUX slot: a state-owned overlay movie above the flow (BF_PROFILE plays
+    // "SaveLoadComponent" at display level 3 -- the save/load prompt). Same faithful
+    // load path as every slot; the component is usually already registered by the
+    // PERSISTENTAPT notification set, so the bundle IO is the fallback only.
+    AptMovieSlot s_AuxSlot =
+        { "aux",       { 0 }, false, false, false, false, /*miLevel*/ 3,
+          nullptr, nullptr, 0, 0, nullptr, nullptr, nullptr, 33u, 0.0, -1, 0 };
 
     // The flow left BF_LEGAL (accept path) -- parks the FLOW slot only (tick + render);
     // the FRAMEWORK movie keeps ticking (the console keeps the persistent level-0 apt
@@ -284,13 +291,17 @@ namespace
     // ~3.5 MiB main + ~8.13 MiB graphics per the console Gui_Persistent_Apt_Pool
     // ({0x369AF0, 0x820000, 0} in BrnMemoryMapData.h). 12 MiB/type covers its largest section.
     const u32 KU_FRAMEWORK_POOL_BYTES = 12u * 1024u * 1024u;
+    // The aux (state-overlay) movie: SAVELOADCOMPONENT.bundle is a small component (4 MB/type).
+    const u32 KU_AUX_POOL_BYTES = 4u * 1024u * 1024u;
     u8 s_aFlowPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FLOW_POOL_BYTES];
     u8 s_aFrameworkPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
     // PERSISTENTAPT is the 11.5 MB library -> its own 12 MiB/type pool (as the framework's).
     u8 s_aPersistentPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
+    u8 s_aAuxPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_AUX_POOL_BYTES];
     CgsResource::Pool s_FlowPoolStorage;
     CgsResource::Pool s_FrameworkPoolStorage;
     CgsResource::Pool s_PersistentPoolStorage;
+    CgsResource::Pool s_AuxPoolStorage;
 
     // The Apt-data resource type id (X360 0x1E == 30; CgsResource::AptDataHeaderType::GetTypeID).
     const u32 KU_APTDATA_RESOURCE_TYPE_ID = 30u;
@@ -345,7 +356,7 @@ namespace
     //   -> Resolve -> Fixup -> AptGetAnimationAtLevel -> MakeCharacterAnimationInst.
     // The movie root locates inside CompleteLoad (const chunk movieOffset @+0x18, the
     // XB1-attested native-8 formula); the resolve64 bounds derive inside LoadAnimation
-    // from the header's size slot. The old signature scan (LocateMovieRoot8), the
+    // from the header's size slot. The old byte-pattern root locator, the
     // gAptLoadAnimRootOverride / span pokes, and the direct AddAptData host calls are
     // RETIRED (2026-07-09, the step-5 load-ownership move).
     //
@@ -462,12 +473,13 @@ namespace BrnGui
     // Forward declarations (definitions are `static` later in this BrnGui namespace; called
     // from PlayMovie / Update which appear before their definitions). Must be in BrnGui (not
     // the anon namespace) so the in-namespace calls bind to the static definitions.
-    // (LocateMovieRoot8, the x64 signature-scan root locator, is RETIRED (2026-07-09):
+    // (The old x64 byte-pattern root locator is RETIRED (2026-07-09):
     // AptLoader::CompleteLoad's faithful native-8 root location -- the const chunk's
     // movieOffset @const+0x18, the XB1-attested formula -- covers every bundle, so the
-    // scan and its gAptLoadAnimRootOverride poke are gone. The DumpResourceBytes hex
+    // locator and its gAptLoadAnimRootOverride poke are gone. The DumpResourceBytes hex
     // probes went with them.)
     static void DriveFaithfulLoad(AptMovieSlot& lrSlot);
+    static void StopRuntimeMovie();
 
     // Host frame counter + the frame the framework movie came up (console ordering
     // gate: the registerClass bootstrap runs at MAIN's first update tick -- dependent
@@ -1118,8 +1130,65 @@ namespace BrnGui
     {
         if (lpacMovieName == nullptr || lpacMovieName[0] == '\0')
         {
-            // null / empty channel-41 name: a spurious re-post (BootLegal interleaves empty events).
-            // Ignore it -- do NOT clobber the loaded-movie name or trigger a (failed) reload.
+            // The empty-name post at level 1 is BF_LEGAL's OnLeave UNLOAD record
+            // ({8,18,12,"",1} on channel 41 -- "unload the movie at this level"): park
+            // the flow movie through the engine's removal op. Other empty posts are
+            // spurious re-fires (BootLegal interleaves empty events) -- ignore.
+            if (liLevelNum == 1)
+                StopRuntimeMovie();
+            return;
+        }
+
+        // LEVEL-0: the AS FRAMEWORK request -- BF_PRELOAD's PlayAptMovie("main", 0), the
+        // real console trigger for the level-0 framework core (MAIN + the persistent
+        // component library the GUI resource module keeps beside it). Re-fires retry the
+        // deferred instantiation until the registrations land.
+        if (liLevelNum == 0)
+        {
+            if (s_bRuntimeReady)
+                EnsureFrameworkMovie();
+            return;
+        }
+
+        // LEVEL >= 2: a state-owned overlay movie above the flow (BF_PROFILE's
+        // "SaveLoadComponent" at level 3). Same faithful path, aux slot.
+        if (liLevelNum >= 2)
+        {
+            const bool lbSameAux =
+                (s_AuxSlot.mbRequested || s_AuxSlot.mbLoaded) &&
+                std::strncmp(s_AuxSlot.macName, lpacMovieName, sizeof(s_AuxSlot.macName) - 1) == 0;
+            if (lbSameAux && s_AuxSlot.mbInstantiated)
+                return;
+            if (!lbSameAux)
+            {
+                std::strncpy(s_AuxSlot.macName, lpacMovieName, sizeof(s_AuxSlot.macName) - 1);
+                s_AuxSlot.macName[sizeof(s_AuxSlot.macName) - 1] = '\0';
+                s_AuxSlot.mbRequested = true;
+                s_AuxSlot.miLevel     = liLevelNum;
+                char lacAux[200];
+                std::snprintf(lacAux, sizeof(lacAux),
+                    "[AptRT] PlayMovie: consume channel-41 '%s' (aux level %d).\n",
+                    s_AuxSlot.macName, liLevelNum);
+                CgsDev::Log::WriteToLog(lacAux);
+            }
+            if (!s_bRuntimeReady)
+            {
+                s_AuxSlot.mbRequested = false;
+                return;
+            }
+            // The component is usually carried by PERSISTENTAPT (already registered);
+            // the bundle IO below is the fallback for a standalone bundle.
+            if (!s_AuxSlot.mbLoaded &&
+                CgsGui::AptAuxPointer::mpAptAuxInst != nullptr &&
+                CgsGui::AptAuxPointer::mpAptAuxInst->mAptDataHandler.FindAptData(s_AuxSlot.macName) == nullptr)
+            {
+                u8* lapAuxBacking[CgsResource::E_MEMTYPE_NUMTYPES];
+                for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+                    lapAuxBacking[lt] = s_aAuxPoolBacking[lt];
+                AptLoadMovieSlot(s_AuxSlot, &s_AuxPoolStorage, lapAuxBacking, KU_AUX_POOL_BYTES);
+            }
+            if (!s_AuxSlot.mbInstantiated && FrameworkClassesLive())
+                DriveFaithfulLoad(s_AuxSlot);
             return;
         }
 
@@ -1136,21 +1205,13 @@ namespace BrnGui
 
         if (!lbSameMovie)
         {
-            // FLOW-SLOT ROUTING: channel 41 drives the FLOW movie at display level 1 (above
-            // the level-0 framework). BootLegal posts level 1; a different level is a protocol
-            // surprise -- log it (assert-equivalent) but still route to the flow slot.
-            if (liLevelNum != 1)
-            {
-                char lacLvl[160];
-                std::snprintf(lacLvl, sizeof(lacLvl),
-                    "[AptRT] PlayMovie: UNEXPECTED level %d (the flow movie is level 1) -- "
-                    "routing to the flow slot anyway (FLAG).\n", liLevelNum);
-                CgsDev::Log::WriteToLog(lacLvl);
-            }
             std::strncpy(s_FlowSlot.macName, lpacMovieName, sizeof(s_FlowSlot.macName) - 1);
             s_FlowSlot.macName[sizeof(s_FlowSlot.macName) - 1] = '\0';
             s_FlowSlot.mbRequested = true;
             s_FlowSlot.miLevel     = liLevelNum;
+            // A NEW flow movie un-parks the slot (the previous state's unload post
+            // deletion-marked the old render root).
+            s_bMovieStopped = false;
 
             char lac[200];
             std::snprintf(lac, sizeof(lac),
@@ -1166,9 +1227,10 @@ namespace BrnGui
             return;
         }
 
-        // Stand the AS FRAMEWORK movies up FIRST (level 0/2, lazily, one-shot IO + deferred
-        // instantiate) so they compose beneath the flow movie and their exported classes are
-        // resident when the flow movie's imports link.
+        // Stand the AS FRAMEWORK movies up FIRST (level 0/2, one-shot IO + deferred
+        // instantiate) so they compose beneath the flow movie and their exported classes
+        // are resident when the flow movie's imports link. (BF_PRELOAD's level-0 request
+        // normally did this long before; this is the belt-and-suspenders re-entry.)
         EnsureFrameworkMovie();
 
         // The flow movie's own bundle IO ([PC IO] leaf) + queued registration, then the
@@ -1289,7 +1351,7 @@ namespace BrnGui
         // Peek the pointer size from the "Apt Data:1:7:N" signature. That signature lives in the
         // APT DATA chunk -- hdr field 2 (@+0x10) of the libapt2 6-field header [name, baseName,
         // aptData, const, geom, size].
-        const u32 luAptDataOff = static_cast<u32>(*reinterpret_cast<const u64*>(luBase + 0x10u));
+        const u32 luAptDataOff = static_cast<u32>(*reinterpret_cast<const u64*>(luBase + 0x10u));   // serialized .apt header: aptData @+0x10
         if (luAptDataOff == 0 || luAptDataOff >= luSize)
         {
             CgsDev::Log::WriteToLog("[AptRT] faithful: aptData offset out of range -- bail (FLAG).\n");
@@ -1303,7 +1365,7 @@ namespace BrnGui
         CgsDev::Log::WriteToLog(lac);
         (void)lpConstFile;
 
-        // --- 2. REGISTER / look up the AptFile handle (AptLoader::Load) --------------------------        // --- 3. REGISTER / look up the AptFile handle (AptLoader::Load) --------------------------
+        // --- 2. REGISTER / look up the AptFile handle (AptLoader::Load) --------------------------
         // Load returns a handle owning ONE counted reference. We keep it (laOwned) and hand a
         // COPY to LoadAnimation (which consumes its copy, per the console by-value slot). The owned
         // handle survives, and after CompleteLoad it points at the loaded movie (mpData = root).
@@ -1390,11 +1452,11 @@ namespace BrnGui
         // and frame[0].mnCommandCount should be 13 (verified vs TITLE_SCREEN02.bundle).
         {
             const char* lpRootMovie = reinterpret_cast<const char*>(lrSlot.mpCharAnim);
-            const int liFrameCount = *reinterpret_cast<const int*>(lpRootMovie + 0x00);
-            void** lpFrames = *reinterpret_cast<void* const*>(lpRootMovie + 0x08) ?
-                *reinterpret_cast<void** const*>(lpRootMovie + 0x08) : nullptr;
+            const int liFrameCount = *reinterpret_cast<const int*>(lpRootMovie + 0x00);   // serialized .apt movie: frameCount @+0x00
+            void** lpFrames = *reinterpret_cast<void* const*>(lpRootMovie + 0x08) ?      // serialized .apt movie: mpFrames @+0x08
+                *reinterpret_cast<void** const*>(lpRootMovie + 0x08) : nullptr;          // serialized .apt movie: mpFrames @+0x08
             const unsigned long long luFramesRaw =
-                *reinterpret_cast<const unsigned long long*>(lpRootMovie + 0x08);
+                *reinterpret_cast<const unsigned long long*>(lpRootMovie + 0x08);        // serialized .apt movie: raw slot value
             // The frame table is a relocated pointer iff it lands inside the resource span.
             const bool lbRelocated =
                 (luFramesRaw >= lrSlot.muResourceBase &&
@@ -1535,7 +1597,7 @@ namespace BrnGui
         // ---- FALLBACK ([PC IO] + FLAG): per-import bundle load ----------------------
         // Dedup: already resident?
         ImportBundleSlot* lpSlot = nullptr;
-        for (u32 lu = 0; lu < s_uImportBundleCount; ++lu)        for (u32 lu = 0; lu < s_uImportBundleCount; ++lu)
+        for (u32 lu = 0; lu < s_uImportBundleCount; ++lu)
         {
             if (s_aImportBundles[lu].lbUsed &&
                 _stricmp(s_aImportBundles[lu].macName, lpacMovieName) == 0)
@@ -1622,7 +1684,7 @@ namespace BrnGui
             lpAptAux->mAptDataHandler.AddAptData(
                 reinterpret_cast<CgsGui::AptDataHeader*>(lpRes), lpSlot->macName);
 
-            ++s_uImportBundleCount;            ++s_uImportBundleCount;
+            ++s_uImportBundleCount;
             std::snprintf(lac, sizeof(lac),
                 "[AptRT] import-load: '%s' resident base=0x%016llX size=%u (slot %u).\n",
                 lpSlot->macName, (unsigned long long)lpSlot->luBase, lpSlot->luSize,
@@ -1680,6 +1742,17 @@ namespace BrnGui
         if (!s_bRuntimeReady)
             return;
 
+        // Retry the DEFERRED slot instantiations each frame -- the async-load
+        // observable. A slot's registration notification dispatches through the view
+        // queue a frame after its bundle IO, so the first DriveFaithfulLoad defers
+        // (FindAptData miss, one-shot not armed); the console's AptLoader::Update
+        // state machine retries per frame, and this is its host-side equivalent.
+        if (s_FrameworkSlot.mbRequested || s_PersistentSlot.mbRequested)
+            EnsureFrameworkMovie();
+        if (s_FlowSlot.mbLoaded && !s_FlowSlot.mbInstantiated && FrameworkClassesLive())
+            DriveFaithfulLoad(s_FlowSlot);
+        if (s_AuxSlot.mbRequested && !s_AuxSlot.mbInstantiated && FrameworkClassesLive())
+            DriveFaithfulLoad(s_AuxSlot);
     }
 
     // -------------------------------------------------------------------------
@@ -1862,6 +1935,26 @@ namespace BrnGui
 }
 
 // =============================================================================
+// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
+// (CgsGui::AptAux::LoadFlashAnimation @0x82849080 calls it with the "_level%d"
+// path). Its X360 body has no per-address export in the dump set, so this host
+// definition is the PC stand-in: parse the level index back out of the target
+// path and drive the host movie-load machinery (the same load the engine body
+// kicks through the loader + the pfnLoadAnimation host callback). Replace with
+// the faithful engine body once it is exported + reconstructed.
+// FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
+// =============================================================================
+int AptLoadAnimation(const char* pName, const char* pTargetPath)
+{
+    int liLevel = 0;
+    if (pTargetPath != nullptr)
+        std::sscanf(pTargetPath, "_level%d", &liLevel);
+    if (BrnGui::gpActiveAptRuntimeHost != nullptr)
+        BrnGui::gpActiveAptRuntimeHost->PlayMovie(pName, liLevel);
+    return 1;
+}
+
+// =============================================================================
 // AptLoaderStartAsyncLoad (dword_8324E838) -- the platform "kick off the .apt stream" hook the
 // faithful AptLoader::Update calls on the state 1->2 (requested -> loading) transition. On the
 // console this starts an ASYNC stream whose completion posts AptCompleteAnimationAsyncLoad; PC has
@@ -1878,54 +1971,6 @@ namespace BrnGui
 // Fixup), the AptCharacterAnimation_Link -> FindExport link, and the AptLoader::Update state machine
 // it drives are all the faithful console flow.
 // =============================================================================
-// =============================================================================
-// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
-// (CgsGui::AptAux::LoadFlashAnimation @0x82849080 calls it with the "_level%d"
-// path). Its X360 body has no per-address export in the dump set, so this host
-// definition is the PC stand-in: parse the level index back out of the target
-// path and drive the host movie-load machinery (the same load the engine body
-// kicks through the loader + the pfnLoadAnimation host callback). Replace with
-// the faithful engine body once it is exported + reconstructed.
-// FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
-// =============================================================================
-// =============================================================================
-// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
-// (CgsGui::AptAux::LoadFlashAnimation @0x82849080 calls it with the "_level%d"
-// path). Its X360 body has no per-address export in the dump set, so this host
-// definition is the PC stand-in: parse the level index back out of the target
-// path and drive the host movie-load machinery (the same load the engine body
-// kicks through the loader + the pfnLoadAnimation host callback). Replace with
-// the faithful engine body once it is exported + reconstructed.
-// FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
-// =============================================================================
-// TEMP-DIAG (delete before commit)
-void AptUpdateTempDiagChain(AptCIH* pFirst)
-{
-    char lac[512];
-    int n = std::snprintf(lac, sizeof(lac), "[AptRT] TEMPDIAG chain:");
-    AptCIH* p = pFirst;
-    for (int i = 0; i < 10 && p != nullptr && n < 460; ++i)
-    {
-        n += std::snprintf(lac + n, sizeof(lac) - n, " %p(d%d,f%08X)",
-                           (void*)p,
-                           p->GetCharacterInst() ? p->GetCharacterInst()->GetRenderItem()->GetDepth() : -1,
-                           p->mFlagsA);
-        p = p->GetDisplayListNext();
-    }
-    std::snprintf(lac + n, sizeof(lac) - n, p ? " ...MORE\n" : " <end>\n");
-    CgsDev::Log::WriteToLog(lac);
-}
-
-int AptLoadAnimation(const char* pName, const char* pTargetPath)
-{
-    int liLevel = 0;
-    if (pTargetPath != nullptr)
-        std::sscanf(pTargetPath, "_level%d", &liLevel);
-    if (BrnGui::gpActiveAptRuntimeHost != nullptr)
-        BrnGui::gpActiveAptRuntimeHost->PlayMovie(pName, liLevel);
-    return 1;
-}
-
 void AptLoaderStartAsyncLoad(const char* pFileName, AptFilePtr* pFile)
 {
     // Re-entrancy guard: LoadImportBundle drives AptCompleteAnimationAsyncLoad which does NOT

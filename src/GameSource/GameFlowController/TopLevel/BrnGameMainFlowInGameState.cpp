@@ -23,10 +23,8 @@ namespace BrnGameMainFlowController
     // gBrnLoadingScreenShouldShow / gBrnDiskSpaceCheckComplete bridge-global precedent --
     // they are modelled here:
     //   gBrnInGameStateActive       stands in for *(base + 0x9A06BA) (byte) -- "in-game state active"
-    //   gBrnGameModuleLoadState     stands in for *(base + 0x9A0644) (word) -- game-module load-state slot
     //   gBrnReturnToFrontEndRequested stands in for *(base + 0x9A0626) (byte) -- "return to front-end" poll
     bool gBrnInGameStateActive = false;
-    s32  gBrnGameModuleLoadState = 0;
     bool gBrnReturnToFrontEndRequested = false;
 }
 
@@ -35,7 +33,12 @@ namespace BrnGameMainFlowController
 void MainGameFlowStateInGame::OnEnter()
 {
     BrnGameMainFlowController::gBrnInGameStateActive = true;
-    BrnGameMainFlowController::gBrnGameModuleLoadState = 5;   // X360 immediate: 5 (E_MGS_COMPLETE_LOADING)
+    // Request GUI FSM stage 5 (the +2523537 pending-stage byte): BridgeGameToGui
+    // @0x823DCA10 posts GuiEventRunFsm{BrnScreenFsm@LOADING -> SCREEN} +
+    // {BrnFBFsm -> HUD} for it -- the front-end/freeburn handoff. [The prior recon
+    // read this store as a "load-state slot" stamp; the bridge's switch on the same
+    // offset proves it is the GUI FSM stage request.]
+    BrnGame::GetMainGameModule()->RequestGuiFsmStage(5);
 }
 
 // @ 0x823AAD28 -- leaving the in-game flow state: clear the "in-game state active" flag OnEnter

@@ -67,6 +67,11 @@ namespace ModelIO
         // (this+0x15034 == 86068).
         const GuiNotificationQueue* GetLoadNotifications() const;
 
+        // X360 0x824F75E0 (the sub the real GuiModule::Update fetches to AddEvent single
+        // load-notification records -- the 14/16/481 forwards -- and to Clear the queue at
+        // the update tail): write-lock (bit 3) handle to mLoadNotifications.
+        GuiNotificationQueue* GetLoadNotificationsNonConst();
+
         // X360 0x8285ACC0: write-lock (bit 3); bulk-appends a source out-event queue into
         // mGuiOutEvents via VariableEventQueue<18432,16>::Append<18432,16>. Returns the result.
         int AddGuiOutEvents(const GuiEventQueue& lrSource);

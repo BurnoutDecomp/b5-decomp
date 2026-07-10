@@ -396,6 +396,19 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
         for (int32_t i = 0; i < nCount1; ++i)
         {
             unsigned char* const pCmd = static_cast<unsigned char*>(pFrame->mpCommands[i]);
+            // FLAG (converter data boundary, same family as the array guard above): a
+            // command SLOT can be null (SAVELOADCOMPONENT's root f0 carries 18 null
+            // entries) or hold the 4-byte-straddle garbage (0x00000001_00000000 class)
+            // in the emitter output; resolve64's null-stays-null keeps nulls null and
+            // leaves straddle garbage as a bogus pointer. Apply the same terabyte-floor
+            // plausibility screen as the command-array guard -- dereferencing crashed
+            // the first BF_PROFILE tick.
+            {
+                const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+                if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                      (luCmd & 0xFFFFFFFFull) != 0u))
+                    continue;
+            }
             if (CmdI32(pCmd, 0x00) != 8)
                 continue;
             int64_t* const pnId = reinterpret_cast<int64_t*>(pCmd + 0x08);
@@ -488,6 +501,14 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
         for (int32_t i = 0; i < nCount; ++i)
         {
             void* pCmd = pFrame->mpCommands[i];
+            // FLAG (converter data boundary): null / straddle-garbage command slots are
+            // skipped -- see the pass-1 note (same plausibility screen).
+            {
+                const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+                if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                      (luCmd & 0xFFFFFFFFull) != 0u))
+                    continue;
+            }
             const int32_t eTag = CmdI32(pCmd, 0x00);
 
             if (eTag == 3)
@@ -735,6 +756,15 @@ AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
     for (int32_t i = 0; i < nCount; ++i)
     {
         void* pCmd = pFrame->mpCommands[i];            // *(v7[1] + v8)  (relocated by resolve64)
+        // FLAG (converter data boundary): a command SLOT can be null or hold the
+        // 4-byte-straddle garbage (SAVELOADCOMPONENT's root f0 nulls); apply the same
+        // per-entry plausibility screen as doFrameControls before touching the record.
+        {
+            const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+            if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                  (luCmd & 0xFFFFFFFFull) != 0u))
+                continue;
+        }
         if (CmdI32(pCmd, 0x00) != 1)
             continue;                                  // only tag-1 ACTION commands are queued
 
@@ -787,6 +817,14 @@ const AptMovie* AptMovie::runFrameActions(AptCIH* pCIH, int nFrame) const
             break;
 
         void* pCmd = lFrame.mpCommands[i];
+        // FLAG (converter data boundary): per-entry plausibility screen, matching
+        // doFrameControls/queueFrameActions (null / straddle-garbage slots skipped).
+        {
+            const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+            if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                  (luCmd & 0xFFFFFFFFull) != 0u))
+                continue;
+        }
         if (CmdI32(pCmd, 0x00) != 1)
             continue;                              // only tag-1 ACTION commands run
 
