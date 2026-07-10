@@ -96,9 +96,9 @@ namespace
     {
         volatile bool  mbActive;
         const s16*     mpPcm;       // interleaved stereo
-        long           mnFrames;
-        long           mnCursor;    // fixed-point 16.16 source frame cursor
-        long           mnStep;      // 16.16 source-frames per output frame
+        s64            mnFrames;
+        s64            mnCursor;    // fixed-point 16.16 source frame cursor (64-bit:
+        s64            mnStep;      //   a 32-bit 16.16 cursor overflows at ~0.74 s)
         f32            mfVolume;
     };
     OneShot g_aVoices[KI_NUM_VOICES] = {};
@@ -305,7 +305,7 @@ void GuiSoundPC::FillStatic(s16* lpOut, int liFrames, void* /*lpUser*/)
             continue;
         for (int i = 0; i < liFrames; ++i)
         {
-            const long liSrc = lrV.mnCursor >> 16;
+            const s64 liSrc = lrV.mnCursor >> 16;
             if (liSrc >= lrV.mnFrames) { lrV.mbActive = false; break; }
             const int liL = int(f32(lrV.mpPcm[liSrc * 2 + 0]) * lrV.mfVolume);
             const int liR = int(f32(lrV.mpPcm[liSrc * 2 + 1]) * lrV.mfVolume);
@@ -443,9 +443,9 @@ void GuiSoundPC::OnTrigger(const char* lpacTypeName, const char* lpacActionName,
     OneShot& lrV = g_aVoices[liSlot];
     lrV.mbActive = false;
     lrV.mpPcm    = lpPcm->data();
-    lrV.mnFrames = long(lpPcm->size() / 2);
+    lrV.mnFrames = s64(lpPcm->size() / 2);
     lrV.mnCursor = 0;
-    lrV.mnStep   = long((s64(liRate) << 16) / liDevRate);
+    lrV.mnStep   = (s64(liRate) << 16) / liDevRate;
     lrV.mfVolume = (lrSplice.mfVolume > 0.0f && lrSplice.mfVolume <= 4.0f) ? lrSplice.mfVolume : 1.0f;
     lrV.mbActive = true;
 
