@@ -18,6 +18,7 @@
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"        // AlwaysAvailableComponentsManager + free accessor (bodied below)
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (BF_LEGAL interface wiring)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::AptCommunicator (the per-frame trigger publish)
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 
@@ -841,6 +842,25 @@ namespace BrnGui
                 mViewInputBuffer.GetViewStateQueue()
                     .CgsModule::VariableEventQueue<65536, 16>::Clear();
                 mViewInputBuffer.UnlockForWrite();
+
+                // The console GuiModule::Update @0x828602C8 tail: publish this frame's
+                // AptCommunicator trigger records (SendAptEvent 21 apt triggers /
+                // SendAptSoundEvent 22 sound triggers) into the view OUTPUT buffer's GUI
+                // event queue, then clear the communicator queue. Without the publish the
+                // communicator queue is write-only and overflows its 18432 bytes after a
+                // few hundred menu interactions (a halting assert).
+                mViewOutputBuffer.LockForWrite();
+                CgsGui::AptCommunicator::FlushTriggerEventsTo(mViewOutputBuffer.GetGuiEventQueue());
+                mViewOutputBuffer.UnlockForWrite();
+                // [PC] the downstream consumer (BridgeFromViewToOutput -> the module output
+                // -> the sound-logic/flow observers) is un-homed, and the console's view
+                // output buffer is re-created per frame off the IO stack; reset the queue
+                // here as that per-frame recreate's stand-in (same idiom as the view input
+                // queue above) so it cannot overflow either.
+                mViewOutputBuffer.LockForWrite();
+                mViewOutputBuffer.GetGuiEventQueue()
+                    ->CgsModule::VariableEventQueue<18432, 16>::Clear();
+                mViewOutputBuffer.UnlockForWrite();
             }
 
             // The remaining shim-side drive (the title help-item defaults retry) --

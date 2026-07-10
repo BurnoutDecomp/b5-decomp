@@ -189,6 +189,13 @@ namespace CgsGui
         // then shrink the active count.
         static void RemoveExpiredAptComponent(AptValue* lpAptValue);
 
+        // The per-frame trigger publish the console CgsGui::GuiModule::Update @0x828602C8
+        // inlines at its tail: bulk-append mOutAptTriggerEvents (the SendAptEvent 21 /
+        // SendAptSoundEvent 22 records) into the view OUTPUT buffer's GUI event queue,
+        // then Clear the communicator queue. Exposed as a member so the queue stays
+        // private (the X360 reaches it as file-scope data, unk_8305A960).
+        static void FlushTriggerEventsTo(CgsModule::VariableEventQueue<18432, 16>* lpDest);
+
     private:
         // X360 0x82849F48. Hash lpacName and return its registered component index, or -1.
         // Static: it only touches the file-static class data (no `this`), and the static

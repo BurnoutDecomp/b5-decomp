@@ -49,6 +49,11 @@ namespace ViewIO
         // returns the read handle to the embedded event queue at this+4.
         const GuiEventQueue* GetGuiEventQueue() const;
 
+        // X360 0x8284F0E8 (the write twin -- CgsGui::GuiModule::Update fetches it before
+        // appending the AptCommunicator trigger queue). Asserts locked-for-writing (bit 3),
+        // then returns the write handle to the embedded event queue at this+4.
+        GuiEventQueue* GetGuiEventQueue();
+
         // Byte-offset pin (the embedded queue lands at this+4: 1-byte IOBuffer base + 3 pad,
         // VariableEventQueue alignof == 4).
         static void _AssertLayout();

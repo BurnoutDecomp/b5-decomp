@@ -40,6 +40,14 @@ namespace ViewIO
         return &mGuiEvents;
     }
 
+    // X360 0x8284F0E8: the write twin (GuiModule::Update @0x828602C8 fetches it before
+    // appending the AptCommunicator trigger queue into this buffer).
+    OutputBuffer::GuiEventQueue* OutputBuffer::GetGuiEventQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mGuiEvents;
+    }
+
     // ---- CgsGui::ViewIO::InputBuffer (X360 0x824F7A10 / 0x824F7AB8 / 0x82856EC8) ------------
 
     void InputBuffer::_AssertInputLayout()
