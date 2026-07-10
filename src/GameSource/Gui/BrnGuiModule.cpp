@@ -21,26 +21,10 @@
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
 
-// PC KEYBOARD BRING-UP (FLAG): poll GetAsyncKeyState without dragging <Windows.h> into this
-// game-source TU (its NOUSER/NOGDI lean-defines conflict). Signatures per WinUser.h.
-// FOCUS GATE: GetAsyncKeyState reads the GLOBAL key state, so without a foreground check
-// the boot flow reacts to keys typed into ANY app (verified: terminal Enters accepted the
-// title menu). Only read the keyboard while a window of THIS process is foreground.
-extern "C" __declspec(dllimport) short __stdcall GetAsyncKeyState(int vKey);
-extern "C" __declspec(dllimport) void* __stdcall GetForegroundWindow(void);
-extern "C" __declspec(dllimport) unsigned long __stdcall GetWindowThreadProcessId(void* hWnd, unsigned long* lpdwProcessId);
-extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
-static short BrnGuiPcGetAsyncKeyState(int liVKey)
-{
-    void* lpForeground = GetForegroundWindow();
-    if (lpForeground == nullptr)
-        return 0;
-    unsigned long luPid = 0;
-    GetWindowThreadProcessId(lpForeground, &luPid);
-    if (luPid != GetCurrentProcessId())
-        return 0;
-    return GetAsyncKeyState(liVKey);
-}
+// (The former PC keyboard injection helper is RETIRED: input now arrives through the real
+// chain -- the InputPadsPC platform leaf fills the player-0 pad record, BrnGameModule's
+// BridgeControllerToGui synthesises the GUI controller events, and RouteControllerGuiEvents
+// below delivers them to the active boot flow's in-queue.)
 
 // The loading-screen visual signal (BrnRendererModule::Render shows the loading screen while it's set).
 // The GUI BF_LOADING state now OWNS this when its FSM is live: BootLoading::Update PlayLoadingScreen
@@ -316,6 +300,7 @@ namespace BrnGui
         // until it is. Replace the values when GuiModule::Construct @X360 is homed.
         mViewModule.Construct(this, "BrnGuiView", 0, 1280.0f / 720.0f, nullptr, 0);
         mMovieManager.Construct();
+        mpGuiEventInputBuffer = 0;
         mbBootStarted = false;
         mbLoadingHasShown = false;
         mbBootFsmReady = false;
@@ -447,6 +432,42 @@ namespace BrnGui
     void GuiModule::Destruct()
     {
         mMovieManager.Destruct();
+    }
+
+    // Deliver this sub-step's inbound controller GUI events into the active boot flow's
+    // in-queue, filtered to the ids the state registered for -- the observer-subscription
+    // filter the console EventInterpreterModule::ProcessInEvents applies before handing an
+    // observer its per-frame queue. FLAG (dispatch stand-in): the console fans the GUI input
+    // buffer out through ModelModule/EventInterpreterModule to every registered observer;
+    // the boot phases each own one state, so the hybrid routes to the active phase queue.
+    void GuiModule::RouteControllerGuiEvents(CgsModule::VariableEventQueue<18432, 16>* lpTargetQueue,
+                                             const s32* lpaiObservedIds, s32 liNumObservedIds)
+    {
+        if (mpGuiEventInputBuffer == 0)
+            return;
+        mpGuiEventInputBuffer->LockForRead();
+        // Walk through the VariableEventQueue base (inline) -- GuiEventQueueBase's own
+        // GetFirstEvent/GetNextEvent are declared-only (same idiom as the video pump).
+        const CgsModule::VariableEventQueue<32768, 16>* lpInQueue =
+            static_cast<const CgsGui::CgsGuiModuleIO::InputBuffer*>(mpGuiEventInputBuffer)->GetGuiEvents();
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (liId >= 0 && lpEvent != 0)
+        {
+            for (s32 i = 0; i < liNumObservedIds; ++i)
+            {
+                if (lpaiObservedIds[i] == liId)
+                {
+                    lpTargetQueue->AddEvent(lpEvent, liId, liSize);
+                    break;
+                }
+            }
+            const CgsModule::Event* lpNext = 0;
+            liId = lpInQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+        mpGuiEventInputBuffer->UnlockForRead();
     }
 
     // X360 GuiModule::Update (0x82527A58) ticks the GUI model + the HUD/Screen flows + the MovieManager.
@@ -610,54 +631,17 @@ namespace BrnGui
                 }
             }
 
-            // ---- PC KEYBOARD -> boot-flow input events (bring-up FLAG) -------------------------
-            // The console feeds BootLegal pad input through the event-interpreter pipeline
-            // (event 143 = "press start" feedback; events 6/21 = controller actions with the
-            // sub-id at payload+4: 41 menu-next, 42 menu-prev, 45 back). That pipeline is not
-            // up on PC yet, so poll the keyboard here and post the SAME event records BootLegal
-            // consumes: Enter -> 6/45 (the console A/accept action: 45 falls through to the
-            // start path in PRESTART and fires the accept handler in MENU_ACTIVE), Space ->
-            // 143 (start feedback), Down/Right -> 6/41, Up/Left -> 6/42, Escape -> 6/49
-            // (stop). Edge-triggered so a held key posts once.
+            // ---- inbound controller GUI events -> BootLegal (the real input chain) -------------
+            // The InputPadsPC leaf filled the player-0 pad record, BridgeControllerToGui
+            // synthesised the GUI controller events (6/45 accept -- which falls through to the
+            // start path in PRESTART and fires the accept handler in MENU_ACTIVE -- 6/41
+            // menu-next, 6/42 menu-prev, 6/49 stop, with the console 0.8s/0.1s hold-repeat),
+            // and this delivers them filtered to BootLegal's registered id set (BrnBootLegal
+            // OnEnter registers {6, 143, 510, 64, 567, 190, 189}).
             {
-                struct PcActionEvent : public CgsModule::Event
-                {
-                    s32 miPad0;    // +0x00
-                    s32 miSubId;   // +0x04 (BootLegal reads the action sub-id here)
-                    s32 miPad2;
-                    s32 miPad3;
-                    explicit PcActionEvent(s32 liSubId)
-                        : miPad0(0), miSubId(liSubId), miPad2(0), miPad3(0) {}
-                };
-                struct PcKeyMap { int iVKey; s32 iEventId; s32 iSubId; };
-                static const PcKeyMap KA_KEYS[] =
-                {
-                    { 0x0D /*VK_RETURN*/, 6,   45 },
-                    { 0x20 /*VK_SPACE*/,  143, 0  },
-                    { 0x28 /*VK_DOWN*/,   6,   41 },
-                    { 0x27 /*VK_RIGHT*/,  6,   41 },
-                    { 0x26 /*VK_UP*/,     6,   42 },
-                    { 0x25 /*VK_LEFT*/,   6,   42 },
-                    { 0x1B /*VK_ESCAPE*/, 6,   49 },
-                };
-                static bool sabKeyWasDown[sizeof(KA_KEYS) / sizeof(KA_KEYS[0])] = {};
-                for (u32 luKey = 0; luKey < sizeof(KA_KEYS) / sizeof(KA_KEYS[0]); ++luKey)
-                {
-                    const bool lbDown = (BrnGuiPcGetAsyncKeyState(KA_KEYS[luKey].iVKey) & 0x8000) != 0;
-                    if (lbDown && !sabKeyWasDown[luKey])
-                    {
-                        PcActionEvent lAction(KA_KEYS[luKey].iSubId);
-                        const bool lbAdded = mBootLegalInQueue.AddEvent(&lAction, KA_KEYS[luKey].iEventId,
-                                                   static_cast<s32>(sizeof(lAction)));
-                        char lacKey[96];
-                        std::snprintf(lacKey, sizeof(lacKey),
-                            "[GuiModule] key vk=0x%02X -> event %d/%d (AddEvent=%d)\n",
-                            KA_KEYS[luKey].iVKey, KA_KEYS[luKey].iEventId,
-                            KA_KEYS[luKey].iSubId, lbAdded ? 1 : 0);
-                        CgsDev::Log::WriteToLog(lacKey);
-                    }
-                    sabKeyWasDown[luKey] = lbDown;
-                }
+                static const s32 KAI_LEGAL_OBSERVED[] = { 6, 143, 510, 64, 567, 190, 189 };
+                RouteControllerGuiEvents(&mBootLegalInQueue, KAI_LEGAL_OBSERVED,
+                                         static_cast<s32>(sizeof(KAI_LEGAL_OBSERVED) / sizeof(KAI_LEGAL_OBSERVED[0])));
             }
             if (mbBootLegalFsmReady)
                 mBootLegalStateMachine.CgsFsm::Fsm::Update();   // runs BootLegal through the Lua FSM
@@ -866,6 +850,14 @@ namespace BrnGui
             CgsModule::Event lReadyEvent;
             mBootInQueue.AddEvent(&lReadyEvent, 64, static_cast<s32>(sizeof(lReadyEvent)));
             mbBootStarted = true;
+        }
+
+        // 1b. Inbound controller GUI events -> BootVideos (its OnEnter registers {64, 510, 6, 21};
+        //     an accept press through the real bridge lets the logos be skipped, as on console).
+        {
+            static const s32 KAI_VIDEOS_OBSERVED[] = { 64, 510, 6, 21 };
+            RouteControllerGuiEvents(&mBootInQueue, KAI_VIDEOS_OBSERVED,
+                                     static_cast<s32>(sizeof(KAI_VIDEOS_OBSERVED) / sizeof(KAI_VIDEOS_OBSERVED[0])));
         }
 
         // 2. Tick the boot state. Through the real Lua FSM (StateMachine drives the current state's

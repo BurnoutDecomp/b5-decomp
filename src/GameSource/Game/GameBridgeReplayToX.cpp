@@ -10,13 +10,10 @@
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   BridgeReplayToGui   0x823E7210
 //
-// HONEST PLACEHOLDERS (FLAGGED): the CgsGui::GuiModule event sink (mpCgsGuiModule)
-// and its AddGuiEvent<T>(event, inputBuffer) template are the committed by-name
-// placeholders from GameBridgeControllerToX.h; the GUI input-event queue is reached by
-// its proven +4 byte offset (the empty CgsGui::CgsGuiModuleIO::InputBuffer placeholder
-// in BrnGameModule.hpp blocks #including the real CgsGuiModuleIO.h -- ODR). The replay
+// The GUI event sink is the REAL CgsGui::GuiModule::AddGuiEvent<T> (CgsGuiModule.h) and
+// the REAL CgsGuiModuleIO::InputBuffer (GetGuiEvents @0x8284F238) now. The replay
 // OUTPUT buffer (BrnReplays::ReplayIO::OutputBuffer_PreSim) + its StatusInterface and
-// GUI event queue are the REAL committed types. See GameBridgeReplayToX.h for details.
+// GUI event queue are the committed types. See GameBridgeReplayToX.h for details.
 //
 // The GuiReplayStatusEvent the bridge synthesises is the real GuiEvent<514> boxing the
 // replay StatusInterface (DWARF BrnGuiEventTypeDefs.h:6261) -- nothing fabricated.
@@ -24,7 +21,8 @@
 
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeReplayToX.h"
-#include "GameSource/Game/GameBridgeControllerToX.h"   // CgsGui::GuiModule placeholder + AddGuiEvent<T>
+
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h"   // CgsGui::GuiModule::AddGuiEvent<T> (the real sink)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include "GameSource/Replays/BrnReplayModuleIO.h"       // BrnReplays::ReplayIO::OutputBuffer_PreSim
@@ -60,7 +58,7 @@ namespace BrnGame
         // it through the GUI module's event sink (X360 AddGuiEvent<GuiReplayStatusEvent>).
         BrnGui::GuiReplayStatusEvent lEvent;
         lEvent.mInterface = *lpStatusInterface;
-        mpCgsGuiModule->AddGuiEvent(&lEvent, lpGuiInput);
+        CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
 
         // ---- (2) replay GUI event queue -> GUI input event queue -------------------
         // The replay output buffer's small (4096) GUI event queue is bulk-appended into
@@ -68,8 +66,6 @@ namespace BrnGame
         // (VariableEventQueue<32768,16>::Append<4096,16>).
         const BrnReplays::ReplayIO::OutputBuffer_PreSim::GuiEventQueue* lpReplayGuiQueue =
             lpReplayOutput->GetGuiEventQueue();
-        CgsModule::VariableEventQueue<32768, 16>* lpGuiInputQueue =
-            GetGuiInputEventQueue(lpGuiInput);
-        lpGuiInputQueue->Append(*lpReplayGuiQueue);
+        lpGuiInput->GetGuiEvents()->Append(*lpReplayGuiQueue);
     }
 }

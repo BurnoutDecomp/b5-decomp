@@ -76,6 +76,32 @@ void PostWorldInputBuffer::SetWheelFFSpring(const CgsInput::Device::WheelFFSprin
 
 // =====================  OutputBuffer  =====================
 
+// X360 0x828F85E0 - bring the buffer up. Store-for-store:
+//   1. status byte = 1 (eStatusConstructed);
+//   2. Construct the bind-result (+4), unbind-result (+112) and pad-disconnected (+220)
+//      event queues;
+//   3. for the FIRST FOUR pad records (the scan loop runs 4, not the full 7-slot array):
+//      mbDisconnected = 1 (record +0x3A0; no pad seen this scan yet), zero the 6 leading
+//      stick/axis words (+0x00..+0x17), then zero 112 {f32,u32} pairs from +0x18 -- the 96
+//      ActionInfo slots plus the +0x318..+0x398 tail span (0x18 + 112*8 == 0x398 exactly;
+//      muConnectionWord/meControllerState are left to the pad scan).
+void OutputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+    mBindResultQueue.Construct();
+    mUnBindResultQueue.Construct();
+    mPadDisconnectedQueue.Construct();
+    for (s32 liPad = 0; liPad < 4; ++liPad)
+    {
+        PadOutputInformation& lrPad = maPadOutputInformation[liPad];
+        lrPad.mbDisconnected = 1;
+        std::memset(&lrPad.mfStickLX, 0, 6 * sizeof(f32));   // +0x00 .. +0x17
+        // 112 pairs from +0x18: the 96-slot action table AND the +0x318..+0x398 tail span
+        // (one span on the X360; addressed off the record base so the write is one region).
+        std::memset(reinterpret_cast<char*>(&lrPad) + 0x18, 0, 112 * sizeof(ActionInfo));
+    }
+}
+
 // X360 0x823B1038 (ledger "OutputBuf") - read-lock accessor for the bind-result queue (this+4).
 const OutputBuffer::BindResultQueue* OutputBuffer::GetBindResultQueue() const
 {

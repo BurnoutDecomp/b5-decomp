@@ -11,6 +11,7 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLegal.h"                // BrnGui::BootLegal (the boot legal/title-screen state)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"// CgsGui::StateInterface (BootVideos' channel)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue (BootVideos' in-queue)
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                  // CgsGui::CgsGuiModuleIO::InputBuffer (the inbound GUI event buffer)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateMachine.h"  // CgsGui::StateMachine (runs the boot FSM Lua script)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"     // CgsResource::Pool (holds the loaded FSM bundle)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc (the boot FSM Lua VM heap)
@@ -53,6 +54,16 @@ namespace BrnGui
         ViewModule* GetViewModule() { return &mViewModule; }
         AptRuntimeHost* GetAptRuntimeHost() { return &mAptRuntimeHost; }
 
+        // Hand this sub-step's GUI module INPUT buffer (filled by BrnGameModule's
+        // BridgeControllerToGui) to the update drive; Update drains its inbound controller
+        // events into the active boot flow's in-queue. FLAG (bridge stand-in): on the
+        // console the buffer arrives through the module scheduler's IO set and the
+        // Model/EventInterpreter observer dispatch fans it out to the registered flows.
+        void SetGuiEventInputBuffer(CgsGui::CgsGuiModuleIO::InputBuffer* lpBuffer)
+        {
+            mpGuiEventInputBuffer = lpBuffer;
+        }
+
         // The always-available GUI components manager the module owns (the in-game EATrax
         // banner / achievement pop-up / save-icon / etc.) lives at a far offset in a part of
         // the GuiModule layout this MINIMAL movie-hosting slice does not yet model. It is
@@ -73,6 +84,20 @@ namespace BrnGui
         // back. [MINIMAL boot driver -- the X360 runs BootVideos inside BrnHudFlow + routes via EventObserver;
         // here the GuiModule drives the single boot state + bridges the queues, marked.]
         void UpdateBootVideoFlow();
+
+        // Deliver this sub-step's inbound controller GUI events (the BridgeControllerToGui
+        // output in mpGuiEventInputBuffer) into the active boot flow's in-queue, filtered to
+        // the event ids the flow state REGISTERED for (the observer-subscription filter the
+        // console EventInterpreterModule applies). FLAG (dispatch stand-in): the console fans
+        // these out through ModelModule/EventInterpreterModule::ProcessInEvents to every
+        // registered observer; the boot phases each own a single state, so the hybrid routes
+        // to the active phase queue directly.
+        void RouteControllerGuiEvents(CgsModule::VariableEventQueue<18432, 16>* lpTargetQueue,
+                                      const s32* lpaiObservedIds, s32 liNumObservedIds);
+
+        // This sub-step's GUI module INPUT buffer (set by BrnGameModule each sub-step; the
+        // buffer itself lives on the update IO stack and is re-created per sub-step).
+        CgsGui::CgsGuiModuleIO::InputBuffer* mpGuiEventInputBuffer;
 
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
 

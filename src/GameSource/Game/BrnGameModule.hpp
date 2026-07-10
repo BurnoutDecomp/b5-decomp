@@ -27,9 +27,12 @@ namespace EA { namespace GameTalk { class GameTalkMessage; } }
 // layouts are owned by each module's IO TU and replace these when reconstructed.
 // (The former ViewIO::InputBuffer placeholder is DELETED per the ODR-trap rule below:
 // the REAL CgsGui::ViewIO::InputBuffer now arrives via BrnGuiModule.h ->
-// CgsGuiViewModuleIO.h, so the IO stack allocates the real 65KB buffer.)
-namespace CgsGui { namespace CgsGuiModuleIO { struct InputBuffer {}; struct OutputBuffer {}; }
-                   namespace ModelIO        { struct OutputBuffer {}; } }
+// CgsGuiViewModuleIO.h, so the IO stack allocates the real 65KB buffer. The former
+// CgsGuiModuleIO placeholders are DELETED the same way: the REAL InputBuffer/OutputBuffer
+// arrive via CgsGuiModuleIO.h below -- the controller bridge pushes real GUI events into
+// the real 33KB inbound queue now.)
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
+namespace CgsGui { namespace ModelIO        { struct OutputBuffer {}; } }
 namespace BrnDirector { namespace DirectorIO { struct OutputBuffer {}; } }
 
 // Engine module member types - placeholders that derive from the REAL module base
@@ -56,7 +59,9 @@ class WorldModule : public CgsModule::ModuleSingleBuffered {};
 // Forward declarations for the controller-bridge family parameter types (declared-only here; the
 // bridge bodies in GameBridgeControllerToX.cpp include the real homes). Keeping these as forward
 // decls avoids pulling the heavy IO headers into this keystone header.
-namespace CgsInput { namespace InputIO { struct PadOutputInformation; struct OutputBuffer; struct ActionInfo; } }
+// CgsInput::InputIO is included for REAL now (the module embeds mPcInputOutputBuffer by
+// value -- the PC stand-in for the input module's per-frame output buffer).
+#include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
 namespace BrnDirector { namespace DirectorIO { struct InputBuffer; } }
 namespace BrnWorldIO { struct UpdateInputBuffer; }
 namespace BrnGame { struct DebugControllerImage; }
@@ -72,8 +77,8 @@ namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
 // BrnTrainingManager.h). Forward-declared; the bridge body includes the real homes.
 namespace BrnSound { namespace Module { namespace Io { struct RootPreUpdateOutputBuffer; } } }
 namespace BrnGameState { class TrainingManager; }
-// (CgsGui::CgsGuiModuleIO::OutputBuffer is the GUI output buffer the ToGui bridge threads through;
-//  it is already declared as a placeholder struct below near the IO-payload stubs.)
+// (CgsGui::CgsGuiModuleIO::InputBuffer -- the GUI input buffer the ToGui bridge fills -- is the
+//  REAL type now, included above via CgsGuiModuleIO.h.)
 
 // BrnGameState::GameStateModule is now the REAL (minimal-slice) class -- included below per this
 // header's own ODR-trap instruction (the TrainingManager/BurnoutSkillz/ModeManager TUs include the
@@ -230,8 +235,10 @@ namespace BrnGame
                                          s32 liActionContext);
 
         // X360 0x823E6B18 -- synthesise GUI events from player-0 (and, when no player-0 controller is
-        // assigned, the cross-pad menu-accept scan) and push them through the GUI module.
-        void BridgeControllerToGui(CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+        // assigned, the cross-pad menu-accept scan) and push them through the GUI module's
+        // AddGuiEvent<T> into the GUI module INPUT buffer (the mangled name pins the third
+        // AddGuiEvent arg as CgsGuiModuleIO::InputBuffer*).
+        void BridgeControllerToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                                    const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
 
         // ---- replay-output bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) -------
@@ -342,14 +349,23 @@ namespace BrnGame
         s32  miSecondaryControllerPort; // @ +10094144 (the rumble/debug-controller read port)
         bool mbGuiAcceptsControllerInput;// @ +10094266 (gates the ToGui change-car / menu-accept events)
         bool mbGuiSuppressMenuAccept;    // @ +10095408 (when set, the menu-accept synthesis is skipped)
-        s32  miLanguageCycleTimerLo;     // @ +10095388 (ToGui language-cycle debounce time, low word)
-        s32  miLanguageCycleTimerHi;     // @ +10095392 (ToGui language-cycle debounce time, high word)
-        // The CgsGui GUI module the ToGui bridge pushes events into (X360 +7252512). Distinct from
-        // mGuiModule (BrnGui::GuiModule, the movie host) -- this is the CgsGui event sink. Held by
-        // pointer (initialised to the embedded module in the full Construct) so the keystone header
-        // need not embed the un-homed CgsGui::GuiModule placeholder by value. The ToGui bridge calls
-        // mpCgsGuiModule->AddGuiEvent<T>(...). FLAG: real layout embeds the module by value @ +7252512.
-        CgsGui::GuiModule* mpCgsGuiModule; // @ +7252512
+        // The ToGui menu-repeat / language-cycle clock pair: an integer-seconds word (the X360
+        // widens it u32->f64 with the LODWORD/HIDWORD idiom) plus a fractional-seconds float
+        // added straight in. Fed once per update frame (FLAG PC time source: the console's
+        // words ride the game module's own timer pass, unreconstructed).
+        s32  miLanguageCycleTimerLo;     // @ +10095388 (whole seconds)
+        f32  mfLanguageCycleTimerFrac;   // @ +10095392 (fractional seconds, added as float)
+
+        // [PC stand-in] The input module's per-frame OUTPUT buffer the controller bridges read.
+        // On the X360 this comes off the module scheduler's IO stacks and is filled by the
+        // input module's own pass (InputPads::Update -> binding tables); that pass is
+        // unreconstructed, so the game module owns one buffer here and the InputPadsPC
+        // platform leaf fills the player-0 record each update frame.
+        CgsInput::InputIO::OutputBuffer mPcInputOutputBuffer;
+        // NOTE: the CgsGui::GuiModule event sink the ToGui bridge targets is embedded at X360
+        // +7252512; its AddGuiEvent<T> body never reads `this`, so the bridge calls it without
+        // the embed until the CgsGui module object is constructed on PC (GuiFsmController-flow
+        // follow-on; see CgsGuiModule.h).
 
         // The training manager the sound bridge notifies (X360 this + 6769456 == 0x674B30, inside
         // the game-state region). Held by pointer per the mpCgsGuiModule precedent so the keystone
