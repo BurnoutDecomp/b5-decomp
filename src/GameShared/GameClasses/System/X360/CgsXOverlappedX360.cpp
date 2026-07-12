@@ -1,36 +1,15 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
+#include "GameShared/GameClasses/System/CgsXOverlapped.h" // CgsSystem::CgsXOverlapped + XOVERLAPPED slice
 
 // CgsXOverlapped -- thin X360-only wrapper around the XDK XOVERLAPPED async
 // I/O structure. The embedded XOVERLAPPED is exactly 7 DWORDs (28 bytes); the
 // X360 binary's Construct just zero-fills those 7 DWORDs, and GetResultString
 // is a static helper that turns an XGetOverlappedResult() code into a printable
-// string. This is platform-specific glue, so (mirroring System/PS3) the class is
-// declared inline in its single platform .cpp rather than in a shared header.
-//
-// XOVERLAPPED is a pure XDK type with no PS3/PC analogue; we forward-declare the
-// XDK shape locally as a minimal slice (the real layout comes from the Xbox 360
-// XDK <xtl.h>). Only the size (7 DWORDs) is load-bearing for Construct.
-
-// Minimal XDK XOVERLAPPED slice (real definition lives in the Xbox 360 XDK).
-// 7 DWORDs == 28 bytes, matching Construct's zero-fill loop (v1 = 7).
-struct XOVERLAPPED
-{
-    u32 InternalLow;          // 0x00
-    u32 InternalHigh;         // 0x04
-    u32 InternalContext;      // 0x08
-    u32 dwExtendedError;      // 0x0C  (read via XGetOverlappedExtendedError)
-    u32 hEvent;               // 0x10
-    u32 dwCompletionContext;  // 0x14  (completion routine context)
-    u32 dwReserved;           // 0x18
-};
-typedef XOVERLAPPED* PXOVERLAPPED;
-
-// XDK entry points (real prototypes live in the Xbox 360 XDK <xapi.h>/<xtl.h>);
-// declared here as extern "C" free functions, mirroring the System/PS3 glue
-// precedent (CgsHardwareLanguagePS3.cpp's `extern "C" int XTLGetLanguage();`).
-extern "C" u32 XGetOverlappedResult(PXOVERLAPPED lpOverlapped, u32* lpdwResult, u32 bWait);
-extern "C" u32 XGetOverlappedExtendedError(PXOVERLAPPED lpOverlapped);
+// string. This is platform-specific glue; the class DECLARATION + the XDK
+// XOVERLAPPED slice were extracted to the shared CgsXOverlapped.h so callers that
+// embed the wrapper by value can #include the real layout. The method BODIES
+// stay here in the single platform .cpp.
 
 // Win32/XDK winerror.h numeric literals consumed by GetResultString.
 #ifndef ERROR_SUCCESS
@@ -54,25 +33,6 @@ static const u32 KU_RESULT_STRING_LENGTH = 100;
 
 // byte_830EA388 (size 100) recovered as the file-static result string.
 static char sacResultString[KU_RESULT_STRING_LENGTH];
-
-class CgsXOverlapped
-{
-public:
-    // Zero-initialises the embedded XOVERLAPPED (7 DWORDs). The X360 build
-    // inlines this as a 7-iteration zero-fill loop over the object; modelled as
-    // a constructor-style reset. The binary's `return result` is a
-    // register/memset artifact on what is logically a void initialiser.
-    void Construct();
-
-    // Calls XGetOverlappedResult(pOverlapped, 0, 0) and maps the completion code
-    // to a human-readable string. Known codes return a static literal; any other
-    // code is formatted (with the extended error) into a shared static buffer.
-    // Static utility -- takes the XOVERLAPPED by pointer, does not touch *this*.
-    static const char* GetResultString(PXOVERLAPPED lpOverlapped);
-
-private:
-    XOVERLAPPED mOverlapped;  // 0x00, 28 bytes -- the only member the TU touches
-};
 
 void CgsXOverlapped::Construct()
 {

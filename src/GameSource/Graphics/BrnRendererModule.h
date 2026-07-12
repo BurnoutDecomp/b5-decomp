@@ -340,6 +340,13 @@ private:
     // through mIm2dRenderer (untextured -> solid colour) at the same screen positions.
     void RenderThreeThreadMonitors(bool lbThread0, bool lbThread1, bool lbThread2);
 
+    // @ 0x82406410 - draw the two solid-black bars that frame a widescreen (letterboxed) view: one
+    // across the top, one across the bottom. lfDestAspectRatio is the visible/kept vertical fraction
+    // of the screen; the cropped-away remainder (1 - lfDestAspectRatio) is split evenly, so each bar
+    // is (1 - lfDestAspectRatio) * 0.5 of the height and spans the full width. Drawn through the
+    // immediate-mode 2D renderer (DWARF signature CgsGraphics::Im2d& + float).
+    void RenderLetterBoxBars(CgsGraphics::Im2d& lIm2d, f32 lfDestAspectRatio);
+
     ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;
     s32                   mDisplayType;

@@ -68,6 +68,53 @@ void BrnRendererModule::RenderThreeThreadMonitors(bool lbThread0, bool lbThread1
     mIm2dRenderer.EndRendering();
 }
 
+// @ 0x82406410 - BrnRendererModule::RenderLetterBoxBars. Draw the two solid-black bars that frame a
+// widescreen (letterboxed) view - one across the top, one across the bottom. lfDestAspectRatio is the
+// visible/kept vertical fraction of the screen; the cropped-away remainder (1 - lfDestAspectRatio) is
+// split evenly between the two bars, so each bar is (1 - lfDestAspectRatio) * 0.5 of the height and
+// spans the full width. The X360 draws them through the immediate-mode 2D renderer in normalised
+// [0,1] screen space: BeginRendering -> SetTransform(cached screen transform) -> Render(top bar) ->
+// Render(bottom bar) -> EndRendering, with each quad's four vertices coloured from a const RGBA black
+// (DWARF locals lLetterboxY / lBlack / lTransform). Each quad is a 4-vertex triangle strip (prim 6).
+void BrnRendererModule::RenderLetterBoxBars(CgsGraphics::Im2d& lIm2d, f32 lfDestAspectRatio)
+{
+    using namespace CgsGraphics;
+
+    const RGBA8 KC_BLACK = { 0, 0, 0, 255 };
+    const f32   lfLetterboxY = (1.0f - lfDestAspectRatio) * 0.5f;   // height of each bar (top + bottom)
+
+    lIm2d.BeginRendering();
+
+    // X360 SetTransform of the renderer's cached [0,1]->screen transform (module static @0x830112D0).
+    // The exact matrix bytes are not recovered from the ARTIST rodata, so the default-constructed
+    // Im2dTransform stands in for that cached screen transform here.
+    Im2dTransform lTransform;
+    lIm2d.SetTransform(lTransform);
+
+    Basic2dColouredTexturedVertex laVerts[4];
+    for (s32 liVertex = 0; liVertex < 4; ++liVertex)
+    {
+        laVerts[liVertex].mv4Colour  = KC_BLACK;
+        laVerts[liVertex].mv2Tex0UV  = { 0.0f, 0.0f };
+    }
+
+    // Top bar: full width (x 0..1), y in [0, lfLetterboxY]. Triangle-strip order TL, BL, TR, BR.
+    laVerts[0].mv2Pos = { 0.0f, 0.0f };
+    laVerts[1].mv2Pos = { 0.0f, lfLetterboxY };
+    laVerts[2].mv2Pos = { 1.0f, 0.0f };
+    laVerts[3].mv2Pos = { 1.0f, lfLetterboxY };
+    lIm2d.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
+
+    // Bottom bar: full width, y in [1 - lfLetterboxY, 1].
+    laVerts[0].mv2Pos = { 0.0f, 1.0f - lfLetterboxY };
+    laVerts[1].mv2Pos = { 0.0f, 1.0f };
+    laVerts[2].mv2Pos = { 1.0f, 1.0f - lfLetterboxY };
+    laVerts[3].mv2Pos = { 1.0f, 1.0f };
+    lIm2d.Render(static_cast<renderengine::PrimitiveType>(6), laVerts, 4);
+
+    lIm2d.EndRendering();
+}
+
 // @ 0x8240A778 - BrnRendererModule::Construct. Reconstructed from the X360 ARTIST build.
 //
 // Option B (layout-faithful incremental): the loading-screen render path is reconstructed
