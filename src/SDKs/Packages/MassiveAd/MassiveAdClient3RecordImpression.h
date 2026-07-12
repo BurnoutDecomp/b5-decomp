@@ -78,6 +78,26 @@ public:
     // poke this private slot by offset.
     void SetField30(int nValue) { mnField30 = nValue; }
 
+    // Additive accessors (FLAG: not their own X360 functions). CMassiveAsset::
+    // SendReport @ 0x82BDA688 builds one media-type impression-report block from
+    // THIS accumulator (passed by pointer as the report's source): it reads the
+    // count/divisor/dividend slots below to compute the per-media wire fields
+    // (texture/video: mnField18 / msField1C and mfField20 / msField24; audio:
+    // mfField28 / msField2C; all four: mnField34/mnField40/mnField48/msField58 as
+    // the tag-50/51/52/70 values). Every read is attested in that TU's asm; these
+    // expose the accumulator slots BY NAME so the asset does not reach into the
+    // private members by offset.
+    int                GetField18() const { return mnField18; }
+    std::uint16_t      GetField1C() const { return msField1C; }
+    float              GetField20() const { return mfField20; }
+    std::uint16_t      GetField24() const { return msField24; }
+    float              GetField28() const { return mfField28; }
+    std::uint16_t      GetField2C() const { return msField2C; }
+    int                GetField34() const { return mnField34; }
+    std::int64_t       GetField40() const { return mnField40; }
+    std::int64_t       GetField48() const { return mnField48; }
+    std::uint16_t      GetField58() const { return msField58; }
+
 private:
     int           mnParentRecord; // +0x14 (a2)
     int           mnField18;      // +0x18

@@ -6,6 +6,16 @@
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h" // CRequestObject::GetServerType
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Asset.h"      // CMassiveAsset (AssetFind / DeleteElements)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3AdObject.h"   // CMassiveAdObject::SubscriberAdd (PreSubscriberAssignT)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h" // CMassiveAdObjectSubscriber::mpcName (PreSubscriberAssignT)
+
+// External MassiveAd string-compare helper (`bl CompareStrings`). Returns 0 when
+// the two NUL-terminated strings are equal -- the X360 branches on the result
+// == 0 for a match, the strcmp convention. It demangles WITHOUT a namespace
+// (a free vendor helper); declared at file scope, body in the MassiveAd string
+// layer (another TU).
+extern int CompareStrings(const char* pcA, const char* pcB);
 
 // ===========================================================================
 // MassiveAdClient3 -- CMassiveZoneManager.
@@ -14,10 +24,10 @@
 // leak source / DecFIGS for this vendor middleware). Stores are reproduced
 // member-for-member against the X360 disassembly; see MassiveAdClient3ZoneManager.h
 // for the per-offset layout map and the list of BLOCKED bodies left for a later
-// ledger slice (they dispatch through collaborators -- CMassiveAsset /
-// CRequestEnterZone / CMassiveClientCore internal state / un-exposed CMassiveAdObject
-// vftable slots -- whose owning layout is not yet reconstructed and must not be
-// guessed).
+// ledger slice (they dispatch through collaborators -- CRequestEnterZone /
+// CRequestImpressionUpdate / CMassiveClientCore internal state / un-exposed
+// CMassiveAdObject vftable slots -- whose owning layout is not yet reconstructed
+// and must not be guessed).
 // ===========================================================================
 
 namespace MassiveAdClient3
@@ -177,6 +187,111 @@ int CMassiveZoneManager::PreSubscriberRemove(CMassiveAdObjectSubscriber* pSubscr
         mPreSubscriberList.GoToNext();
     }
     return -500;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::DeleteElements @ 0x82BD2A88
+//
+// Empties the zone's four owned lists. For the ad-object, asset and order lists
+// each live element is destroyed through its own vftable slot 0 (the X360
+// `(**CurrData)(CurrData, 1)` deleting-destructor dispatch, i.e. a polymorphic
+// `delete` on the CMassiveBaseObject-derived payload) before the list nodes are
+// released with RemoveAll. The pre-subscriber queue is NOT element-owning, so it
+// is only RemoveAll'd (the subscribers are owned elsewhere). Returns 1.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::DeleteElements()
+{
+    mAdObjectList.GoToStart();
+    while (mAdObjectList.GetCurrent())  // while (*(a1 + 0x44)) -- mAdObjectList cursor
+    {
+        void* lpData = mAdObjectList.GetCurrData();
+        if (lpData)
+            delete static_cast<CMassiveBaseObject*>(lpData);  // (**CurrData)(CurrData, 1)
+        mAdObjectList.GoToNext();
+    }
+    mAdObjectList.RemoveAll();
+
+    mAssetList.GoToStart();
+    while (mAssetList.GetCurrent())     // while (*(a1 + 0x54)) -- mAssetList cursor
+    {
+        void* lpData = mAssetList.GetCurrData();
+        if (lpData)
+            delete static_cast<CMassiveBaseObject*>(lpData);
+        mAssetList.GoToNext();
+    }
+    mAssetList.RemoveAll();
+
+    mOrderList.GoToStart();
+    while (mOrderList.GetCurrent())     // while (*(a1 + 0x64)) -- mOrderList cursor
+    {
+        void* lpData = mOrderList.GetCurrData();
+        if (lpData)
+            delete static_cast<CMassiveBaseObject*>(lpData);
+        mOrderList.GoToNext();
+    }
+    mOrderList.RemoveAll();
+
+    mPreSubscriberList.RemoveAll();     // RemoveAll(a1 + 0x28) -- no per-element delete
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::AssetFind @ 0x82BD2D40
+//
+// Walks the asset list for the asset whose id (CMassiveAsset::mnAssetId, X360
+// +0x3C) equals nAssetId, returning it (or null when the list is exhausted). The
+// X360 reads the id field directly on the cursor's payload -- reproduced here as
+// a named-member read through the CMassiveAsset friendship.
+// ---------------------------------------------------------------------------
+CMassiveAsset* CMassiveZoneManager::AssetFind(int nAssetId)
+{
+    mAssetList.GoToStart();
+    while (mAssetList.GetCurrent())  // while (*(a1 + 0x54)) -- mAssetList cursor
+    {
+        CMassiveAsset* lpAsset = static_cast<CMassiveAsset*>(mAssetList.GetCurrData());
+        if (lpAsset->mnAssetId == nAssetId)  // *(GetCurrData + 0x3C) == a2
+            return lpAsset;
+        mAssetList.GoToNext();
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::PreSubscriberAssignT @ 0x82BD3630
+//
+// A new ad object pAdObject named pcName has arrived: hand every queued pre-
+// subscriber whose name matches to the ad object (CMassiveAdObject::SubscriberAdd,
+// the object's vftable slot +0x1C) and dequeue it. A bad name records -300; a null
+// ad object records -400. The X360 restarts the walk from the head after every
+// removal (its `goto` back to GoToStart), reproduced by the outer loop.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::PreSubscriberAssignT(CMassiveAdObject* pAdObject, const char* pcName)
+{
+    if (!CMassiveBaseObject::IsValidString(pcName))
+        return SetLastError(-300, reinterpret_cast<const char*>(0)); // &unk_820046A7
+    if (!pAdObject)
+        return SetLastError(-400, "MAO is not valid");
+
+    for (;;)
+    {
+        mPreSubscriberList.GoToStart();
+        bool lbRemoved = false;
+        while (mPreSubscriberList.GetCurrent())  // while (*(a1 + 0x30)) -- queue cursor
+        {
+            CMassiveAdObjectSubscriber* lpSubscriber =
+                static_cast<CMassiveAdObjectSubscriber*>(mPreSubscriberList.GetCurrData());
+            if (CompareStrings(pcName, lpSubscriber->mpcName) == 0)  // *(CurrData + 4)
+            {
+                pAdObject->SubscriberAdd(lpSubscriber);  // (*(*a2 + 0x1C))(a2, subscriber)
+                PreSubscriberRemove(lpSubscriber);
+                lbRemoved = true;
+                break;  // goto LABEL_8: restart the walk from the head
+            }
+            mPreSubscriberList.GoToNext();
+        }
+        if (!lbRemoved)
+            return 0;
+    }
 }
 
 } // namespace MassiveAdClient3

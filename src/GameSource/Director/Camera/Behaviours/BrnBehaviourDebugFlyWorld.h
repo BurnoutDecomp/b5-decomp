@@ -23,9 +23,11 @@
 //   ToggleCarAttachment @0x821FB8A0 (static tweaker callback)
 //   ToggleSloMo         @0x821FB8B8 (static tweaker callback)
 // Also declared (bodies land with their own ledger rows):
-//   Update              @0x8222C618 (virtual) -- BLOCKED: reads un-homed Camera /
-//       BehaviourSharedInfo interior + a GetImplicitVelocity(out,vehicle) overload
-//       that contradicts the committed VehicleTracker home (see the .cpp).
+//   Update              @0x8222C618 (virtual) -- BLOCKED on the un-homed BehaviourSharedInfo
+//       interior only (tracked-car transform @+0x280, per-frame scale float @+0x580 [role
+//       unrecovered], VehicleTracker* @+0x5E0). Its Camera writes are now homed (the +0x140
+//       flag word is Camera::mState_uFlags, not the shared info) and its GetImplicitVelocity
+//       call is the committed VehicleTracker::GetImplicitVelocity() const (see the .cpp).
 //
 // Member layout is DWARF-attested (BrnBehaviourDebugFlyWorld.h member NAMES + order) with
 // byte offsets pinned by the X360 asm:

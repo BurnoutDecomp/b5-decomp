@@ -15,13 +15,26 @@
 //   ToggleCarAttachment @0x821FB8A0 (static tweaker callback)
 //   ToggleSloMo         @0x821FB8B8 (static tweaker callback)
 //
-// BLOCKED (not bodied here): Update @0x8222C618. Its asm reads the un-homed
-// BrnDirector::Camera::BehaviourSharedInfo interior directly (a request-flag word @+0x140,
-// a car transform matrix @+0x280, a float @+0x580 and a vehicle-info pointer @+0x5E0) and
-// calls a GetImplicitVelocity(Vector3* out, VehicleInfo*) form whose asm signature
-// contradicts the committed VehicleTracker::GetImplicitVelocity() const home. Bodying it
-// faithfully would require forking those foreign types / fabricating accessors, so it is
-// left to the Behaviour shared-info TU that homes them.
+// BLOCKED (not bodied here): Update @0x8222C618. Two of its three original blockers are now
+// cleared:
+//   (1) The request-flag word it `ld/ori 2/std`s is on the CAMERA, not the shared info
+//       (asm: `ld r6,0x140(r27)` where r27 == lrCamera). Camera +0x140 == the committed
+//       BrnDirector::Camera::Camera::mState_uFlags (Camera.h). The rest of its camera writes --
+//       transform rows @+0x00..+0x30, mfFOV @+0x58 (with the "lfFOV > 0.0f" assert, Camera.h:424),
+//       the slo-mo time-dilation request @+0x104 (== mEffects+0x9C == SetRequestedTimeDilation),
+//       and BrnDirector::Camera::Camera::ValidateTransformWithDebugInfo @0x8220A850 -- all resolve
+//       to the now-homed Camera.
+//   (2) The `GetImplicitVelocity(out, veh)` form is NOT a contradicting overload: it is the
+//       committed VehicleTracker::GetImplicitVelocity() const returning a Vector3 by value
+//       (PPC struct-return: r3 = hidden return slot = &out, r4 = the VehicleTracker* `this`).
+//       Hex-Rays rendered the sret+this pair as `(a1, a2)`. No fork is needed.
+// The remaining blocker is the BrnDirector::Camera::BehaviourSharedInfo interior, which still has
+// NO canonical committed home -- only divergent temporary per-behaviour minimal slices
+// (BehaviourRig.h / BrnBehaviourIceAnim.h) that model unrelated accessors. Update reads three of
+// its members with no homed accessor: the tracked-car transform @+0x280 (CreateLookAt target /
+// warp-to-car source), a per-frame float @+0x580 whose ROLE IS NOT RECOVERED (used as the
+// vmaddfp velocity-integration scale), and the VehicleTracker* @+0x5E0. Bodying it faithfully
+// needs those homed by name; left to the Behaviour shared-info TU that owns BehaviourSharedInfo.
 //
 // Source-of-truth: ARTIST X360 pseudocode + ASM at the addresses above.
 // ============================================================================
