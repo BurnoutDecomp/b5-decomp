@@ -64,18 +64,11 @@ public:
     NFSMixMapState* GetMixMapProc(int liIndex);   // @0x82B4D648 -- &m_pFirstInstance[liIndex]
     NFSMixMapState* AddMixState(int liObjectIndex, NFSMixMapState* lpFirstInstance); // @0x82B4D660
     void CreateMixCtls();             // @0x82B4C890 -- build this state's mix-control procs
+    void CreateEvtMixCtls();          // @0x82B4CE00 -- build this state's event mix-control procs
     void CreateSubMixChannels();      // @0x82B4CB00 -- build this state's sub-mix channel procs
     void CreateMasterMixChannels();   // @0x82B4CC48 -- build this state's master-mix channel procs
     void InitializeSubChannels();     // @0x82B4D2A8 -- wire sub-channel input arrays from the blob
     void InitializeMasterChannels();  // @0x82B4D420 -- wire master-channel input arrays from the blob
-
-    // ---- BLOCKED (declared so future callers compile; body deferred) ----
-    //   * CreateEvtMixCtls @0x82B4CE00 -- the word_82F8677A dB->Q15 rodata blocker is now
-    //     RESOLVED (via NFSMixShape::GetQ15FromHundredthsdB), but the body still calls the
-    //     UN-NAMED NFSMixMap helper sub_82B493F8 @0x82B493F8 (result -> stEvtMixCtlUniqueData
-    //     ppScaleRatios). It carries no identity/symbol in the tree, so it cannot be faithfully
-    //     declared/called yet -- unblocks when that NFSMixMap function is named + reconstructed.
-    void CreateEvtMixCtls();  // @0x82B4CE00  BLOCKED (un-named callee sub_82B493F8)
 
     // vtable pointer occupies +0x00 (virtual dtor above).
     NFSMixMap*        m_pNFSMixMap;        // +0x04

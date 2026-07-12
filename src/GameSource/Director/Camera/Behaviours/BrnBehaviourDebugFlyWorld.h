@@ -22,12 +22,12 @@
 //   LevelOut            @0x821FB888 (static tweaker callback)
 //   ToggleCarAttachment @0x821FB8A0 (static tweaker callback)
 //   ToggleSloMo         @0x821FB8B8 (static tweaker callback)
-// Also declared (bodies land with their own ledger rows):
-//   Update              @0x8222C618 (virtual) -- BLOCKED on the un-homed BehaviourSharedInfo
-//       interior only (tracked-car transform @+0x280, per-frame scale float @+0x580 [role
-//       unrecovered], VehicleTracker* @+0x5E0). Its Camera writes are now homed (the +0x140
-//       flag word is Camera::mState_uFlags, not the shared info) and its GetImplicitVelocity
-//       call is the committed VehicleTracker::GetImplicitVelocity() const (see the .cpp).
+//   Update              @0x8222C618 (virtual) -- integrate the fly rig into the produced camera.
+//       Its Camera writes resolve to the homed Camera (the +0x140 flag word is Camera::mState_uFlags),
+//       its GetImplicitVelocity call is the committed VehicleTracker::GetImplicitVelocity() const,
+//       and its three foreign BehaviourSharedInfo fields (car position @+0x280, per-frame scale float
+//       @+0x580 [role unrecovered], VehicleTracker* @+0x5E0) are read by named accessor through the
+//       .cpp's file-local `detail::` shim (the type stays opaque; owning TU pins the offsets).
 //
 // Member layout is DWARF-attested (BrnBehaviourDebugFlyWorld.h member NAMES + order) with
 // byte offsets pinned by the X360 asm:
@@ -83,7 +83,7 @@ public:
     // ------------------------------------------------------------------------
     virtual void        Construct();                                              // @0x82210088
     virtual bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo); // @0x821FB738
-    virtual bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo); // @0x8222C618 (BLOCKED body)
+    virtual bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo); // @0x8222C618
     virtual void        SetupTweaker(Utils::Tweaker& lrTweaker);                  // @0x822100E0
     virtual const char* GetName() const;                                         // @0x821FB728
 

@@ -42,8 +42,46 @@
 namespace MassiveAdClient3
 {
 
+// ---------------------------------------------------------------------------
+// InteractionRecord -- one interaction sub-record listed in a CMassiveRecord's
+// mInteractionRecords. These are polymorphic payloads: the first vtable slot is
+// the vector deleting destructor CMassiveRecord::RemoveInteractionRecords
+// @ 0x82BDD568 invokes as `(**data)(data, 1)`. CMassiveAsset::ReportImpressions
+// @ 0x82BDA980 additionally reads three data fields of the listed sub-record
+// when it emits each interaction report -- all three offsets are attested by
+// that TU's asm (lwz +0x14, ld +0x18, lhz +0x20). The intervening bytes have no
+// recovered meaning and are modelled by a name-less pad; the X360-absolute
+// offsets are reproduced BY NAME, not asserted on the wider host (there is no
+// standalone symbol / DecFIGS for this vendor sub-record type). Both the record
+// TU (teardown) and the asset TU (reporting) share this one definition.
+struct InteractionRecord
+{
+    struct VTable
+    {
+        void* (*mpfnVectorDeletingDestructor)( InteractionRecord* lpThis, int bDelete );
+    };
+
+    const VTable*      mpVTable;    // +0x00 (slot 0 == the vector deleting destructor)
+    unsigned char      maPad04[16]; // +0x04..+0x13 (no recovered meaning)
+    unsigned int       mnField14;   // +0x14 (u32; ReportImpressions -> AddInteractionR uTag31)
+    unsigned long long mnField18;   // +0x18 (u64; ReportImpressions -> AddInteractionR nTag51)
+    unsigned short     msField20;   // +0x20 (u16; ReportImpressions -> AddInteractionR sTag32)
+
+    unsigned int       GetField14() const { return mnField14; }
+    unsigned long long GetField18() const { return mnField18; }
+    unsigned short     GetField20() const { return msField20; }
+};
+
 class CMassiveRecord : public CMassiveBaseObject
 {
+    // CMassiveAsset owns the record list this record lives on and drives its
+    // reporting: CMassiveAsset::ReportImpressions @ 0x82BDA980 reads this record's
+    // two embedded impression accumulators, its two ctor-arg fields (+0x14/+0x18)
+    // and its interaction list directly (bare lwz/list walks in that TU's asm).
+    // Friendship keeps every one of those a named-member access rather than an
+    // offset hack -- the same coupling the zone manager has with CMassiveAsset.
+    friend class CMassiveAsset;
+
 public:
     // @ 0x82BDD6D0. Chains the base ctor ("CMassiveRecord"), installs this
     // class's vftable (off_82187BB8 -- modelled by the virtual dtor), stores the

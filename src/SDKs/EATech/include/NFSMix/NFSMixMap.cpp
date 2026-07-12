@@ -487,6 +487,61 @@ int* NFSMixMap::AddScaleIDs(unsigned short* lpScaleParams, int liProcIdx)
 }
 
 // ---------------------------------------------------------------------------
+// NFSMixMap::AddEvtScaleIDs @0x82B493F8 -- the event-mix-control twin of AddScaleIDs.
+// Expands an event control's u-scale input list (the packed ids that follow the
+// stMixEvtParams header) into the shared packed scale-ptr array: for each entry, one
+// packed id if its state matches the control's own state, else one per active copy of
+// the referenced state (m_StateRefCount). Bails when the scale-ptr array is already
+// full (m_ScaleParamsIDCount == m_ScaleParamsAdded) or the control has no u-scale
+// inputs (nUScaleCntSwing low 5 bits == 0). Writes the produced count into the swing
+// word's top byte and advances m_ScaleParamsIDCount. Returns the base of the range.
+// FLAG (PC pointer-width): the packed 32-bit ids are stored through the m_pScalePtrArray
+// pointer slots (reinterpret) so the stride matches ConnectMixMap's later object-ptr fill.
+// ---------------------------------------------------------------------------
+int* NFSMixMap::AddEvtScaleIDs(stMixEvtParams* lpEvtParams, int liProcIdx)
+{
+    if (m_ScaleParamsIDCount == m_ScaleParamsAdded)      // +0xD8 == +0xD4: array full
+        return 0;
+
+    const int liCount = lpEvtParams->nUScaleCntSwing & 0x1F; // low 5 bits @ +0x04
+    if (liCount == 0)
+        return 0;
+
+    int** lpArray = m_pScalePtrArray;                    // +0x180
+    int** lpBase  = &lpArray[m_ScaleParamsIDCount];
+    const int liSelfType = lpEvtParams->nEVTCTLID & 0xFF; // low byte @ +0x00
+    const int* lpEntry   = reinterpret_cast<const int*>(lpEvtParams + 1); // u-scale list @ +0x18
+
+    int liAdded = 0;
+    for (int li = 0; li < liCount; ++li)
+    {
+        const int liVal       = *lpEntry++;
+        const int liEntryType = (liVal >> 16) & 0xFF;
+        if (liEntryType == liSelfType)
+        {
+            ++liAdded;
+            lpArray[m_ScaleParamsIDCount + li] =
+                reinterpret_cast<int*>(static_cast<intptr_t>((liProcIdx << 11) | liVal));
+        }
+        else
+        {
+            const int liCopies = m_StateRefCount[liEntryType]; // this+8+4*type
+            for (int lj = 0; lj < liCopies; ++lj)
+            {
+                ++liAdded;
+                lpArray[m_ScaleParamsIDCount + lj + li] =
+                    reinterpret_cast<int*>(static_cast<intptr_t>((lj << 11) | liVal));
+            }
+        }
+    }
+
+    // produced count -> top byte of the swing word (nUScaleCntSwing @ +0x04).
+    lpEvtParams->nUScaleCntSwing = (liAdded << 24) | (lpEvtParams->nUScaleCntSwing & 0xFFFFFF);
+    m_ScaleParamsIDCount += liAdded;
+    return reinterpret_cast<int*>(lpBase);
+}
+
+// ---------------------------------------------------------------------------
 // NFSMixMap::GetMasterMixChProc @0x82B4A840 -- route a packed master-channel id to its
 // per-state proc: state = bits[16..23], copy = bits[11..15], proc = bits[0..7]. The X360
 // host-assert ("State out of bounds.") collapses to CGS_ASSERT.

@@ -12,23 +12,13 @@
 namespace MassiveAdClient3
 {
 
-namespace
-{
 // The interaction-record payloads listed in mInteractionRecords are polymorphic
 // objects whose first vtable slot is the vector deleting destructor. The X360
 // teardown calls it as `(**data)(data, 1)` -- load the vtable, call slot 0 with
-// (this, 1). Modelled as a one-slot interface so the call is BY NAME rather than
-// a raw vtable dereference; the listed pointers are stored as void* (the X360
-// keeps an untyped owner pointer in each list node).
-struct InteractionRecord
-{
-    struct VTable
-    {
-        void* (*mpfnVectorDeletingDestructor)( InteractionRecord* lpThis, int bDelete );
-    };
-    const VTable* mpVTable;   // slot 0 == the vector deleting destructor
-};
-}
+// (this, 1) BY NAME rather than a raw vtable dereference. The type (with the data
+// fields CMassiveAsset::ReportImpressions also reads) is defined once in the
+// header so the record TU and the asset TU share it; the listed pointers are kept
+// as void* in each list node (the X360 keeps an untyped owner pointer).
 
 // ---------------------------------------------------------------------------
 // CMassiveRecord::CMassiveRecord @ 0x82BDD6D0

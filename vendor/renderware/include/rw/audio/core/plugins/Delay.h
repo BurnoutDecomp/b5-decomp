@@ -20,7 +20,7 @@
 //   GetSize                @0x82B96A38 -> 184 (0xB8)
 //   Delay (ctor)           @0x82B9DD90
 //   GetPpuTicksEvent       @0x82B9DDE0
-//   `vector deleting destructor' @0x82B9DDE8  (BLOCKED -- see the .cpp note)
+//   `vector deleting destructor' @0x82B9DDE8
 //   UpdateLatencyAndDecay  @0x82B9DE50
 //   ReleaseEvent           @0x82B97278
 //   RwacTimerClient        @0x82B972C8
@@ -76,10 +76,9 @@ public:
     static u32    GetPpuTicksEvent(Delay *self);                   // @0x82B9DDE0
     static int    CreateInstance(Delay *self, f32 *pMaxDelayTime); // @0x82BA2918
 
-    // `vector deleting destructor' @0x82B9DDE8 -- BLOCKED. Its body tears down the embedded
-    // TimerHandle (mTimer @+0x98) through an un-homed XEX 'STUB' symbol (the same un-resolved
-    // TimerHandle teardown that BLOCKS ReverbModel1::Dtor); reconstructing it would fabricate
-    // the callee, so the body is omitted (declared for completeness, not defined).
+    // `vector deleting destructor' @0x82B9DDE8 -- destruct the embedded TimerHandle (trivial /
+    // folded to the image's shared empty thunk 0x82AD5078) and DelayLine, reinstall the base
+    // PlugIn v-table, then free when (flags & 1). See the .cpp for the STUB resolution.
     static void  *VectorDeletingDestructor(Delay *self, char flags);
 
     // ---- per-frame processing / configuration ----

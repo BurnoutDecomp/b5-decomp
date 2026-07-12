@@ -23,24 +23,25 @@
 //     MassiveAdClient3::CMassiveAsset::RecordFind                @ 0x82BDA590
 //     MassiveAdClient3::CMassiveAsset::Resume                    @ 0x82BDA358
 //     MassiveAdClient3::CMassiveAsset::RequestDownloadBinary     @ 0x82BDA188
-//     MassiveAdClient3::CMassiveAsset::ReportImpressions         @ 0x82BDA980 (BLOCKED)
+//     MassiveAdClient3::CMassiveAsset::ReportImpressions         @ 0x82BDA980
 //     MassiveAdClient3::CMassiveAsset::SendReport                @ 0x82BDA688
 //
-// RequestDownloadBinary and SendReport are now RECONSTRUCTED (this wave): their
+// RequestDownloadBinary and SendReport are now RECONSTRUCTED (earlier wave): their
 // former collaborators are homed -- CRequestDownloadBinary (ctor / CreateRequest)
 // and CRequestObject::Submit for the download request, and CRequestImpression
 // Update::Add{Texture,Video,Audio,Model}Report + the CMassiveRecordImpression
 // accumulator getters + CMassiveZoneManager::GetImpressionUpdate for the report.
 //
-// ReportImpressions @ 0x82BDA980 stays BLOCKED (DECLARED so the class surface is
-// complete and the compile gate is clean). It walks each record's interaction-
-// record list and reads three fields (+0x14/+0x18/+0x20) of the listed
-// interaction SUB-RECORD type, which still has NO reconstructed layout: Record.cpp
-// models the listed payload only as a one-slot opaque `InteractionRecord` (just
-// the vtable slot for its deleting destructor). Reading those three fields by name
-// would require homing that type's layout, which is not attested here -- so the
-// body is left for the slice that homes the interaction sub-record. (The zone's
-// pending update and the record accessors it also needs ARE now exposed by name.)
+// ReportImpressions @ 0x82BDA980 is now RECONSTRUCTED (this wave -- the last
+// blocked body of the TU). It walks each record's two embedded impression
+// accumulators + its interaction-record list, reporting each into the current
+// zone's pending update and then resetting the record. The formerly-un-homed
+// interaction SUB-RECORD type is now homed ADDITIVELY: its three attested data
+// fields (+0x14 u32 / +0x18 u64 / +0x20 u16, all offsets read by bare lwz/ld/lhz
+// in this TU's asm) extend the shared `InteractionRecord` struct in
+// MassiveAdClient3Record.h (previously a one-slot vtable-only opaque). CMassive
+// Asset is a friend of CMassiveRecord so the record's impressions / +0x14/+0x18
+// fields / interaction list are read BY NAME rather than by offset.
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CMassiveAsset class / its methods) are PRESERVED VERBATIM --
