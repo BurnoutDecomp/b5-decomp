@@ -100,6 +100,17 @@ struct FreeburnChallengeManager
     bool IsRunning() const        { return meInternalState == E_INTERNAL_STATE_RUNNING; }
     bool IsShowingResults() const { return meInternalState == E_INTERNAL_STATE_RESULTS; }
 
+    // ADDITIVE GROW (CompassComponent::ShowChallengeOnCompass @0x82428CC0, which inlines
+    // this as the `meInternalState in {INITIALISED, RUNNING, RESULTS}` branch set -- the
+    // manager is "active" once a challenge is initialised through until its results are
+    // being shown). DWARF-attested helper (BrnGuiFreeburnChallengeManager DWARF), folded
+    // inline by the X360 compiler. The compare set is exactly {2,3,4}.
+    bool IsActive() const
+    {
+        return meInternalState >= E_INTERNAL_STATE_INITIALISED
+            && meInternalState <= E_INTERNAL_STATE_RESULTS;
+    }
+
     // FLAG: accessor name not DWARF-attested (the count read is inlined
     // @0x82422100); the member itself is the DWARF miTargetsCount.
     s32 GetTargetsCount() const   { return miTargetsCount; }

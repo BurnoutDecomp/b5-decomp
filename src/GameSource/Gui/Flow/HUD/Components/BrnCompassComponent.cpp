@@ -9,6 +9,7 @@
 //   Prepare                 @ 0x8241F8A0
 //   SetVisibility           @ 0x824115E8
 //   ShowLandmarkOnCompass   @ 0x82428C68
+//   ShowChallengeOnCompass  @ 0x82428CC0
 //
 // Reconstructed store-for-store from the X360 asm; DWARF-attested shape.
 //
@@ -18,16 +19,20 @@
 //                                          un-homed platform intrinsic XMVectorACos.
 //   FormatDirectionLetters @ 0x82411640 -- indexes the un-exported per-language rodata
 //                                          string tables off_82F248B8 / off_82F24918.
-//   ShowChallengeOnCompass @ 0x82428CC0 -- un-homed ChallengeListEntryAction validity
-//                                          field + forwards into ShowPositionOnCompass.
 //   Update                 @ 0x8242E160 -- un-homed GuiTracker actively-tracked-landmark
-//                                          accessors + GuiCache tracker/heading reads.
+//                                          accessors (GetActivelyTrackedLandmarks /
+//                                          GetNumActivelyTrackedLandmarks -- no reconstructed
+//                                          home, no disasm) + the GuiCache heading /
+//                                          event-destination-landmark reads.
 // ===================================================================================
 #include "GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
-#include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetLandmarkInfoFromIndex
+#include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetLandmarkInfoFromIndex / GetFreeburnChallengeManager / GetWorldDataController
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"             // GuiEventUpdateSatNav::SatNavIconInfo
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"  // FreeburnChallengeManager::IsActive / GetCurrentAction; BrnResource::ChallengeListEntryAction
+#include "GameSource/Gui/BrnGuiWorldDataController.h"        // WorldDataController::GetTriggerVolumeRegion
+#include "SharedClasses/Trigger/BrnRegion.h"                // BrnTrigger::BoxRegion::GetPosition
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"           // BrnFlapt::FileRef::FindComponent
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h" // BrnFlapt::MovieClipInstance::ResetTimeline
 #include "GameSource/GameState/BrnGameStateTypes.h"         // BrnGameState::LandmarkIndex (complete)
@@ -145,6 +150,37 @@ namespace BrnGui
         const Vector4& lv4Position = lLandmarkInfo.GetPositionLane();
         const Vector3 lv3Destination = { lv4Position.x, lv4Position.y, lv4Position.z, 0.0f };
         ShowPositionOnCompass(lv3Destination, lfBearing);
+    }
+
+    // @ 0x82428CC0 -- when a freeburn challenge is active and its current action has a
+    // trigger-located target, resolve that trigger's world-space region and place it on
+    // the compass, then flash the "fbcTarget" marker icon; returns true when it drew the
+    // marker. The X360 inlines the manager's mpChallengeManager fetch (+assert),
+    // FreeburnChallengeManager::IsActive (state in {INITIALISED, RUNNING, RESULTS}) and the
+    // BoxRegion position read at the call site; de-inlined here to the named accessors.
+    bool CompassComponent::ShowChallengeOnCompass(f32 lfBearing)
+    {
+        const FreeburnChallengeManager* lpChallengeManager = mpGuiCache->GetFreeburnChallengeManager();
+        if (lpChallengeManager->IsActive())
+        {
+            const BrnResource::ChallengeListEntryAction* lpAction = lpChallengeManager->GetCurrentAction();
+
+            const u8 luLocationIndex = 0;
+            if ((lpAction->GetNumLocations() != 0)
+                && (lpAction->GetLocationType(luLocationIndex)
+                    == BrnResource::ChallengeListEntryAction::E_LOCATION_TYPE_TRIGGER))
+            {
+                const CgsID lTriggerID = lpAction->GetTriggerID(luLocationIndex);
+
+                BrnTrigger::BoxRegion lBox;
+                mpGuiCache->GetWorldDataController()->GetTriggerVolumeRegion(lTriggerID, &lBox);
+
+                ShowPositionOnCompass(lBox.GetPosition(), lfBearing);
+                mDestMarkerMovie.GotoAndPlayLabel("fbcTarget");
+                return true;
+            }
+        }
+        return false;
     }
 
     // @ 0x8241F8A0 -- one-time setup of the compass HUD from its apt file:
