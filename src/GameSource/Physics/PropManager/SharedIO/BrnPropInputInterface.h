@@ -73,6 +73,13 @@ namespace Props
         // @0x822CCE20: enqueue a remove-physical-part request.
         void RemovePartInstance(BrnWorld::PropEntityID lEntityId, s32 liPhysicalIndex);
 
+        // ADDITIVE GROW (FLAG -- declared-only, body owned by the per-queue Append
+        // instantiations in CgsBaseEventQueue.h): the whole-interface merge that appends
+        // another PropInputInterface's four request queues onto this one. Driven by the
+        // world prop->physics bridges (WorldModule::BridgePropModuleToPhysicsModule_Prepare
+        // @0x827AB410 and BridgeEntityModulesToPhysicsModule_PrePhysics).
+        void Append(const PropInputInterface& lrOther);
+
     private:
         AddPhysicalPropEventQueue mAddPropQueue;             // +0x0000   (:125)
         AddPhysicalPartEventQueue mAddPartQueue;             // +0x0FB0   (:126)

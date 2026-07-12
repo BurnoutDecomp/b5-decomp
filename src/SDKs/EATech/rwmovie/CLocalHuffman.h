@@ -52,6 +52,16 @@ public:
     CLocalHuffman(u32 luBits, u32* lpuError);
     ~CLocalHuffman();
 
+    // ---- additive: reached through the derived CLocalHuffmanEncoder ---------------------
+    // Number of coded symbols (base member, +0x00). CAltTablesEncoder::clear reads it as
+    // 4 * numSymbols to size the per-table code-buffer memset.
+    u32 GetNumSymbols() const { return muNumSymbols; }
+
+    // CLocalHuffman::setCodes -- (re)builds this table's canonical code words for the
+    // requested table-selection mode. It is a separate (not-yet-reconstructed) X360 TU;
+    // declared here so CAltTablesEncoder::clear can call it through a CLocalHuffmanEncoder.
+    int setCodes(int liMode);
+
 private:
     u32       muNumSymbols;          // +0x00  number of coded symbols
     const u8* mpaCodeLengths;        // +0x04  per-symbol code-length table
