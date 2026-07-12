@@ -70,6 +70,12 @@ namespace
     // on x64, so the region carries 2x headroom).
     u8 s_screenStatePoolBacking[2u * 1024u * 1024u];
 
+    // Backing for the profile manager's allocators (FLAG PC stand-in: the console hands
+    // the 0x26 game-data heap + a module linear; the PC module owns dedicated regions --
+    // the heap carves the 3x9608 mugshot circular buffer + the SLS callback block).
+    u8 s_profileHeapBacking[192u * 1024u];
+    u8 s_profileLinearBacking[64u * 1024u];
+
     // The shared access-pointer bundle the HUD flow's state interface hands its GUI
     // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes the
     // AptAux singleton). The console's view module owns the equivalent module-shared
@@ -180,9 +186,13 @@ namespace BrnGui
         mpGuiEventInputBuffer = 0;
 
         // The flow-controller chain (the X360 Construct's flow set): the cache Construct
-        // (the watcher reset @0x82505860 -> 0x824FD978) runs before the flows are
-        // constructed against it; the controller starts UNLOADED on every flow slot.
+        // (the watcher reset @0x82505860 -> 0x824FD978), then the profile manager (X360
+        // GuiModule::Construct @0x82518028 hands it the cache, the sign-in watcher, and
+        // the view module's language manager), then the flows against the cache; the
+        // controller starts UNLOADED on every flow slot.
         mGuiCache.Construct();
+        mProfileManager.Construct(mGuiCache, mSystemUserProfile,
+                                  mViewModule.GetLanguageManager());
         mScreenFlow.Construct(&mGuiCache);
         mHudFlow.Construct(&mGuiCache);
         mOverlayFlow.Construct(&mGuiCache);
@@ -228,8 +238,18 @@ namespace BrnGui
         // null until the GUI resource slice lands (no reconstructed state dereferences it
         // on the boot path). FLAG (ProfileManager): un-reconstructed; BF_PROFILE's
         // manager-gated calls are boundary no-ops (see BrnBootProfile.cpp).
+        // The profile manager's Prepare precedes the flows': it attaches the sign-in
+        // listener, prepares the embedded save/load system, and carves the mugshot
+        // circular buffer (X360 hands the 0x26 game-data heap + a module linear; the
+        // PC module owns dedicated backing regions -- see the FLAG at the statics).
+        mSystemUserProfile.Prepare();   // X360: CGS_ASSERT'd @BrnGuiModule.cpp:519
+        mProfileHeap.Construct(s_profileHeapBacking, static_cast<s32>(sizeof(s_profileHeapBacking)));
+        mProfileLinear.Construct();
+        mProfileLinear.Create(s_profileLinearBacking, sizeof(s_profileLinearBacking));
+        mProfileManager.Prepare(&mProfileHeap, &mProfileLinear);
+
         mHudFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mHudStatePool,
-                         /*lpProfileManager*/ 0);
+                         &mProfileManager);
         mHudInQueue.Construct();
         mHudFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mHudInQueue));
 
@@ -295,6 +315,7 @@ namespace BrnGui
 
     bool GuiModule::Release()
     {
+        mProfileManager.Release();   // detach the sign-in listener + release the SLS
         mScreenFlow.Release();       // staged: current state OnLeave + ScriptedFsm release
         mHudFlow.Release();
         mOverlayFlow.Release();
@@ -637,6 +658,38 @@ namespace BrnGui
         mModelOutputBuffer.LockForWrite();
         mModelOutputBuffer.GetLoadNotificationsNonConst()->Clear();
         mModelOutputBuffer.UnlockForWrite();
+
+        // ---- 3b. the profile manager pump (X360 GuiModule::Update: the SLS Update at
+        //          module+685896, the collision-world validate/invalidate swap
+        //          @0x82519578, and the manager out-queue drained into the GUI out
+        //          channel). The world-side pool free/restore around the swap is the
+        //          un-reconstructed world collision pool -- FLAG'd absent (no world on
+        //          the PC boot path); the manager's own state machine is driven fully. --
+        mProfileManager.Update();
+        if (mProfileManager.PendingCollisionWorldInvalidate())
+        {
+            // FLAG PC-platform leaf: the console frees the world collision pool here.
+            mProfileManager.SetCollisionWorldValid(false);
+        }
+        if (mProfileManager.PendingCollisionWorldValidate())
+        {
+            // FLAG PC-platform leaf: the console restores the world collision pool here.
+            mProfileManager.SetCollisionWorldValid(true);
+        }
+        {
+            CgsGui::GuiEventQueueSmall& lrProfileOut = mProfileManager.GetOutEventQueue();
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liId = lrProfileOut.GetFirstEvent(&lpEvent, &liSize);
+            while (liId >= 0 && lpEvent != 0)
+            {
+                mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
+                const CgsModule::Event* lpNext = 0;
+                liId = lrProfileOut.GetNextEvent(lpEvent, &lpNext, &liSize);
+                lpEvent = lpNext;
+            }
+            lrProfileOut.Clear();
+        }
 
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----
         mScreenFlow.Update();
