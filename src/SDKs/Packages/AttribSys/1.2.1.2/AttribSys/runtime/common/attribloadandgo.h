@@ -80,6 +80,12 @@ namespace Attrib
         // Commit the vault into the live attribute database (X360 0x8280A660).
         void Initialize();
 
+        // Tear the vault back out of the live database (X360 0x8280E6F0): run each
+        // export policy's per-export deinitialize, collect the database garbage, then
+        // release the owned asset blocks. Body lives in the AttribSys load-and-go TU
+        // (attribloadandgo.cpp); ~Vault calls it on a still-initialized vault.
+        void Deinitialize();
+
         // The payload pointer of exported block luIndex (X360 0x82803420). Asserts
         // the index is within the loaded export count.
         void* GetExportData(unsigned int luIndex) const;

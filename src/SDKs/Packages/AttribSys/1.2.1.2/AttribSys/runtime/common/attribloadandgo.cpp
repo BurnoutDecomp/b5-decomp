@@ -107,3 +107,49 @@ void Attrib::ExportManager::AddExportPolicy(TypeID luType, IExportPolicy* lpPoli
     lrSlot.mType   = luType;
     lrSlot.mPolicy = lpPolicy;
 }
+
+// ExportManager::PrepareToDeinitialize @ 0x828031A8. Fan the per-policy pre-deinitialize
+// hook out to every registered policy in the (sorted) policy table. The X360 walks the live
+// table [0, mNumPolicies) and, for each row, virtual-dispatches through the policy's vtable
+// (slot 7) with the vault; there is no per-row null guard. The vault is passed straight
+// through untouched.
+void Attrib::ExportManager::PrepareToDeinitialize(const Vault& lrVault)
+{
+    for (unsigned int luIndex = 0; luIndex < mNumPolicies; ++luIndex)
+        mpPolicies[luIndex].mPolicy->PrepareToDeinitialize(lrVault);
+}
+
+// ~Vault @ 0x8280EF38. Destroy a loaded vault. If it is still live (initialized and not yet
+// deinitialized) it is torn down first (Deinitialize). Then the destructor asserts every
+// export block was cleared by that deinitialize -- a leftover live payload means a dangling
+// reference -- before returning the two shared block arrays (the DataBlocks and their AssetIDs)
+// to the AttribSys package allocator. Both arrays hold (mNumDependencies + mNumAllocExports)
+// eight-byte entries, so each free is 8*(that count) bytes; the census-decrement + NULL-guarded
+// package-allocator free the X360 inlines is the shared FreeWithCensusIf helper (census updated
+// unconditionally, inner free skipped when the block or size is zero), keeping the two live-byte
+// counters defined exactly once. Diagnostic tags are the X360 rodata, verbatim.
+Attrib::Vault::~Vault()
+{
+    if (mInited && !mDeinited)
+        Deinitialize();
+
+    // Dangling-reference guard: after deinitialize every export DataBlock must have had its
+    // payload pointer cleared. (Empty export set trivially satisfies this.)
+    bool lbExportsCleared = true;
+    for (unsigned int luIndex = 0; luIndex < mNumExports; ++luIndex)
+    {
+        if (mExportData[luIndex].GetData() != nullptr)
+        {
+            lbExportsCleared = false;
+            break;
+        }
+    }
+    CGS_ASSERT(lbExportsCleared,
+               "Attrib::Vault destructor failed to clear exports after deinitialize; likely problem with dangling references.");
+
+    // Both shared arrays were allocated 8 bytes per (dependency + reserved-export) slot by the
+    // ctor; free them back with the same byte count so the shared byte census balances.
+    const size_t lnBlockBytes = static_cast<size_t>(8u * (mNumDependencies + mNumAllocExports));
+    Attrib::HashMapTablePolicy::FreeWithCensusIf(mDepData, lnBlockBytes, "Attrib::DataBlocks");
+    Attrib::HashMapTablePolicy::FreeWithCensusIf(mDepIDs,  lnBlockBytes, "Attrib::AssetIDs");
+}

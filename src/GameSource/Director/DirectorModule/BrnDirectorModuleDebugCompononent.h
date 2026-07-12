@@ -79,8 +79,23 @@ namespace BrnDirector
         // (lpUserData) inside the body recovers the real `this`.
         //
         // DWARF-declared (BrnDirectorModuleDebugCompononent.cpp:441/455); registered as debug
-        // menu callbacks by OnActivate (which is itself declaration-only -- see above), but no
-        // body recovered in this build's ARTIST export.
+        // menu callbacks by OnActivate (which is itself declaration-only -- see above).
+        // Bodies ARE recovered in this build's ARTIST export (SavePlaylists @0x8225EAC8,
+        // LoadPlaylists @0x8225EB60: fopen "d:\\playlists.txt", then
+        // SharedPlaylists::Serialise<TextFileWriteSerialiser|TextFileReadSerialiser|
+        // DebugMenuSerialiser> over the playlist store), but BOTH stay DECLARATION-ONLY
+        // (BLOCKED): the SharedPlaylists object they serialise sits at DirectorModule+0x13BD0
+        // (asm: lwz r11,0xC(this) -> mpDirectorModule; addis+addi +0x13BD0), which lies inside
+        // BrnDirector::MainDirector's opaque `alignas(16) u8 maStorage[0x35450]` placement region
+        // (DirectorModule+0xB00..+0x35F50; BrnMainDirector.h). MainDirector exposes no
+        // SharedPlaylists member, so reaching it would require a raw offset poke into another
+        // class's opaque storage -- forbidden by AGENTS.md's NO-RAW-OFFSET rule for in-memory
+        // engine objects. LoadPlaylists additionally needs SharedPlaylists::Serialise<
+        // Camera::DebugMenuSerialiser>, whose DebugMenuSerialiser visitor type has no
+        // reconstructed home anywhere in the tree. (SharedPlaylists + its Serialise<
+        // TextFileWriteSerialiser> template ARE now homed in BrnICEMoviePlayer.h -- the only
+        // remaining blockers are the MainDirector-opaque container access and, for Load, the
+        // un-homed DebugMenuSerialiser.)
         static void SavePlaylists(void* lpUserData);
         static void LoadPlaylists(void* lpUserData);
 

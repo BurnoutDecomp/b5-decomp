@@ -22,12 +22,15 @@
 // SCOPE: only the eight functions this TU's X360 ledger attests are declared here
 // (GetName, OnActivate, Update, PopulateUserChallengeScores, SendRoadRulesScoresToNetwork,
 // WinAllRoadRules, WinSpecificNumberOfCrashRoadRules, WinSpecificNumberOfTimeRoadRules).
-// Four of them are bodied in the .cpp; the other four (Update + the three Win* actions)
-// reach still-deferred StreetManager / ProgressionManager / Profile / AchievementManager
-// member layouts (mpProgressionManager @ StreetManager+0x1D10 etc.) with no attested
-// accessor, so their bodies are left for when those types are committed. The other
-// DWARF-listed methods (Construct/Destruct/GetPath/GetNumberOfRoadRulesToWin/WinAllTime*/
-// WinAllCrash*) are NOT in this TU's X360 ledger and are intentionally not declared here.
+// Seven of them are bodied in the .cpp; only Update is still declaration-only -- it packs a
+// road-rules score-summary game-action event from deep, still-un-named ProgressionManager/Profile
+// members (Profile+0x1CD1C / Profile+0x1CD30 / ProgressionManager+0x1D0) with no attested
+// accessor, so its body is left for when those members are committed. The three Win* actions ARE
+// now bodied: their trophy/achievement tail routes through the now-committed ProgressionManager /
+// AchievementManagerBase and the X360-attested StreetManager road-rule accessors (additively
+// declared on BrnGameStateStreetManager.h). The other DWARF-listed methods (Construct/Destruct/
+// GetPath/GetNumberOfRoadRulesToWin/WinAllTime*/WinAllCrash*) are NOT in this TU's X360 ledger and
+// are intentionally not declared here.
 
 namespace BrnStreetData
 {
@@ -80,17 +83,17 @@ namespace BrnGameState
         // Arms the "send road-rules scores to network" toggle (X360 0x82317600).
         static void SendRoadRulesScoresToNetwork(void* lpData);
 
-        // "Win all road rules bar one" action (X360 0x82341CD8). DECLARATION ONLY: reaches the
-        // deferred StreetManager mpProgressionManager (+0x1D10) / AchievementManager member
-        // layouts with no attested accessor; bodied by a later pass.
+        // "Win all road rules bar one" action (X360 0x82341CD8). Best-scores every road except the
+        // last, then awards the road-rule trophies through the StreetManager road-rule accessors +
+        // ProgressionManager (bodied in the .cpp).
         static void WinAllRoadRules(void* lpData);
 
-        // "Win Specific Number Of RoadRules" (crash) action (X360 0x82341AC0). DECLARATION ONLY
-        // (same deferred-layout reason as WinAllRoadRules).
+        // "Win Specific Number Of RoadRules" (crash) action (X360 0x82341AC0). Best-crash-scores the
+        // first miNumberOfRoadRulesToWin roads, then awards trophies (bodied in the .cpp).
         static void WinSpecificNumberOfCrashRoadRules(void* lpData);
 
-        // "Win Specific Number Of Time RoadRules" action (X360 0x823418B8). DECLARATION ONLY
-        // (same deferred-layout reason as WinAllRoadRules).
+        // "Win Specific Number Of Time RoadRules" action (X360 0x823418B8). Best-time-scores the
+        // first miNumberOfRoadRulesToWin roads, then awards trophies (bodied in the .cpp).
         static void WinSpecificNumberOfTimeRoadRules(void* lpData);
     };
 }
