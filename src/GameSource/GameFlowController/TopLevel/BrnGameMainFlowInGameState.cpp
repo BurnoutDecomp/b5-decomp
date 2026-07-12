@@ -28,6 +28,8 @@ namespace BrnGameMainFlowController
     bool gBrnReturnToFrontEndRequested = false;
 }
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // dev print + gxMessageFilterFlags gate
+
 // @ 0x823AACF8 -- entering the in-game flow state. Two absolute-offset stores into the
 // game-module aggregate: raise the "in-game state active" flag and stamp the load-state slot to 5.
 void MainGameFlowStateInGame::OnEnter()
@@ -38,6 +40,10 @@ void MainGameFlowStateInGame::OnEnter()
     // {BrnFBFsm -> HUD} for it -- the front-end/freeburn handoff. [The prior recon
     // read this store as a "load-state slot" stamp; the bridge's switch on the same
     // offset proves it is the GUI FSM stage request.]
+    // The dev-gated stage log every main-flow OnEnter on the boot path carries
+    // (MemoryCard/CompleteLoading print the same shape).
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "InGame: OnEnter -> GUI FSM stage 5 (BrnScreenFsm+BrnFBFsm)\n";
     BrnGame::GetMainGameModule()->RequestGuiFsmStage(5);
 }
 

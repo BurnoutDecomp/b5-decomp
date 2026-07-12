@@ -14,6 +14,9 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"             // CgsMemory::LinearMalloc (the HUD state pool)
 #include "GameSource/Gui/BrnGuiFsmController.h"                         // BrnGui::GuiFsmController (the flow FSM controller)
 #include "GameSource/Gui/Flow/HUD/BrnHudFlow.h"                         // BrnGui::BrnHudFlow (the 14-state HUD flow)
+#include "GameSource/Gui/Flow/Overlay/BrnOverlayFlow.h"                 // BrnGui::BrnOverlayFlow (the 15-popup-state overlay flow)
+#include "GameSource/Gui/Flow/Screen/BrnScreenFlow.h"                   // BrnGui::BrnScreenFlow (the 61-state front-end SCREEN flow)
+#include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; shell until reconstructed)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
 
 // BrnGui::GuiModule -- the GUI module (a dispatched CgsModule, like BrnRendererModule). The X360 module
@@ -99,12 +102,13 @@ namespace BrnGui
         // -- the EventInterpreterModule observer dispatch.
         void DispatchInboundGuiEvents();
 
-        // Drain the HUD flow's StateInterface output queue -- the single per-frame
-        // dispatch point for everything the states post: subscription records (34/35),
-        // movie play/stop (508/509), the channel-40 command records (-> mGuiOutQueue for
-        // the game bridge), the channel-41 view-state records (-> the view input queue),
-        // and the menu-music / audio-trigger events (155/201, the PC sound leaves).
-        void DrainFlowOutputQueue();
+        // Drain one flow's StateInterface output queue -- the per-frame dispatch point
+        // for everything its states post: subscription records (34/35, keyed into that
+        // flow's observed-id table), movie play/stop (508/509), the channel-40 command
+        // records (-> mGuiOutQueue for the game bridge), the channel-41 view-state
+        // records (-> the view input queue), and the menu-music / audio-trigger events
+        // (155/201, the PC sound leaves).
+        void DrainFlowOutputQueue(s32 liFlow);
 
         // [PC IO] the GuiResourceModule module-dispatch stand-in: drain the ModelIO input
         // buffer's FSM-bundle load requests (GuiEventLoadRequest, queue type 39), load
@@ -112,8 +116,8 @@ namespace BrnGui
         // into the ModelIO output buffer's notification queue the controller reads.
         void ServiceFsmBundleRequests();
 
-        // Post one event into the HUD flow's in-queue if the flow subscribed to it
-        // (the observer-subscription filter).
+        // Post one event into each live flow's in-queue if that flow subscribed to it
+        // (the observer-subscription filter, per flow).
         void RouteEventToFlow(const CgsModule::Event* lpEvent, s32 liId, s32 liSize);
 
         // This sub-step's GUI module INPUT buffer (set by BrnGameModule each sub-step; the
@@ -134,10 +138,15 @@ namespace BrnGui
 
         // ---- the real flow-controller chain (X360 GuiModule members) --------------------
         GuiCache          mGuiCache;        // X360 +1005376 (the flow states' cache; event-64 payload)
+        BrnScreenFlow     mScreenFlow;      // X360 mScreenFlow (SCREEN = E_GUIFLOW_SCREEN, the front-end)
         BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)
+        BrnOverlayFlow    mOverlayFlow;     // X360 mOverlayFlow (OVERLAY = E_GUIFLOW_OVERLAY)
         GuiFsmController  mFsmController;   // X360 +638904 (the flow FSM controller)
+        ProfileManager    mProfileManager;  // X360 +681696 (shell; ScreenFlow::Prepare takes it by reference)
         CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)
         CgsMemory::LinearMalloc mHudStatePool; // the 14-state pool allocator (HudFlow::Prepare)
+        CgsMemory::LinearMalloc mOverlayStatePool; // the 15-popup-state pool allocator (OverlayFlow::Prepare)
+        CgsMemory::LinearMalloc mScreenStatePool;  // the 61-state pool allocator (ScreenFlow::Prepare)
 
         // The ModelIO pair the controller exchanges with the (module-dispatch) resource
         // loader: requests out through the input buffer, notifications back on the output
@@ -147,19 +156,22 @@ namespace BrnGui
         CgsGui::ModelIO::InputBuffer  mModelInputBuffer;
         CgsGui::ModelIO::OutputBuffer mModelOutputBuffer;
 
-        // The HUD flow's in-queue (every observed event is fanned into it) + the module
-        // GUI-OUT queue the game bridge drains.
+        // The per-flow in-queues (every observed event is fanned into the subscribing
+        // flow's queue) + the module GUI-OUT queue the game bridge drains.
+        CgsModule::VariableEventQueue<18432, 16> mScreenInQueue;
         CgsModule::VariableEventQueue<18432, 16> mHudInQueue;
+        CgsModule::VariableEventQueue<18432, 16> mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
 
-        // The observer-subscription table (records 34/35 from the state interface output
-        // queue). One observer (the HUD flow) -> a flat per-id flag set.
+        // The observer-subscription tables (records 34/35 from each flow's state
+        // interface output queue). One flag set per flow slot.
         static const s32 KI_MAX_OBSERVED_EVENT_ID = 1024;
-        bool mabObservedEventIds[KI_MAX_OBSERVED_EVENT_ID];
+        bool mabObservedEventIds[E_GUIFLOW_COUNT][KI_MAX_OBSERVED_EVENT_ID];
 
-        // One resident pool per flow slot for the loaded FSM LuaCode bundle (the [PC IO]
-        // servicer reloads it on every FSM change; request ids 13/14/15 = SCREEN/HUD/OVERLAY).
-        CgsResource::Pool mFsmBundlePool;
+        // One resident pool per flow slot for the loaded FSM LuaCode bundle (request ids
+        // 13/14/15 = SCREEN/HUD/OVERLAY; each flow's ScriptedFsm holds its LuaCode
+        // resource while live, so the pools must not alias across flows).
+        CgsResource::Pool mFsmBundlePool[E_GUIFLOW_COUNT];
         bool              mbResourcesReadyFed;   // fed BF_LEGAL its resources-ready (567) yet
     };
 

@@ -49,15 +49,26 @@ extern bool gBrnGuiDrivesLoadingScreen;    // we set this while the HUD flow FSM
 
 namespace
 {
-    // Backing for the FSM bundle pool (3 mem types; the FSM scripts are tiny single-state
-    // bundles ~1.5 KB, and the pool reserves 64 KB for its own management structures).
+    // Backing for the per-flow FSM bundle pools (3 mem types each; the boot FSM scripts
+    // are tiny single-state bundles ~1.5 KB -- BRNSCREENFSM is the largest at ~68 KB --
+    // and each pool reserves 64 KB for its own management structures). One backing per
+    // flow slot: each flow's ScriptedFsm holds its LuaCode resource while live.
     const u32 KU_FSM_POOL_BYTES = 256u * 1024u;
-    u8 s_fsmPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FSM_POOL_BYTES];
+    u8 s_fsmPoolBacking[BrnGui::E_GUIFLOW_COUNT][CgsResource::E_MEMTYPE_NUMTYPES][KU_FSM_POOL_BYTES];
     u8 s_fsmLuaHeapBuffer[512u * 1024u];
 
     // Backing for the HUD flow's 14-state pool (BrnHudFlow::Prepare carves the state
     // objects out of this linear region; BootLegal is the largest at a few KB).
     u8 s_hudStatePoolBacking[512u * 1024u];
+
+    // Backing for the overlay flow's 15-popup-state pool (X360 sizes 0x40/0x50/13x0x148;
+    // sized generously for the x64 member inflation).
+    u8 s_overlayStatePoolBacking[256u * 1024u];
+
+    // Backing for the SCREEN flow's 61-state pool (X360 total ~638 KB with 4-byte
+    // pointers; the big real states -- ON_GAME_ROOM 86 KB, ON_CUST_MAT 57 KB -- widen
+    // on x64, so the region carries 2x headroom).
+    u8 s_screenStatePoolBacking[2u * 1024u * 1024u];
 
     // The shared access-pointer bundle the HUD flow's state interface hands its GUI
     // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes the
@@ -168,14 +179,18 @@ namespace BrnGui
         mMovieManager.Construct();
         mpGuiEventInputBuffer = 0;
 
-        // The flow-controller chain (the X360 Construct's flow set): the HUD flow is
-        // constructed against the module's GuiCache; the controller starts UNLOADED on
-        // every flow slot.
+        // The flow-controller chain (the X360 Construct's flow set): the cache Construct
+        // (the watcher reset @0x82505860 -> 0x824FD978) runs before the flows are
+        // constructed against it; the controller starts UNLOADED on every flow slot.
+        mGuiCache.Construct();
+        mScreenFlow.Construct(&mGuiCache);
         mHudFlow.Construct(&mGuiCache);
+        mOverlayFlow.Construct(&mGuiCache);
         mFsmController.Construct();
 
-        for (s32 li = 0; li < KI_MAX_OBSERVED_EVENT_ID; ++li)
-            mabObservedEventIds[li] = false;
+        for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
+            for (s32 li = 0; li < KI_MAX_OBSERVED_EVENT_ID; ++li)
+                mabObservedEventIds[lf][li] = false;
         mbResourcesReadyFed = false;
     }
 
@@ -218,13 +233,31 @@ namespace BrnGui
         mHudInQueue.Construct();
         mHudFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mHudInQueue));
 
+        // The overlay flow: the 15-popup-state pool + its own in-queue (the X360 module
+        // prepares all three flows here).
+        mOverlayStatePool.Construct();
+        mOverlayStatePool.Create(s_overlayStatePoolBacking, sizeof(s_overlayStatePoolBacking));
+        mOverlayFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mOverlayStatePool);
+        mOverlayInQueue.Construct();
+        mOverlayFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mOverlayInQueue));
+
+        // The SCREEN flow: the 61-state front-end pool + its own in-queue. The X360
+        // Prepare threads the module's ProfileManager through BY REFERENCE (the CN_PROFILE
+        // state's Construct consumes it; the manager is a shell until reconstructed).
+        mScreenStatePool.Construct();
+        mScreenStatePool.Create(s_screenStatePoolBacking, sizeof(s_screenStatePoolBacking));
+        mScreenFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mScreenStatePool,
+                            mProfileManager);
+        mScreenInQueue.Construct();
+        mScreenFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mScreenInQueue));
+
         // The controller: store the model-module pointer + the FSM allocator, then
-        // register the HUD flow (E_GUIFLOW_HUD). The SCREEN/OVERLAY flows are follow-ons
-        // (BrnScreenFlow/BrnOverlayFlow containers un-reconstructed); the controller
-        // skips null flow slots.
+        // register the three flow slots.
         mFsmController.Prepare(
             reinterpret_cast<CgsGui::ModelModule*>(&s_ModelModuleSentinel), &mFsmLuaHeap);
+        mFsmController.AddFlow(E_GUIFLOW_SCREEN, &mScreenFlow);
         mFsmController.AddFlow(E_GUIFLOW_HUD, &mHudFlow);
+        mFsmController.AddFlow(E_GUIFLOW_OVERLAY, &mOverlayFlow);
 
         // The ModelIO pair the controller exchanges with the loader: construct the
         // IOBuffer bases (the eStatusConstructed guard the lock methods assert on) and
@@ -262,7 +295,9 @@ namespace BrnGui
 
     bool GuiModule::Release()
     {
-        mHudFlow.Release();          // staged: current state OnLeave + ScriptedFsm release
+        mScreenFlow.Release();       // staged: current state OnLeave + ScriptedFsm release
+        mHudFlow.Release();
+        mOverlayFlow.Release();
         mFsmLuaHeap.Destruct();
         if (gpActiveAptRuntimeHost == &mAptRuntimeHost)
             gpActiveAptRuntimeHost = 0;
@@ -278,13 +313,19 @@ namespace BrnGui
         mMovieManager.Destruct();
     }
 
-    // Post one event into the HUD flow's in-queue if the flow subscribed to it (the
-    // EventInterpreterModule observer-subscription filter the console applies in
-    // ProcessInEvents before handing an observer its per-frame queue).
+    // Post one event into each subscribing flow's in-queue (the EventInterpreterModule
+    // observer-subscription filter the console applies in ProcessInEvents before handing
+    // an observer its per-frame queue; one observer per flow slot here).
     void GuiModule::RouteEventToFlow(const CgsModule::Event* lpEvent, s32 liId, s32 liSize)
     {
-        if (liId >= 0 && liId < KI_MAX_OBSERVED_EVENT_ID && mabObservedEventIds[liId])
+        if (liId < 0 || liId >= KI_MAX_OBSERVED_EVENT_ID)
+            return;
+        if (mabObservedEventIds[E_GUIFLOW_SCREEN][liId])
+            mScreenInQueue.AddEvent(lpEvent, liId, liSize);
+        if (mabObservedEventIds[E_GUIFLOW_HUD][liId])
             mHudInQueue.AddEvent(lpEvent, liId, liSize);
+        if (mabObservedEventIds[E_GUIFLOW_OVERLAY][liId])
+            mOverlayInQueue.AddEvent(lpEvent, liId, liSize);
     }
 
     // The real GuiModule::Update event dispatch (X360 0x82527A58's switch): consume the
@@ -370,8 +411,20 @@ namespace BrnGui
                 {
                     lbAnyServed = true;
 
-                    // Re-init the pool for the fresh bundle (the previous FSM's LuaCode
-                    // was released by the flow's staged Release before this load).
+                    // The controller's request ids map onto the flow slots (13/14/15 =
+                    // SCREEN/HUD/OVERLAY); each flow owns a resident pool so a load for
+                    // one flow never drops another flow's live LuaCode.
+                    s32 liFlow = E_GUIFLOW_HUD;
+                    switch (lpRequest->muLoadRequestId)
+                    {
+                        case 13u: liFlow = E_GUIFLOW_SCREEN;  break;
+                        case 14u: liFlow = E_GUIFLOW_HUD;     break;
+                        case 15u: liFlow = E_GUIFLOW_OVERLAY; break;
+                        default:  break;
+                    }
+
+                    // Re-init that flow's pool for the fresh bundle (the previous FSM's
+                    // LuaCode was released by the flow's staged Release before this load).
                     CgsResource::Pool::InitOptions lOptions;
                     lOptions.miId    = 2;
                     lOptions.mpcName = "GuiFsm";
@@ -380,7 +433,7 @@ namespace BrnGui
                         lOptions.maHeapInfo[lt].muMaxNodes       = 64u;
                         lOptions.maHeapInfo[lt].muHeapMemorySize = KU_FSM_POOL_BYTES - 64u * 1024u;
                         lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
-                        lOptions.mResource.m_baseResources[lt]   = s_fsmPoolBacking[lt];
+                        lOptions.mResource.m_baseResources[lt]   = s_fsmPoolBacking[liFlow][lt];
                         lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_FSM_POOL_BYTES;
                         lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
                     }
@@ -390,18 +443,18 @@ namespace BrnGui
                     lOptions.miNumDependencies      = 0;
                     lOptions.miBankId               = 0;
                     lOptions.mbAllowDefragmentation = false;
-                    mFsmBundlePool.InitPool(&lOptions);
+                    mFsmBundlePool[liFlow].InitPool(&lOptions);
 
                     char lacBundlePath[160];
                     std::snprintf(lacBundlePath, sizeof(lacBundlePath), "FSM/%s.BUNDLE",
                                   lpRequest->mpacFileToLoad);
 
                     CgsResource::BundleLoader lLoader;
-                    const s32 liLoaded = lLoader.LoadBundle(lacBundlePath, &mFsmBundlePool,
+                    const s32 liLoaded = lLoader.LoadBundle(lacBundlePath, &mFsmBundlePool[liFlow],
                                                             CgsResource::ResolveResourceType);
                     s32 liIndex = -1;
                     CgsResource::Entry* lpEntry = (liLoaded > 0)
-                        ? mFsmBundlePool.FindFirstResourceOfType(
+                        ? mFsmBundlePool[liFlow].FindFirstResourceOfType(
                               CgsResource::E_RESOURCETYPE_LUACODE, &liIndex)
                         : 0;
 
@@ -442,13 +495,20 @@ namespace BrnGui
         mModelInputBuffer.UnlockForWrite();
     }
 
-    // Drain the HUD flow's StateInterface output queue -- the single per-frame dispatch
-    // point for everything the states post (the ModelModule bridge + EventInterpreter
-    // ProcessOutEvents roles).
-    void GuiModule::DrainFlowOutputQueue()
+    // Drain one flow's StateInterface output queue -- the per-frame dispatch point for
+    // everything its states post (the ModelModule bridge + EventInterpreter
+    // ProcessOutEvents roles). The 34/35 subscription records key into THAT flow's
+    // observed-id table.
+    void GuiModule::DrainFlowOutputQueue(s32 liFlow)
     {
-        CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
-            mHudFlow.GetOutputEventQueue();
+        CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue = 0;
+        switch (liFlow)
+        {
+            case E_GUIFLOW_SCREEN:  lpOutQueue = mScreenFlow.GetOutputEventQueue();  break;
+            case E_GUIFLOW_HUD:     lpOutQueue = mHudFlow.GetOutputEventQueue();     break;
+            case E_GUIFLOW_OVERLAY: lpOutQueue = mOverlayFlow.GetOutputEventQueue(); break;
+            default:                break;
+        }
         if (lpOutQueue == 0)
             return;
 
@@ -466,7 +526,7 @@ namespace BrnGui
                     const s32 liType =
                         reinterpret_cast<const RegisterEventRecord*>(lpEvent)->miEventType;
                     if (liType >= 0 && liType < KI_MAX_OBSERVED_EVENT_ID)
-                        mabObservedEventIds[liType] = (liId == 34);
+                        mabObservedEventIds[liFlow][liType] = (liId == 34);
                     break;
                 }
                 case 36:   // PriorityRegisterForEvent -- the priority-override dispatch
@@ -578,8 +638,10 @@ namespace BrnGui
         mModelOutputBuffer.GetLoadNotificationsNonConst()->Clear();
         mModelOutputBuffer.UnlockForWrite();
 
-        // ---- 4. the HUD flow tick (the current state's PreUpdate/Update/PostUpdate) ---
+        // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----
+        mScreenFlow.Update();
         mHudFlow.Update();
+        mOverlayFlow.Update();
 
         // ---- 5. drain the flow's output (subscriptions / movie / view / game / audio) --
         mViewInputBuffer.LockForWrite();
@@ -599,7 +661,9 @@ namespace BrnGui
                         static_cast<s32>(sizeof(lNotification)));
             }
 
-            DrainFlowOutputQueue();
+            DrainFlowOutputQueue(E_GUIFLOW_SCREEN);
+            DrainFlowOutputQueue(E_GUIFLOW_HUD);
+            DrainFlowOutputQueue(E_GUIFLOW_OVERLAY);
         }
         mViewInputBuffer.UnlockForWrite();
 

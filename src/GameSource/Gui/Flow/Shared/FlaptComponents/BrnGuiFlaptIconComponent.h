@@ -59,8 +59,9 @@ namespace BrnGui
                              const BrnFlapt::FileRef& lFile,
                              const char* lacParentName);
 
-        // Prepare(const MovieClipRef*) -- DWARF/vtable-shape override (bodied in its
-        // own sibling TU); declared to preserve vtable order.
+        // Prepare(const MovieClipRef*) @ 0x8241C2B8 -- adopt an already-resolved
+        // clip: a bare tail-forward onto BrnFlaptComponent::Prepare(const
+        // MovieClipRef*) @0x8240E740 (no state-hash reset). Bodied in this TU.
         virtual void Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef);
 
         // SetState @ 0x8241C2C0 -- hash lpcStateName; if it differs from the current

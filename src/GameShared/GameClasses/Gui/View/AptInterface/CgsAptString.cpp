@@ -367,4 +367,76 @@ namespace CgsGui
         lpParams->fTextWidth  = lfStringWidth * mTextObject.mfFontHeight;   // [c:+92]
         lpParams->fTextHeight = lpParams->y1 - lpParams->y0;                // [c:+96]
     }
+
+    // @ 0x82855648 -- re-point the already-prepared string at new text and re-measure.
+    // The same resolve/copy/measure tail as Prepare above, minus the layout: unless
+    // lbAlreadyLocalised, a '$'/'~' lead routes the key through the render handler's
+    // language manager (falling back to the raw string when unknown); non-'~' text is
+    // then copied into the caller's persistent buffer; finally the font is asserted
+    // and the string re-measured. Every text/width store re-runs autosizing when the
+    // object autosizes, exactly as the console body does. The console's inlined
+    // singleton/handler/manager asserts (cpp:437/439/440) live in the shared bridge
+    // (GetAptRenderHandlerLanguageManager, CgsAptAux.cpp) per this file's precedent.
+    void CgsAptString::SetText(const CgsUnicode::CgsUtf8* lpNewText,
+                               CgsUnicode::CgsUtf8* lpcStringBuffer,
+                               bool lbAlreadyLocalised)
+    {
+        CGS_ASSERT(lpNewText != 0, "lpNewText");             // cpp:434
+        CGS_ASSERT(lpcStringBuffer != 0, "lpcStringBuffer"); // cpp:435
+
+        const char lcLead = static_cast<char>(lpNewText[0]);
+        if (!lbAlreadyLocalised && (lcLead == '$' || lcLead == '~'))
+        {
+            CgsLanguage::LanguageManager* lpLanguage = GetAptRenderHandlerLanguageManager();
+
+            const CgsUnicode::CgsUtf8* lpResolved = lpLanguage->FindString(
+                reinterpret_cast<const char*>(lpNewText + 1));
+            mTextObject.mpUtf8String = lpResolved;
+            if (mTextObject.mbAutosize)
+                mTextObject.CalculateAutosizing();
+
+            // No localised string found: fall back to the raw key string.
+            if (!mTextObject.mpUtf8String)
+            {
+                mTextObject.mpUtf8String = lpNewText;
+                if (mTextObject.mbAutosize)
+                    mTextObject.CalculateAutosizing();
+            }
+
+            // cpp:455 -- the X360 streams "Invalid string fetched from : <key> : <text>";
+            // folded static per convention.
+            CGS_ASSERT(CgsUnicode::IsValidUtf8String(mTextObject.mpUtf8String),
+                       "Invalid string fetched from : ");
+        }
+        else
+        {
+            mTextObject.mpUtf8String = lpNewText;
+            if (mTextObject.mbAutosize)
+                mTextObject.CalculateAutosizing();
+
+            // cpp:470 -- streamed "Invalid string : <text>"; folded static.
+            CGS_ASSERT(CgsUnicode::IsValidUtf8String(mTextObject.mpUtf8String),
+                       "Invalid string : ");
+        }
+
+        // Unless the source was a '~' key (left pointing at the language string), copy the
+        // resolved text into the caller's buffer and point the text object at that copy.
+        if (static_cast<char>(lpNewText[0]) != '~')
+        {
+            CgsUnicode::CopyN(lpcStringBuffer, mTextObject.mpUtf8String, 256);
+            mTextObject.mpUtf8String = lpcStringBuffer;
+            if (mTextObject.mbAutosize)
+                mTextObject.CalculateAutosizing();
+        }
+
+        // The font handle must still be a real font (not the empty/default sentinel
+        // pair the X360 compares against). cpp:481.
+        CGS_ASSERT(mTextObject.mpFont.mpResourceMemory != 0, "Did not find font");
+
+        // Re-measure the new text and re-run autosizing.
+        mTextObject.mfStringWidth =
+            mTextObject.mpFont.operator->()->GetStringWidth(mTextObject.mpUtf8String);
+        if (mTextObject.mbAutosize)
+            mTextObject.CalculateAutosizing();
+    }
 }

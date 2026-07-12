@@ -26,6 +26,8 @@
 // types follow the DecFIGS DWARF (BrnFlaptTextFieldRef.h).
 // ============================================================================
 
+namespace CgsLanguage { class LanguageManager; }   // returned by GetLanguageManager
+
 namespace BrnFlapt
 {
     struct TextFieldRef
@@ -37,13 +39,24 @@ namespace BrnFlapt
                                 void* lpParentMovie,
                                 void* lpTransform);
 
+        // GetLanguageManager @ 0x8246CB40 -- the language manager reached through the
+        // apt render handler (AptAux singleton -> mRenderHandler -> mpLanguageManager),
+        // asserting the handler (cpp:47) and the manager (cpp:48); `this` is never
+        // touched. DWARF BrnFlaptTextFieldRef.h:72. Bodied in CgsAptAux.cpp -- the TU
+        // that owns the AptAux/AptRenderHandler layout -- because this Ref's own TU
+        // must see the REAL CgsAptString (via the text-field instance) which clashes
+        // with the render handler's opaque pool stand-in (see CgsAptAux.cpp's bridge
+        // note).
+        CgsLanguage::LanguageManager* GetLanguageManager();
+
         // SetColour(Vector4) -- set the field's RGBA colour from a Vector4 (the X360
         // passes the colour in a single VMX register / by value).
         void SetColour(Vector4 lv4Colour);
 
-        // SetText(const char*, bool) -- set the displayed text; the bool selects
-        // whether the string is looked up through the localisation manager.
-        void SetText(const char* lpcText, bool lbLocalise);
+        // SetText @ 0x8246CC48 -- set the displayed text. lbAlreadyLocalised == true
+        // means the text is final ($/~ id lookup suppressed); false lets a $/~-lead
+        // string resolve through the localisation manager (CgsAptString::SetText).
+        void SetText(const char* lpacNewText, bool lbAlreadyLocalised);
 
         // ClearText @ 0x8246CBD8 -- blank the field's displayed text. Real X360
         // symbol (PlayerPositionSingleComponent::RenderValue's empty-value paths);
@@ -81,9 +94,8 @@ namespace BrnFlapt
         // (raw integers per this home's house style). The body asserts the field is
         // valid ("Text field is invalid in TextField::SetLocalisedText", cpp:221) and
         // 0 < liNumParams < 4 ("Wrong number of Parameters int SetLocalisedText",
-        // cpp:222). DWARF shape BrnFlaptTextFieldRef.h:54. Bodied in its own sibling
-        // TU (declaration-only here); used by BaseOverlayState::SetupOverlay for
-        // parameterised popup messages.
+        // cpp:222). DWARF shape BrnFlaptTextFieldRef.h:54. Bodied in this TU's cpp;
+        // used by BaseOverlayState::SetupOverlay for parameterised popup messages.
         bool SetLocalisedText(const char* lpcStringId, s32 liStringIdType,
                               s32 liNumParams, const char* const* lppcParams,
                               const s32* lpeParamFormatTypes);
@@ -115,9 +127,9 @@ namespace BrnFlapt
         // SetLocalisedText(const char*, StringIdType) @ 0x8246CD00 -- look a localised
         // string up by id through the language manager and display it. The overload
         // taking a string id; liStringIdType is the raw id-type integer the X360 uses
-        // (the body asserts it is < 21). Used by EATraxInGameComponent::
-        // DisplayNewTrackNotification (passes type 9) when the supplied track text is a
-        // localisation id rather than a literal.
+        // (the body asserts it is < 21). Bodied in this TU's cpp. Used by
+        // EATraxInGameComponent::DisplayNewTrackNotification (passes type 9) when the
+        // supplied track text is a localisation id rather than a literal.
         void SetLocalisedText(const char* lpcStringId, s32 liStringIdType);
 
         void* mpTextFieldInstance;   // +0x00

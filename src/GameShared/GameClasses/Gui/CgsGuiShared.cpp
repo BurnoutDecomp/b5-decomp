@@ -14,6 +14,17 @@ namespace CgsGui
         return mpGuiCache;
     }
 
+    // GetFlaptManager -- DWARF home CgsGuiShared.h:194 (X360 header-inline; no
+    // standalone body was emitted -- the assert+load pair is carried inlined at
+    // e.g. BrnGui::InvisibleOverlayState::OnEnter @0x824B1568 and
+    // BrnGui::BaseOverlayState::Prepare @0x824B1F80). Same shape as GetGuiCache
+    // above: assert the pointer has been wired up, then return it.
+    BrnFlapt::FlaptManager* GuiAccessPointers::GetFlaptManager()
+    {
+        CGS_ASSERT(mpFlaptManager != nullptr, "NULL != mpFlaptManager");
+        return mpFlaptManager;
+    }
+
     // Null every shared-resource pointer; the owners install each one as its
     // subsystem comes up (mpAptAux from the Apt bring-up, the flapt/cache/queue
     // pointers from their modules).

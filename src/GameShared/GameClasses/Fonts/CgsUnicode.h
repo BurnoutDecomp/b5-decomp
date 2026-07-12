@@ -95,6 +95,15 @@ namespace CgsUnicode
     // UTF-8 character (backs up to the last lead byte). Returns the target. Body lives in
     // CgsUnicode.cpp's own TU. Used by GuiHudMessage::GetParam after SnPrintf.
     CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 lnMaxTargetLength);
+
+    // Copy the source into the target substituting each "%<digit>" positional marker with the
+    // matching argument string (%1 == lppUtf8Arguments[0]); capped at lnTargetStringSize bytes,
+    // never splitting a multi-byte UTF-8 character at the cap. Returns the terminator position.
+    // X360 ARTIST 0x82834AF0 (the ledger spells it CgsUnicode::_Print). Used by the
+    // LanguageManager positional formatters (FormatTextV / Obsolete_FormatTextByArray).
+    CgsUtf8* _Print(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                    s32 lnTargetStringSize, const CgsUtf8* const* lppUtf8Arguments,
+                    u8 luNumArguments);
 }
 
 #endif

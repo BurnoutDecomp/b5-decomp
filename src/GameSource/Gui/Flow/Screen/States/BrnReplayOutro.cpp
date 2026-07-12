@@ -89,12 +89,16 @@ namespace
         }
     };
 
-    // FLAG boundary: the X360 OnLeave calls UnloadAllResources(mpGuiCache, 5) on the cache's
-    // StateLoadingHelper resource sub-object. BrnGui::GuiCache exposes no named accessor for
-    // that inner UnloadAllResources on its committed public API, so it is reached here through
-    // a free boundary helper (the same discipline BrnBootLegal uses for its UnloadResources).
-    // Body links from the GuiCache TU; replace with a named GuiCache accessor when homed.
-    void ReplayOutroUnloadAllResources(GuiCache* lpCache, CgsGui::ResourceRequestTypes leType);  // FLAG
+    // Boundary onto the cache's resource watcher: the X360 OnLeave calls
+    // UnloadAllResources(mpGuiCache, 5) on the StateLoadingHelper sub-object. The
+    // named GuiCache accessor (UnloadAllResources @0x824FEBB0, the watcher
+    // tail-branch) is homed in BrnGuiCache.cpp now, so the boundary is a plain
+    // forward. (Defined in-TU: an anonymous-namespace function can only ever
+    // resolve from this TU.)
+    void ReplayOutroUnloadAllResources(GuiCache* lpCache, CgsGui::ResourceRequestTypes leType)
+    {
+        lpCache->UnloadAllResources(leType);
+    }
 }   // anonymous namespace
 
 // ---- statics -----------------------------------------------------------------

@@ -513,6 +513,164 @@ namespace CgsLanguage
         return true;
     }
 
+    // @ 0x82862650 -- render liValue into the caller's buffer under one of the
+    // four integer formats. The out-of-range assert (cpp:940) and the unknown-
+    // format assert (cpp:968) both stream on the console; folded static. Every
+    // path NUL-terminates the buffer's last byte and returns true.
+    bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize, s32 liValue,
+                                     ParameterFormatType leType)
+    {
+        CGS_ASSERT(leType < E_FORMAT_COUNT,
+                   "Invalid Localisation Format supplied to TextField::FormatText");   // cpp:940
+
+        switch (leType)
+        {
+        case E_FORMAT_INTEGER:
+            FormatIntegerString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_INTEGER_NOSEPERATOR:
+            FormatIntegerNoSeperatorString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_PERCENTAGE:
+            FormatPercentageString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_MONEY:
+            FormatCurrencyString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        default:
+            CGS_ASSERT(false, "Invalid Parameter sent to SetLocalisedText with int");   // cpp:968
+            break;
+        }
+
+        lpacBuffer[luBufferSize - 1] = 0;
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // The FormatAndAddText family + the positional-parameter formatters
+    // (reconstructed from BURNOUT_X360_ARTIST.XEX). Their shared FormatText
+    // resolver (@0x82864C48) is still the FLAG trap-stub at the end of this
+    // file; these bodies are faithful and take over the real behaviour the
+    // moment that resolver lands.
+    // ------------------------------------------------------------------------
+
+    // @ 0x828651A0 -- resolve+format lpcSourceText into a 1KB local, then
+    // AddString the result under lpcStringId. Returns FormatText's own result
+    // (the AddString result is discarded, per the X360 body).
+    bool LanguageManager::FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
+                                           ParameterFormatType leType)
+    {
+        char lacBuffer[1024];
+        const bool lbResult = FormatText(lacBuffer, 1024, lpcSourceText, leType);
+        AddString(lpcStringId, reinterpret_cast<const u8*>(lacBuffer));
+        return lbResult;
+    }
+
+    // @ 0x82866450 -- the positional-parameter form: format the source and the
+    // liNumParams (const char* text, ParameterFormatType) vararg pairs through
+    // FormatTextV, then AddString the result. Returns FormatTextV's result.
+    bool LanguageManager::FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
+                                           ParameterFormatType leType, s32 liNumParams, ...)
+    {
+        char lacBuffer[1024];
+
+        va_list lArguments;
+        va_start(lArguments, liNumParams);
+        const bool lbResult =
+            FormatTextV(lacBuffer, 1024, lpcSourceText, leType, liNumParams, lArguments);
+        va_end(lArguments);
+
+        AddString(lpcStringId, reinterpret_cast<const u8*>(lacBuffer));
+        return lbResult;
+    }
+
+    // @ 0x828651E8 -- resolve+format lpcSourceText into a 1KB local, format each
+    // of the liNumParams (1..3) vararg (const char* text, ParameterFormatType)
+    // pairs into its own 512-byte slot, then print the slots into the source's
+    // %1..%N positional markers, capped at luBufferSize. The X360 walks its
+    // register-save-area va cursor with a per-pair "lpArgument" null tripwire
+    // (cpp:1086); the va_list itself carries that role here.
+    bool LanguageManager::FormatTextV(char* lpacBuffer, u32 luBufferSize,
+                                      const char* lpcSourceText, ParameterFormatType leType,
+                                      s32 liNumParams, va_list lArguments)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");   // cpp:1062
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in LanguageManager::FormatText");  // cpp:1063
+        CGS_ASSERT(liNumParams > 0 && liNumParams < 4, "Wrong number of Parameters int SetLocalisedText"); // cpp:1064
+
+        char lacSourceBuffer[1024];
+        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+
+        // One 512-byte slot + one argument pointer per parameter (the X360 reserves
+        // four pointer slots on its stack; the count is asserted to 1..3 above).
+        const CgsUnicode::CgsUtf8* lapUtf8Params[4];
+        char lacParamBuffers[4][512];
+
+        for (s32 liParam = 0; liParam < liNumParams; ++liParam)
+        {
+            CGS_ASSERT(lArguments != 0, "lpArgument");   // cpp:1086 (the console's va cursor check)
+
+            const char* lpcParamText   = va_arg(lArguments, const char*);
+            const u32   luParamFormat  = va_arg(lArguments, u32);
+
+            CGS_ASSERT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText"); // cpp:1093
+            CGS_ASSERT(luParamFormat <= 0x14, "Invalid Parameter");                                   // cpp:1094
+
+            FormatText(lacParamBuffers[liParam], 512, lpcParamText,
+                       static_cast<ParameterFormatType>(luParamFormat));
+            lapUtf8Params[liParam] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacParamBuffers[liParam]);
+        }
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                           reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
+                           static_cast<s32>(luBufferSize), lapUtf8Params,
+                           static_cast<u8>(liNumParams));
+        return true;
+    }
+
+    // @ 0x82865480 -- as FormatTextV but the liNumParams (1..3) parameter texts /
+    // format types arrive as parallel arrays (the format array read is null-guarded,
+    // defaulting to E_FORMAT_TEXT). Returns false when any parameter failed to
+    // format (the source-format result is discarded, per the X360 body).
+    bool LanguageManager::Obsolete_FormatTextByArray(char* lpacBuffer, u32 luBufferSize,
+                                                     const char* lpcSourceText, ParameterFormatType leType,
+                                                     s32 liNumParams, const char* const* lppcParams,
+                                                     const ParameterFormatType* lpeParamFormatTypes)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");   // cpp:1127
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText");  // cpp:1128
+        CGS_ASSERT(liNumParams > 0 && liNumParams < 4, "Wrong number of Parameters int SetLocalisedText"); // cpp:1129
+
+        bool lbAnyParamFailed = false;
+
+        char lacSourceBuffer[1024];
+        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[4];
+        char lacParamBuffers[4][512];
+
+        for (s32 liParam = 0; liParam < liNumParams; ++liParam)
+        {
+            const char* lpcParamText  = lppcParams[liParam];
+            const u32   luParamFormat =
+                (lpeParamFormatTypes != 0) ? static_cast<u32>(lpeParamFormatTypes[liParam]) : 0;
+
+            CGS_ASSERT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText"); // cpp:1156
+            CGS_ASSERT(luParamFormat <= 0x14, "Invalid Parameter");                                   // cpp:1157
+
+            const bool lbFormatted = FormatText(lacParamBuffers[liParam], 512, lpcParamText,
+                                                static_cast<ParameterFormatType>(luParamFormat));
+            lbAnyParamFailed |= !lbFormatted;
+            lapUtf8Params[liParam] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacParamBuffers[liParam]);
+        }
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                           reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
+                           static_cast<s32>(luBufferSize), lapUtf8Params,
+                           static_cast<u8>(liNumParams));
+        return !lbAnyParamFailed;
+    }
+
     // ------------------------------------------------------------------------
     // FLAG trap-stub bodies (link scaffold, 2026-07-01): the ten Format*String
     // members below are declared (DWARF) and referenced by the debug component's
@@ -523,6 +681,7 @@ namespace CgsLanguage
     // its faithful decompile.
     // ------------------------------------------------------------------------
     void LanguageManager::FormatIntegerString(char*, s32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatIntegerNoSeperatorString(char*, s32, s32) const           { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatXoverYString(char*, s32, s32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatPercentageString(char*, s32, s32) const                   { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatCurrencyString(char*, s32, s32) const                     { __debugbreak(); }   // FLAG trap-stub

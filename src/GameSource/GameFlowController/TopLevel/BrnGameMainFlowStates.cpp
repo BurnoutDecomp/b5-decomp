@@ -207,9 +207,9 @@ void MainGameFlowStateInitialLoadingScreen::Update()
     case E_LOADINGSTAGE_GUIMODULE:
         // X360: LoadGUIModule (0x823EF310) -- the GUI module load stage ALSO posts the
         // initial flow FSMs: GuiEventRunFsm{BrnBFPreFsm -> HUD} (BF_PRELOAD, the first
-        // boot state) and GuiEventRunFsm{BrnOverlay -> OVERLAY}. The GUI module itself is
+        // boot state) and GuiEventRunFsm{BrnOverlay -> OVERLAY} (the popup overlay flow,
+        // record {fsmId, stateId 0, flow 2} @0x823EF3A0). The GUI module itself is
         // prepared by BrnGameModule's inline hookup; the RunFsm posts are the real kick.
-        // [FLAG: the BrnOverlay post lands when the BrnOverlayFlow container does.]
         {
             BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = lpGameModule->GetGuiInputBuffer();
@@ -224,9 +224,20 @@ void MainGameFlowStateInitialLoadingScreen::Update()
                 lpGuiInput->GetGuiEvents()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
                     static_cast<s32>(sizeof(lEvent)));
+
+                // The overlay kick (the X360 posts it back-to-back in the same write
+                // bracket; the state id stays 0 = the script's initial state).
+                lEvent.mFsmId          = CgsIDCompress("BrnOverlay");
+                lEvent.mInitialStateId = 0;
+                lEvent.meFsmToRun      = BrnGui::E_GUI_HUD_BOOT;
+                lEvent.meFlowToUse     = BrnGui::E_GUIFLOW_OVERLAY;
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+                    static_cast<s32>(sizeof(lEvent)));
                 lpGuiInput->UnlockForWrite();
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: posted RunFsm(BrnBFPreFsm -> HUD)\n";
+                    *CgsDev::Log::gpDebugPrint
+                        << "InitialLoadingScreen: posted RunFsm(BrnBFPreFsm -> HUD) + RunFsm(BrnOverlay -> OVERLAY)\n";
                 AdvanceLoadingStage(E_LOADINGSTAGE_DIRECTORMODULE);
             }
         }
