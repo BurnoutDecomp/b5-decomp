@@ -8,8 +8,8 @@
 //     exports are function-only, so every table below was read STRAIGHT FROM
 //     THE DECRYPTED XEX at the address its declaring header documents -- these
 //     are real reconstructions, not placeholders (every entry requests type
-//     4 == CgsGui::E_GUI_RESOURCETYPE_APT). The one exception is PauseScreen,
-//     whose table address is not yet attested: FLAG'd empty there.
+//     4 == CgsGui::E_GUI_RESOURCETYPE_APT). (PauseScreen's table, once the odd
+//     one out, is now attested + defined by its own TU, BrnPauseScreen.cpp.)
 //
 //   * The LIFECYCLE VIRTUALS (OnEnter/OnLeave/Update/GetResourcesToLoad and
 //     one menu hook) of states whose own TUs have not landed (or landed
@@ -54,7 +54,6 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineViewChallenges.h"
 #include "GameSource/Gui/Flow/Screen/States/OnlineYouWin.h"
-#include "GameSource/Gui/Flow/Screen/States/BrnPauseScreen.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.h"
@@ -318,19 +317,8 @@ namespace BrnGui
         LogUnreconstructedState("OnlineQuickCustomCreate", "ProcessSelectedMenuOption");
     }
 
-    // ---- PauseScreen (BrnPauseScreen.cpp is partial: HandleControllerInput landed;
-    //      real bodies OnEnter @0x824CFCE0 / OnLeave @0x824CFDF0 / Update @0x824DA0C0) --
-    void PauseScreen::OnEnter() { LogUnreconstructedState("PauseScreen", "OnEnter"); }
-    void PauseScreen::OnLeave() {}
-    void PauseScreen::Update()  {}
-    void PauseScreen::GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
-                                         u32* lpuNumberOfResources) const
-    {
-        // FLAG: the pause table's .rdata address is not yet attested (DWARF cpp:35,
-        // 2 entries) -- empty until recovered, unlike the dumped tables above.
-        *lppResourceTuples    = 0;
-        *lpuNumberOfResources = 0;
-    }
+    // (PauseScreen's full surface -- OnEnter/OnLeave/Update/GetResourcesToLoad --
+    //  landed in its own TU, BrnPauseScreen.cpp; nothing of it lives here any more.)
 
     // ---- ShowtimeInstantResultsState (BrnShowtimeInstantResults.cpp is partial) -------
     void ShowtimeInstantResultsState::OnEnter() { LogUnreconstructedState("ShowtimeInstantResultsState", "OnEnter"); }

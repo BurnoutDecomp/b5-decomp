@@ -105,6 +105,16 @@ namespace BrnGui
         // loaded flags and its expected count.
         void ClearComponentInitialised(GuiFlow leFlow);
 
+        // AppendExpectedAptComponent @ 0x824F85D8 -- register one component name hash as
+        // "expected" on the flow layer (bounds + duplicate asserted, non-gating), with a
+        // cleared loaded flag. ADDITIVE GROW (BrnPauseScreen TU): the helper level of the
+        // GuiCache::AppendExpectedAptComponent faces declared below.
+        void AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash);
+
+        // IsWaitingAptComponent @ 0x824EDB08 -- linear-scan the flow layer's expected
+        // component ids for the hash. ADDITIVE GROW (BrnPauseScreen TU).
+        bool IsWaitingAptComponent(GuiFlow leFlow, u32 luComponentNameHash) const;
+
         void IncrementUnloadPending();
         void DecrementUnloadPending();
 

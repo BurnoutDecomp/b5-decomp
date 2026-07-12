@@ -1,8 +1,9 @@
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
+#include "GameShared/GameClasses/Containers/CgsHash.h" // CgsContainers::CgsHash::CalculateHash (AppendExpectedAptComponent name entry)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-#include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior)
+#include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior) / std::strlen
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. StateLoadingHelper tracks how many of
 // its watched resources are pending an unload. Increment/Decrement adjust the count
@@ -306,6 +307,49 @@ namespace BrnGui
         lrWatch.muNumberOfComponentsToWatch = 0;
     }
 
+    // @ 0x824F85D8 -- register one component name hash as "expected" on the flow
+    // layer. The three X360 asserts are non-gating (the append always runs): the
+    // flow-range stream (cpp:784, folded static as above), the capacity check
+    // (cpp:789) and the duplicate check (cpp:790, computed through the scan below
+    // exactly as the X360 does).
+    void StateLoadingHelper::AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash)
+    {
+        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:784
+
+        ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
+        CGS_ASSERT(lrWatch.muNumberOfComponentsToWatch
+                       < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                   "Component list is full. Consider increasing the size, or are we "
+                   "doing something silly?");   // cpp:789
+
+        const bool lbAlreadyWaiting = IsWaitingAptComponent(leFlow, luComponentNameHash);
+        CGS_ASSERT(!lbAlreadyWaiting,
+                   "Appending a component to the list that already exists");   // cpp:790
+        (void)lbAlreadyWaiting;
+
+        lrWatch.mauComponentsToWatchIds[lrWatch.muNumberOfComponentsToWatch] = luComponentNameHash;
+        lrWatch.mabComponentsLoaded[lrWatch.muNumberOfComponentsToWatch]     = false;
+        ++lrWatch.muNumberOfComponentsToWatch;
+    }
+
+    // @ 0x824EDB08 -- linear-scan the flow layer's expected component ids for the
+    // hash. Flow-range assert as above (cpp:867).
+    bool StateLoadingHelper::IsWaitingAptComponent(GuiFlow leFlow, u32 luComponentNameHash) const
+    {
+        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:867
+
+        const ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
+        for (u32 luComponent = 0; luComponent < lrWatch.muNumberOfComponentsToWatch;
+             ++luComponent)
+        {
+            if (lrWatch.mauComponentsToWatchIds[luComponent] == luComponentNameHash)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // @ 0x824FEB58 / @ 0x824FEB50 / @ 0x824FEBB0 / @ 0x824EE7A8 / @ 0x824EE528 --
     // the GuiCache faces of the helpers above (X360: `addi r3,r3,8` + tail-branch
     // into the embedded watcher at +0x8).
@@ -332,6 +376,24 @@ namespace BrnGui
     void GuiCache::ClearExpectedAptComponentList(GuiFlow leFlow)
     {
         mStateLoadingHelper.ClearComponentInitialised(leFlow);
+    }
+
+    // @ 0x824F87B8 -- the hash-taking face.
+    void GuiCache::AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash)
+    {
+        mStateLoadingHelper.AppendExpectedAptComponent(leFlow, luComponentNameHash);
+    }
+
+    // @ 0x824F87C0 -- the name-taking entry: walk the name to its NUL (the asm's
+    // `while (*p++);` length measure), hash the bytes with the container CRC-32,
+    // then register the hash. CalculateHash takes a mutable char*; the component
+    // names are read-only ids so the cast is harmless (the hash never writes).
+    void GuiCache::AppendExpectedAptComponent(GuiFlow leFlow, const char* lpacComponentName)
+    {
+        const u32 luComponentNameHash = CgsContainers::CgsHash::CalculateHash(
+            const_cast<char*>(lpacComponentName),
+            static_cast<int>(std::strlen(lpacComponentName)));
+        mStateLoadingHelper.AppendExpectedAptComponent(leFlow, luComponentNameHash);
     }
 
     // GetTimeStep -- no standalone X360 symbol (header-inline; the cache's leading
