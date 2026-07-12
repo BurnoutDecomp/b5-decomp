@@ -196,7 +196,17 @@ namespace CgsGui
             bool AddResourceRequests(const GuiEventQueueSmall* lpRequests);
 
             // CgsGuiResourceModuleIO.h:205 (DWARF). Read-lock handle to the queue.
+            // X360 @0x8284DE00 (the callee GuiResourceModule::ProcessIncomingLoadRequests
+            // @0x828581A8 links to by name): the read-lock accessor family form.
             const GuiEventQueue* GetLoadRequests() const;
+
+            // ADDITIVE ([PC] drain-clear): write-lock handle so a persistent PC buffer can
+            // Clear the consumed queue after GuiResourceModule::Update -- the console's
+            // buffers are transient (IOBufferStack CreateIOBuffer/DestroyIOBuffer per
+            // frame @0x8285A3D8/0x8285A678, Construct-fresh each time) so the original
+            // never re-cleared. Mirrors the committed ModelIO::InputBuffer non-const
+            // GetLoadRequests precedent.
+            GuiEventQueue* GetLoadRequestsNonConst();
 
             // Byte-offset pin (the embedded queue lands at this+4: 1-byte IOBuffer base
             // + 3 pad, VariableEventQueue alignof == 4).
@@ -249,6 +259,13 @@ namespace CgsGui
             // (status bit 4), returns the handle at this+0x814 (== &mLoadNotifications).
             // Bodied in CgsGuiResourceModuleIO_OutputBuffer.cpp.
             const GuiEventQueue* GetLoadNotifications() const;
+
+            // ADDITIVE ([PC] bridge-clear): write-lock handle so a persistent PC buffer
+            // can Clear the bridged notifications each frame -- the console's buffers are
+            // transient (IOBufferStack CreateIOBuffer/DestroyIOBuffer @0x8285A4C0/
+            // 0x8285A590 per frame). Mirrors the X360-attested ModelIO::OutputBuffer::
+            // GetLoadNotificationsNonConst (@0x824F75E0) write-side accessor form.
+            GuiEventQueue* GetLoadNotificationsNonConst();
 
             // Byte-offset pin (mRequestQueue at this+4).
             static void _AssertLayout();
