@@ -2,10 +2,13 @@
 #define BRN_COMPASS_COMPONENT_H
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                                      // Vector2 (16-byte VMX; embedded initial positions)
-#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h"     // BrnFlaptComponent (base)
+#include "BrnCommonTypes.h"                                                      // Vector2 / Vector3 (16-byte VMX; embedded initial positions)
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h"     // BrnFlaptComponent (base); forwards CgsGui::StateInterface + BrnFlapt::FileRef
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // BrnGui::FlaptAnimatorComponent (mPlayerMarkerAnimator)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                           // BrnFlapt::MovieClipRef (embedded clips)
+#include "GameShared/GameClasses/Language/CgsSku.h"                              // CgsLanguage::ELanguage (FormatDirectionLetters param)
+
+namespace BrnGameState { class LandmarkIndex; }   // ShowLandmarkOnCompass param (by value; complete type pulled in the .cpp)
 
 // ============================================================================
 // GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.h
@@ -58,10 +61,58 @@ namespace BrnGui
             E_PLAYER_ROUTE_COUNT                = 3,
         };
 
+        // @ 0x82411568 -- adopt the state channel (via the base), construct the embedded
+        // player-marker animator against it, and reset the cache pointer + route state.
+        void Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
+                       const char* lacParentName, s32 liParentAptLayer);
+
+        // @ 0x8241F8A0 -- resolve the compass component out of lFile, bind its view /
+        // destination-marker clips, cache the strip origin positions + single-view length,
+        // build the player-marker animator name and prepare it, then format the N/E/S/W
+        // direction letters for the current language on all six view sub-clips.
+        void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile);
+
+        // @ 0x8242E160 -- per-frame: scroll the compass to the player heading, then show
+        // the destination/checkpoint/challenge marker for the current game mode (or hide it).
+        // BLOCKED (todo): needs un-homed GuiTracker::GetActivelyTrackedLandmarks /
+        // GetNumActivelyTrackedLandmarks and the GuiCache tracker/heading/event-landmark reads.
+        void Update();
+
+        // @ 0x824115E8 -- play the visible / transin / invisible / transout timeline label
+        // on the component's own apt clip.
+        void SetVisibility(bool lbVisible, bool lbImmediate);
+
     private:
         // @ 0x8241EBA8 -- on a state change, latch it and play the matching animator
         // frame (KAPC_PLAYER_ROUTE_STATES). No-op if unchanged.
         void UpdatePlayerMarkerState(EPlayerRouteState lePlayerOnTrack);
+
+        // @ 0x82428C68 -- resolve a landmark index to its sat-nav icon world position and
+        // place it on the compass at the given player heading.
+        void ShowLandmarkOnCompass(BrnGameState::LandmarkIndex lLandmark, f32 lfBearing);
+
+        // @ 0x82428CC0 -- while a freeburn challenge is active with a trigger location,
+        // place its trigger region on the compass. Returns true when it drew a marker.
+        // BLOCKED (todo): needs an un-homed ChallengeListEntryAction validity-field accessor
+        // and forwards into the blocked ShowPositionOnCompass.
+        bool ShowChallengeOnCompass(f32 lfBearing);
+
+        // @ 0x8241FC10 -- place a world-space destination on the compass strip: bearing =
+        // signed angle between the car->destination vector and world north, mapped to the
+        // marker position (and the on/off-route player-marker state).
+        // BLOCKED (todo): the X360 body inlines VMX using un-exported permute/const-vector
+        // rodata (unk_82181510, unk_8204B610) and calls the un-homed platform intrinsic
+        // XMVectorACos -- neither is recoverable, so the body is left for a keystone wave.
+        void ShowPositionOnCompass(Vector3 lv3Destination, f32 lfBearing);
+
+        // @ 0x82411640 -- set the East_mc / West_mc child clips of lpMovieClipRef to the
+        // per-language direction-letter frame.
+        // BLOCKED (todo): indexes the un-exported per-language rodata string tables
+        // KAPC_FRAMES_EAST (off_82F248B8) / KAPC_FRAMES_WEST (off_82F24918) -- 24 entries
+        // each, only [E_LANGUAGE_...0] == "E"/"W" is attested, so the tables cannot be
+        // reconstructed without fabrication.
+        void FormatDirectionLetters(CgsLanguage::ELanguage leLanguage,
+                                    BrnFlapt::MovieClipRef* lpMovieClipRef);
 
         // @ 0x8241EC38 -- scroll the compass view clip to the given heading (degrees).
         void SetBearing(f32 lfBearing);

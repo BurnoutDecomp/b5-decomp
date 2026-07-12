@@ -52,11 +52,38 @@ void* CCapture::HashMap::HashMemAlloc(u32 uSize)
     return XMemAlloc(uSize, KU_ALLOC_ATTRIBUTES);
 }
 
+// --- @ 0x8295BC70 -----------------------------------------------------------
+// Ensure this bucket has room for one more (page, flags) entry, then commit it.
+// If count+1 exceeds the capacity the entry array is grown via Reserve(count+1)
+// (which writes the status word); if the status is non-negative the live count
+// is incremented. The returned value merely threads r3 (the bucket pointer) and
+// is not consumed. Reproduced exactly from the X360 asm.
+s32 CCapture::HashMap::Bucket::AddEntry(s32* piStatus)
+{
+    s32 iResult = 0; // r3 thread (bucket ptr on the X360); not consumed
+
+    const u32 uNeeded = muWord1 + 1;      // count + 1
+    if (uNeeded > muWord2)                 // exceeds capacity -> grow (unsigned)
+        iResult = Reserve(uNeeded, piStatus);
+
+    if (*piStatus >= 0)                    // grow succeeded (or was unnecessary)
+        ++muWord1;                         // commit the new entry
+
+    return iResult;
+}
+
 // ===========================================================================
-// D3D::CCapture -- the outer GPU-capture object (7 of its 11 X360 functions
+// D3D::CCapture -- the outer GPU-capture object (8 of its 11 X360 functions
 // homed here). Source-of-truth: X360 asm only (no DWARF, no reference source).
 //
-// The remaining four are BLOCKED and intentionally left unbodied:
+// MarkUsedPages @ 0x8295BD50 is now homed (below): its two HashMap helpers were
+// resolved -- Bucket::AddEntry (@ 0x8295BC70) is bodied faithfully from asm, and
+// Bucket::Reserve (@ 0x8295B028, the truncated "D3D::CCaptu" grow) is DECLARED
+// from its attested signature but left unbodied (0x8295B028 has no disassembly
+// export, so its allocate/copy/free body would have to be fabricated -- it is
+// its own future TU). Under the per-TU compile gate the declaration suffices.
+//
+// The remaining three CCapture functions stay BLOCKED and unbodied:
 //   * ParseRegisters      @ 0x82959948 -- indexes a 2-entry rodata table
 //     (unk_8210626C: {registerOffset, targetOffset} pairs) whose values are
 //     un-exported X360 rodata; reconstructing them would fabricate constants.
@@ -67,9 +94,6 @@ void* CCapture::HashMap::HashMemAlloc(u32 uSize)
 //   * PreSubmit           @ 0x8295A148 -- drives six distinct CCapture vtable slots
 //     (**this, this->vt[4/8/12/24/32]); the virtual method set is not homed, so a
 //     faithful body would fabricate vtable slots.
-//   * MarkUsedPages       @ 0x8295BD50 -- inserts into the page HashMap via two
-//     un-homed HashMap methods (D3D::CCapture::HashMap::* @ 0x8295BC70 and the
-//     truncated allocator call), whose asm is not in scope.
 // ===========================================================================
 
 // ---- D3D graphics-SDK free functions used by CCapture (bodies are own TUs) --
@@ -259,6 +283,132 @@ s32 CCapture::SavePages()
     }
 
     muWord199 = muWord198; // roll the last-saved tag forward
+    return iResult;
+}
+
+// --- @ 0x8295BD50 -----------------------------------------------------------
+// Mark every 4 KB page spanned by [uAddress, uAddress+uSize) as used. The range
+// is first gated (biased-range floor, non-zero addr/size, addr below the
+// 0x20000000 window) and its length clamped to the window. For each page: locate
+// its hash bucket (index = (page >> 12) & 0x3F); if the bucket already has
+// capacity, scan its (page, flags) entries back-to-front for a match; otherwise
+// seed the bucket (Bucket::Reserve(0x10)). A miss appends a fresh zero-flag entry
+// via Bucket::AddEntry. The entry's flags then get bit 0x400000 set; page 0 is
+// special -- on its first touch a one-shot type-3 record carrying uTag is emitted
+// (guarded by flag bit 0x40000000) and the flags word is NOT written back;
+// otherwise a not-yet-dirty entry (bits 0x300000 clear) is marked dirty (0x200000)
+// and stored. A failed Reserve/AddEntry sets the object's error bit (0x80000000)
+// and aborts. The returned r3 thread is not consumed by any caller (xrefs_to
+// empty). Reproduced from the X360 asm (0x8295BD50.json).
+s32 CCapture::MarkUsedPages(u32 uAddress, u32 uSize, s32 uTag)
+{
+    s32 iResult = 0; // r3 thread; not consumed by any caller
+
+    if (uAddress + 0x3FF00000u > 0x07EFFFFFu   // biased-range floor (u32 wrap)
+        && uAddress != 0 && uSize != 0 && uAddress < 0x20000000u)
+    {
+        u32 uLen = uSize;
+        if (uAddress + uLen > 0x20000000u)
+            uLen = 0x20000000u - uAddress;         // clamp to the 0x20000000 window
+
+        const u32 uEnd  = uAddress + uLen;         // exclusive end
+        u32       uPage = uAddress & 0xFFFFF000u;  // first 4 KB page (clrrwi ...,12)
+
+        if (uPage < uEnd)                          // at least one page spanned
+        {
+            do
+            {
+                HashMap::Bucket& rBucket =
+                    mHashMap.maBuckets[(uPage >> 12) & 0x3Fu];
+                u32* pEntry = nullptr;
+                bool bFound = false;
+
+                // Single status slot shared by Reserve and AddEntry, mirroring the
+                // one X360 stack word (v16): a just-seeded bucket carries the
+                // seed's success into AddEntry. A failing Reserve breaks the loop
+                // before the slot could ever be re-read, so a per-iteration >=0
+                // default is behaviourally identical to the shared X360 slot.
+                s32 iStatus = 0;
+
+                if (rBucket.muWord2 != 0)          // capacity != 0 -> search
+                {
+                    u32* pBase = static_cast<u32*>(rBucket.mpData);
+                    pEntry = pBase + 2u * rBucket.muWord1;  // one past the last entry
+                    while (pEntry > pBase)
+                    {
+                        pEntry -= 2;               // step back one 8-byte entry
+                        if (pEntry[0] == uPage)    // matching page address
+                        {
+                            bFound = true;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    iResult = rBucket.Reserve(0x10u, &iStatus);  // seed the bucket
+                    if (iStatus < 0)
+                    {
+                        muFlags |= 0x80000000u;
+                        break;
+                    }
+                }
+
+                if (!bFound)
+                {
+                    iResult = rBucket.AddEntry(&iStatus);        // reserve+commit
+                    if (iStatus < 0)
+                    {
+                        muFlags |= 0x80000000u;
+                        break;
+                    }
+                    u32* pBase = static_cast<u32*>(rBucket.mpData);
+                    pEntry = pBase + 2u * rBucket.muWord1 - 2;   // the new last slot
+                    pEntry[0] = uPage;             // entry.page
+                    pEntry[1] = 0;                 // entry.flags
+                }
+
+                u32* pFlags = &pEntry[1];
+                if (pFlags == nullptr)             // degenerate (null data) -> fail
+                {
+                    muFlags |= 0x80000000u;
+                    break;
+                }
+
+                u32  uEntryFlags = *pFlags;
+                bool bStoreFlags = true;
+                if ((uEntryFlags & 0x00400000u) == 0)
+                {
+                    uEntryFlags |= 0x00400000u;
+                    if (uPage == 0)
+                    {
+                        const u32 uFlags = muFlags;
+                        if ((uFlags & 0x40000000u) == 0)
+                        {
+                            u32 aRecord[3];
+                            aRecord[0] = muWord196;               // record base
+                            aRecord[1] = static_cast<u32>(uTag);
+                            aRecord[2] = 0;
+                            muFlags = uFlags | 0x40000000u;       // one-shot latch
+                            iResult = WriteData(3, aRecord, 12, 0, 0, 0);
+                        }
+                        bStoreFlags = false;       // the page-0 path never stores back
+                    }
+                    else if ((uEntryFlags & 0x00300000u) == 0)
+                    {
+                        uEntryFlags |= 0x00200000u; // mark dirty
+                    }
+                }
+
+                if (bStoreFlags)
+                    *pFlags = uEntryFlags;
+
+                uPage += 4096;
+            }
+            while (uPage < uEnd);
+        }
+    }
+
     return iResult;
 }
 

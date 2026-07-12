@@ -1,14 +1,41 @@
 // ===================================================================================
 // BrnGui::CompassComponent  -- implementation
-//   class:BrnGui::CompassComponent
+//   class:BrnGui::CompassComponent  +  GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.cpp
 //
-//   UpdatePlayerMarkerState @ 0x8241EBA8
-//   SetBearing              @ 0x8241EC38
-//   SetMarkerPos            @ 0x8241ED10
+//   UpdatePlayerMarkerState @ 0x8241EBA8   (class-home batch)
+//   SetBearing              @ 0x8241EC38   (class-home batch)
+//   SetMarkerPos            @ 0x8241ED10   (class-home batch)
+//   Construct               @ 0x82411568
+//   Prepare                 @ 0x8241F8A0
+//   SetVisibility           @ 0x824115E8
+//   ShowLandmarkOnCompass   @ 0x82428C68
+//
 // Reconstructed store-for-store from the X360 asm; DWARF-attested shape.
+//
+// STILL TODO (blocked, bodies left for a keystone wave -- declared in the header):
+//   ShowPositionOnCompass  @ 0x8241FC10 -- inlines VMX over un-exported permute/const
+//                                          rodata (unk_82181510 / unk_8204B610) + the
+//                                          un-homed platform intrinsic XMVectorACos.
+//   FormatDirectionLetters @ 0x82411640 -- indexes the un-exported per-language rodata
+//                                          string tables off_82F248B8 / off_82F24918.
+//   ShowChallengeOnCompass @ 0x82428CC0 -- un-homed ChallengeListEntryAction validity
+//                                          field + forwards into ShowPositionOnCompass.
+//   Update                 @ 0x8242E160 -- un-homed GuiTracker actively-tracked-landmark
+//                                          accessors + GuiCache tracker/heading reads.
 // ===================================================================================
 #include "GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
+#include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetLandmarkInfoFromIndex
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"             // GuiEventUpdateSatNav::SatNavIconInfo
+#include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"           // BrnFlapt::FileRef::FindComponent
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h" // BrnFlapt::MovieClipInstance::ResetTimeline
+#include "GameSource/GameState/BrnGameStateTypes.h"         // BrnGameState::LandmarkIndex (complete)
+
+// CgsSystem::HardwareSku::FindLanguage @0x8241FB4C is a namespace free function with no
+// reconstructed header home (bodies live in CgsHardwareSku{PC,PS3}.cpp); declare the exact
+// symbol here so Prepare can resolve the current SKU language.
+namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 
 namespace BrnGui
 {
@@ -75,5 +102,113 @@ namespace BrnGui
         {
             mDestMarkerMovie.SetVisible(lbShowMarker);
         }
+    }
+
+    // @ 0x82411568 -- adopt the state channel through the base component, construct the
+    // embedded player-marker animator against that same channel, then clear the cache
+    // pointer and default the route state. lacName / lacParentName / liParentAptLayer are
+    // part of the shared component Construct signature but unused by the compass at this layer.
+    void CompassComponent::Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
+                                     const char* lacParentName, s32 liParentAptLayer)
+    {
+        (void)lacName;
+        (void)lacParentName;
+        (void)liParentAptLayer;
+
+        // BrnFlaptComponent::Construct: assert lpStateInterface (h:113), store it, SetInvalid the clip.
+        BrnFlaptComponent::Construct(lpStateInterface);
+
+        mPlayerMarkerAnimator.Construct(NULL, lpStateInterface, NULL);
+
+        mpGuiCache      = NULL;
+        mePlayerOnTrack = E_PLAYER_ROUTE_WITHIN_NORMAL_BOUNDS;   // +0x48 == 2
+    }
+
+    // @ 0x824115E8 -- drive the component's own apt clip to the transition/steady label that
+    // matches the requested visibility (immediate vs. animated).
+    void CompassComponent::SetVisibility(bool lbVisible, bool lbImmediate)
+    {
+        if (lbVisible)
+            mAptRef.GotoAndPlayLabel(lbImmediate ? "visible" : "transin");
+        else
+            mAptRef.GotoAndPlayLabel(lbImmediate ? "invisible" : "transout");
+    }
+
+    // @ 0x82428C68 -- fetch the sat-nav icon record for the landmark and place its world
+    // position on the compass at the given player heading.
+    void CompassComponent::ShowLandmarkOnCompass(BrnGameState::LandmarkIndex lLandmark, f32 lfBearing)
+    {
+        GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
+        mpGuiCache->GetLandmarkInfoFromIndex(lLandmark, &lLandmarkInfo);
+        // The X360 VMX-copies the icon's 16-byte position lane straight into the vector arg;
+        // narrow it to the Vector3 destination ShowPositionOnCompass takes.
+        const Vector4& lv4Position = lLandmarkInfo.GetPositionLane();
+        const Vector3 lv3Destination = { lv4Position.x, lv4Position.y, lv4Position.z, 0.0f };
+        ShowPositionOnCompass(lv3Destination, lfBearing);
+    }
+
+    // @ 0x8241F8A0 -- one-time setup of the compass HUD from its apt file:
+    //   * resolve this component and reset its timeline;
+    //   * descend into the "CVParent_mc" container (reset it too);
+    //   * bind the CompassView / DestMarker clips;
+    //   * cache the strip origin (view + marker) and one view's on-screen width (used to
+    //     map a bearing onto the strip);
+    //   * build the player-marker animator's component name and Prepare it;
+    //   * format the direction letters on all six view sub-clips for the SKU language.
+    void CompassComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile)
+    {
+        CGS_ASSERT(lacName != NULL, "lacName != NULL");   // BrnGuiFlaptComponent.h:133
+
+        BrnFlapt::MovieClipRef lComponent;
+        mAptRef = *lFile.FindComponent(&lComponent, lacName);
+
+        CGS_ASSERT(mAptRef.mpMovieClipInst != NULL, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272
+        mAptRef.mpMovieClipInst->ResetTimeline();
+
+        BrnFlapt::MovieClipRef lCompassViewParent;
+        mAptRef.FindChildMovieClip(&lCompassViewParent, "CVParent_mc");
+        CGS_ASSERT(lCompassViewParent.mpMovieClipInst != NULL, "mpMovieClipInst");   // BrnFlaptMovieClipRef.h:272
+        lCompassViewParent.mpMovieClipInst->ResetTimeline();
+
+        BrnFlapt::MovieClipRef lTemp;
+        mCompassViewMovie = *lCompassViewParent.FindChildMovieClip(&lTemp, "CompassView_mc");
+        mDestMarkerMovie  = *lCompassViewParent.FindChildMovieClip(&lTemp, "DestMarker_mc");
+
+        BrnFlapt::MovieClipRef lCompassViewFrontLeft;
+        BrnFlapt::MovieClipRef lCompassViewFrontCentre;
+        BrnFlapt::MovieClipRef lCompassViewFrontRight;
+        BrnFlapt::MovieClipRef lCompassViewBackLeft;
+        BrnFlapt::MovieClipRef lCompassViewBackCentre;
+        BrnFlapt::MovieClipRef lCompassViewBackRight;
+        mCompassViewMovie.FindChildMovieClip(&lCompassViewFrontLeft,   "LeftView_Front_mc");
+        mCompassViewMovie.FindChildMovieClip(&lCompassViewFrontCentre, "CentreView_Front_mc");
+        mCompassViewMovie.FindChildMovieClip(&lCompassViewFrontRight,  "RightView_Front_mc");
+        mCompassViewMovie.FindChildMovieClip(&lCompassViewBackLeft,    "LeftView_Back_mc");
+        mCompassViewMovie.FindChildMovieClip(&lCompassViewBackCentre,  "CentreView_Back_mc");
+        mCompassViewMovie.FindChildMovieClip(&lCompassViewBackRight,   "RightView_Back_mc");
+
+        mv2InitialViewPos       = mCompassViewMovie.GetPosition();
+        mfSingleViewLength      = lCompassViewFrontRight.GetPosition().x
+                                - lCompassViewFrontCentre.GetPosition().x;
+        mv2InitialDestMarkerPos = mDestMarkerMovie.GetPosition();
+
+        char lacTempString[32];
+        CgsCore::SnPrintf(lacTempString, 31, "%s_%s", lacName, "playerIcon_anim");
+        lacTempString[31] = '\0';
+        mPlayerMarkerAnimator.Prepare(lacTempString, lFile, NULL);
+
+        const CgsLanguage::ELanguage leLanguage =
+            static_cast<CgsLanguage::ELanguage>(CgsSystem::HardwareSku::FindLanguage());
+        CGS_ASSERT(leLanguage > CgsLanguage::E_LANGUAGE_INVALID,
+                   "leLanguage > CgsLanguage::E_LANGUAGE_INVALID");   // BrnCompassComponent.cpp:247
+        CGS_ASSERT(leLanguage < CgsLanguage::E_LANGUAGE_TOTAL,
+                   "leLanguage < CgsLanguage::E_LANGUAGE_TOTAL");     // BrnCompassComponent.cpp:248
+
+        FormatDirectionLetters(leLanguage, &lCompassViewFrontLeft);
+        FormatDirectionLetters(leLanguage, &lCompassViewFrontCentre);
+        FormatDirectionLetters(leLanguage, &lCompassViewFrontRight);
+        FormatDirectionLetters(leLanguage, &lCompassViewBackLeft);
+        FormatDirectionLetters(leLanguage, &lCompassViewBackCentre);
+        FormatDirectionLetters(leLanguage, &lCompassViewBackRight);
     }
 }

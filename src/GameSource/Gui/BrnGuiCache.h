@@ -18,6 +18,7 @@ namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList retur
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
 namespace BrnProgression { struct Profile; }      // DetermineCarUnlockPending arg (pointer only)
+namespace BrnGameState { class LandmarkIndex; }    // GetLandmarkInfoFromIndex arg (by value)
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusData; } } // GetOnlinePlayerInfo return (pointer only; home BrnNetworkModuleInGamePlayerStatusInterface.h)
 
 namespace BrnGui
@@ -34,6 +35,8 @@ namespace BrnGui
     // the inlined event-display helpers).
     struct PresetEvent;
     struct SatNavEventDisplayInfo;
+    struct PreEventInfo;   // opaque boundary record (GetPreEventInfo result; consumed by
+                           // OnlinePreEventMessages::Show -- pointer-only)
 
     struct StateLoadingHelper
     {
@@ -157,6 +160,14 @@ namespace BrnGui
         // GuiCache TU.
         s32 GetCurrentGameModeType() const;
 
+        // ADDITIVE GROW (BrnOnlinePreEvent TU): resolve the fly-by line-up entry at the given
+        // index to its pre-event info record. The online pre-event state indexes it with its
+        // running fly-by counter (miCurrentFlyByIndex) and hands the result to
+        // OnlinePreEventMessages::Show (X360 UpdatePermanent case 160 @0x824A13E4). Returned by
+        // pointer (opaque boundary record). Declaration-only per the far-member convention; body
+        // links from the GuiCache TU. FLAG: consumer-named (index/record shape from the caller).
+        const PreEventInfo* GetPreEventInfo(s32 liIndex) const;
+
         // ADDITIVE GROW (BrnGuiFreeburnChallengeManager TU): the cache owns the freeburn
         // challenge list the GUI tracker resolves challenge ids against. The X360
         // FreeburnChallengeManager StartChallenge/TriggerChallenge (@0x82509D60 / @0x8250A160)
@@ -243,6 +254,16 @@ namespace BrnGui
         GuiEventUpdateSatNav::SatNavIconInfo*
             GetOnlineLandmarkInfoAtPositionInList(s32 liIndex,
                                                   GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const;
+
+        // ADDITIVE GROW (BrnCompassComponent TU): fill lpOutIconInfo with the sat-nav icon
+        // record (world position + type) for the given landmark index, and return the out
+        // pointer. CompassComponent::ShowLandmarkOnCompass @0x82428C68 hands mpGuiCache, the
+        // landmark index and a stack SatNavIconInfo, then VMX-copies the record's leading
+        // mv3Position lane onto the compass. X360-attested @0x8240F0xx (inlined at the call
+        // site; the cache forwards to the WorldDataController). Body links from the GuiCache TU.
+        GuiEventUpdateSatNav::SatNavIconInfo*
+            GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandmarkIndex,
+                                     GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const;
 
         // X360 inlined cache helpers (sub_824F8838 / sub_824F8AF0): resolve an event id to its
         // on-map display record. The record's leading 16-byte lane is the world-space icon
