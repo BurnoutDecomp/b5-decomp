@@ -1203,15 +1203,17 @@ namespace BrnGui
         if (lbSameMovie && s_FlowSlot.mbInstantiated)
             return;
 
+        // ANY real flow play un-parks the slot -- including the attract cycle's replay
+        // of the SAME title movie after its stop unlinked the old root node (the
+        // re-drive below mounts it on a fresh level node).
+        s_bMovieStopped = false;
+
         if (!lbSameMovie)
         {
             std::strncpy(s_FlowSlot.macName, lpacMovieName, sizeof(s_FlowSlot.macName) - 1);
             s_FlowSlot.macName[sizeof(s_FlowSlot.macName) - 1] = '\0';
             s_FlowSlot.mbRequested = true;
             s_FlowSlot.miLevel     = liLevelNum;
-            // A NEW flow movie un-parks the slot (the previous state's unload post
-            // deletion-marked the old render root).
-            s_bMovieStopped = false;
 
             char lac[200];
             std::snprintf(lac, sizeof(lac),
@@ -1749,10 +1751,15 @@ namespace BrnGui
         // state machine retries per frame, and this is its host-side equivalent.
         if (s_FrameworkSlot.mbRequested || s_PersistentSlot.mbRequested)
             EnsureFrameworkMovie();
-        if (s_FlowSlot.mbLoaded && !s_FlowSlot.mbInstantiated && FrameworkClassesLive())
+        // The flow retry is gated on the park latch: a STOPPED flow slot (BF_LEGAL
+        // left; node unlinked) must NOT self-remount -- only a real play request
+        // un-parks it (PlayRuntimeMovie clears s_bMovieStopped).
+        if (s_FlowSlot.mbLoaded && !s_FlowSlot.mbInstantiated && !s_bMovieStopped &&
+            FrameworkClassesLive())
             DriveFaithfulLoad(s_FlowSlot);
         if (s_AuxSlot.mbRequested && !s_AuxSlot.mbInstantiated && FrameworkClassesLive())
             DriveFaithfulLoad(s_AuxSlot);
+
     }
 
     // -------------------------------------------------------------------------
@@ -1836,10 +1843,35 @@ namespace BrnGui
                 if (lpItem != nullptr)
                     AptCurrentRenderTreeManager()->Update_ItemRemoved(lpItem, gnCurrUpdateTick);
             }
+
+            // REALLY unlink the node from the director's root display list through the
+            // engine's own removal op (AptDisplayListState::removeItem), which fires the
+            // manager's sibling-rewire notifications (Update_ItemNextSiblingChanged on
+            // the previous level node / Update_SetRootItem on a head change). The bare
+            // deletion mark above left the dead node IN the render sibling chain, and
+            // the manager's later rewires severed everything chained AFTER it -- the
+            // persist (level 2) and aux (level 3) roots dropped out of the render walk
+            // (the black profile-prompt / dead-attract-recompose symptom).
+            if (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr)
+            {
+                AptDisplayList* lpRootList =
+                    gpAptTarget->mpAnimationTarget->GetRootDisplayList();
+                AptDisplayListState* lpState =
+                    (lpRootList != nullptr) ? lpRootList->AsState() : nullptr;
+                if (lpState != nullptr)
+                    lpState->removeItem(lpRoot);
+            }
+
+            // The slot's node is out of the tree: a replay (the attract cycle replays
+            // the SAME title movie) re-drives the faithful load onto a FRESH level node.
+            // (The bundle + registration stay resident -- no re-IO.)
+            s_FlowSlot.mpRootCIH      = nullptr;
+            s_FlowSlot.mbInstantiated = false;
         }
 
         CgsDev::Log::WriteToLog("[AptRT] StopMovie: BF_LEGAL left -- FLOW render root "
-                                "deletion-marked (framework movie keeps running; unload deferred).\n");
+                                "unlinked + deletion-marked (framework movie keeps running; "
+                                "unload deferred).\n");
     }
 
     // True once the movie has COMPOSED: the root clip's first paced tick has run its
