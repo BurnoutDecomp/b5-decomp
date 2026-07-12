@@ -33,6 +33,12 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                              // CgsMemory::LinearMalloc (by value)
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionBatch.h" // CollisionBatch (by value)
 
+// Producer factory return type (pointer-only use in this header); full layout in
+// Memory/DataStream/CgsSimpleDataStreamProducer.h, included by the .cpp.
+namespace CgsMemory { struct SimpleDataStreamProducer; }
+
+namespace EA { namespace Jobs { struct Job; } }
+
 namespace CgsSceneManager
 {
 namespace CgsCollision
@@ -62,9 +68,22 @@ namespace CgsCollision
         // definition in the .cpp includes its owning header.)
         CollisionResultList GetResultList(u16 luIndex) const;   // X360 0x825B2AE0
 
+        // Allocate + construct a SimpleDataStreamProducer for a streamed collision pass out of
+        // the result allocator (128-byte aligned, alignment saved/restored around the burst).
+        // X360 0x828109F8 (ledger identity "Crea" -- the IDA symbol is truncated; this is the
+        // producer-factory it names). Sizes both the command and result buffers via
+        // SimpleDataStreamProducer::GetRequiredBufferSizes before constructing.
+        CgsMemory::SimpleDataStreamProducer* CreateStreamProducer(s32 liMaxCommands);
+
     private:
         u16  CreateNewBatch();                   // h:350 / X360 0x82810960
         void FinishBatch(u16 lu16BatchIndex);    // h:353 / X360 0x82810718
+
+        // Allocate + placement-construct one standalone (empty) EA::Jobs::Job out of the result
+        // allocator (128-byte aligned, alignment saved/restored). Returns null if the bump
+        // allocator overflows. X360 0x82810588. The Run* dispatch family uses the returned job
+        // as the parent/root the per-batch jobs depend on.
+        EA::Jobs::Job* AllocateJob();
 
     private:
         // Layout in DWARF declaration order (see file header for X360 offsets).

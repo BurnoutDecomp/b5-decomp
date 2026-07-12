@@ -18,6 +18,16 @@ class ScatteringData
 public:
     void Construct();
 
+    // 4-way per-member weighted blend @ 0x82675... (body is a sibling TU, not
+    // reconstructed here). Sets this keyframe to the element-wise weighted sum
+    //   *this = A0*wA0 + A1*wA1 + B0*wB0 + B1*wB1
+    // over the whole float layout. Declared additively so
+    // EnvironmentManager::PerformBlend compiles; matches the CloudsData 4-way form.
+    void SetToBlend( const ScatteringData& lValueA0, float lfWeightA0,
+                     const ScatteringData& lValueA1, float lfWeightA1,
+                     const ScatteringData& lValueB0, float lfWeightB0,
+                     const ScatteringData& lValueB1, float lfWeightB1 );
+
 private:
     float mv3SkyTopColour[4];     // 0x00 (Vector3)
     float mv3SkyHorColour[4];     // 0x10 (Vector3)

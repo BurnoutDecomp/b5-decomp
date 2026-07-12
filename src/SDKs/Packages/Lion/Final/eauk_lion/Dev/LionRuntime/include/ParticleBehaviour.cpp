@@ -33,6 +33,145 @@ extern const cLionTokenTable gLionParticleWaveFormTokenTable;  // off_82F36A40
 extern const cLionTokenTable gLionParticleBehaviourTokenTable; // off_82F36A38
 
 // ----------------------------------------------------------------------------
+// small store-for-store helpers (a cVector lane-set is one aligned vector store on
+// X360; reproduced here by named lane so no raw-offset access is needed).
+// ----------------------------------------------------------------------------
+namespace
+{
+    inline void SetVec(cVector& arV, f32 aX, f32 aY, f32 aZ, f32 aW)
+    {
+        arV.x = aX;
+        arV.y = aY;
+        arV.z = aZ;
+        arV.w = aW;
+    }
+
+    inline void ZeroVec(cVector& arV)
+    {
+        SetVec(arV, 0.0f, 0.0f, 0.0f, 0.0f);
+    }
+
+    inline void SetColour(cColour8& arC, u8 aValue)
+    {
+        arC.r = aValue;
+        arC.g = aValue;
+        arC.b = aValue;
+        arC.a = aValue;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// cParticleBehaviour::Init  @ 0x82908EA0
+//
+// Resets a behaviour node to its authoring defaults (called by cParticleEmitter::Init
+// via the descriptor). Every store is reproduced from the X360 asm by named member;
+// the non-zero defaults (from the pseudocode's literal constants and the resolved
+// rodata: flt_82001CC0=0.0, flt_82001C98=1.0, flt_82001DA0=0.5, flt_820054D0=7.0):
+//   mPivotPoint            = (0.5, 0.5, 0.5, 0)
+//   mSizeXYZBase           = (0.5, 0.5, 0,   0)
+//   mVelBase               = (0,   1,   0,   0)
+//   mRGBA0 / mRGBA1        = 0x80808080 (mid-grey, all channels 0x80)
+//   mColour[]/mColourStepRGBA[] = 0xFFFFFFFF (all channels 0xFF)
+//   mEmissionRateBase = 7.0; mLifeBase / mScale / mCellSize / mSizeBase = 1.0
+//   mAlphaFadeOut / mTimeScale / mEmitterEndWeight / mEmitterVelWeight = 1.0
+//   mEndOnAlphaFade / mEndOnEndAngle = 1.0
+// The colour steps loop (asm 0x82909084..0x829090A0) fills all four mColour[] /
+// mColourStepRGBA[] with -1 and all four mColourTime[] / mRGBATime[] with 0.
+//
+// Init does NOT touch mColourStepsRGBAv[], mDivisors[], the alpha-fade reciprocals,
+// mBVCompiled, mRadius, mAABBMin/Max or mEmissionRateHasBeenScaled -- those are left
+// as-is (Build() / CompileBaseVariance() derive them later), matching the asm.
+// ----------------------------------------------------------------------------
+void cParticleBehaviour::Init()
+{
+    ZeroVec(mAccBase);
+    ZeroVec(mAccVariance);
+    ZeroVec(mAxisBase);
+    ZeroVec(mOffsetRotXYZBase);
+    ZeroVec(mOffsetRotXYZVariance);
+    ZeroVec(mOffsetRotXYZVelBase);
+    ZeroVec(mOffsetRotXYZVelVariance);
+    ZeroVec(mOffsetRotXYZAccBase);
+    ZeroVec(mOffsetRotXYZAccVariance);
+    ZeroVec(mRotXYZBase);
+    ZeroVec(mRotXYZVariance);
+    ZeroVec(mRotXYZVelBase);
+    ZeroVec(mRotXYZVelVariance);
+    ZeroVec(mRotXYZAccBase);
+    ZeroVec(mRotXYZAccVariance);
+    SetVec(mPivotPoint, 0.5f, 0.5f, 0.5f, 0.0f);
+    ZeroVec(mPosBase);
+    ZeroVec(mPosVariance);
+    ZeroVec(mRingRadius);
+    SetVec(mSizeXYZBase, 0.5f, 0.5f, 0.0f, 0.0f);
+    ZeroVec(mSizeXYZVariance);
+    ZeroVec(mSizeXYZVelBase);
+    ZeroVec(mSizeXYZVelVariance);
+    ZeroVec(mSizeXYZAccBase);
+    ZeroVec(mSizeXYZAccVariance);
+    SetVec(mVelBase, 0.0f, 1.0f, 0.0f, 0.0f);
+    ZeroVec(mVelVariance);
+    ZeroVec(mRGBADiff);
+
+    // Colour / colour-step tables: four each, colours -> 0xFFFFFFFF, times -> 0.
+    for (u32 luIndex = 0; luIndex < KU_COLOUR_STEP_LIMIT; ++luIndex)
+    {
+        SetColour(mColour[luIndex], 0xFF);
+        mColourTime[luIndex] = 0.0f;
+        SetColour(mColourStepRGBA[luIndex], 0xFF);
+        mRGBATime[luIndex] = 0.0f;
+    }
+    mColourSteps = 0;
+
+    SetColour(mRGBA0, 0x80);
+    SetColour(mRGBA1, 0x80);
+    SetColour(mRGBABase, 0x00);
+    SetColour(mRGBAVar, 0x00);
+
+    mRibbonParticleCount = 0;
+    mEmissionCountClamp = 0;
+    mAlphaFadeIn = 0.0f;
+    mEmissionCountClampVariance = 0;
+    mAlphaFadeOut = 1.0f;
+    mRGBAVarianceMode = 0;
+    mCellSize = 1.0f;
+    mFlags = 0;
+    mCloneScaleInTime = 0.0f;
+    mpWaveFormAlpha = 0;
+    mDragFactorVel = 0.0f;
+    mpWaveFormRGB = 0;
+    mDragFactorRot = 0.0f;
+    mpWaveFormX = 0;
+    mDragFactorScale = 0.0f;
+    mpWaveFormY = 0;
+    mDragFactor = 0.0f;
+    mpWaveFormZ = 0;
+    mMass = 0.0f;
+    mpNext = 0;
+    mLifeBase = 1.0f;
+    mLifeVariance = 0.0f;
+    mEmissionRateBase = 7.0f;
+    mEmissionRateVariance = 0.0f;
+    mEmitterStartWeight = 0.0f;
+    mEmitterEndWeight = 1.0f;
+    mEmitterVelWeight = 1.0f;
+    mScale = 1.0f;
+    mTimeScale = 1.0f;
+    mTimeScaleVariance = 0.0f;
+    mSizeBase = 1.0f;
+    mSizeVariance = 0.0f;
+    mSizeVelBase = 0.0f;
+    mSizeVelVariance = 0.0f;
+    mSizeAccBase = 0.0f;
+    mSizeAccVariance = 0.0f;
+
+    mEndOnScale = 0.0f;
+    mEndOnStartAngle = 0.0f;
+    mEndOnAlphaFade = 1.0f;
+    mEndOnEndAngle = 1.0f;
+}
+
+// ----------------------------------------------------------------------------
 // cParticleBehaviour::BuildColourSteps  @ 0x829094F0
 //
 // Packs up to four colour "steps" into mColourStepRGBA[] / mColourTime[] from the

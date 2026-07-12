@@ -18,6 +18,16 @@ class LightingData
 public:
     void Construct();
 
+    // 4-way per-member weighted blend @ 0x82675... (body is a sibling TU, not
+    // reconstructed here). Sets this keyframe to the element-wise weighted sum
+    //   *this = A0*wA0 + A1*wA1 + B0*wB0 + B1*wB1
+    // over the whole float layout. Declared additively so
+    // EnvironmentManager::PerformBlend compiles; matches the CloudsData 4-way form.
+    void SetToBlend( const LightingData& lValueA0, float lfWeightA0,
+                     const LightingData& lValueA1, float lfWeightA1,
+                     const LightingData& lValueB0, float lfWeightB0,
+                     const LightingData& lValueB1, float lfWeightB1 );
+
 private:
     float mv3KeyLightColour[4];      // 0x00 (Vector3)
     float mv3SpecularColour[4];      // 0x10 (Vector3)

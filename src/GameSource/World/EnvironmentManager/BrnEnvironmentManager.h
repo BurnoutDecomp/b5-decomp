@@ -2,22 +2,40 @@
 
 #include "types.hpp"
 
+#include "GameSource/World/EnvironmentSettings/BrnEnvScatteringData.h"
+#include "GameSource/World/EnvironmentSettings/BrnEnvLightingData.h"
+#include "GameSource/World/EnvironmentSettings/BrnEnvCloudsData.h"
+#include "GameSource/World/EnvironmentSettings/BrnEnvironmentKeyframe.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::ResourcePtr<Keyframe>
+
 namespace BrnWorld
 {
 namespace EnvironmentSettings
 {
-// EnvironmentManager -- only the two functions UpdateFromTool (@0x827B0DA8) and
-// DiscardCurrSeason (@0x827B0E50) are reconstructed in this TU. The class layout
-// below names ONLY the members those two functions provably touch (offsets from
-// their asm); everything else is opaque padding. The manager's constructor and the
-// full member set (an intrusive receiver/dependency/file-request queue set, a
-// resource ptr at +0x424, an embedded AsyncOp, ...) are NOT reconstructed here --
-// their asm is not in this TU's dossier, so they are left as padding rather than
-// fabricated. A future wave that homes the ctor should replace the pad regions with
-// the real members (the +0x424 region is a ResourcePtr, not a list head).
+// EnvironmentManager -- the environment-settings blend/update manager. Reconstructed
+// incrementally from BURNOUT_X360_ARTIST.XEX. The class is large (the true object
+// extends past this partial model); ONLY members provably touched by the functions
+// reconstructed so far are named, at their asm-attested offsets, with everything
+// else left as explicit padding rather than fabricated. Members added by this wave
+// (mfCurrTimeOfDay@0x504, the blended mScattering@0x540 / mLighting@0x5F0 /
+// mClouds@0x680 targets, and maToolKeyframes[4]@0x870) are pinned to the offsets
+// PerformBlend / SetupUpdateFromToolBlend read/write. The +0x424 ResourcePtr, the
+// +0x490 per-season ResourcePtr array, the +0x1174 file-request queue and +0x11C8
+// AsyncOp regions named in prior comments remain opaque padding (their asm is not
+// in this batch's dossier).
 class EnvironmentManager
 {
 public:
+    // A blend frame: four source keyframes and their four blend weights. Built by
+    // SetupTimeOfDayBlend / SetupSeasonsBlend / SetupUpdateFromToolBlend and consumed
+    // by PerformBlend. Layout attested by SetupUpdateFromToolBlend's fill loop
+    // (pointers @+0x00.., weights @+0x10..) and PerformBlend's reads.
+    struct BlendFrame
+    {
+        Keyframe* mapKeyframes[4];   // 0x00  four bracketing source keyframes
+        float     mafWeights[4];     // 0x10  their blend weights (sum to 1)
+    };
+
     // Blend / pause state-machine transition driven by the environment tool. Returns
     // whether the manager is (or has just been put) in a blocking operation.
     // @ 0x827B0DA8
@@ -36,21 +54,44 @@ public:
     };
 
 private:
+    // @ 0x827C30E8. Out-of-line copy of ResourcePtr<Keyframe>::GetMemoryResource()'s
+    // null-resource assert (CgsResourcePtr.h line 581); returns the memory resource.
+    Keyframe* ResourcePointerAssertThingy(CgsResource::ResourcePtr<Keyframe>& lrResourcePtr);
+
+    // @ 0x827B0EB8. 4-way weighted blend of the four source keyframes' scattering /
+    // lighting / clouds sub-blocks into the manager's current-environment targets.
+    void PerformBlend(BlendFrame& lrBlendFrame);
+
+    // @ 0x827C5018. Tool path: re-read d:\LightSetup.txt once every 30 frames, then set
+    // the blend frame to a uniform 0.25-weight blend of four copies of the parsed
+    // keyframe. Returns whether the file was re-read this call.
+    bool SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame);
+
     u8             mPad0[0x444];                // 0x000  (incl. the +0x424 ResourcePtr region, un-homed)
     // --- named members proven by DiscardCurrSeason (0x827B0E50) / UpdateFromTool (0x827B0DA8) ---
     u32            muCurrSeasonRef;             // 0x444  cleared to 0 by DiscardCurrSeason
     u8             mbCurrSeason;                // 0x448  (byte) set from muDiscardSeason low byte
     u8             mPad449[3];                  // 0x449
     EStreamInStage meStreamInStage;             // 0x44C  asserted == E_STREAMIN_DONE
-    u8             mPad450[0x8C];               // 0x450  (incl. the +0x490 dependency-queue region, un-homed)
+    u8             mPad450[0x8C];               // 0x450  (incl. the +0x490 per-season ResourcePtr array, un-homed)
     u32            muDiscardSeason;             // 0x4DC  season index copied into mbCurrSeason
     u8             mPad4E0[0x18];               // 0x4E0
     s32            miBlendState;                // 0x4F8  blend/pause state machine (0..3)
     u8             mPad4FC[4];                  // 0x4FC
     s32            miSavedBlendState;           // 0x500  miBlendState saved across a tool blocking op
-    u8             mPad504[0x35C];              // 0x504
-    s32            miToolUpdateFrameCounter;    // 0x860  reset by UpdateFromTool when entering a blocking op
-    u8             mPad864[0x984];              // 0x864  (incl. the +0x1174 file-request-queue + +0x11C8 AsyncOp regions, un-homed)
+    // --- named members proven by PerformBlend (0x827B0EB8) / SetupUpdateFromToolBlend (0x827C5018) ---
+    f32            mfCurrTimeOfDay;             // 0x504  current time-of-day (parser out-param / sun-dir input)
+    u8             mPad508[0x38];               // 0x508
+    ScatteringData mScattering;                 // 0x540  blended scattering target (PerformBlend dst @+0x540)
+    u8             mPad5E8[0x8];                // 0x5E8
+    LightingData   mLighting;                   // 0x5F0  blended lighting target   (PerformBlend dst @+0x5F0)
+    u8             mPad674[0xC];                // 0x674
+    CloudsData     mClouds;                     // 0x680  blended clouds target     (PerformBlend dst @+0x680)
+    u8             mPad6EC[0x174];              // 0x6EC
+    s32            miToolUpdateFrameCounter;    // 0x860  reset by UpdateFromTool; 30-frame gate in SetupUpdateFromToolBlend
+    u8             mPad864[0xC];                // 0x864
+    Keyframe       maToolKeyframes[4];          // 0x870  four tool-parsed keyframe slots (4 * 0x240)
+    u8             mPad1170[0x78];              // 0x1170 (incl. the +0x1174 file-request queue + +0x11C8 AsyncOp, un-homed)
 };
 }
 }

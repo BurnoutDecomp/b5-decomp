@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h" // CollisionResultList (complete: by-value return)
+#include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"        // SimpleDataStreamProducer (CreateStreamProducer)
+#include "SDKs/EATech/eajobs/job.h"                                                       // EA::Jobs::Job (AllocateJob)
 
 // GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp
 //
@@ -13,10 +15,21 @@
 // DWARF. The batch ring is 64 wide on X360 (KU16_MAX_NUM_BATCHES); mabUsedBatches[i] tracks
 // which of the 64 embedded jobs is in flight.
 //
-// NOT reconstructed here (blocked): CollideLineAgainstPolySoupList @ 0x82812AE0 -- a large
-// hand-written VMX kernel that needs the un-homed CgsGeometric::IntersectLinePolygonSoupSingleSided
-// plus the PolygonSoupListSpatialMap query path and permute-table constants (vpermwi128 0x4B/0x87,
-// sub_82843E98). Left for when those collaborators are recovered.
+// NOT reconstructed here (blocked): the CollideLine*/TestLine* VMX kernels (0x82812AE0,
+// 0x828131C0 CollideLineAgainstPolySoupListNea, 0x82813978 TestLineAgainstPolySoupListDouble)
+// -- large hand-written VMX pipelines that need the un-homed
+// CgsGeometric::IntersectLinePolygonSoupNearestSingleSided, the PolygonSoupListSpatialMap query
+// path and permute-table constants (vpermwi128 0x4B/0x87, sub_82843E98). The async Run*/Collide*
+// dispatch family (RunCollide{Line,SphereListWithTr,SphereListWithSp,SweptSphereListW,
+// PrimitiveListWit}, CollidePrimitiveListAgainstTriang, CollideSweptSphereListWithTriangl) is
+// blocked on the un-homed global EA::Jobs::JobScheduler singleton (unk_830EA650), the un-exported
+// job entry-point rodata symbols (ContactGeneratorEntry / PolygonSoupTesterEntry) and the
+// job-data descriptor VARIANT the dispatchers poke by raw offset (an un-homed union member of
+// CollisionJobDescription). The Add* stream posters (0x828119F0/0x82811340/0x82811698) raw-poke
+// an un-homed external stream object (a9), and PrepareNewPrimitiveTestResultsLi (0x82810798) would
+// require naming un-attested CollisionResultList header fields (+0x04/+0x08/+0x0A, currently a
+// reserved span shared with the by-value GetResultList consumer). All left for when those
+// collaborators/globals are recovered.
 
 namespace CgsSceneManager
 {
@@ -116,6 +129,62 @@ CollisionResultList BaseCollisionGenerator::GetResultList(u16 luIndex) const
 {
     CGS_ASSERT(luIndex < mu16NumUsedResultLists, "luIndex < mu16NumUsedResultLists");
     return *mapCollisionResultLists[luIndex];
+}
+
+// X360 0x82810588. Allocate sizeof(Job) bytes from the result bump allocator at 128-byte
+// alignment, placement-construct one empty (null-named) EA::Jobs::Job in it, then restore the
+// allocator's previous alignment. Returns null when the bump allocator overflows (the asm's
+// `beq` short-circuits the Job ctor to a null result). The allocator's live alignment is read
+// back via GetAlignment() (X360 reads the allocator's alignment member directly, +0x10) so the
+// burst is alignment-neutral to the caller.
+EA::Jobs::Job* BaseCollisionGenerator::AllocateJob()
+{
+    const size_t lnSavedAlignment = mCollisionResultsAllocator.GetAlignment();
+    mCollisionResultsAllocator.SetAlignment(128);
+
+    EA::Jobs::Job* lpJob = nullptr;
+    void* lpvJobMemory = mCollisionResultsAllocator.Malloc(sizeof(EA::Jobs::Job));
+    if (lpvJobMemory)
+        lpJob = new (lpvJobMemory) EA::Jobs::Job(nullptr);
+
+    mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);
+    return lpJob;
+}
+
+// X360 0x828109F8 (ledger identity "Crea" -- IDA-truncated; reconstructed under its descriptive
+// name). Carve a SimpleDataStreamProducer and its command + result buffers out of the result
+// allocator at 128-byte alignment, size the two buffers with the producer's own requirement
+// helper, construct the producer over them, then restore the allocator alignment. The stream
+// carries fixed-geometry commands (32-byte command records, 16-byte result records), so the
+// command/result counts both come from liMaxCommands (r4). The two allocation-failure asserts
+// are the X360 streamed-message form (BasePriorityQueue::Clear + operator<< + FireAssert); their
+// messages are string literals here, matching this file's CGS_ASSERT convention. The
+// GetRequiredBufferSizes result-size out-slot is a single u32 on X360 (the frame reserved three
+// words but only the first is read).
+CgsMemory::SimpleDataStreamProducer* BaseCollisionGenerator::CreateStreamProducer(s32 liMaxCommands)
+{
+    const size_t lnSavedAlignment = mCollisionResultsAllocator.GetAlignment();
+    mCollisionResultsAllocator.SetAlignment(128);
+
+    CgsMemory::SimpleDataStreamProducer* lpProducer =
+        static_cast<CgsMemory::SimpleDataStreamProducer*>(
+            mCollisionResultsAllocator.Malloc(sizeof(CgsMemory::SimpleDataStreamProducer)));
+    CGS_ASSERT(lpProducer != nullptr, "Failed to allocate stream producer\n");
+
+    u32 luCommandBufferSize = 0;
+    u32 luResultBufferSize  = 0;
+    CgsMemory::SimpleDataStreamProducer::GetRequiredBufferSizes(
+        liMaxCommands, 32, liMaxCommands, 16, &luCommandBufferSize, &luResultBufferSize);
+
+    void* lpCommandBuffer = mCollisionResultsAllocator.Malloc(luCommandBufferSize);
+    void* lpResultBuffer  = mCollisionResultsAllocator.Malloc(luResultBufferSize);
+    CGS_ASSERT(lpCommandBuffer != nullptr && lpResultBuffer != nullptr,
+               "Failed to allocate stream buffers\n");
+
+    lpProducer->Construct(liMaxCommands, 32, lpCommandBuffer, liMaxCommands, 16, lpResultBuffer);
+
+    mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);
+    return lpProducer;
 }
 
 }
