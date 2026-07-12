@@ -62,6 +62,34 @@ public:
     // CMassiveAdObject TU; declared virtual here to model the vftable.
     virtual ~CMassiveAdObject();
 
+    // ----- vftable slots the owning CMassiveZoneManager forwards through -------
+    //
+    // The zone manager fans its own per-ad-object operations out across every
+    // CMassiveAdObject on its mAdObjectList by dispatching through these vftable
+    // slots (X360 `(*(*obj + N))(obj, ...)`):
+    //   +0x08  SetAssetExpired(nAssetExpiry)  <- CMassiveZoneManager::SetAssetExpired
+    //                                             @ 0x82BD2DA0 (one int arg)
+    //   +0x10  ReportImpressions()            <- CMassiveZoneManager::ReportImpressions
+    //                                             @ 0x82BD2F08 (no arg)
+    //   +0x18  Resume()                       <- CMassiveZoneManager::Resume
+    //                                             @ 0x82BD3088 (no arg)
+    // The ATTESTED fact is the slot offset + argument shape at each call site; the
+    // method NAMES are inferred from the zone manager's identically-named forwarders
+    // (semantic parity by name, the slot byte order is not asserted -- same pattern
+    // as SubscriberAdd below). The bodies live in the full CMassiveAdObject TU.
+
+    // @ vftable slot +0x08. Expires the asset identified by nAssetExpiry on this ad
+    // object. Body in the CMassiveAdObject TU.
+    virtual int SetAssetExpired(int nAssetExpiry);
+
+    // @ vftable slot +0x10. Reports this ad object's impressions into the zone's
+    // pending impression update. Body in the CMassiveAdObject TU.
+    virtual int ReportImpressions();
+
+    // @ vftable slot +0x18. Resumes this ad object after a suspend. Body in the
+    // CMassiveAdObject TU.
+    virtual int Resume();
+
     // @ vftable slot +0x1C. Registers a subscriber with this ad object. Body in
     // the CMassiveAdObject TU.
     virtual int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber);
@@ -69,6 +97,15 @@ public:
     // @ 0x82BCE... (non-virtual; tail-called by the subscriber). Returns the
     // delivered creative id. Body in the CMassiveAdObject TU.
     int GetCrexID();
+
+    // The ad object's own identifying name (X360 +0x14 -- the first member past
+    // the 0x14-byte CMassiveBaseObject base, distinct from the base debug name at
+    // +0x0C). CMassiveZoneManager::MAOFind @ 0x82BD2CB0 compares each list entry's
+    // name at +0x14 (`CompareStrings(pcName, *(obj + 0x14))`) to locate an ad
+    // object by name. Exposed here BY NAME (the full CMassiveAdObject layout is
+    // recovered in that TU) rather than as an offset read. Public because the zone
+    // manager reads the field directly on the X360, not through a getter.
+    char* mpcAdObjectName;  // +0x14
 
     // The delivered ad's inventory-element id (X360 +0x48). Read directly by
     // CMassiveAdObjectSubscriber::GetInvElementID; exposed here BY NAME (the full

@@ -15,9 +15,11 @@
 //       CArrayLookahead::AddArrayElement              @ 0x82A04D30
 //       CArrayLookahead::SetDissolveDumpFile          @ 0x82A05258
 //       CArrayLookahead::Filter1stOrderDiffLumaVarMean@ 0x82A05048
-//   BLOCKED (need the CSeqDissolveDetector engine TU -- see that header):
 //       CArrayLookahead::DetectDissolve               @ 0x82A05648
 //       CArrayLookahead::DetectEventInArray           @ 0x82A05710
+//   (The last two drive the embedded CSeqDissolveDetector; its Reset/Detect/
+//    ComputeLocalFeature engine bodies are a separate TU -- declarations in
+//    CSeqDissolveDetector.h suffice under the per-TU compile gate.)
 //
 //   Class keeps its native `C`-prefixed name (third-party-style video helper),
 //   matching the sibling CHistogram; no Cgs/Brn namespace is imposed.
@@ -81,6 +83,16 @@ public:
     // First-order temporal IIR smoothing of each slot histogram's luma variance
     // and mean (and their frame-to-frame deltas) across the look-ahead window.
     void Filter1stOrderDiffLumaVarMean();                          // 0x82A05048
+
+    // Run the embedded dissolve detector over the slot three frames behind the
+    // read head (feeds it the variance/mean deltas of the current and previous
+    // frames, or resets it when that slot already carries a dissolve marker).
+    void DetectDissolve();                                         // 0x82A05648
+
+    // Drain every pending frame from the ring: build each frame's histogram,
+    // compute up-to-3-frame change flags, advance the read head, run the IIR
+    // filter + dissolve detector, and classify scene cuts / dissolves per slot.
+    void DetectEventInArray();                                     // 0x82A05710
 
 private:
     friend void _CArrayLookahead_AssertLayout();
