@@ -46,6 +46,7 @@ struct stSubMixChProc;
 struct stMasterMixChSharedData;
 struct stMasterMixChUniqueData;
 struct stMasterMixChProc;
+struct stMixEvtParams;
 
 class NFSMixMap : public MixerMemBase
 {
@@ -89,6 +90,7 @@ public:
     void AssignSFXCallbacks(void* lpOwner);              // @0x82B481B8 -- mpMixerInterface = owner
     stCurveDataProc* GetCurveDataPtr(int* lpParam);      // @0x82B49238 -- find/append curve-proc slot
     int* AddScaleIDs(unsigned short* lpScaleParams, int liProcIdx); // @0x82B492F8
+    int* AddEvtScaleIDs(stMixEvtParams* lpEvtParams, int liProcIdx); // @0x82B493F8 (event twin of AddScaleIDs)
     // Links the freshly-allocated shared/unique MixCtl records into lpProc (sets
     // lpProc->psdata / ->pudata) for NFSMixMapState::CreateMixCtls. Body is its own TU
     // (still un-reconstructed); signature is ARTIST-derived from the call site (r3=this,

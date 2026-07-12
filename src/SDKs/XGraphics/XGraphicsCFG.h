@@ -75,14 +75,23 @@ public:
     CFG* ReservePhysicalRegister(u32 auReg);
 
     // @ 0x82C26738 -- CFG::BuildUsesAndDefs is BLOCKED, not reconstructed here.
-    // It resolves each operand of an IR instruction through VRegTable::Find /
-    // VRegTable::Create, which return a per-register-type MAKER object whose
-    // VReg is produced through virtual slots +0x1C / +0x20 of an un-homed,
-    // un-attested vtable (only these two slots are exercised and their slot order
-    // / sibling slots are not grounded anywhere). It also threads a foreign
-    // "function" context (CFG +0x0C) with a temp-id counter at +0x5E4 that is not
-    // a reconstructed type. Reconstructing it would fabricate a vtable layout and
-    // a foreign type, so it is left out per the fidelity policy.
+    // UPDATE (W42): VRegTable::Find / Create are now homed (XGraphicsVRegTable),
+    // and the per-opcode attribute table dword_82FA57F8 is reachable through the
+    // gaIROpcodeInfo extern (see XGraphicsIRInst.cpp) -- so neither of those is
+    // the blocker. Two IRREDUCIBLE blockers remain, each in the fidelity "do not
+    // fabricate" list:
+    //   (1) The VRegInfo that Find/Create return has its operand resolved through
+    //       a VIRTUAL call on that VRegInfo's own vtable -- slot +0x20 on the
+    //       Find-hit path (lwz r11,0x20(r11); bctrl; args: reg, *(inst+0x80), cfg)
+    //       and slot +0x1C on the Create path (lwz r11,0x1C(r11); bctrl; args: reg,
+    //       *(inst+0x80), cfg, funcCtx). VRegInfo models only its virtual dtor;
+    //       the six sibling slots (bytes 0x04..0x18) are not grounded anywhere, so
+    //       reaching slots 0x1C/0x20 by NAME would require inventing phantom vtable
+    //       slots (or a raw *(vtable+n) offset hack) -- both forbidden.
+    //   (2) It threads a foreign "function" context at CFG +0x0C (lwz r11,0xC(this))
+    //       and decrements a temp-id counter at that object's +0x5E4 (lwz/stw
+    //       0x5E4(r11)). That type is not reconstructed; poking +0x5E4 would be a
+    //       raw-offset hack. Left blocked per the fidelity policy.
     // int BuildUsesAndDefs(IRInst* apInst);
 
     // ---- layout (X360 displacements; opaque padding between named fields) -----

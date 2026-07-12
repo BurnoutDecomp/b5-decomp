@@ -224,6 +224,123 @@ void NFSMixMapState::CreateMixCtls()
 }
 
 // ---------------------------------------------------------------------------
+// NFSMixMapState::CreateEvtMixCtls @0x82B4CE00
+//   Build this state's event mix-control procs from the serialised MixMap event
+//   section (m_pMMStateHdr blob + OffsetEventCtlData: a stMixEventHdr followed by
+//   variable-stride stMixEvtParams entries). The "master" state (m_ObjectIndex==0)
+//   allocates fresh shared records; a copy reuses the first-instance's shared record.
+//   For each event control it:
+//     * defaults the per-envelope curve-id fields (nParam_00/_01/_02) to id 1 when
+//       their low-12-bit id is unset. Which fields depend on the event-type nibble
+//       ((nEVTCTLID >> 24) & 0xF, the top byte): types 0/2 default _00 + _02; type 1 also defaults _01;
+//       type >= 3 defaults none;
+//     * derives the shared offset/ratio from the swing word (nUScaleCntSwing) exactly
+//       as CreateMixCtls (dB->Q15 via NFSMixShape::GetQ15FromHundredthsdB -- the X360
+//       inlined word_82F8677A antilog-table read, de-inlined to the homed helper);
+//     * zero-inits the unique envelope record, stamps its trigger id
+//       ((m_ObjectIndex<<11)|nTriggerID) and its scale-ratios pointer via the
+//       NFSMixMap::AddEvtScaleIDs helper (the event twin of AddScaleIDs).
+//   Entry stride = (((nUScaleCntSwing >> 16) & 0xF) + 6) dwords.
+// ---------------------------------------------------------------------------
+void NFSMixMapState::CreateEvtMixCtls()
+{
+    NFSMixMap* lpMap = m_pNFSMixMap;
+
+    int liOffset = m_pMMStateHdr->OffsetEventCtlData;   // +0x18
+    m_EvtMixCtlsAdded = 0;
+    if (liOffset < 0)
+        return;
+
+    stMixEventHdr* lpHdr = reinterpret_cast<stMixEventHdr*>(
+        reinterpret_cast<char*>(m_pMMStateHdr) + liOffset);
+    m_pEvtMixCtlHdr = lpHdr;
+    if (lpHdr->NumEvents <= 0)
+        return;
+
+    m_MixStateParams.pEvtMixCtlProc = lpMap->GetNextEvtMixCtlProc(0);
+
+    // Serialised event entries follow the 16-byte section header (external blob).
+    stMixEvtParams* lpEntry = reinterpret_cast<stMixEvtParams*>(lpHdr + 1);
+
+    int liChannel = 0;
+    do
+    {
+        stEvtMixCtlSharedData* lpShared;
+        if (m_ObjectIndex)
+        {
+            lpShared = m_pFirstInstance->m_MixStateParams.pEvtMixCtlProc[liChannel].pData_S;
+        }
+        else
+        {
+            lpShared = lpMap->GetNextEvtMixCtlShared(1);
+            lpShared->pMapParms = lpEntry;
+        }
+
+        stEvtMixCtlProc*       lpProc   = lpMap->GetNextEvtMixCtlProc(1);
+        stEvtMixCtlUniqueData* lpUnique = lpMap->GetNextEvtMixCtlUnique(1);
+        lpProc->pData_S = lpShared;
+
+        stMixEvtParams* lpParams = lpShared->pMapParms;
+
+        // ---- envelope curve-id defaulting (per event-type nibble) ----
+        // The type nibble is the TOP byte of nEVTCTLID (asm lbz r11,0(params) -> bits
+        // [24..27]), matching committed GetCurveDataPtr's "type = bits[24..27]".
+        int liType = (lpParams->nEVTCTLID >> 24) & 0xF;
+        if (liType < 3)
+        {
+            if ((lpParams->nParam_00 & 0xFFF) == 0)
+                lpParams->nParam_00 |= 1;
+            if (liType == 1)
+            {
+                if ((lpParams->nParam_01 & 0xFFF) == 0)
+                    lpParams->nParam_01 |= 1;
+            }
+            if ((lpParams->nParam_02 & 0xFFF) == 0)
+                lpParams->nParam_02 |= 1;
+        }
+
+        // ---- shared offset/ratio from the swing word (same shape as CreateMixCtls) ----
+        lpShared->nOffset = 0;
+        lpShared->nRatio  = 0;
+        if (lpParams->nUScaleCntSwing & 0x8000)
+        {
+            lpShared->nRatio = 0x7FFF - NFSMixShape::GetQ15FromHundredthsdB(
+                static_cast<short>(lpParams->nUScaleCntSwing));
+        }
+        else
+        {
+            lpShared->nOffset = lpParams->nUScaleCntSwing & 0x7FFF;
+            if (lpShared->nOffset <= 0)
+                lpShared->nRatio = 0;
+            else
+                lpShared->nRatio = 0x7FFF - NFSMixShape::GetQ15FromHundredthsdB(-lpShared->nOffset);
+        }
+
+        // ---- zero-init the unique envelope record + stamp trigger / scale ids ----
+        lpProc->pData_U          = lpUnique;
+        lpUnique->msStageElapsed = 0.0f;
+        lpUnique->msStart        = 0.0f;
+        lpUnique->qStart         = 0;
+        lpUnique->eCurrentStage  = eEnvelopeStage_Off;
+        lpUnique->qoutput        = 0;
+        lpUnique->output         = 0;
+        lpUnique->pTriggerPtr    = reinterpret_cast<int*>(
+            static_cast<intptr_t>((m_ObjectIndex << 11) | lpParams->nTriggerID));
+        lpUnique->ppScaleRatios  = reinterpret_cast<int**>(
+            lpMap->AddEvtScaleIDs(lpParams, m_ObjectIndex));
+
+        ++liChannel;
+        ++m_EvtMixCtlsAdded;
+        // variable stride: 6-dword stMixEvtParams header + N u-scale ids, where N is the
+        // HIGH 16 bits' low nibble of nUScaleCntSwing (asm lhz r11,4(params) + clrlwi ,28
+        // -> (swing >> 16) & 0xF); the LOW 16 bits carry the dB (& 0x8000 / (short) / & 0x7FFF).
+        lpEntry = reinterpret_cast<stMixEvtParams*>(
+            reinterpret_cast<int*>(lpEntry) + (((lpParams->nUScaleCntSwing >> 16) & 0xF) + 6));
+    }
+    while (liChannel < m_pEvtMixCtlHdr->NumEvents);
+}
+
+// ---------------------------------------------------------------------------
 // NFSMixMapState::CreateSubMixChannels @0x82B4CB00
 //   Build the per-state sub-mix channel procs from the serialised MixMap sub-mix
 //   section (m_pMMStateHdr blob + OffsetSubMixData). The section is a stMixChHdr

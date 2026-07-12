@@ -11,13 +11,14 @@
 // audio-core homes DelayLine (W22), DelayFilter (W21), TimerHandle / TimerManager / System
 // (W25) -- it does NOT fork them.
 //
-// ONE function in this TU is left for a later pass and is only DECLARED in the header (body
-// omitted, not stubbed):
-//   * `vector deleting destructor' @0x82B9DDE8 -- tears down the embedded TimerHandle
-//     (mTimer) through an un-homed XEX 'STUB' symbol (identical to the un-resolved teardown
-//     that BLOCKS ReverbModel1::Dtor); the callee is un-homed, so BLOCKED rather than
-//     fabricated.
-// The bodied functions below do not reference it, so this TU compiles under the per-TU gate.
+// All nine functions are now reconstructed. The `vector deleting destructor' @0x82B9DDE8 was
+// previously left blocked on an "un-homed STUB" teardown of the embedded TimerHandle: that
+// STUB resolves to 0x82AD5078, which is the image's shared empty thunk (a lone `blr` that the
+// X360 identical-code-folder collapses every trivial function onto). i.e. ~TimerHandle is a
+// TRIVIAL destructor (all TimerHandle members are POD -- pointers, ints, bytes -- so it owns
+// nothing to release), and the compiler folded it to that no-op. The destructor is therefore
+// faithfully reconstructed: the empty ~TimerHandle call, the real ~DelayLine, the base-vtable
+// reinstall, and the flag-gated free -- store-for-store with the asm.
 // =====================================================================================
 
 #include "rw/audio/core/plugins/Delay.h"
@@ -40,10 +41,11 @@ namespace core
 extern "C" System *off_83271928;
 
 // off_8217F58C -- the Delay v-table installed at construction. off_820AA810 -- the base
-// PlugIn v-table the (blocked) destructor reinstalls. These are opaque data symbols in the
-// XEX (no exported contents); modelled as honest placeholder storage so the ctor links
-// without fabricating their contents.
-static void *const KDL_DelayVTable = nullptr; // off_8217F58C
+// PlugIn v-table the destructor reinstalls before any free. These are opaque data symbols in
+// the XEX (no exported contents); modelled as honest placeholder storage so the ctor / dtor
+// link without fabricating their contents.
+static void *const KDL_DelayVTable      = nullptr; // off_8217F58C
+static void *const KDL_BasePlugInVTable = nullptr; // off_820AA810
 
 // The delay targets the fixed 48 kHz internal rate (flt_820AA808); the latency form uses the
 // shared 5.0 scale (flt_8200426C, grounded == 5.0 across the image); flt_82001CC0 == 0.0.
@@ -85,6 +87,32 @@ Delay *Delay::Delay_ctor(Delay *self)
     new (&self->mDelayLine) DelayLine();           // addi r3,r31,0x5C -> &mDelayLine (real ctor)
     TimerHandle::TimerHandle_ctor(&self->mTimer);  // addi r3,r31,0x98 -> &mTimer
 
+    return self;
+}
+
+// -------------------------------------------------------------------------------------
+// `vector deleting destructor' @0x82B9DDE8 -- destruct then conditionally free.
+//
+//   ~TimerHandle(&mTimer); ~DelayLine(&mDelayLine);
+//   mBase.mpVTable = off_820AA810;                 // reinstall the base PlugIn v-table
+//   if (flags & 1) operator delete(self);
+//   return self;
+//
+// The leading teardown call (r3 = self+0x98 = &mTimer -> "STUB") targets 0x82AD5078, the
+// image's shared empty thunk (a lone `blr`): ~TimerHandle is trivial (POD members), folded to
+// the no-op, so the call is reproduced but does nothing. ~DelayFilter (mFilter @+0x44) is
+// likewise trivial and the compiler elided its call entirely -- so, per the asm, none is made
+// here. Only mTimer and mDelayLine get explicit destructor calls, in asm order.
+// -------------------------------------------------------------------------------------
+void *Delay::VectorDeletingDestructor(Delay *self, char flags)
+{
+    self->mTimer.~TimerHandle();  // bl STUB (0x82AD5078) -- trivial/no-op ~TimerHandle
+    self->mDelayLine.~DelayLine(); // bl ~DelayLine (0x82B6E498)
+
+    self->mBase.mpVTable = KDL_BasePlugInVTable; // stw off_820AA810 @ +0x00
+
+    if ((flags & 1) != 0)
+        ::operator delete(self);
     return self;
 }
 

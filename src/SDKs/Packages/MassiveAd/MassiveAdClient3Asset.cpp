@@ -419,6 +419,80 @@ int CMassiveAsset::RequestDownloadBinary()
 }
 
 // ---------------------------------------------------------------------------
+// CMassiveAsset::ReportImpressions @ 0x82BDA980
+//
+// Flushes every record's accumulated impressions + interactions into the current
+// zone's pending CRequestImpressionUpdate, then resets each record. With no
+// current zone it records -592 and returns that. For each listed CMassiveRecord:
+//   - reports the primary impression accumulator (mImpression0 @ record+0x20)
+//     when it has both a non-zero visibility count (+0x58) and elapsed time
+//     (+0x34), tagged as the primary slot (1);
+//   - reports the secondary accumulator (mImpression1 @ record+0x80) the same way,
+//     tagged as the secondary slot (0);
+//   - walks the interaction sub-record list and emits one AddInteractionR per
+//     entry, reading three fields of the listed sub-record (+0x14 -> uTag31,
+//     +0x18 -> nTag51, +0x20 -> sTag32) plus the record's own +0x14/+0x18;
+//   - resets the record (clears both accumulators + the interaction list).
+// Returns 0.
+//
+// Faithful note: the X360 loads the current interaction sub-record with THREE
+// separate GetCurrData calls (one opaque call per field read; the cursor does not
+// advance between them, so all three yield the same pointer) -- reproduced here as
+// three sequenced reads to preserve those calls exactly.
+// ---------------------------------------------------------------------------
+int CMassiveAsset::ReportImpressions()
+{
+    CMassiveClientCore* lpCore = CMassiveClientCore::Instance();
+    CMassiveZoneManager* lpZone = lpCore->GetCurrentZone();
+    if (!lpZone)
+        return SetLastError(-592, reinterpret_cast<const char*>(0)); // &unk_820046A7
+
+    mRecordList.GoToStart();
+    while (mRecordList.GetCurrent())  // *(this + 0x30) -- the record-list cursor
+    {
+        CMassiveRecord* lpRecord =
+            static_cast<CMassiveRecord*>(mRecordList.GetCurrData());
+
+        // Primary impression accumulator (record + 0x20).
+        if (lpRecord->mImpression0.GetField58() && lpRecord->mImpression0.GetField34())
+            SendReport(lpRecord->mnField18, 1, &lpRecord->mImpression0);
+
+        // Secondary impression accumulator (record + 0x80).
+        if (lpRecord->mImpression1.GetField58() && lpRecord->mImpression1.GetField34())
+            SendReport(lpRecord->mnField18, 0, &lpRecord->mImpression1);
+
+        // Interaction sub-records: one interaction report per listed entry.
+        if (lpRecord->mInteractionRecords.GetCount() != 0)  // *(record + 0xF0)
+        {
+            lpRecord->mInteractionRecords.GoToStart();
+            while (lpRecord->mInteractionRecords.GetCurrent())  // *(record + 0xEC)
+            {
+                InteractionRecord* lpI1 = static_cast<InteractionRecord*>(
+                    lpRecord->mInteractionRecords.GetCurrData());
+                InteractionRecord* lpI2 = static_cast<InteractionRecord*>(
+                    lpRecord->mInteractionRecords.GetCurrData());
+                InteractionRecord* lpI3 = static_cast<InteractionRecord*>(
+                    lpRecord->mInteractionRecords.GetCurrData());
+
+                lpZone->GetImpressionUpdate()->AddInteractionR(  // *(CurrentZone + 0x6C)
+                    static_cast<unsigned char>(lpI3->GetField14()),      // r4 uTag31 = *(v9 + 0x14)
+                    static_cast<unsigned int>(lpRecord->mnField18),      // r5 nTag38 = record + 0x18
+                    static_cast<unsigned int>(lpRecord->mnField14),      // r6 nTag21 = record + 0x14
+                    static_cast<unsigned long long>(lpI2->GetField18()), // r7 nTag51 = *(v8 + 0x18)
+                    lpI1->GetField20());                                 // r8 sTag32 = *(v7 + 0x20)
+
+                lpRecord->mInteractionRecords.GoToNext();
+            }
+        }
+
+        lpRecord->Reset();
+        mRecordList.GoToNext();
+    }
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // CMassiveAsset::SendReport @ 0x82BDA688
 //
 // Adds ONE media-type impression-report block for the given accumulator to the
