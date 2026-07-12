@@ -46,6 +46,16 @@ extern void  XMemFree(void* pAddress, u32 uAttributes);
 class CCapture
 {
 public:
+    // ---- capture-stream I/O callbacks (function-pointer members word1..word3) --
+    // Only the WRITE callback is called in this TU (WriteData/End): it takes a
+    // byte blob + size and returns a status int -- signature attested by the asm
+    // (mtctr/bctrl with r3=data, r4=size, result in r3). The alloc/free callbacks
+    // are stored by Initialize but not invoked here; their signatures are the
+    // natural alloc(size)->ptr / free(ptr) pair.
+    typedef s32   (*TWriteFn)(const void* pData, s32 iSize);
+    typedef void* (*TAllocFn)(u32 uSize);
+    typedef void  (*TFreeFn)(void* pData);
+
     // Fixed-size hash table: 64 buckets, each a 3-word slot.
     class HashMap
     {
@@ -76,15 +86,88 @@ public:
         // name, not byte offset).
         struct Bucket
         {
-            void* mpData;   // +0x00  heap block (HashMemAlloc); freed in ~HashMap
-            u32   muWord1;  // +0x04  zero-initialised metadata (role not attested)
-            u32   muWord2;  // +0x08  zero-initialised metadata (role not attested)
+            void* mpData;   // +0x00  heap block (HashMemAlloc): base of the
+                            //        (pageAddress, pageFlags) entry array; freed in ~HashMap
+            u32   muWord1;  // +0x04  live entry count (each entry = 2 words / 8 bytes)
+            u32   muWord2;  // +0x08  entry capacity
         };
 
         Bucket maBuckets[KI_BUCKET_COUNT];  // +0x000  0x300 bytes on the X360
 
         friend void _CCaptureHashMapAssertLayout();
+        // CCapture drives its own bucket table directly (End resets the counts,
+        // SavePages walks the entries) -- attested by the X360 asm.
+        friend class CCapture;
     };
+
+    // ======================================================================
+    // CCapture instance -- the outer GPU-capture object. Layout reconstructed
+    // purely from the byte offsets the X360 asm loads/stores (no DWARF, no
+    // reference source). word0 is the vtable pointer (the class has virtuals,
+    // dispatched in the not-yet-homed PreSubmit/HandleType3Opcode); the three
+    // callbacks sit at word1..word3; the 64-bucket HashMap occupies word4..word195
+    // (0x10..0x30F); the trailing state words start at word196 (+0x310). Past
+    // word0 the absolute byte offsets shift on an LLP64 host (4->8 pointer widening
+    // + the wider HashMap), so nothing here is offset-asserted -- every member is
+    // reached by name.
+    // ======================================================================
+
+    // -------- FAITHFULLY BODIED (recovered from X360 asm) --------
+
+    // @ 0x8295A678 -- reset all capture state and install the write/alloc/free
+    // callbacks (falling back to the D3D defaults when null). Returns `this`.
+    CCapture* Initialize(void* pDevice, u32 uBase, TWriteFn pfnWrite,
+                         TAllocFn pfnAlloc, TFreeFn pfnFree);
+
+    // @ 0x8295A4C0 -- begin a capture: set the active flag and emit the opening
+    // record. Fails (0x8007000E) when already in the error state.
+    s32 Start();
+
+    // @ 0x8295A748 -- end a capture: clear the active flag, emit the closing
+    // record, and empty the page hash table (reset every bucket's count).
+    s32 End();
+
+    // @ 0x82959B30 -- serialise one record: emit the 20-byte header via the write
+    // callback, then the payload (bounce-buffered through the XDK heap for type 8).
+    s32 WriteData(s32 iType, const void* pPayload, s32 iSize,
+                  s32 iParam0, s32 iParam1, s32 iParam2);
+
+    // @ 0x82959C00 -- write out every dirty page tracked in the hash table and
+    // roll the page-tag generation forward.
+    s32 SavePages();
+
+    // @ 0x829599E0 -- no-op hook (empty on the X360).
+    void PostSubmit();
+
+    // @ 0x8295BC48 -- no-op hook (empty on the X360).
+    void ShadowShaderProgram();
+
+private:
+    void*    mpVTable;       // +0x000 word0   vtable pointer (virtuals not homed here)
+    TWriteFn mpfnWrite;      // +0x004 word1   capture-stream write callback
+    TAllocFn mpfnAlloc;      // +0x008 word2   allocation callback (stored; unused here)
+    TFreeFn  mpfnFree;       // +0x00C word3   free callback (stored; unused here)
+    HashMap  mHashMap;       // +0x010 word4   64-bucket used-page table (0x300 B on X360)
+    u32      muWord196;      // +0x310 word196 record base value (Init=0)
+    u32      muFlags;        // +0x314 word197 capture state / flag bits
+    u32      muWord198;      // +0x318 word198 duplicate-address counter / current page tag
+    u32      muWord199;      // +0x31C word199 last-saved page tag
+    u32      muWord200;      // +0x320 word200
+    u32      muWord201;      // +0x324 word201
+    u32      muWord202;      // +0x328 word202
+    u32      muWord203;      // +0x32C word203
+    u32      muCurrentBase;  // +0x330 word204 current pushbuffer base address
+    u32      muWord205;      // +0x334 word205
+    void*    mpDevice;       // +0x338 word206 device / context pointer
+    u32      muPendingDpc;   // +0x33C word207 pending PIX worker-DPC argument
+    u32      muWord208;      // +0x340 word208 register mask A
+    u32      muWord209;      // +0x344 word209 register mask B
+    u32      muWord210;      // +0x348 word210 register value A
+    u32      muWord211;      // +0x34C word211 register value B
+    u32      muWord212;      // +0x350 word212 DPC callback function pointer
+    u32      muWord213;      // +0x354 word213 DPC callback argument
+
+    friend void _CCaptureHashMapAssertLayout();
 };
 
 } // namespace D3D
