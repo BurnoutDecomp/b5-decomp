@@ -25,12 +25,12 @@
 //     MassiveAdClient3::CMassiveZoneManager::AssetFind                 @ 0x82BD2D40
 //     MassiveAdClient3::CMassiveZoneManager::DeleteElements            @ 0x82BD2A88
 //     MassiveAdClient3::CMassiveZoneManager::PreSubscriberAssignT      @ 0x82BD3630
-//     MassiveAdClient3::CMassiveZoneManager::MAOFind                   @ 0x82BD2CB0 (BLOCKED)
+//     MassiveAdClient3::CMassiveZoneManager::MAOFind                   @ 0x82BD2CB0
 //     MassiveAdClient3::CMassiveZoneManager::CreateImpUpdateReque      @ 0x82BD2E00 (BLOCKED)
 //     MassiveAdClient3::CMassiveZoneManager::HandleResponse            @ 0x82BD3410 (BLOCKED)
-//     MassiveAdClient3::CMassiveZoneManager::ReportImpressions         @ 0x82BD2F08 (BLOCKED)
-//     MassiveAdClient3::CMassiveZoneManager::Resume                    @ 0x82BD3088 (BLOCKED)
-//     MassiveAdClient3::CMassiveZoneManager::SetAssetExpired           @ 0x82BD2DA0 (BLOCKED)
+//     MassiveAdClient3::CMassiveZoneManager::ReportImpressions         @ 0x82BD2F08
+//     MassiveAdClient3::CMassiveZoneManager::Resume                    @ 0x82BD3088
+//     MassiveAdClient3::CMassiveZoneManager::SetAssetExpired           @ 0x82BD2DA0
 //     MassiveAdClient3::CMassiveZoneManager::SetAssetExpiredByOrderID  @ 0x82BD3710 (BLOCKED)
 //     MassiveAdClient3::CMassiveZoneManager::Tick                      @ 0x82BD3130 (BLOCKED)
 //
@@ -41,22 +41,32 @@
 // friend); PreSubscriberAssignT reads CMassiveAdObjectSubscriber::mpcName (now a
 // friend) and dispatches CMassiveAdObject::SubscriberAdd (a now-homed virtual).
 //
-// The 8 still-BLOCKED bodies are DECLARED here (so the class shape / vftable is
+// W41 UNBLOCK: MAOFind, SetAssetExpired, Resume and ReportImpressions are now
+// implemented -- the CMassiveAdObject surface-pin home was grown ADDITIVELY with
+// the ad object's own name field (mpcAdObjectName @ +0x14, read by MAOFind) and
+// the three vftable slots the zone manager forwards through (SetAssetExpired
+// @ +0x08, ReportImpressions @ +0x10, Resume @ +0x18 -- their bodies stay in the
+// CMassiveAdObject TU). Resume also calls the now-homed CRequestBuilder::Resume
+// and CMassiveAsset::Resume; ReportImpressions calls the now-homed CMassiveAsset::
+// ReportImpressions and CRequestImpressionUpdate::Finish + CRequestObject::Submit
+// on the pending update (its CreateImpUpdateReque helper stays blocked below, but
+// is declared, so the flush body compiles and is faithful).
+//
+// The 4 still-BLOCKED bodies are DECLARED here (so the class shape / vftable is
 // complete and the compile gate is clean) but left for a later ledger slice:
 // they read/dispatch through collaborators whose owning layout is not yet
 // reconstructed and must not be guessed --
 //   - CRequestEnterZone (Tick / HandleResponse build + query one): no home.
-//   - CRequestImpressionUpdate::CreateRequest/Finish (CreateImpUpdateReque /
-//     ReportImpressions build + seal one): the ctor is homed but these bodies are
-//     not attested here.
 //   - CMassiveClientCore internal state at +0x10 and player/session fields at
 //     +0x3C..+0x44 (CreateImpUpdateReque / HandleResponse / Tick read them):
-//     ClientCore is a memberless surface-pin here.
-//   - CMassiveAdObject vftable slots +0x08/+0x0C/+0x10/+0x18 (SetAssetExpired /
-//     Tick / ReportImpressions / Resume dispatch through them) and its +0x14
-//     name field (MAOFind) -- not exposed by the surface-pin home.
+//     ClientCore is a memberless surface-pin here (no state field homed), and
+//     CRequestImpressionUpdate::CreateRequest is not attested here either.
+//   - CMassiveClientCore::ZoneManagerRemove (HandleResponse tail): no home.
 //   - CMassiveAsset::mnField38's un-homed order-record pointee (SetAssetExpired
-//     ByOrderID reads asset.mnField38->+0x14 for the order id): still un-homed.
+//     ByOrderID reads asset.mnField38->+0x14 for the CMassiveOrder number): the
+//     committed CMassiveAsset stores +0x38 as a 32-bit int, so reading it as a
+//     CMassiveOrder* would need a NON-ADDITIVE int->pointer width change on that
+//     committed member -- left blocked rather than fork the asset layout.
 //
 // Layout over the CRequestBuilder base (base = CMassiveBaseObject[+0x00..+0x13]
 // + CMassiveList mRequestList[+0x14] + int mnSubmitStatus[+0x24]; own members
@@ -148,9 +158,9 @@ public:
 
     // ----- ad-object / asset lookups -----------------------------------------
 
-    // @ 0x82BCEA60 / 0x82BD2CB0. BLOCKED -- finds the ad object named pcName in
-    // this zone by comparing each object's name at CMassiveAdObject +0x14, a field
-    // not exposed by the surface-pin CMassiveAdObject home. Called as
+    // @ 0x82BCEA60 / 0x82BD2CB0. Finds the ad object named pcName in this zone by
+    // comparing each object's own name (CMassiveAdObject::mpcAdObjectName @ +0x14)
+    // against pcName; a bad name records -300, a miss returns null. Called as
     // `currentZone->MAOFind(name)` by the subscriber ctor.
     CMassiveAdObject* MAOFind(const char* pcName);
 
@@ -165,9 +175,11 @@ public:
     // +0x10 == 4). Reads CMassiveClientCore internal state.
     int CreateImpUpdateReque();
 
-    // @ 0x82BD2F08. BLOCKED -- flushes queued impressions: reports every asset /
-    // ad object into the pending impression update, seals + submits it, then
-    // starts a fresh one. Calls CMassiveAsset / CMassiveAdObject methods.
+    // @ 0x82BD2F08. Flushes queued impressions: ensures a pending impression
+    // update exists (CreateImpUpdateReque), reports every asset (CMassiveAsset::
+    // ReportImpressions) and ad object (vftable slot +0x10) into it, seals (Finish)
+    // + submits it, then starts a fresh one. Returns 0, or the CreateImpUpdateReque
+    // error when none could be allocated.
     int ReportImpressions();
 
     // ----- zone lifecycle (BLOCKED) ------------------------------------------
@@ -177,8 +189,9 @@ public:
     // object (state 2). Reads CMassiveClientCore player/session fields.
     int Tick();
 
-    // @ 0x82BD3088. BLOCKED -- resumes the base builder then every ad object and
-    // asset (name-hides CRequestBuilder::Resume). Calls CMassiveAsset::Resume.
+    // @ 0x82BD3088. Resumes the base builder (name-hides CRequestBuilder::Resume,
+    // called explicitly) then every ad object (vftable slot +0x18) and asset
+    // (CMassiveAsset::Resume). Returns 1.
     int Resume();
 
     // @ 0x82BD2A88. Deletes every ad object, asset and order (a polymorphic
@@ -186,8 +199,8 @@ public:
     // the pre-subscriber queue (which is not element-owning). Returns 1.
     int DeleteElements();
 
-    // @ 0x82BD2DA0. BLOCKED -- marks nAssetExpiry expired on every ad object
-    // (vftable slot +0x08).
+    // @ 0x82BD2DA0. Marks nAssetExpiry expired on every ad object in the zone
+    // (dispatch through CMassiveAdObject vftable slot +0x08). Returns 1.
     int SetAssetExpired(int nAssetExpiry);
 
     // @ 0x82BD3710. BLOCKED -- expires the asset carrying order id nOrderId across

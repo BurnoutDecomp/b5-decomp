@@ -6,9 +6,10 @@
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h" // CRequestObject::GetServerType
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3Asset.h"      // CMassiveAsset (AssetFind / DeleteElements)
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3AdObject.h"   // CMassiveAdObject::SubscriberAdd (PreSubscriberAssignT)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Asset.h"      // CMassiveAsset (AssetFind / DeleteElements / Resume / ReportImpressions)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3AdObject.h"   // CMassiveAdObject (SubscriberAdd / MAOFind name / SetAssetExpired / ReportImpressions / Resume)
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h" // CMassiveAdObjectSubscriber::mpcName (PreSubscriberAssignT)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestImpressionUpdate.h" // CRequestImpressionUpdate::Finish (ReportImpressions)
 
 // External MassiveAd string-compare helper (`bl CompareStrings`). Returns 0 when
 // the two NUL-terminated strings are equal -- the X360 branches on the result
@@ -292,6 +293,127 @@ int CMassiveZoneManager::PreSubscriberAssignT(CMassiveAdObject* pAdObject, const
         if (!lbRemoved)
             return 0;
     }
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::MAOFind @ 0x82BD2CB0
+//
+// Finds the ad object named pcName in this zone by comparing each ad object's
+// own name (CMassiveAdObject::mpcAdObjectName, X360 +0x14) against pcName. A bad
+// name records -300 and returns null; a miss returns null. Called as
+// `currentZone->MAOFind(name)` by CMassiveAdObjectSubscriber's ctor to bind a
+// subscriber to an already-present ad object.
+// ---------------------------------------------------------------------------
+CMassiveAdObject* CMassiveZoneManager::MAOFind(const char* pcName)
+{
+    if (!CMassiveBaseObject::IsValidString(pcName))
+    {
+        SetLastError(-300, reinterpret_cast<const char*>(0)); // &unk_820046A7
+        return 0;
+    }
+
+    mAdObjectList.GoToStart();
+    while (mAdObjectList.GetCurrent())  // while (*(a1 + 0x44)) -- mAdObjectList cursor
+    {
+        CMassiveAdObject* lpObject =
+            static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
+        if (CompareStrings(pcName, lpObject->mpcAdObjectName) == 0)  // *(CurrData + 0x14)
+            return static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
+        mAdObjectList.GoToNext();
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::SetAssetExpired @ 0x82BD2DA0
+//
+// Marks the asset identified by nAssetExpiry expired on every ad object in the
+// zone, dispatching through each ad object's vftable slot +0x08
+// (CMassiveAdObject::SetAssetExpired). Returns 1.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::SetAssetExpired(int nAssetExpiry)
+{
+    mAdObjectList.GoToStart();
+    while (mAdObjectList.GetCurrent())  // while (*(a1 + 0x44)) -- mAdObjectList cursor
+    {
+        CMassiveAdObject* lpObject =
+            static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
+        lpObject->SetAssetExpired(nAssetExpiry);  // (*(*CurrData + 8))(CurrData, a2)
+        mAdObjectList.GoToNext();
+    }
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::Resume @ 0x82BD3088
+//
+// Resumes the base request builder's outstanding requests (name-hides
+// CRequestBuilder::Resume, so the base is called explicitly), then resumes every
+// ad object (vftable slot +0x18) and every asset (CMassiveAsset::Resume).
+// Returns 1.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::Resume()
+{
+    CRequestBuilder::Resume();  // name-hidden base call
+
+    mAdObjectList.GoToStart();
+    while (mAdObjectList.GetCurrent())  // while (*(a1 + 0x44)) -- mAdObjectList cursor
+    {
+        CMassiveAdObject* lpObject =
+            static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
+        lpObject->Resume();  // (*(*CurrData + 0x18))(CurrData)
+        mAdObjectList.GoToNext();
+    }
+
+    mAssetList.GoToStart();
+    while (mAssetList.GetCurrent())  // while (*(a1 + 0x54)) -- mAssetList cursor
+    {
+        CMassiveAsset* lpAsset = static_cast<CMassiveAsset*>(mAssetList.GetCurrData());
+        lpAsset->Resume();
+        mAssetList.GoToNext();
+    }
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::ReportImpressions @ 0x82BD2F08
+//
+// Flushes the zone's queued impressions: ensures a pending CRequestImpression
+// Update exists (CreateImpUpdateReque; a non-null one short-circuits, else its
+// error is returned), reports every asset (CMassiveAsset::ReportImpressions) and
+// every ad object (vftable slot +0x10) into it, seals it (Finish) and submits it,
+// then clears the slot and lazily starts a fresh update. Returns 0 on the flush
+// path, or the CreateImpUpdateReque error when no update could be allocated.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::ReportImpressions()
+{
+    int lResult = 0;
+    if (mpImpressionUpdate || (lResult = CreateImpUpdateReque()) == 0)
+    {
+        mAssetList.GoToStart();
+        while (mAssetList.GetCurrent())  // while (*(a1 + 0x54)) -- mAssetList cursor
+        {
+            CMassiveAsset* lpAsset = static_cast<CMassiveAsset*>(mAssetList.GetCurrData());
+            lpAsset->ReportImpressions();
+            mAssetList.GoToNext();
+        }
+
+        mAdObjectList.GoToStart();
+        while (mAdObjectList.GetCurrent())  // while (*(a1 + 0x44)) -- mAdObjectList cursor
+        {
+            CMassiveAdObject* lpObject =
+                static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
+            lpObject->ReportImpressions();  // (*(*v4 + 0x10))(v4)
+            mAdObjectList.GoToNext();
+        }
+
+        mpImpressionUpdate->Finish();
+        mpImpressionUpdate->Submit();  // CRequestObject::Submit on the pending update
+        mpImpressionUpdate = 0;
+        CreateImpUpdateReque();  // start a fresh pending update
+        return 0;
+    }
+    return lResult;
 }
 
 } // namespace MassiveAdClient3

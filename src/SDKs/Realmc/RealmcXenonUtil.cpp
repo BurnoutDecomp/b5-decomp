@@ -477,6 +477,91 @@ int XenonUtil::WriteFile(HANDLE lHandle, const void* lpBuffer, DWORD luBytes, DW
 }
 
 // ---------------------------------------------------------------------------
+// ReadFileLayer2 @ 0x82B540F0 -- read a "MC02" record from an open file into the
+// entry's data buffer, verifying the header and the payload CRC.
+//
+//   1. read the 28-byte header, verify magic/size against the real file size;
+//   2. confirm the header's stored data size matches the entry's expected size;
+//   3. read exactly that many bytes into the entry's mpData buffer;
+//   4. confirm the read length, then CRC the payload and verify it against the
+//      header's stored data checksum.
+// Any mismatch yields 8 (generic I/O error); ReadFile propagates its own codes.
+// ---------------------------------------------------------------------------
+int XenonUtil::ReadFileLayer2(HANDLE lHandle, const LoadEntryInfo* lpEntry)
+{
+    u32   laHeader[7] = {};   // the on-disk 28-byte "MC02" record (7 words)
+    DWORD luBytesRead = 0;
+
+    DWORD luFileSize = GetFileSize(lHandle, nullptr);
+
+    int liResult = ReadFile(lHandle, laHeader, 28, &luBytesRead);
+    if (liResult != 0)
+        return liResult;
+
+    liResult = VerifyFileHeader(laHeader, luFileSize);
+    if (liResult != 0)
+        return liResult;
+
+    // The header's stored data size (word 3) must equal the entry's expected size.
+    u32 luDataSize = lpEntry->muDataSize;
+    if (laHeader[3] != luDataSize)
+        return 8;
+
+    liResult = ReadFile(lHandle, lpEntry->mpData, luDataSize, &luBytesRead);
+    if (liResult != 0)
+        return liResult;
+
+    if (laHeader[3] != luBytesRead)
+        return 8;
+
+    u32 luDataCrc = Crc32(lpEntry->mpData, lpEntry->muDataSize);
+    return VerifyDataIntegrity(laHeader, 0, luDataCrc);
+}
+
+// ---------------------------------------------------------------------------
+// SaveDataRegular @ 0x82B53FF0 -- build a "MC02" record header for the entry's
+// payload and write the header followed by the payload to the open file.
+//
+// The 28-byte header is: [0] 'MC02' magic, [1] total file size (payload + 28),
+// [2] 0, [3] payload size, [4] the empty-input CRC seed (Crc32 of nothing),
+// [5] the payload CRC, [6] the header CRC over the first 24 bytes. The write is
+// a two-span loop (header span, then payload span) that stops on the first
+// WriteFile error -- mirroring the X360 iovec walk.
+// ---------------------------------------------------------------------------
+int XenonUtil::SaveDataRegular(HANDLE lHandle, const LoadEntryInfo* lpEntry)
+{
+    const u32 KU_MAGIC_MC02 = 0x4D433032u;   // 'MC02'
+
+    u32 laHeader[7] = {};
+    laHeader[0] = KU_MAGIC_MC02;
+    laHeader[3] = lpEntry->muDataSize;
+    laHeader[1] = lpEntry->muDataSize + 28;             // header + payload
+    laHeader[5] = Crc32(lpEntry->mpData, lpEntry->muDataSize);  // payload CRC
+    laHeader[4] = Crc32(nullptr, 0);                    // empty-input CRC seed
+    laHeader[2] = 0;
+    laHeader[6] = Crc32(laHeader, 24);                  // header CRC over words 0..5
+
+    // Two write spans: the header, then the payload. WriteFile short-circuits the
+    // loop on the first non-zero result code.
+    struct WriteSpan { const void* mpBuffer; DWORD muSize; };
+    const WriteSpan laSpans[2] =
+    {
+        { laHeader,        28 },
+        { lpEntry->mpData, lpEntry->muDataSize },
+    };
+
+    int   liResult = 0;
+    DWORD luWritten = 0;
+    for (int i = 0; i < 2; ++i)
+    {
+        liResult = WriteFile(lHandle, laSpans[i].mpBuffer, laSpans[i].muSize, &luWritten);
+        if (liResult != 0)
+            break;
+    }
+    return liResult;
+}
+
+// ---------------------------------------------------------------------------
 // LoadFiles @ 0x82B54260 -- iterate the entry list, opening each file, reading
 // its layered payload and closing it; stop on the first error.
 // ---------------------------------------------------------------------------

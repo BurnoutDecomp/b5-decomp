@@ -2,7 +2,7 @@
 // CArrayLookahead.cpp  --  circular look-ahead ring of analysed video frames
 //   Reconstructed from BURNOUT_X360_ARTIST.XEX (asm authoritative).
 //
-//   Implemented here (7 of 9 ledger functions):
+//   Implemented here (all 9 ledger functions):
 //       CArrayLookahead::CArrayLookahead               @ 0x82A04BB8
 //       CArrayLookahead::~CArrayLookahead              @ 0x82A055B8
 //       CArrayLookahead::Initialize                    @ 0x82A04DE8
@@ -10,12 +10,13 @@
 //       CArrayLookahead::AddArrayElement               @ 0x82A04D30
 //       CArrayLookahead::SetDissolveDumpFile           @ 0x82A05258
 //       CArrayLookahead::Filter1stOrderDiffLumaVarMean @ 0x82A05048
-//
-//   BLOCKED (not implemented here) -- both drive the embedded
-//   CSeqDissolveDetector, whose Reset/Detect/ComputeLocalFeature engine lives in
-//   a separate, not-yet-reconstructed TU (see CSeqDissolveDetector.h):
 //       CArrayLookahead::DetectDissolve                @ 0x82A05648
 //       CArrayLookahead::DetectEventInArray            @ 0x82A05710
+//
+//   The last two drive the embedded CSeqDissolveDetector; its
+//   Reset/Detect/ComputeLocalFeature engine bodies live in a separate TU and are
+//   only DECLARED (in CSeqDissolveDetector.h) -- declarations are all that the
+//   per-TU `cl /c` compile gate needs.
 // ============================================================================
 
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CArrayLookahead.h"
@@ -31,6 +32,17 @@ const f32 KF_HALF       = 0.5f;        // flt_82001DA0
 
 // Dissolve run cap seeded when detection is enabled (Initialize: li 0x64).
 const s32 KI_MAX_DISSOLVE_LENGTH = 100;
+
+// Luma high-moment ratio guard + threshold used by the scene-cut classifier.
+// Both are attested by the Hex-Rays pseudocode (which decodes the rodata float
+// literals directly): flt_82002138 -> 0.0099999998, dbl_8210EF60 -> 1.2.
+const f32 KF_HIGHMOMENT_EPSILON  = 0.0099999998f;  // flt_82002138
+const f64 KF_HIGHMOMENT_RATIO    = 1.2;            // dbl_8210EF60 (double compare)
+
+// Per-slot scene-event codes (SElement::miEventType) written by the classifier.
+const s32 KI_EVENT_CUT_WEAK      = 2;  // weak cut candidate
+const s32 KI_EVENT_CUT           = 3;  // confirmed cut / dissolve boundary
+const s32 KI_EVENT_DISSOLVE_RUN  = 4;  // frame spanned by a detected dissolve
 } // namespace
 
 // @ 0x82A04BB8
@@ -260,4 +272,289 @@ void CArrayLookahead::Filter1stOrderDiffLumaVarMean()
         lpOlder->mfMeanDelta = lpNewer->mfMeanDelta * KF_WEIGHT_HI + lpOlder->mfMeanDelta * KF_WEIGHT_LO;
         lpNewer->mfMeanDelta = (lpNewer->mfMeanDelta + lpOlder->mfMeanDelta) * KF_HALF;
     }
+}
+
+// @ 0x82A05648
+// Run the dissolve detector against the slot three frames behind the read head
+// (a look-back that only makes sense once >= 3 frames have been analysed). If
+// that slot already carries the confirmed-cut marker the detector is reset;
+// otherwise it is fed the current (and, past the third frame, the previous)
+// histogram variance/mean deltas. All three detector calls tail-return `this`
+// in the asm; the value is discarded by the sole caller, so this is void.
+void CArrayLookahead::DetectDissolve()
+{
+    if (muFrameCount < 3u)
+    {
+        return;
+    }
+
+    // Index three frames back from the slot just behind the read head, wrapped
+    // into the ring.
+    u32 luIndex = muReadIndex;
+    if (luIndex == 0u)
+    {
+        luIndex = muCapacity;
+    }
+    luIndex -= 1u;
+    if (luIndex < 3u)
+    {
+        luIndex += muCapacity;
+    }
+    const u32 luTarget = luIndex - 3u;
+
+    SElement& lrTarget = mpArray[luTarget];
+    if (lrTarget.miEventType == KI_EVENT_CUT)
+    {
+        mDissolveDetector.Reset();
+        return;
+    }
+
+    const CHistogram* lpCurHist = lrTarget.mpHistogram;
+
+    if (muFrameCount == 3u)
+    {
+        // Third frame: no valid predecessor yet, so the "previous" deltas are 0.
+        mDissolveDetector.Detect(0.0f, lpCurHist->mfVarianceDelta,
+                                 0.0f, lpCurHist->mfMeanDelta);
+        return;
+    }
+
+    // Feed the previous slot's deltas alongside the target slot's.
+    u32 luPrev = luTarget;
+    if (luPrev == 0u)
+    {
+        luPrev = muCapacity;
+    }
+    const CHistogram* lpPrevHist = mpArray[luPrev - 1u].mpHistogram;
+
+    mDissolveDetector.Detect(lpPrevHist->mfVarianceDelta, lpCurHist->mfVarianceDelta,
+                             lpPrevHist->mfMeanDelta, lpCurHist->mfMeanDelta);
+}
+
+// @ 0x82A05710
+// Drain every frame pending between the read (tail) and write (head) heads.
+// For each, build its histogram, compute up to three back-reference change
+// flags, advance the read head, run the IIR filter and dissolve detector, then
+// classify scene cuts / dissolves on a two-frame delay. Returns nothing (the
+// asm leaves r3 undefined at the tail-return).
+void CArrayLookahead::DetectEventInArray()
+{
+    const u32 luWrite = muWriteIndex;
+    const u32 luRead  = muReadIndex;
+    if (luWrite == luRead)
+    {
+        return;
+    }
+
+    // Number of frames queued between tail and head (wrapped).
+    u32 luPending = (luWrite < luRead) ? (muCapacity - luRead + luWrite)
+                                       : (luWrite - luRead);
+    if (luPending == 0u)
+    {
+        return;
+    }
+
+    // Wrapped indices of the 1/2/3-frames-back slots. Each is (re)assigned in a
+    // frame-count-guarded block below before it is read; a full pass (>= 4
+    // frames) always sets all three. (The X360 asm seeds them from an
+    // uninitialised stack slot, relying on the same guards.)
+    u32       luPrev1 = 0u;
+    u32       luPrev2 = 0u;
+    u32       luPrev3 = 0u;
+    SElement* lpPrev1 = nullptr;
+    SElement* lpPrev2 = nullptr;
+    SElement* lpPrev3 = nullptr;
+
+    do
+    {
+        const u32 luCur = muReadIndex;
+        SElement& lrCur = mpArray[luCur];
+
+        // (a) Build the freshly-arrived frame's histogram. The asm passes
+        // (image, miImageHeight, miImageWidth) into CalcHistogram's
+        // (image, width, height) slots -- reproduced here register-for-register.
+        lrCur.mpHistogram->CalcHistogram(lrCur.mpImageData,
+                                         static_cast<u32>(miImageHeight),
+                                         static_cast<u32>(miImageWidth));
+
+        // (b) One frame back: luma high-moment ratio + primary hist-change.
+        if (muFrameCount > 0u)
+        {
+            luPrev1 = (luCur != 0u) ? (luCur - 1u) : (muCapacity - 1u);
+            lpPrev1 = &mpArray[luPrev1];
+
+            const CHistogram* lpCurHist  = lrCur.mpHistogram;
+            const CHistogram* lpPrevHist = lpPrev1->mpHistogram;
+
+            s32 liLumaChanged = 0;
+            if (lpPrevHist != nullptr
+                && lpCurHist->miValid != 0
+                && lpPrevHist->miValid != 0)
+            {
+                const f32 lfRatio = lpCurHist->mfHighMoment
+                    / (lpPrevHist->mfHighMoment + KF_HIGHMOMENT_EPSILON);
+                if (lfRatio > KF_HIGHMOMENT_RATIO)
+                {
+                    liLumaChanged = 1;
+                }
+            }
+            lrCur.miLumaChanged = liLumaChanged;
+
+            f32 lfSecondaryDist = 0.0f;
+            f32 lfPrimaryDist   = 0.0f;
+            lrCur.miHistChanged0 = lrCur.mpHistogram->isHistogramChanged(
+                lpPrev1->mpHistogram, static_cast<u32>(miImageSize),
+                &lfSecondaryDist, &lfPrimaryDist);
+        }
+
+        // (c) Two frames back: secondary hist-change.
+        if (muFrameCount > 1u)
+        {
+            luPrev2 = (luPrev1 != 0u) ? (luPrev1 - 1u) : (muCapacity - 1u);
+            lpPrev2 = &mpArray[luPrev2];
+
+            f32 lfSecondaryDist = 0.0f;
+            f32 lfPrimaryDist   = 0.0f;
+            lrCur.miHistChanged1 = lrCur.mpHistogram->isHistogramChanged(
+                lpPrev2->mpHistogram, static_cast<u32>(miImageSize),
+                &lfSecondaryDist, &lfPrimaryDist);
+        }
+
+        // (d) Three frames back: tertiary hist-change.
+        if (muFrameCount > 2u)
+        {
+            luPrev3 = (luPrev2 != 0u) ? (luPrev2 - 1u) : (muCapacity - 1u);
+            lpPrev3 = &mpArray[luPrev3];
+
+            f32 lfSecondaryDist = 0.0f;
+            f32 lfPrimaryDist   = 0.0f;
+            lrCur.miHistChanged2 = lrCur.mpHistogram->isHistogramChanged(
+                lpPrev3->mpHistogram, static_cast<u32>(miImageSize),
+                &lfSecondaryDist, &lfPrimaryDist);
+        }
+
+        lrCur.miProcessed = 1;
+
+        // Advance: one more frame analysed; read head follows the running count.
+        ++muFrameCount;
+        muReadIndex = muFrameCount % muCapacity;
+
+        if (miDissolveEnabled != 0)
+        {
+            Filter1stOrderDiffLumaVarMean();
+        }
+
+        if (muFrameCount >= 4u)
+        {
+            if (miDissolveEnabled != 0)
+            {
+                DetectDissolve();
+                if (mDissolveDetector.miDissolveDetected != 0)
+                {
+                    // Back-annotate the frames spanned by the detected dissolve
+                    // (clamped to the detected length and the ring headroom).
+                    s32 liRun = static_cast<s32>(muFrameCount) - 3;
+                    if (mDissolveDetector.miDissolveLength < liRun)
+                    {
+                        liRun = mDissolveDetector.miDissolveLength;
+                    }
+                    if (liRun >= static_cast<s32>(muCapacity) - 3)
+                    {
+                        liRun = static_cast<s32>(muCapacity) - 3;
+                    }
+
+                    if (liRun > 0)
+                    {
+                        u32 luMark = luPrev3;
+                        s32 liRemaining = liRun;
+                        do
+                        {
+                            mpArray[luMark].miEventType = KI_EVENT_DISSOLVE_RUN;
+                            if (luMark == 0u)
+                            {
+                                luMark = muCapacity;
+                            }
+                            --liRemaining;
+                            --luMark;
+                        }
+                        while (liRemaining != 0);
+                    }
+
+                    if (mDissolveDetector.miDissolveLength > 0)
+                    {
+                        mDissolveDetector.ComputeLocalFeature();
+                    }
+
+                    // Reset the detector's working state for the next dissolve;
+                    // miMaxDissolveLength (+0x08) is deliberately preserved.
+                    mDissolveDetector.miDissolveDetected = 0;
+                    mDissolveDetector.miDissolveLength   = 0;
+                    mDissolveDetector.mfReset0C          = 0.0f;
+                    mDissolveDetector.mfReset10          = 0.0f;
+                    mDissolveDetector.miReset14          = 0;
+                    mDissolveDetector.miReset18          = 0;
+                    mDissolveDetector.miReset1C          = 0;
+                    mDissolveDetector.miReset20          = 0;
+                    mDissolveDetector.miReset24          = 0;
+                }
+            }
+
+            // Scene-cut / dissolve classifier over the two-frames-back slot.
+            if (lpPrev2->miHistChanged0 != 0)
+            {
+                bool lbConfirmCut = false;
+                if (lpPrev2->miLumaChanged != 0)
+                {
+                    if (lrCur.miHistChanged2 == 0)
+                    {
+                        lbConfirmCut = true;
+                    }
+                    else
+                    {
+                        // Reverse-direction luma ratio (two-back / current).
+                        const CHistogram* lpCurHist  = lrCur.mpHistogram;
+                        const CHistogram* lpPrevHist = lpPrev2->mpHistogram;
+                        if (lpCurHist != nullptr
+                            && lpPrevHist->miValid != 0
+                            && lpCurHist->miValid != 0)
+                        {
+                            const f32 lfRatio = lpPrevHist->mfHighMoment
+                                / (lpCurHist->mfHighMoment + KF_HIGHMOMENT_EPSILON);
+                            if (lfRatio > KF_HIGHMOMENT_RATIO)
+                            {
+                                lbConfirmCut = true;
+                            }
+                        }
+                    }
+                }
+
+                if (lbConfirmCut)
+                {
+                    lpPrev2->miEventType = KI_EVENT_CUT;
+                    if (lpPrev1->miReserved14 != 0)
+                    {
+                        lpPrev1->miEventType = KI_EVENT_CUT;
+                        lrCur.miHistChanged0 = 0;
+                        lrCur.miEventType    = 0;
+                    }
+                    else
+                    {
+                        lpPrev1->miHistChanged0 = 0;
+                        lpPrev1->miEventType    = 0;
+                    }
+                }
+                else if (lpPrev3->miEventType == 0
+                    && lpPrev1->miHistChanged1 != 0
+                    && lrCur.miHistChanged2 != 0
+                    && lpPrev1->miHistChanged0 == 0
+                    && lrCur.miHistChanged0 == 0)
+                {
+                    lpPrev2->miEventType = KI_EVENT_CUT_WEAK;
+                }
+            }
+        }
+
+        --luPending;
+    }
+    while (luPending != 0);
 }

@@ -27,15 +27,32 @@
 //                      opaque save-entry payload (file/slot identifiers, name,
 //                      etc.) the X360 moves wholesale, so they are modelled as a
 //                      raw byte block rather than fabricated named members.
-//   +0x20 .. +0x2C     four 32-bit words. The ctor zero-stores each individually;
-//                      operator= copies each individually (NOT via the head
-//                      memcpy). Opaque to this TU -> modelled as a u32[4] tail.
+//   +0x20 .. +0x24     two opaque 32-bit words. The ctor zero-stores each
+//                      individually; operator= copies each individually (NOT via
+//                      the head memcpy). Opaque to this TU -> u32[2].
+//   +0x28              the entry's DATA-BUFFER pointer. Attested by the X360 asm:
+//                      RealmcIface::XenonUtil::ReadFileLayer2 loads *(entry+0x28)
+//                      and hands it to ReadFile as the read destination, and
+//                      SaveDataRegular hands it to WriteFile as the write source
+//                      and to Crc32 as the checksum input. Named `mpData`. On the
+//                      32-bit X360 it is a 4-byte word at +0x28; this project
+//                      compiles host x64, so it widens to an 8-byte pointer (same
+//                      pointer-widening rule as every recon -- the +0x28 offset is
+//                      X360-authoritative, the host offset is not byte-identical).
+//   +0x2C              the data byte count. Attested: ReadFileLayer2 passes it as
+//                      ReadFile's length and compares it against the on-disk
+//                      "MC02" header's stored size; SaveDataRegular writes it as
+//                      the record's size and CRCs `mpData` over it. Named
+//                      `muDataSize` (u32).
 //
-//   Total modelled size = 0x30 (48) bytes.
+//   Total X360 modelled size = 0x30 (48) bytes; the host layout is larger because
+//   the +0x28 data pointer widens to 8 bytes (semantic parity by named members,
+//   not byte offsets).
 //
-// STORE ORDER (operator=, exact): the four trailing words are copied FIRST
-// (+0x20, +0x24, +0x28, +0x2C in that order), THEN the 32-byte head is memcpy'd,
-// THEN the +0x1F flag byte is zeroed last. Reproduced verbatim in the .cpp.
+// STORE ORDER (operator=, exact): the two opaque trailing words are copied FIRST
+// (+0x20, +0x24), then the data pointer (+0x28) and the size (+0x2C), THEN the
+// 32-byte head is memcpy'd, THEN the +0x1F flag byte is zeroed last. Reproduced
+// verbatim in the .cpp.
 // ===========================================================================
 
 #include <cstdint>
@@ -49,13 +66,17 @@ public:
     // @ 0x82B519E8 -- zero the four trailing words and the leading head byte.
     LoadEntryInfo();
 
-    // @ 0x82B51A78 -- copy the four trailing words, then the 32-byte head, then
-    //                 clear the +0x1F flag byte.
+    // @ 0x82B51A78 -- copy the two opaque words, the data pointer and the size,
+    //                 then the 32-byte head, then clear the +0x1F flag byte.
     LoadEntryInfo& operator=(const LoadEntryInfo& rOther);
 
     std::uint8_t  maHead[0x20];     // +0x00  opaque head; +0x1F is a flag byte
-    std::uint32_t maTrailing[4];    // +0x20  four opaque 32-bit words
+    std::uint32_t maTrailing[2];    // +0x20  two opaque 32-bit words
+    void*         mpData;           // +0x28  data-buffer pointer (Read/WriteFile
+                                    //         buffer + Crc32 input; asm-attested)
+    std::uint32_t muDataSize;       // +0x2C  data byte count (asm-attested)
 };
-// sizeof(LoadEntryInfo) == 0x30 (48) bytes.
+// X360 sizeof == 0x30 (48) bytes; host sizeof is larger (the +0x28 data pointer
+// widens to 8 bytes on x64).
 
 } // namespace RealmcIface
