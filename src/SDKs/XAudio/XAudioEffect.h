@@ -58,4 +58,15 @@ protected:
     void* mpContext;   // +8
 };
 
+// ===========================================================================
+// VTABLE NOTE (class:XAUDIO::CEngine asm, wave W40). The engine's teardown does
+// NOT dispatch the CEffect vtable: CEngine::~CEngine releases its effect MANAGERS
+// through the free function `XAudioEffectManager_Release` (not a CEffect virtual),
+// and CEngine never calls a CEffect method directly. So this wave adds NO new
+// attested CEffect vtable slot beyond the destructor (slot 0) / operator delete
+// already modelled here. The CRoutedVoice per-route effect teardown that DOES
+// dispatch a CEffect vtable slot remains deferred in its own TU until that offset
+// is attested (see XAudioRoutedVoice.cpp); no slot is fabricated here.
+// ===========================================================================
+
 } // namespace XAUDIO
