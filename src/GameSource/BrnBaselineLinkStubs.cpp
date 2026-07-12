@@ -263,3 +263,52 @@ namespace renderengine
 // lives in GameShared/.../BitStream/CgsFloatQuantiser.cpp (wired into build_game_exe.bat).
 // (A prior inert "reconstruct as the range minimum" stub was removed: it collided
 // (LNK2005) with the real body and was itself an invented fallback.)
+
+// ===========================================================================
+// XDK boundary shims (profile link-closure wave, 2026-07-12): the Xbox 360 XDK
+// imports referenced by CgsSaveLoadPS3.cpp (SaveLoadSystem::Update's overlapped
+// pump) and CgsGuideIntegration.cpp (SystemUserProfile's XNotify/XUser watcher),
+// both now in the exe source list. These are XDK IMPORTS on the X360 (no game
+// body to reconstruct); the PC has no XDK, so each returns the value that makes
+// its caller take the no-device/no-user branch. Same precedent as
+// XShowDirtyDiscErrorUI above.
+// ===========================================================================
+
+// FLAG PC-platform leaf: XDK overlapped-result query; 0 (== ERROR_SUCCESS, not the
+// 997/996 still-pending codes) tells SaveLoadSystem::Update the async op is finished,
+// clearing its in-flight state -- no overlapped I/O ever starts on PC.
+extern "C" unsigned long XGetOverlappedResult(void* /*lpOverlapped*/,
+                                              unsigned long* /*lpdwResult*/,
+                                              int /*bWait*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK notification-listener creation; a null handle makes
+// SystemUserProfile::Update early-return (no sign-in/storage/invite events on PC).
+extern "C" void* XNotifyCreateListener(unsigned long long /*qwAreas*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK notification poll; 0 == "no notification pending"
+// (unreached while XNotifyCreateListener hands out no listener).
+extern "C" int XNotifyGetNext(void* /*hListener*/, unsigned long /*dwMsgFilter*/,
+                              unsigned long* /*pdwId*/, unsigned long* /*pParam*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK sign-in-state query; 0 == eXUserSigninState_NotSignedIn,
+// so SystemUserProfile::UpdateUserSigninState derives "not signed in" for any user.
+extern "C" u32 XUserGetSigninState(u32 /*luUserIndex*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK user-name query; success + empty name (unreached: no
+// user ever signs in without XNotify events, so the no-user sentinel holds).
+extern "C" u32 XUserGetName(u32 /*luUserIndex*/, char* lpszUserName, u32 luCchUserName)
+{
+    if (lpszUserName != 0 && luCchUserName != 0)
+    {
+        lpszUserName[0] = 0;
+    }
+    return 0;
+}
+
+// FLAG PC-platform leaf: XDK profile-settings read; a non-zero error return makes the
+// caller treat the read as failed rather than parse an unfilled results buffer
+// (unreached: SystemUserProfile only reads settings for a signed-in user).
+extern "C" u32 XUserReadProfileSettings(u32 /*luTitleId*/, u32 /*luUserIndex*/,
+                                        u32 /*luNumSettingIds*/, unsigned long* /*lpaSettingIds*/,
+                                        unsigned long* /*lpcbResults*/, void* /*lpResults*/,
+                                        void* /*lpOverlapped*/) { return 87u; /* ERROR_INVALID_PARAMETER */ }

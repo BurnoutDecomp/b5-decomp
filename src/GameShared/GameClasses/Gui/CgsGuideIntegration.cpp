@@ -15,6 +15,7 @@ extern "C"
                          unsigned long* lpdwId, unsigned long* lpParam);
     int   CloseHandle(void* lhObject);
     u32   XUserGetName(u32 luUserIndex, char* lpszUserName, u32 luCchUserName);
+    u32   XUserGetSigninState(u32 luUserIndex);
     u32   XUserReadProfileSettings(u32 luTitleId, u32 luUserIndex, u32 luNumSettingIds,
                                    unsigned long* lpaSettingIds, unsigned long* lpcbResults,
                                    void* lpResults, void* lpOverlapped);
@@ -149,15 +150,80 @@ namespace CgsGui
         }
 
         // RESULTS.pSettings -- pointer to the first XUSER_PROFILE_SETTING record, at buffer +4.
-        const u8* lpSetting = *reinterpret_cast<u8**>(maReadBuffer + 4);
+        // The buffer is the XDK's serialized XUSER_READ_PROFILE_SETTINGS_RESULTS record (an
+        // external platform byte stream; layout fixed by the XDK, not a game class).
+        const u8* lpSetting = *reinterpret_cast<u8**>(maReadBuffer + 4);   // XDK serialized record blob
 
         ProfileSettings lSettings;
         // (data.nData - 1) > 1 -- true unless the setting's u32 is 1 or 2.
         lSettings.mbExternalCamera =
-            (static_cast<u32>(*reinterpret_cast<const u32*>(lpSetting + 0x20)) - 1u) > 1u;
-        lSettings.miRumble = *reinterpret_cast<const u32*>(lpSetting + 0x48);
+            (static_cast<u32>(*reinterpret_cast<const u32*>(lpSetting + 0x20)) - 1u) > 1u;   // XDK serialized record blob
+        lSettings.miRumble = *reinterpret_cast<const u32*>(lpSetting + 0x48);   // XDK serialized record blob
 
         mpListener->ProfileSettingsChanged(lSettings); // vtable +4
+    }
+
+    // X360 0x82852440. Re-derive the current user's sign-in state (XUserGetSigninState) and,
+    // when signed in, a fresh copy of the user name; if either the state or the name changed,
+    // latch the new state, notify the listener (SigninStateChanged, vtable +8) and refresh the
+    // name + profile settings. (This function was missing from the batch export set; recovered
+    // with a one-off IDA dump of 0x82852440 -- the assert cites CgsGuideIntegration.cpp:231.)
+    void SystemUserProfile::UpdateUserSigninState()
+    {
+        // Snapshot the cached name; a signed-in user's fresh name is read over the snapshot.
+        char lacUserName[16];
+        memcpy(lacUserName, macUserName, sizeof(lacUserName));
+
+        // New state: 0 with no user selected, else XUserGetSigninState(index) != 0
+        // (cntlzw/extrwi/xori == the != 0 test).
+        u32 luSignedIn;
+        if (miUserIndex == KU_USERINDEX_NONE)
+        {
+            luSignedIn = 0;
+        }
+        else
+        {
+            luSignedIn = (XUserGetSigninState(miUserIndex) != 0) ? 1u : 0u;
+        }
+
+        // A real signed-in user: re-read the name into the snapshot buffer.
+        if (miUserIndex != KU_USERINDEX_NONE && luSignedIn == 1)
+        {
+            const u32 luErr = XUserGetName(miUserIndex, lacUserName, 0x10);
+            CGS_ASSERT(luErr == 0, "XUserGetName failed");
+        }
+
+        // Changed when the sign-in state differs, or (state unchanged) the cached name and the
+        // freshly read snapshot differ (the X360's inline byte-compare loop).
+        bool lbChanged = (miState != luSignedIn);
+        if (!lbChanged)
+        {
+            const u8* lpcOld = reinterpret_cast<const u8*>(macUserName);
+            const u8* lpcNew = reinterpret_cast<const u8*>(lacUserName);
+            s32 liDiff;
+            do
+            {
+                liDiff = static_cast<s32>(*lpcOld) - static_cast<s32>(*lpcNew);
+                if (*lpcOld == 0)
+                    break;
+                ++lpcOld;
+                ++lpcNew;
+            }
+            while (liDiff == 0);
+            lbChanged = (liDiff != 0);
+        }
+
+        if (lbChanged)
+        {
+            Listener* lpListener = mpListener;   // read before the state store, as the X360 does
+            miState = luSignedIn;                // stw r28, 4(this)
+            if (lpListener != nullptr)
+            {
+                lpListener->SigninStateChanged(static_cast<EUserSigninState>(luSignedIn)); // vtable +8
+            }
+            UpdateUserName();
+            UpdateProfileSettings();
+        }
     }
 
     // X360 0x8284CD70. Re-read the console signed-in user name; if it changed from the cached copy,

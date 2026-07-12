@@ -182,6 +182,13 @@ namespace CgsLanguage
         bool FormatText(char* lpacBuffer, u32 luBufferSize, s32 liValue,
                         ParameterFormatType leType);
 
+        // X360 0x828641F0 (DWARF CgsLanguageManager.h: the f32 overload) -- render
+        // lfValue under one of the time/percentage/currency/distance formats (the leaf
+        // dispatch switch); unknown formats hit the streamed float assert. The buffer's
+        // last byte is always NUL'd. Body in this TU.
+        bool FormatText(char* lpacBuffer, u32 luBufferSize, f32 lfValue,
+                        ParameterFormatType leType);
+
         // DWARF CgsLanguageManager.h:252 also declares a two-arg overload
         // FormatAndAddText(const char*, const char*); the X360 ARTIST build emitted no
         // body for it (never referenced), so it is declaration-only here.
@@ -252,6 +259,18 @@ namespace CgsLanguage
 
         void FormatSmallDistanceString(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
         void FormatLargeDistanceString(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
+
+        // The remaining leaves the float dispatcher @0x828641F0 switches onto (X360
+        // symbol names; the *Long / MediumText / Auto variants + the u8*-buffered
+        // hours-minutes-seconds form the DWARF spells at BBAACC).
+        void FormatSecondsAndHundredsStringLong(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatSecondsStringLong(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatMinutesSecondsStringMediumText(char* lpcTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
+        void FormatAutoDistanceString(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
+        void FormatAutoDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
+        void FormatSmallDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
+        void FormatLargeDistanceStringLong(char* lpcTarget, f32 lfMetres, s32 liTargetSize) const;
+        void FormatHoursAndMinutesAndSecondsString(u8* lpTarget, f32 lfTimeInSeconds, s32 liTargetSize) const;
 
         // The metres -> display-unit scale the HUD multiplies a distance by to decide whether the
         // small or large distance string reads better (X360 reads it as a float member at +0x60F8;

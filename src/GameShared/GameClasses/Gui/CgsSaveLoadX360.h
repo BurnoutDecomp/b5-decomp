@@ -146,13 +146,15 @@ namespace CgsGui
     {
     public:
         // CgsSaveLoadX360.cpp:155. X360 0x8284C050. Wire up the message display, language
-        // manager, the wide-char title (lpcTitle), the save/content file paths, the image
-        // dimensions and the extra-file (mugshot) size. Asserts lpMessageDisplay/lpLanguageManager
-        // are non-null. luExtraFilesSizeBytes is the last (28th) argument.
+        // manager, the wide-char title (lpcTitle), the save/content file paths, the mugshot
+        // grid dimensions (types x per-type; GetMugshotBufferFromImageId @0x8284C910 asserts
+        // them as miNumberOfMugshotTypes/miNumberOfMugshotsPerType) and the per-mugshot size.
+        // Asserts lpMessageDisplay/lpLanguageManager are non-null. luExtraFilesSizeBytes is
+        // the last (28th) argument.
         void Construct(MessageDisplay* lpMessageDisplay, LanguageManager* lpLanguageManager,
                        const char* lpcTitle, const char* lpcContentInfoFilePath,
-                       const char* lpcSaveFilePath, s32 liImageWidth, s32 liImageHeight,
-                       u32 luExtraFilesSizeBytes);
+                       const char* lpcSaveFilePath, s32 liNumberOfMugshotTypes,
+                       s32 liNumberOfMugshotsPerType, u32 luExtraFilesSizeBytes);
 
         // CgsSaveLoadX360.cpp:214. X360 0x82851FC0. Create the memory-card interface, allocate
         // the mugshot buffer from the linear allocator, and slurp the content-information file
@@ -204,6 +206,55 @@ namespace CgsGui
         // X360 0x828599A0. Show the autosave warning prompt (SAVELOAD_AUTOSAVE_WARNING), routing
         // confirmation to BootupStart.
         void BootupShowAutosaveWarning();
+
+        // X360 0x8284BF50 (assert cites the X360-baked CgsSaveLoadX360.h:745, i.e. an original
+        // header-inline emitted out-of-line). Map a MessageDisplay option INDEX (0..3) to the
+        // memory-card SDK's message CHOICE code (1..4); any other index fires
+        // "SaveLoad: unexpected option index: " and yields 0.
+        static u32 MessageChoiceForOptionIndex(u32 luOptionIndex);
+
+        // X360 0x8284C910. Resolve an image id (liImageId / 1000 == mugshot type,
+        // liImageId % 1000 == index within the type) to its slot inside the mugshot buffer:
+        // mpMugshotBufferData + (type * miNumberOfMugshotsPerType + index) *
+        // miExtraFilesSizeBytes. Asserts both components and the flattened index are in range.
+        void* GetMugshotBufferFromImageId(s32 liImageId);
+
+    public:
+        // ADDITIVE GROW (profile link-closure wave): the three pending message-display option
+        // members. The X360 stores each as a member-function pointer ({func @+0x198, delta
+        // @+0x19C}) and dispatches through HandleOption; this reconstruction stores plain
+        // function pointers to file-local thunks (see CgsSaveLoadPS3.cpp), so the members are
+        // declared public for the thunks to forward to -- access level is a compile-time-only
+        // relaxation, the dispatch shape and behaviour are unchanged.
+
+        // X360 0x8284C6D8. Forward the user's message choice
+        // (MessageChoiceForOptionIndex(luOption)) to the memory-card interface (vtable slot 5).
+        void HandleMemcardOption(u32 luOption);
+
+        // X360 0x82855A60. The autosave-warning CONTINUE handler: hide the autosave icon, then
+        // start the boot-up load through the memory-card interface (RealmcIface load-entry
+        // records + ReadSave) and pump Update.
+        void BootupStart(u32 luOption);
+
+        // X360 0x82855EC0. The confirm-load prompt handler: on YES (option 1) build the
+        // RealmcIface load-entry records and start the memory-card read + pump Update; on NO
+        // report E_SAVELOADTASKRESULT_FAILURE to the bound result handler (+0x130, vtable 0).
+        void LoadHandleConfirmLoad(u32 luOption);
+
+        // ADDITIVE GROW (BrnGuiProfile wave): the inherited ContentInformationFileInterface
+        // overrides. X360-attested by the class's provider role (Prepare publishes this as
+        // the shared ContentInformation provider and the memory-card layer queries the CIF
+        // slots through it), but NO named body exists in the ARTIST export for any of the
+        // four (the CIF vocabulary -- ICON0/PIC1/SND0 -- is the PS3 container's; the X360
+        // memcard layer never queries them by name). Bodied as FLAG'd PC-boundary leaves in
+        // CgsSaveLoadPS3.cpp (the SaveLoadSystem body TU) so the class is instantiable by
+        // value (BrnGui::ProfileManager embeds it at X360 manager+4200).
+        virtual bool        IsSavingCif(ESaveLoadCif leCif);
+        virtual int         GetCifFileType(ESaveLoadCif leCif);
+        virtual const char* GetCifFileName(ESaveLoadCif leCif);
+        virtual bool        LoadCifFile(ESaveLoadCif leCif, void** lppData, s32* lpiSize);
+
+    private:
 
         // ---- X360 layout (byte offsets are authoritative) -------------------------------------
         // +0x00  : inherited ContentInformationFileInterface vptr
@@ -258,9 +309,12 @@ namespace CgsGui
         s32    miContentInfoFileSize;             // +0x208 content-info file size
         void*  mpContentInfoFileBuffer;           // +0x20C content-info file buffer
         s32    miField210;                        // +0x210 (Construct sets -1)
-        s32    miImageWidth;                      // +0x214 (Construct arg a7)
-        s32    miImageHeight;                     // +0x218 (Construct arg a8)
-        s32    miExtraFilesSizeBytes;             // +0x21C (Construct last arg)
+        // +0x214/+0x218: the mugshot grid. Names are X360-attested by the
+        // GetMugshotBufferFromImageId @0x8284C910 assert strings ("liType <
+        // miNumberOfMugshotTypes" / "liIndex < miNumberOfMugshotsPerType").
+        s32    miNumberOfMugshotTypes;            // +0x214 (Construct arg a7)
+        s32    miNumberOfMugshotsPerType;         // +0x218 (Construct arg a8)
+        s32    miExtraFilesSizeBytes;             // +0x21C (Construct last arg; per-mugshot bytes)
         void*  mpMugshotBufferData;               // +0x220 mugshot buffer (LinearMalloc)
         u8     mbAsyncOpState;                    // +0x224 overlapped-op state (1 == in flight)
         u8     mPad225[0x228 - 0x225];            // +0x225 .. +0x227

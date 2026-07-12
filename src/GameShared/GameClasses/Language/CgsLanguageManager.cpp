@@ -5,6 +5,9 @@
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"            // CgsUnicode::IsValidUtf8String
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResource (LoadStringTable)
 
+#include <cstring>   // std::strlen / std::strncpy (the FormatText resolver)
+#include <cstdlib>   // std::atof / std::atoi (the FormatText value branches)
+
 namespace CgsLanguage
 {
     // X360 0x827DF9C8 CgsLanguage::LanguageManager::LanguageManager.
@@ -694,8 +697,155 @@ namespace CgsLanguage
     void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatLargeDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
-    // X360 0x82864C48 (per the header cite): resolve lpcSourceText through the given
-    // format into the caller's buffer. Referenced by TextField::SetLocalisedText (the
-    // in-game IdleHudState text path) -- never on the boot path.
-    bool LanguageManager::FormatText(char*, u32, const char*, ParameterFormatType)        { __debugbreak(); return false; }   // FLAG trap-stub
+    // FLAG trap-stubs for the float-dispatch leaves 0x828641F0 references beyond the
+    // block above (declared additions; decompiles land with the value-format slice).
+    void LanguageManager::FormatSecondsAndHundredsStringLong(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatSecondsStringLong(char*, f32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatMinutesSecondsStringMediumText(char*, f32, s32) const     { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatAutoDistanceString(char*, f32, s32) const                 { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatAutoDistanceStringLong(char*, f32, s32) const             { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatSmallDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatLargeDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatHoursAndMinutesAndSecondsString(u8*, f32, s32) const      { __debugbreak(); }   // FLAG trap-stub
+
+    // @ 0x828641F0 -- the FLOAT value dispatcher (DWARF CgsLanguageManager.h: the
+    // (char*, u32, f32, ParameterFormatType) overload): switch the format onto its
+    // time/percentage/currency/distance leaf, streamed-assert on an unknown format
+    // ("Invalid Parameter sent to SetLocalisedText with float"), always NUL the
+    // buffer's last byte, return true. The leaves are the FLAG trap-stubs above until
+    // their decompiles land -- no boot/menu text rides a float format.
+    bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize, f32 lfValue,
+                                     ParameterFormatType leType)
+    {
+        CGS_ASSERT(leType < 21, "Invalid Localisation Format supplied to TextField::FormatText");
+
+        switch (leType)
+        {
+        case 1:  FormatHoursAndMinutesAndSecondsString(
+                     reinterpret_cast<u8*>(lpacBuffer), lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 2:  FormatMinutesAndSecondsAndHundredsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 3:  FormatMinutesAndSecondsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 4:  FormatSecondsAndHundredsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 5:  FormatSecondsAndHundredsStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 6:  FormatSecondsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 7:  FormatSecondsStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 8:  FormatMinutesSecondsStringMediumText(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 11: FormatIntegerString(lpacBuffer, static_cast<s32>(lfValue),
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 13: FormatPercentageString(lpacBuffer, static_cast<s32>(lfValue),
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 14: FormatCurrencyString(lpacBuffer, static_cast<s32>(lfValue),
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 15: FormatAutoDistanceString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 16: FormatAutoDistanceStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 17: FormatSmallDistanceString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 18: FormatSmallDistanceStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 19: FormatLargeDistanceString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 20: FormatLargeDistanceStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        default:
+            CGS_ASSERT(false, "Invalid Parameter sent to SetLocalisedText with float : ");
+            break;
+        }
+
+        lpacBuffer[luBufferSize - 1] = 0;
+        return true;
+    }
+
+    // @ 0x82864C48 -- the FormatText RESOLVER (TextField::SetLocalisedText's entry;
+    // the profile/boot prompts ride the type-0 copy and type-9/10 database-lookup
+    // branches). Faithful branch map:
+    //   0      : plain copy (own too-long streamed assert kept as the plain form).
+    //   1-8,
+    //   15-20  : atof -> the float dispatcher above; returns FALSE (value formats
+    //            report "not a literal copy", per the X360 result register).
+    //   9 / 10 : FindString(source): hit -> copy (10 = ToUpperN uppercase copy) of
+    //            the DATABASE string; miss -> copy the source text verbatim.
+    //            Returns TRUE.
+    //   11-14  : atoi -> the s32 formatter; returns FALSE.
+    //   other  : "Invalid Parameter sent to FormatText" assert; returns FALSE.
+    // Every returning path NULs the buffer's last byte, matching the X360 stores.
+    bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize,
+                                     const char* lpcSourceText, ParameterFormatType leType)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in TextField::FormatText");
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::FormatText");
+        CGS_ASSERT(std::strlen(lpcSourceText) < luBufferSize,
+                   "Text string too long in TextField::FormatText");
+        CGS_ASSERT(leType < 21, "Invalid Localisation Format supplied to TextField::FormatText");
+
+        switch (leType)
+        {
+        case 0:
+        {
+            // CgsStringUtils.h:65's streamed "String <s> is too long" -- plain form.
+            CGS_ASSERT(std::strlen(lpcSourceText) < luBufferSize, "String is too long");
+            std::strncpy(lpacBuffer, lpcSourceText, luBufferSize);
+            lpacBuffer[luBufferSize - 1] = 0;
+            return true;
+        }
+
+        case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
+        case 15: case 16: case 17: case 18: case 19: case 20:
+        {
+            FormatText(lpacBuffer, luBufferSize,
+                       static_cast<f32>(std::atof(lpcSourceText)), leType);
+            return false;
+        }
+
+        case 9: case 10:
+        {
+            const u8* lpDatabaseString = FindString(lpcSourceText);
+            if (lpDatabaseString != 0)
+            {
+                CGS_ASSERT(std::strlen(reinterpret_cast<const char*>(lpDatabaseString)) <
+                               luBufferSize,
+                           "Database Text string too long in TextField::FormatText");
+                if (leType != 9)
+                {
+                    CgsUnicode::ToUpperN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                                         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpDatabaseString),
+                                         static_cast<s32>(luBufferSize));
+                    lpacBuffer[luBufferSize - 1] = 0;
+                    return true;
+                }
+                CgsUnicode::CopyN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                                  reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpDatabaseString),
+                                  static_cast<s32>(luBufferSize));
+            }
+            else
+            {
+                CgsUnicode::CopyN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                                  reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpcSourceText),
+                                  static_cast<s32>(luBufferSize));
+            }
+            lpacBuffer[luBufferSize - 1] = 0;
+            return true;
+        }
+
+        case 11: case 12: case 13: case 14:
+        {
+            FormatText(lpacBuffer, luBufferSize, static_cast<s32>(std::atoi(lpcSourceText)),
+                       leType);
+            return false;
+        }
+
+        default:
+            CGS_ASSERT(false, "Invalid Parameter sent to FormatText");
+            return false;
+        }
+    }
 }

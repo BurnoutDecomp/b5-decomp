@@ -176,6 +176,36 @@ namespace CgsUnicode
         return lpUtf8TargetString;
     }
 
+    // @ 0x82834638 -- uppercasing bounded copy (LanguageManager::FormatText's
+    // E_FORMAT_ID_LOOKUP_UPPER branch). Byte loop, capped at lnMaxTargetStringLength-1:
+    // plain-ASCII lowercase bytes ('a'..'z', high bit clear) are uppercased in flight;
+    // every other byte (including UTF-8 continuation/lead bytes) copies verbatim; the
+    // target is always NUL-terminated. Returns the write cursor (the target's NUL) --
+    // the X360 r3 at exit.
+    CgsUtf8* ToUpperN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                      s32 lnMaxTargetStringLength)
+    {
+        CGS_ASSERT(lpUtf8TargetString != 0, "lpUtf8TargetString!= NULL");
+        CGS_ASSERT(lpUtf8SourceString != 0, "lpUtf8SourceString!= NULL");
+        CGS_ASSERT(lnMaxTargetStringLength > 0, "lnMaxTargetStringLength > 0");
+
+        CgsUtf8* lpWrite = lpUtf8TargetString;
+        s32 li = 0;
+        for (CgsUtf8 luByte = *lpUtf8SourceString; luByte != 0; luByte = *lpUtf8SourceString)
+        {
+            if (li >= lnMaxTargetStringLength - 1)
+                break;
+            *lpWrite = luByte;
+            if ((luByte & 0x80u) == 0 && luByte >= 0x61u && luByte <= 0x7Au)
+                *lpWrite = static_cast<CgsUtf8>(luByte - 32);
+            ++lpUtf8SourceString;
+            ++lpWrite;
+            ++li;
+        }
+        *lpWrite = 0;
+        return lpWrite;
+    }
+
     // Byte length of a NUL-terminated UTF-8 string (X360 CgsUnicode.cpp:108). Counts the
     // bytes preceding the terminator -- the LanguageResourceType string-table descriptor size.
     u32 ByteLength(const u8* lpUtf8String)
