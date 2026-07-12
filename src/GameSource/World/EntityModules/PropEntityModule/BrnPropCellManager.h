@@ -32,6 +32,7 @@
 //
 // Member names/types are the DecFIGS DWARF (BrnPropCellManager.h), X360-gated.
 #include "types.hpp"
+#include "BrnCommonTypes.h"          // Vector3, VecFloat (ClearPropsNearPosition sphere test)
 #include "BrnPropEntityInstance.h"   // PropEntityInstance, PropPartEntityInstance (mpaProps/mpaPropParts)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"  // CgsContainers::BitArray
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"    // PropEntityID, PropVolumeInstanceID
@@ -112,6 +113,23 @@ namespace BrnWorld
 
         // @ 0x822A4130 -- linear scan of maCells[0..miNumLoadedCells) for luCellId.
         bool IsCellLoaded(u32 luCellId) const;
+
+        // @ 0x822E1600 -- per-frame sweep (PropEntityModule::PreSceneUpdate). For every
+        // LOADED cell whose id is currently in maTargetList, tests each prop in the cell's
+        // [start,end) slot range against a sphere centred on lv3Position with radius
+        // (lvClearRadius + the prop type's bounding radius). A prop that overlaps, is not a
+        // traffic light, and is not one of three special street-furniture graphics ids is
+        // removed from the sim (sim-resident states), from contact generation (if the
+        // ADDED_TO_CONTACT_GEN flag is set) and from the scene (if ADDED_TO_SCENE is set).
+        // lvClearRadius is a broadcast VecFloat (all lanes equal). lu16ZoneId +
+        // lpuZoneStartIndices are the caller-supplied zone id and per-zone start-index table
+        // the scene removal needs (index-within-zone = global slot - start[prop zone index]).
+        void ClearPropsNearPosition(const PropPhysicsDataHeader* lpTypes,
+                                    Vector3 lv3Position, VecFloat lvClearRadius,
+                                    PropInputInterface* lpPropInput,
+                                    InSceneUpdateInterface* lpScene,
+                                    u16 lu16ZoneId,
+                                    const u16* lpuZoneStartIndices);
 
         // BrnPropCellManager.h:309 (DWARF PropCellRecord) -- one loaded cell's registry
         // entry. 12 bytes (asm stride 0xC in IsCellLoaded/ClearPropsNearPosition). The cell

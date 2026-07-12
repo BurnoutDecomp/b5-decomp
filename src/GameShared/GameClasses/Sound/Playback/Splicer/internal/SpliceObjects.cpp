@@ -350,11 +350,25 @@ u32 Splice::GetCpuTicks()
 // ============================================================================
 // BLOCKED (this TU): SpliceSample::Update @ 0x826A3A50
 //
-// Reason: the voice-start path builds an un-modelled rw::audio::core "SndPlayer" start-
-// Event parameter payload (the 0x28-byte record handed to PlugIn::Event) seeded with an
-// un-recovered rodata double constant (X360 dbl_82001CA8, value not in the dossier) and a
-// sample source pointer looked up inline from the SpliceManager's private per-bank tables.
-// Reconstructing the payload struct + the constant would be guessing runtime-dispatch data,
-// which is worse than an honest gap. Its declaration is homed in SpliceObjects.h; the body
-// stays a trap stub until the SndPlayer event-parameter layout and constant are recovered.
+// PARTIAL UNBLOCK (re-attempt): the sample-source lookup that once blocked this func is now
+// homed. The X360 inline table math at 0x826A3D84..0x826A3DC4 resolves against the (now
+// committed) SpliceManager::m_Splices[8] bank array (SpliceContainer @ guest +0x614, 20-byte
+// stride): bankIdx = (s8)mpData->mcSpliceType, sampleId = mpData->muSampleId, and the source
+// pointer = m_Splices[bankIdx].mpSampleData + m_Splices[bankIdx].mpTableOfContents[sampleId]
+// (the +0x614 load is field +0x00 = mpSampleData; the (bankIdx+78)*20 load is that same
+// SpliceContainer's +0x04 = mpTableOfContents, indexed by sampleId*4). That part is fully
+// groundable now.
+//
+// STILL BLOCKED (irreducible): the voice-start branch (mbStartVoice, 0x826A3D00..0x826A3F88)
+// builds a ~40-byte rw::audio::core "SndPlayer" start-Event parameter record handed to
+// PlugIn::Event, whose leading 8 bytes are seeded with the rodata double dbl_82001CA8 -- a
+// constant with NO recovered value (no .ida-exports data segment covers 0x82001CA8; the only
+// other reference is an unrelated ChallengeManager round-to-nearest idiom, which does not
+// reveal the value). The record's remaining field semantics are likewise un-modelled, and
+// the deferred SetAttributeHandler command-queue path it shares writes into the RwacSystem's
+// private command buffer (guest System +0x20 base / +0x10B8 cursor) whose layout is not homed
+// in the vendor rw::audio::core headers. Emitting that payload + constant would be inventing a
+// layout and an attested constant -- a hard fidelity violation, worse than an honest gap. The
+// declaration stays homed in SpliceObjects.h; the body remains a link-time trap until
+// dbl_82001CA8 and the SndPlayer start-event parameter layout are recovered.
 // ============================================================================

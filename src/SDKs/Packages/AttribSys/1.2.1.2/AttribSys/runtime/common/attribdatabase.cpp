@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"     // GetEaStlAllocator()
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"  // AttribSysPackageAllocator::Free(void*,s32,const char*)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribexportmanager.h" // Class/CollectionExportPolicy
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"            // Attrib::Database (CollectGarbage member + sThis)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 
 #include <cstring>   // memcpy (AttribVectorReserve)
@@ -146,6 +147,73 @@ void CollectionExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 void CollectionExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
     CGS_ASSERT(false, "Classes should not have export entries!\n");
+}
+
+// =============================================================================
+// Attrib::Database::CollectGarbage @ 0x8280E5E0 -- reconstructed from BURNOUT_X360_ARTIST.XEX
+// (AttribSys v1.2.1.2). Drain the database's two deferred-delete rings (collections, then
+// classes) until neither still holds a queued node, then -- if the database was flagged to
+// self-destruct on the last vault release -- destroy the singleton. Called by
+// Attrib::Vault::Deinitialize, CgsAttribSys::VaultSlot::DoUnload,
+// Attrib::DatabaseExportPolicy::Deinitialize and CgsAttribSys::AttribSysModule::Update.
+//
+// Wave note (2026-07-12): this was previously blocked on the un-homed DatabasePrivate layout
+// and the CollectGarbageBag<> templates. DatabasePrivate is now homed (attribdatabaseprivate.h)
+// and CollectGarbageBag<Attrib::Collection> is homed as the DatabasePrivate_CollectCollection
+// GarbageBag free-function seam (attribdatabaseprivate.cpp); its Class twin is declared here as
+// the matching cross-TU seam (its body lands with the Class garbage-bag TU), exactly as the
+// committed AttribSys seam convention handles not-yet-landed helpers.
+// =============================================================================
+
+// gDatabaseSelfDestruct (X360 byte_83011BB2; DWARF attribdatabase.cpp:111). Set by
+// Attrib::DatabaseExportPolicy::Deinitialize on the final vault drop and consumed + cleared
+// here once the garbage bags are empty, so the deferred collection destroys the database
+// singleton. Defined in this TU (its X360 home).
+bool gDatabaseSelfDestruct = false;
+
+// Attrib::DatabasePrivate::CollectGarbageBag<Attrib::Collection> @ 0x8280E3C0 (homed in
+// attribdatabaseprivate.cpp) and its Attrib::DatabasePrivate::CollectGarbageBag<Attrib::Class>
+// twin (bodied in the Class garbage-bag TU). Both drain one intrusive eastl::list ring; declared
+// here as cross-TU seams (resolved at link), matching the DatabasePrivate_* seam convention.
+AttribListBase* DatabasePrivate_CollectCollectionGarbageBag(AttribListBase* lpGarbageList);
+AttribListBase* DatabasePrivate_CollectClassGarbageBag(AttribListBase* lpGarbageList);
+
+void Database::CollectGarbage()
+{
+    // this->mPrivates (X360 this+4). The two deferred-delete rings are the self-referential
+    // eastl::list sentinels the DatabasePrivate ctor installs at +0x6C (collections) and +0x8C
+    // (classes) -- the same offsets QueueForDelete<Collection>/<Class> push onto (see the
+    // committed attribcollection.cpp / attribclassprivate.cpp Release paths).
+    u8* lpPrivates = reinterpret_cast<u8*>(const_cast<DatabasePrivate*>(&mPrivates));
+    AttribListBase* lpCollectionGarbage = reinterpret_cast<AttribListBase*>(lpPrivates + 0x6C);
+    AttribListBase* lpClassGarbage      = reinterpret_cast<AttribListBase*>(lpPrivates + 0x8C);
+
+    // Drain both bags until neither ring holds a queued node. The X360 walks each ring counting
+    // its length, but only ever tests the count against zero -- i.e. whether the ring is empty.
+    while (lpCollectionGarbage->mNode.mpNext != &lpCollectionGarbage->mNode ||
+           lpClassGarbage->mNode.mpNext != &lpClassGarbage->mNode)
+    {
+        DatabasePrivate_CollectCollectionGarbageBag(lpCollectionGarbage);
+        DatabasePrivate_CollectClassGarbageBag(lpClassGarbage);
+    }
+
+    if (gDatabaseSelfDestruct)
+    {
+        // Flagged for teardown: destroy the database singleton now the bags are empty. The X360
+        // inlines the IsInitialized() assert (attribsys.h:649) before the deleting-destructor
+        // virtual call (**sThis)(sThis, 1); the virtual `delete` below reproduces that call.
+        Database* lpDatabase = sThis;
+        if (lpDatabase == NULL)
+        {
+            CGS_ASSERT(false, "Attribute database not initialized.");
+            lpDatabase = sThis;
+        }
+        if (lpDatabase != NULL)
+            delete lpDatabase;
+
+        sThis = NULL;
+        gDatabaseSelfDestruct = false;
+    }
 }
 
 } // namespace Attrib
