@@ -13,7 +13,20 @@ namespace BrnGui
     // Its OnEnter/machinery are its own ledger functions (declaration-only here).
     struct CrashNavEnterOnlineX360 : public CrashNavEnterOnlineBase
     {
+        // @0x82487E68 -- base OnEnter, then create the Xbox system XNotify listener.
         virtual void OnEnter();
+        // @0x82487EA0 -- base OnLeave, then CloseHandle + clear the listener.
+        virtual void OnLeave();
+
+        // @0x82488010 -- trigger the Xbox sign-in UI (XShowSigninUI(1, 2)). The asm ignores
+        // `this` and tail-calls the XDK; modelled non-virtual (no vtable slot attested).
+        u32 ShowSignInUI();
+
+        // FLAG additive layout member (asm-attested this+0x37F0): the XNotifyCreateListener
+        // system-notification listener handle -- created in OnEnter, CloseHandle'd + zeroed in
+        // OnLeave, and read by Update as the XNotifyGetNext handle. Corpus convention is a
+        // plain void* (the Xbox HANDLE typedef is not modelled in types.hpp).
+        void* mhNotificationListener;   // @ this+0x37F0 (stw r3, 0x37F0(this))
     };
 
     // DWARF Mod.h:59 -- the full (titled) sign-in screen. OnEnter (Mod.cpp:38) is

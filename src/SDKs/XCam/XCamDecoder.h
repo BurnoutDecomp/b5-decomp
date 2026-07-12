@@ -131,6 +131,11 @@ public:
     // bPreserveOutput is set, also reset the CDecoderOutput stage.
     int Reset(int bPreserveOutput);
 
+    // @ external (XCAM__CDecoder__Shutdown) -- tear the decoder session down.
+    // Called by CRemoteConsoleList::Shutdown on each embedded decoder; its body
+    // is its own TU, declared here (its canonical home) so consumers compile.
+    int Shutdown();
+
 private:
     u32                 muDecodeCount;           // +0x000
     WMVDEC*             mpDecoder;               // +0x004

@@ -39,6 +39,10 @@ public:
     CClipResize* ResizePackedYUYInt2(f64 lfDX, f64 lfSX, f64 lfDY, f64 lfOY,
                                      s32 liHigh);                             // 0x82AB9E08
 
+    // 0x82AB47E0 -- destructor. Called explicitly by ~WMSDKRESIZER (which embeds
+    // a CClipResize sub-object). Declared here; bodied by its own follow-on slice.
+    ~CClipResize();
+
 private:
     // ---- 0x00..0x3C : working/accumulator state (all zeroed in ctor) ----
     s32 mReserved00;   // 0x00
@@ -74,3 +78,8 @@ private:
     s32 mReserved7C;   // 0x7C  (zeroed in ctor)
     s32 mReserved80;   // 0x80  (zeroed in ctor)
 };
+
+// Free-function initialiser used by WMSDKRESIZER::Reset (X360 `bl CClipResize_Init`
+// @ 0x82A44D94): sets up the clip resampler for (dstWidth, height, srcWidth).
+// Declared here; bodied by its own slice.
+CClipResize* CClipResize_Init(CClipResize* pThis, int iDstWidth, int iHeight, int iSrcWidth);
