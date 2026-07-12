@@ -81,6 +81,48 @@
 // has no asm, leave the members as opaque padding and omit the ctor" -- here the
 // ctor exists but its layout deps are unrecovered, so the same no-fabrication
 // rule applies). GetInfo needs none of it -- it writes only its out-parameter.
+//
+// ---------------------------------------------------------------------------
+// W40 RE-ATTEMPT (post CEngine/CObjectRefCount homing) -- STILL BLOCKED
+// ---------------------------------------------------------------------------
+// This TU was re-attempted right after the class:XAUDIO::CEngine keystone and the
+// CVoice/CEffect/CObjectRefCount vtable notes landed in this same wave. Those
+// homings were evaluated against all eight blocked functions; they CONFIRM the
+// block reasons but do NOT resolve them. Precise frontier per group:
+//
+//   * ctor / GetParam / SetParam / `scalar deleting destructor' -- unchanged:
+//       still gated on the un-recovered princeton_digital DSP room layout (the
+//       stereo_room_t sub-filter bank +0x10..~+0x4B800, the two 64-bit accumulators
+//       at +0x4BAA0/+0x4BAA8, and the stereo_room_t() ctor @0x829664D8 which
+//       princeton_digital.h explicitly leaves un-laid-out). GetParam/SetParam are
+//       ADDITIONALLY gated on the Xbox-kernel recursive spinlock/IRQL primitives
+//       (KeRaiseIrqlToDpcLevel / KeAcquireSpinLockAtRaisedIrql /
+//       KeReleaseSpinLockFromRaisedIrql / KfLowerIrql) over the un-homed module
+//       lock globals (unk_83222C28 / dword_83222C2C / dword_83222C30 / byte_83222C34)
+//       -- the same primitives CEngine's own bodies are blocked on this wave.
+//
+//   * Release / Release`adjustor{4}' / QueryInterface /
+//     `vector deleting destructor'`adjustor{4}' -- the COM/refcount MI thunks:
+//       the W40 CObjectRefCount home (XAudioObjectRefCount.h) attests the SHARED
+//       base-vtable image off_82108FF4 and that its slot [3] (@+0x0C) is the
+//       deleting-destructor slot Release dispatches through -- exactly the slot
+//       CReverbEffect::Release uses (`(*(*(this+4)+12))(this+4)`). But CReverbEffect
+//       is a MULTIPLE-INHERITANCE COM object (primary reverb-interface vtable
+//       off_8210905C @+0x00, an intrusive-refcount base off_82109040 @+0x04 with the
+//       count @+0x08). Modelling Release by name needs the refcount member placed at
+//       +0x08, which needs the primary-interface base at +0x00 with its full vtable
+//       slot ORDER (slots 0..2 that precede the +0x0C destructor slot) so a C++
+//       `virtual` lands at slot 3 without phantom padding. That primary-interface
+//       vtable rodata (off_8210905C / off_82109040 / off_82109024 / off_82109030)
+//       is NOT exported, so slots 0..2 are un-attested -- declaring them would be a
+//       phantom-slot fabrication (AGENTS.md). QueryInterface's `*ppOut = this - 4`
+//       is the same MI base-adjust (step from the +4 refcount subobject back to the
+//       +0 outer interface); unlike CEffectManager::QueryInterface's forward
+//       `this + 8` into its own storage, the backward `-4` is only correct once that
+//       MI base structure is modelled, so it stays with the layout. The two
+//       adjustor thunks are compiler-synthesised over Release / the virtual dtor and
+//       depend on the same blocked layout. No slot is fabricated; all four remain
+//       blocked pending the primary reverb-interface vtable order.
 // ===========================================================================
 
 #include "types.hpp"
