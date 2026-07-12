@@ -93,8 +93,6 @@ namespace BrnGui
 
         // @ 0x82428CC0 -- while a freeburn challenge is active with a trigger location,
         // place its trigger region on the compass. Returns true when it drew a marker.
-        // BLOCKED (todo): needs an un-homed ChallengeListEntryAction validity-field accessor
-        // and forwards into the blocked ShowPositionOnCompass.
         bool ShowChallengeOnCompass(f32 lfBearing);
 
         // @ 0x8241FC10 -- place a world-space destination on the compass strip: bearing =
