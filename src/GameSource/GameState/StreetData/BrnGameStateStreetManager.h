@@ -39,6 +39,7 @@ namespace BrnStreetData
 }
 
 namespace CgsNetwork { struct PlayerName; }   // pointer-only param of CreateHighScoreEntryFromDown
+namespace BrnProgression { class ProgressionManager; }   // GetProgressionManager() return (pointer-only)
 
 namespace BrnGameState
 {
@@ -81,6 +82,29 @@ namespace BrnGameState
         void SetChallengeUserScore( int32_t liRoadIndex,
                                     BrnStreetData::ChallengePlayerScoreEntry* lpEntry,
                                     bool lbUpdateHighScore );
+
+        // ---- ADDITIVE GROW (declare-only) for the StreetManagerDebugComponent "win road rules"
+        //      actions (BrnStreetManagerDebugComponent.cpp: WinAllRoadRules /
+        //      WinSpecificNumberOf{Time,Crash}RoadRules @ 0x82341CD8 / 0x82341AC0 / 0x823418B8).
+        //      After filling the player challenge-score table each action re-derives the local
+        //      road-rule counts and routes the resulting trophy/achievement unlocks through the
+        //      progression manager. Signatures + semantics are X360-asm-attested; the bodies reach
+        //      the (still-deferred) StreetManager member layout and land with the StreetManager TU.
+        //      Declare-only suffices for the per-TU cl /c gate on the debug component.
+
+        // X360 reads mpProgressionManager directly (StreetManager+0x1D10). FLAG: de-inlined member
+        // accessor -- modelled as an accessor to keep the debug caller off a raw-offset poke into the
+        // otherwise-opaque StreetManager; the real member + body land with the StreetManager TU.
+        BrnProgression::ProgressionManager* GetProgressionManager();
+
+        // X360-attested StreetManager methods the "win road rules" debug actions call by name.
+        // liUpdateHighScores is the flag the debug actions pass (0); its precise semantics are owned
+        // by the StreetManager TU. The three Get* return the local player's per-category road-rule
+        // tallies (par show-time / par time-trial / complete), each compared against the road count.
+        void UpdateTrophyUnlockOnRoadRuleWin( int32_t liUpdateHighScores );
+        int32_t GetNumberOfParShowTimeRoadsRuledByLocalPlayer();
+        int32_t GetNumberOfParTimeTrialRoadsRuledByLocalPlayer();
+        int32_t GetNumberOfCompleteRoadsRuledByLocalPlayer();
 
         // ---- Recovered out-of-line methods (StreetManager wave) -------------
         // These do NOT touch the (still-deferred) StreetManager member layout: the

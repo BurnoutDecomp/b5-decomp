@@ -38,35 +38,55 @@
 // exactly as the asm shows the ctor install.
 //
 // ---------------------------------------------------------------------------
-// BLOCKED (not homed in this TU -- honest gaps, NOT fabricated):
+// BLOCKED (not homed in this TU -- honest gaps, NOT fabricated). RE-ASSESSED
+// after the RealmcTrc / RealmcContainers / RealmcCore waves landed: several
+// collaborators these two funcs need are now homed (noted below), but each still
+// has a LOAD-BEARING dependency that is genuinely un-homed, so both stay BLOCKED.
 //
 //   RealmcIface::XenonRunnableTask::SelectDevice @ 0x82B57A80
-//     Runs the device-selector loop. It needs three collaborators that are
-//     genuinely un-homed / un-groundable here:
+//     Runs the device-selector loop. The peripheral collaborators are now homed
+//     -- RealmcCore::MessageTrc (::MessageTrc value ctor / ~MessageTrc / ::Apply,
+//     RealmcTrc.h), RealmcCore::Trc::~Trc, RealmcCore::MessagePtr / ResponsePtr
+//     (ctor / dtor / GetValue, RealmcCore.h), RealmcCore::AllocateMem, and every
+//     XenonUtil helper (CheckState / CardExists / DeviceSelectorShow /
+//     UpdateDeviceInfo) plus the CardData operators. But three load-bearing deps
+//     remain un-groundable:
 //       * RealmcCore::IRunnableTask::SendMessage (dossier sub, [external/unknown])
-//         -- the cross-thread request/response send path. Its sibling
-//         RealmcCore::MessageQueue::SendMessage @ 0x82C47510 is itself BLOCKED
-//         (RealmcMessageQueue.h) pending the un-homed custom-EASTL list-node
-//         allocator, and its exact routing / signature cannot be grounded.
-//       * RealmcCore::Trc::Trc(id, packedCodes) value ctor (dossier sub_82C46930)
-//         -- an un-homed Trc constructor (RealmcTrc.h homes only the copy ctor,
-//         _SetMsgOptions and ~Trc).
-//       * The message it sends is a RealmcCore::MessageTrc handed to a
-//         RealmcCore::MessagePtr, but MessagePtr holds an IRealmcMessage
-//         (RefCount + Process@+8) whereas MessageTrc is a Message (Apply@+0x54);
-//         the two message hierarchies are modelled as distinct types in
-//         RealmcCore.h, so storing the MessageTrc in the MessagePtr cannot be
-//         expressed without either a raw-pointer/offset cast (forbidden) or a
-//         risky rework of the shared message base -- left for when the message
-//         hierarchy + SendMessage land.
+//         -- the cross-thread request/response send path (asm: SendMessage(&resp,
+//         this, &msg, 0) returning a ResponsePtr by value). Its sibling
+//         RealmcCore::MessageQueue::SendMessage @ 0x82C47510 is STILL in the
+//         RealmcMessageQueue.h BLOCKED set (pending the custom-EASTL list-node
+//         allocator), and IRunnableTask exposes no SendMessage member to declare
+//         -- its routing / signature cannot be grounded.
+//       * The Trc VALUE ctor RealmcCore::Trc::Trc(id, packedCodes) (dossier
+//         sub_82C46930, asm: Trc(&v34, 24, 1029)) -- a DIFFERENT ctor from the
+//         copy ctor RealmcTrc.h homes (@ 0x82C465C0); the (int id, int packedCodes)
+//         value ctor is un-homed (no ledger entry, no declaration), so the on-stack
+//         Trc SelectDevice builds cannot be constructed.
+//       * Even with SendMessage stubbed, the message it sends is a MessageTrc
+//         handed to a MessagePtr, but MessagePtr holds an IRealmcMessage (RefCount
+//         + Process@+8) whereas MessageTrc is a Message (Apply@+0x54) -- the two
+//         hierarchies are still modelled as distinct types in RealmcCore.h, so
+//         storing the MessageTrc in the MessagePtr needs either a raw-pointer/offset
+//         cast (forbidden) or a risky rework of the shared Message base. Left for
+//         when SendMessage + the Trc value ctor + the unified message base land.
 //
 //   RealmcIface::XenonRunnableTask::GetCa @ 0x82B57CE8
-//     Builds an eastl::basic_string<char16_t> from the active card-data label. It
-//     depends on two [external/unknown] helpers (sub_82B57820, sub_82B579E8) whose
-//     signatures / semantics are not recovered, on RealmcCore::alloca (a still-
-//     `todo` range-string constructor), and on the EASTL basic_string constructor
-//     the dossier surfaces only as an opaque STUB(...) macro. Reconstructing it
-//     would require fabricating those call shapes; left BLOCKED until they land.
+//     Builds a RealmcCore::String16 (eastl::basic_string<char16_t>) from the active
+//     card-data label. One dep landed since -- sub_82B579E8 is now homed as
+//     RealmcCore::String16::assign (@ 0x82B579E8, RealmcContainers.h). But two
+//     load-bearing deps are still un-homed:
+//       * RealmcCore::alloca (dossier: _DWORD* alloca(out, u16*, const char*)) --
+//         the char16 range / c-string String16 constructor that actually extracts
+//         the card label at mpState+0x20; still `todo` (no home, no ledger entry).
+//       * sub_82B57820 ([external/unknown]) -- the String16 copy/build helper the
+//         asm calls to seat the result into the return string; signature /
+//         semantics not recovered, no home.
+//     Plus the leading EASTL basic_string default ctor the dossier surfaces only as
+//     an opaque STUB(this, "EASTL basic_string") -- our String16() models the empty
+//     state but not that allocator-name argument. Reconstructing GetCa would require
+//     fabricating those call shapes; left BLOCKED until RealmcCore::alloca +
+//     sub_82B57820 land.
 // ===========================================================================
 
 #include "SDKs/Realmc/RealmcCore.h"        // RealmcCore::IRunnableTask (base), MemcardState (fwd)

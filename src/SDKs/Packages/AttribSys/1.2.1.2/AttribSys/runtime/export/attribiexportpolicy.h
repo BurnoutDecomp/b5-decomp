@@ -40,6 +40,8 @@
 
 namespace Attrib
 {
+    class Vault;   // the vault a policy operates over (attribloadandgo.h)
+
     class IExportPolicy
     {
     public:
@@ -47,5 +49,14 @@ namespace Attrib
         // trivial: the interface owns no members. Defined out-of-line in the .cpp
         // so the vtable + the deleting-destructor thunk are emitted here.
         virtual ~IExportPolicy();
+
+        // Per-policy pre-deinitialize hook. When a Database's ExportManager tears a
+        // vault down it fans this out to every registered policy
+        // (Attrib::ExportManager::PrepareToDeinitialize @ 0x828031A8 calls it through
+        // the policy vtable for each ExportPolicyPair). Pure here -- IExportPolicy is a
+        // bare interface; the real bodies live in the concrete per-granularity policy
+        // TUs (Class/Collection/DatabaseExportPolicy). Additive interface method; the
+        // object still owns no data members (vptr only).
+        virtual void PrepareToDeinitialize(const Vault& lrVault) = 0;
     };
 }
