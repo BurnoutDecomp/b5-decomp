@@ -116,6 +116,7 @@ struct cParticleBehaviour
         E_BV_SIZE_FULL       = 0x80,     // CompileBaseVariance size (full) block
     };
 
+    void Init();
     void Build();
     void BuildColourSteps();
     void CompileBaseVariance();
