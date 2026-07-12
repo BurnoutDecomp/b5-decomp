@@ -71,10 +71,14 @@ namespace
     u8 s_screenStatePoolBacking[2u * 1024u * 1024u];
 
     // Backing for the profile manager's allocators (FLAG PC stand-in: the console hands
-    // the 0x26 game-data heap + a module linear; the PC module owns dedicated regions --
-    // the heap carves the 3x9608 mugshot circular buffer + the SLS callback block).
+    // the 0x26 game-data heap + a module linear; the PC module owns dedicated regions).
+    // The heap carves the 3x9608 mugshot circular buffer + the SLS callback block; the
+    // LINEAR carves the save/load system's mugshot image buffer
+    // (miExtraFilesSizeBytes 9600 * mugshotsPerType 20 * types 5 == 960000 bytes) + the
+    // content-info file buffer -- so it must clear ~1 MB (the 64 KB it had returned null
+    // from SaveLoadSystem::Prepare's Malloc and tripped the mpMugshotBufferData assert).
     u8 s_profileHeapBacking[192u * 1024u];
-    u8 s_profileLinearBacking[64u * 1024u];
+    u8 s_profileLinearBacking[2u * 1024u * 1024u];
 
     // The shared access-pointer bundle the HUD flow's state interface hands its GUI
     // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes the
@@ -173,15 +177,40 @@ namespace BrnGui
         }
     }
 
+    // The Flapt "alternate text colours" table the X360 GuiModule::Construct passes into
+    // BrnGui::ViewModule::Construct (r8 = &unk_82F27F84, r9 = count 8, at the vtbl+0x54
+    // virtual call in 0x82518028). In the ARTIST build this slot is a table of 8 pointers
+    // to debug text-string constants -- Criterion's word-wrap / placeholder test strings,
+    // reconstructed verbatim from BURNOUT_X360_ARTIST.XEX .rdata (0x82054714..0x820548A0).
+    // The DWARF types the parameter const RGBA*, so it is a pointer table threaded through
+    // that type; FlaptFileInstance stores it (mpAlternateTextColours) but only a debug text
+    // path indexes it -- normal menus never display these, they only satisfy the
+    // FlaptFileInstance::Construct(lpAlternateTextColours != 0) assert the console likewise
+    // satisfies with this same non-null table.
+    const char* const s_aFlaptAlternateTextStrings[8] =
+    {
+        "Hellen",
+        "A load of badgers",
+        "badger\nbadger\nbadger badger badger\nbadger\nbadger\nbadger\nbadger",
+        "Director people",
+        "Fiona and alex",
+        "Coolest person",
+        "Steve but not as much as Chris",
+        "Some other people",
+    };
+
     // X360 GuiModule::Construct (0x82518028) builds the whole GUI subsystem. This slice
     // constructs the view module, the movie manager, and the real flow-controller chain
     // (cache + HUD flow + FSM controller).
     void GuiModule::Construct()
     {
-        // Route through the real BrnGui::ViewModule::Construct @0x824F13B8. FLAG (argument
-        // values): the name/aspect/colour-table arguments of the real X360 caller are not
-        // yet recovered; the null colour table fires the (non-fatal) console asserts.
-        mViewModule.Construct(this, "BrnGuiView", 0, 1280.0f / 720.0f, nullptr, 0);
+        // Route through the real BrnGui::ViewModule::Construct @0x824F13B8 with the X360
+        // caller's recovered args: the view flapt count (7), a 16:9 aspect, and the real
+        // alternate-text-colours (debug string) table + count 8 (see the static above). The
+        // X360 passes a null debug name here; the descriptive "BrnGuiView" is a harmless
+        // non-null label the base accepts.
+        mViewModule.Construct(this, "BrnGuiView", 7, 1280.0f / 720.0f,
+                              reinterpret_cast<const RGBA*>(s_aFlaptAlternateTextStrings), 8);
         mMovieManager.Construct();
         mpGuiEventInputBuffer = 0;
 
