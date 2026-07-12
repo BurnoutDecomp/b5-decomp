@@ -21,7 +21,7 @@ namespace BrnGuiSaveLoad
         // The X360 reads the 64-bit id (ld r11, 0(r3)), keeps the top 14 bits
         // (clrrdi r11,r11,50) and compares them to the DLC marker shifted up
         // (li r10,0x2957; sldi r10,r10,50). True iff the top 14 bits equal the marker.
-        return (lrCar.muCarId >> 50) == KU_DLC_CAR_ID_MARKER;
+        return (lrCar.mId >> 50) == KU_DLC_CAR_ID_MARKER;
     }
 
     // @0x824FF400

@@ -4,6 +4,8 @@
 #include <cstring>   // memmove
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"       // CgsDev::StrStreamBase (ValidateProfile mismatch log)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint, Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<4096,16> (the recovered load-complete queue)
 
 namespace BrnGui
@@ -55,6 +57,37 @@ void OptionsDataProfile::Construct()
     mbForceFeedback     = true;   // asm: stb r10(1), 0x736B
     mbTips              = true;
     mbIsLocked          = false;
+}
+
+// ---------------------------------------------------------------------------
+// ValidateProfile  @0x824EFF58
+//
+// Version-check the loaded options profile: the +0x0 version word must equal
+// KI_VERSION_NUMBER (12). On mismatch, log "Options Data Profile version
+// mismatch, expected 12, got <v>" (gated on message filter bit 0) and fail.
+// ---------------------------------------------------------------------------
+bool OptionsDataProfile::ValidateProfile()
+{
+    using namespace CgsDev;
+
+    const s32 liVersion = miVersionNumber;   // lwz r29, 0(r3)
+
+    if (liVersion == KI_VERSION_NUMBER)
+    {
+        return true;
+    }
+
+    if ((Message::gxMessageFilterFlags & 1) != 0)
+    {
+        *Log::gpDebugPrint
+            << "Options Data Profile version mismatch, expected "
+            << KI_VERSION_NUMBER
+            << ", got "
+            << liVersion
+            << "\n";
+    }
+
+    return false;
 }
 
 // ---------------------------------------------------------------------------

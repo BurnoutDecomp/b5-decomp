@@ -84,6 +84,14 @@ namespace CgsUnicode
     CgsUtf8* CopyN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
                    s32 lnMaxTargetStringLength);
 
+    // Uppercasing copy: as CopyN, but each plain-ASCII lowercase byte (no high bit,
+    // 'a'..'z') is uppercased in flight; multi-byte UTF-8 sequences pass through
+    // untouched. Returns the write cursor (the target's NUL). X360 ARTIST 0x82834638
+    // (LanguageManager::FormatText's E_FORMAT_ID_LOOKUP_UPPER branch). Body in
+    // CgsUnicode.cpp.
+    CgsUtf8* ToUpperN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                      s32 lnMaxTargetStringLength);
+
     // ADDITIVE GROW (BrnNetworkLoginManagerBase TU): unbounded copy of a NUL-terminated UTF-8
     // string into lpUtf8TargetString, returning the target. X360 reaches it from
     // BrnNetwork::LoginManagerBase::UpdateDownloadingTOS (CgsUnicode::Copy(mpTOS, downloadBuffer))

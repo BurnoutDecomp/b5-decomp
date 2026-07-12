@@ -82,7 +82,8 @@ namespace CgsGui
         void UpdateProfileSettings();
         // X360 0x8284CD70 -- re-read the console user name; on change cache it + notify.
         void UpdateUserName();
-        // Referenced by Update / the AttachListener prime path (bodied in a different wave).
+        // X360 0x82852440 -- re-derive the sign-in state (XUserGetSigninState) + fresh user
+        // name; on change latch it, notify (SigninStateChanged) and refresh name + settings.
         void UpdateUserSigninState();
 
         static const u32 KU_USERINDEX_NONE = 4;   // miUserIndex sentinel for "no user selected"
