@@ -73,7 +73,19 @@ namespace BrnGui
     struct GuiEventChangeDistrict : public CgsGui::GuiEvent<169> {};  // id 169 size 12
     struct GuiEventCurrentStatus : public CgsGui::GuiEvent<492> { u8 maPayload[108]; };  // id 492 size 120 (12B GuiEvent header + opaque payload)
     struct GuiEventDirectorSettings { u8 maData[4]; s32 GetEventType() const { return 475; } };  // id 475 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventDriveThruDiscovered : public CgsGui::GuiEvent<314> {};  // id 314 size 12
+    // id 314 size 12. X360 BrnGui::OdometerComponent::HandleDriveThruDiscovered (@0x8242C000)
+    // proves the 12-byte record is three s32 words: the drive-thru type (switch selector, 5
+    // cases 0..4), the total-of-type count, and the discovered-of-type count (read at +0/+4/+8).
+    // Modelled as the raw-struct form (the payload does not carry a GuiEvent header -- its own
+    // GetEventType() returns the id), per this header's modelling recipe; sizeof stays 12 and
+    // GetEventType() stays 314, so the AddGuiEvent<T> instantiation is unaffected.
+    struct GuiEventDriveThruDiscovered
+    {
+        s32 meDriveThruType;    // +0x00 (switch selector: 0 junk yard, 1 gas, 2 body, 3 paint, 4 car park)
+        s32 miNumTotal;         // +0x04
+        s32 miNumDiscovered;    // +0x08
+        s32 GetEventType() const { return 314; }
+    };
     struct GuiEventEnterEventStartLocation { u8 maData[8]; s32 GetEventType() const { return 166; } };  // id 166 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventEnterLandmarkArea { u8 maData[2]; s32 GetEventType() const { return 165; } };  // id 165 size 2 (raw; size not GuiEvent-shaped)
     struct GuiEventEventStateResponse : public CgsGui::GuiEvent<556> { u8 maPayload[1392]; };  // id 556 size 1404 (12B GuiEvent header + opaque payload)

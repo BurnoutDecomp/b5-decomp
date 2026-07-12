@@ -133,6 +133,21 @@ namespace BrnGui
         // UpdateWFInit @0x824846B8 gates on it). Body links from the GuiCache TU.
         bool AreAllAptComponentsInitialised(GuiFlow leFlow) const;
 
+        // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): clear the flow layer's expected-apt-component
+        // list -- the inverse of SetExpectedAptComponentList / AppendExpectedAptComponent. The
+        // online car-select-end state calls it (flow 0) once its resources are loaded and again
+        // once the flow's components are initialised (X360 @0x824968A8 / @0x82484A3C). Body links
+        // from the GuiCache TU.
+        void ClearExpectedAptComponentList(GuiFlow leFlow);
+
+        // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): the online-host-game state word the GUI reads
+        // to tell whether the local client is the online HOST (== 1). CarSelectOnlineEnd::UpdateWFInit
+        // gates the host-choosing clip on it, and HandleLobbyPlayerList gates the host-side
+        // car-selection path on it (X360 lwzx r,this,0xA9C8, compared == 1). Exposed by name as the
+        // raw state word carved into the layout below. FLAG: consumer-named (no standalone DWARF
+        // symbol for this member). Body links from the GuiCache TU.
+        s32 GetOnlineHostGameState() const;   // X360 far member @0xA9C8
+
         // ADDITIVE GROW (BrnOnlinePreEventMessages TU): the cache holds the active game-mode
         // type the GUI reads to pick mode-specific apt key-frames (the X360 reads it as a far
         // member; e.g. the online pre-event messages select the "anim1_StuntRun" key-frame for
@@ -292,6 +307,15 @@ namespace BrnGui
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
 
+        // ADDITIVE GROW (BrnOdometerComponent TU). The odometer HUD caches the player profile
+        // and reads the running offline distance off the cache. Both are inlined far-member
+        // reads at the X360 call site (OdometerComponent::Construct @0x82415088 loads the
+        // profile pointer from mpGuiCache+0x405C; Update @0x82424160 loads the distance float
+        // from mpGuiCache+0x13B94), so exposing them by name keeps that leaf off raw offsets.
+        // DECLARATION-ONLY per the far-member convention (bodies link from the GuiCache TU).
+        const BrnProgression::Profile* GetProfile() const;   // X360 far member @0x405C
+        f32 GetDistanceDriven() const;                        // X360 far member @0x13B94
+
         // The player-options profile block (X360 far member @0xB878/47224 -- past the
         // modelled tail; both CrashNavOptions::SetSettingsFromProfile @0x824B8028 and
         // OnlineGameRoomPlayerInfo::ShowSettingsOptions @0x82485140 inline the fetch).
@@ -398,7 +422,12 @@ namespace BrnGui
         CgsID mShutdownCarID;                            // +0x9FF0 (40944)
         u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
         s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
-        u8  mPad_A004[3124];                             // +0xA004..+0xAC37
+        u8  mPad_A004[0x9C4];                            // +0xA004..+0xA9C7
+        // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): the online-host-game state word (== 1 when the
+        // local client is the online host). Carved from the former mPad_A004[3124] WITHOUT shifting
+        // any following member. FLAG: consumer-named (no standalone DWARF for this member).
+        s32 miOnlineHostGameState;                       // +0xA9C8 (43464)
+        u8  mPad_A9CC[0xAC38 - 0xA9CC];                  // +0xA9CC..+0xAC37
         bool mabRoadRulesActive[2];                      // +0xAC38 (DWARF h; precedes meActiveRoadRule)
         u8  mPad_AC3A[2];                                // +0xAC3A..+0xAC3B
         s32 meActiveRoadRule;                            // +0xAC3C (44092) BrnGameState::EActiveRoadRule (PlayerPositionSingle::RenderValue gate @0x824220B4)

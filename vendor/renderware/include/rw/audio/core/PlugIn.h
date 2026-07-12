@@ -339,7 +339,12 @@ public:
     u32 muExpelAfterDecayCount;                   // +0x10A8  live entries in mpExpelAfterDecayList
     u8 mPad10AC[0x10B8 - 0x10AC];                  // +0x10AC..0x10B7
     u32 muDeferredRingCursor;                     // +0x10B8  byte cursor into the command ring
-    u8 mPad10BC[0x10E4 - 0x10BC];                  // +0x10BC..0x10E3  (ring stats + timing; System-TU-only paths blocked)
+    u8 mPad10BC[0x10C8 - 0x10BC];                  // +0x10BC..0x10C7
+    f32 mfCpuClockRate;                           // +0x10C8  CPU clock rate in Hz (CpuLoadBalancer::Init seeds 3.2e9)
+    f32 mfCpuLoadPercent;                         // +0x10CC  CPU-load headroom % read by CpuLoadBalancer::Balance's cull gate
+    u8 mPad10D0[0x10DC - 0x10D0];                  // +0x10D0..0x10DB
+    u32 muBalanceCycles;                          // +0x10DC  CPU cycles spent in the last CpuLoadBalancer::Balance
+    u8 mPad10E0[0x10E4 - 0x10E0];                  // +0x10E0..0x10E3  (ring stats + timing; System-TU-only paths blocked)
     u32 muFrameCounter;                           // +0x10E4  executed-frame counter (IsCommandComplete)
     u8 mPad10E8[0x10F4 - 0x10E8];                  // +0x10E8..0x10F3
     u16 muActiveVoiceCount;                       // +0x10F4  live entries in mppVoiceListNodes
