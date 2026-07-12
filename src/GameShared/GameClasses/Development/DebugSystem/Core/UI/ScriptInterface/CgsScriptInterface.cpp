@@ -16,13 +16,25 @@
 
 // CgsDev::DebugUI::ScriptInterface - script command runner.
 //
-// NOTE ON SCOPE: 4 of the 21 ledger functions are intentionally NOT reconstructed here:
-//   * ExecuteScriptCommand / ScriptCommand_Help walk KA_COMMAND_TABLE, whose command-word and
-//     runtime-printed help strings are not recovered from the ARTIST rodata (only "*WINDOW" is
-//     attested) - reconstructing them would guess runtime dispatch strings.
-//   * SaveState / ScriptCommand_Window traverse un-recovered foreign layouts by raw offset
-//     (Menu / MenuItemVariable / Variant metadata chains, Window flag/geometry fields, the debug
-//     Metrics field block, DebugManager's component array) that have no reconstructed home yet.
+// NOTE ON SCOPE: 4 of the 21 ledger functions remain BLOCKED (re-checked W38, after the debug-UI
+// collaborator headers were homed):
+//   * ExecuteScriptCommand / ScriptCommand_Help walk KA_COMMAND_TABLE (X360 rodata off_820DC198,
+//     12 {handler, name, help} triples). Only entry 0 is attested - {ScriptCommand_Window,
+//     "*WINDOW", "<PATH> <X> <Y> [PINNED] - Open window..."}; the other 11 entries' command words
+//     and (runtime-printed) help strings live in rodata that is NOT in the ARTIST export (the table
+//     address is referenced only by these two functions), so the table cannot be defined without
+//     fabricating the dispatch strings. Still blocked - rodata unrecovered, not a type-home gap.
+//   * ScriptCommand_Window: Window and Metrics ARE now homed (CgsWindow.h flags/geometry match the
+//     asm exactly; CgsTypes.h Metrics carries the screen-bound floats), but the "*WINDOW" action
+//     still needs CgsDev::DebugUI::MenuManager::OpenWindowFromPath (un-homed - absent from the whole
+//     tree; MenuManager exposes only Open/CreateMenuPath), and it iterates the DebugUI window-list
+//     head + clamps against the DebugUI screen-geometry block by raw offset into the DebugUI layout,
+//     which is deliberately NOT offset-modelled (see CgsDebugUI.h) and exposes no public window-list
+//     iterator / clamp accessor to ScriptInterface. Narrowed but still blocked.
+//   * SaveState serialises the whole debug-UI state by walking the DebugManager component array
+//     (mpInstance[+0x8283*4]), the VariableManager MenuItemVariable array, and Menu/MenuItem/Variant
+//     metadata chains, almost entirely by raw offset into foreign layouts (MenuItemVariable, the
+//     Variant chain, VariableManager internals) that have no reconstructed home yet. Still blocked.
 // They stay blocked in the ledger with those reasons.
 
 namespace CgsDev

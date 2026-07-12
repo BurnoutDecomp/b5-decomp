@@ -22,25 +22,25 @@
 //     MassiveAdClient3::CMassiveAsset::RecordCreate              @ 0x82BDA4D0
 //     MassiveAdClient3::CMassiveAsset::RecordFind                @ 0x82BDA590
 //     MassiveAdClient3::CMassiveAsset::Resume                    @ 0x82BDA358
-//     MassiveAdClient3::CMassiveAsset::RequestDownloadBinary     @ 0x82BDA188 (BLOCKED)
+//     MassiveAdClient3::CMassiveAsset::RequestDownloadBinary     @ 0x82BDA188
 //     MassiveAdClient3::CMassiveAsset::ReportImpressions         @ 0x82BDA980 (BLOCKED)
-//     MassiveAdClient3::CMassiveAsset::SendReport                @ 0x82BDA688 (BLOCKED)
+//     MassiveAdClient3::CMassiveAsset::SendReport                @ 0x82BDA688
 //
-// The three BLOCKED bodies are DECLARED here (so the class surface is complete
-// and the compile gate is clean) but left for a later ledger slice -- they
-// dispatch through collaborators whose owning layout is not yet reconstructed
-// and must not be guessed:
-//   - RequestDownloadBinary builds and submits a CRequestDownloadBinary, a
-//     concrete CRequestObject with no home in b5-decomp.
-//   - ReportImpressions walks each record's interaction-record list and reads
-//     three fields (+0x14/+0x1C/+0x20) of the listed interaction SUB-RECORD
-//     type, which has no reconstructed home (Record.cpp models it only as a
-//     one-slot opaque `InteractionRecord`), and also reaches the zone's pending
-//     CRequestImpressionUpdate (CMassiveZoneManager +0x6C, private).
-//   - SendReport reads many private CMassiveRecordImpression accumulator slots
-//     and the zone's pending update, and carries divwu / twllei (divide-by-zero
-//     trap) / fcfid float-conversion semantics; grounding it faithfully needs the
-//     same un-exposed collaborators as ReportImpressions.
+// RequestDownloadBinary and SendReport are now RECONSTRUCTED (this wave): their
+// former collaborators are homed -- CRequestDownloadBinary (ctor / CreateRequest)
+// and CRequestObject::Submit for the download request, and CRequestImpression
+// Update::Add{Texture,Video,Audio,Model}Report + the CMassiveRecordImpression
+// accumulator getters + CMassiveZoneManager::GetImpressionUpdate for the report.
+//
+// ReportImpressions @ 0x82BDA980 stays BLOCKED (DECLARED so the class surface is
+// complete and the compile gate is clean). It walks each record's interaction-
+// record list and reads three fields (+0x14/+0x18/+0x20) of the listed
+// interaction SUB-RECORD type, which still has NO reconstructed layout: Record.cpp
+// models the listed payload only as a one-slot opaque `InteractionRecord` (just
+// the vtable slot for its deleting destructor). Reading those three fields by name
+// would require homing that type's layout, which is not attested here -- so the
+// body is left for the slice that homes the interaction sub-record. (The zone's
+// pending update and the record accessors it also needs ARE now exposed by name.)
 //
 // Per the naming convention the vendor SDK identifiers (the MassiveAdClient3
 // namespace and the CMassiveAsset class / its methods) are PRESERVED VERBATIM --
@@ -89,6 +89,13 @@ class CMassiveRecordImpression;
 
 class CMassiveAsset : public CRequestBuilder
 {
+    // The owning CMassiveZoneManager keeps this asset on its mAssetList and, on the
+    // X360, reads the asset's id word directly (CMassiveZoneManager::AssetFind
+    // @ 0x82BD2D40 compares asset+0x3C == nAssetId with a bare lwz). Granting
+    // friendship keeps that a named-member read rather than an offset hack; the
+    // zone manager owns the list the asset lives on.
+    friend class CMassiveZoneManager;
+
 public:
     // @ 0x82BD9EE0. Chains CRequestBuilder("CMassiveAsset"), installs this class's
     // vftable (off_82186FE8 -- modelled by the virtuals), stores the asset
@@ -156,8 +163,12 @@ public:
     // CRequestBuilder::Resume) and returns 1.
     int Resume();
 
-    // @ 0x82BDA188 (BLOCKED -- see the file header). Builds and submits a
-    // CRequestDownloadBinary (un-homed); body left for that ledger slice.
+    // @ 0x82BDA188. Kicks off the asset's media download: short-circuits when the
+    // asset is already downloading (state 19 / has a media buffer / non-zero ref
+    // count) by re-arming the state and bumping the ref count, else validates the
+    // URL (-597) and hash (-596) and builds + submits a CRequestDownloadBinary
+    // (marking the asset downloading, state 19). A missing media-type band records
+    // -595; an allocation failure records -99 and clears the state.
     int RequestDownloadBinary();
 
     // @ 0x82BDA980 (BLOCKED -- see the file header). Reports every record's
@@ -165,10 +176,10 @@ public:
     // reads the un-homed interaction sub-record type; body left for that slice.
     int ReportImpressions();
 
-    // @ 0x82BDA688 (BLOCKED -- see the file header). Adds one media-type report
-    // (texture / video / audio / model) for the given impression accumulator to
-    // the zone's pending update; deep private impression/zone access + trap/div
-    // math; body left for that slice.
+    // @ 0x82BDA688. Adds one media-type impression-report block (texture / video /
+    // audio / model, chosen by mnMediaType) for the given accumulator to the
+    // current zone's pending CRequestImpressionUpdate; records -591 when no zone /
+    // pending update / accumulator is present.
     int SendReport(int nRecordField18, int bImpressionSlot,
                    CMassiveRecordImpression* pImpression);
 

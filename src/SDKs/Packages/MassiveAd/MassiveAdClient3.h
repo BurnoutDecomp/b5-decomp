@@ -237,6 +237,13 @@ protected:
     // Exposes that field BY NAME to subclasses instead of an offset poke.
     void SetValid(int bValid) { mbIsValid = bValid; }
 
+    // Additive accessor (FLAG: not its own X360 function). Some derived MassiveAd
+    // handlers READ the base valid/state dword at +0x10 directly on the X360 --
+    // e.g. CMassiveAsset::RequestDownloadBinary @ 0x82BDA188 gates on the asset's
+    // download state (`if ( *(this+0x10) == 19 )`, the "already downloading" band).
+    // Exposes that field BY NAME to subclasses so they do not read it by offset.
+    int GetValid() const { return mbIsValid; }
+
     // Additive clear (FLAG: not its own X360 function). CNetworkManager::Tick
     // opens each tick by zeroing the base last-error dword at +0x04 directly
     // (`stw 0, 0x04`) -- a bare store, distinct from the SetLastError setter which

@@ -10,6 +10,10 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h"     // CRequestObject
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h"  // CMassiveClientCore
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Record.h"      // CMassiveRecord
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RecordImpression.h"        // CMassiveRecordImpression (SendReport source)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3ZoneManager.h"             // CMassiveZoneManager (current zone + pending update)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestImpressionUpdate.h" // CRequestImpressionUpdate (Add*Report)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestDownloadBinary.h"   // CRequestDownloadBinary (asset media download)
 
 // ===========================================================================
 // MassiveAdClient3 -- CMassiveAsset.
@@ -340,6 +344,195 @@ int CMassiveAsset::Resume()
 {
     CRequestBuilder::Resume();
     return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveAsset::RequestDownloadBinary @ 0x82BDA188
+//
+// Kicks off the asset's media download. Logs the attempt, then short-circuits
+// when the asset is already downloading -- state 19, an existing media buffer,
+// or a live reference count: it logs the reason, re-arms the state (20 when a
+// buffer already exists, else 19) and bumps the reference count. Otherwise, when
+// the asset carries a media-type band (mnField48), it validates the URL (-597)
+// and hash (-596), allocates + builds a CRequestDownloadBinary through the list-
+// node heap hook and submits it -- marking the asset downloading (state 19) and
+// bumping the reference count on a clean submit, or recording -99 / clearing the
+// state on an allocation or submit failure. A missing media-type band records
+// -595. All -59x paths return the SetLastError result; the request path returns
+// the Submit result (0 on success).
+// ---------------------------------------------------------------------------
+int CMassiveAsset::RequestDownloadBinary()
+{
+    MassiveLog(5, GetName(), "Request Download Binary ID: %d Crex: %d",
+               mnAssetId, mnCrex);
+
+    // Already downloading / buffered / referenced -> re-arm and count, don't
+    // issue a second request.
+    if (GetValid() == 19 || mpMediaBuffer || mnRefCount)
+    {
+        const char* pcReason;
+        if (mpMediaBuffer)
+            pcReason = "Buffer Exists";
+        else if (mnRefCount)
+            pcReason = "Reference Count";
+        else
+            pcReason = "In Download State";
+        MassiveLog(5, GetName(), "Asset is already downloading: %s", pcReason);
+
+        // `((cntlzw(mpMediaBuffer) & 0x20) == 0) + 19` == (mpMediaBuffer ? 20 : 19).
+        SetValid(mpMediaBuffer ? 20 : 19);
+        ++mnRefCount;
+        return 0;
+    }
+
+    if (!mnField48)
+        return SetLastError(-595, reinterpret_cast<const char*>(0)); // &unk_820046A7
+
+    if (!CMassiveBaseObject::IsValidString(mpcUrl))
+        return SetLastError(-597, reinterpret_cast<const char*>(0)); // &unk_820046A7
+
+    if (!mpHash)
+        return SetLastError(-596, reinterpret_cast<const char*>(0)); // &unk_820046A7
+
+    void* lpReqMem = CMassiveListNode::operator new(sizeof(CRequestDownloadBinary)); // li r3, 0x58
+    CRequestDownloadBinary* lpRequest =
+        lpReqMem ? ::new (lpReqMem) CRequestDownloadBinary() : 0;
+    if (!lpRequest)
+    {
+        MassiveLog(2, GetName(),
+                   "ALLOCATION Failed for CRequestDownloadBinary.  Asset: %d", mnCrex);
+        SetValid(0);  // *(this + 0x10) = 0
+        return -99;
+    }
+
+    lpRequest->CreateRequest(this, mpcUrl, mpHash, mnField48);
+    int lnSubmit = lpRequest->Submit();
+    if (lnSubmit)
+    {
+        SetValid(0);       // *(this + 0x10) = 0
+        return lnSubmit;   // the non-zero Submit failure code
+    }
+
+    SetValid(19);  // *(this + 0x10) = 19 (downloading)
+    ++mnRefCount;
+    return lnSubmit;  // 0 on a clean submit
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveAsset::SendReport @ 0x82BDA688
+//
+// Adds ONE media-type impression-report block for the given accumulator to the
+// current zone's pending CRequestImpressionUpdate. The report shape is chosen by
+// the asset's media-type band (mnMediaType): texture (< 0x400), video (< 0x800),
+// audio (< 0x1000) or model (< 0x2000); a band >= 0x2000 emits nothing. Each
+// block reuses the accumulator's count/divisor/dividend slots -- texture/video/
+// model divide the field18 hit count by msField1C for the tag-53 ratio and (for
+// texture/video) the mfField20 total by msField24 for the tag-48 float; audio
+// divides mfField28 by msField2C for the tag-49 float. bImpressionSlot selects
+// the viewability tag (1 primary / 2 secondary). Reports only when a current zone
+// with a pending update exists AND the accumulator is non-null (else -591); a
+// per-band zero guard skips an empty accumulator. The integer divides carry the
+// X360's divide-by-zero trap semantics implicitly (msField1C / msField2C are the
+// non-zero-guarded denominators).
+// ---------------------------------------------------------------------------
+int CMassiveAsset::SendReport(int nRecordField18, int bImpressionSlot,
+                              CMassiveRecordImpression* pImpression)
+{
+    CMassiveClientCore* lpCore = CMassiveClientCore::Instance();
+    CMassiveZoneManager* lpZone = lpCore->GetCurrentZone();
+    CRequestImpressionUpdate* lpUpdate = lpZone ? lpZone->GetImpressionUpdate() : 0;
+
+    if (!pImpression || !lpZone || !lpUpdate)
+        return SetLastError(-591, reinterpret_cast<const char*>(0)); // &unk_820046A7
+
+    // uTag54: `((cntlzw(a3) & 0x20) == 0) + 1` == (bImpressionSlot ? 2 : 1).
+    const unsigned char uTag54 =
+        static_cast<unsigned char>(bImpressionSlot ? 2 : 1);
+    const unsigned int nTag21 = static_cast<unsigned int>(mnCrex); // this + 0x40
+    const unsigned int nMediaBand = static_cast<unsigned int>(mnMediaType); // +0x44
+
+    // The X360 leaves the pending-update pointer in r3 as the fall-through result
+    // (the null-check idiom `(result = zone->update) != 0` reuses the return
+    // register); a fired Add*Report overwrites it with the block's own result (0).
+    int lnResult = static_cast<int>(reinterpret_cast<std::uintptr_t>(lpUpdate));
+
+    if (nMediaBand < 0x400)
+    {
+        // Texture report (block type 46, float under tag 48).
+        if (pImpression->GetField18())
+        {
+            lnResult = lpUpdate->AddTextureRepor(
+                uTag54,
+                static_cast<unsigned int>(nRecordField18),
+                nTag21,
+                static_cast<unsigned int>(pImpression->GetField34()),
+                static_cast<unsigned long long>(pImpression->GetField40()),
+                static_cast<unsigned long long>(pImpression->GetField48()),
+                static_cast<unsigned short>(
+                    static_cast<unsigned int>(pImpression->GetField18())
+                        / pImpression->GetField1C()),
+                pImpression->GetField20()
+                    / static_cast<float>(static_cast<int>(pImpression->GetField24())),
+                pImpression->GetField58());
+        }
+    }
+    else if (nMediaBand < 0x800)
+    {
+        // Video report (byte-identical wire shape to the texture block).
+        if (pImpression->GetField18())
+        {
+            lnResult = lpUpdate->AddVideoReport(
+                uTag54,
+                static_cast<unsigned int>(nRecordField18),
+                nTag21,
+                static_cast<unsigned int>(pImpression->GetField34()),
+                static_cast<unsigned long long>(pImpression->GetField40()),
+                static_cast<unsigned long long>(pImpression->GetField48()),
+                static_cast<unsigned short>(
+                    static_cast<unsigned int>(pImpression->GetField18())
+                        / pImpression->GetField1C()),
+                pImpression->GetField20()
+                    / static_cast<float>(static_cast<int>(pImpression->GetField24())),
+                pImpression->GetField58());
+        }
+    }
+    else if (nMediaBand < 0x1000)
+    {
+        // Audio report (block type 43, float under tag 49, no tag-53 ratio).
+        if (pImpression->GetField2C())
+        {
+            lnResult = lpUpdate->AddAudioReport(
+                uTag54,
+                static_cast<unsigned int>(nRecordField18),
+                nTag21,
+                static_cast<unsigned int>(pImpression->GetField34()),
+                static_cast<unsigned long long>(pImpression->GetField40()),
+                static_cast<unsigned long long>(pImpression->GetField48()),
+                pImpression->GetField28()
+                    / static_cast<float>(static_cast<int>(pImpression->GetField2C())),
+                pImpression->GetField58());
+        }
+    }
+    else if (nMediaBand < 0x2000)
+    {
+        // Model report (block type 41, integer ratio under tag 53, no float).
+        if (pImpression->GetField18())
+        {
+            lnResult = lpUpdate->AddModelReport(
+                uTag54,
+                static_cast<unsigned int>(nRecordField18),
+                nTag21,
+                static_cast<unsigned int>(pImpression->GetField34()),
+                static_cast<unsigned long long>(pImpression->GetField40()),
+                static_cast<unsigned long long>(pImpression->GetField48()),
+                static_cast<unsigned short>(
+                    static_cast<unsigned int>(pImpression->GetField18())
+                        / pImpression->GetField1C()),
+                pImpression->GetField58());
+        }
+    }
+
+    return lnResult;
 }
 
 } // namespace MassiveAdClient3

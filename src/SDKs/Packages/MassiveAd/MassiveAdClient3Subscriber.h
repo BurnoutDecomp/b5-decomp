@@ -49,6 +49,13 @@ class CMassiveAdObject;
 
 class CMassiveAdObjectSubscriber
 {
+    // A pre-subscriber waits on its owning zone's mPreSubscriberList; on the X360
+    // CMassiveZoneManager::PreSubscriberAssignT @ 0x82BD3630 reads the queued
+    // subscriber's name directly (CompareStrings(pcName, subscriber+0x04)) to match
+    // it against a newly-arrived ad object. Granting friendship keeps that a named-
+    // member read rather than an offset hack; the zone manager owns the queue.
+    friend class CMassiveZoneManager;
+
 public:
     // @ 0x82BCE968. Copies the slot name, then -- when the client core and its
     // current zone are live and the name is valid (>= 2 chars) -- attaches to the
