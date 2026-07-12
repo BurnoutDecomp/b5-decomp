@@ -13,20 +13,30 @@
 // re-sizes the delay lines; UpdateLatencyAndDecay derives the reverb latency the mixer must
 // pre-roll from the largest comb/all-pass delay and the loop gains (Schroeder RT60 form).
 //
-// FOUR functions in this TU are left for a later pass and are only DECLARED here (bodies
+// THREE functions in this TU are left for a later pass and are only DECLARED here (bodies
 // omitted, not stubbed):
 //   * CalculateCombDelays  -- reads the undecoded rwaudio rodata delay-quantisation table
 //                             flt_82170638[1652] (not in the dossier); its exact values are
 //                             load-bearing, so the body is BLOCKED rather than guessed.
 //   * CalculateG1Values    -- reads the undecoded rwaudio rodata coefficient tables
 //                             flt_82170540[] / unk_82170564[] (not in the dossier); BLOCKED.
-//   * Process              -- installs an unresolved all-pass reset function pointer (the
-//                             disassembly's "STUB" symbol) into each all-pass section; the
-//                             pointer identity is un-homed, so BLOCKED rather than fabricated.
-//   * Dtor (~ReverbModel1) -- makes an unresolved call ("STUB") to tear down the embedded
-//                             TimerHandle; the callee is un-homed, so BLOCKED.
-// The bodied functions below reference the four only through their declarations, so this TU
+//   * Process              -- the comb loop installs rw::audio::core::CombFilter::CombFilterApplyFunc
+//                             (@0x82B64D00) as each comb section's IFilter apply pointer. That
+//                             function is real but is neither in the X360 ledger nor in the
+//                             export set (no disassembly is available for it), so its body
+//                             cannot be homed faithfully and its pointer cannot be installed
+//                             without fabricating a stand-in -> BLOCKED. (The separate all-pass
+//                             reset "STUB" pointer is NOT the blocker: it resolves to the
+//                             image's shared empty thunk 0x82AD5078 -- a trivial no-op reset,
+//                             the same folded thunk the ~ReverbModel1 / Delay teardown uses.)
+// The bodied functions below reference the three only through their declarations, so this TU
 // compiles under the per-TU gate.
+//
+// ~ReverbModel1 (Dtor) is now bodied: its leading "STUB" teardown of the embedded TimerHandle
+// resolves to the same shared empty thunk 0x82AD5078 (trivial ~TimerHandle -- all POD members,
+// nothing to release), exactly as resolved for rw::audio::core::Delay's teardown (W42). Only
+// the embedded DelayLines and the (no-op) TimerHandle get destructor calls; the trivial
+// CombFilter / AllPassFilter sub-objects have their destructors elided, per the asm.
 // =====================================================================================
 
 #include "rw/audio/core/plugins/ReverbModel1.h"
@@ -53,6 +63,7 @@ extern "C" System *off_83271928;
 // opaque data symbols in the XEX (no exported contents); modelled as honest placeholder
 // storage so the bodies below link without fabricating their contents.
 static void *const KRV_ReverbModel1VTable = nullptr; // off_8217F59C
+static void *const KRV_BasePlugInVTable   = nullptr; // off_820AA810 (base PlugIn v-table the dtor reinstalls)
 static char       *KRV_ReverbModel1Desc = nullptr;   // off_82F8FA14 (the "ReverbModel1" record)
 
 // The full mixer frame is processed per Process call; the reverb targets a 48 kHz internal
@@ -108,6 +119,33 @@ ReverbModel1 *ReverbModel1::ReverbModel1_ctor(ReverbModel1 *self)
         CombFilter::CombFilter_ctor(&self->mComb[i]);
     for (int i = 0; i < 6; ++i)
         new (&self->mCombDelay[i]) DelayLine();
+
+    return self;
+}
+
+// -------------------------------------------------------------------------------------
+// ~ReverbModel1 @0x82B9E9E0 -- tear the reverb network down, in the asm's order:
+//   1. destruct the six comb delay lines in reverse (mCombDelay[5]..[0]);
+//   2. ~TimerHandle(&mTimer) -- trivial (POD members), ICF-folded onto the image's shared
+//      empty thunk 0x82AD5078 (a lone `blr`), so the call is reproduced but does nothing;
+//   3. destruct the three all-pass delay lines in reverse (mAllPassDelay[2]..[0]);
+//   4. reinstall the base PlugIn v-table (off_820AA810) at +0x00.
+// The trivial CombFilter / AllPassFilter sub-objects own nothing, so the compiler elided
+// their destructor calls entirely -- none is made here, matching the asm. The X360 return is
+// the last ~DelayLine call's register value, which the sole caller (the vector deleting
+// destructor) discards; `self` is returned for a clean, well-typed result.
+// -------------------------------------------------------------------------------------
+ReverbModel1 *ReverbModel1::Dtor(ReverbModel1 *self)
+{
+    for (int i = 5; i >= 0; --i)
+        self->mCombDelay[i].~DelayLine();      // bl ~DelayLine (r30: self+0x3E0 down by 0x3C)
+
+    self->mTimer.~TimerHandle();               // bl STUB (0x82AD5078) -- trivial/no-op ~TimerHandle
+
+    for (int i = 2; i >= 0; --i)
+        self->mAllPassDelay[i].~DelayLine();   // bl ~DelayLine (r30: self+0x100 down by 0x3C)
+
+    self->mBase.mpVTable = KRV_BasePlugInVTable; // stw off_820AA810 @ +0x00
 
     return self;
 }
