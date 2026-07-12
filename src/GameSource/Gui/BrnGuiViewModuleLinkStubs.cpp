@@ -50,6 +50,8 @@
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"                // BrnFlapt::MovieClipInstance (Update/Render stubs below)
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"                         // BrnFlapt::FlaptRenderer
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                          // BrnFlapt::FileRef (PrepareFlapt param)
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                     // BrnFlapt::MovieClipRef (lookup-stub out handles)
+#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                     // BrnFlapt::TextFieldRef (FindChildTextField stub out handle)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"         // BrnGui::AlwaysAvailableComponentsManager
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle (RegisterFlaptFile by-value param)
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsGui::GuiEventQueueBase<N,A>
@@ -65,6 +67,56 @@ namespace BrnFlapt
     void MovieClipInstance::GotoFrame(u32) {}
     void MovieClipInstance::Update(f32) {}
     void MovieClipInstance::Render(FlaptRenderer*) {}
+
+    // --- Timeline lookup/playback bodies referenced by the homed Ref layer ------
+    // (BrnFlaptMovieClipRef.cpp / BrnFlaptFileRef.cpp / the FlaptComponents, pulled
+    // in by the overlay-flow closure 2026-07-12.) Real bodies are the same big
+    // unreconstructed timeline TUs as the block above:
+    //   FindChildMovieClip @0x8246B848 / FindChildTextField @0x8246BAC0 /
+    //   FindChildMovieClipOnFrame @0x8246BD50 / TryFindChildComponentRecursively
+    //   @0x8246C020 / GetParent @0x8246C250 / GetTriggerParameters @0x8246C610 /
+    //   ResetTimeline @0x8246B710 / SetFrameTriggerCallback @0x8246B740 /
+    //   GotoAndPlayLabel @0x8246F228 / GotoAndStopLabel @0x8246F2D8 /
+    //   FlaptFileInstance::FindComponent @0x8246E958.
+    // The sret-out lookups write the INVALID handle (never stack garbage) so the
+    // Ref layer's own "mpMovieClipInst" asserts report the un-driven overlay
+    // deterministically; the playback entries no-op (the clip tree neither
+    // composes nor draws until the timeline TUs land -- the documented visual debt).
+    void MovieClipInstance::FindChildMovieClip(u32, MovieClipRef* lpOutRef, const char*)
+    {
+        lpOutRef->SetInvalid();
+    }
+    void MovieClipInstance::FindChildMovieClipOnFrame(u32, MovieClipRef* lpOutRef, const char*)
+    {
+        lpOutRef->SetInvalid();
+    }
+    void MovieClipInstance::FindChildTextField(u32, TextFieldRef* lpOutRef, const char*)
+    {
+        lpOutRef->SetInvalid();
+    }
+    bool MovieClipInstance::TryFindChildComponentRecursively(u32, MovieClipRef* lpOutRef, const char*)
+    {
+        lpOutRef->SetInvalid();
+        return false;
+    }
+    void MovieClipInstance::GetParent(MovieClipRef* lpOutRef)
+    {
+        lpOutRef->SetInvalid();
+    }
+    void MovieClipInstance::ResetTimeline() {}
+    void MovieClipInstance::GotoAndPlayLabel(u32, const char*) {}
+    void MovieClipInstance::GotoAndStopLabel(u32, const char*) {}
+    void MovieClipInstance::SetFrameTriggerCallback(FrameTriggerCallback, void*) {}
+    const TriggerParameters* MovieClipInstance::GetTriggerParameters() const
+    {
+        return 0;
+    }
+
+    MovieClipRef* FlaptFileInstance::FindComponent(u32, MovieClipRef* lpOutRef, const char*) const
+    {
+        lpOutRef->SetInvalid();
+        return lpOutRef;
+    }
 }
 
 namespace BrnGui

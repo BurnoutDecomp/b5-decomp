@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"        // CgsDev::PerfMonCpu (the Update phase brackets)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf (the "_level%d" target path)
+#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                          // BrnFlapt::TextFieldRef (its GetLanguageManager is bridged here)
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
@@ -664,5 +665,24 @@ namespace CgsGui
         CgsLanguage::LanguageManager* lpLanguage = lpRenderHandler->GetLanguageManager();
         CGS_ASSERT(lpLanguage != 0, "Invalid language manager in CgsAptString::Prepare");
         return lpLanguage;
+    }
+}
+
+// BrnFlapt::TextFieldRef::GetLanguageManager @ 0x8246CB40 -- the same
+// singleton -> render-handler -> language-manager walk with the Ref's own baked
+// asserts (BrnFlaptTextFieldRef.cpp:47/48; `this` is never touched). DWARF home is
+// BrnFlaptTextFieldRef.cpp, but that TU must see the REAL CgsAptString (through the
+// text-field instance it drives) which clashes with the render handler's opaque
+// pool stand-in -- so the body lives here with the rest of the AptAux layout users
+// (same rationale as the GetAptRenderHandlerLanguageManager bridge above).
+namespace BrnFlapt
+{
+    CgsLanguage::LanguageManager* TextFieldRef::GetLanguageManager()
+    {
+        CgsGui::AptRenderHandler* lpRenderHandler =
+            &CgsGui::AptAuxPointer::mpAptAuxInst->mRenderHandler;
+        CGS_ASSERT(lpRenderHandler != 0, "lpRenderHandler");
+        CGS_ASSERT(lpRenderHandler->GetLanguageManager() != 0, "lpRenderHandler->mpLanguageManager");
+        return lpRenderHandler->GetLanguageManager();
     }
 }

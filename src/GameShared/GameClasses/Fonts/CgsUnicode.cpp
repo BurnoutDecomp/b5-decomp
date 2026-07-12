@@ -215,6 +215,90 @@ namespace CgsUnicode
         }
     }
 
+    // Faithful port of X360 ARTIST 0x82834AF0 (CgsUnicode::_Print): copy the source string
+    // into the target, substituting each "%<digit>" positional marker with the matching
+    // argument string (argument 1 == lppUtf8Arguments[0]); a '%' not followed by a plain
+    // ASCII digit -- or one that would not fit -- is copied literally. The output is capped
+    // at lnTargetStringSize bytes; when the cap is hit exactly, back up over trailing UTF-8
+    // continuation bytes so the terminating NUL lands on a character boundary. Returns the
+    // terminator position. Used by the LanguageManager positional formatters (FormatTextV /
+    // Obsolete_FormatTextByArray).
+    CgsUtf8* _Print(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                    s32 lnTargetStringSize, const CgsUtf8* const* lppUtf8Arguments,
+                    u8 luNumArguments)
+    {
+        CGS_ASSERT(lpUtf8SourceString != 0, "lpUtf8SourceString != NULL");   // cpp:654
+        CGS_ASSERT(lpUtf8TargetString != 0, "lpUtf8TargetString != NULL");   // cpp:655
+        // The console checks zero (cpp:656) then non-positive (cpp:657) separately; a
+        // zero size fires both, a negative one only the second -- reproduced exactly.
+        CGS_ASSERT(lnTargetStringSize != 0, "lnTargetStringSize != NULL");
+        CGS_ASSERT(lnTargetStringSize > 0, "lnTargetStringSize > 0");
+
+        const CgsUtf8* lpChar    = lpUtf8SourceString;
+        CgsUtf8*       lpOut     = lpUtf8TargetString;
+        s32            lnWritten = 0;
+        bool           lbAtCap   = (lnWritten == lnTargetStringSize);
+
+        if (*lpChar != 0)
+        {
+            for (;;)
+            {
+                lbAtCap = (lnWritten == lnTargetStringSize);
+                if (lnWritten >= lnTargetStringSize)
+                    break;
+
+                const CgsUtf8 lu8Char = *lpChar;
+                const CgsUtf8 lu8Next = lpChar[1];
+                if (lu8Char != '%' || lnWritten + 1 >= lnTargetStringSize ||
+                    (lu8Next & 0x80) != 0 || lu8Next < '0' || lu8Next > '9')
+                {
+                    // Literal byte (including a '%' with no usable digit after it).
+                    *lpOut++ = lu8Char;
+                    ++lnWritten;
+                }
+                else
+                {
+                    ++lpChar;   // now at the argument-selecting digit
+                    // cpp:677 -- the X360 streams "Only <count> argument(s) supplied for
+                    // string <source>"; folded static per convention.
+                    CGS_ASSERT(static_cast<u8>(*lpChar - '0') <= luNumArguments,
+                               "Only <n> argument(s) supplied for string");
+
+                    // %1 selects lppUtf8Arguments[0] (the console indexes digit-1).
+                    const CgsUtf8* lpArg = lppUtf8Arguments[(*lpChar - '0') - 1];
+                    while (*lpArg != 0)
+                    {
+                        if (lnWritten >= lnTargetStringSize)
+                            break;
+                        *lpOut++ = *lpArg++;
+                        ++lnWritten;
+                    }
+                }
+
+                ++lpChar;
+                if (*lpChar == 0)
+                {
+                    lbAtCap = (lnWritten == lnTargetStringSize);
+                    break;
+                }
+            }
+        }
+
+        // Exactly full: rewind to the last character-leading byte so the NUL fits and
+        // never splits a multi-byte character.
+        if (lbAtCap)
+        {
+            do
+            {
+                --lpOut;
+            }
+            while ((*lpOut & 0xC0) == 0x80);
+        }
+
+        *lpOut = 0;
+        return lpOut;
+    }
+
     // Faithful port of X360 0x82443380 (CgsUnicode.h:499, the release out-of-line body of the
     // UnicodeBuffer::Convert(const CgsUtf8*) inline). Stage a parameter string into this buffer
     // (maBuffer, the first instance member -> &maBuffer == this) via CgsUnicode::Copy, first

@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                       // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/Language/CgsLanguageManagerDebugComponent.h"  // CgsLanguage::LanguageManagerDebugComponent (by-value member)
 
+#include <cstdarg>   // va_list (FormatTextV)
+
 namespace CgsResource { struct LanguageResource; }
 
 // CgsLanguage::LanguageManager - localisation/units manager: owns the loaded string table (a
@@ -163,8 +165,7 @@ namespace CgsLanguage
         // ParameterFormatType) -- the overlay popups pass their GuiPopupParameter's
         // text + raw type word (BaseOk/OkCancelOverlayState::SetupOverlay
         // @0x824B1BC0/@0x824B1C78, the "TEMP_POPUP_STRING1/2" button labels).
-        // ADDITIVE GROW: declaration-only (their bodies are this TU's own ledger
-        // functions, not yet reconstructed).
+        // Bodies in this TU.
         // X360 0x82864C48 (DWARF CgsLanguageManager.h:255) -- resolve lpcSourceText
         // through the given format into the caller's buffer (E_FORMAT_ID_LOOKUP resolves
         // it as a loc-string id; the value formats render clocks/distances/money).
@@ -173,10 +174,41 @@ namespace CgsLanguage
         bool FormatText(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
                         ParameterFormatType leType);
 
+        // X360 0x82862650 (DWARF CgsLanguageManager.h:264) -- render liValue into the
+        // caller's buffer under one of the four integer formats (integer / no-separator
+        // / percentage / money); anything else is the "with int" parameter assert. The
+        // buffer's last byte is always NUL'd. Body in this TU (the four formatter leaves
+        // are the FLAG trap-stubs at the end of the file until their decompiles land).
+        bool FormatText(char* lpacBuffer, u32 luBufferSize, s32 liValue,
+                        ParameterFormatType leType);
+
+        // DWARF CgsLanguageManager.h:252 also declares a two-arg overload
+        // FormatAndAddText(const char*, const char*); the X360 ARTIST build emitted no
+        // body for it (never referenced), so it is declaration-only here.
+        bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText);
+
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
                               ParameterFormatType leType);
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
                               ParameterFormatType leType, s32 liNumParams, ...);
+
+        // X360 0x828651E8 (DWARF CgsLanguageManager.h:273, the va_list form; the h:267
+        // `...` form has no X360 body). Resolve + format lpcSourceText into the caller's
+        // buffer, then format each of the liNumParams (1..3) vararg (const char* text,
+        // ParameterFormatType) pairs into its own 512-byte slot and print them into the
+        // source's %1..%N positional markers (CgsUnicode::_Print). Body in this TU.
+        bool FormatTextV(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
+                         ParameterFormatType leType, s32 liNumParams, va_list lArguments);
+
+        // X360 0x82865480 (DWARF CgsLanguageManager.h:276; the DWARF spells the last
+        // parameter `ParameterFormatType*` -- const-qualified here, the body only reads
+        // it). The array form of the positional-parameter formatter: as FormatTextV but
+        // the liNumParams (1..3) parameter texts/format types arrive as parallel arrays.
+        // Returns false when any parameter failed to format. Body in this TU.
+        bool Obsolete_FormatTextByArray(char* lpacBuffer, u32 luBufferSize,
+                                        const char* lpcSourceText, ParameterFormatType leType,
+                                        s32 liNumParams, const char* const* lppcParams,
+                                        const ParameterFormatType* lpeParamFormatTypes);
 
         // X360 0x82864950 / 0x828640B0. Remove the string added by AddString, by id or by a
         // precomputed hash. Returns false when no matching dynamic-string entry is found.
@@ -204,6 +236,9 @@ namespace CgsLanguage
         // since callers (e.g. the debug HUD) pass a plain byte buffer straight to the text renderer.
         // Bodies link from the CgsLanguageManager TU.
         void FormatIntegerString(char* lpcTarget, s32 liValue, s32 liTargetSize) const;
+        // X360 0x82861248 -- the no-thousands-separator integer variant (FormatText's
+        // E_FORMAT_INTEGER_NOSEPERATOR case).
+        void FormatIntegerNoSeperatorString(char* lpcTarget, s32 liValue, s32 liTargetSize) const;
         void FormatXoverYString(char* lpcTarget, s32 liX, s32 liY, s32 liTargetSize) const;
         void FormatPercentageString(char* lpcTarget, s32 liValue, s32 liTargetSize) const;
         void FormatCurrencyString(char* lpcTarget, s32 liCurrencyValue, s32 liTargetSize) const;

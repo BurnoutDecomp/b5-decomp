@@ -69,20 +69,51 @@ namespace BrnGui
 
         void Construct();
 
+        // EnsureResourceIsLoaded @ 0x824FDA28 -- step one watched resource's state
+        // machine towards LOADED (UNLOADED -> LOAD_REQUESTED with a type-consistency
+        // check; the CANCELLED/REQUESTED unload states step back towards their load
+        // counterparts), appending the id to the dirty list on any change. Returns
+        // whether the resource is now LOADED.
         bool EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource);
+
+        // EnsureResourcesAreLoaded @ 0x824FDD20 -- recount + re-latch the pending
+        // unload count (asserting consistency); while any unload is pending nothing
+        // loads (returns false), else step every tuple and return whether ALL are
+        // loaded.
         bool EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
+
         bool EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreUnloaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         const void* GetLoadedResource(u32 luId) const;
+
+        // UnloadResource @ 0x824FDF58 -- step one watched resource's state machine
+        // towards UNLOADED (the mirror of EnsureResourceIsLoaded; the LOADED case
+        // asserts the live resource + type consistency and bumps the pending-unload
+        // count), appending the id to the dirty list on any change.
         void UnloadResource(const CgsGui::sResourceTuple& lResource);
         void UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount);
+
+        // UnloadAllResources @ 0x824FE1F8 -- walk every watched slot and UnloadResource
+        // each non-UNLOADED entry whose recorded type matches leType.
         void UnloadAllResources(CgsGui::ResourceRequestTypes leType);
+
+        // AreAllAptComponentsInitialised @ 0x824EDC20 -- true once every expected apt
+        // component registered on the flow layer has been marked initialised.
+        bool AreAllAptComponentsInitialised(GuiFlow leFlow) const;
+
+        // ClearComponentInitialised @ 0x824EE058 -- zero the flow layer's per-component
+        // loaded flags and its expected count.
+        void ClearComponentInitialised(GuiFlow leFlow);
 
         void IncrementUnloadPending();
         void DecrementUnloadPending();
 
     private:
-        static const u32 KU_MAX_RESOURCES_TO_WATCH = 228;
+        // X360 ARTIST value: 237 (the 0xED bound + 237-entry walk in EnsureResourceIsLoaded
+        // @0x824FDA28 / EnsureResourcesAreLoaded @0x824FDD20 / IncrementUnloadPending
+        // @0x824EC008, and the Array<int,237> dirty-list helpers). The PS3-FIGS DWARF says
+        // 228 -- version drift; the X360 ledger attestation wins per the DecFIGS rule.
+        static const u32 KU_MAX_RESOURCES_TO_WATCH = 237;
         static const s32 KI_NUM_LOAD_REQUEST_QUEUES = 2;
 
         ResourceInfo               maResources[KU_MAX_RESOURCES_TO_WATCH];
@@ -99,6 +130,10 @@ namespace BrnGui
     class GuiCache
     {
     public:
+        // @ 0x82505860 -- the cache Construct (PC slice: the embedded watcher reset;
+        // the X360 tracker/system-user-profile stores land with their owners).
+        void Construct();
+
         bool EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         bool EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource);
@@ -130,8 +165,20 @@ namespace BrnGui
 
         // ADDITIVE GROW (BrnImageGallery.h TU): has every expected component on the flow
         // layer finished initialising (the per-frame init-wait poll -- ImageGalleryState::
-        // UpdateWFInit @0x824846B8 gates on it). Body links from the GuiCache TU.
+        // UpdateWFInit @0x824846B8 gates on it). X360 @0x824EE7A8 (`addi r3,r3,8` +
+        // tail-branch into the embedded watcher). Bodied in the GuiCache TU.
         bool AreAllAptComponentsInitialised(GuiFlow leFlow) const;
+
+        // Drop the flow layer's expected-component bookkeeping (the loaded flags + the
+        // expected count; the id list itself is left to be overwritten by the next Set/
+        // Append). X360 @0x824EE528 (`addi r3,r3,8` + tail-branch into the watcher's
+        // ClearComponentInitialised). Bodied in the GuiCache TU.
+        void ClearExpectedAptComponentList(GuiFlow leFlow);
+
+        // Request the unload of every watched resource of the given type. X360
+        // @0x824FEBB0 (`addi r3,r3,8` + tail-branch into the watcher). Bodied in the
+        // GuiCache TU.
+        void UnloadAllResources(CgsGui::ResourceRequestTypes leType);
 
         // ADDITIVE GROW (BrnOnlinePreEventMessages TU): the cache holds the active game-mode
         // type the GUI reads to pick mode-specific apt key-frames (the X360 reads it as a far
@@ -317,9 +364,15 @@ namespace BrnGui
         //  the recovered accessors touch are named; the object is a large plain
         //  aggregate (no vptr) so the first member sits at offset 0.
         // ===================================================================
-        u8  mPad_0000[4];                                // +0x0000 GuiEventTimeInfo header word
+        // The cache leads with the embedded per-frame GuiEventTimeInfo pair
+        // (CgsGuiEventTypeDefs.h: mfTimeDelta @+0, mfTimeNow @+4). GetTimeStep reads
+        // the delta word, GetTime the now stamp.
+        f32 mfTimeStep;                                  // +0x0000 (0)     GetTimeStep (the frame delta)
         f32 mfTimeNow;                                   // +0x0004 (4)     GetTime, != -FLT_MAX
-        u8  mPad_0008[16476];                            // +0x0008..+0x4063
+        // +0x0008..+0x4063 -- the embedded resource/component watcher fills this whole
+        // span (X360: the GuiCache::EnsureResource* forwarders @0x824FEB50/58 are
+        // `addi r3,r3,8` + tail-branch into the helper). Widens on x64; access by name.
+        StateLoadingHelper mStateLoadingHelper;          // +0x0008
         WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
         const BurnoutSkillsManager* mpSkillsManager;      // +0x4068 (16488) DWARF h:1632 (PlayerPositionSingle::RenderValue @0x824223FC)
         FreeburnChallengeManager* mpChallengeManager;    // +0x406C (16492)
@@ -363,9 +416,18 @@ namespace BrnGui
         u8  mPad_AC3A[2];                                // +0xAC3A..+0xAC3B
         s32 meActiveRoadRule;                            // +0xAC3C (44092) BrnGameState::EActiveRoadRule (PlayerPositionSingle::RenderValue gate @0x824220B4)
         s32 meRoadRuleScoreMode;                         // +0xAC40 (44096) GuiEventSetRoadRuleScoreMode::ERoadPanelModes
-        u8  mPad_AC44[1];                                // tail guard (further far members --
-        // pre-race messages, profile/replay/online tables, sat-nav zoom -- are reached only
-        // by declaration-only array accessors and are not modelled here.)
+        u8  mPad_AC44[0xB878 - 0xAC44];                  // +0xAC44..+0xB877 (far members --
+        // pre-race messages, replay/online tables, sat-nav zoom -- reached only by
+        // declaration-only array accessors; not modelled member-by-member.)
+
+        // +0xB878 (47224) -- the embedded player-options profile block
+        // (GetOptionsDataProfile hands it out; ScreenLoading writes the loaded save
+        // into it). BrnGuiOptionsDataProfile.h carries compile-only slices of
+        // network/game-state types that clash with the REAL headers inside this
+        // cache header's wide include set, so the block is reserved OPAQUE here and
+        // typed only inside BrnGuiCache.cpp (which static_asserts the real
+        // OptionsDataProfile fits this reservation). Widens on x64; access by name.
+        u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
 
         static void _AssertLayout();
     };

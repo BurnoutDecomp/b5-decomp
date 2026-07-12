@@ -132,16 +132,11 @@ namespace BrnGameState
     GameStateModuleIO::CarScoreData::CarScoreData() {}
 }
 
-// Link stubs for the wave-30 MainGameFlowStateInGame virtuals: the reconstructed
-// bodies (BrnGameMainFlowInGameState.cpp) call BrnGameModule::DoUpdate/DoDispatch,
-// which are not reconstructed yet, so that TU is not in the exe source list. The
-// boot/title slice never enters the in-game flow state; inert stubs satisfy the
-// vtable link only. Replace by adding the real TU when DoUpdate/DoDispatch land.
-#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
-void MainGameFlowStateInGame::OnEnter() {}
-void MainGameFlowStateInGame::OnLeave() {}
-void MainGameFlowStateInGame::Update() {}
-void MainGameFlowStateInGame::Render() {}
+// The wave-30 MainGameFlowStateInGame virtual stubs that used to live here are GONE:
+// DoUpdate/DoDispatch landed, so the real TU (BrnGameMainFlowInGameState.cpp) is in
+// the exe source list now. Its OnEnter requests GUI FSM stage 5 (the front-end/
+// freeburn handoff) -- the inert stubs silently swallowed that request, which was
+// the post-intro handoff stall.
 
 namespace CgsSound
 {

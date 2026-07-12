@@ -4,6 +4,7 @@
 #include <cstring>   // memmove
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<4096,16> (the recovered load-complete queue)
 
 namespace BrnGui
 {
@@ -406,6 +407,118 @@ CgsID OptionsDataProfile::OnlineSaveRoute::OnlineSaveRouteEvent::GetLandmark(s32
     CGS_ASSERT(liIndex < miNumLandmarks, "liIndex= GetNumLandmarks()=");
 
     return maLandmarkIndices[liIndex]; // +0x00 + liIndex*8
+}
+
+// ---------------------------------------------------------------------------
+// FLAG trap-stub bodies (link scaffold, 2026-07-12): the two OnlineSaveRoute
+// game-params transfer bodies below are declared (DWARF) and referenced by this
+// TU's own Add/Get*OnlineGameOptions accessors, but their reconstructions
+// (@0x82507448 SetFromGameParams / @0x82507570 SetToGameParams -- the
+// GuiEventNetworkGameParams field-by-field route transfer) have not landed.
+// Trap bodies per the stub scaffold -- reachable only through the online
+// game-options flows, never on the boot path. Replace each with its faithful
+// decompile.
+// ---------------------------------------------------------------------------
+void OptionsDataProfile::OnlineSaveRoute::SetFromGameParams(GuiCache*, const GuiEventNetworkGameParams*)       { __debugbreak(); }   // FLAG trap-stub
+void OptionsDataProfile::OnlineSaveRoute::SetToGameParams(GuiCache*, GuiEventNetworkGameParams*) const         { __debugbreak(); }   // FLAG trap-stub
+
+// ---------------------------------------------------------------------------
+// NotifyOtherModulesLoadComplete  @0x82511098
+//
+// Post the loaded profile's settings to the other modules as one burst of GUI
+// events on the caller's load-complete queue. The X360 record shapes / event
+// ids / wire sizes, straight from the asm:
+//   458 (0x1CA, 32B) : { mTraxAvailableInFreeBurn, mTraxAvailableInEvents }
+//   459 (0x1CB, 24B) : { mTraxFullyPlayed, miLastPlayedSongIndex,
+//                        miLastPictureParadiseMusicIndex }
+//   463 (0x1CF,  8B) : { mMusicVolume, mSFXVolume }
+//   -- assert "false == mbIsLocked" (cpp:640) --
+//   474 (0x1DA,  4B) : miVoipVolume
+//   462 (0x1CE,  4B) : meTraxPlayOrderMode
+//   475 (0x1DB,  4B) : mbDefaultGameCamera (the 4-byte flag word)
+//   472 (0x1D8,  3B) : { mbSixAxisShowtime, mbSixAxisSteering, mbForceFeedback }
+//   473 (0x1D9,  1B) : mbTips
+//   278 (0x116,  4B) : meCameraFeedSetting
+//
+// The parameter arrives as the header's opaque BrnGui::GuiEventQueueSmall
+// forward; the real object is the CgsGui small queue (a CgsModule::
+// VariableEventQueue<4096,16> -- ScreenLoading::ApplyOptionsDataProfileSettings
+// constructs exactly that and bridges the pointer). Recovered here the same way
+// the GUI states recover their opaque in-queues.
+// ---------------------------------------------------------------------------
+void OptionsDataProfile::NotifyOtherModulesLoadComplete(GuiEventQueueSmall* lpQueue)
+{
+    typedef CgsModule::VariableEventQueue<4096, 16> LoadCompleteQueue;
+    LoadCompleteQueue* lpOutQueue = reinterpret_cast<LoadCompleteQueue*>(lpQueue);
+
+    // 458: both trax-availability sets (two 16-byte FastBitArray<128> payloads).
+    {
+        struct TraxAvailableRecord
+        {
+            EATraxArrayType mFreeBurn;
+            EATraxArrayType mEvents;
+        };
+        TraxAvailableRecord lRecord;
+        lRecord.mFreeBurn = mTraxAvailableInFreeBurn;
+        lRecord.mEvents   = mTraxAvailableInEvents;
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 458, 32);
+    }
+
+    // 459: the fully-played set plus the two last-played indices.
+    {
+        struct TraxPlayedRecord
+        {
+            EATraxArrayType mFullyPlayed;
+            s32             miLastPlayedSongIndex;
+            s32             miLastPictureParadiseMusicIndex;
+        };
+        TraxPlayedRecord lRecord;
+        lRecord.mFullyPlayed                    = mTraxFullyPlayed;
+        lRecord.miLastPlayedSongIndex           = miLastPlayedSongIndex;
+        lRecord.miLastPictureParadiseMusicIndex = miLastPictureParadiseMusicIndex;
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 459, 24);
+    }
+
+    // 463: the music/SFX volume pair.
+    {
+        s32 laiVolumes[2] = { mMusicVolume, mSFXVolume };
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laiVolumes), 463, 8);
+    }
+
+    CGS_ASSERT(false == mbIsLocked, "false == mbIsLocked");   // cpp:640
+
+    // The scalar settings, one event each (X360 wire sizes).
+    {
+        s32 liValue = miVoipVolume;
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 474, 4);
+
+        liValue = static_cast<s32>(meTraxPlayOrderMode);
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 462, 4);
+
+        liValue = mbDefaultGameCamera;
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 475, 4);
+    }
+
+    // 472: the three controller-behaviour bytes, contiguously.
+    {
+        u8 lauControllerFlags[3];
+        lauControllerFlags[0] = mbSixAxisShowtime ? 1 : 0;
+        lauControllerFlags[1] = mbSixAxisSteering ? 1 : 0;
+        lauControllerFlags[2] = mbForceFeedback ? 1 : 0;
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lauControllerFlags), 472, 3);
+    }
+
+    // 473: the tips byte.
+    {
+        u8 luTips = mbTips ? 1 : 0;
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&luTips), 473, 1);
+    }
+
+    // 278: the camera-feed selection.
+    {
+        s32 liCameraFeed = static_cast<s32>(meCameraFeedSetting);
+        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liCameraFeed), 278, 4);
+    }
 }
 
 } // namespace BrnGui

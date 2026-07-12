@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiCache.h"
+#include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior)
@@ -42,6 +43,315 @@ namespace BrnGui
     {
         std::memset(this, 0, sizeof(GuiCache));
         mEventsCtorSentinel = -1;
+        // NOTE: the X360 ctor's -1 store at +3800 lands on the (now modelled)
+        // mStateLoadingHelper.maRequestDirtyList count word -- the Array's
+        // pre-Construct sentinel. The zero-fill above leaves it 0 (constructed-empty)
+        // instead: the member is private to the helper, and the dirty list is only
+        // consumed after the helper's own lifecycle has run on the console flow, so
+        // the observable behaviour (empty list at first use) is identical.
+    }
+
+    // @ 0x824FD978 (per-slot body inlined there) -- one watched slot to its reset state:
+    // UNLOADED, no live resource, and the type back to the 23 wildcard ("no type
+    // recorded yet" -- the value EnsureResourceIsLoaded/UnloadResource admit alongside
+    // an exact match in their consistency asserts).
+    void StateLoadingHelper::ResourceInfo::Construct()
+    {
+        meState    = E_STATE_UNLOADED;
+        meType     = static_cast<CgsGui::ResourceRequestTypes>(23);
+        mpResource = 0;
+    }
+
+    // @ 0x824FD978 -- reset the whole watcher: the 237 resource slots ({0, 23, NULL}
+    // stores in the X360 loop), the control/pending counters, the dirty list, the two
+    // load-request queues, and the three flow-layer expected-component blocks.
+    void StateLoadingHelper::Construct()
+    {
+        muControlledComponentCount = 0;
+        muPendingUnloadCount       = 0;
+
+        for (u32 lu = 0; lu < KU_MAX_RESOURCES_TO_WATCH; ++lu)
+            maResources[lu].Construct();
+
+        maRequestDirtyList.Construct();
+        miCurrentLoadRequestQueue = 0;
+        for (s32 li = 0; li < KI_NUM_LOAD_REQUEST_QUEUES; ++li)
+            mLoadRequestQueues[li].Construct();
+
+        for (u32 luFlow = 0; luFlow < 3; ++luFlow)
+        {
+            ComponentsToWatch& lrWatch = maComponentsToWatch[luFlow];
+            lrWatch.muNumberOfComponentsToWatch = 0;
+            for (u32 lu = 0; lu < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH; ++lu)
+            {
+                lrWatch.mauComponentsToWatchIds[lu] = 0;
+                lrWatch.mabComponentsLoaded[lu]     = false;
+            }
+        }
+    }
+
+    // @ 0x82505860 -- the cache Construct. The X360 form takes the tracker + system-user
+    // -profile pointers (asserted non-null, stored at +16468/+16472) and inits the far
+    // member block before running the embedded watcher's Construct. The tracker/profile
+    // owners are un-reconstructed on PC, so this slice performs the watcher reset (the
+    // part the boot path consumes -- it seeds the 23 wildcard types the resource state
+    // machine's consistency asserts key on); the pointer stores land with their owners.
+    void GuiCache::Construct()
+    {
+        mStateLoadingHelper.Construct();
+    }
+
+    // @ 0x824FDA28 -- step one watched resource's state machine towards LOADED.
+    // UNLOADED requests the load (after a null-resource check and a type-consistency
+    // check against the recorded type -- 23 is the wildcard "unset" type); the three
+    // pending-unload states step back to their load-side counterparts; the transit
+    // states (LOAD_REQUESTED / LOADING / LOADED / UNLOAD_CANCELLED) are left alone;
+    // anything else is the streamed unknown-state assert (folded static). Any state
+    // change re-appends the resource id to the dirty list (erase-then-append keeps
+    // it unique). Returns whether the resource is now LOADED. (The console's assert
+    // streams the resource's name from the GUI resource-name table; the streamed
+    // decoration is dropped per the project assert rule.)
+    bool StateLoadingHelper::EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource)
+    {
+        CGS_ASSERT(lResource.muId < KU_MAX_RESOURCES_TO_WATCH,
+                   "lResourceTuple.muId out of bounds in StateLoadingHelper::EnsureResourceIsLoaded");
+
+        ResourceInfo&        lrResourceInfo = maResources[lResource.muId];
+        const EResourceState leOldState     = lrResourceInfo.meState;
+
+        switch (leOldState)
+        {
+        case E_STATE_UNLOADED:
+            CGS_ASSERT(lrResourceInfo.mpResource == 0, "lResourceInfo.mpResource==NULL");
+            // 23 is the wildcard "no type recorded yet" value the X360 admits alongside
+            // an exact match ("GuiCache: inconsistent type used for resource Id=" fold).
+            CGS_ASSERT(lrResourceInfo.meType == 23 || lrResourceInfo.meType == lResource.meType,
+                       "GuiCache: inconsistent type used for resource Id=");
+            lrResourceInfo.meState = E_STATE_LOAD_REQUESTED;
+            lrResourceInfo.meType  = lResource.meType;
+            break;
+
+        case E_STATE_LOAD_REQUESTED:
+        case E_STATE_LOADING:
+        case E_STATE_LOADED:
+        case E_STATE_UNLOAD_CANCELLED:
+            break;
+
+        case E_STATE_LOAD_CANCELLED:
+            lrResourceInfo.meState = E_STATE_LOADING;
+            break;
+
+        case E_STATE_UNLOAD_REQUESTED:
+            lrResourceInfo.meState = E_STATE_LOADED;
+            break;
+
+        case E_STATE_UNLOADING:
+            lrResourceInfo.meState = E_STATE_UNLOAD_CANCELLED;
+            break;
+
+        default:
+            // cpp:258 -- streamed "StateLoadingHelper::EnsureResourceIsLoaded: unknown
+            // state! Resource <name> is in state <state>"; folded static.
+            CGS_ASSERT(false, "StateLoadingHelper::EnsureResourceIsLoaded: unknown state! Resource ");
+            break;
+        }
+
+        if (lrResourceInfo.meState != leOldState)
+        {
+            maRequestDirtyList.EraseInstancesOf(lResource.muId);
+            maRequestDirtyList.Append(lResource.muId);
+        }
+
+        return lrResourceInfo.meState == E_STATE_LOADED;
+    }
+
+    // @ 0x824FDD20 -- recount the really-pending unloads (LOAD_CANCELLED /
+    // UNLOAD_REQUESTED / UNLOADING), assert the latched count agreed (streamed
+    // expected/actual dropped per the assert rule), and re-latch it. While ANY
+    // unload is pending nothing loads (returns false); otherwise step every tuple
+    // and report whether all of them reached LOADED.
+    bool StateLoadingHelper::EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources,
+                                                      u32 luCount)
+    {
+        CGS_ASSERT(muPendingUnloadCount <= KU_MAX_RESOURCES_TO_WATCH,
+                   "muPendingUnloadCount <= KU_MAX_RESOURCES_TO_WATCH");
+
+        const u32 luRealPending = CountRealPendingUnloads(maResources, KU_MAX_RESOURCES_TO_WATCH);
+        CGS_ASSERT(muPendingUnloadCount == luRealPending,
+                   "Pending Unload count does not equal real pending unload count. "
+                   "This is skipable but might crash with out of memory");
+        muPendingUnloadCount = luRealPending;
+
+        if (luRealPending != 0)
+        {
+            return false;
+        }
+
+        bool lbAllLoaded = true;
+        for (u32 luResource = 0; luResource < luCount; ++luResource)
+        {
+            if (!EnsureResourceIsLoaded(lpResources[luResource]))
+            {
+                lbAllLoaded = false;
+            }
+        }
+        return lbAllLoaded;
+    }
+
+    // @ 0x824FDF58 -- step one watched resource's state machine towards UNLOADED
+    // (the mirror of EnsureResourceIsLoaded): LOAD_REQUESTED backs out to UNLOADED,
+    // LOADING becomes LOAD_CANCELLED (+pending), LOADED becomes UNLOAD_REQUESTED
+    // (+pending, after the live-resource and type-consistency asserts),
+    // UNLOAD_CANCELLED resumes UNLOADING; the already-unloading states are left
+    // alone. Any change re-appends the id to the dirty list. (The console's asserts
+    // stream the resource's name from the GUI resource-name table; streamed
+    // decoration dropped per the project assert rule.)
+    void StateLoadingHelper::UnloadResource(const CgsGui::sResourceTuple& lResource)
+    {
+        ResourceInfo&        lrResourceInfo = maResources[lResource.muId];
+        const EResourceState leOldState     = lrResourceInfo.meState;
+
+        switch (leOldState)
+        {
+        case E_STATE_UNLOADED:
+        case E_STATE_LOAD_CANCELLED:
+        case E_STATE_UNLOAD_REQUESTED:
+        case E_STATE_UNLOADING:
+            break;
+
+        case E_STATE_LOAD_REQUESTED:
+            lrResourceInfo.meState = E_STATE_UNLOADED;
+            break;
+
+        case E_STATE_LOADING:
+            lrResourceInfo.meState = E_STATE_LOAD_CANCELLED;
+            IncrementUnloadPending();
+            break;
+
+        case E_STATE_LOADED:
+            CGS_ASSERT(lrResourceInfo.mpResource != 0, "lResourceInfo.mpResource!=NULL");
+            CGS_ASSERT(lrResourceInfo.meType == 23 || lrResourceInfo.meType == lResource.meType,
+                       "GuiCache: inconsistent type used for resource Id=");
+            lrResourceInfo.meState = E_STATE_UNLOAD_REQUESTED;
+            lrResourceInfo.meType  = lResource.meType;
+            IncrementUnloadPending();
+            break;
+
+        case E_STATE_UNLOAD_CANCELLED:
+            lrResourceInfo.meState = E_STATE_UNLOADING;
+            break;
+
+        default:
+            // cpp:429 -- streamed "StateLoadingHelper::UnloadResource: unknown state!
+            // Resource <name> is in state <state>"; folded static.
+            CGS_ASSERT(false, "StateLoadingHelper::UnloadResource: unknown state! Resource ");
+            break;
+        }
+
+        if (lrResourceInfo.meState != leOldState)
+        {
+            maRequestDirtyList.EraseInstancesOf(lResource.muId);
+            maRequestDirtyList.Append(lResource.muId);
+        }
+    }
+
+    // @ 0x824FE1F8 -- request the unload of every watched slot of the given type
+    // that is not already sitting UNLOADED.
+    void StateLoadingHelper::UnloadAllResources(CgsGui::ResourceRequestTypes leType)
+    {
+        for (u32 luResource = 0; luResource < KU_MAX_RESOURCES_TO_WATCH; ++luResource)
+        {
+            const ResourceInfo& lrResourceInfo = maResources[luResource];
+            if (lrResourceInfo.meState != E_STATE_UNLOADED && lrResourceInfo.meType == leType)
+            {
+                CgsGui::sResourceTuple lTuple;
+                lTuple.muId   = luResource;
+                lTuple.meType = lrResourceInfo.meType;
+                UnloadResource(lTuple);
+            }
+        }
+    }
+
+    // @ 0x824EDC20 -- true once every expected apt component registered on the
+    // flow layer has been marked initialised. The flow-range assert (cpp:895)
+    // streams the offending value on the console; folded static.
+    bool StateLoadingHelper::AreAllAptComponentsInitialised(GuiFlow leFlow) const
+    {
+        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:895
+
+        const ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
+        for (u32 luComponent = 0; luComponent < lrWatch.muNumberOfComponentsToWatch; ++luComponent)
+        {
+            if (!lrWatch.mabComponentsLoaded[luComponent])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // @ 0x824EE058 -- zero the flow layer's per-component loaded flags and its
+    // expected count (the id list is left to be overwritten by the next register).
+    // Flow-range assert as above (cpp:1039).
+    void StateLoadingHelper::ClearComponentInitialised(GuiFlow leFlow)
+    {
+        CGS_ASSERT(static_cast<u32>(leFlow) <= 2, "Invalid GuiFlow of ");   // cpp:1039
+
+        ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
+        for (u32 luComponent = 0; luComponent < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH;
+             ++luComponent)
+        {
+            lrWatch.mabComponentsLoaded[luComponent] = false;
+        }
+        lrWatch.muNumberOfComponentsToWatch = 0;
+    }
+
+    // @ 0x824FEB58 / @ 0x824FEB50 / @ 0x824FEBB0 / @ 0x824EE7A8 / @ 0x824EE528 --
+    // the GuiCache faces of the helpers above (X360: `addi r3,r3,8` + tail-branch
+    // into the embedded watcher at +0x8).
+    bool GuiCache::EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources, u32 luCount)
+    {
+        return mStateLoadingHelper.EnsureResourcesAreLoaded(lpResources, luCount);
+    }
+
+    bool GuiCache::EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource)
+    {
+        return mStateLoadingHelper.EnsureResourceIsLoaded(lResource);
+    }
+
+    void GuiCache::UnloadAllResources(CgsGui::ResourceRequestTypes leType)
+    {
+        mStateLoadingHelper.UnloadAllResources(leType);
+    }
+
+    bool GuiCache::AreAllAptComponentsInitialised(GuiFlow leFlow) const
+    {
+        return mStateLoadingHelper.AreAllAptComponentsInitialised(leFlow);
+    }
+
+    void GuiCache::ClearExpectedAptComponentList(GuiFlow leFlow)
+    {
+        mStateLoadingHelper.ClearComponentInitialised(leFlow);
+    }
+
+    // GetTimeStep -- no standalone X360 symbol (header-inline; the cache's leading
+    // GuiEventTimeInfo delta word). Declared out-of-line in the committed header, so
+    // the body lives here.
+    f32 GuiCache::GetTimeStep() const
+    {
+        return mfTimeStep;
+    }
+
+    // @ X360 far member +0xB878 -- hand out the embedded player-options profile
+    // block (the X360 callers inline the address computation; the accessor is the
+    // named PC face of that far member). The block is reserved opaque in the
+    // header (see the layout note there); it is typed here, in the one TU that
+    // can safely see the profile header.
+    OptionsDataProfile* GuiCache::GetOptionsDataProfile()
+    {
+        static_assert(sizeof(OptionsDataProfile) <= sizeof(mOptionsDataProfileStorage),
+                      "OptionsDataProfile outgrew the cache's opaque reservation");
+        return reinterpret_cast<OptionsDataProfile*>(mOptionsDataProfileStorage);
     }
 
     // @ 0x824EC008

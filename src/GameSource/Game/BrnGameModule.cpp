@@ -343,6 +343,25 @@ namespace BrnGame
         lpGuiOutQueue->Clear();
     }
 
+    // The per-frame spines the in-game flow state drives (MainGameFlowStateInGame::
+    // Update -> DoUpdate, ::Render -> DoDispatch). On the X360 these run the game
+    // module's owned-module update/dispatch walk; the PC host loop (EngineUpdate ->
+    // BrnGameModule::DispatchThread) already drives that walk once per frame, so a
+    // second walk here would double-update every module.
+    // FLAG PC-platform leaf: no-op returns until the module scheduler ownership moves
+    // under the game module's own spines (the host loop is the current driver).
+    int BrnGameModule::DoUpdate()
+    {
+        return 0;
+    }
+
+    // FLAG PC-platform leaf: see DoUpdate above (the render dispatch runs from the PC
+    // render thread's BrnRendererModule::Render drive).
+    int BrnGameModule::DoDispatch()
+    {
+        return 0;
+    }
+
     // @ BrnGameModule.cpp:1047 (X360 0x823BC868) - tear down the owned modules + the module base.
     // The X360 first clears a terminated flag (off +10094134) and destructs an off-path collision
     // generator (off +10095440) - both fall in the omitted member ranges of this incremental
