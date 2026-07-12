@@ -1,4 +1,5 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingDebugComponent.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h"  // PowerParkingManager (member access)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // BrnWorld::PowerParkingDebugComponent member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.

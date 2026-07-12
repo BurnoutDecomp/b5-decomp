@@ -109,6 +109,13 @@ public:
     // samples of delay in.
     void Reset(s32 readPosition);                                  // @0x82B68068
 
+    // Re-target the primary marshal read position to `delaySamples` (a live delay change,
+    // used by Delay::Process when the requested delay fits within the valid samples). Body
+    // lives in DelayLine's own TU; DECLARED here so consumers (Delay::Process) compile
+    // against the real DelayLine home rather than forking it. Grounded only by its call site
+    // (rw::audio::core::Delay::Process @0x82BA2A08: r3 = this, r4 = int delay samples).
+    void SetDelay(s32 delaySamples);
+
     void SetFilter(IFilter *pFilter);                             // @0x82B67F30
     void SetLocalBuffer(f32 *pLocalBuffer, s32 samples);          // @0x82B67F58
     s32  GetValidDelaySamples() const;                            // @0x82B67F68

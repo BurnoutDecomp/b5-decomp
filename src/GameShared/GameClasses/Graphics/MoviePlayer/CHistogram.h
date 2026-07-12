@@ -49,11 +49,16 @@ private:
     static constexpr f32 KF_HIST_CHANGED_HIGH       = 0.6f;  // dbl_8210EF58
     static constexpr f32 KF_HIST_CHANGED_LOW        = 0.25f; // flt_82003F40
 
+public:
     // --- byte-exact layout (total size 0x81C) ---
+    // Public data: the X360 asm accesses these fields directly from the owning
+    // CArrayLookahead (per-slot histogram reset / variance-mean IIR filtering),
+    // so they are part of the class's public surface, not private state.
     f32  mfVariance;                 // +0x000  (1/N)*Sum(k^2*histA[k]) - mean^2
-    u32  muPad04;                    // +0x004
+    f32  mfVarianceDelta;            // +0x004  frame-to-frame variance difference
+                                     //         (written by CArrayLookahead::Filter1stOrderDiffLumaVarMean)
     f32  mfMean;                     // +0x008  (1/N)*Sum(k*histA[k])
-    u32  muPad0C;                    // +0x00C
+    f32  mfMeanDelta;                // +0x00C  frame-to-frame mean difference (same filter)
     u32  muPad10;                    // +0x010
     f32  mfHighMoment;               // +0x014  Sum_{k=100..255} k*histA[k]
     s32  maHistogram[KU_NUM_BINS];   // +0x018  primary histogram (256 bins)
@@ -66,7 +71,9 @@ private:
 inline void _CHistogram_AssertLayout()
 {
     static_assert(offsetof(CHistogram, mfVariance)           == 0x000, "CHistogram::mfVariance");
+    static_assert(offsetof(CHistogram, mfVarianceDelta)      == 0x004, "CHistogram::mfVarianceDelta");
     static_assert(offsetof(CHistogram, mfMean)               == 0x008, "CHistogram::mfMean");
+    static_assert(offsetof(CHistogram, mfMeanDelta)          == 0x00C, "CHistogram::mfMeanDelta");
     static_assert(offsetof(CHistogram, mfHighMoment)         == 0x014, "CHistogram::mfHighMoment");
     static_assert(offsetof(CHistogram, maHistogram)          == 0x018, "CHistogram::maHistogram");
     static_assert(offsetof(CHistogram, maHistogramSecondary) == 0x418, "CHistogram::maHistogramSecondary");

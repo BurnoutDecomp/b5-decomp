@@ -6,44 +6,16 @@
 
 // BrnWorld::PowerParkingDebugComponent -- the in-game debug component for the Power Parking
 // mini-game scorer (path "Gameplay", name "PowerParking"). Mirrors the committed sibling
-// BrnCrashPlayDebugComponent: it holds a pointer to the (un-homed) PowerParkingManager and
-// registers that manager's scoring fields with the debug menu on activation.
+// BrnCrashPlayDebugComponent: it holds a pointer to the PowerParkingManager and registers that
+// manager's scoring fields with the debug menu on activation.
 //
-// PowerParkingManager has no committed home in src (no BrnPowerParkingManager.h), so -- following
-// the CrashPlay sibling pattern -- it is modelled inline here with DWARF-attested named fields.
-// The OnActivate registrations (BrnPowerParkingDebugComponent.cpp @ 0x822A75C8) pin the field set
-// and their types (f32 scores, s32 weighted scores, u32 count, bool force flag).
+// PowerParkingManager is homed in BrnPowerParkingManager.h (which embeds this component by value),
+// so it is forward-declared here (pointer-only use) to avoid an include cycle; the .cpp includes
+// the manager header for member access.
 
 namespace BrnWorld
 {
-    struct PowerParkingManager
-    {
-        // Raw per-frame scoring inputs.
-        f32 mfDistanceScore;
-        f32 mfProximityScore;
-        f32 mfSpeedScore;
-        f32 mfRotationScore;
-        f32 mfAngleAlignmentScore;
-        f32 mfPositionAlignmentScore;
-
-        // Weighted (integerised) scores.
-        s32 miWeightedDistanceScore;
-        s32 miWeightedProximityScore;
-        s32 miWeightedSpeedScore;
-        s32 miWeightedRotationScore;
-        s32 miWeightedAngleAlignmentScore;
-        s32 miWeightedPositionAlignmentScore;
-
-        // Read-only diagnostics.
-        u32 muNearbyParkedCarCount;
-        f32 mfClosestDistanceSq;
-        f32 mfSecondClosestDistanceSq;
-        f32 mfClosestAngleDiff;
-        f32 mfClosestPerpendicularDist;
-
-        // Debug override.
-        bool mbDebugForcePowerPark;
-    };
+    struct PowerParkingManager;
 
     class PowerParkingDebugComponent : public CgsDev::DebugComponent
     {
