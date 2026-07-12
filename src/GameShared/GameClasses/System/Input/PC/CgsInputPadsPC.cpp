@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h"
 
 #include <cstring>   // std::memset
+#include <cstdlib>   // std::getenv (the harness focus-gate bypass)
 
 // ============================================================================
 // FLAG PC-platform leaf (whole file): the host pad source standing in for the
@@ -68,8 +69,16 @@ namespace
     // FOCUS GATE: GetAsyncKeyState reads the GLOBAL key state, so without a foreground
     // check the boot flow reacts to keys typed into ANY app (verified: terminal Enters
     // accepted the title menu). Only read the keyboard while this process is foreground.
+    // FLAG PC-platform leaf: BRN_INPUT_ALLOW_BACKGROUND=1 (set only by the scripted
+    // boot-validation harness at launch) bypasses the gate so the harness's injected
+    // key events land without fighting the desktop for foreground (the injection is
+    // still deliberate keybd_event state, not stray typing -- see boot_test.ps1).
     bool IsProcessForeground()
     {
+        static const bool s_bAllowBackground =
+            (std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr);
+        if (s_bAllowBackground)
+            return true;
         void* lpForeground = GetForegroundWindow();
         if (lpForeground == 0)
             return false;
