@@ -52,7 +52,8 @@ namespace BrnGui
 
         // @ 0x8251A620 -- base-prepare, then build + install the 14-state HUD pool. The wider
         // overload (adds the linear allocator the states are carved from + the profile manager BF_
-        // PROFILE needs). Distinct vtable slot from BrnBaseFlow::Prepare(access, allocator).
+        // PROFILE needs -- forwarded into BootProfile's 3-arg Construct, X360 vtable slot 9).
+        // Distinct vtable slot from BrnBaseFlow::Prepare(access, allocator).
         bool Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
                      rw::IResourceAllocator* lpAllocator,
                      CgsMemory::LinearMalloc* lpLinearMalloc,

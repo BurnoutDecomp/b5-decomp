@@ -16,7 +16,8 @@
 #include "GameSource/Gui/Flow/HUD/BrnHudFlow.h"                         // BrnGui::BrnHudFlow (the 14-state HUD flow)
 #include "GameSource/Gui/Flow/Overlay/BrnOverlayFlow.h"                 // BrnGui::BrnOverlayFlow (the 15-popup-state overlay flow)
 #include "GameSource/Gui/Flow/Screen/BrnScreenFlow.h"                   // BrnGui::BrnScreenFlow (the 61-state front-end SCREEN flow)
-#include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; shell until reconstructed)
+#include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
+#include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
 
 // BrnGui::GuiModule -- the GUI module (a dispatched CgsModule, like BrnRendererModule). The X360 module
@@ -142,8 +143,11 @@ namespace BrnGui
         BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)
         BrnOverlayFlow    mOverlayFlow;     // X360 mOverlayFlow (OVERLAY = E_GUIFLOW_OVERLAY)
         GuiFsmController  mFsmController;   // X360 +638904 (the flow FSM controller)
-        ProfileManager    mProfileManager;  // X360 +681696 (shell; ScreenFlow::Prepare takes it by reference)
+        ProfileManager    mProfileManager;  // X360 +681696 (the REAL save/load manager)
+        CgsGui::SystemUserProfile mSystemUserProfile; // X360 +949152 (sign-in watcher the manager listens to)
         CgsMemory::HeapMalloc  mFsmLuaHeap;    // the FSM Lua VM heap (the controller's allocator)
+        CgsMemory::HeapMalloc   mProfileHeap;   // the manager's heap (mugshot buffer + SLS callbacks)
+        CgsMemory::LinearMalloc mProfileLinear; // the manager's linear (SLS Prepare)
         CgsMemory::LinearMalloc mHudStatePool; // the 14-state pool allocator (HudFlow::Prepare)
         CgsMemory::LinearMalloc mOverlayStatePool; // the 15-popup-state pool allocator (OverlayFlow::Prepare)
         CgsMemory::LinearMalloc mScreenStatePool;  // the 61-state pool allocator (ScreenFlow::Prepare)

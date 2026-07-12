@@ -100,13 +100,21 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     mpLegal->Construct(CgsIDCompress("BF_LEGAL"), &lStateMachine);
     mpAttract->Construct(CgsIDCompress("BF_ATTR"), &lStateMachine);
     mpPostTitleScreenLoad->Construct(CgsIDCompress("BF_COMPLOAD"), &lStateMachine);
-    // FLAG: the X360 BF_PROFILE uses a wider Construct(id, fsm, ProfileManager*) virtual (slot 9)
-    // that threads the profile manager in. BootProfile's ProfileTaskResultHandler base + that 3-arg
-    // Construct are not reconstructed yet (see BrnBootProfile.h), so BF_PROFILE is Construct'd via
-    // the shared 2-arg State::Construct here; the profile manager is carried for when that overload
-    // lands. (Boot reaches BF_PROFILE after the videos; the manager wiring is not on the video path.)
-    mpProfile->Construct(CgsIDCompress("BF_PROFILE"), &lStateMachine);
-    (void)lpProfileManager;
+    // The X360 BF_PROFILE slot alone dispatches the wider Construct(id, fsm, manager)
+    // virtual (Prepare @0x8251A620: `(*(v62 + 36))(*v26, v63, v8, a5)` -- vtable slot 9
+    // vs the 2-arg slot 6 every other state gets), threading the module's ProfileManager
+    // into the state. DWARF signature: Construct(CgsID, CgsFsm::ScriptedFsm*, ProfileManager&).
+    if (lpProfileManager != 0)
+    {
+        mpProfile->Construct(CgsIDCompress("BF_PROFILE"), &lStateMachine, *lpProfileManager);
+    }
+    else
+    {
+        // FLAG PC defensive fallback: the X360 Prepare always receives a live manager;
+        // a config that passes none falls back to the shared 2-arg Construct and
+        // BootProfile's null-manager accept shortcut drives the phase.
+        mpProfile->Construct(CgsIDCompress("BF_PROFILE"), &lStateMachine);
+    }
     mpLoading->Construct(CgsIDCompress("BF_LOADING"), &lStateMachine);
     mpRaceMain->Construct(CgsIDCompress("RACE_MAIN"), &lStateMachine);
     mpFBurnMain->Construct(CgsIDCompress("FBURN_MAIN"), &lStateMachine);
