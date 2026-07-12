@@ -39,6 +39,7 @@ namespace XGRAPHICS
 class CFG;                // owning compiler context (homed in XGraphicsCFG.h)
 class InternalHashTable;  // open-hashing vreg table (homed in XGraphicsInternalHashTable.h)
 struct VRegInfo;          // virtual-register value node (homed in XGraphicsVReg.h)
+struct IRInst;            // IR instruction node (homed in XGraphicsIRInst.h)
 
 class VRegTable
 {
@@ -58,13 +59,13 @@ public:
     // `aiType` / index `aiIndex`, creating it (Create) if absent, and return it.
     VRegInfo* FindOrCreate(s32 aiType, s32 aiIndex);
 
-    // @ 0x82C28530 -- BLOCKED (not defined; caller XGRAPHICS::IRLoadConst::Kill).
-    // Counts the non-null prefix (1..4) of the constant node's component array at
-    // its +0x3A0 and removes the constant from mapConstTables[count-1]. Homing this
-    // needs the un-homed IRLoadConst layout (the +0x3A0 4-word component array); a
-    // raw-offset read of that in-memory object would be an invention. Declared here
-    // for the record only:
-    //   void RemoveConstant(VRegInfo* apConst);
+    // @ 0x82C28530 caller (XGRAPHICS::IRLoadConst::Kill) -- release the const node
+    // `apConst` from the compiler's constant tables. The node's +0x3A0 component
+    // array (IRInst::maUnk3A0) holds 1..4 non-null component words; that count picks
+    // the per-component-count table mapConstTables[count-1], from which the node is
+    // removed (keyed by the node pointer). Now homable: IRInst provides the +0x3A0
+    // array by name and InternalHashTable::Remove is reconstructed.
+    void RemoveConstant(IRInst* apConst);
 
     CFG*               mpContext;          // +0x00 graph context -> VRegInfo::Make
     InternalHashTable* mpMainTable;        // +0x04 general vreg lookup table

@@ -1,7 +1,8 @@
 #include "SDKs/XGraphics/XGraphicsVRegTable.h"
 
-#include "SDKs/XGraphics/XGraphicsInternalHashTable.h" // InternalHashTable::Lookup/Insert
+#include "SDKs/XGraphics/XGraphicsInternalHashTable.h" // InternalHashTable::Lookup/Insert/Remove
 #include "SDKs/XGraphics/XGraphicsVReg.h"              // VRegInfo (miIndex/miType, ::Make)
+#include "SDKs/XGraphics/XGraphicsIRInst.h"            // IRInst (maUnk3A0 const-component array)
 
 // ===========================================================================
 // XGRAPHICS::VRegTable -- reconstructed from BURNOUT_X360_ARTIST.XEX. See
@@ -12,10 +13,11 @@
 // 32-bit); the truncating cast on insert and the widening cast on lookup are the
 // same idiom used across this SDK's u32-slot containers (see XGraphicsVReg.cpp).
 //
-// NOT reconstructed here: RemoveConstant @ 0x82C28530 -- it reads the constant
-// node's +0x3A0 component array to pick a per-count constant table, which needs
-// the un-homed IRLoadConst layout; reproducing that with a raw-offset read of a
-// live C++ object would be an invention, so it is left blocked.
+// RemoveConstant @ 0x82C28530 -- reconstructed now that IRInst names the +0x3A0
+// component array (maUnk3A0) and InternalHashTable::Remove is homed. It counts the
+// const node's live components (1..4), snapshots the four per-count constant
+// tables, and removes the node (used as the u32 key -- the same 32-bit-slot idiom
+// as the vreg tables) from the table for its component count.
 // ===========================================================================
 
 namespace XGRAPHICS
@@ -60,6 +62,36 @@ VRegInfo* VRegTable::FindOrCreate(s32 aiType, s32 aiIndex)
     if (lpReg == nullptr)
         lpReg = Create(aiType, aiIndex);
     return lpReg;
+}
+
+void VRegTable::RemoveConstant(IRInst* apConst)
+{
+    // Count the const node's live components: its +0x3A0 component array holds up
+    // to four words, non-null for each live component (1 == float .. 4 == vec4).
+    // Faithful do-while: word 0 is always probed, so a genuine constant (the only
+    // caller, IRLoadConst::Kill, gates on a real constant operand) yields >= 1.
+    s32 liCount = 0;
+    const s32* lpComponent = apConst->maUnk3A0;
+    do
+    {
+        if (*lpComponent == 0)
+            break;
+        ++liCount;
+        ++lpComponent;
+    }
+    while (liCount < 4);
+
+    // Snapshot the four per-component-count constant tables (the asm materialises
+    // them into a local array before indexing) and remove the node from the one
+    // for its component count. The node pointer is the u32 hash key (32-bit slot).
+    InternalHashTable* lapTables[4];
+    lapTables[0] = mapConstTables[0];
+    lapTables[1] = mapConstTables[1];
+    lapTables[2] = mapConstTables[2];
+    lapTables[3] = mapConstTables[3];
+
+    lapTables[liCount - 1]->Remove(
+        static_cast<u32>(reinterpret_cast<uintptr_t>(apConst)));
 }
 
 } // namespace XGRAPHICS

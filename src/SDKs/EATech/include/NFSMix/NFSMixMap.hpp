@@ -89,6 +89,12 @@ public:
     void AssignSFXCallbacks(void* lpOwner);              // @0x82B481B8 -- mpMixerInterface = owner
     stCurveDataProc* GetCurveDataPtr(int* lpParam);      // @0x82B49238 -- find/append curve-proc slot
     int* AddScaleIDs(unsigned short* lpScaleParams, int liProcIdx); // @0x82B492F8
+    // Links the freshly-allocated shared/unique MixCtl records into lpProc (sets
+    // lpProc->psdata / ->pudata) for NFSMixMapState::CreateMixCtls. Body is its own TU
+    // (still un-reconstructed); signature is ARTIST-derived from the call site (r3=this,
+    // r4=proc, r5=entry cursor, r6=object index, r7=proc index; return discarded).
+    // Declared here so CreateMixCtls compiles against it (trap-stubbed at link).
+    void AssignMixCtlDataPtrs(stMixCtlProc* lpProc, int* lpEntry, int liObjectIndex, int liProcIdx);
 
     // vtable-less allocation passes (build the runtime mixer graph from the parsed counts).
     int  AllocateMixerMemory();     // @0x82B48AF8 -- allocate every m_p*Block/Data via the mixer allocator

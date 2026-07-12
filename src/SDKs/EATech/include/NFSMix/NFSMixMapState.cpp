@@ -1,6 +1,7 @@
 #include "SDKs/EATech/include/NFSMix/NFSMixMapState.hpp"
 #include "SDKs/EATech/include/NFSMix/NFSMixRecords.hpp" // complete proc records for the accessors
 #include "SDKs/EATech/include/NFSMix/NFSMixMap.hpp"     // owning map: Get* allocators + m_StateRefCount
+#include "SDKs/EATech/include/NFSMix/NFSMixShape.hpp"   // GetQ15FromHundredthsdB (dB->Q15, word_82F8677A antilog)
 
 // ===========================================================================
 //  NFSMixMapState -- ctor/dtor + the ARTIST-verified Initialize / GetStateRefCount
@@ -133,6 +134,93 @@ NFSMixMapState* NFSMixMapState::AddMixState(int liObjectIndex, NFSMixMapState* l
 
     lpTarget->Initialize(m_pNFSMixMap, m_StateIndex, 1, liObjIdx);
     return lpTarget;
+}
+
+// ---------------------------------------------------------------------------
+// NFSMixMapState::CreateMixCtls @0x82B4C890
+//   Build the per-state mix-control procs from the serialised MixMap mix-control
+//   section (m_pMMStateHdr blob + OffsetMixCtlData: a stMixCtlHdr followed by
+//   variable-stride serialised mix-control entries). For each control it grabs a
+//   curve-proc slot + a scale-id slot from the owning map, allocates a proc (whose
+//   shared/unique records NFSMixMap::AssignMixCtlDataPtrs links in), then fills the
+//   shared record's packed MIXCTLOBJID + params ptr + offset/ratio, and the unique
+//   record's curve/scale pointers.
+//   * The offset/ratio come from the entry's dB "swing" word (entry[1]): ratio =
+//     0x7FFF - GetQ15FromHundredthsdB(dB). The X360 inlined that helper as a direct
+//     word_82F8677A antilog-table read; it is de-inlined here to the (now-homed)
+//     NFSMixShape::GetQ15FromHundredthsdB call.
+//   * Entry stride = ((entry[1] >> 16) & 0x1F) + 2 dwords.
+// ---------------------------------------------------------------------------
+void NFSMixMapState::CreateMixCtls()
+{
+    NFSMixMap* lpMap = m_pNFSMixMap;
+
+    int liOffset = m_pMMStateHdr->OffsetMixCtlData;
+    m_MixCtlsAdded = 0;
+    if (liOffset < 0)
+        return;
+
+    stMixCtlHdr* lpHdr = reinterpret_cast<stMixCtlHdr*>(
+        reinterpret_cast<char*>(m_pMMStateHdr) + liOffset);
+    m_pMixCtlHdr = lpHdr;
+    if (lpHdr->NumMixCtls <= 0)
+        return;
+
+    m_MixStateParams.pMixCtlProcs = lpMap->GetProcessMixCtlPtr(0);
+
+    // Serialised mix-control entries follow the 16-byte section header (external blob).
+    int* lpEntry = reinterpret_cast<int*>(lpHdr + 1);
+
+    int liChannel = 0;
+    do
+    {
+        // Curve-proc key: the input-id word with this state's object index folded in.
+        // (The X360 builds this on the stack and hands its address to GetCurveDataPtr.)
+        int laParam[2];
+        laParam[0] = (lpEntry[0] & 0xFFFF07FF) | (m_ObjectIndex << 11);
+        laParam[1] = lpEntry[1];
+
+        stCurveDataProc* lpCurve = lpMap->GetCurveDataPtr(laParam);
+        int*             lpScale = lpMap->AddScaleIDs(reinterpret_cast<unsigned short*>(lpEntry), m_ObjectIndex);
+        stMixCtlProc*    lpProc  = lpMap->GetProcessMixCtlPtr(1);
+
+        // AssignMixCtlDataPtrs links the freshly-allocated shared+unique records into lpProc.
+        lpMap->AssignMixCtlDataPtrs(lpProc, lpEntry, m_ObjectIndex, liChannel);
+
+        stMixCtlSharedData* lpShared = lpProc->psdata;
+        lpShared->MIXCTLOBJID    = (lpMap->m_MapType << 8)
+                                 | ((lpEntry[0] >> 16) & 0xE000)
+                                 | (lpEntry[0] & 0x0FFF0000)
+                                 | liChannel;
+        lpShared->pstMixCtlParms = reinterpret_cast<stMixCtlParams*>(lpEntry);
+        lpShared->nOffset        = 0;
+        lpShared->nRatio         = 0;
+
+        // Bit 15 set => the swing word is a signed 16-bit dB (nOffset stays 0);
+        // else the low 15 bits are a positive attenuation in hundredths-dB.
+        if (lpEntry[1] & 0x8000)
+        {
+            lpShared->nRatio = 0x7FFF - NFSMixShape::GetQ15FromHundredthsdB(static_cast<short>(lpEntry[1]));
+        }
+        else
+        {
+            lpShared->nOffset = lpEntry[1] & 0x7FFF;
+            if (lpShared->nOffset <= 0)
+                lpShared->nRatio = 0;
+            else
+                lpShared->nRatio = 0x7FFF - NFSMixShape::GetQ15FromHundredthsdB(-lpShared->nOffset);
+        }
+
+        stMixCtlUniqueData* lpUnique = lpProc->pudata;
+        lpUnique->CmpdBOut      = 0;
+        lpUnique->pstCurveData  = lpCurve;
+        lpUnique->ppScaleRatios = reinterpret_cast<int**>(lpScale);
+
+        ++liChannel;
+        ++m_MixCtlsAdded;
+        lpEntry += ((laParam[1] >> 16) & 0x1F) + 2;
+    }
+    while (liChannel < m_pMixCtlHdr->NumMixCtls);
 }
 
 // ---------------------------------------------------------------------------
