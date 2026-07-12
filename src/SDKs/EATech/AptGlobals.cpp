@@ -339,7 +339,9 @@ typedef void (*AptVarNotFoundCb)(const char* pName);   // matches AptActionInter
 enum AptMaskRenderOperation : int;                     // matches the Apt render headers
 
 void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs)      = nullptr;
-void (*gpAptBackToScriptHook)(void* pPayload)                            = nullptr;   // dword_8324E828
+// (gpAptBackToScriptHook RETIRED 2026-07-12: dword_8324E828 is NOT a standalone
+//  hook -- it is &gAptFuncs (dword_8324E818) + 0x10 == pfnSetBackgroundColour.
+//  The tag-5 arm in AptMovie::doFrameControls now calls the table slot directly.)
 void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = nullptr;   // dword_8324E820
 AptVarNotFoundCb gpAptVarNotFoundCb                                      = nullptr;
 int  (*gpAptInputRecorderSink)(void*, int)                               = nullptr;   // dword_8324E830
@@ -357,7 +359,9 @@ void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp)             = nullp
 bool gAptDefaultTextMouseWheelEnabled = false;   // byte_8324E392
 bool gbAptCustomControlRenderEnabled  = false;   // byte_82F733F6
 
-unsigned char gbAptBackToScriptFired = 0;   // byte_8324D807
+// The BackgroundColour once-per-load latch (the SDK's gbBackgroundColorSet):
+// set by the doFrameControls tag-5 arm, reset by AptLoadAnimation @0x82B07AF4.
+unsigned char gbAptBackgroundColourSet = 0;   // byte_8324D807
 unsigned char gbAptInShutdown        = 0;   // byte_8324E7C9
 unsigned char gbAptRecorderGate      = 0;   // byte_82F733F7
 

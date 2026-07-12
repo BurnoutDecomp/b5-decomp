@@ -370,11 +370,16 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
         if (lbInLayer)
         {
             // Close a still-open clip span whose clip depth the current node exceeds.
+            // X360 @0x82AE4480: `AptDecoupleTreeTraversalClipper(v13, a2, a3, -1, --a5, ...)` --
+            // the clip node re-renders with op == SUBTRACT (li -1 into r6), which is what pops
+            // the mask (DrawRenderingUnit Subtract -> END_MASK). (Was eOp/Normal -- that drew
+            // the mask shape a second time instead of closing the mask. FIXED 2026-07-12.)
             if (lpClipPending != nullptr)
             {
                 if (lpClipPending->mClipDepth < lpNode->mDepth)
                 {
-                    AptDecoupleTreeTraversalClipper(lpClipPending, nTick, pCtx, eOp, nDepth - 1,
+                    AptDecoupleTreeTraversalClipper(lpClipPending, nTick, pCtx,
+                                                    static_cast<AptMaskRenderOperation>(-1), nDepth - 1,
                                                     nLayerMask, bTopLevel, lpClipResume);
                     lpClipPending = nullptr;
                     lpClipResume  = nullptr;
@@ -389,8 +394,15 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
             else if (static_cast<u16>(lpNode->mClipDepth) < 0x8000u)
             {
                 // This node is a CLIP-START: open a clipped span; resume at the returned node.
-                lpClipResume  = AptDecoupleClippedTreeTraversal(lpNode, nTick, pCtx, eOp, nDepth + 1,
-                                                                nLayerMask);
+                // X360: `v14 = AptDecoupleClippedTreeTraversal(v15, a2, a3, 1, a5, a6, a7)` --
+                // the clip node renders with op == ADD (li 1 into r6), so its shape goes out as
+                // MASK GEOMETRY (DrawRenderingUnit Add -> PUSH_MASK_GEOMETRY), not a visible
+                // quad; the in-span siblings then render normally UNDER the latched mask. (Was
+                // eOp/Normal -- the mask shape drew as a visible textured/white rectangle and
+                // no mask was ever pushed: the prompt's opaque white boxes. FIXED 2026-07-12.)
+                lpClipResume  = AptDecoupleClippedTreeTraversal(lpNode, nTick, pCtx,
+                                                                static_cast<AptMaskRenderOperation>(1),
+                                                                nDepth + 1, nLayerMask);
                 lpClipPending = lpNode;
                 ++nDepth;
                 lpNode = lpClipResume;
@@ -414,11 +426,20 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
                         AptRenderItem* lpMaskRev = lpNode->mpMask->Manager_GetRenderRevision(nTick);
                         lpNode->Manager_UpdateMask(lpMaskRev);
                         lpMaskItem = lpNode->mpMask;
-                        // push the mask (2-arg PushRenderDataAbsolute), walk its subtree, and
-                        // (below) pop it after the node's own children.
+                        // push the mask (2-arg PushRenderDataAbsolute), walk its subtree with
+                        // op == ADD, and (below) pop it after the node's own children. X360:
+                        // `AptDecoupleMaskedTreeTraversal(v17, a2, a3, 1, a5, a6, a7)` then
+                        // `(*(*v17 + 12))(v17, a3, 1, a5++)` -- the open walk + pop both carry
+                        // op 1 (Add), which is what routes the mask's shapes through
+                        // DrawRenderingUnit's PUSH_MASK_GEOMETRY arm instead of a visible draw.
+                        // (Was NormalOp() -- FIXED 2026-07-12; the close below already
+                        // carried the faithful -1/Subtract.)
                         lpMaskItem->PushRenderDataAbsolute(pCtx);           // vtbl +0x08
-                        AptDecoupleMaskedTreeTraversal(lpMaskItem, nTick, pCtx, NormalOp(), nDepth + 1, nLayerMask);
-                        lpMaskItem->PopRenderData(pCtx, NormalOp(), nDepth + 1);  // vtbl +0x0C
+                        AptDecoupleMaskedTreeTraversal(lpMaskItem, nTick, pCtx,
+                                                       static_cast<AptMaskRenderOperation>(1),
+                                                       nDepth + 1, nLayerMask);
+                        lpMaskItem->PopRenderData(pCtx, static_cast<AptMaskRenderOperation>(1),
+                                                  nDepth + 1);              // vtbl +0x0C
                         ++nDepth;
                     }
 
@@ -467,10 +488,13 @@ static void AptDecoupleTreeTraversal(AptRenderItem* pItem, int nTick, AptRenderi
     }
     while (lpNode != nullptr);
 
-    // A clip span still open at the end of the sibling chain is closed now.
+    // A clip span still open at the end of the sibling chain is closed now. X360:
+    // `AptDecoupleTreeTraversalClipper(v13, a2, a3, -1, a5 - 1, a6, a7, v14)` -- op ==
+    // SUBTRACT (the mask pop), same fix as the in-loop close above (was eOp/Normal).
     if (lpClipPending != nullptr)
-        AptDecoupleTreeTraversalClipper(lpClipPending, nTick, pCtx, eOp, nDepth - 1, nLayerMask,
-                                        bTopLevel, lpClipResume);
+        AptDecoupleTreeTraversalClipper(lpClipPending, nTick, pCtx,
+                                        static_cast<AptMaskRenderOperation>(-1), nDepth - 1,
+                                        nLayerMask, bTopLevel, lpClipResume);
 }
 // ---------------------------------------------------------------------------
 // AptRenderInternal (X360 sub_82AF3278) -- the render pass body.

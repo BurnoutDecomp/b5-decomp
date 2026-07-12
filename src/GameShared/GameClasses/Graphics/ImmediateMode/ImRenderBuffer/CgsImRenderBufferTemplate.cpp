@@ -683,9 +683,12 @@ namespace CgsGraphics
     namespace
     {
         // The D3D9 pre-transformed screen-space vertex DrawPrimitiveUP consumes (same shape
-        // CgsIm2d.cpp uses for the immediate path).
-        struct DispatchScreenVertex { float x, y, z, rhw; u32 color; float u, v; };
-        const unsigned long KU_DISPATCH_FVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX1;
+        // CgsIm2d.cpp uses for the immediate path). The second UV set (u2,v2) carries the
+        // Apt MASK sample coordinates (screen position mapped into the active mask's UV
+        // space -- the CPU fold of the constants the PS3 case-0x12 uploads); stage 1 is
+        // DISABLED outside a mask block, so the extra set is inert for unmasked draws.
+        struct DispatchScreenVertex { float x, y, z, rhw; u32 color; float u, v; float u2, v2; };
+        const unsigned long KU_DISPATCH_FVF = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_TEX2;
 
         // The engine works in a fixed 1280x720 logical space; map it onto the actual back buffer.
         const f32 KF_DISPATCH_LOGICAL_W = 1280.0f;
@@ -760,6 +763,24 @@ namespace CgsGraphics
         // Colour identity in the 0..255 CXForm space (see DispatchColourChannel).
         f32 lfColScaleR = 255.0f, lfColScaleG = 255.0f, lfColScaleB = 255.0f, lfColScaleA = 255.0f;
         f32 lfColShiftR = 0.0f, lfColShiftG = 0.0f, lfColShiftB = 0.0f, lfColShiftA = 0.0f;
+
+        // ---- the Apt MASK realisation (PUSH_MASK_GEOMETRY 18 / END_MASK 19) ----------------
+        // The PS3 Dispatch (@0x575BD4 case 0x12/0x13) implements the Apt clip mask as a PIXEL
+        // mask, not a stencil: case 0x12 bumps a mask counter, switches the 2D program to its
+        // "masked" sibling (mi8CurrentProgram + 1), binds the MASK texture as a second sampler
+        // (renderengine::Device::SetResource) and uploads a screen->maskUV constant block folded
+        // from the 2-corner run (the 1/(c1-c0) reciprocals in the VMX body); the masked draws'
+        // pixels then multiply their alpha by the mask texture's alpha sample. Case 0x13
+        // decrements the counter and restores the program (mi8CurrentProgram - 1). The PC
+        // fixed-function equivalent: latch the mask command's texture + corner run; while a
+        // mask is active, texture STAGE 1 samples the mask texture with per-vertex UVs the
+        // RENDER_PRIMITIVES fold computes from the same screen->maskUV map (the CPU fold of
+        // the constant block), ALPHAOP = MODULATE(current, mask) with the colour passed
+        // through -- the same observable pixel result as the console's masked program.
+        int liMaskDepth = 0;
+        bool lbMaskStageBound = false;
+        f32 lfMaskX0 = 0.0f, lfMaskY0 = 0.0f, lfMaskInvW = 0.0f, lfMaskInvH = 0.0f;
+        f32 lfMaskU0 = 0.0f, lfMaskV0 = 0.0f, lfMaskDU = 0.0f, lfMaskDV = 0.0f;
 
         // BeginRendering's D3D state prologue (matches CgsIm2d.cpp's ImRenderer::BeginRendering):
         // no lighting, no depth, no cull, alpha-blend over the framebuffer, bilinear filtering, and
@@ -852,6 +873,62 @@ namespace CgsGraphics
                 lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
                 break;
 
+            case IM_CMD_PUSH_MASK_GEOMETRY: // case 18 - begin/refresh the pixel mask (PS3 case 0x12)
+            {
+                const ImCommandPushMaskTexture<V>* lpPush =
+                    static_cast<const ImCommandPushMaskTexture<V>*>(lpCommand);
+                ++liMaskDepth;
+                const Basic2dColouredTexturedVertex* lpCorners =
+                    reinterpret_cast<const Basic2dColouredTexturedVertex*>(lpPush->mpVertices);
+                renderengine::Texture* lpMaskTexture = lpPush->mpTexture;
+                if (lpCorners != nullptr && lpMaskTexture != nullptr &&
+                    lpMaskTexture->mpD3DTexture != nullptr)
+                {
+                    // The screen->maskUV map the PS3 constant fold encodes: reciprocals of the
+                    // corner extents + the corner UV range (a degenerate extent maps flat).
+                    const f32 lfDX = lpCorners[1].mv2Pos.x - lpCorners[0].mv2Pos.x;
+                    const f32 lfDY = lpCorners[1].mv2Pos.y - lpCorners[0].mv2Pos.y;
+                    lfMaskX0   = lpCorners[0].mv2Pos.x;
+                    lfMaskY0   = lpCorners[0].mv2Pos.y;
+                    lfMaskInvW = (lfDX != 0.0f) ? (1.0f / lfDX) : 0.0f;
+                    lfMaskInvH = (lfDY != 0.0f) ? (1.0f / lfDY) : 0.0f;
+                    lfMaskU0   = lpCorners[0].mv2Tex0UV.x;
+                    lfMaskV0   = lpCorners[0].mv2Tex0UV.y;
+                    lfMaskDU   = lpCorners[1].mv2Tex0UV.x - lpCorners[0].mv2Tex0UV.x;
+                    lfMaskDV   = lpCorners[1].mv2Tex0UV.y - lpCorners[0].mv2Tex0UV.y;
+
+                    // Stage 1 = the mask sample: colour passes through, alpha modulates by the
+                    // mask texture's alpha (the masked-program observable). Border-clamp so
+                    // pixels OUTSIDE the mask rect sample transparent (clipped away).
+                    lpDevice->SetTexture(1, lpMaskTexture->mpD3DTexture);
+                    lpDevice->SetTextureStageState(1, D3DTSS_COLOROP,   D3DTOP_SELECTARG2);
+                    lpDevice->SetTextureStageState(1, D3DTSS_COLORARG2, D3DTA_CURRENT);
+                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP,   D3DTOP_MODULATE);
+                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
+                    lpDevice->SetSamplerState(1, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                    lpDevice->SetSamplerState(1, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+                    lpDevice->SetSamplerState(1, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
+                    lpDevice->SetSamplerState(1, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+                    lpDevice->SetSamplerState(1, D3DSAMP_BORDERCOLOR, 0x00000000u);
+                    lbMaskStageBound = true;
+                }
+                break;
+            }
+
+            case IM_CMD_END_MASK:          // case 19 - end the pixel mask (PS3 case 0x13)
+                if (liMaskDepth > 0)
+                    --liMaskDepth;
+                if (liMaskDepth == 0 && lbMaskStageBound)
+                {
+                    lpDevice->SetTexture(1, nullptr);
+                    lpDevice->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                    lpDevice->SetTextureStageState(1, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                    lbMaskStageBound = false;
+                }
+                break;
+
             case IM_CMD_RENDER_PRIMITIVES: // case 2 - the actual draw
             {
                 const ImCommandRenderPrimitives<V>* lpDraw =
@@ -917,6 +994,23 @@ namespace CgsGraphics
 
                     saBatch[luIndex].u = lrVertex.mv2Tex0UV.x;
                     saBatch[luIndex].v = lrVertex.mv2Tex0UV.y;
+
+                    // Mask UV set (stage 1): fold the LOGICAL screen position through the
+                    // active mask's screen->maskUV map (the CPU realisation of the constant
+                    // block the PS3 case-0x12 uploads for the masked program). Inert (stage 1
+                    // disabled) when no mask is active.
+                    if (lbMaskStageBound)
+                    {
+                        saBatch[luIndex].u2 = lfMaskU0 +
+                            (lfScreenX - lfMaskX0) * lfMaskInvW * lfMaskDU;
+                        saBatch[luIndex].v2 = lfMaskV0 +
+                            (lfScreenY - lfMaskY0) * lfMaskInvH * lfMaskDV;
+                    }
+                    else
+                    {
+                        saBatch[luIndex].u2 = 0.0f;
+                        saBatch[luIndex].v2 = 0.0f;
+                    }
                 }
 
                 // Recompute the primitive count if the count was clamped.
@@ -931,12 +1025,11 @@ namespace CgsGraphics
             }
 
             // The remaining state opcodes (SET_STATE_DEPTH/RASTERIZER/SAMPLER/RT, SET_VIEWPORT/
-            // SCISSOR/CLEAR, SET_SHADER_PROGRAM) and the mask ops (PUSH_MASK_GEOMETRY/END_MASK)
-            // configure GPU descriptor state the fixed-function PC 2D path already covers via the
-            // BeginRendering prologue above (or, for the stencil mask, is a follow-on). They are
-            // walked-over here (the stride is correct - GetNextCommand uses muSize) so the draw
-            // stream stays in sync; the visible Apt/GUI/text output is produced by the texture/
-            // transform/draw opcodes handled above.
+            // SCISSOR/CLEAR, SET_SHADER_PROGRAM) configure GPU descriptor state the fixed-function
+            // PC 2D path already covers via the BeginRendering prologue above. They are walked-over
+            // here (the stride is correct - GetNextCommand uses muSize) so the draw stream stays in
+            // sync; the visible Apt/GUI/text output is produced by the texture/transform/draw/mask
+            // opcodes handled above.
             default:
                 break;
             }
