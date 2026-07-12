@@ -90,6 +90,26 @@ public:
                             //        (pageAddress, pageFlags) entry array; freed in ~HashMap
             u32   muWord1;  // +0x04  live entry count (each entry = 2 words / 8 bytes)
             u32   muWord2;  // +0x08  entry capacity
+
+            // @ 0x8295B028 (X360 name truncated to "D3D::CCaptu") -- grow the
+            // (pageAddress, pageFlags) entry array to hold uCapacity entries and
+            // write a signed status (<0 == failure) to *piStatus. The int it
+            // returns just threads r3 and is not meaningfully consumed.
+            //   BLOCKED BODY: 0x8295B028 has NO disassembly export -- it sits
+            //   between D3D::GetTextureSizes @0x8295AF50 and HashMap::HashMap
+            //   @0x8295B0C0 with no standalone dump, so the allocate/copy/free
+            //   body cannot be reconstructed without fabrication. Declared here
+            //   (signature attested by BOTH call sites -- AddEntry @0x8295BCAC and
+            //   MarkUsedPages @0x8295BDF8 pass this=&bucket, r4=capacity,
+            //   r5=&status) so AddEntry / MarkUsedPages compile; the body stays
+            //   its own future TU.
+            s32 Reserve(u32 uCapacity, s32* piStatus);
+
+            // @ 0x8295BC70 -- ensure room for one more entry: when count+1 exceeds
+            // the capacity, grow via Reserve(count+1, piStatus); then, if the
+            // status is non-negative, commit the slot by bumping the live count.
+            // Faithfully recovered from the X360 asm (0x8295BC70.json).
+            s32 AddEntry(s32* piStatus);
         };
 
         Bucket maBuckets[KI_BUCKET_COUNT];  // +0x000  0x300 bytes on the X360
@@ -135,6 +155,13 @@ public:
     // @ 0x82959C00 -- write out every dirty page tracked in the hash table and
     // roll the page-tag generation forward.
     s32 SavePages();
+
+    // @ 0x8295BD50 -- mark each 4 KB page spanned by [uAddress, uAddress+uSize)
+    // (clamped to the low 0x20000000 window) as used: find or insert the page in
+    // its hash bucket (via Bucket::Reserve / Bucket::AddEntry) and OR the tracking
+    // flags into the entry. When page 0 is first touched it also emits a type-3
+    // record carrying uTag. The returned r3 thread is not consumed by any caller.
+    s32 MarkUsedPages(u32 uAddress, u32 uSize, s32 uTag);
 
     // @ 0x829599E0 -- no-op hook (empty on the X360).
     void PostSubmit();

@@ -19,6 +19,7 @@
 // offset is not load-bearing on the 64-bit host (member declared by name).
 
 namespace CgsGui { struct StateInterface; }
+namespace BrnGui { struct PreEventInfo; }   // pointer-only boundary (GuiCache::GetPreEventInfo result)
 
 namespace BrnGui
 {
@@ -32,6 +33,19 @@ namespace BrnGui
         // AddOutputAptViewState is void, so this returns 0 (the value's only consumers are
         // Show/Hide, which discard it).
         int SelectScreenKeyFrameForGameMode();
+
+        // ADDITIVE GROW (BrnOnlinePreEvent TU): the fly-by message API the online pre-event
+        // state drives. X360-attested by the call sites in BrnOnlinePreEvent.cpp:
+        //   Show                  <- UpdatePermanent case 160 (0x824A13F0)
+        //   Hide                  <- UpdateRunning          (0x824873A4)
+        //   HandleLoadNotification<- UpdatePermanent case 21 (0x824A139C)
+        //   IsShowing             <- UpdateRunning byte read (0x82487374)
+        // Declaration-only here; bodies link from the component's own TU. FLAG: signatures
+        // recovered from the caller asm (the messages component's full body is out of scope).
+        void Show(const PreEventInfo* lpInfo);
+        void Hide();
+        void HandleLoadNotification(const char* lpacComponentName);
+        bool IsShowing() const;
 
     private:
         // Guest +0x88 (the asm names it via mpStateInterface): the GUI state-interface the

@@ -90,6 +90,27 @@ public:
     // CMassiveAdObject TU.
     virtual int Resume();
 
+    // @ vftable slot +0x0C. Per-frame tick on this ad object; returns the first
+    // non-zero sub-result (a stop/error code) or 0. Attested as a virtual by the
+    // composite CMassiveAdObjectAudioDynamic::Tic @ 0x82BDE098, which fans its own
+    // tick out across its slave ad objects via `(*(*slave + 0x0C))(slave)`. Body
+    // in the full CMassiveAdObject TU. (Slot offset attested; the NAME is the
+    // composite forwarder's -- semantic parity by name, slot byte order not
+    // asserted.)
+    virtual int Tic();
+
+    // @ vftable slot +0x14. Suspends this ad object. Attested as a virtual by the
+    // composite CMassiveAdObjectAudioDynamic::Suspend @ 0x82BDE188, which fans its
+    // suspend out across its slave ad objects via `(*(*slave + 0x14))(slave)`.
+    // Body in the full CMassiveAdObject TU.
+    virtual int Suspend();
+
+    // @ vftable slot +0x20. Advances/returns the ad object's "current asset" id.
+    // Attested as a virtual by CMassiveAdObjectAudioDynamic::CreateSlaveM
+    // @ 0x82BDDE20, which reads it back on `this` through `(*(*this + 0x20))(this)`
+    // to seed the newly-created slave. Body in the full CMassiveAdObject TU.
+    virtual int GetNextAssetID();
+
     // @ vftable slot +0x1C. Registers a subscriber with this ad object. Body in
     // the CMassiveAdObject TU.
     virtual int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber);
