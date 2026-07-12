@@ -1574,6 +1574,91 @@ namespace BrnGui
     // mid-engine, the completion is needed in this call), then completes through the same
     // faithful LoadAnimation. Idempotent by name (the registry dedups).
     // =========================================================================
+    // -------------------------------------------------------------------------
+    // AuditImportGeometryTextures -- [PC diagnostic, log-only] one-shot audit of a
+    // just-completed import movie's geometry mesh TEXTURE binds. Walks the movie's
+    // AptData geometry chunk (the same records AptResolveShapeGeometry serves the
+    // render walk from) and classifies every textured (texmode 1/2) mesh slot:
+    //   * live Texture* with a realised D3D texture  -> counts as OK
+    //   * live Texture* with mpD3DTexture == null    -> logged (draws as an opaque
+    //     white quad: SetTexture(0,null)+MODULATE degrades to the vertex colour)
+    //   * 0 / still-serialized offset                -> logged (white-fallback bind)
+    // This is the keyless boot-log evidence for the import-texture registration
+    // (the persist-library imports complete during boot, before any input).
+    // -------------------------------------------------------------------------
+    static void AuditImportGeometryTextures(const char* lpacMovieName)
+    {
+        CgsGui::AptAux* lpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+        if (lpAptAux == nullptr || lpacMovieName == nullptr)
+            return;
+        CgsGui::AptDataHeader* lpHeader = lpAptAux->mAptDataHandler.FindAptData(lpacMovieName);
+        if (lpHeader == nullptr)
+            return;
+
+        const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpHeader);
+        const u64  luGeomOff = *reinterpret_cast<const u64*>(luBase + 0x20u);  // serialized .apt header: geom off @+0x20
+        const u32  luSize    = static_cast<u32>(
+            *reinterpret_cast<const u64*>(luBase + 0x28u));    // serialized .apt header: size @+0x28
+        char lac[256];
+        if (luGeomOff == 0 || luGeomOff + 16u > luSize)
+            return;   // no geometry chunk (text-only movie)
+
+        const char* lpChunk = reinterpret_cast<const char*>(luBase + luGeomOff);
+        const u32 luRecords = *reinterpret_cast<const u32*>(lpChunk);
+        const u64 luRecArr  = *reinterpret_cast<const u64*>(lpChunk + 8);   // serialized .apt geometry chunk header @+8
+        if (luRecords == 0 || luRecords > 4096u || luRecArr == 0 || luRecArr >= luSize)
+            return;
+
+        u32 luTextured = 0, luOk = 0, luNullD3D = 0, luUnbound = 0, luLogged = 0;
+        const u64* lpRecs = reinterpret_cast<const u64*>(luBase + luRecArr);
+        for (u32 luRec = 0; luRec < luRecords; ++luRec)
+        {
+            if (lpRecs[luRec] == 0 || lpRecs[luRec] >= luSize) continue;
+            const CgsResource::GuiGeometryFile* lpFile2 =
+                reinterpret_cast<const CgsResource::GuiGeometryFile*>(luBase + lpRecs[luRec]);
+            uintptr_t luMeshTbl = lpFile2->mppGeometryMeshes;
+            if (luMeshTbl != 0 && luMeshTbl < luSize) luMeshTbl += luBase;   // untouched record: still an offset
+            if (luMeshTbl == 0) continue;
+            for (u32 luMesh = 0; luMesh < lpFile2->muNumberOfMeshes && luMesh < 64u; ++luMesh)
+            {
+                uintptr_t luMeshPtr = reinterpret_cast<const uintptr_t*>(luMeshTbl)[luMesh];
+                if (luMeshPtr != 0 && luMeshPtr < luSize) luMeshPtr += luBase;
+                if (luMeshPtr == 0) continue;
+                const CgsResource::GuiGeometryMesh* lpMesh =
+                    reinterpret_cast<const CgsResource::GuiGeometryMesh*>(luMeshPtr);
+                if (lpMesh->miTextureMode != 1 && lpMesh->miTextureMode != 2)
+                    continue;
+                ++luTextured;
+                const uintptr_t luSlot = lpMesh->mpTexture;
+                const char* lpcState;
+                if (luSlot == 0 || luSlot < luSize)
+                {
+                    ++luUnbound;  lpcState = (luSlot == 0) ? "NULL (white fallback)" : "UNPATCHED OFFSET";
+                }
+                else
+                {
+                    const renderengine::Texture* lpTex =
+                        reinterpret_cast<const renderengine::Texture*>(luSlot);
+                    if (lpTex->mpD3DTexture == nullptr) { ++luNullD3D; lpcState = "Texture* with NULL D3D"; }
+                    else                                { ++luOk;      lpcState = nullptr; }
+                }
+                if (lpcState != nullptr && luLogged < 8u)
+                {
+                    ++luLogged;
+                    std::snprintf(lac, sizeof(lac),
+                        "[AptRT] tex-audit: '%s' geom id=%u mesh %u texid=%d mode=%d -> %s.\n",
+                        lpacMovieName, lpFile2->muID, luMesh, lpMesh->miTextureId,
+                        lpMesh->miTextureMode, lpcState);
+                    CgsDev::Log::WriteToLog(lac);
+                }
+            }
+        }
+        std::snprintf(lac, sizeof(lac),
+            "[AptRT] tex-audit: '%s' textured meshes=%u ok=%u nullD3D=%u unbound=%u.\n",
+            lpacMovieName, luTextured, luOk, luNullD3D, luUnbound);
+        CgsDev::Log::WriteToLog(lac);
+    }
+
     static bool LoadImportBundle(const char* lpacMovieName, AptFilePtr* lpFile)
     {
         char lac[256];
@@ -1593,6 +1678,7 @@ namespace BrnGui
                 lpacMovieName);
             CgsDev::Log::WriteToLog(lac);
             CgsGui::AptCallbackFile::LoadAnimation(lpacMovieName, lpFile);
+            AuditImportGeometryTextures(lpacMovieName);   // [PC diagnostic] boot-log bind evidence
             return true;
         }
 
@@ -1701,6 +1787,7 @@ namespace BrnGui
             lpSlot->macName);
         CgsDev::Log::WriteToLog(lac);
         CgsGui::AptCallbackFile::LoadAnimation(lpacMovieName, lpFile);
+        AuditImportGeometryTextures(lpacMovieName);   // [PC diagnostic] boot-log bind evidence
         return true;
     }
 
@@ -1787,6 +1874,29 @@ namespace BrnGui
 
         CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
             s_AptRenderBuffer.mCommandBuffer;
+
+        // [PC diagnostic, log-only] Track the Apt stage background colour the engine's
+        // tag-5 dispatch stored through gAptFuncs.pfnSetBackgroundColour (the fixed
+        // doFrameControls arm). Logged on change so a keyless boot proves the flow:
+        // MAIN authors ffffffff, Title_Screen02 ff1473d2, SaveLoadComponent ff999999
+        // (stored rotated ARGB->RGBA by AptCallbackRender::SetBackgroundColour).
+        {
+            static u32 su32LastBgColour = 0xDEADBEEFu;
+            CgsGui::AptAux* lpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
+            if (lpAptAux != nullptr)
+            {
+                const u32 lu32Bg = lpAptAux->mRenderHandler.GetBackgroundColour().m_rgba;
+                if (lu32Bg != su32LastBgColour)
+                {
+                    su32LastBgColour = lu32Bg;
+                    char lacBg[128];
+                    std::snprintf(lacBg, sizeof(lacBg),
+                        "[AptRT] bg-colour: stage colour now RGBA=%08X (tag-5 -> pfnSetBackgroundColour).\n",
+                        lu32Bg);
+                    CgsDev::Log::WriteToLog(lacBg);
+                }
+            }
+        }
 
         lrBuffer.Swap();               // freeze the write buffer for dispatch
         // Reset the NEW write buffer's stream positions for the next frame (the faithful
@@ -1976,8 +2086,18 @@ namespace BrnGui
 // the faithful engine body once it is exported + reconstructed.
 // FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
 // =============================================================================
+// The BackgroundColour once-per-load latch (byte_8324D807, defined in
+// SDKs/EATech/AptGlobals.cpp; set by the doFrameControls tag-5 arm).
+extern unsigned char gbAptBackgroundColourSet;
+
 int AptLoadAnimation(const char* pName, const char* pTargetPath)
 {
+    // X360 @0x82B07AE4..0x82B07AF4: reset the BackgroundColour once-per-load latch
+    // (byte_8324D807) -- "Each Animation can only have one background color. This
+    // value is reset every time the game (or viewer) loads a new animation."
+    // (SDK AptLoadAnimation), so the NEXT movie's first tag-5 command wins.
+    gbAptBackgroundColourSet = 0;
+
     int liLevel = 0;
     if (pTargetPath != nullptr)
         std::sscanf(pTargetPath, "_level%d", &liLevel);

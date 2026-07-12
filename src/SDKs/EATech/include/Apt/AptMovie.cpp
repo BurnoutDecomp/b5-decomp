@@ -33,6 +33,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"    // AptCharacterAnimation (charTable / import table)
 #include "SDKs/EATech/include/Apt/AptFile.h"                  // AptFile / AptFilePtr (the placed char's file bind)
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"         // AptUint32CXForm (the place record packed colour)
+#include "SDKs/EATech/include/Apt/Apt.h"                      // gAptFuncs (tag-5 BackgroundColour -> pfnSetBackgroundColour @+0x10)
 
 #include <new>   // placement new (the pool-allocated AptPseudoCIH_t nodes)
 
@@ -91,13 +92,16 @@ extern int   gnAptActionFrameId;                // dword_8324E514 (FLAG)
 // &dword_8324E760 -- the process-wide AS action interpreter instance.
 extern AptActionInterpreter gAptActionInterpreter;   // off_8324E760  (FLAG)
 
-// dword_8324D807 -- one-shot latch: a "back-to-script" (tag 5) command fires its
-// host callback at most once per frame-control pass.
-extern unsigned char gbAptBackToScriptFired;    // byte_8324D807  (FLAG)
-
-// dword_8324E828 -- the host "back-to-script" callback (installed by the host; a
-// raw function pointer invoked through the ctr in the asm).
-extern void (*gpAptBackToScriptHook)(void* pPayload);   // dword_8324E828 (FLAG)
+// byte_8324D807 -- the BACKGROUND-COLOUR once-latch: a tag-5 (BackgroundColour)
+// frame command fires the host callback at most once per loaded animation
+// ("bg color can only be set once" -- the SDK's gbBackgroundColorSet semantics);
+// AptLoadAnimation @0x82B07AC8 resets it (stb 0 @0x82B07AF4) so the NEXT loaded
+// movie's first tag-5 wins. (The old "back-to-script one-shot" reading of this
+// latch was wrong -- RETIRED 2026-07-12. The callee at dword_8324E828 is not a
+// standalone hook: 0x8324E828 == &gAptFuncs (dword_8324E818) + 0x10 ==
+// gAptFuncs.pfnSetBackgroundColour, the render-family host callback the movie's
+// doFrameControls tag-5 arm dispatches the authored colour word through.)
+extern unsigned char gbAptBackgroundColourSet;    // byte_8324D807
 
 // The AS register-window globals (off_8324E3D0 / dword_8324E3D4) are
 // AptScriptFunctionBase::spRegBlockCurrentFrameBase / snRegBlockCurrentFrameCount;
@@ -556,18 +560,23 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 // dual-format read while converter-era bundles are still staged.
                 AptDispatchRemoveCommand(pDisplayList, CmdPayloadI32(pCmd));
             }
-            else if (eTag == 5 && !gbAptBackToScriptFired)
+            else if (eTag == 5 && !gbAptBackgroundColourSet)
             {
-                // FLAG (host hook): gpAptBackToScriptHook (dword_8324E828) is the host
-                // "back to script" callback. It is installed by the game's GUI/HUD host on
-                // the console; our Apt bring-up does NOT install it (the FSM host callback
-                // set is out of this slice's scope), so it is null here -- guard the call
-                // (the console always has it installed). Skipping it is faithful for the
-                // title timeline (the tag-5 command hands control back to the host Lua FSM,
-                // which our bring-up drives separately).
-                if (gpAptBackToScriptHook != nullptr)
-                    gpAptBackToScriptHook(CmdPtr(pCmd, 0x08));   // native-8 payload @cmd+8
-                gbAptBackToScriptFired = 1;
+                // tag 5 = BACKGROUND-COLOUR. X360 @0x82B0B91C..0x82B0B93C: load the authored
+                // colour WORD (lwz r3, 4(r30) -- the payload BY VALUE, not a pointer) and call
+                // through dword_8324E828 == &gAptFuncs+0x10 == gAptFuncs.pfnSetBackgroundColour
+                // (CgsGui::AptCallbackRender::SetBackgroundColour @0x8284AF78, installed by
+                // AptAux::ConstructApt), then set the once-per-load latch (stb 1, byte_8324D807).
+                // SDK corroboration: AptMovie.cpp case AptControlType_BackgroundColour ->
+                // gAptFuncs.pfnSetBackgroundColour(pControl->backgroundColour.nColour) under
+                // gbBackgroundColorSet. (The prior "back-to-script hook" reading called a
+                // never-installed duplicate extern with the payload's ADDRESS -- dead code that
+                // lost every movie's authored stage colour. RETIRED 2026-07-12.)
+                // Payload: native-8 colour word @cmd+8 (console @cmd+4) -- the same dual-format
+                // discriminated read as the tag-4 depth.
+                if (gAptFuncs.pfnSetBackgroundColour != nullptr)
+                    gAptFuncs.pfnSetBackgroundColour(static_cast<unsigned int>(CmdPayloadI32(pCmd)));
+                gbAptBackgroundColourSet = 1;
             }
         }
     }
