@@ -242,6 +242,16 @@ namespace BrnGui
         mOverlayFlow.Construct(&mGuiCache);
         mFsmController.Construct();
 
+        // The REAL GUI resource-loading module + its persistent IO pair (replaces the
+        // host FSM-bundle stand-in). Construct the IO buffers (their embedded queues come
+        // up here) and the module. HighDef == true: matches the HD apt/flapt path the
+        // boot uses (the FSM bundle path itself is HD-independent). Construct seeds the
+        // module counters/stages + marks it a new-module type (its base Prepare then skips
+        // the old-module IO-structure lock path -- no assert).
+        mResourceInputBuffer.Construct();
+        mResourceOutputBuffer.Construct();
+        mGuiResourceModule.Construct(true);
+
         for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
             for (s32 li = 0; li < KI_MAX_OBSERVED_EVENT_ID; ++li)
                 mabObservedEventIds[lf][li] = false;
@@ -349,6 +359,18 @@ namespace BrnGui
         mModelOutputBuffer.LockForWrite();
         mModelOutputBuffer.GetLoadNotificationsNonConst()->Construct();
         mModelOutputBuffer.UnlockForWrite();
+
+        // Prepare the GUI resource module with seven bank/pool ids (member order:
+        // aptPersistent, aptStreamed, font, FSM, language, textures, globalTexture). On
+        // the console these are the resource system's real bank handles the module routes
+        // each request type to; on PC they are opaque routing tags -- the module only
+        // COMPARES them, and the [PC] platform servicer materialises just the FSM bank
+        // (id 4) while completing the other banks' requests without IO. They must be
+        // DISTINCT so the FSM bank is uniquely identified against the START-stage
+        // PERSISTENTAPT (bank 1) / GUITEXTURES.BIN (bank 6) loads.
+        mGuiResourceModule.Prepare(/*aptPersistent*/ 1, /*aptStreamed*/ 2, /*font*/ 3,
+                                   /*FSM*/ 4, /*language*/ 5, /*textures*/ 6,
+                                   /*globalTexture*/ 7);
 
         mGuiOutQueue.Construct();
 
@@ -463,12 +485,83 @@ namespace BrnGui
         mpGuiEventInputBuffer->UnlockForRead();
     }
 
-    // [PC IO] the GuiResourceModule module-dispatch stand-in: service the controller's
-    // FSM-bundle load requests synchronously and post the load notification it waits for.
+    // The REAL GuiResourceModule dispatch (replaces ServiceFsmBundleRequests). Runs the
+    // reconstructed CgsGui::GuiResourceModule each frame against its own persistent IO
+    // pair, and bridges the two queue ends to the flow controller's ModelIO buffers --
+    // the same 39-in / 14-out contract the host stand-in served, now through the module:
+    //   1. feed this frame's controller load requests (GuiEventLoadRequest, id 39) into
+    //      the module input, then clear the controller queue (consumed);
+    //   2. run the module -- it drains the requests into its bundle-load queue, advances
+    //      the acquire state machine, and at its Update tail runs the [PC] platform
+    //      servicer that loads FSM\<NAME>.BUNDLE synchronously; completed loads post
+    //      GuiEventLoadNotification (14) into the module output;
+    //   3. clear the module input's now-consumed request queue (the persistent PC buffer
+    //      is not recreated per frame as the console's transient one is);
+    //   4. bridge the module's load notifications into the ModelIO output notification
+    //      queue the controller reads (what the host stand-in posted on completion);
+    //   5. clear the module output's bridged notifications.
+    // The module's acquire machine takes several frames per bundle (acquire-miss -> load
+    // -> re-acquire -> notify); the controller's WFLOAD stage polls for the notification,
+    // so the completion arriving 1+ frames after the request is safe. On the console the
+    // module runs under the model scheduler between the controller's request-post and
+    // notification-read; here it runs in that same slot, before the controller Update.
+    void GuiModule::DispatchGuiResourceModule()
+    {
+        // 1. Feed the controller's requests (posted into mModelInputBuffer by the previous
+        //    frame's GuiFsmController::Update) into the module input, then clear them.
+        mModelInputBuffer.LockForWrite();
+        mResourceInputBuffer.LockForWrite();
+        CgsGui::GuiEventQueueSmall* lpControllerRequests = mModelInputBuffer.GetLoadRequests();
+        mGuiResourceModule.AddResourceRequests(lpControllerRequests, &mResourceInputBuffer);
+        lpControllerRequests->Clear();
+        mResourceInputBuffer.UnlockForWrite();
+        mModelInputBuffer.UnlockForWrite();
+
+        // 2. Run the module for this frame (it locks its own IO pair internally; hold no
+        //    lock here). The Update tail's ServicePlatformRequests loads the bundle files.
+        mGuiResourceModule.Update(&mResourceInputBuffer, &mResourceOutputBuffer);
+
+        // 3. Drop this frame's now-consumed input requests (ProcessIncomingLoadRequests
+        //    reads but does not clear them; the persistent PC buffer must not re-queue).
+        mResourceInputBuffer.LockForWrite();
+        mResourceInputBuffer.GetLoadRequestsNonConst()->Clear();
+        mResourceInputBuffer.UnlockForWrite();
+
+        // 4. Bridge the module's load notifications into the ModelIO output notification
+        //    queue the controller reads -- re-post each record under its own queue id (14).
+        mResourceOutputBuffer.LockForRead();
+        mModelOutputBuffer.LockForWrite();
+        {
+            const CgsGui::GuiResourceModuleIO::InputBuffer::GuiEventQueue* lpNotifications =
+                mGuiResourceModule.GetLoadedNotifications(&mResourceOutputBuffer);
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liId = lpNotifications->GetFirstEvent(&lpEvent, &liSize);
+            while (liId >= 0 && lpEvent != 0)
+            {
+                mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(lpEvent, liId, liSize);
+                const CgsModule::Event* lpNext = 0;
+                liId = lpNotifications->GetNextEvent(lpEvent, &lpNext, &liSize);
+                lpEvent = lpNext;
+            }
+        }
+        mModelOutputBuffer.UnlockForWrite();
+        mResourceOutputBuffer.UnlockForRead();
+
+        // 5. The notifications are bridged; clear the module output queue for next frame.
+        mResourceOutputBuffer.LockForWrite();
+        mResourceOutputBuffer.GetLoadNotificationsNonConst()->Clear();
+        mResourceOutputBuffer.UnlockForWrite();
+    }
+
+    // [PC IO] the ORIGINAL host FSM-bundle stand-in: serviced the controller's FSM-bundle
+    // load requests synchronously and posted the load notification it waits for. SUPERSEDED
+    // by DispatchGuiResourceModule (the real CgsGui::GuiResourceModule now owns this path);
+    // retained unused this phase -- /OPT:REF strips the unreferenced body from the exe.
     // (On the console the request queue reaches CgsGui::GuiResourceModule through the
     // module scheduler; ProcessIncomingLoadRequests + LoadBundle then post the
     // notification -- those bodies are reconstructed, but the module dispatch that runs
-    // them is not, so the IO leaf lives here.)
+    // them was not, so the IO leaf lived here.)
     void GuiModule::ServiceFsmBundleRequests()
     {
         mModelInputBuffer.LockForWrite();
@@ -702,8 +795,9 @@ namespace BrnGui
             CgsDev::Log::WriteToLog("[GuiModule] apt movie live -> fed resources-ready (567).\n");
         }
 
-        // ---- 3. the FSM-bundle load service ([PC IO]) then the controller update ------
-        ServiceFsmBundleRequests();
+        // ---- 3. the FSM-bundle load service (the REAL GuiResourceModule) then the
+        //          controller update ---------------------------------------------------
+        DispatchGuiResourceModule();
         mModelInputBuffer.LockForWrite();
         mModelOutputBuffer.LockForRead();
         mFsmController.Update(&mModelInputBuffer, &mModelOutputBuffer);

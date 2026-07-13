@@ -154,6 +154,31 @@ template <> s32 CgsGui::GuiEventQueueBase<4096, 16>::GetNextEvent(
     return this->CgsModule::VariableEventQueue<4096, 16>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
 }
 
+// The GuiResourceModuleIO buffer queues the GUI resource module's IO pair constructs/
+// drains (CgsGuiResourceModuleIO::InputBuffer::mLoadRequests +
+// OutputBuffer::mLoadNotifications, both GuiEventQueueBase<18432,16>). The module was
+// "not yet wired" until BrnGuiModule::DispatchGuiResourceModule wired it, so this 18432
+// specialisation had never been instantiated; same thin forwarders to the
+// VariableEventQueue base as the families above (the X360 emits one body per instantiation).
+template <> void CgsGui::GuiEventQueueBase<18432, 16>::Construct()
+{
+    this->CgsModule::VariableEventQueue<18432, 16>::Construct();
+}
+template <> void CgsGui::GuiEventQueueBase<18432, 16>::Clear()
+{
+    this->CgsModule::VariableEventQueue<18432, 16>::Clear();
+}
+template <> s32 CgsGui::GuiEventQueueBase<18432, 16>::GetFirstEvent(
+    const CgsModule::Event** lppEvent, s32* lpiSize) const
+{
+    return this->CgsModule::VariableEventQueue<18432, 16>::GetFirstEvent(lppEvent, lpiSize);
+}
+template <> s32 CgsGui::GuiEventQueueBase<18432, 16>::GetNextEvent(
+    const CgsModule::Event* lpEvent, const CgsModule::Event** lppNextEvent, s32* lpiSize) const
+{
+    return this->CgsModule::VariableEventQueue<18432, 16>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
+}
+
 template <> void CgsGui::GuiEventQueueBase<256, 16>::Construct()
 {
     this->CgsModule::VariableEventQueue<256, 16>::Construct();
