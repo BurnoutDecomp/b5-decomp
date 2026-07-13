@@ -74,6 +74,11 @@ namespace BrnGui
     // Interim renderer bridge, matching gpActiveMovieManager: GuiModule publishes
     // its owned AptRuntimeHost while prepared; BrnRendererModule renders through it.
     extern AptRuntimeHost* gpActiveAptRuntimeHost;
+
+    // Phase 2: the host posts a movie-slot bundle load through the real GuiResourceModule
+    // (defined in BrnGuiModule.cpp; forwards to gpActiveGuiModule->RequestAptMovieLoad).
+    // Kept a free accessor so the AptRuntimeHost TU need not pull in the GuiModule layout.
+    void RequestAptMovieLoadThroughModule(const char* lpacMovieName, s32 liType);
 }
 
 #endif

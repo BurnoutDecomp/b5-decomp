@@ -71,6 +71,12 @@
 
 #include <cstdlib>   // malloc (font pool backing, language file block)
 
+// Phase 2: the real GuiResourceModule (via BrnGuiModule) now loads the movie-slot bundles and
+// records each bundle's lead AptDataHeader; this hands it back to DriveFaithfulLoad so a
+// framework/persist slot keyed by its bundle name (MAIN / PERSISTENTAPT) can resolve its own
+// authored movie name (main / CrashNavTitleBar). Defined in CgsGuiResourceModulePC.cpp.
+namespace CgsGui { void* GetLoadedAptBundleLeadHeader(const char* lpacBundleName); }
+
 #ifndef BRN_GUI_APT_RUNTIME_DIAGNOSTICS
 #define BRN_GUI_APT_RUNTIME_DIAGNOSTICS 0
 #endif
@@ -282,26 +288,10 @@ namespace
     s32         s_iRenderFrame           = 0;       // render-walk per-frame trace counter
     bool        s_bFlushProbed           = false;   // emitted the one-shot render-flush probe yet
 
-    // The per-slot pool backings (3 mem types each), static BSS storage; each slot gets
-    // its OWN CgsResource::Pool storage object. The FLOW movie (the title) is ~1.6 MB ->
-    // keep the 8 MB/type backing; the FRAMEWORK movie (MAIN.bundle) is 236 KB -> 4 MB/type
-    // is generous (the bundle's main-memory resources + the heap node overhead).
-    const u32 KU_FLOW_POOL_BYTES      = 8u * 1024u * 1024u;
-    // PERSISTENTAPT (the persistent component library) is an 11.5 MB, 101-resource package:
-    // ~3.5 MiB main + ~8.13 MiB graphics per the console Gui_Persistent_Apt_Pool
-    // ({0x369AF0, 0x820000, 0} in BrnMemoryMapData.h). 12 MiB/type covers its largest section.
-    const u32 KU_FRAMEWORK_POOL_BYTES = 12u * 1024u * 1024u;
-    // The aux (state-overlay) movie: SAVELOADCOMPONENT.bundle is a small component (4 MB/type).
-    const u32 KU_AUX_POOL_BYTES = 4u * 1024u * 1024u;
-    u8 s_aFlowPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FLOW_POOL_BYTES];
-    u8 s_aFrameworkPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
-    // PERSISTENTAPT is the 11.5 MB library -> its own 12 MiB/type pool (as the framework's).
-    u8 s_aPersistentPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FRAMEWORK_POOL_BYTES];
-    u8 s_aAuxPoolBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_AUX_POOL_BYTES];
-    CgsResource::Pool s_FlowPoolStorage;
-    CgsResource::Pool s_FrameworkPoolStorage;
-    CgsResource::Pool s_PersistentPoolStorage;
-    CgsResource::Pool s_AuxPoolStorage;
+    // PHASE 2: the per-slot movie pool backings + the host bundle-IO leaf (AptLoadMovieSlot)
+    // are RETIRED -- every movie slot's bundle now loads through the real GuiResourceModule's
+    // [PC] servicer (CgsGuiResourceModulePC.cpp owns the streamed-apt bank), so the host no
+    // longer carves its own resident movie pools here.
 
     // The Apt-data resource type id (X360 0x1E == 30; CgsResource::AptDataHeaderType::GetTypeID).
     const u32 KU_APTDATA_RESOURCE_TYPE_ID = 30u;
@@ -494,9 +484,7 @@ namespace BrnGui
         // placement's AssociateInstToClass reads.
         return s_iFrameworkUpFrame >= 0 && gpAptClassRegistry != nullptr;
     }
-    // The SHARED slot load path (both movies travel it) + the lazy framework-movie load.
-    static bool AptLoadMovieSlot(AptMovieSlot& lrSlot, CgsResource::Pool* lpPoolStorage,
-                                 u8* const* lapPoolBacking, u32 luPoolBytes);
+    // The lazy framework-movie load (posts the MAIN/PERSISTENTAPT module requests).
     static void EnsureFrameworkMovie();
     // STEP 3 (import content-load): synchronously load the import bundle named `lpacMovieName`
     // (GuiApt\<NAME>.bundle) into a resident pool, register its AptDataHeader with the data handler,
@@ -538,30 +526,6 @@ namespace BrnGui
         lrEvent.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(liRequestType);
         lrEvent.muLoadRequestId = ++s_uNextLoadRequestId;
         ++s_uPendingLoadNotificationWrite;
-    }
-
-    // Queue a notification for EVERY resource of one type in a just-loaded pool (a GUI apt
-    // bundle carries one AptData per movie it embeds -- PERSISTENTAPT carries 61, the whole
-    // import library, which is how the console resolves imports without per-import streams).
-    static u32 QueueLoadNotificationsForPool(CgsResource::Pool* lpPool, u32 luTypeId,
-                                             s32 liRequestType)
-    {
-        u32 luQueued = 0;
-        const u32 luMax = lpPool->GetMaxResources();
-        for (u32 lu = 0; lu < luMax; ++lu)
-        {
-            if (lpPool->GetEntryStatusDirect(static_cast<s32>(lu)) == 0)
-                continue;
-            CgsResource::Entry* lpEntry = const_cast<CgsResource::Entry*>(
-                lpPool->GetEntryDirect(static_cast<s32>(lu)));
-            if (lpEntry->mpResourceType == 0 || lpEntry->mpResourceType->GetTypeID() != luTypeId)
-                continue;
-            if (lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] == 0)
-                continue;
-            QueueLoadNotification(lpEntry, liRequestType);
-            ++luQueued;
-        }
-        return luQueued;
     }
 
     static bool AptLoadOneGuiFont(const char* lpcBundlePath, CgsResource::Pool* lpPool)
@@ -907,108 +871,14 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
-    // AptLoadMovieSlot -- the SHARED movie bundle-IO leaf (BOTH slots travel it): init
-    // the slot's resident pool over the given backing, load "GuiApt\<NAME>.bundle"
-    // ([PC IO] -- the X360 streams it via the GUI resource module), then queue one load
-    // notification per carried AptData resource so the REAL view-module dispatch performs
-    // every registration. Returns true when the bundle loaded (slot.mbLoaded);
-    // INSTANTIATION is decoupled (DriveFaithfulLoad, off the play-movie event).    //
-    // FAITHFULNESS (2026-06-30, user): the GUIAPT32/GUIAPT64 split was NON-FAITHFUL test
-    // scaffolding -- the original game loads apt movies from GUIAPT\. Our PC build's GUIAPT
-    // bundles carry the converted "Apt Data:1:7:8" (native 8-byte) data, so the path stays
-    // faithful (GUIAPT) while the data content is the x64-converted form. Load through
-    // BundleLoader::LoadBundle; the AptData resource (type 0x1E == 30) is FixUp'd by the
-    // registered CgsResource::AptDataHeaderType handler.
+    // AptLoadMovieSlot (RETIRED, Phase 2): the host's synchronous movie bundle-IO leaf --
+    // it init'd a per-slot resident pool, loaded "GuiApt\<NAME>.bundle" through
+    // BundleLoader, and queued one load notification per carried AptData. Every movie slot
+    // now posts a GuiResourceModule load request instead (EnsureFrameworkMovie /
+    // PlayRuntimeMovie -> RequestAptMovieLoadThroughModule); the module's [PC] servicer owns
+    // the bundle IO + the per-AptData registration. Removed with QueueLoadNotificationsForPool
+    // and the per-slot pool backings.
     // -------------------------------------------------------------------------
-    static bool AptLoadMovieSlot(AptMovieSlot& lrSlot, CgsResource::Pool* lpPoolStorage,
-                                 u8* const* lapPoolBacking, u32 luPoolBytes)
-    {
-        char lac[224];
-        CgsResource::RegisterAllResourceTypes();   // idempotent: ensure AptDataHeaderType (0x1E) is live
-
-        // Build the FAITHFUL bundle path "GuiApt\<NAME>.bundle" -- the exact format string the X360
-        // apt loader uses (verified @0x828504B0), name passed as-is (Windows resolves case/separator).
-        // The loader returns <=0 if missing -> bails cleanly.
-        char lacBundlePath[160];
-        std::snprintf(lacBundlePath, sizeof(lacBundlePath), "GuiApt\\%s.bundle", lrSlot.macName);
-
-        lrSlot.mpPool = lpPoolStorage;
-        CgsResource::Pool::InitOptions lOptions;
-        lOptions.miId   = 4;
-        lOptions.mpcName = "AptMovie";
-        for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-        {
-            lOptions.maHeapInfo[lt].muMaxNodes       = 256u;
-            lOptions.maHeapInfo[lt].muHeapMemorySize = luPoolBytes - 128u * 1024u;
-            lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
-            lOptions.mResource.m_baseResources[lt]   = lapPoolBacking[lt];
-            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = luPoolBytes;
-            lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
-        }
-        lOptions.muMaxResources         = 128u;   // PERSISTENTAPT packs 101 resources (61 AptData + ~40 tex)
-        lOptions.muMaxImports           = 64u;
-        lOptions.miRefCountThreshold    = 0;
-        lOptions.miNumDependencies      = 0;
-        lOptions.miBankId               = 0;
-        lOptions.mbAllowDefragmentation = false;
-        lrSlot.mpPool->InitPool(&lOptions);
-
-        CgsResource::BundleLoader lLoader;
-        const s32 liLoaded = lLoader.LoadBundle(lacBundlePath, lrSlot.mpPool,
-                                                CgsResource::ResolveResourceType);
-        std::snprintf(lac, sizeof(lac), "[AptRT] %s: load '%s' -> %d resources.\n",
-                      lrSlot.mpcTag, lacBundlePath, liLoaded);
-        CgsDev::Log::WriteToLog(lac);
-        if (liLoaded <= 0)
-        {
-            // FLAG: bundle missing / not platform-4 / unreadable. Bail cleanly.
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] %s: load: bundle missing/unreadable or not platform-4 -- bail (FLAG).\n",
-                lrSlot.mpcTag);
-            CgsDev::Log::WriteToLog(lac);
-            return false;
-        }
-
-        // Pull the single AptData (0x1E) resource; its bytes are the relocated AptDataHeader.
-        s32 liIndex = -1;
-        CgsResource::Entry* lpEntry =
-            lrSlot.mpPool->FindFirstResourceOfType(KU_APTDATA_RESOURCE_TYPE_ID, &liIndex);
-        if (lpEntry == nullptr)
-        {
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] %s: load: no AptData (type 0x1E) resource in bundle -- bail (FLAG).\n",
-                lrSlot.mpcTag);
-            CgsDev::Log::WriteToLog(lac);
-            return false;
-        }
-        void* lpRes = lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
-        if (lpRes == nullptr)
-        {
-            std::snprintf(lac, sizeof(lac),
-                "[AptRT] %s: load: AptData resource has null main-memory bytes -- bail (FLAG).\n",
-                lrSlot.mpcTag);
-            CgsDev::Log::WriteToLog(lac);
-            return false;
-        }
-        lrSlot.mpHeader = reinterpret_cast<CgsGui::AptDataHeader*>(lpRes);
-        lrSlot.mbLoaded = true;
-
-        // Queue one load notification per carried AptData resource: the REAL
-        // ViewModule::ProcessIncomingLoadNotification @0x8285BD30 (request type 4) registers
-        // each header with the Apt data handler (AddAptData) when GuiModule's bridge drains
-        // the ring into the view queue -- the console notification flow. A framework bundle
-        // carries its whole import library this way (PERSISTENTAPT: 61 AptData resources),
-        // which is how imports later resolve WITHOUT per-import bundle IO. Instantiation is
-        // decoupled: DriveFaithfulLoad runs off the play-movie event once the registration
-        // has landed (FindAptData resolves).
-        const u32 luQueued =
-            QueueLoadNotificationsForPool(lrSlot.mpPool, KU_APTDATA_RESOURCE_TYPE_ID, 4);
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] %s: load: %u AptData notification(s) queued for registration.\n",
-            lrSlot.mpcTag, luQueued);
-        CgsDev::Log::WriteToLog(lac);
-        return true;
-    }
 
     // -------------------------------------------------------------------------
     // EnsureFrameworkMovie -- lazily load + instantiate the AS FRAMEWORK movie ("MAIN")
@@ -1055,12 +925,14 @@ namespace BrnGui
             // registerClass bootstrap. It carries no display (childNodes=0), so level 0 is free.
             std::strncpy(s_FrameworkSlot.macName, "MAIN", sizeof(s_FrameworkSlot.macName) - 1);
             s_FrameworkSlot.macName[sizeof(s_FrameworkSlot.macName) - 1] = '\0';
-            CgsDev::Log::WriteToLog("[AptRT] framework: loading the AS core 'MAIN' at level 0 ...\n");
-            u8* lapBacking[CgsResource::E_MEMTYPE_NUMTYPES];
-            for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-                lapBacking[lt] = s_aFrameworkPoolBacking[lt];
-            AptLoadMovieSlot(s_FrameworkSlot, &s_FrameworkPoolStorage,
-                             lapBacking, KU_FRAMEWORK_POOL_BYTES);
+            // PHASE 2: the framework core's bundle IO rides the real GuiResourceModule (post the
+            // load request; the module loads GuiApt\MAIN.bundle and registers its AptData with the
+            // view). mbLoaded latches the request in-flight; DriveFaithfulLoad instantiates off the
+            // module's registration (resolving 'MAIN' -> authored 'main' via the lead header).
+            CgsDev::Log::WriteToLog("[AptRT] framework: requesting the AS core 'MAIN' (level 0) "
+                                    "through the GuiResourceModule ...\n");
+            RequestAptMovieLoadThroughModule(s_FrameworkSlot.macName, /*streamed apt movie*/ 4);
+            s_FrameworkSlot.mbLoaded = true;
         }
         if (!s_PersistentSlot.mbRequested)
         {
@@ -1072,13 +944,14 @@ namespace BrnGui
             std::strncpy(s_PersistentSlot.macName, "PERSISTENTAPT",
                          sizeof(s_PersistentSlot.macName) - 1);
             s_PersistentSlot.macName[sizeof(s_PersistentSlot.macName) - 1] = '\0';
-            CgsDev::Log::WriteToLog("[AptRT] persist: loading the component library "
-                                    "'PERSISTENTAPT' at level 2 ...\n");
-            u8* lapPersistBacking[CgsResource::E_MEMTYPE_NUMTYPES];
-            for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-                lapPersistBacking[lt] = s_aPersistentPoolBacking[lt];
-            AptLoadMovieSlot(s_PersistentSlot, &s_PersistentPoolStorage,
-                             lapPersistBacking, KU_FRAMEWORK_POOL_BYTES);
+            // PHASE 2: the persistent component library rides the module too. Its bundle carries
+            // the 61-movie import library; the servicer registers EVERY AptData it holds, which is
+            // how the flow movie's imports resolve from the data handler (no per-import IO). The
+            // lead header ('CrashNavTitleBar') drives this slot's own level-2 instantiation.
+            CgsDev::Log::WriteToLog("[AptRT] persist: requesting the component library "
+                                    "'PERSISTENTAPT' (level 2) through the GuiResourceModule ...\n");
+            RequestAptMovieLoadThroughModule(s_PersistentSlot.macName, /*streamed apt movie*/ 4);
+            s_PersistentSlot.mbLoaded = true;
         }
 
         // ---- instantiate (deferred until the queued registrations landed: DriveFaithfulLoad
@@ -1182,10 +1055,11 @@ namespace BrnGui
                 CgsGui::AptAuxPointer::mpAptAuxInst != nullptr &&
                 CgsGui::AptAuxPointer::mpAptAuxInst->mAptDataHandler.FindAptData(s_AuxSlot.macName) == nullptr)
             {
-                u8* lapAuxBacking[CgsResource::E_MEMTYPE_NUMTYPES];
-                for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-                    lapAuxBacking[lt] = s_aAuxPoolBacking[lt];
-                AptLoadMovieSlot(s_AuxSlot, &s_AuxPoolStorage, lapAuxBacking, KU_AUX_POOL_BYTES);
+                // PHASE 2: the state-overlay movie's bundle IO rides the module too (the fallback
+                // when the component is not already carried by PERSISTENTAPT). mbLoaded latches the
+                // request; DriveFaithfulLoad instantiates off the module's registration.
+                RequestAptMovieLoadThroughModule(s_AuxSlot.macName, /*streamed apt movie*/ 4);
+                s_AuxSlot.mbLoaded = true;
             }
             if (!s_AuxSlot.mbInstantiated && FrameworkClassesLive())
                 DriveFaithfulLoad(s_AuxSlot);
@@ -1235,15 +1109,17 @@ namespace BrnGui
         // normally did this long before; this is the belt-and-suspenders re-entry.)
         EnsureFrameworkMovie();
 
-        // The flow movie's own bundle IO ([PC IO] leaf) + queued registration, then the
-        // deferred instantiate (DriveFaithfulLoad resolves via FindAptData; defers until the
-        // registration notification has been dispatched).
+        // PHASE 2: the flow movie's bundle IO now rides the REAL GuiResourceModule. Post the
+        // load request (its [PC] servicer loads GuiApt\<name>.bundle and each carried AptData's
+        // load notification routes to the view -> ProcessIncomingLoadNotification -> AddAptData,
+        // the console notification flow). mbLoaded latches the request as in-flight; the
+        // instantiate below resolves off the module's registration (FindAptData) and defers
+        // until it lands (the async-load observable). Replaces the host's synchronous
+        // AptLoadMovieSlot for the flow slot -- macName is the persistent request-name buffer.
         if (!s_FlowSlot.mbLoaded)
         {
-            u8* lapBacking[CgsResource::E_MEMTYPE_NUMTYPES];
-            for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
-                lapBacking[lt] = s_aFlowPoolBacking[lt];
-            AptLoadMovieSlot(s_FlowSlot, &s_FlowPoolStorage, lapBacking, KU_FLOW_POOL_BYTES);
+            RequestAptMovieLoadThroughModule(s_FlowSlot.macName, /*streamed apt movie*/ 4);
+            s_FlowSlot.mbLoaded = true;
         }
         // Same console-ordering gate as the persistent library: the flow movie's
         // component clips class-bind at place time, so it may not compose before the
@@ -1306,6 +1182,16 @@ namespace BrnGui
             return;
         }
         CgsGui::AptDataHeader* lpHeader = lpAptAux->mAptDataHandler.FindAptData(lrSlot.macName);
+        if (lpHeader == nullptr && lrSlot.mpHeader == nullptr)
+        {
+            // PHASE 2: the movie-slot bundle now loads through the real GuiResourceModule, so the
+            // slot no longer holds its own pool header. Fetch the bundle's LEAD AptData from the
+            // module (keyed by the slot's bundle name) so the authored-name resolution below can
+            // adopt the movie's own registered name. Null until the module has serviced the load
+            // (defers, retried each frame -- the async-load observable).
+            lrSlot.mpHeader = reinterpret_cast<CgsGui::AptDataHeader*>(
+                CgsGui::GetLoadedAptBundleLeadHeader(lrSlot.macName));
+        }
         if (lpHeader == nullptr && lrSlot.mpHeader != nullptr)
         {
             // The framework slots are keyed by the HOST bundle name (MAIN / PERSISTENTAPT),
