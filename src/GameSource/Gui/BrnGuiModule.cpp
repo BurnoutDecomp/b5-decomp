@@ -913,13 +913,18 @@ namespace BrnGui
         if (!mAptRuntimeHost.IsReady())
             return;
 
-        // FLAG (presentation stand-in ordering): the boot logos are presented through
+        // FLAG (presentation stand-in ordering): full-screen movies are presented through
         // the renderer's gpActiveMovieManager hook (drawn BEFORE this), not through the
         // GUI view's MovieVideoRenderer as on console -- so the view's black clear
-        // (RenderBlackScreen) would paint over them. Drive the view render only once the
-        // flow has left the video-presentation states (BF_PRELOAD/BF_VIDEOS); the gate
-        // dies when the movie presentation moves under the real view IO chain.
+        // (RenderBlackScreen) would paint over them. Skip the view render whenever a movie
+        // presentation is active (covers the boot logos in BF_VIDEOS AND the intro montage
+        // in BF_COMPLOAD/PostTitleScreenLoad, which is NOT a video-presentation state but
+        // still plays a full-screen movie), plus the two pre-title states that clear before
+        // any movie arrives. The gate dies when the movie presentation moves under the real
+        // view IO chain.
         {
+            if (mMovieManager.IsMoviePresentationActive())
+                return;
             static const CgsID KI_STATE_PRELOAD = CgsIDCompress("BF_PRELOAD");
             static const CgsID KI_STATE_VIDEOS  = CgsIDCompress("BF_VIDEOS");
             CgsGui::State* lpCurrentState = mHudFlow.GetStateMachine().GetCurrentState();
