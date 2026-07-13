@@ -67,6 +67,14 @@ namespace BrnGui
         ViewModule* GetViewModule() { return &mViewModule; }
         AptRuntimeHost* GetAptRuntimeHost() { return &mAptRuntimeHost; }
 
+        // Phase 2: post an apt movie-bundle load request through the real GuiResourceModule
+        // (the movie-slot bundle IO now rides the module, not the AptRuntimeHost's
+        // synchronous AptLoadMovieSlot). liType is the ARTIST apt request type (4 = streamed
+        // apt movie). The movie name must stay valid until the module services it (a few
+        // frames); the AptRuntimeHost passes its persistent slot macName. Reached from the
+        // host through the free BrnGui::RequestAptMovieLoadThroughModule accessor.
+        void RequestAptMovieLoad(const char* lpacMovieName, s32 liType);
+
         // Hand this sub-step's GUI module INPUT buffer (filled by BrnGameModule's
         // BridgeControllerToGui + BridgeGameToGui) to the update drive; Update dispatches
         // its inbound events (144 -> RunFsm, 14/16/481 -> the model notifications,

@@ -527,10 +527,17 @@ namespace BrnGui
         mResourceInputBuffer.GetLoadRequestsNonConst()->Clear();
         mResourceInputBuffer.UnlockForWrite();
 
-        // 4. Bridge the module's load notifications into the ModelIO output notification
-        //    queue the controller reads -- re-post each record under its own queue id (14).
+        // 4. Bridge the module's notifications to the right consumer, by request type:
+        //    * apt movie load notifications (request types 4..7) -> the VIEW input buffer as
+        //      view event 14, where the REAL CgsGui::ViewModule::ProcessIncomingLoadNotification
+        //      @0x8285BD30 registers each header (AddAptData). Phase 2 routes the movie-slot
+        //      bundle IO through the module, so these replace the AptRuntimeHost's
+        //      PopPendingLoadNotification ring for the flow movie.
+        //    * every other notification (the FSM bundle load, unloads) -> the ModelIO output
+        //      the flow controller's WFLOAD stage reads (the Phase 1 FSM contract, unchanged).
         mResourceOutputBuffer.LockForRead();
         mModelOutputBuffer.LockForWrite();
+        mViewInputBuffer.LockForWrite();
         {
             const CgsGui::GuiResourceModuleIO::InputBuffer::GuiEventQueue* lpNotifications =
                 mGuiResourceModule.GetLoadedNotifications(&mResourceOutputBuffer);
@@ -539,12 +546,24 @@ namespace BrnGui
             s32 liId = lpNotifications->GetFirstEvent(&lpEvent, &liSize);
             while (liId >= 0 && lpEvent != 0)
             {
-                mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(lpEvent, liId, liSize);
+                bool lbAptMovie = false;
+                if (liId == 14)
+                {
+                    const s32 liReqType = static_cast<s32>(
+                        reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent)->meRequestType);
+                    lbAptMovie = (liReqType >= 4 && liReqType <= 7);
+                }
+                if (lbAptMovie)
+                    mViewInputBuffer.GetViewStateQueue()
+                        .CgsModule::VariableEventQueue<65536, 16>::AddEvent(lpEvent, 14, liSize);
+                else
+                    mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(lpEvent, liId, liSize);
                 const CgsModule::Event* lpNext = 0;
                 liId = lpNotifications->GetNextEvent(lpEvent, &lpNext, &liSize);
                 lpEvent = lpNext;
             }
         }
+        mViewInputBuffer.UnlockForWrite();
         mModelOutputBuffer.UnlockForWrite();
         mResourceOutputBuffer.UnlockForRead();
 
@@ -552,6 +571,46 @@ namespace BrnGui
         mResourceOutputBuffer.LockForWrite();
         mResourceOutputBuffer.GetLoadNotificationsNonConst()->Clear();
         mResourceOutputBuffer.UnlockForWrite();
+    }
+
+    // Post an apt movie-bundle load request through the real GuiResourceModule (Phase 2: the
+    // movie-slot bundle IO rides the module). The name pointer must stay valid until the module
+    // services the request (its acquire machine spans a few frames) -- callers pass a persistent
+    // buffer (the AptRuntimeHost slot's macName). liType is the ARTIST apt request type (4 =
+    // streamed apt movie). Load-once is the caller's concern (the host slot latches the request).
+    void GuiModule::RequestAptMovieLoad(const char* lpacMovieName, s32 liType)
+    {
+        if (lpacMovieName == 0 || lpacMovieName[0] == '\0')
+            return;
+
+        static u32 su32AptRequestId = 100u;   // distinct from the FSM controller slot ids (13/14/15)
+        CgsGui::GuiEventLoadRequest lRequest;
+        lRequest.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(liType);
+        lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
+        lRequest.mpacFileToLoad  = lpacMovieName;
+        lRequest.muLoadRequestId = su32AptRequestId++;
+        lRequest.muResourceId    = 0;
+
+        mModelInputBuffer.LockForWrite();
+        mModelInputBuffer.GetLoadRequests()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 39,
+            static_cast<s32>(sizeof(lRequest)));
+        mModelInputBuffer.UnlockForWrite();
+
+        char lac[160];
+        std::snprintf(lac, sizeof(lac),
+                      "[GuiModule] apt movie '%s' -> GuiResourceModule load request (type %d).\n",
+                      lpacMovieName, liType);
+        CgsDev::Log::WriteToLog(lac);
+    }
+
+    // Free accessor so BrnGuiAptRuntime (the host) can post the request through the module
+    // without pulling in the full GuiModule layout -- it reaches the module via the extern
+    // gpActiveGuiModule pointer through this one hop.
+    void RequestAptMovieLoadThroughModule(const char* lpacMovieName, s32 liType)
+    {
+        if (gpActiveGuiModule != 0)
+            gpActiveGuiModule->RequestAptMovieLoad(lpacMovieName, liType);
     }
 
     // [PC IO] the ORIGINAL host FSM-bundle stand-in: serviced the controller's FSM-bundle
