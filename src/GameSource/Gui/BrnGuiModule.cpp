@@ -80,6 +80,21 @@ namespace
     u8 s_profileHeapBacking[192u * 1024u];
     u8 s_profileLinearBacking[2u * 1024u * 1024u];
 
+    // FLAG PC-platform leaf: the live progression + live-revenge profile blocks the
+    // console's progression/network modules install on the ProfileManager via GuiModule
+    // events (SetProgressionProfile / SetLiveRevengeProfile, event 351). Those subsystems
+    // are not wired on PC, so the manager's mpProgressionProfile/mpProgressionData/
+    // mpLiveRevengeProfile stay null and ProfileManager::Bootup->ReadProfileData faults
+    // (memcpy from mpLiveRevengeProfile; ValidateProfiles derefs mpProgressionData as the
+    // ExpectedManifest). These zeroed stand-ins are a blank first-boot profile -- exactly
+    // what the console holds before any save loads -- installed in Prepare below. Sized to
+    // the real segment widths (BrnGuiProfile.h): live-revenge is memcpy'd 30016 B, the
+    // manifest is dereferenced by value, the progression profile is only read by the
+    // (FLAG'd no-op) serialiser.
+    alignas(16) u8 s_pcProgressionProfileBacking[118064];   // KI_PROGRESSION_PROFILE_SIZE_BYTES
+    alignas(16) u8 s_pcProgressionManifestBacking[4096];    // ExpectedManifest (generous)
+    alignas(16) u8 s_pcLiveRevengeProfileBacking[30016];    // KI_LIVEREVENGE_PROFILE_SIZE_BYTES
+
     // The shared access-pointer bundle the HUD flow's state interface hands its GUI
     // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes the
     // AptAux singleton). The console's view module owns the equivalent module-shared
@@ -276,6 +291,19 @@ namespace BrnGui
         mProfileLinear.Construct();
         mProfileLinear.Create(s_profileLinearBacking, sizeof(s_profileLinearBacking));
         mProfileManager.Prepare(&mProfileHeap, &mProfileLinear);
+
+        // Install the PC-boundary blank profile blocks (see the statics above): the
+        // console's progression + network modules do this via SetProgressionProfile /
+        // SetLiveRevengeProfile; without them Bootup->ReadProfileData faults on the null
+        // pointers. std::memset zeroes them (a fresh, unsaved profile).
+        std::memset(s_pcProgressionProfileBacking, 0, sizeof(s_pcProgressionProfileBacking));
+        std::memset(s_pcProgressionManifestBacking, 0, sizeof(s_pcProgressionManifestBacking));
+        std::memset(s_pcLiveRevengeProfileBacking, 0, sizeof(s_pcLiveRevengeProfileBacking));
+        mProfileManager.SetProgressionProfile(
+            reinterpret_cast<BrnProgression::Profile*>(s_pcProgressionProfileBacking),
+            reinterpret_cast<const BrnProgression::ProgressionData*>(s_pcProgressionManifestBacking));
+        mProfileManager.SetLiveRevengeProfile(
+            reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(s_pcLiveRevengeProfileBacking));
 
         mHudFlow.Prepare(&s_GuiAccessPointers, /*lpAllocator*/ 0, &mHudStatePool,
                          &mProfileManager);
