@@ -8,6 +8,7 @@
 #include "GameSource/Gui/BrnGuiViewModule.h"                             // BrnGui::ViewModule (embedded)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                  // CgsGui::CgsGuiModuleIO::InputBuffer (the inbound GUI event buffer)
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"          // CgsGui::ModelIO Input/OutputBuffer (the FSM controller's IO pair)
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModule.h" // CgsGui::GuiResourceModule (+ IO buffers) -- the REAL FSM/resource loader
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"     // CgsResource::Pool (holds the loaded FSM bundle)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"               // CgsMemory::HeapMalloc (the FSM Lua VM heap)
@@ -111,10 +112,18 @@ namespace BrnGui
         // (155/201, the PC sound leaves).
         void DrainFlowOutputQueue(s32 liFlow);
 
-        // [PC IO] the GuiResourceModule module-dispatch stand-in: drain the ModelIO input
-        // buffer's FSM-bundle load requests (GuiEventLoadRequest, queue type 39), load
-        // "FSM/<NAME>.BUNDLE" synchronously, and post the GuiEventLoadNotification (14)
-        // into the ModelIO output buffer's notification queue the controller reads.
+        // The GUI resource-loading dispatch: hand the flow controller's FSM-bundle load
+        // requests (GuiEventLoadRequest, queue type 39, out of mModelInputBuffer) to the
+        // REAL CgsGui::GuiResourceModule, run it (its acquire machine + the [PC] platform
+        // servicer that loads FSM\<NAME>.BUNDLE), and bridge its GuiEventLoadNotification
+        // (14) records back into the ModelIO output buffer the controller reads. Replaces
+        // the host stand-in ServiceFsmBundleRequests below (Phase 1 of retiring that path).
+        void DispatchGuiResourceModule();
+
+        // [PC IO] the ORIGINAL host FSM-bundle stand-in: drained the ModelIO input
+        // buffer's load requests, loaded "FSM/<NAME>.BUNDLE" synchronously, and posted
+        // the GuiEventLoadNotification (14) itself. SUPERSEDED by DispatchGuiResourceModule
+        // (the real module now owns this); retained unused this phase (/OPT:REF strips it).
         void ServiceFsmBundleRequests();
 
         // Post one event into each live flow's in-queue if that flow subscribed to it
@@ -159,6 +168,17 @@ namespace BrnGui
         // Update does (Clear @ the update tail).
         CgsGui::ModelIO::InputBuffer  mModelInputBuffer;
         CgsGui::ModelIO::OutputBuffer mModelOutputBuffer;
+
+        // The REAL GUI resource-loading module + its own per-frame IO pair. Wired in to
+        // REPLACE the host FSM-bundle stand-in: the controller's GuiEventLoadRequest queue
+        // (out of mModelInputBuffer) is handed to the module, which loads FSM\<NAME>.BUNDLE
+        // through its acquire machine + the [PC] platform servicer and posts the
+        // GuiEventLoadNotification (14) back -- DispatchGuiResourceModule bridges those into
+        // mModelOutputBuffer for the controller. The console recreates the module IO
+        // buffers each frame; the PC pair is persistent and cleared per frame.
+        CgsGui::GuiResourceModule                 mGuiResourceModule;
+        CgsGui::GuiResourceModuleIO::InputBuffer  mResourceInputBuffer;
+        CgsGui::GuiResourceModuleIO::OutputBuffer mResourceOutputBuffer;
 
         // The per-flow in-queues (every observed event is fanned into the subscribing
         // flow's queue) + the module GUI-OUT queue the game bridge drains.
