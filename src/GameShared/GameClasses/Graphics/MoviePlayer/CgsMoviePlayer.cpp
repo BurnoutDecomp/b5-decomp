@@ -3,6 +3,7 @@
 #include "pc/gcm/renderengine/device.h"                              // renderengine::gDevice
 #include "pc/gcm/renderengine/texture.h"                             // renderengine::Texture
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstring>   // std::memcpy (strip-band recombine upload)
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -61,6 +62,12 @@ namespace CgsGraphics
         mpFrameTexture = 0;
         muTexWidth = 0;
         muTexHeight = 0;
+
+        miVerticalStrips = 1;
+        miCurrentStrip = 0;
+        miStripsDecoded = 0;
+        mpStripStaging = 0;
+        muStripStagingBytes = 0;
     }
 
     bool MoviePlayer::SetMovieFile(const char* lpMovieFileName, bool lbPreload)
@@ -145,6 +152,19 @@ namespace CgsGraphics
         mfFrameRate = av_q2d(lpStream->avg_frame_rate);
         mfDurationSec = (mpFormatCtx->duration > 0) ? (static_cast<f64>(mpFormatCtx->duration) / static_cast<f64>(AV_TIME_BASE)) : 0.0;
 
+        // X360 VP6 UI/boot videos are authored as three vertically-stacked 1280x240 strips
+        // per 1280x720 display frame (the VP6 stream carries 3x the container frame count;
+        // 3 consecutive decoded strips = one display frame). The console's video path
+        // recombined them; the PC decoder emits them separately, so detect the layout and
+        // recombine below. Signature: the coded frame is 1280 wide and 240 tall.
+        miVerticalStrips = (mpVideoCtx->width == 1280 && mpVideoCtx->height == 240) ? 3 : 1;
+        miCurrentStrip   = 0;
+        miStripsDecoded  = 0;
+        if (miVerticalStrips != 1)
+        {
+            CgsDev::Log::WriteToLog("[Movie] X360 3-strip VP6 detected (1280x240 -> 1280x720 recombine).\n");
+        }
+
         mpFrame = av_frame_alloc();
         mpPacket = av_packet_alloc();
         if (mpFrame == 0 || mpPacket == 0)
@@ -189,6 +209,9 @@ namespace CgsGraphics
             delete mpFrameTexture;
             mpFrameTexture = 0;
         }
+        delete[] mpStripStaging;
+        mpStripStaging = 0;
+        muStripStagingBytes = 0;
         muTexWidth = 0;
         muTexHeight = 0;
         miVideoStream = -1;
@@ -268,6 +291,18 @@ namespace CgsGraphics
             const int liRecv = avcodec_receive_frame(mpVideoCtx, mpFrame);
             if (liRecv == 0)
             {
+                if (miVerticalStrips != 1)
+                {
+                    // 3-strip VP6: the raw strip PTS run at 3x the display rate, so time the
+                    // recombined frame by the DISPLAY index (strips/N) at the container fps.
+                    // The band this strip fills is strips % N.
+                    miCurrentStrip = static_cast<s32>(miStripsDecoded % miVerticalStrips);
+                    const f64 lfFps = (mfFrameRate > 1.0) ? mfFrameRate : 30.0;
+                    const s64 liDisplayIndex = miStripsDecoded / miVerticalStrips;
+                    mfFramePtsSec = static_cast<f64>(liDisplayIndex) / lfFps;
+                    ++miStripsDecoded;
+                    return true;
+                }
                 s64 lts = mpFrame->best_effort_timestamp;
                 if (lts == AV_NOPTS_VALUE) lts = mpFrame->pts;
                 if (lts != AV_NOPTS_VALUE) mfFramePtsSec = static_cast<f64>(lts) * mfTimeBaseSec;
@@ -344,27 +379,68 @@ namespace CgsGraphics
             sws_freeContext(mpSws);
             mpSws = 0;
         }
+        // sws always converts ONE coded strip (no vertical scale): the texture may be taller
+        // (miVerticalStrips bands), each filled by a separate decode in UploadFrame.
         mpSws = sws_getContext(mpVideoCtx->width, mpVideoCtx->height, mpVideoCtx->pix_fmt,
-                               static_cast<int>(luWidth), static_cast<int>(luHeight),
+                               mpVideoCtx->width, mpVideoCtx->height,
                                AV_PIX_FMT_BGRA, SWS_BILINEAR, 0, 0, 0);
         return mpSws != 0;
     }
 
     void MoviePlayer::UploadFrame()
     {
-        if (!EnsureTexture(static_cast<u32>(mpVideoCtx->width), static_cast<u32>(mpVideoCtx->height)))
+        // The texture spans all N strip bands (N==1 for normal video). Repeated texture
+        // Lock/Unlock cycles do NOT reliably preserve the other bands between writes, so
+        // accumulate the N strips in a persistent CPU BGRA buffer (sws each strip into its
+        // band) and publish the recombined frame to the GPU texture in ONE lock on the last
+        // strip. For N==1 this is one strip + one upload (unchanged behaviour).
+        const u32 luStripW    = static_cast<u32>(mpVideoCtx->width);
+        const u32 luStripH    = static_cast<u32>(mpVideoCtx->height);
+        const u32 luTexHeight = luStripH * static_cast<u32>(miVerticalStrips);
+        if (!EnsureTexture(luStripW, luTexHeight))
         {
             return;
         }
+
+        const u32 luBufPitch = luStripW * 4u;
+        const u32 luBufBytes = luBufPitch * luTexHeight;
+        if (mpStripStaging == 0 || muStripStagingBytes < luBufBytes)
+        {
+            delete[] mpStripStaging;
+            mpStripStaging      = new u8[luBufBytes];
+            muStripStagingBytes = luBufBytes;
+        }
+
+        const u32 luBandOffset = static_cast<u32>(miCurrentStrip) * luStripH * luBufPitch;
+        u8* lpDst[1] = { mpStripStaging + luBandOffset };
+        int liStride[1] = { static_cast<int>(luBufPitch) };
+        sws_scale(mpSws, mpFrame->data, mpFrame->linesize, 0, mpVideoCtx->height, lpDst, liStride);
+
+        // Publish only once the display frame is complete (all N strips uploaded).
+        if (miCurrentStrip != miVerticalStrips - 1)
+        {
+            return;
+        }
+
         renderengine::Texture::LockInfo lLock;
         renderengine::Texture::Lock(mpFrameTexture, 0, 0, 0, &lLock);
         if (lLock.mpBits == 0)
         {
             return;
         }
-        u8* lpDst[1] = { static_cast<u8*>(lLock.mpBits) };
-        int liStride[1] = { static_cast<int>(lLock.muPitch) };
-        sws_scale(mpSws, mpFrame->data, mpFrame->linesize, 0, mpVideoCtx->height, lpDst, liStride);
+        u8* lpTexBits = static_cast<u8*>(lLock.mpBits);
+        if (lLock.muPitch == luBufPitch)
+        {
+            std::memcpy(lpTexBits, mpStripStaging, luBufBytes);
+        }
+        else
+        {
+            for (u32 luRow = 0; luRow < luTexHeight; ++luRow)
+            {
+                std::memcpy(lpTexBits + luRow * lLock.muPitch,
+                            mpStripStaging + luRow * luBufPitch, luBufPitch);
+            }
+        }
         renderengine::Texture::Unlock(mpFrameTexture, &lLock);
     }
 

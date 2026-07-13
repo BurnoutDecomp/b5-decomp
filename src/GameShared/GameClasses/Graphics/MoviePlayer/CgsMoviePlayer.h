@@ -113,6 +113,15 @@ namespace CgsGraphics
         bool             mbHaveFrame;             // mpFrame holds a decoded, not-yet-shown frame
         bool             mbEof;                   // demux hit EOF; the decoder is being flushed
 
+        // ---- X360 vertically-strided VP6 (the boot/UI *.vp6 store each 1280x720 display
+        //      frame as N stacked 1280x(720/N) strips; the decoder emits the strips as
+        //      separate frames, so N consecutive decodes recombine into one display frame) --
+        s32              miVerticalStrips;        // 1 = normal; 3 = the X360 1280x240 3-strip form
+        s32              miCurrentStrip;          // which vertical band the next decode fills (0..N-1)
+        s64              miStripsDecoded;         // running count -> display index = /N, band = %N
+        u8*              mpStripStaging;          // CPU BGRA buffer (width x height*N); bands accumulate
+        u32              muStripStagingBytes;     // allocated size of mpStripStaging
+
         // ---- frame texture (drawn through Im2d, the faithful render path) ---------------
         renderengine::Texture* mpFrameTexture;    // current frame, D3DFMT_A8R8G8B8 (BGRA in memory)
         u32   muTexWidth, muTexHeight;
