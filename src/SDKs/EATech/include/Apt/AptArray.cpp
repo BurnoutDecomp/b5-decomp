@@ -76,6 +76,16 @@ AptArray::~AptArray()
     mnLength = 0;
 }
 
+// ---------------------------------------------------------------------------
+// `vector deleting destructor' @0x82AF5C88 -- compiler-generated thunk
+// (~AptArray, then operator delete when the low bit of the flags arg is set:
+// resets the AptArray vtable, chains the AptObject base teardown, then frees
+// the 44-byte block via the GC-pool operator delete(this, 44) above).
+// Intentionally NOT hand-written: the C++ compiler emits the deleting
+// destructor for AptArray from the dtor above + the (pool-backed) operator
+// delete, exactly as for the sibling Apt value/instance types.
+// ---------------------------------------------------------------------------
+
 // _reserve @0x7F01D0 -- ensure capacity for nCount, growing to a power of two
 // (minimum 8) and copying the existing elements.
 void AptArray::_reserve(int32_t nCount)

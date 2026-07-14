@@ -18,11 +18,22 @@
 // fabricated one") their pixel math is DEFERRED to a dedicated asm-grounded pass;
 // each returns `this` (the X360 verified return value) and is otherwise a stub.
 //
-// ClipResizeHighQuality (0x82ABB920) and ~CClipResize (0x82AB47E0) are NOT bodied
-// in this batch (declared-only in the header; homed by their own follow-on slices).
+// ClipResizeHighQuality (0x82ABB920, the format dispatch) and ~CClipResize
+// (0x82AB47E0, the buffer teardown) are also bodied here -- both are short,
+// fully-attested control flow (no unreliable pixel math).
 // ===========================================================================
 
 #include "SDKs/WMSDK/CClipResize.h"
+
+#include <cstdlib>   // ::free (the PC heap leaf for the 0x7C scratch buffer)
+
+// XDK physical allocator leaf used by the destructor (0x82AB4810 `bl XMemFree`);
+// same prototype as the other WMSDK/D3D reconstructions.
+extern void XMemFree(void* pAddress, u32 uAttributes);
+
+// File-static FourCC flag written at 0x8323ED10 by ClipResizeHighQuality: set when
+// the requested format is 'P411' (a planar passthrough that skips resampling).
+static bool sbP411Format;
 
 // ---------------------------------------------------------------------------
 // CClipResize::CClipResize  @ 0x82AB4790
@@ -90,4 +101,60 @@ CClipResize* CClipResize::ResizePackedYUYInt2(f64 lfDX, f64 lfSX, f64 lfDY,
 {
     (void)lfDX; (void)lfSX; (void)lfDY; (void)lfOY; (void)liHigh;
     return this;   // BLOCKED: body needs asm-grounded register-pun disentangling
+}
+
+// ---------------------------------------------------------------------------
+// CClipResize::ClipResizeHighQuality  @ 0x82ABB920
+// Records whether the FourCC is 'P411' in the file-static flag, stashes the six
+// plane pointers, then dispatches to the format-specific resampler. Planar
+// 'P411'/'P422' are passthrough (return `this`); 'YUY2'/'UYVY' share the packed
+// 4:2:2 path (liHigh=1 for YUY2, 0 for UYVY); 0 and 'AYUV' take the packed-32bpp
+// path; everything else falls to the generic planar filter. The four doubles are
+// forwarded verbatim to whichever resampler is tail-called.
+// ---------------------------------------------------------------------------
+CClipResize* CClipResize::ClipResizeHighQuality(u8* lpSrcY, u8* lpSrcU, u8* lpSrcV,
+                                                u8* lpDstY, u8* lpDstU, u8* lpDstV,
+                                                f64 lfScaleX, f64 lfScaleY,
+                                                f64 lfStepY, f64 lfOffsetY, u32 luFourCC)
+{
+    sbP411Format = (luFourCC == 0x31313450u);   // 'P411' (byte_8323ED10)
+
+    mpDstY = lpDstY;   // 0x70
+    mpDstU = lpDstU;   // 0x74
+    mpDstV = lpDstV;   // 0x78
+    mpSrcY = lpSrcY;   // 0x64
+    mpSrcU = lpSrcU;   // 0x68
+    mpSrcV = lpSrcV;   // 0x6C
+
+    if (sbP411Format || luFourCC == 0x50343232u)   // 'P411' / 'P422': passthrough
+        return this;
+
+    if (luFourCC == 0x32595559u)                    // 'YUY2'
+        return ResizePackedYUYInt2(lfScaleX, lfScaleY, lfStepY, lfOffsetY, 1);
+    if (luFourCC == 0x59565955u)                    // 'UYVY'
+        return ResizePackedYUYInt2(lfScaleX, lfScaleY, lfStepY, lfOffsetY, 0);
+    if (luFourCC == 0u || luFourCC == 0x41595556u)  // 0 / 'AYUV': packed 32bpp
+        return ResizePacked32Int2(lfScaleX, lfScaleY, lfStepY, lfOffsetY);
+    return ResizeInt2(lfScaleX, lfScaleY, lfStepY, lfOffsetY);
+}
+
+// ---------------------------------------------------------------------------
+// CClipResize::~CClipResize  @ 0x82AB47E0
+// Release the two owned scratch buffers (the 0x80 slot came from the XDK
+// physical heap, the 0x7C slot from the CRT heap), null both, then mark the
+// object torn down (0x40 = 1). Called explicitly by ~WMSDKRESIZER.
+// ---------------------------------------------------------------------------
+CClipResize::~CClipResize()
+{
+    if (mReserved80 != 0)
+    {
+        XMemFree(reinterpret_cast<void*>(static_cast<uintptr_t>(mReserved80)), 0x248C8000u);
+        mReserved80 = 0;
+    }
+    if (mReserved7C != 0)
+    {
+        ::free(reinterpret_cast<void*>(static_cast<uintptr_t>(mReserved7C)));
+        mReserved7C = 0;
+    }
+    mReserved40 = 1;
 }

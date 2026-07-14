@@ -77,6 +77,7 @@ void AptStringPool_Initialize(int nBucketCount);   // AptStringPool.cpp (== Stri
 // ---- EA::Thread (record the sim/render thread ids + the shared mutex) -------
 #include "eathread/eathread.h"                                  // EA::Thread::GetThreadId / ThreadId
 #include "eathread/eathread_mutex.h"                            // EA::Thread::Mutex (vendor)
+#include "SDKs/EATech/eathread/thread_local_storage.h"          // EA::Thread::ThreadLocalStorage (gAptTargetTls)
 
 // ===========================================================================
 // The Apt bring-up .data/.bss globals this TU owns (the X360 objects the init
@@ -139,6 +140,21 @@ namespace
         return s_mutex;
     }
 
+    // ---- the deferred-release drain mutex (unk_8324E728) -------------------
+    // A SECOND vendor EA::Thread::Mutex, distinct from the update/render mutex
+    // above; AptRenderShutdown takes it to drain the render-item / deferred-
+    // release pool (off_8324E2C8 / dword_8324E508) -- the same lock the AS
+    // unresolve path uses. Same function-local-static shape as
+    // AptUpdateRenderMutex (init-order safe). FLAG: the console passes the raw
+    // MutexParameters name (unk_82143270); a default recursive mutex is faithful.
+    // (AptGlobals.cpp keeps a null `void* gAptUnresolveMutex` symbol placeholder;
+    // the functional object is modelled here, mirroring the render mutex.)
+    EA::Thread::Mutex& AptUnresolveMutex()
+    {
+        static EA::Thread::Mutex s_mutex;   // unk_8324E728
+        return s_mutex;
+    }
+
     // The DOGMA sized-free hook slot's signature is (void*, unsigned) while
     // DOGMA_FreeSized takes size_t; a thin adapter forwards it (x64: unsigned !=
     // size_t -- a straight fn-ptr assign would not type-check).
@@ -174,6 +190,28 @@ extern DOGMA_PoolManager* gpAptRenderManagerPool;  // off_8324D808
 extern DOGMA_PoolManager* gpAptSharedPtrPool;      // off_8324D808
 extern DOGMA_PoolManager* gpAptSingleListPool;     // off_8324D808
 extern void*              gpAptValueGCPool;        // off_8324D834 (type-erased GC-pool view)
+
+// ---------------------------------------------------------------------------
+// The Apt TEARDOWN leaves AptRenderShutdown reaches. The un-homed siblings are
+// declared here at the call site (the codebase pattern for not-yet-homed deps).
+// ---------------------------------------------------------------------------
+// AptMath::ClipStackShutdown -- free the render clip stack (the counterpart of
+// ClipStackInit @0x82AE2470); returns the freed base in the console r3, so
+// intptr_t on x64 (matching the other ClipStack* accessors). Not yet homed.
+namespace AptMath { intptr_t ClipStackShutdown(); }
+
+// AptCommonShutdown -- the once-only shared static-data teardown (counterpart of
+// AptCommonInitialize @0x82AE91F0). Recovered signature takes no args; the X360
+// leaves ClipStackShutdown's r3 result live across the call (a dead leftover --
+// the emitted machine code is identical either way). Not yet homed.
+extern int AptCommonShutdown();
+
+// The render-item / deferred-release pool count (dword_8324E508, homed in
+// AptGlobals.cpp) + the host font-free thunk (dword_8324E870, a member of the
+// gAptFuncs table, named beside the AS unresolve path in AptCharacterAnimation.cpp)
+// the shutdown drain calls on each pooled slot.
+extern int  gAptDeferredReleaseCount;       // dword_8324E508 (AptGlobals.cpp)
+extern void AptFreeFontUnit(void* pUnit);   // dword_8324E870 thunk
 
 // ===========================================================================
 // AptAllocatorInitialize @0x82ADD118 -- construct the Apt value pools + wire the
@@ -506,6 +544,144 @@ int AptValueInitialize()
 }
 
 // ===========================================================================
+// AptValueShutdownRemaining @0x82AE3170 -- BLOCKED (not homed here).
+//
+// The console body is: off_8324D814->ForceDelete(); AptBoolean::Shutdown();
+// AptLookup::Shutdown(); AptRegister::Shutdown(); AptCharacterHelper::Shutdown();
+// return off_8324E2CC->ForceDelete(). Every dep is homed and public EXCEPT
+// AptBoolean::Shutdown, which is `protected` in the frozen AptBoolean.h and grants
+// friendship only to `int ::AptValueInitialize()` (AptBoolean.h:22). A faithful call
+// requires adding `friend int ::AptValueShutdownRemaining();` beside it -- an edit to a
+// sibling TU's frozen header, out of scope for this .cpp-only finishing pass. Deferred
+// to the conductor (one-line friend grant, mirroring the existing Initialize grant).
+// ===========================================================================
+
+// ===========================================================================
+// AptValueShutdown @0x82AF2BE0 -- tear down the AS value singletons + natives.
+//
+// The teardown mirror of AptValueInitialize: drop the AS class-registry hash, then
+// walk the process-wide value singletons -- for each, run the value's GC-pointer
+// teardown (vtbl DestroyGCPointers @+0x28) then the boot-AddRef Release (vtbl Release
+// @+0x04) and null the slot. The rendering context (a pooled AptRenderingContext, not
+// an AptValue) is torn down via its scalar-deleting destructor and its slot is left
+// as-is (the console does NOT null dword_8324E2AC here). Called by AptUpdateShutdown.
+//
+// FLAG (PC): the console brackets the walk with two interrupt-masked lwarx/stwcx. TAS
+// spin locks on unk_8324E71C (the same one-shot latch AptValueInitialize uses);
+// single-threaded here, so acquire/release is a no-op and elided (the AptInit.cpp
+// spin-lock treatment). No null guards are added: the console's per-singleton
+// dispatch is unconditional (only dword_8324E2D4 and dword_8324E2AC are guarded),
+// transcribed verbatim.
+//
+// FLAG (deferred): the seven AS native-function singletons (off_8324D828/D81C/D824/
+// E1FC/D80C/D74C/E378) are the teardown side of the SAME singletons AptValueInitialize
+// FLAG-defers (they stay null until that native-install slice is homed). Their slots
+// live below as this-TU storage so the faithful walk resolves; the whole
+// AptValueShutdown path stays inert until those natives (and AptUpdateShutdown, its
+// caller) are homed.
+// ===========================================================================
+extern AptNativeHash* gpAptClassRegistry;   // dword_8324E2D4 (AptObject.cpp)
+
+namespace
+{
+    // The seven named AS global native-function singletons (X360 off_8324D8xx /
+    // off_8324E1FC / off_8324E378). Deferred-null (see AptValueInitialize's FLAG);
+    // this TU owns their slots for the init/teardown pair. FLAG: file-local until the
+    // deferred native-install slice homes them alongside the other Apt singletons.
+    AptValue* gpAptNativeFn_setInterval    = nullptr;   // off_8324D828
+    AptValue* gpAptNativeFn_clearInterval  = nullptr;   // off_8324D81C
+    AptValue* gpAptNativeFn_isNaN          = nullptr;   // off_8324D824
+    AptValue* gpAptNativeFn_unescape       = nullptr;   // off_8324E1FC
+    AptValue* gpAptNativeFn_escape         = nullptr;   // off_8324D80C
+    AptValue* gpAptNativeFn_boolean        = nullptr;   // off_8324D74C
+    AptValue* gpAptNativeFn_ASSetPropFlags = nullptr;   // off_8324E378
+}
+
+int AptValueShutdown()
+{
+    // dword_8324E2D4 (gpAptClassRegistry) -- the AS export-name class-registry hash.
+    // Guarded (the console null-checks it): destroy its held GC pointers, then run its
+    // scalar-deleting destructor -- dtor + pool free back to the non-GC DOGMA pool it
+    // was placement-new'd from (AptObject.cpp) -- then null the slot.
+    if (gpAptClassRegistry != nullptr)
+    {
+        gpAptClassRegistry->DestroyGCPointers();
+        if (gpAptClassRegistry != nullptr)
+        {
+            gpAptClassRegistry->~AptNativeHash();
+            if (gpNonGCPoolManager != nullptr)
+                gpNonGCPoolManager->Deallocate(gpAptClassRegistry, sizeof(AptNativeHash));
+        }
+        gpAptClassRegistry = nullptr;
+    }
+
+    // FLAG (PC): first interrupt-masked TAS on unk_8324E71C elided single-threaded.
+
+    // off_8324E37C -- the _global extension object.
+    gpAptGlobalExtensionObject->DestroyGCPointers();   // vtbl +0x28
+    gpAptGlobalExtensionObject->Release();             // vtbl +0x04 (drops the boot AddRef)
+    gpAptGlobalExtensionObject = nullptr;
+
+    // FLAG (PC): second interrupt-masked TAS on unk_8324E71C elided single-threaded.
+
+    // off_8324E380 -- the _global fallback scope.
+    gpAptGlobalFallback->DestroyGCPointers();
+    gpAptGlobalFallback->Release();
+    gpAptGlobalFallback = nullptr;
+
+    // off_8324E2A8 -- the Key manager singleton.
+    gpAptKeyObject->DestroyGCPointers();
+    gpAptKeyObject->Release();
+    gpAptKeyObject = nullptr;
+
+    // off_8324D82C -- the shared empty AptString.
+    gpAptStringObject->DestroyGCPointers();
+    gpAptStringObject->Release();
+    gpAptStringObject = nullptr;
+
+    // dword_8324E2AC -- the shared AptRenderingContext (a pooled non-AptValue); guarded
+    // scalar-deleting destructor (dtor + pool free). The slot is NOT nulled (asm).
+    if (gpAptRenderingContext != nullptr)
+        static_cast<AptRenderingContext*>(gpAptRenderingContext)->ScalarDeletingDestructor(1);
+
+    // The seven AS global native-function singletons (deferred-null; see the FLAG).
+    gpAptNativeFn_setInterval->DestroyGCPointers();
+    gpAptNativeFn_setInterval->Release();
+    gpAptNativeFn_setInterval = nullptr;
+
+    gpAptNativeFn_clearInterval->DestroyGCPointers();
+    gpAptNativeFn_clearInterval->Release();
+    gpAptNativeFn_clearInterval = nullptr;
+
+    gpAptNativeFn_isNaN->DestroyGCPointers();
+    gpAptNativeFn_isNaN->Release();
+    gpAptNativeFn_isNaN = nullptr;
+
+    gpAptNativeFn_unescape->DestroyGCPointers();
+    gpAptNativeFn_unescape->Release();
+    gpAptNativeFn_unescape = nullptr;
+
+    gpAptNativeFn_escape->DestroyGCPointers();
+    gpAptNativeFn_escape->Release();
+    gpAptNativeFn_escape = nullptr;
+
+    gpAptNativeFn_boolean->DestroyGCPointers();
+    gpAptNativeFn_boolean->Release();
+    gpAptNativeFn_boolean = nullptr;
+
+    gpAptNativeFn_ASSetPropFlags->DestroyGCPointers();
+    gpAptNativeFn_ASSetPropFlags->Release();
+    gpAptNativeFn_ASSetPropFlags = nullptr;
+
+    // off_8324D748 -- the Object.registerClass native. The console tail-returns this
+    // last Release's r3; AptValue::Release is void here, so 0 (the vendor-path result).
+    gpObjRegistrationFunc->DestroyGCPointers();
+    gpObjRegistrationFunc->Release();
+    gpObjRegistrationFunc = nullptr;
+    return 0;
+}
+
+// ===========================================================================
 // AptRenderInitialize @0x82AEDE90 -- bring up the Apt render side.
 //
 // X360: Mutex::Lock(unk_8324E7E0, unk_82143270); if (!dword_8324E6E0)
@@ -536,6 +712,61 @@ void* AptRenderInitialize(int /*a1*/)
     // off_8324E2C8 = pool->Allocate(4 * 1024) -- the render-item pointer pool.
     gpAptRenderItemPool = gpAptPseudoDataPool->Allocate(sizeof(void*) * gnAptRenderItemPoolCount);
     return gpAptRenderItemPool;
+}
+
+// ===========================================================================
+// AptRenderShutdown @0x82B0C2F0 -- tear down the Apt render side (counterpart of
+// AptRenderInitialize): clear the render latch, free the clip stack, run the
+// common teardown when the sim side is already down, then drain + free the
+// render-item pointer pool.
+//
+// X360: dword_8324E510 = 0; v0 = AptMath::ClipStackShutdown(); if (!dword_8324E50C)
+// AptCommonShutdown(v0); if (dword_8324E508) { Mutex::Lock(unk_8324E728);
+// for (i.. dword_8324E508) { dword_8324E870(pool[i]); pool[i] = 0; }
+// dword_8324E508 = 0; Mutex::Unlock(unk_8324E728); } result =
+// DOGMA_PoolManager::Deallocate(off_8324D808, off_8324E2C8, 4 * dword_82F73004);
+// off_8324E2C8 = 0; dword_8324E508 = 0.
+//
+// FLAG (x64): the pool holds pointer-width slots (AptRenderInitialize allocated
+// sizeof(void*) * count), so the drain strides by void* and the Deallocate size
+// mirrors that Allocate size -- the console's literal `4 * count` byte math is the
+// 32-bit-pointer form of the same walk.
+// ===========================================================================
+int AptRenderShutdown()
+{
+    gbAptRenderInitDone = 0;                 // dword_8324E510 = 0
+
+    AptMath::ClipStackShutdown();            // free the render clip stack (X360 r3 -> v0)
+    if (!gbAptUpdateInitDone)                // dword_8324E50C: skip the common teardown while the sim side is up
+        AptCommonShutdown();                 // (X360 carries the ClipStackShutdown result in r3; recovered sig takes none)
+
+    if (gAptDeferredReleaseCount)            // dword_8324E508
+    {
+        AptUnresolveMutex().Lock();
+
+        unsigned int liFreed = 0;            // v1
+        if (gAptDeferredReleaseCount)        // re-read under the lock
+        {
+            void** const lppItems = static_cast<void**>(gpAptRenderItemPool);   // off_8324E2C8
+            do
+            {
+                AptFreeFontUnit(lppItems[liFreed]);   // dword_8324E870(*(off_8324E2C8 + v2))
+                lppItems[liFreed] = nullptr;          // *(off_8324E2C8 + v2) = 0
+                ++liFreed;
+            }
+            while (liFreed < static_cast<unsigned int>(gAptDeferredReleaseCount));
+        }
+
+        gAptDeferredReleaseCount = 0;        // dword_8324E508 = 0
+        AptUnresolveMutex().Unlock();
+    }
+
+    // off_8324E2C8 = pool->Deallocate(4 * 1024) -- release the render-item pointer pool.
+    bool lbResult = gpAptPseudoDataPool->Deallocate(gpAptRenderItemPool,
+                                                    sizeof(void*) * gnAptRenderItemPoolCount);
+    gpAptRenderItemPool      = nullptr;      // off_8324E2C8 = 0
+    gAptDeferredReleaseCount = 0;            // dword_8324E508 = 0
+    return lbResult;
 }
 
 // ===========================================================================
@@ -682,4 +913,43 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
 
     AptUpdateRenderMutex().Unlock();
     return 0;   // the console returns the Mutex::Unlock result; 0 on the vendor path
+}
+
+// ===========================================================================
+// AptUpdateTarget @0x82B0DE80 -- tick ONE Apt target's movies as the current
+// context, then restore the previous context.
+//
+// X360: v5 = off_8324E574 (save gpAptTarget); off_8324E574 = a1; TLS(unk_8324E814)
+// = a1; AptUpdate(a2, a3, a4); off_8324E574 = v5; result = TLS(unk_8324E814) = v5.
+// i.e. make pTarget the current context (the global slot + the per-thread TLS
+// mirror GetTarget() reads), run the per-frame AptUpdate against it, then restore
+// the previous context. Returns the EA TLS SetValue result (X360 r3).
+//
+// NB: only gpAptTarget (off_8324E574) + the TLS mirror are swapped here -- NOT the
+// list head (off_8324E570) nor gpAptTargetTLS (off_8324E578); the asm touches only
+// those two slots (unlike AptChangeTargetInstance, which sets ..E574 + ..E578). The
+// console brackets nothing with a lock on this path.
+//
+// AptUpdate is the per-frame Apt sim tick, homed by its own (pending) TU; its
+// recovered (a2,a3,a4) int args are forwarded verbatim. Declared extern here.
+// ===========================================================================
+
+// The per-thread current-target TLS mirror (unk_8324E814). Defined in
+// AptRenderLinkStubs.cpp; AptTarget.cpp publishes into the same slot.
+extern EA::Thread::ThreadLocalStorage gAptTargetTls;
+
+// AptUpdate -- the per-frame Apt sim tick (a2/a3/a4 forwarded verbatim).
+extern int AptUpdate(int a1, int a2, int a3);
+
+int AptUpdateTarget(AptTarget* pTarget, int a2, int a3, int a4)
+{
+    AptTarget* pPrev = gpAptTarget;      // v5 = off_8324E574 (save the current context)
+
+    gpAptTarget = pTarget;               // off_8324E574 = a1
+    gAptTargetTls.SetValue(pTarget);     // TLS(unk_8324E814) = a1
+
+    AptUpdate(a2, a3, a4);
+
+    gpAptTarget = pPrev;                 // off_8324E574 = v5 (restore)
+    return static_cast<int>(gAptTargetTls.SetValue(pPrev));   // result = TLS(unk_8324E814) = v5
 }

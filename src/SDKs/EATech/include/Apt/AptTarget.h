@@ -102,6 +102,9 @@ extern int gAptTargetInstanceCount;     // X360 dword_8324E57C
 //       AptUpdateParams block, append it to the instance list, return it.
 //   AptChangeTargetInstance(target)  -- make `target` the current context (sets
 //       gpAptTarget/gpAptTargetTLS + the GetTarget() TLS mirror).
+//   AptDestroyTargetInstance(target) -- unlink `target` from the instance list +
+//       the three context globals, tear it down (AptTarget::Shutdown) and free it.
 // ---------------------------------------------------------------------------
 AptTarget* AptCreateTargetInstance(const u32* pParams);
 AptTarget* AptChangeTargetInstance(AptTarget* pTarget);
+bool       AptDestroyTargetInstance(AptTarget* pTarget);

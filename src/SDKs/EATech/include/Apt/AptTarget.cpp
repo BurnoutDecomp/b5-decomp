@@ -274,6 +274,53 @@ AptTarget* AptChangeTargetInstance(AptTarget* pTarget)
 }
 
 // ---------------------------------------------------------------------
+// AptDestroyTargetInstance @0x82B099E8 -- remove `pTarget` from the instance list,
+// detach it from any context global that still points at it, tear it down and free it.
+//
+// X360 body: spin-lock unk_8324E7D0; --dword_8324E57C; v9 = *(a1+0x24) [NEXT];
+// v10 = *(a1+0x28) [PREV]; if (a1==off_8324E574) off_8324E574 = NEXT; if
+// (a1==off_8324E578) off_8324E578 = NEXT; if (a1==off_8324E570) off_8324E570 = NEXT;
+// if (PREV) PREV->+0x24 = NEXT; if (NEXT) NEXT->+0x28 = PREV; AptTarget::Shutdown(a1);
+// result = Deallocate(off_8324D808, a1, 48); unlock; return result.
+//
+// FLAG: the unk_8324E7D0 spin-lock (acquire at top, release at bottom) is a NO-OP on the
+// single-threaded PC bring-up (the Apt context list is edited only on the main thread);
+// both are elided -- matching AptCreateTargetInstance above. The unlink + the 48-byte
+// Deallocate are reproduced faithfully against the named AptTarget list slots
+// (mpField24 == NEXT / mpField28 == PREV, per the list note above).
+// ---------------------------------------------------------------------
+bool AptDestroyTargetInstance(AptTarget* pTarget)
+{
+    // FLAG: spin-lock unk_8324E7D0 elided (single-threaded PC bring-up).
+
+    --gAptTargetInstanceCount;   // --dword_8324E57C
+
+    AptTarget* pNext = static_cast<AptTarget*>(pTarget->mpField24);   // v9  = *(a1+0x24) NEXT
+    AptTarget* pPrev = static_cast<AptTarget*>(pTarget->mpField28);   // v10 = *(a1+0x28) PREV
+
+    // Detach from the three context globals if they still point at this instance.
+    if (pTarget == gpAptTarget)         // off_8324E574 -> NEXT
+        gpAptTarget = pNext;
+    if (pTarget == gpAptTargetTLS)      // off_8324E578 -> NEXT
+        gpAptTargetTLS = pNext;
+    if (pTarget == gpAptTargetCurrent)  // off_8324E570 (list head) -> NEXT
+        gpAptTargetCurrent = pNext;
+
+    // Splice out of the doubly-linked instance list.
+    if (pPrev)
+        pPrev->mpField24 = pNext;       // *(v10+0x24) = v9   prev->NEXT = this->NEXT
+    if (pNext)
+        pNext->mpField28 = pPrev;       // *(v9+0x28)  = v10  next->PREV = this->PREV
+
+    // Tear the context down and free the 48-byte block.
+    pTarget->Shutdown();                // AptTarget::Shutdown(a1)
+    bool bResult = gpAptPseudoDataPool->Deallocate(pTarget, sizeof(AptTarget));   // Deallocate(pool, a1, 48)
+
+    // FLAG: spin-unlock unk_8324E7D0 elided.
+    return bResult;
+}
+
+// ---------------------------------------------------------------------
 // AptTarget::Shutdown @0x82B02328 -- tear the context down. Runs the teardown
 // "as" this target (swapping the three context globals + the TLS mirror), forces
 // the in-shutdown guard, destroys + frees each owned sub-object, then disposes of

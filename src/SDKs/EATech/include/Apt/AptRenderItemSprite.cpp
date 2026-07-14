@@ -64,3 +64,26 @@ void AptRenderItemSprite::PushRenderDataAbsolute(AptRenderingContext* pCtx) cons
     // FLAG: the console first notifies the render-data hook (dword_1059C6FC).
     PushMatricesAbsolute(pCtx, this);
 }
+
+// dtor @0x82AEC8E0 (X360 vector deleting destructor) -- mInstanceName destructs
+// automatically (the compiler emits its refcount drop) and the base ~AptRenderItem
+// runs; the (a2 & 1) sized pool delete of the 0x38-byte block is the compiler's
+// deleting-destructor wrapper.
+AptRenderItemSprite::~AptRenderItemSprite()
+{
+}
+
+// GetRenderPropertiesString @0x82AD5030 -- the sprite's render-properties string is
+// its instance name (console returns &this->mInstanceName, item+0x34).
+EAStringC* AptRenderItemSprite::GetRenderPropertiesString()
+{
+    return &mInstanceName;
+}
+
+// SetRenderPropertiesString @0x82AE5A80 -- assign the instance name through the
+// refcount-shared EAStringC::operator= (the console tail-calls it, returning the
+// assigned string).
+EAStringC& AptRenderItemSprite::SetRenderPropertiesString(const EAStringC& rString)
+{
+    return mInstanceName = rString;
+}

@@ -4,6 +4,9 @@
 //   COutBitStream::MassageData      @0x82A8BC60
 //   COutBitStream::attach           @0x82A8BCF8
 //   COutBitStream::flush            @0x82A8BF68
+//   COutBitStream::reset            @0x82A8BD18
+//   COutBitStream::putBits          @0x82A8BD78
+//   COutBitStream::flushByteAlign   @0x82A8C078
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (asm authoritative). See COutBitStream.h
 // for the byte-offset layout note.
 // =====================================================================================
@@ -24,6 +27,14 @@ namespace
             luValue <<= 1;
         }
         return luCount;
+    }
+
+    // Low-`luBits`-set mask, i.e. the PPC rodata table dword_82F60618[]: (1<<n)-1, with the
+    // n>=32 entry saturating to all-ones (matches the binary's slw-by-32 giving 0 -> ~0).
+    // putBits uses this table for its value masks and the equivalent inline ~(-1<<n) form.
+    inline u32 LowBitMask(u32 luBits)
+    {
+        return (luBits >= 32) ? 0xFFFFFFFFu : ((1u << luBits) - 1u);
     }
 }
 
@@ -160,4 +171,118 @@ COutBitStream* COutBitStream::flush()
     muBitsFree  = 32;
     muBitBuffer = 0;
     return lpResult;
+}
+
+// COutBitStream::reset @0x82A8BD18 -- rewind the accumulator and cursor without disturbing
+// the buffer pointer, size, escape flag, byte limit or overflow state. Cursor returns to the
+// buffer start, the accumulator is emptied (32 bits free) and the byte count is cleared.
+COutBitStream* COutBitStream::reset()
+{
+    u8* lpStart = mpBufferStart;
+    muBitBuffer = 0;              // +0x0C
+    muBitsFree  = 32;             // +0x10
+    mpCursor    = lpStart;        // +0x08
+    muByteCount = 0;              // +0x04
+    return this;
+}
+
+// COutBitStream::putBits @0x82A8BD78 -- append the low luNumBits of luValue to the stream,
+// MSB-first. Bits accumulate in muBitBuffer until it fills; on a fill the four accumulator
+// bytes are drained MSB-first (raw, or through MassageData when escaping) and the leftover
+// low bits are reloaded into a fresh accumulator. Self-resets first if the byte count has
+// run past the limit, exactly like flush().
+COutBitStream* COutBitStream::putBits(u32 luValue, u32 luNumBits)
+{
+    COutBitStream* lpResult = this;
+
+    if (muByteCount > muByteLimit)
+    {
+        u8* lpStart = mpBufferStart;
+        muBitsFree   = 32;
+        muBitBuffer  = 0;
+        muByteCount  = 0;
+        mpCursor     = lpStart;
+        muOverflowed = 1;
+    }
+
+    u32 luBitsFree = muBitsFree;
+    if (luBitsFree <= luNumBits)
+    {
+        // The new bits fill (and overflow) the accumulator. Fold in the top luBitsFree bits,
+        // drain the four accumulator bytes, then reload the leftover low bits below.
+        u32 luLeftover = luNumBits - luBitsFree;   // bits that won't fit the current word
+        muBitBuffer ^= (luValue >> luLeftover) & LowBitMask(luBitsFree);
+
+        if (muEscapeEnabled)
+        {
+            // Route each accumulator byte (MSB-first) through the start-code emulation-
+            // prevention filter, advancing the cursor by the 1-or-2 bytes it writes. The byte
+            // count grows by the total cursor delta across the four calls.
+            u8* lpCursor0 = mpCursor;
+            u8* lpCursor  = mpCursor;
+            u32 luWritten;
+
+            luWritten = MassageData((u8)(muBitBuffer >> 24), lpCursor, lpCursor + 1);
+            lpCursor += luWritten;
+            mpCursor = lpCursor;
+            luWritten = MassageData((u8)(muBitBuffer >> 16), lpCursor, lpCursor + 1);
+            lpCursor += luWritten;
+            mpCursor = lpCursor;
+            luWritten = MassageData((u8)(muBitBuffer >> 8), lpCursor, lpCursor + 1);
+            lpCursor += luWritten;
+            mpCursor = lpCursor;
+            luWritten = MassageData((u8)muBitBuffer, lpCursor, lpCursor + 1);
+            u8* lpEnd = lpCursor + luWritten;
+            muByteCount = ((u32)(uintptr_t)lpEnd - (u32)(uintptr_t)lpCursor0) + muByteCount;
+            mpCursor = lpEnd;
+            // Faithful to the asm: r3 is left holding MassageData's last return on this path
+            // (never reloaded to `this`); callers on the escape path ignore the result.
+            lpResult = reinterpret_cast<COutBitStream*>((uintptr_t)luWritten);
+        }
+        else
+        {
+            // Escaping off: emit the four accumulator bytes raw, MSB-first.
+            *mpCursor = (u8)(muBitBuffer >> 24);
+            ++mpCursor;
+            *mpCursor = (u8)(muBitBuffer >> 16);
+            ++mpCursor;
+            *mpCursor = (u8)(muBitBuffer >> 8);
+            ++mpCursor;
+            *mpCursor = (u8)muBitBuffer;
+            ++mpCursor;
+            muByteCount += 4;
+        }
+
+        if (luLeftover)
+        {
+            muBitsFree  = 32 - luLeftover;
+            muBitBuffer = (LowBitMask(luLeftover) & luValue) << (32 - luLeftover);
+        }
+        else
+        {
+            muBitBuffer = 0;
+            muBitsFree  = 32;
+        }
+    }
+    else
+    {
+        // The bits fit entirely in the current accumulator word.
+        u32 luOldBuffer = muBitBuffer;
+        u32 luNewFree   = luBitsFree - luNumBits;
+        muBitsFree  = luNewFree;
+        muBitBuffer = ((LowBitMask(luNumBits) & luValue) << luNewFree) ^ luOldBuffer;
+    }
+
+    return lpResult;
+}
+
+// COutBitStream::flushByteAlign @0x82A8C078 -- pad the current partial byte out to a byte
+// boundary by writing zero bits. muBitsFree & 7 gives the number of pad bits needed; when
+// non-zero they are appended via putBits, otherwise the stream is already aligned.
+COutBitStream* COutBitStream::flushByteAlign()
+{
+    u32 luPad = muBitsFree & 7;
+    if (luPad)
+        return putBits(0, luPad);
+    return this;
 }
