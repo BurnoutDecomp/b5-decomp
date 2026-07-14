@@ -196,6 +196,20 @@ void AptStringPool_Initialize(int nBucketCount)
     StringPool::Initialize(nBucketCount);
 }
 
+// AptStringPool_Teardown / AptStringPool_ClearTemporaryPool -- the free wrappers the Apt
+// shutdown (AptInit.cpp AptCommonShutdown) reaches StringPool::Teardown @0x82AE3720 /
+// StringPool::ClearTemporaryPool @0x82AD8E20 through, for the same reason as
+// AptStringPool_Initialize above (AptInit.cpp cannot pull in the full StringPool.h).
+void AptStringPool_Teardown()
+{
+    StringPool::Teardown();
+}
+
+void AptStringPool_ClearTemporaryPool()
+{
+    StringPool::ClearTemporaryPool();
+}
+
 // ---------------------------------------------------------------------------
 // The AptString recycle free-list head (X360 off_8324E4FC / PS3 StringPool::
 // spFirstFree). Its single DEFINITION lives in AptGlobals.cpp (the globals home);

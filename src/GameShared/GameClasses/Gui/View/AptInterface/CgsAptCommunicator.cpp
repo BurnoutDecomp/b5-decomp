@@ -65,9 +65,11 @@ namespace
     // AptCallFunctionOpti("UpdateAll", 0, "gAptCommunicator", 1, lpArray). HOMED 2026-07-04
     // from the console chain Opti @0x82B07DB8 -> VOpti @0x82B07D58 -> Internal @0x82B07CC0 ->
     // MemberFunctionInternal @0x82B07B80, now that AptActionInterpreter::callFunction executes
-    // real script functions (AptInterp_ExecuteScriptFunction). Opti/VOpti are the console
-    // varargs wrappers; this build takes the single AptArray directly (the only call is
-    // numArgs=1), so they collapse into the forward to Internal.
+    // real script functions (AptInterp_ExecuteScriptFunction). Opti is the console varargs
+    // entry; VOpti is its PPC va_list marshalling layer (both homed below as their own
+    // functions, preserving the real Opti -> VOpti -> Internal chain). This build's sole call
+    // is numArgs=1 with one already-resolved AptArray, so VOpti's va_list walk reduces to
+    // packing that single slot (see its note).
 
     // AptCallMemberFunctionInternal @0x82B07B80 -- push the numArgs args onto the interpreter's
     // operand stack, resolve lpacFunction as a member of lpObject, invoke it via callFunction,
@@ -113,14 +115,29 @@ namespace
         AptCallMemberFunctionInternal(lpacFunction, liThisArg, lpObject, liNumArgs, lppArgs);
     }
 
-    // AptCallFunctionOpti @0x82B07DB8 (+ VOpti) -- the single-array-arg entry the reconstruction
-    // uses (numArgs==1: the one vararg is lpArgs).
-    void AptCallFunctionOpti(const char* lpacFunction, int liThisArg,
-                             const char* lpacObject, int liNumArgs, AptArray* lpArgs)
+    // AptCallFunctionVOpti @0x82B07D58 -- the console's PPC va_list marshalling layer: walk
+    // the variadic argument list, pack liNumArgs AptValue* into a local array, and forward to
+    // AptCallFunctionInternal. The raw-PPC va_list pointer math (align-to-8 slot walk + low-
+    // word read) is untranslatable ABI on x64 and is NOT transcribed; this build's sole caller
+    // (AptCallFunctionOpti below) passes numArgs==1 with one already-resolved AptArray, so the
+    // marshalling reduces to packing that single pre-resolved slot -- the faithful x64
+    // reduction of the console array build. (No <cstdarg> va_arg: the one arg is already in
+    // hand.)
+    void AptCallFunctionVOpti(const char* lpacFunction, int liThisArg,
+                              const char* lpacObject, int liNumArgs, AptArray* lpArgs)
     {
         AptValue* lapArgSlot[1];
         lapArgSlot[0] = reinterpret_cast<AptValue*>(lpArgs);
         AptCallFunctionInternal(lpacFunction, liThisArg, lpacObject, liNumArgs, lapArgSlot);
+    }
+
+    // AptCallFunctionOpti @0x82B07DB8 -- the console varargs entry that builds the va_list and
+    // tail-calls VOpti. This build takes the single AptArray directly (numArgs==1), so it
+    // forwards straight to AptCallFunctionVOpti (the real console Opti -> VOpti chain).
+    void AptCallFunctionOpti(const char* lpacFunction, int liThisArg,
+                             const char* lpacObject, int liNumArgs, AptArray* lpArgs)
+    {
+        AptCallFunctionVOpti(lpacFunction, liThisArg, lpacObject, liNumArgs, lpArgs);
     }
 }
 

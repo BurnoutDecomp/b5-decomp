@@ -54,9 +54,12 @@
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"         // AptNativeFunction (complete type for the AptValue* store)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"             // the _global hash (builtin class install)
 #include "SDKs/EATech/include/Apt/AptPrototype.h"               // AptPrototype (builtin prototype seeding)
-#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"        // AptBoolean::Initialize (befriended)
-#include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"         // AptLookup::Initialize
-#include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"       // AptRegister::Initialize + gnAptRegisterCount
+#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"        // AptBoolean::Initialize/Shutdown (befriended)
+#include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"         // AptLookup::Initialize/Shutdown
+#include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"       // AptRegister::Initialize/Shutdown + gnAptRegisterCount
+#include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"        // AptInteger::ClearPool (befriended for AptCommonShutdown)
+#include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"          // AptFloat::ClearPool (befriended for AptCommonShutdown)
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"         // AptCharacterHelper::Shutdown (AptValueShutdownRemaining)
 #include "SDKs/EATech/include/Apt/AptCIHNone.h"                 // AptCIHNone (the "EmptyCIH" placeholder; befriended)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"         // EAStringC ("EmptyCIH" name assignment)
 #include "SDKs/EATech/include/Apt/AptRenderingContext.h"        // AptRenderingContext (the shared render context)
@@ -70,9 +73,18 @@
 // full StringPool.h cannot be included here (the interpreter headers already carry
 // AptNativeHash.h's incompatible mini `class StringPool`).
 void AptStringPool_Initialize(int nBucketCount);   // AptStringPool.cpp (== StringPool::Initialize @0x82AE3630)
+void AptStringPool_Teardown();                     // AptStringPool.cpp (== StringPool::Teardown @0x82AE3720)
+void AptStringPool_ClearTemporaryPool();           // AptStringPool.cpp (== StringPool::ClearTemporaryPool @0x82AD8E20)
 
 // ---- the AptTarget context (AptUpdateInitialize's a2 branch) ---------------
 #include "SDKs/EATech/include/Apt/AptTarget.h"                  // AptTarget (ctor) + AptChangeTargetInstance
+
+// ---- the shutdown-teardown leaves AptUpdateShutdown chains through ----------
+#include "SDKs/EATech/include/Apt/AptArray.h"                   // AptArray::CleanNativeFunctions
+#include "SDKs/EATech/include/Apt/AptScriptColour.h"            // AptScriptColour::CleanNativeFunctions
+#include "SDKs/EATech/include/Apt/AptCIH.h"                     // AptCIH::CleanNativeFunctions
+#include "SDKs/EATech/include/Apt/AptError.h"                   // AptError::CleanNativeFunctions
+#include "SDKs/EATech/include/Apt/AptGC.h"                      // AptGC::CleanAll
 
 // ---- EA::Thread (record the sim/render thread ids + the shared mutex) -------
 #include "eathread/eathread.h"                                  // EA::Thread::GetThreadId / ThreadId
@@ -203,8 +215,9 @@ namespace AptMath { intptr_t ClipStackShutdown(); }
 // AptCommonShutdown -- the once-only shared static-data teardown (counterpart of
 // AptCommonInitialize @0x82AE91F0). Recovered signature takes no args; the X360
 // leaves ClipStackShutdown's r3 result live across the call (a dead leftover --
-// the emitted machine code is identical either way). Not yet homed.
-extern int AptCommonShutdown();
+// the emitted machine code is identical either way). HOMED below (@0x82B0AC08);
+// forward-declared here for AptRenderShutdown, which precedes the definition.
+int AptCommonShutdown();
 
 // The render-item / deferred-release pool count (dword_8324E508, homed in
 // AptGlobals.cpp) + the host font-free thunk (dword_8324E870, a member of the
@@ -544,17 +557,40 @@ int AptValueInitialize()
 }
 
 // ===========================================================================
-// AptValueShutdownRemaining @0x82AE3170 -- BLOCKED (not homed here).
+// AptValueShutdownRemaining @0x82AE3170 -- release the `undefined` singleton, tear
+// down the boolean/lookup/register/character-helper static pools, then release the
+// extern-interface singleton (the counterpart of the corresponding AptValueInitialize
+// bring-up steps).
 //
-// The console body is: off_8324D814->ForceDelete(); AptBoolean::Shutdown();
-// AptLookup::Shutdown(); AptRegister::Shutdown(); AptCharacterHelper::Shutdown();
-// return off_8324E2CC->ForceDelete(). Every dep is homed and public EXCEPT
-// AptBoolean::Shutdown, which is `protected` in the frozen AptBoolean.h and grants
-// friendship only to `int ::AptValueInitialize()` (AptBoolean.h:22). A faithful call
-// requires adding `friend int ::AptValueShutdownRemaining();` beside it -- an edit to a
-// sibling TU's frozen header, out of scope for this .cpp-only finishing pass. Deferred
-// to the conductor (one-line friend grant, mirroring the existing Initialize grant).
+// X360 (store-for-store): off_8324D814->ForceDelete() [vtbl +0x2C]; AptBoolean::
+// Shutdown(); AptLookup::Shutdown(); AptRegister::Shutdown(); AptCharacterHelper::
+// Shutdown(); return off_8324E2CC->ForceDelete() [vtbl +0x2C]. The r3 the four static
+// Shutdowns thread through is dead register plumbing (each is void).
+//
+// AptBoolean::Shutdown is `protected` in AptBoolean.h (AptLookup/AptRegister/
+// AptCharacterHelper::Shutdown are public); AptBoolean.h now grants this function an
+// additive `friend int ::AptValueShutdownRemaining();`, symmetric to the existing
+// AptValueInitialize friend, so the protected call is legal. The console tail-returns
+// the second ForceDelete's r3; ForceDelete is `virtual void`, so the int return is a
+// dead leftover -- 0 on the vendor path (matching AptValueShutdown's treatment).
 // ===========================================================================
+int AptValueShutdownRemaining()
+{
+    // off_8324D814 -- the shared `undefined` (AptNone) singleton: virtual ForceDelete
+    // (vtbl +0x2C) runs its PreDestroy/DestroyGCPointers + `delete this` back to the pool.
+    gpUndefinedValue->ForceDelete();
+
+    // Tear down the four value-pool statics (each frees + clears its pinned pool/pair).
+    AptBoolean::Shutdown();          // the true/false singleton pair (befriended)
+    AptLookup::Shutdown();           // the slot-indexed lookup pool
+    AptRegister::Shutdown();         // the AS register file
+    AptCharacterHelper::Shutdown();  // the default text/movie character templates
+
+    // off_8324E2CC -- the extern-interface singleton: ForceDelete (vtbl +0x2C). The
+    // console tail-returns its r3; the virtual is void here, so 0 (the vendor result).
+    gpAptExternObject->ForceDelete();
+    return 0;
+}
 
 // ===========================================================================
 // AptValueShutdown @0x82AF2BE0 -- tear down the AS value singletons + natives.
@@ -679,6 +715,115 @@ int AptValueShutdown()
     gpObjRegistrationFunc->Release();
     gpObjRegistrationFunc = nullptr;
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Un-homed siblings/globals the shutdown paths (AptCommonShutdown +
+// AptUpdateShutdown) reach; declared here at the call site (the codebase pattern).
+// ---------------------------------------------------------------------------
+// The per-thread current-target TLS mirror (unk_8324E814); defined in
+// AptRenderLinkStubs.cpp. (Re-declared later in the AptUpdateTarget section; a
+// redundant extern is harmless and keeps the shutdown bodies self-contained.)
+extern EA::Thread::ThreadLocalStorage gAptTargetTls;   // unk_8324E814
+
+// byte_8324E7C9 -- the "in a shutdown / on the owning thread" guard AptTarget.cpp owns;
+// AptUpdateShutdown forces it to 1 before the animation-director predestroy. Defined in
+// AptGlobals.cpp; declared extern here.
+extern unsigned char gbAptInShutdown;   // byte_8324E7C9
+
+// AptUpdateZombieVector @0x82B0.. (homed in AptGC.cpp) -- reap the per-target zombie
+// vector, retiring the entries flagged this pass. Canonical void* return.
+extern void* AptUpdateZombieVector(char bClear);
+
+// The AptAnimationTarget lifecycle shims (homed in AptAnimationTarget.cpp; the same
+// free wrappers AptTarget::Shutdown uses): PreDestroy releases the director's owned
+// state, CleanRemList drains the shared delayed-release list (a static op -- the pAnim
+// arg is accepted for call parity, matching the console's r3).
+void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim);
+void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim);
+
+// ===========================================================================
+// AptCommonShutdown @0x82B0AC08 -- the once-only shared static-data teardown
+// (counterpart of AptCommonInitialize @0x82AE91F0). Records the sim/render thread ids,
+// drops the render latch, tears down the animation-target static data + the active
+// target instance, clears the three context globals + the TLS mirror, runs the AS
+// value-singleton teardown (AptValueShutdownRemaining), resets the config-default string
+// + tears down the string pool, drains + frees the shared deferred-release vector, clears
+// the integer/float free pools + the temporary string pool, then clears the common-init
+// self-registration slot + the once-only init guard.
+//
+// FLAG (PC): AptSetRenderThreadID/AptSetSimulationThreadID take an int the vendor
+// GetThreadId ignores (the console threads r3 through them -- dead plumbing); the two
+// interrupt-masked TAS spin locks (reached via the sub-calls, and the final unk_8324E6E0
+// latch clear) are single-threaded no-ops (the AptInit.cpp spin-lock treatment). The
+// return is StringPool::ClearTemporaryPool's r3, void here -> 0.
+// ===========================================================================
+int AptCommonShutdown()
+{
+    // Record the sim/render thread ids (the console threads r3 through both; the arg is
+    // unused on the vendor GetThreadId -- see AptSetRenderThreadID's FLAG).
+    AptSetRenderThreadID(0);
+    AptSetSimulationThreadID(0);
+
+    gbAptRenderInitDone = 0;   // dword_8324E510 = 0
+
+    AptAnimationTarget::CleanupStaticData();
+
+    // Tear down + free the active target instance (list head off_8324E570).
+    AptTarget* lpCurrent = gpAptTargetCurrent;   // v2 = off_8324E570
+    if (lpCurrent != nullptr)
+    {
+        lpCurrent->Shutdown();                                          // AptTarget::Shutdown
+        gpAptPseudoDataPool->Deallocate(lpCurrent, sizeof(AptTarget));  // Deallocate(pool, v2, 48)
+    }
+
+    // Clear the three context globals + the per-thread TLS mirror.
+    gpAptTarget        = nullptr;      // off_8324E574 = 0
+    gpAptTargetCurrent = nullptr;      // off_8324E570 = 0
+    gpAptTargetTLS     = nullptr;      // off_8324E578 = 0
+    gAptTargetTls.SetValue(nullptr);   // TLS(unk_8324E814) = 0
+
+    // The AS value-singleton teardown (undefined / boolean / lookup / register /
+    // character-helper / extern-interface).
+    AptValueShutdownRemaining();
+
+    // off_82F733B0 (gpAptConfigDefault): the console releases the config-default EAStringC's
+    // buffer (EAStringC::DecreaseInternalRefCount) then resets its m_pData to the shared
+    // empty StringDataC (unk_82F72FF8). This reconstruction models gpAptConfigDefault as the
+    // opaque sentinel pointer AptUpdateInitialize only ever points at gAptEmptyDefaultSentinel
+    // (the shared empty StringDataC, whose refcount is pinned), so the release is inert; the
+    // reset to the sentinel is the faithful visible effect. (DecreaseInternalRefCount +
+    // StringDataC are EAStringC-private, so the release is not callable here; the modeled
+    // pinned sentinel makes it a no-op, avoiding an EAStringC befriend.)
+    gpAptConfigDefault = &gAptEmptyDefaultSentinel[0];   // off_82F733B0 = &unk_82F72FF8
+    AptStringPool_Teardown();                            // StringPool::Teardown
+
+    // Drain + free the shared common-init deferred-release vector (off_8324E51C). The console
+    // calls ReleaseValues unconditionally (the pointer is non-null on the live init path),
+    // then frees the item array (4*capacity) + the 12-byte header when present.
+    gpAptDeferredVecCommon->ReleaseValues();          // AptValueVector::ReleaseValues(off_8324E51C)
+    AptValueVector* lpVec = gpAptDeferredVecCommon;   // v5 = off_8324E51C
+    if (lpVec != nullptr)
+    {
+        // Family-(B) vector (AptValueVector.h): the +0 word (mnTop member) holds the
+        // capacity; the item array is 4*capacity, the header is the 12-byte block.
+        gpAptPseudoDataPool->Deallocate(lpVec->mppItems, sizeof(AptValue*) * lpVec->mnTop);  // 4 * *v5
+        gpAptPseudoDataPool->Deallocate(lpVec, sizeof(AptValueVector));                       // 12
+    }
+    gpAptDeferredVecCommon = nullptr;   // off_8324E51C = 0
+
+    // Clear the integer/float free pools (befriended) + the temporary string pool. The
+    // console threads r3 through the two ClearPool calls (both void) into ClearTemporaryPool.
+    AptInteger::ClearPool();
+    AptFloat::ClearPool();
+    AptStringPool_ClearTemporaryPool();   // StringPool::ClearTemporaryPool (its r3 -> result)
+
+    gpAptCommonFuncsSlot = nullptr;   // dword_8324E4F0 = 0
+    // FLAG (PC): the final interrupt-masked TAS clearing the once-only init guard
+    // (dword_8324E6E0) is a single-threaded no-op; the guard store is the visible reset.
+    gbAptCommonInitDone = 0;          // dword_8324E6E0 = 0
+
+    return 0;   // console r3 == StringPool::ClearTemporaryPool result (void here -> 0)
 }
 
 // ===========================================================================
@@ -913,6 +1058,130 @@ int AptUpdateInitialize(unsigned int* a1, char a2)
 
     AptUpdateRenderMutex().Unlock();
     return 0;   // the console returns the Mutex::Unlock result; 0 on the vendor path
+}
+
+// ===========================================================================
+// AptActionInterpreter::shutdown @0x82AE15A0 -- the folded interpreter teardown (see
+// the additive AptActionInterpreter.h declaration). The X360 linker COMDAT-folded it
+// into AptValueVector::shutdown @0x82AE15A0 (byte-identical body); the interpreter's
+// leading operand-stack vector (mnStackTop/mnStackCapacity/mpStack == the AptValueVector
+// {mnTop,mnCapacity,mppItems} at +0/+4/+8) IS that vector, so the call frees the
+// operand-stack array and zeros the three fields, in the console's store order (items
+// free, capacity, top, items). Reconstructed store-for-store from AptValueVector::
+// shutdown (AptValueVector.cpp @0x82AE15A0), on the interpreter's OWN members by name
+// (no offset cast). Homed here beside its sole caller, AptUpdateShutdown.
+// ===========================================================================
+void AptActionInterpreter::shutdown()
+{
+    if (mpStack != nullptr)
+        gpAptOperandStackPool->Deallocate(mpStack, sizeof(AptValue*) * mnStackCapacity);
+    mnStackCapacity = 0;
+    mnStackTop      = 0;
+    mpStack         = nullptr;
+}
+
+// ===========================================================================
+// AptUpdateShutdown @0x82B0C170 -- tear down the Apt sim/update side (counterpart of
+// AptUpdateInitialize): force the in-shutdown guard + drop the update latch, clean each
+// value type's AS native-function table, predestroy the active target's animation
+// director (as the current context), run the AS value-singleton teardown
+// (AptValueShutdown), reap the zombie vector, free the saved-input-checkpoint vector
+// node, run the GC's full clean, drain the deferred-release + zombie vectors, shut the
+// interpreter down, and -- when the render side is already down -- run the shared common
+// teardown.
+//
+// FLAG (PC): the console brackets nothing here with a lock. `a1` is AptValueShutdown's
+// unused arg (threaded r3). The return is AptCommonShutdown's result, or the interpreter-
+// shutdown r3 leftover (void) when the common teardown is skipped -> 0.
+// ===========================================================================
+int AptUpdateShutdown(int /*a1*/)
+{
+    gbAptInShutdown     = 1;   // byte_8324E7C9 = 1
+    gbAptUpdateInitDone = 0;   // dword_8324E50C = 0
+
+    // Clean each value type's lazily-built AS native-function table (the console threads
+    // r3 through the chain; each is a static void teardown).
+    AptArray::CleanNativeFunctions();
+    AptKey::CleanNativeFunctions();
+    AptScriptColour::CleanNativeFunctions();
+    AptCIH::CleanNativeFunctions();
+    AptString::CleanNativeFunctions();
+    AptError::CleanNativeFunctions();
+
+    // Predestroy the active target's animation director, running "as" that context. The
+    // console saves/restores the current + TLS-mirror context pointers around the pass
+    // (a redundant dance -- both saved values equal the current instance -- reproduced
+    // store-for-store).
+    AptTarget* lpCurrent = gpAptTargetCurrent;   // r4 = off_8324E570
+    gpAptTarget    = lpCurrent;                   // off_8324E574 = off_8324E570
+    gpAptTargetTLS = lpCurrent;                   // off_8324E578 = off_8324E570
+    if (lpCurrent != nullptr)
+    {
+        gpAptTarget = lpCurrent;                       // off_8324E574 (console re-store)
+        AptTarget* lpPrevTarget = lpCurrent;           // r27 -- gpAptTarget restore value
+        gAptTargetTls.SetValue(lpCurrent);
+        AptTarget* lpPrevTLS = gpAptTargetTLS;         // r26 -- gpAptTargetTLS restore value (== lpCurrent)
+        gpAptTargetTLS = lpCurrent;                    // off_8324E578 = off_8324E570
+        gAptTargetTls.SetValue(lpCurrent);
+
+        AptAnimationTarget* lpAnim = lpCurrent->mpAnimationTarget;   // *(off_8324E570 + 0x18)
+        AptAnimationTarget_PreDestroy(lpAnim);         // release the director's owned state
+        AptAnimationTarget_CleanRemList(lpAnim);       // drain the shared delayed-release list
+
+        gpAptTargetTLS = lpPrevTLS;                    // off_8324E578 = r26 (restore)
+        gAptTargetTls.SetValue(lpPrevTLS);
+        gpAptTarget = lpPrevTarget;                    // off_8324E574 = r27 (restore)
+        gAptTargetTls.SetValue(lpPrevTarget);
+    }
+
+    // The AS value-singleton teardown (mirror of AptValueInitialize).
+    AptValueShutdown();
+
+    // Reap every zombie this pass (the r3 result is the dead leftover carried into
+    // AptGC::CleanAll below).
+    AptUpdateZombieVector(1);
+
+    // Free the saved-input-checkpoint vector node (dword_8324D810). StringAsVec @0x82AF83F8
+    // is the AptFileSavedInputStateVector destructor (dword_8324D810 == the
+    // gpAptSavedInputCheckpoints vector; see AptSavedInputCheckpoints.cpp); it frees the
+    // vector's heap element backing. On the opaque, zeroed 28-byte node AptUpdateInitialize
+    // models (count 0 / SBO -- its member layout deliberately un-reconstructed), there is no
+    // separately-allocated backing to free, so the teardown reduces to the 28-byte block
+    // Deallocate below. // FLAG
+    void* lpNode = gpAptUpdateListNode;   // v10 = dword_8324D810
+    if (lpNode != nullptr)
+    {
+        gpAptPseudoDataPool->Deallocate(lpNode, 28);   // Deallocate(pool, v10, 28)
+    }
+    gpAptUpdateListNode = nullptr;   // dword_8324D810 = 0
+
+    // The GC's full value-pool clean (the console r3 into it is the dead reap/Deallocate
+    // leftover; CleanAll takes no args).
+    AptGC::CleanAll();
+
+    // Drain the shared common-init deferred-release vector (off_8324E51C), unconditional
+    // (non-null on the live path).
+    gpAptDeferredVecCommon->ReleaseValues();   // AptValueVector::ReleaseValues(off_8324E51C)
+
+    // Free the per-target zombie vector (off_8324E528): item array (4*capacity) + 12-byte
+    // header (family-(B) vector -- the +0 word / mnTop member holds the capacity).
+    AptValueVector* lpZombie = gpAptZombieVector;   // v11 = off_8324E528
+    if (lpZombie != nullptr)
+    {
+        gpAptPseudoDataPool->Deallocate(lpZombie->mppItems, sizeof(AptValue*) * lpZombie->mnTop);  // 4 * *v11
+        gpAptPseudoDataPool->Deallocate(lpZombie, sizeof(AptValueVector));                          // 12
+    }
+    gpAptZombieVector = nullptr;   // off_8324E528 = 0
+
+    // Shut the interpreter (operand stack) down; the console keeps its r3 (void -> 0).
+    gAptActionInterpreter.shutdown();   // AptActionInterpreter::shutdown(&dword_8324E760)
+    int liResult = 0;
+
+    // When the render side is already down, run the shared common teardown too.
+    if (!gbAptRenderInitDone)   // dword_8324E510
+        liResult = AptCommonShutdown();
+
+    return liResult;
 }
 
 // ===========================================================================

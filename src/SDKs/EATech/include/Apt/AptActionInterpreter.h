@@ -179,6 +179,15 @@ public:
     // AptActionInterpreterStackOps.cpp.
     void initialize(const AptInitParmsT* pParms);
 
+    // shutdown @0x82AE15A0 -- the interpreter teardown AptUpdateShutdown calls. The X360
+    // linker COMDAT-folded it into AptValueVector::shutdown (byte-identical body): the
+    // interpreter's leading operand-stack vector (mnStackTop/mnStackCapacity/mpStack @
+    // +0/+4/+8 == the AptValueVector {mnTop,mnCapacity,mppItems} shape) IS that vector, so
+    // shutdown frees the operand-stack array and zeros the three fields. Additive
+    // declaration mirroring initialize; body reconstructed store-for-store (in AptInit.cpp,
+    // beside its sole caller) from the folded AptValueVector::shutdown @0x82AE15A0.
+    void shutdown();
+
     // ~AptActionInterpreter @0x82AE3918 -- free each of the five {count,capacity,
     // array} stacks back to the operand-stack pool (Deallocate(array, count*sizeof)).
     ~AptActionInterpreter();
