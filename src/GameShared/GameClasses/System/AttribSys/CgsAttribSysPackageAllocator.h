@@ -79,6 +79,18 @@ public:
 
     void  Free(void* lpBlock, s32 liSize, const char* lpcTag);
 
+    // The size-accounting free -- the miFreeTotal counterpart of Malloc(size, flags)'s
+    // miAllocTotal += size. Asserts this allocator is live (mbHasAllocator), forwards
+    // to HeapMalloc::Free(mpHeapAllocator, block), then adds lnSize to miFreeTotal.
+    // Distinct from Free(void*, size_t) @ 0x828020C8 (which does NOT account) and from
+    // deallocate() (which accounts a fixed +12); this is the variable-size free that the
+    // X360 inlines at the AttribSys edit teardown site (Attrib::EditRecord::~EditRecord
+    // @ 0x8280DE58: the sbHasLinearAllocator assert is done by the GetAttribSysAllocator()
+    // that hands back this instance, so only mbHasAllocator is asserted here). The exact
+    // vendor symbol name is not independently attested; FreeSized names the reconstructed
+    // inline. FLAG.
+    void  FreeSized(void* lpBlock, size_t lnSize);
+
     // @ 0x82803F18 -- EASTL container allocator adapter deallocate(void*, size_t): the hook
     // the EASTL list<Attrib::Collection*, AttribSysPackageAllocator> caller invokes as
     // mAllocator.deallocate(p, n). Asserts the AttribSys memory manager has been Prepare'd

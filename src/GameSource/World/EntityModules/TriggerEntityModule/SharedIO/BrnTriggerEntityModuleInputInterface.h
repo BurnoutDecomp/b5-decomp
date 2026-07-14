@@ -15,6 +15,11 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue (remove queue)
 #include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"  // CgsSceneManager::SceneQueryId
 
+// The add-box producer (AddTriggerRegion) takes a trigger region by pointer and reads its
+// leading BoxRegion + GenericRegion category byte. Forward-declared here (full layouts are
+// pulled by the .cpp) to keep the header light.
+namespace BrnTrigger { struct TriggerRegion; struct GenericRegion; }
+
 namespace BrnWorld
 {
 namespace TriggerEntityModuleIO
@@ -71,6 +76,28 @@ namespace TriggerEntityModuleIO
         f32            GetDimensionZ() const     { return mfDimZ; }
     };
 
+    // ADDITIVE GROW (this TU -- BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface::
+    // AddTriggerRegion @ X360 0x8238ECF8): the concrete BOX-trigger element pushed onto the add
+    // queue as event type 2. The producer builds this exact 96-byte record on the stack, then calls
+    // VariableEventQueue<131072,16>::AddEvent<InAddBoxTriggerEvent>(this, &event, 2) (the mangled
+    // AddEvent<...InAddBoxTriggerEvent...> in the asm). Field offsets are the X360 stack stores:
+    //   +0x00 mTransform   -- BoxRegion::ComputeTransform() result (4 vectors, stvx128 x4)
+    //   +0x40 mPacked...   -- (queryFlags << 24) | (sign-extended TriggerRegion::GetRegionIndex())
+    //   +0x44 muTriggerType-- TriggerRegion::meType byte (lbz 0x2A)
+    //   +0x45 muSubType    -- 0xFF when meType == E_TYPE_GENERIC_REGION, else GenericRegion::meType
+    //                         byte (lbz 0x36) -- reproduces the asm's branch exactly.
+    //   +0x50 mDimensions  -- abs(BoxRegion dimensions): X360 vandc clears each lane's sign bit.
+    // sizeof == 0x60 (the compile-time size AddEvent<InAddBoxTriggerEvent> forwards as liSize).
+    struct InAddBoxTriggerEvent : public CgsModule::Event
+    {
+        Matrix44Affine mTransform;                // +0x00  box world transform
+        u32            mPackedQueryFlagsAndIndex;  // +0x40  (queryFlags<<24) | regionIndex
+        u8             muTriggerType;              // +0x44  TriggerRegion::meType
+        u8             muSubType;                  // +0x45  generic sub-type / 0xFF
+        u8             maPad[10];                  // +0x46..+0x4F  (pad to the 16-byte lane)
+        Vector3        mDimensions;                // +0x50  abs box dimensions
+    };
+
     // ADDITIVE GROW (Process* TU): element record of the trigger-query input queue
     // (CgsModule::VariableEventQueue<4096,16>). X360 ProcessTriggerQueryEvents (0x82306BB0) reads,
     // for an E_TRIGGERQUERY_LINETEST (event type 3):
@@ -114,6 +141,13 @@ namespace TriggerEntityModuleIO
 
         const RemoveTriggerQueue& GetRemoveTriggerEventQueue() const { return mRemoveTriggerEventQueue; }
         RemoveTriggerQueue&       GetRemoveTriggerEventQueue()       { return mRemoveTriggerEventQueue; }
+
+        // X360 0x8238ECF8: build one InAddBoxTriggerEvent from a trigger region + a query-flags
+        // byte and post it onto the embedded add queue (event type 2). Body in
+        // BrnTriggerEntityModuleInputInterface.cpp. The X360 passes `this` straight to
+        // AddEvent<InAddBoxTriggerEvent> -- mAddTriggerEventQueue is at interface +0, so the call
+        // lands on the embedded queue.
+        void AddTriggerRegion(s32 liQueryFlags, const BrnTrigger::TriggerRegion* lpRegion);
 
         // X360 header-inline (BridgeInputToEntityModules @0x827AE52C/@0x827AE540): merge the
         // source interface's add queue then its remove queue into this one.

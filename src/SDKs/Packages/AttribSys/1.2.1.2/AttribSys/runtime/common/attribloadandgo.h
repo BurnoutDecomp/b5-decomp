@@ -40,9 +40,14 @@ namespace Attrib
     // reclaims a vault's asset so the host can free any transient data it attached.
     // Vtable order from DWARF (attribloadandgo.h:507): [0] ~IGarbageCollector,
     // [1] ReleaseData.
+    //
+    // The destructor is out-of-line (home: attribgarbagecollector.cpp). The X360
+    // emits its scalar deleting destructor thunk @ 0x827DBA70 -- MSVC only produces
+    // that ??_G thunk (and pins the interface vtable to one TU) when the virtual
+    // destructor is NOT inline, so it is declared here and defined in that TU.
     struct IGarbageCollector
     {
-        virtual ~IGarbageCollector() {}
+        virtual ~IGarbageCollector();
 
         // luType selects the asset class, lAssetId names the asset, lpData/luSize
         // the transient block being released.

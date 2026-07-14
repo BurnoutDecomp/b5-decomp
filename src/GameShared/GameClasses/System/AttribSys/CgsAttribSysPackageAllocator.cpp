@@ -95,6 +95,21 @@ void AttribSysPackageAllocator::deallocate(void* lpBlock, size_t /*lnSize*/)
     miFreeTotal += 12;
 }
 
+// The size-accounting free inlined at the AttribSys edit teardown site
+// (Attrib::EditRecord::~EditRecord @ 0x8280DE58). Asserts the package allocator is
+// live (mbHasAllocator @ +0x04), forwards the block to the adopted heap, and adds
+// lnSize to miFreeTotal @ +0x10 -- the free-side mirror of Malloc's miAllocTotal += size.
+// The caller reaches this instance through GetAttribSysAllocator(), which already fired
+// the sbHasLinearAllocator assert, so it is not repeated here (matching the X360 inline).
+// The exact vendor symbol name is not independently attested. FLAG.
+void AttribSysPackageAllocator::FreeSized(void* lpBlock, size_t lnSize)
+{
+    CGS_ASSERT(mbHasAllocator, "mbHasAllocator");
+
+    mpHeapAllocator->Free(lpBlock);
+    miFreeTotal += static_cast<s32>(lnSize);
+}
+
 // @ 0x821F0200 - the diagnostic name for meUserPackage. Returns NULL (with an
 // assert) for an id outside the known E_PACKAGE_* range. (X360 compares the raw
 // +0x08 word: 0->"AttribSys", 1->"GameTalk", <3->"EASTL", else assert+NULL.)

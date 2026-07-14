@@ -18,6 +18,7 @@
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // GameStateToGuiInterface (complete)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface (complete; ->GetDirtyTrickQueue)
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h" // BrnGameState::TakedownEvent
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // BrnPhysics::Vehicle::{VehicleOutputInterface,CrashingRaceCarInterface}
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 
 namespace BrnGameState
@@ -262,6 +263,38 @@ namespace BrnGameState
         lDirtyTrickEvent.meDirtyTrickStatus            = leDirtyTrickStatus;
 
         mDirtyTrickOutputQueue.AddEvent(lDirtyTrickEvent);
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HandleWaitForPaybackAggressorToCrash  @ 0x823977F0
+    // Aggressor side, WAIT_AWARD_PAYBACK -> waiting for the player (who was just taken down) to crash.
+    // Snapshot the per-car "is crashing" flags from this frame's vehicle output; if the LOCAL player's
+    // race car is now crashing, the payback is earned: cancel the aggressor timer, advance the FSM to
+    // AWARD_DT, clear the awarded flag and show the payback HUD.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::HandleWaitForPaybackAggressorToCrash(
+        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
+    {
+        CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+
+        BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
+        lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
+
+        const s32 liPlayerRaceCarIndex =
+            static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex());
+
+        if (lCrashingRaceCars.IsCrashing(liPlayerRaceCarIndex))
+        {
+            mfPaybackAggTimer       = -1.0f;                                 // +588
+            mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_AWARD_DT;    // +604 = 2
+            mbPaybackAwarded        = false;                                 // +614 = 0
+
+            PaybackStateChangeEvent lStateChange;
+            lStateChange.miShow = 1;
+            mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
+                &lStateChange, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+        }
     }
 
     // -----------------------------------------------------------------------------------
