@@ -116,6 +116,18 @@ struct AptCIH : public AptValueGC
     // AssociateInstToClass uses the return to decide whether to register a tick.)
     int FindAndSetEvents();
 
+    // AssociateInstToClass @0x82B073B8 -- bind a freshly placed sprite(5)/animation(tag
+    // 16) instance (or a class-tagged 0x24 instance) to its registered ActionScript
+    // class: build the AptPrototype on the char inst's property hash, wire __proto__ to
+    // the MovieClip builtin's prototype + the class's own prototype, resolve the placed
+    // char's export name in the class registry, tick the node + run the AS constructor
+    // under GC-root protection, then FindAndSetEvents. Gated off unless the instance is
+    // class-eligible + its render item is not already class-bound. Returns 1 when a
+    // "needs-a-tick" event was newly registered, else 0. The full X360 @0x82B073B8
+    // reconstruction lives in AptDisplayList.cpp (AptCIH_AssociateInstToClass, next to
+    // its AddToDisplayList/placeObject caller); this member homes it to the class.
+    int AssociateInstToClass();
+
     // GetAnimationInst @0x82B7B358 -- mpCharacterInst narrowed to the animation
     // subtype (caller has already confirmed IsAnimationInst, type tag 9).
     AptCharacterAnimationInst* GetAnimationInst() const;
@@ -167,6 +179,33 @@ struct AptCIH : public AptValueGC
     // zombie is queued for delayed release, and the replacement takes its slot.
     // Returns the inserted node (or `this` when this container has no child list).
     AptCIH* ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie);
+
+    // InsertChild @0x82B09CA0 -- place pCharacter into this sprite-base node's child
+    // display list at nDepth under pName (seeding the new node's placement field from
+    // pSource's char inst when pSource is given), mark the generalised-process dirty
+    // state, and -- when a fresh node was created -- apply pInitObject's members and bind
+    // its AS class (AssociateInstToClass). Returns the placed node. (AS attachMovie /
+    // createEmptyMovieClip / createTextField / duplicateMovieClip.) The X360 body is
+    // reconstructed as AptCIH_InsertChild (AptCIHBehaviour.cpp); this member owns it.
+    AptCIH* InsertChild(AptCIH* pSource, AptCharacter* pCharacter, int nDepth,
+                        EAStringC* pName, AptValue* pInitObject);
+
+    // ---- BLOCKED behavioural overrides (bodies deferred, honest reasons) --------
+    // ProcessCustomControls @0x82B07788 -- per-frame custom-control (movie-clip promoted
+    // to a host control) refresh: resolve the "_CustomControlType" registered AS key,
+    // manage the control state bits, promote the sprite render item (CopyFromSprite),
+    // and dispatch the descriptor strings / resolved Z-id to the host custom-control
+    // hooks. BLOCKED: needs the un-homed registered AS-name keys (console unk_8324E5C8
+    // "_CustomControlType" / unk_8324E5C0) AND the un-modelled AptCharacter+0x20
+    // AptAssetRenderingUnit geometry field the host callback consumes; no faithful
+    // partial exists (the key drives the very first state resolution). Declared-only.
+    //
+    // objectMemberLookup @0x82B0DF70 -- AptValue vtbl[6] override: resolve a scriptable
+    // member name on a text(2) / sprite(12/movie-clip) node. BLOCKED: the X360 body is
+    // two `bctr` computed jumps through gperf-indexed handler jump tables (TextMembers
+    // id-1<=0x14, SpriteMembers id-1<=0x82) whose per-case targets IDA did NOT recover
+    // (un-dumped rodata / computed control flow). Its sibling objectMemberSet @0x82B09E58
+    // shares the pattern and is likewise unbodied; both inherit AptValue's default for now.
 
     // ClearCIH @0x82AC... (X360-attested behavioural follow-on; body in its own
     // TU) -- tear down this node's character instance / placed state. Declared so

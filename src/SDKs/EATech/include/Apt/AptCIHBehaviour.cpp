@@ -2095,15 +2095,32 @@ void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag)
     pCIH->SetCharacterInst(pInst, bFlag != 0);
 }
 
-// AptCIH_InsertChild -- AptCIH::InsertChild @0x82B09CA0: place pCharacter into pNode's
-// child display list (mpCharacterInst->mDisplayList) at nDepth under pName. The X360
-// seeds the placement field (a6/nPlacementField18) from pSource's char-inst render-item
-// +0x18 when pSource is given, then forwards to AptDisplayList::placeObject.
-AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
-                           int nDepth, EAStringC* pName, AptValue* pInitObject)
+// AptCIH::AssociateInstToClass @0x82B073B8 -- home the class-binding reconstruction to
+// the class. The full X360 body (build the AptPrototype on the char inst's property hash,
+// wire __proto__ to the MovieClip builtin + the class's prototype, resolve the placed
+// char's export name in the class registry, tick + run the AS constructor under GC-root
+// protection, FindAndSetEvents) lives next to its AddToDisplayList / placeObject callers
+// in AptDisplayList.cpp as AptCIH_AssociateInstToClass. This member homes it to the class
+// so the node can bind its own class by name (as AptCIH::InsertChild's tail does).
+extern int AptCIH_AssociateInstToClass(AptCIH* pNode);   // homed in AptDisplayList.cpp
+int AptCIH::AssociateInstToClass()
+{
+    return AptCIH_AssociateInstToClass(this);
+}
+
+// AptCIH::InsertChild @0x82B09CA0 -- place pCharacter into this sprite-base node's child
+// display list (mpCharacterInst->mDisplayList) at nDepth under pName. The X360 seeds the
+// placement field (a6/nPlacementField18) from pSource's char-inst render-item +0x18 when
+// pSource is given, then drives the placement: AptDisplayList::placeObject instantiates
+// the node, marks the generalised-process dirty state, applies the init object, and binds
+// the fresh node's AS class -- the encapsulated equivalent of the console's inline
+// instantiateCharacter + post-placement tail (SetGeneralizedProcessDirtyState /
+// _addToSetCaches / the init-member setVariable loop / AssociateInstToClass).
+AptCIH* AptCIH::InsertChild(AptCIH* pSource, AptCharacter* pCharacter,
+                            int nDepth, EAStringC* pName, AptValue* pInitObject)
 {
     AptCharacterSpriteInstBase* pSpriteInst =
-        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
+        static_cast<AptCharacterSpriteInstBase*>(GetCharacterInst());
     AptDisplayList* pChildList = &pSpriteInst->mDisplayList;
 
     // console @0x82B09CD0: a SINGLE deref reads the source char-inst's subclass placement
@@ -2115,10 +2132,18 @@ AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharac
         pPlacementClipActions = AptCharInst_GetPlacementField18(pSource->GetCharacterInst());
 
     return pChildList->placeObject(
-        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, pNode,
+        /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, this,
         /*bForceRemove*/ 1, /*nClipDepth*/ -1, /*fFrameValue*/ 0.0,
         /*pColorXForm*/ nullptr, /*pPositionMatrix*/ nullptr,
         pPlacementClipActions, /*pClassObject*/ pInitObject);
+}
+
+// AptCIH_InsertChild -- the free-function shim the sibling Apt TUs reference by name (the
+// X360 calls it with the receiver in r3). Forwards to the now-homed member.
+AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
+                           int nDepth, EAStringC* pName, AptValue* pInitObject)
+{
+    return pNode->InsertChild(pSource, pCharacter, nDepth, pName, pInitObject);
 }
 
 // AptDisplayList_mergeState -- AptDisplayList::mergeState @0x82B0B438 (homed in
