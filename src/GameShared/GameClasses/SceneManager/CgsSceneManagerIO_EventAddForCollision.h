@@ -23,16 +23,17 @@
 // queue-instantiation TU, so only the stored named members are reconstructed here.
 #include "BrnCommonTypes.h"                                          // Vector3, EntityId
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // CgsSceneManager::VolumeInstanceId
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_Event.h" // CgsSceneManager::SceneManagerIO::Event (single canonical definition)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // SetRaceCarCullingGroupEvent::CullingGroup
 
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
 {
-    // Empty per-module event base (CgsModule event-queue convention; the queue stores
-    // events by byte image). Matches the SceneManagerIO::Event used by the other
-    // SceneManager IO event payloads.
-    struct Event {};
+    // Empty per-module event base (CgsModule event-queue convention; the queue stores events by
+    // byte image). SceneManagerIO::Event now lives in CgsSceneManagerIO_Event.h as a single
+    // canonical definition (was formerly redefined here -- the redefinition tripped C2011 once
+    // SceneUpdate.h began co-including this header alongside CgsSceneManagerModuleIO.h).
 
     // Cache-placement option for a queued add-for-collision request
     // (DWARF CgsSceneManagerIO_SceneUpdate.h:43). Stored as a single byte
