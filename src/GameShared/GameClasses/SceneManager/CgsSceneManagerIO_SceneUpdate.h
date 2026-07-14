@@ -19,14 +19,22 @@
 // the X360 byte offset. Nothing external reads a raw offset (every consumer takes &member or
 // embeds the aggregate by value), so the named-member model is the faithful reconstruction.
 //
-// GAP (honest): several sibling queues that this interface also embeds (e.g. the
-// set-volume-instance-transform / add-volume-instance-for-caching / set-culling-group
-// queues, and the query/collision-add/padding families owned by other interface methods)
-// are NOT modeled here -- their element type/capacity are un-recovered in this TU's dossier
-// (their AddEvent callees are still todo, with no committed element home). They are left out
-// rather than guessed; the whole-interface Clear/Destruct (which reset EVERY embedded queue's
-// live count) and the three producers that target those un-recovered queues are therefore not
-// emitted by this TU (blocked on those siblings' element types).
+// COMPLETE LAYOUT (grounded): the whole embedded-queue set is now recovered from
+// CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Construct @ 0x822E6550, which
+// constructs all 25 embedded queues in ascending this-relative offset order, naming each
+// queue's element type + capacity (EventQueue<T, N>). The whole-interface Clear/Destruct
+// (X360 0x822B10C8 / 0x828BA280) each zero the live count (miLength) of those 25 queues; the
+// 25 zeroed offsets in the asm are exactly Construct's 25 queue bases + 8. Every element type
+// has a committed home in the _Event*.h family, except the three volume-instance element
+// records (SetVolumeInstanceTransform / SetVolumeInstanceCullingGroup / AddVolumeInstanceForCaching)
+// whose field layout is read directly off their producers' stores (@0x822CB7E8 / 0x822B1A98 /
+// 0x8270DA10) and defined below; their capacities are pinned by Construct's offsets.
+//
+// The 14 additive queue members below are APPENDED after the 11 committed members (never
+// shifting the committed front). The named-member reconstruction is order-independent for the
+// producers (they reach each queue BY NAME) and for Clear/Destruct (independent per-queue count
+// resets), so appending -- rather than interleaving in X360-offset order -- is faithful and
+// keeps the committed members' offsets unchanged. X360 offsets are kept in per-member comments.
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // global Matrix44Affine typedef
@@ -46,11 +54,55 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventClearCullingTable.h"   // InEventClearCullingTable
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventSetEntityRadius.h"     // InEventSetEntityRadius
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventClearEntityPadding.h"  // InEventClearEntityPadding
+// The additive sibling queues also embedded in this aggregate (grounded by Construct @0x822E6550):
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventAddForCollision.h"     // InEventAddForCollision
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventAddVolumeInstance.h"   // InEventAddVolumeInstance
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventForceNoPadding.h"      // InEventForceNoPadding
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventSetCullingGroupPair.h" // InEventSetCullingGroupPair
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventSetPadding.h"          // InEventSetPadding
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventRemoveAllEntities.h"   // InEventRemoveAllEntities
+#include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h"     // TriangleCacheManagerIO::InEvent{AddToCache,UpdateCachedPosition,RemoveFromCache}
+#include "GameShared/GameClasses/SceneManager/TriangleCollision/CgsTriangleCollisionManagerIO_Events.h" // TriangleCollisionManagerIO::InEvent{AddPolySoupList,ClearPolySoupLists}
 
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
 {
+    // ---- Additive element records for the three volume-instance queues -------------------
+    // No committed element home exists for these three (their explicit-instantiation TUs are
+    // still todo), so they are defined here from their producers' asm-attested stores. Each
+    // derives from a distinctly-named empty event base (CgsModule event-queue convention) to
+    // avoid ODR clashes with the other per-element SceneManagerIO::Event bases.
+
+    // mSetVolumeInstanceTransformQueue element (producer @0x822CB7E8: `std r4` id @+0x00, then
+    // four `lvx128/stvx128` matrix lanes @+0x10). 16-byte aligned (carries the affine matrix),
+    // sizeof 0x50 (80). Capacity 1024 pinned by Construct (offset delta 0x8010 -> 0x1C020).
+    struct EventBaseSetVolumeInstanceTransform {};
+    struct alignas(16) InEventSetVolumeInstanceTransform : public EventBaseSetVolumeInstanceTransform
+    {
+        VolumeInstanceId mVolumeInstanceId; // +0x00 (std r4, 8B)
+        // +0x08..0x0F pad to the 16-byte alignment forced by the affine matrix lane.
+        Matrix44Affine   mTransform;        // +0x10 (four 16B lvx/stvx lanes, 64B)
+    };
+
+    // mSetVolumeInstanceCullingGroupQueue element (producer @0x822B1A98: `std r4` id @+0x00,
+    // `stw r5` culling-group id @+0x08). 8-byte aligned, sizeof 0x10 (16). Capacity 1280.
+    struct EventBaseSetVolumeInstanceCullingGroup {};
+    struct InEventSetVolumeInstanceCullingGroup : public EventBaseSetVolumeInstanceCullingGroup
+    {
+        VolumeInstanceId mVolumeInstanceId; // +0x00 (std r4, 8B)
+        s32              miCullingGroupId;  // +0x08 (stw r5, 4B)
+    };
+
+    // mAddVolumeInstanceForCachingQueue element (producer @0x8270DA10: `std r30` id @+0x00,
+    // `stw r31` cache-options enum word @+0x08). 8-byte aligned, sizeof 0x10 (16). Capacity 64.
+    struct EventBaseAddVolumeInstanceForCaching {};
+    struct InEventAddVolumeInstanceForCaching : public EventBaseAddVolumeInstanceForCaching
+    {
+        VolumeInstanceId mVolumeInstanceId; // +0x00 (std r30, 8B)
+        s32              meCacheOptions;     // +0x08 (stw r31, 4B; E_*_CACHE_OPTIONS enum word)
+    };
+
     struct alignas(16) InSceneUpdateInterface
     {
         // ADDITIVE GROW (FLAG -- body owned by InSceneUpdateInterface's own TU): the
@@ -59,6 +111,12 @@ namespace SceneManagerIO
         // tail-call InSceneUpdateInterface::Construct on this aggregate. Declared-only here
         // so consuming TUs compile; the owning TU emits the body. No layout change.
         void Construct();
+
+        // Whole-interface count resets (X360 0x822B10C8 / 0x828BA280). Both zero the live count
+        // (miLength) of every embedded queue and return `this` (the X360 forwards the pointer;
+        // InputBuffer_Update::Construct tail-returns Clear's result). Bodies emitted by this TU.
+        InSceneUpdateInterface* Clear();
+        InSceneUpdateInterface* Destruct();
 
         // Producer methods (X360 0x822B10C8..0x822CB8E4). Each stages one event on the stack,
         // fires the queue's "too small" tripwire assert when the target queue is full, then
@@ -81,12 +139,17 @@ namespace SceneManagerIO
         void ClearCullingTable(bool lbCullAll);
         void ClearEntityVolumesPadding(CgsSceneManager::EntityId lEntityId);
 
-        // Merged prop-entity write-side updaters (bodies owned by this TU where grounded;
-        // SetVolumeInstanceTransform(VolumeInstanceId) targets an un-recovered queue and stays
-        // declared-only). Pointer-/value-used by committed consumers; signatures unchanged.
+        // Merged prop-entity write-side updaters. SetVolumeInstanceTransform(VolumeInstanceId)
+        // is the @0x822CB7E8 producer (bodied by this TU -- it targets mSetVolumeInstanceTransformQueue);
+        // pointer-/value-used by committed consumers, signatures unchanged.
         void SetEntityPosition(u32 luEntityId, const Matrix44Affine& lTransform);
         void SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstanceId, const Matrix44Affine& lTransform);
         void RemoveAllEntities();
+
+        // ADDITIVE GROW: the two remaining volume-instance producers (bodied by this TU). Args
+        // are asm-attested (r4 8-byte VolumeInstanceId + a 32-bit second word each).
+        void SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId, s32 liCullingGroupId); // @0x822B1A98
+        void AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId, s32 leCacheOptions);     // @0x8270DA10
 
         // ADDITIVE GROW (FLAG -- declared-only, body owned by InSceneUpdateInterface's own
         // TU): the whole-interface merge the physics->scene world bridge drives
@@ -108,6 +171,26 @@ namespace SceneManagerIO
         CgsModule::EventQueue<InEventClearCullingTable, 64>     mClearCullingTableQueue;    // ClearCullingTable
         CgsModule::EventQueue<InEventSetEntityRadius, 512>      mSetEntityRadiusQueue;      // SetEntityRadius
         CgsModule::EventQueue<InEventClearEntityPadding, 16>    mClearEntityPaddingQueue;   // ClearEntityVolumesPadding
+
+        // ---- Additive: the remaining embedded queues (grounded by Construct @0x822E6550) ----
+        // Appended after the committed 11 so their offsets are unchanged. Element types +
+        // capacities are exactly what Construct passes; the X360 this-relative queue base is in
+        // each trailing comment. These are all reset by Clear/Destruct and (where a producer
+        // lives in this TU) appended to by name.
+        CgsModule::EventQueue<InEventSetVolumeInstanceTransform, 1024>     mSetVolumeInstanceTransformQueue;     // X360 +0x8010
+        CgsModule::EventQueue<InEventAddForCollision, 1536>               mAddForCollisionQueue;                // X360 +0x71040
+        CgsModule::EventQueue<InEventAddVolumeInstance, 1280>             mAddVolumeInstanceQueue;              // X360 +0x7D050
+        CgsModule::EventQueue<InEventForceNoPadding, 64>                  mForceNoPaddingQueue;                 // X360 +0x96060
+        CgsModule::EventQueue<InEventSetCullingGroupPair, 64>             mSetCullingGroupPairQueue;            // X360 +0xB4140
+        CgsModule::EventQueue<InEventSetPadding, 1280>                    mSetPaddingQueue;                     // X360 +0xB54B0
+        CgsModule::EventQueue<InEventAddVolumeInstanceForCaching, 64>     mAddVolumeInstanceForCachingQueue;    // X360 +0xBF4C0
+        CgsModule::EventQueue<InEventSetVolumeInstanceCullingGroup, 1280> mSetVolumeInstanceCullingGroupQueue;  // X360 +0xBF920
+        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventAddToCache, 298>          mAddToCacheQueue;          // X360 +0xC4930
+        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventUpdateCachedPosition, 298> mUpdateCachedPositionQueue; // X360 +0xC5290
+        CgsModule::EventQueue<CgsSceneManager::TriangleCacheManagerIO::InEventRemoveFromCache, 298>     mRemoveFromCacheQueue;     // X360 +0xC77E0
+        CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventAddPolySoupList, 20>  mAddPolySoupListQueue;     // X360 +0xC7C94
+        CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20> mClearPolySoupListsQueue; // X360 +0xC7DE0
+        CgsModule::EventQueue<InEventRemoveAllEntities, 1>                mRemoveAllEntitiesQueue;              // X360 +0xC7E3C
     };
 }
 }
