@@ -10,6 +10,14 @@
 //   Set<u16,72>::Contains  @ 0x8271A888  (Insert / KillOutOfAreaTraffic / UpdateEventStarts)
 //   Set<u16,72>::Insert    @ 0x8272C768  (SetDifference<72u,72u> / RecalculateActiveHulls)
 //
+// The member TEMPLATE SetDifference<Capacity1,Capacity2> is NOT instantiated by the explicit
+// `template class` below (a class instantiation never instantiates nested member templates), so
+// the one out-of-line copy the X360 emits for this instance is forced separately:
+//   Set<u16,72>::SetDifference<72u,72u> @ 0x8272C810  (BrnTraffic::TrafficEntityModule::RecalculateActiveHulls)
+// The asm (this=dest at +0x90 count, r4=lA, r5=lB) walks lA, Clear()s the dest (result[0x90]=0),
+// and for each lA element not found in lB inserts it -- exactly the generic CgsSet.h body; the
+// binary calls Find(lB,elem) directly because Contains() (which forwards to Find) is inlined.
+//
 // LAYOUT (X360 element addressing + count word, authoritative):
 //   maElements[72]   +0x00  (72 * 2 = 144 bytes; u16 element -- 2-byte stride, lhz/sthx)
 //   muLength         +0x90  (count word read/written at *(this+0x90), `lwz 0x90(r31)`)
@@ -33,3 +41,8 @@
 #include "GameShared/GameClasses/Containers/CgsSet.h"
 
 template class Set<u16, 72>;
+
+// Force the out-of-line copy of the member template SetDifference<72u,72u> @ 0x8272C810
+// (the class instantiation above does not emit nested member templates). Body is the generic
+// CgsSet.h SetDifference<Capacity1,Capacity2>. Spelled GLOBAL scope (::Set), matching committed CgsSet.h.
+template void Set<u16, 72>::SetDifference<72, 72>(const Set<u16, 72>& lA, const Set<u16, 72>& lB);
