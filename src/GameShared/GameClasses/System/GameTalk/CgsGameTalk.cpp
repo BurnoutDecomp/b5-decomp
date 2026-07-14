@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
+#include "GameShared/GameClasses/System/GameTalk/CgsGameTalkDebugComponent.h"
 
 // The AttribSys GameTalk message handler registered by Prepare. Owned by the
 // (not-yet-reconstructed) CgsAttribSys::AttribSysModule TU; forward-declared here
@@ -51,6 +52,16 @@ namespace CgsGameTalk
         // The channel name the AttribSys GameTalk handler is registered on
         // (off_82F32FB4 "AttribSys.xenon").
         const char* const KAC_ATTRIBSYS_CHANNEL = "AttribSys.xenon";
+
+        // GameTalkDebugComponent's name/path, returned verbatim by GetName/GetPath. These are the
+        // rodata const char* pointers the two accessors lwz through (off_82F30E90 -> "GameTalk",
+        // off_82F30E94 -> "Core"); distinct from the KAC_LOG_WINDOW_* pair Prepare uses.
+        const char* const KAC_DEBUG_COMPONENT_NAME = "GameTalk"; // off_82F30E90
+        const char* const KAC_DEBUG_COMPONENT_PATH = "Core";     // off_82F30E94
+
+        // The size OnActivate passes to Window::SetSize (flt_820DEDB8 / flt_820DEDBC).
+        const f32 KF_DEBUG_WINDOW_WIDTH  = 250.0f; // flt_820DEDB8
+        const f32 KF_DEBUG_WINDOW_HEIGHT = 60.0f;  // flt_820DEDBC
     }
 
     // X360 @0x82837648.
@@ -129,5 +140,28 @@ namespace CgsGameTalk
         {
             lpManager->Update();
         }
+    }
+
+    // X360 0x82836C20 -- chain up to the (empty) base activation (the bl folds onto the shared empty
+    // thunk the disassembler mislabels BaseCollisionGenerator::Destruct), then size the already-
+    // prepared "Core/GameTalk" log window (off_82F32FD4 == sLogWindow). Unlike the AttribSys sibling,
+    // OnActivate does not Prepare the window -- GameTalk::Construct already did that.
+    void GameTalkDebugComponent::OnActivate()
+    {
+        DebugComponent::OnActivate();
+
+        sLogWindow.SetSize(KF_DEBUG_WINDOW_WIDTH, KF_DEBUG_WINDOW_HEIGHT);
+    }
+
+    // X360 0x827DB690 -- lwz r3, off_82F30E90 -> "GameTalk".
+    const char* GameTalkDebugComponent::GetName() const
+    {
+        return KAC_DEBUG_COMPONENT_NAME;
+    }
+
+    // X360 0x827DB6A0 -- lwz r3, off_82F30E94 -> "Core".
+    const char* GameTalkDebugComponent::GetPath() const
+    {
+        return KAC_DEBUG_COMPONENT_PATH;
     }
 }
