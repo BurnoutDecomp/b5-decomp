@@ -11,9 +11,14 @@
 #include "SDKs/EATech/include/Apt/AptDefine.h"           // gpNonGCPoolManager + AptNonGC*SaveSize
 #include "SDKs/EATech/Apt/DogmaAllocator.h"              // DOGMA_PoolManager::Allocate/Deallocate
 
+int AptCommonShutdown();   // AptInit.cpp @0x82B0AC08 -- the shared static-data teardown
+
 class AptFloat : public AptValueNoGC
 {
     friend class AptGC;   // AptGC::CleanAll calls the protected ClearPool (leak: friend)
+    // AptCommonShutdown @0x82B0AC08 is the other external caller of the protected
+    // ClearPool (the Apt shutdown flush) -- additive friend grant, symmetric to AptGC.
+    friend int ::AptCommonShutdown();
 public:
     static void* operator new(size_t size)              { return gpNonGCPoolManager->Allocate(size); }
     static void  operator delete(void* p, size_t size)  { gpNonGCPoolManager->Deallocate(p, size); }
