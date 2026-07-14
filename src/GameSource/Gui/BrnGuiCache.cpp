@@ -231,33 +231,12 @@ namespace BrnGui
         return meGameModeType;
     }
 
-    // Uncalled layout pin. The class carries 8-byte pointers on the LLP64 gate host but
-    // 4-byte pointers on the X360 target, so ABSOLUTE byte offsets past a pointer member
-    // are not host-invariant (AGENTS.md: absolute offsets only for pointer-free regions).
-    // We therefore pin the RELATIVE spacing of the asm-attested scalar block @+40748..+40960,
-    // which is entirely pointer-free, so its inter-member deltas equal the X360 deltas on
-    // any host. Never called.
-    void GuiCache::_AssertLayout()
-    {
-        // mfTimeNow is the first scalar after the 4-byte header word: pointer-free prefix.
-        static_assert(offsetof(GuiCache, mfTimeNow) == 4, "mfTimeNow @ +4 (mTimeInfo.mfTimeNow)");
-
-        // Pointer-free per-event scalar block: deltas match the X360 offsets exactly.
-        static_assert(offsetof(GuiCache, mfTargetTime) - offsetof(GuiCache, mfEventTime) == 40752 - 40748, "mfTargetTime - mfEventTime");
-        static_assert(offsetof(GuiCache, miOpponentsInEvent) - offsetof(GuiCache, mfEventTime) == 40772 - 40748, "miOpponentsInEvent - mfEventTime");
-        static_assert(offsetof(GuiCache, mEventDestinationLandmarkIndex) - offsetof(GuiCache, mfEventTime) == 40780 - 40748, "destLandmark - mfEventTime");
-        static_assert(offsetof(GuiCache, mEventDestinationDistrict) - offsetof(GuiCache, mfEventTime) == 40784 - 40748, "destDistrict - mfEventTime");
-        static_assert(offsetof(GuiCache, miCheckpointReached) - offsetof(GuiCache, mfEventTime) == 40884 - 40748, "miCheckpointReached - mfEventTime");
-        static_assert(offsetof(GuiCache, muCheckpointsInEvent) - offsetof(GuiCache, miCheckpointReached) == 40888 - 40884, "muCheckpointsInEvent - miCheckpointReached");
-        static_assert(offsetof(GuiCache, miTakedownsCurrent) - offsetof(GuiCache, miCheckpointReached) == 40892 - 40884, "miTakedownsCurrent - miCheckpointReached");
-        static_assert(offsetof(GuiCache, miTakedownTarget) - offsetof(GuiCache, miCheckpointReached) == 40896 - 40884, "miTakedownTarget - miCheckpointReached");
-        static_assert(offsetof(GuiCache, miScoreCurrent) - offsetof(GuiCache, miCheckpointReached) == 40900 - 40884, "miScoreCurrent - miCheckpointReached");
-        static_assert(offsetof(GuiCache, miScoreTarget) - offsetof(GuiCache, miCheckpointReached) == 40904 - 40884, "miScoreTarget - miCheckpointReached");
-        static_assert(offsetof(GuiCache, miScoreCombo) - offsetof(GuiCache, miCheckpointReached) == 40908 - 40884, "miScoreCombo - miCheckpointReached");
-        static_assert(offsetof(GuiCache, miComboMultiplier) - offsetof(GuiCache, miCheckpointReached) == 40912 - 40884, "miComboMultiplier - miCheckpointReached");
-        static_assert(offsetof(GuiCache, mShutdownCarID) - offsetof(GuiCache, mPursuedCarID) == 40944 - 40928, "mShutdownCarID - mPursuedCarID");
-        static_assert(offsetof(GuiCache, meTrophyCarUnlockType) - offsetof(GuiCache, mShutdownCarID) == 40960 - 40944, "meTrophyCarUnlockType - mShutdownCarID");
-    }
+    // The GuiCache layout pin (GuiCache::_AssertLayout) now lives ONCE, inline in
+    // BrnGuiCache.h, as the comprehensive GC_FAR block that pins every asm-attested far member
+    // relative to mv4WorldCameraPosition (plus the pointer-invariant prefix). The former,
+    // narrower copy that lived here was a redefinition of that inline (C2084) and pinned a
+    // strict subset of the same offsets, so it has been removed -- the header version is
+    // canonical and supersedes it.
 
     // @0x824F8830 -- GuiCache::GetNumEventStarts (DWARF BrnGuiCache.h:801). Pure tail-forwarder:
     // X360 `addi r3, r3, 0x5690` (this + 0x5690) then `b sub_824F7688`, i.e. hands

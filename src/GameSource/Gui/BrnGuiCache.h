@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>   // offsetof (layout pins in _AssertLayout)
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
@@ -8,6 +9,7 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
+#include "GameSource/GameState/BrnCgsPlayerName.h" // CgsNetwork::PlayerName (COMPLETE: value member of ReplayPlayerActive below)
 
 // BrnGui::GuiCache subsystem (DecFIGS DWARF: BrnGuiCache.h). StateLoadingHelper is the
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
@@ -20,6 +22,10 @@ namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (poi
 namespace BrnProgression { struct Profile; }      // DetermineCarUnlockPending arg (pointer only)
 namespace BrnGameState { class LandmarkIndex; }    // GetLandmarkInfoFromIndex arg (by value)
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusData; } } // GetOnlinePlayerInfo return (pointer only; home BrnNetworkModuleInGamePlayerStatusInterface.h)
+namespace BrnTraffic { struct ScoringTrafficData; } // GetScoringTrafficData return (pointer only; home BrnTraffic scoring TU) -- element of the maScoringTrafficData table
+// CgsNetwork::PlayerName is now a COMPLETE type (included above): it is the lead value member
+// of ReplayPlayerActive (the replay-player-active table entry) and the element returned by
+// GetSortedReplayPlayerActive. Home: GameSource/GameState/BrnCgsPlayerName.h.
 
 namespace BrnGui
 {
@@ -37,6 +43,35 @@ namespace BrnGui
     struct SatNavEventDisplayInfo;
     struct PreEventInfo;   // opaque boundary record (GetPreEventInfo result; consumed by
                            // OnlinePreEventMessages::Show -- pointer-only)
+    struct PresetRace;     // opaque boundary record (GetPresetRace result; the preset-race
+                           // CgsArray element, stride 120 -- pointer-only, un-homed element type)
+
+    // One entry of the cache's "stunts to display" list (X360 GuiCache::GetStuntToDisplay
+    // @0x8240F770 walks it at stride 8, testing the leading id word against -1 as the
+    // list terminator). Modelled as a VALUE member array inside GuiCache, so it must be a
+    // complete type here. FLAG: only the leading id word is asm-attested; the +0x04 word is
+    // reserved (an unrecovered companion field the stride proves is present).
+    struct StuntToDisplayInfo
+    {
+        s32 miStuntId;     // +0x00 (-1 == list terminator)
+        s32 miField_04;    // +0x04 (companion word; semantic unrecovered)
+    };
+
+    // One entry of the cache's replay-player-active table (maReplayPlayersActive @0x141E0,
+    // 16 entries, stride 32). IncrementReplayPlayerActive @0x824EEEC0 appends/bumps entries;
+    // ClearReplayPlayerActive @0x824EEE28 resets them; SortReplayPlayersActive @0x824F8C58
+    // qsorts DESCENDING by muActiveCount; GetSortedReplayPlayerActive @0x824EEFA0 returns
+    // &entry.mName. Field offsets/types are X360-attested by those store-for-store bodies:
+    // the name is cleared/compared/constructed at +0x00, a 64-bit value slot is std'd at
+    // +0x10, and the hit count is stw'd/lwz'd at +0x18.
+    struct ReplayPlayerActive
+    {
+        CgsNetwork::PlayerName mName;         // +0x00 (16B; char macName[16])
+        s64                    mValue;        // +0x10 (std; seeded from the s32 liValue)
+        u32                    muActiveCount; // +0x18 (stw; qsort key)
+        u8                     mPad_1C[4];    // +0x1C..+0x1F (pad to the attested stride 32)
+    };
+    static_assert(sizeof(ReplayPlayerActive) == 0x20, "ReplayPlayerActive stride 0x20 (32)");
 
     struct StateLoadingHelper
     {
@@ -380,6 +415,59 @@ namespace BrnGui
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
              GetOnlinePlayerInfoFromPlayerId(s32 liPlayerId) const;
 
+        // ====================================================================
+        //  Remaining GuiCache accessors recovered in this wave (dossier: 60
+        //  funcs). All read/index the named far members carved into the layout
+        //  below at their asm-proven offsets; bodies link from the GuiCache TU.
+        //  Trailing comments give the X360 address + the member each one hits.
+        // ====================================================================
+
+        // --- per-event scalar accessors (mode/score/time/distance) ---
+        f32 GetDistanceInEvent() const;             // X360 @0x8240F398 (mfDistanceInEvent @0x9F48, >= 0)
+        BrnGameState::LandmarkIndex
+            GetEventDestinationLandmarkIndex() const; // X360 @0x8240FA88 (mEventDestinationLandmarkIndex @0x9F4C)
+        BrnGameState::LandmarkIndex
+            GetEventFinishLandmark() const;         // X360 @0x824EC610 (checkpoint-landmark view @+0x9F52; see note)
+        BrnGameState::LandmarkIndex
+            GetOnlineLandmarkIndex(u32 luCheckpointIndex) const; // X360 @0x8240FB50 (miOnlineRoundIndex @0xA7FC + maOnlineGameModeOptions @0xA800)
+
+        // --- race-car info block (ARCI-indexed, mRaceCarInfo SoA @0xA020..) ---
+        const Vector4& GetRaceCarPosition(EActiveRaceCarIndex leActiveRaceCarIndex) const; // X360 @0x82443750 (maRaceCarPositions @0xA020)
+        s32  GetEventPositionOfRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const;    // X360 @0x82443D78 (maEventPositionOfRaceCar @0xA130, gate @0xA140)
+        bool HasRaceCarFinished(EActiveRaceCarIndex leActiveRaceCarIndex) const;           // X360 @0x824EC4C8 (maRaceCarFinished @0xA138, gate @0xA140)
+        bool IsActiveRaceCarIndexUsed(EActiveRaceCarIndex leActiveRaceCarIndex) const;     // X360 @0x82443A00 (maRaceCarUsed @0xA0E4)
+        bool IsActiveRaceCarConnecting(EActiveRaceCarIndex leActiveRaceCarIndex) const;    // X360 @0x82443B28 (maRaceCarConnecting @0xA0EC)
+        bool IsRaceCarCrashing(EActiveRaceCarIndex leActiveRaceCarIndex) const;            // X360 @0x824438A8 (maRaceCarCrashing @0xA104, used-gate @0xA0E4)
+
+        // --- online player state tables (ARCI-indexed, @0xB84C..) ---
+        bool GetOnlinePlayerDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const;  // X360 @0x8240F988 (maOnlinePlayerDisconnected @0xB84C)
+        bool GetOnlinePlayerInCarSelect(EActiveRaceCarIndex leActiveRaceCarIndex) const;   // X360 @0x824436D0 (maOnlinePlayerInCarSelect @0xB854)
+        bool IsOnlinePlayerEliminated(EActiveRaceCarIndex leActiveRaceCarIndex) const;     // X360 @0x8240FA08 (maOnlinePlayerEliminated @0xB85C)
+
+        // --- road-rule / scoring-traffic / stunt / preset tables ---
+        bool IsRoadRuleActive(s32 liRoadRuleType) const;   // X360 @0x82472E78 (maRoadRuleActiveByType @0xAC44, idx 0..1)
+        s32  GetScoringTrafficCount() const;               // X360 @0x824497C0 (miScoringTrafficCount @0xA3D0)
+        const BrnTraffic::ScoringTrafficData*
+            GetScoringTrafficData(u32 luIndex) const;      // X360 @0x82450718 (maScoringTrafficData @0xA150)
+        const StuntToDisplayInfo* GetStuntToDisplay(s32 liIndex) const; // X360 @0x8240F770 (maStuntToDisplay @0xAC5C)
+        const PresetRace* GetPresetRace(s32 liPresetRaceIndex) const;   // X360 @0x824B2FE8 (maPresetRaces @0x4FB0, count miNumPresetRaces @0x5280)
+        u32  GetNumOnlineFinishPoints() const;             // X360 @0x8241E7D8 (sum of per-word 64-bit popcounts over maOnlineFinishPointsMask @+0x7770, 4 doublewords)
+
+        // --- replay slot / player tables ---
+        bool IsReplayARCRendered(EActiveRaceCarIndex leActiveRaceCarIndex) const;  // X360 @0x824EEDA8 (maReplayARCRendered @0x143C0)
+        s32  ReplayConvertGuiSlotIndexToReelIndex(s32 liSlotIndex) const;          // X360 @0x824EEBE0 (maReplayReelForSlot @0x13BA0, miReplaySlotsUsed @0x13BB8)
+        const CgsNetwork::PlayerName*
+            GetSortedReplayPlayerActive(u32 luIndex) const;                        // X360 @0x824EEFA0 (maReplayPlayersActive @0x143A0, gated on mbReplayHasBeenSorted @0x143F8)
+        void ClearReplayPlayerActive();                                            // X360 @0x824EEE28 (clears maReplayPlayersActive/maReplayARCRendered, mbReplayHasBeenSorted=0)
+        void IncrementReplayPlayerActive(const char* lpcPlayerName, s32 liValue);  // X360 @0x824EEEC0 (maReplayPlayersActive lookup/append)
+        void SortReplayPlayersActive();                                            // X360 @0x824F8C58 (qsort maReplayPlayersActive; sets mbReplayHasBeenSorted)
+        static s32 _SortReplayPlayersActiveByCount(const void* lpA, const void* lpB); // X360 @0x824EF028 (qsort comparator on entry +0x18 count)
+
+        // --- misc setters / sat-nav / car-unlock ---
+        void SetMapIconManager(MapIconManager* lpMapIconManager); // X360 @0x824EC3C8 (mpMapIconManager @0x4060)
+        void ZoomSatNavOut();                                     // X360 @0x82472FD0 (miSatNavZoomLevel @0x803C)
+        void DetermineCarUnlockPending(BrnProgression::Profile* lpProfile); // X360 @0x824EC678 (sets mbCarUnlockPending/mbCarUnlockDetermined @0x4B75/0x4B76; reads Profile far members -- BrnProfile.h boundary)
+
     private:
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
@@ -391,13 +479,22 @@ namespace BrnGui
         // ===================================================================
         u8  mPad_0000[4];                                // +0x0000 GuiEventTimeInfo header word
         f32 mfTimeNow;                                   // +0x0004 (4)     GetTime, != -FLT_MAX
-        u8  mPad_0008[16476];                            // +0x0008..+0x4063
+        u8  mPad_0008[3792];                             // +0x0008..+0x0ED7
+        s32 miCtorSentinel_0ED8;                         // +0x0ED8 (3800)  ctor writes -1 (CgsArray "used before Construct" sentinel; sub-array un-homed)
+        s32 miCtorField_0EDC;                            // +0x0EDC (3804)  ctor writes 0 (companion of the 0x0ED8 sentinel)
+        u8  mPad_0EE0[4108];                             // +0x0EE0..+0x1EEB
+        s32 miCtorField_1EEC;                            // +0x1EEC (7916)  ctor writes 0 (un-homed sub-object field)
+        u8  mPad_1EF0[8556];                             // +0x1EF0..+0x405B
+        BrnProgression::Profile*  mpProfile;             // +0x405C (16476) OdometerComponent::Construct @0x82415088 (mpGuiCache+0x405C); DetermineCarUnlockPending source
+        MapIconManager*           mpMapIconManager;      // +0x4060 (16480) SetMapIconManager @0x824EC3C8 (v3[4120]=a2)
         WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
         const BurnoutSkillsManager* mpSkillsManager;      // +0x4068 (16488) DWARF h:1632 (PlayerPositionSingle::RenderValue @0x824223FC)
         FreeburnChallengeManager* mpChallengeManager;    // +0x406C (16492)
         HudMessageController*     mpHudMessageController; // +0x4070 (16496)
         HudMessageDirector*       mpHudMessageDirector;   // +0x4074 (16500)
-        u8  mPad_4078[2696];                             // +0x4078..+0x4AFF
+        u8  mPad_4078[2664];                             // +0x4078..+0x4ADF
+        Vector4 mv4WorldCameraPosition;                  // +0x4AE0 (19168) GetWorldCameraPosition (SatNavRenderer @0x8245FA48 lvx128 mpGuiCache,0x4AE0)
+        u8  mPad_4AF0[16];                               // +0x4AF0..+0x4AFF
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
         u8   mPad_4B04[0x46];                             // +0x4B04..+0x4B49
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
@@ -414,21 +511,55 @@ namespace BrnGui
         bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
         bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption
         bool mbOnlineStartPending;                       // +0x4B53 (19283) SelectOnlineMenuOption (cleared)
-        u8   mPad_4B54[0x527F - 0x4B53];                 // +0x4B54..+0x527F
-        s32 miNumPresetRaces;                            // +0x5280 (21120)
-        u8  mPad_5284[19408];                            // +0x5284..+0x9E53
-        s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker
+        u8   mPad_4B54[33];                              // +0x4B54..+0x4B74
+        // ADDITIVE GROW (BrnGuiCache DetermineCarUnlockPending @0x824EC678): the two car-unlock
+        // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
+        bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains
+        bool mbCarUnlockDetermined;                      // +0x4B76 (19318) set 1 on entry (determination has run)
+        u8   mPad_4B77[1081];                            // +0x4B77..+0x4FAF
+        u8   maPresetRacesStorage[6 * 120];              // +0x4FB0 (20400) PresetRace maPresetRaces[6] (stride 120; GetPresetRace @0x824B2FE8 -> 120*(idx+170)+this; element un-homed)
+        s32 miNumPresetRaces;                            // +0x5280 (21120) count of maPresetRaces (GetPresetRace bound)
+        u8  mPad_5284[9436];                             // +0x5284..+0x775F  (holds mSetUpAllEventStartsInterface @0x5690/22160 -- embedded; GetNumEventStarts forwards to it)
+        s32 miEventStartsCount;                          // +0x7760 (30560) mSetUpAllEventStartsInterface CgsArray count (ctor -1; GetNumEventStarts sentinel/count @+0x20D0 of the interface)
+        u8  mPad_7764[12];                               // +0x7764..+0x776F
+        // 256-bit online finish-point bitmask (4 doublewords). GetNumOnlineFinishPoints
+        // @0x8241E7D8 loads each 64-bit word (ld @0x7770/0x7778/0x7780/0x7788), 64-bit
+        // SWAR-popcounts it, and sums the four counts. Carved from the former mPad_7764.
+        u64 maOnlineFinishPointsMask[4];                 // +0x7770 (30576)
+        u8  mPad_7790[2220];                             // +0x7790..+0x803B
+        s32 miSatNavZoomLevel;                           // +0x803C (32828) ZoomSatNavOut @0x82472FD0 (result[8207]); clamp [0,1], assert <= E_SAT_NAV_ZOOM_COUNT
+        u8  maEventsStorage[7700];                       // +0x8040 (32832) mEvents preset-event CgsArray storage (GetPresetEvent @0x8241E520 forwards 32832; count is mEventsCtorSentinel @+7700)
+        s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker / GetNumPresetEvents count (-1 = not constructed)
         s32 meGameModeType;                              // +0x9E58 (40536) GsmIO::EGameModeType
-        u8  mPad_9E5C[208];                              // +0x9E5C..+0x9F2B
+        u8  mPad_9E5C[124];                              // +0x9E5C..+0x9ED7
+        s32 miCtorSentinel_9ED8;                         // +0x9ED8 (40664) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
+        u8  mPad_9EDC[36];                               // +0x9EDC..+0x9EFF
+        s32 miCtorSentinel_9F00;                         // +0x9F00 (40704) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
+        u8  mPad_9F04[40];                               // +0x9F04..+0x9F2B
         f32 mfEventTime;                                 // +0x9F2C (40748)
         f32 mfTargetTime;                                // +0x9F30 (40752)
         u8  mPad_9F34[16];                               // +0x9F34..+0x9F43 mafTargetScores[4]
         s8  miOpponentsInEvent;                          // +0x9F44 (40772)
-        u8  mPad_9F45[7];                                // +0x9F45..+0x9F4B
+        u8  mPad_9F45[3];                                // +0x9F45..+0x9F47
+        f32 mfDistanceInEvent;                           // +0x9F48 (40776) GetDistanceInEvent @0x8240F398 (result[10194], >= 0)
         u16 mEventDestinationLandmarkIndex;              // +0x9F4C (40780) LandmarkIndex (s16)
         u8  mPad_9F4E[2];                                // +0x9F4E..+0x9F4F
-        s32 mEventDestinationDistrict;                   // +0x9F50 (40784) BrnWorld::EDistrict
-        u8  mPad_9F54[96];                               // +0x9F54..+0x9FB3
+        // +0x9F50 event-destination region (union). Race-style modes store the resolved
+        // district word here (mEventDestinationDistrict @+0x9F50). Checkpoint modes reuse the
+        // SAME storage from +0x9F52 as the per-checkpoint finish-landmark list: GetEventFinishLandmark
+        // @0x824EC610 reads the u16 at +0x9F52 + 2*checkpoint (overlapping the district's high
+        // half), so the two views are modelled as a union to keep both named at their exact
+        // X360 offsets. FLAG: maCheckpointLandmarks bound (49) is region-derived (fills the
+        // 100-byte span to the next member); only the +0x9F52 base + 2-byte stride are attested.
+        union
+        {
+            s32 mEventDestinationDistrict;               // +0x9F50 (40784) BrnWorld::EDistrict
+            struct
+            {
+                u8  mPad_9F50_pre[2];                    // +0x9F50..+0x9F51 (low half of the district word)
+                u16 maCheckpointLandmarks[49];           // +0x9F52.. per-checkpoint finish LandmarkIndex view
+            };
+        };
         s32 miCheckpointReached;                         // +0x9FB4 (40884)
         u32 muCheckpointsInEvent;                        // +0x9FB8 (40888)
         s32 miTakedownsCurrent;                          // +0x9FBC (40892)
@@ -443,22 +574,182 @@ namespace BrnGui
         CgsID mShutdownCarID;                            // +0x9FF0 (40944)
         u8  mPad_9FF8[8];                                // +0x9FF8..+0x9FFF
         s32 meTrophyCarUnlockType;                       // +0xA000 (40960) TrophyUnlockData::UnlockType
-        u8  mPad_A004[0x9C4];                            // +0xA004..+0xA9C7
+        // ---- mRaceCarInfo SoA (ARCI-indexed, 8 lanes) carved from the former mPad_A004[0x9C4] ----
+        u8  mPad_A004[28];                               // +0xA004..+0xA01F
+        Vector4 maRaceCarPositions[8];                   // +0xA020 (40992) GetRaceCarPosition @0x82443750 (16*(idx+2562)+this)
+        u8  mPad_A0A0[68];                               // +0xA0A0..+0xA0E3
+        bool maRaceCarUsed[8];                           // +0xA0E4 (41188) IsActiveRaceCarIndexUsed @0x82443A00 / GetRaceCarPosition used-gate
+        bool maRaceCarConnecting[8];                     // +0xA0EC (41196) IsActiveRaceCarConnecting @0x82443B28
+        u8  mPad_A0F4[16];                               // +0xA0F4..+0xA103
+        bool maRaceCarCrashing[8];                       // +0xA104 (41220) IsRaceCarCrashing @0x824438A8
+        u8  mPad_A10C[36];                               // +0xA10C..+0xA12F
+        s8  maEventPositionOfRaceCar[8];                 // +0xA130 (41264) GetEventPositionOfRaceCar @0x82443D78 (place; gated on @0xA140)
+        bool maRaceCarFinished[8];                       // +0xA138 (41272) HasRaceCarFinished @0x824EC4C8 (gated on @0xA140)
+        bool maEventPositionValid[8];                    // +0xA140 (41280) validity gate for maEventPositionOfRaceCar / maRaceCarFinished
+        u8  mPad_A148[8];                                // +0xA148..+0xA14F
+        // ---- scoring-traffic CgsArray (mTrafficCarInfo.mScoreTargets) ----
+        u8  maScoringTrafficDataStorage[640];            // +0xA150 (41296) BrnTraffic::ScoringTrafficData[] (GetScoringTrafficData @0x82450718 forwards 41296; element sizeof un-attested)
+        s32 miScoringTrafficCount;                       // +0xA3D0 (41936) GetScoringTrafficCount @0x824497C0 (CgsArray count; ctor -1)
+        u8  mPad_A3D4[1036];                             // +0xA3D4..+0xA7DF
+        s32 miCtorSentinel_A7E0;                         // +0xA7E0 (42976) ctor writes -1 (CgsArray sentinel; sub-array un-homed)
+        u8  mPad_A7E4[24];                               // +0xA7E4..+0xA7FB
+        // ---- online game-mode-options (round-indexed) ----
+        s32 miOnlineRoundIndex;                          // +0xA7FC (43004) GetOnlineRoundIndex (GetOnlineLandmarkIndex @0x8240FB50), < KU_MAX_ONLINE_ROUNDS_IN_MODE
+        u8  maOnlineGameModeOptionsStorage[10 * 44];     // +0xA800 (43008) GetOnlineGameModeOptions[] (stride 44, 10 rounds; GetOnlineLandmarkIndex indexes 44*round+43008)
+        u8  mPad_A9B8[16];                               // +0xA9B8..+0xA9C7
         // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): the online-host-game state word (== 1 when the
         // local client is the online host). Carved from the former mPad_A004[3124] WITHOUT shifting
         // any following member. FLAG: consumer-named (no standalone DWARF for this member).
         s32 miOnlineHostGameState;                       // +0xA9C8 (43464)
-        u8  mPad_A9CC[0xAC38 - 0xA9CC];                  // +0xA9CC..+0xAC37
+        u8  mPad_A9CC[100];                              // +0xA9CC..+0xAA2F
+        // ctor field-inits a stride-56 SoA of 8 lanes (one per ARCI): int@+0, float@+4 each
+        // (ctor @0x827E05B8 writes +43568..+43964). FLAG: only the +0/+4 words are attested
+        // (the 48-byte tail is reserved); semantic of the pair is unrecovered.
+        struct PerRacerPair_AA30 { s32 miField_00; f32 mfField_04; u8 mPad_08[48]; }; // 56 bytes
+        PerRacerPair_AA30 maPerRacerData_AA30[8];        // +0xAA30 (43568) ctor-initialised per-racer numeric pairs
+        u8  mPad_AC10[72];                               // +0xAC10..+0xAC37
         bool mabRoadRulesActive[2];                      // +0xAC38 (DWARF h; precedes meActiveRoadRule)
         u8  mPad_AC3A[2];                                // +0xAC3A..+0xAC3B
         s32 meActiveRoadRule;                            // +0xAC3C (44092) BrnGameState::EActiveRoadRule (PlayerPositionSingle::RenderValue gate @0x824220B4)
         s32 meRoadRuleScoreMode;                         // +0xAC40 (44096) GuiEventSetRoadRuleScoreMode::ERoadPanelModes
-        u8  mPad_AC44[1];                                // tail guard (further far members --
-        // pre-race messages, profile/replay/online tables, sat-nav zoom -- are reached only
-        // by declaration-only array accessors and are not modelled here.)
+        bool maRoadRuleActiveByType[2];                  // +0xAC44 (44100) IsRoadRuleActive @0x82472E78 (idx 0..1, score type)
+        u8  mPad_AC46[2];                                // +0xAC46..+0xAC47
+        // ---- road-rule-shot block (RoadRuleShotComponent::Snap @0x82415620) ----
+        s32 meRoadRuleShotOpponentARCI;                  // +0xAC48 (44104) GetRoadRuleShotOpponentARCI (DWARF h:1817)
+        u8  mPad_AC4C[14];                               // +0xAC4C..+0xAC59
+        bool mbRoadRuleShotCapturedLineGate;             // +0xAC5A (44122) GetRoadRuleShotCapturedLineGate ("CAPTURED_FOR" line gate)
+        u8  mPad_AC5B[1];                                // +0xAC5B
+        StuntToDisplayInfo maStuntToDisplay[3];          // +0xAC5C (44124) GetStuntToDisplay @0x8240F770 (stride 8; -1-terminated)
+        u32 muNumActivePlayers;                          // +0xAC74 (44148) GetFriendsListCachedField / GetNumActivePlayers
+        u8  mPad_AC78[8];                                // +0xAC78..+0xAC7F
+        // One online-player record per player. Byte storage for the fwd-declared 312-byte
+        // BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData (GetOnlinePlayerInfo @0x8240F890
+        // -> 312*idx+44160). ctor field-inits each lane's +0x60(int)/+0x64(float).
+        u8  maPlayerInfo[8][312];                        // +0xAC80 (44160) InGamePlayerStatusData maPlayerInfo[8] (stride 312)
+        u8  mPad_B640[456];                              // +0xB640..+0xB807
+        s32 maCurrentPlayerTeam[8];                      // +0xB808 (47112) GetCurrentOnlinePlayerTeam @0x8240F910 (4*(idx+11778)+this; GsmIO::EPlayerTeam)
+        u8  mPad_B828[36];                               // +0xB828..+0xB84B
+        bool maOnlinePlayerDisconnected[8];              // +0xB84C (47180) GetOnlinePlayerDisconnected @0x8240F988
+        bool maOnlinePlayerInCarSelect[8];               // +0xB854 (47188) GetOnlinePlayerInCarSelect @0x824436D0
+        bool maOnlinePlayerEliminated[8];                // +0xB85C (47196) IsOnlinePlayerEliminated @0x8240FA08
+        // Far tail. The player-options profile block (GetOptionsDataProfile @0xB878/47224) and
+        // the sat-nav icon / drive-through / landmark tables live in this span but are reached
+        // only through declaration-only accessors; not individually modelled. See notes.
+        u8  mPad_B864[30376];                            // +0xB864..+0x12F0B  (incl. mOptionsDataProfile @0xB878)
+        // ---- mPreRaceData: fly-by pre-event messages (GetPreEventInfo @0x824827D8) ----
+        u8  maPreEventInfoStorage[3][580];               // +0x12F0C (77580) PreEventInfo maPreEventInfo[3] (stride 580)
+        s32 miNumMessages;                               // +0x135D8 (79320) mPreRaceData.miNumMessages (GetPreEventInfo bound)
+        // ---- mProfileEventState: offline profile-event CgsArray ----
+        u8  mProfileEventStateStorage[1400];             // +0x135DC (79324) GetProfileEvent @0x82449880 forwards 79324; count is miProfileEventsCount @+1400
+        s32 miProfileEventsCount;                         // +0x13B54 (80724) GetNumProfileEvents count / CgsArray sentinel (ctor -1)
+        u8  mPad_13B58[60];                              // +0x13B58..+0x13B93
+        f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
+        u8  mPad_13B98[8];                               // +0x13B98..+0x13B9F
+        // ---- replay slots / status interface / player tables ----
+        s32 maReplayReelForSlot[6];                      // +0x13BA0 (80800) ReplayConvert... @0x824EEBE0 (4*(slot+20200)+this)
+        s32 miReplaySlotsUsed;                           // +0x13BB8 (80824) ReplayConvert... bound
+        u8  mReplayStatusInterfaceStorage[1572];         // +0x13BBC (80828) BrnReplays::ReplayIO::StatusInterface (ReplayConvert forwards 80828; GetReel)
+        // 16 replay-player-active entries, stride 32 (lead CgsNetwork::PlayerName + value@+0x10 + count@+0x18).
+        ReplayPlayerActive maReplayPlayersActive[16];    // +0x141E0 (82400) GetSortedReplayPlayerActive @0x824EEFA0 (32*(idx+2575)+this); qsort'd by muActiveCount
+        bool maReplayARCRendered[8];                     // +0x143E0 (82912) IsReplayARCRendered @0x824EEDA8
+        bool mbReplayHasBeenSorted;                      // +0x143E8 (82920) SortReplayPlayersActive / GetSortedReplayPlayerActive gate
 
         static void _AssertLayout();
     };
+
+    // ------------------------------------------------------------------------
+    //  Layout pins: fail the compile gate if any far member drifts off its
+    //  X360-attested `this+offset`.
+    //
+    //  The X360 target is 32-bit (4-byte pointers); the MSVC compile gate is
+    //  x64 (8-byte pointers). GuiCache has exactly ONE pointer cluster
+    //  (mpProfile..mpHudMessageDirector, +0x405C..+0x4078). On the gate every
+    //  member PAST that cluster is shifted by a constant +32 (a multiple of the
+    //  struct's 16-byte alignment), so member-to-member byte deltas are
+    //  identical on both targets. We therefore assert:
+    //    * pointer-INVARIANT prefix members (before the cluster) at absolute
+    //      X360 offsets, and
+    //    * every far member RELATIVE to the first far member
+    //      (mv4WorldCameraPosition @0x4AE0); each RHS is written as the two
+    //      documented X360 offsets so a wrong pad/stride fails the gate.
+    // ------------------------------------------------------------------------
+    inline void GuiCache::_AssertLayout()
+    {
+        // pointer-invariant prefix (before the +0x405C pointer cluster):
+        static_assert(offsetof(GuiCache, mfTimeNow)           == 0x0004, "mfTimeNow @0x0004");
+        static_assert(offsetof(GuiCache, miCtorSentinel_0ED8) == 0x0ED8, "miCtorSentinel_0ED8 @0x0ED8");
+        static_assert(offsetof(GuiCache, miCtorField_0EDC)    == 0x0EDC, "miCtorField_0EDC @0x0EDC");
+        static_assert(offsetof(GuiCache, miCtorField_1EEC)    == 0x1EEC, "miCtorField_1EEC @0x1EEC");
+
+        // far members, pinned RELATIVE to mv4WorldCameraPosition (@0x4AE0):
+        #define GC_FAR(member, x360off) \
+            static_assert(offsetof(GuiCache, member) - offsetof(GuiCache, mv4WorldCameraPosition) \
+                          == ((x360off) - 0x4AE0), #member " @" #x360off)
+        GC_FAR(mePlayerActiveRaceCarIndex,     0x4B00);
+        GC_FAR(mbInEventColouringGate,         0x4B4A);
+        GC_FAR(mbOnlineStartInProgress,        0x4B4C);
+        GC_FAR(mbCarUnlockPending,             0x4B75);
+        GC_FAR(mbCarUnlockDetermined,          0x4B76);
+        GC_FAR(maPresetRacesStorage,           0x4FB0);
+        GC_FAR(miNumPresetRaces,               0x5280);
+        GC_FAR(miEventStartsCount,             0x7760);
+        GC_FAR(maOnlineFinishPointsMask,       0x7770);
+        GC_FAR(miSatNavZoomLevel,              0x803C);
+        GC_FAR(maEventsStorage,                0x8040);
+        GC_FAR(mEventsCtorSentinel,            0x9E54);
+        GC_FAR(meGameModeType,                 0x9E58);
+        GC_FAR(mfEventTime,                    0x9F2C);
+        GC_FAR(mfTargetTime,                   0x9F30);
+        GC_FAR(miOpponentsInEvent,             0x9F44);
+        GC_FAR(mfDistanceInEvent,              0x9F48);
+        GC_FAR(mEventDestinationLandmarkIndex, 0x9F4C);
+        GC_FAR(mEventDestinationDistrict,      0x9F50);
+        GC_FAR(maCheckpointLandmarks,          0x9F52);
+        GC_FAR(miCheckpointReached,            0x9FB4);
+        GC_FAR(muCheckpointsInEvent,           0x9FB8);
+        GC_FAR(miTakedownsCurrent,             0x9FBC);
+        GC_FAR(miScoreCurrent,                 0x9FC4);
+        GC_FAR(mPursuedCarID,                  0x9FE0);
+        GC_FAR(mShutdownCarID,                 0x9FF0);
+        GC_FAR(meTrophyCarUnlockType,          0xA000);
+        GC_FAR(maRaceCarPositions,             0xA020);
+        GC_FAR(maRaceCarUsed,                  0xA0E4);
+        GC_FAR(maRaceCarConnecting,            0xA0EC);
+        GC_FAR(maRaceCarCrashing,              0xA104);
+        GC_FAR(maEventPositionOfRaceCar,       0xA130);
+        GC_FAR(maRaceCarFinished,              0xA138);
+        GC_FAR(maEventPositionValid,           0xA140);
+        GC_FAR(maScoringTrafficDataStorage,    0xA150);
+        GC_FAR(miScoringTrafficCount,          0xA3D0);
+        GC_FAR(miOnlineRoundIndex,             0xA7FC);
+        GC_FAR(maOnlineGameModeOptionsStorage, 0xA800);
+        GC_FAR(miOnlineHostGameState,          0xA9C8);
+        GC_FAR(maPerRacerData_AA30,            0xAA30);
+        GC_FAR(mabRoadRulesActive,             0xAC38);
+        GC_FAR(meActiveRoadRule,               0xAC3C);
+        GC_FAR(meRoadRuleScoreMode,            0xAC40);
+        GC_FAR(maRoadRuleActiveByType,         0xAC44);
+        GC_FAR(meRoadRuleShotOpponentARCI,     0xAC48);
+        GC_FAR(mbRoadRuleShotCapturedLineGate, 0xAC5A);
+        GC_FAR(maStuntToDisplay,               0xAC5C);
+        GC_FAR(muNumActivePlayers,             0xAC74);
+        GC_FAR(maPlayerInfo,                   0xAC80);
+        GC_FAR(maCurrentPlayerTeam,            0xB808);
+        GC_FAR(maOnlinePlayerDisconnected,     0xB84C);
+        GC_FAR(maOnlinePlayerInCarSelect,      0xB854);
+        GC_FAR(maOnlinePlayerEliminated,       0xB85C);
+        GC_FAR(maPreEventInfoStorage,          0x12F0C);
+        GC_FAR(miNumMessages,                  0x135D8);
+        GC_FAR(mProfileEventStateStorage,      0x135DC);
+        GC_FAR(miProfileEventsCount,           0x13B54);
+        GC_FAR(mfDistanceDriven,               0x13B94);
+        GC_FAR(maReplayReelForSlot,            0x13BA0);
+        GC_FAR(miReplaySlotsUsed,              0x13BB8);
+        GC_FAR(maReplayPlayersActive,          0x141E0);
+        GC_FAR(maReplayARCRendered,            0x143E0);
+        GC_FAR(mbReplayHasBeenSorted,          0x143E8);
+        #undef GC_FAR
+    }
 
     // Boundary record returned by the two inlined event-display helpers above. Only the two
     // fields the sat-nav renderer reads are named (X360-proven offsets); the rest of the record
