@@ -98,16 +98,9 @@ namespace
     {
     }
 
-    // FLAG PC-platform leaf: the save/load system's boot-up task (device/container
-    // checks; X360 call in SetCollisionWorldValid @0x82517F50) is un-reconstructed;
-    // the PC leaf completes the task synchronously with SUCCESS so the boot machine
-    // (BootupResult -> collision-world VALIDATE -> report) runs to completion.
-    void SaveLoadSystem_Bootup(CgsGui::SaveLoadSystem& /*lrSystem*/,
-                               CgsGui::SaveLoadTaskResultHandler& lrHandler,
-                               const CgsGui::SaveLoadMetadata& /*lrMetadata*/, bool /*lbAutoLoad*/)
-    {
-        lrHandler.HandleSaveLoadTaskResult(CgsGui::E_SAVELOADTASKRESULT_SUCCESS);
-    }
+    // (CgsGui::SaveLoadSystem::Bootup -- the profile boot-up task -- is now reconstructed in
+    // CgsSaveLoadPS3.cpp and shows the SAVELOAD_AUTOSAVE_WARNING prompt; SetCollisionWorldValid
+    // below calls it directly, so the prior fabricated auto-complete leaf is retired.)
 
     // FLAG PC-platform leaf: the 3-arg save task (X360 sub_8285F268) is un-reconstructed
     // (no PC storage backend); synchronous SUCCESS keeps the task machine consistent.
@@ -740,7 +733,13 @@ void ProfileManager::SetCollisionWorldValid(bool lbValid)
     else if (meCollisionWorldState == E_COLLISIONWORLDSTATE_INVALIDATING)
     {
         meCollisionWorldState = E_COLLISIONWORLDSTATE_INVALID;
-        SaveLoadSystem_Bootup(mSaveLoadSystem, *this, mMetadata, mbAutoLoad);
+        // X360 0x82517F98 tail-call: CgsGui::SaveLoadSystem::Bootup(&mSaveLoadSystem, this,
+        // &mMetadata, mbAutoLoad). This shows the SAVELOAD_AUTOSAVE_WARNING prompt and BLOCKS the
+        // boot-up task until the user answers CONTINUE (SaveLoadSystem::BootupStart then reports the
+        // result, which lands in ProfileManager::BootupResult). The prior fabricated
+        // SaveLoadSystem_Bootup leaf reported SUCCESS synchronously right here, so the prompt never
+        // showed and BF_PROFILE flashed straight through into the BF_COMPLOAD intro video.
+        mSaveLoadSystem.Bootup(this, &mMetadata, mbAutoLoad);
     }
 }
 
