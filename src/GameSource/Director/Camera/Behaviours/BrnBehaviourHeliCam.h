@@ -3,6 +3,9 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"        // Utils::VersionNumber (the +0x7C tag)
+#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters (mShakeParams @+0x08)
+#include "GameSource/Director/Camera/Utils/BrnLooker.h"          // Utils::Looker::Parameters (mLookerParams @+0x18)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h
@@ -42,12 +45,30 @@ public:
 
     // The heli-cam parameter block: a type tag in its leading word plus behaviour-specific
     // data. GetType returns the tag SetParameters asserts on.
+    //
+    // ------------------------------------------------------------------------
+    // Full field-walk layout, pinned from the three Parameters::Serialise<S> instances
+    // (Serialise<DebugMenuSerialiser> @0x8224C110, Serialise<TextFileReadSerialiser> @0x82231D30,
+    // Serialise<TextFileWriteSerialiser> @0x8224DE90). The serialisers reference the members at
+    // these X360 store/load displacements:
+    //   +0x08 mShakeParams   (CameraShake::Parameters, 0x10 bytes -> ends +0x18)  "Shake Parameters"
+    //   +0x18 mLookerParams  (Looker::Parameters, 0x64 bytes -> ends +0x7C)       "Looker Parameters"
+    //   +0x7C muVersion      (VersionNumber; stamped = 2)         "Version Number (dont change)"
+    //   +0x80 mfFOV          (Process<float>(a1+128); SetRange 1..150; label @0x820051C0 unrecovered)
+    //   +0x84 mfHeight              "Height (KM)"              (SetStep 0.01)
+    //   +0x88 mfInitialDistanceX    "Initial Distance X (KM)"  (SetStep 0.01)
+    //   +0x8C mfInitialDistanceZ    "Initial Distance Z (KM)"  (SetStep 0.01)
+    //   +0x90 mfVelocityMPS         "Velocity MPS"             (SetStep 0.01)
+    // The mShakeParams/mLookerParams/muVersion nested types are reused BY NAME from their homes
+    // (CameraShake in BehaviourRig.h, Looker in BrnLooker.h, VersionNumber in CameraUtils.h) so the
+    // 0x08/0x18/0x7C offsets follow from their real sizes, not hand-inserted padding.
+    // ------------------------------------------------------------------------
     class Parameters
     {
     public:
         // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (TextFile{Read,Write}Serialiser); the per-instance body is a separate TU.
-        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        // serialiser S (DebugMenuSerialiser / TextFile{Read,Write}Serialiser); the body + its three
+        // explicit instantiations live in BrnBehaviourHeliCamSerialise.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         EBehaviourTypeHeliCam GetType() const
@@ -55,8 +76,16 @@ public:
             return static_cast<EBehaviourTypeHeliCam>(meType);
         }
 
-        s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
-        s32 miParamWord1;  // +0x04  first behaviour-specific word
+        s32                             meType;             // +0x00  the behaviour type tag (eBehaviour*)
+        s32                             miParamWord1;       // +0x04  first behaviour-specific word
+        Utils::CameraShake::Parameters  mShakeParams;       // +0x08  "Shake Parameters"  (v1 + v2)
+        Utils::Looker::Parameters       mLookerParams;      // +0x18  "Looker Parameters" (v2 only)
+        Utils::VersionNumber            muVersion;          // +0x7C  version tag (code version = 2)
+        f32                             mfFOV;              // +0x80  <unk_820051C0> field (range 1..150)
+        f32                             mfHeight;           // +0x84  "Height (KM)"
+        f32                             mfInitialDistanceX; // +0x88  "Initial Distance X (KM)"
+        f32                             mfInitialDistanceZ; // +0x8C  "Initial Distance Z (KM)"
+        f32                             mfVelocityMPS;      // +0x90  "Velocity MPS"
     };
 
     // Adopt a heli-cam parameter block: assert it carries the heli-cam type tag, then cache its

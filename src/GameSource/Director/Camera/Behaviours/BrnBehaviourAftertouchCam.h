@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
+#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters (embedded "Shake Params" sub-block)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h
@@ -43,12 +44,22 @@ public:
 
     // The aftertouch-cam parameter block: a type tag in its leading word plus behaviour-specific
     // data. GetType returns the tag SetParameters asserts on.
+    //
+    // Layout pinned from the Parameters::Serialise<S> field-walk asm (the three visitors at
+    // 0x8224C530 / 0x8224E458 / 0x822321B0): each Process<float>/fscanf/fprintf displacement off
+    // the block pointer names an f32 slot; the leading `CameraShake::Parameters::Serialise(a1+8, a2)`
+    // recursion names an embedded CameraShake::Parameters at +0x08 (the "Shake Params" sub-section).
+    // meType(+0x00)/miParamWord1(+0x04) are the pre-existing behaviour header words SetParameters
+    // reads. All three visitors walk the SAME field sequence in the SAME order, so the offsets below
+    // are authoritative; the +0x18..+0x2C span holds aftertouch-cam members none of the three
+    // visitors serialise (reserved to place the walked floats at their attested offsets).
     class Parameters
     {
     public:
         // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (TextFile{Read,Write}Serialiser); the per-instance body is a separate TU.
-        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        // serialiser S (DebugMenu / TextFile{Read,Write}Serialiser); the per-instance body lives in
+        // BrnBehaviourAftertouchCamParameters.cpp. Declared so the serialiser's Serialise<Parameters>
+        // can drive it by name.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         EBehaviourTypeAftertouchCam GetType() const
@@ -58,6 +69,26 @@ public:
 
         s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
         s32 miParamWord1;  // +0x04  first behaviour-specific word
+
+        // +0x08  embedded shake post-process tunings; walked first as the "Shake Params"
+        //   sub-section (CameraShake::Parameters::Serialise(a1+8, a2) in every visitor).
+        Utils::CameraShake::Parameters mShakeParams;   // +0x08 .. +0x18 (four f32)
+
+        // +0x18 .. +0x2C  aftertouch-cam members that none of the three Serialise<S> instances
+        //   walk; reserved so the serialised floats below sit at their asm-attested offsets.
+        u8  maReserved18[0x2C - 0x18];
+
+        f32 mfSlowDistance;                 // +0x2C  "Slow Distance"
+        f32 mfSlowHeight;                   // +0x30  "Slow Height"
+        f32 mfFastDistance;                 // +0x34  "Fast Distance"
+        f32 mfFastHeight;                   // +0x38  "Fast Height"
+        f32 mfPitch;                        // +0x3C  "Pitch"
+        f32 mfField40;                      // +0x40  <unk_820051C0> (field label unrecovered; see cpp)
+        f32 mfBlendFactorBlendFactor;       // +0x44  "Blend Factor Blend Factor"
+        f32 mfMinimumBlendFactor;           // +0x48  "Minimum Blend Factor"
+        f32 mfMaximumBlendFactor;           // +0x4C  "Maximum Blend Factor"
+        f32 mfHeightDistanceBlendFactor;    // +0x50  "Height Distance Blend Factor"
+        f32 mfHeightDistanceVelocityRange;  // +0x54  "Height Distance Velocity Range"
     };
 
     // FLAG: the +0x20 sub-object the GetCo* accessor exposes. The truncated dossier name

@@ -50,6 +50,10 @@ namespace BrnDirector
 namespace Camera
 {
 
+// The versioned-block tag (definition in CameraUtils.h). Forward-declared so the version leaf
+// overload below can take it by reference; in the debug-menu pass that overload is a no-op.
+namespace Utils { struct VersionNumber; }
+
 class DebugMenuSerialiser
 {
 public:
@@ -85,9 +89,26 @@ public:
     void Serialise(const char* lpcName, u32& lrValue);
     void Serialise(const char* lpcName, bool& lrValue);
 
+    // The block's leading version tag. In the debug-menu pass this is a NO-OP: a version tag is not
+    // exposed as an editable menu variable (the X360 Serialise<DebugMenuSerialiser> instances emit no
+    // Process/SetStep for it -- e.g. Looker::Parameters @0x822156E0 stores the tag then walks straight
+    // to the first float). Declared so the versioned Parameters visitors compile uniformly across all
+    // three serialisers. Body is a separate TU.
+    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);
+
     // The vec3 leaf visitor -- DEFINED in BrnDebugMenuSerialiser.cpp @0x82219A50. Registers each
     // component (x/y/z) as a debug-menu float (Process<float>) with a 0.01 adjust step (SetStep).
     void Serialise(const char* lpcName, Vector3& lrValue);
+
+    // The nested-block visitor template (X360: `void Serialise<T>(const char*, T&)`) -- the
+    // debug-menu counterpart of the text serialisers' nested-block overload. Its shared body
+    // (attested inlined into every nesting Parameters walker, e.g. CameraImpactEffect::Parameters::
+    // Serialise<DebugMenuSerialiser> @0x822327B0) pushes the section name onto the path stack
+    // (AddToPath), recurses into T's own Serialise (walking T's fields one level deeper), then pops
+    // the name back off. Declaration-only in this slice (the body + its explicit instantiations are
+    // the DebugMenuSerialiser's own TU); declared here so the nesting Parameters::Serialise<Debug
+    // MenuSerialiser> walkers can drive a sub-block section by name.
+    template<class T> void Serialise(const char* lpcName, T& lrParams);
 
 private:
     // Path-stack capacity (Serialisation.h:448).

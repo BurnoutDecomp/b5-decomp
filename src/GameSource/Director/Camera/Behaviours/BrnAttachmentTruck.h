@@ -45,6 +45,29 @@ public:
     //   stvx128 v0, r0, ret(r3) ; store into the sret return slot
     rw::math::vpu::Vector3 GetPosition() const;
 
+    // ------------------------------------------------------------------------
+    // The attachment-truck tuning block: two f32 tunables the camera-tunings bank saves/loads
+    // to text and the in-game debug menu edits. Field offsets pinned from the Serialise<S>
+    // visitors' asm (the Process<float> / lfs displacements off the block pointer):
+    //   +0x00 mfInitialOffsetDist    "Initial offset dist."   (lfs 0(r30) / Process<float>(...,a1))
+    //   +0x04 mfConvergenceTimeSecs  "Convergence Time Secs"  (lfs 4(r30) / Process<float>(...,a1+4))
+    // Only these two slots are attested by this TU's two Serialise instances; any further truck
+    // tunables land with the gyro-cam rig TU. HOME is this class (the ledger nests Parameters
+    // under AttachmentTruck).
+    // ------------------------------------------------------------------------
+    class Parameters
+    {
+    public:
+        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's two f32 fields into the
+        // camera-tunings serialiser S (DebugMenuSerialiser / TextFileWriteSerialiser). The
+        // per-instance bodies live in BrnAttachmentTruck.cpp (ONE templated body + one explicit
+        // instantiation per S the X360 emits). Declared so the serialiser drives it by name.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
+        f32 mfInitialOffsetDist;    // +0x00  "Initial offset dist."
+        f32 mfConvergenceTimeSecs;  // +0x04  "Convergence Time Secs"
+    };
+
 private:
 
     // FLAG: only the members GetPosition reads are modelled at their asm-attested offsets; the

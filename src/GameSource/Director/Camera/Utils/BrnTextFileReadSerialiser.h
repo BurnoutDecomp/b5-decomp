@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_UTILS_BRN_TEXT_FILE_READ_SERIALISER_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector3 (the vec3 leaf overload)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (the label buffer)
 
 #include <cstdio>   // FILE (the serialiser reads from a text file handle held by the caller)
@@ -24,6 +25,10 @@ namespace BrnDirector
 {
 namespace Camera
 {
+
+// The versioned-block tag (definition in CameraUtils.h). Forward-declared here so the version
+// leaf overload below can take it by reference without pulling the camera-utils header in.
+namespace Utils { struct VersionNumber; }
 
 // The text-file read serialiser. The X360 object built on the stack lays out exactly like
 // CgsDev::StrStream (vtable@0, mePrintMode@4, mpcBuffer@8, miBufferSize@0xC, then a 0x40-byte
@@ -54,6 +59,27 @@ public:
     void Serialise(const char* lpcName, f32& lrValue);
     void Serialise(const char* lpcName, s32& lrValue);
     void Serialise(const char* lpcName, u32& lrValue);
+
+    // Read a named bool field back: consume one "<label> : <value>\n" ("%s : %d\n") line and store
+    // (value != 0). Always inlined into the owning Parameters Serialise<TextFileReadSerialiser>
+    // visitor (e.g. the camera-rig "Widescreen Only" field @0x82232D68), so it carries no standalone
+    // ledger symbol; declared here so those visitors drive it by name. Body in the .cpp.
+    void Serialise(const char* lpcName, bool& lrValue);
+
+    // Read the block's leading version tag ("%s : %d\n") into the u32 inside VersionNumber -- the
+    // read counterpart of the write serialiser's VersionNumber overload. Inlined into each versioned
+    // Parameters visitor (e.g. Looker::Parameters @0x822030E8), where the read-back tag then drives
+    // the code/data version-mismatch assert. Kept a DISTINCT overload from the plain u32 form so the
+    // DebugMenuSerialiser counterpart can no-op it. Body is a separate TU.
+    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);
+
+    // Read a named Vector3 field back (member-visitor form). The X360 compiler inlines this member
+    // straight into the owning Parameters Serialise<TextFileReadSerialiser> visitor as a direct call
+    // to the vec3 dispatcher above -- Serialise(FILE**, const char*, f32*) @0x82219AE0, the SAME
+    // function, modelled there with the file handle passed explicitly. Declared here in member form
+    // so the camera-rig / behaviour Parameters visitors (e.g. Utils::CameraRig::Params @0x82232CCC)
+    // drive the vec3 fields uniformly by name; body is a separate TU.
+    void Serialise(const char* lpcName, Vector3& lrValue);
 
     // The nested-block reader-visitor template (X360: `FILE* Serialise<T>(const char*, T&)`). One
     // shared body per instance: consume+discard the field's section-header label line, then recurse
