@@ -13,6 +13,8 @@ namespace BrnGui
 {
     struct CompletedGame : public CgsGui::State
     {
+        CompletedGame();                                   // @0x82500828
+
         virtual void OnEnter();
         virtual void OnLeave();
         virtual void Update();
