@@ -6,8 +6,8 @@
 //
 //   CWMVFARoutines::calcMean4x4     @0x82A46610   (bodied here)
 //   CWMVFARoutines::calcMean4x4x4   @0x82A46710   (bodied here)
-//   CWMVFARoutines::calcMean8x8B    @0x82A46AE8   (declared-only; body not yet verified)
-//   CWMVFARoutines::calcGradient8x1B@0x82A47050   (declared-only; body not yet verified)
+//   CWMVFARoutines::calcMean8x8B    @0x82A46AE8   (bodied here)
+//   CWMVFARoutines::calcGradient8x1B@0x82A47050   (bodied here)
 //
 // Every routine is a non-static member whose implicit `this` (a1/r3) is never touched --
 // they are stateless block statistics over caller-supplied sample buffers passed as raw
@@ -35,6 +35,12 @@ public:
                          int liRowA4, int liRowA5, int liRowA6,
                          int liColOffset, int liColStride);
 };
+
+// Human form of the asm's branchless abs (srawi/xor/subf) used by the SAD accumulators.
+static inline int liAbs32(int liValue)
+{
+    return liValue < 0 ? -liValue : liValue;
+}
 
 // -------------------------------------------------------------------------------------
 // CWMVFARoutines::calcMean4x4 @0x82A46610.
@@ -96,7 +102,85 @@ int CWMVFARoutines::calcMean4x4x4(u32* lpMeanOut, int liSampleBase, int liColumn
     return 4 * liC3Row3;
 }
 
-// calcMean8x8B @0x82A46AE8 and calcGradient8x1B @0x82A47050 are NOT bodied here: their
-// reconstructions did not pass verification this wave (calcMean8x8B dropped a column and
-// mis-modelled the row cadence; calcGradient8x1B fabricated a cursor advance). They remain
-// declared above so callers resolve, and their bodies land once re-verified.
+// -------------------------------------------------------------------------------------
+// CWMVFARoutines::calcMean8x8B @0x82A46AE8.
+// Mean of an 8x8 block of byte samples: sum 64 values, >>6, store the low byte to
+// *lpMeanOut. The block base is liSampleBase+liColumn; each of the 8 rows steps by
+// liRowStride and reads 8 consecutive columns. The asm walks four rows per do-while pass
+// (two passes) but the reduction is order-independent. Returns the column-2 cursor
+// advanced past the block (liSampleBase+liColumn+2 + 8*liRowStride) -- the residual r3,
+// which the callers discard.
+// -------------------------------------------------------------------------------------
+unsigned char* CWMVFARoutines::calcMean8x8B(u8* lpMeanOut, int liSampleBase, int liColumn, int liRowStride)
+{
+    u8* lpBlock = reinterpret_cast<u8*>(liSampleBase + liColumn);
+
+    u32 luSum = 0;
+    for (int liRow = 0; liRow < 8; ++liRow)
+    {
+        const u8* lpRow = lpBlock + liRow * liRowStride;
+        luSum += lpRow[0] + lpRow[1] + lpRow[2] + lpRow[3]
+               + lpRow[4] + lpRow[5] + lpRow[6] + lpRow[7];
+    }
+
+    *lpMeanOut = static_cast<u8>(luSum >> 6);
+    return lpBlock + 2 + 8 * liRowStride;
+}
+
+// -------------------------------------------------------------------------------------
+// CWMVFARoutines::calcGradient8x1B @0x82A47050.
+// Walks an 8-column strip and, at each column, sums 4-connected byte gradients: the centre
+// sample minus its up/down/left/right neighbours, where up/down are +/-liColStride and
+// left/right are +/-1. Output B (lpaGradientB[col], cursor advanced each column) sums the
+// gradient over all three rows liRowA4/liRowA5/liRowA6; output A (*lpaGradientA -- the asm
+// never advances this cursor, so it is overwritten each column) sums it over liRowA4 only.
+// Returns the last column's |liRowA4 centre - left neighbour| residual, which callers
+// discard.
+// -------------------------------------------------------------------------------------
+int CWMVFARoutines::calcGradient8x1B(u32* lpaGradientA, u32* lpaGradientB,
+                                     int liRowA4, int liRowA5, int liRowA6,
+                                     int liColOffset, int liColStride)
+{
+    const u8* lpRowA4 = reinterpret_cast<const u8*>(liRowA4 + liColOffset);
+    const u8* lpRowA6 = reinterpret_cast<const u8*>(liRowA6 + liColOffset);
+    const u8* lpRowA5 = reinterpret_cast<const u8*>(liRowA5 + liColOffset);
+    const int liUp   = -liColStride;   // v11 - 1
+    const int liDown =  liColStride;   // v12 + 1
+
+    int liReturn = 0;
+    for (int liCol = 8; liCol != 0; --liCol)
+    {
+        const int liCentreA5 = *lpRowA5;
+        const int liCentreA6 = *lpRowA6;
+        const int liCentreA4 = *lpRowA4;
+
+        *lpaGradientB = liAbs32(liCentreA6 - lpRowA6[liUp])
+                      + liAbs32(liCentreA5 - lpRowA5[liUp])
+                      + liAbs32(liCentreA6 - lpRowA6[liDown])
+                      + liAbs32(liCentreA5 - lpRowA5[liDown])
+                      + liAbs32(liCentreA6 - lpRowA6[1])
+                      + liAbs32(liCentreA5 - lpRowA5[1])
+                      + liAbs32(liCentreA4 - lpRowA4[liUp])
+                      + liAbs32(liCentreA4 - lpRowA4[1])
+                      + liAbs32(liCentreA6 - lpRowA6[-1])
+                      + liAbs32(liCentreA5 - lpRowA5[-1])
+                      + liAbs32(liCentreA4 - lpRowA4[liDown])
+                      + liAbs32(liCentreA4 - lpRowA4[-1]);
+
+        ++lpRowA5;
+        ++lpRowA6;
+        ++lpaGradientB;
+
+        const int liA4Up    = liCentreA4 - lpRowA4[liUp];
+        const int liA4Right = liCentreA4 - lpRowA4[1];
+        const int liA4Left  = liCentreA4 - lpRowA4[-1];
+        const int liA4Down  = liCentreA4 - lpRowA4[liDown];
+        ++lpRowA4;
+
+        *lpaGradientA = liAbs32(liA4Up) + liAbs32(liA4Right)
+                      + liAbs32(liA4Down) + liAbs32(liA4Left);
+        liReturn = liA4Left ^ (liA4Left >> 31);
+    }
+
+    return liReturn;
+}

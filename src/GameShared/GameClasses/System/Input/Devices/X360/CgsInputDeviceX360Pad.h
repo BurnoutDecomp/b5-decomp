@@ -136,6 +136,10 @@ namespace CgsInput
         // Never-called layout pin (defined in the header below) needs member-offset access.
         friend void _DeviceX360Pad_AssertLayout();
 
+        // ManagerX360::UnbindFromPort inlines two writes into this pad (mbConnected = 0 @+0x10,
+        // mePort = -1 @+0xF0); grant it access instead of forcing a raw-offset write.
+        friend class ManagerX360;
+
         // ---- head ----
         u8  mau8Pad00[4];         // +0x00 .. 0x03  (bind/player head -- not touched by this TU's bodies)
         s32 meType;               // +0x04          device type (Construct = 0; checked == 2 for wheel)

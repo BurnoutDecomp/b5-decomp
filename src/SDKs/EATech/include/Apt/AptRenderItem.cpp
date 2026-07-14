@@ -290,6 +290,12 @@ AptRenderItem::~AptRenderItem()
     --sItemsAllocated;
 }
 
+// `vector deleting destructor' @0x82AEF2B0 -- DROPPED (compiler-synthesized thunk,
+// like every sibling AptRenderItem* class). The X360 body is exactly
+//   ~AptRenderItem(); if (flag & 1) operator delete(this); return this;
+// which MSVC re-derives from the committed virtual ~AptRenderItem() above plus the
+// sized AptRenderItem::operator delete. No separate hand-written logical source.
+
 // ---- transforms -----------------------------------------------------------
 const AptMatrix* AptRenderItem::GetPositionMatrixConst() const
 {

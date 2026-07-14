@@ -22,10 +22,9 @@
 //   * miNumBoundPads @+0x70: bumped on bind (BindToPort ++*(this+0x70)), decremented on
 //     unbind (UnbindFromPort --*(this+0x70)).
 //
-// WAVE54 NOTE: only BindToPort (@0x828E7718) is homed in this wave. UpdateConnectedDevices
-// and UnbindFromPort are declared-only here (their proposed bodies were rejected by the
-// verifier and land in a later wave); UnbindFromPort's inlined pad writes will need a
-// `friend class ManagerX360;` in DeviceX360Pad at that time.
+// All three methods are homed in CgsInputManagerX360.cpp. UnbindFromPort's inlined pad writes
+// reach DeviceX360Pad's private mbConnected/mePort through the `friend class ManagerX360;`
+// grant added to CgsInputDeviceX360Pad.h.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputDeviceX360Pad.h" // CgsInput::DeviceX360Pad (BindToPort)
@@ -61,7 +60,6 @@ namespace CgsInput
         // X360 0x828DC480. Poll each of the four XInput slots: on a successful XInputGetState,
         // resolve/refresh the device sub-type via XInputGetCapabilities and (re)latch the raw
         // state; on failure clear the slot. Updates each slot record's type + connected flag.
-        // (Declared-only in wave54 -- body lands in a later wave.)
         void UpdateConnectedDevices();
 
         // X360 0x828E7718. Bind port lePort to physical pad lpPad. Returns true when the slot
@@ -71,7 +69,6 @@ namespace CgsInput
 
         // X360 0x828E7808. Unbind port lePort from lpPad: clear the pad's connected flag and
         // port (two inlined pad writes), clear the bound-pad slot, and decrement the count.
-        // (Declared-only in wave54 -- body lands in a later wave.)
         void UnbindFromPort(DeviceX360Pad* lpPad, u32 lePort);
 
     private:

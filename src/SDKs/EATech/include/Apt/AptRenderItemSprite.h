@@ -35,4 +35,14 @@ struct AptRenderItemSprite : public AptRenderItem
     virtual void PushRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;  // @0x7F249C
     virtual void PopRenderData(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;   // @0x7ECAD0
     virtual void PushRenderDataAbsolute(AptRenderingContext* pCtx) const;                                  // @0x7F2958
+
+    // dtor (X360 vector deleting destructor @0x82AEC8E0): mInstanceName destructs
+    // (its refcount drop) + the base ~AptRenderItem runs; the sized pool delete frees.
+    virtual ~AptRenderItemSprite();
+
+    // ---- render-properties string (the instance-name render-data key) --------
+    // The sprite's "render properties string" IS mInstanceName; Set assigns through
+    // EAStringC::operator= (refcount-shared copy).
+    EAStringC* GetRenderPropertiesString();                                        // @0x82AD5030
+    EAStringC& SetRenderPropertiesString(const EAStringC& rString);                // @0x82AE5A80
 };

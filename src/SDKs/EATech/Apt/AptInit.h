@@ -78,3 +78,10 @@ void* AptRenderInitialize(int a1);
 // `a1` is the AptUpdateParams block (null => the built-in defaults). Returns the
 // EA::Thread::Mutex::Unlock result (X360 r3).
 int AptUpdateInitialize(unsigned int* a1, char a2);
+
+// AptUpdateTarget @0x82B0DE80 -- make `pTarget` the current Apt context (the
+// gpAptTarget slot + the per-thread TLS mirror GetTarget() reads), run the per-
+// frame AptUpdate(a2,a3,a4) against it, then restore the previous context. Returns
+// the EA::Thread::ThreadLocalStorage::SetValue result (X360 r3). Body in AptInit.cpp.
+class AptTarget;
+int AptUpdateTarget(AptTarget* pTarget, int a2, int a3, int a4);
