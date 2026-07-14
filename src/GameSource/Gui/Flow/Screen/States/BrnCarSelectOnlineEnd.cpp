@@ -45,6 +45,27 @@ namespace
     const s32 KI_ONLINE_HOST_GAME = 1;
 }
 
+// ---- CarSelectOnlineEnd (ctor) @ 0x825089C8 -----------------------------------------
+// Compiler-emitted construction of the online-car-select-end flow state and its embedded
+// GUI sub-objects. The X360 writes the state's own vtable (+0x000, off_8207553C), then a
+// long run of embedded sub-object vtables across the object: the countdown clock
+// (this+0x40 = off_82073058, mOnlineCountdown), the lobby player-list (this+0x1F8 =
+// off_820746E8, mOnlinePlayerList) with its per-player TextField / animator widget slots
+// (the repeated off_82072F8C / off_820730FC stores), and the host-choosing clip
+// (this+0x1A20 = off_82072F68, mHostChoosingAnimator). Those per-sub-object vtable stores
+// belong to widget types not individually recoverable from this ctor; the recovered,
+// modelled effect is "construct the CgsGui::State base and the three embedded components",
+// which the member initialisation here reproduces (the scalar members mpGuiCache /
+// meInternalState / mpHostStatusData / mLastHostCarID take no store in the ctor asm).
+// Reconstructed from the X360 asm.
+CarSelectOnlineEnd::CarSelectOnlineEnd()
+    : CgsGui::State()          // state vtable + base bookkeeping (X360 +0x000)
+    , mOnlineCountdown()       // embedded countdown ctor   (X360 this+0x40)
+    , mOnlinePlayerList()      // embedded player-list ctor  (X360 this+0x1F8)
+    , mHostChoosingAnimator()  // embedded host-choosing clip (X360 this+0x1A20)
+{
+}
+
 // ---- UpdateLoadResources @ 0x824967F0 -----------------------------------------------
 bool CarSelectOnlineEnd::UpdateLoadResources()
 {

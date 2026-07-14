@@ -44,6 +44,10 @@ namespace BrnGui
             E_INTERNALSTATE_COUNT         = 4,
         };
 
+        // @ 0x825089C8 - compiler-emitted ctor: constructs the CgsGui::State base and the three
+        //   embedded components (countdown / player-list / host-choosing clip).
+        CarSelectOnlineEnd();
+
         virtual void OnEnter();
         virtual void OnLeave();
         virtual void Update();
