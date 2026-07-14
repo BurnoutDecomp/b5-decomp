@@ -13,12 +13,14 @@
 // SetEntityPosition / SetVolumeInstanceTransform(VolumeInstanceId) / RemoveAllEntities, merged
 // here from the former local minimal slice -- now lives in CgsSceneManagerIO_SceneUpdate.h.
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_Event.h"       // CgsSceneManager::SceneManagerIO::Event (single canonical definition)
 
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
 {
-    struct Event {};
+    // struct Event lives in CgsSceneManagerIO_Event.h (hoisted to a single definition to avoid the
+    // C2011 redefinition once SceneUpdate.h began co-including EventAddForCollision.h).
 
     // Output event: the nearest hit of a line test.
     //

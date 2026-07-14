@@ -47,6 +47,16 @@ namespace SceneManagerIO
                                                        s64 /*lUnused3*/,
                                                        const void* lpIntersection,
                                                        bool lbHasIntersection);
+
+        // @ X360 0x828C4A08 (SizeBytes == 32768). Reserve a variable-length RESULT event sized
+        // for a 16-byte header + liNumIntersections 64-byte intersection records, write the two
+        // header words (query id, intersection count) and return a pointer to the record area for
+        // the caller (SceneManagerModule::ProcessLineTestFine) to fill the records in place. Uses
+        // event-type id 1 (the sibling AddTriangleCollisionLineTestNearestResult uses id 2). NAME
+        // is inferred from the caller (ProcessLineTestFine) + the type-1 tag + the 64-byte record
+        // stride; the X360 IDA symbol is truncated ("...OutSceneQueryResultsQueu"). Returns the
+        // record-area pointer (void*), matching the X360 `return Event + 4` (past the 16-byte header).
+        void* AllocateLineTestFineResult(s32 liQueryId, s32 liNumIntersections);
     };
 
     template <s32 SizeBytes>
@@ -85,6 +95,24 @@ namespace SceneManagerIO
         // Typed convenience overload: liSize == sizeof(OutEventLineTestNearestResult),
         // event-type id == 2.
         return this->template AddEvent<OutEventLineTestNearestResult>(&lEvent, 2);
+    }
+
+    // -------- AllocateLineTestFineResult  @ X360 0x828C4A08 --------
+    // Thin wrapper over the base VariableEventQueue<SizeBytes,16>::AllocateEvent:
+    //   Event = AllocateEvent(1, (liNumIntersections << 6) + 16);   // 16B header + N*64B records
+    //   Event[0] = liQueryId;  Event[1] = liNumIntersections;       // *Event = a2 ; Event[1] = a3
+    //   return Event + 4;                                           // record area, past 16B header
+    // The X360 stores the two header words through a _DWORD view of the returned payload and
+    // returns the payload advanced by 4 words (16 bytes). Modelled with the same s32 header view.
+    template <s32 SizeBytes>
+    void* OutSceneQueryResultsQueue<SizeBytes>::AllocateLineTestFineResult(
+        s32 liQueryId, s32 liNumIntersections)
+    {
+        const s32 liSize = (liNumIntersections << 6) + 16; // 16-byte header + N * 64-byte records
+        s32* lpPayload = reinterpret_cast<s32*>(this->AllocateEvent(1, liSize));
+        lpPayload[0] = liQueryId;          // *Event = a2
+        lpPayload[1] = liNumIntersections; // Event[1] = a3
+        return lpPayload + 4;              // Event + 4 (dwords) == the 64-byte-record area
     }
 }
 }
