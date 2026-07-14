@@ -215,6 +215,25 @@ namespace CgsFileSystem
         return static_cast<u32>(liTotalAvailable);
     }
 
+    // GetCurrentFilePriority @ 0x828E0F70 — pick the streaming priority for the next device read: at
+    // end-of-file (nothing more to fetch) run at normal priority; otherwise run at normal priority
+    // while the buffer is at least a quarter full, and escalate to the high priority once it drains
+    // below 25% so a starving consumer catches up. (ARTIST: mbIsEndOfFile byte-test @0x588, then the
+    // signed miBufferSize @0x130 as the denominator and the zero-extended GetAmountOfDataInBuffer
+    // result as the numerator, compared against 0.25.)
+    s32 StreamDeviceDiskRead::GetCurrentFilePriority()
+    {
+        if (mbIsEndOfFile)
+            return miNormalPriority;
+
+        f64 lfCapacity = static_cast<f64>(miBufferSize);
+        f64 lfInBuffer = static_cast<f64>(GetAmountOfDataInBuffer());
+        if (lfInBuffer / lfCapacity >= 0.25)
+            return miNormalPriority;
+
+        return miHighPriority;
+    }
+
     // ResetStreamBlocks @ 0x828E8D90 — clear the ring back to empty and re-seat each block's fixed
     // buffer slot (miStreamPos = index * blockSize). Only valid when nothing is in flight.
     void StreamDeviceDiskRead::ResetStreamBlocks()

@@ -33,6 +33,7 @@
 // (0x2A23B9 / 0x14C86 / 0x2C23A5) and the "is pixel program" flag (1) come straight from the
 // immediates -- none are fabricated.
 
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"
 
@@ -374,5 +375,34 @@ template s8 ImRenderer<BasicColouredTexturedVertex>::AddProgram(
 template bool ImRenderer<BasicColouredTexturedVertex>::SetProgram(s8);
 template void ImRenderer<BasicColouredTexturedVertex>::EndRendering();
 template void* ImRenderer<BasicColouredTexturedVertex>::SetTransform(const void*);
+
+// ---------------------------------------------------------------------------------------------------
+// Im3d::PushMask  @ 0x827DCF78
+// Open one stencil-mask region on the textured immediate-mode 3D renderer. On the FIRST mask of the
+// stack only (mu32NumMasks == 0), rebind the next program slot (mi8CurrentProgram + 1) and, if that
+// bind actually changed device state, reinstall the current world transform (the base renderer's
+// mauTransform store at this+0x80). Then save this mask's shader constants, bump the live mask count,
+// and push the mask pixel-shader state -- returning that call's result (X360 r3 tail-passthrough).
+//
+// The X360 forwards the three mask params to SaveMaskShaderConstants in the order (a4, a2, a3); that
+// reorder is preserved. SaveMaskShaderConstants / SetMaskPixelShaderState are separate unhomed ledger
+// keys (declared on Im3d, bodied by their own TUs) -- reached here BY NAME.
+// ---------------------------------------------------------------------------------------------------
+void* Im3d::PushMask(const void* lpMaskParam0, const void* lpMaskParam1, const void* lpMaskParam2)
+{
+    CGS_ASSERT(mu32NumMasks < KU_MAX_MASK_COUNT, "mu32NumMasks < V_IM3D_MAX_MASK_COUNT");
+
+    // First mask only: (re)bind the next program slot and, when that bind changed the device state,
+    // install the world transform once. (X360: `&this->mauTransform` == this+0x80, copied onto
+    // itself and written into the slot's shader-state block by SetTransform.)
+    if (mu32NumMasks == 0 && SetProgram(static_cast<s8>(mi8CurrentProgram + 1)))
+    {
+        SetTransform(mauTransform);
+    }
+
+    SaveMaskShaderConstants(lpMaskParam2, lpMaskParam0, lpMaskParam1);
+    ++mu32NumMasks;
+    return SetMaskPixelShaderState();
+}
 
 } // namespace CgsGraphics

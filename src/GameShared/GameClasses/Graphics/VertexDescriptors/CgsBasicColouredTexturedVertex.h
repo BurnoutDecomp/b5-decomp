@@ -1,6 +1,10 @@
 #pragma once
 
 #include "types.hpp"
+// RGBA8 already lives in the 2D coloured+textured vertex home; reuse it rather than fork (so this
+// header can coexist with CgsBasicColouredVertex.h, which reuses the same RGBA8 -- e.g. when both
+// the untextured and textured 3D vertices are visible via CgsIm3d.h).
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h"  // CgsGraphics::RGBA8
 
 namespace renderengine
 {
@@ -16,7 +20,6 @@ namespace renderengine
 namespace CgsGraphics
 {
     struct Vector3F { f32 x, y, z; };
-    struct RGBA8    { u8 r, g, b, a; };
     struct Vector2F { f32 x, y; };
 
     struct BasicColouredTexturedVertex

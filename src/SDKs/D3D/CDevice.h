@@ -187,7 +187,10 @@ private:
     // mfSecondsPerTick scales an elapsed time-base delta to seconds; the two
     // 64-bit counters accumulate blocked time-base ticks, split by blocker type
     // (type 3 -> the second counter, every other type -> the first).
-    u8  mPad4160[0x5458 - (0x415C + 4)]; // +0x4160
+    u8  mPad4160[0x5424 - (0x415C + 4)]; // +0x4160
+    u32 muGpuTimingEnabled; // +0x5424  non-zero while GPU timing capture is on;
+                            //          gates D3D::GPUTimingMarkerFull::~GPUTimingMarkerFull
+    u8  mPad5428[0x5458 - (0x5424 + 4)]; // +0x5428
     f32 mfSecondsPerTick;   // +0x5458  seconds per CPU time-base tick
     u8  mPad545C[0x5460 - (0x5458 + 4)]; // +0x545C
     u64 mu64BlockTicks;     // +0x5460  accumulated blocked ticks (type != 3)
@@ -197,6 +200,7 @@ private:
 
     friend void _CDeviceAssertLayout();
     friend class CBlocker;
+    friend class GPUTimingMarkerFull; // reads muGpuTimingEnabled in its destructor
     friend class CCommandBuffer; // unlinks itself from mpCommandBufferList under mCommandBufferLock
     friend class CRingAllocList; // reads muOutOfMemoryBase on the ring-alloc failure path
 };

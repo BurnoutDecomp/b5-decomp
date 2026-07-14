@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 
 #include <cstddef>   // offsetof (layout pin for the entry-list resource-memory view)
+#include <cstring>   // memset (clear caller's "needs" flags when no pool holds the list)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -70,6 +71,97 @@ namespace
         meState             = E_STATE_WAIT;    // stw 3, 0x00
         mpOutNeeds          = lpOutNeeds;      // stw r8, 0x18
         mpOutResources      = lpOutResources;  // stw r9, 0x1C
+    }
+
+    // -------- Update @ 0x829066E0 (IDA export "Up") --------
+    // Run one step of the live-update state machine and return an ELiveUpdateResult. The machine walks
+    // WAIT -> FREE_SOURCE_ENTRIES -> ALLOCATE -> IDLE, each state falling straight into the next within a
+    // single call once its precondition is met (the X360 goto-chains the cases in exactly this order):
+    //   WAIT: spin for 10 frames (returning BUSY) to let outstanding work settle, then advance.
+    //   FREE_SOURCE_ENTRIES: pick the pool to update (if not already latched); if nothing holds any of the
+    //     list's resources, clear the caller's "needs" flags and finish. Otherwise resolve dependencies
+    //     (latching miNeedCount) and delete the original resource memory.
+    //   ALLOCATE: allocate the new resource memory and (re)create the entry-list resource; on success
+    //     latch mpOutListEntry and finish.
+    // Any allocation failure drops the machine back to IDLE and returns ERROR.
+    u32 LiveUpdatePoolModuleState::Update()
+    {
+        switch (meState)
+        {
+        case E_STATE_IDLE:
+            return E_RESULT_DONE;
+
+        case E_STATE_WAIT:
+            if (++miElapsedWaitFrames < 10)
+            {
+                return E_RESULT_BUSY;
+            }
+            meState = E_STATE_FREE_SOURCE_ENTRIES;
+            // fall through
+
+        case E_STATE_FREE_SOURCE_ENTRIES:
+            meState = E_STATE_FREE_SOURCE_ENTRIES;
+
+            if (mpPool == nullptr)
+            {
+                FindPoolToUpdate();
+                if (mpPool == nullptr)
+                {
+                    // No resident copy of any list resource -> nothing to live-update.
+                    memset(mpOutNeeds, 0, miNumEntries);
+                    meState = E_STATE_IDLE;
+                    return E_RESULT_DONE;
+                }
+            }
+
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "Live updating Pool [";
+                *CgsDev::Log::gpDebugPrint << mpPool->GetName();
+                *CgsDev::Log::gpDebugPrint << "]\n";
+            }
+
+            miNeedCount = static_cast<s16>(CheckListDependencies());
+            if (miNeedCount == 0)
+            {
+                meState = E_STATE_IDLE;
+                return E_RESULT_DONE;
+            }
+
+            if (!DeleteOriginalResources())
+            {
+                meState = E_STATE_IDLE;
+                return E_RESULT_ERROR;
+            }
+            // fall through
+
+        case E_STATE_ALLOCATE:
+        {
+            meState = E_STATE_ALLOCATE;
+
+            if (!AllocateNewResources())
+            {
+                meState = E_STATE_IDLE;
+                return E_RESULT_ERROR;
+            }
+
+            Entry* lpListEntry = CreateEntryListResource();
+            if (lpListEntry != nullptr)
+            {
+                mpOutListEntry = lpListEntry;
+                meState = E_STATE_IDLE;
+                return E_RESULT_DONE;
+            }
+
+            CGS_ASSERT(lpListEntry != nullptr, "Could not create resource to hold entry list with entries\n");   // :179
+            meState = E_STATE_IDLE;
+            return E_RESULT_ERROR;
+        }
+
+        default:
+            CGS_ASSERT(false, "Live update state is invalid\n");   // :193
+            return E_RESULT_ERROR;
+        }
     }
 
     // -------- GenerateResponse @ 0x828E4200 --------

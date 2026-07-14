@@ -36,7 +36,25 @@ namespace CgsGraphics
 
         // --- timing ---
         float GetRenderingDelay();            // @ 0x827EAB30  (this renderer adds no delay: 0)
+
+        // --- lifetime ---
+        // Destructor @ 0x827EAA98. Its body (release the four movie output textures, destruct
+        // the embedded EA::Jobs::Job at +0x180, restore the vtable words) is owned by the sibling
+        // decode/teardown TU keyed to CgsMovieVideoRenderer.cpp and is still todo -- so it is
+        // DECLARED here (so the deleting-destructor thunk below can name it) but NOT defined in
+        // this file. Non-virtual in this light declaration surface: the real X360 object is
+        // polymorphic (a vtable word sits at +0), but this surface deliberately does not model the
+        // rw::movie IVideoRenderer base / vtable. GROW this to `virtual ... override` with the full
+        // member layout when the destructor TU lands.
+        ~MovieVideoRenderer();
     };
+
+    // MovieVideoRenderer::'vector deleting destructor' @ 0x827EF3A0. The MSVC deleting-destructor
+    // thunk MSVC emits for `delete`: run the destructor, then -- only when the low bit of the flag
+    // argument is set -- hand the block to the global ::operator delete; return the object either
+    // way. Modelled with the committed XxxDeletingDtor(T*, char) free-function shape (cf.
+    // rw::movie::IVideoRendererScalarDeletingDtor @ 0x827E9F00 and DeviceScalarDeletingDtor).
+    MovieVideoRenderer* MovieVideoRendererVectorDeletingDtor(MovieVideoRenderer* lpRenderer, char lcFlags);
 }
 
 #endif
