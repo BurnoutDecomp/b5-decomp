@@ -43,6 +43,14 @@ namespace BrnPhysics
 {
     namespace ContactSpy
     {
+        // Fixed-capacity per-entity contact run list (defined in BrnContactSpyRunList.h).
+        // Forward-declared here so ContactSpyQueue can declare SortAndCreateRunList<OutMaxLength>
+        // taking a ContactSpyRunList<OutMaxLength>* WITHOUT pulling the run-list tree into every
+        // consumer of this queue header (the body + explicit instantiations live in the
+        // ContactSpyQueue_*_SortAndCreateRunList_* ledger TUs, which include the full definition).
+        template <s32 MaxLength>
+        class ContactSpyRunList;
+
         // DWARF: BrnContactSpyQueue.h:57.
         template <typename T, s32 N>
         class ContactSpyQueue : public CgsModule::EventQueue<T, N>
@@ -88,6 +96,16 @@ namespace BrnPhysics
                         return nullptr;
                 }
             }
+
+            // ContactSpyQueue<T,N>::SortAndCreateRunList<OutMaxLength>  (per-instantiation; its own
+            // ledger TU). Sorts the live contacts by colliding entity id, then walks them collapsing
+            // each consecutive same-entity run into one ContactSpyRunData (accumulated friction stress
+            // + per-run averaged normal stress / contact point) appended to lpOutRunList. Member
+            // FUNCTION template: the OutMaxLength arg names the run list's compile-time capacity
+            // (PhysicalCarPart -> ContactSpyRunList<50>). Body + explicit instantiations live in the
+            // ContactSpyQueue_*_SortAndCreateRunList_* .cpp TUs.
+            template <s32 OutMaxLength>
+            void SortAndCreateRunList(ContactSpyRunList<OutMaxLength>* lpOutRunList);
 
         private:
             // ContactSpyQueue<T,N>::GetNumUniqueEntities @ (per-instantiation). PRIVATE
