@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (PathLine stage machines)
 
+#include <algorithm>   // std::sort (SelectionHistory::FindRandomOldest)
 #include <cmath>
 
 // CgsSound::Utils::Slope::Slope(const SlopeParams&) @ 0x826A1F70.
@@ -323,6 +324,59 @@ void SelectionHistory<512u, u16, u16, 65536ull>::Update(u16 lSelection)
     maHistory[lSelection].mTimeStamp = mCurrentTimeStamp;
     ++mCurrentTimeStamp;
 }
+
+// @ 0x82702840 -- FindRandomOldest<unsigned short, 32>. Reconstructed store-for-store from
+// BURNOUT_X360_ARTIST.XEX. Builds a FindResult scratch table (tuNOldest entries, all seeded
+// to the { 0xFFFF, KU_SIZE } "never-selected" sentinel @0x827028A0), overwrites the first
+// luNumOfItems with { maHistory[item].mTimeStamp, item }, sorts those ascending by timestamp
+// (std::_Sort @0x82702948, predicate LessThanTimeStamp), then draws a random pick from the
+// oldest (luNumOfItems/2 + 1) half and returns that entry's mIndex.
+//
+//   luMod = (luNumOfItems >> 1) + 1               ; asm @0x8270294C..0x82702950
+//   pick  = mRandom.RandomUInt(0, luMod)          ; the inlined LCG draw @0x82702980..0x827029BC
+//   return laResults[pick].mIndex                 ; lhzx r3 @0x827029C0
+//
+// The asm inlines the bounded LCG draw directly against mRandom.muSeed (ld/mulld/std @+0x30,
+// multiplier 0x5851F42D4C957F2D, +1); the `twllei r31,0` @0x827029A8 is RandomUInt's internal
+// "luMod > 0" guard (CgsRandom.h:303). Reconstructed here through the public RandomUInt(0,luMod)
+// API rather than re-deriving the LCG by raw offset, matching how Randomize() above is homed.
+// CONFIDENCE low: the exact bounded-draw mapping ((oldSeed>>32) % luMod vs RandomUInt) is
+// reconstructed by intent, sharing the inlined-PRNG caveat flagged on Randomize().
+template <u32 tuSize, typename StoredType, typename TimeStampType, u64 tuModulo>
+template <typename LookupType, u32 tuNOldest>
+StoredType SelectionHistory<tuSize, StoredType, TimeStampType, tuModulo>::FindRandomOldest(
+    const LookupType* lpaItems, u16 luNumOfItems)
+{
+    CGS_ASSERT(luNumOfItems < tuNOldest, "luNumOfItems < NOldest");
+
+    // Seed every scratch slot with the max-timestamp / out-of-range sentinel (loop @0x82702898).
+    FindResult laResults[tuNOldest];
+    for (u32 lu = 0; lu < tuNOldest; ++lu)
+    {
+        laResults[lu].mTimeStamp = static_cast<TimeStampType>(0xFFFFu);  // sth 0xFFFF
+        laResults[lu].mIndex     = static_cast<StoredType>(KU_SIZE);     // sth 0x200 (512)
+    }
+
+    // Fill the first luNumOfItems entries from the candidate selections (loop @0x827028C4).
+    for (u16 lu = 0; lu < luNumOfItems; ++lu)
+    {
+        CGS_ASSERT(lpaItems[lu] < KU_SIZE, "lpaItems[ i ] < KU_SIZE");
+        laResults[lu].mIndex     = static_cast<StoredType>(lpaItems[lu]);
+        laResults[lu].mTimeStamp = maHistory[lpaItems[lu]].mTimeStamp;
+    }
+
+    // Oldest-first ordering: ascending timestamp (std::_Sort @0x82702948).
+    std::sort(laResults, laResults + luNumOfItems, &SelectionHistory::LessThanTimeStamp);
+
+    // Random pick from the oldest (n/2 + 1) half.
+    const u32 luMod  = (static_cast<u32>(luNumOfItems) >> 1) + 1u;
+    const u32 luPick = mRandom.RandomUInt(0, luMod);
+    return laResults[luPick].mIndex;
+}
+
+// X360-attested member-template instantiation: FindRandomOldest<unsigned short, 32>.
+template u16
+SelectionHistory<512u, u16, u16, 65536ull>::FindRandomOldest<u16, 32u>(const u16*, u16);
 
 }
 }

@@ -59,3 +59,19 @@ template BrnNetwork::LocalEventScoreUploadData&
 // post-increments miCount (stw r11+1,0x310). Stride 0x10 == 16 == sizeof(LocalEventScoreUploadData).
 template BrnNetwork::LocalEventScoreUploadData*
     Array<BrnNetwork::LocalEventScoreUploadData, 49>::AddNew();
+
+// AppendArray  @ 0x8255E940  (append every live element of a same-instantiation source Array;
+// called by BrnNetwork::EventScoresManager::ProcessNetworkEvents, which folds the drained
+// per-event upload records into maPendingUploads). The X360 body is the generic
+// Array<T,N>::AppendArray<N> (CgsArray.h:272): asserts this + source were Construct/Clear'd
+// (both miCount @ +0x310 != the -1 sentinel; source's constructed-guard is the CgsArray.h:336
+// GetLength assert, re-issued per loop iteration in the X360 -- source count is loop-invariant so
+// the committed cache-once form is observably identical), then asserts the combined live count
+// fits N via the unsigned `> 0x31` capacity-49 guard ("Array container out of space appending an
+// array", CgsArray.h:246), then Appends source[0..GetLength()-1] in order (checked operator[]
+// stride 0x10 == 16 == sizeof(LocalEventScoreUploadData) feeding the generic Append). The dynamic
+// StrStream "Length/Capacity" message is the documented generic-body parity gap (kept as the
+// static CGS_ASSERT string). Reuses the already-instantiated operator[] and Append above.
+template void
+    Array<BrnNetwork::LocalEventScoreUploadData, 49>::AppendArray(
+        const Array<BrnNetwork::LocalEventScoreUploadData, 49>&);

@@ -314,6 +314,14 @@ public:
     // @ 0x826C6800 -- stamp maHistory[lSelection]; re-randomise on timestamp wrap.
     void Update(TimeStampType lSelection);
 
+    // @ 0x82702840 -- FindRandomOldest<LookupType, tuNOldest>. Build a FindResult scratch
+    // table { maHistory[item].mTimeStamp, item } for the luNumOfItems candidate selections,
+    // sort ascending by timestamp, then return a random pick's mIndex from the oldest
+    // (luNumOfItems/2 + 1) entries. X360-attested member-template instance <unsigned short,32>;
+    // used by CollisionStateManager::GetRandomSampleID<Attrib::Gen::*> in the collision TU.
+    template <typename LookupType, u32 tuNOldest>
+    StoredType FindRandomOldest(const LookupType* lpaItems, u16 luNumOfItems);
+
     // @ 0x82690D40 -- FindResult timestamp comparator. STATIC: used as the std::sort
     // predicate (fn-ptr) in the collision-manager TU.
     static bool LessThanTimeStamp(const FindResult& lkrLeft, const FindResult& lkrRight);
