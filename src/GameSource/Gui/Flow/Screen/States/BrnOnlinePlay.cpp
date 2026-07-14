@@ -112,6 +112,27 @@ const char* const OnlinePlay::KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[E_MAIN_MENU_OPTI
     "TO_NEWS",      // [6] NEWS            FLAG: UNATTESTED placeholder
 };
 
+// ---- OnlinePlay (ctor) @ 0x82508B40 -------------------------------------------------
+// Compiler-emitted construction of the online-play main-menu screen state and its embedded
+// GUI sub-objects. The X360 writes the state's own vtable (+0x000, off_820755A8), the
+// "new news" transition component's GuiComponent vtable (this+0x38 = off_82072F68,
+// mNewNewsAnimation), then calls MenuComponent::MenuComponent on the main-menu (this+0xC8,
+// mMainMenuComponent). The player-stats panel (this+0x1188 = off_820747CC,
+// mPlayerStatsDisplay) is constructed inline -- its own vtable plus the long run of per-row
+// sub-widget vtables (the repeated off_82072F8C stores at +0x1214..+0x2280) -- and the local
+// player-stats event record (this+0x2378, mPlayerStatsEvent) is zero-primed at its tail
+// (+0x23D8/+0x23DC). Those inlined sub-object stores are exactly the embedded members' own
+// default ctors; no scalar state field takes a store here (OnEnter primes meSubState / the
+// local-player block / the cache + listener). Reconstructed from the X360 asm.
+OnlinePlay::OnlinePlay()
+    : CgsGui::State()        // state vtable + base bookkeeping (X360 +0x000)
+    , mNewNewsAnimation()    // "new news" transition carrier (X360 this+0x38)
+    , mMainMenuComponent()   // embedded main-menu, 7 rows    (X360 this+0xC8)
+    , mPlayerStatsDisplay()  // embedded player-stats panel   (X360 this+0x1188)
+    , mPlayerStatsEvent()    // local player-stats event rec  (X360 this+0x2378)
+{
+}
+
 // ------------------------------------------------ OnEnter @ 0x8249BC18
 void OnlinePlay::OnEnter()
 {
