@@ -17,17 +17,18 @@
 // the blt always skips it when there is room); AddEvent always runs. The methods return void
 // (the X360 tail-calls AddEvent and forwards its result, which the callers discard).
 //
-// The five remaining ledger functions of this class are BLOCKED, not emitted here:
-//   * Clear / Destruct              -- reset the live count of EVERY embedded queue (25 of them);
-//                                      ~14 sibling queues have un-recovered element types (their
-//                                      AddEvent callees are still todo, no committed element home),
-//                                      so their counters cannot be named/zeroed without fabrication.
+// The five formerly-blocked ledger functions of this class are now emitted here, grounded by
+// CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Construct @ 0x822E6550 (which names
+// every embedded queue's element type + capacity, so the whole embedded set is recovered):
+//   * Clear / Destruct              -- zero the live count (miLength) of all 25 embedded queues
+//                                      (X360 inlines 25 `stw 0, miLength(queue)`); each maps to a
+//                                      named queue's BaseEventQueue<T>::Clear(). Both return `this`.
 //   * SetVolumeInstanceTransform    -- targets mSetVolumeInstanceTransformQueue (X360 +0x8010);
-//   * AddVolumeInstanceForCaching   -- targets the +0xBF480 caching queue;
-//   * SetVolumeInstanceCullingGroup -- targets the +0xBF920 culling-group queue.
-//   The last three queues' element type + capacity are un-recovered in this dossier (AddEvent
-//   callees todo, no committed element home / EventQueue_*_N instantiation), so the event record
-//   cannot be staged faithfully. Left as honest gaps.
+//   * AddVolumeInstanceForCaching   -- targets mAddVolumeInstanceForCachingQueue (X360 +0xBF4C0);
+//   * SetVolumeInstanceCullingGroup -- targets mSetVolumeInstanceCullingGroupQueue (X360 +0xBF920).
+//   The three volume-instance element records have no prior committed home, so their field layout
+//   is read off each producer's stores (@0x822CB7E8 / 0x8270DA10 / 0x822B1A98) and their capacity
+//   off Construct's offsets -- defined in CgsSceneManagerIO_SceneUpdate.h and size-pinned below.
 // =============================================================================
 
 namespace CgsSceneManager
@@ -178,5 +179,124 @@ namespace SceneManagerIO
                    "SceneManager.mClearEntityPaddingQueue too small, increase value in SceneManagerConstants.h");
         mClearEntityPaddingQueue.AddEvent(lEvent);
     }
+
+    // ----- Set a volume instance's transform (X360 0x822CB7E8) -----
+    // Stages { mVolumeInstanceId = a2 (std, 8B), mTransform = *a3 (four vmx lanes, 64B) } and
+    // appends to mSetVolumeInstanceTransformQueue.
+    void InSceneUpdateInterface::SetVolumeInstanceTransform(VolumeInstanceId lVolumeInstanceId, const Matrix44Affine& lTransform)
+    {
+        InEventSetVolumeInstanceTransform lEvent;
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
+        lEvent.mTransform        = lTransform;           // four stvx128 lanes @+0x10
+
+        CGS_ASSERT(mSetVolumeInstanceTransformQueue.GetLength() < mSetVolumeInstanceTransformQueue.GetMaxLength(),
+                   "SceneManager.mSetVolumeInstanceTransformQueue too small, increase value in SceneManagerConstants.h");
+        mSetVolumeInstanceTransformQueue.AddEvent(lEvent);
+    }
+
+    // ----- Set a volume instance's culling group (X360 0x822B1A98) -----
+    // Stages { mVolumeInstanceId = a2 (std, 8B), miCullingGroupId = a3 (stw, 4B) } and appends
+    // to mSetVolumeInstanceCullingGroupQueue.
+    void InSceneUpdateInterface::SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId, s32 liCullingGroupId)
+    {
+        InEventSetVolumeInstanceCullingGroup lEvent;
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
+        lEvent.miCullingGroupId  = liCullingGroupId;    // stw a3 @+0x08
+
+        CGS_ASSERT(mSetVolumeInstanceCullingGroupQueue.GetLength() < mSetVolumeInstanceCullingGroupQueue.GetMaxLength(),
+                   "SceneManager.mSetVolumeInstanceCullingGroupQueue too small, increase value in SceneManagerConstants.h");
+        mSetVolumeInstanceCullingGroupQueue.AddEvent(lEvent);
+    }
+
+    // ----- Add a volume instance to the triangle cache (X360 0x8270DA10) -----
+    // Two non-gating range tripwires guard the cache-options enum (asm `cmpwi 3; blt` and
+    // `cmpwi 2; bne`), then stage { mVolumeInstanceId = a2 (std, 8B), meCacheOptions = a3
+    // (stw, 4B) } and append to mAddVolumeInstanceForCachingQueue.
+    void InSceneUpdateInterface::AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId, s32 leCacheOptions)
+    {
+        CGS_ASSERT(leCacheOptions < 3,  "leCacheOptions < E_NUM_CACHE_OPTIONS");           // enum bound E_NUM_CACHE_OPTIONS == 3
+        CGS_ASSERT(leCacheOptions != 2, "leCacheOptions != E_DO_NOT_ADD_TO_CACHE_MANAGER"); // enum value E_DO_NOT_ADD_TO_CACHE_MANAGER == 2
+
+        InEventAddVolumeInstanceForCaching lEvent;
+        lEvent.mVolumeInstanceId = lVolumeInstanceId;   // std a2 @+0x00
+        lEvent.meCacheOptions    = leCacheOptions;      // stw a3 @+0x08
+
+        CGS_ASSERT(mAddVolumeInstanceForCachingQueue.GetLength() < mAddVolumeInstanceForCachingQueue.GetMaxLength(),
+                   "SceneManager.mAddVolumeInstanceForCachingQueue too small, increase value in SceneManagerConstants.h");
+        mAddVolumeInstanceForCachingQueue.AddEvent(lEvent);
+    }
+
+    // ----- Reset every embedded queue's live count (X360 0x822B10C8) -----
+    // The X360 inlines a `stw 0, miLength(queue)` for each of the 25 embedded queues (the 25
+    // zeroed offsets == Construct's 25 queue bases + 8). Each maps to the queue's own Clear()
+    // (BaseEventQueue<T>::Clear -> miLength = 0); order is irrelevant (independent counters).
+    InSceneUpdateInterface* InSceneUpdateInterface::Clear()
+    {
+        mUpdatePositionQueue.Clear();
+        mSetVolumeInstanceTransformQueue.Clear();
+        mAddEntityQueue.Clear();
+        mAddDynamicVolumeQueue.Clear();
+        mAddForCollisionQueue.Clear();
+        mAddVolumeInstanceQueue.Clear();
+        mForceNoPaddingQueue.Clear();
+        mRemoveEntityQueue.Clear();
+        mRemoveForCollisionQueue.Clear();
+        mRemoveVolumeQueue.Clear();
+        mRemoveVolumeInstanceQueue.Clear();
+        mReplaceDynamicVolumeQueue.Clear();
+        mSetCullingGroupPairQueue.Clear();
+        mClearCullingTableQueue.Clear();
+        mSetEntityRadiusQueue.Clear();
+        mSetPaddingQueue.Clear();
+        mAddVolumeInstanceForCachingQueue.Clear();
+        mClearEntityPaddingQueue.Clear();
+        mSetVolumeInstanceCullingGroupQueue.Clear();
+        mAddToCacheQueue.Clear();
+        mUpdateCachedPositionQueue.Clear();
+        mRemoveFromCacheQueue.Clear();
+        mAddPolySoupListQueue.Clear();
+        mClearPolySoupListsQueue.Clear();
+        mRemoveAllEntitiesQueue.Clear();
+        return this;
+    }
+
+    // ----- Teardown: reset every embedded queue's live count (X360 0x828BA280) -----
+    // Byte-identical to Clear (the inline stores the same 25 miLength=0 zeroes and returns this);
+    // the inline queues own no heap, so teardown is purely the count reset.
+    InSceneUpdateInterface* InSceneUpdateInterface::Destruct()
+    {
+        mUpdatePositionQueue.Clear();
+        mSetVolumeInstanceTransformQueue.Clear();
+        mAddEntityQueue.Clear();
+        mAddDynamicVolumeQueue.Clear();
+        mAddForCollisionQueue.Clear();
+        mAddVolumeInstanceQueue.Clear();
+        mForceNoPaddingQueue.Clear();
+        mRemoveEntityQueue.Clear();
+        mRemoveForCollisionQueue.Clear();
+        mRemoveVolumeQueue.Clear();
+        mRemoveVolumeInstanceQueue.Clear();
+        mReplaceDynamicVolumeQueue.Clear();
+        mSetCullingGroupPairQueue.Clear();
+        mClearCullingTableQueue.Clear();
+        mSetEntityRadiusQueue.Clear();
+        mSetPaddingQueue.Clear();
+        mAddVolumeInstanceForCachingQueue.Clear();
+        mClearEntityPaddingQueue.Clear();
+        mSetVolumeInstanceCullingGroupQueue.Clear();
+        mAddToCacheQueue.Clear();
+        mUpdateCachedPositionQueue.Clear();
+        mRemoveFromCacheQueue.Clear();
+        mAddPolySoupListQueue.Clear();
+        mClearPolySoupListsQueue.Clear();
+        mRemoveAllEntitiesQueue.Clear();
+        return this;
+    }
+
+    // Size pins for the three volume-instance element records defined by this TU (their stride
+    // is load-bearing: it fixes each queue's capacity against Construct's queue-base offsets).
+    static_assert(sizeof(InEventSetVolumeInstanceTransform)     == 80, "InEventSetVolumeInstanceTransform X360 stride 0x50 (id + affine matrix)");
+    static_assert(sizeof(InEventSetVolumeInstanceCullingGroup)  == 16, "InEventSetVolumeInstanceCullingGroup X360 stride 0x10 (id + culling-group word)");
+    static_assert(sizeof(InEventAddVolumeInstanceForCaching)    == 16, "InEventAddVolumeInstanceForCaching X360 stride 0x10 (id + cache-options word)");
 }
 }
