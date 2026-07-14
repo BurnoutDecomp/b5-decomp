@@ -3,18 +3,15 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
 #include "GameShared/GameClasses/System/GameTalk/CgsGameTalkDebugComponent.h"
-
-// The AttribSys GameTalk message handler registered by Prepare. Owned by the
-// (not-yet-reconstructed) CgsAttribSys::AttribSysModule TU; forward-declared here
-// with its GameTalk MessageHandler signature so the per-TU compile gate resolves
-// the address-of without fabricating the AttribSysModule type.
-namespace CgsAttribSys
-{
-    namespace AttribSysModule
-    {
-        void AttribulatorGameTalkHandler(EA::GameTalk::GameTalkMessage* lpMessage);
-    }
-}
+// The AttribSys GameTalk message handler registered by Prepare is a static member of
+// CgsAttribSys::AttribSysModule (now reconstructed); pull its class so the address-of below
+// resolves to the real static-member symbol.
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"
+// That header drags <windows.h> transitively, whose A/W macro rewrites the SendMessage
+// identifier to SendMessageA -- which would clobber GameTalk::SendMessage below. Drop it.
+#ifdef SendMessage
+#undef SendMessage
+#endif
 
 // =====================================================================================
 // CgsGameTalk::GameTalk -- game-side GameTalk front door.

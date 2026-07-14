@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMovieVideoRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+#include <new>   // ::operator delete
+
 // CgsGraphics::MovieVideoRenderer position/scale/delay control surface, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. The renderer always presents the movie frame full-screen at the default
 // transform: position queries assert-false and return 0, scale queries assert-false and return the
@@ -75,5 +77,23 @@ namespace CgsGraphics
     void MovieVideoRenderer::SetScaleY(float lfScaleY)
     {
         CGS_ASSERT(lfScaleY == 1.0f, "false");
+    }
+
+    // MovieVideoRenderer::'vector deleting destructor' @ 0x827EF3A0. The X360 emits the standard
+    // MSVC deleting-destructor thunk:
+    //   ~MovieVideoRenderer(this);           // bl CgsGraphics__MovieVideoRenderer___MovieVideoRenderer
+    //   if (flags & 1)                       // clrlwi r11,r30,31; cmplwi; beq
+    //       operator delete(this);           // bl operator_delete (global ::operator delete)
+    //   return this;                         // r3 = this on both paths
+    // The destructor it calls lives in this same class (address 0x827EAA98, still todo); this thunk
+    // only wires up the destroy-then-conditionally-free sequence the binary performs.
+    MovieVideoRenderer* MovieVideoRendererVectorDeletingDtor(MovieVideoRenderer* lpRenderer, char lcFlags)
+    {
+        lpRenderer->~MovieVideoRenderer();
+        if (lcFlags & 1)
+        {
+            ::operator delete(lpRenderer);
+        }
+        return lpRenderer;
     }
 }

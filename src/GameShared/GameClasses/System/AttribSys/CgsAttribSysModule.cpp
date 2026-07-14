@@ -1,10 +1,23 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"
 
+#include <new>                                                     // placement new (RegisterSchema)
+#include <string.h>                                                // strcmp (channel match)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysIO::InputBuffer + requests + Inp
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"          // LinearMalloc::Malloc (schema vault)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h" // the debug log window
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"   // Attrib::Database
+#include "SDKs/EA/GameTalk/GameTalk.h"                              // EA::GameTalk::GameTalkMessage accessors
+
+// Attrib::DecodeLiveLinkMessage lives in its own (not-yet-reconstructed) TU
+// (SDKs/.../AttribSys/runtime/common/attriblivelink.cpp, X360 0x8280FD10). It takes the
+// GameTalk "Update" key content (the r3 forwarded from GetKeyContent) and threads the edits
+// into the attribute database. Forward-declared here just far enough to link the address-of;
+// its body is owned elsewhere -- do not define it in this TU.
+namespace Attrib
+{
+    void DecodeLiveLinkMessage(const char* lpMessageContent);
+}
 
 namespace CgsAttribSys
 {
@@ -34,6 +47,19 @@ AttribSysModule::EPrepareStage operator++(AttribSysModule::EPrepareStage& leStag
     CGS_ASSERT(leStage <= AttribSysModule::E_PREPARESTAGE_DONE,
                "leEnumIndex <= AttribSysModule::E_PREPARESTAGE_DONE");
     return leOld;
+}
+
+// @ 0x827DD340 -- AttribSysGarbageCollector's scalar deleting destructor (MSVC's ??_G thunk).
+// Defining the virtual destructor out-of-line here makes the compiler synthesise exactly that
+// thunk: it runs the derived destructor (which the X360 folds to a direct bl on the base
+// Attrib::IGarbageCollector::~IGarbageCollector), then -- when the low bit of the deleting
+// flag is set -- calls operator delete(this) and returns this on both paths. The class owns
+// only miTotalFreedSoFar (a plain s32) and holds no resources, so the destructor body is
+// empty; the observable effect is the base-vptr install and the conditional free the
+// synthesised thunk supplies. Mirrors the base sibling Attrib::IGarbageCollector
+// (attribgarbagecollector.cpp @ 0x827DBA70).
+AttribSysGarbageCollector::~AttribSysGarbageCollector()
+{
 }
 
 // The GC callback body lives in the garbage-collector's own TU; trap here so the vtable links.
@@ -77,6 +103,28 @@ void AttribSysModule::Construct()
 const VaultArray* AttribSysModule::GetVaultArray() const
 {
     return spVaultArray;
+}
+
+// @ 0x8280FF50 -- the GameTalk callback registered on the "AttribSys.xenon" channel.
+// The asm defensively re-compares the message's channel string (msg+0x10 == GetChannel())
+// against "AttribSys.xenon" byte-for-byte; on a match it looks up the "Update" key and, if
+// present, forwards the key content to Attrib::DecodeLiveLinkMessage. The Hex-Rays int
+// return is the manager's fiction -- the registered handler is a void MessageHandler.
+void AttribSysModule::AttribulatorGameTalkHandler(EA::GameTalk::GameTalkMessage* lpMessage)
+{
+    // beq/bne cr6 on the channel-string compare: bail unless this really is the AttribSys channel.
+    if (strcmp(lpMessage->GetChannel(), "AttribSys.xenon") != 0)
+    {
+        return;
+    }
+
+    // bl sub_82837E08(msg, "Update") == GameTalkMessage::GetKeyContent("Update"); its result
+    // (NULL when the key is absent) is the r3 forwarded straight into DecodeLiveLinkMessage.
+    const char* lpcUpdate = lpMessage->GetKeyContent("Update");
+    if (lpcUpdate != nullptr)
+    {
+        Attrib::DecodeLiveLinkMessage(lpcUpdate);
+    }
 }
 
 // @ 0x82807620 -- resumable bring-up. Each stage records itself before doing its work so a

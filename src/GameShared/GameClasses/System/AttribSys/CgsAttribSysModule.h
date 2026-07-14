@@ -26,6 +26,14 @@ class LinearMalloc;
 class HeapMalloc;
 }
 
+namespace EA
+{
+namespace GameTalk
+{
+    class GameTalkMessage;
+}
+}
+
 namespace CgsAttribSys
 {
 namespace AttribSysIO
@@ -43,13 +51,23 @@ class AttribSysDebugComponent : public CgsDev::DebugComponent
 {
 };
 
-// The garbage-collector callback AttribSys invokes when it reclaims a vault. The X360
-// ledger attests only its construction (folded to an empty body) and its presence in the
-// vault array; ReleaseData's body lives in the GC's own TU. (DWARF CgsAttribSysModule.h:75.)
+// The garbage-collector callback AttribSys invokes when it reclaims a vault. Concrete host
+// of Attrib::IGarbageCollector: its construction folds to an empty body, ReleaseData's body
+// lives in this TU (deferred trap), and its scalar deleting destructor thunk is attested at
+// X360 0x827DD340. (DWARF CgsAttribSysModule.h:75.)
+//
+// The destructor is declared out-of-line (defined in this TU's .cpp) so MSVC synthesises the
+// derived-class ??_G scalar-deleting-destructor at 0x827DD340 -- MSVC only emits that thunk
+// (and pins this class's vtable to one TU) when the virtual destructor is NOT inline. This
+// mirrors the base sibling home Attrib::IGarbageCollector (attribgarbagecollector.cpp
+// @ 0x827DBA70).
 class AttribSysGarbageCollector : public Attrib::IGarbageCollector
 {
 public:
     void Construct() { miTotalFreedSoFar = 0; }
+
+    // Out-of-line so MSVC emits the ??_G scalar deleting destructor @ X360 0x827DD340.
+    ~AttribSysGarbageCollector() override;
 
     void ReleaseData(u8 luType, Attribute::HashInt lAssetId,
                      void* lpData, unsigned int luSize) override;
@@ -102,6 +120,13 @@ public:
 
     // X360 0x828025E8 -- the live vault array (returned via the module's static pointer).
     const VaultArray* GetVaultArray() const;
+
+    // X360 0x8280FF50 -- the GameTalk message handler registered on the "AttribSys.xenon"
+    // channel by CgsGameTalk::Prepare. A plain (context-free) MessageHandler, hence static:
+    // if the inbound message really is on the AttribSys channel and carries an "Update" key,
+    // its content is decoded as an AttribSys LiveLink edit stream. Mirrors the sibling
+    // CgsDev::DebugGameTalkInterface::GameTalkMsgHandler.
+    static void AttribulatorGameTalkHandler(EA::GameTalk::GameTalkMessage* lpMessage);
 
 private:
     // X360 0x8280EBF0 (RegisterVault) / 0x8280E4A0 (RegisterSchema) / 0x8280F9D0 (UnregisterVault).
