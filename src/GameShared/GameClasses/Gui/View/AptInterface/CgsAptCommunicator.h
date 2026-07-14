@@ -184,6 +184,14 @@ namespace CgsGui
         // the per-frame dirty flags and the key/value pool.
         void UpdateAllComponents();
 
+        // X360 0x824EAD38. Debug helper: linear-scan the registered components' hashed
+        // names for luHash and return that component's stored name text ("Unknown" on a
+        // miss). Reads only the static mAptComponentList (the X360 scans mauHashedName
+        // @dword_830419A0 and returns maacName @unk_830422A0 + 256*index). Public because
+        // BrnGui::GuiCacheDebugComponent::ShowAptComponentGuiCacheStatus calls it to label
+        // a GUI-cache dump entry.
+        const char* GetComponentNameForHash(u32 luHash);
+
     private:
         // X360 0x82849F48. Hash lpacName and return its registered component index, or -1.
         // Static: it only touches the file-static class data (no `this`), and the static
