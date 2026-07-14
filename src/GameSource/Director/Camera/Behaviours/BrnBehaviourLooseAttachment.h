@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetParameters type assert + race-car index asserts)
+#include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"   // Utils::CameraImpactEffect::Parameters (embedded "Impact" sub-block @+0x2C of Parameters)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h
@@ -54,12 +55,23 @@ public:
 
     // The loose-attachment parameter block: a type tag in its leading word plus behaviour-specific
     // data. GetType returns the tag SetParameters asserts on.
+    //
+    // The field-walk region (the embedded "Impact" sub-block + the loose-attachment tunables) is
+    // pinned store-for-store from the three Serialise<S> visitor bodies (write @0x82254BC8, read
+    // @0x8224D2F0, debug-menu @0x82254248): a by-value CameraImpactEffect::Parameters sub-block at
+    // +0x2C (walked as the nested "Impact" section) followed by the loose-attachment f32/bool
+    // tunables at the a1+0x48..a1+0x60 displacements the write/read/menu asm loads/stores. No
+    // pointers in the walked region => the offsets are host-pointer-width invariant (pinned in the
+    // .cpp). Only meType (+0x00) / miParamWord1 (+0x04) and the walked fields are modelled by name;
+    // the +0x08..+0x2B gap is rig data no reconstructed function in this TU touches.
     class Parameters
     {
     public:
         // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (TextFile{Read,Write}Serialiser); the per-instance body is a separate TU.
-        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        // serialiser S (DebugMenuSerialiser / TextFile{Read,Write}Serialiser), recursing into the
+        // embedded impact block for the "Impact" section. The per-instance body is a separate TU
+        // (bodied in BrnBehaviourLooseAttachment.cpp with one explicit instantiation per serialiser).
+        // Declared so a serialiser's Serialise<Parameters> can drive it by name.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         EBehaviourTypeLooseAttachment GetType() const
@@ -69,6 +81,21 @@ public:
 
         s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
         s32 miParamWord1;  // +0x04  first behaviour-specific word (cached by SetParameters)
+
+        // FLAG: +0x08..+0x2B is loose-attachment rig data that none of this TU's Serialise<S>
+        //   visitors touch (the field-walk starts at the +0x2C "Impact" sub-block). Modelled as a
+        //   reserved span so the walked fields below land at their asm-attested displacements; name
+        //   these members precisely when the full loose-attachment Parameters schema TU lands.
+        u8  maReserved08[0x2C - 0x08];                   // +0x08 .. +0x2B (rig data not walked here)
+
+        Utils::CameraImpactEffect::Parameters mImpact;   // +0x2C  embedded impact-shake block ("Impact")
+        f32 mfPitch;                                     // +0x48  "Pitch"
+        f32 mfHeight;                                    // +0x4C  "Height"
+        f32 mfDistance;                                  // +0x50  "Distance"
+        f32 mfField54;                                   // +0x54  <unk_820051C0 label> tunable (label rodata unrecovered)
+        f32 mfDutch;                                     // +0x58  "Dutch"
+        f32 mfDetachLerpAmount;                          // +0x5C  "Detach Lerp Amount"
+        bool mbLookFromTarget;                           // +0x60  "Look from target"
     };
 
     // FLAG: the +0x20 sub-object Get exposes is an embedded behaviour sub-object (the attachment

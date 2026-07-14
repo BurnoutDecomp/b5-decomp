@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_UTILS_BRN_TEXT_FILE_WRITE_SERIALISER_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector3 (the vec3 leaf overload)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (muRecursionDepth guard in Serialise<T>)
 
 #include <cstdio>   // std::FILE (the serialiser writes to a text file handle held by it)
@@ -38,6 +39,10 @@ namespace BrnDirector
 {
 namespace Camera
 {
+
+// The versioned-block tag (definition in CameraUtils.h). Forward-declared here so the version
+// leaf overload below can take it by reference without pulling the camera-utils header in.
+namespace Utils { struct VersionNumber; }
 
 class TextFileWriteSerialiser
 {
@@ -76,6 +81,27 @@ public:
     // visitors drive them by name. Body in the .cpp.
     void Serialise(const char* lpcName, s32& lrValue);
     void Serialise(const char* lpcName, u32& lrValue);
+
+    // Write a named bool field as one "<formatted-name> : <value>\n" ("%s : %d\n") line -- the flag
+    // is promoted to int for the "%d" varargs. Always inlined by the X360 compiler into the owning
+    // Parameters Serialise<TextFileWriteSerialiser> visitor (e.g. the camera-rig "Widescreen Only"
+    // field @0x82216160), so it carries no standalone ledger symbol; declared here so those visitors
+    // drive it by name. Body in the .cpp.
+    void Serialise(const char* lpcName, bool& lrValue);
+
+    // Write the block's leading version tag as one "<formatted-name> : <version>\n" ("%s : %d\n")
+    // line (the u32 inside VersionNumber). Inlined into each versioned Parameters visitor's
+    // Serialise<TextFileWriteSerialiser> body (e.g. Looker::Parameters @0x82216198). Kept a
+    // DISTINCT overload from the plain u32 form so the DebugMenuSerialiser counterpart can no-op it
+    // -- a version tag is not an editable debug-menu variable (the debug instances emit no leaf for
+    // it). Body is a separate TU.
+    void Serialise(const char* lpcName, Utils::VersionNumber& lrValue);
+
+    // Write a named Vector3 field -- the vec3 counterpart of the scalar overloads above
+    // (X360 sub_822089C0 @0x822089C0). Declared here so the camera-rig / behaviour Parameters
+    // Serialise<TextFileWriteSerialiser> visitors (e.g. Utils::CameraRig::Params @0x82216044) drive
+    // the vec3 fields by name; body is a separate TU.
+    void Serialise(const char* lpcName, Vector3& lrValue);
 
     // The nested-block serialiser-visitor template (X360: `public: void Serialise<T>(const char*,
     // T&)`). One shared body per instance: write the field's formatted section-header label line

@@ -2,7 +2,10 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_AFTERTOUCH_CRASH_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert + _AssertLayout)
+#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"   // Utils::CameraShake::Parameters (the "Shake Params" sub-block, embedded by value @+0x08)
+
+#include <cstddef>   // offsetof (the never-called _AssertLayout pin)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h
@@ -53,8 +56,9 @@ public:
     {
     public:
         // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (TextFile{Read,Write}Serialiser); the per-instance body is a separate TU.
-        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        // serialiser S (DebugMenuSerialiser / TextFile{Read,Write}Serialiser). The ONE templated
+        // field-walk body + its three explicit instantiations are bodied in this TU's .cpp (asm:
+        // DebugMenu @0x8224C748, write @0x8224E728, read @0x82232330).
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         EBehaviourTypeAftertouchCrash GetType() const
@@ -64,6 +68,47 @@ public:
 
         s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
         s32 miParamWord1;  // +0x04  first behaviour-specific word
+
+        // The shake post-process tunings sub-block ("Shake Params" section) the field-walk visitor
+        // recurses into first (DebugMenu AddToPath+recurse @0x8224C778, write @0x8224E74C, read
+        // @0x82232368). Homed, by value, in BehaviourRig.h (four f32 tunables, +0x08..+0x17).
+        Utils::CameraShake::Parameters mShakeParams;   // +0x08 .. +0x17
+
+        // +0x18 .. +0x2B: rig members the serialiser walk does not touch (it jumps straight from the
+        //   shake sub-block to the +0x2C f32 tunables). Not modelled here.
+        u8  maReserved18[0x2C - 0x18];
+
+        // The eleven serialised f32 tunables at their asm-attested offsets. The write serialiser's
+        // a1[N] float displacements confirm each offset (a1[11]=+0x2C .. a1[22]=+0x58); note the walk
+        // visits +0x40 (mfField40) BEFORE +0x3C (mfPitch), and skips the +0x50 word (a1[20] unused).
+        f32 mfSlowDistance;                 // +0x2C  "Slow Distance"
+        f32 mfSlowHeight;                   // +0x30  "Slow Height"
+        f32 mfFastDistance;                 // +0x34  "Fast Distance"
+        f32 mfFastHeight;                   // +0x38  "Fast Height"
+        f32 mfPitch;                        // +0x3C  "Pitch"
+        f32 mfField40;                      // +0x40  <label @0x820051C0 unrecovered -- see .cpp FLAG>
+        f32 mfBlendFactorBlendFactor;       // +0x44  "Blend Factor Blend Factor"
+        f32 mfMinimumBlendFactor;           // +0x48  "Minimum Blend Factor"
+        f32 mfMaximumBlendFactor;           // +0x4C  "Maximum Blend Factor"
+        u8  maReserved50[0x54 - 0x50];      // +0x50  rig word the walk skips (write a1[20] unused)
+        f32 mfHeightDistanceBlendFactor;    // +0x54  "Height Distance Blend Factor"
+        f32 mfHeightDistanceVelocityRange;  // +0x58  "Height Distance Velocity Range"
+
+        // Never called: pin the serialised-field offsets against the X360 stores. Every field here
+        // precedes any pointer member, so these offsets are host-pointer-width invariant.
+        static void _AssertLayout()
+        {
+            CGS_ASSERT(offsetof(Parameters, mShakeParams) == 0x08,
+                       "mShakeParams @ +0x08");
+            CGS_ASSERT(offsetof(Parameters, mfSlowDistance) == 0x2C,
+                       "mfSlowDistance @ +0x2C");
+            CGS_ASSERT(offsetof(Parameters, mfPitch) == 0x3C,
+                       "mfPitch @ +0x3C");
+            CGS_ASSERT(offsetof(Parameters, mfField40) == 0x40,
+                       "mfField40 @ +0x40");
+            CGS_ASSERT(offsetof(Parameters, mfHeightDistanceVelocityRange) == 0x58,
+                       "mfHeightDistanceVelocityRange @ +0x58");
+        }
     };
 
     // FLAG: the +0x60 sub-object the Get* accessor exposes. The truncated dossier name ("Get")

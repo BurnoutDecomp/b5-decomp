@@ -61,6 +61,12 @@ public:
 
         s32 meType;        // +0x00  the behaviour type tag (eBehaviour*)
         s32 miParamWord1;  // +0x04  first behaviour-specific word
+        // --- fixed-cam tunable fields, pinned from the Serialise<S> field-walk asm ---
+        // Both Serialise instances (DebugMenu @0x82214BF0, TextFileWrite @0x822151C8) touch
+        // exactly these two f32 slots, in this order: the +0x08 slot (label at the unrecovered
+        // rodata @0x820051C0) then the +0x0C slot ("Max Dutch" -- the dutch/roll-angle clamp).
+        f32 mfField08;     // +0x08  <unk_820051C0 label> tunable (label rodata unrecovered)
+        f32 mfMaxDutch;    // +0x0C  "Max Dutch" -- max dutch (camera roll) angle
     };
 
     // Adopt a fixed-cam parameter block: assert it carries the fixed-cam type tag, then cache
