@@ -35,6 +35,23 @@ static const f32 KF_WORST_CASE_PHASE_STEP  = 1.5f;   // flt_82004D04
 static const f32 KF_WORST_CASE_PHASE_RESET = 0.0f;   // flt_82001CC0
 static const f32 KF_WORST_CASE_RING_STEP   = 50.0f;  // flt_820138DC (ring Z spacing & X offset)
 
+// @0x824F6350 -- copy the three names into their fixed 32-byte fields, force
+// termination at byte 31, then store the action enum between component and label.
+void GuiAudioTriggerEvent::Construct(s32 leAction, const char* lpComponentName,
+                                     const char* lpLabel, const char* lpMovieName)
+{
+    CGS_ASSERT(lpComponentName && lpLabel && lpMovieName,
+               "lpComponentName && lpLabel && lpMovieName");
+
+    CgsCore::SPrintf(macComponent, sizeof(macComponent), lpComponentName);
+    macComponent[31] = 0;
+    CgsCore::SPrintf(macLabel, sizeof(macLabel), lpLabel);
+    macLabel[31] = 0;
+    CgsCore::SPrintf(macMovie, sizeof(macMovie), lpMovieName);
+    macMovie[31] = 0;
+    meAction = leAction;
+}
+
 // @ 0x823A6A20 — zero-extended byte; guards leCounty >= 0 (vacuous for an unsigned
 // byte but the X360 still emits it) and leCounty < BrnWorld::E_COUNTY_COUNT.
 BrnWorld::ECounty GuiEventUpdateSatNav::SatNavIconInfo::GetCounty() const

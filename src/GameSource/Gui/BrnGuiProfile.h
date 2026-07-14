@@ -164,7 +164,11 @@ namespace BrnGui
 
         // BrnGuiProfile.h:536 -- silent mode auto-answers every prompt with option 0
         // (ShowAutosaveEnabled/DisabledMessage @0x824F8D70/0x824F8E00 check it).
-        void SetSilentMode(bool lbSilentMode) { mbSilentMode = lbSilentMode; }
+        void SetSilentMode(bool lbSilentMode)
+        {
+            mbSilentMode = lbSilentMode;
+            mSaveLoadSystem.SetSilentMode(lbSilentMode);
+        }
 
         // BrnGuiProfile.h:592 @0x824731A0 / :604 @0x82473278.
         void AttachMessageDisplay(ProfileMessageDisplay* lpMessageDisplay);

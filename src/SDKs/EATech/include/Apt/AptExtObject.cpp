@@ -268,3 +268,22 @@ void AptRegisterExtension(AptExtObject* pExtObject)
     if (pGlobalHash)
         pGlobalHash->Set(lName, pExtObject);
 }
+
+// ---------------------------------------------------------------------------
+// AptUnRegisterExtension @0x82AEDF28 -- remove a native extension from the AS
+// VM. The X360 body obtains the virtual name, takes a temporary reference, unsets
+// that name from the global-extension hash, then releases the temporary reference.
+// The AddRef is load-bearing: AptNativeHash::Unset releases the registry's own
+// reference, so it keeps the extension alive until the unregister operation has
+// finished. The console's uncontended registry spin lock is omitted for the same
+// single-threaded host reason as AptRegisterExtension above.
+// ---------------------------------------------------------------------------
+void AptUnRegisterExtension(AptExtObject* pExtObject)
+{
+    EAStringC lName(pExtObject->GetName());
+    pExtObject->AddRef();
+
+    gpAptGlobalExtensionObject->GetNativeHashVirtual()->Unset(lName);
+
+    pExtObject->Release();
+}

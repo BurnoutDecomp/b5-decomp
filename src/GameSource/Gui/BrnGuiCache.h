@@ -13,7 +13,8 @@
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
 // the methods reached by the in-scope GUI code are declared on GuiCache (its full data
 // layout is an out-of-scope boundary object the leaves only touch through these calls).
-namespace CgsGui { class ObjectController; }
+namespace CgsGui { class ObjectController; struct GuiEventAptTriggerPayload; }
+namespace CgsGui { namespace ModelIO { struct InputBuffer; } }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
@@ -69,6 +70,16 @@ namespace BrnGui
 
         void Construct();
 
+        // @0x8250DC30 -- flush the previous request queue into ModelIO, advance the
+        // double buffer, and materialise every dirty resource-state transition as a
+        // GuiEventLoadRequest (39).
+        void Update(CgsGui::ModelIO::InputBuffer* lpInputBuffer);
+
+        // @0x824FE3D0 / @0x824FE7E0 -- consume the resource module's completion
+        // notifications and advance the matching cache slot.
+        void OnLoadNotification(const CgsGui::GuiEventLoadNotification* lpEvent);
+        void OnUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpEvent);
+
         // EnsureResourceIsLoaded @ 0x824FDA28 -- step one watched resource's state
         // machine towards LOADED (UNLOADED -> LOAD_REQUESTED with a type-consistency
         // check; the CANCELLED/REQUESTED unload states step back towards their load
@@ -115,6 +126,11 @@ namespace BrnGui
         // component ids for the hash. ADDITIVE GROW (BrnPauseScreen TU).
         bool IsWaitingAptComponent(GuiFlow leFlow, u32 luComponentNameHash) const;
 
+        // MarkAptComponentInitialised @ 0x824EDEC8 -- an Apt ONLOAD trigger marks
+        // every matching expected component across the three GUI flows and attaches
+        // a waiting controlled component, if present.
+        void MarkAptComponentInitialised(const CgsGui::GuiEventAptTriggerPayload* lpEvent);
+
         void IncrementUnloadPending();
         void DecrementUnloadPending();
 
@@ -144,14 +160,20 @@ namespace BrnGui
         // the X360 tracker/system-user-profile stores land with their owners).
         void Construct();
 
+        // @0x8250DD80 -- resource-helper update. The unrelated per-car scratch reset
+        // in the tail is outside this cache slice.
+        void Update(CgsGui::ModelIO::InputBuffer* lpInputBuffer);
+
         bool EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         bool EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreUnloaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         const void* GetLoadedResource(u32 luId) const;
+        void UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount);
 
         f32 GetTime() const;
         f32 GetTimeStep() const;
+        bool IsLoadingScreenVisible() const { return mbIsLoadingScreenVisible; }
 
         // DWARF: BrnGuiCache.h:206 -- register a single apt component (by its name hash) as
         // "expected" on the given GUI flow layer, so the cache waits for it to finish
@@ -184,6 +206,10 @@ namespace BrnGui
         // Append). X360 @0x824EE528 (`addi r3,r3,8` + tail-branch into the watcher's
         // ClearComponentInitialised). Bodied in the GuiCache TU.
         void ClearExpectedAptComponentList(GuiFlow leFlow);
+
+        // RecEvent @ 0x8250DDF0 -- resource completion (14/16) and Apt ONLOAD (21)
+        // branches used by the module bridges.
+        void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId);
 
         // Request the unload of every watched resource of the given type. X360
         // @0x824FEBB0 (`addi r3,r3,8` + tail-branch into the watcher). Bodied in the
@@ -392,7 +418,9 @@ namespace BrnGui
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
         u8   mPad_4B04[0x46];                             // +0x4B04..+0x4B49
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
-        u8   mPad_4B4B[0x527F - 0x4B4A];                 // +0x4B4B..+0x527F
+        u8   mPad_4B4B[0x4B4F - 0x4B4B];                 // +0x4B4B..+0x4B4E
+        bool mbIsLoadingScreenVisible;                   // +0x4B4F (19279) DecFIGS h: IsLoadingScreenVisible
+        u8   mPad_4B50[0x5280 - 0x4B50];                 // +0x4B50..+0x527F
         s32 miNumPresetRaces;                            // +0x5280 (21120)
         u8  mPad_5284[19408];                            // +0x5284..+0x9E53
         s32 mEventsCtorSentinel;                         // +0x9E54 (40532) mEvents array ctor marker

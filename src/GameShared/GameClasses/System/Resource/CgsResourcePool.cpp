@@ -18,6 +18,18 @@
 
 namespace CgsResource
 {
+    namespace
+    {
+        u32 GetManagementHashLength(u32 luMaxResources)
+        {
+            const u32 luRequiredEntries = 3u * luMaxResources;
+            u32 luLength = 1;
+            while (luLength < luRequiredEntries)
+                luLength *= 2;
+            return luLength;
+        }
+    }
+
     // ---- lookup -------------------------------------------------------------------
 
     // 0x828ED190 - resolve an ID to its entry index via the hash table, then gate on the
@@ -398,24 +410,23 @@ namespace CgsResource
     }
 
     // 0x828F5B28 - bring the management data up: size + initialise the id->index hash, then
-    // mark every entry free. The X360 also resets each entry's ResourcePtr alias-list to an
-    // empty self-referential state (Entry+52..); that region is modelled with the ResourcePtr
-    // propagation and is not needed for the basic load path, so it is omitted here.
+    // mark every entry free and reset its ResourcePtr owner ring.
     void Pool::InitManagementData()
     {
-        // Hash length = next power of two >= 3 * muMaxResources.
-        u32 luLength = 3u * muMaxResources;
-        --luLength;
-        luLength |= luLength >> 1;
-        luLength |= luLength >> 2;
-        luLength |= luLength >> 4;
-        luLength |= luLength >> 8;
-        luLength |= luLength >> 16;
-        ++luLength;
+        const u32 luLength = GetManagementHashLength(muMaxResources);
         mHashTable.Initialize(mpHashEntries, static_cast<s32>(luLength));
 
-        for (u32 luIndex = 0; luIndex < muNumFreeResources; ++luIndex)
+        for (u32 luIndex = 0; luIndex < muMaxResources; ++luIndex)
+        {
             mpx8ResourceStatuses[luIndex] = 0;
+            Entry* const lpEntry = &mpResourceEntries[luIndex];
+            BaseResourcePtr* const lpOwner =
+                reinterpret_cast<BaseResourcePtr*>(&lpEntry->mResource);
+            lpEntry->mpResourceNext = lpOwner;
+            lpEntry->mpResourcePrev = lpOwner;
+            lpEntry->mpResourceThis = lpOwner;
+            lpEntry->muResourceThreadId = reinterpret_cast<uintptr_t>(lpEntry);
+        }
 
         miNumResourcesInPurgatory = 0;
     }
@@ -459,12 +470,7 @@ namespace CgsResource
 
         const u32 luMax = lpOptions->muMaxResources;
 
-        // Hash length = next power of two >= 3 * muMaxResources (matches InitManagementData).
-        u32 luHashLength = 3u * luMax;
-        --luHashLength;
-        luHashLength |= luHashLength >> 1;  luHashLength |= luHashLength >> 2;
-        luHashLength |= luHashLength >> 4;  luHashLength |= luHashLength >> 8;
-        luHashLength |= luHashLength >> 16; ++luHashLength;
+        const u32 luHashLength = GetManagementHashLength(luMax);
 
         u32 luOverheadSize = static_cast<u32>(sizeof(Entry)) * luMax                       // mpResourceEntries
                            + luMax                                                          // mpx8ResourceStatuses (u8)

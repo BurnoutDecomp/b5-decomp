@@ -48,7 +48,10 @@ namespace EAThread
     // id, matching the X360 4-byte field width. No ResourcePtr accessor touches it
     // (declaration-only padding); replace with the real EA header alias if/when the
     // EAThread shim lands.
-    typedef u32 ThreadId;
+    // The PC resource-pointer path temporarily carries an Entry* in this slot
+    // while reseating an alias.  It is a 32-bit word on X360 and pointer-width on
+    // the native x64 target.
+    typedef uintptr_t ThreadId;
 }
 
 namespace CgsResource

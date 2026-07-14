@@ -7,7 +7,6 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (stage log)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // CgsLanguage::LanguageManager (no-space formatting)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (resource/watcher surface)
-#include "GameSource/Gui/BrnGuiAptRuntime.h"                              // gpActiveAptRuntimeHost (component-init gate boundary)
 
 #include <cstdio>   // std::snprintf (the stage log)
 
@@ -37,9 +36,6 @@ namespace BrnGui
 
         const s32 KI_ACTION_ACCEPT = 49;   // X360 HandleControllerInput accept sub-id
         const s32 KI_ACTION_BACK   = 50;   // X360 HandleControllerInput back sub-id
-        // The PC controller chain's accept observable: BridgeControllerToGui synthesises
-        // 6/45 for the accept press (the real 0x820352F0/0x82035330 binding tables).
-        const s32 KI_ACTION_ACCEPT_PC = 45;
 
         const s32 KI_CHANNEL_GUI_OUT    = 40;  // GuiEventOut
         const s32 KI_CHANNEL_VIEW_STATE = 41;  // GuiOutViewState
@@ -49,6 +45,14 @@ namespace BrnGui
         struct GuiEventCache : public CgsModule::Event
         {
             GuiCache* mpGuiCache;
+        };
+
+        // ARTIST controller event 6 payload. HandleControllerInput reads the second
+        // dword (button/action id), after the pad id.
+        struct ControllerInputPressedPayload : public CgsModule::Event
+        {
+            s32 miPadId;
+            s32 miButtonId;
         };
 
         // 16-byte GuiEvent<N> command { 1, N, 12 } (the shared boot-state channel record).
@@ -89,51 +93,20 @@ namespace BrnGui
                 : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
         };
 
-        // BrnGui::GuiAudioTriggerEvent -- the 112-byte audio-trigger record the X360
-        // Construct()s with (channel, apt-name, trigger-name) and OutputGuiEvent()s on
-        // channel 201 (HandleControllerInput fires it for the prompt accept). Same
-        // local carrier the committed BrnBootLegal.cpp posts.
-        struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
+        // The cache watcher is the ARTIST component-initialisation handshake:
+        // register the five expected SaveLoad clips by name, then wait until their
+        // Apt ONLOAD triggers have marked them initialised.
+        void CacheAppendExpectedAptComponent(GuiCache* lpCache, GuiFlow leFlow,
+                                             const char* lpacComponentName)
         {
-            u8 maBody[112];
-            GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12) { for (s32 i = 0; i < 112; ++i) maBody[i] = 0; }
-            // FLAG (bring-up carrier layout): the X360 fills the 112-byte audio record with
-            // the channel + apt/trigger NAME HASHES for the AEMS sound logic; that exact
-            // record layout is the deferred audio-engine boundary. Until it is recovered,
-            // carry { s32 channel @+0, trigger name @+4, apt name @+68 } so the PC
-            // channel-201 consumer can key the trigger (mirrors BrnBootLegal.cpp).
-            void Construct(s32 liChannel, const char* lpacAptName, const char* lpacTrigger)
-            {
-                *reinterpret_cast<s32*>(&maBody[0]) = liChannel;
-                const char* lpacT = (lpacTrigger != 0) ? lpacTrigger : "";
-                const char* lpacA = (lpacAptName != 0) ? lpacAptName : "";
-                s32 li = 0;
-                for (; li < 63 && lpacT[li] != 0; ++li) maBody[4 + li] = static_cast<u8>(lpacT[li]);
-                maBody[4 + li] = 0;
-                for (li = 0; li < 43 && lpacA[li] != 0; ++li) maBody[68 + li] = static_cast<u8>(lpacA[li]);
-                maBody[68 + li] = 0;
-            }
-        };
+            if (lpCache != 0)
+                lpCache->AppendExpectedAptComponent(leFlow, lpacComponentName);
+        }
 
-        // ---- GuiCache apt-watcher boundary (the register half only) --------------------
-        // The name-taking watcher register entry (GuiCache::AppendExpectedAptComponent
-        // (GuiFlow, const char*) @0x824F87C0) is declared on the committed cache but its
-        // body is not in the build yet; registering the expectation is bookkeeping the
-        // WAIT_INITIALISE gate below stands in for, so the register is a no-op until
-        // that body lands.
-        // FLAG PC-platform leaf: cache apt-watcher register boundary (see above).
-        void CacheAppendExpectedAptComponent(GuiCache* /*lpCache*/, GuiFlow /*leFlow*/,
-                                             const char* /*lpacComponentName*/) {}
-
-        // FLAG PC-platform leaf: the X360 gates WAIT_INITIALISE on the cache watcher
-        // (GuiCache::AreAllAptComponentsInitialised @0x824EE7A8), whose per-component
-        // marks come from the apt engine's component-registration handshake -- not yet
-        // wired on PC (the append above is a no-op). Gate on the Apt host being up so
-        // the SaveLoadComponent request has a live engine to land in.
         bool CacheAreAllAptComponentsInitialised(GuiCache* lpCache)
         {
-            return lpCache != 0 && BrnGui::gpActiveAptRuntimeHost != 0 &&
-                   BrnGui::gpActiveAptRuntimeHost->IsReady();
+            return lpCache != 0 &&
+                   lpCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN);
         }
     }
 
@@ -353,11 +326,11 @@ namespace BrnGui
         { KI_EVENT_GUI_CACHE, KI_EVENT_CONTROLLER, KI_EVENT_OVERLAY_RESULT };
     const s32 BootProfile::miNumEventsObserved = 3;
 
-    // FLAG (unrecovered .rdata @0x82F25F78/0x82F25F80): the profile screen's static
-    // resource-tuple table carries no exported values; empty until recovered (with a
-    // zero count every cache resource walk below is trivially satisfied).
-    const CgsGui::sResourceTuple BootProfile::maResourcesToLoad[1] = { { 0u, CgsGui::E_GUI_RESOURCETYPE_START } };
-    const u32 BootProfile::muNumResourcesToLoad = 0;
+    // ARTIST .rdata @0x82F25F78: { id 127, type 4 }; the count at 0x82F25F80 is 1.
+    // off_82F278E0[127] names the resource "SaveLoadComponent".
+    const CgsGui::sResourceTuple BootProfile::maResourcesToLoad[1] =
+        { { 127u, CgsGui::E_GUI_RESOURCETYPE_APT } };
+    const u32 BootProfile::muNumResourcesToLoad = 1;
 
     // @ 0x824743F8 (cpp:282) -- base Construct then thread the profile manager
     // (BrnHudFlow::Prepare @0x8251A620 dispatches this wider overload for BF_PROFILE).
@@ -396,19 +369,19 @@ namespace BrnGui
         if (mpProfileManager != 0)   // X360 unconditional; PC null-guard
             mpProfileManager->DetachMessageDisplay(mProfileMessage);
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
-        // X360 size 20 with 4-byte pointers; sizeof on the x64 gate (the pointer widens).
-        GuiAptNameFlagEvent20 lUnload("", 1);
+        // ARTIST 0x82478558: the empty-name sentinel targets the same display level
+        // used by SaveLoadComponent (level 3), so that prompt is gone before the
+        // post-title intro state can begin.
+        GuiAptNameFlagEvent20 lUnload("", 3);
         mpStateInterface->GetOutputEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lUnload), KI_CHANNEL_VIEW_STATE,
             static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
         if (!mbCheckDiskSpace)
         {
-            // GuiCache::UnloadResources(maResourcesToLoad, muNumResourcesToLoad) -- the
-            // recovered tuple count is 0, so the X360 unload walk is a no-op here; then
-            // the player-name refresh command (507). (The X360 gates the 507 post on a
-            // cache flag @cache+19279 being clear; unrecovered, and clear on a normal
-            // boot, so the post stands.)
-            PostCommand16<507>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            if (mpGuiCache != 0)
+                mpGuiCache->UnloadResources(maResourcesToLoad, muNumResourcesToLoad);
+            if (mpGuiCache == 0 || !mpGuiCache->IsLoadingScreenVisible())
+                PostCommand16<507>(mpStateInterface, KI_CHANNEL_GUI_OUT);
         }
         else
         {
@@ -420,20 +393,20 @@ namespace BrnGui
     // manager (accept with a live prompt also fires the "Accept" audio trigger):
     // accept -> option 0 on an ok prompt / option 1 on an ok-cancel prompt; back ->
     // option 0 on an ok-cancel prompt. PC fallback: with no manager wired, an accept at
-    // RUNNING resolves the (absent) profile task, the HandleProfileTaskResult observable.
+    // RUNNING resolves through the manager's task callback.
     void BootProfile::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        const s32 liSubId = *reinterpret_cast<const s32*>(
-            reinterpret_cast<const char*>(lpEvent) + 4);
-        if (liSubId == KI_ACTION_ACCEPT || liSubId == KI_ACTION_ACCEPT_PC)
+        const s32 liSubId =
+            reinterpret_cast<const ControllerInputPressedPayload*>(lpEvent)->miButtonId;
+        if (liSubId == KI_ACTION_ACCEPT)
         {
             const s32 liNumOptions = mProfileMessage.GetNumOptions();
             if (liNumOptions >= 1)
             {
                 // X360: GuiAudioTriggerEvent::Construct(7, "", "Accept") + OutputGuiEvent.
-                GuiAudioTriggerEvent lAudio;
-                lAudio.Construct(7, "", "Accept");
-                mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
+                BrnGui::GuiAudioTriggerEvent lAudio;
+                lAudio.Construct(7, "", "Accept", "");
+                mpStateInterface->OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(lAudio);
             }
 
             if (liNumOptions == 1)
@@ -445,13 +418,6 @@ namespace BrnGui
             {
                 if (mpProfileManager != 0)
                     mpProfileManager->HandleMessageChoice(1);
-            }
-            else if (mpProfileManager == 0 && meInternalState == E_INTERNALSTATE_RUNNING)
-            {
-                // FLAG PC profile boundary fallback: no ProfileManager wired -> the
-                // accept press IS the profile-task resolution (the console advances
-                // RUNNING -> LEAVING from HandleProfileTaskResult @0x82474468).
-                meInternalState = E_INTERNALSTATE_LEAVING;
             }
         }
         else if (liSubId == KI_ACTION_BACK && mProfileMessage.GetNumOptions() == 2)
@@ -476,11 +442,6 @@ namespace BrnGui
     {
         if (mpProfileManager != 0)   // only the manager calls here, but keep the PC guard
         {
-            // X360 stores both silent-mode flags directly (manager+267296 = 0 and
-            // SaveLoadSystem::SetSilentMode(manager+4200, 0) -- the inlined manager-side
-            // un-silence). The save/load system member is manager-private; the committed
-            // ProfileManager::SetSilentMode covers the manager flag (the system-side
-            // mirror belongs to the coordinator's ProfileManager pass).
             mpProfileManager->SetSilentMode(false);
         }
         LogProfileStage(meInternalState, E_INTERNALSTATE_LEAVING);

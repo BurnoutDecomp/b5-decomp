@@ -17,6 +17,11 @@ extern "C" __declspec(dllimport) unsigned long __stdcall GetWindowThreadProcessI
 extern "C" __declspec(dllimport) unsigned long __stdcall GetCurrentProcessId(void);
 extern "C" __declspec(dllimport) void* __stdcall LoadLibraryA(const char* lpLibFileName);
 extern "C" __declspec(dllimport) void* __stdcall GetProcAddress(void* hModule, const char* lpProcName);
+extern "C" __declspec(dllimport) void* __stdcall OpenEventA(unsigned long dwDesiredAccess,
+                                                              int bInheritHandle,
+                                                              const char* lpName);
+extern "C" __declspec(dllimport) unsigned long __stdcall WaitForSingleObject(void* hHandle,
+                                                                              unsigned long dwMilliseconds);
 
 namespace
 {
@@ -109,6 +114,43 @@ namespace
         { 42, KAI_KEYS_PREV,   static_cast<unsigned short>(KU_XPAD_DPAD_UP | KU_XPAD_DPAD_LEFT) },
     };
     const u32 KU_NUM_BINDINGS = sizeof(KA_BINDINGS) / sizeof(KA_BINDINGS[0]);
+
+    // FLAG PC-platform leaf: the unattended boot harness signals one auto-reset event
+    // per host action. Unlike synthetic desktop keystrokes these survive a locked or
+    // disconnected desktop and are consumed by exactly one input update. The channel is
+    // enabled only with the harness's BRN_INPUT_ALLOW_BACKGROUND environment marker.
+    bool ConsumeHarnessAction(s32 liActionId)
+    {
+        static const bool s_bHarnessEnabled =
+            (std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr);
+        if (!s_bHarnessEnabled)
+            return false;
+
+        const char* lpcEventName = 0;
+        switch (liActionId)
+        {
+        case 45: lpcEventName = "Local\\BurnoutPC_Input_Accept"; break;
+        case 49: lpcEventName = "Local\\BurnoutPC_Input_Stop";   break;
+        case 41: lpcEventName = "Local\\BurnoutPC_Input_Next";   break;
+        case 42: lpcEventName = "Local\\BurnoutPC_Input_Prev";   break;
+        default: return false;
+        }
+
+        // SYNCHRONIZE == 0x00100000; WAIT_OBJECT_0 == 0. The harness creates
+        // auto-reset events before launching the game, so a successful zero-time wait
+        // both observes and consumes one requested action.
+        static void* sapHarnessEvents[KU_NUM_BINDINGS] = {};
+        u32 luBinding = 0;
+        while (luBinding < KU_NUM_BINDINGS
+               && KA_BINDINGS[luBinding].iActionId != liActionId)
+            ++luBinding;
+        if (luBinding >= KU_NUM_BINDINGS)
+            return false;
+        if (sapHarnessEvents[luBinding] == 0)
+            sapHarnessEvents[luBinding] = OpenEventA(0x00100000u, 0, lpcEventName);
+        return sapHarnessEvents[luBinding] != 0
+            && WaitForSingleObject(sapHarnessEvents[luBinding], 0) == 0;
+    }
 }
 
 namespace CgsInput
@@ -154,6 +196,8 @@ namespace CgsInput
                 for (const int* lpiKey = lrBinding.paiVKeys; *lpiKey != 0 && !lbDown; ++lpiKey)
                     lbDown = (GetAsyncKeyState(*lpiKey) & 0x8000) != 0;
             }
+            if (!lbDown)
+                lbDown = ConsumeHarnessAction(lrBinding.iActionId);
             if (!lbDown && lbXPad)
                 lbDown = (lXState.Gamepad.wButtons & lrBinding.uXPadButtons) != 0;
 

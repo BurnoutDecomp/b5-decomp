@@ -2,6 +2,8 @@
 #define BRN_ONLINE_INVITE_MESSAGE_COMPONENT_H
 
 #include "types.hpp"
+#include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h"
+#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"
 
 namespace CgsGui { class StateInterface; }
 namespace BrnFlapt { struct FileRef; }
@@ -20,7 +22,9 @@ namespace BrnFlapt { struct FileRef; }
 
 namespace BrnGui
 {
-    class OnlineInviteMessageComponent
+    class GuiCache;
+
+    class OnlineInviteMessageComponent : public BrnFlaptComponent
     {
     public:
         // The component's showing-state machine. The transition-complete callback asserts
@@ -29,10 +33,29 @@ namespace BrnGui
         // intermediate values are the conventional show/transition-in states.
         enum EShowingState
         {
-            E_SHOWINGSTATE_HIDDEN           = 0, // value the callback writes back
-            E_SHOWINGSTATE_TRANSITIONING_IN = 1,
+            E_SHOWINGSTATE_INVISIBLE        = 0,
+            E_SHOWINGSTATE_SHOWING          = 1,
             E_SHOWINGSTATE_TRANSITIONING_OUT = 2, // value the assert requires
-            E_SHOWINGSTATE_SHOWING          = 3,
+            E_SHOWINGSTATE_COUNT            = 3,
+        };
+
+        enum EOnlineNotificationChyronType
+        {
+            E_ONLINENOTIFICATIONCHYRONTYPE_NONE = 0,
+            E_ONLINENOTIFICATIONCHYRONTYPE_HOST_START_EVENT = 1,
+            E_ONLINENOTIFICATIONCHYRONTYPE_BUDDY_ONLINE = 2,
+            E_ONLINENOTIFICATIONCHYRONTYPE_NUM_BUDDIES_ONLINE = 3,
+            E_ONLINENOTIFICATIONCHYRONTYPE_INVITE_RECEIVED = 4,
+            E_ONLINENOTIFICATIONCHYRONTYPE_NEW_NEWS = 5,
+            E_ONLINENOTIFICATIONCHYRONTYPE_COUNT = 6,
+        };
+
+        enum EMessagingAvailableState
+        {
+            E_MESSAGING_AVAILABLE_STATE_UNAVAILABLE = 0,
+            E_MESSAGING_AVAILABLE_STATE_PRE_WAIT = 1,
+            E_MESSAGING_AVAILABLE_STATE_AVAILABLE = 2,
+            E_MESSAGING_AVAILABLE_STATE_COUNT = 3,
         };
 
         // 0x824162E0 -- called when the transition-out animation finishes: assert we were
@@ -48,22 +71,26 @@ namespace BrnGui
         // @0x824F3628 Construct site: r4="OnlineInvite_mc", r5=&StateInterface, r6=0.
         void Construct(const char* lpcMovieClipName,
                        CgsGui::StateInterface* lpStateInterface,
-                       s32 liFlags);
+                       const char* lpcParentName);
 
         // PrepareFlapt site: r4="OnlineInvite_mc", r5=FileRef.
         void Prepare(const char* lpcMovieClipName, const BrnFlapt::FileRef& lFile);
 
+        static void TransitionCompleteCallback(void* lpUserData, u16 luFrame);
+
     private:
-        // Guest +0x34: a secondary state the callback tests against 4. The match latches
-        // the dismissed flag below; modelled as an opaque s32 state code.
-        s32 miSecondaryState; // guest +0x34
-
-        // Guest +0x30: the showing-state machine value (read/asserted/reset by the callback).
-        EShowingState meShowingState; // guest +0x30
-
-        // Guest +0x68: a bool flag set true when the secondary state == 4 at transition
-        // complete (the asm stores a byte, so this is a byte-wide field, not a dword).
-        bool mbDismissed; // guest +0x68
+        GuiCache* mpGuiCache;
+        BrnFlapt::TextFieldRef maTextFields[2];
+        f32 mfTimeToRemoveCurrentMessage;
+        f32 mfTimeToAllowMessages;
+        EShowingState meShowingState;
+        EOnlineNotificationChyronType meShowingType;
+        EMessagingAvailableState meMessagesAvailable;
+        bool mbGameStarted;
+        EOnlineNotificationChyronType meQueuedType;
+        char macQueuedName[32];
+        s32 miQueuedCount;
+        bool mbOutputFinishEvent;
     };
 }
 

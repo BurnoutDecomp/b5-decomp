@@ -5,6 +5,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"          // BrnFlapt::FileRef
 #include "GameSource/Gui/Flapt/BrnFlaptFileInstance.h"     // BrnFlapt::FlaptFileInstance (52-byte stride)
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"         // BrnFlapt::FlaptRenderer (the embedded renderer @ console +0x40)
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"// SoundTriggerCallback declaration
 
 // ============================================================================
 // GameSource/Gui/Flapt/BrnFlaptManager.h
@@ -93,6 +94,9 @@ namespace BrnFlapt
         // @0x82472188 RegisterFlaptFile : bind a loaded resource handle to a flapt file
         // slot (already-active assert + FlaptFileInstance::SetData with the embedded renderer).
         void RegisterFlaptFile(FlaptFiles leFile, CgsResource::ResourceHandle lResourceHandle);
+
+        void SetSoundTriggerHandler(MovieClipInstance::SoundTriggerCallback lpCallback,
+                                    void* lpUserData);
 
         PrepareStage      mePrepareStage;
         ReleaseStage      meReleaseStage;

@@ -23,12 +23,9 @@
 // protocol (requests out / receiver-queue responses in / WAIT-stage counting) is untouched;
 // only the transport between the two queue ends is PC-synchronous.
 //
-// Bank materialisation policy (this wave): only the FSM bundle bank (miFSMBundleBank --
-// the bank the flow-controller's type-18 requests route to) is backed by a real PC pool.
-// Requests routed to any other bank complete as echo-only responses (logged) so the state
-// machine's WAIT counting stays exact -- the START stage's fire-and-forget PERSISTENTAPT /
-// GUITEXTURES.BIN loads fall in this bucket while the apt movie slots still load host-side
-// (BrnGuiAptRuntime); materialising the apt banks here is the follow-on migration step.
+// The PC adapter materialises the same distinct FSM, persistent-Apt, and streamed-Apt
+// banks that GuiResourceModule::Prepare receives on the console. Texture/font/language
+// banks still complete as echo-only responses until their owning PC pool modules exist.
 namespace CgsGui
 {
     namespace
@@ -127,6 +124,44 @@ namespace CgsGui
                 CgsDev::Log::WriteToLog("[GuiResourceModule] streamed-apt bank pool materialised.\n");
             }
             return &s_AptStreamedBankPool;
+        }
+
+        // The persistent-Apt bank is deliberately separate from the streamed movie bank.
+        // GuiResourceModule's ARTIST flow loads PERSISTENTAPT into this bank during START,
+        // then type-7 requests acquire their named .swf entries from it. Missing persistent
+        // entries are loaded into this same bank by the module's normal retry path.
+        u8 s_aAptPersistentBankBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_APT_STREAMED_BANK_BYTES];
+        CgsResource::Pool s_AptPersistentBankPool;
+        bool s_bAptPersistentBankLive = false;
+
+        CgsResource::Pool* MaterialiseAptPersistentBankPool(s32 liPoolId)
+        {
+            if (!s_bAptPersistentBankLive)
+            {
+                CgsResource::RegisterAllResourceTypes();
+                CgsResource::Pool::InitOptions lOptions;
+                lOptions.miId    = liPoolId;
+                lOptions.mpcName = "GuiResourceAptPersistentBank";
+                for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+                {
+                    lOptions.maHeapInfo[lt].muMaxNodes       = KU_APT_STREAMED_BANK_MAX_NODES;
+                    lOptions.maHeapInfo[lt].muHeapMemorySize = KU_APT_STREAMED_BANK_BYTES - 256u * 1024u;
+                    lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
+                    lOptions.mResource.m_baseResources[lt]   = s_aAptPersistentBankBacking[lt];
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_APT_STREAMED_BANK_BYTES;
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
+                }
+                lOptions.muMaxResources         = KU_APT_STREAMED_BANK_MAX_NODES;
+                lOptions.muMaxImports           = KU_APT_STREAMED_BANK_MAX_NODES;
+                lOptions.miRefCountThreshold    = 0;
+                lOptions.miNumDependencies      = 0;
+                lOptions.miBankId               = 0;
+                lOptions.mbAllowDefragmentation = false;
+                s_AptPersistentBankPool.InitPool(&lOptions);
+                s_bAptPersistentBankLive = true;
+                CgsDev::Log::WriteToLog("[GuiResourceModule] persistent-apt bank pool materialised.\n");
+            }
+            return &s_AptPersistentBankPool;
         }
 
         // Emit one type-14 load notification per AptData (0x1E) resource in the pool, each
@@ -334,10 +369,28 @@ namespace CgsGui
                                       liLoaded, luEmitted, lpRequest->miPoolId);
                         CgsDev::Log::WriteToLog(lac);
                     }
+                    else if (lpRequest->miPoolId == miAptPersistentBundleBank)
+                    {
+                        // PERSISTENTAPT and type-7 retry bundles remain in the dedicated
+                        // persistent bank. Their named resource is acquired by the module's
+                        // ordinary request/response path; the initial fire-and-forget bank
+                        // load must not synthesize streamed-movie registration events.
+                        CgsResource::Pool* lpPool = MaterialiseAptPersistentBankPool(lpRequest->miPoolId);
+                        CgsResource::BundleLoader lLoader;
+                        const s32 liLoaded =
+                            lLoader.LoadBundle(lpRequest->macFileName, lpPool, CgsResource::ResolveResourceType);
+
+                        char lac[224];
+                        std::snprintf(lac, sizeof(lac),
+                                      "[GuiResourceModule] persistent apt bundle '%s' -> %s (%d resources, bank %d).\n",
+                                      lpRequest->macFileName, liLoaded > 0 ? "loaded" : "MISSING",
+                                      liLoaded, lpRequest->miPoolId);
+                        CgsDev::Log::WriteToLog(lac);
+                    }
                     else
                     {
-                        // The bank is not materialised on PC yet (texture/font/language +
-                        // persistent-apt waves pending) -- complete the request without IO so the
+                        // The bank is not materialised on PC yet (texture/font/language) --
+                        // complete the request without IO so the
                         // WAIT counting stays exact; the acquire path reports the miss.
                         char lac[192];
                         std::snprintf(lac, sizeof(lac),
@@ -369,6 +422,30 @@ namespace CgsGui
                                       lpRequest->macFileName, liUnloaded);
                         CgsDev::Log::WriteToLog(lac);
                     }
+                    else if (lpRequest->miPoolId == miAptPersistentBundleBank && s_bAptPersistentBankLive)
+                    {
+                        CgsResource::BundleLoader lLoader;
+                        const s32 liUnloaded =
+                            lLoader.UnloadBundle(lpRequest->macFileName, &s_AptPersistentBankPool);
+
+                        char lac[208];
+                        std::snprintf(lac, sizeof(lac),
+                                      "[GuiResourceModule] persistent apt bundle '%s' unload -> %d resources released.\n",
+                                      lpRequest->macFileName, liUnloaded);
+                        CgsDev::Log::WriteToLog(lac);
+                    }
+                    else if (lpRequest->miPoolId == miAptStreamedBundleBank && s_bAptStreamedBankLive)
+                    {
+                        CgsResource::BundleLoader lLoader;
+                        const s32 liUnloaded =
+                            lLoader.UnloadBundle(lpRequest->macFileName, &s_AptStreamedBankPool);
+
+                        char lac[208];
+                        std::snprintf(lac, sizeof(lac),
+                                      "[GuiResourceModule] streamed apt bundle '%s' unload -> %d resources released.\n",
+                                      lpRequest->macFileName, liUnloaded);
+                        CgsDev::Log::WriteToLog(lac);
+                    }
 
                     // The echo is what ParseUnloaded matches (it re-hashes macFileName).
                     if (lpRequest->mpUser != 0)
@@ -393,6 +470,21 @@ namespace CgsGui
                         // { &entry main-memory slot, entry }.
                         s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_FsmBankPool.FindResource(
+                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                        if (lpEntry != 0)
+                        {
+                            lResponse.mResourceHandle.mpResourceMemory =
+                                &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+                            lResponse.mResourceHandle.mpSourceEntry = lpEntry;
+                        }
+                    }
+                    else if (lpRequest->miPoolId == miAptPersistentBundleBank && s_bAptPersistentBankLive)
+                    {
+                        // PoolModule::DoAcquireResourceRequest @0x828FCD48 is shared by
+                        // all console banks: loaded-status mask 2 and the entry's main-
+                        // memory slot form the returned handle.
+                        s32 liIndex = -1;
+                        CgsResource::Entry* lpEntry = s_AptPersistentBankPool.FindResource(
                             lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
                         if (lpEntry != 0)
                         {

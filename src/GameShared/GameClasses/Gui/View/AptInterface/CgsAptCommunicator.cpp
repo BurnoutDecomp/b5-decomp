@@ -962,7 +962,7 @@ namespace CgsGui
         }
 
         // Build and (for the queued kinds) push the trigger record.
-        GuiEventAptTrigger lTrigger;
+        GuiEventAptTriggerPayload lTrigger;
         lTrigger.meEventType       = static_cast<GuiEventAptTrigger::AptEventType>(liEventId);
         lTrigger.miUniqueId        = liUniqueId;
         lTrigger.mpacComponentName = lName.GetBuffer();
@@ -982,7 +982,8 @@ namespace CgsGui
             || liEventId == GuiEventAptTrigger::E_APT_EVENT_FRAME_TRIGGER)
         {
             mOutAptTriggerEvents.AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lTrigger.meEventType), 21, 20);
+                reinterpret_cast<const CgsModule::Event*>(&lTrigger), 21,
+                static_cast<s32>(sizeof(lTrigger)));
         }
 
         AptValue* lpReturn = AptInteger::Create(0);

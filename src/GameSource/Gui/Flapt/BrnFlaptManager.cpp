@@ -178,6 +178,14 @@ void FlaptManager::RegisterFlaptFile(FlaptFiles leFile,
     lpFileInst->SetData(lResourceHandle, &mRenderer);
 }
 
+// ---- SetSoundTriggerHandler @ 0x8246D6D0 --------------------------------
+void FlaptManager::SetSoundTriggerHandler(
+    MovieClipInstance::SoundTriggerCallback lpCallback, void* lpUserData)
+{
+    CGS_ASSERT(lpCallback != 0, "lpCallback");
+    MovieClipInstance::SetSoundTriggerHandler(lpCallback, lpUserData);
+}
+
 // ---- GetFile @ 0x82473078 ------------------------------------------------
 FileRef* FlaptManager::GetFile(FileRef* lpOutRef, u32 luFile)
 {

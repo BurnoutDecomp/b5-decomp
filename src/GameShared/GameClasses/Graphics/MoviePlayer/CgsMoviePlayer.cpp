@@ -4,7 +4,6 @@
 #include "pc/gcm/renderengine/texture.h"                             // renderengine::Texture
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>   // std::memcpy (strip-band recombine upload)
-#include <cstdio>    // std::snprintf (TEMP-DIAG strip timestamps)
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -340,10 +339,12 @@ namespace CgsGraphics
             if (liRecv == 0)
             {
                 miCurrentStrip = liBand;
-                // display frames advance once per N strip ticks; avg_fps is the STRIP rate, so the
-                // display rate is avg_fps/N. Pace each display frame N*timebase seconds apart.
+                // Each MVhd declares the authored display rate (30 fps for the shipped movies).
+                // FFmpeg flattens the N interleaved MV0 packets into one AVStream but retains that
+                // per-video header rate, so advance time once per complete N-band chunk set.
                 const s64 liDisplayIndex = miStripsDecoded / liN;
-                mfFramePtsSec = static_cast<f64>(liDisplayIndex) * static_cast<f64>(liN) * mfTimeBaseSec;
+                const f64 lfFps = (mfFrameRate > 1.0) ? mfFrameRate : 30.0;
+                mfFramePtsSec = static_cast<f64>(liDisplayIndex) / lfFps;
                 ++miStripsDecoded;
                 return true;
             }

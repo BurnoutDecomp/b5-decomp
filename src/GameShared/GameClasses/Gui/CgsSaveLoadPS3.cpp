@@ -71,7 +71,8 @@ namespace
         virtual void Reserved03() {}
         virtual void Reserved04() {}
         virtual void Reserved05() {}
-        virtual void Reserved06() {}
+        // FLAG PC-platform leaf: the host has no console memory-card UI to silence.
+        virtual void SetSilentMode(bool /*lbSilentMode*/, s32 /*liUserIndex*/) {}
         virtual void Reserved07() {}
         virtual void Reserved08() {}
         virtual void Reserved09() {}
@@ -214,10 +215,22 @@ namespace CgsGui
         miNumberOfMugshotsPerType = liNumberOfMugshotsPerType; // +0x218 (a8)
         miExtraFilesSizeBytes   = static_cast<s32>(luExtraFilesSizeBytes); // +0x21C (a28)
         mbField180              = true;                      // +0x180 (stb r9=1,0x180)
-        mbField181              = false;                     // +0x181 (stb r11=0,0x181)
+        mbSilentMode            = false;                     // +0x181 (stb r11=0,0x181)
         mbField183              = false;                     // +0x183 (stb r11=0,0x183)
         mbAsyncOpState          = 0;                         // +0x224 (stb r11=0,0x224)
         mField24C               = 0;                         // +0x24C (stb r11=0,0x24C)
+    }
+
+    // X360 @0x82473110. The two explicit transition tests preserve the ARTIST
+    // branch shape: notify slot 6 only when the value changes, always with user -1,
+    // then store the requested byte.
+    void SaveLoadSystem::SetSilentMode(bool lbSilentMode)
+    {
+        if (mbSilentMode && !lbSilentMode)
+            mpMemcardInterface->SetSilentMode(false, -1);
+        if (!mbSilentMode && lbSilentMode)
+            mpMemcardInterface->SetSilentMode(true, -1);
+        mbSilentMode = lbSilentMode;
     }
 
     // X360 0x82851FC0. Create the memory-card interface, allocate the mugshot buffer and read the

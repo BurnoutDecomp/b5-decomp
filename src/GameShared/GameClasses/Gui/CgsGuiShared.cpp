@@ -25,6 +25,18 @@ namespace CgsGui
         return mpFlaptManager;
     }
 
+    // Header-inline access-pointer setters in the original build.  GuiModule::Construct
+    // calls both before either the HUD or overlay flow can enter its first state.
+    void GuiAccessPointers::SetFlaptManager(BrnFlapt::FlaptManager* lpFlaptManager)
+    {
+        mpFlaptManager = lpFlaptManager;
+    }
+
+    void GuiAccessPointers::SetGuiCache(BrnGui::GuiCache* lpGuiCache)
+    {
+        mpGuiCache = lpGuiCache;
+    }
+
     // Null every shared-resource pointer; the owners install each one as its
     // subsystem comes up (mpAptAux from the Apt bring-up, the flapt/cache/queue
     // pointers from their modules).

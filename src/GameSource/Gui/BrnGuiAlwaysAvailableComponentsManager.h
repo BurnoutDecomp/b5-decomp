@@ -29,10 +29,9 @@
 //   Update           @ 0x82509338   (virtual)   [reconstruction BLOCKED -- see .cpp]
 //
 // The five always-available components are embedded BY VALUE (the X360 Construct
-// builds each in place at a fixed offset inside this object); their inner field
-// sets are uncommitted, so each is modelled as a footprint-sized opaque component
-// type in its own minimal home (the offsets here are documentary -- byte layout is
-// not load-bearing on the 64-bit host; every member is accessed BY NAME).
+// builds each in place at a fixed offset inside this object). Their PC declarations
+// expose the members needed by the faithfully homed construction/preparation path;
+// every access is through a named member.
 // ============================================================================
 
 // The DWARF spells the in-event-queue type InputBuffer::GuiEventQueue; that nested typedef
@@ -107,16 +106,8 @@ namespace BrnGui
         bool                        mbFlaptPrepared;        // +0x101C4
     };
 
-    // Reach the always-available components manager the GuiModule owns. The manager is a far
-    // embedded sub-object in a part of the GuiModule layout that its current minimal
-    // (movie-hosting) home does not model as a named member, so the X360-attested byte offset
-    // (mpGuiModule + 0x17D670, from BrnGui::ViewModule::ProcessIncomingLoadNotification
-    // @0x824F9468) is encapsulated in this accessor's body (bodied in BrnGuiModule.cpp, which
-    // owns the GuiModule layout). Declared here -- next to the type it returns -- so callers
-    // (e.g. BrnGui::ViewModule) reach the manager BY NAME without taking on GuiModule.h's heavy
-    // transitive includes or doing offset arithmetic themselves. [FLAG: uncommitted
-    // GuiModule-layout offset; self-corrects to a real GuiModule member when that block is
-    // reconstructed.]
+    // Reach the named manager sub-object owned by GuiModule. Declared next to the type it
+    // returns so callers such as BrnGui::ViewModule do not need GuiModule.h's heavy includes.
     AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager(GuiModule* lpGuiModule);
 }
 
