@@ -92,7 +92,9 @@ struct FxMessage_CameraCut  : public FxMessage { FxMessage_CameraCut()  : FxMess
 struct FxMessage_StuntSmash : public FxMessage { FxMessage_StuntSmash() : FxMessage(E_STUNT_SMASH) {} };
 struct FxMessage_StuntStunt : public FxMessage { FxMessage_StuntStunt() : FxMessage(E_STUNT_STUNT) {} };
 struct FxMessage_StruntJump : public FxMessage { FxMessage_StruntJump() : FxMessage(E_STUNT_JUMP)  {} };
+struct FxMessage_CameraPhoto: public FxMessage { FxMessage_CameraPhoto(): FxMessage(E_CAMERA_PHOTO){} };
 struct FxMessage_QuitEvent  : public FxMessage { FxMessage_QuitEvent()  : FxMessage(E_QUIT_EVENT)  {} };
+struct FxMessage_ResetOnTrack : public FxMessage { FxMessage_ResetOnTrack() : FxMessage(E_RESET_ON_TRACK) {} };
 
 // DWARF home inferred: struct BrnSound::Logic::FxEffect : public BrnEffectObject.
 // Reuses the committed BrnEffectObject dual base BY NAME and embeds a 4-element

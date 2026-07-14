@@ -57,6 +57,28 @@ namespace SceneManagerIO
         static_assert(sizeof(OutEventLineTestNearestResult)                    == 0x40, "sizeof == 0x40");
     }
 
+    // Output event: the hit/no-hit result of a fast double-sided line test. DWARF
+    // CgsSceneManagerModuleIO.h:251 (OutEventLineTestFastDoubleSidedResult) -- only a query
+    // handle and an intersection flag. The producing queue is
+    // VariableEventQueue<32768,16>; the typed AddEvent<OutEventLineTestFastDoubleSidedResult>
+    // @ 0x828D0780 forwards to the three-arg AddEvent with liSize == sizeof(EventT) == 8
+    // (asm loads r6 = 8), which pins sizeof to 8: mQueryId(4) + mbIntersection(1) padded to 8.
+    // No Vector3 -> default (4-byte) alignment, unlike OutEventLineTestNearestResult.
+    struct OutEventLineTestFastDoubleSidedResult : public Event
+    {
+        SceneQueryId mQueryId;        // +0x00
+        bool         mbIntersection;  // +0x04
+        // +0x05..+0x07 trailing pad -> sizeof == 8
+    };
+
+    // Pin the X360-attested event size (typed AddEvent @ 0x828D0780 forwards sizeof == 8).
+    inline void OutEventLineTestFastDoubleSidedResult_AssertLayout()
+    {
+        static_assert(offsetof(OutEventLineTestFastDoubleSidedResult, mQueryId)       == 0x00, "mQueryId @ +0x00");
+        static_assert(offsetof(OutEventLineTestFastDoubleSidedResult, mbIntersection) == 0x04, "mbIntersection @ +0x04");
+        static_assert(sizeof(OutEventLineTestFastDoubleSidedResult)                   == 8,    "sizeof == 8");
+    }
+
     // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
     // reconstructed by SceneFineLineTestQueue's own TU (DWARF home
     // CgsSceneManagerModuleIO.h). Size 16400 (DWARF-derived: see below).

@@ -7,10 +7,12 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"        // CgsSound::Playback::Name
 #include "GameShared/GameClasses/Language/CgsSku.h"                 // CgsLanguage::ELanguage
 #include "SharedClasses/Progression/BrnTrainingTypes.h"            // BrnProgression::ETrainingType
+#include "GameSource/GameState/BrnGameActions.h"                    // BrnProgression::TrophyUnlockData::UnlockType
 #include "GameSource/AttribSys/Enums/OnlineVoiceOver.h"            // AttribSys::Enums::OnlineVoiceOver::OnlineVoiceOver
 #include "GameSource/Sound/Global/BrnFxEffect.h"                    // BrnSound::Logic::FxMessage_*
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"     // BrnSound::ESoundMessages/FxVolumes/GameModeLostResults/RaceCarIsNowActive
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"               // BrnGui GUI audio-event payloads (read-only reuse)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::GuiEventPlayMusicOnMenuStream (read-only reuse)
 
 // Explicit per-method instantiation of CgsModule::VariableEventQueue<8192, 16>.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (out-of-line per-instantiation emission).
@@ -68,6 +70,7 @@ template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Me
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::GameModeLostResults> >(const CgsSound::Io::Message<BrnSound::GameModeLostResults>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::RaceCarIsNowActive> >(const CgsSound::Io::Message<BrnSound::RaceCarIsNowActive>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraCut> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraCut>*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_ResetOnTrack> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_ResetOnTrack>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_QuitEvent> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_QuitEvent>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StruntJump> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StruntJump>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntSmash> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntSmash>*, s32);
@@ -77,6 +80,25 @@ template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Me
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioSettings> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioSettings>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxPreview> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxPreview>*, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxUpdate> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxUpdate>*, s32);
+// Message<GuiEventAudioTraxLastPlayedIndexes> == 0x28(40): 16-byte MessageHeader + 24-byte
+// GuiEvent<459> payload (BrnGuiDemangledEventTypes.h:293, id 459 size 24). Matches the baked
+// record-size arg in the X360 thunk @0x826DF2B0 (li r6,0x28), posted by
+// BrnSound::Module::SoundLogicModule::ProcessGuiEvents.
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxLastPlayedIndexes> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxLastPlayedIndexes>*, s32);
+// Message<BrnProgression::TrophyUnlockData::UnlockType> == 0x14(20): 16-byte MessageHeader + a
+// 4-byte enum payload (E_UNLOCKTYPE_*, home BrnGameActions.h). Matches the baked record-size arg
+// in the X360 thunk @0x826DED38 (li r6,0x14), posted by
+// BrnSound::Module::SoundLogicModule::ProcessGameActionQueue (the trophy-unlock sound cue).
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnProgression::TrophyUnlockData::UnlockType> >(const CgsSound::Io::Message<BrnProgression::TrophyUnlockData::UnlockType>*, s32);
+// Message<BrnSound::Logic::FxMessage_CameraPhoto> == 0x14(20): 16-byte MessageHeader + a 4-byte
+// FxMessage payload (empty FxMessage subclass fixing meType == E_CAMERA_PHOTO, home BrnFxEffect.h).
+// Matches the baked record-size arg in the X360 thunk @0x826DFC10 (li r6,20), posted by
+// BrnSound::Logic::CameraControl::UpdateParams (the photo-mode camera cue).
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraPhoto> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraPhoto>*, s32);
+// Message<CgsGui::GuiEventPlayMusicOnMenuStream> == 0x18(24): 16-byte MessageHeader + the GuiEvent<23>
+// "play menu music stream" payload (home CgsGuiStateInterface.h). Matches the baked record-size arg
+// in the X360 thunk @0x826DF058 (li r6,24), posted by BrnSound::Module::SoundLogicModule::ProcessGuiEvents.
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream> >(const CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream>*, s32);
 
 // BLOCKED (2, precise -- NOT fabricated): the two remaining Message<InnerT> instances whose
 // InnerT is a genuinely un-homed BrnGui payload type. Homing them requires either editing the
