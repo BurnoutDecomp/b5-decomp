@@ -27,6 +27,20 @@ namespace BrnGui
     {
     }
 
+    // @0x82483708 -- fetch row liIndex as a TableRow*. The X360 bounds-checks the index
+    // with a single UNSIGNED compare (`a2 >= 0x10`, i.e. liIndex outside [0, 16)), firing
+    // "Table::GetSelectable() invalid index specified" (BrnTable.h:356), then forwards to
+    // the base SelectableGroup::GetSelectable and returns its slot. TableRow derives from
+    // SelectableGroup (not Selectable), so the base Selectable* is reinterpret_cast — a
+    // static_cast would be ill-formed across the unrelated bases.
+    TableRow* Table::GetSelectable(s32 liIndex)
+    {
+        CGS_ASSERT(static_cast<u32>(liIndex) < static_cast<u32>(KI_MAX_ROWS_PER_TABLE),
+                   "Table::GetSelectable() invalid index specified");
+
+        return reinterpret_cast<TableRow*>(SelectableGroup::GetSelectable(liIndex));
+    }
+
     // @0x82489720 -- forward a colour value to a row's cell. Resolves the row via
     // GetSelectable(liRow), asserting it exists ("Invalid selectable specified",
     // BrnTable.h:285), then re-resolves it and forwards to TableRow::SetColourValue.

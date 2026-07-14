@@ -65,6 +65,10 @@ namespace CgsNetwork
         // GetIndexName(liCategory, liIndex) feed NetworkOutScoreboardHeadingList::AddHeading).
         const char* GetCategoryName(s32 liCategory) const;
         const char* GetIndexName(s32 liCategory, s32 liIndex) const;
+        // Variation heading name (pinned from the BrnNetwork::ScoreboardManager::CopyVariations X360
+        // call site @ 0x825626D8 -- GetVariationName(liCategory, liIndex, liVariation) feeds
+        // NetworkOutScoreboardHeadingList::AddHeading). ADDITIVE GROW (BrnNetworkScoreboardManager TU).
+        const char* GetVariationName(s32 liCategory, s32 liIndex, s32 liVariation) const;
         s32         GetNumberOfColumns() const;
         s32         GetNumberOfRows() const;
         s32         GetColumnType(s32 liColumn) const;
