@@ -1,41 +1,24 @@
 // ===========================================================================
-// BrnGuiViewModuleLinkStubs.cpp -- FLAG (GUI view-module / Flapt link stubs).
+// BrnGuiViewModuleLinkStubs.cpp -- residual GUI view-module link homes.
 //
-// Minimal out-of-line definitions so the game exe LINKS the real CgsGui::ViewModule /
-// BrnGui::ViewModule ownership slice (CgsGuiViewModule.cpp / BrnGuiViewModule.cpp /
-// BrnFlaptManager.cpp) without pulling in the still-unreconstructed BrnFlapt engine
-// bodies. Every symbol here is referenced by that slice but its real TU is not yet
-// homed; each is stubbed so the reference resolves and the current loading-screen ->
-// title -> menu boot behaves EXACTLY as it did before the ownership move (the Flapt
-// overlay is simply not driven -- the same "missing menu text" visual debt that was
-// already noted). Delete each stub (and add the real TU to the source list) as its
-// body lands.
+// Out-of-line definitions still needed by the homed CgsGui::ViewModule /
+// BrnGui::ViewModule ownership slice. The Flapt lifecycle, timeline update, named
+// lookups, and always-available component preparation now live in their real TUs.
+// Only rendering remains outside the current boot milestone; the queue methods below
+// are faithful specialisations of their VariableEventQueue base lifecycle.
 //
-// AUDIT (2026-07-09b, vs the on-disk tree + the exe source list):
-//   - BrnFlapt::MovieClipInstance::{Construct,GotoFrame,Update,Render} -- the
-//     timeline layer the homed registration/drive path reaches (SetData @0x82471620
-//     constructs + rewinds the root clip; FlaptFileInstance::Update/Render
-//     @0x82471820/@0x82472480 tick/draw it). Their real bodies are the big
-//     unreconstructed timeline TUs. No-op: a registered instance goes active but its
-//     clip tree neither composes nor draws until they land.
-//   - BrnGui::AlwaysAvailableComponentsManager::PrepareFlapt -- has a real body in
-//     BrnGuiAlwaysAvailableComponentsManager.cpp, but that body dereferences the far
-//     embedded manager (GuiModule + 0x17D670) and the PC-minimal GuiModule does NOT
-//     CONTAIN that component block at all -- the accessor's offset `this` points
-//     outside the object, so enabling the real body is STRUCTURALLY GATED on
-//     reconstructing the GuiModule component block (not just on this stub). No-op'd
-//     here; the FLAPT-load notification path stays benign (the offset `this` is
-//     never dereferenced).
+// AUDIT (2026-07-14, vs the on-disk tree + the exe source list):
+//   - BrnFlapt::MovieClipInstance::Render is the sole residual timeline body here.
+//     Construct/GotoFrame/Update and the child/trigger/keyframe machinery are homed
+//     in BrnFlaptMovieClipInstance.cpp.
 //   - CgsGui::GuiEventQueueBase<256,16>::{Construct,Prepare,Release} -- the tiny GUI
 //     output queue the view module owns (mOutputEventQueue). CgsGuiEvent.h declares them
 //     out-of-line; no TU instantiates them. Forwarded to the homed CgsModule::
 //     VariableEventQueue<256,16> base bodies (the queue's real lifecycle) via explicit
 //     member specialisation -- faithful for the lifecycle, marked FLAG for the un-homed
 //     GUI-specific override.
-//   (FlaptManager Construct/Prepare/Release/Destruct, FlaptFileInstance Update/Render,
-//   FlaptRenderer::StartRenderingFrame and the giFlapt* monitor handles were homed to
-//   their real TUs -- BrnFlaptManager.cpp / BrnFlaptFileInstance.cpp /
-//   BrnFlaptRenderer.cpp -- and no longer live here.)
+//   (FlaptManager, FlaptFileInstance, FlaptRenderer, and the always-available manager
+//   are homed to their real TUs and no longer have definitions here.)
 // ===========================================================================
 
 #include "types.hpp"
@@ -47,7 +30,7 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"              // CgsGui::ImRendererSet / FontCollection (struct)
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"                          // BrnFlapt::FlaptManager, FlaptFiles
 #include "GameSource/Gui/Flapt/BrnFlaptFileInstance.h"                     // BrnFlapt::FlaptFileInstance
-#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"                // BrnFlapt::MovieClipInstance (Update/Render stubs below)
+#include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"                // BrnFlapt::MovieClipInstance (Render below)
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"                         // BrnFlapt::FlaptRenderer
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                          // BrnFlapt::FileRef (PrepareFlapt param)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                     // BrnFlapt::MovieClipRef (lookup-stub out handles)
@@ -61,70 +44,8 @@ namespace BrnFlapt
 {
     // --- Timeline bodies referenced by the homed FlaptFileInstance --------------
     // (SetData @0x82471620 constructs/rewinds the root clip; Update/Render drive it.)
-    void MovieClipInstance::Construct(const MovieClip*, const char*, MovieClipInstance*,
-                                      CgsMemory::LinearMalloc*, const FlaptRenderer*,
-                                      const RGBA*, s32) {}
-    void MovieClipInstance::GotoFrame(u32) {}
-    void MovieClipInstance::Update(f32) {}
     void MovieClipInstance::Render(FlaptRenderer*) {}
 
-    // --- Timeline lookup/playback bodies referenced by the homed Ref layer ------
-    // (BrnFlaptMovieClipRef.cpp / BrnFlaptFileRef.cpp / the FlaptComponents, pulled
-    // in by the overlay-flow closure 2026-07-12.) Real bodies are the same big
-    // unreconstructed timeline TUs as the block above:
-    //   FindChildMovieClip @0x8246B848 / FindChildTextField @0x8246BAC0 /
-    //   FindChildMovieClipOnFrame @0x8246BD50 / TryFindChildComponentRecursively
-    //   @0x8246C020 / GetParent @0x8246C250 / GetTriggerParameters @0x8246C610 /
-    //   ResetTimeline @0x8246B710 / SetFrameTriggerCallback @0x8246B740 /
-    //   GotoAndPlayLabel @0x8246F228 / GotoAndStopLabel @0x8246F2D8 /
-    //   FlaptFileInstance::FindComponent @0x8246E958.
-    // The sret-out lookups write the INVALID handle (never stack garbage) so the
-    // Ref layer's own "mpMovieClipInst" asserts report the un-driven overlay
-    // deterministically; the playback entries no-op (the clip tree neither
-    // composes nor draws until the timeline TUs land -- the documented visual debt).
-    void MovieClipInstance::FindChildMovieClip(u32, MovieClipRef* lpOutRef, const char*)
-    {
-        lpOutRef->SetInvalid();
-    }
-    void MovieClipInstance::FindChildMovieClipOnFrame(u32, MovieClipRef* lpOutRef, const char*)
-    {
-        lpOutRef->SetInvalid();
-    }
-    void MovieClipInstance::FindChildTextField(u32, TextFieldRef* lpOutRef, const char*)
-    {
-        lpOutRef->SetInvalid();
-    }
-    bool MovieClipInstance::TryFindChildComponentRecursively(u32, MovieClipRef* lpOutRef, const char*)
-    {
-        lpOutRef->SetInvalid();
-        return false;
-    }
-    void MovieClipInstance::GetParent(MovieClipRef* lpOutRef)
-    {
-        lpOutRef->SetInvalid();
-    }
-    void MovieClipInstance::ResetTimeline() {}
-    void MovieClipInstance::GotoAndPlayLabel(u32, const char*) {}
-    void MovieClipInstance::GotoAndStopLabel(u32, const char*) {}
-    void MovieClipInstance::SetFrameTriggerCallback(FrameTriggerCallback, void*) {}
-    const TriggerParameters* MovieClipInstance::GetTriggerParameters() const
-    {
-        return 0;
-    }
-
-    MovieClipRef* FlaptFileInstance::FindComponent(u32, MovieClipRef* lpOutRef, const char*) const
-    {
-        lpOutRef->SetInvalid();
-        return lpOutRef;
-    }
-}
-
-namespace BrnGui
-{
-    // See file-header audit: the real body (BrnGuiAlwaysAvailableComponentsManager.cpp)
-    // dereferences the far embedded manager the minimal GuiModule does not model, so it
-    // stays out of the build; the empty body keeps the offset `this` untouched.
-    void AlwaysAvailableComponentsManager::PrepareFlapt(const BrnFlapt::FileRef&) {}
 }
 
 // The ModelIO buffer queues the GUI flow controller's IO pair constructs/drains

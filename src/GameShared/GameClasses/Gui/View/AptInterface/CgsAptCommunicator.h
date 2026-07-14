@@ -102,6 +102,20 @@ namespace CgsGui
         AptValue*    mpComponentRef;      // CgsAptCommunicator.h:70 (DWARF)
     };
 
+    // Native-width queue payload for event 21. ARTIST queues the five fields above
+    // as a bare 20-byte PPC record (two words, two 32-bit pointers and one word).
+    // The PC queue must preserve the same fields under the x64 ABI, where the two
+    // pointers widen. Keeping the payload separate from GuiEvent<21>'s 12-byte
+    // wrapper also preserves ARTIST's "payload only" wire shape.
+    struct GuiEventAptTriggerPayload
+    {
+        GuiEventAptTrigger::AptEventType meEventType;
+        s32                              miUniqueId;
+        const char*                      mpacComponentName;
+        u32                              muComponentNameHash;
+        AptValue*                        mpComponentRef;
+    };
+
     // ------------------------------------------------------------------------
     // GuiEventSoundTrigger - the 100-byte record SendAptSoundEvent pushes (DWARF
     // CgsAptCommunicator.h:83, `: public GuiEvent<22>`). The X360 queues exactly the

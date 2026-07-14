@@ -2,6 +2,7 @@
 
 #include <cstdio>                                                         // std::snprintf (log formatting)
 #include <chrono>   // the PC frame clock for the view time-step event (FLAG: wall clock)
+#include <cstring>  // std::strcmp (ARTIST GUI-audio action-name table)
 
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log
@@ -11,7 +12,9 @@
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"      // CgsResource::LuaCodeResource
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> (channel command records)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::GuiEventPlayAptMovie (channel-41 payload)
+#include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h"   // priority removal/blocking event ids
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::GuiEventLoadNotification / GuiEventLoadRequest
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // BrnGui::GuiAudioTriggerEvent
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"        // AlwaysAvailableComponentsManager + free accessor (bodied below)
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (flow interface wiring)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
@@ -19,6 +22,14 @@
 #include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"             // CgsSystem::MenuMusicPC (the menu-stream music player)
 #include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h"               // CgsSystem::GuiSoundPC (the GUI presentation blips)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash (event-155 keys)
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                // FLApt live-instance allocator
+
+// DecFIGS types GuiModule::Construct's alternate-text palette as const RGBA*.
+// ARTIST's eight packed words at 0x82F27F84 are the complete table.
+struct RGBA
+{
+    u32 mPacked;
+};
 
 // ============================================================================
 // BrnGui::GuiModule -- the GUI module. X360 GuiModule::Construct (0x82518028) builds the
@@ -70,6 +81,12 @@ namespace
     // on x64, so the region carries 2x headroom).
     u8 s_screenStatePoolBacking[2u * 1024u * 1024u];
 
+    // The view's FLApt timeline tree is one linear allocation, reset when the GUI
+    // module is rebuilt. ARTIST receives the GUI module's LinearAllocator here;
+    // the PC owner supplies an equivalent dedicated region.
+    alignas(16) u8 s_flaptLinearBacking[16u * 1024u * 1024u];
+    CgsMemory::LinearMalloc s_flaptLinear;
+
     // Backing for the profile manager's allocators (FLAG PC stand-in: the console hands
     // the 0x26 game-data heap + a module linear; the PC module owns dedicated regions).
     // The heap carves the 3x9608 mugshot circular buffer + the SLS callback block; the
@@ -114,6 +131,16 @@ namespace
     struct RegisterEventRecord
     {
         s32 miEventType;
+    };
+
+    // StateInterface::PriorityRegisterForEvent's ARTIST wire prefix. The observer
+    // pointer follows at +0x968 on PPC; GuiModule already knows the posting flow, so
+    // the native pointer is deliberately not part of this parser.
+    struct PriorityRegisterRecordPrefix
+    {
+        s32 miEventType;
+        s32 maiEventTypeOverridden[600];
+        u32 muOverrideCount;
     };
 
     // The event-64 record: the module posts the GuiCache pointer each frame (the X360
@@ -192,26 +219,18 @@ namespace BrnGui
         }
     }
 
-    // The Flapt "alternate text colours" table the X360 GuiModule::Construct passes into
-    // BrnGui::ViewModule::Construct (r8 = &unk_82F27F84, r9 = count 8, at the vtbl+0x54
-    // virtual call in 0x82518028). In the ARTIST build this slot is a table of 8 pointers
-    // to debug text-string constants -- Criterion's word-wrap / placeholder test strings,
-    // reconstructed verbatim from BURNOUT_X360_ARTIST.XEX .rdata (0x82054714..0x820548A0).
-    // The DWARF types the parameter const RGBA*, so it is a pointer table threaded through
-    // that type; FlaptFileInstance stores it (mpAlternateTextColours) but only a debug text
-    // path indexes it -- normal menus never display these, they only satisfy the
-    // FlaptFileInstance::Construct(lpAlternateTextColours != 0) assert the console likewise
-    // satisfies with this same non-null table.
-    const char* const s_aFlaptAlternateTextStrings[8] =
+    // The exact eight packed colours passed to ViewModule::Construct by ARTIST
+    // (0x82F27F84, count 8).
+    const RGBA KA_ALTERNATE_TEXT_COLOURS[8] =
     {
-        "Hellen",
-        "A load of badgers",
-        "badger\nbadger\nbadger badger badger\nbadger\nbadger\nbadger\nbadger",
-        "Director people",
-        "Fiona and alex",
-        "Coolest person",
-        "Steve but not as much as Chris",
-        "Some other people",
+        { 0xFF000000u },
+        { 0xFF00CCFFu },
+        { 0xFFFFFFFFu },
+        { 0xFF2864B7u },
+        { 0xFFA68C4Au },
+        { 0xFF0F0F9Cu },
+        { 0xFF6B8A57u },
+        { 0xFF33B6E6u },
     };
 
     // X360 GuiModule::Construct (0x82518028) builds the whole GUI subsystem. This slice
@@ -221,13 +240,17 @@ namespace BrnGui
     {
         // Route through the real BrnGui::ViewModule::Construct @0x824F13B8 with the X360
         // caller's recovered args: the view flapt count (7), a 16:9 aspect, and the real
-        // alternate-text-colours (debug string) table + count 8 (see the static above). The
+        // alternate-text-colours table + count 8 (see the static above). The
         // X360 passes a null debug name here; the descriptive "BrnGuiView" is a harmless
         // non-null label the base accepts.
         mViewModule.Construct(this, "BrnGuiView", 7, 1280.0f / 720.0f,
-                              reinterpret_cast<const RGBA*>(s_aFlaptAlternateTextStrings), 8);
+                              KA_ALTERNATE_TEXT_COLOURS, 8);
+        mViewModule.GetFlaptManager()->SetSoundTriggerHandler(
+            &GuiModule::FlaptSoundTriggerCallback, this);
         mMovieManager.Construct();
+        mAlwaysAvailableComponentsManager.Construct();
         mpGuiEventInputBuffer = 0;
+        mpOutputBuffer = 0;
 
         // The flow-controller chain (the X360 Construct's flow set): the cache Construct
         // (the watcher reset @0x82505860 -> 0x824FD978), then the profile manager (X360
@@ -235,6 +258,17 @@ namespace BrnGui
         // the view module's language manager), then the flows against the cache; the
         // controller starts UNLOADED on every flow slot.
         mGuiCache.Construct();
+
+        // X360 GuiModule::Construct wires the shared state-access bundle here, before
+        // any flow is allowed to run: ViewModule::GetAptAux/GetLanguageManager,
+        // ViewModule::GetFlaptManager, and this GuiCache are the four live owners.
+        // AptAux itself is installed during Prepare below because the PC runtime host
+        // constructs that singleton there; the other three owners already exist.
+        s_GuiAccessPointers.Construct();
+        s_GuiAccessPointers.mpLanguageManager = mViewModule.GetLanguageManager();
+        s_GuiAccessPointers.SetFlaptManager(mViewModule.GetFlaptManager());
+        s_GuiAccessPointers.SetGuiCache(&mGuiCache);
+
         mProfileManager.Construct(mGuiCache, mSystemUserProfile,
                                   mViewModule.GetLanguageManager());
         mScreenFlow.Construct(&mGuiCache);
@@ -253,8 +287,19 @@ namespace BrnGui
         mGuiResourceModule.Construct(true);
 
         for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
+        {
             for (s32 li = 0; li < KI_MAX_OBSERVED_EVENT_ID; ++li)
                 mabObservedEventIds[lf][li] = false;
+            mabPriorityBlocking[lf] = false;
+            for (s32 lc = 0; lc < KI_MAX_PRIORITY_CLAIMS_PER_FLOW; ++lc)
+            {
+                PriorityClaim& lrClaim = maPriorityClaims[lf][lc];
+                lrClaim.mbActive   = false;
+                lrClaim.miEventType = -1;
+                for (s32 li = 0; li < KI_MAX_OBSERVED_EVENT_ID; ++li)
+                    lrClaim.mabOverriddenEventIds[li] = false;
+            }
+        }
         mbResourcesReadyFed = false;
     }
 
@@ -278,12 +323,17 @@ namespace BrnGui
         // states' access pointers can reach the AptAux singleton. Idempotent + defensive.
         mAptRuntimeHost.Prepare(&mViewModule);
 
-        // Wire the flow's state interface to the shared access pointers so the GUI
-        // components' faithful apt output chain (FillAptViewMessage -> AptAux::
-        // UpdateFlashComponent -> the AptCommunicator key/value store) can reach the
-        // AptAux singleton. Only mpAptAux is populated here (the flapt/cache pointers
-        // belong to their still-gated modules).
-        s_GuiAccessPointers.Construct();
+        // Prepare the embedded FLApt manager before a type-10 load notification can
+        // register FLAPTHUD and construct its live MovieClipInstance tree.
+        s_flaptLinear.Construct();
+        s_flaptLinear.Create(s_flaptLinearBacking, sizeof(s_flaptLinearBacking));
+        s_flaptLinear.SetAlignment(16);
+        CGS_ASSERT(mViewModule.GetFlaptManager()->Prepare(&s_flaptLinear),
+                   "FLApt manager failed to prepare");
+
+        // Complete the shared access bundle with the AptAux singleton created by the
+        // PC runtime host above.  Construct already installed the language, Flapt, and
+        // GuiCache owners exactly as the X360 GuiModule::Construct does.
         s_GuiAccessPointers.mpAptAux = CgsGui::AptAuxPointer::mpAptAuxInst;
 
         // The REAL flow bring-up: base prepare (access pointers into the StateInterface)
@@ -373,6 +423,7 @@ namespace BrnGui
                                    /*globalTexture*/ 7);
 
         mGuiOutQueue.Construct();
+        mpOutputBuffer = &mGuiOutQueue;
 
         // The view-module IO pair the per-frame bridge fills.
         mViewInputBuffer.Construct();
@@ -382,6 +433,92 @@ namespace BrnGui
         mViewInputBuffer.UnlockForWrite();
         mViewOutputBuffer.Construct();
         miLastViewFrameMs = -1;
+
+        // GuiModule::Prepare stage 13 first blocks on the locale's font table.  For
+        // the western path selected by this PC build ARTIST uses exactly
+        // {17,16}, {18,16}, {19,16}; AptRuntimeHost has already loaded those three
+        // native font bundles and queued their type-16 notifications while bringing
+        // up AptAux.  Consume those (and the adjacent language notification) now,
+        // before the second stage-13 table is allowed to instantiate FLAPTHUD's text
+        // fields.  This restores the original fonts-before-FLApt ordering.
+        mViewInputBuffer.LockForWrite();
+        {
+            CgsGui::GuiEventLoadNotification lNotification;
+            while (mAptRuntimeHost.PopPendingLoadNotification(&lNotification))
+            {
+                mViewInputBuffer.GetViewStateQueue()
+                    .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lNotification), 14,
+                        static_cast<s32>(sizeof(lNotification)));
+            }
+        }
+        mViewInputBuffer.UnlockForWrite();
+        mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
+        mViewInputBuffer.LockForWrite();
+        mViewInputBuffer.GetViewStateQueue()
+            .CgsModule::VariableEventQueue<65536, 16>::Clear();
+        mViewInputBuffer.UnlockForWrite();
+
+        // The second ARTIST stage-13 table is this exact resource pair:
+        // resource 125 "main" (persistent Apt, type 7) and resource 196
+        // "FLAPTHUD" (persistent FLApt, type 10). The PC resource transport is
+        // synchronous, so advance the same cache/module state machines here until
+        // both completion notifications have arrived, then let the view consume them
+        // before any flow state can enter InvisibleOverlayState.
+        const CgsGui::sResourceTuple kaStartupResources[2] =
+        {
+            { 125u, static_cast<CgsGui::ResourceRequestTypes>(7) },
+            { 196u, static_cast<CgsGui::ResourceRequestTypes>(10) },
+        };
+
+        bool lbStartupResourcesReady =
+            mGuiCache.EnsureResourcesAreLoaded(kaStartupResources, 2);
+        for (u32 luPass = 0; luPass < 64u && !lbStartupResourcesReady; ++luPass)
+        {
+            mModelInputBuffer.LockForWrite();
+            mGuiCache.Update(&mModelInputBuffer);
+            mModelInputBuffer.UnlockForWrite();
+
+            DispatchGuiResourceModule();
+
+            mModelOutputBuffer.LockForRead();
+            {
+                const CgsGui::ModelIO::OutputBuffer::GuiNotificationQueue* lpNotifications =
+                    mModelOutputBuffer.GetLoadNotifications();
+                const CgsModule::Event* lpNotification = 0;
+                s32 liNotificationSize = 0;
+                s32 liNotificationId =
+                    lpNotifications->GetFirstEvent(&lpNotification, &liNotificationSize);
+                while (liNotificationId >= 0 && lpNotification != 0)
+                {
+                    if (liNotificationId == 14 || liNotificationId == 16)
+                        mGuiCache.RecEvent(lpNotification, liNotificationId);
+
+                    const CgsModule::Event* lpNext = 0;
+                    liNotificationId = lpNotifications->GetNextEvent(
+                        lpNotification, &lpNext, &liNotificationSize);
+                    lpNotification = lpNext;
+                }
+            }
+            mModelOutputBuffer.UnlockForRead();
+
+            mModelOutputBuffer.LockForWrite();
+            mModelOutputBuffer.GetLoadNotificationsNonConst()->Clear();
+            mModelOutputBuffer.UnlockForWrite();
+
+            lbStartupResourcesReady =
+                mGuiCache.EnsureResourcesAreLoaded(kaStartupResources, 2);
+        }
+        CGS_ASSERT(lbStartupResourcesReady,
+                   "GUI startup resources main/FLAPTHUD failed to load");
+
+        // Both type-7 and type-10 completion records were bridged in load order.
+        // Processing the queue registers main with Apt and FLAPTHUD with FlaptManager.
+        mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
+        mViewInputBuffer.LockForWrite();
+        mViewInputBuffer.GetViewStateQueue()
+            .CgsModule::VariableEventQueue<65536, 16>::Clear();
+        mViewInputBuffer.UnlockForWrite();
 
         // The HUD flow FSM chain is live: the GUI owns the loading-screen visual through
         // the real 19/20 command protocol (BridgeGuiToGame consumes them).
@@ -420,12 +557,118 @@ namespace BrnGui
     {
         if (liId < 0 || liId >= KI_MAX_OBSERVED_EVENT_ID)
             return;
-        if (mabObservedEventIds[E_GUIFLOW_SCREEN][liId])
-            mScreenInQueue.AddEvent(lpEvent, liId, liSize);
-        if (mabObservedEventIds[E_GUIFLOW_HUD][liId])
-            mHudInQueue.AddEvent(lpEvent, liId, liSize);
-        if (mabObservedEventIds[E_GUIFLOW_OVERLAY][liId])
-            mOverlayInQueue.AddEvent(lpEvent, liId, liSize);
+
+        // IsPriorityEvent + IsEventBlocked from ARTIST's EventInterpreterModule.
+        // The first registered priority key owns the event; a blocking owner removes
+        // its override events from every other observer until it unregisters.
+        s32 liPriorityOwner = -1;
+        s32 liBlockingOwner = -1;
+        for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
+        {
+            for (s32 lc = 0; lc < KI_MAX_PRIORITY_CLAIMS_PER_FLOW; ++lc)
+            {
+                const PriorityClaim& lrClaim = maPriorityClaims[lf][lc];
+                if (!lrClaim.mbActive)
+                    continue;
+                if (liPriorityOwner < 0 && lrClaim.miEventType == liId)
+                    liPriorityOwner = lf;
+                if (liBlockingOwner < 0 && mabPriorityBlocking[lf] &&
+                    lrClaim.mabOverriddenEventIds[liId])
+                {
+                    liBlockingOwner = lf;
+                }
+            }
+        }
+
+        CgsModule::VariableEventQueue<18432, 16>* lapQueues[E_GUIFLOW_COUNT] =
+            { &mScreenInQueue, &mHudInQueue, &mOverlayInQueue };
+        for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
+        {
+            if (!mabObservedEventIds[lf][liId])
+                continue;
+
+            if (liPriorityOwner >= 0)
+            {
+                if (lf == liPriorityOwner || liBlockingOwner < 0)
+                {
+                    lapQueues[lf]->AddEvent(lpEvent, liId, liSize);
+                    if (lf == liPriorityOwner)
+                        mabPriorityBlocking[lf] = true;
+                }
+                else if (mabObservedEventIds[lf][CgsGui::E_GUI_PRIORITY_REMOVAL])
+                {
+                    const s32 liRemovedEventId = liId;
+                    lapQueues[lf]->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&liRemovedEventId),
+                        CgsGui::E_GUI_PRIORITY_REMOVAL, static_cast<s32>(sizeof(liRemovedEventId)));
+                }
+                continue;
+            }
+
+            if (liBlockingOwner >= 0)
+            {
+                if (lf == liBlockingOwner)
+                {
+                    const s32 liBlockingEventId = liId;
+                    lapQueues[lf]->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&liBlockingEventId),
+                        CgsGui::E_GUI_PRIORITY_BLOCKING, static_cast<s32>(sizeof(liBlockingEventId)));
+                    lapQueues[lf]->AddEvent(lpEvent, liId, liSize);
+                }
+                else if (mabObservedEventIds[lf][CgsGui::E_GUI_PRIORITY_REMOVAL])
+                {
+                    const s32 liRemovedEventId = liId;
+                    lapQueues[lf]->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&liRemovedEventId),
+                        CgsGui::E_GUI_PRIORITY_REMOVAL, static_cast<s32>(sizeof(liRemovedEventId)));
+                }
+                continue;
+            }
+
+            lapQueues[lf]->AddEvent(lpEvent, liId, liSize);
+        }
+    }
+
+    // ARTIST @0x825112B0 converts the FLApt action string to a
+    // GuiAudioTriggerEvent and publishes it through the module output buffer.
+    void GuiModule::FlaptSoundTriggerCallback(void* lpUserData,
+                                              const char* lpcComponentName,
+                                              const char* lpcSwfName,
+                                              const char* lpcActionName,
+                                              const char* lpcLabel)
+    {
+        CGS_ASSERT(lpUserData != 0, "lpUserData");
+        CGS_ASSERT(lpcComponentName != 0, "lpcComponentName");
+        CGS_ASSERT(lpcSwfName != 0, "lpcSwfName");
+        CGS_ASSERT(lpcActionName != 0, "lpcActionName");
+        CGS_ASSERT(lpcLabel != 0, "lpcLabel");
+
+        GuiModule* lpThis = static_cast<GuiModule*>(lpUserData);
+        CGS_ASSERT(lpThis->mpOutputBuffer != 0, "mpOutputBuffer");
+
+        // off_82F277A8..off_82F277E0: the fourteen authored presentation actions.
+        static const char* const KAPC_ACTION_NAMES[14] = {
+            "ON_ENTER", "ON_LEAVE", "ON_FOCUS", "ON_LOSE_FOCUS",
+            "ON_ACCEPT", "ON_CANCEL", "ON_TICK", "ON_CHANGE",
+            "ON_UP", "ON_DOWN", "ON_LEFT", "ON_LEFT_SWEEP",
+            "ON_RIGHT", "ON_RIGHT_SWEEP"
+        };
+
+        s32 liAction = 14;
+        for (s32 li = 0; li < 14; ++li)
+        {
+            if (std::strcmp(lpcActionName, KAPC_ACTION_NAMES[li]) == 0)
+            {
+                liAction = li;
+                break;
+            }
+        }
+
+        GuiAudioTriggerEvent lAudioEvent;
+        lAudioEvent.Construct(liAction, lpcComponentName, lpcLabel, lpcSwfName);
+        lpThis->mpOutputBuffer->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lAudioEvent),
+            lAudioEvent.GetEventType(), static_cast<s32>(sizeof(lAudioEvent)));
     }
 
     // The real GuiModule::Update event dispatch (X360 0x82527A58's switch): consume the
@@ -527,14 +770,15 @@ namespace BrnGui
         mResourceInputBuffer.GetLoadRequestsNonConst()->Clear();
         mResourceInputBuffer.UnlockForWrite();
 
-        // 4. Bridge the module's notifications to the right consumer, by request type:
-        //    * apt movie load notifications (request types 4..7) -> the VIEW input buffer as
+        // 4. Bridge every notification to ModelIO, where both the FSM controller and
+        //    GuiCache observe it. Apt movie load notifications (request types 4..7) also
+        //    go to the VIEW input buffer as
         //      view event 14, where the REAL CgsGui::ViewModule::ProcessIncomingLoadNotification
         //      @0x8285BD30 registers each header (AddAptData). Phase 2 routes the movie-slot
         //      bundle IO through the module, so these replace the AptRuntimeHost's
         //      PopPendingLoadNotification ring for the flow movie.
-        //    * every other notification (the FSM bundle load, unloads) -> the ModelIO output
-        //      the flow controller's WFLOAD stage reads (the Phase 1 FSM contract, unchanged).
+        //    The dual delivery is the ARTIST contract: the cache owns resource state while
+        //    ViewModule owns Apt registration.
         mResourceOutputBuffer.LockForRead();
         mModelOutputBuffer.LockForWrite();
         mViewInputBuffer.LockForWrite();
@@ -551,13 +795,13 @@ namespace BrnGui
                 {
                     const s32 liReqType = static_cast<s32>(
                         reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent)->meRequestType);
-                    lbAptMovie = (liReqType >= 4 && liReqType <= 7);
+                    lbAptMovie = (liReqType >= 4 && liReqType <= 7) || liReqType == 10;
                 }
+                mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(
+                    lpEvent, liId, liSize);
                 if (lbAptMovie)
                     mViewInputBuffer.GetViewStateQueue()
                         .CgsModule::VariableEventQueue<65536, 16>::AddEvent(lpEvent, 14, liSize);
-                else
-                    mModelOutputBuffer.GetLoadNotificationsNonConst()->AddEvent(lpEvent, liId, liSize);
                 const CgsModule::Event* lpNext = 0;
                 liId = lpNotifications->GetNextEvent(lpEvent, &lpNext, &liSize);
                 lpEvent = lpNext;
@@ -759,8 +1003,61 @@ namespace BrnGui
                         mabObservedEventIds[liFlow][liType] = (liId == 34);
                     break;
                 }
-                case 36:   // PriorityRegisterForEvent -- the priority-override dispatch
-                case 37:   // is a follow-on (no boot state uses it). [FLAG]
+                case 36:   // PriorityRegisterForEvent
+                {
+                    if (liSize < static_cast<s32>(sizeof(PriorityRegisterRecordPrefix)))
+                        break;
+                    const PriorityRegisterRecordPrefix* lpRecord =
+                        reinterpret_cast<const PriorityRegisterRecordPrefix*>(lpEvent);
+
+                    PriorityClaim* lpClaim = 0;
+                    for (s32 lc = 0; lc < KI_MAX_PRIORITY_CLAIMS_PER_FLOW; ++lc)
+                    {
+                        PriorityClaim& lrCandidate = maPriorityClaims[liFlow][lc];
+                        if (lrCandidate.mbActive &&
+                            lrCandidate.miEventType == lpRecord->miEventType)
+                        {
+                            lpClaim = &lrCandidate;
+                            break;
+                        }
+                        if (lpClaim == 0 && !lrCandidate.mbActive)
+                            lpClaim = &lrCandidate;
+                    }
+                    if (lpClaim == 0)
+                        break;
+
+                    lpClaim->mbActive    = true;
+                    lpClaim->miEventType = lpRecord->miEventType;
+                    for (s32 li = 0; li < KI_MAX_OBSERVED_EVENT_ID; ++li)
+                        lpClaim->mabOverriddenEventIds[li] = false;
+                    const u32 luCount = (lpRecord->muOverrideCount < 600u)
+                        ? lpRecord->muOverrideCount : 600u;
+                    for (u32 lu = 0; lu < luCount; ++lu)
+                    {
+                        const s32 liOverridden = lpRecord->maiEventTypeOverridden[lu];
+                        if (liOverridden >= 0 && liOverridden < KI_MAX_OBSERVED_EVENT_ID)
+                            lpClaim->mabOverriddenEventIds[liOverridden] = true;
+                    }
+                    break;
+                }
+                case 37:   // PriorityUnRegisterForEvent
+                {
+                    const s32 liPriority =
+                        reinterpret_cast<const RegisterEventRecord*>(lpEvent)->miEventType;
+                    for (s32 lc = 0; lc < KI_MAX_PRIORITY_CLAIMS_PER_FLOW; ++lc)
+                    {
+                        PriorityClaim& lrClaim = maPriorityClaims[liFlow][lc];
+                        if (lrClaim.mbActive && lrClaim.miEventType == liPriority)
+                        {
+                            lrClaim.mbActive = false;
+                            lrClaim.miEventType = -1;
+                            break;
+                        }
+                    }
+                    break;
+                }
+                case 38:   // StopPriorityEventBlocking
+                    mabPriorityBlocking[liFlow] = false;
                     break;
 
                 case KI_GUIEVENT_PLAY_VIDEO:   // 508
@@ -794,20 +1091,16 @@ namespace BrnGui
                     break;
                 }
 
-                case 155:  // menu-music request (hash @+0x0C; 0 = stop)
-                    HandleMenuMusicEvent(*reinterpret_cast<const s32*>(
-                        reinterpret_cast<const char*>(lpEvent) + 0x0C));
+                case 155:  // menu-music request (0 = stop)
+                    HandleMenuMusicEvent(static_cast<s32>(
+                        reinterpret_cast<const CgsGui::GuiEventPlayMusicOnMenuStream*>(
+                            lpEvent)->muStreamNameHash));
                     break;
 
-                case 201:  // GUI audio trigger ("Accept"...) -> the presentation-sound leaf
-                {
-                    // Record shape: 12B GuiEvent header, action ENUM @body+0, the label/
-                    // trigger name @body+4, apt/screen name @body+68.
-                    const char* lpacBody  = reinterpret_cast<const char*>(lpEvent) + 0x0C;
-                    const s32   liActEnum = *reinterpret_cast<const s32*>(lpacBody);
-                    CgsSystem::GuiSoundPC::OnTrigger(lpacBody + 4, 0, lpacBody + 68, liActEnum);
+                case 201:  // GUI audio trigger -> the module output event channel
+                    CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
+                    mpOutputBuffer->AddEvent(lpEvent, liId, liSize);
                     break;
-                }
 
                 case 42:   // internal command channel (preload-done 72 etc.) -- consumers
                     break; // are module-internal follow-ons. [FLAG]
@@ -859,6 +1152,28 @@ namespace BrnGui
         DispatchGuiResourceModule();
         mModelInputBuffer.LockForWrite();
         mModelOutputBuffer.LockForRead();
+
+        // ARTIST GuiCache::RecEvent consumes load/unload completion before the cache
+        // update publishes its next double-buffered request batch.
+        {
+            const CgsGui::ModelIO::OutputBuffer::GuiNotificationQueue* lpNotifications =
+                mModelOutputBuffer.GetLoadNotifications();
+            const CgsModule::Event* lpNotification = 0;
+            s32 liNotificationSize = 0;
+            s32 liNotificationId =
+                lpNotifications->GetFirstEvent(&lpNotification, &liNotificationSize);
+            while (liNotificationId >= 0 && lpNotification != 0)
+            {
+                if (liNotificationId == 14 || liNotificationId == 16)
+                    mGuiCache.RecEvent(lpNotification, liNotificationId);
+
+                const CgsModule::Event* lpNext = 0;
+                liNotificationId = lpNotifications->GetNextEvent(
+                    lpNotification, &lpNext, &liNotificationSize);
+                lpNotification = lpNext;
+            }
+        }
+        mGuiCache.Update(&mModelInputBuffer);
         mFsmController.Update(&mModelInputBuffer, &mModelOutputBuffer);
         mModelOutputBuffer.UnlockForRead();
         mModelInputBuffer.UnlockForWrite();
@@ -978,12 +1293,14 @@ namespace BrnGui
                 lfStepSeconds = static_cast<f32>(liNowMs - miLastViewFrameMs) * 0.001f;
             miLastViewFrameMs = liNowMs;
 
-            // Clamp the stand-in step (FLAG PC time source): a synchronous movie load can
-            // consume seconds inside ONE frame, and an unclamped step makes the engine
-            // pacer run hundreds of catch-up AS frames in a single call. 100ms == the
-            // pacer's worst case of ~6 banked frames.
-            if (lfStepSeconds > 0.1f)
-                lfStepSeconds = 0.1f;
+            // FLAG PC-platform leaf: the console scheduler supplies a bounded simulation
+            // step, whereas this host stand-in measures wall time across synchronous file
+            // and movie loads. Cap it to one 60 Hz simulation tick so the faithful Flapt
+            // updater never receives an impossible multi-frame delta (which ARTIST asserts)
+            // and Apt does not attempt wall-clock catch-up after a blocking host operation.
+            const f32 kfMaxHostViewStep = 1.0f / 60.0f;
+            if (lfStepSeconds > kfMaxHostViewStep)
+                lfStepSeconds = kfMaxHostViewStep;
 
             mViewInputBuffer.LockForWrite();
             if (lfStepSeconds > 0.0f)
@@ -1024,7 +1341,15 @@ namespace BrnGui
                 s32 liTrigId = lpTrigQueue->GetFirstEvent(&lpTrig, &liTrigSize);
                 while (liTrigId >= 0 && lpTrig != 0)
                 {
-                    if (liTrigId == 22 && liTrigSize >= 100)
+                    if (liTrigId == 21)
+                    {
+                        // ARTIST GuiCache::RecEvent case 21 marks expected Apt
+                        // components on ONLOAD, then the EventInterpreter fans the
+                        // same trigger to any flow state observing event 21.
+                        mGuiCache.RecEvent(lpTrig, liTrigId);
+                        RouteEventToFlow(lpTrig, liTrigId, liTrigSize);
+                    }
+                    else if (liTrigId == 22 && liTrigSize >= 100)
                     {
                         // {type[32], action[32], label[32], layer}. Key rule (the
                         // trigger-resolve): string key = label unless 'uninitialised',
@@ -1119,18 +1444,11 @@ namespace BrnGui
 
 // ---- GetAlwaysAvailableComponentsManager (free accessor) ----------------------------
 // Header-declared in BrnGuiAlwaysAvailableComponentsManager.h; homed here because this TU
-// owns the GuiModule layout. Encapsulates the X360-attested byte offset of the manager
-// within GuiModule (mpGuiModule + 0x17D670, from BrnGui::ViewModule::
-// ProcessIncomingLoadNotification @0x824F9468). The returned pointer is only reached on the
-// FLAPT-load notification path; on the current boot it is fetched but its PrepareFlapt target
-// is a link stub, so the offset pointer is never dereferenced.
-// [FLAG: uncommitted GuiModule-layout offset -- self-corrects to &mMember when the full
-// GuiModule view/components block is reconstructed.]
+// owns the GuiModule layout.
 namespace BrnGui
 {
     AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager(GuiModule* lpGuiModule)
     {
-        return reinterpret_cast<AlwaysAvailableComponentsManager*>(
-            reinterpret_cast<u8*>(lpGuiModule) + GuiModule::KU_OFF_AAC_MANAGER);
+        return lpGuiModule->GetAlwaysAvailableComponentsManager();
     }
 }

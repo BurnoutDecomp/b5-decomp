@@ -20,6 +20,7 @@
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
+#include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"     // module-owned permanent FLApt components
 
 // BrnGui::GuiModule -- the GUI module (a dispatched CgsModule, like BrnRendererModule). The X360 module
 // (Construct 0x82518028 / Prepare 0x82518D68 / Update 0x82527A58 / Render 0x825146B8) builds the entire
@@ -63,9 +64,19 @@ namespace BrnGui
         // Apt bring-up. Called from BrnRendererModule::Render (the PC render thread).
         void Render();
 
+        static void FlaptSoundTriggerCallback(void* lpUserData,
+                                              const char* lpcComponentName,
+                                              const char* lpcSwfName,
+                                              const char* lpcActionName,
+                                              const char* lpcLabel);
+
         MovieManager* GetMovieManager() { return &mMovieManager; }
         ViewModule* GetViewModule() { return &mViewModule; }
         AptRuntimeHost* GetAptRuntimeHost() { return &mAptRuntimeHost; }
+        AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager()
+        {
+            return &mAlwaysAvailableComponentsManager;
+        }
 
         // Phase 2: post an apt movie-bundle load request through the real GuiResourceModule
         // (the movie-slot bundle IO now rides the module, not the AptRuntimeHost's
@@ -91,18 +102,6 @@ namespace BrnGui
         // drains it after the module update -- the PC stand-in for the console GUI module
         // OUTPUT buffer's out-event queue the bridge reads. Cleared by the bridge.
         CgsModule::VariableEventQueue<18432, 16>* GetGuiOutQueue() { return &mGuiOutQueue; }
-
-        // The always-available GUI components manager the module owns lives at a far
-        // offset in a part of the GuiModule layout this slice does not yet model; it is
-        // reached BY NAME through the free accessor GetAlwaysAvailableComponentsManager()
-        // (bodied in BrnGuiModule.cpp). See KU_OFF_AAC_MANAGER.
-
-    public:
-        // X360 byte offset of the always-available components manager within GuiModule
-        // (mpGuiModule + 0x17D670; used by the free GetAlwaysAvailableComponentsManager()
-        // accessor in BrnGuiModule.cpp). [FLAG -- uncommitted-layout offset; becomes a real
-        // named member once the full GuiModule view/components block is reconstructed.]
-        static const u32 KU_OFF_AAC_MANAGER = 0x17D670;
 
     private:
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
@@ -142,6 +141,11 @@ namespace BrnGui
         // buffer itself lives on the update IO stack and is re-created per sub-step).
         CgsGui::CgsGuiModuleIO::InputBuffer* mpGuiEventInputBuffer;
 
+        // ARTIST's callback publishes GuiAudioTriggerEvent through GuiModule's current
+        // output buffer. The PC scheduler exposes that channel as mGuiOutQueue, so retain
+        // the same explicit producer pointer instead of bypassing the event route.
+        CgsModule::VariableEventQueue<18432, 16>* mpOutputBuffer;
+
         ViewModule mViewModule;       // DecFIGS BrnGuiModule.h:441 (owns Apt/text/render state)
 
         // The view-module IO pair the per-frame bridge fills (the input buffer carries the
@@ -153,6 +157,7 @@ namespace BrnGui
         s64 miLastViewFrameMs;        // PC frame clock for the time-step event (FLAG: wall clock)
         MovieManager mMovieManager;   // X360 +301600 (drives the boot/attract videos)
         AptRuntimeHost mAptRuntimeHost; // GUI-owned Apt host published while the module is prepared
+        AlwaysAvailableComponentsManager mAlwaysAvailableComponentsManager;
 
         // ---- the real flow-controller chain (X360 GuiModule members) --------------------
         GuiCache          mGuiCache;        // X360 +1005376 (the flow states' cache; event-64 payload)
@@ -199,6 +204,20 @@ namespace BrnGui
         // interface output queue). One flag set per flow slot.
         static const s32 KI_MAX_OBSERVED_EVENT_ID = 1024;
         bool mabObservedEventIds[E_GUIFLOW_COUNT][KI_MAX_OBSERVED_EVENT_ID];
+
+        // EventInterpreterModule priority state. ARTIST permits ten priority keys
+        // per observer; each key owns an override-event mask. A priority owner starts
+        // blocking its override set after receiving its priority event and stops when
+        // the state unregisters or posts the explicit stop-blocking record.
+        static const s32 KI_MAX_PRIORITY_CLAIMS_PER_FLOW = 10;
+        struct PriorityClaim
+        {
+            bool mbActive;
+            s32  miEventType;
+            bool mabOverriddenEventIds[KI_MAX_OBSERVED_EVENT_ID];
+        };
+        PriorityClaim maPriorityClaims[E_GUIFLOW_COUNT][KI_MAX_PRIORITY_CLAIMS_PER_FLOW];
+        bool          mabPriorityBlocking[E_GUIFLOW_COUNT];
 
         // One resident pool per flow slot for the loaded FSM LuaCode bundle (request ids
         // 13/14/15 = SCREEN/HUD/OVERLAY; each flow's ScriptedFsm holds its LuaCode

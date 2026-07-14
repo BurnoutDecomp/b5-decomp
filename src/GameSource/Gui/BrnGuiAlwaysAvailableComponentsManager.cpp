@@ -44,7 +44,11 @@ namespace BrnGui
     // without fabricating the four observe-only ids beyond the fifteen the Update switch
     // handles. The fifteen recovered from the @0x82509338 switch are: 9, 26, 43, 44, 64, 72,
     // 105, 175, 191, 355, 392, 502, 503, 516, 586.
-    extern const s32 maiEventToObserve[19];   // dword_8206F760 (game .rodata)
+    const s32 maiEventToObserve[19] =
+    {
+        26, 21, 43, 44, 9, 64, 105, 175, 502, 586,
+        503, 72, 94, 192, 96, 392, 516, 191, 355,
+    }; // ARTIST dword_8206F760
 
     namespace
     {

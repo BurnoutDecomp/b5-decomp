@@ -31,7 +31,7 @@ namespace RealmcIface
         virtual void Reserved03() = 0;                          // slot 3  (+0x0C)
         virtual void Reserved04() = 0;                          // slot 4  (+0x10)
         virtual void Reserved05() = 0;                          // slot 5  (+0x14)
-        virtual void Reserved06() = 0;                          // slot 6  (+0x18)
+        virtual void SetSilentMode(bool lbSilentMode, s32 liUserIndex) = 0; // slot 6 (+0x18)
         virtual void Reserved07() = 0;                          // slot 7  (+0x1C)
         virtual void Reserved08() = 0;                          // slot 8  (+0x20)
         virtual void Reserved09() = 0;                          // slot 9  (+0x24)
@@ -170,6 +170,10 @@ namespace CgsGui
         // forward Update to it.
         void Update();
 
+        // X360 0x82473110. Mirror silent mode into the memory-card backend on a
+        // transition, passing the all-users sentinel (-1), then latch the flag.
+        void SetSilentMode(bool lbSilentMode);
+
         // X360 0x82859B70. Begin a load: bind the result handler, push the metadata, prompt the
         // user (SAVELOAD_CONFIRM_LOAD) routing the choice to LoadHandleConfirmLoad.
         void Load(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata);
@@ -272,7 +276,7 @@ namespace CgsGui
         const char* mpacContentInfoFilePath;      // +0x178 (Construct arg a5 == lpcContentInfoFilePath)
         const char* mpacSaveFilePath;             // +0x17C save-file path (CreateFileA)
         bool   mbField180;                        // +0x180 (Construct sets true)
-        bool   mbField181;                        // +0x181 (Construct sets false)
+        bool   mbSilentMode;                      // +0x181 (Construct sets false; SetSilentMode)
         u8     mPad182;                           // +0x182 alignment
         bool   mbField183;                        // +0x183 (Construct sets false)
         RealmcIface::MemcardInterface* mpMemcardInterface; // +0x184

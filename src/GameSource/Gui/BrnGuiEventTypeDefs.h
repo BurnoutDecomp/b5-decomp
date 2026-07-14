@@ -62,6 +62,31 @@ enum GuiFlow
     E_GUIFLOW_FIRST   = 0,
 };
 
+// BrnGuiAudioEvent.cpp / ARTIST @0x824F6350. The native payload is exactly
+// { component[32], action, label[32], movie[32] } (100 bytes). The committed PC
+// GuiEvent<N> carries its 12-byte queue header explicitly, making this queued
+// record 112 bytes in total.
+struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
+{
+    char macComponent[32];
+    s32  meAction;
+    char macLabel[32];
+    char macMovie[32];
+
+    GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12), meAction(0)
+    {
+        macComponent[0] = 0;
+        macLabel[0] = 0;
+        macMovie[0] = 0;
+    }
+
+    void Construct(s32 leAction, const char* lpComponentName,
+                   const char* lpLabel, const char* lpMovieName = "");
+};
+
+static_assert(sizeof(GuiAudioTriggerEvent) == 112,
+              "GuiAudioTriggerEvent is a 100-byte payload plus the 12-byte PC GuiEvent header");
+
 // BrnGuiEventTypeDefs.h:912 -- HUD FSM selector carried by GuiEventRunFsm.
 enum EHUDFSMs
 {

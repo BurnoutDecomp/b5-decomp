@@ -102,14 +102,6 @@ void BrnRendererModule::Render()
         return;
     }
 
-    // Full-screen movie (marketing/intro). While a movie is active the MovieManager owns the frame (the
-    // loading screen is hidden during it); the debug HUD still overlays below. The manager renders only
-    // while it is in PLAYING_MOVIE, through the renderer's Im2d. [PC movie path]
-    if (BrnGui::gpActiveMovieManager != 0)
-    {
-        BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
-    }
-
     // GUI render drive (the Apt/view frame): the X360 render pass runs the GUI module's
     // Render (BrnGui::GuiModule::Render @0x825146B8 -> CgsGui::GuiModule::Render
     // @0x8285AF38 -> ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 ->
@@ -142,6 +134,17 @@ void BrnRendererModule::Render()
     }
 
     mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
+
+    // Full-screen movie (marketing/intro). The X360 presentation owns the screen while
+    // MovieManager is playing; the PC FFmpeg substitute must therefore submit its quad
+    // after the loading-screen foreground, not before it. PostTitleScreenLoad also posts
+    // StopAptLoadingMovie before PlayVideo, so the loading renderer still performs the
+    // original state transition underneath the opaque movie frame. The debug HUD remains
+    // later in the pass, as it is in the ARTIST render tail.
+    if (BrnGui::gpActiveMovieManager != 0)
+    {
+        BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
+    }
 
     // Debug HUD overlay (the on-screen perf squares) - drawn on top of the loading screen, before the
     // present. The debug manager is the BrnGameModule-owned singleton (constructed at boot); the X360

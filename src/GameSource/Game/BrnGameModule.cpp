@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/DebugSystem/CgsDebugFontBringUp.h"   // LoadAndSetDebugFont
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201)
+#include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h" // GUI presentation-sound PC consumer
 
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
@@ -335,6 +337,13 @@ namespace BrnGame
                     default:
                         break;
                 }
+            }
+            else if (liId == 201)
+            {
+                const BrnGui::GuiAudioTriggerEvent* lpAudio =
+                    reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent);
+                CgsSystem::GuiSoundPC::OnTrigger(
+                    lpAudio->macLabel, 0, lpAudio->macComponent, lpAudio->meAction);
             }
             const CgsModule::Event* lpNext = 0;
             liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);

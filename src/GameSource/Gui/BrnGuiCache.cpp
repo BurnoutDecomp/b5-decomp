@@ -2,6 +2,9 @@
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
 #include "GameShared/GameClasses/Containers/CgsHash.h" // CgsContainers::CgsHash::CalculateHash (AppendExpectedAptComponent name entry)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
+#include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
 
 #include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior) / std::strlen
 
@@ -16,6 +19,71 @@ namespace BrnGui
 {
     namespace
     {
+        // ARTIST off_82F278E0, read directly from BURNOUT_X360_ARTIST.XEX.i64.
+        // StateLoadingHelper::Update indexes this 237-entry table by resource id.
+        const char* const kapcGuiResourceNames[237] =
+        {
+            "<LANG DATABASE>", "boostbarmask", "boostfirebody", "boostbarbackground",
+            "boostbarbackgroundendcap", "boostfireover", "boostbarendcap", "boostbarendglow",
+            "boostearnflame", "boostbarboosting", "boostgrowfireball", "boostbarmultiplier",
+            "boostbarglow", "<SCREEN FSM>", "<HUD FSM>", "<OVERLAY FSM>",
+            "BRNEVENTFSM", "WesternB5Header_70", "WesternB5Body_35", "WesternB5DotMat_35",
+            "DFHEIC", "JAMA", "B5ComponentUnity", "B5NorthIndicatorComponent",
+            "B5CompassComponent", "SatNavDistance", "SatNavStatic", "CountdownIcon",
+            "ChevronIcon", "TextField", "ColourField", "B5MultiTextField",
+            "Timer", "B5RoadRuleComponent", "B5MenuToggle", "B5MenuItemColourPicker",
+            "B5MenuItem", "B5HudMessage", "B5CrashedHudMessages", "B5PreRaceMessageComponent",
+            "B5CustomComponentTexture", "B5MapCursor", "B5HudSingleMetricComponent",
+            "B5HudFractionMetricComponent", "B5ProgressBar", "B5MugShot", "RoadRuleShot", "Ticker",
+            "CrashNavPanel", "CrashNavLegend", "CrashNavBorough", "B5RivalPanel",
+            "B5RivalIcon", "B5RivalTable", "B5CarouselScrollBar", "B5ManufacturersIcon",
+            "B5Triggers", "Toggle", "B5ScrollableSelection", "B5HelpItem",
+            "BoostMessage", "B5ControllerButtons", "B5PositionIndicatorComponent", "B5HelperComponents",
+            "DistrictIcon", "DistrictMarker", "B5PhotoLicenseComponent", "B5SpecialComponent",
+            "B5DriversLicenseComponents", "B5ColourSelector", "B5CarsIcon", "B5MedalIcon",
+            "B5GameModeLogos", "B5RaceEventInfo", "B5SatNavOverlay", "B5PositionTableComponent",
+            "B5FriendList", "B5FriendListChangeIcon", "B5EATraxInGameComponent", "B5OnlineInviteComponent",
+            "B5SaveIconComponent", "B5PaybackComponent", "PlayerStatsBar", "RoadIconComponent",
+            "B5RoadSigns", "B5RoadRulerIcon", "B5EATraxMenuComponent", "B5ShowTimeBar",
+            "B5ShowtimeComponents", "B5JunctionInfoComponent", "B5VersionTextComponent",
+            "B5PhotoBoothComponent", "B5PhotoBoothComponentDMV", "B5PhotoBoothCptDMVUpgrade",
+            "B5OnlineCarSelectComponents", "B5SkipCrashPrompt", "B5AchievementIcons",
+            "B5LicenseRank0", "B5LicenseRank1", "B5LicenseRank2", "B5LicenseRank3",
+            "B5LicenseRank4", "B5LicenseRank5", "B5LicenseElite", "B5LicenseEliteFinal",
+            "DestN", "DestNW", "DestW", "DestSW", "DestS", "DestSE", "DestE", "DestNE",
+            "LargeRoadRageIcon", "LargeFreestyleIcon", "LargeBurningRouteIcon", "LargeRaceIconPost",
+            "LargeMarkedManIconPost", "LargeRoadRageIconPost", "LargeFreestyleIconPost",
+            "LargeBurningRouteIconPost", "CAR_PUSCC01", "CAR_PUSCC01", "CAR_PUSCC01", "CAR_PUSCC01",
+            "main", "BrnBootPreload", "SaveLoadComponent", "Title_Screen02", "EA_HD_Logo",
+            "EA_Criterion_Logo", "CrashNavTitleBar", "BrnCrashNavMapMain", "BrnCrashNavMapEvent",
+            "BrnCrashNavNews", "BrnCrashNavScrbdMenu", "BrnCrashNavDriversLicense", "BrnCrashNavStats",
+            "BrnCrashNavRivals", "BrnCrashNavSettings", "BrnCrashNavProfile", "BrnCrashNavOptions",
+            "BrnCrashNavAccountManagement", "BrnCrashNavColourCalibrate", "BrnCrashNavDriverDetails",
+            "BrnCrashNavTrax", "BrnCrashNavAchievements", "BrnIntro", "BrnCarSelectUnlock",
+            "BrnCarSelectMain", "BrnCarSelectLivery", "BrnCarSelectOnlineEnd", "BrnDriversLicenseScreens",
+            "BrnGeneralPause", "Credits", "ReplaysClips", "ReplaysClipsOnline", "ReplaysOptions",
+            "ReplaysIntro", "ReplaysMain", "ReplaysOutro", "ReplaysLoading", "ReplaysInfo",
+            "ReplaysCredits", "ON_IMG_GAL", "ON_CONN", "ON_DISC", "ON_GR_PI", "ON_LOAD",
+            "ON_PAUSE", "ON_POST", "ON_YOU_WIN", "ON_MAIN", "ON_QMCMCM", "ON_QWKM",
+            "ON_CUSTM", "ON_CREA", "ON_CRSUM", "ON_ROUT", "ON_TEAMS", "ON_RIVAL",
+            "ON_NEWS", "ON_SCORB", "ON_CAR", "ON_MARK_MAN", "ON_PRE_EVENT", "ON_STATS",
+            "ON_CHAL", "ON_VWOPT", "ON_BLACK", "B5NetworkPlayerStats", "B5NetworkRouteInfo",
+            "B5RaceHud", "B5CrashedHud", "B5CrashedStuntHud", "B5IdleHud", "FLAPTHUD", "Overlays",
+            "B5AlwaysAvailableContainer", "SatNavMap", "B5SatNavComponent", "SatNavMask",
+            "PreRaceBackgroundMask", "MainMapBackgroundMask", "Icons_EventIcon_NotAttempted_Anim",
+            "Icons_EventIcon_Completed_Anim", "Icons_CrashNavIcon", "BrnPreRaceFlyByRace",
+            "BrnPreRaceFlyByFaceOff", "BrnPreRaceFlyByOfflShowtime", "BrnPreRaceFlyByRoadRage",
+            "BrnPreRaceFlyByPursuit", "BrnPreRaceFlyByBurningRoute", "BrnPreRaceFlyByEliminator",
+            "BrnPreRaceFlyByStuntAttack", "BrnPreRaceFlyByMarkedMan", "BrnPreRaceFlyByTrafficAttack",
+            "Results", "BrnUpgrade", "DriversLicense", "RivalryUpdate", "BrnCompletedGame",
+            "goldCarUnlock", "platinumCarUnlock", "BrnRivalShutdown", "BrnTrophyCarUnlock",
+            "OnlineResults", "OnlineScalpsAndAwards", "pfxhooks", "<COLOURCUBE1>",
+            "<COLOURCUBE2>", "<COLOURCUBE3>", "<COLOURCUBE4>", "<COLOURCUBE5>",
+            "<COLOURCUBE6>", "RoadSigns_0", "Headtif"
+        };
+        static_assert(sizeof(kapcGuiResourceNames) / sizeof(kapcGuiResourceNames[0]) == 237,
+                      "ARTIST GUI resource-name table must contain 237 entries");
+
         u32 CountRealPendingUnloads(const StateLoadingHelper::ResourceInfo* lpResources, u32 luCount)
         {
             u32 luRealPending = 0;
@@ -100,6 +168,177 @@ namespace BrnGui
     void GuiCache::Construct()
     {
         mStateLoadingHelper.Construct();
+    }
+
+    // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
+    // rotate the two-queue index, then turn each dirty cache slot into the exact
+    // resource request described by its state, indexing ARTIST's off_82F278E0 table.
+    void StateLoadingHelper::Update(CgsGui::ModelIO::InputBuffer* lpInputBuffer)
+    {
+        CGS_ASSERT(lpInputBuffer != 0, "Invalid ModelIO input buffer");
+
+        const s32 liQueue = miCurrentLoadRequestQueue;
+        CgsGui::GuiEventQueueSmall& lrQueue = mLoadRequestQueues[liQueue];
+        lpInputBuffer->GetLoadRequests()->Append(lrQueue);
+        lrQueue.Clear();
+        miCurrentLoadRequestQueue = (liQueue + 1) % KI_NUM_LOAD_REQUEST_QUEUES;
+
+        const u32 luDirtyCount = maRequestDirtyList.GetLength();
+        for (u32 luDirty = 0; luDirty < luDirtyCount; ++luDirty)
+        {
+            const u32 luResourceId = maRequestDirtyList.GetItem(luDirty);
+            ResourceInfo& lrInfo = maResources[luResourceId];
+
+            const char* lpacResourceName = kapcGuiResourceNames[luResourceId];
+
+            CgsGui::GuiEventLoadRequest lRequest;
+            if (lrInfo.meState == E_STATE_LOAD_REQUESTED)
+            {
+                lRequest.Construct(lrInfo.meType, CgsGui::E_GUI_RESOURCEREQUEST_LOAD,
+                                   lpacResourceName, luResourceId);
+                lrInfo.meState = E_STATE_LOADING;
+            }
+            else if (lrInfo.meState == E_STATE_UNLOAD_REQUESTED)
+            {
+                lRequest.Construct(lrInfo.meType, CgsGui::E_GUI_RESOURCEREQUEST_UNLOAD,
+                                   lpacResourceName, luResourceId);
+                lrInfo.meState = E_STATE_UNLOADING;
+            }
+            else
+            {
+                continue;
+            }
+
+            lrQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), 39,
+                             static_cast<s32>(sizeof(lRequest)));
+        }
+        maRequestDirtyList.Clear();
+    }
+
+    // @0x8250DD80 -- the observable resource portion of GuiCache::Update.
+    void GuiCache::Update(CgsGui::ModelIO::InputBuffer* lpInputBuffer)
+    {
+        mStateLoadingHelper.Update(lpInputBuffer);
+    }
+
+    // @0x824FE3D0 -- direct resource-module loads that bypassed the cache are only
+    // warned about in ARTIST (state UNLOADED). Cached LOADING transitions to LOADED;
+    // a load which completed after cancellation is immediately scheduled to unload.
+    void StateLoadingHelper::OnLoadNotification(
+        const CgsGui::GuiEventLoadNotification* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid load event sent to StateLoadingHelper::OnLoadNotification");
+        if (lpEvent == 0)
+            return;
+
+        const u32 luResourceId = lpEvent->muLoadRequestId;
+        CGS_ASSERT(luResourceId < KU_MAX_RESOURCES_TO_WATCH,
+                   "Invalid resource id to mark as loaded in StateLoadingHelper::OnLoadNotification");
+        if (luResourceId >= KU_MAX_RESOURCES_TO_WATCH)
+            return;
+
+        ResourceInfo& lrInfo = maResources[luResourceId];
+        switch (lrInfo.meState)
+        {
+        case E_STATE_UNLOADED:
+            break; // A direct StateInterface request bypassed the cache.
+
+        case E_STATE_LOAD_REQUESTED:
+        case E_STATE_UNLOAD_REQUESTED:
+        case E_STATE_UNLOADING:
+        case E_STATE_UNLOAD_CANCELLED:
+            CGS_ASSERT(false, "GuiCache: bad state transition");
+            break;
+
+        case E_STATE_LOADING:
+        case E_STATE_LOAD_CANCELLED:
+        {
+            void* lpResource = 0;
+            if (lpEvent->mResourceHandle.mpResourceMemory != 0)
+            {
+                lpResource = *reinterpret_cast<void* const*>(
+                    lpEvent->mResourceHandle.mpResourceMemory);
+            }
+            CGS_ASSERT(lpResource != 0, "Invalid resource pointer");
+
+            const bool lbWasCancelled = lrInfo.meState == E_STATE_LOAD_CANCELLED;
+            lrInfo.meState = E_STATE_LOADED;
+            lrInfo.mpResource = lpResource;
+            if (lbWasCancelled)
+            {
+                const CgsGui::sResourceTuple lTuple = { luResourceId, lrInfo.meType };
+                DecrementUnloadPending();
+                UnloadResource(lTuple);
+            }
+            break;
+        }
+
+        case E_STATE_LOADED:
+            CGS_ASSERT(false,
+                       "GuiCache: StateInterface::Request() called directly on a resource already in the GuiCache");
+            break;
+
+        default:
+            CGS_ASSERT(false, "StateLoadingHelper::OnLoadNotification: unknown state");
+            break;
+        }
+    }
+
+    // @0x824FE7E0 -- mirror completion for unloads. A cancelled unload returns to
+    // UNLOADED, decrements the pending count, then re-requests the resource.
+    void StateLoadingHelper::OnUnloadNotification(
+        const CgsGui::GuiEventUnloadNotification* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid unload event sent to StateLoadingHelper::OnUnloadNotification");
+        if (lpEvent == 0)
+            return;
+
+        const u32 luResourceId = lpEvent->muLoadRequestId;
+        CGS_ASSERT(luResourceId < KU_MAX_RESOURCES_TO_WATCH,
+                   "Invalid resource id to mark as loaded in StateLoadingHelper::OnUnloadNotification");
+        if (luResourceId >= KU_MAX_RESOURCES_TO_WATCH)
+            return;
+
+        ResourceInfo& lrInfo = maResources[luResourceId];
+        switch (lrInfo.meState)
+        {
+        case E_STATE_UNLOADED:
+            break; // A direct StateInterface unload bypassed the cache.
+
+        case E_STATE_LOAD_REQUESTED:
+        case E_STATE_LOADING:
+        case E_STATE_LOAD_CANCELLED:
+        case E_STATE_UNLOAD_REQUESTED:
+            CGS_ASSERT(false, "GuiCache: bad state transition");
+            break;
+
+        case E_STATE_LOADED:
+            CGS_ASSERT(false,
+                       "GuiCache: StateInterface::UnloadResource() called directly on a resource already in the GuiCache");
+            break;
+
+        case E_STATE_UNLOADING:
+            lrInfo.meState = E_STATE_UNLOADED;
+            lrInfo.mpResource = 0;
+            DecrementUnloadPending();
+            break;
+
+        case E_STATE_UNLOAD_CANCELLED:
+        {
+            const CgsGui::sResourceTuple lTuple = { luResourceId, lrInfo.meType };
+            lrInfo.meState = E_STATE_UNLOADED;
+            lrInfo.mpResource = 0;
+            DecrementUnloadPending();
+            EnsureResourceIsLoaded(lTuple);
+            break;
+        }
+
+        default:
+            CGS_ASSERT(false, "StateLoadingHelper::OnUnloadNotification: unknown state");
+            break;
+        }
     }
 
     // @ 0x824FDA28 -- step one watched resource's state machine towards LOADED.
@@ -350,6 +589,51 @@ namespace BrnGui
         return false;
     }
 
+    // @ 0x824EDEC8 -- consume an Apt ONLOAD trigger. ARTIST scans all three
+    // flow watcher blocks and marks every matching component hash. It then binds
+    // the Apt reference to a matching controlled component and removes that
+    // pending entry by swapping the final entry down into the vacated slot.
+    void StateLoadingHelper::MarkAptComponentInitialised(
+        const CgsGui::GuiEventAptTriggerPayload* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid apt trigger event sent to StateLoadingHelper::MarkAptComponentInitialised");
+        if (lpEvent == 0)
+            return;
+
+        for (u32 luFlow = 0; luFlow < 3; ++luFlow)
+        {
+            ComponentsToWatch& lrWatch = maComponentsToWatch[luFlow];
+            for (u32 luComponent = 0;
+                 luComponent < lrWatch.muNumberOfComponentsToWatch;
+                 ++luComponent)
+            {
+                if (lrWatch.mauComponentsToWatchIds[luComponent] ==
+                    lpEvent->muComponentNameHash)
+                {
+                    lrWatch.mabComponentsLoaded[luComponent] = true;
+                }
+            }
+        }
+
+        for (u32 luControlled = 0; luControlled < muControlledComponentCount; ++luControlled)
+        {
+            if (muControlledComponentNameHash[luControlled] != lpEvent->muComponentNameHash)
+                continue;
+
+            mpaControlledComponents[luControlled]->AttachController(lpEvent->mpComponentRef);
+            const u32 luLast = muControlledComponentCount - 1;
+            if (luControlled != luLast)
+            {
+                mpaControlledComponents[luControlled] = mpaControlledComponents[luLast];
+                muControlledComponentNameHash[luControlled] =
+                    muControlledComponentNameHash[luLast];
+            }
+            --muControlledComponentCount;
+            break;
+        }
+    }
+
     // @ 0x824FEB58 / @ 0x824FEB50 / @ 0x824FEBB0 / @ 0x824EE7A8 / @ 0x824EE528 --
     // the GuiCache faces of the helpers above (X360: `addi r3,r3,8` + tail-branch
     // into the embedded watcher at +0x8).
@@ -361,6 +645,12 @@ namespace BrnGui
     bool GuiCache::EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource)
     {
         return mStateLoadingHelper.EnsureResourceIsLoaded(lResource);
+    }
+
+    void GuiCache::UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount)
+    {
+        for (u32 luResource = 0; luResource < luCount; ++luResource)
+            mStateLoadingHelper.UnloadResource(lpResources[luResource]);
     }
 
     void GuiCache::UnloadAllResources(CgsGui::ResourceRequestTypes leType)
@@ -376,6 +666,36 @@ namespace BrnGui
     void GuiCache::ClearExpectedAptComponentList(GuiFlow leFlow)
     {
         mStateLoadingHelper.ClearComponentInitialised(leFlow);
+    }
+
+    // @ 0x8250DDF0 -- the three event families used by the reconstructed module:
+    // resource load/unload completions and Apt ONLOAD component triggers.
+    void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)
+    {
+        if (lpEvent == 0)
+            return;
+
+        switch (liEventId)
+        {
+        case 14:
+            mStateLoadingHelper.OnLoadNotification(
+                reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent));
+            break;
+        case 16:
+            mStateLoadingHelper.OnUnloadNotification(
+                reinterpret_cast<const CgsGui::GuiEventUnloadNotification*>(lpEvent));
+            break;
+        case 21:
+        {
+            const CgsGui::GuiEventAptTriggerPayload* lpTrigger =
+                reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+            if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
+                mStateLoadingHelper.MarkAptComponentInitialised(lpTrigger);
+            break;
+        }
+        default:
+            break;
+        }
     }
 
     // @ 0x824F87B8 -- the hash-taking face.

@@ -55,6 +55,14 @@ void TextFieldRef::SetText(const char* lpacNewText, bool lbAlreadyLocalised)
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpacNewText), lbAlreadyLocalised);
 }
 
+// ---- SetAutoSize @ 0x8246D488 --------------------------------------------
+void TextFieldRef::SetAutoSize(bool lbAutoSize)
+{
+    CGS_ASSERT(mpTextFieldInstance != 0,
+               "Textfield must be constructed before we can set it to autosize");
+    static_cast<TextFieldInstance*>(mpTextFieldInstance)->SetAutoSize(lbAutoSize);
+}
+
 // ---- SetLocalisedText(id, type) @ 0x8246CD00 -------------------------------
 // Look the string id up / format it through the language manager into a 1KB local,
 // then set the resolved text (already localised). The X360 body asserts the id

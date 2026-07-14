@@ -55,6 +55,15 @@ namespace BrnFlapt
             mAptString.SetText(lpNewText, macStringData, lbAlreadyLocalised);
         }
 
+        void SetAutoSize(bool lbAutoSize)
+        {
+            CgsGraphics::TextObject& lrTextObject = mAptString.mTextObject;
+            lrTextObject.mbAutosize = lbAutoSize;
+            lrTextObject.mpfCurrentFontHeight = lbAutoSize
+                ? &lrTextObject.mfAutosizedFontHeight
+                : &lrTextObject.mfFontHeight;
+        }
+
     private:
         // SetUpAptStringParams @ 0x8246DF58 : populate lpOutAptStringParams from a
         // TextField + FontStyle + the initial text. The X360 calling convention takes

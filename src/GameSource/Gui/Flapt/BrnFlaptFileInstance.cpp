@@ -86,13 +86,8 @@ void FlaptFileInstance::SetData(CgsResource::ResourceHandle lHandle,
     CGS_ASSERT(mpFile->muNumMovieClips > 0,
                "Error - invalid FLApt file with mo movieclips");
 
-    // The root clip instance. The console allocates the literal sizeof
-    // (MovieClipInstance) == 0x38. FLAG: replace the literal with
-    // sizeof(MovieClipInstance) once the timeline type's x64 layout lands (its
-    // bodies are still un-homed no-ops, so nothing writes past the console extent
-    // yet and the constant only under-sizes a region nothing dereferences).
     mpRootMovieClipInstance =
-        static_cast<MovieClipInstance*>(mpLinearAlloc->Malloc(0x38));
+        static_cast<MovieClipInstance*>(mpLinearAlloc->Malloc(sizeof(MovieClipInstance)));
     CGS_ASSERT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance");
 
     mpRootMovieClipInstance->Construct(mpFile->mpaMovieClips, "_root", 0,
@@ -151,6 +146,41 @@ MovieClipRef* FlaptFileInstance::GetRootMovieClip(MovieClipRef* lpOutRef) const
     lpOutRef->mpMovieClipInst =
         static_cast<BrnFlapt::MovieClipInstance*>(lpMovieClipInst);
     lpOutRef->mpTransform = 0;
+    return lpOutRef;
+}
+
+// ---- FindComponent @ 0x8246E958 -----------------------------------------
+// Resolve the component hash through FlaptFile's authored IndexPath table,
+// walking the already-constructed live clip tree from the root.
+MovieClipRef* FlaptFileInstance::FindComponent(u32 luHash, MovieClipRef* lpOutRef,
+                                                const char* lpcName) const
+{
+    CGS_ASSERT(mbIsActive, "IsActive()");
+    CGS_ASSERT(mpFile->muNumMovieClips > 0, "mpFile->muNumMovieClips > 0");
+    CGS_ASSERT(mpFile->muNumComponents > 0, "mpFile->muNumComponents > 0");
+    CGS_ASSERT(mpRootMovieClipInstance != 0, "mpRootMovieClipInstance");
+    CGS_ASSERT(lpOutRef != 0, "lpOutRef");
+    CGS_ASSERT(mpFile->mpaComponentNames != 0, "lpName");
+    CGS_ASSERT(mpFile->mpaComponentPaths != 0, "mpFile->mpaComponentPaths");
+
+    for (u32 luComponent = 0; luComponent < mpFile->muNumComponents; ++luComponent)
+    {
+        if (mpFile->mpaComponentNames[luComponent].muHash != luHash)
+            continue;
+
+        const IndexPath& lrPath = mpFile->mpaComponentPaths[luComponent];
+        CGS_ASSERT(lrPath.muDepth > 0, "lpPath->muDepth > 0");
+
+        MovieClipInstance* lpInstance = mpRootMovieClipInstance;
+        for (u32 luDepth = 0; luDepth + 1u < lrPath.muDepth; ++luDepth)
+            lpInstance = lpInstance->GetNthChild(lrPath.mauPath[luDepth]);
+
+        lpInstance->GetNthChild(lrPath.mauPath[lrPath.muDepth - 1u], lpOutRef);
+        return lpOutRef;
+    }
+
+    (void)lpcName; // only decorates ARTIST's streamed assertion text
+    CGS_ASSERT(false, "Unable to find FLApt component");
     return lpOutRef;
 }
 

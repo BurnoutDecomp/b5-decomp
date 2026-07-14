@@ -470,6 +470,8 @@ namespace BrnGui
     // probes went with them.)
     static void DriveFaithfulLoad(AptMovieSlot& lrSlot);
     static void StopRuntimeMovie();
+    static void StopRuntimeMovieAtLevel(s32 liLevelNum);
+    static void UnlinkRuntimeMovieSlot(AptMovieSlot& lrSlot);
 
     // Host frame counter + the frame the framework movie came up (console ordering
     // gate: the registerClass bootstrap runs at MAIN's first update tick -- dependent
@@ -1003,12 +1005,11 @@ namespace BrnGui
     {
         if (lpacMovieName == nullptr || lpacMovieName[0] == '\0')
         {
-            // The empty-name post at level 1 is BF_LEGAL's OnLeave UNLOAD record
-            // ({8,18,12,"",1} on channel 41 -- "unload the movie at this level"): park
-            // the flow movie through the engine's removal op. Other empty posts are
-            // spurious re-fires (BootLegal interleaves empty events) -- ignore.
-            if (liLevelNum == 1)
-                StopRuntimeMovie();
+            // AptAux::LoadFlashAnimation forwards an empty movie name to AptLoadAnimation,
+            // whose linker unloads the exact _levelN target. Preserve that target-level
+            // rule for every host-owned slot (BF_LEGAL level 1, ScreenLoading level 3,
+            // and the replay screen's level 3/4 clears).
+            StopRuntimeMovieAtLevel(liLevelNum);
             return;
         }
 
@@ -1034,16 +1035,19 @@ namespace BrnGui
                 return;
             if (!lbSameAux)
             {
+                UnlinkRuntimeMovieSlot(s_AuxSlot);
                 std::strncpy(s_AuxSlot.macName, lpacMovieName, sizeof(s_AuxSlot.macName) - 1);
                 s_AuxSlot.macName[sizeof(s_AuxSlot.macName) - 1] = '\0';
-                s_AuxSlot.mbRequested = true;
-                s_AuxSlot.miLevel     = liLevelNum;
+                s_AuxSlot.mbLoaded       = false;
+                s_AuxSlot.mbLoadAttempted = false;
                 char lacAux[200];
                 std::snprintf(lacAux, sizeof(lacAux),
                     "[AptRT] PlayMovie: consume channel-41 '%s' (aux level %d).\n",
                     s_AuxSlot.macName, liLevelNum);
                 CgsDev::Log::WriteToLog(lacAux);
             }
+            s_AuxSlot.mbRequested = true;
+            s_AuxSlot.miLevel     = liLevelNum;
             if (!s_bRuntimeReady)
             {
                 s_AuxSlot.mbRequested = false;
@@ -1810,6 +1814,46 @@ namespace BrnGui
     }
 
     // -------------------------------------------------------------------------
+    // UnlinkRuntimeMovieSlot -- remove one host-owned level root through Apt's own
+    // render-tree and display-list removal operations. The bundle/registration stays
+    // resident; a later play of the same movie creates a fresh level node.
+    // -------------------------------------------------------------------------
+    static void UnlinkRuntimeMovieSlot(AptMovieSlot& lrSlot)
+    {
+        if (lrSlot.mbInstantiated && lrSlot.mpRootCIH != nullptr)
+        {
+            AptCIH* lpRoot = static_cast<AptCIH*>(lrSlot.mpRootCIH);
+            AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
+            if (lpCI != nullptr && (lpCI->GetTypeTag() == 5 || lpCI->GetTypeTag() == 9))
+            {
+                AptRenderItem* lpItem =
+                    static_cast<AptCharacterSpriteInstBase*>(lpCI)->mpRenderItem;
+                if (lpItem != nullptr)
+                    AptCurrentRenderTreeManager()->Update_ItemRemoved(lpItem, gnCurrUpdateTick);
+            }
+
+            if (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr)
+            {
+                AptDisplayList* lpRootList =
+                    gpAptTarget->mpAnimationTarget->GetRootDisplayList();
+                AptDisplayListState* lpState =
+                    (lpRootList != nullptr) ? lpRootList->AsState() : nullptr;
+                if (lpState != nullptr)
+                    lpState->removeItem(lpRoot);
+            }
+        }
+
+        lrSlot.mpRootCIH       = nullptr;
+        lrSlot.mbInstantiated  = false;
+        lrSlot.mbLoadAttempted = false;
+        lrSlot.mpCharAnim      = nullptr;
+        lrSlot.mpAptFile       = nullptr;
+        lrSlot.mdTickAccumMs   = 0.0;
+        lrSlot.miLastUpdateQpcMs = -1;
+        lrSlot.miTickFrame     = 0;
+    }
+
+    // -------------------------------------------------------------------------
     // StopRuntimeMovie -- the flow left BF_LEGAL (the accept path posted command
     // 70). On the console, leaving the state unloads the title movie (OnLeave's
     // channel-41 {"",1} post -> CgsAptAux unload), whose render-side observable is
@@ -1828,46 +1872,43 @@ namespace BrnGui
             return;
         s_bMovieStopped = true;
 
-        if (s_FlowSlot.mbInstantiated && s_FlowSlot.mpRootCIH != nullptr)
-        {
-            AptCIH* lpRoot = static_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
-            AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
-            if (lpCI != nullptr && (lpCI->GetTypeTag() == 5 || lpCI->GetTypeTag() == 9))
-            {
-                AptRenderItem* lpItem =
-                    static_cast<AptCharacterSpriteInstBase*>(lpCI)->mpRenderItem;
-                if (lpItem != nullptr)
-                    AptCurrentRenderTreeManager()->Update_ItemRemoved(lpItem, gnCurrUpdateTick);
-            }
-
-            // REALLY unlink the node from the director's root display list through the
-            // engine's own removal op (AptDisplayListState::removeItem), which fires the
-            // manager's sibling-rewire notifications (Update_ItemNextSiblingChanged on
-            // the previous level node / Update_SetRootItem on a head change). The bare
-            // deletion mark above left the dead node IN the render sibling chain, and
-            // the manager's later rewires severed everything chained AFTER it -- the
-            // persist (level 2) and aux (level 3) roots dropped out of the render walk
-            // (the black profile-prompt / dead-attract-recompose symptom).
-            if (gpAptTarget != nullptr && gpAptTarget->mpAnimationTarget != nullptr)
-            {
-                AptDisplayList* lpRootList =
-                    gpAptTarget->mpAnimationTarget->GetRootDisplayList();
-                AptDisplayListState* lpState =
-                    (lpRootList != nullptr) ? lpRootList->AsState() : nullptr;
-                if (lpState != nullptr)
-                    lpState->removeItem(lpRoot);
-            }
-
-            // The slot's node is out of the tree: a replay (the attract cycle replays
-            // the SAME title movie) re-drives the faithful load onto a FRESH level node.
-            // (The bundle + registration stay resident -- no re-IO.)
-            s_FlowSlot.mpRootCIH      = nullptr;
-            s_FlowSlot.mbInstantiated = false;
-        }
+        UnlinkRuntimeMovieSlot(s_FlowSlot);
 
         CgsDev::Log::WriteToLog("[AptRT] StopMovie: BF_LEGAL left -- FLOW render root "
                                 "unlinked + deletion-marked (framework movie keeps running; "
                                 "unload deferred).\n");
+    }
+
+    // Empty-name Apt events unload their exact display level. The flow slot retains
+    // its BF_LEGAL park latch; the other slots simply cancel their retry request so
+    // an unloaded node cannot remount itself on the following host tick.
+    static void StopRuntimeMovieAtLevel(s32 liLevelNum)
+    {
+        if (liLevelNum == s_FlowSlot.miLevel)
+        {
+            StopRuntimeMovie();
+            return;
+        }
+
+        AptMovieSlot* lpSlot = nullptr;
+        if (liLevelNum == s_FrameworkSlot.miLevel)
+            lpSlot = &s_FrameworkSlot;
+        else if (liLevelNum == s_PersistentSlot.miLevel)
+            lpSlot = &s_PersistentSlot;
+        else if (liLevelNum == s_AuxSlot.miLevel)
+            lpSlot = &s_AuxSlot;
+
+        if (lpSlot == nullptr)
+            return;
+
+        lpSlot->mbRequested = false;
+        UnlinkRuntimeMovieSlot(*lpSlot);
+
+        char lac[160];
+        std::snprintf(lac, sizeof(lac),
+                      "[AptRT] StopMovie: unloaded %s render root at level %d.\n",
+                      lpSlot->mpcTag, liLevelNum);
+        CgsDev::Log::WriteToLog(lac);
     }
 
     // True once the movie has COMPOSED: the root clip's first paced tick has run its
