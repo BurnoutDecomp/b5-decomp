@@ -18,3 +18,14 @@
 #include "GameShared/GameClasses/Containers/CgsSet.h"
 
 template class Set<u16, 15>;
+
+// SetDifference is a member-function TEMPLATE (parameterised on the two source-set
+// capacities), so the explicit `template class Set<u16,15>` above does NOT emit it -- it
+// needs its own explicit instantiation. The X360 emitted one out-of-line copy for the
+// <15u,15u> pairing (both operands Set<u16,15>):
+//   Set<u16,15>::SetDifference<15,15> @ 0x822E5440  (BrnWorld::PropEntityModule::UpdateInstanceStreaming)
+// The generic body (CgsSet.h SetDifference) is faithful: Clear() then, for each element of
+// lA, Insert it when lB does not Contain it. In the emitted asm Contains is inlined, so the
+// CgsSet.h:332 constructed-assert is followed by a direct Find call (Contains == Find !=
+// KU_INVALID); GetLength (:227) and operator[]/GetItem (:257/:258) asserts all match.
+template void Set<u16, 15>::SetDifference<15, 15>(const Set<u16, 15>& lA, const Set<u16, 15>& lB);
