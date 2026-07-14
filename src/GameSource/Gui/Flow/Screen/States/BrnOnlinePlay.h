@@ -72,6 +72,12 @@ namespace BrnGui
             E_MAIN_MENU_OPTIONS_COUNT           = 7,
         };
 
+        // @0x82508B40 -- compiler-emitted ctor: constructs the CgsGui::State base and the four
+        //   embedded sub-objects (news-animation carrier / main-menu / player-stats panel /
+        //   local player-stats event record). No scalar members are stored in the ctor asm
+        //   (OnEnter primes them); the recovered effect is base + member default-construction.
+        OnlinePlay();
+
         // @0x8249BC18 / @0x8249BDA8 / (Update declared-only) -- the FSM enter/leave/update
         // virtuals. OnEnter registers the eight observed events, builds the news-animation +
         // player-stats + main-menu components, primes the local-player display block, creates
