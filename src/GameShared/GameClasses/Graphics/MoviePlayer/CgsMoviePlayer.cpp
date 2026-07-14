@@ -4,6 +4,7 @@
 #include "pc/gcm/renderengine/texture.h"                             // renderengine::Texture
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>   // std::memcpy (strip-band recombine upload)
+#include <cstdio>    // std::snprintf (TEMP-DIAG strip timestamps)
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -68,6 +69,10 @@ namespace CgsGraphics
         miStripsDecoded = 0;
         mpStripStaging = 0;
         muStripStagingBytes = 0;
+        mpStripCtx[0] = 0;
+        mpStripCtx[1] = 0;
+        mpStripCtx[2] = 0;
+        muPacketRoute = 0;
     }
 
     bool MoviePlayer::SetMovieFile(const char* lpMovieFileName, bool lbPreload)
@@ -160,9 +165,35 @@ namespace CgsGraphics
         miVerticalStrips = (mpVideoCtx->width == 1280 && mpVideoCtx->height == 240) ? 3 : 1;
         miCurrentStrip   = 0;
         miStripsDecoded  = 0;
+        muPacketRoute    = 0;
+        mpStripCtx[0]    = mpVideoCtx;   // band 0 decodes through the primary context
+        mpStripCtx[1]    = 0;
+        mpStripCtx[2]    = 0;
         if (miVerticalStrips != 1)
         {
-            CgsDev::Log::WriteToLog("[Movie] X360 3-strip VP6 detected (1280x240 -> 1280x720 recombine).\n");
+            // Each interleaved band is its own VP6 prediction chain -> give bands 1..N-1 their own
+            // decoder contexts (band 0 reuses mpVideoCtx). Packet i%N feeds mpStripCtx[i%N].
+            bool lbStripOk = true;
+            for (s32 liBand = 1; liBand < miVerticalStrips; ++liBand)
+            {
+                AVCodecContext* lpCtx = avcodec_alloc_context3(lpCodec);
+                if (lpCtx == 0 ||
+                    avcodec_parameters_to_context(lpCtx, lpStream->codecpar) < 0 ||
+                    avcodec_open2(lpCtx, lpCodec, 0) < 0)
+                {
+                    if (lpCtx != 0) avcodec_free_context(&lpCtx);
+                    lbStripOk = false;
+                    break;
+                }
+                mpStripCtx[liBand] = lpCtx;
+            }
+            if (!lbStripOk)
+            {
+                ReleaseResources();
+                CgsDev::Log::WriteToLog("[Movie] 3-strip decoder alloc FAILED\n");
+                return false;
+            }
+            CgsDev::Log::WriteToLog("[Movie] X360 3-strip VP6 detected (1280x240 -> 1280x720, 3 decoders).\n");
         }
 
         mpFrame = av_frame_alloc();
@@ -195,6 +226,18 @@ namespace CgsGraphics
         {
             av_packet_free(&mpPacket);
         }
+        // Free the extra band decoders first (mpStripCtx[0] aliases mpVideoCtx, freed below).
+        for (s32 liB = 1; liB < 3; ++liB)
+        {
+            if (mpStripCtx[liB] != 0)
+            {
+                avcodec_free_context(&mpStripCtx[liB]);
+            }
+        }
+        mpStripCtx[0] = 0;
+        mpStripCtx[1] = 0;
+        mpStripCtx[2] = 0;
+        muPacketRoute = 0;
         if (mpVideoCtx != 0)
         {
             avcodec_free_context(&mpVideoCtx);
@@ -282,27 +325,71 @@ namespace CgsGraphics
         miCrossfadeOutFrames = liCrossfadeOutFrames;
     }
 
+    // 3-strip VP6: N interleaved INDEPENDENT prediction chains (packet i belongs to band i%N).
+    // Output the next strip in (display,band) order from its OWN decoder context; feed packets in
+    // file order routed by muPacketRoute%N so each band's P-frames reference the previous same-band
+    // frame. A shared decoder would mispredict across bands -> macroblock garbage.
+    bool MoviePlayer::DecodeStripFrame()
+    {
+        const s32 liN = miVerticalStrips;
+        const s32 liBand = static_cast<s32>(miStripsDecoded % liN);
+        AVCodecContext* lpCtx = mpStripCtx[liBand];
+        for (;;)
+        {
+            const int liRecv = avcodec_receive_frame(lpCtx, mpFrame);
+            if (liRecv == 0)
+            {
+                miCurrentStrip = liBand;
+                // display frames advance once per N strip ticks; avg_fps is the STRIP rate, so the
+                // display rate is avg_fps/N. Pace each display frame N*timebase seconds apart.
+                const s64 liDisplayIndex = miStripsDecoded / liN;
+                mfFramePtsSec = static_cast<f64>(liDisplayIndex) * static_cast<f64>(liN) * mfTimeBaseSec;
+                ++miStripsDecoded;
+                return true;
+            }
+            if (liRecv == AVERROR_EOF || liRecv != AVERROR(EAGAIN))
+            {
+                mbFinished = true;
+                return false;
+            }
+            // This band's decoder wants more input.
+            if (mbEof)
+            {
+                avcodec_send_packet(lpCtx, 0);   // keep flushing this band
+                continue;
+            }
+            const int liRead = av_read_frame(mpFormatCtx, mpPacket);
+            if (liRead < 0)
+            {
+                mbEof = true;
+                for (s32 liB = 0; liB < liN; ++liB)
+                {
+                    avcodec_send_packet(mpStripCtx[liB], 0);   // begin draining every band
+                }
+                continue;
+            }
+            if (mpPacket->stream_index == miVideoStream)
+            {
+                avcodec_send_packet(mpStripCtx[muPacketRoute % static_cast<u32>(liN)], mpPacket);
+                ++muPacketRoute;
+            }
+            av_packet_unref(mpPacket);
+        }
+    }
+
     // Pull the next decoded video frame, reading + sending packets as needed; flush at EOF. Sets
     // mbFinished + returns false when the stream is fully drained. [PC FFmpeg decode loop.]
     bool MoviePlayer::DecodeFrame()
     {
+        if (miVerticalStrips != 1)
+        {
+            return DecodeStripFrame();
+        }
         for (;;)
         {
             const int liRecv = avcodec_receive_frame(mpVideoCtx, mpFrame);
             if (liRecv == 0)
             {
-                if (miVerticalStrips != 1)
-                {
-                    // 3-strip VP6: the raw strip PTS run at 3x the display rate, so time the
-                    // recombined frame by the DISPLAY index (strips/N) at the container fps.
-                    // The band this strip fills is strips % N.
-                    miCurrentStrip = static_cast<s32>(miStripsDecoded % miVerticalStrips);
-                    const f64 lfFps = (mfFrameRate > 1.0) ? mfFrameRate : 30.0;
-                    const s64 liDisplayIndex = miStripsDecoded / miVerticalStrips;
-                    mfFramePtsSec = static_cast<f64>(liDisplayIndex) / lfFps;
-                    ++miStripsDecoded;
-                    return true;
-                }
                 s64 lts = mpFrame->best_effort_timestamp;
                 if (lts == AV_NOPTS_VALUE) lts = mpFrame->pts;
                 if (lts != AV_NOPTS_VALUE) mfFramePtsSec = static_cast<f64>(lts) * mfTimeBaseSec;
