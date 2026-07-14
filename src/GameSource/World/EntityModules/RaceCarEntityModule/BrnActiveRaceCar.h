@@ -9,15 +9,26 @@
 //
 // SCOPE OF THIS HEADER: this is the declaration surface BrnRaceCar.cpp needs -- the
 // four accessors RaceCar's lifecycle/positioning code calls on an ActiveRaceCar* it
-// holds by pointer (it never embeds one by value, so the full 0x1CD0/7376-byte
-// layout is NOT laid out here). The bodies live in BrnActiveRaceCar.cpp (X360
-// 0x822A1F10 IsAttached, etc.) and resolve at link; here we only declare them.
-// Member offsets attested by the BrnRaceCar X360 asm are recorded in comments:
+// holds by pointer (it never embeds one by value). The bodies live in
+// BrnActiveRaceCar.cpp (X360 0x822A1F10 IsAttached, etc.) and resolve at link; here we
+// only declare them. Member offsets attested by the BrnRaceCar X360 asm are recorded in
+// comments:
 //   GetActiveRaceCarIndex() -> reads +0x748   (miActiveRaceCarIndex)
 //   GetGlobalRaceCar()      -> reads +0x6F0   (mpGlobalRaceCar)
 //   ToBePlacedOnTrack()     -> reads byte +0x7C4 (mbToBePlacedOnTrack)
 // Method shapes are gated on the DecFIGS DWARF for BrnActiveRaceCar.h
 // (GetActiveRaceCarIndex/GetGlobalRaceCar/IsAttached/ToBePlacedOnTrack const).
+//
+// PER-FRAME STATE LAYOUT (added additively for the state accessors bodied in the .cpp):
+// the five per-frame accessors (IsCrashing / IsOnRaceStartState / IsInAnyRaceStartState /
+// SetBraking / UpdateWheelPhysicsState) read/write a handful of members at deep
+// X360-asm-attested offsets. Those members are homed below by NAME in a private layout
+// section: every member lands at its proven byte offset via explicit `u8 mPadXXXX[N]`
+// fillers, none of the four method-only members above is shifted, and the layout uses only
+// platform-stable types (Matrix44 / integer / bool -- NO pointers), so its byte offsets are
+// identical on X360 and the x64 gate. The `mpGlobalRaceCar` pointer (+0x6F0) is NOT homed as
+// a field -- it is reached through GetGlobalRaceCar() -- so no pointer-size divergence enters
+// this layout. Offsets are PINNED with offsetof static_asserts in BrnActiveRaceCar.cpp.
 // ============================================================================
 
 #include "types.hpp"
@@ -68,36 +79,34 @@ public:
     bool IsPlayer() const;
 
     // ------------------------------------------------------------------------
-    // DECLARATION-ONLY (bodies deferred). These read/write per-frame ActiveRaceCar
-    // state members (mbIsCrashing @+0x52A, meRaceStartState @+0x77C, miBrakingCounter
-    // @+0x738, mbBraking @+0x1BE7, the per-wheel physics blocks @+0x310/+0x1020/+0x1560
-    // and mau8WheelOnGround @+0x526/+0x1560) that the committed sparse declaration
-    // surface deliberately does NOT lay out (the full 0x1CD0/7376-byte instance is not
-    // homed here -- see the header comment above). They are declared so consumers/this
-    // TU compile; their bodies resolve at link against the not-yet-homed full layout.
-    // Homing them would require laying out the entire instance, which is out of scope
-    // for this declaration-surface header. FLAGGED: un-homed members.
+    // Per-frame state accessors bodied in BrnActiveRaceCar.cpp against the homed
+    // per-frame members in the private layout section below (mbIsCrashing @+0x52A,
+    // meRaceStartState @+0x77C, miBrakingCounter @+0x738, mbBraking @+0x1BE7, the two
+    // per-wheel physics transform blocks @+0x310/+0x1020 and the per-wheel on-ground
+    // bytes @+0x526/+0x1560). All access is by NAME.
 
-    // X360 0x822A2150: returns mbIsCrashing (byte @+0x52A).
+    // X360 0x822A2150: assert IsAttached(), then return mbIsCrashing (byte @+0x52A).
     bool IsCrashing() const;
 
-    // X360 0x822A2060: leState == meRaceStartState (int @+0x77C).
+    // X360 0x822A2060: assert IsAttached(), then liState == meRaceStartState (int @+0x77C).
     bool IsOnRaceStartState(s32 liState) const;
 
-    // X360 0x822A20D8: meRaceStartState is one of the two race-start states (0 or 1).
+    // X360 0x822A20D8: assert IsAttached(), then meRaceStartState is one of the two
+    // race-start states (ordinal 0 or 1).
     bool IsInAnyRaceStartState() const;
 
-    // X360 0x822B8610: for an AI car, ramp a braking counter (miBrakingCounter @+0x738,
-    // +1 toward +10 when braking / -2 toward -10 when not) and set mbBraking
-    // (@+0x1BE7) = counter > 0; for non-AI cars mbBraking = lbBraking directly.
+    // X360 0x822B8610: for an AI car (mpGlobalRaceCar->GetType() == E_RACE_CAR_TYPE_AI),
+    // ramp a braking hysteresis counter (miBrakingCounter @+0x738, +1 toward +10 when
+    // braking / -2 toward -10 when not) and set mbBraking (@+0x1BE7) = counter > 0; for
+    // non-AI cars mbBraking = lbBraking directly.
     void SetBraking(bool lbBraking);
 
-    // X360 0x822B8738: DEFERRED -- multi-stage VMX (lvx128/stvx128) copy of the four
-    // per-wheel 64-byte physics transforms from the physics scratch into the active
-    // car's wheel-physics blocks (@+0x310 and @+0x1020) plus the per-wheel on-ground
-    // byte (@+0x526 / +0x1560). Declared only; the per-TU `cl /c` gate does not link,
-    // so an undefined-but-declared method compiles cleanly. FLAGGED: VMX pipeline +
-    // un-homed wheel-physics layout.
+    // X360 0x822B8738: per-wheel copy of the four road wheels' 64-byte physics transforms
+    // out of the physics wheel-data snapshot into BOTH of the active car's wheel-transform
+    // blocks (maWheelPhysicsTransformA @+0x310 and maWheelPhysicsTransformB @+0x1020) plus
+    // the matching per-wheel on-ground bytes (mau8WheelOnGroundA @+0x526 /
+    // mau8WheelOnGroundB @+0x1560). The console does this with unrolled lvx128/stvx128; the
+    // faithful C++ is a Matrix44 copy-assign per wheel.
     void UpdateWheelPhysicsState(const void* lpPhysicsWheelData);
 
     // ========================================================================
@@ -208,5 +217,49 @@ public:
         GlassScale mav2CrackedGlassScale[8];             // +0x1458 (5208) per-pane scale (8x8B)
                                                           // ends +0x1498 (5272)
     };
+
+public:
+    // Race-start phase held in meRaceStartState (int @+0x77C). The only X360-attested fact
+    // is that ordinals 0 and 1 both count as a "race start" phase (IsInAnyRaceStartState
+    // reports true for both); any other value is a non-start phase. The DWARF enumerator
+    // names are not attested for this TU, so the two start phases are named by ordinal.
+    enum ERaceStartState : s32
+    {
+        E_RACE_START_STATE_STAGE_0 = 0,
+        E_RACE_START_STATE_STAGE_1 = 1,
+    };
+
+private:
+    // ========================================================================
+    // Per-frame state layout (added additively). Only the members the five per-frame
+    // accessors touch are homed by name; everything else is honest `u8 mPadXXXX[N]`
+    // padding sized so each named member lands at its X360-asm-proven byte offset. The
+    // instance is 0x1CD0 (7376) bytes; every offset here is PINNED with an offsetof
+    // static_assert in BrnActiveRaceCar.cpp. No pointer members appear in this layout
+    // (mpGlobalRaceCar @+0x6F0 is reached via GetGlobalRaceCar()), so the byte offsets
+    // are identical on X360 and the x64 gate.
+    //
+    // Wheel arrays: the two 64-byte-per-wheel transform blocks are the deformation
+    // wheel-transform slots (the inlined accessor for block B asserts index <
+    // KU_DEFORMATION_MODEL_DATA_MAX_WHEELS == 6, matching RenderParams), so both are
+    // sized [6]. The per-wheel on-ground byte arrays are [4] -- pinned to four road wheels
+    // by mbIsCrashing sitting immediately after mau8WheelOnGroundA at +0x52A.
+    // ========================================================================
+    u8               mPad0000[784];                 // +0x000 (0)   .. +0x310 (784)
+    Matrix44         maWheelPhysicsTransformA[6];    // +0x310 (784) per-wheel physics transform, block A
+    u8               mPad0490[150];                  // +0x490 (1168).. +0x526 (1318)
+    u8               mau8WheelOnGroundA[4];          // +0x526 (1318) per-wheel on-ground flag, block A
+    bool             mbIsCrashing;                   // +0x52A (1322) IsCrashing()
+    u8               mPad052B[525];                  // +0x52B (1323).. +0x738 (1848)
+    s32              miBrakingCounter;               // +0x738 (1848) AI braking hysteresis counter
+    u8               mPad073C[64];                   // +0x73C (1852).. +0x77C (1916)
+    s32              meRaceStartState;               // +0x77C (1916) ERaceStartState ordinal
+    u8               mPad0780[2208];                 // +0x780 (1920).. +0x1020 (4128)
+    Matrix44         maWheelPhysicsTransformB[6];    // +0x1020 (4128) per-wheel physics transform, block B
+    u8               mPad11A0[960];                  // +0x11A0 (4512).. +0x1560 (5472)
+    u8               mau8WheelOnGroundB[4];          // +0x1560 (5472) per-wheel on-ground flag, block B
+    u8               mPad1564[1667];                 // +0x1564 (5476).. +0x1BE7 (7143)
+    bool             mbBraking;                      // +0x1BE7 (7143) latched braking flag
+    u8               mPad1BE8[232];                  // +0x1BE8 (7144).. +0x1CD0 (7376) end of instance
 };
 }
