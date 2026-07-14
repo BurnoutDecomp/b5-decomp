@@ -3,6 +3,8 @@
 #include "types.hpp"
 // Real instance layout: the 16 file handles, the 8 read-stream engines, the embedded log + lock.
 #include "GameShared/GameClasses/System/FileSystem/CgsFile.h"
+// Complete CgsFileSystem::File definition — maFiles[16] is embedded by value below.
+#include "GameShared/GameClasses/System/FileSystem/CgsFileRW.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsFileLog.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsReadStream.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsStreamDeviceDiskRead.h"
