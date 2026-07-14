@@ -14,6 +14,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                                    // CgsCore::SPrintf (variation heading formatter)
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceRankings.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                          // VariableEventQueue<14000,16>::AddEvent
@@ -49,6 +50,20 @@ namespace BrnNetwork
     // CopyIndexes (and CopyVariations) on AddEvent.
     static const s32 KI_NETEVENT_SCOREBOARD_HEADINGS     = 0x34;   // 52  (AddEvent event-type)
     static const s32 KI_SCOREBOARD_HEADINGS_PAYLOAD_SIZE = 0x808;  // 2056 == sizeof(NetworkOutScoreboardHeadingList)
+
+    // The DirtySock scoreboard-param slots CopyVariations probes to pick each variation's heading
+    // format. Params 4/5 are named from the range asserts CopyVariations fires (the stunt-run and
+    // burn-route event scoreboards); param 3 selects the qword_82029FA0 heading format table. Each
+    // slot routes to a per-mode file-scope format-string table (all three un-recovered; see the
+    // FLAGGED note on CopyVariations).
+    static const s32 KI_SCOREBOARD_PARAM_VARIATION_FMT = 3;   // -> qword_82029FA0 format table
+    static const s32 KI_SCOREBOARD_PARAM_STUNT_RUN     = 4;   // -> qword_8207C440 format table
+    static const s32 KI_SCOREBOARD_PARAM_BURN_ROUTE    = 5;   // -> qword_8207C4B0 format table
+
+    // The per-mode event-scoreboard counts CopyVariations range-asserts its variation index against
+    // (X360 FireAssert immediates @ BrnNetworkScoreboardManager.cpp:542 / :552).
+    static const s32 KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS  = 14;
+    static const s32 KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS = 35;
 
     // The incoming GUI "challenge this event score" event handed to HandleEvScoreTargetEvent.
     // Forward-declared in the header (BrnNetwork::EvScoreTargetEvent); defined here. The leading
@@ -737,6 +752,95 @@ namespace BrnNetwork
              ++liIndexCounter)
         {
             lHeadingList.AddHeading(mpRankings->GetIndexName(liCategory, liIndexCounter));
+        }
+
+        AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lHeadingList),
+            KI_NETEVENT_SCOREBOARD_HEADINGS, KI_SCOREBOARD_HEADINGS_PAYLOAD_SIZE);
+
+        mDebugComponent.HandleScoreboardHeadingEvent(&lHeadingList);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // CopyVariations  @ 0x825626D8
+    // Build a variation heading list for (liCategory, liIndex), broadcast it (event-type 0x34,
+    // 2056 bytes) and hand it to the debug component to (re)render. Most variations take their name
+    // straight from the rankings component (GetVariationName); the stunt-run / burn-route event
+    // scoreboards instead synthesise their heading through a per-mode format-string table and flag
+    // the list via the two reserved discriminator bytes.
+    //
+    // The SPrintf FORMAT strings are recovered rodata literals ("$%d" for param 3, "$EV_%06u" for
+    // the param-4 stunt-run and param-5 burn-route branches -- asm r5 == aD_11 / aEv06u_0). Their
+    // vararg VALUE, however, is loaded (asm `ldx r6`) from a per-mode numeric table indexed by the
+    // loop counter (qword_82029FA0 / qword_8207C440 / qword_8207C4B0), and those tables are file-scope
+    // rodata NOT recovered in this slice.
+    //
+    // FLAGGED rodata gap (per project rule: never fabricate un-recovered rodata): each SPrintf keeps
+    // its recovered format literal but passes a FLAGGED-0 placeholder for the un-recovered table
+    // value until that rodata is homed. The recoverable structure -- the param dispatch, the two
+    // range asserts, the reserved-flag stores and the GetVariationName fallback -- is faithful.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::CopyVariations(s32 liCategory, s32 liIndex)
+    {
+        BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
+        lHeadingList.miLength                = 0;
+        lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_VARIATION;
+        lHeadingList.maReservedPadTo0x808[0] = 0;
+        lHeadingList.maReservedPadTo0x808[1] = 0;
+
+        // The X360 body tracks the format-table index in its own register (r31) alongside the
+        // variation counter (r30); both start at 0 and step together, so they stay equal.
+        s32 liTableIndex = 0;
+        for (s32 liVariationCounter = 0;
+             liVariationCounter < mpRankings->GetNumberOfVariations(liCategory, liIndex);
+             ++liVariationCounter)
+        {
+            mpRankings->SelectScoreboard(liCategory, liIndex, liVariationCounter);
+
+            if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_VARIATION_FMT))
+            {
+                char lacHeading[32];
+                // Format literal "$%d" is recovered (rodata aD_11, asm r5); the vararg VALUE is
+                // qword_82029FA0[liTableIndex] -- an un-recovered rodata table (asm `ldx r6`), so it
+                // is left as a FLAGGED-0 placeholder until that table is homed.
+                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$%d", 0 /* qword_82029FA0[liTableIndex] */);
+                lHeadingList.AddHeading(lacHeading);
+                lHeadingList.maReservedPadTo0x808[0] = 1;
+            }
+            else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_STUNT_RUN))
+            {
+                CGS_ASSERT(liVariationCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
+                           "liVariationLoopCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS");
+                char lacHeading[32];
+                // Format literal "$EV_%06u" is recovered (rodata aEv06u_0, asm r5); the vararg VALUE
+                // is qword_8207C440[liTableIndex] -- an un-recovered rodata table (asm `ldx r6`), left
+                // as a FLAGGED-0 placeholder until that table is homed.
+                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u", 0u /* qword_8207C440[liTableIndex] */);
+                lHeadingList.AddHeading(lacHeading);
+                lHeadingList.maReservedPadTo0x808[0] = 0;
+                lHeadingList.maReservedPadTo0x808[1] = 1;
+            }
+            else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_BURN_ROUTE))
+            {
+                CGS_ASSERT(liVariationCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
+                           "liVariationLoopCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS");
+                char lacHeading[32];
+                // Format literal "$EV_%06u" is recovered (rodata aEv06u_0, asm r5); the vararg VALUE
+                // is qword_8207C4B0[liTableIndex] -- an un-recovered rodata table (asm `ldx r6`), left
+                // as a FLAGGED-0 placeholder until that table is homed.
+                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u", 0u /* qword_8207C4B0[liTableIndex] */);
+                lHeadingList.AddHeading(lacHeading);
+                lHeadingList.maReservedPadTo0x808[0] = 0;
+                lHeadingList.maReservedPadTo0x808[1] = 1;
+            }
+            else
+            {
+                lHeadingList.maReservedPadTo0x808[0] = 0;
+                lHeadingList.AddHeading(
+                    mpRankings->GetVariationName(liCategory, liIndex, liVariationCounter));
+            }
+
+            ++liTableIndex;
         }
 
         AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(

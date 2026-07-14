@@ -29,3 +29,27 @@ AptRenderItem* AptRenderItemAnimation::Clone(int nCreatedOnTick, bool bCopyExten
 }
 
 void AptRenderItemAnimation::Render(AptRenderingContext*, AptMaskRenderOperation, int) const {}
+
+// AptRenderItemAnimation::`scalar deleting destructor' @0x82AEF3F0 -- the MSVC
+// `delete` thunk. The X360 body (r3=this, r4=flags):
+//     v4 = this[13];                              // mInstanceName (EAStringC)
+//     *this = &off_82145898;                      // reinstall this level's vtable
+//     EAStringC::DecreaseInternalRefCount(v4);    // drop mInstanceName's buffer ref
+//     AptRenderItem::~AptRenderItem(this);        // base teardown
+//     if (flags & 1)
+//         DOGMA_PoolManager::Deallocate(off_8324D808, this, 56);   // gpNonGCPoolManager
+//     return this;
+// The vtable store + the mInstanceName refcount drop + the base dtor are exactly the
+// implicit ~AptRenderItemAnimation() chain (Animation adds no members, so it runs
+// ~AptRenderItemSprite -- which destroys mInstanceName -- then ~AptRenderItem). The
+// per-object scalar-deleting destructor has no portable C++ spelling, so it is homed
+// as the committed XxxScalarDeletingDtor(T*, char) free function (cf.
+// IVideoRendererScalarDeletingDtor @0x827E9F00). off_8324D808 is the same pool the
+// sibling Clone allocates from; the sized (56-byte) free matches sizeof(AptRenderItemAnimation).
+AptRenderItemAnimation* AptRenderItemAnimationScalarDeletingDtor(AptRenderItemAnimation* pThis, char cFlags)
+{
+    pThis->~AptRenderItemAnimation();
+    if ((cFlags & 1) != 0)
+        gpNonGCPoolManager->Deallocate(pThis, sizeof(AptRenderItemAnimation));
+    return pThis;
+}

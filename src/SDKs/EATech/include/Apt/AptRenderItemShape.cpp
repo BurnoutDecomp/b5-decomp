@@ -1,6 +1,11 @@
 // ===========================================================================
 // EATech Apt -- AptRenderItemShape.   DECOMPILED from the PS3 EXTERNAL ELF.
 //   ctor 0x80FDF4 / Render 0x8113C0.
+//   `vector deleting destructor'  0x82AECB88   (compiler thunk; not hand-written
+//     -- MSVC synthesizes it from the committed base `virtual ~AptRenderItem()`
+//     + sized `operator delete`. AptRenderItemShape adds no members, so the thunk
+//     just re-stamps the vtable, runs the trivial derived dtor -> base
+//     ~AptRenderItem, then frees the 52-byte pool block when its flag bit is set.)
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptRenderItemShape.h"

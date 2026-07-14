@@ -9,8 +9,13 @@
 //   CSchemaAccess::GetArgumentInfo     @ 0x8297EDE0
 //   CSchemaAccess::GetConformanceInfo  @ 0x8297EE10
 //   CSchemaAccess::GetConformingInfo   @ 0x8297EE68
+//   CSchemaAccess::SkipScope           @ 0x8297EEE8
 
 #include "SDKs/Xam/CSchemaAccess.h"
+
+// E_FAIL HRESULT the malformed-descriptor guard paths return
+// (lis r?,-0x8000 ; ori r?,r?,0x4005 == 0x80004005).
+static const s32 KI_E_FAIL = static_cast<s32>(0x80004005);
 
 // ---------------------------------------------------------------------------
 // CSchemaAccess::BindToSchema @ 0x8297F380
@@ -119,5 +124,188 @@ s32 CSchemaAccess::GetUnionInfo(u8* lpDst, void* lpSelector)
     {
         lhr = GetWord(lpSelector);
     }
+    return lhr;
+}
+
+// ---------------------------------------------------------------------------
+// CSchemaAccess::SkipScope @ 0x8297EEE8
+//
+// Recursively step the cursor past a whole schema scope, validating every field
+// descriptor against the wire data as it goes (depth-bounded to 0x10 to bound
+// recursion). Each field is a descriptor byte whose low bits select a class:
+//   (desc >> 2) & 3 == 0  scalar/leaf field   -> consume its optional trailers
+//   (desc >> 2) & 3 == 1  nested scope         -> rewind + recurse (SkipScope)
+//   (desc >> 2) & 3 == 3  scope terminator     -> stop
+// and whose bit flags 0x80/0x40/0x20/0x10 gate optional trailing words
+// (argument byte, count word, 2-byte conformance descriptor + its own 0x80
+// selector word, conformance info). A union scope ((desc & 0xC) == 8) first
+// reads a member count (GetUnionInfo) and walks that many members, each a byte
+// count of index words followed by a data-pointer whose first byte is the next
+// descriptor. Malformed class bits return E_FAIL; any buffer read error is
+// returned verbatim. Faithful store-for-store translation of the X360 body
+// (its branch structure -- including the reads-into-the-loop-tail sharing --
+// is preserved with labels rather than restructured).
+// ---------------------------------------------------------------------------
+s32 CSchemaAccess::SkipScope(u32 luDepth)
+{
+    s32  lhr;
+    s32  luClass;
+    u16  luMember;
+    bool lbTerminal;
+    s32  luWordIdx;
+    u32  luSavedOffset;
+    s32  luNestedClass;
+    u8   lDesc;         // [sp+50h] nested field descriptor
+    u8   lTopDesc;      // [sp+51h] this scope's opening field descriptor
+    u8   luConfCount;   // [sp+52h] index-word count for a union member
+    char lArgByte;      // [sp+53h] argument byte (0x80 trailer)
+    u16  luScratchWord; // [sp+54h] scratch 16-bit read sink
+    u8   lConfDesc[2];  // [sp+56h] 2-byte conformance descriptor (0x20 trailer)
+    u16  luUnionCount;  // [sp+58h] union member count
+    u32  luSize;        // [sp+5Ch] element size pinned per GetData call
+    u32  luPtrSize;     // [sp+60h] GetDataPointer span size
+    u8*  lpData;        // [sp+64h] GetDataPointer span base
+    char lConfInfo;     // [sp+68h] conformance-info sink (0x10 trailer)
+
+    if (luDepth >= 0x10)
+        goto invalid;
+
+    luSize = 1;
+    lhr = GetData(&lTopDesc, &luSize);
+    if (lhr < 0)
+        goto done;
+
+    luClass = (lTopDesc >> 2) & 3;
+    if (luClass == 0 || (luClass != 1 && ((lTopDesc >> 2) & 3) == 3))
+    {
+invalid:
+        lhr = KI_E_FAIL;
+        goto done;
+    }
+
+    lhr = GetWord(&luScratchWord);
+    if (lhr >= 0)
+    {
+        if ((lTopDesc & 0x80) == 0
+            || (luSize = 1, lhr = GetData(&lArgByte, &luSize), lhr >= 0))
+        {
+            if ((lTopDesc & 0x40) == 0
+                || (lhr = GetWord(&luScratchWord), lhr >= 0))
+            {
+                if ((lTopDesc & 0x20) == 0
+                    || (luSize = 2, lhr = GetData(lConfDesc, &luSize), lhr >= 0)
+                        && ((lConfDesc[0] & 0x80) == 0
+                            || (lhr = GetWord(&luScratchWord), lhr >= 0)))
+                {
+                    if ((lTopDesc & 0xC) == 8)
+                    {
+                        lhr = GetUnionInfo(reinterpret_cast<u8*>(&luUnionCount), &luScratchWord);
+                        if (lhr >= 0)
+                        {
+                            luMember = 0;
+                            goto unionLoop;
+                        }
+                        goto done;
+                    }
+                    luMember = luUnionCount;
+unionLoop:
+                    while ((lTopDesc & 0xC) == 8)
+                    {
+                        if (luMember >= luUnionCount)
+                        {
+                            luSize = 1;
+                            lhr = GetData(&lDesc, &luSize);
+                            if (lhr < 0)
+                                goto done;
+                            lbTerminal = (lDesc & 0xC) == 12;
+checkTerminal:
+                            if (!lbTerminal)
+                                goto invalid;
+                            goto afterField;
+                        }
+                        lhr = GetByte(&luConfCount);
+                        if (lhr < 0)
+                            goto done;
+                        luWordIdx = 0;
+                        if (luConfCount)
+                        {
+                            do
+                            {
+                                lhr = GetWord(&luScratchWord);
+                                if (lhr < 0)
+                                    goto done;
+                            }
+                            while (++luWordIdx < luConfCount);
+                        }
+                        lhr = GetWord(&luScratchWord);
+                        if (lhr < 0)
+                            goto done;
+                        luPtrSize = luScratchWord;
+                        lhr = GetDataPointer(reinterpret_cast<void**>(&lpData), &luPtrSize);
+                        if (lhr < 0)
+                            goto done;
+                        lDesc = *lpData;
+afterField:
+                        if ((lTopDesc & 0xC) == 8)
+                            ++luMember;
+                        if ((lDesc & 0xC) == 0xC)
+                            goto done;
+                    }
+
+                    luSavedOffset = GetOffset();
+                    luSize = 1;
+                    lhr = GetData(&lDesc, &luSize);
+                    if (lhr < 0)
+                        goto done;
+                    luNestedClass = (lDesc >> 2) & 3;
+                    if (luNestedClass == 0)
+                    {
+                        if ((lDesc & 0x80) != 0)
+                        {
+                            luSize = 1;
+                            lhr = GetData(&lArgByte, &luSize);
+                            if (lhr < 0)
+                                goto done;
+                        }
+                        if ((lDesc & 0x40) != 0)
+                        {
+                            lhr = GetWord(&luScratchWord);
+                            if (lhr < 0)
+                                goto done;
+                        }
+                        if ((lDesc & 0x20) != 0)
+                        {
+                            luSize = 2;
+                            lhr = GetData(lConfDesc, &luSize);
+                            if (lhr < 0)
+                                goto done;
+                            if ((lConfDesc[0] & 0x80) != 0)
+                            {
+                                lhr = GetWord(&luScratchWord);
+                                if (lhr < 0)
+                                    goto done;
+                            }
+                        }
+                        if ((lDesc & 0x10) == 0)
+                            goto afterField;
+                        lhr = GetConformanceInfo(&lConfInfo);
+                        goto checkStatus;
+                    }
+                    lbTerminal = luNestedClass == 3;
+                    if (((lDesc >> 2) & 3) != 3)
+                    {
+                        SeekTo(luSavedOffset);
+                        lhr = SkipScope(luDepth + 1);
+checkStatus:
+                        if (lhr < 0)
+                            goto done;
+                        goto afterField;
+                    }
+                    goto checkTerminal;
+                }
+            }
+        }
+    }
+done:
     return lhr;
 }

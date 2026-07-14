@@ -5,6 +5,10 @@
 
 #include "lobbytagfield.h"   // TagFieldSetStructure
 
+#include "GameSource/GameState/BrnGameActions.h"            // BrnGameState::GameStateModuleIO::OnlineGameResults (+ EGameModeType)
+#include "GameShared/GameClasses/Core/CgsID.h"              // CgsID / CgsIDConvertToString (SetGameStats car-name stamp)
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"    // CgsSystem::Time (SetGameStats round-time buffer)
+
 #include <cstring>   // std::memset (stands in for the X360 XMemSet in ClearGameData)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -120,6 +124,102 @@ namespace BrnNetwork
             CgsDev::Assert::EndAssert();
         }
         return static_cast<EEventType>(liGameMode - 10);
+    }
+
+    // X360 @ 0x8258A9F8. Stamp the end-of-game result payload from one round's
+    // OnlineGameResults record plus the online-rival count. Clears the payload, converts the
+    // wire game-mode to the event index (+0x0C), copies the loop-bound entry count (+0x04) and
+    // an assorted-offset scalar (+0x08), then -- per entry -- writes either a RACE record
+    // (time in centiseconds / distance*100 at +0x40+8i) or a STUNT record (score / multiplier
+    // at +0x90+8i), selected by the raw wire mode; finally stamps the STAT block
+    // (car-name string @ +0x30, meters-driven truncated to int, takedown tallies, rival count).
+    //
+    // Field bytes on `this` are reached by absolute offset (as in the sibling SerialiseToString
+    // @ 0x82584600 -- no per-field member names on the leaf payload are asserted). The frozen
+    // header declares the input in a global forward-declared `GameStateModuleIO` (an opaque
+    // handle); the concrete record is BrnGameState::GameStateModuleIO::OnlineGameResults
+    // (home BrnGameActions.h), so rebind to the real type here -- without touching the
+    // declaration -- to name the members and call GetRaceResults / GetStuntResults.
+    // Absolute-offset stores into the serialized end-of-game result WIRE byte-stream.
+    // `this` is the packed result record; its per-field member names are not recovered (the
+    // committed sibling SerialiseToString @0x82584600 reads the same layout by offset).
+    static inline void WirePutS32(void* lpBase, u32 luOffset, s32 liValue)
+    {
+        *reinterpret_cast<s32*>(reinterpret_cast<u8*>(lpBase) + luOffset) = liValue;   // serialized byte-stream store
+    }
+
+    void GameResults::SetGameStats(const GameStateModuleIO::OnlineGameResults* lpRaceResults,
+                                   s32 liNumberOfRivals)
+    {
+        const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults =
+            reinterpret_cast<const BrnGameState::GameStateModuleIO::OnlineGameResults*>(lpRaceResults);
+
+        ClearGameData();
+
+        u8* lpBytes = reinterpret_cast<u8*>(this);
+        WirePutS32(lpBytes, 0x0C, GameModeToEvent(lpResults->miEventType));
+        WirePutS32(lpBytes, 0x08, lpResults->miReserved0x30);
+
+        // The per-entry loop bound comes from OnlineGameResults+0x2C (the committed member at
+        // that offset), which the X360 stores into the GEN count word (+0x04) SerialiseToString
+        // later re-reads.
+        const s32 liEntryCount = lpResults->miReserved0x2C;
+        WirePutS32(lpBytes, 0x04, liEntryCount);
+
+        for (s32 liIndex = 0; liIndex < liEntryCount; ++liIndex)
+        {
+            u8* lpEntry = lpBytes + 0x40 + liIndex * 8;
+            switch (lpResults->miEventType)
+            {
+                case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE:   // 10
+                {
+                    CgsSystem::Time lRoundTime;
+                    lRoundTime.SetFloatVal(0.0f);
+                    f32 lfRoundDistance = 0.0f;
+                    lpResults->GetRaceResults(liIndex,
+                                              reinterpret_cast<f32*>(&lRoundTime),
+                                              &lfRoundDistance);
+
+                    const s32 liSeconds  = lRoundTime.GetSeconds();
+                    const f32 lfFraction = lRoundTime.GetFraction();
+                    if (static_cast<f32>(liSeconds) + lfFraction > 0.0f)
+                    {
+                        WirePutS32(lpEntry, 4, 0);
+                        WirePutS32(lpEntry, 0, liSeconds * 100 - static_cast<s32>(lfFraction * -100.0f));
+                    }
+                    else
+                    {
+                        WirePutS32(lpEntry, 0, 0);
+                        WirePutS32(lpEntry, 4, static_cast<s32>(lfRoundDistance * 100.0f));
+                    }
+                    break;
+                }
+                case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE:   // 12
+                case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN:  // 14
+                case BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END:   // 17
+                {
+                    s32 liScore      = 0;
+                    s32 liMultiplier = 0;
+                    lpResults->GetStuntResults(liIndex, &liScore, &liMultiplier);
+                    WirePutS32(lpEntry, 0x50, liScore);
+                    WirePutS32(lpEntry, 0x54, liMultiplier);
+                    break;
+                }
+                default:
+                    CGS_ASSERT(false, "No specific results for this game mode type.\n");
+                    break;
+            }
+        }
+
+        CgsIDConvertToString(lpResults->mCarUsed, reinterpret_cast<char*>(lpBytes + 0x30));
+        WirePutS32(lpBytes, 0x1C, lpResults->miMarkedManTakedownsFor);
+        WirePutS32(lpBytes, 0x18, liNumberOfRivals);
+        WirePutS32(lpBytes, 0x14, static_cast<s32>(lpResults->mfMetersDriven));
+        WirePutS32(lpBytes, 0x10, lpResults->mSecondsInEvent.GetSeconds());
+        WirePutS32(lpBytes, 0x20, lpResults->miTakedownsFor);
+        WirePutS32(lpBytes, 0x24, lpResults->miTakedownsAgainst);
+        WirePutS32(lpBytes, 0x28, lpResults->miTraitorousTakedownsFor);
+        WirePutS32(lpBytes, 0x2C, lpResults->miTraitorousTakedownsAgainst);
     }
 
     // X360 0x825842F0. Reset the game-data block ahead of a fresh fill, then report ready.

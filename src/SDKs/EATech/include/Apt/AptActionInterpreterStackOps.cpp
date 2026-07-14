@@ -985,7 +985,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     // console: (*(v7+1) & 0x3FFC000) == 0x4000 -> the method needs an extra AddRef.
     // console: (v7->mnValueData & 0x3FFC000) == 0x4000 -- a flags-band state test on
     // the RECEIVER's packed word (NOT isMCInParentChain; the old form compared a bool
-    // against 0x4000 == never true, silently skipping the hold ref).
+    // against 0x4000 == never true, so the hold ref was never applied).
     if ((pMethodName->mnValueData & 0x3FFC000u) == 0x4000u)
     {
         pMethodName->AddRef();   // console (**v7)(v7)
