@@ -341,13 +341,35 @@ namespace CgsGui
 
         // Pending option handler = &LoadHandleConfirmLoad. The X360 builds the member-fn pointer
         // { func = LoadHandleConfirmLoad @+0x198, delta = 0 @+0x19C } and stores it via
-        // `std r11,0x198`.
+        // `std r11,0x198`. muFunc is full-width on x64 (see the header note) -- no truncation.
         mMessageDisplayOptionFunc.muFunc =
-            static_cast<u32>(reinterpret_cast<uintptr_t>(&SaveLoadSystem_LoadHandleConfirmLoad));
+            reinterpret_cast<uintptr_t>(&SaveLoadSystem_LoadHandleConfirmLoad);
         mMessageDisplayOptionFunc.muDelta = 0;
 
-        mpActiveMessageDisplay->ShowMessage(reinterpret_cast<MessageDisplay::OptionHandler*>(this),
+        mpActiveMessageDisplay->ShowMessage(static_cast<MessageDisplay::OptionHandler*>(this),
                                             KSTR_CONFIRM_LOAD, lapcOptions, 2);
+    }
+
+    // X360 0x828601D8 (entry NOT in the ARTIST export set). Begin the profile boot-up. The body is
+    // composed from the exported sibling Load @0x82859B70 (identical bind-handler + SetMetadata
+    // setup) and the confirmed callee BootupShowAutosaveWarning @0x828599A0 (SetMetadata's xref set
+    // @0x8284C240 lists Bootup as a caller, so the SetMetadata call is attested). Bind the active
+    // result handler, push the boot-up metadata, then show the SAVELOAD_AUTOSAVE_WARNING prompt --
+    // BootupShowAutosaveWarning stores &BootupStart as the pending CONTINUE handler and renders the
+    // one-option prompt through the message display. The boot-up therefore BLOCKS on the prompt
+    // (the console behaviour) until the user answers CONTINUE; the prior PC leaf finished the task
+    // synchronously here, which is why the prompt never appeared.
+    void SaveLoadSystem::Bootup(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata,
+                                bool /*lbAutoLoad*/)
+    {
+        u8 laSaveInfo[336];
+        std::memset(laSaveInfo, 0, 288);
+
+        mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler);   // +0x130
+
+        SetMetadata(lpMetadata, laSaveInfo);
+
+        BootupShowAutosaveWarning();
     }
 
     // X360 0x82856040. Write the save: build two load-entry records (the title save + the mugshot
@@ -470,8 +492,10 @@ namespace CgsGui
         // sub-object embedded just before the active-display pointer); the active display's
         // ShowMessage is invoked as ShowMessage(handler, message, options, count) -- so the
         // a3/a4 swap means options=lpacOptions and count=luNumberOfOptions.
-        MessageDisplay::OptionHandler* lpHandler =
-            reinterpret_cast<MessageDisplay::OptionHandler*>(reinterpret_cast<u8*>(this) - 4);
+        // The OptionHandler passed is `this` adjusted to the embedded OptionHandler sub-object.
+        // static_cast performs the correct base-offset adjustment on x64 (the X360's fixed `-4`
+        // pointer fixup does not survive the wider vptr / different base offsets).
+        MessageDisplay::OptionHandler* lpHandler = static_cast<MessageDisplay::OptionHandler*>(this);
         mpActiveMessageDisplay->ShowMessage(lpHandler, lpcMessage, lpacOptions, luNumberOfOptions);
     }
 
@@ -496,13 +520,15 @@ namespace CgsGui
         mpMessageDisplay->HideMessage();   // (*(**(this+0x134)+8))(...)
 
         // Read the active member-fn pointer { func @+0x198, delta @+0x19C }, then clear the pair.
-        const u32 luFunc  = mMessageDisplayOptionFunc.muFunc;
-        const u32 luDelta = mMessageDisplayOptionFunc.muDelta;
+        // muFunc is a full 64-bit code pointer on x64 (see the header note) -- read it full-width so
+        // the >4GB trampoline address is not truncated.
+        const uintptr_t luFunc  = mMessageDisplayOptionFunc.muFunc;
+        const u32       luDelta = mMessageDisplayOptionFunc.muDelta;
         mMessageDisplayOptionFunc.muFunc  = 0;
         mMessageDisplayOptionFunc.muDelta = 0;
         // Member-function-pointer dispatch: add the delta to `this` and call through the function
         // word with (adjustedThis, option).
-        void* lpfn       = reinterpret_cast<void*>(static_cast<uintptr_t>(luFunc));
+        void* lpfn       = reinterpret_cast<void*>(luFunc);
         void* lpAdjusted = reinterpret_cast<u8*>(this) + luDelta;
         reinterpret_cast<void (*)(void*, u32)>(lpfn)(lpAdjusted, luOption);
     }
@@ -515,14 +541,15 @@ namespace CgsGui
         mpMessageDisplay->ShowAutosaveIcon(true);
 
         // Pending option handler = &BootupStart. Member-fn pointer { func = BootupStart @+0x198,
-        // delta = 0 @+0x19C }, stored via `std r10,0x198`.
+        // delta = 0 @+0x19C }, stored via `std r10,0x198`. muFunc is full-width on x64 (see the
+        // header note) -- the >4GB trampoline address must not be truncated to u32.
         mMessageDisplayOptionFunc.muFunc =
-            static_cast<u32>(reinterpret_cast<uintptr_t>(&SaveLoadSystem_BootupStart));
+            reinterpret_cast<uintptr_t>(&SaveLoadSystem_BootupStart);
         mMessageDisplayOptionFunc.muDelta = 0;
 
         const char* lapcOptions[1];
         lapcOptions[0] = KSTR_CONTINUE;
-        mpMessageDisplay->ShowMessage(reinterpret_cast<MessageDisplay::OptionHandler*>(this),
+        mpMessageDisplay->ShowMessage(static_cast<MessageDisplay::OptionHandler*>(this),
                                       KSTR_AUTOSAVE_WARNING, lapcOptions, 1);
     }
 
@@ -585,12 +612,19 @@ namespace CgsGui
         mpMessageDisplay->ShowAutosaveIcon(false);   // X360: (*(vtbl+12))(mpMessageDisplay, 0)
 
         // FLAG PC-platform leaf: the X360 continues by building RealmcIface load-entry records
-        // (sub_82B51A08 + CreateRealmcMugshotLoadEntryInfo + CreateRealmcSaveInfo) and starting
-        // the memory-card boot-up read (mpMemcardInterface vtable +0x24), then pumps Update().
-        // The Realmc SDK is the unrecovered console storage backend and the PC interface is the
-        // inert no-op boundary, so no load is started: the boot-up path proceeds as "no save
-        // present" without crashing.
+        // (sub_82B51A08 + CreateRealmcMugshotLoadEntryInfo + CreateRealmcSaveInfo) and starting the
+        // memory-card boot-up READ (mpMemcardInterface vtable +0x24), then pumps Update(); the
+        // read's ASYNC completion later reports the result to the bound handler (+0x130). The
+        // Realmc SDK is the unrecovered console storage backend and the PC interface is the inert
+        // no-op boundary, so no read starts or completes. Report the boot-up result to the bound
+        // handler HERE -- the PC substitute for the async read's completion. SUCCESS is the "no
+        // save present" outcome the prior PC boot-up leaf reported: ProfileManager::BootupResult
+        // enables autosave and the fresh profile is reset by the version-mismatch path. This runs
+        // only after the user answered CONTINUE (HandleOption -> BootupStart), so it is NOT a
+        // shortcut past the autosave-warning prompt (which the prior leaf skipped entirely).
         Update();
+        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+            ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_SUCCESS);
     }
 
     // X360 0x82855EC0. The confirm-load prompt handler routed from Load(). luOption == 1 is the

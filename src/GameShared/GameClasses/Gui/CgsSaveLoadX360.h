@@ -142,7 +142,15 @@ namespace CgsGui
     // ShowMessage's +0x194 store's second word and this +0x198 func word alias the same address
     // by design -- ShowMessage zeroing +0x198 while writing +0x194 is the binary's actual
     // behaviour, reproduced here (no extra guard).
-    class SaveLoadSystem : public ContentInformationFileInterface
+    // The X360 SaveLoadSystem carries an embedded MessageDisplay::OptionHandler sub-object (the
+    // engine offsets to it as `this - 4` when passing itself as the prompt's option handler);
+    // HandleOption is its override. Model that as a real base so the OptionHandler pointer the
+    // manager dispatches through (ProfileManager::HandleMessageChoice -> mpOptionHandler->
+    // HandleOption) resolves to SaveLoadSystem::HandleOption via a proper vtable rather than a
+    // reinterpret_cast onto the ContentInformationFileInterface vtable (which mis-dispatched to
+    // IsSavingCif). ContentInformationFileInterface has no data members, so this only adds a vptr.
+    class SaveLoadSystem : public ContentInformationFileInterface,
+                           public MessageDisplay::OptionHandler
     {
     public:
         // CgsSaveLoadX360.cpp:155. X360 0x8284C050. Wire up the message display, language
@@ -177,6 +185,14 @@ namespace CgsGui
         // X360 0x82859B70. Begin a load: bind the result handler, push the metadata, prompt the
         // user (SAVELOAD_CONFIRM_LOAD) routing the choice to LoadHandleConfirmLoad.
         void Load(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata);
+
+        // X360 0x828601D8 (entry not in the ARTIST export set; the body is composed from the
+        // exported sibling Load @0x82859B70 -- identical bind-handler/SetMetadata setup, confirmed
+        // by the SetMetadata xref @0x8284C240 listing Bootup as a caller -- plus its confirmed
+        // callee BootupShowAutosaveWarning @0x828599A0). Begin the profile boot-up: bind the
+        // result handler, push the metadata, and show the SAVELOAD_AUTOSAVE_WARNING prompt (routing
+        // CONTINUE to BootupStart). ProfileManager::SetCollisionWorldValid tail-calls this.
+        void Bootup(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata, bool lbAutoLoad);
 
         // X360 0x82856040. Write the current save (title + mugshot entries) to the memory card.
         void Save();
@@ -297,14 +313,19 @@ namespace CgsGui
             u32 muField194;                       // +0x194 (ShowMessage's func word)
             SystemUserProfile* mpSystemUserProfile; // +0x194 (Prepare)
         };
-        // +0x198 : the ACTIVE pending-option member-function pointer { func @+0x198, delta @+0x19C }.
-        //          Construct/Load/BootupShowAutosaveWarning store it via `std ...,0x198`;
-        //          HandleOption null-checks and dispatches through it. Modelled as two 4-byte
-        //          words to keep the X360's natural 4-byte alignment (a u64 would force 8-byte
-        //          alignment and shift later members).
-        struct { u32 muFunc; u32 muDelta; } mMessageDisplayOptionFunc; // +0x198 / +0x19C
+        // X360 +0x198 / +0x19C: the ACTIVE pending-option member-function pointer { code-ptr,
+        // this-delta }. Construct/Load/BootupShowAutosaveWarning store it; HandleOption null-checks
+        // and dispatches through it. muFunc is WIDENED to a full 64-bit pointer for the PC x64
+        // build: the console stored a 32-bit code address, but the PC option-handler trampolines
+        // (SaveLoadSystem_BootupStart / _LoadHandleConfirmLoad) live in an image based at
+        // 0x140000000 (>4GB), so a u32 truncates the high byte and HandleOption dispatches a garbage
+        // pointer. muDelta stays 32-bit (the trampolines are free functions, delta 0). This widening
+        // shifts the following members past their X360 offsets -- harmless here, every member is
+        // accessed by name (no offset-poke, no layout static_assert); the +0x1xx labels below are
+        // the X360 reference, already approximate on x64 (the +0x194 pointer union is 8 bytes too).
+        struct { uintptr_t muFunc; u32 muDelta; } mMessageDisplayOptionFunc;
 
-        wchar_t macwMetadataTitle[32];            // +0x1A0 wide metadata title (ConvertAscii dest)
+        wchar_t macwMetadataTitle[32];            // X360 +0x1A0 wide metadata title (ConvertAscii dest)
 
         char   macTitle[32];                      // +0x1E0 metadata title (strncpy, 32)
 

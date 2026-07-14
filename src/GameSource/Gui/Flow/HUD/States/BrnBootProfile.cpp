@@ -36,6 +36,12 @@ namespace BrnGui
 
         const s32 KI_ACTION_ACCEPT = 49;   // X360 HandleControllerInput accept sub-id
         const s32 KI_ACTION_BACK   = 50;   // X360 HandleControllerInput back sub-id
+        // FLAG PC-platform input bridge: the console A-button "select" the popup accepts arrives as
+        // action 49; the PC input reconstruction (CgsInputPadsPC) maps the accept key (ENTER/SPACE/
+        // pad-A) to action 45 -- the same accept-key action the title SelectionMenu consumes -- so
+        // recognise 45 as the accept here too, or the autosave-warning prompt could never be
+        // dismissed on PC. Behaviour is otherwise identical to the X360 sub-id-49 path.
+        const s32 KI_ACTION_ACCEPT_PC = 45;
 
         const s32 KI_CHANNEL_GUI_OUT    = 40;  // GuiEventOut
         const s32 KI_CHANNEL_VIEW_STATE = 41;  // GuiOutViewState
@@ -398,7 +404,7 @@ namespace BrnGui
     {
         const s32 liSubId =
             reinterpret_cast<const ControllerInputPressedPayload*>(lpEvent)->miButtonId;
-        if (liSubId == KI_ACTION_ACCEPT)
+        if (liSubId == KI_ACTION_ACCEPT || liSubId == KI_ACTION_ACCEPT_PC)
         {
             const s32 liNumOptions = mProfileMessage.GetNumOptions();
             if (liNumOptions >= 1)
