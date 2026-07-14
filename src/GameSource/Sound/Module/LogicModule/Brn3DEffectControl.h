@@ -79,6 +79,28 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
     {
     }
 
+    // Nested DrawSphere payload. DWARF (BrnEffectControl.h:152) declares the owning
+    // member `BrnSound::Logic::Brn3DEffectControl::DrawSphere mDrawSphere`. It is the
+    // element type of the sound-command message the 3-D effect controls post through
+    // the logic queue as CgsSound::Io::Message<Brn3DEffectControl::DrawSphere>: the
+    // X360 typed-AddEvent thunk @0x826DF9B8 (VariableEventQueue<8192,16>::AddEvent<
+    // Message<DrawSphere>>) bakes the record size `li r6,0x20` (=32). Because
+    // sizeof(Message<T>) == 16-byte MessageHeader + sizeof(T), this pins
+    // sizeof(DrawSphere) == 16. Posted by BrnSound::Logic::Traffic::TrafficEngine,
+    // Collision::CollisionControl, Passby::PassbyEffect, Vehicles::Engines::DualGinsuEffect.
+    //
+    // FLAG: only the SIZE (16 bytes) is X360-attested (from the AddEvent record-size
+    // immediate). The internal field breakdown is NOT grounded by asm in this TU, so
+    // the payload is modelled as honest opaque 4-byte words (align 4, consistent with a
+    // float/vector payload) rather than fabricated centre/radius fields. Pinned by the
+    // static_assert below; full field semantics DEFERRED to the Brn3DEffectControl TU.
+    // Defining the nested type is additive and does not alter Brn3DEffectControl's own
+    // size/vtable (the mDrawSphere member itself stays DEFERRED, as noted above).
+    struct DrawSphere
+    {
+        u32 mauOpaque[4];  // 16 bytes = X360-attested payload size (Message == li r6,0x20 == 32)
+    };
+
     // Scalar deleting destructor @ 0x826C85F8 — out-of-line; see Brn3DEffectControl.cpp.
     virtual ~Brn3DEffectControl();
 
@@ -87,6 +109,11 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
     // FLAG: full Attrib::Gen::globalenginedata generated class is DEFERRED.
     Attrib::Instance mEngineDataAtrib;
 };
+
+// X360-attested payload size (see the DrawSphere FLAG above): the AddEvent<Message<
+// DrawSphere>> thunk @0x826DF9B8 bakes li r6,0x20 (=32) == sizeof(MessageHeader)+16.
+static_assert(sizeof(Brn3DEffectControl::DrawSphere) == 16,
+              "Brn3DEffectControl::DrawSphere payload must be 16 bytes (Message == 32 == li r6,0x20)");
 
 } // namespace Logic
 } // namespace BrnSound

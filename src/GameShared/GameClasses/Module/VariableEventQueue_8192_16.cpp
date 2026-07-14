@@ -13,6 +13,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"     // BrnSound::ESoundMessages/FxVolumes/GameModeLostResults/RaceCarIsNowActive
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"               // BrnGui GUI audio-event payloads (read-only reuse)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::GuiEventPlayMusicOnMenuStream (read-only reuse)
+#include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h"      // BrnSound::Logic::Brn3DEffectControl::DrawSphere
 
 // Explicit per-method instantiation of CgsModule::VariableEventQueue<8192, 16>.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (out-of-line per-instantiation emission).
@@ -99,6 +100,14 @@ template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Me
 // "play menu music stream" payload (home CgsGuiStateInterface.h). Matches the baked record-size arg
 // in the X360 thunk @0x826DF058 (li r6,24), posted by BrnSound::Module::SoundLogicModule::ProcessGuiEvents.
 template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream> >(const CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream>*, s32);
+// Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> == 0x20(32): 16-byte MessageHeader + the
+// 16-byte DrawSphere payload (home Brn3DEffectControl.h). Matches the baked record-size arg in the
+// X360 typed-AddEvent thunk @0x826DF9B8 (li r6,0x20), posted by the 3-D effect controls
+// (Traffic::TrafficEngine::ProcessUpdate, Collision::CollisionControl::UpdateParams,
+// Passby::PassbyEffect::ProcessUpdate, Vehicles::Engines::DualGinsuEffect::ProcessUpdate).
+static_assert(sizeof(CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>) == 0x20,
+              "Message<Brn3DEffectControl::DrawSphere> must be 32 bytes (X360 AddEvent li r6,0x20)");
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> >(const CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>*, s32);
 
 // BLOCKED (2, precise -- NOT fabricated): the two remaining Message<InnerT> instances whose
 // InnerT is a genuinely un-homed BrnGui payload type. Homing them requires either editing the
