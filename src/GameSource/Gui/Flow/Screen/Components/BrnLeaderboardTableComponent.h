@@ -47,6 +47,15 @@ namespace BrnGui
         s8   GetRowsBefore() const;
         s8   GetRowsAfter() const;
 
+        // @0x82419368 (this TU) -- return the value in the currently-highlighted row's first
+        // score-bearing column (a number/time/currency data type), parsed as an integer.
+        s32  GetHighlightedScore() const;
+
+        // @0x82436580 (this TU) -- highlight the row whose name-column cell string-matches
+        // lpacPlayerName (clearing the highlight when the name is empty, there is no name column,
+        // or no row matches), then redraw.
+        void SetTargetGamertag(const char* lpacPlayerName);
+
     private:
         // @0x824346C8 (this TU, DWARF cpp:231) -- format one cell (row,column) from the
         // scoreboard row data according to the column's data type and push it into the column.

@@ -15,13 +15,15 @@
 
 // BrnGui::LeaderboardTableComponent -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// Bodied here (5 ledger functions, DWARF primary file
+// Bodied here (7 ledger functions, DWARF primary file
 // GameSource/Gui/Flow/Screen/Components/BrnLeaderboardTableComponent.cpp):
-//   LeaderboardTableComponent::Construct           @0x824190B0
-//   LeaderboardTableComponent::SetupScoreboard     @0x8243BBD0
-//   LeaderboardTableComponent::DrawScoreboard      @0x82436188
-//   LeaderboardTableComponent::SetCell             @0x824346C8
-//   LeaderboardTableComponent::LocaliseTextInCell  @0x82426938
+//   LeaderboardTableComponent::Construct            @0x824190B0
+//   LeaderboardTableComponent::SetupScoreboard      @0x8243BBD0
+//   LeaderboardTableComponent::DrawScoreboard       @0x82436188
+//   LeaderboardTableComponent::SetCell              @0x824346C8
+//   LeaderboardTableComponent::LocaliseTextInCell   @0x82426938
+//   LeaderboardTableComponent::GetHighlightedScore  @0x82419368
+//   LeaderboardTableComponent::SetTargetGamertag    @0x82436580
 
 namespace BrnGui
 {
@@ -277,5 +279,76 @@ namespace BrnGui
 
         // Point the column cell at the "$"-sigil reference so the display layer resolves it.
         maColumns[liColumn].SetCell(lacKey);
+    }
+
+    // @ 0x82419368
+    s32 LeaderboardTableComponent::GetHighlightedScore() const
+    {
+        // Scan the used columns for the first score-bearing data type (a plain number, a time,
+        // or a currency); the scoreboard's own GetColumn asserts the per-column index bounds.
+        s32 liColumn = 0;
+        while (liColumn < miColumnsUsed)
+        {
+            const BrnNetwork::ScoreboardColumn::EDataType leType =
+                mScoreboard.GetColumn(liColumn)->GetType();
+            if (leType == BrnNetwork::ScoreboardColumn::E_DATATYPE_NUMBER ||
+                leType == BrnNetwork::ScoreboardColumn::E_DATATYPE_TIME ||
+                leType == BrnNetwork::ScoreboardColumn::E_DATATYPE_CURRENCY)
+                break;
+            ++liColumn;
+        }
+        CGS_ASSERT(liColumn < miColumnsUsed, "liColumn < miColumnsUsed");
+
+        // Read that column's cell for the currently-highlighted row and parse it as an integer
+        // (GetRow asserts the row-index bounds against the scoreboard's row count).
+        const char* lpcData = mScoreboard.GetRow(miHighlight)->GetData(liColumn);
+        return std::atoi(lpcData);
+    }
+
+    // @ 0x82436580
+    void LeaderboardTableComponent::SetTargetGamertag(const char* lpacPlayerName)
+    {
+        CGS_ASSERT(lpacPlayerName != 0, "lpPlayerName");
+
+        // An empty target clears the local-player highlight and redraws.
+        if (*lpacPlayerName == 0)
+        {
+            miLocalPlayer = -1;
+            DrawScoreboard();
+            return;
+        }
+
+        // Find the name column (GetColumn asserts the per-column index bounds).
+        s32 liColumn = 0;
+        while (liColumn < miColumnsUsed)
+        {
+            if (mScoreboard.GetColumn(liColumn)->GetType() ==
+                BrnNetwork::ScoreboardColumn::E_DATATYPE_NAME)
+                break;
+            ++liColumn;
+        }
+
+        // No name column: nothing to match against, so clear the highlight and redraw.
+        if (liColumn >= miColumnsUsed)
+        {
+            miLocalPlayer = -1;
+            DrawScoreboard();
+            return;
+        }
+
+        // Walk the used rows, matching each row's name cell against the target gamertag;
+        // miLocalPlayer doubles as the row cursor and lands on the matching index.
+        for (miLocalPlayer = 0; miLocalPlayer < miRowsUsed; miLocalPlayer = miLocalPlayer + 1)
+        {
+            const char* lpcName = mScoreboard.GetRow(miLocalPlayer)->GetData(liColumn);
+            if (std::strcmp(lpcName, lpacPlayerName) == 0)
+                break;
+        }
+
+        // Running off the end means no row matched: clear the highlight.
+        if (miLocalPlayer >= miRowsUsed)
+            miLocalPlayer = -1;
+
+        DrawScoreboard();
     }
 }

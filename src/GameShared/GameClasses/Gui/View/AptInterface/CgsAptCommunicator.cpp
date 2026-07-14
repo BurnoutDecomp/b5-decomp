@@ -389,6 +389,32 @@ namespace CgsGui
     }
 
     // ========================================================================
+    // GetComponentNameForHash  @ 0x824EAD38
+    //
+    // Debug helper (BrnGui::GuiCacheDebugComponent::ShowAptComponentGuiCacheStatus
+    // calls it): linear-scan the registered components' hashed-name table for luHash
+    // and return that component's stored name text; "Unknown" on a miss. Reads only
+    // the static mAptComponentList -- the X360 walks mauHashedName (@dword_830419A0,
+    // the instance's +0x8400) against the array end (@dword_83041DA0) and, on a match
+    // at index i, returns maacName[i] (@unk_830422A0 + 256*i). The per-iteration
+    // component-index bounds asserts are the inlined CgsAptCommunicator.h:182/183 pair.
+    // ========================================================================
+    const char* AptCommunicator::GetComponentNameForHash(u32 luHash)
+    {
+        for (s32 liComponent = 0; liComponent < AptComponentList::KU_MAX_COMPONENTS; ++liComponent)
+        {
+            CGS_ASSERT(liComponent >= 0, "Invalid Component Index");
+            CGS_ASSERT(liComponent < AptComponentList::KU_MAX_COMPONENTS, "Invalid Component Index");
+
+            if (mAptComponentList.GetHashedName(liComponent) == luHash)
+            {
+                return mAptComponentList.GetName(liComponent);
+            }
+        }
+        return "Unknown";
+    }
+
+    // ========================================================================
     // sMethod_GetPlatformString  @ 0x82849950
     // ========================================================================
     AptValue* AptCommunicator::sMethod_GetPlatformString(AptValue* /*pContext*/, int /*iNumParams*/)
