@@ -24,12 +24,52 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h"
-#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"  // complete BrnDirector::DebugComponent (SetStep)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"  // complete BrnDirector::DebugComponent (RegisterVariable/UnregisterVariable/SetStep)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 
 namespace BrnDirector
 {
 namespace Camera
 {
+
+// ----------------------------------------------------------------------------
+// The per-leaf worker (Serialisation.h:265, `template<class T> void Process<T>(const char*, T&)`).
+// In ADD mode it registers &value as a debug-menu variable under the current menu path (the path
+// stack macPathStack is the group); in REMOVE mode it strips that same variable back out (the
+// variable manager keys the removal off the value address, not the label). One typed
+// CgsDev::DebugComponent::RegisterVariable overload is selected per instantiation
+// (float/int/uint/bool), which is why each Process<T> has its own out-of-line body in the X360
+// image (0x821FE078/108/198/228) -- each calls a distinct RegisterVariable.
+//
+// Store-for-store from Process<float> @0x821FE078 (r31=this, a2=name, a3=&value):
+//     if ( meMode == E_MODE_ADD_TO_MENU )                              ; if ( !*this )
+//         mpDebugComponent->RegisterVariable(&value, macPathStack, name);  ; RegisterVariable(this[0x48], a3, this+8, a2)
+//     else if ( meMode == E_MODE_REMOVE_FROM_MENU )                    ; if ( *this == 1 )
+//         mpDebugComponent->UnregisterVariable(&value);                ; UnregisterVariable(this[0x48], a3)
+//     else
+//         CGS_ASSERT(false, "unhandled case");                         ; Serialisation.h:283
+//
+// meMode(+0x00)/macPathStack(+0x08)/mpDebugComponent(+0x48) match the frozen class layout; the
+// DWARF signature returns void, so the X360's live return register from the tail call is dropped.
+// ----------------------------------------------------------------------------
+template<class T>
+void DebugMenuSerialiser::Process(const char* lpcName, T& lrValue)
+{
+    if (meMode == E_MODE_ADD_TO_MENU)
+        mpDebugComponent->RegisterVariable(&lrValue, macPathStack, lpcName);
+    else if (meMode == E_MODE_REMOVE_FROM_MENU)
+        mpDebugComponent->UnregisterVariable(&lrValue);
+    else
+        CGS_ASSERT(false, "unhandled case");
+}
+
+// Explicit instantiations owned by this TU -- the four leaf types the camera-tunings/playlist
+// Parameters trees drive Process<T> with: 0x821FE078 float, 0x821FE108 int, 0x821FE198 unsigned
+// int, 0x821FE228 bool. Each &value resolves to the matching CgsDev::DebugComponent overload.
+template void DebugMenuSerialiser::Process<float>(const char* lpcName, float& lrValue);
+template void DebugMenuSerialiser::Process<int>(const char* lpcName, int& lrValue);
+template void DebugMenuSerialiser::Process<unsigned int>(const char* lpcName, unsigned int& lrValue);
+template void DebugMenuSerialiser::Process<bool>(const char* lpcName, bool& lrValue);
 
 void DebugMenuSerialiser::Serialise(const char* lpcName, Vector3& lrValue)
 {
