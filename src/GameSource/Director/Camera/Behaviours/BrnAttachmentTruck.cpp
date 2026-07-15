@@ -17,6 +17,7 @@
 // the read serialiser is NOT emitted here).
 #include "GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h"
 #include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"
+#include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"
 
 namespace BrnDirector
 {
@@ -50,11 +51,14 @@ void AttachmentTruck::Parameters::Serialise(TSerialiser& lrSerialiser)
     lrSerialiser.Serialise("Initial offset dist.", mfInitialOffsetDist);
 }
 
-// Explicit instantiations -- one per serialiser S the X360 emits this block's field-walk over.
-// (Only DebugMenuSerialiser @0x82215A38 and TextFileWriteSerialiser @0x82216470 are present in
-// this TU; the read serialiser instance is not emitted for the truck block.)
+// Explicit instantiations -- one per serialiser S that walks this block's fields. The X360
+// inlines the field-walk at each call site (DebugMenu @0x82215A38, Write @0x82216470, Read
+// @0x82215C78 walks mfConvergenceTimeSecs/mfInitialOffsetDist guarded on the FILE*), so no
+// standalone symbol survives in the binary; the de-inlined source form requires all three
+// instantiations (mirroring BrnBehaviourAftertouchCamParameters.cpp).
 template void AttachmentTruck::Parameters::Serialise<DebugMenuSerialiser>(DebugMenuSerialiser&);
 template void AttachmentTruck::Parameters::Serialise<TextFileWriteSerialiser>(TextFileWriteSerialiser&);
+template void AttachmentTruck::Parameters::Serialise<TextFileReadSerialiser>(TextFileReadSerialiser&);
 
 } // namespace Camera
 } // namespace BrnDirector

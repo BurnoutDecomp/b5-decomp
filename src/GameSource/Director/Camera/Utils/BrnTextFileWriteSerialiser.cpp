@@ -42,7 +42,12 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourPassengerCam.h"
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"          // BehaviourRoadRunner::Parameters (attested-empty text walk)
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h"  // BehaviourRotateAboutVehicle::Parameters (attested-empty text walk)
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"  // BehaviourSpirallingDeathcam::Parameters (attested-empty text walk)
+#include "GameSource/Director/Camera/Behaviours/BrnAttachmentTruck.h"              // AttachmentTruck::Parameters
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"     // BehaviourRig::Parameters + Utils::{CameraRig::Params,CameraShake,OrientationLag,Looker,PositionLag}::Parameters
+#include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"                // Utils::CameraImpactEffect::Parameters
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"            // BrnDirector::{IceMovie,ICEMoviePlaylist}
 
 namespace BrnDirector
@@ -182,12 +187,20 @@ void TextFileWriteSerialiser::Serialise(const char* lpcName, T& lrParams)
 // identical for every T (above); each differs only by the T argument and its field-walking
 // Serialise<TextFileWriteSerialiser> callee (a separate TU).
 //
-// BLOCKED (not instantiated here -- their nested Parameters type has no reconstructed home yet, so
-// instantiating the body would require fabricating the type): AttachmentTruck::Parameters,
-// BehaviourRoadRunner::Parameters, BehaviourRotateAboutVehicle::Parameters,
-// BehaviourSpirallingDeathcam::Parameters, Utils::CameraImpactEffect::Parameters. These land when
-// their owning behaviour/utility TUs home the nested block.
+// The final five (AttachmentTruck::Parameters @0x82232BF8, BehaviourRoadRunner::Parameters
+// @0x82214E78, BehaviourRotateAboutVehicle::Parameters @0x82214D48, BehaviourSpirallingDeathcam::
+// Parameters @0x82214DE0, Utils::CameraImpactEffect::Parameters @0x8224ED50) now have homed nested
+// blocks, so they instantiate here too. The three behaviour Parameters (RoadRunner/RotateAboutVehicle/
+// SpirallingDeathcam) have an ATTESTED-EMPTY text field-walk -- their instantiation asm emits only
+// the section-header + depth accounting and inlines the inner zero-field Serialise to nothing (the
+// params register is discarded before FormatName); the homed empty Serialise<S> visitor reproduces
+// that exactly (see each behaviour header's Parameters FLAG).
 // ----------------------------------------------------------------------------
+template void TextFileWriteSerialiser::Serialise<AttachmentTruck::Parameters>(const char*, AttachmentTruck::Parameters&);
+template void TextFileWriteSerialiser::Serialise<BehaviourRoadRunner::Parameters>(const char*, BehaviourRoadRunner::Parameters&);
+template void TextFileWriteSerialiser::Serialise<BehaviourRotateAboutVehicle::Parameters>(const char*, BehaviourRotateAboutVehicle::Parameters&);
+template void TextFileWriteSerialiser::Serialise<BehaviourSpirallingDeathcam::Parameters>(const char*, BehaviourSpirallingDeathcam::Parameters&);
+template void TextFileWriteSerialiser::Serialise<Utils::CameraImpactEffect::Parameters>(const char*, Utils::CameraImpactEffect::Parameters&);
 template void TextFileWriteSerialiser::Serialise<BehaviourAftertouchCam::Parameters>(const char*, BehaviourAftertouchCam::Parameters&);
 template void TextFileWriteSerialiser::Serialise<BehaviourAftertouchCrash::Parameters>(const char*, BehaviourAftertouchCrash::Parameters&);
 template void TextFileWriteSerialiser::Serialise<BehaviourBystanderCam::Parameters>(const char*, BehaviourBystanderCam::Parameters&);

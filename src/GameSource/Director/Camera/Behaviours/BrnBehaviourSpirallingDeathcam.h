@@ -28,6 +28,30 @@ class BehaviourSpirallingDeathcam
 {
 public:
 
+    // ------------------------------------------------------------------------
+    // The deathcam parameter block. HOME here because the ledger nests it under this behaviour
+    // (BrnDirector::Camera::BehaviourSpirallingDeathcam::Parameters) and the camera-tunings bank
+    // saves it through TextFileWriteSerialiser::Serialise<Parameters> @0x82214DE0.
+    //
+    // FLAG: the text-serialise field-walk for this block is ATTESTED EMPTY. The X360 instantiation
+    //   @0x82214DE0 emits only the section-header label line + recursion-depth accounting; it
+    //   discards the parameter-block register (mr r5,r4 overwrites the params ptr before FormatName)
+    //   and makes NO `bl` to any inner Parameters::Serialise field walker -- i.e. the compiler
+    //   inlined the inner visitor to nothing because it serialises zero fields to text. The
+    //   visitor below is therefore an empty (zero-field) walk, faithful to the attested asm; NO
+    //   field offsets are fabricated. The full parameter layout (the block's actual tunables) lands
+    //   with the deathcam rig TU -- model it there when its own Serialise field-walk is attested.
+    // ------------------------------------------------------------------------
+    class Parameters
+    {
+    public:
+        // X360 visitor: `void Serialise<S>(S&)` for the camera-tunings serialiser S. Attested
+        // EMPTY for the text writer (see the class FLAG): walks zero fields. Templated inline so
+        // TextFileWriteSerialiser::Serialise<Parameters>'s odr-use inlines it away, matching the
+        // degenerate instantiation asm (no inner field-walk call).
+        template<class TSerialiser> void Serialise(TSerialiser& /*lrSerialiser*/) {}
+    };
+
     // Reset the per-activation state word. @0x821FB3F8. The asm writes 0 to a state field near
     // the head of the object (`*(this + 8) = 0`) and returns true.
     bool Prepare();

@@ -87,6 +87,29 @@ struct Camera;
 class BehaviourRoadRunner
 {
 public:
+    // ------------------------------------------------------------------------
+    // The "road runner" parameter block. HOME here because the ledger nests it under this behaviour
+    // (BrnDirector::Camera::BehaviourRoadRunner::Parameters) and the camera-tunings bank saves it
+    // through TextFileWriteSerialiser::Serialise<Parameters> @0x82214E78.
+    //
+    // FLAG: the text-serialise field-walk for this block is ATTESTED EMPTY. The X360 instantiation
+    //   @0x82214E78 emits only the section-header label line + recursion-depth accounting; it
+    //   discards the parameter-block register (mr r5,r4 overwrites the params ptr before FormatName)
+    //   and makes NO `bl` to any inner Parameters::Serialise field walker -- the compiler inlined
+    //   the inner visitor to nothing because it serialises zero fields to text. The visitor below is
+    //   therefore an empty (zero-field) walk, faithful to the attested asm; NO field offsets are
+    //   fabricated. The full parameter layout lands with the behaviour rig TU.
+    // ------------------------------------------------------------------------
+    class Parameters
+    {
+    public:
+        // X360 visitor: `void Serialise<S>(S&)` for the camera-tunings serialiser S. Attested
+        // EMPTY for the text writer (see the class FLAG): walks zero fields. Templated inline so
+        // TextFileWriteSerialiser::Serialise<Parameters>'s odr-use inlines it away, matching the
+        // degenerate instantiation asm (no inner field-walk call).
+        template<class TSerialiser> void Serialise(TSerialiser& /*lrSerialiser*/) {}
+    };
+
     // The camera this behaviour produced this frame (the X360 reaches it through the handle
     // helper sub_821FDC58, which resolves the behaviour's produced camera). The crash-nav state
     // copies it into its own mCamera. DECLARATION-ONLY (body lands with the full behaviour TU).
