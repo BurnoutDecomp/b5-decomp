@@ -22,9 +22,27 @@
 #include "BrnProgressionCarData.h"        // BrnProgression::CarData (maCars element, full layout)
 #include "BrnProgressionLiveryData.h"     // BrnProgression::LiveryData (maLiveryChoices element)
 #include "BrnProgressionRivalData.h"      // BrnProgression::RivalData (maRivals element)
+#include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfileRecords.h"  // BrnGuiSaveLoad::{Car,Livery,Rival,ProfileEvent}Data (SplitArray save-image twins)
 
 namespace BrnProgression
 {
+
+// ------------------------------------------------------------------------------------
+// SplitArray<TSrc, TDst>  -- Profile::Serialise's save-image splitter.
+//
+// Walk liCount live progression records (lpSrc) and copy each into either the "base game"
+// run (lpBase / *lpiBaseCount) or the "DLC" run (lpDlc / *lpiDlcCount), preserving order
+// within each run. A record is classified as DLC by BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId
+// (its packed id at +0) for the id-keyed records, or by its id threshold for events; the DLC
+// run is capped at liMaxDlcCount (asserted "liDLCIndex < liMaxDlcCount", BrnProfile.cpp:56).
+// Each of the four instantiations is a distinct X360 body (different stride/predicate), so
+// each is provided as an explicit specialisation in BrnProfile.cpp; the primary template is
+// intentionally left undefined.
+// ------------------------------------------------------------------------------------
+template<typename TSrc, typename TDst>
+void SplitArray(s32 liCount, const TSrc* lpSrc,
+                s32* lpiBaseCount, TDst* lpBase,
+                s32* lpiDlcCount,  TDst* lpDlc, s32 liMaxDlcCount);
 
 struct ProfileEvent
 {

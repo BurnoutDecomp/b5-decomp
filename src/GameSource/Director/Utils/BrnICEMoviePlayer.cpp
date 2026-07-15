@@ -635,29 +635,80 @@ SharedPlaylists::GetPausePlaylist() const
 }
 
 // ----------------------------------------------------------------------------
-// NOTE -- BrnDirector::ICEMoviePlaylist::Serialise<S> is BLOCKED (all three instances:
-//   <TextFileWriteSerialiser> @0x8224CBE8, <TextFileReadSerialiser> @0x8224CDE8,
-//   <DebugMenuSerialiser> @0x8224B240).
+// BrnDirector::ICEMoviePlaylist::Serialise<S> -- the ONE playlist movie-list visitor body.
+//   <DebugMenuSerialiser>     @0x8224B240
+//   <TextFileWriteSerialiser> @0x8224CBE8
+//   <TextFileReadSerialiser>  @0x8224CDE8
 //
-// Unlike the SharedPlaylists visitor below, the playlist visitor is not a field walk: it drives the
-// movie ObjectPool/Array machinery -- serialise a movie count through a "Ignore this" scratch slot,
-// Construct() when the file count is smaller than the live list, InsertMovieBefore() a fresh default
-// IceMovie when it is larger, then recurse into each movie via IceMovie::Serialise labelling them
-// from a per-movie "MovieN" rodata name table. Three faithfulness gaps block a precise reconstruction:
-//   1. The movie-count scratch slot (X360 stores it at playlist +0x4DC, label "Ignore this") is not
-//      pinned to a named trailing member -- resolving it needs the ObjectPool<...,20,s32> sizings
-//      verified so +0x4DC maps to miDebugMenuNewMovieIndex vs miDebugSize.
-//   2. The per-movie label table is a 10-byte-stride "Movie1".."Movie20" rodata blob of which only
-//      "Movie1" is symbolised; the rest are inferred from the stride, not recovered.
-//   3. The InsertMovieBefore default IceMovie is a partial inline init (refType INVALID, startPos 0,
-//      vehicleType 0, flash true; other fields left uninitialised) whose shape (Construct-inlined vs
-//      explicit) is not pinned.
-// The DebugMenuSerialiser instance additionally needs the un-homed DebugMenuSerialiser type (its
-// per-movie path is AddToPath + CgsDev::DebugComponent (Un)RegisterVariable, not IceMovie::Serialise).
-// Deferred; blocked precisely rather than fabricating the name table / mis-mapping the scratch slot.
-// (SharedPlaylists::Serialise below recurses into this visitor; it compiles against the declaration,
-// so its own reconstruction is unaffected by this block.)
+// Unlike the SharedPlaylists field-walk below, the playlist visitor drives the movie
+// ObjectPool/Array machinery: serialise the live movie count through the throwaway "Ignore
+// this" scratch member, resize the list to match (Construct() to reset when the incoming
+// count is smaller; InsertMovieBefore() a fresh default IceMovie when it is larger), then
+// hand each movie to the serialiser as a nested "MovieN" block (S recurses into
+// IceMovie::Serialise for the text passes; registers the movie's fields under the path for
+// the debug-menu pass). The body is uniform across S; only S's inlined leaf/nested-block
+// helpers differ (Write: FormatName+fprintf; Read: fscanf; DebugMenu: Process/AddToPath).
+//
+// Offsets verified against the asm: mMoviePoolIndicies at playlist +0x380 (its live-count
+// word at +0x3D0), and the "Ignore this" scratch slot at +0x4DC == miDebugSize (the pool
+// mDebugMenuRemoveData @+0x3D8 is 0x100 bytes, so the trailing s32 pair sits at +0x4D8
+// (miDebugMenuNewMovieIndex) / +0x4DC (miDebugSize), pinned by sizeof(ICEMoviePlaylist)
+// == 0x4E8 from SharedPlaylists::GetPausePlaylist). The default grow-movie is the asm's
+// partial inline init: refType INVALID, startPos 0, vehicleType E_PLAYER_CAR(0), flash true
+// (v20[0]=-1, v20[6]=0.0, v20[7]=0, v21=1); its other fields are left uninitialised exactly
+// as the X360 leaves them. The per-movie label is the "Movie1".."Movie20" name the X360
+// reads from a 10-byte-stride rodata table (only "Movie1" symbolised); reconstructed here as
+// the equivalent deterministic "Movie<1-based index>" format.
 // ----------------------------------------------------------------------------
+template<class TSerialiser>
+void ICEMoviePlaylist::Serialise(TSerialiser& lrSerialiser)
+{
+    // Serialise the movie count through the throwaway "Ignore this" scratch member
+    // (miDebugSize): on a write pass it carries the live count out; on a read pass it is
+    // overwritten with the count parsed from the file.
+    miDebugSize = mMoviePoolIndicies.GetCount();   // GetCount asserts Construct/Clear was called
+    lrSerialiser.Serialise("Ignore this", miDebugSize);
+
+    // If the incoming count is smaller than the live list, reset the list so the read pass
+    // rebuilds exactly miDebugSize movies from scratch.
+    if (miDebugSize < mMoviePoolIndicies.GetCount())
+    {
+        Construct();
+    }
+
+    for (s32 liMovie = 0; liMovie < miDebugSize; ++liMovie)
+    {
+        // Grow the list with a fresh default movie whenever the target count runs past the
+        // live list (append it before the current end).
+        if (mMoviePoolIndicies.GetCount() <= liMovie)
+        {
+            IceMovie lNewMovie;
+            lNewMovie.meRefType         = IceMovie::E_REF_TYPE_INVALID;
+            lNewMovie.mfStartPosition01 = 0.0f;
+            lNewMovie.meVehicleType     = VehicleRef::E_PLAYER_CAR;
+            lNewMovie.mbPlayFlash       = true;
+            InsertMovieBefore(mMoviePoolIndicies.GetCount(), lNewMovie);
+        }
+
+        const s32 liPoolIndex = mMoviePoolIndicies.GetItem(liMovie);
+        IceMovie&  lrMovie     = mMoviePool[liPoolIndex];
+        CGS_ASSERT(mMoviePoolIndicies.GetItem(liMovie) <= KI_CAPACITY,
+                   "mMoviePoolIndicies[liMovie] <= 20");
+
+        // Label the movie "Movie1".."Movie20" and hand it to the serialiser as a nested block.
+        char lacName[16];
+        CgsCore::SPrintf(lacName, sizeof(lacName), "Movie%i", liMovie + 1);
+        lrSerialiser.Serialise(lacName, lrMovie);
+    }
+}
+
+// Explicit instantiations -- one per serialiser the playlist is saved/loaded/menu-registered
+// through. Each drives the count scalar overload + the nested-block Serialise<IceMovie> per
+// movie (both declaration-only on the serialiser side; their bodies link with the serialiser
+// TUs), so this TU forces no inner-template instantiation of its own.
+template void ICEMoviePlaylist::Serialise<Camera::DebugMenuSerialiser>(Camera::DebugMenuSerialiser&);
+template void ICEMoviePlaylist::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
+template void ICEMoviePlaylist::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
 
 // ----------------------------------------------------------------------------
 // BrnDirector::SharedPlaylists::Serialise<S> -- the ONE shared-playlists field-walk visitor body.
