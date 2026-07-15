@@ -37,11 +37,26 @@
 // ============================================================================
 
 #include "GameSource/Effects/Particles/Native/FXBuckets.h"
+#include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"  // BrnDebris  -> FXBucket<BrnDebris,32>
+#include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"// BrnSpark   -> FXBucket<BrnSpark,4>
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h" // CgsMemory::HeapMalloc::Malloc
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 
 namespace BrnParticle
 {
+    // ------------------------------------------------------------------------
+    // Explicit instantiations of the FXBucketManager::AllocateBucket<TBucket> member
+    // (body inline in FXBuckets.h). These are the two allocator TUs the X360 build emits:
+    //   AllocateBucket<FXBucket<BrnDebris,32>> @ 0x8228E3F0
+    //       -- caller: BrnParticle::Native::BrnDebrisArray::GetNewDebris
+    //   AllocateBucket<FXBucket<BrnSpark,4>>   @ 0x8228E470
+    //       -- caller: BrnParticle::Native::SparkArray::SparkBank::GetNewSpark
+    // ------------------------------------------------------------------------
+    template BrnParticle::FXBucket<BrnParticle::Native::BrnDebris, 32>*
+        FXBucketManager::AllocateBucket<BrnParticle::FXBucket<BrnParticle::Native::BrnDebris, 32> >();
+    template BrnParticle::FXBucket<BrnParticle::Native::BrnSpark, 4>*
+        FXBucketManager::AllocateBucket<BrnParticle::FXBucket<BrnParticle::Native::BrnSpark, 4> >();
+
     void FXBucketManager::Construct(CgsMemory::HeapMalloc* lpHeapMalloc, u32 luTotalSize)
     {
         // 128-byte-aligned block holding the whole bucket budget.
