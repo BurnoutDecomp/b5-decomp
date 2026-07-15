@@ -147,5 +147,37 @@ namespace BrnParticle
         // every 8192-byte bucket into the free list (prev/next wired, both ends nulled),
         // and seed the free/total counts to the bucket count.
         void Construct(CgsMemory::HeapMalloc* lpHeapMalloc, u32 luTotalSize);
+
+        // X360 FXBucketManager::AllocateBucket<TBucket> @ 0x8228E3F0 (FXBucket<BrnDebris,32>)
+        // and @ 0x8228E470 (FXBucket<BrnSpark,4>): pop the head bucket off the intrusive free
+        // list, unlink it, Clear() its particle payload, drop the free count and hand it back.
+        // Returns NULL when the pool is exhausted. TBucket is the concrete FXBucket<T,N>; the
+        // asm dispatches to that instantiation's Clear(). Reconstructed store-for-store:
+        //
+        //   v2 = mpFreeList; if (!mpFreeList) return 0;      ; bail on empty pool
+        //   v3 = mpFreeList;                                 ; v3 == v2 (the popped head)
+        //   mpFreeList = v2->mpNextBucket;                   ; advance the head (*a1 = v2[1])
+        //   v2->mpNextBucket = 0;                            ; null the popped bucket's next
+        //   if (mpFreeList) mpFreeList->mpPreviousBucket = 0;; new head has no prev (**a1 = 0)
+        //   ((TBucket*)v2)->Clear();                         ; reset the payload
+        //   --muNumFreeBuckets;                              ; --a1[2]
+        //   return v3;
+        template< class TBucket >
+        TBucket* AllocateBucket()
+        {
+            FXBucketBase* lpBucket = mpFreeList;
+            if ( !mpFreeList )
+                return NULL;
+
+            FXBucketBase* lpAllocatedBucket = mpFreeList;
+            mpFreeList = lpBucket->mpNextBucket;
+            lpBucket->mpNextBucket = NULL;
+            if ( mpFreeList )
+                mpFreeList->mpPreviousBucket = NULL;
+
+            static_cast<TBucket*>( lpBucket )->Clear();
+            --muNumFreeBuckets;
+            return static_cast<TBucket*>( lpAllocatedBucket );
+        }
     };
 }
