@@ -179,7 +179,20 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             {
                 pWritable->mBounds.fRight = pItem2->mBounds.fLeft + fEdgeInset;
             }
-            pWritable->mBounds.fBottom = pItem2->mBounds.fTop + fEdgeInset;
+            // A MULTILINE field's box height is load-bearing: it is the vertical room the
+            // wrapped/newline-split lines are rendered into (RenderStringInternal stops at
+            // penY >= mv2BottomRight.mY). Collapsing it to a 4px inset while the field is
+            // momentarily empty (before its bound text resolves -- e.g. the SaveLoadComponent
+            // "$message" autosave prompt, authored 668x128) permanently loses the authored
+            // height, so when the text arrives the faithful renderer clips a 3-line message to
+            // one line. The console shows the full multi-line prompt, so its box is NOT the
+            // collapsed inset there. Gate the height collapse on NOT-multiline, symmetric to the
+            // width collapse being gated on NOT-word-wrapped: a word-wrapped field keeps its
+            // width, a multiline field keeps its height. Single-line fields collapse as before.
+            if ((pItem2->mFlagsAndBorderColor & 1u) == 0u)   // not multiline
+            {
+                pWritable->mBounds.fBottom = pItem2->mBounds.fTop + fEdgeInset;
+            }
         }
 
         // Reset the AptCharacterTextInst cached scalars (X360: *(v4+0x14)=0, *(v4+0x10)=1,
