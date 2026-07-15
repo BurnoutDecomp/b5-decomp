@@ -4,6 +4,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
+#include "SharedClasses/Graphics/BrnEffectsData.h"          // BrnEffects::BloomData / VignetteData (complete layout)
 
 // ============================================================================
 // BrnWorld::EnvironmentSettings::FindKeyframeInds @ 0x827B0418
@@ -251,6 +252,251 @@ bool ConsumeFieldValue( float& lrfValue, FILE* lpFile )
     return true;
 }
 
+// ===========================================================================
+// Templated keyframe field-value consumers  ConsumeFieldValue<T>
+//
+//   @ 0x82679160  ConsumeFieldValue<BrnEffects::BloomData>
+//   @ 0x82679528  ConsumeFieldValue<BrnEffects::VignetteData>
+//   @ 0x82679CB8  ConsumeFieldValue<EnvironmentSettings::LightingData>
+//   @ 0x8267A080  ConsumeFieldValue<EnvironmentSettings::CloudsData>
+//
+// ONE shared template body, reconstructed store-for-store from
+// BURNOUT_X360_ARTIST.XEX. Each instantiation walks a per-type static field
+// descriptor table (record = { char name[256]; s32 type; s32 offset }, 264
+// bytes) that lives in rodata; the record whose name matches lpFieldName selects
+// a store path keyed by the type code, writing float(s) at
+// (u8*)&lrData + offset. The four tables were recovered by a headless IDA dump
+// of the rodata at 0x820A3AC8 / 0x820A3DE0 / 0x820A5D40 / 0x820A6688.
+//
+// Type-code store paths (from the disassembly):
+//   0        one scalar float                        -> ConsumeFieldValue(f32&)
+//   1        one <type-1> field  (UNUSED by these four tables -- sibling reader
+//            @0x82675DC8; element type INFERRED, see FLAG on the declaration)
+//   2 / 3    X / Y lane of a vec2 (read one float, overwrite that lane in place)
+//   4 / 5    colour (multiple floats) -> sibling reader @0x82675E50; a type-5
+//            field additionally matches "<name>Power" -> splat one scalar and
+//            multiply the whole vec4 by it (vspltw + vmulfp128)
+//   6 / 7 / 8  X / Y lane stores (UNUSED by these four tables)
+//   9        colour/multiplier: read a colour, merge into the target preserving
+//            one lane (vrlimi128 mask=1, see FLAG)
+// ===========================================================================
+namespace
+{
+struct FieldDescriptor
+{
+    char mName[256];
+    s32  mType;
+    s32  mOffset;
+};
+static_assert( sizeof( FieldDescriptor ) == 264,
+               "FieldDescriptor record must be 264 bytes (name[256] + s32 type + s32 offset)" );
+
+// --- @0x820A3AC8 : BrnEffects::BloomData (3 records) ---
+const FieldDescriptor kaBloomFields[] =
+{
+    { "BloomLuminance",        0, 0x00 },
+    { "BloomThreshold",        0, 0x04 },
+    { "BloomColourMultiplier", 9, 0x10 },
+};
+
+// --- @0x820A3DE0 : BrnEffects::VignetteData (8 records) ---
+const FieldDescriptor kaVignetteFields[] =
+{
+    { "VignetteAngle",       0, 0x00 },
+    { "VignetteSharpness",   0, 0x04 },
+    { "VignetteAmountX",     2, 0x10 },
+    { "VignetteAmountY",     3, 0x10 },
+    { "VignetteCentreX",     2, 0x20 },
+    { "VignetteCentreY",     3, 0x20 },
+    { "VignetteOuterColour", 9, 0x40 },
+    { "VignetteInnerColour", 9, 0x30 },
+};
+
+// --- @0x820A5D40 : EnvironmentSettings::LightingData (9 records) ---
+const FieldDescriptor kaLightingFields[] =
+{
+    { "KeyLightColour",         5, 0x00 },
+    { "SpecularColour",         5, 0x10 },
+    { "KeyFillColour",          5, 0x20 },
+    { "ShadowFillColour",       5, 0x30 },
+    { "RightFillColour",        5, 0x40 },
+    { "LeftFillColour",         5, 0x50 },
+    { "UpFillColour",           5, 0x60 },
+    { "DownFillColour",         5, 0x70 },
+    { "AmbientIrradianceScale", 0, 0x80 },
+};
+
+// --- @0x820A6688 : EnvironmentSettings::CloudsData (15 records) ---
+const FieldDescriptor kaCloudsFields[] =
+{
+    { "CloudLayer0Density",    0, 0x40 },
+    { "CloudLayer1Density",    0, 0x44 },
+    { "CloudLayer0Feathering", 0, 0x48 },
+    { "CloudLayer1Feathering", 0, 0x4C },
+    { "CloudLayer0LiteColour", 4, 0x00 },
+    { "CloudLayer1LiteColour", 4, 0x10 },
+    { "CloudLayer0DarkColour", 4, 0x20 },
+    { "CloudLayer1DarkColour", 4, 0x30 },
+    { "CloudLayer0Opacity",    0, 0x50 },
+    { "CloudLayer1Opacity",    0, 0x54 },
+    { "CloudLayer0Speed",      0, 0x58 },
+    { "CloudLayer1Speed",      0, 0x5C },
+    { "CloudLayer0Scale",      0, 0x60 },
+    { "CloudLayer1Scale",      0, 0x64 },
+    { "CloudDirectionAngle",   0, 0x68 },
+};
+
+// Per-type table selector (tag-dispatched on a null T* so the shared body stays
+// type-generic). Only the four recovered types have an overload; a fifth
+// consumer -- ConsumeFieldValue<ScatteringData> -- is a sibling wave kept
+// external via the extern-template declaration below.
+const FieldDescriptor* GetEnvFieldTable( const BrnEffects::BloomData*,    s32& lrCount )
+{ lrCount = 3;  return kaBloomFields; }
+const FieldDescriptor* GetEnvFieldTable( const BrnEffects::VignetteData*, s32& lrCount )
+{ lrCount = 8;  return kaVignetteFields; }
+const FieldDescriptor* GetEnvFieldTable( const LightingData*,             s32& lrCount )
+{ lrCount = 9;  return kaLightingFields; }
+const FieldDescriptor* GetEnvFieldTable( const CloudsData*,               s32& lrCount )
+{ lrCount = 15; return kaCloudsFields; }
+} // namespace
+
+// Sibling ConsumeFieldValue overloads whose bodies live in BrnEnvironmentData.cpp
+// (a separate wave -- declared here, like the char* string overload, so this
+// shared body links against them):
+//   @ 0x82675E50 -- read a colour (vec4 of floats) into lpColour. Used by type
+//                   codes 4 / 5 / 9.
+//   @ 0x82675DC8 -- read a type-1 field. FLAG: no field of type 1 appears in any
+//                   of the four recovered tables and this helper's asm was not in
+//                   scope, so its element type (u32*) is INFERRED, not attested.
+bool ConsumeFieldValue( f32* lpColour, FILE* lpFile );
+bool ConsumeFieldValue( u32* lpField,  FILE* lpFile );
+
+// ---------------------------------------------------------------------------
+// ConsumeFieldValue<T> -- the one shared body (see the block comment above).
+// Control flow mirrors the guest: a failed value read on a name-matched record
+// resumes scanning (the guest's `goto LABEL_31`), reproduced here as `continue`.
+// ---------------------------------------------------------------------------
+template< typename T >
+bool ConsumeFieldValue( T& lrData, const char* lpFieldName, FILE* lpFile )
+{
+    u8* const lpBase = reinterpret_cast<u8*>( &lrData );
+
+    s32                    liCount = 0;
+    const FieldDescriptor* const lpBegin =
+        GetEnvFieldTable( static_cast<const T*>( 0 ), liCount );
+    const FieldDescriptor* const lpEnd = lpBegin + liCount;
+
+    for ( const FieldDescriptor* lpDesc = lpBegin; lpDesc < lpEnd; ++lpDesc )
+    {
+        const s32 liType = lpDesc->mType;
+
+        if ( strcmp( lpDesc->mName, lpFieldName ) == 0 )
+        {
+            u8* const lpTarget = lpBase + lpDesc->mOffset;
+
+            switch ( liType )
+            {
+                case 0:
+                    return ConsumeFieldValue( *reinterpret_cast<f32*>( lpTarget ), lpFile );
+
+                case 1:
+                    return ConsumeFieldValue( reinterpret_cast<u32*>( lpTarget ), lpFile );
+
+                case 2:
+                {
+                    f32 lfValue;
+                    if ( !ConsumeFieldValue( lfValue, lpFile ) )
+                        continue;
+                    reinterpret_cast<f32*>( lpTarget )[0] = lfValue;
+                    return true;
+                }
+                case 3:
+                {
+                    f32 lfValue;
+                    if ( !ConsumeFieldValue( lfValue, lpFile ) )
+                        continue;
+                    reinterpret_cast<f32*>( lpTarget )[1] = lfValue;
+                    return true;
+                }
+                case 4:
+                case 5:
+                    return ConsumeFieldValue( reinterpret_cast<f32*>( lpTarget ), lpFile );
+
+                case 6:
+                {
+                    f32 lfValue;
+                    if ( !ConsumeFieldValue( lfValue, lpFile ) )
+                        continue;
+                    reinterpret_cast<f32*>( lpTarget )[0] = lfValue;
+                    return true;
+                }
+                case 7:
+                {
+                    f32 lfValue;
+                    if ( !ConsumeFieldValue( lfValue, lpFile ) )
+                        continue;
+                    reinterpret_cast<f32*>( lpTarget )[1] = lfValue;
+                    return true;
+                }
+                case 8:
+                {
+                    f32 lfValue;
+                    if ( !ConsumeFieldValue( lfValue, lpFile ) )
+                        continue;
+                    reinterpret_cast<f32*>( lpTarget )[1] = lfValue;
+                    return true;
+                }
+                case 9:
+                {
+                    f32 laColour[4];
+                    if ( !ConsumeFieldValue( laColour, lpFile ) )
+                        continue;
+                    f32* const lpDst = reinterpret_cast<f32*>( lpTarget );
+                    lpDst[0] = laColour[0];
+                    lpDst[1] = laColour[1];
+                    lpDst[2] = laColour[2];
+                    // lpDst[3] preserved: the guest merges the read colour over the
+                    // old target with vrlimi128 v0,v13,1,0. FLAG: mask=1 is read as
+                    // "keep word 3 (.w)" per the VMX128 field-mask convention; the
+                    // preserved lane was not byte-verified against a golden dump.
+                    return true;
+                }
+                default:
+                    continue;
+            }
+        }
+        else if ( liType == 5 )
+        {
+            // Colour keyframes also accept "<ColourName>Power": read one scalar and
+            // scale the whole vec4 by it (guest: vspltw + vmulfp128).
+            const size_t luNameLen = strlen( lpDesc->mName );
+            if ( strncmp( lpFieldName, lpDesc->mName, luNameLen ) == 0
+              && strcmp( lpFieldName + luNameLen, "Power" ) == 0 )
+            {
+                f32 lfPower;
+                if ( ConsumeFieldValue( lfPower, lpFile ) )
+                {
+                    f32* const lpColour =
+                        reinterpret_cast<f32*>( lpBase + lpDesc->mOffset );
+                    lpColour[0] *= lfPower;
+                    lpColour[1] *= lfPower;
+                    lpColour[2] *= lfPower;
+                    lpColour[3] *= lfPower;
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+// ConsumeFieldValue<ScatteringData> is a sibling wave (its descriptor table was
+// not part of this recovery); keep it an external reference rather than
+// implicitly instantiating a table-less body in this TU.
+extern template bool ConsumeFieldValue< ScatteringData >(
+    ScatteringData& lrData, const char* lpFieldName, FILE* lpFile );
+
 // ---------------------------------------------------------------------------
 // ParseTimeOfDay @ 0x82675B10
 //
@@ -402,5 +648,19 @@ bool ParseEnvironmentFile( float&                     lrfTimeOfDay,
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Explicit instantiations of the shared ConsumeFieldValue<T> body -- one per
+// recovered field table.
+//   @ 0x82679160 / 0x82679528 / 0x82679CB8 / 0x8267A080
+// ---------------------------------------------------------------------------
+template bool ConsumeFieldValue< BrnEffects::BloomData >(
+    BrnEffects::BloomData& lrData, const char* lpFieldName, FILE* lpFile );
+template bool ConsumeFieldValue< BrnEffects::VignetteData >(
+    BrnEffects::VignetteData& lrData, const char* lpFieldName, FILE* lpFile );
+template bool ConsumeFieldValue< LightingData >(
+    LightingData& lrData, const char* lpFieldName, FILE* lpFile );
+template bool ConsumeFieldValue< CloudsData >(
+    CloudsData& lrData, const char* lpFieldName, FILE* lpFile );
 }
 }
