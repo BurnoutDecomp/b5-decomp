@@ -3,14 +3,14 @@
 //
 // Out-of-line definitions still needed by the homed CgsGui::ViewModule /
 // BrnGui::ViewModule ownership slice. The Flapt lifecycle, timeline update, named
-// lookups, and always-available component preparation now live in their real TUs.
-// Only rendering remains outside the current boot milestone; the queue methods below
-// are faithful specialisations of their VariableEventQueue base lifecycle.
+// lookups, rendering, and always-available component preparation now all live in their
+// real TUs; only the GUI event-queue specialisations below remain here (faithful
+// specialisations of their VariableEventQueue base lifecycle).
 //
-// AUDIT (2026-07-14, vs the on-disk tree + the exe source list):
-//   - BrnFlapt::MovieClipInstance::Render is the sole residual timeline body here.
-//     Construct/GotoFrame/Update and the child/trigger/keyframe machinery are homed
-//     in BrnFlaptMovieClipInstance.cpp.
+// AUDIT (2026-07-15, vs the on-disk tree + the exe source list):
+//   - BrnFlapt::MovieClipInstance::Render is now homed in BrnFlaptMovieClipInstance.cpp
+//     alongside Construct/GotoFrame/Update and the child/trigger/keyframe machinery
+//     (the empty render stub that used to live here has been retired).
 //   - CgsGui::GuiEventQueueBase<256,16>::{Construct,Prepare,Release} -- the tiny GUI
 //     output queue the view module owns (mOutputEventQueue). CgsGuiEvent.h declares them
 //     out-of-line; no TU instantiates them. Forwarded to the homed CgsModule::
@@ -39,14 +39,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle (RegisterFlaptFile by-value param)
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsGui::GuiEventQueueBase<N,A>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // CgsModule::VariableEventQueue<N,A> (forward target)
-
-namespace BrnFlapt
-{
-    // --- Timeline bodies referenced by the homed FlaptFileInstance --------------
-    // (SetData @0x82471620 constructs/rewinds the root clip; Update/Render drive it.)
-    void MovieClipInstance::Render(FlaptRenderer*) {}
-
-}
 
 // The ModelIO buffer queues the GUI flow controller's IO pair constructs/drains
 // (BrnGuiModule::Prepare / ServiceFsmBundleRequests): the 32768 inbound event queue and

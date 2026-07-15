@@ -101,6 +101,15 @@ namespace BrnFlapt
         // Render compiles; the body lands with this class's own TU.
         void StartRenderingFrame();
 
+        // StartDrawingMask / PopMask : open and close one stencil-mask region. The Flapt
+        // render walk (MovieClipInstance::Render) brackets a mask render layer with these:
+        // StartDrawingMask sets the mask bit (bit0 of mxFlags) so RenderMesh routes the
+        // mask-shape meshes to RenderMask and pushes a fresh mesh tally; the walk clears
+        // the bit once the shape is drawn, then PopMask undoes the region and drops the
+        // tally.
+        void StartDrawingMask();
+        void PopMask();
+
         FlaptRenderSet* mpImRenderSet;                // +0x00 (X360 asserted name "mpImRenderSet")
         void*           mpTextRenderer;               // +0x04 (CgsGraphics::TextRenderer*; opaque here)
         void*           mpLanguageManager;            // +0x08
