@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"     // CgsGraphics::TextRenderer / TextObject (RenderTextField submission)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                     // BrnFlapt::Mesh / FlaptFile / FlaptFile::GuiTexture / GuiVertex
+#include "pc/gcm/renderengine/texture.h"                              // renderengine::Texture2D create path (interim white "no texture")
 
 // BrnFlapt::FlaptRenderer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // This TU bodies the constructor, the shader-state accessor, the per-object render entry
@@ -44,20 +45,71 @@ const u8 KU_BATCH_FLAG_SETTEXTURE = 1;
 const u8 KU_BATCH_FLAG_SETBLEND   = 2;
 
 
-// The immediate renderer's two default render-state singletons that RenderMesh binds.
-// These are REAL console globals (X360 reads each as a pointer-valued global):
-//   gpFlaptNoTexture          = *(0x83010F58)  - the "no texture" texture bound for an
-//                               untextured mesh (miTextureId < 0).
-//   gpFlaptDefaultBlendState  = *(0x83010F20)  - the default blend state every mesh
-//                               submission binds.
-// FLAG (un-homed console globals): the renderer state-initialisation TU that
-// populates them is not yet recovered, so they are defined null here as link
-// placeholders. RenderMesh's faithful guard below then asserts-and-skips an
-// untextured mesh until that TU lands (a real gpFlaptNoTexture makes the guard
-// pass, exactly as on the console). Replace these definitions with externs when
-// the owning TU is homed.
-renderengine::Texture* const         gpFlaptNoTexture = 0;
+// The immediate renderer's two default render-state singletons RenderMesh binds. On the
+// console these are members of the shared CgsGraphics::ImRendererBase::StateLibrary
+// (mgStateLibrary), built once by ImRendererBase::ConstructOnceOnly:
+//   gpFlaptNoTexture          = mgStateLibrary.mpTexture_White      (X360 *(0x83010F58)) -
+//                               the white "no texture" bound for an untextured mesh
+//                               (miTextureId < 0); it samples white so the mesh shows its
+//                               vertex colours (this is how solid-colour UI -- backgrounds,
+//                               borders -- draws).
+//   gpFlaptDefaultBlendState  = mgStateLibrary.mpBlendState_Standard (X360 *(0x83010F20)).
+//
+// FLAG (interim homing): the ImRendererBase state library (CgsImRenderer.cpp) is not yet
+// compiled into the build, so its ConstructOnceOnly never runs and these were null link
+// placeholders -- which made RenderMesh's faithful `lbIsSpecialTexture || lpTexture` guard
+// assert on the first untextured mesh once MovieClipInstance::Render was bodied. Until the
+// state library is homed and linked (a separate, scoped milestone -- see the flapt-render
+// bring-up notes), build the SAME white fallback ConstructWhiteTexture produces (4x4 A8R8G8B8,
+// every texel 0xFFFFFFFF) lazily here, through the PC render-engine Texture2D create path
+// (identical to CgsMoviePlayer / LoadingScreenRenderer). The default blend state stays null:
+// RenderMesh only binds a blend state when it differs from the cached one, and both start
+// null, so it is never bound (the batch inherits the current device blend) -- tolerable and
+// non-asserting. Replace both with `extern` refs into mgStateLibrary once ConstructOnceOnly
+// is brought into the build.
 const CgsGraphics::BlendState* const gpFlaptDefaultBlendState = 0;
+
+// Interim ConstructWhiteTexture (see FLAG above): the faithful 4x4 all-white A8R8G8B8 fallback,
+// built once via the render-engine Texture2D create/lock/fill/unlock path the PC texture
+// creators use. Returned to RenderMesh in place of the null gpFlaptNoTexture placeholder.
+renderengine::Texture* GetFlaptNoTexture()
+{
+    static renderengine::Texture* spWhiteTexture = 0;
+    if (spWhiteTexture == 0)
+    {
+        renderengine::Texture2D::Parameters lParams = {};
+        lParams.muWidth     = 4;
+        lParams.muHeight    = 4;
+        lParams.muDepth     = 1;
+        lParams.muNumLevels = 1;
+        lParams.muFormat    = 340;   // A8R8G8B8 (the PC render-engine's 32-bit RGBA format)
+
+        renderengine::Texture2D::ResourceDescriptor lDesc;
+        renderengine::Texture2D::GetResourceDescriptor(&lDesc, &lParams);
+        renderengine::Texture2D* lpTexture = renderengine::Texture2D::Initialize(&lDesc, &lParams);
+
+        renderengine::Texture::LockInfo lLocked;
+        renderengine::Texture::Lock(lpTexture, 0, 0, 0, &lLocked);
+        if (lLocked.mpBits != 0)
+        {
+            // Fill white row-by-row at the locked pitch (the surface row stride may exceed
+            // the 16-byte texel run for a 4-wide A8R8G8B8 row).
+            u8* lpRow = static_cast<u8*>(lLocked.mpBits);
+            for (u32 luY = 0; luY < 4; ++luY)
+            {
+                u32* lpTexels = reinterpret_cast<u32*>(lpRow);
+                for (u32 luX = 0; luX < 4; ++luX)
+                {
+                    lpTexels[luX] = 0xFFFFFFFFu;
+                }
+                lpRow += lLocked.muPitch;
+            }
+        }
+        renderengine::Texture::Unlock(lpTexture, &lLocked);
+        spWhiteTexture = lpTexture;
+    }
+    return spWhiteTexture;
+}
 
 // ---- StartRenderingFrame @ 0x82470698 --------------------------------------
 void FlaptRenderer::StartRenderingFrame()
@@ -123,7 +175,7 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
     const s32 liTextureId = lpMesh->miTextureId;   // signed: <0 means "no texture"
     if (liTextureId < 0)
     {
-        lpTexture = gpFlaptNoTexture;
+        lpTexture = GetFlaptNoTexture();   // interim mgStateLibrary.mpTexture_White (see FLAG above)
         if (miShaderProgram != 0)
         {
             // Force the program back to 0 directly (bypassing SetShader's cache, then
@@ -365,6 +417,33 @@ void FlaptRenderer::RenderMask(const Mesh* lpMesh, const FlaptFile* lpFile,
 
     // Count this mesh against the currently-open mask.
     ++mMaskMeshCounts[mMaskMeshCounts.GetLength() - 1];
+}
+
+// ---- StartDrawingMask / PopMask ------------------------------------------
+// The open/close pair for the Flapt stencil-mask path (MovieClipInstance::Render brackets
+// a mask render layer with them; RenderMesh routes meshes to RenderMask while the mask bit
+// is set, and RenderMask tallies them). Reconstructed from the mask protocol rather than
+// each method's own disassembly: RenderMask's invariants ((mxFlags & 1) set, an open
+// mMaskMeshCounts entry it post-increments), the attested Stack<u16,2> call sites
+// (StartDrawingMask -> Push @0x8246E738; PopMask -> Peek @0x8246E8A8 then Pop @0x8246E7F8,
+// per CgsStackUnsignedShort2.cpp), and the render buffer's PushMask/PopMask command pair.
+
+// StartDrawingMask : begin defining a mask shape. Flag the renderer into the mask path and
+// open a fresh mesh tally for this mask (RenderMask bumps it per mask mesh).
+void FlaptRenderer::StartDrawingMask()
+{
+    mxFlags |= 1u;
+    mMaskMeshCounts.Push(static_cast<u16>(0));
+}
+
+// PopMask : close the innermost mask. Emit the render buffer's pop-mask command (on the PC
+// fold this disables the scissor region) and drop this mask's mesh tally. The mask bit has
+// already been cleared by the render walk once the shape's meshes were drawn.
+void FlaptRenderer::PopMask()
+{
+    CGS_ASSERT(!mMaskMeshCounts.IsEmpty(), "!mMaskMeshCounts.IsEmpty()");
+    mpImRenderSet->mpIm2dRenderBuffer->PopMask();
+    mMaskMeshCounts.Pop();
 }
 
 }

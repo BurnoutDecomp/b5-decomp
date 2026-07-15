@@ -64,6 +64,12 @@ namespace BrnFlapt
                 : &lrTextObject.mfFontHeight;
         }
 
+        // The embedded apt string's laid-out text object -- the glyph run the renderer
+        // submits. MovieClipInstance::Render hands it to FlaptRenderer::RenderTextField
+        // for each drawn field; on the X360 that call reads mAptString.mTextObject inline
+        // off the instance pointer (the instance and its apt string share address +0x00).
+        const CgsGraphics::TextObject& GetTextObject() const { return mAptString.mTextObject; }
+
     private:
         // SetUpAptStringParams @ 0x8246DF58 : populate lpOutAptStringParams from a
         // TextField + FontStyle + the initial text. The X360 calling convention takes

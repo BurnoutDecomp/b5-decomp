@@ -3,6 +3,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldInstance.h"
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"
+#include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
@@ -26,6 +27,57 @@ namespace
         lrDestination.y = lrSource.y;
         lrDestination.z = lrSource.z;
         lrDestination.w = lrSource.w;
+    }
+
+    // Compose a draw item's local Im2dTransform onto the renderer's current (parent)
+    // world transform and push the product as the new stack top. This is the de-optimised
+    // form of the VMX128 compose the X360 inlines at every MovieClipInstance::Render draw
+    // site (the lvx128/vmaddfp/vperm/stvx128 block around 0x82471960): an affine 2x2 +
+    // translation concatenation (parent applied after child) plus the Flapt colour
+    // transform (scale multiplies, shift adds). Written as named-component scalar math per
+    // the project's x64 semantic-parity-by-named-members rule.
+    //
+    // The affine convention is the one CgsIm2d actually applies (CgsIm2d.cpp:275-281):
+    //   out.x = mOriginXYZ.x + mRightUp.x*p.x + mRightUp.y*p.y
+    //   out.y = mOriginXYZ.y + mRightUp.z*p.x + mRightUp.w*p.y
+    // so the world transform (parent(child(p))) gives the products below. Verified against
+    // the authored identity transform (mRightUp = 1,0,0,1): identity child -> parent,
+    // identity parent -> child.
+    void ComposeDrawTransform(FlaptRenderer* lpRenderer,
+                              const CgsGraphics::Im2dTransform& lrLocal)
+    {
+        const CgsGraphics::Im2dTransform& lrParent = lpRenderer->maTransformStack.Peek();
+        CgsGraphics::Im2dTransform* const lpWorld  = lpRenderer->maTransformStack.Grow();
+
+        // Affine basis: world 2x2 = parent 2x2 * child 2x2.
+        lpWorld->mRightUp.x = lrParent.mRightUp.x * lrLocal.mRightUp.x
+                            + lrParent.mRightUp.y * lrLocal.mRightUp.z;
+        lpWorld->mRightUp.y = lrParent.mRightUp.x * lrLocal.mRightUp.y
+                            + lrParent.mRightUp.y * lrLocal.mRightUp.w;
+        lpWorld->mRightUp.z = lrParent.mRightUp.z * lrLocal.mRightUp.x
+                            + lrParent.mRightUp.w * lrLocal.mRightUp.z;
+        lpWorld->mRightUp.w = lrParent.mRightUp.z * lrLocal.mRightUp.y
+                            + lrParent.mRightUp.w * lrLocal.mRightUp.w;
+
+        // Translation: world origin = parent 2x2 * child origin + parent origin.
+        lpWorld->mOriginXYZ.x = lrParent.mRightUp.x * lrLocal.mOriginXYZ.x
+                              + lrParent.mRightUp.y * lrLocal.mOriginXYZ.y
+                              + lrParent.mOriginXYZ.x;
+        lpWorld->mOriginXYZ.y = lrParent.mRightUp.z * lrLocal.mOriginXYZ.x
+                              + lrParent.mRightUp.w * lrLocal.mOriginXYZ.y
+                              + lrParent.mOriginXYZ.y;
+        lpWorld->mOriginXYZ.z = lrParent.mOriginXYZ.z;   // 2D depth inherited from parent
+        lpWorld->mOriginXYZ.w = 0.0f;
+
+        // Colour transform: scale multiplies, shift adds (component-wise).
+        lpWorld->mColourScale.x = lrParent.mColourScale.x * lrLocal.mColourScale.x;
+        lpWorld->mColourScale.y = lrParent.mColourScale.y * lrLocal.mColourScale.y;
+        lpWorld->mColourScale.z = lrParent.mColourScale.z * lrLocal.mColourScale.z;
+        lpWorld->mColourScale.w = lrParent.mColourScale.w * lrLocal.mColourScale.w;
+        lpWorld->mColourShift.x = lrParent.mColourShift.x + lrLocal.mColourShift.x;
+        lpWorld->mColourShift.y = lrParent.mColourShift.y + lrLocal.mColourShift.y;
+        lpWorld->mColourShift.z = lrParent.mColourShift.z + lrLocal.mColourShift.z;
+        lpWorld->mColourShift.w = lrParent.mColourShift.w + lrLocal.mColourShift.w;
     }
 }
 
@@ -644,6 +696,142 @@ MovieClipRef* MovieClipRef::SetVisible(bool lbVisible)
         ? static_cast<u8>(luFlags | 0x02u)
         : static_cast<u8>(luFlags & 0xFDu);
     return this;
+}
+
+// ---- Render @0x824718F0 ---------------------------------------------------
+// Draw this clip node and (recursively) its children into the Flapt render buffer. Walk
+// the clip's render layers in order; within each layer, for the current keyframe's
+// per-category enabled bitmask, draw the layer's child clips, meshes, and text fields --
+// each through its own local Im2dTransform composed onto the renderer's transform stack
+// (peek parent, grow a slot for the world transform, render, pop). A layer may bracket
+// its contents in a stencil mask: StartDrawingMask flags the renderer so RenderMesh
+// routes the mask-shape meshes to RenderMask; the walk clears the mask bit once the shape
+// is drawn (so the layer's content draws clipped), then PopMask closes it.
+//
+// mpaTransforms is the flat [children | meshes | text fields] slot array Construct builds
+// (numChildren + numMeshes + numTextFields entries), so a mesh's local transform lives at
+// numChildren + meshIndex and a text field's at numChildren + numMeshes + fieldIndex.
+// Children are additionally culled when their local transform is fully transparent
+// (colour alpha scale+shift <= 0) or their instance visible-flag (mxFlags bit1, set by
+// MovieClipRef::SetVisible) is clear -- both tests the X360 makes before recursing.
+void MovieClipInstance::Render(FlaptRenderer* lpRenderer)
+{
+    CGS_ASSERT(lpRenderer != 0, "lpRenderer");
+    CGS_ASSERT(mpMovieClip != 0, "mpMovieClip");
+    CGS_ASSERT(mpMovieClip->mpaRenderLayers != 0, "mpMovieClip->mpaRenderLayers");
+    CGS_ASSERT(mpMovieClip->mpaKeyFrames != 0, "mpMovieClip->mpaKeyFrames");
+    CGS_ASSERT(mpMovieClip->mpaMeshes != 0, "mpMovieClip->mpaMeshes");
+    CGS_ASSERT(muLastKeyFrameApplied < mpMovieClip->muNumKeyFrames,
+               "muLastKeyFrameApplied < mpMovieClip->muNumKeyFrames");
+
+    const MovieClip* const lpClip = mpMovieClip;
+    const u32 luNumLayers = lpClip->muNumRenderLayers;
+
+    for (u32 luLayer = 0; luLayer < luNumLayers; ++luLayer)
+    {
+        const RenderLayer* const lpLayer = &lpClip->mpaRenderLayers[luLayer];
+        const RenderLayerKeyFrame* const lpKeyFrame =
+            &lpClip->mpaKeyFrames[muLastKeyFrameApplied * luNumLayers + luLayer];
+
+        const bool lbLayerOpensMask = (lpLayer->mxFlags & 1u) != 0;
+        if (lbLayerOpensMask)
+        {
+            lpRenderer->StartDrawingMask();
+        }
+
+        // --- child movie clips ---
+        {
+            const u32 luFirst = lpLayer->muMovieClipOffset;
+            const u32 luEnd   = luFirst + lpLayer->muMovieClipCount;
+            u32 luBit = 1u;
+            for (u32 luChild = luFirst; luChild < luEnd; ++luChild, luBit <<= 1)
+            {
+                CGS_ASSERT(luChild < lpClip->muNumChildren,
+                           "luMovieClip < lpMovieClip->muNumChildren");
+                if ((lpKeyFrame->mxEnabledMovieClips & luBit) == 0)
+                {
+                    continue;
+                }
+
+                MovieClipInstance* const lpChild = &mpaChildInstances[luChild];
+                const CgsGraphics::Im2dTransform& lrLocal = mpaTransforms[luChild];
+
+                // Cull fully-transparent (colour alpha scale+shift <= 0) or hidden children.
+                const f32 lfAlpha = lrLocal.mColourScale.w + lrLocal.mColourShift.w;
+                if (lfAlpha > 0.0f && (lpChild->mxFlags & 2u) != 0)
+                {
+                    ComposeDrawTransform(lpRenderer, lrLocal);
+                    lpChild->Render(lpRenderer);
+                    CGS_ASSERT(lpRenderer->maTransformStack.GetLength() > 1,
+                               "mTransformStack.GetLength() > 1");
+                    lpRenderer->maTransformStack.Pop();
+                }
+            }
+        }
+
+        // --- meshes ---
+        {
+            const u32 luFirst = lpLayer->muMeshOffset;
+            const u32 luEnd   = luFirst + lpLayer->muMeshCount;
+            u32 luBit = 1u;
+            for (u32 luMesh = luFirst; luMesh < luEnd; ++luMesh, luBit <<= 1)
+            {
+                CGS_ASSERT(luMesh < lpClip->muNumMeshes,
+                           "luMesh < lpMovieClip->muNumMeshes");
+                if ((lpKeyFrame->mxEnabledMeshes & luBit) == 0)
+                {
+                    continue;
+                }
+
+                const Mesh* const lpMesh = &lpClip->mpaMeshes[luMesh];
+                const CgsGraphics::Im2dTransform& lrLocal =
+                    mpaTransforms[lpClip->muNumChildren + luMesh];
+
+                ComposeDrawTransform(lpRenderer, lrLocal);
+                lpRenderer->RenderMesh(lpMesh, lpClip->mpFile);
+                CGS_ASSERT(lpRenderer->maTransformStack.GetLength() > 1,
+                           "mTransformStack.GetLength() > 1");
+                lpRenderer->maTransformStack.Pop();
+            }
+        }
+
+        // --- text fields ---
+        {
+            const u32 luFirst = lpLayer->muTextFieldOffset;
+            const u32 luEnd   = luFirst + lpLayer->muTextFieldCount;
+            u32 luBit = 1u;
+            for (u32 luText = luFirst; luText < luEnd; ++luText, luBit <<= 1)
+            {
+                CGS_ASSERT(luText < lpClip->muNumTextFields,
+                           "luTextField < lpMovieClip->muNumTextFields");
+                if ((lpKeyFrame->mxEnabledTextFields & luBit) == 0)
+                {
+                    continue;
+                }
+
+                TextFieldInstance* const lpText = &mpaTextFieldInstances[luText];
+                const CgsGraphics::Im2dTransform& lrLocal =
+                    mpaTransforms[lpClip->muNumChildren + lpClip->muNumMeshes + luText];
+
+                ComposeDrawTransform(lpRenderer, lrLocal);
+                lpRenderer->RenderTextField(&lpText->GetTextObject());
+                CGS_ASSERT(lpRenderer->maTransformStack.GetLength() > 1,
+                           "mTransformStack.GetLength() > 1");
+                lpRenderer->maTransformStack.Pop();
+            }
+        }
+
+        // --- close the layer's mask, if it opened one ---
+        if (lbLayerOpensMask)
+        {
+            CGS_ASSERT((lpRenderer->mxFlags & 1u) != 0, "IsRenderingMask()");
+            lpRenderer->mxFlags &= ~1u;
+        }
+        if ((lpLayer->mxFlags & 2u) != 0)
+        {
+            lpRenderer->PopMask();
+        }
+    }
 }
 
 }
