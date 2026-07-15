@@ -11,12 +11,17 @@
 //
 //   SelectAvailableChallengeByID @ 0x82440138 -- resolve a challenge id to its available
 //                                               slot and select it (showing the selector).
+//   Show                        @ 0x82410AA8 -- publish the transition-IN apt view-state.
+//   Hide                        @ 0x82436F70 -- publish the transition-OUT apt view-state and
+//                                               post the GuiChallengeSelectedEvent.
 //
 // SelectAvailableChallenge @ 0x82439BA0 is intentionally NOT reconstructed in this TU -- see
 // the block note at the bottom of this file. GetAvailableChallengeData is declared-only here.
 
 #include "GameSource/Gui/Flow/Hud/Components/BrnChallengeSelector.h"
 
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::OutputGuiEvent
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"     // BrnGui::GuiChallengeSelectedEvent
 #include "SharedClasses/DataLists/ChallengeList.h"        // BrnResource::ChallengeList
 #include "SharedClasses/DataLists/ChallengeListEntry.h"   // BrnResource::ChallengeListEntry
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
@@ -25,6 +30,11 @@
 
 namespace BrnGui
 {
+
+// The selector/action code Hide stamps into the posted GuiChallengeSelectedEvent (X360 `li 3`).
+// FriendsListComponent posts other codes (1/2) for its own transitions; the GameBridge case-573
+// consumer validates the code is in 0..3. Named here for source clarity.
+static const s32 KI_SELECTOR_ACTION_HIDE = 3;
 
 // DWARF: extern const char[8] KAC_TEXT_FIELD_NAME (BrnChallengeSelector.cpp:23); "Text_mc".
 const char ChallengeSelector::KAC_TEXT_FIELD_NAME[8] = "Text_mc";
@@ -161,6 +171,67 @@ void ChallengeSelector::SelectAvailableChallengeByID(CgsID lID, bool lbSelect)
 
         SelectAvailableChallenge(liAvailableIndex, lbSelect);
     }
+}
+
+// @ 0x82410AA8
+// Show the selector (if hidden): mark it visible and publish the host/client transition-IN apt
+// view-state. No-op when already visible (asm `bnelr`).
+void ChallengeSelector::Show()
+{
+    if (mbVisible)
+    {
+        return;   // asm: bnelr -- already shown, nothing to do
+    }
+
+    mbVisible = true;   // stb 1, 0x1165 (set before the host/client branch)
+
+    if (mbIsHost)
+    {
+        AddOutputAptViewState("apt_state", "transinHost", false);
+    }
+    else
+    {
+        AddOutputAptViewState("apt_state", "transinClient", false);
+    }
+}
+
+// @ 0x82436F70
+// Hide the selector (if shown): publish the host/client transition-OUT apt view-state, clear the
+// visible flag, resolve the currently-highlighted challenge and post a GuiChallengeSelectedEvent
+// (selector action 3) onto the state's output event queue. The X360 inlines
+// StateInterface::OutputGuiEvent<GuiChallengeSelectedEvent> (@0x82436778) -- it stack-builds the
+// GuiEventWrapper<T,40> { size 16, type 573, offset 16 } + the 16-byte payload
+// { mChallengeID, 3, GetChall() } and calls mOutEventQueue.AddEvent(&wrapper, 40, 32); this
+// reconstruction drives that same record through the committed OutputGuiEvent<> helper. No-op when
+// already hidden (asm only proceeds when mbVisible == 1).
+void ChallengeSelector::Hide()
+{
+    if (!mbVisible)
+    {
+        return;   // asm: only proceeds when mbVisible == 1
+    }
+
+    AddOutputAptViewState("apt_state",
+                          mbIsHost ? "transoutHost" : "transoutClient",
+                          false);
+
+    // X360 clears mbVisible after capturing the current-index arg but before GetChallengeIndex.
+    const s32 liCurrentIndex   = miCurrentAvailableChallengeIndex;   // lwz 0x1158
+    mbVisible                  = false;                              // stb 0, 0x1165
+    const s32 liChallengeIndex = GetChallengeIndex(liCurrentIndex);
+
+    const BrnResource::ChallengeListEntry* lpEntry =
+        mpChallengeList->GetChallengeData(liChallengeIndex);
+
+    // Build and post the "challenge selected" GUI event. The wrapper's internal pad word
+    // (@+0x0C of the 32-byte record) is left as the template lays it out -- matching the X360's
+    // uninitialised gap word; the 16-byte payload below is fully written.
+    GuiChallengeSelectedEvent lEvent;
+    lEvent.mChallengeID     = lpEntry->GetChallengeID();  // ld 0xC0 -> mChallengeID
+    lEvent.miSelectorAction = KI_SELECTOR_ACTION_HIDE;    // li 3
+    lEvent.miChall          = lpEntry->GetChall();        // BrnResource::ChallengeListEntry::GetChall
+
+    mpStateInterface->OutputGuiEvent(lEvent);
 }
 
 // -----------------------------------------------------------------------------

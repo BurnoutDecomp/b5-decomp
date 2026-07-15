@@ -277,7 +277,24 @@ namespace BrnGui
     struct alignas(8) GuiOverlayShowingNotification { u8 maData[8]; s32 GetEventType() const { return 190; } };  // id 190 size 8 [8-aligned: OGE off16]
     struct alignas(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
     struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<457> { u8 maPayload[88]; };  // id 457 size 100
-    struct alignas(8) GuiChallengeSelectedEvent : public CgsGui::GuiEvent<573> { u8 maPayload[4]; };  // id 573 size 16 [8-aligned: OGE off16]
+    // X360-RECOVERED LAYOUT (no longer an opaque placeholder). The inner field breakdown IS
+    // recovered from three attesting producers -- BrnGui::ChallengeSelector::Hide (@0x82436F70),
+    // BrnGui::FriendsListComponent::Close (@0x824397E8) and ::SelectPrevious (@0x82441988), which
+    // stack-build this 16-byte record and post it through
+    // StateInterface::OutputGuiEvent<GuiChallengeSelectedEvent> (@0x82436778, channel 40) -- and
+    // cross-checked against the consumer GameBridgeGUIToX case 573, which reads mChallengeID
+    // (u64 @0x00), miSelectorAction (s32 @0x08) and miChall (s32 @0x0C). So it is modelled with
+    // real fields rather than a GuiEvent<573> header + opaque maPayload (the producers write a raw
+    // CgsID at offset 0, i.e. there is NO GuiEvent header inside the payload). sizeof == 16, align 8
+    // and GetEventType() == 573 are preserved, so the AddGuiEvent<T> / OutputGuiEvent<T> template
+    // instantiations are unaffected.
+    struct alignas(8) GuiChallengeSelectedEvent
+    {
+        u64 mChallengeID;      // +0x00  highlighted challenge id (CgsID)
+        s32 miSelectorAction;  // +0x08  selector/action code (Hide posts 3; Close posts 3 then 1; SelectPrevious posts 2)
+        s32 miChall;           // +0x0C  BrnResource::ChallengeListEntry::GetChall()
+        s32 GetEventType() const { return 573; }
+    };  // id 573 size 16 [8-aligned: OGE off16]
     struct GuiEvent100PerCentComplete { u8 maData[1]; s32 GetEventType() const { return 469; } };  // id 469 size 1
     struct GuiEventActivateCarSelect { u8 maData[8]; s32 GetEventType() const { return 192; } };  // id 192 size 8
     struct GuiEventAudioGenericSequence { u8 maData[4]; s32 GetEventType() const { return 468; } };  // id 468 size 4

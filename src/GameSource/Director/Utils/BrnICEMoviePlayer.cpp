@@ -119,6 +119,53 @@ const CgsResource::ID IceMovie::GetCgsID() const
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::IceMovie::Serialise<S> -- the ONE per-movie field-walk visitor body.
+//   <TextFileReadSerialiser>  @0x82202E28
+//   <TextFileWriteSerialiser> @0x82215AB0
+//
+// Recursed into from ICEMoviePlaylist::Serialise (via S's nested-block Serialise<IceMovie>)
+// to (de)serialise one movie entry. A movie saved/loaded through the text passes is always a
+// GROUP/TAKE reference anchored to the player car, so the body first forces meRefType ==
+// E_REF_TYPE_GROUP_TAKE (asm: *this = 1) and meVehicleType == E_PLAYER_CAR (asm: *(this+0x1C)
+// = 0), then walks the four editable fields as named scalar leaves through S:
+//   "Group"         -> meGroup        (+0x10, the ICE-group enum word)
+//   "Take"          -> muTakeIndex    (+0x14)
+//   "Vehicle Index" -> muVehicleIndex (+0x20)
+//   "Play Flash"    -> mbPlayFlash    (+0x24, the byte flag)
+//
+// The body is uniform across S; only S's inlined leaf helpers differ:
+//   - Write @0x82215AB0: each leaf is FormatName + fprintf "%s : %d\n" of the field, guarded by
+//     `if (mpFile)` (the four `if (*(a2+4))` checks -- mpFile is TextFileWriteSerialiser +0x04).
+//   - Read  @0x82202E28: each leaf is fscanf "%s : %d\n" into the field, guarded by `if (mpFile)`
+//     (the four `if (*a2)` checks -- mpFile is TextFileReadSerialiser +0x00). The read of the
+//     "Play Flash" line parses an int then stores (value != 0), which the asm renders as the
+//     cntlzw/extrwi/xori "!= 0" idiom -- exactly the bool& overload's `store (v != 0)`.
+//
+// meGroup is the signed EIceGroup enum (its storage IS the 4-byte word the asm reads/writes with
+// "%d"); it is handed to S's s32 scalar overload through an aliasing reference so the exact same
+// four bytes are read/written, without a separate enum overload (parity, not a value change).
+// ----------------------------------------------------------------------------
+template<class TSerialiser>
+void IceMovie::Serialise(TSerialiser& lrSerialiser)
+{
+    // A text-serialised movie is always a group/take reference on the player car.
+    meRefType     = E_REF_TYPE_GROUP_TAKE;   // *this      = 1
+    meVehicleType = VehicleRef::E_PLAYER_CAR; // *(this+0x1C) = 0
+
+    lrSerialiser.Serialise("Group", reinterpret_cast<s32&>(meGroup));
+    lrSerialiser.Serialise("Take", muTakeIndex);
+    lrSerialiser.Serialise("Vehicle Index", muVehicleIndex);
+    lrSerialiser.Serialise("Play Flash", mbPlayFlash);
+}
+
+// Explicit instantiations -- one per text serialiser the movie is saved/loaded through. Each
+// leaf resolves to that serialiser's scalar Serialise(const char*, s32&/u32&/bool&) overload
+// (declaration-only on the serialiser side; their bodies link with the serialiser TUs), so this
+// TU forces no inner-template instantiation of its own.
+template void IceMovie::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
+template void IceMovie::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
+
+// ----------------------------------------------------------------------------
 // BrnDirector::ICEMoviePlaylist::GetMovieCount
 //
 // The number of movies in the list == the order array's live-element count. Asserts the
