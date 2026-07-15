@@ -5,6 +5,7 @@
 #include "GameSource/Director/BrnDirectorICEWrapper.h"     // BrnDirector::ICEWrapper (PlayMovie / IsPlayingMovie / GetCamera)
 #include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"  // Camera::TextFileWriteSerialiser (SharedPlaylists::Serialise<S>)
 #include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"   // Camera::TextFileReadSerialiser  (SharedPlaylists::Serialise<S>)
+#include "GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h" // Camera::DebugMenuSerialiser     (SharedPlaylists::Serialise<S>)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnICEMoviePlayer.cpp
@@ -670,11 +671,14 @@ SharedPlaylists::GetPausePlaylist() const
 //     FormatName + fprintf "%s : %d\n" for the index.
 //   - TextFileReadSerialiser  @0x82258CC0: three nested-block reads (consume header line + recurse),
 //     then fscanf "%s : %d\n" for the index.
-// The DebugMenuSerialiser instance (@0x82252D30) shares this source body but is NOT instantiated
-// here -- its serialiser type has no reconstructed home yet (see note below).
+//   - DebugMenuSerialiser     @0x82252D30: three nested-block Serialise<ICEMoviePlaylist> registrations
+//     (the un-homed sub_8224F218 helper = DebugMenuSerialiser::Serialise<ICEMoviePlaylist>), then the
+//     index leaf which inlines to Process<unsigned int> -- i.e. the u32 Serialise overload's body.
 //
 // Playlist offsets verified against the asm: maPausePlaylists[0/1/2] at +0x09D0/+0x0EB8/+0x13A0
-// (0x4E8-byte stride) and muCurrentPausePlaylist at +0x1888.
+// (0x4E8-byte stride) and muCurrentPausePlaylist at +0x1888. The DebugMenuSerialiser instance's asm
+// (@0x82252D30) walks the same "Playlists/Pause playlist {0,1,2}" + "Playlists/Current playlist"
+// names at the same field offsets, confirming the shared source body.
 // ----------------------------------------------------------------------------
 template<class TSerialiser>
 void SharedPlaylists::Serialise(TSerialiser& lrSerialiser)
@@ -685,11 +689,11 @@ void SharedPlaylists::Serialise(TSerialiser& lrSerialiser)
     lrSerialiser.Serialise("Playlists/Current playlist", muCurrentPausePlaylist);
 }
 
-// Explicit instantiations -- one per file serialiser the shared playlists are saved/loaded through.
-// BLOCKED (not instantiated): Serialise<Camera::DebugMenuSerialiser> @0x82252D30 -- DebugMenuSerialiser
-// has no reconstructed home yet (its pause-playlist recursion is the un-homed sub_8224F218 nested-block
-// helper + Process<unsigned int> for the index). It lands with the DebugMenuSerialiser TU.
+// Explicit instantiations -- one per serialiser the shared playlists are saved/loaded/menu-registered
+// through. Each ICEMoviePlaylist leaf resolves to the serialiser's nested-block Serialise<ICEMoviePlaylist>
+// overload; the u32 index leaf resolves to its scalar Serialise(const char*, u32&) overload.
 template void SharedPlaylists::Serialise<Camera::TextFileWriteSerialiser>(Camera::TextFileWriteSerialiser&);
 template void SharedPlaylists::Serialise<Camera::TextFileReadSerialiser>(Camera::TextFileReadSerialiser&);
+template void SharedPlaylists::Serialise<Camera::DebugMenuSerialiser>(Camera::DebugMenuSerialiser&);
 
 } // namespace BrnDirector

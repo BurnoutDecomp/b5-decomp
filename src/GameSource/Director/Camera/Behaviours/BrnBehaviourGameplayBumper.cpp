@@ -16,11 +16,13 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"
 
 // The bumper-cam Parameters::Serialise<S> visitor drives the camera-tunings serialiser S by name;
-// each S provides the scalar/nested field helpers. Pull in the two file serialisers this TU
-// instantiates the visitor over (the DebugMenuSerialiser instance has no reconstructed serialiser
-// home yet -- see the note above the explicit instantiations).
+// each S provides the scalar/nested field helpers. Pull in the three serialisers this TU
+// instantiates the visitor over: the two file serialisers plus the debug-menu serialiser (its
+// reconstructed home, BrnDebugMenuSerialiser.h, has since landed -- see the note above the
+// explicit instantiations).
 #include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"
 #include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"
+#include "GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h"
 
 namespace BrnDirector
 {
@@ -128,11 +130,12 @@ void BehaviourGameplayBumper::Parameters::Serialise(TSerialiser& lrSerialiser)
     lrSerialiser.Serialise("FOV during boost", mfBoostFOV);
 }
 
-// Explicit instantiations -- one per file serialiser this block is saved/loaded through.
-// BLOCKED (not instantiated): Serialise<DebugMenuSerialiser> @0x82214A08 -- BrnDirector::Camera::
-// DebugMenuSerialiser has no reconstructed home yet (it needs Process<float> + CgsDev::DebugComponent
-// SetStep wiring), so instantiating the body over it would require fabricating that serialiser type.
-// It lands when the DebugMenuSerialiser TU is homed.
+// Explicit instantiations -- one per serialiser this block is menu-mirrored / saved / loaded through.
+// The DebugMenuSerialiser home (BrnDebugMenuSerialiser.h) has since landed -- its scalar
+// Serialise(const char*, f32&) overload inlines to the Process<float> + CgsDev::DebugComponent::SetStep
+// pair the X360 debug-menu instance @0x82214A08 emits per field -- so the debug-menu instance is now
+// emitted here too (mirrors the committed BehaviourBystanderCam::Parameters::Serialise instantiations).
+template void BehaviourGameplayBumper::Parameters::Serialise<DebugMenuSerialiser>(DebugMenuSerialiser&);
 template void BehaviourGameplayBumper::Parameters::Serialise<TextFileWriteSerialiser>(TextFileWriteSerialiser&);
 template void BehaviourGameplayBumper::Parameters::Serialise<TextFileReadSerialiser>(TextFileReadSerialiser&);
 

@@ -59,6 +59,20 @@ namespace SceneManagerIO
         u32             mxQueryFlags;        // +0xC8
     };
 
+    // The coarse sphere-test event record (E_IN_EVENT_SPHERE_TEST). The X360 typed
+    // AddEvent<InEventSphereTest> @0x8273F9D8 bakes `li r6, 0x20`, so its queued byte
+    // image is 32 bytes. No field-level DWARF is recovered in any decompiled TU's scope
+    // (the emitter builds the stack image and the queue block-copies it whole), so the
+    // payload is modelled as an OPAQUE byte span at the X360-attested size, mirroring the
+    // opaque-blob homes (CgsSceneManagerIO_EventSphereTest.h / EventAddDynamicVolume).
+    // FLAG: opaque interior -- field names/types NOT fabricated (HARD RULE 3); only the
+    // X360-attested sizeof(==32) is load-bearing (the liSize the typed AddEvent passes).
+    struct alignas(16) InEventSphereTest : public CgsModule::Event
+    {
+        u8 macOpaquePayload[32];   // +0x00  opaque (X360-attested 32-byte AddEvent liSize)
+    };
+    static_assert(sizeof(InEventSphereTest) == 32, "InEventSphereTest byte image must match X360 AddEvent liSize (0x20)");
+
     // Coarse-query input queue. Adds the typed enqueue helpers over the variable
     // event queue base; carries no extra data members (DWARF
     // CgsSceneManagerIO_CoarseQuery.h:90).

@@ -97,5 +97,38 @@ namespace Vehicle
         // overload the X360 standalone leaf takes; reads the aftertouch stick deflection.
         bool GetAftertouchValues(f32* lpYaw, f32* lpPitch, f32* lpScalar) const;
     };
+
+    // ----- ADDITIVE GROW (VEQ typed-AddEvent<EventT> finish): minimal opaque homes for the
+    //       Network / AI / Traffic driver-control payloads that this header was always documented
+    //       to own (see the file-header note above). Each is a RAW event payload posted into the
+    //       vehicle-driver VariableEventQueue<5040,16> via the templated AddEvent<EventT>(&payload,
+    //       type) thunk; the generic body forwards to the three-arg AddEvent with liSize ==
+    //       sizeof(EventT). Every struct is sized EXACTLY to the record-size immediate baked into
+    //       its X360 AddEvent thunk (li r6,0xNN == sizeof, RAW payload -- not wrapped in Message<>):
+    //         BrnAIDriverControls       @0x82794C50  li r6,0x50  (80)
+    //         BrnNetworkDriverControls  @0x82595618  li r6,0xC0  (192)
+    //         BrnTrafficDriverControls  @0x82746808  li r6,0x48  (72)
+    //       FLAG: field semantics are NOT reconstructed. The DecFIGS DWARF describes these as
+    //       variants of BrnPlayerDriverControls (shared control block + variant-specific data), but
+    //       no X360 leaf in this ledger reads their interior, so the interior is left an opaque byte
+    //       blob rather than fabricating members/offsets. (The one field any committed consumer
+    //       reads -- BrnNetworkDriverControls' leading word, the EActiveRaceCarIndex, per
+    //       WorldBridgeInputToEntityModules.cpp:48 -- lives at offset 0.) They derive from the empty
+    //       CgsModule::Event queue-payload base, same as BrnPlayerDriverControls, so the leading
+    //       data word sits at offset 0.
+    struct BrnAIDriverControls : public CgsModule::Event
+    {
+        u8 mOpaquePayload[0x50];   // FLAG: opaque -- sized to X360 AddEvent record (li r6,0x50)
+    };
+
+    struct BrnNetworkDriverControls : public CgsModule::Event
+    {
+        u8 mOpaquePayload[0xC0];   // FLAG: opaque -- sized to X360 AddEvent record (li r6,0xC0)
+    };
+
+    struct BrnTrafficDriverControls : public CgsModule::Event
+    {
+        u8 mOpaquePayload[0x48];   // FLAG: opaque -- sized to X360 AddEvent record (li r6,0x48)
+    };
 }
 }
