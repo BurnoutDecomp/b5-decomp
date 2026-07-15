@@ -27,6 +27,7 @@
 //   +0x38 maOperand[6]      -- per-operand cached VReg::GetIndex() (Init = -1)
 //   +0x50 maOperandType[6]  -- per-operand cached VReg::GetType()  (Init = 48)
 //   +0x80 maModifier[6][4]  -- per-operand write-mask/modifier bytes
+//   +0xA8 muUnkA8           -- FLAG scalar word (IRAllocPos::NewInst zeroes it)
 //   +0xE8 maSourceRegs[32]  -- per-channel source registers (VReg*)
 //   +0x16C maSwizzle[32][4] -- per-channel swizzle (Init = 3)
 //   +0x3B0 maDefaultModifier[4] -- default modifier bytes {0,1,2,3}
@@ -59,6 +60,12 @@ struct IRInst : public DListNode
     u8    maUnk98[6];           // +0x98  FLAG per-operand byte flags (Init = 0)
     u8    maUnk9E[6];           // +0x9E  FLAG per-operand byte flags (Init = 0)
     u8    muUnkA4;              // +0xA4  FLAG (Init = 0)
+    // +0xA8 is a node-flags/scalar word IRInst::Init does not touch; the derived
+    // IRAllocPos / IRAllocColor / IRAllocMem ctors (each inlined into their NewInst)
+    // zero-stamp it (stw 0, 0xA8). Its only grounding is that zero store, so its
+    // purpose is FLAGged unattested -- it is named/typed solely to give that store a
+    // NAMED target.
+    u32   muUnkA8;              // +0xA8  FLAG unattested (IRAllocPos/Color/Mem NewInst = 0)
     s32   maUnkC8[6];           // +0xC8  FLAG per-operand (Init = 0)
     // +0xE0 is an unmodeled gap word (no attested reader/writer). muUnkE4 @+0xE4
     // is a node-flags word: IRInst::Init does not touch it, but the IRLoadInterp
