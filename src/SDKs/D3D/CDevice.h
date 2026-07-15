@@ -201,6 +201,7 @@ private:
     friend void _CDeviceAssertLayout();
     friend class CBlocker;
     friend class GPUTimingMarkerFull; // reads muGpuTimingEnabled in its destructor
+    friend class GPUTimingMarkerSmall; // reads muGpuTimingEnabled in its ctor and dtor
     friend class CCommandBuffer; // unlinks itself from mpCommandBufferList under mCommandBufferLock
     friend class CRingAllocList; // reads muOutOfMemoryBase on the ring-alloc failure path
 };
