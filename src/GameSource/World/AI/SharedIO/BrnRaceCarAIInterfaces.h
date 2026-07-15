@@ -116,8 +116,17 @@ namespace BrnAI
         // /types verbatim from the DWARF (BrnRaceCarAIInterfaces.h:353/347/366); the X360 typed
         // AddEvent liSize confirms each byte size (AddCarToCurrentModeEvent==20 @0x822FD028,
         // PlayerControlChangedEvent==1 @0x822FCF70, RemoveCarFromCurrentModeEvent==4 @0x822FD0E0).
-        // (AttachAIControlEvent is deliberately NOT homed here -- it carries an Attribute::Key and
-        // a BrnAI::EPersonalityType, the latter un-homed, so its typed AddEvent stays blocked.)
+        // AttachAIControlEvent (DWARF BrnRaceCarAIInterfaces.h event-records group) carries an
+        // Attribute::Key and a BrnAI::EPersonalityType (the latter un-homed), so no field-level
+        // layout is reconstructed. The X360 typed AddEvent @0x822FCC90 bakes `li r6, 0x18`, so its
+        // byte image is 24 bytes -- homed minimally as an opaque payload at that attested size.
+        // FLAG: opaque interior -- field names/types NOT fabricated (HARD RULE 3); only the
+        // X360-attested sizeof(==24) is load-bearing (it is the liSize the typed AddEvent passes).
+        struct AttachAIControlEvent : public CgsModule::Event
+        {
+            u8 macOpaquePayload[24];   // +0x00  opaque (X360-attested 24-byte AddEvent liSize)
+        };
+        static_assert(sizeof(AttachAIControlEvent) == 24, "AttachAIControlEvent byte image must match X360 AddEvent liSize (0x18)");
 
         // BrnRaceCarAIInterfaces.h:353 -- sizeof 20.
         struct AddCarToCurrentModeEvent : public CgsModule::Event

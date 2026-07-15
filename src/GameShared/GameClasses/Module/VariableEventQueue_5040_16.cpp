@@ -30,4 +30,17 @@ template const char* CgsModule::VariableEventQueue<5040, 16>::GetFirstWritePoint
 // memcpy; AppendSafe = per-event GetFirst/Next + AddEventSafe). Element-type
 // homes are #included above so each EventT is a complete type.
 template bool CgsModule::VariableEventQueue<5040, 16>::AddEvent<BrnPhysics::Vehicle::BrnPlayerDriverControls>(const BrnPhysics::Vehicle::BrnPlayerDriverControls*, s32);
+// The Network / AI / Traffic driver-control variants (opaque payload homes in
+// BrnVehicleDriverControls.h). Each typed thunk forwards to the three-arg AddEvent with
+// liSize == sizeof(EventT); the sizeof is pinned to the record-size immediate baked into the
+// X360 thunk (li r6,0xNN), so each instance's payload is a complete, correctly-sized type.
+static_assert(sizeof(BrnPhysics::Vehicle::BrnAIDriverControls) == 0x50,
+              "BrnAIDriverControls must be 80 bytes (X360 AddEvent thunk @0x82794C50 li r6,0x50)");
+static_assert(sizeof(BrnPhysics::Vehicle::BrnNetworkDriverControls) == 0xC0,
+              "BrnNetworkDriverControls must be 192 bytes (X360 AddEvent thunk @0x82595618 li r6,0xC0)");
+static_assert(sizeof(BrnPhysics::Vehicle::BrnTrafficDriverControls) == 0x48,
+              "BrnTrafficDriverControls must be 72 bytes (X360 AddEvent thunk @0x82746808 li r6,0x48)");
+template bool CgsModule::VariableEventQueue<5040, 16>::AddEvent<BrnPhysics::Vehicle::BrnAIDriverControls>(const BrnPhysics::Vehicle::BrnAIDriverControls*, s32);
+template bool CgsModule::VariableEventQueue<5040, 16>::AddEvent<BrnPhysics::Vehicle::BrnNetworkDriverControls>(const BrnPhysics::Vehicle::BrnNetworkDriverControls*, s32);
+template bool CgsModule::VariableEventQueue<5040, 16>::AddEvent<BrnPhysics::Vehicle::BrnTrafficDriverControls>(const BrnPhysics::Vehicle::BrnTrafficDriverControls*, s32);
 template bool CgsModule::VariableEventQueue<5040, 16>::Append<5040, 16>(const CgsModule::VariableEventQueue<5040, 16>&);
