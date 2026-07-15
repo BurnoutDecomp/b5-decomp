@@ -62,7 +62,11 @@ public:
     // declared here so CAltTablesEncoder::clear can call it through a CLocalHuffmanEncoder.
     int setCodes(int liMode);
 
-private:
+protected:
+    // Reached by name from the derived CLocalHuffmanEncoder encode path (WriteSymbol /
+    // encodeSymbol / encodeHeader / checkFrame). These are the same base fields the X360
+    // asm addresses as this[0..8]; the derived methods read them and checkFrame advances
+    // mpaCodeLengths by muNumSymbols, so they are protected rather than private.
     u32       muNumSymbols;          // +0x00  number of coded symbols
     const u8* mpaCodeLengths;        // +0x04  per-symbol code-length table
     u32       muBits;                // +0x08  primary index bit width

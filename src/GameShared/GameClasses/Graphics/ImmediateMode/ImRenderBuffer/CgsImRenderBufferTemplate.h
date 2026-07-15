@@ -109,13 +109,30 @@ namespace CgsGraphics
         // command's payload begins 16 bytes in (header @ +0/+4, an 8-byte pad, the transform
         // @ +16..+79). Emitted by SetTransform() below.
         IM_CMD_SET_TRANSFORM         = 16,  // SetTransform(const Im2dTransform&) -- 80-byte record
+        // The Im2dRenderBuffer clip-mask stack (X360 Im2dRenderBuffer::PushMask @0x82450030 /
+        // ::PopMask @0x824501C8, the <Basic2dColouredTexturedVertex> instance). muType 17 pushes a
+        // mask built from a 2-vertex screen-space corner run (a 16-byte record carrying the bound
+        // texture @ +8 and the corner-run pointer @ +12, plus a 40-byte 2-vertex alloc in the vertex
+        // stream); muType 19 pops/clears the current mask (a 16-byte header-only record). This 17-push
+        // is DISTINCT from the Apt rasteriser's own mask ADD op (muType 18 below) -- a different call
+        // site with the same {texture,verts} record shape but its own opcode; the 19-pop is shared.
+        IM_CMD_PUSH_MASK             = 17,  // Im2dRenderBuffer::PushMask -- push a clip mask (2 corner verts)
         // The Apt mask path (AptCallbackRender::DrawRenderingUnit @0x5CBA30) inlines two more
         // command writers: muType 18 begins a stencil mask from a rendering unit's shape AABB
         // (a 16-byte record carrying the bound texture id @ +8 and a 2-vertex screen-space corner
         // run @ +12), and muType 19 ends/clears the current mask (a 16-byte header-only record).
         // (The Subtract op writes 19; the Add op writes a 18 per mesh.)
         IM_CMD_PUSH_MASK_GEOMETRY    = 18,  // DrawRenderingUnit Add op -- begin a mask from the shape AABB
-        IM_CMD_END_MASK              = 19,  // DrawRenderingUnit Subtract op -- end/clear the current mask
+        IM_CMD_END_MASK              = 19,  // DrawRenderingUnit Subtract op -- end/clear the current mask (== Im2dRenderBuffer::PopMask)
+        // The Im2dRenderBuffer GUI command writers (X360 <Basic2dColouredTexturedVertex> instance):
+        // muType 21 pushes the boost-bar additive/base colour pair (a 48-byte record: header @ +0/+4,
+        // an 8-byte gap, then two 16-byte colour Vector4s @ +16/+32 -- X360 PushBoostBarColours
+        // @0x824502A8); muType 22 appends a "set-transform + bound texture/blend + draw a static vertex
+        // run" batch (a 112-byte record: the 64-byte Im2dTransform @ +16, then texture/blend/prim/verts/
+        // count/flags @ +80.. -- X360 BatchTransformTextureBlendRenderStatic @0x8246F7D0, called by
+        // BrnFlapt::FlaptRenderer::RenderMesh).
+        IM_CMD_PUSH_BOOST_BAR_COLOURS               = 21,  // Im2dRenderBuffer::PushBoostBarColours -- 48-byte record
+        IM_CMD_BATCH_TRANSFORM_TEXTURE_BLEND_RENDER = 22,  // Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic -- 112-byte record
     };
 
     // -------------------------------------------------------------------------
@@ -237,6 +254,38 @@ namespace CgsGraphics
         CgsGraphics::Im2dTransform mTransform;   // [c:0x10..0x4F] the 64-byte batch transform
     };
 
+    // PushBoostBarColours record (muType IM_CMD_PUSH_BOOST_BAR_COLOURS): the boost-bar colour pair
+    // Im2dRenderBuffer::PushBoostBarColours @0x824502A8 pushes. The X360 writer stores {muType=21,
+    // muSize=48} then two stvx128 copy the two 16-byte colour Vector4s (passed in v1/v2) into the
+    // record at +16 and +32 -- so, like SetTransform, the header occupies +0/+4 and +8..0x0F is the
+    // 16-byte-alignment gap the writer skips before the first vector lands at +16.
+    struct ImCommandPushBoostBarColours : public ImCommand           // muType IM_CMD_PUSH_BOOST_BAR_COLOURS
+    {
+        u32                    mau32Pad[2];    // [c:0x08..0x0F] alignment gap (untouched by the writer)
+        rw::math::vpu::Vector4 maColours[2];   // [c:0x10 / 0x20] the two 16-byte colour vectors (v1, v2)
+    };
+
+    // BatchTransformTextureBlendRenderStatic record (muType IM_CMD_BATCH_TRANSFORM_TEXTURE_BLEND_RENDER):
+    // the "set-transform + bound texture/blend + draw a static vertex run" batch command
+    // Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic @0x8246F7D0 appends. The X360 writer
+    // stores {muType=22, muSize=112}, copies the 64-byte Im2dTransform into the record at +16 (four
+    // lvx/stvx, like SetTransform), then stores the six trailing args as words/byte at the console
+    // offsets +80/+84/+88/+92/+96 and the flag byte at +100. Reconstructed x64-native (the trailing
+    // pointer members widen; reached by name, not pinned to the console byte offsets). muFlags is the
+    // KU_FLAG_SETTEXTURE(1)/KU_FLAG_SETBLEND(2) bitmask telling the dispatcher which bound state changed.
+    template <typename V>
+    struct ImCommandBatchTransformTextureBlendRender : public ImCommand // muType IM_CMD_BATCH_TRANSFORM_TEXTURE_BLEND_RENDER
+    {
+        u32                             mau32Pad[2];      // [c:0x08..0x0F] alignment gap (untouched by the writer)
+        CgsGraphics::Im2dTransform      mTransform;       // [c:0x10..0x4F] the 64-byte batch transform
+        renderengine::Texture*          mpTexture;        // [c:0x50 console] the bound texture (a3)
+        const renderengine::BlendState* mpBlendState;     // [c:0x54 console] the bound blend state (a4)
+        renderengine::PrimitiveType     mePrimitiveType;  // [c:0x58 console] the primitive topology (a5)
+        const V*                        mpVertices;        // [c:0x5C console] the static vertex run (a6)
+        u32                             muNumVertices;    // [c:0x60 console] vertex count (a7)
+        u8                              mu8Flags;         // [c:0x64 console] KU_FLAG_SETTEXTURE/SETBLEND bitmask (a8)
+    };
+
     // -------------------------------------------------------------------------
     // ImRenderBuffer<V> - the double-buffered command+vertex stream itself.
     // DWARF CgsImRenderBuffer.h:229. Member order/names authoritative from the
@@ -325,6 +374,44 @@ namespace CgsGraphics
         // terminal branch of DrawRenderingUnit @0x5CBA30 (loc_5CBF24): a 16-byte header-only
         // {muType=19, muSize=16} record (overflow rewinds, matching the other writers).
         void EndMask();
+
+        // ---- Im2dRenderBuffer command writers (ledger key class:CgsGraphics::Im2dRenderBuffer) ----
+        // The X360 build's Im2dRenderBuffer is the <Basic2dColouredTexturedVertex> instantiation of
+        // this buffer (its methods index this same layout: mpWriteBuffer @+0x20, muCommandBufferSize
+        // @+0x30, mbInRenderBlock @+0x34, mbFailGracefully @+0x41, muVertexBufferSize @+0x2C -- the
+        // asm reaches them at buffer_subobject+off, matching these members exactly). These four command
+        // writers are its own clip-mask / boost-bar / static-batch API, appended exactly like the base
+        // writers above (overflow rewinds to the last EndRendering). Bodies in CgsIm2dRenderBuffer.cpp.
+        // (Its fifth command writer, SetTransform @0x8244FF30, IS the SetTransform(const Im2dTransform&)
+        // already defined above -- byte-identical opcode-16/80-byte append -- so it is not re-declared.)
+
+        // Push a clip mask built from a 2-vertex (min-corner, max-corner) screen-space run bound to
+        // lpTexture (X360 Im2dRenderBuffer::PushMask @0x82450030): a 16-byte {muType=17} record with
+        // the texture @ +8 and the corner-run pointer @ +12, plus a 40-byte AllocVertices(2) run the
+        // two corners are copied into. Distinct opcode from the Apt PushMaskGeometry (18).
+        void PushMask(renderengine::Texture* lpTexture, const V* lpaMaskVertices);
+
+        // Pop/clear the current clip mask (X360 Im2dRenderBuffer::PopMask @0x824501C8): a 16-byte
+        // header-only {muType=19} record. Same opcode/record as EndMask (a different X360 call site).
+        void PopMask();
+
+        // Push the boost-bar colour pair (X360 Im2dRenderBuffer::PushBoostBarColours @0x824502A8): a
+        // 48-byte {muType=21} record carrying two 16-byte colour vectors (passed in v1/v2) at +16/+32.
+        void PushBoostBarColours(const rw::math::vpu::Vector4& lrColour0,
+                                 const rw::math::vpu::Vector4& lrColour1);
+
+        // Append a "set-transform + bound texture/blend + draw a static vertex run" batch (X360
+        // Im2dRenderBuffer::BatchTransformTextureBlendRenderStatic @0x8246F7D0, called by
+        // BrnFlapt::FlaptRenderer::RenderMesh): a 112-byte {muType=22} record carrying the 64-byte
+        // transform @ +16 then texture/blend/prim/verts/count/flags. lu8Flags is the
+        // KU_FLAG_SETTEXTURE(1)/KU_FLAG_SETBLEND(2) "which bound state changed" bitmask.
+        void BatchTransformTextureBlendRenderStatic(const Im2dTransform& lrTransform,
+                                                    renderengine::Texture* lpTexture,
+                                                    const renderengine::BlendState* lpBlendState,
+                                                    renderengine::PrimitiveType lePrimitiveType,
+                                                    const V* lpVertices,
+                                                    u32 luNumVertices,
+                                                    u8 lu8Flags);
 
         // ----- command-stream walk (the dispatcher drives these) -----
         const ImCommand* GetFirstCommand() const;                                            // @0x57E024
