@@ -25,6 +25,16 @@
 //                              (SetUpParamGen: lwz r3,0xAC(this) -> FindOrCreate).
 //   +0x584 miNextTempIndex  -- monotonic temp-value index counter (read + post-
 //                              incremented in TempValue::TempValue).
+//   +0x58C miNextLoopIndexedConst -- monotonic loop-indexed-const-set index
+//                              counter (read + post-incremented in
+//                              LoopIndexedConstSet::LoopIndexedConstSet).
+//   +0x590 miNextLoopIndex  -- monotonic loop-indexed-set index counter (read +
+//                              post-incremented in LoopIndexedInputSet::LoopIndexedInputSet;
+//                              shared by the loop-indexed set value kinds).
+//   +0x594 miNextLoopIndexedOutput -- monotonic loop-indexed-OUTPUT-set index counter
+//                              (read + post-incremented in
+//                              LoopIndexedOutputSet::LoopIndexedOutputSet; own counter,
+//                              distinct from the const/input ones at +0x58C/+0x590).
 //   +0x598 miNextVRegId     -- monotonic vreg-id counter (read + post-incremented,
 //                              the pre-increment value becomes VRegInfo::miId).
 //   +0x5AC mpArena          -- the arena every graph object (VRegInfo, its use/def
@@ -99,7 +109,10 @@ public:
     VRegTable*      mpVRegTable;             // +0x0AC  virtual-register table
     u8              maPad0B0[0x584 - 0x0B0]; // +0x0B0 .. +0x583 opaque
     s32             miNextTempIndex;         // +0x584  next temp-value index (post-inc)
-    u8              maPad588[0x598 - 0x588]; // +0x588 .. +0x597 opaque
+    u8              maPad588[0x58C - 0x588]; // +0x588 .. +0x58B opaque
+    s32             miNextLoopIndexedConst;  // +0x58C  next loop-indexed-const-set index (post-inc)
+    s32             miNextLoopIndex;         // +0x590  next loop-indexed-set index (post-inc)
+    s32             miNextLoopIndexedOutput; // +0x594  next loop-indexed-output-set index (post-inc)
     s32             miNextVRegId;            // +0x598  next virtual-register id (post-inc)
     u8              maPad59C[0x5AC - 0x59C]; // +0x59C .. +0x5AB opaque
     Arena*          mpArena;                 // +0x5AC  arena all graph objects allocate from
