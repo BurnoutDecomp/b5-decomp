@@ -120,6 +120,27 @@ namespace TriggerEntityModuleIO
         Vector3                       GetLineEnd() const         { return mLineEnd; }
     };
 
+    // ADDITIVE GROW (VariableEventQueue<4096,16> finish TU): the producer-side element record
+    // that BrnGameState::TriggerQueryManager::SubmitTriggerQueries pushes onto the module's
+    // trigger-query input queue via
+    //   CgsModule::VariableEventQueue<4096,16>::AddEvent<InLineTestEvent>(&event, type)
+    // (X360 0x8238E960 -- the typed AddEvent tail-forwards `li r6, 0x30` == sizeof == 48 to the
+    // three-arg AddEvent). This is one of the "sibling LineTest events" the header preamble notes
+    // also live in this DWARF home; only the exact size (48) is attested from THIS TU's exports
+    // (the typed-AddEvent stub does not touch the payload interior -- it only memcpy's sizeof
+    // bytes). The consumer ProcessTriggerQueryEvents reads the wire record with the same field
+    // layout documented on InTriggerQueryEvent above (mQueryId @+0, volume-flags @+4, line start
+    // @+16, line end @+32); InLineTestEvent is almost certainly that same 48-byte record under its
+    // producer-side name. FLAG: interior field offsets are NOT reconstructed here -- they belong to
+    // the SubmitTriggerQueries / TriggerQueryManager producer TU (whose asm is not in this TU's
+    // exports); modelled as an opaque 48-byte payload so sizeof is pinned exactly without
+    // fabricating member names/offsets. Grow into named fields (mirroring InTriggerQueryEvent) when
+    // that producer TU lands.
+    struct InLineTestEvent : public CgsModule::Event
+    {
+        u8 maOpaque[48];   // FLAG: 48 == X360-attested sizeof (li r6,0x30); interior deferred to producer TU
+    };
+
     // ADDITIVE GROW (Process* TU): the management input interface aggregate -- the add + remove
     // trigger queues the world bridge fills each frame. The X360 ProcessAddTriggerEvents drains
     // GetAddTriggerEventQueue() (the first embedded member, a VariableEventQueue<131072,16>).

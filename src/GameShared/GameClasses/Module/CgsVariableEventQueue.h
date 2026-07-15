@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CgsDev::Assert::Begin/Fire/EndAssert (verbatim X360 file/line)
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (assert/log message build)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"    // CgsModule::EventQueue<T,N> source for the typed Append<EventT,SRCN>
 
 #include <cstring>   // memcpy / memset / strlen
 
@@ -123,6 +124,22 @@ namespace CgsModule
         // safe form is X360-attested and added here additively.
         template <s32 SRCBUF, s32 SRCALIGN>
         bool AppendSafe(const VariableEventQueue<SRCBUF, SRCALIGN>& lrSource);
+
+        // ADDITIVE GROW (FLAG): typed per-event append from a fixed-stride EventQueue<EventT,SRCN>.
+        // Distinct from the VariableEventQueue-source Append above -- the X360 emits this as a
+        // templated member parameterised on the *source element type and capacity*: e.g.
+        // ??$Append@...HitOverheadSignEvent...@?$VariableEventQueue@$0GAA@$0BA@@CgsModule@@ ==
+        // VariableEventQueue<1536,16>::Append<BrnGameState::GameStateModuleIO::HitOverheadSignEvent,
+        // 100> @ 0x827AECF8, and the RecordPropHitEvent,50 sibling @ 0x827AEC10. It asserts this
+        // queue is constructed (CgsVariableEventQueue.h:841), then walks the source queue
+        // (0..GetLength()) and forwards each element to the three-arg AddEvent with the caller-
+        // supplied liType and liSize == sizeof(EventT) (li r6,1 for the 1-byte HitOverheadSignEvent,
+        // li r6,0x20 for the 32-byte RecordPropHitEvent). Used by WorldModule::
+        // BridgeEntityModulesToOutput_PostPhysics to fold the per-frame typed game-event queues into
+        // the packed GameState input buffer. DWARF declares only the single-event AddEvent forms;
+        // this typed bulk Append is X360-attested and added here additively.
+        template <typename EventT, s32 SRCN>
+        bool Append(const EventQueue<EventT, SRCN>& lrSource, s32 liType);
 
         void* AllocateEvent(s32 liType, s32 liSize);
         void* AllocateEventSafe(s32 liType, s32 liSize);
@@ -531,6 +548,32 @@ namespace CgsModule
         memcpy(&macData[miBufferWritePos], lpSrc, liSizeInBytes);
         miBufferWritePos += liSizeInBytes;
         miLength += lrSource.GetLength();
+        return true;
+    }
+
+    // -------- Append<EventT,SRCN> @ X360 0x827AECF8 (dest <1536,16>, src EventQueue<HitOverheadSignEvent,100>) --------
+    // Typed per-event append from a fixed-stride EventQueue<EventT,SRCN>: forward every live source
+    // event (0..GetLength()) to the three-arg AddEvent with the caller-supplied liType and
+    // liSize == sizeof(EventT). No overflow pre-check -- AddEvent asserts on overflow itself.
+    template <s32 BUFSIZE, s32 ALIGN>
+    template <typename EventT, s32 SRCN>
+    bool VariableEventQueue<BUFSIZE, ALIGN>::Append(const EventQueue<EventT, SRCN>& lrSource, s32 liType)
+    {
+        if (!mbIsConstructed)
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 841);
+            CgsDev::Assert::EndAssert();
+        }
+
+        for (s32 liIndex = 0; liIndex < lrSource.GetLength(); ++liIndex)
+        {
+            const EventT& lrEvent = lrSource.GetEvent(liIndex);
+            AddEvent(reinterpret_cast<const Event*>(&lrEvent), liType, (s32)sizeof(EventT));
+        }
         return true;
     }
 

@@ -1,5 +1,10 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"
+#include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::InLineTestEvent
+
+// X360 0x8238E960 forwards sizeof(InLineTestEvent) == 0x30 (li r6,0x30) to the three-arg AddEvent.
+static_assert(sizeof(BrnWorld::TriggerEntityModuleIO::InLineTestEvent) == 48,
+              "InLineTestEvent must be 48 bytes (X360 AddEvent<InLineTestEvent> forwards li r6,0x30)");
 
 // Explicit per-method instantiation of CgsModule::VariableEventQueue<4096, 16>.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (out-of-line per-instantiation emission).
@@ -32,6 +37,7 @@ template bool CgsModule::VariableEventQueue<4096, 16>::AddEvent<BrnResource::Gam
 template bool CgsModule::VariableEventQueue<4096, 16>::AddEvent<BrnResource::GameDataIO::LoadGameDataEvent>(const BrnResource::GameDataIO::LoadGameDataEvent*, s32);
 template bool CgsModule::VariableEventQueue<4096, 16>::AddEvent<BrnResource::GameDataIO::SwapInCollisionWorldRequest>(const BrnResource::GameDataIO::SwapInCollisionWorldRequest*, s32);
 template bool CgsModule::VariableEventQueue<4096, 16>::AddEvent<BrnResource::GameDataIO::SwapOutCollisionWorldRequest>(const BrnResource::GameDataIO::SwapOutCollisionWorldRequest*, s32);
+template bool CgsModule::VariableEventQueue<4096, 16>::AddEvent<BrnWorld::TriggerEntityModuleIO::InLineTestEvent>(const BrnWorld::TriggerEntityModuleIO::InLineTestEvent*, s32);
 template bool CgsModule::VariableEventQueue<4096, 16>::Append<1024, 16>(const CgsModule::VariableEventQueue<1024, 16>&);
 template bool CgsModule::VariableEventQueue<4096, 16>::Append<2048, 16>(const CgsModule::VariableEventQueue<2048, 16>&);
 template bool CgsModule::VariableEventQueue<4096, 16>::Append<4096, 16>(const CgsModule::VariableEventQueue<4096, 16>&);
