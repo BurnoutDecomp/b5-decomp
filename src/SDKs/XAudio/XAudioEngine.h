@@ -142,6 +142,14 @@ struct SEngineCallback
 // ---------------------------------------------------------------------------
 struct SEngineVoiceList
 {
+    // @ 0x82C2DC50 -- X360 symbol XAUDIO::CEngine::CEngineVoiceList::SwapActiveLists.
+    // Flip this list's front/back active sub-list pointers (mpActiveA <-> mpActiveB)
+    // under the XAudio module-shared recursive spin-lock. Driven once per list by
+    // CEngine::SwapActiveLists. Bodied in XAudioEngineVoiceList.cpp (the ledger TU
+    // class:XAUDIO::CEngine::CEngineVoiceList); the recursive-lock primitives it
+    // needs live in XAudioEngineVoiceList.h.
+    s32 SwapActiveLists();
+
     CMasterVoiceList  mMaster;   // +0x00  (12B X360 head)
     XAUDIOPACKETCTX_  mActiveA;  // +0x0C  (concrete type: XAUDIO::CActiveVoiceList)
     XAUDIOPACKETCTX_  mActiveB;  // +0x18  (concrete type: XAUDIO::CActiveVoiceList)
