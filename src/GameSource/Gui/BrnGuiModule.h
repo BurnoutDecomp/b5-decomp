@@ -199,6 +199,10 @@ namespace BrnGui
         CgsModule::VariableEventQueue<18432, 16> mHudInQueue;
         CgsModule::VariableEventQueue<18432, 16> mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
+        // The always-available components manager's in-queue: the GuiModule fans the events
+        // that manager subscribes to (save-icon 355, connect 64, ...) into it, then pumps
+        // AlwaysAvailableComponentsManager::Update against it each frame.
+        CgsModule::VariableEventQueue<18432, 16> mAlwaysAvailInQueue;
 
         // The observer-subscription tables (records 34/35 from each flow's state
         // interface output queue). One flag set per flow slot.

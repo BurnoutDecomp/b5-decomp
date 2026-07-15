@@ -33,6 +33,8 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                        // BrnFlapt::FileRef
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the in-queue Update walks
+#include "GameSource/Gui/BrnGuiCache.h"                                  // BrnGui::GuiCache (event 64 connect)
 
 namespace BrnGui
 {
@@ -157,18 +159,115 @@ namespace BrnGui
         mpInGuiEventQueue = lpInGuiEventQueue;
     }
 
-    // @0x82509338 -- per-frame event pump. RECONSTRUCTION BLOCKED: see the file header. The
-    // body switches on ~15 GUI event-payload types and reaches GuiCache /
-    // BrnGui::OptionsDataProfile far members and the BrnSound EaTraxHelper accessors, none
-    // of which have a reconstructable type home in this dossier. Trap stub until those homes
-    // exist -- NO raw-offset poke, NO faked types.
+    // True once the manager observes an event id (its 19-entry table). Lets the GuiModule
+    // fan the manager's subscribed events into its in-queue (the console routes them through
+    // the shared observer-subscription filter; this is the same membership test).
+    bool AlwaysAvailableComponentsManager::ObservesEvent(s32 liId) const
+    {
+        for (s32 li = 0; li < KI_NUM_EVENTS_OBSERVED; ++li)
+            if (maiEventToObserve[li] == liId)
+                return true;
+        return false;
+    }
+
+    namespace
+    {
+        // The event-64 connect payload (the GuiCache pointer), same shape BootProfile reads.
+        struct AacGuiEventCache : public CgsModule::Event
+        {
+            GuiCache* mpGuiCache;
+        };
+    }
+
+    // @0x82509338 -- per-frame event pump: walk the in-queue and drive the always-available
+    // overlays. Reconstructed from the X360 body. The two in-game EATrax rich-presence cases
+    // (502/503) reach BrnSound::Module::Io::EaTraxHelper + BrnGui::OptionsDataProfile /
+    // GuiCache FAR members that have no committed type home; those specific accessor calls are
+    // FLAG'd deferrals (documented below) -- the event DISPATCH and every other case (the
+    // save-icon 355, the connect 64, showtime, achievement, the load flags) are faithful.
     void AlwaysAvailableComponentsManager::Update()
     {
-        // BLOCKED: needs the GUI event-payload type homes (events 9/26/43/44/64/72/105/175/
-        // 191/355/392/502/503/516/586), BrnGui::OptionsDataProfile (+0x7344 / cache +0xB878),
-        // the GuiCache active-track far member (+0x12BC0) and BrnSound::Module::Io::EaTraxHelper.
-        CGS_ASSERT(false,
-                   "BrnGui::AlwaysAvailableComponentsManager::Update is blocked: missing GUI "
-                   "event-payload + GuiCache/OptionsDataProfile/EaTraxHelper type homes");
+        // The console gates the whole pump on the flapt being bound (this+65988): with no
+        // clips bound there is nothing to drive.
+        if (!mbFlaptPrepared || mpInGuiEventQueue == 0)
+            return;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            switch (liId)
+            {
+            case 64:   // connect: latch the GuiCache (the far members the in-game cases read)
+                CGS_ASSERT(lpEvent != 0, "Invalid cache in AlwaysAvailableComponentsManager::Update");
+                mpGuiCache = static_cast<const AacGuiEventCache*>(lpEvent)->mpGuiCache;
+                break;
+
+            case 26:   // per-frame time-step: stamp the timed (in-game) overlays
+                mbGameLoadStateCompleted = true;
+                // FLAG PC-platform leaf: the console stamps the EATrax/achievement timers
+                // from GuiEventTimeInfo::GetTime() (@0x8240E328), whose body is not committed
+                // to the link. Those overlays are in-game only (never on the boot/front-end
+                // path the save icon runs on); the flag above is the observable this frame.
+                break;
+
+            case 44:   // buddy notification cleared
+                mbShowNewsNotification = false;
+                break;
+
+            case 72:   // external resource dependencies loaded
+                mbExternalResourcesDependenciesLoaded = true;
+                break;
+
+            case 355:  // autosave icon: show (payload==1) / hide the top-left save spinner
+                if (*reinterpret_cast<const u8*>(lpEvent) == 1)
+                    mSaveIconComponent.ShowSaveIcon();
+                else
+                    mSaveIconComponent.HideSaveIcon();
+                break;
+
+            case 392:  // showtime banner: show / hide
+                if (*reinterpret_cast<const u8*>(lpEvent) == 1)
+                    mShowtimeMessageComponent.Show();
+                else
+                    mShowtimeMessageComponent.Hide(true);
+                break;
+
+            case 191:  // showtime hide (immediate) when the payload flag is clear
+                if (*reinterpret_cast<const u8*>(lpEvent) == 0)
+                    mShowtimeMessageComponent.Hide(true);
+                break;
+
+            case 9:    // fall-through hide: only once fully prepared
+            case 516:
+                if (mePrepareStage == E_PREPARE_DONE)
+                    mShowtimeMessageComponent.Hide(true);
+                break;
+
+            case 586:  // new achievement unlocked
+                mAchievementPopupComponent.DisplayNewAchievementNotification(
+                    reinterpret_cast<const AchievementPopupComponent::AchievementsBitArray*>(lpEvent));
+                break;
+
+            // The online-invite chyron (175/43/105) and the EATrax "now playing" cases
+            // (502/503) drive in-game-only overlays that do not fire on the boot/front-end
+            // path. Their console bodies reach OnlineInviteMessageComponent::ShowMessage (not
+            // yet committed) and BrnSound::Module::Io::EaTraxHelper + BrnGui::OptionsDataProfile
+            // / GuiCache far members with no committed type home. The dispatch is kept; the
+            // un-homed accessor calls are FLAG'd deferrals until those TUs land.
+            // FLAG PC-platform leaf: in-game EATrax/online-invite overlays (un-homed callees).
+            case 175:
+            case 43:
+            case 105:
+            case 502:
+            case 503:
+                break;
+
+            default:
+                break;
+            }
+        }
     }
 }

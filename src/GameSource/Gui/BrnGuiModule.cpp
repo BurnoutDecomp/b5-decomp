@@ -388,6 +388,15 @@ namespace BrnGui
         mScreenInQueue.Construct();
         mScreenFlow.SetInEventQueue(reinterpret_cast<InputBuffer::GuiEventQueue*>(&mScreenInQueue));
 
+        // The always-available components manager (save-icon spinner, EATrax/achievement/
+        // showtime overlays): give it its own in-queue and latch it. The manager's Prepare
+        // state machine + per-frame Update pump run from GuiModule::Update (matching the
+        // console's GuiModule::Update @0x82527A58, which calls the manager's Prepare each
+        // frame). PrepareFlapt (binding SaveIcon_mc etc.) is driven by the flapt-load
+        // notification in ViewModule::ProcessIncomingLoadNotification.
+        mAlwaysAvailInQueue.Construct();
+        mAlwaysAvailableComponentsManager.SetInEventQueue(&mAlwaysAvailInQueue);
+
         // The controller: store the model-module pointer + the FSM allocator, then
         // register the three flow slots.
         mFsmController.Prepare(
@@ -1133,6 +1142,10 @@ namespace BrnGui
             lCacheEvent.mpGuiCache = &mGuiCache;
             RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,
                              static_cast<s32>(sizeof(lCacheEvent)));
+            // The always-available manager observes the connect event (64): it latches the
+            // GuiCache its Prepare state machine waits on. Fan it into the manager's in-queue.
+            mAlwaysAvailInQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),
+                                         64, static_cast<s32>(sizeof(lCacheEvent)));
         }
 
         // ---- 2b. boot-resources-ready feedback (event 567; bring-up FLAG) -------------
@@ -1209,12 +1222,26 @@ namespace BrnGui
             while (liId >= 0 && lpEvent != 0)
             {
                 mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
+                // The always-available manager observes some of the profile-manager's out
+                // events (the autosave-icon flag, id 355, that ShowAutosaveIcon posts): fan
+                // those into its in-queue so its Update drives the top-left save spinner.
+                if (mAlwaysAvailableComponentsManager.ObservesEvent(liId))
+                    mAlwaysAvailInQueue.AddEvent(lpEvent, liId, liSize);
                 const CgsModule::Event* lpNext = 0;
                 liId = lrProfileOut.GetNextEvent(lpEvent, &lpNext, &liSize);
                 lpEvent = lpNext;
             }
             lrProfileOut.Clear();
         }
+
+        // Pump the always-available components manager (the top-left save-icon spinner + the
+        // in-game EATrax/achievement/showtime overlays). The console GuiModule::Update
+        // (@0x82527A58) advances its Prepare state machine each frame and the base observer
+        // pump runs its Update; here that is one call each, against the in-queue filled above
+        // (the connect event 64 that latches its GuiCache is fanned in at the cache post).
+        mAlwaysAvailableComponentsManager.Prepare(&s_GuiAccessPointers);
+        mAlwaysAvailableComponentsManager.Update();
+        mAlwaysAvailInQueue.Clear();
 
         // ---- 4. the flow ticks (each current state's PreUpdate/Update/PostUpdate) -----
         mScreenFlow.Update();
