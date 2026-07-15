@@ -74,10 +74,15 @@ namespace BrnGui
         // @0x824F3920 -- latch the input GUI event queue the manager pumps in Update.
         virtual void SetInEventQueue(CgsModule::VariableEventQueue<18432, 16>* lpInGuiEventQueue);
 
-        // @0x82509338 -- pump the input event queue and drive the overlays. The body is
-        // BLOCKED (depends on uncommitted GUI event-payload types + GuiCache /
-        // OptionsDataProfile far members); see the .cpp for the trap stub + reason.
+        // @0x82509338 -- pump the input event queue and drive the overlays (save-icon /
+        // showtime / achievement / connect faithful; the in-game EATrax + online-invite
+        // cases are FLAG'd deferrals for their un-homed callees -- see the .cpp).
         virtual void Update();
+
+        // True when the manager subscribes to `liId` (its 19-entry observe table). The
+        // GuiModule uses it to fan the manager's events into its in-queue (the PC stand-in
+        // for the console's shared observer-subscription filter).
+        bool ObservesEvent(s32 liId) const;
 
     private:
         // The five always-available GUI components, embedded by value. Guest offsets
