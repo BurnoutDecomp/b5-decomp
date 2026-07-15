@@ -52,6 +52,18 @@ struct RecordPropHitEvent : public GameEvent<E_EVENT_RECORD_PROP_HIT>
     bool    mbHitBefore; // 0x14
 };
 
+// FLAG (minimal home): FinishedSyncingPlayersEvent -- a BrnGameState::GameStateModuleIO network-sync
+// notification event queued by BrnNetwork::StateManager::UpdateSyncTime via
+// CgsModule::VariableEventQueue<1536,16>::AddEvent<FinishedSyncingPlayersEvent> @ 0x82566168, which
+// forwards liSize == sizeof(EventT) == 1 (li r6,1 @ 0x82566204). Neither the member layout nor the
+// EGameEventType discriminant is attested by any decompiled caller or by DWARF (the sole caller
+// UpdateSyncTime is not yet decompiled), so this is homed at the asm-attested size only: a 1-byte
+// opaque marker. Grow to the real GameEvent<E_EVENT_...> shape once the caller is recovered.
+struct FinishedSyncingPlayersEvent
+{
+    u8 muPad0;   // 0x00 -- asm-attested size (1) only; real field(s)/discriminant unknown
+};
+
 // X360 0x823A78F0. mNetworkPlayerID at offset 0.
 struct ChangeNetworkCarEvent : public GameEvent<E_EVENT_CHANGE_NETWORK_CAR>
 {
