@@ -56,7 +56,7 @@ public:
     };
 
     // Allocates `liCapacity` pool nodes; writes 0 on success or -100 on allocation
-    // failure through lpiResult. (Bodied by its own follow-on slice; declared here.)
+    // failure through lpiResult.
     CQueue(s32* lpiResult, s32 liCapacity);
 
     // Frees the free-list and the active-list nodes. Not a destructor in the asm; it is
