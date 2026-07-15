@@ -8,14 +8,13 @@
 //
 // The X360 build inlines the generated `using Instance::…` API away; Songs is the one
 // real array accessor recovered in this wave. Derives (privately) from Attrib::Instance,
-// matching the committed sibling generated classes (surfacelist/propscrashbinlist/
+// matching the committed sibling generated classes (song/surfacelist/propscrashbinlist/
 // debrisparams).
 //
-// NOTE: the songlist ctor @0x82697978 could not be recovered in this wave (the decompiler
-// failed to produce output for it), so its class-key constant and DefaultDataArea size are
-// unattested. Rather than fabricate them, the ctor is left DECLARATION-ONLY here (it
-// compiles under the per-TU cl /c gate; a full body must be authored from the ctor asm in
-// a follow-up). The Songs accessor is fully attested and complete.
+// Both functions are now fully attested and bodied. The ctor @0x82697978 was recovered in
+// a later wave (its asm chains the Attrib::Instance base ctor via sub_8280A248, checks the
+// class key 0x7C94BB46, then defaults a 0x970-byte data area) and mirrors the committed
+// sibling song::song exactly.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_private.h"   // Attrib::Private (canonical)
 
@@ -26,26 +25,17 @@ namespace Gen
     class songlist : private Instance
     {
     public:
-        // ctor @ 0x82697978 — declaration-only (body unrecovered in this wave; see header
-        // note). Compiles under cl /c; nothing in this header instantiates it.
+        // ctor @ 0x82697978 — chain the Attrib::Instance base ctor, assert the collection's
+        // class is ClassName::songlist (skipping the assert when the class is unset/0), then
+        // give the instance a default data area (0x970 bytes) if it has none.
         explicit songlist(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
 
         // Bounds-checked accessor for the songlist's variable-length Song array.
-        // X360 @0x82683998: read mpAttributeData (Instance+4 -> r30), get the array
-        // length via Attrib::Private::GetLength(mpAttributeData); if luIndex (r4,
-        // unsigned) >= length (unsigned compare `cmplw`), fall back to the shared
-        // zero-initialised default block sized for one Song record (0x18 bytes).
-        // Otherwise index into the array: element stride is 0x18 (24) bytes
-        //   (slwi r11,r31,1 -> idx*2; add -> idx*3; slwi r11,r11,3 -> idx*24)
-        // and the array starts at +8 within the attribute-data block
-        //   (add r11,r11,r30 -> +mpAttributeData; addi r3,r11,8 -> +8).
-        void* Songs(unsigned int luIndex) const
-        {
-            u8* lpData = static_cast<u8*>(GetLayoutPointer()); // Instance+4 == mpAttributeData
-            if (luIndex >= reinterpret_cast<const Private*>(lpData)->GetLength())
-                return DefaultDataArea(0x18u);
-            return lpData + 8 + 24u * luIndex;
-        }
+        // X360 @0x82683998 (out-of-line; body in songlist.cpp). Reads mpAttributeData
+        // (Instance+4), gets the array length via Attrib::Private::GetLength; if luIndex
+        // (unsigned) >= length falls back to the shared zero-initialised default block
+        // (one Song record, 0x18 bytes); otherwise indexes the array (stride 0x18, base +8).
+        void* Songs(unsigned int luIndex) const;
     };
 }
 }
