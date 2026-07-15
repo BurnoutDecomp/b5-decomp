@@ -34,6 +34,7 @@
 // is odr-used) -- pull in every behaviour Parameters block this TU instantiates over.
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"
+#include "GameSource/Director/Camera/Behaviours/BrnAttachmentTruck.h"     // AttachmentTruck::Parameters (now homed)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFailsafe.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"
@@ -215,10 +216,13 @@ FILE* TextFileReadSerialiser::Serialise(const char* /*lpcLabel*/, f32** lppVec)
 // Explicit instantiations. The delegating reader body is identical for every T; the three
 // component readers differ only by the axis lane written.
 //
-// BLOCKED (not instantiated -- nested Parameters type has no reconstructed home yet):
-// AttachmentTruck::Parameters (its read leaf @0x82215C78 inlines that block's two-float reader; the
-// nested block lands with the AttachmentTruck / gyro-cam rig TU).
+// AttachmentTruck::Parameters read leaf @0x82215C78 inlines that block's two-float reader; the
+// nested block is now homed (BrnAttachmentTruck.h/.cpp, with Parameters::Serialise<S> defined), so
+// the de-inlined delegating form is instantiated here. The inlined asm (header "%s\n", then
+// "%s : %f\n" into +0x04 mfConvergenceTimeSecs, then +0x00 mfInitialOffsetDist) reproduces exactly
+// via this body + AttachmentTruck::Parameters::Serialise<TextFileReadSerialiser>.
 // ----------------------------------------------------------------------------
+template void TextFileReadSerialiser::Serialise<AttachmentTruck::Parameters>(const char*, AttachmentTruck::Parameters&);
 template void TextFileReadSerialiser::Serialise<BehaviourAftertouchCam::Parameters>(const char*, BehaviourAftertouchCam::Parameters&);
 template void TextFileReadSerialiser::Serialise<BehaviourAftertouchCrash::Parameters>(const char*, BehaviourAftertouchCrash::Parameters&);
 template void TextFileReadSerialiser::Serialise<BehaviourBystanderCam::Parameters>(const char*, BehaviourBystanderCam::Parameters&);
