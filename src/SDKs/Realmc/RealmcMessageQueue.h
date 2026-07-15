@@ -121,6 +121,17 @@ public:
     //                 Returns 0.
     int ShutDown();
 
+    // @ 0x82C46C98 -- enqueue a (message, response) pair onto the response list for
+    //                 the waiting requester to pick up. DECLARATION-ONLY here: the
+    //                 body is still BLOCKED (see the banner above -- it allocates an
+    //                 eastl::list node through the un-homed custom allocator) and is
+    //                 homed additively when the allocator TU lands. Declared so
+    //                 consumers (RealmcIface::GameCallbackProcessor::ProcessMessage)
+    //                 can call it by name -- the compile gate is `cl /c` (no link).
+    //                 Signature from the X360 asm: r3 = this (queue), r4 = &message
+    //                 (MessagePtr), r5 = &response (ResponsePtr).
+    int PostResponse(MessagePtr& rMessage, ResponsePtr& rResponse);
+
 private:
     RealmcListHead        mMessageList;    // +0x00  eastl::list<MessagePtr>
     RealmcListHead        mResponseList;   // +0x0C  eastl::list<pair<MessagePtr,ResponsePtr>>

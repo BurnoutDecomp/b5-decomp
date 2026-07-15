@@ -235,6 +235,13 @@ struct ChallengeListEntry
     void                          FixUp(void* lpBase);               // :365  declared-only
     void                          FixDown(void* lpBase);             // :368  declared-only
     CgsID                         GetChallengeID() const;            // :372  declared-only
+    // ADDITIVE (declared-only): X360-attested accessor BrnResource::ChallengeListEntry::GetChall
+    // (own TU, un-homed). Called by BrnGui::ChallengeSelector::Hide (@0x82436F70) and
+    // BrnGui::FriendsListComponent::Close/SelectPrevious to fill the GuiChallengeSelectedEvent
+    // +0x0C word (returns a 32-bit challenge value). `const` is required by Hide's const call site
+    // (mpChallengeList->GetChallengeData(...) yields a const ChallengeListEntry*). Definition lives
+    // in its own future TU; declared here so this class's callers link by name.
+    s32                           GetChall() const;                  // declared-only (own TU)
     int32_t                       GetNumPlayers() const;             // :375  declared-only
     int32_t                       GetOriginalNumPlayers() const;     // :378  declared-only
     int32_t                       GetNumActions() const;             // :381  declared-only
