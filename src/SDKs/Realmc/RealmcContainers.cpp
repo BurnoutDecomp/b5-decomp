@@ -237,6 +237,31 @@ void IntVector::DoInsertValue(int* pPos, const int* pValue)
 }
 
 // ---------------------------------------------------------------------------
+// IntVector::DoRealloc<int*> @ 0x82C46F60
+//
+//   buf = nCapacity ? allocate(4*nCapacity) : 0                 (4 bytes / int)
+//   memcpy(buf, pBegin, pEnd - pBegin)                          (copy live bytes)
+//   return buf
+//
+// The X360 allocate call is the same backend vtable slot +8 (plain allocate,
+// tag "RealmcCore::allocator", flags 0) that allocator::allocate wraps. The
+// memcpy span a4 - a3 is the byte distance pEnd - pBegin, i.e. the live element
+// count * sizeof(int); the fresh buffer is uninitialised past that. reserve()
+// owns the old-buffer free and the begin/end/capEnd reseat, so this routine only
+// allocates and moves.
+// ---------------------------------------------------------------------------
+int* IntVector::DoRealloc(unsigned int nCapacity, int* pBegin, int* pEnd)
+{
+    int* pNew = nCapacity
+        ? static_cast<int*>(allocator::allocate(4u * nCapacity, 0))
+        : nullptr;
+
+    std::memcpy(pNew, pBegin,
+                static_cast<std::size_t>(pEnd - pBegin) * sizeof(int));
+    return pNew;
+}
+
+// ---------------------------------------------------------------------------
 // IntVector::reserve @ 0x82C470C8
 //
 //   if (nCapacity > (mpCapEnd - mpBegin)) {                -> capacity in elements
