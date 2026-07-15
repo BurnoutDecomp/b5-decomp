@@ -8,6 +8,7 @@
 // ===================================================================================
 
 #include "BrnProfile.h"
+#include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfileDLC1.h"   // BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId (SplitArray DLC test)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
@@ -1263,6 +1264,163 @@ void Profile::RemoveEventScoreToUpload(CgsID lEventId)
     {
         CGS_ASSERT(false, "Tried to remove an upload event score that doesn't exist\n");   // BrnProfile.cpp:1751
     }
+}
+
+// ====================================================================================
+// SplitArray<TSrc, TDst>  -- Profile::Serialise save-image splitters.
+//
+// Four explicit specialisations, one per X360 body. Each walks the live progression array
+// and copies every record verbatim into either the base-game run (lpBase) or the DLC run
+// (lpDlc), preserving order; the DLC run is capped at liMaxDlcCount. The id-keyed records
+// (Car/Livery/Rival) classify a record as DLC via ProfileDLC1::IsDLCCarId (the packed 64-bit
+// id at record +0); events classify by an id threshold. De-optimised from the X360 (which
+// open-codes the per-record word copies); the whole-record memcpy reproduces the exact byte
+// stride each body copies (0x18 / 0x18 / 0x38 / 0x08).
+// ====================================================================================
+
+// ------------------------------------------------------------------------------------
+// SplitArray<CarData, BrnGuiSaveLoad::CarData>  @ 0x823696F0
+// ------------------------------------------------------------------------------------
+template<>
+void SplitArray<CarData, BrnGuiSaveLoad::CarData>(
+        s32 liCount, const CarData* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::CarData* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::CarData* lpDlc, s32 liMaxDlcCount)
+{
+    s32 liBaseIndex = 0;
+    s32 liDlcIndex  = 0;
+
+    for (s32 liRemaining = liCount; liRemaining > 0; --liRemaining)
+    {
+        BrnGuiSaveLoad::CarData* lpDst;
+        if (BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId(*lpSrc))   // reads the packed car id @ +0
+        {
+            CGS_ASSERT(liDlcIndex < liMaxDlcCount, "liDLCIndex < liMaxDlcCount");   // BrnProfile.cpp:56
+            lpDst = &lpDlc[liDlcIndex];
+            ++liDlcIndex;
+        }
+        else
+        {
+            lpDst = &lpBase[liBaseIndex];
+            ++liBaseIndex;
+        }
+        memcpy(lpDst, lpSrc, sizeof(BrnGuiSaveLoad::CarData));   // three-qword record copy
+        ++lpSrc;
+    }
+
+    *lpiBaseCount = liBaseIndex;
+    *lpiDlcCount  = liDlcIndex;
+}
+
+// ------------------------------------------------------------------------------------
+// SplitArray<LiveryData, BrnGuiSaveLoad::LiveryData>  @ 0x823697C0
+// Identical structure to the CarData body (0x18 stride); the DLC test reads the record's id
+// at +0, which for a LiveryData record is mBaseCarId.
+// ------------------------------------------------------------------------------------
+template<>
+void SplitArray<LiveryData, BrnGuiSaveLoad::LiveryData>(
+        s32 liCount, const LiveryData* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::LiveryData* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::LiveryData* lpDlc, s32 liMaxDlcCount)
+{
+    s32 liBaseIndex = 0;
+    s32 liDlcIndex  = 0;
+
+    for (s32 liRemaining = liCount; liRemaining > 0; --liRemaining)
+    {
+        BrnGuiSaveLoad::LiveryData* lpDst;
+        // The X360 passes the raw record pointer to IsDLCCarId, which reads the id at +0.
+        if (BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId(reinterpret_cast<const CarData&>(*lpSrc)))
+        {
+            CGS_ASSERT(liDlcIndex < liMaxDlcCount, "liDLCIndex < liMaxDlcCount");   // BrnProfile.cpp:56
+            lpDst = &lpDlc[liDlcIndex];
+            ++liDlcIndex;
+        }
+        else
+        {
+            lpDst = &lpBase[liBaseIndex];
+            ++liBaseIndex;
+        }
+        memcpy(lpDst, lpSrc, sizeof(BrnGuiSaveLoad::LiveryData));   // three-qword record copy
+        ++lpSrc;
+    }
+
+    *lpiBaseCount = liBaseIndex;
+    *lpiDlcCount  = liDlcIndex;
+}
+
+// ------------------------------------------------------------------------------------
+// SplitArray<RivalData, BrnGuiSaveLoad::RivalData>  @ 0x82369890
+// 0x38 stride (seven-qword copy). The DLC test reads the record's id at +0 (mRivalId).
+// ------------------------------------------------------------------------------------
+template<>
+void SplitArray<RivalData, BrnGuiSaveLoad::RivalData>(
+        s32 liCount, const RivalData* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::RivalData* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::RivalData* lpDlc, s32 liMaxDlcCount)
+{
+    s32 liBaseIndex = 0;
+    s32 liDlcIndex  = 0;
+
+    for (s32 liRemaining = liCount; liRemaining > 0; --liRemaining)
+    {
+        BrnGuiSaveLoad::RivalData* lpDst;
+        if (BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId(reinterpret_cast<const CarData&>(*lpSrc)))
+        {
+            CGS_ASSERT(liDlcIndex < liMaxDlcCount, "liDLCIndex < liMaxDlcCount");   // BrnProfile.cpp:56
+            lpDst = &lpDlc[liDlcIndex];
+            ++liDlcIndex;
+        }
+        else
+        {
+            lpDst = &lpBase[liBaseIndex];
+            ++liBaseIndex;
+        }
+        memcpy(lpDst, lpSrc, sizeof(BrnGuiSaveLoad::RivalData));   // seven-qword record copy
+        ++lpSrc;
+    }
+
+    *lpiBaseCount = liBaseIndex;
+    *lpiDlcCount  = liDlcIndex;
+}
+
+// ------------------------------------------------------------------------------------
+// SplitArray<ProfileEvent, BrnGuiSaveLoad::ProfileEvent>  @ 0x82369988
+// 0x08 stride (two-dword copy). Events are NOT classified via IsDLCCarId: a base-game event
+// has an id <= 0x975E0, anything larger is a DLC event (the X360 inlines the compare on the
+// event id at +0). The base branch is taken first; only the DLC branch bounds-checks.
+// ------------------------------------------------------------------------------------
+template<>
+void SplitArray<ProfileEvent, BrnGuiSaveLoad::ProfileEvent>(
+        s32 liCount, const ProfileEvent* lpSrc,
+        s32* lpiBaseCount, BrnGuiSaveLoad::ProfileEvent* lpBase,
+        s32* lpiDlcCount,  BrnGuiSaveLoad::ProfileEvent* lpDlc, s32 liMaxDlcCount)
+{
+    const u32 KU_DLC_EVENT_ID_THRESHOLD = 0x975E0u;   // X360 cmplwi 0x975E0 on the event id
+
+    s32 liBaseIndex = 0;
+    s32 liDlcIndex  = 0;
+
+    for (s32 liRemaining = liCount; liRemaining > 0; --liRemaining)
+    {
+        BrnGuiSaveLoad::ProfileEvent* lpDst;
+        if (lpSrc->GetID() <= KU_DLC_EVENT_ID_THRESHOLD)
+        {
+            lpDst = &lpBase[liBaseIndex];
+            ++liBaseIndex;
+        }
+        else
+        {
+            CGS_ASSERT(liDlcIndex < liMaxDlcCount, "liDLCIndex < liMaxDlcCount");   // BrnProfile.cpp:56
+            lpDst = &lpDlc[liDlcIndex];
+            ++liDlcIndex;
+        }
+        memcpy(lpDst, lpSrc, sizeof(BrnGuiSaveLoad::ProfileEvent));   // two-dword record copy
+        ++lpSrc;
+    }
+
+    *lpiBaseCount = liBaseIndex;
+    *lpiDlcCount  = liDlcIndex;
 }
 
 } // namespace BrnProgression
