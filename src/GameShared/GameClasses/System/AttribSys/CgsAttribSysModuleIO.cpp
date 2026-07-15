@@ -86,5 +86,14 @@ namespace AttribSysIO
         BaseEventReceiverQueue*, ResourceHandle, EAttribSysVaultType);
     template bool AttribSysRequestInterface<2048>::UnregisterVault(
         BaseEventReceiverQueue*, ResourceHandle);
+
+    // -------- InputBuffer::AppendRequestInterface<32768> @ X360 0x82671948 --------
+    // Explicit instantiation of the member template (generic body in CgsAttribSysModuleIO.h).
+    // Bulk-appends a source AttribSysRequestInterface<32768>'s packed request bytes into the
+    // vault request queue (this+2068), forwarding to VariableEventQueue<2048,16>::Append<32768,16>.
+    // Emitted by BrnResource::GameDataModule::Update. The <2048>::Append<32768,16> destination
+    // symbol is already instantiated in Module/VariableEventQueue_2048_16.cpp.
+    template bool InputBuffer::AppendRequestInterface<32768>(
+        const AttribSysRequestInterface<32768>*);
 }
 }

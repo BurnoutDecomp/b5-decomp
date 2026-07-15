@@ -29,6 +29,10 @@ namespace Utils
             f32           mfSlerpSpring;    // +0x10 (h:86)
             bool          mbUseSlerpSpring; // +0x14 (h:87)
 
+            // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
+            // Per-instance body is a separate TU (BrnOrientationLagSerialise.cpp).
+            template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
+
             // DWARF h:90 / cpp:28 -- declaration-only (its own ledger function).
             void Construct();
         };

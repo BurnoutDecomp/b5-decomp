@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>   // offsetof
 #include "types.hpp"
 
 // =============================================================================
@@ -77,17 +78,73 @@ typedef DispatchCommand DispatchPacket;
 
 class DispatchFrame;
 
-// DispatchList is homed by a separate TU (the sort-key/block list). GetList only
-// needs the X360-verified stride (sizeof(DispatchList) == 384) and never
-// dereferences it, so a forward declaration suffices here. The one method bodied
-// outside its own TU is RelocateForMainMemory, called by DispatchFrame's
-// relocation pass (CgsDispatcherCommands.cpp) -- declared here so that caller can
-// see it; its body lives in the DispatchList TU.
+// DispatchList — the per-list sort-key/key-block bucket. A list accumulates 64-bit
+// sort-key records (one per Submit) into a linked chain of fixed-capacity KeyBlocks;
+// the sort/merge pass later walks those records to order the bin's packets.
+//
+// X360-verified member offsets (word offsets from `this`, 4-byte pointers), attested
+// by ReserveKey @ 0x822A0788 and Submit @ 0x822A0808:
+//   0x08  m_pBinBase         DispatchCommand*  (a1[2]) -- base for packet-local offset
+//   0x0C  muCount            u32               (a1[3]) -- total records submitted
+//   0x14  mpBlockListTail    KeyBlock*         (a1[5]) -- current (last) key block
+// The 0x00/0x04/0x10 words and the span past 0x18 out to the X360-verified
+// sizeof(DispatchList) == 384 are NOT exercised by any function in this TU; they are
+// modelled as honest reserved spans (FLAG) rather than fabricated as named facts.
 class DispatchList
 {
 public:
+    // One block in the key-block chain. Submit appends the 64-bit sort record at
+    // mpKeys[muCount] and bumps muCount; ReserveKey rolls to a fresh block (via
+    // AllocateKeyBlock) once muCount reaches muCapacity. Field offsets are attested
+    // by the asm: *block (0x00) = key array, *(block+4) = count, *(block+8) = cap.
+    // Any block-chain linkage (next pointer) is owned/grown by AllocateKeyBlock's TU
+    // and is not modelled here (no function in this TU reads it).
+    struct KeyBlock
+    {
+        u64* mpKeys;      // 0x00 -- packed 64-bit sort records
+        u32  muCount;     // 0x04 -- records used
+        u32  muCapacity;  // 0x08 -- records this block can hold
+    };
+
+    // Packed 64-bit sort record: the sort key in the high bits, the packet's
+    // bin-local quad-word offset in the low 20 bits.
+    struct SortKey
+    {
+        static const u32 KU_MASK_OFFSET = 0x000FFFFFu;  // low 20 bits = packet-local qword offset
+        static const u32 KU_SHIFT_KEY   = 20u;          // sort key occupies bits [20..]
+    };
+
+    // ---- Functions bodied by this TU (CgsGraphicsDispatchList.cpp) -----------
+    DispatchList* ReserveKey();                                       // @ 0x822A0788
+    DispatchList* Submit(s32 li32SortKey, DispatchCommand* lpPacket); // @ 0x822A0808
+
+    // ---- Declared-only surface (homed by other TUs) -------------------------
     // @ 0x827EE868 -- rebase this list's command/key pointers for main memory.
     DispatchList* RelocateForMainMemory(u32 luBinBase, u32 luBinOffset, u32 luListOffset);
+    // Append a fresh KeyBlock to the chain and make it the tail (bodied in the
+    // CgsDispatcher AllocateKeyBlock TU; only declared here so ReserveKey can call it).
+    DispatchList* AllocateKeyBlock();
+
+private:
+    // FLAG: 0x00/0x04 words not read by any function in this TU (unattested here).
+    u8               maPad00[0x08];        // 0x00..0x07
+    DispatchCommand* m_pBinBase;           // 0x08 (a1[2])
+    u32              muCount;              // 0x0C (a1[3])
+    // FLAG: 0x10 word not read by any function in this TU (unattested here).
+    u8               maPad10[0x04];        // 0x10..0x13
+    KeyBlock*        mpBlockListTail;      // 0x14 (a1[5])
+    // FLAG: opaque tail out to the X360-verified sizeof(DispatchList) == 384 (0x180).
+    // Sized against the 32-bit X360 ABI; no function in this TU reads it. (On the
+    // LLP64 x64 gate the byte total legitimately differs — GetList uses the literal
+    // 384 stride, never sizeof, so this span is documentary only.)
+    u8               maReservedTail[0x180u - 0x18u];
+
+    // Never called; pins the one pointer-invariant offset fact.
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(DispatchList, m_pBinBase) == 0x08,
+                      "DispatchList::m_pBinBase must sit at 0x08");
+    }
 };
 
 class DispatchBin

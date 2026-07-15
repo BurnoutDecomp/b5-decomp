@@ -16,6 +16,7 @@
 // interface's queue, NOT the leading mEventQueue).
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT (InputBuffer::AppendRequestInterface<N> template body)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"
@@ -136,6 +137,22 @@ namespace AttribSysIO
         AttribSysRequestInterface<KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE>*       GetVaultRequestInterface()       { return &mVaultRequestInterface; }
         const AttribSysRequestInterface<KI_ATTRIBSYS_EVENT_QUEUE_MAX_SIZE>* GetVaultRequestInterface() const { return &mVaultRequestInterface; }
 
+        // AppendRequestInterface<N> -- bulk-append a source AttribSysRequestInterface<N>'s packed
+        // request bytes into THIS buffer's embedded vault request queue (mVaultRequestInterface,
+        // this+2068). X360-attested as a member template on the *source* interface capacity N:
+        //   AppendRequestInterface<32768> @ 0x82671948  (BrnResource::GameDataModule::Update)
+        // The asm asserts the buffer is write-locked (IOBuffer status bit 3, "Not locked for
+        // writing"), asserts the source pointer is non-NULL, then tail-calls
+        // VariableEventQueue<2048,16>::Append<N,16> on &mVaultRequestInterface.mRequestQueue
+        // (this+0x814 == this+2068). Because AttribSysRequestInterface<N> holds its
+        // AttribSysRequestQueue<N> (a VariableEventQueue<N,16>) at offset 0, the source interface
+        // pointer IS its queue reference; the asm passes it straight through (r4 = a2). The bulk
+        // Append body is the committed VariableEventQueue<BUFSIZE,ALIGN>::Append<SRCBUF,SRCALIGN>
+        // (memcpy of the source's packed bytes; see CgsVariableEventQueue.h). Generic body
+        // out-of-line below; the <32768> instance is emitted from CgsAttribSysModuleIO.cpp.
+        template <s32 N>
+        bool AppendRequestInterface(const AttribSysRequestInterface<N>* lpSourceInterface);
+
         // Inp/InputBuff are namespace-scope free functions (DWARF CgsAttribSys::AttribSysIO::Inp /
         // ::InputBuff) that read this buffer's protected lock state + request queue; grant them
         // access as friends (a friend of InputBuffer may reach the inherited protected IOBuffer
@@ -143,5 +160,19 @@ namespace AttribSysIO
         friend const AttribSysEventQueue* Inp(const InputBuffer* lpInputBuffer);
         friend AttribSysEventQueue*       InputBuff(InputBuffer* lpInputBuffer);
     };
+
+    // -------- InputBuffer::AppendRequestInterface<N> (generic body; instances in the .cpp) --------
+    // X360 0x82671948 (<32768>). Assert the buffer is write-locked, assert the source interface
+    // pointer is non-NULL, then bulk-append the source interface's queue into the embedded vault
+    // request queue. mVaultRequestInterface.mRequestQueue is the destination VariableEventQueue<2048,16>;
+    // lpSourceInterface->mRequestQueue is the source VariableEventQueue<N,16> (Append<SRCBUF,SRCALIGN>
+    // deduces SRCBUF=N, SRCALIGN=16). Assert file/line are the X360-baked CgsAttribSysModuleIO.h:116/117.
+    template <s32 N>
+    bool InputBuffer::AppendRequestInterface(const AttribSysRequestInterface<N>* lpSourceInterface)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(lpSourceInterface != NULL, "lpSourceInterface != NULL");
+        return mVaultRequestInterface.mRequestQueue.Append(lpSourceInterface->mRequestQueue);
+    }
 }
 }
