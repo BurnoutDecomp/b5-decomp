@@ -25,11 +25,9 @@ extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation e
 extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                             // dword_8324E864
 extern void (*gpAptFreeAnimationHook)(void* pDataBlock);                                        // off_1059C66C
 
-// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
-// (LoadFlashAnimation @0x82849080 calls it with the "_level%d" path). Its X360 body
-// has no per-address export in the dump set; the PC definition is the host stand-in
-// in BrnGuiAptRuntime.cpp until it is exported + reconstructed.
-extern int AptLoadAnimation(const char* pName, const char* pTargetPath);
+// AptLoadAnimation @0x82B07AC8 -- the engine "load a movie onto a target path" public
+// entry (LoadFlashAnimation @0x82849080 calls it with the "_level%d" path). Faithful
+// body at its SDK home, SDKs/EATech/Apt/Apt.cpp; declared by Apt.h (included above).
 
 namespace
 {

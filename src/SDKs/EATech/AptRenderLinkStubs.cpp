@@ -347,7 +347,10 @@ struct AptDragState;  // FLAG fwd-decl (pointer-only use)
     // stub left the block unallocated, so the AS register file never existed).
     // AptScriptFunctionBase_PopStaticData RETIRED (2026-07-01): homed as the real static member
     // AptScriptFunctionBase::PopStaticData (AptScriptFunctionBase.cpp, asm-decoded register-block pop).
-    void GlobalNotificationFunction(AptFilePtr* pFile) {}   // FLAG link-stub (movie load-notify; deferred with the unload bring-up)
+    // GlobalNotificationFunction RETIRED (2026-07-16): homed as the real @0x82B00C78
+    // body (AptLinker.cpp) -- the loader's "file linked" notify into the current
+    // target's linker pending list. The {} stub silently dropped every async movie
+    // load completion (nothing ever mounted through the engine linker).
     void Mutex_Lock(void* pMutex, void* pName) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
     void Mutex_Unlock(void* pMutex) {}   // FLAG PC-platform leaf: single-threaded PC (no lock needed)
     // TextFormat_copyTextFormatObj RETIRED (2026-07-10): homed as the real member

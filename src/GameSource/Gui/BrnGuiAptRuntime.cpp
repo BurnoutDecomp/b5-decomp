@@ -1726,8 +1726,11 @@ namespace BrnGui
         // queue a frame after its bundle IO, so the first DriveFaithfulLoad defers
         // (FindAptData miss, one-shot not armed); the console's AptLoader::Update
         // state machine retries per frame, and this is its host-side equivalent.
-        if (s_FrameworkSlot.mbRequested || s_PersistentSlot.mbRequested)
-            EnsureFrameworkMovie();
+        // UNCONDITIONAL since the AptLoadAnimation retirement: the first call used to
+        // ride PlayRuntimeMovie (now engine-native), so the framework/persist bring-up
+        // kicks from the per-frame drive itself. (Console: BF_PRELOAD plays "main" @
+        // level 0 through the same channel-41 path -- slice 2 moves this there.)
+        EnsureFrameworkMovie();
         // The flow retry is gated on the park latch: a STOPPED flow slot (BF_LEGAL
         // left; node unlinked) must NOT self-remount -- only a real play request
         // un-parks it (PlayRuntimeMovie clears s_bMovieStopped).
@@ -1806,11 +1809,37 @@ namespace BrnGui
         }
     }
 
+    // Non-creating probe for the engine node mounted at a display level: walk the
+    // director's root display list (the same search AptGetAnimationAtLevel opens
+    // with) WITHOUT the lazy-create tail -- a liveness QUERY must not mint nodes.
+    static AptCIH* FindMountedLevelNode(s32 liLevel)
+    {
+        if (gpAptTarget == nullptr || gpAptTarget->mpAnimationTarget == nullptr)
+            return nullptr;
+        AptDisplayList* lpRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();
+        AptDisplayListState* lpState = (lpRoot != nullptr) ? lpRoot->AsState() : nullptr;
+        if (lpState == nullptr)
+            return nullptr;
+        for (AptCIH* lpNode = lpState->mpFirst; lpNode != nullptr;
+             lpNode = lpNode->mpDisplayListNext)
+        {
+            if (lpNode->mpCharacterInst == nullptr ||
+                lpNode->mpCharacterInst->mpRenderItem == nullptr)
+                continue;
+            if (lpNode->mpCharacterInst->mpRenderItem->GetDepth() == liLevel)
+                return lpNode;
+        }
+        return nullptr;
+    }
+
     static bool IsRuntimeMovieLive()
     {
-        // FLOW-slot semantics: BootLegal drives this query off its channel-41 movie
-        // (the framework movie's liveness is internal to the runtime).
-        return s_FlowSlot.mbInstantiated && s_FlowSlot.mpRootCIH != nullptr;
+        // FLOW semantics: BootLegal drives this query off its channel-41 movie at
+        // display level 1. Engine-native since the AptLoadAnimation retirement: the
+        // linker mounts the flow movie's anim inst onto the level-1 node -- live ==
+        // that node exists with a bound character inst (SetCharacterInst ran).
+        AptCIH* lpNode = FindMountedLevelNode(1);
+        return lpNode != nullptr && lpNode->GetCharacterInst() != nullptr;
     }
 
     // -------------------------------------------------------------------------
@@ -1918,11 +1947,12 @@ namespace BrnGui
     // reports initialised only once its clip is placed.
     static bool IsRuntimeMovieComposed()
     {
-        // FLOW-slot semantics (BootLegal's compose gate): the framework movie's own
-        // composition is NOT part of this handshake.
-        if (!IsRuntimeMovieLive())
+        // FLOW semantics (BootLegal's compose gate): composed == the mounted level-1
+        // movie's first paced tick ran its frame-0 place commands (child display list
+        // non-empty). Engine-native read of the same node IsRuntimeMovieLive probes.
+        AptCIH* lpRoot = FindMountedLevelNode(1);
+        if (lpRoot == nullptr)
             return false;
-        AptCIH* lpRoot = reinterpret_cast<AptCIH*>(s_FlowSlot.mpRootCIH);
         AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
         if (lpCI == nullptr || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
             return false;
@@ -2003,35 +2033,12 @@ namespace BrnGui
 
 }
 
-// =============================================================================
-// AptLoadAnimation -- the engine "load a movie onto a target path" public entry
-// (CgsGui::AptAux::LoadFlashAnimation @0x82849080 calls it with the "_level%d"
-// path). Its X360 body has no per-address export in the dump set, so this host
-// definition is the PC stand-in: parse the level index back out of the target
-// path and drive the host movie-load machinery (the same load the engine body
-// kicks through the loader + the pfnLoadAnimation host callback). Replace with
-// the faithful engine body once it is exported + reconstructed.
-// FLAG PC-platform leaf: host stand-in for the un-exported engine load entry.
-// =============================================================================
-// The BackgroundColour once-per-load latch (byte_8324D807, defined in
-// SDKs/EATech/AptGlobals.cpp; set by the doFrameControls tag-5 arm).
-extern unsigned char gbAptBackgroundColourSet;
-
-int AptLoadAnimation(const char* pName, const char* pTargetPath)
-{
-    // X360 @0x82B07AE4..0x82B07AF4: reset the BackgroundColour once-per-load latch
-    // (byte_8324D807) -- "Each Animation can only have one background color. This
-    // value is reset every time the game (or viewer) loads a new animation."
-    // (SDK AptLoadAnimation), so the NEXT movie's first tag-5 command wins.
-    gbAptBackgroundColourSet = 0;
-
-    int liLevel = 0;
-    if (pTargetPath != nullptr)
-        std::sscanf(pTargetPath, "_level%d", &liLevel);
-    if (BrnGui::gpActiveAptRuntimeHost != nullptr)
-        BrnGui::gpActiveAptRuntimeHost->PlayMovie(pName, liLevel);
-    return 1;
-}
+// (AptLoadAnimation's PC stand-in RETIRED 2026-07-16: the faithful engine body
+// @0x82B07AC8 -- .swf strip + bg-latch reset + gpAptTarget->mpLinker->Load -- is
+// homed at its real SDK home, SDKs/EATech/Apt/Apt.cpp. The play path is now
+// engine-native: channel-41 event 18 -> ViewModule -> AptAux::LoadFlashAnimation
+// -> AptLoadAnimation -> AptLinker::Load; AptUpdate's per-frame mpLinker->Update
+// mounts the completed file at its "_level%d" target.)
 
 // =============================================================================
 // AptLoaderStartAsyncLoad (dword_8324E838) -- the platform "kick off the .apt stream" hook the
