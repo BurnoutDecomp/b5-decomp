@@ -40,6 +40,26 @@ class Vector3Template
 public:
     Vector3Template(Type lX, Type lY, Type lZ);
 
+    // Additive grow (StreetManager keystone, wave B): a trivial default ctor so the
+    // type can be a value member of a Construct()-initialised aggregate
+    // (BrnGameState::StreetManager embeds four Vector3Template<float> at X360
+    // +0x1D40..+0x1D6F; BrnGameState::SectionWalkData embeds two). The X360 runs no
+    // per-lane init on those embeds (StreetManager::Construct calls SetZero
+    // explicitly), so uninitialised lanes are faithful. Layout unchanged
+    // (mX@+0, mY@+4, mZ@+8; no vtable).
+    Vector3Template() {}
+
+    // Additive grow (StreetManager keystone, wave B): component readers on the
+    // Vector2Template precedent above, plus the SetZero the DecFIGS DWARF attests
+    // (StreetManager::Construct hint calls rw::math::fpu::Vector3Template<float>::
+    // SetZero four times) and a whole-vector setter for the X360's three-lane
+    // stfs store idiom. Layout unchanged.
+    Type X() const { return mX; }
+    Type Y() const { return mY; }
+    Type Z() const { return mZ; }
+    void Set(Type lX, Type lY, Type lZ) { mX = lX; mY = lY; mZ = lZ; }
+    void SetZero() { mX = static_cast<Type>(0); mY = static_cast<Type>(0); mZ = static_cast<Type>(0); }
+
 private:
     Type mX;
     Type mY;

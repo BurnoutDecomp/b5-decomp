@@ -29,6 +29,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // CgsID (u64)
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "SharedClasses/StreetData/BrnChallengeData.h"   // BrnStreetData::ChallengeData / ChallengeParScoresEntry (shared home; GetChallengeParScore row type)
 
 namespace CgsMemory { class LinearMalloc; }
 
@@ -158,17 +159,11 @@ namespace BrnStreetData
     };
 
     // -- ChallengeParScoresEntry (40 bytes) -- stride for GetChallengeParScore.
-    // Minimal local model (real home is SharedClasses/StreetData/BrnChallengeData.*,
-    // not yet committed as a shared header). Layout mirrors the committed
-    // BrnChallengeData.cpp: ChallengeData{ u64 mDirty; u64 mValidScores;
-    // s32 mScoreList[2] } (24) + CgsID mRivals[2] (16) = 40.
-    struct ChallengeParScoresEntry
-    {
-        u64   mDirty;            // +0   CgsContainers::BitArray<2>
-        u64   mValidScores;      // +8   CgsContainers::BitArray<2>
-        s32   maScoreList[2];    // +16  ScoreList
-        CgsID mRivals[2];        // +24  (sizeof == 40)
-    };
+    // The former byte-identical local POD model was retired by the wave-C StreetManager
+    // keystone: the type now comes from its canonical shared home,
+    // SharedClasses/StreetData/BrnChallengeData.h (ChallengeData base + CgsID mRivals[2]
+    // + the Copy/GetScore methods the StreetManager callers spell by name). Same 40-byte
+    // layout; included above.
 
     // -- StreetData -------------------------------------------------------
     struct StreetData

@@ -149,6 +149,30 @@ namespace BrnStreetData
         void SetCarID( ScoreType leScoreType, ::CgsID lCarID );
     };
 
+    // BrnChallengeData.h:244 (DWARF). The compiled par-score record for one challenge road: a
+    // ChallengeData plus the pair of per-score-type rival ids. Promoted out of the former
+    // file-local definition in BrnChallengeData.cpp (wave-C StreetManager keystone) so the
+    // StreetManager callers -- GetChallengeParScore @0x82336168, ProcessScoreRequestEvent
+    // @0x8234A240, ProcessNewRoadScore @0x823496C8, SendUpcomingRoadMessage @0x82348798 --
+    // can spell Copy/GetScore by name. SharedClasses/StreetData/BrnStreetData.h (whose
+    // GetChallengeParScore rows stride over this type) now includes this definition instead
+    // of its former byte-identical POD model. Layout: 24-byte ChallengeData base + 16 = 40.
+    // The DWARF also declares Construct(Time, CgsID, Time, CgsID, int32_t, CgsID) at :255
+    // (the StreetData-compiler filler); its BrnStreetData::Time param type has no committed
+    // home yet, so that one declaration is deferred with its TU. Method bodies live in
+    // BrnChallengeData.cpp.
+    struct ChallengeParScoresEntry : public ChallengeData
+    {
+        ::CgsID mRivals[2];   // +24
+
+        // BrnChallengeData.h:263 (DWARF). X360 0x8231C7E0. Reads the base score and the
+        // per-score rival id; returns void (the X360 r3 return is an ABI artifact).
+        void GetScore( ScoreType leScoreType, int32_t* lpiScore, ::CgsID* lpRivalId ) const;
+
+        // BrnChallengeData.h:266 (DWARF). X360 0x82676700.
+        void Copy( const ChallengeParScoresEntry* lpSource );
+    };
+
     // BrnChallengeData.h:56 (DWARF). Post-increment ScoreType iterator: advances the referenced
     // enum, asserts it has not exceeded E_SCORE_TYPE_COUNT, returns the prior value by value.
     // X360 0x8230EBB8. Body in BrnChallengeData.cpp.

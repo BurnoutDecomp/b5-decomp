@@ -88,6 +88,17 @@ struct ProgressionData
     // count if none matches.
     s32 FindRivalIndexFromId(CgsID lRivalId) const;
 
+    // ADDITIVE GROW (StreetManager wave-C keystone; DWARF BrnProgressionData.h:111/:114/:117).
+    // By-index rival iteration for StreetManager::FindRivalsByDistrict / SetupParRivals
+    // (X360 0x82336360 / 0x8233F560 read mpaRivals/miRivalCount through these header-inlines).
+    // GetRival owns the bounds assert the X360 bakes as BrnProgressionData.h:460
+    // ("liIndex < miRivalCount") -- callers do NOT duplicate it. GetRival bodies are
+    // declare-only here (Rival is forward-declared; bodies land with the ProgressionData TU,
+    // same convention as FindRival above).
+    s32 GetRivalCount() const { return miRivalCount; }
+    const Rival* GetRival(s32 liIndex) const;
+    Rival*       GetRival(s32 liIndex);
+
     // ADDITIVE GROW (declare-only; bodies in the ProgressionData TU).
     // DriveThruManager::UnlockCarChallengeForCar walks the event-junction table.
     //   GetEventJunctionCount() -> muEventJunctionCount (count word +0x1C).

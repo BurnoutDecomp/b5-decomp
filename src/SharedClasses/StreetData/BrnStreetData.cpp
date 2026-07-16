@@ -112,14 +112,16 @@ namespace BrnStreetData
         // The asm writes (per 40-byte entry): mValidScores(+8)=0, mDirty(+0)=0,
         // mValidScores(+8)=-1 — i.e. mDirty cleared, all score slots flagged valid.
         // Loop count is miJunctionCount (asm reuses result[7]), not the challenge count.
+        // (mDirty/mValidScores are the shared-home CgsContainers::BitArray<2u> members now;
+        // UnSetAll/SetAll are each a single whole-word store — the same three stores.)
         for ( s32 liEntry = 0; liEntry < miJunctionCount; ++liEntry )
         {
             ChallengeParScoresEntry& lrEntry =
                 *reinterpret_cast<ChallengeParScoresEntry*>(
                     reinterpret_cast<u8*>( mpaChallengeParScores ) + ( KI_CHALLENGE_STRIDE * liEntry ) );
-            lrEntry.mValidScores = 0u;
-            lrEntry.mDirty       = 0u;
-            lrEntry.mValidScores = ~static_cast<u64>( 0u );
+            lrEntry.mValidScores.UnSetAll();
+            lrEntry.mDirty.UnSetAll();
+            lrEntry.mValidScores.SetAll();
         }
 
         return liDelta;

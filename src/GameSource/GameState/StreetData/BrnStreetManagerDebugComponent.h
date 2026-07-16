@@ -50,6 +50,32 @@ namespace BrnGameState
         // the DWARF (BrnStreetManagerDebugComponent.h:77).
         int32_t miNumberOfRoadRulesToWin;   // +0x0C
 
+        // ADDITIVE GROW (StreetManager keystone, wave B). DWARF-declared
+        // (BrnStreetManagerDebugComponent.cpp:49/:90); no standalone X360 symbols --
+        // both are inlined into their only callers, where the stores are attested:
+        //   StreetManager::Construct @ 0x82335978: base ctor call on this+0x1DF0,
+        //     then `stw r31,0x10(r29)` (mpStreetManager = lpStreetManager) and
+        //     `stw r30,0xC(r29)` (miNumberOfRoadRulesToWin = 0). Prepare @ 0x82350900
+        //     repeats the same sequence before DebugComponent::Register.
+        //   StreetManager::Destruct @ 0x82335D40: `stw 0 -> +0x1D0(=this+0x1DF0+0x10)`
+        //     (mpStreetManager = NULL), then the base call.
+        // The shared base call is a COMDAT-folded symbol (IDA names it
+        // CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct); it is the
+        // CgsDev::DebugComponent base Construct/Destruct.
+        // NOTE mbOutputRoadRulesScoresToNetwork has no attested init store in either
+        // inline site; it is deliberately NOT touched here (faithful to the asm).
+        void Construct( StreetManager* lpStreetManager )
+        {
+            DebugComponent::Construct();
+            miNumberOfRoadRulesToWin = 0;
+            mpStreetManager          = lpStreetManager;
+        }
+        void Destruct()
+        {
+            mpStreetManager = 0;
+            DebugComponent::Destruct();
+        }
+
         // Per-frame pump (X360 0x8234A7E0, called by StreetManager::Update). When the
         // "send scores to network" toggle is armed, packs the local road-rules score summary
         // into the output game-action queue. DECLARATION ONLY: reaches deferred
