@@ -165,34 +165,29 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable());
         pWritable->SetZID(gAptEmptyTextRenderDataZID);
 
-        // Box-alignment re-nudge of the field edges (unless box alignment == 3 "none").
+        // Collapse the empty field's box ONLY when the field is auto-sized: the X360 tests
+        // the packed dword IN PLACE -- `(*(v36+76) & 0x3C) != 0xC` -- i.e. the 4-bit box-
+        // alignment field (bits 2-5) != 3 == AptStringAlignment_None (the authored default
+        // the ctor seeds; enum value corroborated by the 2.07/3.02.02 Apt SDK source, which
+        // guards this exact block with `GetBoxAlignment() != AptStringAlignment_None`).
+        // A default (non-auto-sized) field KEEPS its authored box while empty -- that is what
+        // preserves a bound-variable multiline field's height (e.g. the SaveLoadComponent
+        // "$message" prompt, authored 668x128, empty until its text resolves) across the
+        // empty pass.
         AptRenderItemDynamicText* pItem2 =
             static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem());
         const int nBoxAlign = (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
-        if ((nBoxAlign & 0xF) != 0xC)   // console rlwinm r11,0,26,29 ; cmpwi 0xC -> the "none" box
+        if (nBoxAlign != 3)   // != AptStringAlignment_None (X360: (flags & 0x3C) != 0xC)
         {
-            // The console collapses the empty field's box to a fixed 4-pixel edge inset:
-            // right = left + 4.0, bottom = top + 4.0 (flt_82004EF4 == 4.0 -- the literal
-            // is inline in the X360 pseudocode: `*(v36 + 80) + 4.0`).
+            // The console collapses the empty auto-sized field's box to a fixed 4-pixel edge
+            // inset: right = left + 4.0 (unless word-wrapped), bottom = top + 4.0 (always --
+            // flt_82004EF4 == 4.0; the literal is inline in the X360 pseudocode).
             const float fEdgeInset = 4.0f;   // flt_82004EF4
             if (((pItem2->mFlagsAndBorderColor >> 1) & 1u) == 0u)   // not word-wrapped
             {
                 pWritable->mBounds.fRight = pItem2->mBounds.fLeft + fEdgeInset;
             }
-            // A MULTILINE field's box height is load-bearing: it is the vertical room the
-            // wrapped/newline-split lines are rendered into (RenderStringInternal stops at
-            // penY >= mv2BottomRight.mY). Collapsing it to a 4px inset while the field is
-            // momentarily empty (before its bound text resolves -- e.g. the SaveLoadComponent
-            // "$message" autosave prompt, authored 668x128) permanently loses the authored
-            // height, so when the text arrives the faithful renderer clips a 3-line message to
-            // one line. The console shows the full multi-line prompt, so its box is NOT the
-            // collapsed inset there. Gate the height collapse on NOT-multiline, symmetric to the
-            // width collapse being gated on NOT-word-wrapped: a word-wrapped field keeps its
-            // width, a multiline field keeps its height. Single-line fields collapse as before.
-            if ((pItem2->mFlagsAndBorderColor & 1u) == 0u)   // not multiline
-            {
-                pWritable->mBounds.fBottom = pItem2->mBounds.fTop + fEdgeInset;
-            }
+            pWritable->mBounds.fBottom = pItem2->mBounds.fTop + fEdgeInset;
         }
 
         // Reset the AptCharacterTextInst cached scalars (X360: *(v4+0x14)=0, *(v4+0x10)=1,

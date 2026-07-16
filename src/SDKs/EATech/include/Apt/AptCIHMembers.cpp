@@ -231,16 +231,20 @@ AptValue* AptCIH::objectMemberLookup(AptValue* const pThis,
             {
             case 1:   // "autoSize" @0x82B0E004 -- the box-align field as a keyword
             {
+                // The keyword-per-value table mirrors the setter @0x82B09EDC (see its
+                // proof note): 0=Left->"left", 1=Right->"right", 2=Center->"center",
+                // 3=None->"none" (asm string refs 0x8324E638/0x8324E6A4/0x8324E60C/
+                // 0x8324E644 in the alphabetised pool).
                 AptString* const pStr = AptString::Create("");
                 const int32_t nBoxAlign = pText->GetBoxAlignment();
                 if (nBoxAlign < 1)
                     *pStr->GetInternalString() = EAStringC("left");
                 else if (nBoxAlign == 1)
-                    *pStr->GetInternalString() = EAStringC("center");
-                else if (nBoxAlign < 3)
                     *pStr->GetInternalString() = EAStringC("right");
+                else if (nBoxAlign < 3)
+                    *pStr->GetInternalString() = EAStringC("center");
                 else
-                    *pStr->GetInternalString() = EAStringC("justify");
+                    *pStr->GetInternalString() = EAStringC("none");
                 return pStr;
             }
 
@@ -571,27 +575,34 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
             {
             case 1:   // "autoSize" @0x82B09EDC -- keyword -> the box-align field
             {
+                // Keyword identities PROVEN from the alphabetised .data string pool the
+                // asm addresses (dword_8324E580 block: 0x8324E60C="center" < 0x8324E620=
+                // "false" < 0x8324E638="left" < 0x8324E644="none" < 0x8324E6A4="right" <
+                // 0x8324E6C4="true") cross-checked against the getter @0x82B0E004 (which
+                // returns the SAME strings for align 0/1/2/3) AND the Apt SDK source
+                // (AptCIH.cpp AptTextPropertyautoSize: left|true->Left(0), center->
+                // Center(2), right->Right(1), false|none->None(3)).
                 EAStringC strValue;
                 pValue->toString(&strValue);
                 strValue.MakeLower();
 
-                // The grow-direction relayout flag: bit 3 when the box is CURRENTLY
-                // justify-aligned (unless switching between the two justify keywords),
-                // bit 4 otherwise. (The console's short-circuit || over NameEquals.)
+                // The relayout-direction flag: bit 3 when the box is CURRENTLY None-
+                // aligned (the SDK's `szBuf != "false" || szBuf != "none"` condition is
+                // always true -- the asm compiles that shape verbatim), bit 4 otherwise.
                 if ((pText->mFlagsAndBorderColor & 0x3Cu) == 0x0Cu
-                    && (!(strValue == EAStringC("true")) || !(strValue == EAStringC("justify"))))
+                    && (!(strValue == EAStringC("false")) || !(strValue == EAStringC("none"))))
                     pWritable->SetStateFlags(8u);
                 else
                     pWritable->SetStateFlags(0x10u);
 
-                if (strValue == EAStringC("left") || strValue == EAStringC("false"))
-                    pWritable->SetBoxAlignment(0);
-                else if (strValue == EAStringC("right"))
-                    pWritable->SetBoxAlignment(2);
+                if (strValue == EAStringC("left") || strValue == EAStringC("true"))
+                    pWritable->SetBoxAlignment(0);   // AptStringAlignment_Left
                 else if (strValue == EAStringC("center"))
-                    pWritable->SetBoxAlignment(1);
-                else if (strValue == EAStringC("true") || strValue == EAStringC("justify"))
-                    pWritable->SetBoxAlignment(3);
+                    pWritable->SetBoxAlignment(2);   // AptStringAlignment_Center
+                else if (strValue == EAStringC("right"))
+                    pWritable->SetBoxAlignment(1);   // AptStringAlignment_Right
+                else if (strValue == EAStringC("false") || strValue == EAStringC("none"))
+                    pWritable->SetBoxAlignment(3);   // AptStringAlignment_None
                 // (any other keyword leaves the field unchanged)
 
                 pWritable->ClearStateFlags(1u);
