@@ -32,6 +32,12 @@ namespace BrnGameState
 
     class ChallengeManagerDebugComponent : public CgsDev::DebugComponent
     {
+        // X360 ChallengeManager::Construct (0x82332DB0) / Destruct (0x8233A9C0) initialise the
+        // embedded component's back-pointer / index / pending flag INLINE (stw this,+0x1010;
+        // stw 0,+0x1014; stb 0,+0x1018) before calling DebugComponent::Register/Destruct on it,
+        // so the enclosing manager reaches these private members directly.
+        friend class ChallengeManager;
+
     protected:
         // Menu label (X360 0x823171E0). Overrides CgsDev::DebugComponent::GetName.
         const char* GetName() const override;        // @ BrnChallengeManagerDebugComponent.cpp:69

@@ -34,6 +34,16 @@ public:
         miNumObjectsFree = N;
     }
 
+    // Lifecycle-Construct (engine two-phase init): clear ONLY the occupancy BitArray -- no
+    // free-queue refill, no counter write. X360-attested: ChallengeManager::Construct
+    // (0x82332DB0) / Destruct (0x8233A9C0) inline exactly one `std r0(0), +0x100` over the
+    // embedded ObjectPool<StoredLeapingData,7,s32>'s occupancy word (Clear()'s queue refill +
+    // miNumObjectsFree store are absent there; the owner Clear()s via Prepare before use).
+    void Construct()
+    {
+        mObjectsAllocated.UnSetAll();
+    }
+
     // Lowest ALLOCATED slot index, or -1 when the pool is empty. The X360 body
     // (0x828C3538) inlines the occupancy-BitArray lowest-set-bit scan; forwarding to
     // BitArray<N>::GetFirstNonZeroBit is value-identical. DWARF CgsObjectPool.h:298.

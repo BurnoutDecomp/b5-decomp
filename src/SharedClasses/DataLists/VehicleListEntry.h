@@ -88,6 +88,17 @@ struct VehicleListEntry
     u8 GetLiveryType() const;
 
     // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
+    // ChallengeManager keystone (wave C). The car's boost class / car type. X360
+    // ChallengeManager::CheckCurrentCar (0x823336E8) reads it as `lbz r11,0xE8(entry)` and maps
+    // 0/1/2 onto the challenge car-restriction gate (ChallengeListEntry::ECarRestrictionType
+    // DANGER(1)/AGGRESSION(2)/STUNT(3)). The +0xE8 offset is the wiki-named muCarType byte
+    // (Vehicle List / Burnout Paradise, this-era layout; enum BrnResource::ECarType
+    // E_CARTYPE_DANGER=0 / E_CARTYPE_AGGRESSION=1 / E_CARTYPE_STUNTS=2). FLAG: offset recovered
+    // from the asm; the field/enum names are taken from the burnout.wiki VehicleListEntry table
+    // (same precedent as GetLiveryType above). Returned as the raw byte.
+    u8 GetCarType() const;
+
+    // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
     // BrnGameState::ResetPlayerDebugComponent change-car menu label. The car's display name
     // C-string. Per the Vehicle-List wiki macVehicleName is the char[64] at entry+0x30 (the X360
     // OnChangeCarFilter streams `entry+0x30` into the menu label). Returns nullptr/empty-safe.
