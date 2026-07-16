@@ -40,17 +40,23 @@ public:
     void Reserved01() override;
     int  Update(int liArg) override;
     void Reserved03() override;
-    void Reserved04() override;
-    void Reserved05() override;
-    void Reserved06() override;
+    // Wave B: slots 4/5/6/9 were renamed in the base to their consumer-attested
+    // shapes (UserSignedIn/MessageChoice/SetSilent/Bootup) and slot 14 (ReadSave)
+    // was appended -- the override decls track the base so the class stays concrete.
+    void UserSignedIn() override;
+    void MessageChoice(int liChoice) override;
+    void SetSilent(int liSilent, int liArg) override;
     void Reserved07() override;
     void Reserved08() override;
-    void Reserved09() override;
+    void Bootup(void* lpSaveInfo, int liNumEntries, void* lpEntries,
+                void* lpTitleInfo) override;
     void Reserved10() override;
     void WriteSave(void* lpSaveInfo, int liCount, void* lpEntries,
                    int liFlags, void* lpTitleInfo) override;
     void CheckSave(int liArg, void* lpCheckParams) override;
     void SetActive(int liActive) override;
+    void ReadSave(void* lpEntryContentName, int liNumEntries, void* lpEntries,
+                  int liFlags, void* lpTitleInfo) override;
 };
 
 } // namespace RealmcIface
