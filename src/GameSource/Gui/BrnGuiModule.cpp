@@ -827,45 +827,12 @@ namespace BrnGui
         mResourceOutputBuffer.UnlockForWrite();
     }
 
-    // Post an apt movie-bundle load request through the real GuiResourceModule (Phase 2: the
-    // movie-slot bundle IO rides the module). The name pointer must stay valid until the module
-    // services the request (its acquire machine spans a few frames) -- callers pass a persistent
-    // buffer (the AptRuntimeHost slot's macName). liType is the ARTIST apt request type (4 =
-    // streamed apt movie). Load-once is the caller's concern (the host slot latches the request).
-    void GuiModule::RequestAptMovieLoad(const char* lpacMovieName, s32 liType)
-    {
-        if (lpacMovieName == 0 || lpacMovieName[0] == '\0')
-            return;
+    // (RequestAptMovieLoad RETIRED, slice 2: no more host movie-slot requests --
+    // the engine's AptLoader owns movie data acquisition.)
 
-        static u32 su32AptRequestId = 100u;   // distinct from the FSM controller slot ids (13/14/15)
-        CgsGui::GuiEventLoadRequest lRequest;
-        lRequest.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(liType);
-        lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
-        lRequest.mpacFileToLoad  = lpacMovieName;
-        lRequest.muLoadRequestId = su32AptRequestId++;
-        lRequest.muResourceId    = 0;
-
-        mModelInputBuffer.LockForWrite();
-        mModelInputBuffer.GetLoadRequests()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), 39,
-            static_cast<s32>(sizeof(lRequest)));
-        mModelInputBuffer.UnlockForWrite();
-
-        char lac[160];
-        std::snprintf(lac, sizeof(lac),
-                      "[GuiModule] apt movie '%s' -> GuiResourceModule load request (type %d).\n",
-                      lpacMovieName, liType);
-        CgsDev::Log::WriteToLog(lac);
-    }
-
-    // Free accessor so BrnGuiAptRuntime (the host) can post the request through the module
-    // without pulling in the full GuiModule layout -- it reaches the module via the extern
-    // gpActiveGuiModule pointer through this one hop.
-    void RequestAptMovieLoadThroughModule(const char* lpacMovieName, s32 liType)
-    {
-        if (gpActiveGuiModule != 0)
-            gpActiveGuiModule->RequestAptMovieLoad(lpacMovieName, liType);
-    }
+    // (RequestAptMovieLoadThroughModule RETIRED, slice 2: the engine's AptLoader
+    // requests movie data itself -- registered-data first, bundle-IO fallback --
+    // through the real AptLoaderStartAsyncLoad platform hook.)
 
     // [PC IO] the ORIGINAL host FSM-bundle stand-in: serviced the controller's FSM-bundle
     // load requests synchronously and posted the load notification it waits for. SUPERSEDED
@@ -1410,8 +1377,6 @@ namespace BrnGui
             mViewOutputBuffer.UnlockForWrite();
         }
 
-        // The remaining shim-side drive (the AptRuntimeHost residue frame counter).
-        mAptRuntimeHost.UpdateShimResidue();
     }
 
     // The per-frame GUI render drive. X360 BrnGui::GuiModule::Render @0x825146B8 gates on

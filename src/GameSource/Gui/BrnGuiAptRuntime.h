@@ -23,14 +23,10 @@ namespace BrnGui
     public:
         bool Prepare(CgsGui::ViewModule* lpViewModule);
         bool Prepare();
-        void PlayMovie(const char* lpacMovieName, s32 liLevelNum);
-        // The remaining shim-side per-frame drive (the title help-item defaults
-        // retry). The movie TICK ownership moved to the real chain --
-        // GuiModule::Update -> CgsGui::ViewModule::Update -> AptAux::Update ->
-        // AptUpdateTarget (the engine frame pacer). Deleted with the component
-        // shim.
-        void UpdateShimResidue();
-        void StopMovie();
+        // (PlayMovie / StopMovie / UpdateShimResidue RETIRED, slice 2: movie play,
+        // mount, tick and unload are ENGINE-NATIVE -- channel-41 event 18 ->
+        // ViewModule -> AptAux::LoadFlashAnimation -> AptLoadAnimation ->
+        // AptLinker::Load; AptUpdate's per-frame linker Update mounts/unmounts.)
 
         // ---- PC-minimal render wiring residue --------------------------------------
         // The movie RENDER ownership moved to the real chain -- GuiModule::Render ->
@@ -74,11 +70,6 @@ namespace BrnGui
     // Interim renderer bridge, matching gpActiveMovieManager: GuiModule publishes
     // its owned AptRuntimeHost while prepared; BrnRendererModule renders through it.
     extern AptRuntimeHost* gpActiveAptRuntimeHost;
-
-    // Phase 2: the host posts a movie-slot bundle load through the real GuiResourceModule
-    // (defined in BrnGuiModule.cpp; forwards to gpActiveGuiModule->RequestAptMovieLoad).
-    // Kept a free accessor so the AptRuntimeHost TU need not pull in the GuiModule layout.
-    void RequestAptMovieLoadThroughModule(const char* lpacMovieName, s32 liType);
 }
 
 #endif
