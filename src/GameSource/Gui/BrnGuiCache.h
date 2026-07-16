@@ -34,6 +34,7 @@ namespace BrnGui
     struct FreeburnChallengeManager;
     struct BurnoutSkillsManager;   // GetBurnoutSkillsManager return (pointer only)
     struct OptionsDataProfile;     // GetOptionsDataProfile return (pointer only; home BrnCrashNavOptions.h family)
+    struct HudMessageAnalyzer;     // friend of GuiCache (reads the analyzer-carved snapshot members by name)
     struct HudMessageController;
     struct HudMessageDirector;
     struct MapIconManager;
@@ -469,6 +470,14 @@ namespace BrnGui
         void DetermineCarUnlockPending(BrnProgression::Profile* lpProfile); // X360 @0x824EC678 (sets mbCarUnlockPending/mbCarUnlockDetermined @0x4B75/0x4B76; reads Profile far members -- BrnProfile.h boundary)
 
     private:
+        // The HUD-message analyzer reads a handful of consumer-carved snapshot members
+        // directly by name (mfFrameDeltaTime, mbGameplayHudActive, the +0x4930 pending
+        // cluster, miGameFlowState, miLastStuntScore): the X360 inlines the raw loads at
+        // its Update / HandleWreckedEvent sites and the PS3 DWARF has no accessor rows
+        // for these X360-only offsets, so friendship -- not a fabricated accessor
+        // surface -- is the honest exposure. (HudMessageAnalyzer wave-C keystone.)
+        friend struct HudMessageAnalyzer;
+
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
         //  reserved with explicit padding (AGENTS.md "LAYOUT RECOVERY WITH
@@ -477,7 +486,11 @@ namespace BrnGui
         //  the recovered accessors touch are named; the object is a large plain
         //  aggregate (no vptr) so the first member sits at offset 0.
         // ===================================================================
-        u8  mPad_0000[4];                                // +0x0000 GuiEventTimeInfo header word
+        // ADDITIVE CARVE (HudMessageAnalyzer keystone): the leading float is the frame
+        // DELTA time -- HudMessageAnalyzer::Update @0x82525FC0 accumulates it into its
+        // road-rules / road-rage message timers and counts the game-completed timer down
+        // with it every frame (lfs f13, 0(mpGuiCache)). FLAG: consumer-named.
+        f32 mfFrameDeltaTime;                            // +0x0000
         f32 mfTimeNow;                                   // +0x0004 (4)     GetTime, != -FLT_MAX
         u8  mPad_0008[3792];                             // +0x0008..+0x0ED7
         s32 miCtorSentinel_0ED8;                         // +0x0ED8 (3800)  ctor writes -1 (CgsArray "used before Construct" sentinel; sub-array un-homed)
@@ -492,11 +505,32 @@ namespace BrnGui
         FreeburnChallengeManager* mpChallengeManager;    // +0x406C (16492)
         HudMessageController*     mpHudMessageController; // +0x4070 (16496)
         HudMessageDirector*       mpHudMessageDirector;   // +0x4074 (16500)
-        u8  mPad_4078[2664];                             // +0x4078..+0x4ADF
+        u8  mPad_4078[4];                                // +0x4078..+0x407B
+        // ADDITIVE CARVE (HudMessageAnalyzer keystone): the gameplay-HUD gate byte the
+        // analyzer's Update checks before firing crash/challenge/trophy/player-left
+        // messages (lbz mpGuiCache+0x407C, X360 @0x82527668/0x825276B0/...). FLAG:
+        // consumer-named.
+        bool mbGameplayHudActive;                        // +0x407C (16508)
+        u8  mPad_407D[0x4930 - 0x407D];                  // +0x407D..+0x492F
+        // ADDITIVE CARVE (HudMessageAnalyzer keystone): the three-slot pending-status
+        // cluster the analyzer's Update resets on wire ids 291/320 (lwz/std @+0x4930/
+        // +0x4934/+0x4938: each status word is cleared when it holds 1 or 2, and the
+        // qword payload is zeroed unconditionally). FLAG: consumer-named -- the
+        // producer-side semantics are unrecovered.
+        s32 miPendingEventStatusA;                       // +0x4930 (18736)
+        s32 miPendingEventStatusB;                       // +0x4934 (18740)
+        u64 mu64PendingEventPayload;                     // +0x4938 (18744)
+        u8  mPad_4940[0x4AE0 - 0x4940];                  // +0x4940..+0x4ADF
         Vector4 mv4WorldCameraPosition;                  // +0x4AE0 (19168) GetWorldCameraPosition (SatNavRenderer @0x8245FA48 lvx128 mpGuiCache,0x4AE0)
         u8  mPad_4AF0[16];                               // +0x4AF0..+0x4AFF
         s32 mePlayerActiveRaceCarIndex;                  // +0x4B00 (19200) EActiveRaceCarIndex (DWARF h; HudMessageAnalyzer::HandleLiveRevengeUpdate @0x8251E2xx)
-        u8   mPad_4B04[0x46];                             // +0x4B04..+0x4B49
+        u8   mPad_4B04[0x2C];                             // +0x4B04..+0x4B2F
+        // ADDITIVE CARVE (HudMessageAnalyzer keystone): the game-flow state word the
+        // analyzer's Update gates its trigger passes on (lwz mpGuiCache+0x4B30; fire
+        // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the
+        // enum home is unrecovered (values observed: -1 / 1 / 3).
+        s32  miGameFlowState;                             // +0x4B30 (19248)
+        u8   mPad_4B34[0x16];                             // +0x4B34..+0x4B49
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
         u8   mPad_4B4B[1];                                // +0x4B4B
         // ADDITIVE GROW (BrnOnlinePlay TU): the online-play main-menu invite / online-start flag
@@ -568,7 +602,16 @@ namespace BrnGui
         s32 miScoreTarget;                               // +0x9FC8 (40904)
         s32 miScoreCombo;                                // +0x9FCC (40908)
         s32 miComboMultiplier;                           // +0x9FD0 (40912)
-        u8  mPad_9FD4[12];                               // +0x9FD4..+0x9FDF
+        // ADDITIVE CARVE (HudMessageAnalyzer wave-C keystone): the last stunt's score.
+        // NAME is DWARF-attested by adjacency (BrnGuiCache.h:1762 miLastStuntScore is the
+        // member immediately after h:1760 miComboMultiplier); the OFFSET is X360-attested
+        // by HudMessageAnalyzer::HandleWreckedEvent @0x8251CB1C (lwzx cache+0x9FD4 > 0,
+        // together with meGameModeType == E_MODE_STUNT_ATTACK, picks the WRECKED_STUNT
+        // lane). The PS3-DWARF tail after it (miLastStuntMultiplier / miRivalDamage*)
+        // does NOT fit the 12-byte gap to mPursuedCarID @0x9FE0, so only this first
+        // member is carved; the rest stays padding.
+        s32 miLastStuntScore;                            // +0x9FD4 (40916)
+        u8  mPad_9FD8[8];                                // +0x9FD8..+0x9FDF
         CgsID mPursuedCarID;                             // +0x9FE0 (40928)
         u8  mPad_9FE8[8];                                // +0x9FE8..+0x9FEF
         CgsID mShutdownCarID;                            // +0x9FF0 (40944)
@@ -676,6 +719,7 @@ namespace BrnGui
     inline void GuiCache::_AssertLayout()
     {
         // pointer-invariant prefix (before the +0x405C pointer cluster):
+        static_assert(offsetof(GuiCache, mfFrameDeltaTime)    == 0x0000, "mfFrameDeltaTime @0x0000");
         static_assert(offsetof(GuiCache, mfTimeNow)           == 0x0004, "mfTimeNow @0x0004");
         static_assert(offsetof(GuiCache, miCtorSentinel_0ED8) == 0x0ED8, "miCtorSentinel_0ED8 @0x0ED8");
         static_assert(offsetof(GuiCache, miCtorField_0EDC)    == 0x0EDC, "miCtorField_0EDC @0x0EDC");
@@ -685,7 +729,18 @@ namespace BrnGui
         #define GC_FAR(member, x360off) \
             static_assert(offsetof(GuiCache, member) - offsetof(GuiCache, mv4WorldCameraPosition) \
                           == ((x360off) - 0x4AE0), #member " @" #x360off)
+        // members BETWEEN the pointer cluster and the 0x4AE0 anchor (same constant
+        // shift; pinned anchor-minus-member to keep the size_t arithmetic positive):
+        #define GC_MID(member, x360off) \
+            static_assert(offsetof(GuiCache, mv4WorldCameraPosition) - offsetof(GuiCache, member) \
+                          == (0x4AE0 - (x360off)), #member " @" #x360off)
+        GC_MID(mbGameplayHudActive,            0x407C);
+        GC_MID(miPendingEventStatusA,          0x4930);
+        GC_MID(miPendingEventStatusB,          0x4934);
+        GC_MID(mu64PendingEventPayload,        0x4938);
+        #undef GC_MID
         GC_FAR(mePlayerActiveRaceCarIndex,     0x4B00);
+        GC_FAR(miGameFlowState,                0x4B30);
         GC_FAR(mbInEventColouringGate,         0x4B4A);
         GC_FAR(mbOnlineStartInProgress,        0x4B4C);
         GC_FAR(mbCarUnlockPending,             0x4B75);
@@ -709,6 +764,7 @@ namespace BrnGui
         GC_FAR(muCheckpointsInEvent,           0x9FB8);
         GC_FAR(miTakedownsCurrent,             0x9FBC);
         GC_FAR(miScoreCurrent,                 0x9FC4);
+        GC_FAR(miLastStuntScore,               0x9FD4);
         GC_FAR(mPursuedCarID,                  0x9FE0);
         GC_FAR(mShutdownCarID,                 0x9FF0);
         GC_FAR(meTrophyCarUnlockType,          0xA000);

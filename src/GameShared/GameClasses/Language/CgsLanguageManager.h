@@ -157,6 +157,18 @@ namespace CgsLanguage
         bool FormatText(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
                         ParameterFormatType leType);
 
+        // DWARF CgsLanguageManager.h:260 -- FormatText's one-int-parameter sibling:
+        // resolve lpcSourceText through leType (E_FORMAT_ID_LOOKUP at every recovered
+        // callsite) and render liValue through leValueType into the caller's buffer.
+        // X360 callsites: HudMessageAnalyzer::HandleStuntPerformed @0x8251B7F0/B93C/
+        // BA88/BCDC (buf, 63, "STUNT_RUN_MULTIPLIER_*", 9, <stunt count>, 11).
+        // ADDITIVE GROW: declaration-only (its body is this TU's own ledger function).
+        // The DWARF also attests 2- and 3-value overloads (h:281/h:305); they are left
+        // undeclared until a reconstructed caller needs them.
+        bool FormatTextFromInt(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
+                               ParameterFormatType leType, s32 liValue,
+                               ParameterFormatType leValueType);
+
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
                               ParameterFormatType leType);
         bool FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,

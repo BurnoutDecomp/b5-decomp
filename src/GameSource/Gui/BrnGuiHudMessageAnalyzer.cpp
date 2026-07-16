@@ -21,8 +21,8 @@
 namespace BrnGui
 {
 
-// @ 0x825179E8
-void HudMessageAnalyzer::TriggerMessage(const char* lpcMessageId)
+// @ 0x825179E8 (const per DWARF h:203)
+void HudMessageAnalyzer::TriggerMessage(const char* lpcMessageId) const
 {
     // Non-gating tripwires (h:737/738).
     CGS_ASSERT(NULL != lpcMessageId, "NULL != lpcMessageId");
@@ -36,8 +36,8 @@ void HudMessageAnalyzer::TriggerMessage(const char* lpcMessageId)
     mpHudMessageDirector->AddMessage(&lMessage, false);
 }
 
-// @ 0x82517AF8
-void HudMessageAnalyzer::TriggerMessage(const GuiHudMessage* lpMessage)
+// @ 0x82517AF8 (const per DWARF h:208)
+void HudMessageAnalyzer::TriggerMessage(const GuiHudMessage* lpMessage) const
 {
     // Non-gating tripwires (h:764 "Invalid HUD message" / h:~770 director check;
     // both streamed on the X360, folded static).

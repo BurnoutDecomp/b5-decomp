@@ -218,6 +218,13 @@ public:
     bool GetSeenEliteCompletionSequence() const;
     void SetSeenEliteCompletionSequence();
 
+    // ADDITIVE GROW (BrnGuiHudMessageAnalyzer::Update): the "100%-complete HUD message
+    // seen" flag pair, DWARF-attested shapes (BrnProfile.h:556 / :560). The X360 image
+    // has no standalone symbols for either (no ledger rows; Update @0x82525FC0 inlines
+    // the +118035 lbz/stb at both callsites), so they are defined inline here.
+    bool GetOneHundredHudMessageViewed() const   { return mbOneHundredHudMessageViewed; }
+    void SetOneHundredHudMessageViewed(bool lbViewed) { mbOneHundredHudMessageViewed = lbViewed; }
+
     void DEBUG_ClearMedals();
 
     // ------------------------------------------------------------------------
@@ -342,6 +349,47 @@ public:
     // X360: ProgressionManager::SetRoadRuleChallengeData -> Profile::SetRoadRuleChallengeData.
     // Wholesale 2560-byte copy of the 64-entry ChallengePlayerScoreEntry table into maChallengeData.
     void SetRoadRuleChallengeData(const BrnStreetData::ChallengePlayerScoreEntry* lpaChallengeScores);
+
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (StreetManager wave-C keystone) -- the road-rules profile accessors the
+    // DWARF declares at BrnProfile.h:795-830 (+ the showtime pair at :476/:479). All are
+    // header-inline in the original (the X360 folds each into its StreetManager caller:
+    // OnProfileLoaded @0x82349E20, ProcessConnectedOnlineEvent @0x8234A148,
+    // UpdateUserScoresFromServerRecords @0x82348FC0, ProcessNewRoadScore @0x823496C8), so the
+    // bodies are the raw member reads/writes those callsites attest. No layout change.
+    // ------------------------------------------------------------------------
+
+    // DWARF :795/:798. Row accessors into the persisted road-rules tables. The OnProfileLoaded
+    // memcpy sources are the row-0 pointers (the X360 reads the table bases directly).
+    const BrnStreetData::ChallengeHighScoreEntry* GetNetworkChallengeData(s32 liIndex) const
+    {
+        return &maNetworkChallengeData[liIndex];
+    }
+    const BrnStreetData::ChallengePlayerScoreEntry* GetUserChallengeData(s32 liIndex) const
+    {
+        return &maChallengeData[liIndex];
+    }
+
+    // DWARF :812/:817. muTimeStampOfLastRoadRulesDownload (+96).
+    u32  GetNetworkChallengeDownloadTimestamp() const { return muTimeStampOfLastRoadRulesDownload; }
+    void SetNetworkChallengeDownloadTimestamp(u32 luTimeStamp) { muTimeStampOfLastRoadRulesDownload = luTimeStamp; }
+
+    // DWARF :821/:826. muLastRoadRulesResetTime (+102616).
+    u32  GetLastRoadRulesResetTime() const { return muLastRoadRulesResetTime; }
+    void SetLastRoadRulesResetTime(u32 luResetTime) { muLastRoadRulesResetTime = luResetTime; }
+
+    // DWARF :830 (non-const there; kept verbatim). The persisted road-rules session id,
+    // assembled from its two persisted halves (+118064 high, +118044 low) exactly as the
+    // X360 folds it at every score-summary payload build.
+    u64 GetRoadRulesID()
+    {
+        return (static_cast<u64>(muRoadRulesIDHighBits) << 32) + muRoadRulesIDLowBits;
+    }
+
+    // DWARF :476/:479. miHighestShowTimeScore (+612). Plain get/set; the "only if greater"
+    // guard is the ProcessNewRoadScore callsite's own attested branch.
+    s32  GetNewHighShowtimeScore() const { return miHighestShowTimeScore; }
+    void SetNewHighShowtimeScore(s32 liScore) { miHighestShowTimeScore = liScore; }
 
 private:
     // ----- byte-exact member layout (offsets in comments; all X360-proven) -----

@@ -44,6 +44,15 @@
 #include "SharedClasses/StreetData/BrnStreetData.h"     // BrnStreetData::RoadIndex (road-rules events)
 #include "SharedClasses/StreetData/BrnChallengeData.h"  // BrnStreetData::ScoreType / E_SCORE_TYPE_COUNT (road-rules events)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"  // BrnGameState::GameStateModuleIO::EGameModeType (GuiEventJunctionInfo)
+#include "GameSource/GameState/BrnTakedownType.h"       // BrnGameState::ETakedownType (GuiTakedownEvent)
+#include "GameSource/GameState/BrnCgsPlayerName.h"      // CgsNetwork::PlayerName (road-rule high score / left-lobby payloads)
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // BrnGameState::StuntInfo (GuiHUDMessageStuntPerformed)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (dirty-trick payloads)
+
+// Fixed-underlying-type opaque declaration (committed home BrnVehicleConstants.h:
+// `enum EImpactType : s32`); keeps the vehicle-constants header out of this GUI payload
+// home (same idiom as BrnScoringSystem.h).
+namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
 
 namespace BrnGui
 {
@@ -822,5 +831,444 @@ struct GuiEventJunctionInfo : public CgsGui::GuiEvent<311>
     bool   mbIsAutoUnlockedChallenge;                                 // +0x19
     // pad to 0x20 (u64 alignment of the leading CgsID; total record size 0x20)
 };
+
+// ===================================================================================
+// HudMessageAnalyzer event-payload family (ADDITIVE GROW: BrnGuiHudMessageAnalyzer.cpp
+// keystone). The BrnGui GUI-event payloads the HUD-message analyzer's Handle* methods
+// consume, upgraded from their BrnGuiDemangledEventTypes.h opaque placeholders to their
+// real DWARF shapes (the placeholder entries are REMOVED from that header -- exactly one
+// definition per type; CgsGuiModule_AddGuiEvent_Inst.cpp / the OutputGuiEvent Inst TU
+// include both headers and keep compiling).
+//
+// MODELLING (X360-authoritative): the X360 queue records for this family carry their
+// FIELDS AT RECORD OFFSET +0 -- pinned on the consumer side by the analyzer handlers'
+// field reads (e.g. HandleTakedown reads meAggressorIndex at record+0x10) and on the
+// producer side by the game-state bridge stores (GameBridgeGameStateToX.h documents the
+// takedown stores at +0x00..+0x25). A 12-byte CgsGui::GuiEvent<N> base would displace
+// every field, so these payloads are FLAT structs carrying their X360 wire id via
+// GetEventType() (the raw-record form of the BrnGuiDemangledEventTypes recipe; same
+// treatment as the committed GuiOnlineStuntRun* family above). Each struct's sizeof is
+// pinned to the X360 AddGuiEvent/AddEvent size literal where one is attested.
+//
+// PS3-DWARF -> X360 id drift: the DWARF GuiEvent<N> template ids are the PS3 wire ids;
+// the X360 ids (used here) come from the X360 AddGuiEvent instantiation literals (the
+// former demangled-header entries) or, where no producer instantiation exists, from the
+// HudMessageAnalyzer::Update dispatch case that routes the payload to its handler
+// (jumptable bases: 82526234 = id 64+case, 82526838 = id 313+case, 82526BF0 = id
+// 419+case -- X360 @0x82525FC0).
+// ===================================================================================
+
+// DWARF BrnGuiEventTypeDefs.h (before :113) -- which stunt-collectible family an
+// area/all-complete event talks about.
+enum StuntType
+{
+    E_STUNTTYPE_JUMP  = 0,
+    E_STUNTTYPE_SMASH = 1,
+    E_STUNTTYPE_STUNT = 2,
+    E_STUNTTYPE_COUNT = 3,
+};
+
+// DWARF BrnGuiEventTypeDefs.h:562 area -- the crash-bar state-change payload
+// (GuiEvent<373> on PS3; X360 wire id 377, record = the single state word).
+// The analyzer stores meCurrentState in its meCrashEntryState member and keys the
+// delayed-message flow off it (HandleCrashedEvent switch).
+struct GuiPlayerCrashingStateChangeEvent
+{
+    // DWARF :567.
+    enum CrashBarState
+    {
+        E_CRASHBARSTATE_INVALID        = -1,
+        E_CRASHBARSTATE_START_CRASHED  = 0,
+        E_CRASHBARSTATE_LEAVE_CRASHED  = 1,
+        E_CRASHBARSTATE_START_TAKEDOWN = 2,
+        E_CRASHBARSTATE_LEAVE_TAKEDOWN = 3,
+        E_CRASHBARSTATE_COUNT          = 4,
+    };
+
+    CrashBarState meCurrentState;   // DWARF :1292; +0x00 (the whole 4-byte record)
+
+    s32 GetEventType() const { return 377; }
+};
+static_assert(sizeof(GuiPlayerCrashingStateChangeEvent) == 4, "X360 record size 4 (id 377)");
+
+// DWARF BrnGuiEventTypeDefs.h:3565 area (GuiEvent<358>; X360 id 363, record 40 bytes).
+// X360 FIELD ORDER (binary authoritative, differs from the PS3-DWARF member listing):
+// the car-id qwords lead and the race-car indices follow -- pinned on BOTH sides:
+//   producer: BrnGame::TranslateTakedownsToGuiEvents @0x823E1C38 (see the store map in
+//             GameBridgeGameStateToX.h: ids @+0x00/+0x08, indices @+0x10/+0x14,
+//             type @+0x18, chain @+0x1C, multi @+0x20, status bytes @+0x24/+0x25)
+//   consumer: HudMessageAnalyzer::HandleTakedown @0x8251C3C0 (reads +0x10/+0x14/+0x18/
+//             +0x24/+0x25) and ConstructTakedownMessage @0x824F9C28 (reads type @+0x18,
+//             chain @+0x1C with the <2 / -2<9 ladder, multi @+0x20 with the <=1 gate).
+// Member NAMES from the DWARF. (GameBridgeGameStateToX.h keeps a file-local FLAGGED
+// placeholder of this record for its own TU; the include graphs do not meet.)
+struct GuiTakedownEvent
+{
+    CgsID                       mAggressorCarID;          // +0x00
+    CgsID                       mVictimCarID;             // +0x08
+    EActiveRaceCarIndex         meAggressorIndex;         // +0x10
+    EActiveRaceCarIndex         meVictimIndex;            // +0x14
+    BrnGameState::ETakedownType meTakedownType;           // +0x18 (KAPC_TAKEDOWN_TYPES index; 3 == revenge/settled special case)
+    s32                         miTakedownChainCount;     // +0x1C
+    s32                         miMultipleTakedownCount;  // +0x20
+    bool                        mbMarkedManTakeDown;      // +0x24
+    bool                        mbSettledScore;           // +0x25
+    // 2 tail-pad bytes -> the X360 40-byte record
+
+    s32 GetEventType() const { return 363; }
+};
+static_assert(sizeof(GuiTakedownEvent) == 40, "X360 AddGuiEvent size 40 (id 363)");
+
+// (GuiShutdownEvent -- DWARF :3618 {CgsID mVictimCarID} -- KEEPS its
+// BrnGuiDemangledEventTypes.h placeholder, id 373 size 8: HandleShutdown is not part of
+// this keystone's fan-out and the analyzer header only forward-declares the type.)
+
+// DWARF :3645 (GuiEvent<360>; X360 id 365, record 12 bytes). HandleImpact @0x824F2E48
+// guards meImpactType in (0, 9).
+struct GuiImpactEvent
+{
+    BrnPhysics::Vehicle::EImpactType meImpactType;                 // +0x00
+    EActiveRaceCarIndex              meAggressorActiveRaceCarIndex; // +0x04
+    EActiveRaceCarIndex              meVictimActiveRaceCarIndex;    // +0x08
+
+    s32 GetEventType() const { return 365; }
+};
+static_assert(sizeof(GuiImpactEvent) == 12, "X360 AddGuiEvent size 12 (id 365)");
+
+// DWARF :3708 (GuiEvent<363>; X360 id 368 = Update dispatch 313+55). HandleSignatureStunt
+// @0x8251D7E8 reads the id qword @+0x00.
+struct GuiSignatureStuntEvent
+{
+    CgsID mId;   // +0x00
+
+    s32 GetEventType() const { return 368; }
+};
+
+// DWARF :3741/:3779/:3846 -- the online dirty-trick (payback) trio (PS3 GuiEvent<175/177/179>;
+// X360 ids 177/179/181, records 12/12/16 bytes). The analyzer reads aggressor @+0x00,
+// victim @+0x04, trick type @+0x08 (guarded < 3 -- the 3-entry X360 Pbk tables) and, on
+// the ended event only, the survived byte @+0x0C. NOTE: the X360 'no trick pending'
+// sentinel the analyzer stores is 3 (the PS3 six-axis slot of BrnNetwork::EPaybackType).
+struct GuiDirtyTrickNewEvent
+{
+    EActiveRaceCarIndex      meAggressorActiveRaceCarIndex;  // +0x00
+    EActiveRaceCarIndex      meVictimActiveRaceCarIndex;     // +0x04
+    BrnNetwork::EPaybackType meTrickType;                    // +0x08
+
+    s32 GetEventType() const { return 177; }
+};
+static_assert(sizeof(GuiDirtyTrickNewEvent) == 12, "X360 AddGuiEvent size 12 (id 177)");
+
+struct GuiDirtyTrickTriggerEvent
+{
+    EActiveRaceCarIndex      meAggressorActiveRaceCarIndex;  // +0x00
+    EActiveRaceCarIndex      meVictimActiveRaceCarIndex;     // +0x04
+    BrnNetwork::EPaybackType meTrickType;                    // +0x08
+
+    s32 GetEventType() const { return 179; }
+};
+static_assert(sizeof(GuiDirtyTrickTriggerEvent) == 12, "X360 AddGuiEvent size 12 (id 179)");
+
+struct GuiDirtyTrickEndedEvent
+{
+    EActiveRaceCarIndex      meAggressorActiveRaceCarIndex;  // +0x00
+    EActiveRaceCarIndex      meVictimActiveRaceCarIndex;     // +0x04
+    BrnNetwork::EPaybackType meTrickType;                    // +0x08
+    bool                     mbSurvived;                     // +0x0C
+
+    s32 GetEventType() const { return 181; }
+};
+static_assert(sizeof(GuiDirtyTrickEndedEvent) == 16, "X360 AddGuiEvent size 16 (id 181)");
+
+// DWARF :3812/:3828 (PS3 GuiEvent<479/480>; X360 ids 484/485, records 16 bytes).
+// HandleTookLead/HandleTookLast read the index @+0x08 (bounds < 8).
+struct GuiTookLeadEvent
+{
+    CgsID               mOfflineRivalCarID;        // +0x00
+    EActiveRaceCarIndex meLeadActiveRaceCarIndex;  // +0x08
+
+    s32 GetEventType() const { return 484; }
+};
+static_assert(sizeof(GuiTookLeadEvent) == 16, "X360 AddGuiEvent size 16 (id 484)");
+
+struct GuiTookLastEvent
+{
+    CgsID               mOfflineRivalCarID;        // +0x00
+    EActiveRaceCarIndex meLastActiveRaceCarIndex;  // +0x08
+
+    s32 GetEventType() const { return 485; }
+};
+static_assert(sizeof(GuiTookLastEvent) == 16, "X360 AddGuiEvent size 16 (id 485)");
+
+// DWARF :3908 (PS3 GuiEvent<370>; X360 id 375, record 16 bytes). The analyzer parks a
+// copy in mTrophyCarUnlockedEvent (Update id-375 case copies the 2 qwords) and
+// HandleTrophyCarUnlocked prints mTrophyCarID.
+struct GuiEventTrophyCarUnlock
+{
+    // DWARF type BrnProgression::TrophyUnlockData::UnlockType -- raw s32 here (the
+    // trophy-progression home is not yet committed; the analyzer only forwards it).
+    s32   meUnlockType;    // +0x00
+    CgsID mTrophyCarID;    // +0x08
+
+    s32 GetEventType() const { return 375; }
+};
+static_assert(sizeof(GuiEventTrophyCarUnlock) == 16, "X360 AddGuiEvent size 16 (id 375)");
+
+// DWARF :4323/:4353 (PS3 GuiEvent<477/481>; X360 ids 482/486, records 16 bytes). Both
+// carry a rival car id qword and the race-car index @+0x08 the analyzer gamer-tags.
+struct GuiNetworkPlayerCrashingEvent
+{
+    CgsID               mRivalCarID;                         // +0x00
+    EActiveRaceCarIndex meNetworkPlayerActiveRaceCarIndex;   // +0x08
+
+    s32 GetEventType() const { return 482; }
+};
+static_assert(sizeof(GuiNetworkPlayerCrashingEvent) == 16, "X360 AddGuiEvent size 16 (id 482)");
+
+struct GuiNetworkPlayerOnTailEvent
+{
+    CgsID               mOfflineRivalCarID;          // +0x00
+    EActiveRaceCarIndex meOnTailActiveRaceCarIndex;  // +0x08
+
+    s32 GetEventType() const { return 486; }
+};
+static_assert(sizeof(GuiNetworkPlayerOnTailEvent) == 16, "X360 AddGuiEvent size 16 (id 486)");
+
+// DWARF :4461 (PS3 GuiEvent<148>; X360 id 150, record 16 bytes). HandleJoinedEvent
+// prints the joining rival's id.
+struct GuiEventCarJoinedEvent
+{
+    CgsID mJoiningRivalID;   // +0x00
+    bool  mbDoCamera;        // +0x08
+
+    s32 GetEventType() const { return 150; }
+};
+static_assert(sizeof(GuiEventCarJoinedEvent) == 16, "X360 AddGuiEvent size 16 (id 150)");
+
+// DWARF :1542 typedef GuiEventCarEliminatedFromEvent = GuiEvent<149> (payload-less on
+// PS3). X360 (id 151 = Update dispatch 64+87): HandleEliminatedEvent @0x8251D0E8 reads a
+// SIGNED BYTE at record+0x00 (lbz;extsb) and indexes KAPC_FINISH_POSITION_MESSAGES[1 + it].
+// FLAG: the field name is consumer-inferred (no DWARF member exists for the X360 payload).
+struct GuiEventCarEliminatedFromEvent
+{
+    s8 mi8FinishPosition;   // +0x00 (0-based position; message id = POSITION_* [pos+1])
+
+    s32 GetEventType() const { return 151; }
+};
+
+// DWARF :4528 (PS3 GuiEvent<217>; X360 id 219, record 8 bytes). "All collectibles of
+// this stunt family in this county are done" -- HandleStuntsComplete @0x8251F6E8 fires
+// "StntAllDone" with KAPC_COLLECTABLE_COMPLETION_STRINGID[meStuntElementType] (< 3) and
+// KAPC_COUNTY_STRINGID[meCounty] (< 5).
+struct GuiEventStuntAreaComplete
+{
+    StuntType         meStuntElementType;   // +0x00 (DWARF :2090)
+    BrnWorld::ECounty meCounty;             // +0x04 (DWARF :2091)
+
+    s32 GetEventType() const { return 219; }
+};
+static_assert(sizeof(GuiEventStuntAreaComplete) == 8, "X360 AddGuiEvent size 8 (id 219)");
+
+// DWARF :4795 (PS3 GuiEvent<314>; X360 id 316, record 8 bytes). The special-event car
+// the burning route could not start with.
+struct GuiEventFailedToStartEvent
+{
+    CgsID mSpecialCarID;   // +0x00 (DWARF :2539)
+
+    s32 GetEventType() const { return 316; }
+};
+static_assert(sizeof(GuiEventFailedToStartEvent) == 8, "X360 AddGuiEvent size 8 (id 316)");
+
+// DWARF :4846/:4853 (PS3 GuiEvent<274/275>; X360 ids 276/277, records 4/24 bytes).
+// RoadRulesRecvData::NetworkPlayerID is a typedef of s32 (-1 == no player).
+struct GuiEventNetworkPlayerJoinedLobby
+{
+    s32 mNetworkPlayerID;   // +0x00 (DWARF :2959)
+
+    s32 GetEventType() const { return 276; }
+};
+static_assert(sizeof(GuiEventNetworkPlayerJoinedLobby) == 4, "X360 AddGuiEvent size 4 (id 276)");
+
+struct GuiEventNetworkPlayerLeftLobby
+{
+    s32                    mNetworkPlayerID;        // +0x00 (DWARF :2973)
+    CgsNetwork::PlayerName mPlayerName;             // +0x04 (DWARF :2974; 16-byte name)
+    bool                   mbIsLocalPlayerInGame;   // +0x14 (DWARF :2975)
+
+    s32 GetEventType() const { return 277; }
+};
+static_assert(sizeof(GuiEventNetworkPlayerLeftLobby) == 24, "X360 AddGuiEvent size 24 (id 277)");
+
+// DWARF :5422 (PS3 GuiEvent<265>; X360 id 267, record 8 bytes). DWARF declares the two
+// fields private behind get/setters; the accessor bodies are their own ledger rows
+// (declaration-only) and the analyzer reads via GetNetworkPlayerID.
+struct GuiNetworkRemotePlayerDisconnectEvent
+{
+public:
+    void                SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex);   // DWARF :5426
+    EActiveRaceCarIndex GetActiveRaceCarIndex() const                          // DWARF :5429 (X360 inlines the read)
+    { return meActiveRaceCarIndex; }
+    void SetNetworkPlayerID(s32 liPlayerID);                                   // DWARF :5433
+    s32  GetNetworkPlayerID() const                                            // DWARF :5436 (X360 inlines the read @+0x04)
+    { return mPlayerID; }
+
+    s32 GetEventType() const { return 267; }
+
+private:
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00 (DWARF :5439)
+    s32                 mPlayerID;              // +0x04 (DWARF :5440)
+};
+static_assert(sizeof(GuiNetworkRemotePlayerDisconnectEvent) == 8, "X360 AddGuiEvent size 8 (id 267)");
+
+// DWARF :6066/:6079 (PS3 GuiEvent<434/435>; X360 ids 439/440, records 24/16 bytes).
+struct GuiRivalryStatusChange
+{
+    // DWARF :3620.
+    enum ERivalryLevels
+    {
+        E_RIVAL_LEVEL_NEW     = 0,
+        E_RIVAL_LEVEL_RIVAL   = 1,
+        E_RIVAL_LEVEL_TARGET  = 2,
+        E_RIVAL_LEVEL_WRECKED = 3,
+        E_RIVAL_LEVEL_COUNT   = 4,
+    };
+
+    CgsID          mRivalID;      // +0x00 (DWARF :5125)
+    CgsID          mCarID;        // +0x08 (DWARF :5126; HandleRivalryChangeEvent prints it)
+    ERivalryLevels meNewStatus;   // +0x10 (DWARF :5127; the handler's switch operand)
+
+    s32 GetEventType() const { return 439; }
+};
+static_assert(sizeof(GuiRivalryStatusChange) == 24, "X360 AddGuiEvent size 24 (id 439)");
+
+struct GuiRivalIsFleeing
+{
+    CgsID mRivalID;   // +0x00 (DWARF :5138)
+    CgsID mCarID;     // +0x08 (DWARF :5139)
+
+    s32 GetEventType() const { return 440; }
+};
+static_assert(sizeof(GuiRivalIsFleeing) == 16, "X360 AddGuiEvent size 16 (id 440)");
+
+// DWARF :6146 (PS3 GuiEvent<448>; X360 id 453, record 4 bytes).
+struct GuiTraitorousTakedownEvent
+{
+    EActiveRaceCarIndex meAggActiveRaceCarIndex;   // +0x00 (DWARF :5275)
+
+    s32 GetEventType() const { return 453; }
+};
+static_assert(sizeof(GuiTraitorousTakedownEvent) == 4, "X360 AddGuiEvent size 4 (id 453)");
+
+// DWARF :6163 (PS3 GuiEvent<424>; X360 id 429, record 24 bytes). The stunt snapshot the
+// scoring system publishes; the analyzer keys skill messages off the flag masks and the
+// spin/roll counters. StuntInfo is the committed 20-byte scoring record
+// (BrnStuntModeScoring.h); the X360 record carries TWO MORE half-words after it.
+// FLAG: the two tail half-words are X360-only (no DWARF names) -- consumer-inferred:
+// HandleStuntPerformed @0x8251B608 bound-checks them <= 1 / sums +0x14 with the
+// multiplier exactly like the flat-spin/barrel-roll counters, so they are modelled as
+// the "super" counter pair pending a better-attested name.
+struct GuiHUDMessageStuntPerformed
+{
+    BrnGameState::StuntInfo mStuntInfo;        // +0x00..+0x13 (DWARF :5301)
+    u16                     mu16TailCount14;   // +0x14 (FLAG: X360-only, name unrecovered)
+    u16                     mu16TailCount16;   // +0x16 (FLAG: X360-only, name unrecovered)
+
+    s32 GetEventType() const { return 429; }
+};
+static_assert(sizeof(GuiHUDMessageStuntPerformed) == 24, "X360 AddGuiEvent size 24 (id 429)");
+
+// DWARF :6208 (PS3 GuiEvent<147>; X360 id 149 = Update dispatch 64+85; no producer
+// AddGuiEvent literal). Field names verbatim from the X360 assert strings
+// ("strlen(lpEvent->mTitle) < sizeof(lpEvent->mTitle)", cpp:2252/2253).
+struct GuiGenericHUDMessage
+{
+    char mTitle[64];      // +0x00 (DWARF :5386)
+    char mSubtitle[64];   // +0x40 (DWARF :5387)
+
+    s32 GetEventType() const { return 149; }
+};
+
+// DWARF :6228 (PS3 GuiEvent<440>; X360 id 445, record 4 bytes).
+struct GuiOnlineTeamChangeEvent
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00 (DWARF :5413)
+
+    s32 GetEventType() const { return 445; }
+};
+static_assert(sizeof(GuiOnlineTeamChangeEvent) == 4, "X360 AddGuiEvent size 4 (id 445)");
+
+// (GuiEventPlayerWrecked -- DWARF :3856, payload-less -- KEEPS its
+// BrnGuiDemangledEventTypes.h placeholder, id 548 size 1: HandleWreckedEvent reads no
+// payload field, so the opaque 1-byte record is already the faithful shape.)
+
+// DWARF :2017 (PS3 GuiEvent<392>; X360 id 397, record 16 bytes). HandleShowtimeModeSwitch
+// @0x8251F240 resolves mNetworkPlayerID to a name, keys off meActiveRaceCarIndex vs the
+// local player and fires only when mbEnteringShowtime is set.
+struct GuiShowtimeModeSwitch
+{
+    s32                 mNetworkPlayerID;       // +0x00 (DWARF :6393)
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x04 (DWARF :6394)
+    s32                 miFinalShowtimeScore;   // +0x08 (DWARF :6395)
+    bool                mbEnteringShowtime;     // +0x0C (DWARF :6396)
+
+    s32 GetEventType() const { return 397; }
+};
+static_assert(sizeof(GuiShowtimeModeSwitch) == 16, "X360 AddGuiEvent size 16 (id 397)");
+
+// DWARF :6659 (PS3 GuiEvent<563>; X360 id 578, record 24 bytes). HandleChallengeEnded
+// @0x824F33E0 switches on meChallengeStatus (1/2/3/6 park a copy in mChallengedEndedData;
+// 4 is ignored; anything else asserts "Unknown Challenge Status") and copies the whole
+// 24-byte record.
+struct GuiChallengeEndEvent
+{
+    CgsID                         mChallengeID;                  // +0x00 (DWARF :6609)
+    BrnGameState::EChallengeStatus meChallengeStatus;            // +0x08 (DWARF :6610)
+    s32                           miNumChallengesComplete;       // +0x0C (DWARF :6611)
+    s32                           miTotalNumChallenges;          // +0x10 (DWARF :6612)
+    bool                          mbAbortingToStartNewChallenge; // +0x14 (DWARF :6613)
+
+    s32 GetEventType() const { return 578; }
+};
+static_assert(sizeof(GuiChallengeEndEvent) == 24, "X360 AddGuiEvent size 24 (id 578)");
+
+// DWARF :4198 (PS3 GuiEvent<333>; X360 id 337, record 48 bytes). X360 FIELD ORDER pinned
+// by HandleRoadRuleFailed @0x8251F020: the road id qword LEADS the record (SPrintf'd
+// "%llu" from +0x00 -- same X360 mRoadId-first drift as the committed GuiEventRoadRuleEnter),
+// the failed rule type is the word @+0x08 (0 == time rule, 1 == showtime/crash rule,
+// anything else asserts), the current ruler's name string sits @+0x0C and the two
+// ruled-by flags @+0x2C/+0x2D. Member names verbatim from the DWARF.
+struct GuiEventRoadRuleFail
+{
+    CgsID                    mRoadID;                    // +0x00 (X360-pinned head)
+    BrnStreetData::ScoreType meRuleType;                 // +0x08
+    char                     macCurrentRulerName[32];    // +0x0C
+    bool                     mbRoadRuledByLocalPlayer;   // +0x2C
+    bool                     mbRoadRuledByAI;            // +0x2D
+
+    s32 GetEventType() const { return 337; }
+};
+static_assert(sizeof(GuiEventRoadRuleFail) == 48, "X360 OutputGuiEvent size 48 (id 337)");
+
+// DWARF :4252 (PS3 GuiEvent<338>; X360 id 342, record 48 bytes). The analyzer's
+// HandleNewRoadRulesHighScore @0x824F32A0 block-copies the whole 48-byte record into
+// mRoadRuleHighScoreData (no field is read there), so only the DWARF member ORDER is
+// carried here. FLAG: the interior X360 offsets are unverified (nothing in this TU reads
+// them); the 16-byte PlayerName head + the 48-byte total are the X360-load-bearing facts.
+struct GuiEventRoadRuleNewHighScore
+{
+    CgsNetwork::PlayerName   mPlayerName;                // DWARF :1275 (16-byte name)
+    CgsID                    mRoadId;                    // DWARF :1276
+    BrnStreetData::ScoreType meScoreType;                // DWARF :1277
+    s32                      miNumScoresLost;            // DWARF :1278
+    s32                      miNumRoadsNowRuled;         // DWARF :1279
+    bool                     mbIsLocalPlayer;            // DWARF :1280
+    bool                     mbIsWholeRoadOwned;         // DWARF :1281
+    bool                     mbWasRulePlayersBefore;     // DWARF :1282
+    bool                     mbMultipleScores;           // DWARF :1283
+    bool                     mbOnlineLossButOfflineWin;  // DWARF :1284
+
+    s32 GetEventType() const { return 342; }
+};
+static_assert(sizeof(GuiEventRoadRuleNewHighScore) == 48, "X360 AddGuiEvent size 48 (id 342)");
 
 } // namespace BrnGui
