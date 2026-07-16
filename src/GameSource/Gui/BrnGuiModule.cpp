@@ -286,7 +286,7 @@ namespace BrnGui
         mResourceOutputBuffer.Construct();
         mGuiResourceModule.Construct(true);
 
-        for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
+        for (s32 lf = 0; lf < KI_NUM_EVENT_OBSERVERS; ++lf)
         {
             for (s32 li = 0; li < KI_MAX_OBSERVED_EVENT_ID; ++li)
                 mabObservedEventIds[lf][li] = false;
@@ -559,9 +559,10 @@ namespace BrnGui
         mMovieManager.Destruct();
     }
 
-    // Post one event into each subscribing flow's in-queue (the EventInterpreterModule
+    // Post one event into each subscribing observer's in-queue (the EventInterpreterModule
     // observer-subscription filter the console applies in ProcessInEvents before handing
-    // an observer its per-frame queue; one observer per flow slot here).
+    // an observer its per-frame queue). The observer slots are the three flows plus the
+    // always-available components manager.
     void GuiModule::RouteEventToFlow(const CgsModule::Event* lpEvent, s32 liId, s32 liSize)
     {
         if (liId < 0 || liId >= KI_MAX_OBSERVED_EVENT_ID)
@@ -572,7 +573,7 @@ namespace BrnGui
         // its override events from every other observer until it unregisters.
         s32 liPriorityOwner = -1;
         s32 liBlockingOwner = -1;
-        for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
+        for (s32 lf = 0; lf < KI_NUM_EVENT_OBSERVERS; ++lf)
         {
             for (s32 lc = 0; lc < KI_MAX_PRIORITY_CLAIMS_PER_FLOW; ++lc)
             {
@@ -589,9 +590,9 @@ namespace BrnGui
             }
         }
 
-        CgsModule::VariableEventQueue<18432, 16>* lapQueues[E_GUIFLOW_COUNT] =
-            { &mScreenInQueue, &mHudInQueue, &mOverlayInQueue };
-        for (s32 lf = 0; lf < E_GUIFLOW_COUNT; ++lf)
+        CgsModule::VariableEventQueue<18432, 16>* lapQueues[KI_NUM_EVENT_OBSERVERS] =
+            { &mScreenInQueue, &mHudInQueue, &mOverlayInQueue, &mAlwaysAvailInQueue };
+        for (s32 lf = 0; lf < KI_NUM_EVENT_OBSERVERS; ++lf)
         {
             if (!mabObservedEventIds[lf][liId])
                 continue;
@@ -978,10 +979,11 @@ namespace BrnGui
         mModelInputBuffer.UnlockForWrite();
     }
 
-    // Drain one flow's StateInterface output queue -- the per-frame dispatch point for
+    // Drain one observer's StateInterface output queue -- the per-frame dispatch point for
     // everything its states post (the ModelModule bridge + EventInterpreter
-    // ProcessOutEvents roles). The 34/35 subscription records key into THAT flow's
-    // observed-id table.
+    // ProcessOutEvents roles). The 34/35 subscription records key into THAT observer's
+    // observed-id table. The fourth slot is the always-available components manager,
+    // whose Prepare posts its real 19-id registration through the same records.
     void GuiModule::DrainFlowOutputQueue(s32 liFlow)
     {
         CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue = 0;
@@ -990,6 +992,9 @@ namespace BrnGui
             case E_GUIFLOW_SCREEN:  lpOutQueue = mScreenFlow.GetOutputEventQueue();  break;
             case E_GUIFLOW_HUD:     lpOutQueue = mHudFlow.GetOutputEventQueue();     break;
             case E_GUIFLOW_OVERLAY: lpOutQueue = mOverlayFlow.GetOutputEventQueue(); break;
+            case E_GUIOBSERVER_ALWAYSAVAILABLE:
+                lpOutQueue = mAlwaysAvailableComponentsManager.GetOutputEventQueue();
+                break;
             default:                break;
         }
         if (lpOutQueue == 0)
@@ -1140,12 +1145,11 @@ namespace BrnGui
         {
             GuiEventCache lCacheEvent;
             lCacheEvent.mpGuiCache = &mGuiCache;
+            // Delivery to every subscriber -- the three flows AND the always-available
+            // manager (its real 19-id table includes 64; it latches the GuiCache its
+            // Prepare state machine waits on) -- rides the one subscription filter.
             RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent), 64,
                              static_cast<s32>(sizeof(lCacheEvent)));
-            // The always-available manager observes the connect event (64): it latches the
-            // GuiCache its Prepare state machine waits on. Fan it into the manager's in-queue.
-            mAlwaysAvailInQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCacheEvent),
-                                         64, static_cast<s32>(sizeof(lCacheEvent)));
         }
 
         // ---- 2b. boot-resources-ready feedback (event 567; bring-up FLAG) -------------
@@ -1222,11 +1226,12 @@ namespace BrnGui
             while (liId >= 0 && lpEvent != 0)
             {
                 mGuiOutQueue.AddEvent(lpEvent, liId, liSize);
-                // The always-available manager observes some of the profile-manager's out
-                // events (the autosave-icon flag, id 355, that ShowAutosaveIcon posts): fan
-                // those into its in-queue so its Update drives the top-left save spinner.
-                if (mAlwaysAvailableComponentsManager.ObservesEvent(liId))
-                    mAlwaysAvailInQueue.AddEvent(lpEvent, liId, liSize);
+                // The console publishes these on the module bus (AddGuiOutEvents onto the
+                // out buffer's gui-events channel), where they come back around as in
+                // events and reach every registered observer through the interpreter's
+                // subscription filter (that is how the autosave-icon flag, id 355, reaches
+                // the always-available manager). Model the loop with the same filter.
+                RouteEventToFlow(lpEvent, liId, liSize);
                 const CgsModule::Event* lpNext = 0;
                 liId = lrProfileOut.GetNextEvent(lpEvent, &lpNext, &liSize);
                 lpEvent = lpNext;
@@ -1236,9 +1241,9 @@ namespace BrnGui
 
         // Pump the always-available components manager (the top-left save-icon spinner + the
         // in-game EATrax/achievement/showtime overlays). The console GuiModule::Update
-        // (@0x82527A58) advances its Prepare state machine each frame and the base observer
-        // pump runs its Update; here that is one call each, against the in-queue filled above
-        // (the connect event 64 that latches its GuiCache is fanned in at the cache post).
+        // (@0x82527A58) advances its Prepare state machine each frame, and the interpreter's
+        // UpdateObservers runs its Update against the queue the subscription filter filled
+        // (RouteEventToFlow above delivers the ids its Prepare registered -- 64, 355, ...).
         mAlwaysAvailableComponentsManager.Prepare(&s_GuiAccessPointers);
         mAlwaysAvailableComponentsManager.Update();
         mAlwaysAvailInQueue.Clear();
@@ -1269,6 +1274,10 @@ namespace BrnGui
             DrainFlowOutputQueue(E_GUIFLOW_SCREEN);
             DrainFlowOutputQueue(E_GUIFLOW_HUD);
             DrainFlowOutputQueue(E_GUIFLOW_OVERLAY);
+            // The always-available manager is the fourth registered observer: its
+            // StateInterface out-queue carries the type-34 registration records its
+            // Prepare posts (the real 19-id table) plus anything its components emit.
+            DrainFlowOutputQueue(E_GUIOBSERVER_ALWAYSAVAILABLE);
         }
         mViewInputBuffer.UnlockForWrite();
 

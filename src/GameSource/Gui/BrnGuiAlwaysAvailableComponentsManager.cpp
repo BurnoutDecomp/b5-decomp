@@ -40,17 +40,16 @@ namespace BrnGui
 {
     // The GUI events the manager registers to observe: the X360 passes the real game-data
     // table dword_8206F760 with a hard-coded count of 19 (asm @0x824F37FC `li r5,0x13`;
-    // DWARF `maiEventToObserve[19]` / `miNumEventsObserved == 19`). The table's literal
-    // contents live in a .rodata section not present in this dossier, so it is modelled as
-    // the extern game-data symbol (NOT redefined here) to preserve the asm-attested count
-    // without fabricating the four observe-only ids beyond the fifteen the Update switch
-    // handles. The fifteen recovered from the @0x82509338 switch are: 9, 26, 43, 44, 64, 72,
-    // 105, 175, 191, 355, 392, 502, 503, 516, 586.
+    // DWARF `maiEventToObserve[19]` / `miNumEventsObserved == 19`). ALL 19 literal values
+    // below are ATTESTED: dumped directly from the ARTIST IDA database at 0x8206F760
+    // (2026-07-16; the table sits right after the "ShowtimeMsg_cpt" string literal), in
+    // the authored order. The Update switch @0x82509338 handles fifteen of them; 21 / 94 /
+    // 96 / 192 are observed-but-unhandled there (online-invite family).
     const s32 maiEventToObserve[19] =
     {
         26, 21, 43, 44, 9, 64, 105, 175, 502, 586,
         503, 72, 94, 192, 96, 392, 516, 191, 355,
-    }; // ARTIST dword_8206F760
+    }; // ARTIST dword_8206F760 (IDA-dump attested)
 
     namespace
     {
@@ -157,17 +156,6 @@ namespace BrnGui
     void AlwaysAvailableComponentsManager::SetInEventQueue(CgsModule::VariableEventQueue<18432, 16>* lpInGuiEventQueue)
     {
         mpInGuiEventQueue = lpInGuiEventQueue;
-    }
-
-    // True once the manager observes an event id (its 19-entry table). Lets the GuiModule
-    // fan the manager's subscribed events into its in-queue (the console routes them through
-    // the shared observer-subscription filter; this is the same membership test).
-    bool AlwaysAvailableComponentsManager::ObservesEvent(s32 liId) const
-    {
-        for (s32 li = 0; li < KI_NUM_EVENTS_OBSERVED; ++li)
-            if (maiEventToObserve[li] == liId)
-                return true;
-        return false;
     }
 
     namespace

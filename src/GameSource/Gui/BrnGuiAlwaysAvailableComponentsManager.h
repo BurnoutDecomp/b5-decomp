@@ -79,11 +79,6 @@ namespace BrnGui
         // cases are FLAG'd deferrals for their un-homed callees -- see the .cpp).
         virtual void Update();
 
-        // True when the manager subscribes to `liId` (its 19-entry observe table). The
-        // GuiModule uses it to fan the manager's events into its in-queue (the PC stand-in
-        // for the console's shared observer-subscription filter).
-        bool ObservesEvent(s32 liId) const;
-
     private:
         // The five always-available GUI components, embedded by value. Guest offsets
         // (relative to `this`) are noted for provenance only.
