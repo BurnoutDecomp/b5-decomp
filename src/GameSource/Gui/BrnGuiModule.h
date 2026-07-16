@@ -199,15 +199,25 @@ namespace BrnGui
         CgsModule::VariableEventQueue<18432, 16> mHudInQueue;
         CgsModule::VariableEventQueue<18432, 16> mOverlayInQueue;
         CgsModule::VariableEventQueue<18432, 16> mGuiOutQueue;
-        // The always-available components manager's in-queue: the GuiModule fans the events
-        // that manager subscribes to (save-icon 355, connect 64, ...) into it, then pumps
-        // AlwaysAvailableComponentsManager::Update against it each frame.
+        // The always-available components manager's in-queue: the subscription filter
+        // (RouteEventToObserver) delivers the events the manager registered for (its real
+        // 19-id table: save-icon 355, connect 64, showtime, ...) into it, then the module
+        // pumps AlwaysAvailableComponentsManager::Update against it each frame -- the same
+        // observer contract the console's EventInterpreterModule drives (deliver via
+        // SetInEventQueue's queue, pump via UpdateObservers).
         CgsModule::VariableEventQueue<18432, 16> mAlwaysAvailInQueue;
 
-        // The observer-subscription tables (records 34/35 from each flow's state
-        // interface output queue). One flag set per flow slot.
+        // The registered event OBSERVERS (the console EventInterpreterModule's observer
+        // list): the three flows plus the always-available components manager -- the AAC
+        // registers through its own StateInterface exactly like a flow state (its Prepare
+        // posts the real 19-id table, ARTIST dword_8206F760, as type-34 records).
+        static const s32 E_GUIOBSERVER_ALWAYSAVAILABLE = E_GUIFLOW_COUNT;
+        static const s32 KI_NUM_EVENT_OBSERVERS        = E_GUIFLOW_COUNT + 1;
+
+        // The observer-subscription tables (records 34/35 from each observer's state
+        // interface output queue). One flag set per observer slot.
         static const s32 KI_MAX_OBSERVED_EVENT_ID = 1024;
-        bool mabObservedEventIds[E_GUIFLOW_COUNT][KI_MAX_OBSERVED_EVENT_ID];
+        bool mabObservedEventIds[KI_NUM_EVENT_OBSERVERS][KI_MAX_OBSERVED_EVENT_ID];
 
         // EventInterpreterModule priority state. ARTIST permits ten priority keys
         // per observer; each key owns an override-event mask. A priority owner starts
@@ -220,8 +230,8 @@ namespace BrnGui
             s32  miEventType;
             bool mabOverriddenEventIds[KI_MAX_OBSERVED_EVENT_ID];
         };
-        PriorityClaim maPriorityClaims[E_GUIFLOW_COUNT][KI_MAX_PRIORITY_CLAIMS_PER_FLOW];
-        bool          mabPriorityBlocking[E_GUIFLOW_COUNT];
+        PriorityClaim maPriorityClaims[KI_NUM_EVENT_OBSERVERS][KI_MAX_PRIORITY_CLAIMS_PER_FLOW];
+        bool          mabPriorityBlocking[KI_NUM_EVENT_OBSERVERS];
 
         // One resident pool per flow slot for the loaded FSM LuaCode bundle (request ids
         // 13/14/15 = SCREEN/HUD/OVERLAY; each flow's ScriptedFsm holds its LuaCode
