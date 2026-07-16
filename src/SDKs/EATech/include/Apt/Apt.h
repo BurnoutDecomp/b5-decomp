@@ -221,4 +221,12 @@ struct AptUserFunctions
 // alongside AptAux::ConstructApt which fills its render slots).
 extern AptUserFunctions gAptFuncs;
 
+// ---- the public engine entries (SDK Apt.h / bodies in Apt/Apt.cpp) -------------
+// AptLoadAnimation @0x82B07AC8 -- queue a movie load onto a target path ("_level%d"
+// from AptAux::LoadFlashAnimation): resets the BackgroundColour once-per-load latch,
+// strips a ".swf" suffix off the name, and hands (name, target) to the live target's
+// linker (gpAptTarget->mpLinker->Load). The console's int return is its final
+// EAStringC refcount-drop result -- ignored by every caller.
+int AptLoadAnimation(const char* pName, const char* pTargetPath);
+
 #endif // SDKS_EATECH_APT_APT_H

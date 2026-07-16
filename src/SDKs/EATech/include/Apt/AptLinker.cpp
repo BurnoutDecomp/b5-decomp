@@ -169,6 +169,54 @@ void AptLinker::Notify(AptFilePtr* pFile)
 }
 
 // ---------------------------------------------------------------------
+// GlobalNotificationFunction -- @0x82B00C78 (the loader's "file linked" hop).
+//   AptLoader::notify hands every just-linked AptFile here; the function takes a
+//   local reference, resolves the CURRENT target off the Apt target TLS
+//   (unk_8324E814 -> value+0x20 == mpLinker), and forwards the handle into that
+//   target's linker pending list (AptLinker::Notify -- which consumes the local
+//   reference). The saved-input debug arm (dword_8324D7F0 gate ->
+//   AptSavedInputCheckpoints::updateState(...)) records the link event for
+//   deterministic replay; the checkpoint recorder's updateState is un-homed, so
+//   that arm is FLAG'd (inactive at the boot default gbAptSavedInputActive == 0).
+//   The caller's *pFile is consumed (zeroed + released), matching the asm tail.
+// ---------------------------------------------------------------------
+namespace EA { namespace Thread { class ThreadLocalStorage
+{
+public:
+    bool  SetValue(const void* pData);
+    void* GetValue();
+private:
+    unsigned int mTlsIndex;
+}; } }
+extern EA::Thread::ThreadLocalStorage gAptTargetTls;   // unk_8324E814
+
+void GlobalNotificationFunction(AptFilePtr* pFile)
+{
+    // Local IncRef copy -- AptLinker::Notify consumes it.
+    AptFilePtr local;
+    local.pData = pFile->pData;
+    if (local.pData != nullptr)
+        AptSharedPtrIncRef(local.pData);
+
+    AptTarget* pTarget = static_cast<AptTarget*>(gAptTargetTls.GetValue());
+    if (pTarget != nullptr && pTarget->mpLinker != nullptr)
+        pTarget->mpLinker->Notify(&local);
+
+    if (gbAptSavedInputActive)
+    {
+        // FLAG (un-homed saved-input recorder): the console records the link event
+        // (AptSavedInputCheckpoints::updateState(gpAptSavedInputCheckpoints,
+        // &file->mFileName, 1, 3, 2)); inactive on the boot path (gate default 0).
+    }
+
+    // Consume the caller's handle (asm tail: *a1 = 0 + DecRef/delete-at-zero).
+    AptFile* pConsumed = pFile->pData;
+    pFile->pData = nullptr;
+    if (pConsumed != nullptr && AptSharedPtrDecRef(pConsumed) == 0)
+        AptSharedPtrDelete(pConsumed);
+}
+
+// ---------------------------------------------------------------------
 // AptLinker::CancelLoad -- @0x82AFAE18.
 //   Find the node keyed on pValue (node->mpThingy->mpValue == pValue) and
 //   pop it from the list. No-op if not found.
@@ -290,12 +338,17 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
     if (pValue == nullptr)
         goto done;
 
-    // Accept only a CIH-handle placeholder (type 12) marked, or a CIH-none (37).
+    // Accept only a DEFINED CIH-handle (type 12), or a CIH-none (37). The console's
+    // `(v9 >> 27) & 1` is bit 27 of the big-endian-packed value bitfield == mbIsDefined
+    // (MSB-first packing: bits 31..27 = IsAllocated / HasRegisterReferenceMark /
+    // IsInDeferredVector / DestroyedGC / IsDefined; the low 7 bits it masks with
+    // (v9<<25)>>25 are meValueType, confirming the packing). The prior
+    // mbAllowsDelayedDeletion read was bit 26 -- it rejected every level placeholder.
     {
         const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
         bool bAccept = false;
         if (eType == AptVFT_CharacterInstHandle &&
-            pValue->mValueBitfield.mbAllowsDelayedDeletion /* (v9>>27)&1 bit */ )
+            pValue->getIsDefined() /* console (v9>>27)&1 == mbIsDefined */ )
             bAccept = true;
         else if (eType == AptVFT_CIHNone)
             bAccept = true;
@@ -314,8 +367,10 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
 
         if (!bSkip)
         {
-            // Already loaded?  -> grab its handle.
-            filePtr = gpAptTarget->mpLoader->IsLoaded(*pFileName); // AptLoader::IsLoaded(&v98, loader, a2) + operator=
+            // Already loaded?  -> grab its handle. The loader is keyed by the MOVIE
+            // NAME (X360 a2 == pName) -- NOT the "_level%d" target string (a3), which
+            // only names the destination variable resolved above.
+            filePtr = gpAptTarget->mpLoader->IsLoaded(*pName);     // AptLoader::IsLoaded(&v98, loader, a2) + operator=
             pLinkedFile = filePtr.pData;
             if (pLinkedFile != nullptr)
             {
@@ -326,8 +381,8 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
             }
             else
             {
-                // Not loaded yet: kick a load request.
-                filePtr = gpAptTarget->mpLoader->Load(*pFileName); // AptLoader::Load(&v99, loader, a2)
+                // Not loaded yet: kick a load request (by the movie NAME, X360 a2).
+                filePtr = gpAptTarget->mpLoader->Load(*pName);     // AptLoader::Load(&v99, loader, a2)
                 pLinkedFile = filePtr.pData;
                 // If the request just completed (state 6 -> swap state/field12 to 4),
                 // notify immediately.
