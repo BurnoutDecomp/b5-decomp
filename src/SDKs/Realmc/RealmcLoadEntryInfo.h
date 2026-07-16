@@ -60,11 +60,24 @@
 namespace RealmcIface
 {
 
+class DataBuffer;   // SDKs/Realmc/RealmcDataBuffer.h ({ mpData, muSize })
+
 class LoadEntryInfo
 {
 public:
     // @ 0x82B519E8 -- zero the four trailing words and the leading head byte.
     LoadEntryInfo();
+
+    // @ 0x82B51A08 -- DECLARATION ONLY (wave B; body still owned by this SDK TU's
+    //                 remaining fan-out): build a record from an entry name plus two
+    //                 DataBuffer pairs. Grounded in its four CgsGui::SaveLoadSystem
+    //                 call sites (BootupStart @0x82855A60, LoadHandleConfirmLoad
+    //                 @0x82855EC0, Save @0x82856040, CreateRealmcMugshotLoadEntryInfo
+    //                 @0x828523D0): r4 = the name ("Mugshots" / the 32-byte macTitle
+    //                 head), r5 = a zeroed {0,0} pair, r6 = the { data, size } pair.
+    //                 FLAG: parameter roles from the call sites; pA's meaning is
+    //                 unrecovered (every caller passes {0,0}).
+    LoadEntryInfo(const char* pName, const DataBuffer* pA, const DataBuffer* pB);
 
     // @ 0x82B51A78 -- copy the two opaque words, the data pointer and the size,
     //                 then the 32-byte head, then clear the +0x1F flag byte.

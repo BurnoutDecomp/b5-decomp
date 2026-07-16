@@ -29,12 +29,21 @@
 //   slot 0  (+0x00)  the (vector deleting) destructor
 //   slot 1  (+0x04)  reserved
 //   slot 2  (+0x08)  Update(int)            -- SaveLoadSystem::Update forwards here
-//   slots 3-10       reserved (pin the attested byte offsets below)
+//   slot 3  (+0x0C)  reserved
+//   slot 4  (+0x10)  UserSignedIn()         -- SaveLoadSystem::SetSignedInUserIndex (wave B)
+//   slot 5  (+0x14)  MessageChoice(int)     -- SaveLoadSystem::HandleMemcardOption (wave B)
+//   slot 6  (+0x18)  SetSilent(int, int)    -- SaveLoadSystem::SetSilentMode (wave B)
+//   slots 7-8        reserved
+//   slot 9  (+0x24)  Bootup(...)            -- SaveLoadSystem::BootupStart (wave B)
+//   slot 10 (+0x28)  reserved
 //   slot 11 (+0x2C)  WriteSave(...)         -- SaveLoadSystem::Save
 //   slot 12 (+0x30)  CheckSave(int, void*)  -- SaveLoadSystem::Save
 //   slot 13 (+0x34)  SetActive(int)         -- SaveLoadSystem::Prepare (passes 1)
-// The intervening slots are reserved (declared, not invented) to pin the four the
-// binary dispatches at their attested offsets; their semantics are not recovered.
+//   slot 14 (+0x38)  ReadSave(...)          -- SaveLoadSystem::LoadHandleConfirmLoad (wave B)
+// The remaining slots are reserved (declared, not invented) to pin the attested ones
+// at their byte offsets; the wave-B slot names/signatures are grounded in the
+// CgsGui::SaveLoadSystem call sites (FLAGGED inline below) -- their true SDK names are
+// not recovered.
 //
 // The concrete implementation is RealmcIface::MemcardInterfaceImpl (a 0x528-byte
 // object CreateInstance allocates and constructs); its full layout and method
@@ -81,17 +90,41 @@ public:
     virtual void Reserved01() = 0;                                // slot 1  (+0x04)
     virtual int  Update(int liArg) = 0;                          // slot 2  (+0x08)
     virtual void Reserved03() = 0;                                // slot 3  (+0x0C)
-    virtual void Reserved04() = 0;                                // slot 4  (+0x10)
-    virtual void Reserved05() = 0;                                // slot 5  (+0x14)
-    virtual void Reserved06() = 0;                                // slot 6  (+0x18)
+    // slot 4 (+0x10) -- notify the memory card that a user signed in. Dispatched by
+    // CgsGui::SaveLoadSystem::SetSignedInUserIndex @0x8284C210 (tail-call, no arguments)
+    // whenever the cached user index becomes >= 0. Was Reserved04 before wave B.
+    // FLAG: slot name inferred from the consumer.
+    virtual void UserSignedIn() = 0;                              // slot 4  (+0x10)
+    // slot 5 (+0x14) -- deliver the user's message-box choice (1..4, the Realmc codes
+    // CgsGui::SaveLoadSystem::MessageChoiceForOptionIndex maps option indices 0..3 onto).
+    // Dispatched by SaveLoadSystem::HandleMemcardOption @0x8284C6D8. Was Reserved05.
+    // FLAG: slot name inferred from the consumer.
+    virtual void MessageChoice(int liChoice) = 0;                 // slot 5  (+0x14)
+    // slot 6 (+0x18) -- toggle silent mode. Dispatched by SaveLoadSystem::SetSilentMode
+    // @0x82473110 as (0|1, -1); the -1 second argument's role is unrecovered. Was
+    // Reserved06. FLAG: slot name inferred from the consumer.
+    virtual void SetSilent(int liSilent, int liArg) = 0;          // slot 6  (+0x18)
     virtual void Reserved07() = 0;                                // slot 7  (+0x1C)
     virtual void Reserved08() = 0;                                // slot 8  (+0x20)
-    virtual void Reserved09() = 0;                                // slot 9  (+0x24)
+    // slot 9 (+0x24) -- start the bootup save check. Dispatched by
+    // SaveLoadSystem::BootupStart @0x82855A60 as (saveInfo, count, entries, titleInfo)
+    // with count/entries == (2, the two LoadEntryInfo records) on the reload lane or
+    // (0, NULL) on the plain check. Was Reserved09. FLAG: slot name inferred from the
+    // consumer.
+    virtual void Bootup(void* lpSaveInfo, int liNumEntries, void* lpEntries,
+                        void* lpTitleInfo) = 0;                   // slot 9  (+0x24)
     virtual void Reserved10() = 0;                                // slot 10 (+0x28)
     virtual void WriteSave(void* lpSaveInfo, int liCount, void* lpEntries,
                            int liFlags, void* lpTitleInfo) = 0;   // slot 11 (+0x2C)
     virtual void CheckSave(int liArg, void* lpCheckParams) = 0;   // slot 12 (+0x30)
     virtual void SetActive(int liActive) = 0;                     // slot 13 (+0x34)
+    // slot 14 (+0x38) -- read a save's entries back. Dispatched by
+    // SaveLoadSystem::LoadHandleConfirmLoad @0x82855EC0 as
+    // (&EntryContentName, 2, the two LoadEntryInfo records, 0, TitleInfo::Empty()).
+    // Appended by wave B (the slot was beyond the previously pinned +0x34 tail).
+    // FLAG: slot name inferred from the consumer.
+    virtual void ReadSave(void* lpEntryContentName, int liNumEntries, void* lpEntries,
+                          int liFlags, void* lpTitleInfo) = 0;    // slot 14 (+0x38)
 
     // @ 0x82B52BF8 -- the memory-card interface factory / singleton accessor.
     // Installs the caller's allocator + locale callback, prepares the shared

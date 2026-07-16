@@ -87,6 +87,12 @@ namespace CgsGui
 
         static const u32 KU_USERINDEX_NONE = 4;   // miUserIndex sentinel for "no user selected"
 
+        // Wave B: CgsGui::SaveLoadSystem::SignIn (X360 0x8285D9E8) pokes mbSignedIn (+0x1C)
+        // directly (`stb r11,0x1C(profile)`) when XShowSigninUI reports an immediate
+        // failure; the X360 module writes the field without an accessor, so the save/load
+        // front-end is befriended rather than fabricating a setter the binary lacks.
+        friend class SaveLoadSystem;
+
         u32       miUserIndex;       // +0x00
         u32       miState;           // +0x04 (== EUserSigninState; 1 == signed in)
         char      macUserName[16];   // +0x08

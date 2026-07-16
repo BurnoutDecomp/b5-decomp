@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Gui/CgsSaveLoad.h"   // CgsGui::ESaveLoadCif, ContentInformationFileInterface, MessageDisplay, SaveLoadTaskResultHandler
 
 #include <Windows.h>   // HANDLE / OVERLAPPED (the X360 stream/async ops wrap Win32; host Win32 on PC)
+#include <cstddef>     // offsetof (the wave-B _AssertLayout relative anchors)
 
 namespace CgsMemory { class HeapMalloc; class LinearMalloc; }
 class LanguageManager;
@@ -22,6 +23,12 @@ namespace RealmcIface
     // Forward-declared SDK helpers used by Save/Prepare; full bodies live in their own TUs.
     class GameInfo;
     class MemcardInterfaceFactory;
+    // Wave-B additions: SDK value types the SaveLoadSystem Create* helpers build/return.
+    // Complete definitions: SDKs/Realmc/RealmcIfaceSaveCheckParams.h /
+    // RealmcLoadEntryInfo.h / RealmcDataBuffer.h (include those in the .cpp partfiles).
+    class SaveCheckParams;
+    class LoadEntryInfo;
+    class DataBuffer;
 }
 
 // CgsGui::XenonFileInputStream - a read-only file input stream over a Win32 file HANDLE,
@@ -157,6 +164,23 @@ namespace CgsGui
         void LoadImageFiles(SaveLoadTaskResultHandler* lpResultHandler, s32 liNumberOfImageFiles,
                             const void* lpImageFile);
 
+        // ---- wave B public surface (X360-attested; bodies in CgsSaveLoadX360_wB_*.cpp) ----
+
+        // X360 0x82473110. Toggle silent mode: when the cached mbField181 state differs from
+        // the request, forward the change to the memory-card interface (SetSilent(lb, -1)),
+        // then cache the new state.
+        void SetSilentMode(bool lbSilentMode);
+
+        // X360 0x8284C210. Cache the signed-in user index (miField210); >= 0 tail-forwards
+        // UserSignedIn() to the memory-card interface, < 0 clears mbField183.
+        // (Caller: BrnGui::ProfileManager::SigninStateChanged.)
+        void SetSignedInUserIndex(s32 liUserIndex);
+
+        // X360 0x828522D0. Copy ONE image record's mugshot buffer into the caller's record
+        // (same { imageId, ?, miSize, dest } 16-byte record LoadImageFiles walks).
+        // (Caller: BrnGui::ProfileManager::CopyImageToBuffer.)
+        void CopyImageToBuffer(const void* lpImageFile);
+
     private:
         // X360 0x8284C240. Copy the metadata's title (wide + ascii) and the save-info comment
         // strings into the fixed buffers (asserting each fits) and cache the two size fields.
@@ -182,6 +206,143 @@ namespace CgsGui
         // confirmation to BootupStart.
         void BootupShowAutosaveWarning();
 
+        // ---- wave B private surface (X360-attested; bodies in CgsSaveLoadX360_wB_*.cpp) -------
+        //
+        // `this` conventions in the Hex-Rays views of these members (X360 ABI mechanics only --
+        // write them all as plain members using the NAMED members below):
+        //   * The Realmc RESULT callbacks (BootupCheckDone / LoadDone / SetAutosaveDone /
+        //     CardRemoved / ClearMessage) receive the +4 interface sub-object, so their raw
+        //     displacements are (real member offset - 4).
+        //   * Everything else (option handlers dispatched by HandleOption, the SignIn family,
+        //     the Create* helpers, direct members) receives the real `this`; displacements are
+        //     the real offsets.
+
+        // X360 0x8284C1B0. The locale string-id lookup callback handed to the Realmc memory
+        // card (Prepare's callback block): maps 0..27 into the maRealmemcardStringIDs table
+        // (asserts the range). Static -- no `this`.
+        static const char* LocaleGetStrCallback(u32 luStringID);
+
+        // X360 0x8284BF50 (original body lived in CgsSaveLoadX360.h:745 -- a header-defined
+        // static). Map a MessageDisplay option index 0..3 onto the Realmc message-choice code
+        // 1..4; any other index fires the "SaveLoad: unexpected option index: " assert and
+        // returns 0. Static -- no `this`.
+        static s32 MessageChoiceForOptionIndex(u32 luOptionIndex);
+
+        // X360 0x8284C6D8. The generic pending-option target ShowMessage installs: translate
+        // the chosen option index and forward it to the memory-card interface (MessageChoice).
+        void HandleMemcardOption(u32 luOption);
+
+        // X360 0x8284CAD8. If a pending-option member function is armed
+        // (mMessageDisplayOptionFunc.muFunc != 0), hide the prompt via mpMessageDisplay and
+        // clear the pair. (Realmc result-callback family: Hex-Rays displacements are real-4.)
+        void ClearMessage();
+
+        // X360 0x82852368. (Re)arm the autosave pre-flight: build the SaveCheckParams (one
+        // SaveReq for the current save) and hand it to the memory-card interface
+        // (CheckSave(1, &params)). liArg is passed by every caller as -1 and never read.
+        void EnableAutosave(s32 liArg);
+
+        // X360 0x8284C898. Build the autosave SaveCheckParams: one SaveReq built from
+        // macTitle / CreateRealmcSaveInfo / 0x100 / muGameDataSizeKb / TitleInfo::Empty().
+        // (X360 sret: dest in r3, `this` in r4.)
+        RealmcIface::SaveCheckParams CreateRealmcSaveCheckParams();
+
+        // X360 0x8284C818. Build the RealmcIface::SaveInfo for the current save into
+        // lpSaveInfo (EntryContentName(macwMetadataTitle, macTitle, mugshotBytes +
+        // muGameDataSizeKb) + the { mpContentInfoFileBuffer, miContentInfoFileSize } pair).
+        // Returns lpSaveInfo. SaveInfo itself is an un-homed SDK type (declaration-only ctor
+        // extern in the partfile); callers pass an opaque stack buffer.
+        void* CreateRealmcSaveInfo(void* lpSaveInfo);
+
+        // X360 0x828523D0. Build the "Mugshots" load-entry record ({ mpMugshotBufferData,
+        // total mugshot bytes }). (X360 sret: dest in r3, `this` in r4.)
+        RealmcIface::LoadEntryInfo CreateRealmcMugshotLoadEntryInfo();
+
+        // X360 0x8284C910. Resolve an image id (type*1000 + index) to its slot inside the
+        // mugshot buffer: mpMugshotBufferData + miExtraFilesSizeBytes * (type *
+        // miImageHeight + index). Fires range asserts on both halves.
+        void* GetMugshotBufferFromImageId(s32 liImageId);
+
+        // X360 0x82855A60. Kick the memory-card bootup check (Bootup slot +0x24): hide the
+        // prompt (display slot +0x0C), then when mbField182 == 1 include the two load-entry
+        // records (title save + Mugshots) so the bootup reloads them; pump Update. The
+        // luOption parameter is the HandleOption dispatch argument -- never read.
+        void BootupStart(u32 luOption);
+
+        // X360 0x82859A38. Realmc bootup-check result callback (0 == ok, 1..2 == failure
+        // lanes, >= 3 asserts "Should not get here"). Success: set mbField183/mbField180,
+        // EnableAutosave(-1), report success. Failure with a signed-in user: prompt
+        // SAVELOAD_RETRY_BOOT (options SAVELOAD_RETRY / SAVELOAD_CONTINUE_WITHOUT_SAVING)
+        // routed to BootupHandleRetryBootup; otherwise report result 2.
+        void BootupCheckDone(u32 luResult);
+
+        // X360 0x82855B80. Retry-bootup prompt choice: option 1 == retry (BootupStart);
+        // otherwise mbField183 = 1, mbField180 = 0 and report failure.
+        void BootupHandleRetryBootup(u32 luOption);
+
+        // X360 0x8285F200. Not-signed-in prompt choice: option 1 == WaitForUIClosed(&SignIn);
+        // otherwise report failure.
+        void BootupHandleNotSignedInOption(u32 luOption);
+
+        // X360 0x82855FE0. Realmc load result callback: success re-arms the autosave
+        // pre-flight (EnableAutosave(-1)); reports 0/1 to the result handler.
+        void LoadDone(u32 luResult);
+
+        // X360 0x82855EC0. Confirm-load prompt choice: option 1 builds the entry-content
+        // name + the two load-entry records and hands them to the memory-card interface
+        // (ReadSave slot +0x38), then pumps Update; otherwise reports failure.
+        void LoadHandleConfirmLoad(u32 luOption);
+
+        // X360 0x828521A0. Realmc load-ready callback: hand the title-save data pair
+        // { muSaveDataSizeKb, muGameDataSizeKb } to the SDK's DataBuffer and return 0.
+        // Only the last parameter is read (FLAG: the four leading parameter roles are
+        // unrecovered -- shape from the r4..r8 register usage).
+        s32 LoadReady(s32 liArg1, s32 liArg2, s32 liArg3, s32 liArg4,
+                      RealmcIface::DataBuffer* lpDataBuffer);
+
+        // X360 0x8284C7D8. Realmc save-ready callback -- never expected on X360; fires
+        // "SaveReady called.\n" and returns 0.
+        s32 SaveReady();
+
+        // X360 0x82856188. Save-retry prompt choice: option 1 == Save(); otherwise
+        // mbField180 = 0 and report failure.
+        void SaveHandleRetry(u32 luOption);
+
+        // X360 0x8284CC00. Realmc set-autosave result callback:
+        // mbField180 = (liResult == 0 && liEnabled == 1). liArg2 is never read
+        // (FLAG: parameter roles inferred from the r4/r6 compares).
+        void SetAutosaveDone(s32 liResult, s32 liArg2, s32 liEnabled);
+
+        // X360 0x8284CC20. Realmc card-removed callback: clear mbField180, arm the
+        // overlapped op (mbAsyncOpState = 1, Construct the XOVERLAPPED @+0x228) and pop the
+        // system message box (XShowMessageBoxUI) with the localised
+        // SAVELOAD_DEVICE_REMOVED_OR_CHANGED text; asserts ERROR_IO_PENDING.
+        void CardRemoved();
+
+        // X360 0x8284C648. Realmc delete result callback -- fires the streamed
+        // "DeleteDone: not implemented." assert (folds to CGS_ASSERT).
+        void DeleteDone();
+
+        // X360 0x8284CBC0 / 0x8284CB80. Realmc find-entries callbacks -- never expected on
+        // X360; assert-only bodies.
+        void FindEntriesDone();
+        void FoundEntry();
+
+        // X360 0x8285D9E8. Pop the Xbox sign-in UI (XShowSigninUI(1, 0)); on immediate
+        // failure mark mpSystemUserProfile (+0x1C flag byte), then
+        // WaitForUIClosed(&SignInUIClosed).
+        void SignIn();
+
+        // X360 0x82859D48. Sign-in UI closed: a signed-in user (miField210 >= 0) continues
+        // to BootupShowAutosaveWarning(); otherwise reports failure.
+        void SignInUIClosed();
+
+        // DECLARATION ONLY (body is NOT in this TU's fan-out; do not define): park a
+        // pending member-function to run when the current system UI closes. Callers:
+        // BootupHandleNotSignedInOption (&SignIn), SignIn (&SignInUIClosed). The X360
+        // passes the 8-byte { func, this-delta } pair by value in r4.
+        void WaitForUIClosed(void (SaveLoadSystem::*lpfnUIClosedFunc)());
+
         // ---- X360 layout (byte offsets are authoritative) -------------------------------------
         // +0x00  : inherited ContentInformationFileInterface vptr
         u8   mPad04[0x08 - 0x04];                 // +0x04 .. +0x07
@@ -199,7 +360,9 @@ namespace CgsGui
         const char* mpacSaveFilePath;             // +0x17C save-file path (CreateFileA)
         bool   mbField180;                        // +0x180 (Construct sets true)
         bool   mbField181;                        // +0x181 (Construct sets false)
-        u8     mPad182;                           // +0x182 alignment
+        bool   mbField182;                        // +0x182 (BootupStart `lbz 0x182` == 1 -> the
+                                                  //         bootup check reloads the two save
+                                                  //         entries; was mPad182 before wave B)
         bool   mbField183;                        // +0x183 (Construct sets false)
         RealmcIface::MemcardInterface* mpMemcardInterface; // +0x184
         LanguageManager* mpLanguageManager;       // +0x188
@@ -245,5 +408,63 @@ namespace CgsGui
         bool   mbAutosaveIconVisible;             // +0x248 cached autosave-icon visibility
         u8     mPad249[0x24C - 0x249];            // +0x249 .. +0x24B
         u8     mField24C;                         // +0x24C (Construct zeroes)
+
+    private:
+        // Never called -- wave-B layout pin. The X360 vptr is 4 bytes but the host x64 vptr
+        // is 8, so no member offset here is pointer-invariant; every pin is therefore a
+        // RELATIVE anchor between members with platform-invariant sizes in between (the
+        // documented X360 byte offsets in the comments above stay the offset authority).
+        static void _AssertLayout()
+        {
+            // comment block: +0x08 .. +0x128 (char arrays + u64, invariant sizes)
+            static_assert(offsetof(SaveLoadSystem, macSaveInfoDescription)
+                        - offsetof(SaveLoadSystem, macSaveInfoComment) == 0x20,
+                          "macSaveInfoDescription must follow the 32-byte comment (X360 +0x28)");
+            // (no anchor across macSaveInfoDescription -> mField128: the u64 rounds up to an
+            //  8-byte boundary on the host, so that distance is X360-only -- 0x100 there.)
+            // wide-title block: +0x138 .. +0x178 (32 wchar_t == 64 bytes on MSVC)
+            static_assert(offsetof(SaveLoadSystem, mpacContentInfoFilePath)
+                        - offsetof(SaveLoadSystem, macwTitle) == 0x40,
+                          "mpacContentInfoFilePath must follow the 32-wchar title (X360 +0x178)");
+            // flag cluster: +0x180 .. +0x183 (bytes, invariant)
+            static_assert(offsetof(SaveLoadSystem, mbField181)
+                        - offsetof(SaveLoadSystem, mbField180) == 1
+                       && offsetof(SaveLoadSystem, mbField182)
+                        - offsetof(SaveLoadSystem, mbField180) == 2
+                       && offsetof(SaveLoadSystem, mbField183)
+                        - offsetof(SaveLoadSystem, mbField180) == 3,
+                          "the +0x180..+0x183 flag bytes must stay adjacent");
+            // option pair: two 4-byte words (the X360 stores it as one 8-byte std)
+            static_assert(offsetof(SaveLoadSystem, mMessageDisplayOptionFunc.muDelta)
+                        - offsetof(SaveLoadSystem, mMessageDisplayOptionFunc.muFunc) == 4,
+                          "mMessageDisplayOptionFunc must be { func, delta } (X360 +0x198/+0x19C)");
+            // metadata/title/size block: +0x1A0 .. +0x20C (wchar/char arrays + u32s)
+            static_assert(offsetof(SaveLoadSystem, macTitle)
+                        - offsetof(SaveLoadSystem, macwMetadataTitle) == 0x40,
+                          "macTitle must follow the 32-wchar metadata title (X360 +0x1E0)");
+            static_assert(offsetof(SaveLoadSystem, muSaveDataSizeKb)
+                        - offsetof(SaveLoadSystem, macTitle) == 0x20
+                       && offsetof(SaveLoadSystem, muGameDataSizeKb)
+                        - offsetof(SaveLoadSystem, muSaveDataSizeKb) == 4
+                       && offsetof(SaveLoadSystem, miContentInfoFileSize)
+                        - offsetof(SaveLoadSystem, muSaveDataSizeKb) == 8,
+                          "the +0x200 size/pair block must stay adjacent");
+            // mugshot block: +0x210 .. +0x21C (s32s, invariant)
+            static_assert(offsetof(SaveLoadSystem, miImageWidth)
+                        - offsetof(SaveLoadSystem, miField210) == 4
+                       && offsetof(SaveLoadSystem, miImageHeight)
+                        - offsetof(SaveLoadSystem, miImageWidth) == 4
+                       && offsetof(SaveLoadSystem, miExtraFilesSizeBytes)
+                        - offsetof(SaveLoadSystem, miImageWidth) == 8,
+                          "the +0x210 mugshot-int block must stay adjacent");
+            // overlapped block: +0x224 .. +0x248 (bytes, invariant). CardRemoved constructs
+            // the XOVERLAPPED at maOverlapped[0] and passes &maOverlapped[0x1C] as the
+            // XShowMessageBoxUI MESSAGEBOX_RESULT (X360 +0x244).
+            static_assert(offsetof(SaveLoadSystem, maOverlapped)
+                        - offsetof(SaveLoadSystem, mbAsyncOpState) == 4
+                       && offsetof(SaveLoadSystem, mbAutosaveIconVisible)
+                        - offsetof(SaveLoadSystem, maOverlapped) == 0x20,
+                          "the +0x224 async-op block must stay adjacent");
+        }
     };
 }

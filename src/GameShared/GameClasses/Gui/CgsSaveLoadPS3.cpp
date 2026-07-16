@@ -74,10 +74,9 @@ namespace
     // The save/load locale-string callback the memory-card interface is given.
     void* gpfnLocaleGetStrCallback = nullptr;   // CgsGui::SaveLoadSystem::LocaleGetStrCallback
 
-    // SaveLoadSystem private helpers reached from in-scope functions but bodied in other parts of
-    // the (out-of-scope) implementation.
-    void* GetMugshotBufferFromImageId(void* lpSystem, int liImageId);                   // SaveLoadSystem::GetMugshotBufferFromImageId
-    void* CreateRealmcSaveInfo(void* lpOut, void* lpSystem);                            // SaveLoadSystem::CreateRealmcSaveInfo
+    // (wave B) The GetMugshotBufferFromImageId / CreateRealmcSaveInfo placeholders that used
+    // to be declared here became real class members (CgsSaveLoadX360.h); the call sites below
+    // now call the members directly.
 
     // Pending message-display option member functions (the X360 stores these as member-function
     // pointers in mActiveOptionFunc / mMessageDisplayOptionFunc and later dispatches them).
@@ -283,7 +282,7 @@ namespace CgsGui
 
         void* lpTitleInfo = RealmcTitleInfo_Empty();
         u8    lSaveInfo;
-        void* lpSaveInfo = CreateRealmcSaveInfo(&lSaveInfo, this);
+        void* lpSaveInfo = CreateRealmcSaveInfo(&lSaveInfo);
         mpMemcardInterface->WriteSave(lpSaveInfo, 2, laEntries[0], 0, lpTitleInfo);
 
         Update();
@@ -308,7 +307,7 @@ namespace CgsGui
             CGS_ASSERT(liRecordSize == miExtraFilesSizeBytes,
                        "lpImageFile[liIndex].miSize == miExtraFilesSizeBytes");
 
-            void* lpSource = GetMugshotBufferFromImageId(this, liImageId);
+            void* lpSource = GetMugshotBufferFromImageId(liImageId);
             std::memcpy(lpDest, lpSource, static_cast<usize>(miExtraFilesSizeBytes));
 
             lpRecord += 4;
