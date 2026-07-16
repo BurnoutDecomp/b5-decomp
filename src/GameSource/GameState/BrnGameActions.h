@@ -78,6 +78,27 @@ enum EGameActionType
     E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 53,    // DWARF BrnGameActions.h:63
     E_ACTION_WORLD_STUNT_PERFORMED      = 122,   // DWARF BrnGameActions.h:132
     E_ACTION_POWER_PARK_RESULT          = 139,   // DWARF BrnGameActions.h:149
+
+    // Freeburn-challenge action block (ChallengeManager keystone). X360-ATTESTED values:
+    // the PS3-DWARF block is 145..153, but every ChallengeManager AddEvent callsite posts
+    // id == DWARF+8 with the byte size matching the DWARF struct exactly (update action
+    // id 155 size 0x94, success-update id 158 size 0x10, success id 159 size 0xC,
+    // completion-status id 156 size 0x108, every-player id 157 size 0x838, show-selector
+    // id 160 size 8, active-challenge id 161 size 0x30, end-not-active id 154 size 1,
+    // challenge id 153 size 0x20).
+    E_ACTION_FREEBURN_CHALLENGE                          = 153,  // DWARF 145 (+8 X360)
+    E_ACTION_FREEBURN_CHALLENGE_END_NOT_ACTIVE           = 154,  // DWARF 146 (+8 X360)
+    E_ACTION_FREEBURN_CHALLENGE_UPDATE                   = 155,  // DWARF 147 (+8 X360)
+    E_ACTION_FREEBURN_CHALLENGE_COMPLETION_STATUS        = 156,  // DWARF 148 (+8 X360)
+    E_ACTION_FREEBURN_CHALLENGE_EVERY_PLAYER_COMPLETION_STATUS = 157, // DWARF 149 (+8 X360)
+    E_ACTION_FREEBURN_CHALLENGE_SUCCESS_UPDATE           = 158,  // DWARF 150 (+8 X360)
+    E_ACTION_FREEBURN_CHALLENGE_SUCCESS                  = 159,  // DWARF 151 (+8 X360)
+    // StreetManager keystone (wave B). PS3-DWARF value (BrnGameActions.h enum: 262);
+    // the X360 discriminant is owned by the GameStateModule dispatcher that posts the
+    // query -- template tag only here (the filler, FillInRoadRulesQuery, never reads it).
+    E_ACTION_ROAD_RULES_BATCH_QUERY                      = 262,  // value unconfirmed on X360 (template tag only)
+    E_ACTION_FREEBURN_CHALLENGE_SHOW_SELECTOR            = 160,  // DWARF 152 (+8 X360)
+    E_ACTION_ACTIVE_FREEBURN_CHALLENGE                   = 161,  // DWARF 153 (+8 X360)
 };
 
 template <EGameActionType T>
@@ -430,5 +451,147 @@ static_assert(offsetof(OnStuntElementCompleteAction, maConvoyMemberIds) == 0x44,
               "OnStuntElementCompleteAction::maConvoyMemberIds must be at X360 offset +0x44");
 static_assert(offsetof(OnStuntElementCompleteAction, miConvoyMemberCount) == 0x64,
               "OnStuntElementCompleteAction::miConvoyMemberCount must be at X360 offset +0x64");
+
+// ===== Freeburn-challenge actions (ChallengeManager keystone) =====
+
+// DWARF BrnGameActions.h:5543 (member set + order). X360 size attested: ChallengeManager::
+// WriteDataToOutput posts it with AddEvent(..., 155, 0x94) and 4+4+4+64+8+64 == 0x94 exactly.
+// [2][8] == [action][player] (note the transposed order vs the manager's [player][action] grids).
+struct FreeburnChallengeUpdateAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE_UPDATE>
+{
+    f32 mfTimeLeftInChallenge;                            // 0x00 (:5546)
+    s32 miCurrentActionIndex;                             // 0x04 (:5547)
+    s32 miNumTargetsUsed;                                 // 0x08 (:5549)
+    f32 maafIndividualTargetContributions[2][8];          // 0x0C (:5550)
+    s32 maiOverallTargetRemaining[2];                     // 0x4C (:5551)
+    EFreeburnChallengeSuccess maaeCompleted[2][8];        // 0x54 (:5552)
+}; // sizeof == 0x94
+
+// DWARF BrnGameActions.h:5590. X360 size attested: UpdateActionSuccess posts AddEvent(..., 158, 0x10).
+struct FburnChallengeSuccessUpdateAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE_SUCCESS_UPDATE>
+{
+    // DWARF also spells the LastSecondChallengeSuccess typedef at :3142 inside this struct;
+    // the owning definition is BrnGameStateSharedIO.h:313 (FastBitArray<60>).
+    LastSecondChallengeSuccess mChallengeSuccessUpdate; // 0x00 (:5592, FastBitArray<60>)
+    s32 miActionIndex;                                  // 0x08 (:5593)
+}; // sizeof == 0x10
+
+// DWARF BrnGameActions.h:5604. X360 size attested: UpdateChallenge posts AddEvent(..., 159, 0xC).
+struct FburnChallengeSuccessAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE_SUCCESS>
+{
+    f32  mafActionScores[2];          // 0x00 (:5606)
+    bool mabSuccessfulActions[2];     // 0x08 (:5607)
+    bool mabAccumulationThisFrame[2]; // 0x0A (:5608)
+}; // sizeof == 0xC
+
+// The plain freeburn-challenge lifecycle action (id 153). DWARF BrnGameActions.h:5514 (member
+// set + order). X360 size attested: SEVEN ChallengeManager sites post it with
+// AddEvent(..., 153, 0x20) -- BeginChallenge 0x823505B8, TriggerFreeburnChallenge 0x82346DA0,
+// EndChallenge 0x8234DE30, UpdateResults 0x82345FD0, UpdateArbitration 0x82351AF8,
+// UpdateArbitrationSuccess 0x82350340, UpdateChallenge 0x82347190 -- and every field store below
+// is offset-attested at those sites (CgsID @0x00, s32 @0x08/0x0C/0x10/0x14/0x18, byte @0x1C/0x1D,
+// 2B tail pad -> 0x20).
+// meEventType is BrnNetwork::BrnNetworkModuleIO::EChallengeEventType (DWARF :5517) stored as s32
+// (same 4B storage; the StartNetworkGameEvent::meBoostType precedent -- including the heavy
+// BrnNetworkModuleIO.h here is not warranted). X360-DRIFT WARNING on its VALUES: the begin(0)/
+// trigger(1)/action-success(2)/reset(3) posts match the committed PS3-DWARF enumerators 1:1, but
+// EndChallenge stores 5 and UpdateResults stores 6 where the PS3 enum spells ENDED=4/
+// RESULTS_FINISHED=5 -- the X360 enum carries one extra (unattested) enumerator before ENDED.
+// Store the raw attested value with a drift comment; do NOT "fix" 5/6 back to the PS3 names.
+struct FreeburnChallengeAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE>
+{
+    CgsID mChallengeID;                  // 0x00 (:5516)
+    s32   meEventType;                   // 0x08 (:5517, BrnNetworkModuleIO::EChallengeEventType; s32 storage)
+    EChallengeStatus meChallengeStatus;  // 0x0C (:5518, BrnGameState::EChallengeStatus)
+    s32   miActionIndex;                 // 0x10 (:5519)
+    s32   miNumChallengesComplete;       // 0x14 (:5520; -1 == "not supplied" at most sites)
+    s32   miTotalNumChallenges;          // 0x18 (:5521; -1 == "not supplied" at most sites)
+    bool  mbIsHost;                      // 0x1C (:5522)
+    bool  mbAbortingToStartNewChallenge; // 0x1D (:5523)
+
+    void Construct();                    // :5527 declared-only (not in this TU's X360 ledger)
+}; // sizeof == 0x20
+
+// The empty end-not-active notification action (id 154). DWARF BrnGameActions.h:5531 (an EMPTY
+// struct -- no members). X360 size attested: CancelFreeburnChallenge / RemoteEndChallenge /
+// UpdateArbitrationSuccess post AddEvent(..., 154, 1) from an uninitialised stack byte.
+// (The already-committed partfiles post the bare GameAction<E_ACTION_FREEBURN_CHALLENGE_END_
+// NOT_ACTIVE> tag, which is layout-identical; prefer this named struct in new bodies.)
+struct FburnChallengeEndNotActiveAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE_END_NOT_ACTIVE>
+{
+}; // sizeof == 1 (empty)
+
+// One player's freeburn-challenge completion-status action (id 156). DWARF BrnGameActions.h:5563.
+// X360 size attested: NetworkPlayerFinalised 0x82347E88 posts AddEvent(..., 156, 0x108) after
+// memcpy'ing the manager's 256-byte local completion bit store to +0x00 and stamping the player
+// id at +0x100 (stw sp+0x180). NOTE the field ORDER differs from CompletedFburnChallengesData
+// (the EventQueue element, id first) -- here the bit store leads.
+struct FburnChallengeStatusAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE_COMPLETION_STATUS>
+{
+    CompletedFburnChallenges    mCompletedChallenges; // 0x000 (:5565, FastBitArray<2000> == 256B)
+    BrnNetwork::NetworkPlayerID mPlayerID;            // 0x100 (:5566)
+}; // sizeof == 0x108 (4B tail pad)
+
+// The "show the challenge selector" GUI action (id 160). DWARF BrnGameActions.h:5619.
+// X360 size attested: NetworkPlayerRemoved 0x8234E420 (posts it ZEROED -- std r0 -> mChallengeID
+// == 0), Disconnected-family and UpdateArbitration / UpdateArbitrationSuccess post
+// AddEvent(..., 160, 8).
+struct FburnChallengeShowSelectorAction : public GameAction<E_ACTION_FREEBURN_CHALLENGE_SHOW_SELECTOR>
+{
+    CgsID mChallengeID;   // 0x00 (:5621)
+}; // sizeof == 8
+
+// The "this is the currently active freeburn challenge + its participants" action (id 161).
+// DWARF BrnGameActions.h:5632 (member SET; see drift note). X360 size + layout attested:
+// NetworkPlayerFinalised 0x82347E88 builds it on the stack (sp+0x50) and posts
+// AddEvent(..., 161, 0x30): CgsID @0x00 (std, mpCurrentChallenge id), the ARCI slots filled from
+// +0x08 (stwx r30, 4*count + sp+0x58), the destination player id @0x24 (stw sp+0x74) and the
+// participant count @0x28 (stw sp+0x78).
+// X360-vs-DWARF MEMBER-ORDER DRIFT: the PS3 DWARF lists maePlayersInChallengeARCI FIRST (id at
+// +0x20) -- the X360 build stores the id at +0x00 and the ARCI block at +0x08. Member names are
+// the DWARF's; the ORDER below is X360-authoritative. (The matching *event* consumed by
+// ProcessEvent case 173 KEEPS the PS3 order -- see ActiveFburnChallengeEvent in BrnGameEvents.h.)
+struct ActiveFburnChallengeAction : public GameAction<E_ACTION_ACTIVE_FREEBURN_CHALLENGE>
+{
+    // == the count the NetworkPlayerFinalised bound assert spells:
+    // "lActiveChallengeAction.miNumPlayersInChallenge < KI_MAX_NETWORK_PLAYERS"
+    static const s32 KI_MAX_NETWORK_PLAYERS = 7;
+
+    CgsID                       mChallengeID;                // 0x00 (:5635; X360 FIRST -- drift)
+    EActiveRaceCarIndex         maePlayersInChallengeARCI[KI_MAX_NETWORK_PLAYERS]; // 0x08..0x23 (:5634)
+    BrnNetwork::NetworkPlayerID mPlayerToSendToID;           // 0x24 (:5636)
+    s32                         miNumPlayersInChallenge;     // 0x28 (:5637)
+}; // sizeof == 0x30 (4B tail pad)
+
+// Pin the X360-attested offsets of the freeburn action family (all pointer-free -> absolute on
+// the x64 gate too). GameAction<T> is the empty tag base, so struct base == action base.
+static_assert(sizeof(FreeburnChallengeAction) == 0x20, "FreeburnChallengeAction must be 0x20 bytes (AddEvent size)");
+static_assert(offsetof(FreeburnChallengeAction, meEventType) == 0x08, "FreeburnChallengeAction::meEventType at +0x08");
+static_assert(offsetof(FreeburnChallengeAction, mbIsHost) == 0x1C, "FreeburnChallengeAction::mbIsHost at +0x1C");
+static_assert(sizeof(FburnChallengeStatusAction) == 0x108, "FburnChallengeStatusAction must be 0x108 bytes (AddEvent size)");
+static_assert(offsetof(FburnChallengeStatusAction, mPlayerID) == 0x100, "FburnChallengeStatusAction::mPlayerID at +0x100");
+static_assert(sizeof(FburnChallengeShowSelectorAction) == 8, "FburnChallengeShowSelectorAction must be 8 bytes (AddEvent size)");
+static_assert(sizeof(ActiveFburnChallengeAction) == 0x30, "ActiveFburnChallengeAction must be 0x30 bytes (AddEvent size)");
+static_assert(offsetof(ActiveFburnChallengeAction, maePlayersInChallengeARCI) == 0x08, "ActiveFburnChallengeAction ARCI block at +0x08");
+static_assert(offsetof(ActiveFburnChallengeAction, mPlayerToSendToID) == 0x24, "ActiveFburnChallengeAction::mPlayerToSendToID at +0x24");
+static_assert(offsetof(ActiveFburnChallengeAction, miNumPlayersInChallenge) == 0x28, "ActiveFburnChallengeAction::miNumPlayersInChallenge at +0x28");
+
+// ===== Road-rules batch query (StreetManager keystone, wave B) =====
+// ADDITIVE GROW. DWARF BrnGameActions.h:2833 (members :4808..:4814); the member ORDER
+// below is X360-authoritative from StreetManager::FillInRoadRulesQuery @ 0x823365A8,
+// which stores miNumRoads at +512 (right after the ids) and the four bool arrays at
+// +516/+580/+644/+708 with the owns-all flag at +772 -- the PS3 DWARF lists miNumRoads
+// after the bool arrays; the X360 build places it before them.
+// The two "beaten" pairs are indexed by BrnStreetData::ScoreType (0 == TIME, 1 == CRASH).
+struct RoadRulesBatchQueryAction : public GameAction<E_ACTION_ROAD_RULES_BATCH_QUERY>
+{
+    ::CgsID maRoadIds[64];                 // +0    (:4808) one CgsID per road
+    s32     miNumRoads;                    // +512  (:4813) asserted <= KI_MAX_CHALLENGES
+    bool    mabPlayerBeatenParTime[64];    // +516  (:4809) HasPlayerBeatenParScore(i, TIME)  == BEATEN
+    bool    mabPlayerBeatenParCrash[64];   // +580  (:4810) HasPlayerBeatenParScore(i, CRASH) == BEATEN
+    bool    mabPlayerBestOnlineTime[64];   // +644  (:4811) HasPlayerBeatenFriendScore(i, TIME)  == BEATEN
+    bool    mabPlayerBestOnlineCrash[64];  // +708  (:4812) HasPlayerBeatenFriendScore(i, CRASH) == BEATEN
+    bool    mbPlayerOwnsAllRoadsOffline;   // +772  (:4814) ProgressionManager complete-roads tally >= 64
+};
 }
 }

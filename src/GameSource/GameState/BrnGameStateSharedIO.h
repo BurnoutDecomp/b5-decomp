@@ -5,6 +5,7 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"             // BrnGameState::LandmarkIndex
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"     // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"      // CgsContainers::BitArray<N> (CarCheckpointData)
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray<60> (LastSecondChallengeSuccess)
 #include "GameSource/BurnoutConstants.h"                        // EActiveRaceCarIndex (FlybyRivalData)
 #include "GameSource/GameState/BrnCgsPlayerName.h"              // CgsNetwork::PlayerName (shared 16-byte home)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"        // CgsSystem::Time (CarScoreData)
@@ -139,6 +140,27 @@ namespace BrnGameState
             s32                      mNetworkPlayerID;             // 0x00 (BrnNetwork::NetworkPlayerID == s32)
             CompletedFburnChallenges mCompletedFreeburnChallenges; // 0x08 (FastBitArray<2000>, 256B)
         };
+
+        // Per-player-per-action freeburn-challenge success state (DWARF home
+        // BrnGameStateSharedIO.h:541; previously mirrored by value in the committed
+        // BrnGuiFreeburnChallengeManager.h -- THIS is the owning definition). Stored in
+        // ChallengeManager::maaePlayersSuccessStatus[8][2] and FreeburnChallengeUpdateAction::
+        // maaeCompleted; the ChallengeManager per-action player counters test CONTRIBUTING(2)
+        // and DONE(3) (X360 GetNumPlayersContributing/GetNumPlayerSucceeding).
+        enum EFreeburnChallengeSuccess
+        {
+            E_FREEBURN_CHALLENGE_SUCCESS_NONE             = 0,
+            E_FREEBURN_CHALLENGE_SUCCESS_NOT_IN_CHALLENGE = 1,
+            E_FREEBURN_CHALLENGE_SUCCESS_CONTRIBUTING     = 2,
+            E_FREEBURN_CHALLENGE_SUCCESS_DONE             = 3,
+            E_FREEBURN_CHALLENGE_SUCCESS_COUNT            = 4,
+        };
+
+        // Per-player last-second success bit set carried by the freeburn success-update
+        // action/event and cached in ChallengeManager::mLastSecondSuccessStatus (DWARF home
+        // BrnGameStateSharedIO.h:313: typedef FastBitArray<60> LastSecondChallengeSuccess --
+        // one u64 field; the X360 zero/latch stores are single `std`s).
+        typedef CgsContainers::FastBitArray<60> LastSecondChallengeSuccess;
 
         // ===== Added by the GameMode/ModeManager leaf batch (Group B IO family) =====
 
@@ -349,6 +371,17 @@ namespace BrnGameState
             void Construct();
             void AddCompletionStatus(const CompletedFburnChallenges* lpCompletedChallenges,
                                      BrnNetwork::NetworkPlayerID lPlayerID);
+
+            // ADDITIVE GROW (ChallengeManager keystone, wave C). DWARF BrnGameStateSharedIO.h:944:
+            // stamp the LOCAL player's completion bit store into the trailing private member. The
+            // X360 build inlines it at its sole reconstructed callsite
+            // (ChallengeManager::OutputFreeburnChallengeEveryPlayerStatusEvent @ 0x823480A0:
+            // memcpy(event+0x738, manager+0xD00, 0x100)) -- the member copy below emits exactly
+            // that 256-byte copy. Defined inline so the inlining call sites stay store-for-store.
+            void AddLocalPlayerCompletionStatus(const CompletedFburnChallenges* lpCompletedChallenges)
+            {
+                mLocalChallengeCompletionData = *lpCompletedChallenges;
+            }
 
         private:
             static const s32 KI_NUM_PLAYER_SLOTS = 7;

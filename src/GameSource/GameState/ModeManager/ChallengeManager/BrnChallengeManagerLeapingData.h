@@ -1,16 +1,8 @@
 #pragma once
 
-#include "types.hpp"
-
-// Provisional element home for the ObjectPool<CarLeapingData,7,s32> instantiation. CarLeapingData
-// is a nested record of BrnGameState::ChallengeManager (real fields land with that TU); sized
-// to the X360 element stride (32 bytes). Single owner -- grow in place.
-namespace BrnGameState
-{
-class ChallengeManager
-{
-public:
-    struct CarLeapingData { u8 maBlob[32]; };
-    struct StoredLeapingData { u8 maBlob[32]; };   // 32-byte X360 element stride (EActiveRaceCarIndex + Vector3); blob-style to match CarLeapingData
-};
-}
+// The provisional stand-alone home of BrnGameState::ChallengeManager::{CarLeapingData,
+// StoredLeapingData} (32-byte X360 pool-element blobs) has been grown in place into the
+// manager's real header, exactly as the original thin slice planned ("single owner --
+// grow in place"). This forward keeps the ObjectPool_CarLeapingData_7.cpp /
+// ObjectPool_StoredLeapingData_7.cpp instantiation TUs' include lines valid.
+#include "GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManager.h"
