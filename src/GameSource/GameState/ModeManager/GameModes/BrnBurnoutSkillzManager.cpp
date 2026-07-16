@@ -50,9 +50,9 @@ typedef BrnPhysics::Vehicle::RaceCarState                RaceCarState;
 typedef CgsModule::VariableEventQueue<1536, 16>  GameEventQueueImpl;
 typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 
-// KI_MAX_CHALLENGES -- the road-rule challenge table width (X360 0x40). Named so the
-// index bounds guards do not use a bare literal.
-static const s32 KI_MAX_CHALLENGES = 64;
+// KI_MAX_CHALLENGES (the road-rule challenge table width, X360 0x40) now comes from
+// the frozen BrnGameStateStreetManager.h (its DWARF home, BrnGameStateStreetManager.h:102);
+// the former file-local duplicate was removed with the wave-B StreetManager freeze.
 
 // ----------------------------------------------------------------------------
 // Event payload views.

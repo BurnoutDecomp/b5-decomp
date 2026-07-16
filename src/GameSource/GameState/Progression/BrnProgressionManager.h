@@ -5,8 +5,12 @@
 #include "GameSource/GameState/BrnGameStateTypes.h" // BrnGameState::StuntElementType
 #include "SharedClasses/Trigger/BrnGenericRegion.h"  // BrnTrigger::GenericRegion::Type (OnDriveThru param)
 #include "BrnProfile.h"                              // BrnProgression::Profile (embedded sub-object, mProfile)
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr (mpProgressionData / mpAISectionData)
 
 #include <cstddef> // offsetof (uncalled _AssertLayout)
+
+namespace BrnAI { struct AISectionsData; }   // ResourcePtr<T> tag only (never dereferenced here)
+namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }   // SendGameCompletionResults param (pointer-only)
 
 // Foreign types the additive DriveThruManager-facing accessors route by pointer (declare-only).
 // Tags match the committed homes (CarData/ProgressionData = struct, AchievementManagerBase = class)
@@ -95,6 +99,19 @@ public:
     // assert the result is non-null, then poke training flags through it. Body + the real embedded
     // Profile member land with the ProgressionManager TU. FLAG: declare-only additive grow.
     Profile* GetProfile();
+
+    // (The StreetManager keystone's GetProgressionData() grow collided with the identical
+    //  pre-existing DriveThruManager-batch declaration further down -- X360 attestation for it:
+    //  DWARF BrnProgressionManager.h:426; the X360 inlines ResourcePtr<ProgressionData>::
+    //  operator-> at each call site, e.g. StreetManager::FindRivalsByDistrict @ 0x82336360,
+    //  null-checking mpResourceMemory first. ONE declaration kept below.)
+
+    // ADDITIVE GROW (declare-only) for the StreetManager keystone (wave B). X360
+    // StreetManager::UpdateUserScoresFromServerRecords @ 0x82348FC0 tail-calls
+    // SendGameCompletionResults(pm, lpOutput->GetGameActionQueue()) after the trophy
+    // fan-out -- posts the game-completion results onto the output game-action queue
+    // (VariableEventQueue<13312,16>). Body lands with the ProgressionManager TU.
+    void SendGameCompletionResults( CgsModule::VariableEventQueue<13312, 16>* lpGameActionQueue );
 
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the BrnStuntManager TU.
@@ -213,6 +230,41 @@ public:
     // lpaChallengeHighScores (3584-byte copy). Asserts the source non-null then delegates to the Profile.
     void SetRoadRuleNetworkHighScores(const BrnStreetData::ChallengeHighScoreEntry* lpaChallengeHighScores);
 
+    // ------------------------------------------------------------------------
+    // ADDITIVE GROW (StreetManager wave-C keystone) -- the roads-ruled counter accessors the
+    // DWARF declares at BrnProgressionManager.h:516-531. Header-inline in the original: the
+    // X360 folds them into StreetManager::GetNumberOfParShowTimeRoadsRuledByLocalPlayer
+    // @0x8233F230 (+133456), GetNumberOfParTimeTrialRoadsRuledByLocalPlayer @0x8233F2C0
+    // (+133460), GetNumberOfCompleteRoadsRuledByLocalPlayer @0x8233F350 (+133464) and
+    // FillInRoadRulesQuery @0x823365A8 (the >= 64 owns-all-roads read). The "only if
+    // greater" max-updates are the StreetManager callsites' own attested branches, not
+    // these accessors'. DWARF constness kept verbatim (the Complete getter is non-const).
+    // ------------------------------------------------------------------------
+    u32  GetNumberOfParCrashRoadRulesRuledByPlayer() const
+    {
+        return static_cast<u32>(miNumberOfParCrashRoadRulesRuledByPlayer);
+    }
+    void SetNumberOfParCrashRoadRulesRuledByPlayer(u32 luNumber)
+    {
+        miNumberOfParCrashRoadRulesRuledByPlayer = static_cast<s32>(luNumber);
+    }
+    u32  GetNumberOfParTimeRoadRulesRuledByPlayer() const
+    {
+        return static_cast<u32>(miNumberOfParTimeRoadRulesRuledByPlayer);
+    }
+    void SetNumberOfParTimeRoadRulesRuledByPlayer(u32 luNumber)
+    {
+        miNumberOfParTimeRoadRulesRuledByPlayer = static_cast<s32>(luNumber);
+    }
+    u32  GetNumberOfCompleteRoadRulesRuledByPlayer()
+    {
+        return static_cast<u32>(miNumberOfNumberOfCompleteRoadRulesRuledByPlayer);
+    }
+    void SetNumberOfCompleteRoadRulesRuledByPlayer(u32 luNumber)
+    {
+        miNumberOfNumberOfCompleteRoadRulesRuledByPlayer = static_cast<s32>(luNumber);
+    }
+
 private:
     // ========================================================================
     // MINIMAL MEMBER LAYOUT (field ORDER X360-attested; exact byte offsets are X360-only -- the
@@ -241,10 +293,21 @@ private:
     // AreRoadRulesAvailable's medal read) goes through this named member.
     Profile mProfile;                                  // X360 +0x170
 
-    // Two road-rules-availability flags AreRoadRulesAvailable OR-folds (X360 +133456 / +133460).
-    // FLAG: their producers live in not-yet-reconstructed ProgressionManager TUs.
-    s32 mi32RoadRulesAvailableFlagA;                   // X360 +133456
-    s32 mi32RoadRulesAvailableFlagB;                   // X360 +133460
+    // The player's road-rules-ruled tallies (X360 +133456 / +133460 / +133464).
+    // *** FLAG -- COMMITTED-NAME CORRECTION (StreetManager keystone, wave B) ***
+    // Previously committed as mi32RoadRulesAvailableFlagA/B ("availability flags");
+    // the DecFIGS DWARF (BrnProgressionManager.h:152/:155/:158) names them, and the
+    // StreetManager tally functions prove the semantics:
+    //   GetNumberOfParShowTimeRoadsRuledByLocalPlayer @ 0x8233F230 maxes +133456
+    //     with the CRASH-score tally,
+    //   GetNumberOfParTimeTrialRoadsRuledByLocalPlayer @ 0x8233F2C0 maxes +133460
+    //     with the TIME-score tally,
+    //   GetNumberOfCompleteRoadsRuledByLocalPlayer @ 0x8233F350 stores the
+    //     both-scores tally at +133464.
+    // AreRoadRulesAvailable's nonzero-OR reads stay correct under the rename.
+    s32 miNumberOfParCrashRoadRulesRuledByPlayer;              // X360 +133456 (DWARF :152)
+    s32 miNumberOfParTimeRoadRulesRuledByPlayer;               // X360 +133460 (DWARF :155)
+    s32 miNumberOfNumberOfCompleteRoadRulesRuledByPlayer;      // X360 +133464 (DWARF :158; sic -- DWARF spelling)
 
     // Prepare2 back-pointers (X360 +0x20924 / +0x2093C / +0x20938). Typed as the X360 forwards them.
     void*                                  mpTriggerData;        // X360 +0x20924 (a5)
@@ -261,32 +324,19 @@ private:
     };
     DebugComponentSlot mDebugComponent;
 
-    // Two intrusive doubly-linked-list heads the ctor empties (X360 ctor: count=0; next=prev=mid=&self;
-    // tail=0 -- the canonical empty CgsList sentinel; X360 +133348 and +133380).
-    struct IntrusiveListHead
-    {
-        s32   mi32Count;        // +0x00 (ctor: 0)
-        void* mpReserved0;      // +0x04 (ctor: 0)
-        void* mpReserved1;      // +0x08 (ctor: 0)
-        void* mpHead;           // +0x0C (ctor: &self)
-        void* mpTail;           // +0x10 (ctor: &self)
-        void* mpMid;            // +0x14 (ctor: &self)
-        void* mpReserved2;      // +0x18 (ctor: 0)
-
-        // Empty the list to the X360 ctor's self-referential sentinel state.
-        void Reset()
-        {
-            mi32Count   = 0;
-            mpReserved0 = nullptr;
-            mpReserved1 = nullptr;
-            mpHead      = this;   // X360: result[3340] = result + 33337 (&self)
-            mpTail      = this;   // X360: result[3341] = result + 33337
-            mpMid       = this;   // X360: result[3342] = result + 33337
-            mpReserved2 = nullptr;
-        }
-    };
-    IntrusiveListHead mEventListA;   // X360 +133348
-    IntrusiveListHead mEventListB;   // X360 +133380
+    // *** FLAG -- COMMITTED-TYPE CORRECTION (StreetManager keystone, wave B) ***
+    // Previously committed as two "IntrusiveListHead mEventListA/mEventListB" whose
+    // Reset() modelled the ctor stores (count=0; three &self links; zeros). That
+    // 0,0,0,self,self,self,0 pattern IS BaseResourcePtr's default-construct state
+    // (mpResourceMemory/mHandle zeroed @+0x00..+0x08, mpNext/mpPrev/mpThis self-linked
+    // @+0x0C/+0x10/+0x14, muThreadId 0 @+0x18), and the DecFIGS DWARF
+    // (BrnProgressionManager.h:837/:838) names the two members as the resource
+    // pointers below. StreetManager::FindRivalsByDistrict @ 0x82336360 proves the
+    // first: it reads +133348's mpResourceMemory and calls
+    // ResourcePtr<ProgressionData>::operator-> on it. No committed code used the
+    // old names except the ctor's Reset() calls (now the members' own default ctors).
+    CgsResource::ResourcePtr<BrnProgression::ProgressionData> mpProgressionData;  // X360 +133348 (0x20 stride)
+    CgsResource::ResourcePtr<BrnAI::AISectionsData>           mpAISectionData;    // X360 +133380
 
     // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are
     // NOT asserted: they do not survive the 32->64-bit pointer widening of the embedded Profile.

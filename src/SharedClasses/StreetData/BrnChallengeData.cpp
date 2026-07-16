@@ -21,12 +21,13 @@ namespace BrnStreetData
     // The X360 initialises a fresh record's per-entry ids to the all-ones "no owner" sentinel.
     static const ::CgsID KU_INVALID_ID = 0xFFFFFFFF00000000ULL;
 
-    // Per-score-type [min,max] range tables backing the SetScore guard. FLAGGED placeholders --
-    // the real bytes live in X360 .data @ 0x820A764C (min) / 0x820A7654 (max). The {0,0} /
-    // {INT32_MAX,INT32_MAX} pair accepts any non-negative score (the safe over-permissive
-    // direction); pin the literals when a .data dump is available.
+    // Per-score-type [min,max] range tables backing the SetScore guard. PINNED (wave-C
+    // StreetManager keystone) from the X360 .rdata bytes: dword_820A764C = {0, 0} and
+    // dword_820A7654 = {600000, 1000000000} (BE dump 2026-07-16; see
+    // scratchpad/waveB/streetmgr_wc_rodata_dump.txt). TIME max = 600000 (a 10-minute
+    // millisecond cap), CRASH max = 1000000000.
     const int32_t ScoreList::KAI_MIN_SCORES[ E_SCORE_TYPE_COUNT ] = { 0, 0 };
-    const int32_t ScoreList::KAI_MAX_SCORES[ E_SCORE_TYPE_COUNT ] = { 0x7FFFFFFF, 0x7FFFFFFF };
+    const int32_t ScoreList::KAI_MAX_SCORES[ E_SCORE_TYPE_COUNT ] = { 600000, 1000000000 };
 
     // The X360 initialises a fresh score list to the all-ones "no score" sentinel (-1 per entry);
     // ChallengeData::Construct calls this after clearing the dirty/valid bit arrays.
@@ -111,16 +112,8 @@ namespace BrnStreetData
         maCarIDs[1] = lpSource->maCarIDs[1];
     }
 
-    struct ChallengeParScoresEntry : public ChallengeData
-    {
-        ::CgsID mRivals[2];    // +24
-
-        // BrnChallengeData.h:263 (DWARF). X360 0x8231C7E0. Reads the base score and
-        // the per-score rival id; returns void (X360 r3 return is an ABI artifact).
-        void GetScore( ScoreType leScoreType, int32_t* lpiScore, ::CgsID* lpRivalId ) const;
-        void Copy(const ChallengeParScoresEntry* lpSource);
-    };
-
+    // ChallengeParScoresEntry is now defined in the shared BrnChallengeData.h home (wave-C
+    // StreetManager keystone promotion); only its method bodies live here.
     void ChallengeParScoresEntry::Copy(const ChallengeParScoresEntry* lpSource)
     {
         CGS_ASSERT(lpSource != nullptr, "lpData");

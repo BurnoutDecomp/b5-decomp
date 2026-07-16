@@ -134,7 +134,13 @@ namespace
 {
     void AwardRoadRuleWinTrophies( StreetManager* lpStreetManager )
     {
-        lpStreetManager->UpdateTrophyUnlockOnRoadRuleWin( 0 );
+        // Wave-B header freeze firmed the param up from the old `int32_t
+        // liUpdateHighScores` model to its real type (BrnStreetData::ScoreType --
+        // UpdateTrophyUnlockOnRoadRuleWin @ 0x82341780 branches on 0==TIME / 1==CRASH).
+        // The literal 0 this helper always passed == E_SCORE_TYPE_TIME. FLAG: the X360
+        // crash-flavoured Win* actions may pass E_SCORE_TYPE_CRASH at their inlined
+        // copies -- re-verify per-action when those inline tails are next visited.
+        lpStreetManager->UpdateTrophyUnlockOnRoadRuleWin( BrnStreetData::E_SCORE_TYPE_TIME );
 
         const int32_t liNumberOfShowTimeRoadsRuled =
             lpStreetManager->GetNumberOfParShowTimeRoadsRuledByLocalPlayer();

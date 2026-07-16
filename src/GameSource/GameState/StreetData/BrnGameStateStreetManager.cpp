@@ -6,21 +6,21 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The three members recovered here are the
-// StreetManager methods that DON'T depend on the (still-deferred) StreetManager member
-// layout: Prepare2 is a pure forwarder, and the two Create* factories operate entirely
-// on the score record handed in. The remaining ledger methods (CanContinueWalking,
-// PushSectionIndex, GetParRivalId, GetRoadIndexFromAISectionIndex,
-// SetChallengeFriendHighScore) reach fixed StreetManager member offsets (miNextFreeSection
-// Slot @+0x1D90, the section-walk short array @+0x1D94, the par-rival u64 table @+0x1800,
-// the AISectionsData/StreetData ResourcePtrs @+0x1CE8/+0x1CC8, and the net-challenge array
-// @+0), which the canonical header intentionally does not commit yet; they are left for
-// when the full StreetManager layout lands.
+// StreetManager methods that DON'T depend on the StreetManager member layout: Prepare2
+// is a pure forwarder, and the two Create* factories operate entirely on the score
+// record handed in. The full member layout is now committed in the frozen header
+// (StreetManager keystone, wave B); the remaining 36 ledger methods land as
+// BrnGameStateStreetManager_wB_* partfiles.
 
 namespace BrnGameState
 {
 
-// @ 0x823509D8
-bool StreetManager::Prepare2( void* lpOutput, void* lpReceiverQueue, void* lpParRivalData )
+// @ 0x823509D8 (the DWARF :222 3-param `Prepare`; kept under its X360 symbol name).
+// Param types firmed up from the former void* placeholders with the wave-B header
+// freeze -- same forwarding body.
+bool StreetManager::Prepare2( GameStateModuleIO::OutputBuffer* lpOutput,
+                              CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue,
+                              const TriggerQueryManager* lpTriggerQueryManager )
 {
     CGS_ASSERT( lpOutput != NULL, "lpOutput" );
     CGS_ASSERT( lpReceiverQueue != NULL, "lpReceiverQueue" );
@@ -30,7 +30,7 @@ bool StreetManager::Prepare2( void* lpOutput, void* lpReceiverQueue, void* lpPar
         return false;
     }
 
-    SetupParRivals( lpParRivalData );
+    SetupParRivals( lpTriggerQueryManager );
     return true;
 }
 

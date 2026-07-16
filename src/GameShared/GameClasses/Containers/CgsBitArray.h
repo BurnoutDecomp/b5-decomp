@@ -118,6 +118,17 @@ public:
         }
     }
 
+    // ADDITIVE GROW (StreetData wave-C keystone; DWARF CgsBitArray.h:55 attests SetAll on the
+    // reference template). Set every bit -- whole-word ~0 stores, exactly the X360 single
+    // `std -1` of the one-field BitArray<2> in StreetData::FixUp/FixDown's par-score loop.
+    void SetAll()
+    {
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            maxBits[luField] = ~static_cast<u64>(0);
+        }
+    }
+
     // True iff no bit is set (the popcount==0 guard).
     bool IsZero() const
     {

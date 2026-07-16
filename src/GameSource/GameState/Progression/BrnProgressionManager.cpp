@@ -54,19 +54,19 @@ ProgressionManager::ProgressionManager()
     // symbol off_820CDE4C is not yet homed; modelled as the seeded-null slot.
     mDebugComponent.mpVTable = nullptr;
 
-    // road-rules-availability flags start clear (the ctor leaves the +133456/+133460 region 0).
-    mi32RoadRulesAvailableFlagA = 0;
-    mi32RoadRulesAvailableFlagB = 0;
+    // road-rules ruled tallies start clear (the ctor leaves the +133456..+133464 region 0).
+    miNumberOfParCrashRoadRulesRuledByPlayer         = 0;
+    miNumberOfParTimeRoadRulesRuledByPlayer          = 0;
+    miNumberOfNumberOfCompleteRoadRulesRuledByPlayer = 0;
 
     // Prepare2 back-pointers start null.
     mpTriggerData        = nullptr;
     mpGameStateModule    = nullptr;
     mpAchievementManager = nullptr;
 
-    // (3b) empty the two intrusive event lists to the self-referential sentinel
-    // (X360: count=0; head/tail/mid = &self; everything else 0).
-    mEventListA.Reset();
-    mEventListB.Reset();
+    // (3b) the two resource pointers (mpProgressionData / mpAISectionData) reach the
+    // X360 ctor's self-referential sentinel state (count-0/self-link/zero pattern)
+    // through their BaseResourcePtr default ctors -- no explicit stores needed here.
 }
 
 // ------------------------------------------------------------------------------------
@@ -124,11 +124,11 @@ bool ProgressionManager::AreRoadRulesAvailable() const
     {
         return true;
     }
-    if (mi32RoadRulesAvailableFlagA != 0)
+    if (miNumberOfParCrashRoadRulesRuledByPlayer != 0)
     {
         return true;
     }
-    if (mi32RoadRulesAvailableFlagB != 0)
+    if (miNumberOfParTimeRoadRulesRuledByPlayer != 0)
     {
         return true;
     }
