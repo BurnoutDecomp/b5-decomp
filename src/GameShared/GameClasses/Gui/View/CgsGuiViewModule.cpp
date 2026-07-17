@@ -134,11 +134,16 @@ namespace CgsGui
         mbClearScreenEnabled = true;
         std::memset(macCurrentlyPlayingMovies, 0, sizeof(macCurrentlyPlayingMovies));
         mOutputEventQueue.Construct();
-        // The guest tail store `*(this+4) = 1` writes the private base
-        // ModuleSingleBuffered::mePrepareStage (= E_MANAGERPREPARESTAGE_INPUT) after the
-        // base Construct set START. Not reproduced (the field is private to the base and
-        // the observable difference is nil: the base Prepare's START case only re-nulls
-        // the already-null data-structure pointers before falling into INPUT).
+        // The guest tail store `*(this+4) = 1` is CgsModule::mbIsNewModule = true --
+        // NOT the prepare stage (the base's stage stores go to +8: ARTIST
+        // ModuleSingleBuffered::Prepare @0x8286E824 `li r11,2; stw r11,8(r31)`), so
+        // +4 is the bool right after the vptr. The ViewModule is a NEW-module type:
+        // its IO buffers arrive as Update/Render ARGUMENTS from the owner (GuiModule),
+        // so the base Prepare skips every owned-buffer stage (each is gated on
+        // !mbIsNewModule) and falls straight through to DONE. Without this store the
+        // base Prepare dead-ends in CreateInputDataStructure's null placeholder and
+        // ViewModule::Prepare can never complete.
+        mbIsNewModule = true;
         // The derived mePrepareStage/meReleaseStage seeds live in the C++ ctor, not here
         // (the guest body stores neither).
     }
