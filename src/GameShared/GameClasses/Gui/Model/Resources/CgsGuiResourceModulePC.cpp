@@ -9,6 +9,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"        // CgsResource::ID::HashString (apt acquire id)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"   // the request/response event records
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // GuiEventLoadNotification (the apt registration record)
+#include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"     // E_RESOURCETYPE_FONT (the font bank's CreateTextureState walk)
+#include "GameShared/GameClasses/Fonts/CgsFont.h"                          // CgsResource::Font (glyph-atlas realisation)
 
 #include <cstdio>    // std::snprintf (log lines)
 #include <cstring>   // std::strncpy / _stricmp (the bundle-lead registry)
@@ -204,6 +206,49 @@ namespace CgsGui
                 CgsDev::Log::WriteToLog("[GuiResourceModule] gui-textures bank pool materialised.\n");
             }
             return &s_GuiTexturesBankPool;
+        }
+
+        // The FONT bank (type 16 -- E_FONT_RESOURCETYPE_FONTDATA; container type 14
+        // "Language\Fonts\%s.font"). The console's GuiModule::Prepare stage 13 requests
+        // the locale's font table ({17,16},{18,16},{19,16} for the western SKU) through
+        // the cache; the module's container path LoadBundles each font here and the
+        // generic notification sweep emits the type-16 records ViewModule::AddFont
+        // consumes. CreateTextureState (the D3D atlas realisation) is the PC-platform
+        // half of the console's font FixUp -- run per loaded Font entry.
+        const u32 KU_FONT_BANK_BYTES     = 4u * 1024u * 1024u;
+        const u32 KU_FONT_BANK_MAX_NODES = 64u;
+        u8 s_aFontBankBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_FONT_BANK_BYTES];
+        CgsResource::Pool s_FontBankPool;
+        bool s_bFontBankLive = false;
+
+        CgsResource::Pool* MaterialiseFontBankPool(s32 liPoolId)
+        {
+            if (!s_bFontBankLive)
+            {
+                CgsResource::RegisterAllResourceTypes();
+                CgsResource::Pool::InitOptions lOptions;
+                lOptions.miId    = liPoolId;
+                lOptions.mpcName = "GuiResourceFontBank";
+                for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+                {
+                    lOptions.maHeapInfo[lt].muMaxNodes       = KU_FONT_BANK_MAX_NODES;
+                    lOptions.maHeapInfo[lt].muHeapMemorySize = KU_FONT_BANK_BYTES - 128u * 1024u;
+                    lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
+                    lOptions.mResource.m_baseResources[lt]   = s_aFontBankBacking[lt];
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_FONT_BANK_BYTES;
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
+                }
+                lOptions.muMaxResources         = KU_FONT_BANK_MAX_NODES;
+                lOptions.muMaxImports           = KU_FONT_BANK_MAX_NODES;
+                lOptions.miRefCountThreshold    = 0;
+                lOptions.miNumDependencies      = 0;
+                lOptions.miBankId               = 0;
+                lOptions.mbAllowDefragmentation = false;
+                s_FontBankPool.InitPool(&lOptions);
+                s_bFontBankLive = true;
+                CgsDev::Log::WriteToLog("[GuiResourceModule] font bank pool materialised.\n");
+            }
+            return &s_FontBankPool;
         }
 
         // Emit one type-14 load notification per AptData (0x1E) resource in the pool, each
@@ -429,6 +474,43 @@ namespace CgsGui
                                       liLoaded, lpRequest->miPoolId);
                         CgsDev::Log::WriteToLog(lac);
                     }
+                    else if (lpRequest->miPoolId == miFontBundleBank)
+                    {
+                        // A locale font bundle (container type 14, "Language\Fonts\<name>.font").
+                        CgsResource::Pool* lpPool = MaterialiseFontBankPool(lpRequest->miPoolId);
+                        CgsResource::BundleLoader lLoader;
+                        const s32 liLoaded =
+                            lLoader.LoadBundle(lpRequest->macFileName, lpPool, CgsResource::ResolveResourceType);
+
+                        // Realise the D3D glyph atlas for every not-yet-realised Font entry
+                        // (the PC half of the console font FixUp; device exists by stage 13 --
+                        // the debug-font atlas realised earlier in this boot).
+                        if (liLoaded > 0)
+                        {
+                            const u32 luMax = lpPool->GetMaxResources();
+                            for (u32 lu = 0; lu < luMax; ++lu)
+                            {
+                                if (lpPool->GetEntryStatusDirect(static_cast<s32>(lu)) == 0)
+                                    continue;
+                                CgsResource::Entry* lpEntry = const_cast<CgsResource::Entry*>(
+                                    lpPool->GetEntryDirect(static_cast<s32>(lu)));
+                                if (lpEntry->mpResourceType == 0 ||
+                                    lpEntry->mpResourceType->GetTypeID() != CgsResource::E_RESOURCETYPE_FONT)
+                                    continue;
+                                CgsResource::Font* lpFont = reinterpret_cast<CgsResource::Font*>(
+                                    lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY]);
+                                if (lpFont != 0)
+                                    lpFont->CreateTextureState();
+                            }
+                        }
+
+                        char lac[192];
+                        std::snprintf(lac, sizeof(lac),
+                                      "[GuiResourceModule] font bundle '%s' -> %s (%d resources, bank %d).\n",
+                                      lpRequest->macFileName, liLoaded > 0 ? "loaded" : "MISSING",
+                                      liLoaded, lpRequest->miPoolId);
+                        CgsDev::Log::WriteToLog(lac);
+                    }
                     else if (lpRequest->miPoolId == miTexturesBundlePoolId)
                     {
                         // GUITEXTURES.BIN (type 11): the shared GUI raster bank. Load it
@@ -530,6 +612,20 @@ namespace CgsGui
                         // { &entry main-memory slot, entry }.
                         s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_FsmBankPool.FindResource(
+                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                        if (lpEntry != 0)
+                        {
+                            lResponse.mResourceHandle.mpResourceMemory =
+                                &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+                            lResponse.mResourceHandle.mpSourceEntry = lpEntry;
+                        }
+                    }
+                    else if (lpRequest->miPoolId == miFontBundleBank && s_bFontBankLive)
+                    {
+                        // Same shared console responder shape for the font bank: the
+                        // type-16 FONTDATA acquire resolves the named Font entry.
+                        s32 liIndex = -1;
+                        CgsResource::Entry* lpEntry = s_FontBankPool.FindResource(
                             lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
                         if (lpEntry != 0)
                         {

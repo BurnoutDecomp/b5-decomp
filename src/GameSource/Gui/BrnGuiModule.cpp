@@ -443,13 +443,79 @@ namespace BrnGui
         mViewOutputBuffer.Construct();
         miLastViewFrameMs = -1;
 
-        // GuiModule::Prepare stage 13 first blocks on the locale's font table.  For
-        // the western path selected by this PC build ARTIST uses exactly
-        // {17,16}, {18,16}, {19,16}; AptRuntimeHost has already loaded those three
-        // native font bundles and queued their type-16 notifications while bringing
-        // up AptAux.  Consume those (and the adjacent language notification) now,
-        // before the second stage-13 table is allowed to instantiate FLAPTHUD's text
-        // fields.  This restores the original fonts-before-FLApt ordering.
+        // GuiModule::Prepare stage 13 FIRST blocks on the locale's font table -- the
+        // ARTIST western-SKU set is exactly {17,16}, {18,16}, {19,16}
+        // (WesternB5Header_70 / WesternB5Body_35 / WesternB5DotMat_35 as
+        // E_FONT_RESOURCETYPE_FONTDATA). Drive it through the SAME cache/module pump
+        // the second table below uses: the module's container path loads each
+        // "Language\Fonts\<name>.font" bundle into the font bank and the notification
+        // sweep emits the type-16 records; the view registers each font
+        // (ProcessIncomingLoadNotification case 16 -> AddFont) BEFORE the second
+        // table is allowed to instantiate FLAPTHUD's text fields -- the original
+        // fonts-before-FLApt ordering, by the console's own mechanism.
+        // (The language notification still rides the host bring-up's queue; it is
+        // drained after the font pump, ahead of the same view Update.)
+        {
+            const CgsGui::sResourceTuple kaFontResources[3] =
+            {
+                { 17u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+                { 18u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+                { 19u, static_cast<CgsGui::ResourceRequestTypes>(16) },
+            };
+
+            bool lbFontsReady = mGuiCache.EnsureResourcesAreLoaded(kaFontResources, 3);
+            for (u32 luPass = 0; luPass < 64u && !lbFontsReady; ++luPass)
+            {
+                mModelInputBuffer.LockForWrite();
+                mGuiCache.Update(&mModelInputBuffer);
+                mModelInputBuffer.UnlockForWrite();
+
+                DispatchGuiResourceModule();
+
+                mModelOutputBuffer.LockForRead();
+                {
+                    const CgsGui::ModelIO::OutputBuffer::GuiNotificationQueue* lpNotifications =
+                        mModelOutputBuffer.GetLoadNotifications();
+                    const CgsModule::Event* lpNotification = 0;
+                    s32 liNotificationSize = 0;
+                    s32 liNotificationId =
+                        lpNotifications->GetFirstEvent(&lpNotification, &liNotificationSize);
+                    while (liNotificationId >= 0 && lpNotification != 0)
+                    {
+                        if (liNotificationId == 14 || liNotificationId == 16)
+                        {
+                            mGuiCache.RecEvent(lpNotification, liNotificationId);
+                            // Bridge the font notification to the view (event 14) so
+                            // ProcessIncomingLoadNotification collects it (AddFont).
+                            if (liNotificationId == 14)
+                            {
+                                mViewInputBuffer.LockForWrite();
+                                mViewInputBuffer.GetViewStateQueue()
+                                    .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                                        lpNotification, 14, liNotificationSize);
+                                mViewInputBuffer.UnlockForWrite();
+                            }
+                        }
+
+                        const CgsModule::Event* lpNext = 0;
+                        liNotificationId = lpNotifications->GetNextEvent(
+                            lpNotification, &lpNext, &liNotificationSize);
+                        lpNotification = lpNext;
+                    }
+                }
+                mModelOutputBuffer.UnlockForRead();
+
+                mModelOutputBuffer.LockForWrite();
+                mModelOutputBuffer.GetLoadNotificationsNonConst()->Clear();
+                mModelOutputBuffer.UnlockForWrite();
+
+                lbFontsReady = mGuiCache.EnsureResourcesAreLoaded(kaFontResources, 3);
+            }
+            CGS_ASSERT(lbFontsReady, "GUI locale fonts failed to load");
+        }
+
+        // The host bring-up's remaining queued notification (the LANGUAGE string
+        // table) drains here, ahead of the same view Update.
         mViewInputBuffer.LockForWrite();
         {
             CgsGui::GuiEventLoadNotification lNotification;
