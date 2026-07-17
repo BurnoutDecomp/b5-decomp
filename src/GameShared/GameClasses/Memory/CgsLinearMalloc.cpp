@@ -73,6 +73,13 @@ namespace CgsMemory
         return mnEndAddress - mnNextAddress;
     }
 
+    // 0x82866D40 - `return *(this+12) - *(this+4)`: the bump pointer's distance from the
+    // region start == bytes consumed so far.
+    size_t LinearMalloc::GetUsage() const
+    {
+        return mnNextAddress - mnStartAddress;
+    }
+
     void* LinearMalloc::GetStartAddress() const
     {
         return mpAlloc;

@@ -36,8 +36,9 @@
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"   // AptNativeHash / AptHashItem (urlEncode walk)
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"   // gAptActionInterpreter.getName (MC name path)
 #include "SDKs/EATech/include/Apt/AptMovie.h"   // homes the AptValue_toInteger thunk
-
-struct AptArray;   // AptArray.h -- the array join renderer (AptValue_AptArrayToString thunk)
+#include "SDKs/EATech/include/Apt/AptCIH.h"            // GetCharacterInst (the CIH toString arm)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"  // GetTypeTag (the CIH toString arm)
+#include "SDKs/EATech/include/Apt/AptArray.h"          // AptArray::toString (the array join arm)
 
 #include <cstdio>    // snprintf (the "[Type=0x%X]" / "%d" / "%f" / "%p" renders)
 #include <cstring>   // strcmp (the "_proto__" / "type" key compares)
@@ -198,14 +199,11 @@ float AptValue::toFloat() const
     }
 }
 
-// ---------------------------------------------------------------------------
-// AptValue_toInteger -- homes the thunk AptMovie::labelToFrame used while the
-// AptValue conversion layer did not yet exist. Now a thin forward to toInteger().
-// ---------------------------------------------------------------------------
-int AptValue_toInteger(AptValue* pValue)
-{
-    return pValue ? pValue->toInteger() : 0;
-}
+// AptValue_toInteger removed -- it was a null-guarding forwarder to the real
+// member AptValue::toInteger() @0x7F2CF4 (defined above in this file). Its sole
+// call site (AptMovie::labelToFrame) now calls pValue->toInteger() directly under
+// its existing null guard.
+
 
 // ===========================================================================
 // AptValue string rendering -- the value-layer renderer the conversion/opcode
@@ -231,11 +229,9 @@ int AptValue_toInteger(AptValue* pValue)
 //       observable string -- rather than referencing the private empty-string
 //       sentinel s_EmptyInternalData. (FLAG per use below.)
 //   AptArray::toString is private; the X360 calls it directly across the inlined
-//       TU. Routed through this FLAG'd thunk (the array join renderer follow-on).
+//       TU -- modelled by the AptValue friendship in AptArray.h (called directly below).
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;                 // dword_8324E760
-extern void AptValue_AptArrayToString(AptArray* pArray, EAStringC* pOut,
-                                      const char* pSeparator);     // FLAG: AptArray::toString @0x82AED040
 
 // ---------------------------------------------------------------------------
 // toString @0x82AF8FA0 -- render this value into *pOut as an ActionScript string.
@@ -312,9 +308,10 @@ void AptValue::toString(EAStringC* pOut) const
         return;
     }
 
-    // --- ARRAY (loc_82AF90F8): join the elements with "," (AptArray::toString).
+    // --- ARRAY (loc_82AF90F8): join the elements with "," (AptArray::toString
+    //     @0x82AED040 -- the private member, reached via the AptValue friendship).
     case AptVFT_Array:              // 0xE
-        AptValue_AptArrayToString(reinterpret_cast<AptArray*>(pThis), pOut, ",");   // unk_82144058 = ","
+        static_cast<AptArray*>(pThis)->toString(pOut, ",");   // unk_82144058 = ","
         return;
 
     // --- NATIVE FUNCTION (loc_82AF9114): "[native function 0x%p]" of the fn ptr@+0x20.
@@ -405,19 +402,22 @@ void AptValue::toString(EAStringC* pOut) const
     }
 
     // X360 loc_82AF91F0 (table type 0xC, AptVFT_CharacterInstHandle): the CIH's
-    // display node at +0x20 names itself, with shape/unnamed fallbacks.
+    // character instance names itself, with shape/unnamed fallbacks.
+    // (x64 FIX 2026-07-10: the console reads the char inst at CIH+0x20 and its packed
+    // type word at inst+8 -- raw offsets that do NOT survive the x64 widening. The
+    // transliterated reads returned null/garbage, so every movieclip toString'd to
+    // ""/"No Instance Name" -- the empty component name behind the SendAptSoundEvent
+    // halting assert. Read the NAMED members instead.)
     if (eType == AptVFT_CharacterInstHandle)
     {
-        AptValue* const pNode =
-            *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(pThis) + 0x20);
-        if (pNode == 0)
+        AptCharacterInst* const pInst = static_cast<AptCIH*>(pThis)->GetCharacterInst();
+        if (pInst == 0)
         {
             *pOut = "";   // X360 beq loc_82AF9048 -> assign the empty embedded string
             return;
         }
-        // X360 reads *(node+8)>>0x1A (the node's packed type tag) to classify it.
-        const int nNodeType = *reinterpret_cast<const int*>(
-                                  reinterpret_cast<char*>(pNode) + 8) >> 0x1A;
+        // X360 reads *(inst+8)>>0x1A -- the char inst's packed type tag (mTypeFlags).
+        const int nNodeType = static_cast<int>(pInst->GetTypeTag());
         const bool lbButtonOrSprite = (nNodeType == 5) || (nNodeType == 9);
         if (!lbButtonOrSprite
             && nNodeType != 4 && nNodeType != 2 && nNodeType != 0xA && nNodeType != 0xF)
@@ -427,9 +427,8 @@ void AptValue::toString(EAStringC* pOut) const
             return;
         }
         // X360 loc_82AF9270: the named-instance path -> the interpreter builds the
-        // node's slash/dot path. FLAG: getName needs the live interpreter + the
-        // path-builder follow-on; dormant (empty) until they are up.
-        gAptActionInterpreter.getName(pThis, pOut);   // FLAG: path-builder follow-on
+        // node's slash/dot path.
+        gAptActionInterpreter.getName(pThis, pOut);
         return;
     }
 
@@ -462,11 +461,17 @@ void AptValue::Append_ToString(EAStringC* pOut) const
     if (lbAppendableString)
     {
         // X360: a primitive string appends *(this+8); a boxed string indirects
-        // through *(this+0x20) first.
-        AptValue* const pStrValue = (eType == AptVFT_StringValue)
-            ? pThis
-            : *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(pThis) + 0x20);
-        *pOut += *reinterpret_cast<EAStringC*>(reinterpret_cast<char*>(pStrValue) + 8);
+        // through *(this+0x20) first. FLAG (x64 offset fix): those are CONSOLE byte
+        // offsets -- the embedded EAStringC lives at the console's +8 only because
+        // AptValue is 8 bytes there (4-byte vtbl + 4-byte mnValueData). On x64 the base
+        // is 16 bytes (8-byte vtbl + mnValueData + pad), so the string is at +0x10; the
+        // literal +8 read {mnValueData, pad} as an EAStringC -> m_pData = pad(0xBAADF00D
+        // uninit)<<32 | mnValueData -> AV in operator+=/IncreaseInternalRefCount. Use
+        // the named accessor (c_string()->GetInternalString()) which resolves the right
+        // member for both the primitive value and the boxed StringObject.
+        AptString* const pStr = pThis->c_string();
+        if (pStr != nullptr)
+            *pOut += *pStr->GetInternalString();
         return;
     }
 

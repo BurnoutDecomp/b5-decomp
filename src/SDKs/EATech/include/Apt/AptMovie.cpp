@@ -33,6 +33,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"    // AptCharacterAnimation (charTable / import table)
 #include "SDKs/EATech/include/Apt/AptFile.h"                  // AptFile / AptFilePtr (the placed char's file bind)
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"         // AptUint32CXForm (the place record packed colour)
+#include "SDKs/EATech/include/Apt/Apt.h"                      // gAptFuncs (tag-5 BackgroundColour -> pfnSetBackgroundColour @+0x10)
 
 #include <new>   // placement new (the pool-allocated AptPseudoCIH_t nodes)
 
@@ -42,7 +43,7 @@ int AptMovie::labelToFrame(const EAStringC* pLabel) const
     {
         AptValue* pValue = mpLabelHash->Lookup(*pLabel);
         if (pValue)
-            return AptValue_toInteger(pValue);
+            return pValue->toInteger();
     }
     return -1;
 }
@@ -91,13 +92,16 @@ extern int   gnAptActionFrameId;                // dword_8324E514 (FLAG)
 // &dword_8324E760 -- the process-wide AS action interpreter instance.
 extern AptActionInterpreter gAptActionInterpreter;   // off_8324E760  (FLAG)
 
-// dword_8324D807 -- one-shot latch: a "back-to-script" (tag 5) command fires its
-// host callback at most once per frame-control pass.
-extern unsigned char gbAptBackToScriptFired;    // byte_8324D807  (FLAG)
-
-// dword_8324E828 -- the host "back-to-script" callback (installed by the host; a
-// raw function pointer invoked through the ctr in the asm).
-extern void (*gpAptBackToScriptHook)(void* pPayload);   // dword_8324E828 (FLAG)
+// byte_8324D807 -- the BACKGROUND-COLOUR once-latch: a tag-5 (BackgroundColour)
+// frame command fires the host callback at most once per loaded animation
+// ("bg color can only be set once" -- the SDK's gbBackgroundColorSet semantics);
+// AptLoadAnimation @0x82B07AC8 resets it (stb 0 @0x82B07AF4) so the NEXT loaded
+// movie's first tag-5 wins. (The old "back-to-script one-shot" reading of this
+// latch was wrong -- RETIRED 2026-07-12. The callee at dword_8324E828 is not a
+// standalone hook: 0x8324E828 == &gAptFuncs (dword_8324E818) + 0x10 ==
+// gAptFuncs.pfnSetBackgroundColour, the render-family host callback the movie's
+// doFrameControls tag-5 arm dispatches the authored colour word through.)
+extern unsigned char gbAptBackgroundColourSet;    // byte_8324D807
 
 // The AS register-window globals (off_8324E3D0 / dword_8324E3D4) are
 // AptScriptFunctionBase::spRegBlockCurrentFrameBase / snRegBlockCurrentFrameCount;
@@ -109,25 +113,26 @@ extern void (*gpAptBackToScriptHook)(void* pPayload);   // dword_8324E828 (FLAG)
 // raw-but-faithful call-site signatures so the timeline driver links):
 struct AptCIH;
 extern AptCIH* AptGetAnimationAtLevel(int nLevel);                       // _AptGetAnimationAtLevel @0x82B00788 (canonical AptCIH*; void* blob walk binds)
-extern void* AptPseudoDisplayList_FindInst(void* pList, void* pSource,   // AptPseudoDisplayList::FindInst
-                                           unsigned char* pOutHit, void** ppExisting,
-                                           void* pContext, void* pInfo);
+// (The invented 6-arg AptPseudoDisplayListFindInst extern was RETIRED 2026-07-10:
+// the console DoTemporaryFrameControls place arm calls the real 3-arg member
+// AptPseudoDisplayList::FindInst(key, &existing, &pred) -- asm-verified r4=depth
+// key, r5=&pred, r6=&existing. The stub it bound to nulled every lookup, so a
+// jumpToFrame replay re-created every already-live pseudo node.)
 // AptPseudoDisplayList_Insert retired: the real member AptPseudoDisplayList::Insert is called directly.
-extern void  AptCharacterAnimation_ExecuteInitActions(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions (FLAG deferred; see AptRenderLinkStubs.cpp)
-extern void* AptFile_operator(void* pDst, void* pSrc);                   // AptFile::operator=
+extern void  AptExecuteInitActionsGate(void* pAnim, void* pCIH, int nId);   // AptCharacterAnimation::ExecuteInitActions (FLAG deferred; see AptRenderLinkStubs.cpp)
 
 // sub_82B0AE08 @0x82B097D8's caller-side dispatcher (the place-command handler doFrameControls
-// invokes for each tag-3 record). HOMED below (2026-07-01) as AptMovie_PlaceCommand -- it reads
+// invokes for each tag-3 record). HOMED below (2026-07-01) as AptDispatchPlaceCommand -- it reads
 // the serialised place-info record + calls the faithfully-homed AptDisplayList::placeObjectNCXForm.
-static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent);
+static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent);
 
 // sub_82AFD150 @0x82AFD150 -- the remove-command dispatcher (doFrameControls' tag-4 twin of
-// AptMovie_PlaceCommand). HOMED (2026-07-04; was an AptRenderLinkStubs no-op, which left every
+// AptDispatchPlaceCommand). HOMED (2026-07-04; was an AptRenderLinkStubs no-op, which left every
 // timeline-removed element on screen -- the title menu items stacked their whole state band).
 // X360 body (two calls, both already homed):
 //   AptDisplayListState::findInst(*a1, a2, 0, &prev, &match);   // r3=*list (the state), r4=depth
 //   AptDisplayList::removeObject(a1, match);
-static void AptMovie_RemoveCommand(AptDisplayList* pDisplayList, int nDepth)
+static void AptDispatchRemoveCommand(AptDisplayList* pDisplayList, int nDepth)
 {
     AptCIH* pPrev  = nullptr;   // the console's 12-byte prev triple; only the out-pointers matter
     AptCIH* pMatch = nullptr;
@@ -210,17 +215,18 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                 (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
             char* const pBody = reinterpret_cast<char*>(luBody);
 
-            const int32_t nFlags = *reinterpret_cast<const int32_t*>(pBody + 0x00);
-            const int32_t nDepth = *reinterpret_cast<const int32_t*>(pBody + 0x04);   // [c: cmd+0x08]
+            const int32_t nFlags = CmdI32(pBody, 0x00);   // serialized .apt place record
+            const int32_t nDepth = CmdI32(pBody, 0x04);   // [c: cmd+0x08]
 
-            unsigned char chMode = 0;                  // var_60 (BYREF)
-            void* pExisting = nullptr;                  // the existing-node out
-            // FindInst keys by the placement depth (the console passes the depth word).
-            AptPseudoDisplayList_FindInst(pPseudoList,
-                                          reinterpret_cast<void*>(static_cast<intptr_t>(nDepth)),
-                                          &chMode, &pExisting, a5, pBody);
+            // FindInst keys by the placement depth (console r4 = the depth word;
+            // r5 = &pred (var_5C), r6 = &existing (var_60) -- the real 3-arg member).
+            AptPseudoCIH_t* lpPred     = nullptr;   // var_5C (BYREF; unused by this arm)
+            AptPseudoCIH_t* lpExisting = nullptr;   // var_60 (the existing-node out)
+            pPseudoList->FindInst(reinterpret_cast<void*>(static_cast<intptr_t>(nDepth)),
+                                  &lpExisting, &lpPred);
+            void* const pExisting = lpExisting;
 
-            int32_t nResolvedId = *reinterpret_cast<const int32_t*>(pBody + 0x08);   // [c: cmd+0x0C]
+            int32_t nResolvedId = CmdI32(pBody, 0x08);   // [c: cmd+0x0C] serialized .apt place record
             void* pCharacter = nullptr;
             if (nResolvedId != -1)
             {
@@ -268,7 +274,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
                     if (nFlags & 0x08)
                         pData->mpColorTransform = const_cast<char*>(pBody) + 0x24;
                     if (nFlags & 0x10)
-                        pData->mfRatio = *reinterpret_cast<const float*>(pBody + 0x2C);
+                        pData->mfRatio = CmdF32(pBody, 0x2C);   // serialized .apt move/morph ratio
                     pData->muxFlags |= static_cast<u32>(nFlags);
                 }
                 continue;
@@ -279,7 +285,7 @@ AptMovie* AptMovie::DoTemporaryFrameControls(AptPseudoDisplayList* pPseudoList, 
             // native-8 bundles keep imports as genuine import-table entries). Feeding a
             // null-character node into the replay would hand mergeState's AddToDisplayList
             // a null character to instantiate (AV -- reproduced on the drive bundles' menu
-            // state jumps). Skip it, exactly as AptMovie_PlaceCommand skips the fresh place.
+            // state jumps). Skip it, exactly as AptDispatchPlaceCommand skips the fresh place.
             if (nResolvedId != -1 && pCharacter == nullptr)
                 continue;
 
@@ -394,6 +400,19 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
         for (int32_t i = 0; i < nCount1; ++i)
         {
             unsigned char* const pCmd = static_cast<unsigned char*>(pFrame->mpCommands[i]);
+            // FLAG (converter data boundary, same family as the array guard above): a
+            // command SLOT can be null (SAVELOADCOMPONENT's root f0 carries 18 null
+            // entries) or hold the 4-byte-straddle garbage (0x00000001_00000000 class)
+            // in the emitter output; resolve64's null-stays-null keeps nulls null and
+            // leaves straddle garbage as a bogus pointer. Apply the same terabyte-floor
+            // plausibility screen as the command-array guard -- dereferencing crashed
+            // the first BF_PROFILE tick.
+            {
+                const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+                if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                      (luCmd & 0xFFFFFFFFull) != 0u))
+                    continue;
+            }
             if (CmdI32(pCmd, 0x00) != 8)
                 continue;
             int64_t* const pnId = reinterpret_cast<int64_t*>(pCmd + 0x08);
@@ -401,7 +420,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 continue;   // already run (the negated-id latch)
 
             const unsigned char* const pStream =
-                *reinterpret_cast<const unsigned char* const*>(pCmd + 0x10);
+                static_cast<const unsigned char*>(CmdPtr(pCmd, 0x10));   // serialized .apt action record: relocated stream ptr @+0x10
             // Same relocated-pointer plausibility screen as the command array above
             // (a malformed/unrelocated slot must not be executed).
             const uintptr_t luStream = reinterpret_cast<uintptr_t>(pStream);
@@ -486,6 +505,14 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
         for (int32_t i = 0; i < nCount; ++i)
         {
             void* pCmd = pFrame->mpCommands[i];
+            // FLAG (converter data boundary): null / straddle-garbage command slots are
+            // skipped -- see the pass-1 note (same plausibility screen).
+            {
+                const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+                if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                      (luCmd & 0xFFFFFFFFull) != 0u))
+                    continue;
+            }
             const int32_t eTag = CmdI32(pCmd, 0x00);
 
             if (eTag == 3)
@@ -494,10 +521,10 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 // body = align8(cmd+4); the placed-char id lives at body+0x08.
                 const uintptr_t luBody =
                     (reinterpret_cast<uintptr_t>(pCmd) + 4u + 7u) & ~static_cast<uintptr_t>(7u);
-                const int32_t nId = *reinterpret_cast<const int32_t*>(luBody + 0x08);
+                const int32_t nId = CmdI32(reinterpret_cast<void*>(luBody), 0x08);   // serialized .apt place record: charId @body+0x08
 
                 // ---- place: run the placed character's init actions -----------
-                AptCharacterAnimation_ExecuteInitActions(pAnim, pParent, nId);   // FLAG deferred: the real member runs away at boot frame 3 (init-action VM path incomplete) -- see AptRenderLinkStubs.cpp
+                AptExecuteInitActionsGate(pAnim, pParent, nId);   // FLAG deferred: the real member runs away at boot frame 3 (init-action VM path incomplete) -- see AptRenderLinkStubs.cpp
 
                 // Bind the placed character's animation file (native-8 named members): a
                 // placed char with no file yet takes the import-table entry matching its id,
@@ -524,27 +551,32 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
                 }
 
                 // Dispatch the place: the info record is at cmd+4 (the console r31 base).
-                AptMovie_PlaceCommand(pDisplayList, reinterpret_cast<char*>(pCmd) + 4, pParent);
+                AptDispatchPlaceCommand(pDisplayList, reinterpret_cast<char*>(pCmd) + 4, pParent);
             }
             else if (eTag == 4)
             {
                 // remove: drop the node at the command's depth (sub_82AFD150; XB1 inlines
                 // the same walk). Native-8 payload @cmd+8 (XB1 asm `mov r8d,[rbx+8]`);
                 // dual-format read while converter-era bundles are still staged.
-                AptMovie_RemoveCommand(pDisplayList, CmdPayloadI32(pCmd));
+                AptDispatchRemoveCommand(pDisplayList, CmdPayloadI32(pCmd));
             }
-            else if (eTag == 5 && !gbAptBackToScriptFired)
+            else if (eTag == 5 && !gbAptBackgroundColourSet)
             {
-                // FLAG (host hook): gpAptBackToScriptHook (dword_8324E828) is the host
-                // "back to script" callback. It is installed by the game's GUI/HUD host on
-                // the console; our Apt bring-up does NOT install it (the FSM host callback
-                // set is out of this slice's scope), so it is null here -- guard the call
-                // (the console always has it installed). Skipping it is faithful for the
-                // title timeline (the tag-5 command hands control back to the host Lua FSM,
-                // which our bring-up drives separately).
-                if (gpAptBackToScriptHook != nullptr)
-                    gpAptBackToScriptHook(CmdPtr(pCmd, 0x08));   // native-8 payload @cmd+8
-                gbAptBackToScriptFired = 1;
+                // tag 5 = BACKGROUND-COLOUR. X360 @0x82B0B91C..0x82B0B93C: load the authored
+                // colour WORD (lwz r3, 4(r30) -- the payload BY VALUE, not a pointer) and call
+                // through dword_8324E828 == &gAptFuncs+0x10 == gAptFuncs.pfnSetBackgroundColour
+                // (CgsGui::AptCallbackRender::SetBackgroundColour @0x8284AF78, installed by
+                // AptAux::ConstructApt), then set the once-per-load latch (stb 1, byte_8324D807).
+                // SDK corroboration: AptMovie.cpp case AptControlType_BackgroundColour ->
+                // gAptFuncs.pfnSetBackgroundColour(pControl->backgroundColour.nColour) under
+                // gbBackgroundColorSet. (The prior "back-to-script hook" reading called a
+                // never-installed duplicate extern with the payload's ADDRESS -- dead code that
+                // lost every movie's authored stage colour. RETIRED 2026-07-12.)
+                // Payload: native-8 colour word @cmd+8 (console @cmd+4) -- the same dual-format
+                // discriminated read as the tag-4 depth.
+                if (gAptFuncs.pfnSetBackgroundColour != nullptr)
+                    gAptFuncs.pfnSetBackgroundColour(static_cast<unsigned int>(CmdPayloadI32(pCmd)));
+                gbAptBackgroundColourSet = 1;
             }
         }
     }
@@ -552,7 +584,7 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
 }
 
 // ===========================================================================
-// AptMovie_PlaceCommand -- sub_82B0AE08 @0x82B0AE08 (the place-command dispatcher the
+// AptDispatchPlaceCommand -- sub_82B0AE08 @0x82B0AE08 (the place-command dispatcher the
 // timeline path invokes for each tag-3 record). DECOMPILED FAITHFULLY from the X360
 // ARTIST.XEX. It reads the serialised PlaceObject record and calls the faithfully-homed
 // AptDisplayList::placeObjectNCXForm to create/update the placed AptCharacterInst at the
@@ -579,14 +611,14 @@ AptMovie* AptMovie::doFrameControls(AptDisplayList* pDisplayList, AptCIH* pParen
 // (bit0). It resolves the character, builds the EAStringC name (when HasName), and calls
 // placeObjectNCXForm. Reconstructed by ROLE using the homed placeObjectNCXForm (named types).
 // ===========================================================================
-static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent)
+static AptCIH* AptDispatchPlaceCommand(AptDisplayList* pDisplayList, const void* pPlaceInfo, AptCIH* pParent)
 {
     // The record body is pointer-aligned after the tag (FrameItem::Write Align()); the caller
     // passes record+4, so align it up to the 8-byte pointer boundary to reach the body base.
     const uintptr_t luBody = (reinterpret_cast<uintptr_t>(pPlaceInfo) + 7u) & ~static_cast<uintptr_t>(7u);
-    const char* const pBody = reinterpret_cast<const char*>(luBody);
+    char* const pBody = reinterpret_cast<char*>(luBody);
 
-    const uint32_t nFlags = *reinterpret_cast<const uint32_t*>(pBody + 0x00);
+    const uint32_t nFlags = static_cast<uint32_t>(CmdI32(pBody, 0x00));   // serialized .apt place record
 
     // Place when the record carries a character (bit1 HasCharacter) or is a Move (bit0);
     // otherwise it is a no-op (the X360's `(flags&2)==0 && (flags&1)==0 -> 0`).
@@ -595,8 +627,8 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     if (!bHasCharacter && !bMove)
         return nullptr;
 
-    const int32_t nDepth  = *reinterpret_cast<const int32_t*>(pBody + 0x04);
-    const int32_t nCharId = *reinterpret_cast<const int32_t*>(pBody + 0x08);
+    const int32_t nDepth  = CmdI32(pBody, 0x04);
+    const int32_t nCharId = CmdI32(pBody, 0x08);
 
     // The placed character = the owning movie's charTable[charId]. The owner movie char-anim
     // is reached through the parent CIH's named char-inst chain (parent->charInst->renderItem
@@ -637,7 +669,7 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     EAStringC nameStr;
     if ((nFlags & 0x20u) != 0u)
     {
-        const char* const pNamePtr = *reinterpret_cast<const char* const*>(pBody + 0x30);
+        const char* const pNamePtr = static_cast<const char*>(CmdPtr(pBody, 0x30));   // relocated name C-string
         if (pNamePtr != nullptr)
         {
             nameStr = EAStringC(pNamePtr);
@@ -653,8 +685,8 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
         ? reinterpret_cast<const float*>(pBody + 0x0C) : nullptr;
     const AptUint32CXForm* const pPackedColor = ((nFlags & 0x08u) != 0u)
         ? reinterpret_cast<const AptUint32CXForm*>(pBody + 0x24) : nullptr;
-    const double fFrameValue = static_cast<double>(*reinterpret_cast<const float*>(pBody + 0x2C));
-    const int16_t nClipDepth = static_cast<int16_t>(*reinterpret_cast<const int32_t*>(pBody + 0x38));
+    const double fFrameValue = static_cast<double>(CmdF32(pBody, 0x2C));
+    const int16_t nClipDepth = static_cast<int16_t>(CmdI32(pBody, 0x38));
 
     // The clipActions/handler-list block pointer: placed into the sprite inst's
     // mpClipEventHandlers slot (queueClipEvents scans it; _addToSetCaches folds its
@@ -662,7 +694,7 @@ static AptCIH* AptMovie_PlaceCommand(AptDisplayList* pDisplayList, const void* p
     // streams parsed) by resolve64's case-3 walk.
     const void* pClipActions = nullptr;
     if ((nFlags & 0x80u) != 0u)
-        pClipActions = *reinterpret_cast<void* const*>(pBody + 0x40);
+        pClipActions = CmdPtr(pBody, 0x40);   // clipActions block (resolve64-relocated)
 
     // ---- MOVE (bit0 without bit1 HasCharacter): the TWEEN-KEYFRAME path ----------------
     // The X360 `(flags & 2) == 0` branch: findInst the EXISTING node at this depth and
@@ -733,6 +765,15 @@ AptMovie* AptMovie::queueFrameActions(void* pCIH, int nFrame)
     for (int32_t i = 0; i < nCount; ++i)
     {
         void* pCmd = pFrame->mpCommands[i];            // *(v7[1] + v8)  (relocated by resolve64)
+        // FLAG (converter data boundary): a command SLOT can be null or hold the
+        // 4-byte-straddle garbage (SAVELOADCOMPONENT's root f0 nulls); apply the same
+        // per-entry plausibility screen as doFrameControls before touching the record.
+        {
+            const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+            if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                  (luCmd & 0xFFFFFFFFull) != 0u))
+                continue;
+        }
         if (CmdI32(pCmd, 0x00) != 1)
             continue;                                  // only tag-1 ACTION commands are queued
 
@@ -785,6 +826,14 @@ const AptMovie* AptMovie::runFrameActions(AptCIH* pCIH, int nFrame) const
             break;
 
         void* pCmd = lFrame.mpCommands[i];
+        // FLAG (converter data boundary): per-entry plausibility screen, matching
+        // doFrameControls/queueFrameActions (null / straddle-garbage slots skipped).
+        {
+            const uintptr_t luCmd = reinterpret_cast<uintptr_t>(pCmd);
+            if (!(luCmd > 0x0000000200000000ull && (luCmd >> 47) == 0u &&
+                  (luCmd & 0xFFFFFFFFull) != 0u))
+                continue;
+        }
         if (CmdI32(pCmd, 0x00) != 1)
             continue;                              // only tag-1 ACTION commands run
 
@@ -928,12 +977,11 @@ void* AptMovie::resolve(int nBase, void* a3, int a4)
                         for (int32_t k = 0; k < v37; ++k)
                         {
                             char* pRec = reinterpret_cast<char*>(CmdPtr(pInit, 0x04)) + 12 * k;
-                            int32_t v41 = *reinterpret_cast<int32_t*>(pRec + 8);
+                            int32_t v41 = CmdI32(pRec, 8);   // serialized .apt init-block record: stream ptr @+8
                             int32_t v42 = v41 ? (v41 + nBase) : 0;
-                            *reinterpret_cast<int32_t*>(pRec + 8) = v42;
+                            CmdSetI32(pRec, 8, v42);
                             result = const_cast<unsigned char*>(gAptActionInterpreter._parseStream(
-                                         reinterpret_cast<const unsigned char*>(
-                                             *reinterpret_cast<void**>(pRec + 8)),
+                                         reinterpret_cast<const unsigned char*>(CmdPtr(pRec, 8)),
                                          nBase, reinterpret_cast<AptValue*>(a3),
                                          a4));
                         }
@@ -1027,15 +1075,15 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
     void* pHash = gpAptPseudoDataPool->Allocate(sizeof(AptPseudoCIH_t));   // [c: 20]
     if (pHash)
     {
-        // XB1 (sub_1408567D0) zeroes the four 8-BYTE member slots of the 0x28-byte
-        // AptNativeHash (mpTable/mp__Proto__/mpPrototype/mnEventHandlerMask @+0x08..
-        // +0x20) then stamps the type word. The prior 4-byte zeroing left the upper
-        // halves (and +0x18..) as pool garbage on x64.
-        char* const pcHash = reinterpret_cast<char*>(pHash);
-        *reinterpret_cast<uint64_t*>(pcHash + 0x08) = 0;
-        *reinterpret_cast<uint64_t*>(pcHash + 0x10) = 0;
-        *reinterpret_cast<uint64_t*>(pcHash + 0x18) = 0;
-        *reinterpret_cast<uint64_t*>(pcHash + 0x20) = 0;
+        // XB1 (sub_1408567D0) zeroes the four 8-byte member slots of the 0x28-byte
+        // AptNativeHash then stamps the type word. (The prior 4-byte zeroing left the
+        // pointers' upper halves as pool garbage on x64 -- named-member init clears them
+        // as full 8-byte fields.)
+        AptNativeHash* const pNativeHash = reinterpret_cast<AptNativeHash*>(pHash);
+        pNativeHash->mpTable            = nullptr;   // +0x08
+        pNativeHash->mp__Proto__        = nullptr;   // +0x10
+        pNativeHash->mpPrototype        = nullptr;   // +0x18
+        pNativeHash->mnEventHandlerMask = 0;         // +0x20 (upper 4B is struct padding)
         CmdSetI32(pHash, 0x00, 2);
     }
     this->mpLabelHash = reinterpret_cast<AptNativeHash*>(pHash);
@@ -1129,8 +1177,8 @@ void AptMovie::resolve64(uintptr_t nBase, uintptr_t nResBase, uint32_t nResSize,
                     // {count@+0x00 (i32); recArrayPtr@block+0x08 (XB1/native-8)}; each
                     // record is STRIDE 16 (XB1 v17+=16) with its action-stream pointer at rec+0x08 (an
                     // 8-byte native-8 slot). Relocate the record-array pointer + each record's stream
-                    // pointer so a clipActions read never AVs; the stream CONTENTS stay un-parsed
-                    // (VM deferred) -- XB1's sub_14084A920 (_parseStream) is NOT called.
+                    // pointer, then PARSE each stream (XB1 sub_1408567D0 case-3 calls
+                    // sub_14084A920 == _parseStream per record -- verified 2026-07-09).
                     if (luClip != 0 && inRes(luClip))
                     {
                         void* const pClip = reinterpret_cast<void*>(luClip);
@@ -1228,11 +1276,11 @@ void* AptMovie::unresolve(int nBase, int a3)
                         {
                             char* pRec = reinterpret_cast<char*>(CmdPtr(pInit, 0x04)) + 12 * k;
                             gAptActionInterpreter._parseStream(
-                                reinterpret_cast<const unsigned char*>(*reinterpret_cast<void**>(pRec + 8)),
+                                reinterpret_cast<const unsigned char*>(CmdPtr(pRec, 8)),   // serialized .apt init record stream ptr @+8
                                 nBase, nullptr, a3);
-                            int32_t v22 = *reinterpret_cast<int32_t*>(pRec + 8);
+                            int32_t v22 = CmdI32(pRec, 8);
                             int32_t v23 = v22 ? (v22 - nBase) : 0;
-                            *reinterpret_cast<int32_t*>(pRec + 8) = v23;
+                            CmdSetI32(pRec, 8, v23);
                         }
                         int32_t v24 = CmdI32(pInit, 0x04);
                         int32_t v25 = v24 ? (v24 - nBase) : 0;

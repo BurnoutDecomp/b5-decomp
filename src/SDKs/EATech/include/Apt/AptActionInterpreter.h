@@ -37,7 +37,7 @@ class EAStringC;          // SDKs/EATech/include/Apt/AptString/EAString.h (path/
 // FLAG (runtime-only AptActionInterpreter init parameters -- the block initialize()
 // reads; not serialised, so it is modelled by its console field offsets). DEFINED
 // here (was a TU-local struct in AptActionInterpreterStackOps.cpp; promoted to the
-// header so the host bring-up -- BrnAptRuntimeBringUp.cpp -- can construct one to call
+// header so the GUI Apt host -- BrnGuiAptRuntime.cpp -- can construct one to call
 // AptActionInterpreter::initialize, the X360 AptUpdateInitialize's job). Layout is
 // byte-identical to the prior local definition (console offsets 0x20/0x24/0x40).
 struct AptInitParmsT
@@ -150,6 +150,13 @@ public:
     // Release the nCount popped, store the new at the collapsed slot).
     void       stackPopAndPush(int nCount, AptValue* pValue);   // @0x7FB288
 
+    // NOTE: the five interpreter stacks are each a contiguous {count, capacity, array}
+    // triple laid out EXACTLY as an AptValueVector (operand @[c:0x00], call-frame-register
+    // @[c:0x0C], stack-C @[c:0x18], CIH/target @[c:0x24]). The console reaches single-element
+    // pops via `AptValueVector::pop(a1 + wordOffset)` -- punning a pointer to the triple as an
+    // AptValueVector* and calling the real pop(). Reproduced verbatim at the call sites (see
+    // _FunctionAptActionCallMethod), so no per-stack pop shim is needed.
+
     // stackAt @0x82ADC060 -- the operand nDepth slots below the top (0 = top).
     AptValue*  stackAt(int nDepth) const { return mpStack[mnStackTop - nDepth - 1]; }
 
@@ -170,6 +177,13 @@ public:
     // function register file (AptScriptFunctionBase::GetRegisterValue). Anything else pushes
     // as-is. The push itself is the inlined stackPush (store/advance/AddRef).
     void       stackPushIndirect(AptValue* pValue);
+
+    // GetDictEntry -- fetch string-constant dictionary slot nIndex (mpConstantPool[i],
+    // console *(4*idx + a1[17])). The console reads the slot inline at each Push*Dict*
+    // op; homed here with a null guard (FLAG hardening: an x64 pool miss can leave a
+    // slot null where the console pre-seeds -- returns gpUndefinedValue then). Body in
+    // AptActionInterpreterInterpHelpers.cpp.
+    AptValue*  GetDictEntry(unsigned int nIndex);
 
     // ---- lifecycle (initialize/destroy the five stacks) ------------------
     // initialize @0x82AE39D8 -- allocate the five {count,capacity,array} stacks from
@@ -225,6 +239,63 @@ public:
     // null. Used by the SetTarget / valueToObject paths.
     AptValue* getObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pName);
 
+    // valueToObject @0x82B07FB8 -- coerce pValue to the AptValue object it designates
+    // under (pScope, pTarget) via *ppOut: a clip-handle (12)/CIHNone (37) boxes itself;
+    // else an object-ness probe; else a defined string value resolves through getObject.
+    // Body in AptActionInterpreterInterpHelpers.cpp.
+    void valueToObject(AptValue* pScope, AptValue* pTarget, AptValue* pValue, AptValue** ppOut);
+    // ExecuteScriptFunction -- callFunction @0x82AE3C08's AptScriptFunctionBase frame-
+    // execution branch (tags 34/35/36): install the fn + constant pool, Setup/Setup-
+    // Argument/runStream/Cleanup, restore state. CallFunctionDispatch drives it. Body in
+    // AptActionInterpreterInterpHelpers.cpp.
+    AptValue* ExecuteScriptFunction(AptValue* pScope, AptValue* pFunction, int nArgs,
+                                    AptValue* pNewTarget, AptValue* pConstructTarget);
+
+    // SetVariableFallback -- setVariable @0x82B03048's tail when the context exposes no
+    // native hash: store into the CIH node's frame-context hash (movie-clip nodes) or the
+    // global ParentAnim hash. Body in AptActionInterpreterInterpHelpers.cpp.
+    bool SetVariableFallback(AptValue* pContext, const EAStringC* pName, AptValue* pValue, int nDirect);
+
+    // SetInScopeChain -- setVariable @0x82B03048's nSearchScopeChain store: overwrite
+    // the name where an enclosing frame (spFrameStack, else the function's parent scope)
+    // already binds it. Body in AptActionInterpreterInterpHelpers.cpp.
+    bool SetInScopeChain(const EAStringC* pName, AptValue* pValue);
+
+    // LookupGlobalFallback -- getVariable @0x82B03430's no-target tail: the _level /
+    // global-object frame (the running function's ParentAnim native hash) last-resort
+    // lookup. Body in AptActionInterpreterInterpHelpers.cpp.
+    AptValue* LookupGlobalFallback(AptValue* pContext, const EAStringC* pName, int nDirect);
+
+    // _doCloneSprite @0x82B0DC60 -- AS duplicateMovieClip core: resolve pParentValue to
+    // its clip (valueToObject), InsertChild a clone under the display parent, copy the
+    // source render data + init-object members, tick it live. Body in
+    // AptActionInterpreterInterpHelpers.cpp.
+    AptValue* _doCloneSprite(AptCIH* pScope, AptValue* pTarget, AptValue* pParentValue,
+                             AptValue* pNameValue, int nDepth, AptValue* pInitObject);
+
+    // loadVariables @0x82B07DF8 -- AS loadVariables: fetch pURL via the host hook,
+    // parse the body as key=value[&...] pairs (urlDecode) and setVariable each onto
+    // (pScope, pTarget). Body in AptActionInterpreterInterpHelpers.cpp.
+    void loadVariables(AptValue* pScope, AptValue* pTarget, EAStringC* pURL);
+
+    // ResolveTranscode -- _parseStream @0x82AF3440's opcode-length walk (advance the PC
+    // past each opcode's inline operands + drive the per-opcode rebase/flush). _parseStream()
+    // forwards to it. Body in AptActionInterpreterInterpHelpers.cpp.
+    const unsigned char* ResolveTranscode(const unsigned char* pStream, int nRelocBase,
+                                          AptValue* pResolveCtx, int nDirection);
+
+    // EnumerateMembers -- _doEnumerate @0x82B036D8's native-hash key walk (push one
+    // AptString per enumerable member, skipping the two reserved keys). _doEnumerate()
+    // forwards to it. Body in AptActionInterpreterInterpHelpers.cpp.
+    void EnumerateMembers(AptValue* pScope, AptValue* pTarget);
+
+    // CallFunctionDispatch -- callFunction @0x82AE3C08's dispatch body (native-fn /
+    // script-fn / not-callable arms + the post-call abort collapse). callFunction()
+    // forwards to it. Body in AptActionInterpreterInterpHelpers.cpp.
+    AptValue* CallFunctionDispatch(AptValue* pScope, AptValue* pFunction, int nArgs,
+                                   AptValue* pNewTarget, AptValue* pConstructTarget);
+
+
     // getName @0x82AF75C8 / getName2 @0x82AF7540 -- build the slash/dot path name of
     // a value into pOut (getName2 also appends a trailing "/" for an empty path).
     // FLAG: the core path walk (sub_82AF7400) is the path-builder follow-on.
@@ -235,6 +306,32 @@ public:
     // interface chain looking for pClass's prototype; type-aware fallback for the
     // non-object cases. Returns 1 on a match.
     int isObjectOfType(AptValue* pObject, AptValue* pClass);
+
+    // instanceOfChainWalk -- isObjectOfType @0x82AEA5B8's object arm: the prototype /
+    // interface chain walk that latches on pClass's prototype (the needle). Static:
+    // it reads only the two value arguments, no interpreter state.
+    static int instanceOfChainWalk(AptValue* pObject, AptValue* pClass);
+    // GetNodeFrameContextHash -- setVariable @0x82B03374's node branch: a node's frame-
+    // context is its DISPLAY PARENT's char-inst property hash (an AS timeline variable
+    // lives on the enclosing clip); null when the chain breaks. Static: reads only the
+    // node value. Body in AptActionInterpreterInterpHelpers.cpp.
+    static AptNativeHash* GetNodeFrameContextHash(AptValue* pContext);
+
+    // HashLookupName -- AptNativeHash::Lookup over the resolved method-name slot (the
+    // Extension-typed name path of CallMethod); null hash yields no value. Static: reads
+    // only the hash + slot args. Body in AptActionInterpreterInterpHelpers.cpp.
+    static AptValue* HashLookupName(AptNativeHash* pHash, EAStringC** pNameSlot);
+
+    // NameEquals (console Burnout_X360_Artist_0040_0 = EAStringC::operator==) -- does the
+    // resolved method-name slot equal the constant key? Null-guarded. Static: reads only
+    // the slot + constant. Body in AptActionInterpreterInterpHelpers.cpp.
+    static bool NameEquals(EAStringC** pNameSlot, const EAStringC* pConst);
+
+    // HasMember (console sub_82AE4058) -- does pValue (or, for object/CIH-typed values,
+    // its prototype) hold a member keyed by *pNameSlot? Static: reads only the value +
+    // name-slot args. Body in AptActionInterpreterInterpHelpers.cpp.
+    static bool HasMember(AptValue* pValue, EAStringC** pNameSlot);
+
 
     // _createObject @0x82B08088 -- the AS `new ClassName(args...)` value-materialiser.
     // Resolves the class value pClassName under (pScope, pTarget) via getVariable; if
@@ -259,6 +356,16 @@ public:
     // pair (or null when there is no pair). Used by loadVariables.
     const char* urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue);
 
+    // unEscape @0x82AEE110 -- URL-decode a string in place ('+' -> space, '%HH' hex
+    // pair -> byte, else copy). The value-layer escape codec urlDecode consumes.
+    // Static: operates purely on the passed EAStringC.
+    static void unEscape(EAStringC* pStr);
+
+    // escape @0x82AEE008 -- URL percent-ENCODE a string in place (every
+    // non-alphanumeric byte becomes "%XX"; alphanumerics copy). The inverse codec
+    // of unEscape; the AS escape() builtin consumes it.
+    static void escape(EAStringC* pStr);
+
     // ---- AS global builtins (cbCallMethod_*) that this TU owns ------------
     // cbCallMethod_ASSetPropFlags @0x82AD8448 -- ASSetPropFlags() stub (returns
     // `undefined`; the AS member-visibility flags are a no-op in this build).
@@ -270,6 +377,13 @@ public:
     // cbCallMethod_clearInterval @0x82AE3AE0 -- clearInterval(id): find + tear down
     // the timer slot whose id matches the (integer) argument.
     static AptValue* cbCallMethod_clearInterval(AptValue* pThis, int nArgCount);
+
+    // SetIntervalImpl / ClearIntervalImpl -- the interval-table work of
+    // cbCallMethod_setInterval @0x82B019D8 / _clearInterval @0x82AE3AE0 past their arg
+    // guards. Static: they touch only the interval table + native-arg stack, no this.
+    // Bodies in AptIntervalTimer.cpp.
+    static AptValue* SetIntervalImpl(AptValue* pCallback, int nArgCount);
+    static void      ClearIntervalImpl(int nId);
 
     // ---- ActionScript opcode handlers (static; (interpreter, context)) ----
     // The bytecode dispatch registers these by opcode. Each is a static function
@@ -476,6 +590,7 @@ public:
     // Dictionary-aware constant/variable push opcodes (the .apt string-dictionary
     // shortcut forms of Push + the Get/Set fused ops):
     static void _FunctionAptActionPush                 (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionPushString           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringDictByte   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringDictWord   (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionPushStringGetMember  (AptActionInterpreter* pInterp, LocalContextT* pContext);

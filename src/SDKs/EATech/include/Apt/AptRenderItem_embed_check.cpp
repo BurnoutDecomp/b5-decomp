@@ -3,6 +3,7 @@
 // (AptRenderItem is abstract, so exercise via a pointer.)
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptRenderItem_EmbedCheck(AptRenderItem* p)
 {
     (void)p->GetPositionMatrixConst();
@@ -17,6 +18,7 @@ static void AptRenderItem_EmbedCheck(AptRenderItem* p)
     (void)p->Manager_GetFirstChild();
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptRenderItem_EmbedCheckEntry(AptRenderItem* p)
 {
     AptRenderItem_EmbedCheck(p);

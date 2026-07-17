@@ -28,11 +28,12 @@
 // positionally (the loaded-shape layout is owned by the .apt parse, not this slice).
 static const std::uintptr_t KU_SHAPE_GEOMETRY_OFFSET = 0x20;
 
-// AptHook_DrawShape -- console dword_1059C6B8(v6[8], op, tick).
-//
-// Reads the shape's geometry handle (the AptAssetRenderingUnit at +0x20) and dispatches it
-// through the installed gAptFuncs.pfnDrawRenderingUnit slot
-// (== CgsGui::AptCallbackRender::DrawRenderingUnit -> AptRenderHandler::Render for the Normal op).
+// AptHook_DrawShape -- console dword_1059C6B8(v6[8], op, tick). Reads the shape's geometry
+// handle (the AptAssetRenderingUnit at +0x20) and dispatches it through the installed
+// gAptFuncs.pfnDrawRenderingUnit slot (CgsGui::AptAux::ConstructApt installs it to
+// CgsGui::AptCallbackRender::DrawRenderingUnit -> AptRenderHandler::Render).
+// FLAG PC-platform leaf: this IS the console's host render-callback boundary (the indirect
+// dword_1059C6B8 slot), not an engine Class::method.
 void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTick)
 {
     if (!pShape)
@@ -50,16 +51,16 @@ void AptHook_DrawShape(AptCharacter* pShape, AptMaskRenderOperation eOp, int nTi
         gAptFuncs.pfnDrawRenderingUnit(lpRenderingUnit, eOp, nTick);
 }
 
-// AptHook_DrawImportGlyph / AptHook_ResolveImport -- the imported-sub-character draw/resolve
+// AptHookDrawImportGlyph / AptHookResolveImport -- the imported-sub-character draw/resolve
 // path. FLAG: deferred with the .apt parse (the import-resolution branch in AptCharacter::render
 // couples to the full loaded-.apt data layout). Homed as no-ops so the link is satisfied; the
 // common (non-importing) shape path -- the boot-UI case -- renders correctly through DrawShape.
-void AptHook_DrawImportGlyph(AptCharacter* /*pImport*/, int /*nIndex*/, void* /*pGlyphData*/)
+void AptHookDrawImportGlyph(AptCharacter* /*pImport*/, int /*nIndex*/, void* /*pGlyphData*/)
 {
     // FLAG: imported-glyph draw deferred (the .apt import table is reconstructed with the parse).
 }
 
-int AptHook_ResolveImport(void* /*pImportFileData*/, int /*nImportId*/)
+int AptHookResolveImport(void* /*pImportFileData*/, int /*nImportId*/)
 {
     // FLAG: imported-id resolution deferred (the .apt import table is reconstructed with the parse).
     return 0;

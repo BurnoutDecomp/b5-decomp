@@ -33,6 +33,9 @@
 
 #include <cstdint>
 
+// AptActionInterpreter::GetDictEntry (the null-guarded dictionary-slot fetch) is
+// declared in AptActionInterpreter.h.
+
 // FLAG (host debug sink -- installed by the host; console dword_8324E82C): the
 // trace output function. printf-style; the one call site passes (fmt, message).
 extern void AptHook_Trace(const char* szFormat, const char* szMessage);
@@ -103,12 +106,12 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 // counter. After the side-effect each flushes the AptGC deferred-release value
 // vector once the operand stack has drained (the console guards the flush by
 // `off_8324E51C->count != 0 && mnStackTop == 0`; the count side of the guard is
-// folded into AptApt_FlushDeferredReleases, exactly as the sibling Var/Member
+// folded into AptFlushDeferredReleases, exactly as the sibling Var/Member
 // opcodes do).
 //
 // FLAG -- the AptGC deferred-release vector flush (console off_8324E51C /
 // AptValueVector::ReleaseValues; the AptGC layer). Encapsulated as
-// AptApt_FlushDeferredReleases (the same hook the Var/Member opcodes use); the
+// AptFlushDeferredReleases (the same hook the Var/Member opcodes use); the
 // stack-empty guard that triggers it is faithful + engine-side.
 // ===========================================================================
 
@@ -116,7 +119,7 @@ void AptActionInterpreter::_FunctionAptActionToString(AptActionInterpreter* pInt
 // the deferred-release value vector once the operand stack empties. Shared with
 // the Var/Member opcodes (declared there too); the host-side vector type/global
 // are not reconstructed yet, so the flush is encapsulated.
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 namespace
 {
@@ -131,7 +134,7 @@ namespace
     {
         const uint8_t nDictByte = *pContext->mpProgramCounter;
         ++pContext->mpProgramCounter;                       // advance past the byte
-        AptValue* pValue = pInterp->mpConstantPool[nDictByte];
+        AptValue* pValue = pInterp->GetDictEntry(nDictByte);   // null-guarded (FLAG hardening)
         pInterp->mpStack[pInterp->mnStackTop++] = pValue;   // inlined stackPush
         pValue->AddRef();
     }
@@ -146,7 +149,7 @@ void AptActionInterpreter::_FunctionAptActionCallFuncSetVar(AptActionInterpreter
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +161,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodPop(AptActionInterpreter*
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -172,7 +175,7 @@ void AptActionInterpreter::_FunctionAptActionCallFuncAndPop(AptActionInterpreter
     _FunctionAptActionCallFunction(pInterp, pContext);
     pInterp->stackPop();                  // drop the call result (Release)
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // console: vector-count && top==0 -> ReleaseValues
+        AptFlushDeferredReleases();   // console: vector-count && top==0 -> ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -186,19 +189,18 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncPop(AptActionInterprete
     const unsigned int nIndex = *pContext->mpProgramCounter;   // inline byte dict index
     pContext->mpProgramCounter += 1;
 
-    AptValue* pEntry = pInterp->mpConstantPool[nIndex];           // console: *(4*idx + a1[17])
+    AptValue* pEntry = pInterp->GetDictEntry(nIndex);   // null-guarded (FLAG hardening)           // console: *(4*idx + a1[17])
     pInterp->mpStack[pInterp->mnStackTop++] = pEntry;          // inlined stackPush
     pEntry->AddRef();
 
     _FunctionAptActionCallFunction(pInterp, pContext);
     pInterp->stackPop();                                       // drop the call result (Release)
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();
+        AptFlushDeferredReleases();
 }
 
 // The value->object resolver (homed in AptActionInterpreterInterpHelpers.cpp).
-extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                               AptValue* pValue, AptValue** ppOut);
+// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
 
 // ---------------------------------------------------------------------------
 // With (0x94; PS3 @0x82016C) -- AS `with (obj) { ... }`. The aligned inline operand
@@ -226,7 +228,7 @@ void AptActionInterpreter::_FunctionAptActionWith(AptActionInterpreter* pInterp,
         AptValue* pObject = nullptr;   // FLAG: the console leaves the out slot uninitialised
                                        // on a no-object value and AddRefs it regardless; the
                                        // null init + guard below keep that hazard out.
-        AptActionInterpreter_valueToObject(pContext->mpCIH, nullptr, pTarget, &pObject);
+        pInterp->valueToObject(pContext->mpCIH, nullptr, pTarget, &pObject);
         if (pObject)
         {
             pContext->mpPendingReleaseValue = pObject;    // ctx[2] -- the with-scope
@@ -252,7 +254,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethodSetVar(AptActionInterpret
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +268,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallFuncSetVar(AptActionInterpr
     _FunctionAptActionCallFunction(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +282,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodPop(AptActionInterpre
     _FunctionAptActionCallMethod(pInterp, pContext);
     pInterp->stackPop();                  // console AptValue>::Pop -- drop the call result
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +296,7 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
     _FunctionAptActionCallMethod(pInterp, pContext);
     _FunctionAptActionSetVariable(pInterp, pContext);
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ===========================================================================
@@ -314,9 +316,8 @@ void AptActionInterpreter::_FunctionAptActionDictCallMethodSetVar(AptActionInter
 // FLAG (the active AS local-variable frame stack -- console off_8324E3DC /
 // AptScriptFunctionBase::spFrameStack, a protected static). The catch-variable bind
 // reads it (and lazily creates it via CreateFrameStack) to store the caught value in
-// the current activation's locals; reached through an accessor so the protected
-// static stays encapsulated.
-extern AptFrameStack* AptScriptFunctionBase_GetActiveFrameStack();
+// the current activation's locals; read through the public static accessor
+// AptScriptFunctionBase::GetActiveFrameStack() (which encapsulates the protected static).
 
 namespace
 {
@@ -380,11 +381,11 @@ void AptActionInterpreter::_FunctionAptActionTry(AptActionInterpreter* pInterp,
             EAStringC catchName(pRecord->mpCatchName);   // console InitFromBuffer(v13, *(v5+16))
             if (pInterp->mpCurrentFunction)              // console a1[15] (mpCurrentFunction) set
             {
-                AptFrameStack* pFrame = AptScriptFunctionBase_GetActiveFrameStack();  // FLAG: off_8324E3DC
+                AptFrameStack* pFrame = AptScriptFunctionBase::GetActiveFrameStack();  // off_8324E3DC
                 if (!pFrame)
                 {
                     pInterp->mpCurrentFunction->CreateFrameStack();
-                    pFrame = AptScriptFunctionBase_GetActiveFrameStack();
+                    pFrame = AptScriptFunctionBase::GetActiveFrameStack();
                 }
                 pFrame->GetNativeHashVirtual()->Set(catchName, pThrown);  // console AptNativeHash::Set(frame+8, ...)
             }

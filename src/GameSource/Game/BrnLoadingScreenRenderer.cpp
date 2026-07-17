@@ -121,8 +121,8 @@ namespace BrnGame
         f32 lfWidth, f32 lfHeight, void* lpcData, s32 liDataSize)
     {
         renderengine::Texture2D::Parameters lParams = {};
-        lParams.muWidth = static_cast<u32>(lfWidth);
-        lParams.muHeight = static_cast<u32>(lfHeight);
+        lParams.muWidth = static_cast<u32>(lfWidth + 0.5f);
+        lParams.muHeight = static_cast<u32>(lfHeight + 0.5f);
         lParams.muDepth = 1;
         lParams.muNumLevels = 1;
         lParams.muFormat = 340;
@@ -259,6 +259,13 @@ namespace BrnGame
     {
         using namespace CgsGraphics;
 
+        // ARTIST 0x823E7B28: the renderer returns before beginning an Im2d pass
+        // when the loading screen's visible byte (this+0x14) is clear.
+        if (!mbVisible)
+        {
+            return;
+        }
+
         lpIm2d->BeginRendering();
 
         Im2dTransform lScreenXForm;
@@ -355,7 +362,7 @@ namespace BrnGame
         const RGBA8 lBlack = { 0, 0, 0, static_cast<u8>(lfAlpha * 255.0f + 0.5f) };
         lpIm2d->SetTexture(mpCarTexture);
         EmitQuad(lpIm2d, {0.0f,0.0f}, {KF_SCREEN_W,0.0f}, {0.0f,KF_SCREEN_H}, {KF_SCREEN_W,KF_SCREEN_H},
-                 0.0f, 0.0f, 1.0f, 1.0f, lBlack);
+                 0.0f, 0.0f, KF_BG_U, KF_BG_V, lBlack);
         lpIm2d->EndRendering();
     }
 
@@ -363,9 +370,10 @@ namespace BrnGame
     // visuals (if not backgrounded and no overlay), then update the black overlay.
     void LoadingScreenRenderer::RenderForeground(CgsGraphics::Im2d* lpIm2d)
     {
-        const u32 luNow = CgsSystem::GetSystemTimerBaseTime();
-        const u32 luDelta = luNow - static_cast<u32>(muLastTime);
-        muLastTime = luNow;
+        const u32 luFirstTime = CgsSystem::GetSystemTimerBaseTime();
+        const u32 luSecondTime = CgsSystem::GetSystemTimerBaseTime();
+        const u32 luDelta = luSecondTime - static_cast<u32>(muLastTime);
+        muLastTime = luFirstTime;
         const u32 luFreq = CgsSystem::GetSystemTimerFrequency();
         f32 lfStep = (luFreq != 0u) ? static_cast<f32>(luDelta) / static_cast<f32>(luFreq) : 0.0f;
         if (lfStep > 0.1f) { lfStep = 0.1f; }

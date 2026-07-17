@@ -18,9 +18,6 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // base dtor (chained)
 
-// The instantiation step-probe sink (host-implemented; weak no-op default in AptCharacterHelper.cpp).
-extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
-
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetRenderItemWritable / mpRenderItem
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"               // mpCharacter
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"       // ClearCharacterList / ResetInitIndicators / IncCharacterList
@@ -31,7 +28,7 @@ extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
 #include "SDKs/EATech/include/Apt/AptCIH.h"                      // KU_AptEmbeddedMovieOff (native-8 header size 0x20)
 
 // ---------------------------------------------------------------------------
-// AptMovieCharacter_GetAnimation -- a movie/animation AptCharacter embeds its
+// AptGetMovieCharacterAnimation -- a movie/animation AptCharacter embeds its
 // AptCharacterAnimation movie root by value immediately after the AptCharacter base
 // (X360: `addi r3, mpCharacter, 0x10; blr` -- the embedded timeline, the same embedded
 // movie AptMovie.h documents). The owning character-subtype that would carry it as a
@@ -43,11 +40,11 @@ extern "C" void CgsApt_GalProbe(const char* pcStep, const void* p);
 // sizeof(AptCharacter)); on the x64 gate the SERIALIZED header widens to 0x20 under the
 // 8-byte pointer rule (the .apt converter's GUIAPT64 "1:7:8" layout). The embedded-root
 // offset is therefore KU_AptEmbeddedMovieOff (0x20 -- the SAME def-base offset
-// AptCIH_GetClipMovie uses; VERIFIED vs TITLE_SCREEN02.bundle), so the returned
+// AptGetClipMovie uses; VERIFIED vs TITLE_SCREEN02.bundle), so the returned
 // AptCharacterAnimation* lands on the real def-base region (where the frame count / the
 // fixed-up character table live). Null-safe.
 // ---------------------------------------------------------------------------
-AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter)
+AptCharacterAnimation* AptGetMovieCharacterAnimation(AptCharacter* pCharacter)
 {
     if (pCharacter == nullptr)
         return nullptr;
@@ -88,7 +85,7 @@ void AptCharacterAnimationInst::PreDestroy()
 //
 // The movie root the two AptCharacterAnimation calls operate on is the
 // AptCharacterAnimation embedded at char+0x10 (reached by name through
-// AptMovieCharacter_GetAnimation -- see the header FLAG). The first call reads the
+// AptGetMovieCharacterAnimation -- see the header FLAG). The first call reads the
 // CURRENT render item's character directly (this->mpRenderItem); the init-indicator
 // reset uses the tick-WRITABLE render item (GetRenderItemWritable, evaluated twice
 // in the asm: once for the null guard, once for the character pointer).
@@ -107,13 +104,13 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
     // Tear down the imported movie's character list (drop a character reference per
     // table entry). The movie root is embedded in the current render item's
     // character at char+0x10.
-    AptMovieCharacter_GetAnimation(mpRenderItem->mpCharacter)->ClearCharacterList();
+    AptGetMovieCharacterAnimation(mpRenderItem->mpCharacter)->ClearCharacterList();
 
     // If the writable render item still owns a character, restore that movie's init
     // indicators (the instance is going away before all its init actions ran).
     if (GetRenderItemWritable()->mpCharacter)
     {
-        AptMovieCharacter_GetAnimation(GetRenderItemWritable()->mpCharacter)->ResetInitIndicators();
+        AptGetMovieCharacterAnimation(GetRenderItemWritable()->mpCharacter)->ResetInitIndicators();
     }
 
     // Drop one reference on the imported source .apt file; delete the shared AptFile
@@ -137,7 +134,7 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 //   AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(this, a2);  // base ctor
 //   *this = off_82145FE8;                       // AnimInst vtable (automatic codegen)
 //   *(this+0x28) = 0;                           // mAnimationFilePtr.pData = 0
-//   *(this+0x24) = 0;                           // mAnimationState_unknown = 0
+//   *(this+0x24) = 0;                           // mnAccumulatedUpdateMs = 0
 //   if(a2+0xC != a3) AptSharedPtr<AptFile>::operator=(a2+0xC, a3);   // (a2's embedded AptFilePtr) = a3
 //   if(this+0x28 != a3) AptSharedPtr<AptFile>::operator=(this+0x28, a3);// mAnimationFilePtr = a3
 //   held = a3; if(held) incref(held);               // pinned copy of the file
@@ -154,11 +151,9 @@ AptCharacterAnimationInst::~AptCharacterAnimationInst()
 // ---------------------------------------------------------------------------
 AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
 {
-    CgsApt_GalProbe("MakeCAI: enter pFile", pFile);
     if (pFile == nullptr)
         return nullptr;
     void* lpMem = gpAptSharedPtrPool->Allocate(sizeof(AptCharacterAnimationInst));    // Allocate(off_8324D808, 0x2C)
-    CgsApt_GalProbe("MakeCAI: alloc inst", lpMem);
     if (lpMem == nullptr)
         return nullptr;
 
@@ -166,7 +161,6 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // the movie root (pFile->mpData) is the AptCharacter the base ctor builds over,
     // and the held file reference is an incref'd AptFilePtr(pFile).
     AptCharacter* lpCharacter = reinterpret_cast<AptCharacter*>(pFile->mpData);   // r4 = *(pFile+0x14)
-    CgsApt_GalProbe("MakeCAI: mpData(character)", lpCharacter);
     AptFilePtr    laHeldFile;
     laHeldFile.pData = pFile;
     if (pFile != nullptr)
@@ -179,13 +173,11 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(this, character).
     // (The AnimInst vtable store `*this = off_82145FE8` is the manual-vtable family's
     // automatic codegen -- not hand-written here, matching the dtor + the base ctor.)
-    CgsApt_GalProbe("MakeCAI: SpriteInstBase ctor ...", nullptr);
     ::new (static_cast<void*>(static_cast<AptCharacterSpriteInstBase*>(pInst)))
         AptCharacterSpriteInstBase(lpCharacter);
-    CgsApt_GalProbe("MakeCAI: SpriteInstBase done; renderItem", pInst->mpRenderItem);
 
     pInst->mAnimationFilePtr.pData = nullptr;    // *(this+0x28) = 0 (pre-op= clear)
-    pInst->mAnimationState_unknown = 0;          // *(this+0x24) = 0
+    pInst->mnAccumulatedUpdateMs = 0;            // *(this+0x24) = 0
 
     // (1) @0x82AFFDF8..: the movie root's own embedded AptFilePtr (a2+0xC) = a3.
     // AptSharedPtr<AptFile>::operator=(character+0xC, &held). The PS3 lift gates this
@@ -240,14 +232,13 @@ AptCharacterAnimationInst* MakeCharacterAnimationInst(AptFile* pFile)
     // movie def-base; on the current TITLE_SCREEN02 bundle it is NOT (char[1] un-widened +
     // the def-base charCount/table at +0x18/+0x20 vs the runtime struct's +0x0C/+0x10), so
     // the host facade DEFERS calling this factory until the converter fix (see
-    // BrnAptRuntimeBringUp: the movie-root instantiation is held off with the tick). The
+    // BrnGuiAptRuntime: the movie-root instantiation is held off with the tick). The
     // body here stays the faithful, un-gated console decompile.
-    CgsApt_GalProbe("MakeCAI: IncCharacterList (renderItem)", pInst->mpRenderItem);
     AptFilePtr laIncArg;
     laIncArg.pData = laHeldFile.pData;                // v16[0] = *a3
     if (laIncArg.pData != nullptr)
         AptSharedPtrIncRef(laIncArg.pData);           // lwarx/+1/stwcx. @0x82AFFE50
-    AptMovieCharacter_GetAnimation(pInst->mpRenderItem->mpCharacter)
+    AptGetMovieCharacterAnimation(pInst->mpRenderItem->mpCharacter)
         ->IncCharacterList(laIncArg);                 // IncCharacterList(*(mpRenderItem->mpChar)+embed, v16) @0x82AFFE74
 
     // Drop the by-value pin (v16[0]): the asm decrefs it after the call and deletes at

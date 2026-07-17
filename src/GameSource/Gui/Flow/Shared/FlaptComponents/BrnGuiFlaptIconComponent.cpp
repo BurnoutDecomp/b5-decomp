@@ -68,6 +68,15 @@ namespace BrnGui
         muCurrentStateHash = 0;
     }
 
+    // @ 0x8241C2B8 -- the adopt-a-resolved-clip override: a bare tail-forward onto
+    // the base's Prepare(const MovieClipRef*) (X360: addi r3,r3,4 -> b 0x8240E740,
+    // the this-adjust from the icon's vptr-carrying layout to its base subobject).
+    // Unlike the FileRef overload above it does NOT reset muCurrentStateHash.
+    void FlaptIconComponent::Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef)
+    {
+        BrnFlaptComponent::Prepare(lpMovieClipRef);
+    }
+
     // @ 0x8241C2C0 -- play the clip on the hashed state label, if it changed.
     void FlaptIconComponent::SetState(const char* lpcStateName)
     {

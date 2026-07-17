@@ -27,6 +27,8 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeControllerToX.h"
 
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h"               // CgsGui::GuiModule::AddGuiEvent<T> (the real GUI event sink)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h" // CgsInput::InputIO::OutputBuffer / PadOutputInformation / ActionInfo
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"    // CgsInput::KU_NUMBER_OF_PADS
@@ -40,21 +42,21 @@
 
 namespace BrnGame
 {
-    // ---- global action-index tables (X360 unk_820352F0 / dword_82035330 region) -------------
+    // ---- global action-index tables (X360 unk_820352F0 / dword_82035330 rodata) -------------
     // The bridges iterate a list of pad-action ids: for each id k, the action slot is
-    // padRecord.maActionInfo[k]. FLAG: the real table is the X360 read-only blob at 0x820352F0;
-    // its exact contents are not recovered, so it is modelled here as a named, sized table the
-    // bridges index by name. The count is the X360 dword_82035330 sentinel just past the table.
-    // (Values below are a faithful placeholder ordering; promote when the blob is recovered.)
+    // padRecord.maActionInfo[k]. Values extracted from the X360 rodata (2026-07-10): the scan
+    // table is the 16 dwords at 0x820352F0 (the ToGui loop runs from the table base to the
+    // menu-axis table's address -- pointer-bounded, so 16 entries), and the menu-axis
+    // auto-repeat table is the 8 dwords at 0x82035330 (ids 37..44; BootLegal's menu-next 41 /
+    // menu-prev 42 ride this repeat pass).
     static const s32 gaiGuiActionIndexTable[] = {
-        49, 50, 51, 52, 53, 54, 55, 56, 57, 58
+        49, 46, 50, 51, 52, 53, 54, 55, 56, 57, 45, 47, 48, 21, 59, 58
     };
     static const s32 giNumGuiActionIndices =
         static_cast<s32>(sizeof(gaiGuiActionIndexTable) / sizeof(gaiGuiActionIndexTable[0]));
 
-    // The 8 menu-axis action ids the ToGui language/menu repeat loop scans (X360 dword_82035330[..]).
-    // FLAG: modelled placeholder; promote with the action-index blob.
-    static const s32 gaiGuiMenuAxisActionTable[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+    // The 8 menu-axis action ids the ToGui language/menu repeat loop scans (X360 dword_82035330).
+    static const s32 gaiGuiMenuAxisActionTable[8] = { 37, 38, 39, 40, 41, 42, 43, 44 };
 
     // ToGui language-cycle persistent state (X360 file-scope globals byte_82FAEB9C / dword_82FAEB98 /
     // flt_82FAEB94 / flt_82FAE490[8]). FLAG: file-scope here, promoted to their real home when the
@@ -361,13 +363,14 @@ namespace BrnGame
 
     // =========================================================================
     // BridgeControllerToGui  (X360 0x823E6B18)
+    // The GUI sink is the real CgsGui::GuiModule::AddGuiEvent<T> (the X360 calls it on the
+    // module embedded at BrnGameModule+7252512; the body never reads `this`, so it is
+    // callable without the embed until that object is constructed on PC).
     // =========================================================================
     void BrnGameModule::BridgeControllerToGui(
-        CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
         const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer)
     {
-        CgsGui::GuiModule* lpGui = mpCgsGuiModule;
-
         s32 liActiveUserIndex = 0;
         const CgsInput::InputIO::PadOutputInformation* lpPad =
             GetPadInfoForPlayer0(lpInputOutputBuffer, &liActiveUserIndex);
@@ -395,9 +398,9 @@ namespace BrnGame
                     if (((lpAction->muStatus >> 1) & 1) == 1)
                     {
                         CgsGui::GuiEventControllerInputPressed lEvent;
-                        lEvent.miPort = 0;
-                        lEvent.miActionId = liActionId;
-                        if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                        lEvent.miPadId = 0;
+                        lEvent.miButtonId = liActionId;
+                        CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                         lbAccepted = true;
                         break;
                     }
@@ -412,7 +415,7 @@ namespace BrnGame
         {
             CgsGui::GuiEventActiveUserIndex lEvent;
             lEvent.miActiveUserIndex = (lpPad->meControllerState != 0) ? liActiveUserIndex : -1;
-            if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
         // Toggle-change-car message (when the GUI accepts input + the relevant action is pressed+held).
@@ -421,8 +424,7 @@ namespace BrnGame
             (lpActions[(0x1BC + 0x18 - 0x18) / 8].muStatus & 1) != 0)
         {
             BrnGui::GuiEventToggleChangeCarMessage lEvent;
-            lEvent.miUnused = 0;
-            if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
         // Front-end menu-accept synthesis (skipped while menu-accept is suppressed).
@@ -434,8 +436,8 @@ namespace BrnGame
             const CgsInput::InputIO::ActionInfo& lrA16C = lpActions[(0x16C - 0x18 + 0x18) / 8]; // +0x16C
             if (((lrA16C.muStatus >> 1) & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPort = 0; lEvent.miActionId = 45;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = 45;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                 return;
             }
             if ((lrA16C.muStatus & 1) != 0)
@@ -447,24 +449,24 @@ namespace BrnGame
         if (lpPad->meControllerState == 2)
         {
             CgsGui::GuiEventControllerAxis lEvent;
-            lEvent.miAxisId = 2;
-            lEvent.mfX = lpPad->mfAxis10;
-            lEvent.mfY = lpPad->mfAxis14;
-            if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+            lEvent.miAxis = 2;
+            lEvent.mfXAxis = lpPad->mfAxis10;
+            lEvent.mfYAxis = lpPad->mfAxis14;
+            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
         else
         {
             CgsGui::GuiEventControllerAxis lAxis0;
-            lAxis0.miAxisId = 0;
-            lAxis0.mfX = lpPad->mfStickLX;
-            lAxis0.mfY = lpPad->mfStickLY;
-            if (lpGui) lpGui->AddGuiEvent(&lAxis0, lpGuiOutputBuffer);
+            lAxis0.miAxis = 0;
+            lAxis0.mfXAxis = lpPad->mfStickLX;
+            lAxis0.mfYAxis = lpPad->mfStickLY;
+            CgsGui::GuiModule::AddGuiEvent(lAxis0, lpGuiInputBuffer);
 
             CgsGui::GuiEventControllerAxis lAxis1;
-            lAxis1.miAxisId = 1;
-            lAxis1.mfX = lpPad->mfStickRX;
-            lAxis1.mfY = lpPad->mfStickRY;
-            if (lpGui) lpGui->AddGuiEvent(&lAxis1, lpGuiOutputBuffer);
+            lAxis1.miAxis = 1;
+            lAxis1.mfXAxis = lpPad->mfStickRX;
+            lAxis1.mfYAxis = lpPad->mfStickRY;
+            CgsGui::GuiModule::AddGuiEvent(lAxis1, lpGuiInputBuffer);
         }
 
         // Per-action down / pressed / released events over the action-index table.
@@ -483,28 +485,33 @@ namespace BrnGame
             bool lbWasDown = false;
             if ((lpAction->muStatus & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputDown lEvent; lEvent.miPort = 0; lEvent.miActionId = liActionId;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputDown lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                 lbWasDown = true;
             }
             if (((lpAction->muStatus >> 1) & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPort = 0; lEvent.miActionId = liActionId;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                 lbWasDown = true;
             }
             else if (((lpAction->muStatus >> 2) & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputReleased lEvent; lEvent.miPort = 0; lEvent.miActionId = liActionId;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputReleased lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                 lbWasDown = true;
             }
             if (lbWasDown && lbIsMenuAxisId)
                 lbSuppressMenuAxis = true;
         }
 
-        // Menu auto-repeat pass: a current frame time derived from the language-cycle timer words.
-        f32 lfNow = static_cast<f32>(miLanguageCycleTimerLo) + static_cast<f32>(miLanguageCycleTimerHi);
+        // Menu auto-repeat pass. The X360 time base is the game module's language-cycle clock
+        // pair -- an integer-seconds word widened to double plus a fractional-seconds float
+        // (LODWORD/HIDWORD u32->f64 idiom @0x823E6E30) -- compared against the per-action
+        // repeat deadlines (0.8s initial delay, 0.1s repeat).
+        f32 lfNow = static_cast<f32>(
+            static_cast<f64>(static_cast<u32>(miLanguageCycleTimerLo)) +
+            static_cast<f64>(mfLanguageCycleTimerFrac));
         for (s32 i = 0; i < 8; ++i)
         {
             s32 liActionId = gaiGuiMenuAxisActionTable[i];
@@ -513,39 +520,41 @@ namespace BrnGame
 
             if ((lpAction->muStatus & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputDown lEvent; lEvent.miPort = 0; lEvent.miActionId = liActionId;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputDown lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
             }
             if (((lpAction->muStatus >> 1) & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPort = 0; lEvent.miActionId = liActionId;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                 safMenuRepeatNextTime[i] = lfNow + 0.8f;
             }
             else if (((lpAction->muStatus >> 2) & 1) != 0)
             {
-                CgsGui::GuiEventControllerInputReleased lEvent; lEvent.miPort = 0; lEvent.miActionId = liActionId;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputReleased lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
                 safMenuRepeatNextTime[i] = 0.0f;
             }
             if ((lpAction->muStatus & 1) != 0 && lfNow >= safMenuRepeatNextTime[i])
             {
                 safMenuRepeatNextTime[i] += 0.1f;
-                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPort = 0; lEvent.miActionId = liActionId;
-                if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+                CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
+                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
             }
         }
 
         // Controller-disconnected events: drain the input buffer's pad-disconnected queue.
+        // Payload order per the X360 store pair (HIDWORD=miPlayer first, LODWORD=miPort second):
+        // {miPlayer, miPort} -- matching GuiControllerDisconnected's DWARF member order.
         const CgsInput::InputIO::OutputBuffer::PadDisconnectedQueue* lpDisc =
             lpInputOutputBuffer->GetPadDisconnectedQueue();
         for (s32 i = 0; i < lpDisc->GetLength(); ++i)
         {
             const CgsInput::InputIO::BaseInputEvent& lrEvent = lpDisc->GetEvent(i);
             CgsGui::GuiControllerDisconnected lEvent;
+            lEvent.miPlayer = lrEvent.miPlayer;
             lEvent.miPort   = lrEvent.miPort;
-            lEvent.miReason = lrEvent.miPlayer;
-            if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
         // Language cycle: when the change-language combo is held and the debounce has elapsed, emit a
@@ -568,8 +577,8 @@ namespace BrnGame
         if (lbPending == 1 && lfNow > (sfLanguageCycleLastTime + 1.0f))
         {
             CgsGui::GuiEventSetLanguage lEvent;
-            lEvent.miLanguageId = gaiLanguageCycleIds[liIndex];
-            if (lpGui) lpGui->AddGuiEvent(&lEvent, lpGuiOutputBuffer);
+            lEvent.meLanguage = static_cast<CgsLanguage::ELanguage>(gaiLanguageCycleIds[liIndex]);
+            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
             sfLanguageCycleLastTime = lfNow;
             sbLanguageCyclePending = 0;
         }

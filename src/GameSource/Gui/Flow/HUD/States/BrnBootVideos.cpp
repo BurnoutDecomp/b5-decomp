@@ -112,11 +112,21 @@ namespace BrnGui
                 break;
 
             case E_UPDATE_STAGE_MAIN_CRITERION_LOGO_MOVIE:
-                // Criterion-logo video finished -> the boot videos are done; signal the flow to advance.
+                // Criterion-logo video finished -> the boot videos are done. The X360
+                // posts the phase-complete command 70 on the GUI-out channel (Update
+                // @0x82478778: {1,70,12} AddEvent(out, 40, 16)); the game main flow's
+                // MarketingScreens::Update advances on it.
                 if (liEventId == KI_EVENT_VIDEO_FINISHED)
                 {
                     meUpdateStage = E_UPDATE_STAGE_DONE;
-                    SendStateEvent("done");   // [X360 emits a boot-videos-done GUI event (channel 40)]
+                    struct GuiCommandEvent16 : public CgsGui::GuiEvent<70>
+                    {
+                        u8 mu8Flag; u8 maPad[3];
+                        GuiCommandEvent16() : CgsGui::GuiEvent<70>(1, 12), mu8Flag(0)
+                        { maPad[0] = maPad[1] = maPad[2] = 0; }
+                    } lDone;
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lDone), 40, 16);
                 }
                 break;
 

@@ -10,6 +10,8 @@
 // declares AptValue / AptSavedInputRecord / AptSysClock and aliases AptGetBytesEnum / the
 // movie-clip handle, which is all these callback signatures need (none deref them here).
 #include "SDKs/EATech/include/Apt/Apt.h"
+#include "SDKs/EATech/include/Apt/AptTarget.h"
+#include <eathread/eathread_mutex.h>
 
 // Forward declarations for AptAux::Construct's collaborators (passed straight through to
 // AptRenderHandler::Construct; only pointers are held here).
@@ -85,6 +87,29 @@ namespace CgsGui
         // render-slot installs reference the CgsAptCallbackRender.cpp family this TU defines.
         void ConstructApt();
 
+        // X360 0x82853B20 (CgsGui::AptAux::Update) -- the per-frame Apt drive: assert
+        // Prepare finished, flush the component key/value store (UpdateComponents),
+        // then run the engine frame pacer under the Apt mutex
+        // (AptUpdateTarget(mpAptTargetInstance, liDeltaMs, -1, 16)). The X360
+        // hard-returns 1; no caller consumes it. Body in CgsAptAux.cpp.
+        void Update(s32 liDeltaMs);
+
+        // X360 0x82848FB8 (CgsGui::AptAux::Render) -- the per-frame Apt render drive
+        // ViewModule::RenderInternal @0x82858AF8 runs: assert Prepare finished, then
+        // walk the target's render tree (AptRenderTarget(mpAptTargetInstance,
+        // liDeltaMs, -1) -- the elapsed ms feed the consumed render-tick bank; every
+        // layer). Bracketed by the dword_82F33130 perf monitor; no mutex (the render
+        // walk only READS the tree the update side committed). The X360 hard-returns
+        // 1; no caller consumes it. Body in CgsAptAux.cpp.
+        void Render(s32 liDeltaMs);
+
+        // X360 0x82849080 (CgsGui::AptAux::LoadFlashAnimation) -- load a movie onto a
+        // GUI level: assert the name/level, format the "_level%d" target path, and hand
+        // it to the engine's AptLoadAnimation. Called by
+        // ViewModule::ProcessIncomingAptEvent (the play-movie view event). Body in
+        // CgsAptAux.cpp; DWARF: LoadFlashAnimation(const char*, int32_t).
+        void LoadFlashAnimation(const char* lpacFileName, s32 liTargetLevel);
+
         // X360 0x82848E50 (CgsGui::AptAux::InitializeApt) -- the keystone Apt runtime
         // bring-up AptAux::Prepare runs after AptAux::Construct: build the AptUpdate /
         // AptCreateTarget param blocks, then in order AptAllocatorInitialize ->
@@ -92,6 +117,10 @@ namespace CgsGui
         // AptChangeTargetInstance -> the ext-object phase (build + register the
         // AptCommunicator extension into mpAptCommunicator). Body in CgsAptAux.cpp.
         void InitializeApt();
+
+        // X360 0x828503E0 / 0x828504B0. AptDataHandler and Apt engine lifecycle.
+        bool Prepare(CgsMemory::HeapMalloc* lpAllocator);
+        bool Release();
 
         // X360 0x82850570 (CgsGui::AptAux::UpdateComponents) -- the per-frame component
         // flush AptAux::Update @0x82853B20 runs FIRST each frame (perfmon "AptAux - Upd
@@ -121,6 +150,7 @@ namespace CgsGui
         // meaning is owned by the apt-engine bookkeeping; only that they are set is in scope.
         s32 miState0;   // [guest +0x00] set to 0
         s32 miState4;   // [guest +0x04] set to 3
+        AptTarget* mpAptTargetInstance; // [guest +0x08]
 
         // The embedded APT data registry/allocator front-end (Construct builds it). [guest +12]
         AptDataHandler mAptDataHandler;
@@ -137,6 +167,7 @@ namespace CgsGui
         // behind the ~108KB render handler; addressed by name here. UpdateComponents
         // asserts it, UpdateFlashComponent stores through it. [guest +0x1AC60]
         AptCommunicator* mpAptCommunicator;
+        EA::Thread::Mutex mAptMutex;
     };
 
     // The AptAux singleton handle the render callbacks resolve through. The guest holds a
@@ -189,6 +220,18 @@ namespace CgsGui
 
     namespace AptCallbackFile
     {
+        // X360 0x828495A8 (gAptFuncs pfnFreeAnimation). Mark a loaded AptDataHeader as
+        // loaded/free again: the binary stores 1 to the header state word at +0x14.
+        void FreeAnimation(void* lpDataBlock);
+
+        // X360 0x828540E0 (gAptFuncs pfnOnUnload). Assert the AptAux singleton exists,
+        // then ask AptCommunicator to remove the expired component registration.
+        void OnUnload(AptValue* lpValue);
+
+        // X360 0x828495B8 (gAptFuncs pfnLoadAnimationCompleted). The binary ignores
+        // both name arguments, raises the partial-GC flag, then flushes queued input.
+        void LoadAnimationCompleted(const char* lpacBaseName, const char* lpacTargetName);
+
         // X360 0x828495E0 / 0x82849620. Guarded not-yet-implemented file-progress callbacks;
         // each fires the not-implemented assert and returns 0. (gAptFuncs pfnGetBytesTotal /
         // pfnGetBytesLoaded(const char*, AptGetBytesEnum).)
@@ -204,18 +247,14 @@ namespace CgsGui
         void LoadAnimation(const char* lpacName, AptFilePtr* lpHandle);
     }
 
-    // FLAG (x64 converted 8-byte bundle): the located movie-root character header the host
-    // stashes before LoadAnimation (see CgsAptAux.cpp). Null => CompleteLoad uses the console
-    // pConstFile->mnDataRootOffset formula. Defined in CgsAptAux.cpp.
-    extern void* gAptLoadAnimRootOverride;
-
-    // FLAG (x64 native-8 relocation bounds): the AptData resource span the host stashes before
-    // LoadAnimation, so the native-8 AptMovie::resolve64 relocation walk (driven by
-    // AptCharacterAnimation::Fixup) can bounds-check every serialised offset slot -- a slot
-    // holds a file-relative offset iff (0 < off < gAptResourceSpanSize), and a relocated pointer
-    // is safe to deref iff it lands in [gAptResourceSpanBase, +gAptResourceSpanSize). This makes
-    // the walk robust against non-pointer / already-relocated / garbage slots. Defined in
-    // CgsAptAux.cpp. (base == the load base pBase == the AptData resource base on our path.)
+    // FLAG (x64 native-8 relocation bounds): the AptData resource span LoadAnimation derives
+    // from the registered header (base == the header address; size == the converted 6-field
+    // header's size slot @+0x28) before driving the completion, so the native-8
+    // AptMovie::resolve64 relocation walk (driven by AptCharacterAnimation::Fixup) can
+    // bounds-check every serialised offset slot -- a slot holds a file-relative offset iff
+    // (0 < off < gAptResourceSpanSize), and a relocated pointer is safe to deref iff it lands
+    // in [gAptResourceSpanBase, +gAptResourceSpanSize). This makes the walk robust against
+    // non-pointer / already-relocated / garbage slots. Defined in CgsAptAux.cpp.
     extern uintptr_t gAptResourceSpanBase;
     extern uint32_t  gAptResourceSpanSize;
 

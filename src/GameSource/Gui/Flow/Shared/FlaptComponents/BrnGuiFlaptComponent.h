@@ -73,6 +73,14 @@ namespace BrnGui
                      const BrnFlapt::FileRef& lFile,
                      const char* lacParentName);
 
+        // Prepare(const MovieClipRef*) @ 0x8240E740 -- adopt an already-resolved
+        // movie clip: assert it (h:164, the X360 out-of-line copy's own home), copy
+        // its two handle words into mAptRef and reset the bound clip's timeline.
+        // DWARF home is this header (BrnGuiFlaptComponent.h:164 assert cite); bodied
+        // out-of-line in BrnGuiFlaptComponent.cpp because the timeline reset needs the
+        // MovieClipInstance type this widely-included base header must not pull in.
+        void Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef);
+
         // SetInvalid -- drop the bound clip. ADDITIVE GROW (the DWARF declares it,
         // BrnGuiFlaptComponent.h:30; the X360 always inlines it -- the per-component
         // mAptRef zero-pairs in BrnGui::BaseOverlayState's reset path

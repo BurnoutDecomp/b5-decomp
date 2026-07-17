@@ -29,8 +29,17 @@
 //     stream is taken straight from its named .SNS.
 // ============================================================================
 
+#include <vector>
+#include <cstdint>
+
 namespace CgsSystem
 {
+    // In-memory SNR (GenericRwacWaveContent) sample decode -- the presentation
+    // splice-bank samples are fully-resident SNR images. Shares this TU's EA-XMA
+    // frame decode. Bodied in CgsMovieAudioPC.cpp.
+    bool SnrSampleDecodePC(const std::uint8_t* lpData, std::size_t luLen,
+                           std::vector<std::int16_t>& lrPcm, int& lrRate, int& lrChannels);
+
     class MovieAudioPC
     {
     public:

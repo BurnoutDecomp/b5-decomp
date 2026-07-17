@@ -7,6 +7,7 @@
 // a C++ `virtual` here would inject a second compiler vptr and break parity.
 static_assert(sizeof(AptCharacterShapeInst) >= sizeof(AptCharacterInst), "AptCharacterShapeInst layout drift");
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptCharacterShapeInst_EmbedCheck(AptCharacterShapeInst* p)
 {
     (void)static_cast<AptCharacterInst*>(p);   // confirms the base relationship

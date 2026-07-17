@@ -77,6 +77,16 @@ void*     gpAptRenderingContext       = nullptr;   // dword_8324E2AC (the shared
 // arms silently looked up empty objects. Every reader now binds gpAptGlobalFallback /
 // gpAptGlobalExtensionObject above -- the pair AptValueInitialize actually builds.)
 AptValue* gpObjRegistrationFunc       = nullptr;   // the Object-registration native fn
+// The AS global-function singletons AptCIH::objectMemberLookup returns for the
+// setInterval/clearInterval/isNaN/unescape/escape/Boolean member names. Created
+// by the deferred sub_82AF6B68 builtin-table init (see AptInit.cpp); null until
+// that init homes -- the lookup's null return continues the findChild resolution.
+AptValue* gpAptFnSetInterval          = nullptr;   // off_8324D828
+AptValue* gpAptFnClearInterval        = nullptr;   // off_8324D81C
+AptValue* gpAptFnIsNaN                = nullptr;   // off_8324D824
+AptValue* gpAptFnUnescape             = nullptr;   // off_8324E1FC
+AptValue* gpAptFnEscape               = nullptr;   // off_8324D80C
+AptValue* gpAptFnBoolean              = nullptr;   // off_8324D74C
 
 // ===========================================================================
 // 2. The 27 gpAptNativeFn_8324E4xx per-built-in native-function singletons.
@@ -203,7 +213,13 @@ extern const EAStringC gAptKeyThis           ("this");       // unk_8324E6C0
 extern const EAStringC gAptThisKey           ("this");       // dword_8324E6C0 (alias name for the same key)
 extern const EAStringC gAptKeyGlobal         ("_global");    // unk_8324E59C
 extern const EAStringC gAptKeyArguments      ("arguments");  // unk_8324E6B8
-extern const EAStringC gAptKeyPrototype      ("__proto__");  // the AS prototype key
+extern const EAStringC gAptKeyPrototype      ("prototype"); // dword_8324E698 -- the AS "prototype" key
+                                                            // (hash 1689; AptNativeHash's fast-slot gates
+                                                            // key it against mpPrototype. The old literal
+                                                            // "__proto__" (hash 27581) made every
+                                                            // fn.prototype Lookup return null -> no class
+                                                            // methods ever landed. "__proto__" itself is
+                                                            // StringPool::saConstant[0].)
 extern const EAStringC gAptKeyControllerKey  ("controller"); // unk_8324E614
 extern const EAStringC gAptEmptyMethodName   ("");           // unk_8324E6B8 (the empty method-name sentinel)
 extern const EAStringC gAptObjectClassName   ("Object");     // &dword_8324E650
@@ -247,8 +263,34 @@ EAStringC*             gAptEventNameTable         = nullptr;   // event-name tab
 extern const int gAptPropertyIndexRemap[256] = {};   // dword_82F73010
 
 // gAptMemberIndexToEventBit: AS member-index (-200 biased) -> event bitmask
-// (X360 dword_82143BA8). FLAG: rodata contents un-recovered; X360 vaddr 0x82143BA8.
-extern const int32_t gAptMemberIndexToEventBit[256] = {};   // dword_82143BA8
+// (X360 dword_82143BA8; 19 entries EXTRACTED from the ARTIST .asm rodata,
+// big-endian .long/.byte run 0x82143BA8..0x82143BF3). Each maps a
+// SpriteMembersIndex on<Event> id (200..218) to its clip-event mask bit --
+// consistent with KaAptEventDescriptors (onLoad 207 -> 0x1, onEnterFrame 203 ->
+// 0x2, onKeyDown 204 -> 0x40, onKeyUp 205 -> 0x80, onUnload 217 -> 0x4, onData
+// 200 -> 0x100). -1 = not a maskable handler. Tail stays zero (out-of-range ids
+// never reach the read -- the wordlist tops out at 218).
+extern const int32_t gAptMemberIndexToEventBit[256] = {   // dword_82143BA8
+    /* 200 onData           */ 0x00000100,
+    /* 201 onDragOut        */ 0x00010000,
+    /* 202 onDragOver       */ 0x00008000,
+    /* 203 onEnterFrame     */ 0x00000002,
+    /* 204 onKeyDown        */ 0x00000040,
+    /* 205 onKeyUp          */ 0x00000080,
+    /* 206 onKillFocus      */ -1,
+    /* 207 onLoad           */ 0x00000001,
+    /* 208 onMouseDown      */ 0x00000010,
+    /* 209 onMouseMove      */ 0x00000008,
+    /* 210 onMouseUp        */ 0x00000020,
+    /* 211 onPress          */ 0x00000400,
+    /* 212 onRelease        */ 0x00000800,
+    /* 213 onReleaseOutside */ 0x00001000,
+    /* 214 onRollOut        */ 0x00004000,
+    /* 215 onRollOver       */ 0x00002000,
+    /* 216 onSetFocus       */ -1,
+    /* 217 onUnload         */ 0x00000004,
+    /* 218 onMouseWheel     */ 0x00080000,
+};
 
 // AptListenerEventDescriptor: the {eventMask, nameIndex} pair, matching the local
 // struct in AptAnimationTarget.cpp:227 verbatim (same tag + members so the array
@@ -297,10 +339,14 @@ typedef void (*AptVarNotFoundCb)(const char* pName);   // matches AptActionInter
 enum AptMaskRenderOperation : int;                     // matches the Apt render headers
 
 void (*gpAptFSCommandHook)(const char* pCommand, const char* pArgs)      = nullptr;
-void (*gpAptBackToScriptHook)(void* pPayload)                            = nullptr;   // dword_8324E828
+// (gpAptBackToScriptHook RETIRED 2026-07-12: dword_8324E828 is NOT a standalone
+//  hook -- it is &gAptFuncs (dword_8324E818) + 0x10 == pfnSetBackgroundColour.
+//  The tag-5 arm in AptMovie::doFrameControls now calls the table slot directly.)
 void (*gpAptGCTableFree)(void* p, unsigned nBytes)                       = nullptr;   // dword_8324E820
 AptVarNotFoundCb gpAptVarNotFoundCb                                      = nullptr;
 int  (*gpAptInputRecorderSink)(void*, int)                               = nullptr;   // dword_8324E830
+// The recorder's text-tag sink (AptUpdate's per-frame "%06d" stamp goes through it).
+void (*gpAptInputRecorderTagSink)(const char*)                           = nullptr;   // dword_8324E834
 void (*gpfnAptDestroyCustomControl)(intptr_t nZId)                       = nullptr;   // dword_8324E898
 void (*gpfnAptCustomControlPushRenderData)(const char* pInstanceName)    = nullptr;   // dword_8324E8CC
 void (*gpfnAptCustomControlPopRenderData)(const char* pInstanceName)     = nullptr;   // dword_8324E8D0
@@ -313,7 +359,9 @@ void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp)             = nullp
 bool gAptDefaultTextMouseWheelEnabled = false;   // byte_8324E392
 bool gbAptCustomControlRenderEnabled  = false;   // byte_82F733F6
 
-unsigned char gbAptBackToScriptFired = 0;   // byte_8324D807
+// The BackgroundColour once-per-load latch (the SDK's gbBackgroundColorSet):
+// set by the doFrameControls tag-5 arm, reset by AptLoadAnimation @0x82B07AF4.
+unsigned char gbAptBackgroundColourSet = 0;   // byte_8324D807
 unsigned char gbAptInShutdown        = 0;   // byte_8324E7C9
 unsigned char gbAptRecorderGate      = 0;   // byte_82F733F7
 
@@ -333,7 +381,10 @@ int gnAptActionFrameId          = 0;   // dword_8324E514
 // dumps (a bss dword); zero until one surfaces.
 int gAptNullInputId             = 0;   // console gNullInput
 int gnAptNativeArgCount         = 0;   // dword_8324E760
-int gnCurrUpdateTick            = 0;
+int gnCurrUpdateTick            = 0;   // dword_8324E520 (the update-side tick bank AptUpdate advances)
+// The render-side consumed tick AptUpdate banks against (the update side never runs
+// more than the banked-frame cap ahead of it). Advanced by the render drive.
+int gnCurrRenderTickConsumed    = 0;   // dword_8324E524
 // (gAptParseArgHeapCount retired 2026-07-01: dword_8324E3D4 is
 //  AptScriptFunctionBase::snRegBlockCurrentFrameCount.)
 

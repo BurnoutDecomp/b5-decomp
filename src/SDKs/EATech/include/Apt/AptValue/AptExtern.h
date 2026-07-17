@@ -64,7 +64,7 @@ extern DOGMA_PoolManager* gpAptSharedPtrPool;   // off_8324D808
 // rather than offset-indexing the table. Its body is installed by the host /
 // Apt startup (another TU); declared so objectMemberSet links.
 // ---------------------------------------------------------------------------
-void AptHost_SetExternVariable(const char* szVar, const char* szValue);
+void AptHostSetExternVariable(const char* szVar, const char* szValue);
 
 class AptExtern : public AptValueNoGC
 {

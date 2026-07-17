@@ -28,11 +28,13 @@
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"        // scratch state for the multi-frame skip path
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"        // gAptActionInterpreter operand stack (_gotoAndX)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"          // AptString::Create (the `_name` property getter)
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"          // AptGetAnimationAtLevel (GetRootAnimation's CIHNone path)
 #include "SDKs/EATech/include/Apt/AptDefine.h"     // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"
 
 #include <new>   // placement new (the scratch AptPseudoDisplayList over pool memory)
+#include <cstring>   // std::strcmp (the `_name` property-name compare)
 
 // FLAG (un-homed AS/runtime singletons -- declared verbatim by their console name
 // equivalents; bodies/definitions land with their owning TUs):
@@ -58,17 +60,16 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // AptCIH_queueClipEvents AptAnimationTarget.cpp already declares).
 // Canonical sig: X360/PS3 AptCIH::queueClipEvents(int, unsigned int, int) -- a3 (the
 // frame id) is UNSIGNED; reconciled across all three declaring TUs.
-AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int bDeferred);
+// AptCIH::queueClipEvents is now called directly as a member (AptCIH.h is included above).
 
 // FLAG (un-homed AptDisplayList behavioural follow-on; console AptDisplayList::mergeState
 // @0x82B0B438 -- explicitly BLOCKED in AptDisplayList.h's note): merge a rebuilt scratch
 // pseudo display list into this live child list. Declared as a free function taking the
 // child list so the home file can name it without editing AptDisplayList.h.
-void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pScratch,
-                                void* pProperties, char bForward);
+// AptDisplayList::mergeState is now called directly as a member (AptDisplayList.h is included above).
 
 // ---------------------------------------------------------------------------
-// AptCIH_GetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
+// AptGetClipMovie -- the AptMovie timeline embedded inside a sprite/animation
 // AptCharacter subclass. The X360 reaches it as `mpRenderItem->mpCharacter + 0x10`;
 // the project models that un-homed subclass field with the same FLAGged reinterpret
 // AptCharacterAnimation.cpp uses (the AptCharacter base header stops before it).
@@ -78,7 +79,7 @@ void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pSc
 // FLAG (x64 fork): the console reaches it at char+0x10; the 8-byte GUIAPT64 "1:7:8"
 // layout widens the AptCharacter header so it lands at char+0x20 (KU_AptEmbeddedMovieOff,
 // AptCIH.h). We ship only the 8-byte format, so this is the single native-64 offset.
-static AptMovie* AptCIH_GetClipMovie(const AptCharacterSpriteInstBase* pInst)
+static AptMovie* AptGetClipMovie(const AptCharacterSpriteInstBase* pInst)
 {
     AptCharacter* pCharacter = pInst->mpRenderItem->mpCharacter;
     return reinterpret_cast<AptMovie*>(reinterpret_cast<char*>(pCharacter) + KU_AptEmbeddedMovieOff);
@@ -282,6 +283,9 @@ AptNativeHash* AptCIH::GetNativeHash() const   // @0x82AD5B28
 {
     return mpCharacterInst ? mpCharacterInst->mpProperties : nullptr;
 }
+
+// (objectMemberLookup @0x82B0DF70 / objectMemberSet @0x82B09E58 -- the built-in
+// member recognizers -- are homed in AptCIHMembers.cpp.)
 bool AptCIH::IsMask() const  { return mpCharacterInst->GetRenderItem()->GetIsMask(); }   // @0x82AD5BA0
 bool AptCIH::HasMask() const { return mpCharacterInst->GetRenderItem()->GetHasMask(); }  // @0x82AD5BB8
 
@@ -373,7 +377,7 @@ int AptCIH::jumpToFrame(int nFrame)
     if (nFrame < 0)
         return 0;
 
-    AptMovie* pMovie = AptCIH_GetClipMovie(pInst);
+    AptMovie* pMovie = AptGetClipMovie(pInst);
     if (nFrame >= pMovie->mnFrameCount)
         return 0;
 
@@ -425,7 +429,7 @@ int AptCIH::jumpToFrame(int nFrame)
             // clip's end). The play-head (mnGotoFrame) is the loop variable.
             while (pInst->mnGotoFrame <= nFrame)
             {
-                if (pInst->mnGotoFrame >= AptCIH_GetClipMovie(pInst)->mnFrameCount)
+                if (pInst->mnGotoFrame >= AptGetClipMovie(pInst)->mnFrameCount)
                     break;
                 // FLAG: the X360 call site (sub_82B0BE60) only fills r3 (the AptMovie)
                 // and r4 (the scratch list); the frame index + trailing args are not
@@ -436,7 +440,8 @@ int AptCIH::jumpToFrame(int nFrame)
             }
 
             pInst->mnGotoFrame = nFrame;
-            AptDisplayList_mergeState(&pInst->mDisplayList, pScratch, pProperties, bForward);
+            pInst->mDisplayList.mergeState(reinterpret_cast<void**>(pScratch),
+                                           static_cast<AptNativeHash*>(pProperties), bForward);
 
             if (pScratch)
             {
@@ -461,7 +466,7 @@ int AptCIH::jumpToFrame(int nFrame)
 // clip movie (char + embed) WITHOUT null guards -- everything is always live in the
 // shipped game. On our partial bring-up the render-tree / AS scope is not fully stood up
 // yet, so this faithful body is NOT ticked at boot: the host driver holds it off
-// (BrnAptRuntimeBringUp AptRuntimeUpdate: lbTickReady=false) until the converter delivers
+// (BrnGuiAptRuntime UpdateRuntime: lbTickReady=false) until the converter delivers
 // a uniformly-64-bit bundle. The body below is the single faithful X360 decompile.
 
 int AptCIH::tick()
@@ -485,7 +490,7 @@ int AptCIH::tick()
     const bool bNeedsAction = ((nFlags >> 6) & 1u) != 0;   // v12 = (v11 >> 6) & 1  (state bit6 0x40)
     const bool bFreshPlaced = (nFlags & 0x80u) != 0;       // state bit7 (0x80)
 
-    AptMovie* const pClipMovie = AptCIH_GetClipMovie(pInst);   // *(v6[1]+4) + embed
+    AptMovie* const pClipMovie = AptGetClipMovie(pInst);   // *(v6[1]+4) + embed
 
     // ---- (1) auto-advance the play-head -----------------------------------
     // The play-head steps this frame when the clip needs an action (v12), or it is
@@ -563,13 +568,13 @@ label_27:
          ((pInst->mTypeFlags & 0xFC000000u) == 0x24000000u)) &&
         (((pInst->mnClipActionFlags & 0x200u) != 0) || HasEventMember(2)))
     {
-        AptCIH_queueClipEvents(this, 2, gnAptActionFrameId, 1);
+        queueClipEvents(2, gnAptActionFrameId, 1);
     }
     // (4) construct/load clip event on first placement; then clear the freshly-placed bit.
     if ((pInst->mnClipActionFlags & 0x80u) != 0)
     {
         if (((pInst->mnClipActionFlags & 0x100u) != 0) || HasEventMember(1))
-            AptCIH_queueClipEvents(this, 1, gnAptActionFrameId, 1);
+            queueClipEvents(1, gnAptActionFrameId, 1);
         pInst->mnClipActionFlags &= ~0x80u;
     }
 
@@ -588,7 +593,7 @@ label_27:
     else
     {
         if ((pInst->mnClipActionFlags & 0x40u) != 0 &&
-            AptCIH_GetClipMovie(pInst)->mnFrameCount != 1)
+            AptGetClipMovie(pInst)->mnFrameCount != 1)
         {
             return (mFlagsA >> 25) & 1u;
         }
@@ -599,69 +604,9 @@ label_27:
     return (mFlagsA >> 25) & 1u;
 }
 
-// _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core (static: the CIH is
-// passed in r3, the arg count in r4, the play flag in r5).
-void* AptCIH::_gotoAndX(int nArgCount, unsigned int bPlay)
-{
-    if (nArgCount >= 1)
-    {
-        AptCharacterInst* pInst = mpCharacterInst;
-        // The goto target is the top of the interpreter operand stack.
-        AptValue* pTarget = gAptActionInterpreter.stackAt(0);
-
-        // The custom-control 0x3C char family does not seek by this path.
-        if ((pInst->mTypeFlags & 0xFC000000u) != 0x3C000000u)
-        {
-            int nFrame;
-            // A defined string-value (vtbl 1) / string-object (vtbl 33) operand names
-            // a frame LABEL; anything else is a numeric frame number. Read the value's
-            // type/defined state through the named bitfield accessors (the x64-native
-            // form of the console `(*(v6+4)<<25)>>25` / `(*(v6+4)>>27)&1`).
-            const int nVtbl = static_cast<int>(pTarget->getVtblIndex());
-            const bool bIsLabel = (nVtbl == AptVFT_StringValue || nVtbl == AptVFT_StringObject)
-                                  && pTarget->getIsDefined();
-
-            if (bIsLabel)
-            {
-                // FLAG (x64): the X360 hands AptNativeHash::Lookup the label value's
-                // embedded EAStringC (console `v6 + 8`; for a register value it first
-                // dereferences the register's stored value). AptValue::Get_ToString is
-                // the blessed value-layer accessor for that name EAStringC (returning the
-                // embedded string, or rendering the value into the scratch), used here in
-                // place of the x64-shifted raw +8 / register-deref offsets.
-                EAStringC strScratch;
-                const EAStringC* pName = AptValue::Get_ToString(pTarget, &strScratch);
-
-                AptMovie* pMovie = AptCIH_GetClipMovie(
-                    static_cast<AptCharacterSpriteInstBase*>(pInst));
-                AptValue* pLabelMatch = (pMovie->mpLabelHash && pName)
-                    ? pMovie->mpLabelHash->Lookup(*pName)
-                    : nullptr;
-                nFrame = pLabelMatch ? (pLabelMatch->toInteger() + 1) : 0;   // (-1)+1 == 0 on miss
-            }
-            else
-            {
-                nFrame = pTarget->toInteger();
-            }
-
-            // The stored/label frame is 1-based; seek to the 0-based index.
-            const int nSeek = nFrame - 1;
-            if (nSeek >= 0)
-            {
-                jumpToFrame(nSeek);
-
-                // Set/clear the clip's auto-play state bit (bit6 / 0x40 of the sprite
-                // mnClipActionFlags) from bPlay, then -- when it is PLAYING (bPlay set)
-                // -- re-dirty the node so it keeps ticking.
-                const bool bWantPlay = (bPlay != 0);
-                AptCharacterSpriteInstBase* pSprite =
-                    static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
-                pSprite->mnClipActionFlags =
-                    (pSprite->mnClipActionFlags & 0xFFFFFFBFu) | (bWantPlay ? 0x40u : 0u);
-                if (bWantPlay)
-                    SetDirtyState(true, true);
-            }
-        }
-    }
-    return gpUndefinedValue;
-}
+// (AptCIH::_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is the
+// static member homed in AptCIHNativeFunctionHelper.cpp, the sole caller family's
+// TU. The duplicate body this TU carried was RETIRED 2026-07-10: two homes for one
+// console function drifted -- one had the play-arm SetDirtyState right while the
+// live one had it inverted onto the stop arm, freezing every gotoAndPlay'd
+// transition on a settled node.)

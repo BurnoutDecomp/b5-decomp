@@ -116,20 +116,6 @@ namespace CgsGui
         s32  GetNextEvent(const CgsModule::Event* lpEvent, const CgsModule::Event** lppNextEvent, s32* lpiSize) const;
     };
 
-    // GuiEventLoadRequest (DWARF CgsGuiEventTypes.h: GuiEventLoadRequest is the
-    // GuiEvent<39>-based load-request event). The X360 GUI model input buffer pushes it
-    // onto its small load-request queue with CgsModule::VariableEventQueue<4096,16>::AddEvent(
-    // &request, /*type*/39, /*size*/24) (see CgsGui::ModelIO::InputBuffer::AddResourceRequests
-    // @0x8250C658): so the event-type id is 39 and the on-queue record is 24 bytes. The
-    // GuiEvent<39> base supplies the 12-byte event header (muHeader0/muEventType/muHeader2);
-    // the remaining 12 bytes are the request payload. The payload's exact field breakdown is
-    // not recovered from the available DWARF, so it is modelled as an opaque 12-byte span here
-    // (honest placeholder -- the 24-byte total is the X360 fact; the inner field names are not).
-    struct GuiEventLoadRequest : public GuiEvent<39>
-    {
-        u8 maRequestPayload[12]; // +12..+23 (opaque; total record size 24, X360 AddEvent size arg)
-    };
-
     // Named GUI event-queue sizes (bytes), from the X360 queue-size constants.
     typedef GuiEventQueueBase<65536, 16> GuiEventQueueLarge;
     typedef GuiEventQueueBase<16384, 16> GuiEventQueueMedium;

@@ -23,4 +23,14 @@ namespace CgsGui
         mStateInterface.Prepare(lpAllocator, lpAccessPointers);
         return true;
     }
+
+    // The base virtual defaults. The concrete observers (the flows, the components)
+    // override the per-frame pair; the base bodies are the no-op defaults the X360
+    // vtable carries for observers that don't. ProcessEvents (the interpreter's
+    // vtable[0] dispatch target) hands the observer its per-frame filtered queue; the
+    // base default consumes nothing (a flow routes its queue through SetInEventQueue
+    // instead -- the queue is delivered to the state machine's in-queue by the module).
+    void EventObserver::ProcessEvents(CgsModule::VariableEventQueue<18432, 16>* /*lpEventQueue*/) {}
+    void EventObserver::PreWorldUpdate() {}
+    void EventObserver::Update() {}
 }

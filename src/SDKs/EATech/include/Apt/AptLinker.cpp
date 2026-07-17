@@ -39,8 +39,8 @@ bool Burnout_X360_Artist_0040_0(EAStringC* pName, EAStringC* pReference);
 // FLAG (un-homed AptCIH behavioural surface): set the character instance on a CIH
 // (@0x82B00548) and tick it (@0x82B0BED8). Declared so Update/ConvertToZombie
 // compile; bodies in the AptCIH behavioural cluster.
-void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag);   // AptCIH::SetCharacterInst
-int AptCIH_tick(AptCIH* pCIH);                                                    // AptCIH::tick
+// AptCIH::SetCharacterInst is now called directly as a member (AptCIH.h is included).
+// AptCIH::tick is now called directly as a member (AptCIH.h is included).
 
 // FLAG (un-homed GC primitive): @0x82AE4DF0 / PS3 _Z17ReplaceReferences...
 // ReplaceReferences(pOld, pNew, ppTable, nCount) -- retarget every live reference
@@ -50,17 +50,13 @@ int AptCIH_tick(AptCIH* pCIH);                                                  
 // binds: 0 -> (AptValue**)nullptr, 0 -> nCount). Body its own GC TU.
 int ReplaceReferences(AptValue* pOld, AptValue* pNew, AptValue** ppTable, int nCount);
 
-// FLAG (un-homed): @0x82B0C9B0 AptAnimationTarget::RunActions -- flush the queued
-// deferred ActionScript actions for the director.
-void AptAnimationTarget_RunActions(AptAnimationTarget* pAnim);
+// AptAnimationTarget::RunActions @0x82B0C9B0 -- flush the queued deferred ActionScript
+// actions for the director; now called directly on the member (the AptAnimationTarget_RunActions shim is retired).
 
-// FLAG (un-homed AptRenderItem depth accessor): the X360 reads/writes the int16
-// at AptRenderItem+0x14 (the placed depth) and dispatches a vtbl slot (+0x14) to
-// copy visual state during a zombie swap. Modelled via named render-item depth
-// get/set; the vtbl-dispatched copy is the un-homed AptRenderItem clone path.
-int16_t AptRenderItem_GetDepth(const AptRenderItem* pItem);                        // *(item+0x14)
-void    AptRenderItem_SetDepth(AptRenderItem* pItem, int16_t nDepth);             // *(item+0x14)=
-void    AptRenderItem_CopyVisualFrom(AptRenderItem* pDst, const AptRenderItem* pSrc); // (*item->vtbl[+0x14])(dst, src)
+// The X360 reads/writes the int16 placed depth at AptRenderItem+0x14 and dispatches
+// a vtbl slot (+0x14 == CopyRenderDataFrom) to copy visual state during a zombie
+// swap; the reconstructed C++ calls the named AptRenderItem members directly
+// (GetDepth()/SetDepth()/CopyRenderDataFrom()).
 
 // FLAG (un-homed saved-input debug gate): dword_8324D7F0 -- nonzero when the
 // saved-input record/replay system is active (gates Update's checkpoint logic).
@@ -173,6 +169,54 @@ void AptLinker::Notify(AptFilePtr* pFile)
 }
 
 // ---------------------------------------------------------------------
+// GlobalNotificationFunction -- @0x82B00C78 (the loader's "file linked" hop).
+//   AptLoader::notify hands every just-linked AptFile here; the function takes a
+//   local reference, resolves the CURRENT target off the Apt target TLS
+//   (unk_8324E814 -> value+0x20 == mpLinker), and forwards the handle into that
+//   target's linker pending list (AptLinker::Notify -- which consumes the local
+//   reference). The saved-input debug arm (dword_8324D7F0 gate ->
+//   AptSavedInputCheckpoints::updateState(...)) records the link event for
+//   deterministic replay; the checkpoint recorder's updateState is un-homed, so
+//   that arm is FLAG'd (inactive at the boot default gbAptSavedInputActive == 0).
+//   The caller's *pFile is consumed (zeroed + released), matching the asm tail.
+// ---------------------------------------------------------------------
+namespace EA { namespace Thread { class ThreadLocalStorage
+{
+public:
+    bool  SetValue(const void* pData);
+    void* GetValue();
+private:
+    unsigned int mTlsIndex;
+}; } }
+extern EA::Thread::ThreadLocalStorage gAptTargetTls;   // unk_8324E814
+
+void GlobalNotificationFunction(AptFilePtr* pFile)
+{
+    // Local IncRef copy -- AptLinker::Notify consumes it.
+    AptFilePtr local;
+    local.pData = pFile->pData;
+    if (local.pData != nullptr)
+        AptSharedPtrIncRef(local.pData);
+
+    AptTarget* pTarget = static_cast<AptTarget*>(gAptTargetTls.GetValue());
+    if (pTarget != nullptr && pTarget->mpLinker != nullptr)
+        pTarget->mpLinker->Notify(&local);
+
+    if (gbAptSavedInputActive)
+    {
+        // FLAG (un-homed saved-input recorder): the console records the link event
+        // (AptSavedInputCheckpoints::updateState(gpAptSavedInputCheckpoints,
+        // &file->mFileName, 1, 3, 2)); inactive on the boot path (gate default 0).
+    }
+
+    // Consume the caller's handle (asm tail: *a1 = 0 + DecRef/delete-at-zero).
+    AptFile* pConsumed = pFile->pData;
+    pFile->pData = nullptr;
+    if (pConsumed != nullptr && AptSharedPtrDecRef(pConsumed) == 0)
+        AptSharedPtrDelete(pConsumed);
+}
+
+// ---------------------------------------------------------------------
 // AptLinker::CancelLoad -- @0x82AFAE18.
 //   Find the node keyed on pValue (node->mpThingy->mpValue == pValue) and
 //   pop it from the list. No-op if not found.
@@ -252,9 +296,9 @@ AptCIH* AptLinker::ConvertToZombie(AptValue* pValue)
     {
         // Top-level node: hand the visual state across + reseat in the root list.
         AptRenderItem* pNewItem = pNew->mpCharacterInst->GetRenderItemWritable();   // *(v20+32)
-        AptRenderItem_CopyVisualFrom(pNewItem, pCIH->mpCharacterInst->mpRenderItem);// (*item->vtbl[+0x14])(item, *(v22+4))
-        const int16_t nDepth = AptRenderItem_GetDepth(pCIH->mpCharacterInst->mpRenderItem); // *(*(*(a2+32)+4)+20)
-        AptRenderItem_SetDepth(pNew->mpCharacterInst->GetRenderItemWritable(), nDepth);
+        pNewItem->CopyRenderDataFrom(pCIH->mpCharacterInst->mpRenderItem);          // (*item->vtbl[+0x14])(item, *(v22+4))
+        const int16_t nDepth = pCIH->mpCharacterInst->mpRenderItem->GetDepth();     // *(*(*(a2+32)+4)+20)
+        pNew->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
 
         const int nInsertDepth = pCIH->GetDepth();                 // v24 = *(a2+20) (placed index/depth)
         AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();  // *(off_8324E574+6)+0x20
@@ -294,12 +338,17 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
     if (pValue == nullptr)
         goto done;
 
-    // Accept only a CIH-handle placeholder (type 12) marked, or a CIH-none (37).
+    // Accept only a DEFINED CIH-handle (type 12), or a CIH-none (37). The console's
+    // `(v9 >> 27) & 1` is bit 27 of the big-endian-packed value bitfield == mbIsDefined
+    // (MSB-first packing: bits 31..27 = IsAllocated / HasRegisterReferenceMark /
+    // IsInDeferredVector / DestroyedGC / IsDefined; the low 7 bits it masks with
+    // (v9<<25)>>25 are meValueType, confirming the packing). The prior
+    // mbAllowsDelayedDeletion read was bit 26 -- it rejected every level placeholder.
     {
         const AptVirtualFunctionTable_Indices eType = pValue->getVtblIndex();
         bool bAccept = false;
         if (eType == AptVFT_CharacterInstHandle &&
-            pValue->mValueBitfield.mbAllowsDelayedDeletion /* (v9>>27)&1 bit */ )
+            pValue->getIsDefined() /* console (v9>>27)&1 == mbIsDefined */ )
             bAccept = true;
         else if (eType == AptVFT_CIHNone)
             bAccept = true;
@@ -318,8 +367,10 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
 
         if (!bSkip)
         {
-            // Already loaded?  -> grab its handle.
-            filePtr = gpAptTarget->mpLoader->IsLoaded(*pFileName); // AptLoader::IsLoaded(&v98, loader, a2) + operator=
+            // Already loaded?  -> grab its handle. The loader is keyed by the MOVIE
+            // NAME (X360 a2 == pName) -- NOT the "_level%d" target string (a3), which
+            // only names the destination variable resolved above.
+            filePtr = gpAptTarget->mpLoader->IsLoaded(*pName);     // AptLoader::IsLoaded(&v98, loader, a2) + operator=
             pLinkedFile = filePtr.pData;
             if (pLinkedFile != nullptr)
             {
@@ -330,8 +381,8 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
             }
             else
             {
-                // Not loaded yet: kick a load request.
-                filePtr = gpAptTarget->mpLoader->Load(*pFileName); // AptLoader::Load(&v99, loader, a2)
+                // Not loaded yet: kick a load request (by the movie NAME, X360 a2).
+                filePtr = gpAptTarget->mpLoader->Load(*pName);     // AptLoader::Load(&v99, loader, a2)
                 pLinkedFile = filePtr.pData;
                 // If the request just completed (state 6 -> swap state/field12 to 4),
                 // notify immediately.
@@ -499,14 +550,14 @@ void AptLinker::Update()
         {
             AptCIH* pCIH = static_cast<AptCIH*>(pThingy->mpValue);          // v24 = *(_R28+8)
             const int16_t nDepth =
-                AptRenderItem_GetDepth(pCIH->mpCharacterInst->mpRenderItem);// v25 = *(*(*(v24+32)+4)+20)
+                pCIH->mpCharacterInst->mpRenderItem->GetDepth();            // v25 = *(*(*(v24+32)+4)+20)
             pCIH->mFlagsA &= 0x9FFFFFFFu;                                   // clear transition bits
             pCIH->ClearCIH(false);                                         // AptCIH::ClearCIH(v24,0)
 
             if ((pCIH->mFlagsA & 0x60000000u) == 0x20000000u)             // still transitioning
             {
                 AptCIH* pZombie = ConvertToZombie(pCIH);                   // AptLinker::ConvertToZombie(a1, v24)
-                AptRenderItem_SetDepth(pZombie->mpCharacterInst->GetRenderItemWritable(), nDepth);
+                pZombie->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
             }
             else
             {
@@ -519,8 +570,8 @@ void AptLinker::Update()
                     // empty-placeholder AptCharacterInst vtable, un-homed data sym).
                     InstallEmptyCharacterInstVtbl(pInst);
                 }
-                AptCIH_SetCharacterInst(pCIH, pInst, 1);                   // AptCIH::SetCharacterInst(v24, v29, 1)
-                AptRenderItem_SetDepth(pCIH->mpCharacterInst->GetRenderItemWritable(), nDepth);
+                pCIH->SetCharacterInst(pInst, true);                       // AptCIH::SetCharacterInst(v24, v29, 1)
+                pCIH->mpCharacterInst->GetRenderItemWritable()->SetDepth(nDepth);
                 ListErase(&mpThingyListHead, &mpThingyListHead);          // sub_82AF83A0(a1, &v82) -- drop head
             }
             if (mpThingyListHead == nullptr)
@@ -571,7 +622,7 @@ void AptLinker::Update()
                     pCIH->ForceCleanNativeHash();                          // AptCIH::ForceCleanNativeHash(v61)
                 }
                 pCIH->mFlagsA &= 0x9FFFFFFFu;                              // v61[3] &= 0x9FFFFFFF
-                AptCIH_SetCharacterInst(pCIH, /*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), 1);
+                pCIH->SetCharacterInst(/*as inst*/reinterpret_cast<AptCharacterInst*>(pAnimInst), true);
                 pCIH->setIsDefined(true);                                  // AptValue::setIsDefined(v61,1)
                 // SetCharacterInst installed the new AptCharacterAnimationInst -- an
                 // AptCharacterSpriteInstBase. Reset its pending goto-frame to "none"
@@ -583,7 +634,7 @@ void AptLinker::Update()
                 pSpriteInst->mnGotoFrame        = -1;       // *(v61[8]+16) = -1
                 pSpriteInst->mnClipActionFlags |= 0x80u;    // *(v61[8]+20) |= 0x80
                 pCIH->SetDirtyState(false, false);                        // AptCIH::SetDirtyState(...,0)
-                AptCIH_tick(pCIH);                                        // AptCIH::tick
+                pCIH->tick();                                            // AptCIH::tick
                 pCIH->SetDirtyState(true, true);                          // AptCIH::SetDirtyState(v61,1,1)
                 pThingy->mbLinked = true;                                 // *(_R29+12) = 1
 
@@ -618,7 +669,7 @@ void AptLinker::Update()
         empty.mnSize = 0; empty.mnCapacity = 0; empty.mpData = empty.mInlineStorage;
         empty.mInlineStorage[0].pData = nullptr; empty.mInlineStorage[1].pData = nullptr;
         mPendingFiles.Swap(empty);                                        // sub_82AFF018(a1+4, v83)
-        AptAnimationTarget_RunActions(gpAptTarget->mpAnimationTarget);    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
+        gpAptTarget->mpAnimationTarget->RunActions();    // AptAnimationTarget::RunActions(off_8324E574->mpAnimationTarget)
         // ~empty (Strin(v83)) releases the swapped-out elements.
     }
 }
@@ -765,14 +816,47 @@ void EnsureAnimFrameRateCached(AptCharacterAnimationInst* pInst)
 //   X360: if(dword_8324E844) dword_8324E844(file->name+8, cih->assetString+8);
 //         if(dword_8324E518){ build a 6-tag string from file->name; dword_8324E830(&s); }
 // Both are host-installed function-pointer slots (the gAptFuncs host-callback
-// family, the same indirection as pfnSetExternVariable). They are null until the
-// host installs them; the console guards each call with its slot, so when unwired
-// nothing fires. FLAG: host notify hooks deferred -- no-op while the slots are null
-// (faithful to the `if(slot)` console guards during bring-up).
+// family, the same indirection as pfnSetExternVariable). The console guards each
+// call with its slot, so with no host installer the empty body IS the shipped
+// behaviour.
+// FLAG PC-platform leaf: host link-notify fn-ptr slots (dword_8324E844/8324E830),
+// un-installed on the PC title path -- the console's if(slot) guards skip both.
 // ---------------------------------------------------------------------
 void FireLinkNotifyCallbacks(AptFile* /*pFile*/, AptCIH* /*pCIH*/)
 {
-    // dword_8324E844 / dword_8324E830 host hooks -- deferred (null during bring-up).
+}
+
+// ---------------------------------------------------------------------
+// AptLinker::isFileImported @0x82AECC58 -- HOMED 2026-07-10 (retiring the
+// return-false link-stub, which made CancelPreloadedAnimation treat every
+// candidate as un-imported). For each thingy the linker tracks, hand its file a
+// FRESH COUNTED COPY of the candidate (AptFile::isFileImported consumes its
+// argument each probe -- the console's per-iteration lwarx/stwcx IncRef); a hit
+// answers true. Either way the ORIGINAL candidate handle is consumed at exit
+// (Dispose + null), matching the asm's shared tail.
+// ---------------------------------------------------------------------
+bool AptLinker::isFileImported(AptFilePtr* ppCandidate)
+{
+    bool bImported = false;
+    for (AptSingleListNode* pNode = mpThingyListHead; pNode != nullptr; pNode = pNode->mpNext)
+    {
+        // A fresh counted copy of the candidate for this probe (consumed by the callee).
+        AptFile* pLocal = ppCandidate->pData;          // lwz r11, 0(r31)
+        if (pLocal != nullptr)
+            AptSharedPtrIncRef(pLocal);                // the lwarx/stwcx ++ on +0
+
+        if (pNode->mpThingy->mpFile.pData->isFileImported(&pLocal))   // r3 = *(thingy+4)
+        {
+            bImported = true;                          // loc_82AECCF4
+            break;
+        }
+    }
+
+    // Shared tail: consume the original candidate (Dispose + null the slot).
+    AptFile* const pOld = ppCandidate->pData;
+    ppCandidate->pData = nullptr;
+    AptFilePtr::Dispose(pOld);                         // bl AptFile___Dispose
+    return bImported;
 }
 
 // ---------------------------------------------------------------------

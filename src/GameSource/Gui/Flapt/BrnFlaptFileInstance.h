@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"   // BrnFlapt::MovieClipRef
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"
 
 // ============================================================================
 // GameSource/Gui/Flapt/BrnFlaptFileInstance.h
@@ -24,9 +26,25 @@
 namespace BrnFlapt
 {
     struct FlaptRenderer;   // FlaptFileInstance::Render draws through it
+    struct MovieClipInstance;
+}
+struct RGBA;
+namespace CgsMemory { class LinearMalloc; }
 
+namespace BrnFlapt
+{
     struct FlaptFileInstance
     {
+        void Construct(const RGBA* lpAlternateTextColours, s32 liNumAlternateColours);
+        void Prepare(CgsMemory::LinearMalloc* lpFlaptAllocator);
+        void Destruct();
+
+        // SetData @ 0x82471620 : bind a loaded FlaptFile resource to this instance --
+        // rebind mpFile from the handle, allocate + construct the root
+        // MovieClipInstance from the flapt allocator, rewind it to frame 0 and mark
+        // the instance active. DWARF: SetData(ResourceHandle, FlaptRenderer*).
+        void SetData(CgsResource::ResourceHandle lHandle, FlaptRenderer* lpRenderer);
+
         // GetRootMovieClip @ 0x8246B360 : assert IsActive() and a live root clip,
         // then return a MovieClipRef {mpRootMovieClipInstance, 0} by value (written
         // into the caller-provided out buffer).
@@ -45,10 +63,12 @@ namespace BrnFlapt
         void Update(f32 lfTimeStep);
         void Render(FlaptRenderer* lpRenderer);
 
-        u8    mbIsActive;             // +0x00
-        u8    mau8Opaque01[0x23];     // +0x01..0x23  pad to +0x24
-        void* mpRootMovieClipInstance;// +0x24
-        u8    mau8Opaque28[0x0C];     // +0x28..0x33  pad to 0x34 (52-byte stride)
+        bool mbIsActive;
+        CgsResource::ResourcePtr<FlaptFile> mpFile;
+        MovieClipInstance* mpRootMovieClipInstance;
+        const RGBA* mpAlternateTextColours;
+        s32 miNumAlternateColours;
+        CgsMemory::LinearMalloc* mpLinearAlloc;
     };
 }
 

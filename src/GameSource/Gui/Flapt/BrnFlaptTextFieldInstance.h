@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptString.h"  // CgsGui::CgsAptString (mAptString)
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"                    // CgsUnicode::CgsUtf8 (macStringData)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT (SetText's h:120 tripwire)
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                       // BrnFlapt::MovieClip / TextField / FontStyle
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"                      // BrnFlapt::FlaptRenderer (mpFonts read by Construct)
 
@@ -43,6 +44,31 @@ namespace BrnFlapt
                        const FlaptRenderer* lpRenderer,
                        const RGBA* lpAlternateTextColours,
                        s32 liNumAlternateColours);
+
+        // SetText -- X360 header-inline (this header, :120 -- the "lpNewText" tripwire
+        // TextFieldRef::SetText @0x8246CC48 carries inlined): assert the text, then
+        // re-point + re-measure the embedded apt string into this instance's own
+        // persistent buffer (CgsAptString::SetText @0x82855648).
+        void SetText(const CgsUnicode::CgsUtf8* lpNewText, bool lbAlreadyLocalised)
+        {
+            CGS_ASSERT(lpNewText != 0, "lpNewText");   // BrnFlaptTextFieldInstance.h:120
+            mAptString.SetText(lpNewText, macStringData, lbAlreadyLocalised);
+        }
+
+        void SetAutoSize(bool lbAutoSize)
+        {
+            CgsGraphics::TextObject& lrTextObject = mAptString.mTextObject;
+            lrTextObject.mbAutosize = lbAutoSize;
+            lrTextObject.mpfCurrentFontHeight = lbAutoSize
+                ? &lrTextObject.mfAutosizedFontHeight
+                : &lrTextObject.mfFontHeight;
+        }
+
+        // The embedded apt string's laid-out text object -- the glyph run the renderer
+        // submits. MovieClipInstance::Render hands it to FlaptRenderer::RenderTextField
+        // for each drawn field; on the X360 that call reads mAptString.mTextObject inline
+        // off the instance pointer (the instance and its apt string share address +0x00).
+        const CgsGraphics::TextObject& GetTextObject() const { return mAptString.mTextObject; }
 
     private:
         // SetUpAptStringParams @ 0x8246DF58 : populate lpOutAptStringParams from a

@@ -49,6 +49,11 @@ namespace ViewIO
         // returns the read handle to the embedded event queue at this+4.
         const GuiEventQueue* GetGuiEventQueue() const;
 
+        // X360 0x8284F0E8 (the write twin -- CgsGui::GuiModule::Update fetches it before
+        // appending the AptCommunicator trigger queue). Asserts locked-for-writing (bit 3),
+        // then returns the write handle to the embedded event queue at this+4.
+        GuiEventQueue* GetGuiEventQueue();
+
         // Byte-offset pin (the embedded queue lands at this+4: 1-byte IOBuffer base + 3 pad,
         // VariableEventQueue alignof == 4).
         static void _AssertLayout();
@@ -73,13 +78,22 @@ namespace ViewIO
     static_assert(sizeof(CgsGraphicsCameraStorage) % 16 == 0, "Camera storage 16-byte multiple");
 
     // ---- ImRendererSet (foreign type; mirrors CgsGuiModuleIO.h) ----------------------------
-    // SetImRenderers @0x82856EC8 copies the leading 5 dwords (20 bytes, +0x00..+0x13) then the
-    // camera at +0x20; GetImRenderers @0x824F7A10 returns &mRendererSet. The alignas(16) mCamera
-    // lands at +0x20 (12 bytes +0x14..+0x1F are pad).
+    // SetImRenderers @0x82856EC8 copies the leading 5 renderer-pointer slots (console 5 dwords,
+    // +0x00..+0x13) then the camera (console +0x20); GetImRenderers @0x824F7A10 returns
+    // &mRendererSet. The five slots carry the assert-attested names ViewModule::Render
+    // @0x82858810 checks ("lpViewInput->GetImRenderers().mpIm2dRenderBuffer" / the three
+    // mpIm3dRenderBuffer* fields); slot 1 is never asserted/derefed (name unrecovered). x64:
+    // the slots widen to 8-byte pointers (semantic parity by named member -- the console's
+    // byte offsets shift; typed void* here so this IO header does not drag the renderer
+    // types in -- ViewModule::Render casts slot 0 back to CgsGui::AptIm2dRenderBuffer*).
     struct ImRendererSet
     {
-        unsigned char            maRendererPtrs[20]; // +0x00..+0x13 (5 dwords copied by SetImRenderers)
-        CgsGraphicsCameraStorage mCamera;            // +0x20 (X360 camera @ this+0x10040)
+        void* mpIm2dRenderBuffer;                    // console +0x00 (CgsGui::AptIm2dRenderBuffer*)
+        void* mpReserved04;                          // console +0x04
+        void* mpIm3dRenderBufferUntex;               // console +0x08
+        void* mpIm3dRenderBufferRacePosition;        // console +0x0C
+        void* mpIm3dRenderBufferMenusAndHud;         // console +0x10
+        CgsGraphicsCameraStorage mCamera;            // console +0x20 (X360 camera @ this+0x10040)
     };
 
     // The view->input buffer. Derives CgsModule::IOBuffer and embeds a large GUI event queue at
@@ -95,6 +109,11 @@ namespace ViewIO
         // X360 0x824F7AB8: write-lock (bit 3); returns &mViewStateQueue (this+4). A Get* that
         // checks the WRITE lock -- the AddViewState writers hold it while Append'ing.
         ViewStateQueue& GetViewStateQueue();
+
+        // X360 0x8284EF98 (baked CgsGuiViewModuleIO.h:172): READ-lock (bit 4) handle to the
+        // view-state queue ("Not locked for reading\n"), returns this+4. The
+        // ViewModule::Update-side reader (ProcessIncomingViewEvents iterates it).
+        const ViewStateQueue& GetEvents() const;
         // X360 0x82856EC8: write-lock (bit 3); copies the source set's 5-dword head into
         // mRendererSet then assigns the source camera (src+0x20) into mRendererSet.mCamera.
         void SetImRenderers(const ImRendererSet& lrRenderers);

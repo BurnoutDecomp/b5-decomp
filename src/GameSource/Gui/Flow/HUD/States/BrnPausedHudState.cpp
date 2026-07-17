@@ -28,7 +28,10 @@ struct GuiEventPausedHudEnter : public CgsGui::GuiEvent<532>
     GuiEventPausedHudEnter() : CgsGui::GuiEvent<532>(1, 12) {}
 };
 
-// 3 observed event ids (values resolved at link time; see header).
+// 3 observed event ids. FLAG (unrecovered .rdata): the exports carry no values; 0 is a
+// never-posted placeholder id until the table is recovered (the paused HUD is in-game
+// territory, not on the boot path).
+const s32 PausedHudState::maiEventToObserve[3] = { 0, 0, 0 };
 const s32 PausedHudState::miNumEventsObserved = 3;
 
 // @ 0x8247CBE8

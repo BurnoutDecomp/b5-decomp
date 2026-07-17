@@ -64,18 +64,16 @@ extern AptGCReleaseVector gValuesToRelease;    // off_8324E51C / xb1 qword_14147
 // FLAG (dormant unresolve path): the per-string return to the temporary string pool
 // (xb1 sub_14083F2A0). The pool's per-string release entry point is not yet homed
 // (StringPool exposes only ClearTemporaryPool); reached only on movie UNLOAD.
-extern void AptStringPool_ReleaseString(AptString* pString);
+extern void AptStringPoolReleaseString(AptString* pString);
 
-// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
-// bring-up TU): reports a Push/dictionary constant slot revisited after a prior
-// resolve pass (see the double-resolve guard below).
-#if defined(_MSC_VER)
-extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue);
-#pragma comment(linker, "/alternatename:AptParseStreamDoubleResolveProbe=AptParseStreamDoubleResolveProbeDefault")
-extern "C" void AptParseStreamDoubleResolveProbeDefault(const void*, long long) {}
-#else
-extern "C" void AptParseStreamDoubleResolveProbe(const void* pSlot, long long nValue);
-#endif
+// The pool-string INTERNER (xb1 sub_140838AE0 == StringPool::FindOrCreate; free
+// forwarder in AptStringPool.cpp -- the full StringPool.h collides with
+// AptNativeHash.h's mini StringPool in this TU's include set). Every serialized
+// constant string resolves through it: the interned node is chain-AddRef'd +
+// GC-rooted, which is what survives the per-op deferred-release drains below --
+// a plain temp AptString::Create dies at the next drain when its node was a
+// recycled allocation (the 'BuildName' pool-string death, 2026-07-09).
+extern AptString* AptStringPool_FindOrCreate(const char* pName);
 
 namespace
 {
@@ -95,6 +93,12 @@ namespace
         return *reinterpret_cast<int64_t*>(p + nOff);
     }
 
+    // Typed reads of a serialized constant/DefineFunction record field (the const-chunk
+    // header is not a recovered type -- the documented serialised-blob idiom, per the file note).
+    inline int32_t  RecI32(unsigned char* p, int nOff) { return *reinterpret_cast<const int32_t*>(p + nOff); }
+    inline uint32_t RecU32(unsigned char* p, int nOff) { return *reinterpret_cast<const uint32_t*>(p + nOff); }
+    inline float    RecF32(unsigned char* p, int nOff) { return *reinterpret_cast<const float*>(p + nOff); }
+
     // ±base with the null-stays-null guard every xb1 slot rebase carries.
     inline void Rebase(uintptr_t& rSlot, uintptr_t nBase, bool bUnresolve)
     {
@@ -110,14 +114,17 @@ namespace
     AptValue* ResolveConstRecord(unsigned char* pRec, unsigned char* pCtx)
     {
         // xb1 0x14084AA67: `mov eax,[rcx]` -- the record type is a DWORD load.
-        const int32_t nType = *reinterpret_cast<const int32_t*>(pRec + 0x00);
+        const int32_t nType = RecI32(pRec, 0x00);
 
-        if (nType == 1)   // string: rebase payload against the ctx, intern, un-rebase
+        if (nType == 1)   // string: rebase payload against the ctx, INTERN, un-rebase
         {
             uintptr_t& rPayload = Slot(pRec, 0x08);
             if (rPayload)
                 rPayload += reinterpret_cast<uintptr_t>(pCtx);
-            AptValue* pValue = AptString::Create(reinterpret_cast<const char*>(rPayload));
+            // xb1 sub_140838AE0: the string-pool interner (chain-AddRef'd + GC-rooted),
+            // NOT the temporary Create -- the interned ref is what the "Create's ref
+            // transfers" slot convention below relies on.
+            AptValue* pValue = AptStringPool_FindOrCreate(reinterpret_cast<const char*>(rPayload));
             if (rPayload)
                 rPayload -= reinterpret_cast<uintptr_t>(pCtx);
             else
@@ -131,23 +138,23 @@ namespace
             case 6:   // float: 0.0f collapses to the pooled integer 0 (xb1 vucomiss+jnz --
             {         // the UNORDERED result also falls through, so a NaN const takes the
                       // integer-0 path too; replicated with the explicit self-compare)
-                const float fValue = *reinterpret_cast<const float*>(pRec + 0x08);
+                const float fValue = RecF32(pRec, 0x08);
                 if (fValue == 0.0f || fValue != fValue)
                     return AptInteger::Create(0);
                 return AptFloat::Create(fValue);
             }
             case 7:   // integer (xb1: mov ecx,[rcx+8])
-                return AptInteger::Create(*reinterpret_cast<const int32_t*>(pRec + 0x08));
+                return AptInteger::Create(RecI32(pRec, 0x08));
             case 8:   // lookup-pool entry (xb1: movsxd of the dword index; upper bound only)
             {
-                const int nIndex = *reinterpret_cast<const int32_t*>(pRec + 0x08);
+                const int nIndex = RecI32(pRec, 0x08);
                 return AptLookup::PoolHolds(nIndex) ? AptLookup::GetPoolEntry(nIndex) : 0;
             }
             case 5:   // boolean: the shared singleton pair (xb1: cmp dword ptr [rcx+8],0)
-                return AptBoolean::Create(*reinterpret_cast<const int32_t*>(pRec + 0x08) != 0);
+                return AptBoolean::Create(RecI32(pRec, 0x08) != 0);
             case 4:   // register-file entry (xb1: movsxd of the dword index; upper bound only)
             {
-                const int nIndex = *reinterpret_cast<const int32_t*>(pRec + 0x08);
+                const int nIndex = RecI32(pRec, 0x08);
                 return AptRegister::FileHolds(nIndex) ? AptRegister::GetFileEntry(nIndex) : 0;
             }
             case 3:
@@ -256,7 +263,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 unsigned char* pRec = Align8(pc);
                 pc = pRec + 24;
                 // flag bit2 (+0x0C) = catch-in-register: no name pointer to relocate.
-                if ((*reinterpret_cast<uint32_t*>(pRec + 0x0C) & 4u) == 0)
+                if ((RecU32(pRec, 0x0C) & 4u) == 0)
                     Rebase(Slot(pRec, 0x10), nBase, bUnresolve);   // catch-variable name
                 break;
             }
@@ -275,7 +282,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 // xb1 0x14084AE52/0x14084AD78: `cmp [r8+8], r9d` -- nArgs is a signed
                 // DWORD (the u16 register-count/preload-flags pack occupies +0x0C/+0x0E,
                 // so a qword read would drag them into the count).
-                const int32_t nArgs = *reinterpret_cast<const int32_t*>(pRec + 0x08);
+                const int32_t nArgs = RecI32(pRec, 0x08);
                 unsigned char* pArgs = reinterpret_cast<unsigned char*>(Slot(pRec, 0x10));
                 if (nArgs > 0 && pArgs)
                 {
@@ -303,7 +310,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                 pc = pRec + 16;
 
                 // xb1 0x14084AA3C: `cmp [rsi], edi` -- the entry count is a signed DWORD.
-                const int32_t nCount = *reinterpret_cast<const int32_t*>(pRec + 0x00);
+                const int32_t nCount = RecI32(pRec, 0x00);
 
                 if (bUnresolve)
                 {
@@ -320,7 +327,7 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                             if (pRaw->getVtblIndex() != AptVFT_StringValue)
                                 pRaw = *reinterpret_cast<AptValue**>(
                                     reinterpret_cast<char*>(pRaw) + 0x40);   // the boxed slot
-                            AptStringPool_ReleaseString(static_cast<AptString*>(pRaw));
+                            AptStringPoolReleaseString(static_cast<AptString*>(pRaw));
                         }
                         else
                         {
@@ -360,12 +367,9 @@ void AptActionInterpreter::_parseStream(unsigned char* pStream, uintptr_t nBase,
                     // FLAG (x64 wild-slot guard): a slot holding neither a sane index
                     // form is a live pointer from a prior resolve pass or garbage --
                     // `pConstTable + 16 * <pointer>` AV'd MAIN's Fixup (2026-07-05,
-                    // cdb-verified). Keep it as-is + log rather than crash.
+                    // cdb-verified). Keep it as-is rather than crash.
                     if (nConstIndex < 0 || nConstIndex > 0xFFFF)
-                    {
-                        AptParseStreamDoubleResolveProbe(pTable + i * 8, nConstIndex);
                         continue;
-                    }
 
                     AptValue* pValue =
                         ResolveConstRecord(pConstTable + 16 * nConstIndex, pCtx);

@@ -76,17 +76,16 @@ struct AptClipEventHandler
 };
 
 // The sprite instance's registered-clip-event-handler list -- the placement's
-// clipActions BLOCK view: {i32 count @0; recArray ptr}. FLAG (converter-format
-// accommodation, same class as the resolve64 case-3 note): the apt_convert-produced
-// bundle packs the 8-byte record-array pointer at +0x04 (the true XB1 native-8
-// layout has it 8-aligned at +0x08), so the view is 4-packed to match our data.
-#pragma pack(push, 4)
+// clipActions BLOCK view, the XB1 native-8 layout: {i32 count @0; pad;
+// recArray ptr 8-aligned @+0x08}. (An earlier 4-packed view of this struct is
+// retired; the GUIAPT64 drive set is uniformly XB1-form now -- apt8_repair.py
+// normalizes every naturally-packed clipActions block -- so the faithful
+// natural layout is restored, 2026-07-09.)
 struct AptClipEventHandlerList
 {
     int32_t             mnCount;       // +0x00
-    AptClipEventHandler* mpHandlers;   // +0x04 (our bundle; xb1 +0x08)
+    AptClipEventHandler* mpHandlers;   // +0x08 (natural 8-aligned, XB1-form)
 };
-#pragma pack(pop)
 
 struct AptCharacterSpriteInstBase : public AptCharacterInst
 {

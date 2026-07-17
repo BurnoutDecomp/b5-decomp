@@ -44,12 +44,8 @@
 #include <cmath>   // sqrtf
 
 
-// FLAG (Apt context singleton -- console off_8324E574; owned by the AptTarget /
-// linker boot TU): cancel this node's in-flight asset load + drop the ActionScript
-// actions queued against it. Declared here as the x64-native accessors; their
-// bodies (the linker CancelLoad + the action-queue removal) land with that TU.
-void AptApt_CancelLoad(AptCIH* pNode);
-void AptApt_RemoveActionFor(AptCIH* pNode);
+
+
 
 // The "null input" context id queueClipEvents stamps on an enterFrame enqueue
 // (console gNullInput; defined in AptGlobals.cpp).
@@ -245,10 +241,9 @@ AptCharacterAnimationInst* AptCIH::GetAnimationInst() const
 //   (type tag in bits 26..31); the animation tag is 9 (0x24000000 >> 26).
 // ---------------------------------------------------------------------------
 
-// FLAG (homed with AptAnimationTarget; console @0x82B0...): remove every per-frame
-// timer/event function this node registered against the animation director. Declared
-// here (free-function form, like AptAnimationTarget_RunActions) until that TU bodies it.
-void AptAnimationTarget_RemoveTimerFunctions(AptAnimationTarget* pAnim, AptCIH* pNode);
+// AptAnimationTarget::RemoveTimerFunctions @0x82AE4320 -- remove every per-frame
+// timer/event function this node registered against the animation director; now called
+// directly on the member (the AptAnimationTarget_RemoveTimerFunctions shim is retired).
 
 void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRenderData)
 {
@@ -270,7 +265,7 @@ void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRender
         // The freshly installed instance is an animation node (type tag 9) -> drop its
         // registered per-frame timer functions from the animation director.
         if ((mpCharacterInst->GetTypeTag() == 9u) && gpAptTarget != nullptr)
-            AptAnimationTarget_RemoveTimerFunctions(gpAptTarget->mpAnimationTarget, this);
+            gpAptTarget->mpAnimationTarget->RemoveTimerFunctions(this);
 
         // GC-tear-down + free the old instance (the X360's DestroyGCPointers + the
         // vtable-0 scalar-deleting destructor; AptCharacterInst is DOGMA-pool-backed).
@@ -317,8 +312,8 @@ void AptCIH::Remove(bool bClearGCRoots)
 {
     // Cancel any in-flight asset load + drop the queued ActionScript actions
     // (through the Apt context singleton -- see the FLAG'd accessors above).
-    AptApt_CancelLoad(this);
-    AptApt_RemoveActionFor(this);
+    gpAptTarget->mpLinker->CancelLoad(this);   // X360 @0x82AFC0C8 (inlined accessor)
+    gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(this);   // X360 @0x82AFC0D8 (inlined accessor; AptValue* return discarded)
 
     // Tear down the placed/character state.
     ClearCIH(bClearGCRoots);
@@ -1322,26 +1317,26 @@ bool AptCIH::ProcessTextInst()
 // dword_8324E41C/420/424 around AptDisplayList::GeneralisedProcess each frame; the
 // registered callbacks are invoked per node by AptCIH::GeneralisedProcess (above).
 //
-// AptCIH_ProcessTextInstCb is the free-function adapter matching the callback slot
+// AptProcessTextInstCb is the free-function adapter matching the callback slot
 // signature (AptCIH*, AptCIH*, void*) -> unsigned int; it forwards to the node's
 // ProcessTextInst (which reads only its `this`, like the console's r3-in call).
-// AptCIH_RunGeneralisedTextProcess installs it, walks pRoot's subtree via
+// AptRunGeneralisedTextProcess installs it, walks pRoot's subtree via
 // GeneralisedProcess, and restores the slot -- the faithful text-refresh pass a host
 // per-frame driver runs (the console does it inside AptUpdate).
 // ---------------------------------------------------------------------------
 extern unsigned int (*AptCIH_sCIHProcessCb)(AptCIH*, AptCIH*, void*);   // dword_8324E41C
 
-unsigned int AptCIH_ProcessTextInstCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx*/)
+unsigned int AptProcessTextInstCb(AptCIH* pNode, AptCIH* /*pRoot*/, void* /*pCtx*/)
 {
     return pNode->ProcessTextInst() ? 1u : 0u;
 }
 
-void AptCIH_RunGeneralisedTextProcess(AptCIH* pRoot)
+void AptRunGeneralisedTextProcess(AptCIH* pRoot)
 {
     if (pRoot == nullptr)
         return;
     unsigned int (*pPrev)(AptCIH*, AptCIH*, void*) = AptCIH_sCIHProcessCb;
-    AptCIH_sCIHProcessCb = &AptCIH_ProcessTextInstCb;
+    AptCIH_sCIHProcessCb = &AptProcessTextInstCb;
     pRoot->GeneralisedProcess(pRoot, nullptr);
     AptCIH_sCIHProcessCb = pPrev;
 }
@@ -1363,7 +1358,7 @@ void AptCIH_RunGeneralisedTextProcess(AptCIH* pRoot)
 // AS-interpreter, GC, and Apt-runtime boot TUs) ------------------------------------
 // AddToRemList (console AptAnimationTarget::AddToRemList @0x82B...): queue a node that
 // is still externally referenced onto the animation director's removal list.
-void AptAnimationTarget_AddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
+void AptAnimationTargetAddToRemList(AptAnimationTarget* pAnim, AptCIH* pItem);
 
 // PreDestroy hook (console dword_8324E8A0): the optional process-wide pre-destroy notify
 // callback; null until a host installs it. Owned by the Apt-runtime boot TU.
@@ -1441,7 +1436,7 @@ bool AptCIH::HasEvent(int nEventMask)
 // aClipEvents pairs): the masks-512/4/0x40000 immediate byte-code-block run and
 // the bDeferred __proto__ event-member dispatch are BOTH live below. The only
 // remaining FLAG is the cross-CIH handler rebind sub-branch (see inline).
-int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId,
+int AptQueueClipEventsRunMatched(AptCIH* pNode, int nEventMask, unsigned int nFrameId,
                                       int bDeferred)
 {
     AptCharacterSpriteInstBase* const pSprite =
@@ -1449,7 +1444,7 @@ int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned in
     AptClipEventHandlerList* pList = pSprite->mpClipEventHandlers;   // charInst word[6]
 
     int nResult = 0;
-    // The same converter-data plausibility guard as _addToSetCaches (see there): a
+    // The same malformed-record pointer gate as _addToSetCaches (see there): a
     // 4-byte-straddled record-array slot marks an unusable (never-relocated) block.
     if (pList != nullptr)
     {
@@ -1504,10 +1499,10 @@ int AptCIH_queueClipEvents_RunMatched(AptCIH* pNode, int nEventMask, unsigned in
                         static_cast<AptValue*>(pNode), pBlock, 0, nullptr, nullptr);
 
                     pBlock->Release();
-                    // Pop the CIH stack (Release the pinned node).
-                    gAptActionInterpreter
-                        .mpCIHStack[gAptActionInterpreter.mnCIHStackTop - 1]->Release();
-                    --gAptActionInterpreter.mnCIHStackTop;
+                    // Pop the CIH stack (Release the pinned node) -- the {count,cap,array}
+                    // triple punned as an AptValueVector, calling the real pop() (behaviour-
+                    // identical: the push above is unguarded + pNode non-null).
+                    reinterpret_cast<AptValueVector*>(&gAptActionInterpreter.mnCIHStackTop)->pop();
 
                     gAptActionInterpreter.CleanupAfterExecution(lpSavedHeap);
                 }
@@ -1636,7 +1631,7 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
     // live in the deferred AS-execution sub-path (FLAG). The integer result the X360
     // returns (0 / 1) is what every caller treats truthily; carried back as the shared
     // value pointer's int role.
-    const int nRan = AptCIH_queueClipEvents_RunMatched(this, nEventMask, nFrameId, bDeferred);
+    const int nRan = AptQueueClipEventsRunMatched(this, nEventMask, nFrameId, bDeferred);
     return reinterpret_cast<AptValue*>(static_cast<intptr_t>(nRan));
 }
 
@@ -1734,7 +1729,7 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
 // the director / input target hold it in. The unload-event tail + the zombie
 // decision live in ClearCIH itself (shipped order); the helper's int return is
 // vestigial (always 0) and ignored.
-int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
+int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool bClearGCRoots);
 
 // ---- the zombie-vector surface (AptGC.cpp) --------------------------------
 // The vector (X360 off_8324E528), the zombies-dirty flag (byte_8324E38F), the
@@ -1748,7 +1743,7 @@ extern void          (*gpAptZombieNotifyHook)(int bImmediate, int nReserved,
 extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
 extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 
-// AptCIH_ClearCIH_DrainQueuesAndZombie -- ClearCIH's director-table DRAIN
+// AptClearCIHDrainQueuesAndZombie -- ClearCIH's director-table DRAIN
 // (HOMED 2026-07-02 from the X360 body @0x82AF6020; was the return-0 link-stub,
 // which left cleared nodes dangling in the director's sets/tables -- the bulk
 // removeObject path under mergeState walked them freed): remove the node from
@@ -1760,7 +1755,7 @@ extern AptCIH*         AptGetAnimationAtLevel(int nLevel);
 // master/slave teardown -- X360 bl chain @0x82AF6374, XB1 sub_1408333D0).
 // Returns nonzero when the node became a zombie -- the zombie arm is still a
 // staged FLAG (see the note at the ClearCIH call site), so 0 for now.
-int AptCIH_ClearCIH_DrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
+int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 {
     // ---- the director-set / event-slot / new-inst DRAIN --------------------
     AptAnimationTarget* const pDir =
@@ -1829,7 +1824,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     // target's drag/focus slots, the new-insts table, and (when it became externally
     // referenced) the zombie vector + partial GC; run the unload-event tail. Returns
     // nonzero when the node was queued as a zombie (the instance is NOT freed below).
-    AptCIH_ClearCIH_DrainQueuesAndZombie(this, bClearGCRoots);
+    AptClearCIHDrainQueuesAndZombie(this, bClearGCRoots);
 
     // Animation node (type tag 9) -> remove its per-frame timer functions.
     if (mpCharacterInst->GetTypeTag() == 9u && gpAptTarget != nullptr)
@@ -2067,69 +2062,42 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
 // AptCIH_tick -- AptCIH::tick @0x82B0BED8 (homed in AptCIH.cpp). Returns int (tick's
 // enterFrame-stage result the AptDisplayList walk OR-s into nResult).
-int AptCIH_tick(AptCIH* pCIH) { return pCIH->tick(); }
+// AptCIH_tick RETIRED: now called directly as the AptCIH::tick member (defined in AptCIH.cpp).
 
 // AptCIH_GeneralisedProcess -- AptCIH::GeneralisedProcess per-node. The AptDisplayList
 // walk passes (node, nFlags) where nFlags is the walk's `a2` (the root context pointer
 // in the X360); the third (void* context) arg is unused by that call site (r5 carries
 // the leftover), so it is forwarded as null.
-int AptCIH_GeneralisedProcess(AptCIH* pCIH, int a2)
-{
-    // FLAG (x64): the X360 a2 is the root-context pointer; the existing free-shim/DL
-    // signatures carry it through `int`, so widen back via intptr_t (the value is only
-    // re-passed, never dereferenced through this width).
-    AptCIH* const pRoot = reinterpret_cast<AptCIH*>(static_cast<intptr_t>(a2));
-    return static_cast<int>(pCIH->GeneralisedProcess(pRoot, nullptr));
-}
+// AptCIH_GeneralisedProcess RETIRED: now called directly as the AptCIH::GeneralisedProcess
+// member (defined above @ line 1664); the free-function forwarder is removed.
 
 // AptCIH_queueClipEvents -- AptCIH::queueClipEvents (canonical (int, unsigned int, int)).
 // The console passes the CIH as an AptValue*; narrow to the node.
-AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask, unsigned int nFrameId, int bDeferred)
-{
-    return static_cast<AptCIH*>(pCIH)->queueClipEvents(nEventMask, nFrameId, bDeferred);
-}
+// AptCIH_queueClipEvents RETIRED: now called directly as the AptCIH::queueClipEvents
+// member (defined above @ line 1626); the free-function forwarder is removed.
 
 // AptCIH_SetCharacterInst -- AptCIH::SetCharacterInst @0x82B00548 (homed above).
-void AptCIH_SetCharacterInst(AptCIH* pCIH, AptCharacterInst* pInst, int bFlag)
-{
-    pCIH->SetCharacterInst(pInst, bFlag != 0);
-}
+// AptCIH_SetCharacterInst RETIRED: now called directly as the AptCIH::SetCharacterInst
+// member (defined above @ line 253); the free-function forwarder is removed.
 
-// AptCIH::AssociateInstToClass @0x82B073B8 -- home the class-binding reconstruction to
-// the class. The full X360 body (build the AptPrototype on the char inst's property hash,
-// wire __proto__ to the MovieClip builtin + the class's prototype, resolve the placed
-// char's export name in the class registry, tick + run the AS constructor under GC-root
-// protection, FindAndSetEvents) lives next to its AddToDisplayList / placeObject callers
-// in AptDisplayList.cpp as AptCIH_AssociateInstToClass. This member homes it to the class
-// so the node can bind its own class by name (as AptCIH::InsertChild's tail does).
-extern int AptCIH_AssociateInstToClass(AptCIH* pNode);   // homed in AptDisplayList.cpp
-int AptCIH::AssociateInstToClass()
-{
-    return AptCIH_AssociateInstToClass(this);
-}
-
-// AptCIH::InsertChild @0x82B09CA0 -- place pCharacter into this sprite-base node's child
-// display list (mpCharacterInst->mDisplayList) at nDepth under pName. The X360 seeds the
-// placement field (a6/nPlacementField18) from pSource's char-inst render-item +0x18 when
-// pSource is given, then drives the placement: AptDisplayList::placeObject instantiates
-// the node, marks the generalised-process dirty state, applies the init object, and binds
-// the fresh node's AS class -- the encapsulated equivalent of the console's inline
-// instantiateCharacter + post-placement tail (SetGeneralizedProcessDirtyState /
-// _addToSetCaches / the init-member setVariable loop / AssociateInstToClass).
+// AptCIH_InsertChild -- AptCIH::InsertChild @0x82B09CA0: place pCharacter into pNode's
+// child display list (mpCharacterInst->mDisplayList) at nDepth under pName. The X360
+// seeds the placement field (a6/nPlacementField18) from pSource's char-inst render-item
+// +0x18 when pSource is given, then forwards to AptDisplayList::placeObject.
 AptCIH* AptCIH::InsertChild(AptCIH* pSource, AptCharacter* pCharacter,
                             int nDepth, EAStringC* pName, AptValue* pInitObject)
 {
-    AptCharacterSpriteInstBase* pSpriteInst =
+        AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<AptCharacterSpriteInstBase*>(GetCharacterInst());
     AptDisplayList* pChildList = &pSpriteInst->mDisplayList;
 
     // console @0x82B09CD0: a SINGLE deref reads the source char-inst's subclass placement
-    // slot at +0x18 (`lwz r29,0x18(*(a2+0x20))`) -- the same field AptCharInst_SetPlacement-
-    // Field18 writes; encapsulated (subclass-specific role), NOT the render-item mFlags.
-    extern const void* AptCharInst_GetPlacementField18(AptCharacterInst* pInst);
+    // slot at +0x18 (`lwz r29,0x18(*(a2+0x20))`) == AptCharacterSpriteInstBase::mpClipEventHandlers
+    // (the sprite-base subclass slot; NOT the render-item mFlags).
     const void* pPlacementClipActions = nullptr;
     if (pSource != nullptr)
-        pPlacementClipActions = AptCharInst_GetPlacementField18(pSource->GetCharacterInst());
+        pPlacementClipActions =
+            static_cast<AptCharacterSpriteInstBase*>(pSource->GetCharacterInst())->mpClipEventHandlers;
 
     return pChildList->placeObject(
         /*pExistingNode*/ nullptr, nDepth, pCharacter, pName, this,
@@ -2138,27 +2106,15 @@ AptCIH* AptCIH::InsertChild(AptCIH* pSource, AptCharacter* pCharacter,
         pPlacementClipActions, /*pClassObject*/ pInitObject);
 }
 
-// AptCIH_InsertChild -- the free-function shim the sibling Apt TUs reference by name (the
-// X360 calls it with the receiver in r3). Forwards to the now-homed member.
-AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
-                           int nDepth, EAStringC* pName, AptValue* pInitObject)
-{
-    return pNode->InsertChild(pSource, pCharacter, nDepth, pName, pInitObject);
-}
-
 // AptDisplayList_mergeState -- AptDisplayList::mergeState @0x82B0B438 (homed in
 // AptDisplayList.cpp). The X360 passes the source AptPseudoDisplayList directly as the
 // merge-info pointer (its [0]=inner list / [1]=owning parent are read inside), the
 // AS property hash as pParentHash, and bForward as the keep-removed flag.
-void* AptDisplayList_mergeState(AptDisplayList* pList, AptPseudoDisplayList* pScratch,
-                                void* pProperties, char bForward)
-{
-    return pList->mergeState(reinterpret_cast<void**>(pScratch),
-                             static_cast<AptNativeHash*>(pProperties), bForward);
-}
+// AptDisplayList_mergeState RETIRED: now called directly as the AptDisplayList::mergeState
+// member (defined in AptDisplayList.cpp @ 0x82B0B438); the free-function forwarder is removed.
 
-// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console
-// dword_8324E8A0). When a host has installed the callback, dispatch to it; else no-op.
+// AptCIH_PreDestroyHook -- AptCIH::PreDestroy's optional notify hook (console dword_8324E8A0).
+// FLAG PC-platform leaf: the host-installed pre-destroy callback boundary (dispatch when installed, else no-op).
 void AptCIH_PreDestroyHook(AptCIH* pCIH)
 {
     if (gpAptCIHPreDestroyHook)
@@ -2197,7 +2153,7 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 
     // refcount > 1 (an outside reference survives) -> queue on the director's rem list.
     if (pItem->getRefCount() > 1u && gpAptTarget != nullptr)
-        AptAnimationTarget_AddToRemList(gpAptTarget->mpAnimationTarget, pItem);
+        AptAnimationTargetAddToRemList(gpAptTarget->mpAnimationTarget, pItem);
 
     pItem->Release();   // X360 vtable[1]
     return pItem;
@@ -2211,21 +2167,6 @@ AptCIH* AptDisplayListState::AddToDelayReleaseList(AptCIH* pItem, bool bDelay)
 // free-function form is the decompile-time split. Homed here next to Remove.
 // ===========================================================================
 
-// AptApt_CancelLoad -- cancel this node's in-flight asset load through the context's
-// file linker. X360 @0x82AFC0C8: r3 = gpAptTarget->mpLinker (+0x20); r4 = pNode;
-// AptLinker::CancelLoad(linker, pNode). pNode (an AptCIH) is an AptValue, the
-// CancelLoad arg type.
-void AptApt_CancelLoad(AptCIH* pNode)
-{
-    gpAptTarget->mpLinker->CancelLoad(pNode);
-}
+// AptApt_CancelLoad inlined at its call site (AptCIH::Remove).
 
-// AptApt_RemoveActionFor -- drop every ActionScript action queued against this node.
-// X360 @0x82AFC0D8: r11 = gpAptTarget->mpAnimationTarget (+0x18); r3 =
-// animTarget->mpActionQueue (+0x0C); r4 = pNode; AptActionQueueC::RemoveActionFor(
-// queue, pNode). The console discards the AptValue* return; void here to match the
-// call-site declaration.
-void AptApt_RemoveActionFor(AptCIH* pNode)
-{
-    gpAptTarget->mpAnimationTarget->mpActionQueue->RemoveActionFor(pNode);
-}
+// AptApt_RemoveActionFor inlined at its call site (AptCIH::Remove).

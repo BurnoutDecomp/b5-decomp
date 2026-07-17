@@ -9,6 +9,7 @@
 
 namespace
 {
+    // FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
     void AptRenderItemDynamicText_EmbedCheck(AptRenderItemDynamicText* p)
     {
         // text / variable strings

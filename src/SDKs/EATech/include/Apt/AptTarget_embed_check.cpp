@@ -8,6 +8,7 @@
 namespace
 {
     // Exercise the named members + the accessor exactly as the dependents do.
+    // FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
     void AptTarget_EmbedCheck()
     {
         AptTarget* pCtx = gpAptTarget;                 // off_8324E574 (the current context)

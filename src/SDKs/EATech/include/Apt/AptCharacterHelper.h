@@ -88,6 +88,13 @@ public:
 // ---------------------------------------------------------------------------
 AptCIH* AptGetAnimationAtLevel(int nLevel);
 
+// The NON-CREATING half of AptGetAnimationAtLevel: the same root-display-list
+// search for the node mounted at display level nLevel, WITHOUT the lazy-create
+// tail. Liveness/composition QUERIES must not mint level nodes; the search is
+// exactly the loop AptGetAnimationAtLevel opens with. Null when nothing is
+// mounted at the level (or no target/director exists yet).
+AptCIH* AptFindAnimationAtLevel(int nLevel);
+
 // ---------------------------------------------------------------------------
 // FLAG (callee homed with the .apt FONT layer -- NOT yet reconstructed): resolve
 // the default font for a freshly-created text field from `pFontOwner` (the level-0

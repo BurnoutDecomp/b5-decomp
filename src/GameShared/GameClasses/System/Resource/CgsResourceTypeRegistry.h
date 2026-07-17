@@ -6,20 +6,15 @@ namespace CgsResource
 {
     class Type;
 
-    // The resource-type registry: a small id -> Type* table the bundle loader resolves a
-    // resource's handler through. Each Type handler registers itself (keyed on its own
-    // GetTypeID()); BundleLoader::LoadBundle takes ResolveResourceType as its FTypeResolver.
-    //
-    // The X360 resolves the per-resource Type by its bundle muResourceTypeId during the batch
-    // create path; this is the PC equivalent of that lookup (a flat id-indexed table, since
-    // resource-type ids are small and dense). Handlers are registered as each is brought up;
-    // an unregistered id resolves to null (the loader then creates + copies but skips fixup).
+    // The resource-type registry: a small sparse id -> Type* table. Game/vendor ids
+    // are not all dense bytes (FLApt is 0x10020), so indexing a 256-entry array by
+    // id silently discarded valid handlers.
     namespace TypeRegistry
     {
-        enum { KU_MAX_RESOURCE_TYPES = 256 };
+        enum { KU_MAX_REGISTERED_RESOURCE_TYPES = 256 };
 
         void        Register(const Type* lpType);          // by lpType->GetTypeID()
-        const Type* GetType(u32 luResourceTypeId);         // null if unregistered / out of range
+        const Type* GetType(u32 luResourceTypeId);         // null if unregistered
         void        Clear();
     }
 

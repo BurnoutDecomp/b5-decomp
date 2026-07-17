@@ -20,6 +20,7 @@
 namespace CgsResource
 {
     class  Type;               // resource-type handler (CgsResourceType.h) - by pointer
+    struct BaseResourcePtr;    // intrusive resource-pointer ring node
     struct DebugResourceInfo;  // per-resource debug record - by pointer (debug builds)
 
     // CgsResourceBasePool.h:52
@@ -32,13 +33,16 @@ namespace CgsResource
         const Type*        mpResourceType;       // +32  type handler (fixup/import virtuals)
         u32                muImportTableOffset;  // +36  byte offset into the pool import buffer
         SmallResource      mResource;            // +40  resource memory: one base ptr per memtype
-        // X360 RECONCILE: between mResource and mauHeapIndices the X360 Entry carries a
-        // ~20-byte smart-pointer alias-list region (the PS3 DWARF lumps +40.. into a single
-        // "BaseResourcePtr mPtr", but AllocateMemoryForResource 0x828FDAC8 writes the three
-        // memtype memory pointers at +40 -- i.e. a SmallResource -- and the heap indices at
-        // +72). That region is untouched by the create/alloc/lookup load path and is modelled
-        // when the ResourcePtr propagation is decompiled. Entry stride is 88 on X360; the x64
-        // PC field widths/offsets differ (semantic parity, not byte-match).
+        // The X360 overlays mResource with the first three words of the entry's
+        // BaseResourcePtr ring head.  On x64 those three resource pointers occupy
+        // 24 bytes; these four fields are the pointer-width continuation of that
+        // same owner node.  Keeping them adjacent makes &mResource a valid ring
+        // head for BaseResourcePtr::CreateFromHandle without truncating or reading
+        // through the following heap-index/debug fields.
+        BaseResourcePtr*   mpResourceNext;
+        BaseResourcePtr*   mpResourcePrev;
+        BaseResourcePtr*   mpResourceThis;
+        uintptr_t          muResourceThreadId;
         u16                mauHeapIndices[3];    // +72  heap node index per memory pool
         DebugResourceInfo* mpDebugInfo;          // +80  debug resource info (zeroed on create)
     };

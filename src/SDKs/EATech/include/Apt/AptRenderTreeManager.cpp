@@ -2,7 +2,7 @@
 // EATech Apt -- AptRenderTreeManager factory + the scene-node render hooks.
 // DECOMPILED from the PS3 EXTERNAL ELF.
 //   AptRenderItem::Manager_CreateItem @0x814094 (the per-character-type factory).
-//   AptRTM_CreateItem / AptRTM_GetTickItemWritable / AptCurrentRenderTreeManager
+//   AptRTM_CreateItem / AptGetTickItemWritable / AptCurrentRenderTreeManager
 //   -- the helpers AptCharacterInst calls (homed here against the manager).
 // ===========================================================================
 
@@ -109,19 +109,13 @@ AptRenderTreeManager* AptCurrentRenderTreeManager()
     return reinterpret_cast<AptRenderTreeManager*>(gpAptTarget->mppRenderRootAnchor);
 }
 
-AptRenderItem* AptRTM_CreateItem(AptRenderTreeManager* pMgr, AptCharacter* pCharacter, int nTick)
-{
-    // The manager's DOUBLE-BUFFERED wrapper around the Manager_CreateItem factory (the console
-    // AptRenderTreeManager::Update_CreateItem path, used when a live render-tree manager owns the
-    // per-tick revisions). NOTE: AptCharacterInst::AptCharacterInst NO LONGER routes through here --
-    // it now matches the X360 ctor faithfully (guard on gpAptTarget, call AptRenderItem::
-    // Manager_CreateItem DIRECTLY), so the prior INVENTED null-manager fallback (call the factory when
-    // pMgr==0) is removed. This helper stays for the manager-driven path once the render-tree manager
-    // lands; with no live manager yet it is currently unused.
-    return pMgr->Update_CreateItem(pCharacter, nTick);
-}
+// AptRTM_CreateItem removed (was unused): it was only a thin forwarder to the real member
+// AptRenderTreeManager::Update_CreateItem @0x814254. AptCharacterInst::AptCharacterInst no
+// longer routes through it (it calls AptRenderItem::Manager_CreateItem directly, matching the
+// X360 ctor), so the manager-driven path calls Update_CreateItem on the manager directly once
+// the render-tree-manager subsystem lands.
 
-AptRenderItem* AptRTM_GetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick)
+AptRenderItem* AptGetTickItemWritable(AptRenderTreeManager* pMgr, const AptRenderItem* pItem, int nTick)
 {
     // NULL-SAFE (see AptRTM_CreateItem): a null manager returns the item unchanged rather than
     // dereferencing the null manager.
@@ -782,7 +776,7 @@ AptRenderItem* AptRenderTreeManager::Render_GetRoot(_AptRenderItemRootList** ppH
 // helpers route through (declared as free functions in AptCharacterInst.h so that
 // header need not include the manager facade). Decompiled @0x82AE1C98 / 0x82AECD50.
 // ---------------------------------------------------------------------------
-struct AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
+struct AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode,
                                 int nSourceArg, int nTick)
 {
     // a2 (the clone source) = pNode; a3 (the destination node) arrives as the raw
@@ -792,7 +786,7 @@ struct AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, struct AptCIH* pNode
     return pNode;
 }
 
-struct AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick)
+struct AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, struct AptCIH* pNode, int nTick)
 {
     pMgr->Update_ItemMoved(pNode, nTick);
     return pNode;

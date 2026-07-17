@@ -62,4 +62,19 @@ namespace BrnGui
 
         mAptRef.mpMovieClipInst->ResetTimeline();
     }
+
+    // @ 0x8240E740 (DWARF home BrnGuiFlaptComponent.h:164; the X360 kept an
+    // out-of-line copy of the header-inline) -- adopt an already-resolved clip:
+    // assert it, bind its two handle words into mAptRef, and reset the bound
+    // clip's timeline (the same asserted-reset tail as the FileRef Prepare above).
+    void BrnFlaptComponent::Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef)
+    {
+        CGS_ASSERT(lpMovieClipRef != 0, "NULL != lpMovieClipRef");
+
+        mAptRef = *lpMovieClipRef;
+
+        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mpMovieClipInst");
+
+        mAptRef.mpMovieClipInst->ResetTimeline();
+    }
 }

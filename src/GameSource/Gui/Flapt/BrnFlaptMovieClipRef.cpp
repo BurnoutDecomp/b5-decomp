@@ -144,6 +144,21 @@ void MovieClipRef::GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName) c
     mpMovieClipInst->GotoAndPlayLabel(luLabelHash, lpcDEBUGName);
 }
 
+// ---- GotoAndPlayLabel @ 0x8246F3E8 ---------------------------------------
+// The string-keyed overload: assert the handle and the label, hash the label,
+// then forward to the instance (which receives both the hash and the original
+// string as the debug name).
+void MovieClipRef::GotoAndPlayLabel(const char* lpcLabel) const
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(lpcLabel != 0, "lpcLabel");
+
+    u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcLabel),
+                                                       FlaptNameLength(lpcLabel));
+
+    mpMovieClipInst->GotoAndPlayLabel(luHash, lpcLabel);
+}
+
 // ---- GotoAndStopLabel @ 0x8246F498 ---------------------------------------
 // Assert the handle and the label, hash the label, then forward to the instance
 // (which receives both the hash and the original string).

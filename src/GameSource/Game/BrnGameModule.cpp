@@ -2,9 +2,19 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/DebugSystem/CgsDebugFontBringUp.h"   // LoadAndSetDebugFont
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201)
+#include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h" // GUI presentation-sound PC consumer
 
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
+#include <chrono>    // the ToGui repeat-clock feed (FLAG PC time source: wall clock)
+
+#include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
+
+// The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
+// stand-in below keys its loading-complete report on it.
+namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 // ---- Xbox 360 XDK entry point (real prototype lives in the XDK). Displays the system
 // "dirty disc" error UI for the given signed-in user. ------------------------------------
@@ -52,8 +62,7 @@ namespace BrnGame
         , mbGuiAcceptsControllerInput(false)
         , mbGuiSuppressMenuAccept(false)
         , miLanguageCycleTimerLo(0)
-        , miLanguageCycleTimerHi(0)
-        , mpCgsGuiModule(0)
+        , mfLanguageCycleTimerFrac(0.0f)
         , miRenderMetricsRequested(0)
     {
         // (The X360 ctor does not touch mCpuMonitors -- Construct() sentinel-fills and
@@ -200,6 +209,185 @@ namespace BrnGame
         // dispatch; this is the minimal PC hookup (Update runs in GameMain). It stays idle until a
         // 508 GuiEventPlayVideo is queued (BrnBootVideos in Phase 3).
         mGuiModule.Prepare();
+
+        // ---- input bring-up (PC stand-in for the unreconstructed input setup pass) --------
+        // The console input module's Prepare constructs its output buffer, scans the pads and
+        // flips the module state to "ready / player-0 assigned"; none of that pass is
+        // reconstructed, so seed the observable outcome here: the real OutputBuffer::Construct
+        // (@0x828F85E0), port 0 assigned, module ready (==4), and the GUI accepting controller
+        // input (the console sets it from the GUI flow state -- FLAG follow-on).
+        mPcInputOutputBuffer.Construct();
+        miInputModuleState        = 4;
+        miPlayer0ControllerPort   = 0;
+        mbGuiAcceptsControllerInput = true;
+
+        // ---- the GUI flow-FSM bridge state (X360 Construct zeroes the slots; the bridge
+        //      parks the stage at 6 after the first pass) --------------------------------
+        miGuiFsmStage      = 0;
+        mbGuiPhaseComplete = false;
+        mbGuiPreAccept     = false;
+    }
+
+    // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
+    // pending stage's GuiEventRunFsm record(s) as raw 24-byte event-144 AddEvents (the
+    // X360 posts these raw, not through the AddGuiEvent<T> template), then parks the
+    // stage and clears the phase-complete flag.
+    void BrnGameModule::BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer)
+    {
+        if (lpGuiInputBuffer == 0)
+            return;
+
+        struct RunFsmPost
+        {
+            static void Post(CgsGui::CgsGuiModuleIO::InputBuffer* lpBuffer, const char* lpacFsmName,
+                             const char* lpacInitialState, s32 liFsmToRun, s32 liFlowToUse)
+            {
+                BrnGui::GuiEventRunFsm lEvent;
+                lEvent.mFsmId          = CgsIDCompress(lpacFsmName);
+                lEvent.mInitialStateId = (lpacInitialState != 0) ? CgsIDCompress(lpacInitialState)
+                                                                 : static_cast<CgsID>(0);
+                lEvent.meFsmToRun      = static_cast<BrnGui::EHUDFSMs>(liFsmToRun);
+                lEvent.meFlowToUse     = static_cast<BrnGui::GuiFlow>(liFlowToUse);
+                lpBuffer->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+                    static_cast<s32>(sizeof(lEvent)));
+            }
+        };
+
+        switch (miGuiFsmStage)
+        {
+            case 1:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnVideoFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 2:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnLegalFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 3:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnCmpLdFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 4:
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnBFProFsm", 0,
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_HUD);
+                break;
+            case 5:
+                // The in-game handoff: the front-end SCREEN flow at its LOADING state plus
+                // the freeburn HUD FSM.
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnScreenFsm", "LOADING",
+                                 BrnGui::E_GUI_HUD_BOOT, BrnGui::E_GUIFLOW_SCREEN);
+                RunFsmPost::Post(lpGuiInputBuffer, "BrnFBFsm", 0,
+                                 BrnGui::E_GUI_HUD_FREEBURN, BrnGui::E_GUIFLOW_HUD);
+                break;
+            default:
+                break;
+        }
+
+        if (miGuiFsmStage != 6)
+        {
+            miGuiFsmStage      = 6;
+            mbGuiPhaseComplete = false;
+        }
+    }
+
+    // @ 0x823CB758 -- the GUI->game out-event consumer (see BrnGameModule.hpp). The PC
+    // consumers map the console's dispatch-buffer render states onto the renderer's
+    // loading-screen signal; the quit-to-dash (86/87/89 -> XLaunchNewImage) and the
+    // brightness/contrast forwards (545/546) are platform follow-ons.
+    void BrnGameModule::BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+    {
+        if (lpGuiOutQueue == 0)
+            return;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (liId >= 0 && lpEvent != 0)
+        {
+            if (liId == 40)   // channel 40: GuiEventOut command records (muEventType @+4)
+            {
+                const u32 luCommand = reinterpret_cast<const u32*>(lpEvent)[1];
+                switch (luCommand)
+                {
+                    case 19:   // PlayAptLoadingMovie -> the loading screen shows
+                        gBrnLoadingScreenShouldShow = true;
+                        break;
+                    case 20:   // StopAptLoadingMovie -> the loading screen drops
+                        gBrnLoadingScreenShouldShow = false;
+                        break;
+                    case 70:   // GUI phase complete -- the main flow advances on it
+                        mbGuiPhaseComplete = true;
+                        break;
+                    case 71:   // pre-accept -- resume the world load during the accept dwell
+                        mbGuiPreAccept = true;
+                        break;
+                    case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
+                        if (miInputModuleState == 0)
+                            miInputModuleState = 1;
+                        break;
+                    case 65:
+                        // The SCREEN flow's in-game entry notice (InGame::OnEnter posts
+                        // {1,65,12,flag=1}). X360: BridgeGuiToGameState @0x823DDB78
+                        // forwards it as GameState action 106; the GameState/world side
+                        // then closes the boot loading-screen lifecycle as its streaming
+                        // settles. [FLAG world-load stand-in: with no world modules on PC
+                        // the "world" is ready the moment gameplay owns the screen, so the
+                        // in-game notice retires the boot loading screen here -- the same
+                        // observable the console produces at this point. The real
+                        // GameState consumer replaces this when the world side lands.]
+                        gBrnLoadingScreenShouldShow = false;
+                        CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
+                                                "loading screen retired (world-load stand-in).\n");
+                        break;
+                    case 86: case 87: case 89:
+                        // Quit-to-dash (X360: XGetLaunchData + XLaunchNewImage). [FLAG PC
+                        // platform: no dash relaunch; logged so the request is visible.]
+                        CgsDev::Log::WriteToLog("[GameModule] GUI quit-to-dash command (86/87/89) -- "
+                                                "PC platform no-op (FLAG).\n");
+                        break;
+                    case 138:  // dispatch render state 3
+                    case 589:  // dispatch render state 4
+                    case 590:  // dispatch render state 5 (the accept fade)
+                        // The console writes the dispatch-thread input buffer's render-state
+                        // byte (+39312). [FLAG: the PC renderer's mode consumer lands with
+                        // the loading-screen render slice.]
+                        break;
+                    default:
+                        break;
+                }
+            }
+            else if (liId == 201)
+            {
+                const BrnGui::GuiAudioTriggerEvent* lpAudio =
+                    reinterpret_cast<const BrnGui::GuiAudioTriggerEvent*>(lpEvent);
+                CgsSystem::GuiSoundPC::OnTrigger(
+                    lpAudio->macLabel, 0, lpAudio->macComponent, lpAudio->meAction);
+            }
+            const CgsModule::Event* lpNext = 0;
+            liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
+        lpGuiOutQueue->Clear();
+    }
+
+    // The per-frame spines the in-game flow state drives (MainGameFlowStateInGame::
+    // Update -> DoUpdate, ::Render -> DoDispatch). On the X360 these run the game
+    // module's owned-module update/dispatch walk; the PC host loop (EngineUpdate ->
+    // BrnGameModule::DispatchThread) already drives that walk once per frame, so a
+    // second walk here would double-update every module.
+    // FLAG PC-platform leaf: no-op returns until the module scheduler ownership moves
+    // under the game module's own spines (the host loop is the current driver).
+    int BrnGameModule::DoUpdate()
+    {
+        return 0;
+    }
+
+    // FLAG PC-platform leaf: see DoUpdate above (the render dispatch runs from the PC
+    // render thread's BrnRendererModule::Render drive).
+    int BrnGameModule::DoDispatch()
+    {
+        return 0;
     }
 
     // @ BrnGameModule.cpp:1047 (X360 0x823BC868) - tear down the owned modules + the module base.
@@ -439,9 +627,61 @@ namespace BrnGame
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
                 }
-                // GUI module per-frame tick (drives the MovieManager state machine; Phase 2/3 drive the
-                // boot BrnHudFlow -> BootVideos here). The X360 ticks this through the module dispatch.
+                // ---- controller -> GUI input pass (the console per-substep bridge) ---------
+                // Fill the player-0 pad record (InputPadsPC, the PC stand-in for the input
+                // module's own fill), then run the REAL BridgeControllerToGui: it synthesises
+                // the GUI controller events from the pad record and pushes them through
+                // CgsGui::GuiModule::AddGuiEvent into this sub-step's GUI input buffer. The
+                // GUI module drains that buffer during its Update below.
+                {
+                    // Advance the ToGui repeat/language-cycle clock (FLAG PC time source: the
+                    // console words ride the game module's timer pass, unreconstructed).
+                    const s64 liNowMs = static_cast<s64>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch()).count());
+                    miLanguageCycleTimerLo   = static_cast<s32>(liNowMs / 1000);
+                    mfLanguageCycleTimerFrac = static_cast<f32>(liNowMs % 1000) * 0.001f;
+
+                    mPcInputOutputBuffer.LockForWrite();
+                    CgsInput::InputPadsPC::UpdatePlayer0(&mPcInputOutputBuffer);
+                    mPcInputOutputBuffer.UnlockForWrite();
+
+                    mPcInputOutputBuffer.LockForRead();
+                    mpGuiInputBuffer->LockForWrite();
+                    BridgeControllerToGui(mpGuiInputBuffer, &mPcInputOutputBuffer);
+                    // The game->GUI flow-FSM bridge (X360 0x823DCA10, run under the same
+                    // write bracket the console's LoadingScriptedState::Update uses): post
+                    // any pending GuiEventRunFsm stage the main flow requested.
+                    BridgeGameToGui(mpGuiInputBuffer);
+                    // FLAG world-load stand-in: the console's GameState side reports the
+                    // world-load status as game action 191, which the game module's
+                    // translator (GameBridgeGameStateToX @0x823E9CE0, case 191) forwards to
+                    // the GUI as GuiEvent<136> (load started) / GuiEvent<137> (load
+                    // complete). The SCREEN flow's LOADING state blocks on 137 before it
+                    // hands the flow to the in-game state. The PC has no world streaming
+                    // yet, so its "world load" completes trivially: report loading-complete
+                    // each sub-step while the in-game flow state is live (delivery is
+                    // registration-filtered, so the event only reaches a state that is
+                    // actually waiting on it). The real action-191 producer replaces this
+                    // when the world-streaming pipeline lands.
+                    if (BrnGameMainFlowController::gBrnInGameStateActive)
+                    {
+                        CgsGui::GuiEvent<137> lWorldLoadComplete;
+                        CgsGui::GuiModule::AddGuiEvent(lWorldLoadComplete, mpGuiInputBuffer);
+                    }
+                    mpGuiInputBuffer->UnlockForWrite();
+                    mPcInputOutputBuffer.UnlockForRead();
+
+                    // Hand this sub-step's filled buffer to the GUI drive (FLAG bridge
+                    // stand-in: the console passes it through the module scheduler's IO set).
+                    mGuiModule.SetGuiEventInputBuffer(mpGuiInputBuffer);
+                }
+                // GUI module per-frame tick (drives the FSM controller + the HUD flow + the
+                // MovieManager). The X360 ticks this through the module dispatch.
                 mGuiModule.Update();
+                // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
+                // commands (70/71, the loading screen 19/20, ...) the states posted.
+                BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)
@@ -485,6 +725,10 @@ namespace BrnGame
     void BrnGameModule::CreateStaticIOBuffers()
     {
         mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer, "Gui");
+        // The X360 CreateIOBuffer<InputBuffer> instantiation (@0x823AC898) runs the buffer's
+        // Construct after the stack alloc; the generic PC template placement-news only, so
+        // run the real Construct (@0x82857378) here.
+        mpGuiInputBuffer->Construct();
         mpUpdateInputBufferStack->CreateIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer, "GuiView");
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer, "Gui");
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer, "GuiModel");

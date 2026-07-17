@@ -7,8 +7,6 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16> (output GUI event queue)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
-#include "GameSource/GameState/Progression/BrnProgressionManager.h" // BrnProgression::ProgressionManager (mProgressionManager, by value)
-#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::NetworkPlayerID (GetActiveRaceCarIndex grow)
 
 // Forward declarations for the BrnTrainingManager additive-grow accessor signatures below (pointer/
 // reference only -- no layout needed here; the real types are included by the TrainingManager TU).
@@ -22,8 +20,6 @@ namespace BrnProgression { class Profile; }
 namespace InputBuffer    { class GameActionQueue; }
 // For the DeveloperChallengeManager additive grow below (pointer-only).
 namespace BrnResource    { struct VehicleList; }
-// For the StreetManager-keystone additive grow below (pointer-only).
-namespace BrnGameState   { class DeveloperChallengeManager; }
 // For the ResetPlayerDebugComponent additive grows below (pointer-only).
 namespace BrnResource    { class  WheelList; }
 namespace BrnTrigger     { struct TriggerData; }
@@ -49,44 +45,8 @@ public:
         return mePlayerActiveRaceCarIndex;
     }
 
-    // ADDITIVE GROW (declare-only) for the ChallengeManager keystone (wave C). DWARF
-    // BrnGameStateModule.h:618: `EActiveRaceCarIndex GetActiveRaceCarIndex(NetworkPlayerID)` --
-    // resolve a network player id to their active-race-car slot (E_ACTIVE_RACE_CAR_INDEX_INVALID
-    // == -1 when absent). X360-attested callers: ChallengeManager::NetworkPlayerRemoved
-    // (bl @ 0x8234E4E4, r3=mpGameStateModule, r4=lPlayerID, result cmpwi -1) and
-    // ChallengeManager::SetRemotePlayersChallengeCompleted (bl @ 0x82323EB4). The X360 body is
-    // ledgered in a class-bucket TU (dossier attributes it to the BrnScoringSystem.h bucket);
-    // declare-only suffices for the per-TU `cl /c` gate.
-    ::EActiveRaceCarIndex GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lNetworkPlayerID);
-
     // X360 @ 0x823116D0 (BrnGameStateModule.h:982). Out-of-line; defined in BrnGameStateModule.cpp.
     bool IsOnlineGameMode();
-
-    // X360 @ 0x82311620 (BrnGameStateModule.h:987). Inline accessor for the player's GLOBAL
-    // race-car index (the slot into the full world race-car table, distinct from the 0..7 active
-    // index returned by GetPlayerActiveRaceCarIndex above). Asserts the module is mid-update
-    // (mbIsUpdating) then returns the cached index. Defined in BrnGameStateModule.cpp.
-    s32 GetPlayerGlobalRaceCarIndex();
-
-    // X360 @ 0x82356870 (BrnGameStateModule.h:1037). Per-active-race-car "is this car currently
-    // crashing" query. Asserts the module is mid-update and that the index is in range
-    // [E_ACTIVE_RACE_CAR_INDEX_0, E_ACTIVE_RACE_CAR_INDEX_COUNT), then returns the cached crash flag
-    // for that slot. Defined in BrnGameStateModule.cpp.
-    bool IsRaceCarCrashing(::EActiveRaceCarIndex leRaceCarIndex);
-
-    // X360 @ 0x823567A8 (BrnGameStateModule.h:1019). True when the current game mode is a showtime
-    // mode (offline OR online). Asserts the module is mid-update, then compares the current game-mode
-    // type (via GetCurrentGameModeType) against E_MODE_OFFLINE_SHOWTIME / E_MODE_ONLINE_SHOWTIME.
-    // Defined in BrnGameStateModule.cpp.
-    bool IsShowtimeGameMode();
-
-    // X360 @ 0x82356978. True when the simulation is currently paused. The pause state is a bitfield
-    // of pause reasons (miSimPauseFlags); when the caller opts in to the game-mode check (lbCheckGameMode)
-    // and the current mode is online, a subset of the pause-reason bits is masked out (the stricter mask
-    // when lbStrictMask is set returns immediately). NOTE: the two bool parameter names are inferred from
-    // the X360 asm's branch structure -- they gate the online-mode bit masking. Defined in
-    // BrnGameStateModule.cpp.
-    bool IsSimPaused(bool lbCheckGameMode, bool lbStrictMask) const;
 
     // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU. CheckCarID
     // resolves the loaded vehicle list off the owning module (the X360 reads the VehicleList* at
@@ -113,21 +73,6 @@ public:
     // named accessor; body + the real embedded-ModeManager wiring land with the GameStateModule TU.
     // FLAG: declare-only additive grow on the minimal GameStateModule slice.
     ModeManager* GetModeManager();
-
-    // ADDITIVE GROW (declare-only) for the StreetManager keystone (wave B).
-    // DWARF BrnGameStateModule.h:672 `CgsID GetCurrentCarId() const` -- the player's
-    // current car id (X360 member mCurrentCarId, the u64 at this+284376 that
-    // StreetManager::ProcessNewRoadScore @ 0x823496C8 reads to stamp the scoring car
-    // into the challenge record's maCarIDs). Body + the real member land with the
-    // GameStateModule TU.
-    ::CgsID GetCurrentCarId() const;
-
-    // ADDITIVE GROW (declare-only) for the StreetManager keystone (wave B). The X360
-    // reaches the embedded DeveloperChallengeManager as the this+185712 sub-object
-    // (StreetManager::ProcessNewRoadScore's inlined accessor; the baked assert string
-    // is literally "mpGameStateModule->GetDeveloperChallengeManager()"). Body + the
-    // real embedded member land with the GameStateModule TU.
-    DeveloperChallengeManager* GetDeveloperChallengeManager();
 
     // ADDITIVE GROW (declare-only) for the AchievementManagerBase TU. FLAG: the cached
     // current-game-mode-type scalar AchievementManagerBase::OnTakedown (X360 0x8235AAE0)
@@ -264,28 +209,10 @@ public:
     bool IsModeChangeInProgress() const;
 
 private:
-    // NOTE: this is a MINIMAL SLICE (see the class comment). Members are named, not offset-pinned;
-    // only the fields the reconstructed functions touch are declared. Their real byte offsets in the
-    // full ~290KB layout are noted in comments but not enforced with padding here.
-
-    // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode
-    // (X360 embedded at this+0x1DB8 / 7608).
+    // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode.
     ModeManager         mModeManager;
-    // The by-value progression manager (X360 embedded at this+47920 / 0xBB30). SetCarUnlockAlreadyShown
-    // reaches the player Profile through mProgressionManager.GetProfile() (asm asserts it non-null with
-    // the verbatim message "mProgressionManager.GetProfile()").
-    BrnProgression::ProgressionManager mProgressionManager;
-    // The per-frame output GUI event queue the module publishes HUD/GUI events onto
-    // (X360 embedded at this+189824 / 0x2E580). GetOutputGuiEventQueue returns &this member.
-    CgsModule::VariableEventQueue<18432, 16> mOutputGuiEventQueue;
     // DWARF BrnGameStateModule.h:794 (X360 this+208304).
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
-    // X360 this+208308 (0x32DB4) -- the player's global race-car index (GetPlayerGlobalRaceCarIndex).
-    s32                 miPlayerGlobalRaceCarIndex;
-    // X360 this+208316 (0x32DBC) -- per-active-race-car "is crashing" flags (IsRaceCarCrashing).
-    bool                maRaceCarCrashing[E_ACTIVE_RACE_CAR_INDEX_COUNT];
-    // X360 this+232288 (0x38B60) -- bitfield of active sim-pause reasons (IsSimPaused). Nonzero == paused.
-    s32                 miSimPauseFlags;
     // DWARF BrnGameStateModule.h:882 (X360 this+292289) -- set true only while the module is updating.
     bool                mbIsUpdating;
 };

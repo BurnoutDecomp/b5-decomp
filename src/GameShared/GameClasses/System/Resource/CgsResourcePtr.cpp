@@ -82,7 +82,7 @@ namespace CgsResource
         // same overlay documented in CgsResourceBasePool.h). muThreadId carries the source Entry
         // pointer (the X360 re-uses the field as the relink condition + source).
         mpThis     = reinterpret_cast<BaseResourcePtr*>(lpSrcHandle->mpResourceMemory);
-        muThreadId = static_cast<EAThread::ThreadId>(reinterpret_cast<uintptr_t>(lpSrcHandle->mpSourceEntry));
+        muThreadId = reinterpret_cast<EAThread::ThreadId>(lpSrcHandle->mpSourceEntry);
 
         // Copy the owner node's identity region (offsets +0x00/+0x04/+0x08) into this, BY NAME.
         BaseResourcePtr* lpOwner = mpThis;  // owner == *(+0x14)

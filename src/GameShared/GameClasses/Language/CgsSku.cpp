@@ -1,6 +1,11 @@
 #include "GameShared/GameClasses/Language/CgsSku.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                     // GuiEventSetSku / GuiEventSetLanguageNotification
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                          // CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<>
+#include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"                  // ModelIO::InputBuffer::AddResourceRequests
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // GuiEventLoadRequest (the ch-39 record)
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
 
 // CgsLanguage::Sku member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -13,19 +18,12 @@
 //   SetSku        @ 0x828608B0  meSku = sku; mbSendSku = true
 //   SetLanguage   @ 0x82860F20  meLanguage = lang; mbLoadRequest = mbSendLanguage = true
 //
-// The sixth ledger function, Update @ 0x828662B8, is NOT homed here. It is blocked on two
-// dependencies that are not faithfully reconstructable in this batch:
-//   * the single-event CgsGui::CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<GuiEventSetSku> /
-//     AddGuiOutEvent<GuiEventSetLanguageNotification> template instances and their
-//     GuiEventSetSku / GuiEventSetLanguageNotification event types, which are an uncommitted
-//     part of the GUI module-IO output subsystem (only the bulk AddGuiOutEvents is homed); and
-//   * the two per-language rodata tables the Update load path indexes -- the 32-byte-stride
-//     language filename table (byte_820E5DD0 == mapcSupportedLanguageFilenames) and the
-//     32-byte-stride resource-name table (unk_820E5AD0 == mapcSupportedLanguageResources) --
-//     whose string VALUES live in unrecovered image .rdata and drive the HashString /
-//     AddResourceRequests calls.
-// Bodying Update would require fabricating those .rdata string values and an uncommitted
-// event-publishing template, so it is left unhomed and refined as still-blocked.
+// The sixth ledger function, Update @ 0x828662B8, is homed below: its two former blockers
+// are resolved -- the single-event AddGuiOutEvent<> instances + both event types are
+// committed (CgsGuiModuleIO.h / CgsGuiEventTypeDefs.h), and the two per-language rodata
+// tables were RECOVERED from the ARTIST i64 (idat batch dump, 2026-07-17): the 32-byte-
+// stride BUNDLE-name slots @0x820E5AD0 and resource-name slots @0x820E5DD0, indexed by
+// ELanguage (unpopulated slots are empty == unsupported languages).
 
 namespace CgsSystem
 {
@@ -98,5 +96,90 @@ namespace CgsLanguage
     {
         meSku     = leSku;
         mbSendSku = true;
+    }
+
+    // ---- the per-language rodata tables (recovered from the ARTIST i64) --------------
+    // 32-byte-stride char slots indexed by ELanguage. The BUNDLE names (@0x820E5AD0)
+    // feed the request's mpacFileToLoad (the module's container template [13] formats
+    // "Language\%s.bundle"); the RESOURCE names (@0x820E5DD0) feed the request's
+    // hashed resource id (the "%s.lang" acquire). Empty slots = unsupported languages.
+    static const char KAAC_LANGUAGE_BUNDLE_NAMES[E_LANGUAGE_TOTAL][32] =
+    {
+        "",     "",     "",     "",     "",     "",     "",     "0001",   // 7  ENGLISH_US
+        "0002", "",     "0003", "0006", "",     "",     "",     "0005",   // 8  ENGLISH_UK .. 15 ITALIAN
+        "0007", "",     "",     "",     "",     "",     "0004", "",       // 16 JAPANESE .. 22 SPANISH
+    };
+    static const char KAAC_LANGUAGE_RESOURCE_NAMES[E_LANGUAGE_TOTAL][32] =
+    {
+        "",              "", "", "", "", "", "", "english.lang",
+        "english_uk.lang", "", "french.lang", "german.lang", "", "", "", "italian.lang",
+        "japanese.lang", "", "", "", "", "", "spanish.lang", "",
+    };
+
+    // X360 0x828662B8. The per-frame language/SKU pump GuiModule::Update drives:
+    //   1. a pending language change with the previous bundle still loaded posts the
+    //      previous language's UNLOAD request (type 12) and arms a 10-frame unload
+    //      dwell (miWaitForUnload);
+    //   2. once the dwell has elapsed, the pending language posts its LOAD request
+    //      and becomes the loaded language (the trailing decrement runs once more
+    //      after the load frame, exactly as the asm does);
+    //   3. a pending SKU notification publishes GuiEventSetSku (event 27);
+    //   4. a pending language notification publishes GuiEventSetLanguageNotification
+    //      (event 29).
+    // The request record carries the hashed RESOURCE name ("english.lang") as the
+    // resource id and the BUNDLE name ("0001") as the file to load.
+    void Sku::Update(CgsGui::ModelIO::InputBuffer* lpModelInputBuffer,
+                     CgsGui::CgsGuiModuleIO::OutputBuffer* lpOutput)
+    {
+        if (mbLoaded && mbLoadRequest)
+        {
+            CgsGui::GuiEventLoadRequest lRequest;
+            lRequest.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(12);
+            lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_UNLOAD;
+            lRequest.mpacFileToLoad  = KAAC_LANGUAGE_BUNDLE_NAMES[meLoadedLanguage];
+            lRequest.muLoadRequestId = 0;
+            lRequest.muResourceId    =
+                CgsResource::ID::HashString(
+                    reinterpret_cast<const u8*>(KAAC_LANGUAGE_RESOURCE_NAMES[meLoadedLanguage]));
+            lpModelInputBuffer->AddResourceRequests(lRequest);
+            mbLoaded        = false;
+            miWaitForUnload = 10;
+        }
+
+        if (mbLoadRequest)
+        {
+            if (miWaitForUnload == 0)
+            {
+                CgsGui::GuiEventLoadRequest lRequest;
+                lRequest.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(12);
+                lRequest.meLoadUnload    = CgsGui::E_GUI_RESOURCEREQUEST_LOAD;
+                lRequest.mpacFileToLoad  = KAAC_LANGUAGE_BUNDLE_NAMES[meLanguage];
+                lRequest.muLoadRequestId = 0;
+                lRequest.muResourceId    =
+                    CgsResource::ID::HashString(
+                        reinterpret_cast<const u8*>(KAAC_LANGUAGE_RESOURCE_NAMES[meLanguage]));
+                lpModelInputBuffer->AddResourceRequests(lRequest);
+                mbLoaded         = true;
+                mbLoadRequest    = false;
+                meLoadedLanguage = meLanguage;
+            }
+            --miWaitForUnload;
+        }
+
+        if (mbSendSku)
+        {
+            CgsGui::GuiEventSetSku lEvent;
+            lEvent.meSku = meSku;
+            lpOutput->AddGuiOutEvent(lEvent);
+            mbSendSku = false;
+        }
+
+        if (mbSendLanguage)
+        {
+            CgsGui::GuiEventSetLanguageNotification lEvent;
+            lEvent.meLanguage = meLanguage;
+            lpOutput->AddGuiOutEvent(lEvent);
+            mbSendLanguage = false;
+        }
     }
 }

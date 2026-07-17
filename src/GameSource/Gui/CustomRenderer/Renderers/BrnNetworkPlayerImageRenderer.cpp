@@ -190,7 +190,8 @@ namespace BrnGui
                     GetRenderOutput(0, &liShaderProgram, 0);
                 // The render-output slot returns the component's Flapt movie; bind the live
                 // frame into its special-texture slot (X360 passes r3 straight to SetSpecialTexture).
-                reinterpret_cast<BrnFlapt::FlaptFile*>(lpOutput)->SetSpecialTexture(KAC_SPECIAL_TEXTURE_NAME);
+                BrnFlapt::FlaptFile::SetSpecialTexture(lpOutput,
+                                                       KAC_SPECIAL_TEXTURE_NAME);
             }
             miClearTexturesFrameCount = KI_CLEAR_TEXTURES_NOT_SET;     // -1
             mePrepareStage = E_PREPARESTAGE_LOAD_DEFAULT_TEXTURE;
@@ -414,7 +415,8 @@ namespace BrnGui
 
         s32 liShaderProgram = 0;
         renderengine::Texture* lpOutput = GetRenderOutput(0, &liShaderProgram, 0);
-        reinterpret_cast<BrnFlapt::FlaptFile*>(lpOutput)->SetSpecialTexture(KAC_SPECIAL_TEXTURE_NAME);
+        BrnFlapt::FlaptFile::SetSpecialTexture(lpOutput,
+                                               KAC_SPECIAL_TEXTURE_NAME);
 
         CGS_ASSERT(mpFlaptRenderer, "mpFlaptRenderer");
         mpFlaptRenderer->SetSpecialTextureShaderProgram(liShaderProgram);

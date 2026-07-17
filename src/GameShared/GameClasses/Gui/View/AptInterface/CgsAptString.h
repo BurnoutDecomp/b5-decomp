@@ -84,6 +84,17 @@ namespace CgsGui
         // longer the un-set-up sentinel pair) and return the cached text handle.
         TextHandle GetText() const;
 
+        // @ 0x82855648 - re-point the cached text at lpNewText and re-measure. Unless
+        // lbAlreadyLocalised, a "$"/"~"-prefixed string is first resolved through the
+        // apt render handler's language manager (falling back to the raw text when the
+        // id is unknown); non-"~" results are then copied into the caller's persistent
+        // lpcStringBuffer (256-byte cap). Asserts the resolved text is valid UTF-8 and
+        // that the font has been set up, recalculating autosizing after every text /
+        // width store, exactly as the X360 body does. DWARF CgsAptString.h:98.
+        void SetText(const CgsUnicode::CgsUtf8* lpNewText,
+                     CgsUnicode::CgsUtf8* lpcStringBuffer,
+                     bool lbAlreadyLocalised);
+
     public:
         // The embedded text object. Its leading SafeResourceHandle<Font> (mpFont +0x00/+0x04)
         // is the identity/type-tag pair GetText asserts against; its cached text pointer

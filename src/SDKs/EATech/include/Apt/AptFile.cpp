@@ -15,7 +15,8 @@
 #include <new>   // placement new for MakeAptFile's EAStringC member construct
 
 #include "SDKs/EATech/include/Apt/AptFile.h"
-#include "SDKs/EATech/include/Apt/AptLoader.h"   // GetTarget / AptTarget_GetLoader / AptLoader::Invalidate
+#include "SDKs/EATech/include/Apt/AptLoader.h"   // GetTarget / AptLoader::Invalidate
+#include "SDKs/EATech/include/Apt/AptTarget.h"   // AptTarget::GetLoader (full type for the member call)
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // AptImportEntry (import-table record) + AptCharacter
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"            // AptSharedPtr<AptFile>::Dispose
 
@@ -31,37 +32,19 @@
 // here against the named x64 members (console offsets in [c:] comments).
 // ---------------------------------------------------------------------------
 
-// FLAG (un-homed deferred subsystem callback): the loaded-block free hook the Apt
-// runtime installs at GUI bring-up. PS3 dword_1071B1F4 (X360 off_1059C66C) is set
-// to `&CgsGui::AptCallbackFile::FreeAnimation` by CgsGui::AptAux::ConstructApt --
-// the registered "free a loaded .apt data block" user-function. It is owned by the
-// (not-yet-homed) GUI Apt-callback TU; declared here as a named function-pointer
-// hook so the teardown calls through it faithfully without fabricating its body.
-// Null until ConstructApt installs it (the request layer never reaches this path
-// during bring-up).
+// The loaded-block free hook the Apt runtime installs at GUI bring-up. PS3
+// dword_1071B1F4 (X360 off_1059C66C) is set to
+// `&CgsGui::AptCallbackFile::FreeAnimation` by CgsGui::AptAux::ConstructApt -- the
+// registered "free a loaded .apt data block" user-function.
 typedef void (*AptFreeAnimationHook)(void* pDataBlock);
 extern AptFreeAnimationHook gpAptFreeAnimationHook;   // dword_1071B1F4 / off_1059C66C
 AptFreeAnimationHook gpAptFreeAnimationHook = nullptr;
 
-// AptFile_UnresolveAnimation -- the inverse of the load-time Fixup over the loaded
-// movie root: run AptCharacterAnimation::Unresolve on the AptCharacterAnimation
-// embedded at the movie root + 0x10, passing the load base (the resolve context)
-// as nBase. PS3: AptCharacterAnimation::Unresolve(*(this+5) + 16, *(this+4)).
-void AptFile_UnresolveAnimation(void* pLoadedData, void* pResolveContext)
-{
-    // The movie root (mpData) carries its AptCharacterAnimation by value at +0x10
-    // (the AptMovieData embedded-timeline layout AptFile.h documents); Unresolve is
-    // a method on that embedded animation.
-    AptCharacterAnimation* pAnimation = reinterpret_cast<AptCharacterAnimation*>(
-        reinterpret_cast<char*>(pLoadedData) + 0x10);   // [c:] *(this+5) + 16
+// AptFile_UnresolveAnimation inlined at its call site in ~AptFile (see above).
 
-    // FLAG (raw-ptr-as-id): the console passes the load base (mpResolveContext, a
-    // pointer) into Unresolve's int32_t nBase param; preserved verbatim.
-    pAnimation->Unresolve(static_cast<int32_t>(reinterpret_cast<intptr_t>(pResolveContext)));
-}
-
-// AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to
-// the registered Apt free callback. PS3: (*dword_1071B1F4)(*(this+6)).
+// AptFile_FreeLoadedBlock -- hand the raw loaded-data block (mpDataBlock) back to the
+// registered Apt free callback (PS3 (*dword_1071B1F4)(*(this+6))).
+// FLAG PC-platform leaf: the host free-callback boundary (gpAptFreeAnimationHook, installed by AptAux::ConstructApt).
 void AptFile_FreeLoadedBlock(void* pDataBlock)
 {
     if (gpAptFreeAnimationHook != nullptr)   // installed by CgsGui::AptAux::ConstructApt
@@ -74,7 +57,7 @@ AptFile::~AptFile()
     //    while GetTarget() is null -- see the FLAG in AptLoader.h).
     if (AptTarget* pTarget = GetTarget())
     {
-        if (AptLoader* pLoader = AptTarget_GetLoader(pTarget))
+        if (AptLoader* pLoader = pTarget->GetLoader())
             pLoader->Invalidate(this);
     }
 
@@ -83,7 +66,15 @@ AptFile::~AptFile()
     //    this branch is currently unreachable and its ops are extern hooks.
     if (mnState >= 3 && mnState <= 6 && mpData)
     {
-        AptFile_UnresolveAnimation(mpData, mpResolveContext);
+        // Inverse of the load-time Fixup: run AptCharacterAnimation::Unresolve on the
+        // AptCharacterAnimation embedded at the movie root (mpData) + 0x10, passing the
+        // load base (mpResolveContext) as nBase.
+        // PS3: AptCharacterAnimation::Unresolve(*(this+5) + 16, *(this+4)).
+        AptCharacterAnimation* pAnimation = reinterpret_cast<AptCharacterAnimation*>(
+            reinterpret_cast<char*>(mpData) + 0x10);   // [c:] *(this+5) + 16
+        // FLAG (raw-ptr-as-id): the load base (mpResolveContext, a pointer) is passed
+        // into Unresolve's int32_t nBase param; preserved verbatim.
+        pAnimation->Unresolve(static_cast<int32_t>(reinterpret_cast<intptr_t>(mpResolveContext)));
         AptFile_FreeLoadedBlock(mpDataBlock);
     }
 

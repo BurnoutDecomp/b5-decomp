@@ -15,6 +15,8 @@
 #include "SDKs/EATech/include/Apt/AptCIH.h"                       // the zombie entries
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h"    // mAnimationFilePtr (the reap's file-state swap)
 #include "SDKs/EATech/include/Apt/AptFile.h"                      // mnState / mnField12 (the saved-state slot)
+#include "SDKs/EATech/include/Apt/AptTarget.h"                    // gpAptTarget / current target
+#include "SDKs/EATech/include/Apt/AptAnimationTarget.h"           // queued-input counter clear
 
 // ---------------------------------------------------------------------------
 // The Apt GC globals. FLAG: defined by the Apt GC startup data (AptInit); declared
@@ -24,6 +26,7 @@
 // ---------------------------------------------------------------------------
 extern AptGCReleaseVector      gValuesToRelease;
 extern AptValueGC_PoolManager  gAptValueGCPool;
+extern int                     gbAptSavedInputActive;
 
 // ---------------------------------------------------------------------------
 // sReferenceRegistrationCb @0x82AD9C80 -- mark-walk callback.
@@ -174,13 +177,38 @@ void* AptUpdateZombieVector(char bClear)
 }
 
 // ---------------------------------------------------------------------------
-// AptApt_FlushDeferredReleases -- the per-opcode / stack-empty deferred-release
+// AptFlushDeferredReleases -- the per-opcode / stack-empty deferred-release
 // drain the console inlines as ReleaseValues(off_8324E51C) at each call site (the
 // AS interpreter opcode handlers + the display-list teardown). Homed here as the
 // single de-inlined helper over the real gValuesToRelease vector, retiring the
-// AptRenderLinkStubs {} no-op that silently dropped every drain. Empty-vector safe.
+// AptRenderLinkStubs {} no-op that dropped every drain. Empty-vector safe.
 // ---------------------------------------------------------------------------
-void AptApt_FlushDeferredReleases()
+void AptFlushDeferredReleases()
 {
     gValuesToRelease.ReleaseValues();
+}
+
+// ---------------------------------------------------------------------------
+// AptPartialGarbageCollection @0x82ADD2A0 -- the tiny load-complete hook. The
+// shipped body only raises byte_8324E38F, the same zombies-dirty flag the zombie
+// vector maintenance code raises when a deferred sweep must run.
+// ---------------------------------------------------------------------------
+void AptPartialGarbageCollection()
+{
+    gbAptZombiesDirty = true;
+}
+
+// ---------------------------------------------------------------------------
+// AptFlushInputQueue @0x82ADD270 -- unless saved-input playback is active,
+// clear the queued input count on the current target's animation director.
+// ---------------------------------------------------------------------------
+void AptFlushInputQueue()
+{
+    if (gbAptSavedInputActive != 0)
+        return;
+
+    AptAnimationTarget* pAnimationTarget =
+        (gpAptTarget != nullptr) ? gpAptTarget->mpAnimationTarget : nullptr;
+    if (pAnimationTarget != nullptr)
+        pAnimationTarget->SetQueuedInputsSize(0);
 }

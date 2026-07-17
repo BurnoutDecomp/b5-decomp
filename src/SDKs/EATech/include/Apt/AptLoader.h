@@ -54,7 +54,7 @@ struct AptLoaderNode
 struct AptTarget;
 AptTarget* GetTarget();
 struct AptLoader;
-AptLoader* AptTarget_GetLoader(AptTarget* pTarget);
+// AptTarget_GetLoader is now the member AptTarget::GetLoader() (declared in AptTarget.h).
 
 struct AptLoader
 {
@@ -90,15 +90,12 @@ struct AptLoader
     // the AptFile (state -> loaded). pBlock is the AptDataHeader (X360 a5): it flows all
     // the way to Fixup so the case-1 pfnLoadRenderingUnit reads AptData+12 (the geometry).
     //
-    // pPreResolvedRoot: // FLAG (x64 converted bundle). The console derives the movie root
-    // as pBase + pConstFile->mnDataRootOffset (def base at root+16 for the 4-byte format).
-    // Our converted 8-byte .apt's dataRootOffset does NOT locate the type-9 movie root (its
-    // console layout diverged), so the host pre-locates the root CHARACTER HEADER (via the
-    // 0x09876543 signature scan) and passes it here; when null the faithful console formula
-    // is used. The def base (the AptCharacterAnimation) is root + the pointer-size header
-    // (0x20 native-8 / 0x10 console-4).
+    // The movie root derives from the file itself on both formats: the console 4-byte
+    // path as pBase + pConstFile->mnDataRootOffset (def base at root+16), the native-8
+    // path from the const chunk's movieOffset @const+0x18 (the XB1-attested x64 formula;
+    // def base at root+0x20).
     void CompleteLoad(AptFilePtr filePtr, void* pBase, struct AptConstFile* pConstFile,
-                      void* pBlock, void* pPreResolvedRoot = nullptr);
+                      void* pBlock);
 
     // @0x82B020C8 -- per-frame loader tick: walk the weak list and advance each
     // AptFile by its load state -- kick off the async stream for freshly-requested
@@ -127,7 +124,6 @@ struct AptLoader
 // memory. Pins the handle, forwards to gpAptTarget->mpLoader->CompleteLoad(handle,
 // pBase, pConstFile, pAptDataHeader), then drops the pin. Body in AptLoader.cpp.
 // pAptDataHeader is the AptDataHeader (X360 a4 -> CompleteLoad a5 -> Resolve/Fixup a4).
-// pPreResolvedRoot is the x64 converted-bundle root-header override (FLAG; default null).
 struct AptConstFile;
 void AptCompleteAnimationAsyncLoad(AptFilePtr* pHandle, void* pBase, struct AptConstFile* pConstFile,
-                                   void* pAptDataHeader, void* pPreResolvedRoot = nullptr);
+                                   void* pAptDataHeader);

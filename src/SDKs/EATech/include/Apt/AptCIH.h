@@ -49,7 +49,7 @@ struct AptNativeHash;
 // (GUIAPT64 "1:7:8" layout) so the embedded body lands at char+0x20 (VERIFIED vs TITLE_SCREEN02.bundle:
 // movie/sprite body @ char+0x20, where the fixed-up frame count + character table live). We ship ONLY
 // the 8-byte format, so this is a compile-time constant (single native-64 path, matching Fixup). Read by
-// AptCIH_GetClipMovie + AptMovieCharacter_GetAnimation.
+// AptGetClipMovie + AptGetMovieCharacterAnimation.
 static const unsigned int KU_AptEmbeddedMovieOff = 0x20u;
 
 struct AptCIH : public AptValueGC
@@ -70,8 +70,20 @@ struct AptCIH : public AptValueGC
     virtual void RegisterReferences();   // @0x7E9C78 (GC mark: parent + char props)
     virtual void DestroyGCPointers();    // @0x80553C (release parent + char inst)
     virtual void PreDestroy();           // @0x7ECBAC
-    // FLAG: AptCIH also overrides GetHasClass/SetHasClass (@0x7E1E18/0x7E1DF0) +
-    // objectMemberSet/Lookup; deferred (AptValue's defaults inherited for now).
+    // objectMemberLookup @0x82B0DF70 / objectMemberSet @0x82B09E58 -- the built-in
+    // MovieClip/TextField member recognizers (FULL reconstruction, 2026-07-09; bodies
+    // in AptCIHMembers.cpp). The interpreter consults them on every member access
+    // against a clip (get/setVariable, BEFORE findChild / the property-hash store):
+    // the gperf indexes (Text/SpriteMembersIndex) resolve the name, the console jump
+    // tables' id -> case mapping routes it -- procedural transforms through Get/Set-
+    // ProceduralProperty, the TextField surface through the tick-writable render item,
+    // the MovieClip methods as lazy AptNativeFunction singletons, the AS event-handler
+    // members into the property hash + event mask (+ the director's input set).
+    virtual AptValue* objectMemberLookup(AptValue* const pThis,
+                                         const AptNativeString* const pName) const override;
+    virtual bool objectMemberSet(AptValue* const pThis,
+                                 const AptNativeString* const pName,
+                                 AptValue* const pValue) override;
 
     // ---- name -------------------------------------------------------------
     const EAStringC& GetInstanceName() const { return mInstanceName; }   // @0x7DF0A8
@@ -89,6 +101,11 @@ struct AptCIH : public AptValueGC
 
     // ---- delegated mask / property reads (through the char inst) -----------
     AptNativeHash* GetNativeHash() const;   // @0x82AD5B28 (char inst's property hash)
+    // The console CIH vtable's slot-2 override IS GetNativeHash (@0x82AD5B28): a
+    // CIH's "native hash" is its char inst's property hash. The missing override
+    // made HasEventMember/findChild/objectMember* see a null hash on every placed
+    // clip (no proto chain, no onLoad detection). x64 FIX 2026-07-05.
+    virtual AptNativeHash* GetNativeHashVirtual() { return GetNativeHash(); }
     bool IsMask() const;                    // @0x82AD5BA0 (render item's mask flag)
     bool HasMask() const;                   // @0x82AD5BB8 (render item's has-mask flag)
 
@@ -115,18 +132,13 @@ struct AptCIH : public AptValueGC
     // the "needs-an-update-tick" events (mask 0x200C0) was newly set, else 0. (AptCIH::
     // AssociateInstToClass uses the return to decide whether to register a tick.)
     int FindAndSetEvents();
-
-    // AssociateInstToClass @0x82B073B8 -- bind a freshly placed sprite(5)/animation(tag
-    // 16) instance (or a class-tagged 0x24 instance) to its registered ActionScript
-    // class: build the AptPrototype on the char inst's property hash, wire __proto__ to
-    // the MovieClip builtin's prototype + the class's own prototype, resolve the placed
-    // char's export name in the class registry, tick the node + run the AS constructor
-    // under GC-root protection, then FindAndSetEvents. Gated off unless the instance is
-    // class-eligible + its render item is not already class-bound. Returns 1 when a
-    // "needs-a-tick" event was newly registered, else 0. The full X360 @0x82B073B8
-    // reconstruction lives in AptDisplayList.cpp (AptCIH_AssociateInstToClass, next to
-    // its AddToDisplayList/placeObject caller); this member homes it to the class.
+    // AssociateInstToClass @0x82B073B8 -- bind a freshly placed sprite(5)/animation(9)
+    // instance to its registered ActionScript class (build the AptPrototype, wire
+    // __proto__, resolve the class off the registered class-name registry, run the AS
+    // constructor, then FindAndSetEvents). Gated behind the class-binding bring-up flag.
+    // Returns 1 when a class was bound, else 0. Body in AptDisplayList.cpp.
     int AssociateInstToClass();
+
 
     // GetAnimationInst @0x82B7B358 -- mpCharacterInst narrowed to the animation
     // subtype (caller has already confirmed IsAnimationInst, type tag 9).
@@ -180,32 +192,12 @@ struct AptCIH : public AptValueGC
     // Returns the inserted node (or `this` when this container has no child list).
     AptCIH* ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie);
 
-    // InsertChild @0x82B09CA0 -- place pCharacter into this sprite-base node's child
-    // display list at nDepth under pName (seeding the new node's placement field from
-    // pSource's char inst when pSource is given), mark the generalised-process dirty
-    // state, and -- when a fresh node was created -- apply pInitObject's members and bind
-    // its AS class (AssociateInstToClass). Returns the placed node. (AS attachMovie /
-    // createEmptyMovieClip / createTextField / duplicateMovieClip.) The X360 body is
-    // reconstructed as AptCIH_InsertChild (AptCIHBehaviour.cpp); this member owns it.
+    // InsertChild @0x82B09CA0 -- place pCharacter into this node's child display list
+    // (mpCharacterInst->mDisplayList) at nDepth under pName; seeds the placement clip-
+    // actions from pSource's char-inst when given, then forwards to placeObject.
     AptCIH* InsertChild(AptCIH* pSource, AptCharacter* pCharacter, int nDepth,
-                        EAStringC* pName, AptValue* pInitObject);
+                        EAStringC* pName, AptValue* pInitObject);   // @0x82B09CA0
 
-    // ---- BLOCKED behavioural overrides (bodies deferred, honest reasons) --------
-    // ProcessCustomControls @0x82B07788 -- per-frame custom-control (movie-clip promoted
-    // to a host control) refresh: resolve the "_CustomControlType" registered AS key,
-    // manage the control state bits, promote the sprite render item (CopyFromSprite),
-    // and dispatch the descriptor strings / resolved Z-id to the host custom-control
-    // hooks. BLOCKED: needs the un-homed registered AS-name keys (console unk_8324E5C8
-    // "_CustomControlType" / unk_8324E5C0) AND the un-modelled AptCharacter+0x20
-    // AptAssetRenderingUnit geometry field the host callback consumes; no faithful
-    // partial exists (the key drives the very first state resolution). Declared-only.
-    //
-    // objectMemberLookup @0x82B0DF70 -- AptValue vtbl[6] override: resolve a scriptable
-    // member name on a text(2) / sprite(12/movie-clip) node. BLOCKED: the X360 body is
-    // two `bctr` computed jumps through gperf-indexed handler jump tables (TextMembers
-    // id-1<=0x14, SpriteMembers id-1<=0x82) whose per-case targets IDA did NOT recover
-    // (un-dumped rodata / computed control flow). Its sibling objectMemberSet @0x82B09E58
-    // shares the pattern and is likewise unbodied; both inherit AptValue's default for now.
 
     // ClearCIH @0x82AC... (X360-attested behavioural follow-on; body in its own
     // TU) -- tear down this node's character instance / placed state. Declared so
@@ -237,13 +229,10 @@ struct AptCIH : public AptValueGC
     // string-value placeholder, a negative frame, or a frame past the clip's end.
     int jumpToFrame(int nFrame);   // @0x82B0BD50
 
-    // _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core. Reads the goto
-    // target off the interpreter operand stack: a numeric value is the 1-based frame
-    // number; a string/label value resolves through the clip's label hash. Seeks via
-    // jumpToFrame, then sets/clears the clip's auto-play flag from bPlay and re-dirties
-    // the node when it stopped. Returns the shared `undefined` value. nArgCount gates
-    // the whole op (must be >= 1). Static: the X360 passes the CIH in r3, no `this`.
-    void* _gotoAndX(int nArgCount, unsigned int bPlay);   // @0x82B0D2F0
+    // _gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core (the original
+    // source declares it exactly so). Static: pThis carries the receiver. Body in
+    // AptCIHNativeFunctionHelper.cpp (the caller family's TU; single home).
+    static AptValue* _gotoAndX(AptValue* pThis, int nParams, int bPlay);   // @0x82B0D2F0
 
     // ---- packed state / flags (mFlagsA bit-fields) -----------------------
     uint32_t GetCIHState() const;       void SetCIHState(uint32_t eState);    // @0x7DF12C/0x7DF110
@@ -376,6 +365,13 @@ struct AptCIH : public AptValueGC
     // and (re)mark the generalized-process dirty state. Returns true when a mask was
     // (re)processed, false when the node carries no mask.
     bool ProcessMaskMatricies();   // @0x82AEDAE0
+
+    // ProcessCustomControls -- the per-frame custom-control refresh pass AptUpdate
+    // @0x82B0DB68 installs into the second generalised-process slot (dword_8324E420)
+    // alongside ProcessTextInst / ProcessMaskMatricies. Its X360 body has no
+    // per-address export in the dump set yet; declared here for the AptUpdate slot
+    // install, no-op link-stub until it is exported + reconstructed.
+    bool ProcessCustomControls();
 
     // CleanNativeFunctions @0x82AD6FB8 -- shutdown teardown: Release + null each of the
     // process-wide ActionScript native-function singletons (the built-in AS functions

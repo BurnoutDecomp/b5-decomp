@@ -3,7 +3,8 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (1-byte FlagSet base)
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // GuiEventQueueBase<N,16>, GuiEventQueueSmall, GuiEventLoadRequest
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // GuiEventQueueBase<N,16>, GuiEventQueueSmall
+#include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // GuiEventLoadRequest
 #include "GameShared/GameClasses/System/Resource/CgsResourceRequestQueue.h" // ResourceRequestQueue<N>
 
 // CgsGui::ModelIO - the per-frame IO buffers the GUI model module exchanges with the
@@ -66,6 +67,11 @@ namespace ModelIO
         // (this+0x15034 == 86068).
         const GuiNotificationQueue* GetLoadNotifications() const;
 
+        // X360 0x824F75E0 (the sub the real GuiModule::Update fetches to AddEvent single
+        // load-notification records -- the 14/16/481 forwards -- and to Clear the queue at
+        // the update tail): write-lock (bit 3) handle to mLoadNotifications.
+        GuiNotificationQueue* GetLoadNotificationsNonConst();
+
         // X360 0x8285ACC0: write-lock (bit 3); bulk-appends a source out-event queue into
         // mGuiOutEvents via VariableEventQueue<18432,16>::Append<18432,16>. Returns the result.
         int AddGuiOutEvents(const GuiEventQueue& lrSource);
@@ -108,7 +114,8 @@ namespace ModelIO
         // CgsModelModuleIO.h:79 (DWARF). X360 0x8250C658: asserts this buffer is
         // locked-for-writing (status bit 3, "Not locked for writing\n"), then pushes the
         // request onto mLoadRequests via VariableEventQueue<4096,16>::AddEvent(&request,
-        // /*type*/39, /*size*/24). Returns the AddEvent result.
+        // /*type*/39, /*X360 size*/24). On the PC/x64 gate the file-name pointer widens,
+        // so the copied payload is sizeof(GuiEventLoadRequest).
         bool AddResourceRequests(const GuiEventLoadRequest& lrRequest);
 
         // CgsModelModuleIO.h:87 (DWARF, non-const overload). X360 0x824F7490: asserts this

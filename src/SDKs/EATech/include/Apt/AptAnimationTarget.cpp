@@ -21,6 +21,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"           // AptCharacterInst (typed drain reads)
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // the sprite fields the drains read
 #include "SDKs/EATech/include/Apt/AptDisplayListState.h"      // mDisplayList head GC mark walk
+#include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetCIH (the timer callback's bound clip)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"   // DOGMA_PoolManager::Allocate/Deallocate
 
 #include <cstring>   // memset
@@ -189,7 +190,7 @@ extern AptValue* gpAptNoneValue;   // off_8324D814
 // + a u16 capacity. Declared as externs so the director ctor/dtor wire them by name;
 // bodied when that small Set TU is homed.
 // ---------------------------------------------------------------------------
-// AptAnimationTargetSet_Construct @0x82AE1708 -- HOMED (was a link-stub): build the set's
+// AptAnimationTargetSetConstruct @0x82AE1708 -- HOMED (was a link-stub): build the set's
 // slot table. DECOMPILED FAITHFULLY from the X360 ARTIST.XEX:
 //   *(a1+2) = a2 (mnCapacity); if (a2) { mppSlots = Allocate(4*a2); mnCount = 0; memset(slots,0); }
 //   else { mnCount = 0; mppSlots = 0; }
@@ -197,7 +198,7 @@ extern AptValue* gpAptNoneValue;   // off_8324D814
 // the console allocates 4*capacity (4-byte pointers), x64 needs sizeof(void*)*capacity so the
 // indexed slot writes (_addToSetCaches' AptListenerSlotList::add) stay in bounds. Without this
 // the set was never built (the stub), so _addToSetCaches over-read/overwrote uninitialised slots.
-void AptAnimationTargetSet_Construct(AptAnimationTargetSet* pSet, u16 nCapacity)
+void AptAnimationTargetSetConstruct(AptAnimationTargetSet* pSet, u16 nCapacity)
 {
     pSet->mnCapacity = nCapacity;
     if (nCapacity != 0)
@@ -213,8 +214,74 @@ void AptAnimationTargetSet_Construct(AptAnimationTargetSet* pSet, u16 nCapacity)
         pSet->mppSlots = nullptr;
     }
 }
-extern void AptAnimationTargetSet_Destruct (AptAnimationTargetSet* pSet);                  // sub_82AE1670 (listener free)
-extern void AptAnimationTargetSet_Destruct2(AptAnimationTargetSet* pSet);                  // sub_82AE1780 (input free)
+// ---------------------------------------------------------------------------
+// The set destructors sub_82AE1670 (listener set) / sub_82AE1780 (input set) --
+// HOMED 2026-07-10 (retiring the {} link-stubs, which leaked every slot ref +
+// the slot array at target teardown). The two console bodies are INSTRUCTION-
+// IDENTICAL ICF twins: Release (vtbl[1]) each non-null slot -- early-out once
+// mnCount live entries have been dropped -- then Deallocate the slot array
+// (console 4*capacity; native-8 sizeof(void*)*capacity) back to the pseudo pool.
+// ---------------------------------------------------------------------------
+void AptAnimationTargetSetDestruct(AptAnimationTargetSet* pSet)
+{
+    u16 nLive = pSet->mnCount;                     // lhz 0(r31)
+    const u16 nCapacity = pSet->mnCapacity;        // lhz 2(r31)
+    if (nCapacity != 0)
+    {
+        for (u16 i = 0; i < nCapacity; ++i)        // the slot scan (loc_82AE1698)
+        {
+            AptValue* const pSlot = pSet->mppSlots[i];
+            if (pSlot == nullptr)
+                continue;
+            pSlot->Release();                      // vtbl[1]
+            if (--nLive == 0)
+                break;                             // addic. r29,-1; beq exit
+        }
+    }
+    if (pSet->mppSlots != nullptr)
+        gpAptPseudoDataPool->Deallocate(pSet->mppSlots,
+                                        sizeof(void*) * pSet->mnCapacity);   // native-8 stride (console 4*cap)
+}
+
+void AptAnimationTargetSetDestruct2(AptAnimationTargetSet* pSet)
+{
+    AptAnimationTargetSetDestruct(pSet);   // sub_82AE1780 == sub_82AE1670 (ICF twins)
+}
+
+// ---------------------------------------------------------------------------
+// AptAnimationTarget::AddToRemList @0x82AEE3F8 -- HOMED 2026-07-10 (retiring the
+// {} link-stub, which dropped every delay-released clip on the floor). Queue a
+// CIH on the shared delayed-release table:
+//   * a node already queued (mFlagsA bit26) is a no-op;
+//   * a full table (size >= the table element count) flushes via CleanRemList;
+//   * find the first FREE (null) slot within the current fill run (else append);
+//   * AddRef the node, mark it queued (bit26), store it; appending bumps the fill.
+// (The console never reads its r3/pAnim arg -- CleanRemList is static.)
+// ---------------------------------------------------------------------------
+void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unread)*/,
+                                    AptCIH* pItem)
+{
+    if (((pItem->mFlagsA >> 26) & 1u) != 0)          // lwz 0xC(r30); extrwi 1,5
+        return;                                       // already queued
+
+    if (snDelayedReleaseListSize >= snMaxNewMovieClips)   // dword_8324E550 >= dword_8324E540
+        AptAnimationTarget::CleanRemList();
+
+    // First free (null) slot within the fill run, else the append position.
+    int liSlot = 0;
+    if (snDelayedReleaseListSize > 0)
+    {
+        AptValue** const lppList = static_cast<AptValue**>(spDelayedReleaseList);
+        while (liSlot < snDelayedReleaseListSize && lppList[liSlot] != nullptr)
+            ++liSlot;
+    }
+
+    pItem->AddRef();                                  // vtbl[0]
+    pItem->mFlagsA |= 0x04000000u;                    // oris 0x400 -- the queued bit26
+    static_cast<AptValue**>(spDelayedReleaseList)[liSlot] = static_cast<AptValue*>(pItem);
+    if (liSlot == snDelayedReleaseListSize)
+        ++snDelayedReleaseListSize;                   // appended past the fill run
+}
 
 // ---------------------------------------------------------------------------
 // FLAG (un-homed GC / interpreter cluster): the module-static interpreter state +
@@ -238,14 +305,13 @@ extern void (*gpAptGCTableFree)(void* p, unsigned nBytes);                      
 // FLAG (un-homed AptCIH behavioural TU): per-frame tick of a freshly-created node.
 // AptCIH::tick @0x... is behavioural surface owned by AptCIHBehaviour.cpp; declared
 // as a free-function shim (the X360 calls it with the CIH in r3) so TickNewInsts links.
-extern int AptCIH_tick(AptCIH* pCIH);
+// AptCIH::tick is now called directly as a member (AptCIH.h is included above).
 
 // FLAG (un-homed AptCIH behavioural TU): queue a clip-event against a CIH. The X360
 // calls AptCIH::queueClipEvents(pCIH, nEventMask, nPacked, bDeferred) -> AptValue*;
 // declared as a free-function shim so the two input dispatchers (ProcessInputSet /
 // AddListenerToQueue path) link. Its body belongs with AptCIH's event machinery.
-extern AptValue* AptCIH_queueClipEvents(AptValue* pCIH, int nEventMask,
-                                        unsigned int nPacked, int bDeferred);
+// AptCIH::queueClipEvents is now called directly as a member (AptCIH.h is included above).
 
 // ---------------------------------------------------------------------------
 // FLAG (un-homed AS event-descriptor rodata + name table). AddListenerToQueue walks
@@ -312,9 +378,9 @@ AptAnimationTarget::AptAnimationTarget(const AptAnimationTargetParams* pParams)
     mnNumIntervalTimers = pParams->mnNumIntervalTimers;   // a1[1] = *a2
     mnQueuedInputsCap   = pParams->mnQueuedInputsCap;     // a1[2] = a2[1]
 
-    AptAnimationTargetSet_Construct(&mListenerSet,
+    AptAnimationTargetSetConstruct(&mListenerSet,
         static_cast<u16>(pParams->mnListenerSetSize));   // __(a1+4, a2[2]) -- low u16 of the word
-    AptAnimationTargetSet_Construct(&mInputSet,
+    AptAnimationTargetSetConstruct(&mInputSet,
         static_cast<u16>(pParams->mnInputSetSize));      // sub_82AE1708(a1+6, a2[3])
 
     // The root display list (a1+0x20) is the inline member mDisplayList; its ctor
@@ -421,8 +487,8 @@ AptAnimationTarget::~AptAnimationTarget()
     // is an inline member with a user dtor, so its destruction is emitted
     // automatically at scope exit (a benign reorder relative to the set-destructs,
     // which do not touch the display list).
-    AptAnimationTargetSet_Destruct2(&mInputSet);     // sub_82AE1780(a1+0x18)
-    AptAnimationTargetSet_Destruct (&mListenerSet);  // sub_82AE1670(a1+0x10)
+    AptAnimationTargetSetDestruct2(&mInputSet);     // sub_82AE1780(a1+0x18)
+    AptAnimationTargetSetDestruct (&mListenerSet);  // sub_82AE1670(a1+0x10)
 }
 
 // ---------------------------------------------------------------------------
@@ -584,7 +650,7 @@ void AptAnimationTarget::TickNewInsts()
         if ((liTypeTag == 5 || liTypeTag == 16)
             && static_cast<AptCharacterSpriteInstBase*>(lpCharInst)->mnGotoFrame == -1)
         {
-            AptCIH_tick(lpCIH);                                 // AptCIH::tick
+            lpCIH->tick();                                     // AptCIH::tick
             lpInsts = static_cast<AptValue**>(spNewInsts);     // reload (tick may realloc)
         }
 
@@ -845,9 +911,9 @@ void* AptAnimationTarget::RemoveCIHReferences()
         {
             using RemapFn = void* (*)(void*);
             char* lpVtbl = *reinterpret_cast<char**>(lrTimer.mpCBFunction);
-            (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpCBFunction);
+            (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpCBFunction);   // FLAG un-homed vtbl[13] GC reference-remap virtual
             lpVtbl = *reinterpret_cast<char**>(lrTimer.mpContext);
-            lpResult = (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpContext);
+            lpResult = (*reinterpret_cast<RemapFn*>(lpVtbl + 52))(lrTimer.mpContext);   // FLAG un-homed vtbl[13] GC reference-remap virtual
         }
 
         const s32 liParamCount = lrTimer.mParams.mnTop;
@@ -1214,25 +1280,25 @@ int AptAnimationTarget::ProcessInputSet(int nEventId, int nCode, unsigned int nP
             {
                 if (nCode == 1)
                 {
-                    liResult = reinterpret_cast<intptr_t>(
-                        AptCIH_queueClipEvents(lpEntry, 128, nPacked, 0));
+                                        liResult = reinterpret_cast<intptr_t>(
+                        static_cast<AptCIH*>(lpEntry)->queueClipEvents(128, nPacked, 0));
                 }
                 else if (nCode == 0)
                 {
                     const unsigned int liEvent = nPacked >> 17;
-                    if (liEvent == 502u || liEvent == 501u)
+                                        if (liEvent == 502u || liEvent == 501u)
                     {
                         liResult = reinterpret_cast<intptr_t>(
-                            AptCIH_queueClipEvents(lpEntry, 64, nPacked, 0));
+                            static_cast<AptCIH*>(lpEntry)->queueClipEvents(64, nPacked, 0));
                     }
-                    else
+                                        else
                     {
                         liResult = reinterpret_cast<intptr_t>(
-                            AptCIH_queueClipEvents(lpEntry, 64, nPacked, 0));
+                            static_cast<AptCIH*>(lpEntry)->queueClipEvents(64, nPacked, 0));
                         if (!lbInputFired)
                         {
-                            AptValue* lpRet =
-                                AptCIH_queueClipEvents(lpEntry, 0x20000, nPacked, 1);
+                                                        AptValue* lpRet =
+                                static_cast<AptCIH*>(lpEntry)->queueClipEvents(0x20000, nPacked, 1);
                             liResult     = reinterpret_cast<intptr_t>(lpRet);
                             // X360 tests only the low byte (clrlwi. r11,r26,24; IDA char v7).
                             lbInputFired = ((reinterpret_cast<uintptr_t>(lpRet) & 0xFFu) != 0);
@@ -1326,14 +1392,6 @@ char* AptAnimationTarget::GetAStickRight(int nPlayer)
 //   word +0x1C) are interpreter-private value subtypes not yet modelled by name;
 //   reproduced verbatim through the recovered console offsets, each flagged below.
 // ---------------------------------------------------------------------------
-#if defined(_MSC_VER)
-extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
-#pragma comment(linker, "/alternatename:AptRunActionsStaleSlotProbe=AptRunActionsStaleSlotProbeDefault")
-extern "C" void AptRunActionsStaleSlotProbeDefault(const void*, const void*) {}
-#else
-extern "C" void AptRunActionsStaleSlotProbe(const void* pSlot, const void* pCIH);
-#endif
-
 int AptAnimationTarget::RunActions()
 {
     CleanRemList();
@@ -1360,13 +1418,11 @@ int AptAnimationTarget::RunActions()
             // The CIH handle must be "defined" (mnValueData bit 27 set).
             // (Guarded: the console never queues a null/dead CIH; an x64 bring-up
             // path can leave a STALE ring cell (observed 0xbaadf000ffffffff) -- the
-            // standard plausibility screen skips + logs it rather than AV.
+            // standard plausibility screen skips it rather than AV.
             // FLAG hardening; the ring-lifetime reconstruction is the follow-on.)
             const uintptr_t luCIH = reinterpret_cast<uintptr_t>(lpNode);
             const bool lbCIHPlausible =
                 luCIH >= 0x10000u && (luCIH >> 47) == 0u;
-            if (!lbCIHPlausible && lpNode != nullptr)
-                AptRunActionsStaleSlotProbe(lpSlot, lpNode);
             if (lbCIHPlausible && ((lpNode->mnValueData >> 27) & 1u) != 0u)
             {
                 // Named members (2026-07-01; were the console raw offsets on x64
@@ -1610,9 +1666,11 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
         // The callback is a defined script function (type {34..36}, bit 27 set)?
         const bool lbScriptFn =
             (static_cast<u32>(liCBType - 34) <= 2u) && (((lnCBBits >> 27) & 1u) != 0u);   // v16
-        // FLAG: a script function's bound char inst lives at value word +0x20.
+        // A script function's bound CIH (console value word +0x20 == the named
+        // AptScriptFunctionBase::GetCIH() -- the raw +0x20 read does not survive the
+        // x64 widening; same class as the toString CIH-arm fix).
         AptValue* lpBound = lbScriptFn
-            ? *reinterpret_cast<AptValue**>(reinterpret_cast<char*>(lpCB) + 0x20)   // v17 = *(v13+32)
+            ? static_cast<AptScriptFunctionBase*>(lpCB)->GetCIH()   // v17 = *(v13+32)
             : nullptr;
 
         // Fire condition: either the callback itself is a defined movie-clip(9) value,
@@ -1625,10 +1683,12 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
             const u32 lnBoundBits = reinterpret_cast<AptCIH*>(lpBound)->mnValueData;   // v17[1]
             if (((lnBoundBits >> 27) & 1u) != 0u)
             {
-                char* lpBoundInst =
-                    *reinterpret_cast<char**>(reinterpret_cast<char*>(lpBound) + 0x20);  // v17[8]
-                lbFire = (static_cast<u32>(*reinterpret_cast<int*>(lpBoundInst + 8)) & 0xFC000000u)
-                         != 0x3C000000u;
+                // Console *(v17+0x20)+8 == the bound CIH's char inst mTypeFlags
+                // (named members; tag 15 / 0x3C000000 == the dead level-placeholder form).
+                AptCharacterInst* lpBoundInst =
+                    static_cast<AptCIH*>(lpBound)->GetCharacterInst();
+                lbFire = lpBoundInst != nullptr &&
+                         (static_cast<u32>(lpBoundInst->mTypeFlags) & 0xFC000000u) != 0x3C000000u;
             }
         }
 
@@ -1709,43 +1769,26 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
 // reproduced with no behavioural change. Homed here, alongside those member bodies.
 // ===========================================================================
 
-// AptAnimationTarget_RunActions -- AptAnimationTarget::RunActions @0x82B0C9B0
-// (AptLinker / AptTarget per-frame action drain). The console returns r3; the free
-// callers discard it, so this is `void` to match the call-site declaration.
-void AptAnimationTarget_RunActions(AptAnimationTarget* pAnim)
-{
-    pAnim->RunActions();
-}
+// AptAnimationTarget::RunActions @0x82B0C9B0 is the real member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
+// (Callers discard the result -- they invoke the member directly.)
 
-// AptAnimationTarget_CleanRemList -- AptAnimationTarget::CleanRemList @0x82AEAB08.
-// The member is class-static (the rem list is a shared table); the console passes
-// the director in r3 but the body ignores it -- forwarded faithfully.
-void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim)
-{
-    (void)pAnim;
-    AptAnimationTarget::CleanRemList();
-}
 
-// AptAnimationTarget_PreDestroy -- AptAnimationTarget::PreDestroy @0x82AFE420
-// (AptTarget::Shutdown's director teardown step).
-void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim)
-{
-    pAnim->PreDestroy();
-}
+// AptAnimationTarget::CleanRemList @0x82AEAB08 is the real static member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
 
-// AptAnimationTarget_RemoveTimerFunctions -- AptAnimationTarget::RemoveTimerFunctions
-// @0x82AE4320 (AptCIH::SetCharacterInst drops an animation node's timer callbacks).
-void AptAnimationTarget_RemoveTimerFunctions(AptAnimationTarget* pAnim, AptCIH* pNode)
-{
-    pAnim->RemoveTimerFunctions(pNode);
-}
 
-// AptAnimationTarget_Destruct -- ~AptAnimationTarget @0x82AFF790 (AptTarget::Shutdown
-// runs the director destructor before pool-freeing the 88-byte block).
-void AptAnimationTarget_Destruct(AptAnimationTarget* pAnim)
-{
-    pAnim->~AptAnimationTarget();
-}
+// AptAnimationTarget::PreDestroy @0x82AFE420 is the real member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
+
+
+// AptAnimationTarget::RemoveTimerFunctions @0x82AE4320 is the real member (declared in
+// AptAnimationTarget.h, defined above); the forwarding free-function shim is retired.
+
+
+// ~AptAnimationTarget @0x82AFF790 is the real destructor (declared in AptAnimationTarget.h,
+// defined above); AptTarget::Shutdown invokes it explicitly (the AptAnimationTarget_Destruct shim is retired).
+
 
 // ---------------------------------------------------------------------------
 // AptReplaceReferences -- BLOCKED FLAG stub. This is the AptAnimationTarget TU's

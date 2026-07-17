@@ -37,7 +37,7 @@ namespace CgsResource
     uint32_t AptDataHeaderType::GetImportCount(const void* lpResource) const
     {
         uintptr_t lRes = reinterpret_cast<uintptr_t>(lpResource);
-        u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);
+        u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);   // serialized .apt resource header: movie root @+12
 
         uint32_t luCount = 0;
         u32 luMovies = lpRoot[0];
@@ -77,7 +77,7 @@ namespace CgsResource
         *lppValue = nullptr;
         *lpuOffset = 0;
 
-        u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);
+        u32* lpRoot = *reinterpret_cast<u32**>(lRes + 12);   // serialized .apt resource header: movie root @+12
         u32 luMovies = lpRoot[0];
         if (!luMovies)
             return;
@@ -100,7 +100,7 @@ namespace CgsResource
                     // is tested. The prior reconstruction tested a fixed importTable[1] without
                     // indexing/derefing. DecFIGS 0xB737DC: `v15 = 4*v13 + importTable; v17 = *v15;
                     // if (*(v17 + 4))`.
-                    u32* lpImportTable = *reinterpret_cast<u32**>(luChar + 8);
+                    u32* lpImportTable = *reinterpret_cast<u32**>(luChar + 8);   // serialized .apt movie: import table @+8
                     u32 luEntry = lpImportTable[luImport];
                     if (reinterpret_cast<u32*>(luEntry)[1])
                     {

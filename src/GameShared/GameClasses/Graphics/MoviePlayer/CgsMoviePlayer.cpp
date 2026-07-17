@@ -3,6 +3,7 @@
 #include "pc/gcm/renderengine/device.h"                              // renderengine::gDevice
 #include "pc/gcm/renderengine/texture.h"                             // renderengine::Texture
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstring>   // std::memcpy (strip-band recombine upload)
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -61,6 +62,16 @@ namespace CgsGraphics
         mpFrameTexture = 0;
         muTexWidth = 0;
         muTexHeight = 0;
+
+        miVerticalStrips = 1;
+        miCurrentStrip = 0;
+        miStripsDecoded = 0;
+        mpStripStaging = 0;
+        muStripStagingBytes = 0;
+        mpStripCtx[0] = 0;
+        mpStripCtx[1] = 0;
+        mpStripCtx[2] = 0;
+        muPacketRoute = 0;
     }
 
     bool MoviePlayer::SetMovieFile(const char* lpMovieFileName, bool lbPreload)
@@ -145,6 +156,45 @@ namespace CgsGraphics
         mfFrameRate = av_q2d(lpStream->avg_frame_rate);
         mfDurationSec = (mpFormatCtx->duration > 0) ? (static_cast<f64>(mpFormatCtx->duration) / static_cast<f64>(AV_TIME_BASE)) : 0.0;
 
+        // X360 VP6 UI/boot videos are authored as three vertically-stacked 1280x240 strips
+        // per 1280x720 display frame (the VP6 stream carries 3x the container frame count;
+        // 3 consecutive decoded strips = one display frame). The console's video path
+        // recombined them; the PC decoder emits them separately, so detect the layout and
+        // recombine below. Signature: the coded frame is 1280 wide and 240 tall.
+        miVerticalStrips = (mpVideoCtx->width == 1280 && mpVideoCtx->height == 240) ? 3 : 1;
+        miCurrentStrip   = 0;
+        miStripsDecoded  = 0;
+        muPacketRoute    = 0;
+        mpStripCtx[0]    = mpVideoCtx;   // band 0 decodes through the primary context
+        mpStripCtx[1]    = 0;
+        mpStripCtx[2]    = 0;
+        if (miVerticalStrips != 1)
+        {
+            // Each interleaved band is its own VP6 prediction chain -> give bands 1..N-1 their own
+            // decoder contexts (band 0 reuses mpVideoCtx). Packet i%N feeds mpStripCtx[i%N].
+            bool lbStripOk = true;
+            for (s32 liBand = 1; liBand < miVerticalStrips; ++liBand)
+            {
+                AVCodecContext* lpCtx = avcodec_alloc_context3(lpCodec);
+                if (lpCtx == 0 ||
+                    avcodec_parameters_to_context(lpCtx, lpStream->codecpar) < 0 ||
+                    avcodec_open2(lpCtx, lpCodec, 0) < 0)
+                {
+                    if (lpCtx != 0) avcodec_free_context(&lpCtx);
+                    lbStripOk = false;
+                    break;
+                }
+                mpStripCtx[liBand] = lpCtx;
+            }
+            if (!lbStripOk)
+            {
+                ReleaseResources();
+                CgsDev::Log::WriteToLog("[Movie] 3-strip decoder alloc FAILED\n");
+                return false;
+            }
+            CgsDev::Log::WriteToLog("[Movie] X360 3-strip VP6 detected (1280x240 -> 1280x720, 3 decoders).\n");
+        }
+
         mpFrame = av_frame_alloc();
         mpPacket = av_packet_alloc();
         if (mpFrame == 0 || mpPacket == 0)
@@ -175,6 +225,18 @@ namespace CgsGraphics
         {
             av_packet_free(&mpPacket);
         }
+        // Free the extra band decoders first (mpStripCtx[0] aliases mpVideoCtx, freed below).
+        for (s32 liB = 1; liB < 3; ++liB)
+        {
+            if (mpStripCtx[liB] != 0)
+            {
+                avcodec_free_context(&mpStripCtx[liB]);
+            }
+        }
+        mpStripCtx[0] = 0;
+        mpStripCtx[1] = 0;
+        mpStripCtx[2] = 0;
+        muPacketRoute = 0;
         if (mpVideoCtx != 0)
         {
             avcodec_free_context(&mpVideoCtx);
@@ -189,6 +251,9 @@ namespace CgsGraphics
             delete mpFrameTexture;
             mpFrameTexture = 0;
         }
+        delete[] mpStripStaging;
+        mpStripStaging = 0;
+        muStripStagingBytes = 0;
         muTexWidth = 0;
         muTexHeight = 0;
         miVideoStream = -1;
@@ -259,10 +324,68 @@ namespace CgsGraphics
         miCrossfadeOutFrames = liCrossfadeOutFrames;
     }
 
+    // 3-strip VP6: N interleaved INDEPENDENT prediction chains (packet i belongs to band i%N).
+    // Output the next strip in (display,band) order from its OWN decoder context; feed packets in
+    // file order routed by muPacketRoute%N so each band's P-frames reference the previous same-band
+    // frame. A shared decoder would mispredict across bands -> macroblock garbage.
+    bool MoviePlayer::DecodeStripFrame()
+    {
+        const s32 liN = miVerticalStrips;
+        const s32 liBand = static_cast<s32>(miStripsDecoded % liN);
+        AVCodecContext* lpCtx = mpStripCtx[liBand];
+        for (;;)
+        {
+            const int liRecv = avcodec_receive_frame(lpCtx, mpFrame);
+            if (liRecv == 0)
+            {
+                miCurrentStrip = liBand;
+                // Each MVhd declares the authored display rate (30 fps for the shipped movies).
+                // FFmpeg flattens the N interleaved MV0 packets into one AVStream but retains that
+                // per-video header rate, so advance time once per complete N-band chunk set.
+                const s64 liDisplayIndex = miStripsDecoded / liN;
+                const f64 lfFps = (mfFrameRate > 1.0) ? mfFrameRate : 30.0;
+                mfFramePtsSec = static_cast<f64>(liDisplayIndex) / lfFps;
+                ++miStripsDecoded;
+                return true;
+            }
+            if (liRecv == AVERROR_EOF || liRecv != AVERROR(EAGAIN))
+            {
+                mbFinished = true;
+                return false;
+            }
+            // This band's decoder wants more input.
+            if (mbEof)
+            {
+                avcodec_send_packet(lpCtx, 0);   // keep flushing this band
+                continue;
+            }
+            const int liRead = av_read_frame(mpFormatCtx, mpPacket);
+            if (liRead < 0)
+            {
+                mbEof = true;
+                for (s32 liB = 0; liB < liN; ++liB)
+                {
+                    avcodec_send_packet(mpStripCtx[liB], 0);   // begin draining every band
+                }
+                continue;
+            }
+            if (mpPacket->stream_index == miVideoStream)
+            {
+                avcodec_send_packet(mpStripCtx[muPacketRoute % static_cast<u32>(liN)], mpPacket);
+                ++muPacketRoute;
+            }
+            av_packet_unref(mpPacket);
+        }
+    }
+
     // Pull the next decoded video frame, reading + sending packets as needed; flush at EOF. Sets
     // mbFinished + returns false when the stream is fully drained. [PC FFmpeg decode loop.]
     bool MoviePlayer::DecodeFrame()
     {
+        if (miVerticalStrips != 1)
+        {
+            return DecodeStripFrame();
+        }
         for (;;)
         {
             const int liRecv = avcodec_receive_frame(mpVideoCtx, mpFrame);
@@ -344,27 +467,68 @@ namespace CgsGraphics
             sws_freeContext(mpSws);
             mpSws = 0;
         }
+        // sws always converts ONE coded strip (no vertical scale): the texture may be taller
+        // (miVerticalStrips bands), each filled by a separate decode in UploadFrame.
         mpSws = sws_getContext(mpVideoCtx->width, mpVideoCtx->height, mpVideoCtx->pix_fmt,
-                               static_cast<int>(luWidth), static_cast<int>(luHeight),
+                               mpVideoCtx->width, mpVideoCtx->height,
                                AV_PIX_FMT_BGRA, SWS_BILINEAR, 0, 0, 0);
         return mpSws != 0;
     }
 
     void MoviePlayer::UploadFrame()
     {
-        if (!EnsureTexture(static_cast<u32>(mpVideoCtx->width), static_cast<u32>(mpVideoCtx->height)))
+        // The texture spans all N strip bands (N==1 for normal video). Repeated texture
+        // Lock/Unlock cycles do NOT reliably preserve the other bands between writes, so
+        // accumulate the N strips in a persistent CPU BGRA buffer (sws each strip into its
+        // band) and publish the recombined frame to the GPU texture in ONE lock on the last
+        // strip. For N==1 this is one strip + one upload (unchanged behaviour).
+        const u32 luStripW    = static_cast<u32>(mpVideoCtx->width);
+        const u32 luStripH    = static_cast<u32>(mpVideoCtx->height);
+        const u32 luTexHeight = luStripH * static_cast<u32>(miVerticalStrips);
+        if (!EnsureTexture(luStripW, luTexHeight))
         {
             return;
         }
+
+        const u32 luBufPitch = luStripW * 4u;
+        const u32 luBufBytes = luBufPitch * luTexHeight;
+        if (mpStripStaging == 0 || muStripStagingBytes < luBufBytes)
+        {
+            delete[] mpStripStaging;
+            mpStripStaging      = new u8[luBufBytes];
+            muStripStagingBytes = luBufBytes;
+        }
+
+        const u32 luBandOffset = static_cast<u32>(miCurrentStrip) * luStripH * luBufPitch;
+        u8* lpDst[1] = { mpStripStaging + luBandOffset };
+        int liStride[1] = { static_cast<int>(luBufPitch) };
+        sws_scale(mpSws, mpFrame->data, mpFrame->linesize, 0, mpVideoCtx->height, lpDst, liStride);
+
+        // Publish only once the display frame is complete (all N strips uploaded).
+        if (miCurrentStrip != miVerticalStrips - 1)
+        {
+            return;
+        }
+
         renderengine::Texture::LockInfo lLock;
         renderengine::Texture::Lock(mpFrameTexture, 0, 0, 0, &lLock);
         if (lLock.mpBits == 0)
         {
             return;
         }
-        u8* lpDst[1] = { static_cast<u8*>(lLock.mpBits) };
-        int liStride[1] = { static_cast<int>(lLock.muPitch) };
-        sws_scale(mpSws, mpFrame->data, mpFrame->linesize, 0, mpVideoCtx->height, lpDst, liStride);
+        u8* lpTexBits = static_cast<u8*>(lLock.mpBits);
+        if (lLock.muPitch == luBufPitch)
+        {
+            std::memcpy(lpTexBits, mpStripStaging, luBufBytes);
+        }
+        else
+        {
+            for (u32 luRow = 0; luRow < luTexHeight; ++luRow)
+            {
+                std::memcpy(lpTexBits + luRow * lLock.muPitch,
+                            mpStripStaging + luRow * luBufPitch, luBufPitch);
+            }
+        }
         renderengine::Texture::Unlock(mpFrameTexture, &lLock);
     }
 

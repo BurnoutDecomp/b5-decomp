@@ -13,7 +13,7 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnBootVideos.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLegal.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootAttract.h"
-#include "GameSource/Gui/Flow/HUD/States/BrnBootCompoundLoad.h"
+#include "GameSource/Gui/Flow/HUD/States/BrnPostTitleScreenLoad.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootProfile.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnBootLoading.h"
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
@@ -79,12 +79,12 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     CgsGui::StateMachine& lStateMachine = GetStateMachine();
 
     // Allocate the 14 states (X360 build order = the SetStates table order).
-    mpPreload      = NewPoolState<BootPreload>(lpLinearMalloc);
-    mpVideos       = NewPoolState<BootVideos>(lpLinearMalloc);
-    mpLegal        = NewPoolState<BootLegal>(lpLinearMalloc);
-    mpAttract      = NewPoolState<BootAttract>(lpLinearMalloc);
-    mpCompoundLoad = NewPoolState<BootCompoundLoad>(lpLinearMalloc);
-    mpProfile      = NewPoolState<BootProfile>(lpLinearMalloc);
+    mpPreload             = NewPoolState<BootPreload>(lpLinearMalloc);
+    mpVideos              = NewPoolState<BootVideos>(lpLinearMalloc);
+    mpLegal               = NewPoolState<BootLegal>(lpLinearMalloc);
+    mpAttract             = NewPoolState<BootAttract>(lpLinearMalloc);
+    mpPostTitleScreenLoad = NewPoolState<PostTitleScreenLoad>(lpLinearMalloc);
+    mpProfile             = NewPoolState<BootProfile>(lpLinearMalloc);
     mpLoading      = NewPoolState<BootLoading>(lpLinearMalloc);
     mpRaceMain     = NewPoolState<RaceMainHudState>(lpLinearMalloc);
     mpFBurnMain    = NewPoolState<FBurnMainHudState>(lpLinearMalloc);
@@ -99,14 +99,22 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     mpVideos->Construct(CgsIDCompress("BF_VIDEOS"), &lStateMachine);
     mpLegal->Construct(CgsIDCompress("BF_LEGAL"), &lStateMachine);
     mpAttract->Construct(CgsIDCompress("BF_ATTR"), &lStateMachine);
-    mpCompoundLoad->Construct(CgsIDCompress("BF_COMPLOAD"), &lStateMachine);
-    // FLAG: the X360 BF_PROFILE uses a wider Construct(id, fsm, ProfileManager*) virtual (slot 9)
-    // that threads the profile manager in. BootProfile's ProfileTaskResultHandler base + that 3-arg
-    // Construct are not reconstructed yet (see BrnBootProfile.h), so BF_PROFILE is Construct'd via
-    // the shared 2-arg State::Construct here; the profile manager is carried for when that overload
-    // lands. (Boot reaches BF_PROFILE after the videos; the manager wiring is not on the video path.)
-    mpProfile->Construct(CgsIDCompress("BF_PROFILE"), &lStateMachine);
-    (void)lpProfileManager;
+    mpPostTitleScreenLoad->Construct(CgsIDCompress("BF_COMPLOAD"), &lStateMachine);
+    // The X360 BF_PROFILE slot alone dispatches the wider Construct(id, fsm, manager)
+    // virtual (Prepare @0x8251A620: `(*(v62 + 36))(*v26, v63, v8, a5)` -- vtable slot 9
+    // vs the 2-arg slot 6 every other state gets), threading the module's ProfileManager
+    // into the state. DWARF signature: Construct(CgsID, CgsFsm::ScriptedFsm*, ProfileManager&).
+    if (lpProfileManager != 0)
+    {
+        mpProfile->Construct(CgsIDCompress("BF_PROFILE"), &lStateMachine, *lpProfileManager);
+    }
+    else
+    {
+        // FLAG PC defensive fallback: the X360 Prepare always receives a live manager;
+        // a config that passes none falls back to the shared 2-arg Construct and
+        // BootProfile's null-manager accept shortcut drives the phase.
+        mpProfile->Construct(CgsIDCompress("BF_PROFILE"), &lStateMachine);
+    }
     mpLoading->Construct(CgsIDCompress("BF_LOADING"), &lStateMachine);
     mpRaceMain->Construct(CgsIDCompress("RACE_MAIN"), &lStateMachine);
     mpFBurnMain->Construct(CgsIDCompress("FBURN_MAIN"), &lStateMachine);
@@ -122,7 +130,7 @@ bool BrnHudFlow::Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
     lapStates[1]  = mpVideos;
     lapStates[2]  = mpLegal;
     lapStates[3]  = mpAttract;
-    lapStates[4]  = mpCompoundLoad;
+    lapStates[4]  = mpPostTitleScreenLoad;
     lapStates[5]  = mpProfile;
     lapStates[6]  = mpLoading;
     lapStates[7]  = mpRaceMain;

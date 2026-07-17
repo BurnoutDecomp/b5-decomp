@@ -87,16 +87,15 @@ void* AptUpdateZombieVector(char bAll);
 //                                       display-list/listener state before the GC pass.
 //   AptAnimationTarget::CleanRemList @0x82B0...  -- drain the remove list.
 //   ~AptAnimationTarget              @0x82AFF790 -- the 88-byte director destructor.
-void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim);
-void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim);
-void AptAnimationTarget_Destruct(AptAnimationTarget* pAnim);
+// AptAnimationTarget::PreDestroy is now called directly on the director (the AptAnimationTarget_PreDestroy shim is retired).
+// AptAnimationTarget::CleanRemList is now called directly (static member; the AptAnimationTarget_CleanRemList shim is retired).
+// ~AptAnimationTarget is now invoked explicitly on the director (the AptAnimationTarget_Destruct shim is retired).
 
 // FLAG (un-homed): ~AptLoader @0x82B... -- the X360 loader destructor drains the
 // weak loaded-file list before the block is freed. AptLoader has no homed dtor
 // (its request-layer reconstruction added no owned state needing destruction);
-// the list-drain is part of the deferred loader-completion TU. Declared here so
-// the teardown matches the console's `~AptLoader; Deallocate` sequence.
-void AptLoader_Destruct(AptLoader* pLoader);
+// the list-drain is part of the deferred loader-completion TU. Shutdown calls the
+// explicit `pLoader->~AptLoader()` directly (the console's `~AptLoader; Deallocate`).
 
 // ---------------------------------------------------------------------
 // AptTarget::AptTarget @0x82B00160 -- pool-allocate the context's owned
@@ -187,7 +186,7 @@ AptTarget::AptTarget(const u32* pParams)
 //  These are the pieces CgsGui::AptAux::InitializeApt @0x82848E50 runs after the
 //  allocator/update/render inits to stand up + select the per-process Apt context;
 //  the X360 InitializeApt is itself un-reconstructed (its callees are these), so the
-//  host bring-up (BrnAptRuntimeBringUp.cpp) calls these directly. Homed here in the
+//  GUI Apt host (BrnGuiAptRuntime.cpp) calls these directly. Homed here in the
 //  AptTarget TU (it owns the target globals + the ctor these drive).
 //
 //  LIST: off_8324E570 (gpAptTargetCurrent) is the HEAD of the instance list; each
@@ -345,8 +344,8 @@ void AptTarget::Shutdown()
     // ---- predestroy the animation director (release its owned state) ----
     if (mpAnimationTarget)
     {
-        AptAnimationTarget_PreDestroy(mpAnimationTarget);
-        AptAnimationTarget_CleanRemList(mpAnimationTarget);
+                mpAnimationTarget->PreDestroy();
+        AptAnimationTarget::CleanRemList();
     }
 
     // ---- retire all pending zombies ----
@@ -356,7 +355,7 @@ void AptTarget::Shutdown()
     AptLoader* pLoader = mpLoader;                  // v5 = *(this + 0x1C)
     if (pLoader)
     {
-        AptLoader_Destruct(pLoader);                // ~AptLoader (drains the list -- un-homed)
+        pLoader->~AptLoader();                       // console: explicit ~AptLoader (drains the loaded-file list)
         gpAptPseudoDataPool->Deallocate(pLoader, sizeof(AptLoader));   // Deallocate(pool, v5, 4)
     }
 
@@ -368,7 +367,7 @@ void AptTarget::Shutdown()
     AptAnimationTarget* pAnim = mpAnimationTarget;  // v7 = *(this + 0x18)
     if (pAnim)
     {
-        AptAnimationTarget_Destruct(pAnim);         // ~AptAnimationTarget
+        pAnim->~AptAnimationTarget();               // ~AptAnimationTarget
         gpAptPseudoDataPool->Deallocate(pAnim, sizeof(AptAnimationTarget));   // Deallocate(pool, v7, 88)
     }
 
@@ -428,19 +427,8 @@ AptTarget* GetTarget()
 // == mpLoader). Routed through the named member so the x64 layout stays correct
 // (the AptLoader.h FLAG that introduced this accessor instead of the literal offset).
 // ---------------------------------------------------------------------
-AptLoader* AptTarget_GetLoader(AptTarget* pTarget)
+AptLoader* AptTarget::GetLoader()
 {
-    return pTarget->mpLoader;   // *(this + 7) == +0x1C
+    return mpLoader;   // *(this + 7) == +0x1C
 }
 
-// ---------------------------------------------------------------------
-// AptLoader_Destruct -- run ~AptLoader (drain the weak loaded-file list + cancel
-// every still-registered preloaded animation). PS3 _ZN9AptLoaderD1Ev/D2Ev
-// @0xF440B8/@0xF44198; the body is homed as AptLoader::~AptLoader (AptLoader.cpp
-// @0x82AFF958). This shim is the named-callee Shutdown invokes (the console emits a
-// direct `~AptLoader; Deallocate` -- the explicit destructor call, no block free).
-// ---------------------------------------------------------------------
-void AptLoader_Destruct(AptLoader* pLoader)
-{
-    pLoader->~AptLoader();
-}

@@ -41,4 +41,19 @@ public:
 
     // CleanAll @0x82AE4A40 -- the full Apt value-pool teardown (see the header).
     static void CleanAll();
+
+    // CleanUnreachable -- the PARTIAL sweep AptUpdate @0x82B0DB68 runs when the
+    // zombies-dirty flag is raised (AptPartialGarbageCollection): mark the live
+    // value graph, release the unreachable values. Its X360 body has no
+    // per-address export in the dump set yet; declared for the AptUpdate call,
+    // body pending export + reconstruction (AptRenderLinkStubs.cpp meanwhile).
+    static void CleanUnreachable();
 };
+
+// AptPartialGarbageCollection @0x82ADD2A0 -- mark that a partial sweep is
+// needed after animation load completion.
+void AptPartialGarbageCollection();
+
+// AptFlushInputQueue @0x82ADD270 -- clear the current target's queued inputs
+// unless saved-input playback is active.
+void AptFlushInputQueue();

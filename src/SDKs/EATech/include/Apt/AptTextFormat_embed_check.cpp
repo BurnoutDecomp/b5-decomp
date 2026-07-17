@@ -7,6 +7,7 @@
 
 namespace
 {
+    // FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
     void AptTextFormat_EmbedCheck(AptTextFormat* pFmt)
     {
         TextFormat* pRec = &pFmt->mFormat;     // +0x20 embedded record

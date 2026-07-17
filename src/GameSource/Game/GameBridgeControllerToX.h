@@ -29,6 +29,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h" // CgsInput::InputIO::ActionInfo (action slot read by name)
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"       // CgsGui::GuiEventControllerInput* / ActiveUserIndex / Axis / SetLanguage
 
 #include <cstring>   // memcpy
 
@@ -95,51 +96,21 @@ namespace BrnGame
     };
 
     // ========================================================================
-    // CgsGui::GuiModule + its GUI-event payload family. UN-HOMED -- FLAGGED placeholder.
-    // The game module embeds a CgsGui::GuiModule at +7252512; the ToGui bridge calls its
-    // AddGuiEvent<TEvent>(InputBuffer*, TEvent*, OutputBuffer*) template for each GUI event it
-    // synthesises from the pad record. Modelled minimally so the bridge references everything by
-    // name; replace with the real CgsGui GUI module when it is reconstructed.
+    // The GUI event sink is the REAL CgsGui::GuiModule::AddGuiEvent<T> now
+    // (GameShared/GameClasses/Gui/CgsGuiModule.h; instances @0x823DA8A8 etc.), pushing
+    // onto the GUI module INPUT buffer's inbound queue (CgsGuiModuleIO::InputBuffer::
+    // GetGuiEvents @0x8284F238). The payload types are the real CgsGui GuiEvent<N>
+    // records (CgsGuiEventTypeDefs.h). The former placeholder sink is retired.
     // ========================================================================
 }
 
-namespace CgsGui
-{
-    // The GUI module's per-frame output buffer the bridge threads through AddGuiEvent is
-    // CgsGui::CgsGuiModuleIO::OutputBuffer (declared as a placeholder in BrnGameModule.hpp). The
-    // bridge only forwards the pointer it is handed.
-
-    // GUI-event payloads (one per AddGuiEvent<T> instantiation the bridge uses). Each carries only
-    // the fields the bridge stores. FLAG: field names are from the bridge's stores, not DWARF.
-    struct GuiEventActiveUserIndex      { s32 miActiveUserIndex; };          // {-1 or pad index}
-    struct GuiEventControllerInputPressed  { s32 miPort; s32 miActionId; };  // {0, action id}
-    struct GuiEventControllerInputDown     { s32 miPort; s32 miActionId; };
-    struct GuiEventControllerInputReleased { s32 miPort; s32 miActionId; };
-    struct GuiEventControllerAxis       { s32 miAxisId; f32 mfX; f32 mfY; }; // {axis, x, y}
-    struct GuiControllerDisconnected    { s32 miPort; s32 miReason; };
-    struct GuiEventSetLanguage          { s32 miLanguageId; };
-}
 namespace BrnGui
 {
-    struct GuiEventToggleChangeCarMessage { s32 miUnused; };  // empty-payload toggle event
-}
-
-namespace CgsGui
-{
-    // CgsGui::GuiModule -- UN-HOMED placeholder. Exposes the AddGuiEvent<T> template surface the
-    // ToGui bridge calls. The real module enqueues each event into the GUI input buffer; here the
-    // template is a faithful no-store sink (it accepts the payload by-name) -- the parity contract
-    // for this TU is WHICH events are synthesised from WHICH pad bits, which the bridge body encodes.
-    class GuiModule
+    // The change-car toggle request. Payload-less; the X360 AddGuiEvent instance
+    // @0x823DAA18 pushes it as event id 540 with the 1-byte payload marker. Homed here
+    // until a BrnGui event-type-defs home exists (its producers are this bridge + the
+    // front-end car-select flow).
+    struct GuiEventToggleChangeCarMessage : public CgsGui::GuiEvent<540>
     {
-    public:
-        template <typename TEvent>
-        void AddGuiEvent(TEvent* lpEvent, void* lpOutputBuffer)
-        {
-            // FLAG: real CgsGui::GuiModule enqueues *lpEvent into its input buffer. Modelled as a
-            // by-name sink until the GUI module + its event queue are homed.
-            (void)lpEvent;
-            (void)lpOutputBuffer;
-        }
     };
 }

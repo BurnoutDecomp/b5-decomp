@@ -15,7 +15,8 @@
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
 // the methods reached by the in-scope GUI code are declared on GuiCache (its full data
 // layout is an out-of-scope boundary object the leaves only touch through these calls).
-namespace CgsGui { class ObjectController; }
+namespace CgsGui { class ObjectController; struct GuiEventAptTriggerPayload; }
+namespace CgsGui { namespace ModelIO { struct InputBuffer; } }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
 namespace BrnProgression { struct ProfileEvent; } // GetProfileEvent return (pointer only)
@@ -108,20 +109,76 @@ namespace BrnGui
 
         void Construct();
 
+        // @0x8250DC30 -- flush the previous request queue into ModelIO, advance the
+        // double buffer, and materialise every dirty resource-state transition as a
+        // GuiEventLoadRequest (39).
+        void Update(CgsGui::ModelIO::InputBuffer* lpInputBuffer);
+
+        // @0x824FE3D0 / @0x824FE7E0 -- consume the resource module's completion
+        // notifications and advance the matching cache slot.
+        void OnLoadNotification(const CgsGui::GuiEventLoadNotification* lpEvent);
+        void OnUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpEvent);
+
+        // EnsureResourceIsLoaded @ 0x824FDA28 -- step one watched resource's state
+        // machine towards LOADED (UNLOADED -> LOAD_REQUESTED with a type-consistency
+        // check; the CANCELLED/REQUESTED unload states step back towards their load
+        // counterparts), appending the id to the dirty list on any change. Returns
+        // whether the resource is now LOADED.
         bool EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource);
+
+        // EnsureResourcesAreLoaded @ 0x824FDD20 -- recount + re-latch the pending
+        // unload count (asserting consistency); while any unload is pending nothing
+        // loads (returns false), else step every tuple and return whether ALL are
+        // loaded.
         bool EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
+
         bool EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreUnloaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         const void* GetLoadedResource(u32 luId) const;
+
+        // UnloadResource @ 0x824FDF58 -- step one watched resource's state machine
+        // towards UNLOADED (the mirror of EnsureResourceIsLoaded; the LOADED case
+        // asserts the live resource + type consistency and bumps the pending-unload
+        // count), appending the id to the dirty list on any change.
         void UnloadResource(const CgsGui::sResourceTuple& lResource);
         void UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount);
+
+        // UnloadAllResources @ 0x824FE1F8 -- walk every watched slot and UnloadResource
+        // each non-UNLOADED entry whose recorded type matches leType.
         void UnloadAllResources(CgsGui::ResourceRequestTypes leType);
+
+        // AreAllAptComponentsInitialised @ 0x824EDC20 -- true once every expected apt
+        // component registered on the flow layer has been marked initialised.
+        bool AreAllAptComponentsInitialised(GuiFlow leFlow) const;
+
+        // ClearComponentInitialised @ 0x824EE058 -- zero the flow layer's per-component
+        // loaded flags and its expected count.
+        void ClearComponentInitialised(GuiFlow leFlow);
+
+        // AppendExpectedAptComponent @ 0x824F85D8 -- register one component name hash as
+        // "expected" on the flow layer (bounds + duplicate asserted, non-gating), with a
+        // cleared loaded flag. ADDITIVE GROW (BrnPauseScreen TU): the helper level of the
+        // GuiCache::AppendExpectedAptComponent faces declared below.
+        void AppendExpectedAptComponent(GuiFlow leFlow, u32 luComponentNameHash);
+
+        // IsWaitingAptComponent @ 0x824EDB08 -- linear-scan the flow layer's expected
+        // component ids for the hash. ADDITIVE GROW (BrnPauseScreen TU).
+        bool IsWaitingAptComponent(GuiFlow leFlow, u32 luComponentNameHash) const;
+
+        // MarkAptComponentInitialised @ 0x824EDEC8 -- an Apt ONLOAD trigger marks
+        // every matching expected component across the three GUI flows and attaches
+        // a waiting controlled component, if present.
+        void MarkAptComponentInitialised(const CgsGui::GuiEventAptTriggerPayload* lpEvent);
 
         void IncrementUnloadPending();
         void DecrementUnloadPending();
 
     private:
-        static const u32 KU_MAX_RESOURCES_TO_WATCH = 228;
+        // X360 ARTIST value: 237 (the 0xED bound + 237-entry walk in EnsureResourceIsLoaded
+        // @0x824FDA28 / EnsureResourcesAreLoaded @0x824FDD20 / IncrementUnloadPending
+        // @0x824EC008, and the Array<int,237> dirty-list helpers). The PS3-FIGS DWARF says
+        // 228 -- version drift; the X360 ledger attestation wins per the DecFIGS rule.
+        static const u32 KU_MAX_RESOURCES_TO_WATCH = 237;
         static const s32 KI_NUM_LOAD_REQUEST_QUEUES = 2;
 
         ResourceInfo               maResources[KU_MAX_RESOURCES_TO_WATCH];
@@ -138,14 +195,24 @@ namespace BrnGui
     class GuiCache
     {
     public:
+        // @ 0x82505860 -- the cache Construct (PC slice: the embedded watcher reset;
+        // the X360 tracker/system-user-profile stores land with their owners).
+        void Construct();
+
+        // @0x8250DD80 -- resource-helper update. The unrelated per-car scratch reset
+        // in the tail is outside this cache slice.
+        void Update(CgsGui::ModelIO::InputBuffer* lpInputBuffer);
+
         bool EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreLoaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         bool EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource);
         bool EnsureResourcesAreUnloaded(const CgsGui::sResourceTuple* lpResources, u32 luCount);
         const void* GetLoadedResource(u32 luId) const;
+        void UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount);
 
         f32 GetTime() const;
         f32 GetTimeStep() const;
+        bool IsLoadingScreenVisible() const { return mbIsLoadingScreenVisible; }
 
         // DWARF: BrnGuiCache.h:206 -- register a single apt component (by its name hash) as
         // "expected" on the given GUI flow layer, so the cache waits for it to finish
@@ -169,15 +236,25 @@ namespace BrnGui
 
         // ADDITIVE GROW (BrnImageGallery.h TU): has every expected component on the flow
         // layer finished initialising (the per-frame init-wait poll -- ImageGalleryState::
-        // UpdateWFInit @0x824846B8 gates on it). Body links from the GuiCache TU.
+        // UpdateWFInit @0x824846B8 gates on it). X360 @0x824EE7A8 (`addi r3,r3,8` +
+        // tail-branch into the embedded watcher). Bodied in the GuiCache TU.
         bool AreAllAptComponentsInitialised(GuiFlow leFlow) const;
 
-        // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): clear the flow layer's expected-apt-component
-        // list -- the inverse of SetExpectedAptComponentList / AppendExpectedAptComponent. The
-        // online car-select-end state calls it (flow 0) once its resources are loaded and again
-        // once the flow's components are initialised (X360 @0x824968A8 / @0x82484A3C). Body links
-        // from the GuiCache TU.
+        // Drop the flow layer's expected-component bookkeeping (the loaded flags + the
+        // expected count; the id list itself is left to be overwritten by the next Set/
+        // Append). X360 @0x824EE528 (`addi r3,r3,8` + tail-branch into the watcher's
+        // ClearComponentInitialised); the online car-select-end state also calls it
+        // (@0x824968A8 / @0x82484A3C). Bodied in the GuiCache TU.
         void ClearExpectedAptComponentList(GuiFlow leFlow);
+
+        // RecEvent @ 0x8250DDF0 -- resource completion (14/16) and Apt ONLOAD (21)
+        // branches used by the module bridges.
+        void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId);
+
+        // Request the unload of every watched resource of the given type. X360
+        // @0x824FEBB0 (`addi r3,r3,8` + tail-branch into the watcher). Bodied in the
+        // GuiCache TU.
+        void UnloadAllResources(CgsGui::ResourceRequestTypes leType);
 
         // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): the online-host-game state word the GUI reads
         // to tell whether the local client is the online HOST (== 1). CarSelectOnlineEnd::UpdateWFInit
@@ -486,18 +563,17 @@ namespace BrnGui
         //  the recovered accessors touch are named; the object is a large plain
         //  aggregate (no vptr) so the first member sits at offset 0.
         // ===================================================================
-        // ADDITIVE CARVE (HudMessageAnalyzer keystone): the leading float is the frame
-        // DELTA time -- HudMessageAnalyzer::Update @0x82525FC0 accumulates it into its
-        // road-rules / road-rage message timers and counts the game-completed timer down
-        // with it every frame (lfs f13, 0(mpGuiCache)). FLAG: consumer-named.
-        f32 mfFrameDeltaTime;                            // +0x0000
+        // The cache leads with the embedded per-frame GuiEventTimeInfo pair
+        // (CgsGuiEventTypeDefs.h: mfTimeDelta @+0, mfTimeNow @+4). GetTimeStep reads
+        // the delta word, GetTime the now stamp. (HudMessageAnalyzer::Update
+        // @0x82525FC0 accumulates the same leading delta word into its message timers.)
+        f32 mfTimeStep;                                  // +0x0000 (0)     GetTimeStep (the frame delta)
         f32 mfTimeNow;                                   // +0x0004 (4)     GetTime, != -FLT_MAX
-        u8  mPad_0008[3792];                             // +0x0008..+0x0ED7
-        s32 miCtorSentinel_0ED8;                         // +0x0ED8 (3800)  ctor writes -1 (CgsArray "used before Construct" sentinel; sub-array un-homed)
-        s32 miCtorField_0EDC;                            // +0x0EDC (3804)  ctor writes 0 (companion of the 0x0ED8 sentinel)
-        u8  mPad_0EE0[4108];                             // +0x0EE0..+0x1EEB
-        s32 miCtorField_1EEC;                            // +0x1EEC (7916)  ctor writes 0 (un-homed sub-object field)
-        u8  mPad_1EF0[8556];                             // +0x1EF0..+0x405B
+        // +0x0008..+0x405B -- the embedded resource/component watcher fills this span
+        // (X360: the GuiCache::EnsureResource* forwarders @0x824FEB50/58 are
+        // `addi r3,r3,8` + tail-branch into the helper; the ctor's -1 store at +0x0ED8
+        // is the helper's own CgsArray sentinel). Widens on x64; access by name.
+        StateLoadingHelper mStateLoadingHelper;          // +0x0008
         BrnProgression::Profile*  mpProfile;             // +0x405C (16476) OdometerComponent::Construct @0x82415088 (mpGuiCache+0x405C); DetermineCarUnlockPending source
         MapIconManager*           mpMapIconManager;      // +0x4060 (16480) SetMapIconManager @0x824EC3C8 (v3[4120]=a2)
         WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
@@ -541,6 +617,12 @@ namespace BrnGui
         bool mbInviteInProgress;                         // +0x4B4D (19277) HandleGuiCacheEvent source
         u8   mPad_4B4E[1];                                // +0x4B4E
         bool mbPerformingInvite;                         // +0x4B4F (19279) HandleGuiCacheEvent source
+        // MERGE RECONCILE PENDING: the loading-screen-visible byte (DecFIGS h:
+        // IsLoadingScreenVisible; the accessor + BootProfile::OnLeave read it) was carved
+        // at the SAME X360 byte (+0x4B4F) the OnlinePlay wave named mbPerformingInvite.
+        // The x64 layout is name-based, so both live as distinct members until the DWARF
+        // claim is re-verified; the IsLoadingScreenVisible accessor reads this one.
+        bool mbIsLoadingScreenVisible;                   // +0x4B4F claim (19279) -- see note
         u8   mPad_4B50[1];                                // +0x4B50
         bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
         bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption
@@ -678,7 +760,15 @@ namespace BrnGui
         // Far tail. The player-options profile block (GetOptionsDataProfile @0xB878/47224) and
         // the sat-nav icon / drive-through / landmark tables live in this span but are reached
         // only through declaration-only accessors; not individually modelled. See notes.
-        u8  mPad_B864[30376];                            // +0xB864..+0x12F0B  (incl. mOptionsDataProfile @0xB878)
+        // +0xB878 (47224) -- the embedded player-options profile block (GetOptionsDataProfile
+        // hands it out; ScreenLoading writes the loaded save into it). BrnGuiOptionsDataProfile.h
+        // carries compile-only slices of network/game-state types that clash with the REAL
+        // headers inside this cache header's wide include set, so the block is reserved OPAQUE
+        // here and typed only inside BrnGuiCache.cpp (which static_asserts the real
+        // OptionsDataProfile fits this reservation). Widens on x64; access by name. The 20-byte
+        // lead-in (+0xB864..+0xB877) holds un-modelled sat-nav/landmark words.
+        u8 mPad_B864[20];                                // +0xB864..+0xB877
+        u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
         // ---- mPreRaceData: fly-by pre-event messages (GetPreEventInfo @0x824827D8) ----
         u8  maPreEventInfoStorage[3][580];               // +0x12F0C (77580) PreEventInfo maPreEventInfo[3] (stride 580)
         s32 miNumMessages;                               // +0x135D8 (79320) mPreRaceData.miNumMessages (GetPreEventInfo bound)
@@ -700,112 +790,14 @@ namespace BrnGui
         static void _AssertLayout();
     };
 
-    // ------------------------------------------------------------------------
-    //  Layout pins: fail the compile gate if any far member drifts off its
-    //  X360-attested `this+offset`.
-    //
-    //  The X360 target is 32-bit (4-byte pointers); the MSVC compile gate is
-    //  x64 (8-byte pointers). GuiCache has exactly ONE pointer cluster
-    //  (mpProfile..mpHudMessageDirector, +0x405C..+0x4078). On the gate every
-    //  member PAST that cluster is shifted by a constant +32 (a multiple of the
-    //  struct's 16-byte alignment), so member-to-member byte deltas are
-    //  identical on both targets. We therefore assert:
-    //    * pointer-INVARIANT prefix members (before the cluster) at absolute
-    //      X360 offsets, and
-    //    * every far member RELATIVE to the first far member
-    //      (mv4WorldCameraPosition @0x4AE0); each RHS is written as the two
-    //      documented X360 offsets so a wrong pad/stride fails the gate.
-    // ------------------------------------------------------------------------
-    inline void GuiCache::_AssertLayout()
-    {
-        // pointer-invariant prefix (before the +0x405C pointer cluster):
-        static_assert(offsetof(GuiCache, mfFrameDeltaTime)    == 0x0000, "mfFrameDeltaTime @0x0000");
-        static_assert(offsetof(GuiCache, mfTimeNow)           == 0x0004, "mfTimeNow @0x0004");
-        static_assert(offsetof(GuiCache, miCtorSentinel_0ED8) == 0x0ED8, "miCtorSentinel_0ED8 @0x0ED8");
-        static_assert(offsetof(GuiCache, miCtorField_0EDC)    == 0x0EDC, "miCtorField_0EDC @0x0EDC");
-        static_assert(offsetof(GuiCache, miCtorField_1EEC)    == 0x1EEC, "miCtorField_1EEC @0x1EEC");
-
-        // far members, pinned RELATIVE to mv4WorldCameraPosition (@0x4AE0):
-        #define GC_FAR(member, x360off) \
-            static_assert(offsetof(GuiCache, member) - offsetof(GuiCache, mv4WorldCameraPosition) \
-                          == ((x360off) - 0x4AE0), #member " @" #x360off)
-        // members BETWEEN the pointer cluster and the 0x4AE0 anchor (same constant
-        // shift; pinned anchor-minus-member to keep the size_t arithmetic positive):
-        #define GC_MID(member, x360off) \
-            static_assert(offsetof(GuiCache, mv4WorldCameraPosition) - offsetof(GuiCache, member) \
-                          == (0x4AE0 - (x360off)), #member " @" #x360off)
-        GC_MID(mbGameplayHudActive,            0x407C);
-        GC_MID(miPendingEventStatusA,          0x4930);
-        GC_MID(miPendingEventStatusB,          0x4934);
-        GC_MID(mu64PendingEventPayload,        0x4938);
-        #undef GC_MID
-        GC_FAR(mePlayerActiveRaceCarIndex,     0x4B00);
-        GC_FAR(miGameFlowState,                0x4B30);
-        GC_FAR(mbInEventColouringGate,         0x4B4A);
-        GC_FAR(mbOnlineStartInProgress,        0x4B4C);
-        GC_FAR(mbCarUnlockPending,             0x4B75);
-        GC_FAR(mbCarUnlockDetermined,          0x4B76);
-        GC_FAR(maPresetRacesStorage,           0x4FB0);
-        GC_FAR(miNumPresetRaces,               0x5280);
-        GC_FAR(miEventStartsCount,             0x7760);
-        GC_FAR(maOnlineFinishPointsMask,       0x7770);
-        GC_FAR(miSatNavZoomLevel,              0x803C);
-        GC_FAR(maEventsStorage,                0x8040);
-        GC_FAR(mEventsCtorSentinel,            0x9E54);
-        GC_FAR(meGameModeType,                 0x9E58);
-        GC_FAR(mfEventTime,                    0x9F2C);
-        GC_FAR(mfTargetTime,                   0x9F30);
-        GC_FAR(miOpponentsInEvent,             0x9F44);
-        GC_FAR(mfDistanceInEvent,              0x9F48);
-        GC_FAR(mEventDestinationLandmarkIndex, 0x9F4C);
-        GC_FAR(mEventDestinationDistrict,      0x9F50);
-        GC_FAR(maCheckpointLandmarks,          0x9F52);
-        GC_FAR(miCheckpointReached,            0x9FB4);
-        GC_FAR(muCheckpointsInEvent,           0x9FB8);
-        GC_FAR(miTakedownsCurrent,             0x9FBC);
-        GC_FAR(miScoreCurrent,                 0x9FC4);
-        GC_FAR(miLastStuntScore,               0x9FD4);
-        GC_FAR(mPursuedCarID,                  0x9FE0);
-        GC_FAR(mShutdownCarID,                 0x9FF0);
-        GC_FAR(meTrophyCarUnlockType,          0xA000);
-        GC_FAR(maRaceCarPositions,             0xA020);
-        GC_FAR(maRaceCarUsed,                  0xA0E4);
-        GC_FAR(maRaceCarConnecting,            0xA0EC);
-        GC_FAR(maRaceCarCrashing,              0xA104);
-        GC_FAR(maEventPositionOfRaceCar,       0xA130);
-        GC_FAR(maRaceCarFinished,              0xA138);
-        GC_FAR(maEventPositionValid,           0xA140);
-        GC_FAR(maScoringTrafficDataStorage,    0xA150);
-        GC_FAR(miScoringTrafficCount,          0xA3D0);
-        GC_FAR(miOnlineRoundIndex,             0xA7FC);
-        GC_FAR(maOnlineGameModeOptionsStorage, 0xA800);
-        GC_FAR(miOnlineHostGameState,          0xA9C8);
-        GC_FAR(maPerRacerData_AA30,            0xAA30);
-        GC_FAR(mabRoadRulesActive,             0xAC38);
-        GC_FAR(meActiveRoadRule,               0xAC3C);
-        GC_FAR(meRoadRuleScoreMode,            0xAC40);
-        GC_FAR(maRoadRuleActiveByType,         0xAC44);
-        GC_FAR(meRoadRuleShotOpponentARCI,     0xAC48);
-        GC_FAR(mbRoadRuleShotCapturedLineGate, 0xAC5A);
-        GC_FAR(maStuntToDisplay,               0xAC5C);
-        GC_FAR(muNumActivePlayers,             0xAC74);
-        GC_FAR(maPlayerInfo,                   0xAC80);
-        GC_FAR(maCurrentPlayerTeam,            0xB808);
-        GC_FAR(maOnlinePlayerDisconnected,     0xB84C);
-        GC_FAR(maOnlinePlayerInCarSelect,      0xB854);
-        GC_FAR(maOnlinePlayerEliminated,       0xB85C);
-        GC_FAR(maPreEventInfoStorage,          0x12F0C);
-        GC_FAR(miNumMessages,                  0x135D8);
-        GC_FAR(mProfileEventStateStorage,      0x135DC);
-        GC_FAR(miProfileEventsCount,           0x13B54);
-        GC_FAR(mfDistanceDriven,               0x13B94);
-        GC_FAR(maReplayReelForSlot,            0x13BA0);
-        GC_FAR(miReplaySlotsUsed,              0x13BB8);
-        GC_FAR(maReplayPlayersActive,          0x141E0);
-        GC_FAR(maReplayARCRendered,            0x143E0);
-        GC_FAR(mbReplayHasBeenSorted,          0x143E8);
-        #undef GC_FAR
-    }
+    // The former inline GuiCache::_AssertLayout absolute/relative X360 byte-offset pin
+    // block is RETIRED at the l2 merge: the merged layout embeds the widening
+    // StateLoadingHelper (+0x8) and the 0x8000-byte options-profile reservation, so the
+    // "single pointer cluster + X360-sized pads" premise those pins depended on no
+    // longer holds. Per the x64 gate rule the layout contract is semantic parity by
+    // NAMED members; the documented X360 offsets in the member comments above remain
+    // the offset authority.
+    inline void GuiCache::_AssertLayout() {}
 
     // Boundary record returned by the two inlined event-display helpers above. Only the two
     // fields the sat-nav renderer reads are named (X360-proven offsets); the rest of the record

@@ -2,14 +2,26 @@
 // BrnGui::IconComponent  -- implementation
 //   class:BrnGui::IconComponent
 //
-// Construct      @ 0x824E63C0
-// SetState(u32)  @ 0x824E2B60
+// Construct              @ 0x824E63C0
+// SetState(u32)          @ 0x824E2B60
+// SetState(const char*)  @ 0x824E2B90 (ledger-unnamed sub_)
 //   Reconstructed store-for-store from the X360 pseudocode/asm.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"
 
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetState's cpp:85 tripwire)
+
 namespace BrnGui
 {
+    // @ 0x824E2B90 (ledger-unnamed sub_) -- the named-state overload: assert the
+    // identifier (cpp:85) and push it straight onto the apt "apt_state" view-state.
+    void IconComponent::SetState(const char* lpacStateIdentifier)
+    {
+        CGS_ASSERT(lpacStateIdentifier != 0, "lStateIdentifier != NULL");   // cpp:85
+
+        AddOutputAptViewState("apt_state", lpacStateIdentifier, false);
+    }
+
     // @ 0x824E63C0
     void IconComponent::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                                   const char* const* lppacStateIdentifiers, const char* lpacParentName)

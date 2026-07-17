@@ -2,6 +2,7 @@
 
 #include "GameSource/Replays/BrnReplayShared.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::StrCpy (Construct's bounded name copy)
 
 #include <cstring>
 #include <cstddef>  // offsetof
@@ -147,4 +148,45 @@ namespace BrnReplays
     template s32 BaseSerialiser::ReadVariableQueue<13312, 16>(CgsModule::VariableEventQueue<13312, 16>*);
     template s32 BaseSerialiser::ReadVariableQueue<512, 16>(CgsModule::VariableEventQueue<512, 16>*);
     template s32 BaseSerialiser::WriteVariableQueue<13312, 16>(CgsModule::VariableEventQueue<13312, 16>*);
+
+    // @ 0x8264C280 -- the shared leaf-serialiser initialiser: stamp the id/context
+    // and buffer sizes, zero every live-state member, latch the streaming flag and
+    // copy the debug name (32-byte cap with the CgsStringUtils.h:65 length tripwire
+    // carried by CgsCore::StrCpy; "<NoName>" when none is given). X360 stores, by
+    // name: meId = liId (+0x28) / meContext = liContext (+0x2C) -- the second
+    // parameter feeds the CONTEXT word, not the mode; meMode / mbLocked / mpBuffer /
+    // miBufferUsed / miBufferRead / mpStaticBuffer / mbIsKeyFrame all zeroed;
+    // miBufferSize / miStaticBufferSize from the args (the X360 zeroes the stale
+    // DWARF +0x1C static-size slot and writes the live +0x24 extension slot -- one
+    // named member here); the flag byte lands at X360 +0x5B, the streaming gate
+    // (modelled mbAllowStreaming; the header's documented +0x5A is the known
+    // X360-extension tail drift). The X360's r3 at exit is a dead this-derived
+    // tail value; 0 here.
+    s32 BaseSerialiser::Construct(s32 liId, s32 liContext, s32 liBufferSize,
+                                  s32 liStaticBufferSize, const char* lpcName, s32 liFlag)
+    {
+        meId               = static_cast<ESerialiserId>(liId);
+        meContext          = static_cast<ESerialiserContext>(liContext);
+        mpBuffer           = 0;
+        miBufferSize       = liBufferSize;
+        miBufferUsed       = 0;
+        miStaticBufferSize = liStaticBufferSize;
+        meMode             = E_MODE_IDLE;
+        mbLocked           = false;
+        miBufferRead       = 0;
+        mbIsKeyFrame       = false;
+        mbAllowStreaming   = (liFlag != 0);
+        mpStaticBuffer     = 0;
+
+        if (lpcName)
+        {
+            CgsCore::StrCpy(macName, KI_MAX_NAME_LENGTH, lpcName);
+        }
+        else
+        {
+            CgsCore::StrCpy(macName, KI_MAX_NAME_LENGTH, "<NoName>");
+        }
+
+        return 0;
+    }
 }

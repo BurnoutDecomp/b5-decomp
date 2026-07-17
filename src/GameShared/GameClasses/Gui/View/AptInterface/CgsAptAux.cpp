@@ -4,15 +4,47 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"     // CgsGui::AptCommunicator (the ext-object phase + the flush)
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"        // CgsDev::PerfMonCpu (the Update phase brackets)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf (the "_level%d" target path)
+#include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                          // BrnFlapt::TextFieldRef (its GetLanguageManager is bridged here)
 
 #include "SDKs/EATech/Apt/AptInit.h"                                            // Apt bring-up entry points (InitializeApt callees)
 #include "SDKs/EATech/include/Apt/AptTarget.h"                                  // AptCreateTargetInstance / AptChangeTargetInstance
+#include "SDKs/EATech/include/Apt/AptRenderWalk.h"                              // AptRenderTarget (the AptAux::Render walk entry)
 #include "SDKs/EATech/include/Apt/AptLoader.h"                                  // AptCompleteAnimationAsyncLoad (LoadAnimation forwards to it)
 #include "SDKs/EATech/include/Apt/AptSharedPtr.h"                               // AptSharedPtrIncRef/DecRef/Delete (LoadAnimation refcount)
 #include "SDKs/EATech/include/Apt/AptConstFile.h"                               // AptConstFile (the resolved const-file pointer type)
+#include "SDKs/EATech/include/Apt/AptGC.h"                                      // AptPartialGarbageCollection / AptFlushInputQueue
 
 #include <cstring>   // memset (zero-install the gAptFuncs slots)
 #include <cstdint>   // uintptr_t / uint64_t (x64 header-field resolution)
+
+// Dynamic-text render-data hooks: the Apt engine stores these next to the render
+// callback slots and AptRenderItemDynamicText calls them directly.
+extern void (*gpfnAptDrawTextRenderData)(intptr_t nZId, AptMaskRenderOperation eOp, int nTick);  // dword_8324E868
+extern void (*gpfnAptReleaseTextRenderData)(intptr_t nZId, int nOp);                             // dword_8324E864
+extern void (*gpAptFreeAnimationHook)(void* pDataBlock);                                        // off_1059C66C
+
+// AptLoadAnimation @0x82B07AC8 -- the engine "load a movie onto a target path" public
+// entry (LoadFlashAnimation @0x82849080 calls it with the "_level%d" path). Faithful
+// body at its SDK home, SDKs/EATech/Apt/Apt.cpp; declared by Apt.h (included above).
+
+namespace
+{
+    void DrawTextRenderData(intptr_t nZId, AptMaskRenderOperation eOp, int nTick)
+    {
+        (void)nTick;
+        CgsGui::AptCallbackRender::DrawString(
+            reinterpret_cast<AptAssetString>(nZId), eOp, 0);
+    }
+
+    void ReleaseTextRenderData(intptr_t nZId, int nOp)
+    {
+        CgsGui::AptCallbackRender::DeallocateString(
+            reinterpret_cast<AptAssetString>(nZId),
+            static_cast<u32>(nOp));
+    }
+}
 
 // =============================================================================
 // CgsGui::AptAux / CgsGui::AptAuxPointer + the Apt host user-function table.
@@ -78,6 +110,7 @@ namespace CgsGui
         // The two leading state words the guest seeds (`*(a1+4) = 3; *a1 = 0`).
         miState4 = 3;
         miState0 = 0;
+        mpAptTargetInstance = nullptr;
 
         // The communicator ext object does not exist yet (InitializeApt's ext phase
         // creates + registers it); null until then so UpdateComponents can gate on it.
@@ -133,32 +166,39 @@ namespace CgsGui
         gAptFuncs.pfnPushRenderFlags     = &AptCallbackRenderFlags::Push;
         gAptFuncs.pfnPopRenderFlags      = &AptCallbackRenderFlags::Pop;
 
+        // Dynamic text render-data slots live beside the host render table, but
+        // AptRenderItemDynamicText reaches them directly rather than through gAptFuncs.
+        gpfnAptDrawTextRenderData    = &DrawTextRenderData;
+        gpfnAptReleaseTextRenderData = &ReleaseTextRenderData;
+
         // ---- the non-render families this TU now homes (their hosts above) -------------------
         gAptFuncs.pfnMemFree               = &AptCallbackMemory::Free;
         gAptFuncs.pfnDebugAddSavedInput    = &AptCallbackDebug::AddSavedInput;
         gAptFuncs.pfnDebugSetScreenGrabPending = &AptCallbackDebug::SetScreenGrabPending;
-        gAptFuncs.pfnGetBytesTotal         = &AptCallbackFile::GetBytesTotal;
-        gAptFuncs.pfnGetBytesLoaded        = &AptCallbackFile::GetBytesLoaded;
-        gAptFuncs.pfnSetExternVariable     = &AptCallbackVariable::SetExternVariable;
-        gAptFuncs.pfnGetExternVariable     = &AptCallbackVariable::GetExternVariable;
-        gAptFuncs.pfnSendVariables         = &AptCallbackDeprecated::SendVariables;
-        gAptFuncs.pfnCommand               = &AptCallbackDeprecated::FsCommand;
-        gAptFuncs.pfnLoadVariablesNULL     = &AptCallbackDeprecated::LoadVariablesNULL;
-        gAptFuncs.pfnPointHitTest          = &AptCallbackDeprecated::PointHitTest;
-        gAptFuncs.pfnGetRealTimeClock      = &AptCallbackDeprecated::GetRealTimeClock;
+        gAptFuncs.pfnFreeAnimation          = &AptCallbackFile::FreeAnimation;
+        gAptFuncs.pfnLoadAnimationCompleted = &AptCallbackFile::LoadAnimationCompleted;
+        gAptFuncs.pfnGetBytesTotal          = &AptCallbackFile::GetBytesTotal;
+        gAptFuncs.pfnGetBytesLoaded         = &AptCallbackFile::GetBytesLoaded;
+        gAptFuncs.pfnOnUnload               = &AptCallbackFile::OnUnload;
+        gAptFuncs.pfnSetExternVariable      = &AptCallbackVariable::SetExternVariable;
+        gAptFuncs.pfnGetExternVariable      = &AptCallbackVariable::GetExternVariable;
+        gAptFuncs.pfnSendVariables          = &AptCallbackDeprecated::SendVariables;
+        gAptFuncs.pfnCommand                = &AptCallbackDeprecated::FsCommand;
+        gAptFuncs.pfnLoadVariablesNULL      = &AptCallbackDeprecated::LoadVariablesNULL;
+        gAptFuncs.pfnPointHitTest           = &AptCallbackDeprecated::PointHitTest;
+        gAptFuncs.pfnGetRealTimeClock       = &AptCallbackDeprecated::GetRealTimeClock;
+        gpAptFreeAnimationHook              = &AptCallbackFile::FreeAnimation;
 
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
         //   Memory      (pfnMemAlloc / pfnMemFreeSize)
         //   Debug       (pfnAssertFail / pfnDebugPrint)
-        //   File        (pfnLoadAnimation / pfnFreeAnimation / pfnFreeConstantTable /
-        //                pfnLoadAnimationCompleted / pfnOnUnload)
+        //   File        (pfnLoadAnimation / pfnFreeConstantTable)
         //   Variable    (pfnLoadVariables)
         //   Custom      (pfnCustomControlRender / pfnCustomControlUpdate / the Zid family)
         //   Deprecated  (pfnUninitializedVarAccess / pfnCustomSavedInputHandler /
         //                pfnPlaySavedInputsDone / pfnHandleZombieState)
         // are NOT installed here: those hosts are not reconstructed yet (several depend on the
-        // undeclared Apt C-API -- AptLoadAnimation / AptPartialGarbageCollection / ... -- or on
-        // CgsGui::AptCommunicator, neither of which has a reconstructed home). They remain null
+        // callbacks that do not yet have a reconstructed Apt/GUI owner. They remain null
         // (the ctor's value-init); installing them is a follow-on once those families land.
     }
 
@@ -206,14 +246,8 @@ namespace CgsGui
         AptRenderInitialize(liUpdated);
 
         // 4. *(this+8) = AptCreateTargetInstance(v7); 5. AptChangeTargetInstance(target).
-        AptTarget* lpTarget = AptCreateTargetInstance(lauCreateCfg);
-        // FLAG (partial AptAux slice): the console caches the created target at *(this+8);
-        // this AptAux slice models only mAptDataHandler/mRenderHandler (the +8 word overlaps
-        // mAptDataHandler), so the cache store is OMITTED. The target is globally reachable
-        // via GetTarget() (AptChangeTargetInstance publishes it into gpAptTarget + the TLS
-        // mirror), which is what every downstream reader actually uses -- so the observable
-        // "current context" is set faithfully without corrupting the partial-slice AptAux.
-        AptChangeTargetInstance(lpTarget);
+        mpAptTargetInstance = AptCreateTargetInstance(lauCreateCfg);
+        AptChangeTargetInstance(mpAptTargetInstance);
 
         // 6. The ext-object phase (UN-DEFERRED 2026-07-05): build the AS communicator
         //    extension and register it with the AS VM. The console does
@@ -229,6 +263,122 @@ namespace CgsGui
         //    AptUpdateInitialize, so the registration lands on a live hash.
         mpAptCommunicator = new AptCommunicator();   // pooled AptExtObject::operator new
         AptRegisterExtension(mpAptCommunicator);
+    }
+
+    bool AptAux::Prepare(CgsMemory::HeapMalloc* lpAllocator)
+    {
+        switch (miState0)
+        {
+        case 0:
+            miState0 = 1;
+            // fall through
+        case 1:
+            if (!mAptDataHandler.Prepare(lpAllocator))
+                return false;
+            miState0 = 2;
+            // fall through
+        case 2:
+            InitializeApt();
+            miState0 = 3;
+            // fall through
+        case 3:
+            miState4 = 0;
+            return true;
+        default:
+            CGS_ASSERT(false, "CgsGUI::AptAux::Prepare() Invalid State!");
+            return false;
+        }
+    }
+
+    bool AptAux::Release()
+    {
+        switch (miState4)
+        {
+        case 0:
+            miState4 = 1;
+            // The engine shutdown chain is reconstructed separately from ownership.
+            // Keep the live target intact until that chain is available.
+            // fall through
+        case 1:
+            miState4 = 2;
+            // fall through
+        case 2:
+            miState4 = 3;
+            miState0 = 0;
+            return true;
+        case 3:
+            miState0 = 0;
+            return true;
+        default:
+            CGS_ASSERT(false, "CgsGUI::AptAux::Release() Invalid State!");
+            return false;
+        }
+    }
+
+    // The per-frame CPU monitors AptAux::Update/Render bracket their phases with
+    // (X360 dword_82F33138 "AptAux - Upd Comps" / dword_82F33134 the movie-tick
+    // phase / dword_82F33130 the render walk). Registered by the un-homed
+    // perf-monitor setup TU; -1 handles no-op Start/StopMonitor until it lands.
+    static s32 giAptAuxUpdateComponentsMonitor = -1;   // dword_82F33138
+    static s32 giAptAuxUpdateTargetMonitor     = -1;   // dword_82F33134
+    static s32 giAptAuxRenderMonitor           = -1;   // dword_82F33130
+
+    // -------------------------------------------------------------------------
+    // AptAux::LoadFlashAnimation - X360 0x82849080. Load a movie onto a GUI level:
+    // assert the name (the console streams it -- the StrStream text collapses to the
+    // plain string per project convention) and the level (< 100), format the
+    // "_level%d" target path, and hand it to the engine's AptLoadAnimation.
+    // -------------------------------------------------------------------------
+    void AptAux::LoadFlashAnimation(const char* lpacFileName, s32 liTargetLevel)
+    {
+        CGS_ASSERT(lpacFileName != 0,
+                   "Invalid Flash file to load in AptDataHandler::LoadFlashAnimation");
+        CGS_ASSERT(liTargetLevel < 100, "Invalid level in AptAux::LoadFlashAnimation");
+
+        char lacTargetPath[16];
+        CgsCore::SPrintf(lacTargetPath, sizeof(lacTargetPath), "_level%d", liTargetLevel);
+        AptLoadAnimation(lpacFileName, lacTargetPath);
+    }
+
+    // -------------------------------------------------------------------------
+    // AptAux::Update - X360 0x82853B20. The per-frame Apt drive: assert Prepare
+    // finished (miState0 == 3), flush the component key/value store to the movie
+    // AS (UpdateComponents), then -- under the Apt mutex -- run the engine's
+    // per-target frame pacer (AptUpdateTarget(mpAptTargetInstance, ms, -1, 16):
+    // every depth layer, at most 16 banked frames). The X360 hard-returns 1.
+    // -------------------------------------------------------------------------
+    void AptAux::Update(s32 liDeltaMs)
+    {
+        CGS_ASSERT(miState0 == 3, "Update being called before Prepare is finished.");
+
+        CgsDev::PerfMonCpu::StartMonitor(giAptAuxUpdateComponentsMonitor);
+        UpdateComponents();
+        CgsDev::PerfMonCpu::StopMonitor(giAptAuxUpdateComponentsMonitor);
+
+        CgsDev::PerfMonCpu::StartMonitor(giAptAuxUpdateTargetMonitor);
+        mAptMutex.Lock();
+        AptUpdateTarget(mpAptTargetInstance, liDeltaMs, -1, 16);
+        mAptMutex.Unlock();
+        CgsDev::PerfMonCpu::StopMonitor(giAptAuxUpdateTargetMonitor);
+    }
+
+    // -------------------------------------------------------------------------
+    // AptAux::Render - X360 0x82848FB8. The per-frame Apt render drive
+    // ViewModule::RenderInternal @0x82858AF8 runs: assert Prepare finished
+    // (miState0 == 3; the console streams "Render being called before Prepare is
+    // finished." -- the StrStream text collapses to the plain string per project
+    // convention), then walk the target's render tree: AptRenderTarget(
+    // mpAptTargetInstance, liDeltaMs, -1) -- the elapsed milliseconds feed the
+    // consumed render-tick bank, every layer drawn. No mutex (the walk only READS
+    // the tree the update side committed). The X360 hard-returns 1.
+    // -------------------------------------------------------------------------
+    void AptAux::Render(s32 liDeltaMs)
+    {
+        CGS_ASSERT(miState0 == 3, "Render being called before Prepare is finished.");
+
+        CgsDev::PerfMonCpu::StartMonitor(giAptAuxRenderMonitor);
+        AptRenderTarget(mpAptTargetInstance, liDeltaMs, -1);
+        CgsDev::PerfMonCpu::StopMonitor(giAptAuxRenderMonitor);
     }
 
     // -------------------------------------------------------------------------
@@ -317,20 +467,36 @@ namespace CgsGui
         return 0;
     }
 
-    // =========================================================================
-    // FLAG (x64 converted 8-byte bundle): the host bring-up pre-locates the movie-root
-    // CHARACTER HEADER (0x09876543 signature scan -- it has the resource size the scan
-    // needs) and stashes it here before calling LoadAnimation. The console reads the root
-    // via pConstFile->mnDataRootOffset, but our converted .apt's dataRootOffset does not
-    // locate the type-9 movie root (its console layout diverged). When null, CompleteLoad
-    // falls back to the faithful console formula. Reset to null by the host after each load.
-    // =========================================================================
-    void* gAptLoadAnimRootOverride = nullptr;   // the located root char header (x64)
+    // X360 0x828495A8 (CgsGui::AptCallbackFile::FreeAnimation). The whole body is
+    // `li r11, 1; stw r11, 0x14(r3); blr`: mark the AptDataHeader state as loaded/free.
+    void AptCallbackFile::FreeAnimation(void* lpDataBlock)
+    {
+        static_cast<AptDataHeader*>(lpDataBlock)->meCurrentState =
+            AptDataHeader::E_APTDATASTATE_LOADED;
+    }
 
-    // The AptData resource span (base + size) the host stashes before LoadAnimation, so the
-    // native-8 AptMovie::resolve64 relocation walk can bounds-check every serialised offset
-    // slot (see the header). Zero => the walk treats every non-zero slot as a live offset
-    // (the pre-bounds behaviour). base == the load base == the AptData resource base.
+    // X360 0x828540E0 (CgsGui::AptCallbackFile::OnUnload). Assert the AptAux singleton
+    // exists, then remove the unloading movieclip from the communicator component table.
+    void AptCallbackFile::OnUnload(AptValue* lpValue)
+    {
+        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != nullptr, "AptAuxPointer::mpAptAuxInst");
+        AptCommunicator::RemoveExpiredAptComponent(lpValue);
+    }
+
+    // X360 0x828495B8 (CgsGui::AptCallbackFile::LoadAnimationCompleted). The
+    // whole body is two calls: AptPartialGarbageCollection(); AptFlushInputQueue().
+    void AptCallbackFile::LoadAnimationCompleted(const char* /*lpacBaseName*/,
+                                                 const char* /*lpacTargetName*/)
+    {
+        AptPartialGarbageCollection();
+        AptFlushInputQueue();
+    }
+
+    // The AptData resource span (base + size) LoadAnimation derives from the registered
+    // header before driving the completion, so the native-8 AptMovie::resolve64 relocation
+    // walk can bounds-check every serialised offset slot (see the header note). Zero => the
+    // walk treats every non-zero slot as a live offset (the pre-bounds behaviour). base ==
+    // the load base == the AptData resource base (the header sits at the resource start).
     uintptr_t gAptResourceSpanBase = 0;
     uint32_t  gAptResourceSpanSize = 0;
 
@@ -368,10 +534,10 @@ namespace CgsGui
         if (lpAptData == nullptr)
             return;
 
-        // FLAG (x64 converted 8-byte bundle): the console asserts AptData[5] (meCurrentState) is
-        // LOADED(1)/ACTIVE(2) and then sets it to ACTIVE(2). Our converted header is 8-byte-widened,
+        // FLAG (x64 native-8 bundle): the console asserts AptData[5] (meCurrentState) is
+        // LOADED(1)/ACTIVE(2) and then sets it to ACTIVE(2). The native-8 header is 8-byte-widened,
         // so meCurrentState does NOT sit at the u32-struct's +20 (that overlaps mpConstData's high
-        // half at +16); its real offset is ambiguous in the converted layout. The state precondition
+        // half at +16); its real offset is ambiguous in the widened layout. The state precondition
         // is moot here anyway -- the host loads the .apt SYNCHRONOUSLY before this call, so it is
         // always fully loaded, and the host's own load-once guard replaces the console's state=2
         // re-load gate. So the on-disk state read/write is skipped (not asserted / not written) to
@@ -381,23 +547,33 @@ namespace CgsGui
         // console's relocated mpAptData/mpConstData -- FLAG). The header sits at the resource base,
         // so base == the header address.
         //
-        // UN-COLLAPSED (2026-07-01): the converted (libapt2 SerializeChunks) header carries SIX
+        // UN-COLLAPSED (2026-07-01): the native-8 (libapt2 SerializeChunks) header carries SIX
         // 8-byte fields [name@0, baseName@8, aptData@0x10, const@0x18, geom@0x20, size@0x28] -- the
         // extra baseName shifts every field one slot past the console's [name, aptData, const, ...]
-        // order (FLAG: converter-format accommodation, see APT_CONVERTER_BUGS.md #2). pBase = the
+        // order (FLAG: native-8 header field order, see APT_CONVERTER_BUGS.md #2). pBase = the
         // "Apt Data:1:7:8" chunk (every serialised offset is chunk-relative), pConstFile = the
         // "Apt constant file" chunk (movieOffset@+0x18 locates the root; itemStart@+0x28 is the
         // constant-record table _parseStream resolves Push/DefineDictionary entries through) --
         // exactly the console's AptData[1]/AptData[2] pair and the XB1 CompleteLoad's a3/a4 pair.
         const uintptr_t luHeaderBase  = reinterpret_cast<uintptr_t>(lpAptData);
         const uintptr_t luAptDataOff  = static_cast<uintptr_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x10u));  // aptData (u64 @ +0x10)
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x10u));  // serialized .apt header: aptData off @+0x10
         const uintptr_t luConstOff    = static_cast<uintptr_t>(
-            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x18u));  // const   (u64 @ +0x18)
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x18u));  // serialized .apt header: const off @+0x18
         void* lpBase      = reinterpret_cast<void*>(luHeaderBase + luAptDataOff);
         void* lpConstFile = (luConstOff != 0)
                                 ? reinterpret_cast<void*>(luHeaderBase + luConstOff)
                                 : lpBase;   // degenerate header: keep the old collapse
+
+        // Publish the resource span for the native-8 relocation walk's bounds checks
+        // (FLAG x64; see the gAptResourceSpan* note): base = the header (== the resource
+        // start), size = the converted 6-field header's size slot @+0x28. Restored after
+        // the completion so nested loads (the import graph) re-derive their own span.
+        const uintptr_t luPrevSpanBase = gAptResourceSpanBase;
+        const uint32_t  luPrevSpanSize = gAptResourceSpanSize;
+        gAptResourceSpanBase = luHeaderBase;
+        gAptResourceSpanSize = static_cast<uint32_t>(
+            *reinterpret_cast<const uint64_t*>(luHeaderBase + 0x28u));  // serialized .apt header: size @+0x28
 
         // Pin the caller's handle (the asm's leading lwarx/stwcx. IncRef on *a2).
         AptFilePtr laHandle;
@@ -408,8 +584,10 @@ namespace CgsGui
         // Forward to the async-completion glue (-> AptLoader::CompleteLoad -> Resolve -> Fixup).
         AptCompleteAnimationAsyncLoad(&laHandle, lpBase,
                                       reinterpret_cast<AptConstFile*>(lpConstFile),
-                                      /*pAptDataHeader (a5)*/ lpAptData,
-                                      /*pPreResolvedRoot (x64 FLAG)*/ gAptLoadAnimRootOverride);
+                                      /*pAptDataHeader (a5)*/ lpAptData);
+
+        gAptResourceSpanBase = luPrevSpanBase;
+        gAptResourceSpanSize = luPrevSpanSize;
 
         // (The console then sets AptData[5] = 2 (ACTIVE). FLAG-skipped -- see the state note above:
         // the widened header's state slot is ambiguous and the host's load-once guard covers it.)
@@ -485,5 +663,24 @@ namespace CgsGui
         CgsLanguage::LanguageManager* lpLanguage = lpRenderHandler->GetLanguageManager();
         CGS_ASSERT(lpLanguage != 0, "Invalid language manager in CgsAptString::Prepare");
         return lpLanguage;
+    }
+}
+
+// BrnFlapt::TextFieldRef::GetLanguageManager @ 0x8246CB40 -- the same
+// singleton -> render-handler -> language-manager walk with the Ref's own baked
+// asserts (BrnFlaptTextFieldRef.cpp:47/48; `this` is never touched). DWARF home is
+// BrnFlaptTextFieldRef.cpp, but that TU must see the REAL CgsAptString (through the
+// text-field instance it drives) which clashes with the render handler's opaque
+// pool stand-in -- so the body lives here with the rest of the AptAux layout users
+// (same rationale as the GetAptRenderHandlerLanguageManager bridge above).
+namespace BrnFlapt
+{
+    CgsLanguage::LanguageManager* TextFieldRef::GetLanguageManager()
+    {
+        CgsGui::AptRenderHandler* lpRenderHandler =
+            &CgsGui::AptAuxPointer::mpAptAuxInst->mRenderHandler;
+        CGS_ASSERT(lpRenderHandler != 0, "lpRenderHandler");
+        CGS_ASSERT(lpRenderHandler->GetLanguageManager() != 0, "lpRenderHandler->mpLanguageManager");
+        return lpRenderHandler->GetLanguageManager();
     }
 }

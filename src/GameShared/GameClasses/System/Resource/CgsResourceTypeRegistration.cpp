@@ -15,6 +15,8 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSchemaResourceType.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
+#include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
+#include "SharedClasses/Gui/Flapt/BrnFlaptFileResourceType.h"                  // BrnFlapt::FlaptFileResourceType (0x10020)
 
 // ============================================================================================
 // Resource-type registration -- the faithful counterpart of the X360
@@ -102,5 +104,9 @@ namespace CgsResource
         TypeRegistry::Register(&sAptDataHeader);
         static LuaCodeResourceType         sLuaCode;           // 0x22  LuaCode (FSM scripts; loaded by the GUI flow)
         TypeRegistry::Register(&sLuaCode);
+        static LanguageResourceType        sLanguage;          // 0x27  Language (localised string table)
+        TypeRegistry::Register(&sLanguage);
+        static BrnFlapt::FlaptFileResourceType sFlaptFile;     // 0x10020 FLApt (GUI-owned vendor movie)
+        TypeRegistry::Register(&sFlaptFile);
     }
 }

@@ -15,4 +15,12 @@ inline u32 GetLoadBase(const rw::Resource& lrResource)
 {
     return static_cast<u32>(reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]));
 }
+
+// The full-width load base for handlers whose (x64-widened) offset slots relocate to
+// real 64-bit pointers -- the u32 form above truncates the x64 heap base. Same segment-0
+// read; the console delta arithmetic is 32-bit only because its pointers are.
+inline uintptr_t GetLoadBase64(const rw::Resource& lrResource)
+{
+    return reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
+}
 }

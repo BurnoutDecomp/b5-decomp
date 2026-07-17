@@ -9,7 +9,7 @@
 // CgsAptRenderHandler.h -- that header models the pooled CgsAptString opaquely (a 128-byte slot),
 // which is a conflicting definition of the SAME guest type. The opaque-world half (free the
 // previous string, hand out a free pool slot + char buffer, surface the font collection / effect /
-// size scale) is done by the AptCallbackRender_AcquireStringSlot bridge in CgsAptCallbackRender.cpp;
+// size scale) is done by AptCallbackRender::AcquireStringSlot in CgsAptCallbackRender.cpp;
 // here we cast the slot back to the real CgsAptString and lay the string out.
 //
 // Faithful to the dossier:
@@ -30,7 +30,7 @@ namespace CgsGui
         s32                  liEffect       = 0;
         f32                  lfSizeScale    = 1.0f;
         s32                  liZID          = 0;
-        void* lpSlot = AptCallbackRender_AcquireStringSlot(
+        void* lpSlot = AcquireStringSlot(
             lpParameters, &lpStringBuffer, &lpFonts, &liEffect, &lfSizeScale, &liZID);
 
         // Guard the shape-only bring-up: when no FontCollection is wired (title-screen shapes

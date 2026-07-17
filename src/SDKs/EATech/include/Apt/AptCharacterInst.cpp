@@ -25,17 +25,6 @@
 
 #include <new>   // placement new (factory)
 
-// The mkitem step-probe sink (host-implemented; weak no-op default so this TU links standalone).
-#if defined(_MSC_VER)
-extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
-                                   const void* pRenderItem, const void* pItemCharacter);
-#pragma comment(linker, "/alternatename:CgsApt_MkItemProbe=CgsApt_MkItemProbeDefault")
-extern "C" void CgsApt_MkItemProbeDefault(const void*, int, const void*, const void*, const void*) {}
-#else
-extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const void* pCharacter,
-                                   const void* pRenderItem, const void* pItemCharacter);
-#endif
-
 // ctor @0x82AF7E70 (X360 ARTIST; PS3 @0x81431C)
 //   *this = off_82145F80;                              // vtable (family models it as the
 //                                                      //   manual mpVTable_unused; not written)
@@ -52,7 +41,7 @@ extern "C" void CgsApt_MkItemProbe(const void* pCharInst, int nCharType, const v
 // AptRenderItem::Manager_CreateItem FACTORY DIRECTLY. That factory needs no render-tree manager (it
 // just DOGMA-pool-allocates the typed render item off the character), so there is no manager routing
 // here at all; the render item is created iff an Apt target is active. gpAptTarget is live once the
-// bring-up runs AptCreateTargetInstance/AptChangeTargetInstance (BrnAptRuntimeBringUp), so every
+// GUI Apt host runs AptCreateTargetInstance/AptChangeTargetInstance (BrnGuiAptRuntime), so every
 // AptCharacterInst gets a real, type-correct render item carrying mpCharacter.
 AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
 {
@@ -62,9 +51,6 @@ AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
     if (gpAptTarget)   // off_8324E574 -- create the render item only when an Apt target is active
         pItem = AptRenderItem::Manager_CreateItem(pCharacter, gnCurrUpdateTick);
     mpRenderItem = pItem;
-
-    CgsApt_MkItemProbe(this, pCharacter ? pCharacter->mnType : -1, pCharacter, pItem,
-                       pItem ? pItem->mpCharacter : nullptr);
 
     // High 6 bits of mTypeFlags = the character's type tag (15 when none).
     const uint32_t uType = pCharacter ? static_cast<uint32_t>(pCharacter->mnType) : 15u;
@@ -158,7 +144,7 @@ AptRenderItem* AptCharacterInst::GetRenderItem() const { return mpRenderItem; }
 AptRenderItem* AptCharacterInst::GetRenderItemWritable()
 {
     AptRenderItem* pWritable =
-        AptRTM_GetTickItemWritable(AptCurrentRenderTreeManager(), mpRenderItem, gnCurrUpdateTick);
+        AptGetTickItemWritable(AptCurrentRenderTreeManager(), mpRenderItem, gnCurrUpdateTick);
     if (mpRenderItem != pWritable)
     {
         pWritable->AddReference();
@@ -237,9 +223,9 @@ void AptCharacterInst::SetIsVisible(bool bVisible)
 // AptRenderTreeManager.cpp (AptRTM_*). Declared extern here (this TU calls them);
 // the earlier no-op stubs were removed to resolve the LNK2005 double-definition.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptRTM_CloneItem(AptRenderTreeManager* pMgr, AptCIH* pNode,
+extern AptCIH* AptCloneManagedItem(AptRenderTreeManager* pMgr, AptCIH* pNode,
                                 int nSourceArg, int nTick);
-extern AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int nTick);
+extern AptCIH* AptManagedItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int nTick);
 
 // The X360 render-tree helpers read the live manager through gpCurrentTargetSim's
 // field [11] (console +0x2C) and the current update tick through dword_8324E520.
@@ -252,11 +238,11 @@ extern AptCIH* AptRTM_ItemMoved(AptRenderTreeManager* pMgr, AptCIH* pNode, int n
 //                                                 dword_8324E520);
 // Tail-call into the manager's clone entry point; passes the scene node, the
 // source argument (r4->r5), and the current update tick. FLAG: the live
-// double-buffer clone is deferred -- AptRTM_CloneItem is the manager facade.
+// double-buffer clone is deferred -- AptCloneManagedItem is the manager facade.
 // ---------------------------------------------------------------------------
 AptCIH* AptCharacterInst::CloneItem(AptCIH* pNode, int nArg)
 {
-    return AptRTM_CloneItem(AptCurrentRenderTreeManager(), pNode, nArg, gnCurrUpdateTick);
+    return AptCloneManagedItem(AptCurrentRenderTreeManager(), pNode, nArg, gnCurrUpdateTick);
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +326,7 @@ AptCIH* AptCharacterInst::ItemInserted(AptCIH* pNode)
     AptRenderTreeManager* pMgr = AptCurrentRenderTreeManager();   // gpCurrentTargetSim[11]
     pNode->mpCharacterInst->GetRenderItemWritable()->Manager_SetDeletionMark(false);  // [c:0x20]
     if (pMgr)
-        AptRTM_ItemMoved(pMgr, pNode, gnCurrUpdateTick);
+        AptManagedItemMoved(pMgr, pNode, gnCurrUpdateTick);
     return pNode;
 }
 
@@ -351,7 +337,7 @@ AptCIH* AptCharacterInst::ItemInserted(AptCIH* pNode)
 // ---------------------------------------------------------------------------
 AptCIH* AptCharacterInst::ItemMoved(AptCIH* pNode)
 {
-    return AptRTM_ItemMoved(AptCurrentRenderTreeManager(), pNode, gnCurrUpdateTick);
+    return AptManagedItemMoved(AptCurrentRenderTreeManager(), pNode, gnCurrUpdateTick);
 }
 
 // ---------------------------------------------------------------------------

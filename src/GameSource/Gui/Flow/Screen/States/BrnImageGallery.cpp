@@ -15,13 +15,16 @@ namespace BrnGui
 {
 namespace
 {
-    // FLAG boundary: the apt-component watcher half of the cache. BrnGui::GuiCache exposes no
-    // committed ClearExpectedAptComponentList accessor, so it is reached here through a free
-    // boundary helper (the same discipline BrnBootLegal uses). Body links from the GuiCache TU;
-    // replace with a named GuiCache accessor when homed.
+    // Boundary onto the apt-component watcher half of the cache. The named GuiCache
+    // accessor (ClearExpectedAptComponentList @0x824EE528, the watcher tail-branch)
+    // is homed in BrnGuiCache.cpp now, so the boundary is a plain forward. (Defined
+    // in-TU: an anonymous-namespace member can only ever resolve from this TU.)
     struct ImageGalleryCacheBoundary
     {
-        static void ClearExpectedAptComponentList(GuiCache* lpCache, GuiFlow leFlow);  // FLAG
+        static void ClearExpectedAptComponentList(GuiCache* lpCache, GuiFlow leFlow)
+        {
+            lpCache->ClearExpectedAptComponentList(leFlow);
+        }
     };
 }   // anonymous namespace
 

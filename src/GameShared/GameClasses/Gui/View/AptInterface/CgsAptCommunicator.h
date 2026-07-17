@@ -102,6 +102,20 @@ namespace CgsGui
         AptValue*    mpComponentRef;      // CgsAptCommunicator.h:70 (DWARF)
     };
 
+    // Native-width queue payload for event 21. ARTIST queues the five fields above
+    // as a bare 20-byte PPC record (two words, two 32-bit pointers and one word).
+    // The PC queue must preserve the same fields under the x64 ABI, where the two
+    // pointers widen. Keeping the payload separate from GuiEvent<21>'s 12-byte
+    // wrapper also preserves ARTIST's "payload only" wire shape.
+    struct GuiEventAptTriggerPayload
+    {
+        GuiEventAptTrigger::AptEventType meEventType;
+        s32                              miUniqueId;
+        const char*                      mpacComponentName;
+        u32                              muComponentNameHash;
+        AptValue*                        mpComponentRef;
+    };
+
     // ------------------------------------------------------------------------
     // GuiEventSoundTrigger - the 100-byte record SendAptSoundEvent pushes (DWARF
     // CgsAptCommunicator.h:83, `: public GuiEvent<22>`). The X360 queues exactly the
@@ -191,6 +205,18 @@ namespace CgsGui
         // BrnGui::GuiCacheDebugComponent::ShowAptComponentGuiCacheStatus calls it to label
         // a GUI-cache dump entry.
         const char* GetComponentNameForHash(u32 luHash);
+
+        // X360 0x82851818. Remove the component whose bound AptValue is being unloaded:
+        // find the matching component reference, move the final active slot into its place,
+        // then shrink the active count.
+        static void RemoveExpiredAptComponent(AptValue* lpAptValue);
+
+        // The per-frame trigger publish the console CgsGui::GuiModule::Update @0x828602C8
+        // inlines at its tail: bulk-append mOutAptTriggerEvents (the SendAptEvent 21 /
+        // SendAptSoundEvent 22 records) into the view OUTPUT buffer's GUI event queue,
+        // then Clear the communicator queue. Exposed as a member so the queue stays
+        // private (the X360 reaches it as file-scope data, unk_8305A960).
+        static void FlushTriggerEventsTo(CgsModule::VariableEventQueue<18432, 16>* lpDest);
 
     private:
         // X360 0x82849F48. Hash lpacName and return its registered component index, or -1.

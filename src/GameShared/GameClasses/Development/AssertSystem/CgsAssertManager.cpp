@@ -13,6 +13,7 @@
 #undef DrawText                            // <Windows.h> (via device.h) #defines DrawText -> DrawTextA; keep our method name
 
 #include <cstdio>    // snprintf (the X360 used CgsCore::SPrintf)
+#include <cstdlib>   // getenv (the harness assert-release marker)
 #include <cstring>   // strncpy / strrchr
 
 namespace CgsDev
@@ -200,10 +201,33 @@ namespace Assert
         // above and continues.
         if (CanRenderAssert())
         {
+            // FLAG PC-platform leaf: the unattended boot harness drives the game through
+            // named auto-reset events only (see CgsInputPadsPC::ConsumeHarnessAction) and
+            // cannot press END; with the same BRN_INPUT_ALLOW_BACKGROUND marker set,
+            // "Local\BurnoutPC_Assert_Release" releases the assert screen exactly like END.
+            struct HarnessRelease
+            {
+                static bool Signalled()
+                {
+                    static const bool sbEnabled =
+                        std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr;
+                    if (!sbEnabled)
+                        return false;
+                    static HANDLE shEvent = nullptr;
+                    if (shEvent == nullptr)
+                        shEvent = OpenEventA(0x00100000u /*SYNCHRONIZE*/, FALSE,
+                                             "Local\\BurnoutPC_Assert_Release");
+                    return shEvent != nullptr &&
+                           WaitForSingleObject(shEvent, 0) == WAIT_OBJECT_0;
+                }
+            };
+
             for (;;)
             {
                 DisplayAssertScreen();
                 if (GetAsyncKeyState(VK_END) & 0x8000)
+                    break;
+                if (HarnessRelease::Signalled())
                     break;
                 Sleep(1);
             }

@@ -4,6 +4,7 @@
 
 class AptValue;
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptNativeHash_EmbedCheck(AptNativeHash* p, const EAStringC& key, AptValue* v)
 {
     p->Set(key, v);
@@ -28,6 +29,7 @@ static void AptNativeHash_EmbedCheck(AptNativeHash* p, const EAStringC& key, Apt
     p->DestroyGCPointers();
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptNativeHash_EmbedCheckEntry(AptNativeHash* p, const EAStringC& key, AptValue* v)
 {
     AptNativeHash_EmbedCheck(p, key, v);

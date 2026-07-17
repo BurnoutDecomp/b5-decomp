@@ -40,6 +40,9 @@ namespace BrnGui
         void HandleIncomingEvents();
 
     private:
+        static const s32 miNumEventsObserved = 3;
+        static const s32 maiEventToObserve[miNumEventsObserved];
+
         GuiCache* mpGuiCache;        // BrnPostTitleScreenLoad.h:71
         s32       miNumFilesToLoad;  // BrnPostTitleScreenLoad.h:73
         EState    meState;           // BrnPostTitleScreenLoad.h:86

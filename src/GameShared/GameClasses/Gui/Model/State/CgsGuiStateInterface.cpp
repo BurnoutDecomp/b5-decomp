@@ -20,6 +20,18 @@ namespace CgsGui
         return mpAccessPointers;
     }
 
+    // @ 0x8240E438 - the language manager reached through the access pointers. The
+    // X360 body inlines GetAccessPointers() twice (once feeding the h:351 manager
+    // check, once for the returning load), so the h:344 "mpAccessPointers != NULL"
+    // tripwire brackets the manager check; the accessor calls below reproduce that
+    // exact assert sequence.
+    CgsLanguage::LanguageManager* StateInterface::GetLanguageManager()
+    {
+        CGS_ASSERT(GetAccessPointers()->mpLanguageManager != nullptr,
+                   "GetAccessPointers()->mpLanguageManager != NULL");
+        return GetAccessPointers()->mpLanguageManager;
+    }
+
     // @ 0x8240E4E0 - reads the metric-units flag off the language manager reached
     // through the access pointers.
     bool StateInterface::IsUsingMetricUnits()

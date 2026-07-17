@@ -37,10 +37,13 @@ namespace BrnGui
     // UpdateRunning), so it is modelled as a GuiComponent-derived carrier with an opaque
     // animation tail -- the same stopgap the committed siblings BrnCarSelectOnlineEnd.h /
     // BrnOnlineQuickCustomCreate.h use. GROW to the real AnimationComponent when it lands.
+#ifndef BRN_GUI_ANIMATION_COMPONENT_STOPGAP
+#define BRN_GUI_ANIMATION_COMPONENT_STOPGAP
     struct AnimationComponent : public CgsGui::GuiComponent
     {
-        u8 maReservedAnimationTail[0x40];
+        u8 maReservedAnimationTail[0x40];   // opaque animation tail (see the note above)
     };
+#endif
 
     struct CarSelectUnlock : public CgsGui::State
     {

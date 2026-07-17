@@ -14,7 +14,7 @@
 //     AptUpdateInitialize       @0x82B02D08   (the sim/update state + the AS interpreter)
 //
 // (AptAllocatorInitialize @0x82ADD118 -- the first entry -- is already homed inside
-// BrnAptRuntimeBringUp.cpp; StringPool::Initialize @0x82AE3630, homed in AptInit.cpp,
+// BrnGuiAptRuntime.cpp; StringPool::Initialize @0x82AE3630, homed in AptInit.cpp,
 // is a leaf AptCommonInitialize calls.)
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
@@ -79,9 +79,7 @@ void* AptRenderInitialize(int a1);
 // EA::Thread::Mutex::Unlock result (X360 r3).
 int AptUpdateInitialize(unsigned int* a1, char a2);
 
-// AptUpdateTarget @0x82B0DE80 -- make `pTarget` the current Apt context (the
-// gpAptTarget slot + the per-thread TLS mirror GetTarget() reads), run the per-
-// frame AptUpdate(a2,a3,a4) against it, then restore the previous context. Returns
-// the EA::Thread::ThreadLocalStorage::SetValue result (X360 r3). Body in AptInit.cpp.
+// AptUpdateTarget @0x82B0DE80 / AptUpdate @0x82B0DB68 -- the per-frame drivers are
+// declared in AptTarget.h and homed in AptUpdate.cpp (the context swap + the frame
+// pacer). The former AptInit.cpp duplicate body is retired at the l2 merge.
 class AptTarget;
-int AptUpdateTarget(AptTarget* pTarget, int a2, int a3, int a4);

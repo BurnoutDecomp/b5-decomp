@@ -48,6 +48,7 @@
 //   0x8E DefineFunction2   0x8F Try               0x96 Push
 //   0x99 BranchAlways(*)   0x9A GetUrl2           0x9B DefineFunction
 //   0x9D BranchIfTrue(*)   0x9E CallFrame         0x9F GotoFrame2
+//   0xA1 PushString (@0x82AF4128)
 //   0xA2 PushStringDictByte 0xA3 PushStringDictWord
 //   0xA4 PushStringGetVar  0xA5 PushStringGetMember
 //   0xA6 PushStringSetVar  0xA7 PushStringSetMember
@@ -66,8 +67,9 @@
 // ships it as static data; building it at startup yields the identical map.
 AptActionInterpreter::AptActionHandler AptActionInterpreter::sGlobalTable[256] = { 0 };
 
-// The shared no-op handler for unhandled/unused opcodes (the engine's own STUB
-// at X360 0x82AD5078). Leaves the stack untouched.
+// The shared handler installed at every unhandled/unused opcode slot -- the engine's own
+// empty dispatch routine at X360 0x82AD5078 (leaves the operand stack untouched). The real
+// engine ships this as a genuine do-nothing handler, so the empty body is faithful.
 void AptActionInterpreter::_FunctionAptActionStub(AptActionInterpreter*, LocalContextT*)
 {
 }
@@ -244,6 +246,7 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x9B] = &_FunctionAptActionDefineFunction;
 
     // -- string-dictionary push / fused forms --
+    sGlobalTable[0xA1] = &_FunctionAptActionPushString;   // @0x82AF4128 (table entry extracted 2026-07-10)
     sGlobalTable[0xA2] = &_FunctionAptActionPushStringDictByte;
     sGlobalTable[0xA3] = &_FunctionAptActionPushStringDictWord;
     sGlobalTable[0xA4] = &_FunctionAptActionPushStringGetVar;

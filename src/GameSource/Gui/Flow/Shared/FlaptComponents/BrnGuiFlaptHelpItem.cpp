@@ -67,6 +67,41 @@ namespace BrnGui
         mAptRef.FindChildTextField(&mTextField, "TextField");
     }
 
+    // The child button-icon component names (the @0x82428188 assert text names the
+    // original KAC_ constants; the Prepare(name,file) overload above binds the same
+    // children as "<name>_ButtonLeft"/"<name>_ButtonRight" composites).
+    static const char* const KAC_ICONLEFT  = "ButtonLeft";
+    static const char* const KAC_ICONRIGHT = "ButtonRight";
+
+    // @ 0x82428188 -- rebind the help item onto an already-located movie clip:
+    // adopt lpMovieClipRef as this item's own clip (the base Prepare, with its
+    // NULL + timeline-reset asserts), recursively locate the two child button-icon
+    // clips under it, adopt + set up both icons, then bind the "TextField" child.
+    void FlaptHelpItem::Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef)
+    {
+        BrnFlaptComponent::Prepare(lpMovieClipRef);
+
+        BrnFlapt::MovieClipRef lLeftButtonMovieClipRef;
+        const bool lbFoundLeft = lpMovieClipRef->TryFindChildComponentRecursively(
+            KAC_ICONLEFT, &lLeftButtonMovieClipRef);
+        CGS_ASSERT(lbFoundLeft,
+                   "true == lpMovieClipRef->TryFindChildComponentRecursively( KAC_ICONLEFT, &lLeftButtonMovieClipRef )");
+
+        BrnFlapt::MovieClipRef lRightButtonMovieClipRef;
+        const bool lbFoundRight = lpMovieClipRef->TryFindChildComponentRecursively(
+            KAC_ICONRIGHT, &lRightButtonMovieClipRef);
+        CGS_ASSERT(lbFoundRight,
+                   "true == lpMovieClipRef->TryFindChildComponentRecursively( KAC_ICONRIGHT, &lRightButtonMovieClipRef )");
+
+        mIconLeft.BrnFlaptComponent::Prepare(&lLeftButtonMovieClipRef);
+        mIconLeft.Setup();
+
+        mIconRight.BrnFlaptComponent::Prepare(&lRightButtonMovieClipRef);
+        mIconRight.Setup();
+
+        mAptRef.FindChildTextField(&mTextField, "TextField");
+    }
+
     // @ 0x8241D338 -- set the help text and both flanking button glyphs.
     void FlaptHelpItem::SetItem(const char* lpText,
                                 FlaptButtonIconComponent::EPadButton leButtonLeft,

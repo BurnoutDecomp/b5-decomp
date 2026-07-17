@@ -10,7 +10,7 @@
 // SERIALIZED 64-BIT DEF-BASE / IN-PLACE (the faithful GUIAPT64 "1:7:8" format).
 // The struct below IS the on-disk movie def-base overlaid directly (the loader
 // relocates it IN PLACE via Fixup, then the runtime reads it through this struct
-// -- AptMovieCharacter_GetAnimation returns `char + KU_AptEmbeddedMovieOff`, a
+// -- AptGetMovieCharacterAnimation returns `char + KU_AptEmbeddedMovieOff`, a
 // pointer straight into the 64-bit file blob). So the member OFFSETS are the
 // VERIFIED 64-bit serialized offsets (vs TITLE_SCREEN02.bundle), NOT a transcoded
 // runtime layout: charCount@0x18, charTable@0x20, importCount@0x34, importTable@
@@ -167,6 +167,12 @@ struct AptCharacterAnimation
     // the load base (the aptDataOffset memory address). SINGLE native-64-bit path (GUIAPT64
     // "1:7:8" only); the console dual-path/transcode is gone. Faithful body in the .cpp.
     AptCharacterAnimation* Fixup(void* pBase, struct AptConstFile* pConstFile, void* pBlock);
+    // @0x82AFF... (PS3 @0xF44894, DecFIGS AptCharacterAnimation::Link(AptCharacter*, void*)) --
+    // bind a just-loaded movie root into the scene (AptLoader::Update's state 3->4 import/
+    // cross-reference resolution pass). Console args a2/a3 are never read; kept as the raw
+    // pData/pDataBlock the loader passes. Body in the .cpp.
+    void Link(void* pData, void* pDataBlock);
+
 };
 
 // Lock the serialized 64-bit def-base offsets Fixup relocates + the runtime reads

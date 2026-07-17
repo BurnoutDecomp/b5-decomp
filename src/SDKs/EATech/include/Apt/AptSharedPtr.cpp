@@ -33,7 +33,7 @@
 // ---------------------------------------------------------------------------
 void AptSharedPtr<AptFile>::Dispose(AptFile* pData)
 {
-    AptSharedPtr_DisposeDebugHook(pData, 0, nullptr);
+    AptSharedPtrDisposeDebugHook(pData, 0, nullptr);
 
     if (pData)
     {
@@ -42,7 +42,7 @@ void AptSharedPtr<AptFile>::Dispose(AptFile* pData)
             count = AptSharedPtrDelete(pData);
     }
 
-    AptSharedPtr_DisposeDebugHook(nullptr, 0, nullptr);
+    AptSharedPtrDisposeDebugHook(nullptr, 0, nullptr);
 }
 
 // ---------------------------------------------------------------------------
