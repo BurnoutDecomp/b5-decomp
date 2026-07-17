@@ -102,26 +102,29 @@ namespace
     // CgsSaveLoadPS3.cpp and shows the SAVELOAD_AUTOSAVE_WARNING prompt; SetCollisionWorldValid
     // below calls it directly, so the prior fabricated auto-complete leaf is retired.)
 
-    // FLAG PC-platform leaf: the 3-arg save task (X360 sub_8285F268) is un-reconstructed
-    // (no PC storage backend); synchronous SUCCESS keeps the task machine consistent.
-    void SaveLoadSystem_Save(CgsGui::SaveLoadSystem& /*lrSystem*/,
+    // (The 3-arg save task now has a real body -- CgsGui::SaveLoadSystem::Save in
+    // CgsSaveLoadPS3.cpp writes the PC profile container; the prior fabricated
+    // synchronous-SUCCESS leaf is retired. This shim only forwards.)
+    void SaveLoadSystem_Save(CgsGui::SaveLoadSystem& lrSystem,
                              CgsGui::SaveLoadTaskResultHandler& lrHandler,
-                             const CgsGui::SaveLoadMetadata& /*lrMetadata*/,
-                             const CgsGui::SaveInfo& /*lrSaveInfo*/)
+                             const CgsGui::SaveLoadMetadata& lrMetadata,
+                             const CgsGui::SaveInfo& lrSaveInfo)
     {
-        lrHandler.HandleSaveLoadTaskResult(CgsGui::E_SAVELOADTASKRESULT_SUCCESS);
+        lrSystem.Save(&lrHandler, lrMetadata, lrSaveInfo);
     }
 
-    // FLAG PC-platform leaf: the autosave task (X360 CgsGui::SaveLoadSystem::Autosave)
-    // is un-reconstructed (no PC storage backend); synchronous SUCCESS as above.
-    void SaveLoadSystem_Autosave(CgsGui::SaveLoadSystem& /*lrSystem*/,
+    // (The autosave task now has a real body -- CgsGui::SaveLoadSystem::Autosave in
+    // CgsSaveLoadPS3.cpp commits the image records and writes the PC profile container;
+    // the prior fabricated synchronous-SUCCESS leaf is retired. This shim only forwards.)
+    void SaveLoadSystem_Autosave(CgsGui::SaveLoadSystem& lrSystem,
                                  CgsGui::SaveLoadTaskResultHandler& lrHandler,
-                                 const CgsGui::SaveLoadMetadata& /*lrMetadata*/,
-                                 const CgsGui::SaveInfo& /*lrSaveInfo*/,
-                                 s32 /*liNumberOfImageFiles*/,
-                                 const CgsGui::ImageFileInfo* /*laImageFileInfo*/)
+                                 const CgsGui::SaveLoadMetadata& lrMetadata,
+                                 const CgsGui::SaveInfo& lrSaveInfo,
+                                 s32 liNumberOfImageFiles,
+                                 const CgsGui::ImageFileInfo* laImageFileInfo)
     {
-        lrHandler.HandleSaveLoadTaskResult(CgsGui::E_SAVELOADTASKRESULT_SUCCESS);
+        lrSystem.Autosave(&lrHandler, lrMetadata, lrSaveInfo,
+                          liNumberOfImageFiles, laImageFileInfo);
     }
 
     // FLAG PC-platform leaf: CgsGui::SaveLoadSystem::CopyImageToBuffer @0x828522D0 is

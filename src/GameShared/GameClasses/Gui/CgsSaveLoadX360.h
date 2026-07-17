@@ -2,7 +2,8 @@
 
 #include "types.hpp"
 
-#include "GameShared/GameClasses/Gui/CgsSaveLoad.h"   // CgsGui::ESaveLoadCif, ContentInformationFileInterface, MessageDisplay, SaveLoadTaskResultHandler
+#include "GameShared/GameClasses/Gui/CgsSaveLoad.h"   // CgsGui::ESaveLoadCif, ContentInformationFileInterface, MessageDisplay, SaveLoadTaskResultHandler, SaveLoadMetadata, SaveInfo
+#include "GameShared/GameClasses/Gui/CgsImageFileInfo.h"   // CgsGui::ImageFileInfo (Autosave records)
 
 #include <Windows.h>   // HANDLE / OVERLAPPED (the X360 stream/async ops wrap Win32; host Win32 on PC)
 
@@ -197,6 +198,31 @@ namespace CgsGui
         // X360 0x82856040. Write the current save (title + mugshot entries) to the memory card.
         void Save();
 
+        // The manager-facing 3-arg save task (BrnGui::ProfileManager::Save @0x82513B28
+        // drives it; the entry itself is not in the ARTIST export set -- the body is
+        // composed from the exported sibling Load @0x82859B70's bind-handler + SetMetadata
+        // setup, the same composition Bootup uses). Bind the result handler, push the
+        // metadata/save-info, then run the storage write and report the result. On PC the
+        // storage edge is the CgsSaveLoadPC container (FLAG'd leaf in the body); the
+        // console's asynchronous WriteSave completion becomes a synchronous report.
+        void Save(SaveLoadTaskResultHandler* lpResultHandler, const SaveLoadMetadata& lrMetadata,
+                  const SaveInfo& lrSaveInfo);
+
+        // The autosave task (BrnGui::ProfileManager::Autosave @0x82513958 drives it; same
+        // unexported family, same composition). As the 3-arg Save, plus each valid image
+        // record is committed into its mugshot-buffer slot (GetMugshotBufferFromImageId)
+        // before the write, so the container's mugshot payload persists it -- the console
+        // parked the same records in the memcard container's image files.
+        void Autosave(SaveLoadTaskResultHandler* lpResultHandler, const SaveLoadMetadata& lrMetadata,
+                      const SaveInfo& lrSaveInfo, s32 liNumberOfImageFiles,
+                      const ImageFileInfo* laImageFileInfo);
+
+        // True when a saved profile container exists for lrMetadata's save name -- the
+        // existence primitive the boot-up flow consumes to branch "no save present" vs
+        // "save found" (the console asked the memcard's find-entries machinery). Purely a
+        // query; starts no I/O task and touches no task state.
+        bool SaveFileExists(const SaveLoadMetadata& lrMetadata) const;
+
         // X360 0x828521E0. Copy each requested image's mugshot buffer into the caller's image
         // file records, then report the load result.
         void LoadImageFiles(SaveLoadTaskResultHandler* lpResultHandler, s32 liNumberOfImageFiles,
@@ -347,5 +373,24 @@ namespace CgsGui
         bool   mbAutosaveIconVisible;             // +0x248 cached autosave-icon visibility
         u8     mPad249[0x24C - 0x249];            // +0x249 .. +0x24B
         u8     mField24C;                         // +0x24C (Construct zeroes)
+
+        // ADDITIVE GROW (PC storage wave): the host-width capture of the metadata's
+        // stored-data view. The X360 SetMetadata caches the metadata's +0x30/+0x34 words
+        // (muSaveDataSizeKb/muGameDataSizeKb above) -- on the 32-bit console those two
+        // words ARE the SaveLoadMetadata::mStoredData OpaqueBuffer {ptr, size} pair, and
+        // Save's title entry passes them to WriteSave as the image buffer/size. On the
+        // x64 host that pair no longer fits two u32 words, so the task starters
+        // (Load / the 3-arg Save / Autosave) capture the same view here full-width via
+        // CaptureStoredDataView; the storage edge reads/writes through it.
+        OpaqueBuffer mStoredDataView;
+
+        // Capture lrMetadata.mStoredData into mStoredDataView (the host-width form of
+        // the X360 SetMetadata +0x30/+0x34 capture -- see mStoredDataView).
+        void CaptureStoredDataView(const SaveLoadMetadata& lrMetadata);
+
+        // The mugshot buffer's total byte size (per-mugshot size x grid), the second
+        // container payload -- the same product Prepare allocates and the X360 Save's
+        // "Mugshots" entry publishes.
+        s32 GetMugshotBufferSizeBytes() const;
     };
 }
