@@ -207,6 +207,29 @@ void AptCharacterHelper::Shutdown()
 // via AptDisplayListState::insert(root, depth, node) (the X360's sub_82AEE788 is the
 // same findInst+insert+stamp-depth, folded here to the one insert).
 // ---------------------------------------------------------------------------
+// The non-creating search half of AptGetAnimationAtLevel (the loop it opens
+// with, without the lazy-create tail). Queries use this so a liveness probe
+// never mints a level node.
+AptCIH* AptFindAnimationAtLevel(int nLevel)
+{
+    if (gpAptTarget == nullptr || gpAptTarget->mpAnimationTarget == nullptr)
+        return nullptr;
+
+    AptDisplayList* pRoot = gpAptTarget->mpAnimationTarget->GetRootDisplayList();
+    AptDisplayListState* pState = (pRoot != nullptr) ? pRoot->AsState() : nullptr;
+    if (pState == nullptr)
+        return nullptr;
+
+    for (AptCIH* pNode = pState->mpFirst; pNode != nullptr; pNode = pNode->mpDisplayListNext)
+    {
+        if (pNode->mpCharacterInst == nullptr || pNode->mpCharacterInst->mpRenderItem == nullptr)
+            continue;
+        if (pNode->mpCharacterInst->mpRenderItem->GetDepth() == nLevel)
+            return pNode;
+    }
+    return nullptr;
+}
+
 AptCIH* AptGetAnimationAtLevel(int nLevel)
 {
     // No active target / director / root display list -> nothing mounted.
