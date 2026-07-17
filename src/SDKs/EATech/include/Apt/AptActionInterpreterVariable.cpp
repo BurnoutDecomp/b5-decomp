@@ -25,7 +25,7 @@
 // leaves are declared and stubbed, the work `stubs` pattern):
 //   getContext (the path parser, ~115 lines) and AptValue::findChild (the special-
 //   name + display-tree resolver, ~190 asm-only insns) -- their own TUs;
-//   AptInterp_LookupScopeChain (the AptFrameStack function-local lookup) and
+//   AptLookupScopeChain (the AptFrameStack function-local lookup) and
 //   AptInterp_LookupGlobalFallback (the _level / global-frame lookup) encapsulate
 //   the AptScriptFunctionBase frame state (not reconstructed) -- x64-native helpers
 //   so no console frame-context offsets are baked in;
@@ -45,13 +45,11 @@ extern AptValue* gpUndefinedCIH;     // FLAG: the undefined-CIH sentinel (AptIni
 
 // FLAG: the function-local scope chain (walks AptScriptFunctionBase::spFrameStack
 // via the interpreter's current frame context). Returns the found value or null.
-extern AptValue* AptInterp_LookupScopeChain(AptActionInterpreter* pInterp, const EAStringC* pName);
+extern AptValue* AptLookupScopeChain(AptActionInterpreter* pInterp, const EAStringC* pName);
 
 // FLAG: the _level / global-object fallback for CIH contexts (the global frame's
 // AptNativeHash). Returns the found value or null.
-extern AptValue* AptInterp_LookupGlobalFallback(AptActionInterpreter* pInterp,
-                                                AptValue* pContext, const EAStringC* pName,
-                                                int nDirect);
+// AptActionInterpreter::LookupGlobalFallback is now a member (declared in the header).
 
 // FLAG: the "variable not found" diagnostic callback (null until AptInit).
 typedef void (*AptVarNotFoundCb)(const char* pName);
@@ -97,7 +95,7 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
     if (nKind == 1 && pContext)
         pFound = pContext->findChild(pLeaf, pTarget);                      // FLAG: findChild
     if (!pFound && nSearchScopeChain)
-        pFound = AptInterp_LookupScopeChain(this, pLeaf);                  // FLAG: frame stack
+        pFound = AptLookupScopeChain(this, pLeaf);                  // FLAG: frame stack
 
     if (!pFound)
     {
@@ -113,7 +111,7 @@ AptValue* AptActionInterpreter::getVariable(AptValue* pScope, AptValue* pTarget,
             // 5) the _level / global-object fallback (only when not targeting).
             if (!pFound && !pTarget)
             {
-                pFound = AptInterp_LookupGlobalFallback(this, pContext, pLeaf, nDirect);  // FLAG
+                pFound = LookupGlobalFallback(pContext, pLeaf, nDirect);  // the _level / global-frame fallback
                 if (!pFound)
                 {
                     if (gpAptVarNotFoundCb)

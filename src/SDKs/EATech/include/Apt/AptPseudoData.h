@@ -39,10 +39,10 @@ struct AptPlaceObjectInfo_t
     u8  maMatrix[24];        // [0x14] body+0x0C  2D affine (6 floats)    [c:+0x10]
     u8  maColorTransform[8]; // [0x2C] body+0x24  packed colour transform [c:+0x28]
     f32 mfRatio;             // [0x34] body+0x2C  morph/tween ratio       [c:+0x30]
-    u8  maName[8];           // [0x38] body+0x30  instance-name ptr8
+    const char* mpName;      // [0x38] body+0x30  instance-name ptr8
     s32 miClipDepth;         // [0x40] body+0x38  clip depth
     u8  maPad44[4];          // [0x44]
-    u8  maClipActions[8];    // [0x48] body+0x40  clipActions block ptr8  [c: value @+0x3C]
+    void* mpClipActions;     // [0x48] body+0x40  clipActions block ptr8  [c: value @+0x3C]
 };
 
 struct AptPseudoData_t

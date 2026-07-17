@@ -88,17 +88,18 @@ struct AptCharacterAnimation;
 // FLAG (x64 fork): the console reaches it as `addi r3, mpCharacter, 0x10` (the console
 // sizeof(AptCharacter)). On the x64 gate the serialised AptCharacter header widens
 // under the 8-byte pointer rule (GUIAPT64 "1:7:8" layout) so the embedded body lands
-// at char+0x20 -- the same def-base offset AptCIH_GetClipMovie uses (KU_AptEmbeddedMovieOff,
+// at char+0x20 -- the same def-base offset AptGetClipMovie uses (KU_AptEmbeddedMovieOff,
 // AptCIH.h). Where the fixed-up character table / frame count live. Null-safe.
 // ---------------------------------------------------------------------------
-AptCharacterAnimation* AptMovieCharacter_GetAnimation(AptCharacter* pCharacter);
+AptCharacterAnimation* AptGetMovieCharacterAnimation(AptCharacter* pCharacter);
 
 struct AptCharacterAnimationInst : public AptCharacterSpriteInstBase
 {
-    // +0x24 -- unattested extra dword (see the layout note above); reserved by name
-    // so mAnimationFilePtr lands at its asm-pinned +0x28. Never accessed by the two
-    // reconstructed bodies.
-    uint32_t   mAnimationState_unknown;   // +0x24 placeholder
+    // +0x24 -- the banked update milliseconds the AptUpdate frame pacer accumulates
+    // (AptUpdate @0x82B0DB68 / its per-target driver @0x82B0D608 read v7[9], add the
+    // elapsed ms, subtract one authored frame per tick, and store the remainder
+    // back). Zeroed by the ctor. ATTESTED (was an unattested placeholder dword).
+    uint32_t   mnAccumulatedUpdateMs;     // +0x24
 
     // +0x28 -- the ref-counted source .apt file the animation was imported from.
     AptFilePtr mAnimationFilePtr;         // +0x28

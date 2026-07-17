@@ -14,6 +14,8 @@
 
 namespace CgsInput
 {
+    class InputPadsPC;   // PC pad-fill platform leaf (System/Input/PC/CgsInputPadsPC.h)
+
 namespace InputIO
 {
     struct Event {};   // empty base of the input event hierarchy
@@ -208,6 +210,11 @@ namespace InputIO
         typedef CgsModule::EventQueue<UnBindResult,   8> UnBindResultQueue;    // 108B (UnBindResult=12B)
         typedef CgsModule::EventQueue<BaseInputEvent, 8> PadDisconnectedQueue; // 76B
 
+        // X360 0x828F85E0 - bring the buffer up: set the constructed status byte, Construct
+        // the three result/disconnect queues, then reset the first four pad records (zero the
+        // stick/axis head + the 112 {value,status} pairs from +0x18, mbDisconnected = 1).
+        void Construct();                                             // 0x828F85E0
+
         const BindResultQueue*      GetBindResultQueue() const;      // 0x823B1038
         const UnBindResultQueue*    GetUnbindResultQueue() const;    // 0x823B10E0 (DWARF spells it "Unbind")
         const PadDisconnectedQueue* GetPadDisconnectedQueue() const; // 0x823B1188
@@ -219,6 +226,12 @@ namespace InputIO
         const PadOutputInformation* GetPadInfo(s32 iPort) const;     // 0x823B1230
 
     private:
+        // FLAG PC-platform leaf access: InputPadsPC (System/Input/PC/CgsInputPadsPC.cpp) is
+        // the host stand-in for the unreconstructed console pad fill (CgsInput::InputPads::
+        // Update -> binding tables -> maPadOutputInformation); it writes the player-0 record
+        // directly, so it is granted the module-internal access the console fill has.
+        friend class CgsInput::InputPadsPC;
+
         BindResultQueue      mBindResultQueue;          // @ +4   .. +112
         UnBindResultQueue    mUnBindResultQueue;        // @ +112 .. +220
         PadDisconnectedQueue mPadDisconnectedQueue;     // @ +220 .. +296

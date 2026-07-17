@@ -21,6 +21,7 @@
 #include "SDKs/EATech/include/Apt/AptGlobal.h"             // gpAptGlobalFallback (off_8324E380 sentinel)
 #include "SDKs/EATech/include/Apt/AptObject.h"             // AptValueWithHash (gpAptGlobalFallback upcast)
 #include "SDKs/EATech/include/Apt/AptTarget.h"             // gpAptTarget->mpLinker (off_8324E574+0x20)
+#include "SDKs/EATech/include/Apt/AptLinker.h"             // AptLinker::Load (the getURL .swf arm)
 
 #include <cstdint>   // uintptr_t
 
@@ -34,11 +35,9 @@ extern int        gnAptNativeArgCount;    // dword_8324E760
 // FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
 extern AptValue* gpUndefinedValue;
 
-// FLAG (value-layer follow-ons; bodies own their TUs). isNaN already has a committed
-// extern in AptActionInterpreterStringOps2.cpp; escape/unescape are the X360 _escape
-// @0x82AEE008 / _unEscape @0x82AEE110 (percent-encode / decode an EAStringC in place).
-extern void escape(EAStringC* pString);
-extern void unescape(EAStringC* pString);
+// The escape/unescape codecs are the homed members AptActionInterpreter::escape
+// @0x82AEE008 / ::unEscape @0x82AEE110 (percent-encode / decode an EAStringC in
+// place; AptActionInterpreter.cpp).
 
 // FLAG (wired at AptInit; committed externs in the sibling AptActionInterpreter*Ops TUs):
 // the running .swf version (only v7 makes a non-empty string coerce to boolean true).
@@ -48,8 +47,7 @@ extern unsigned int AptGetSwfVersion();
 // loadVariables native method drives, preserving the (interpreter, node, pendingRelease,
 // &url) call shape -- r5 = *(pContext+8) = mpPendingReleaseValue). The GetUrl2
 // loadVariables branch forwards to it.
-extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
-                                               AptValue* pNode, AptValue* pPendingRelease, EAStringC* pURL);
+// AptActionInterpreter::loadVariables is now a member (declared in the header).
 
 // ---------------------------------------------------------------------------
 // isNaN (the value test) @0x82AF9768 -- HOMED 2026-07-02, retiring the
@@ -216,7 +214,7 @@ AptValue* AptActionInterpreter::cbCallMethod_escape(AptValue* /*pThis*/, int nAr
         {
             EAStringC strArg;
             pArg->toString(&strArg);   // render the argument to text
-            escape(&strArg);           // percent-encode in place
+            AptActionInterpreter::escape(&strArg);   // percent-encode in place (@0x82AEE008)
             *pResult->GetInternalString() += strArg;
         }
     }
@@ -240,7 +238,7 @@ AptValue* AptActionInterpreter::cbCallMethod_unescape(AptValue* /*pThis*/, int /
     {
         EAStringC strArg;
         pArg->toString(&strArg);   // render the argument to text
-        unescape(&strArg);         // percent-decode in place
+        AptActionInterpreter::unEscape(&strArg);   // percent-decode in place (@0x82AEE110)
         *pResult->GetInternalString() = strArg;
     }
     return pResult;
@@ -276,17 +274,11 @@ void AptActionInterpreter::_FunctionAptActionAsciiToChar(AptActionInterpreter* p
 }
 
 // ---------------------------------------------------------------------------
-// The getURL load entry @0x82B06660 -- the X360 `AptLinker::Load` invoked from the
-// getURL ops as f(this=mpLinker, &urlString, &targetString). The committed
-// AptLinker::Load member (AptLinker.cpp) models that overload with a 32-bit `int`
-// first parameter (a pre-existing modeling choice in a TU this file does not own);
-// passing an EAStringC* through that int parameter would truncate the pointer on
-// x64. To call the same homed routine faithfully without the lossy cast, it is
-// declared here as a free-function shim with the real (linker, url, target) pointer
-// types -- the getURL ABI -- and links to the same body at final link.
-// FLAG: x64 pointer-width fork of the committed AptLinker::Load(int, EAStringC*)
-//       signature; the engine target is the single @0x82B06660 routine.
-extern void AptLinker_GetUrlLoad(AptLinker* pLinker, EAStringC* pUrl, EAStringC* pTarget);
+// The getURL/getURL2 ".swf" arm loads through the SAME homed member the loadMovie
+// native uses: AptLinker::Load(EAStringC* pName, EAStringC* pTarget) @0x82B06660
+// (AptLinker.h -- the signature was long since corrected to two string pointers;
+// the interim AptLinkerGetUrlLoad forwarder and its {} stub, which dropped every
+// getURL movie load, were retired 2026-07-10).
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionGetUrl @0x82B09300 -- AS getURL(url, target): the SWF1 form
@@ -324,7 +316,7 @@ void AptActionInterpreter::_FunctionAptActionGetUrl(AptActionInterpreter* pInter
     if (bSwf || strUrl.IsEmpty())
     {
         EAStringC strTarget(pTarget);
-        AptLinker_GetUrlLoad(gpAptTarget->mpLinker, &strUrl, &strTarget);
+        gpAptTarget->mpLinker->Load(&strUrl, &strTarget);   // AptLinker::Load (the loadMovie member)
     }
 }
 
@@ -382,7 +374,7 @@ void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInte
         // &url). loadVariables is not an AptActionInterpreter member; the homed core is
         // the same extern shim the loadVariables native method (AptCIHNativeFunctionHelper)
         // drives. FLAG: AptActionInterpreter::loadVariables (@0x82B07DF8) not yet homed.
-        AptActionInterpreter_loadVariables(pInterp, pNode, pContext->mpPendingReleaseValue, &strUrl);
+        pInterp->loadVariables(pNode, pContext->mpPendingReleaseValue, &strUrl);
         pInterp->stackPop(2);
         return;
     }
@@ -403,7 +395,7 @@ void AptActionInterpreter::_FunctionAptActionGetUrl2(AptActionInterpreter* pInte
     }
 
     pInterp->stackPop(2);
-    AptLinker_GetUrlLoad(gpAptTarget->mpLinker, &strUrl, &strTarget);
+    gpAptTarget->mpLinker->Load(&strUrl, &strTarget);   // AptLinker::Load (the loadMovie member)
 }
 
 // ---------------------------------------------------------------------------

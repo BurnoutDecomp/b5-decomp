@@ -35,7 +35,7 @@
 // reads/writes extern members through fn-ptrs dword_8324E858 (get) / dword_8324E854
 // (set). The extern subsystem is host-provided and not reconstructed, so the two
 // hooks are encapsulated as AptExtern_GetMember/SetMember. Also FLAG'd: the
-// deferred-release vector drain on stack-empty (AptApt_FlushDeferredReleases, the
+// deferred-release vector drain on stack-empty (AptFlushDeferredReleases, the
 // AptGC layer; the stack-empty guard is faithful + engine-side).
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
@@ -60,7 +60,7 @@ extern void      AptExtern_SetMember(const char* szName, const char* szValue);  
 
 // FLAG (AptGC layer -- AptValueVector): drain the deferred-release value vector
 // (off_8324E51C) once the operand stack empties. See AptActionInterpreterVarOps.cpp.
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 namespace
 {
@@ -179,7 +179,7 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
 
     pInterp->stackPop(3);                                 // pop object + key + value
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ===========================================================================
@@ -217,8 +217,7 @@ void AptActionInterpreter::_FunctionAptActionSetMember(AptActionInterpreter* pIn
 // matching the sibling AptActionInterpreterSpecialOps.cpp): coerce pValue to the
 // object it designates under (pScope, pTarget), writing the result through *ppOut.
 //   AptActionInterpreter::valueToObject @0x82B0... (X360).
-extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                               AptValue* pValue, AptValue** ppOut);
+// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
 
 // FLAG (engine rodata -- the static AS builtin-property name table + its id remap;
 // console dword_8324E580[dword_82F73010[index]]): gAptPropertyIndexRemap maps a
@@ -253,7 +252,7 @@ void AptActionInterpreter::_FunctionAptActionGetProperty(AptActionInterpreter* p
     AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the object
 
     AptValue* pObject = nullptr;
-    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+    pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pObjectOper, &pObject);   // FLAG: un-homed valueToObject
 
     if (pObject)
@@ -288,7 +287,7 @@ void AptActionInterpreter::_FunctionAptActionSetProperty(AptActionInterpreter* p
     AptValue* pObjectOper = pInterp->mpStack[pInterp->mnStackTop - 3];   // the object
 
     AptValue* pObject = nullptr;
-    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+    pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pObjectOper, &pObject);   // FLAG: un-homed valueToObject
 
     const int nProperty = pIndexValue->toInteger();

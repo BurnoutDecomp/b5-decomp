@@ -65,7 +65,7 @@ extern DOGMA_PoolManager* gpAptSharedPtrPool;   // off_8324D808
 // Apt startup (another TU); declared so objectMemberSet links.
 //   leak Apt.h: void (*pfnSetExternVariable)(const char *szVar, const char *szValue);
 // ---------------------------------------------------------------------------
-void AptHost_SetExternVariable(const char* szVar, const char* szValue);
+void AptHostSetExternVariable(const char* szVar, const char* szValue);
 
 class AptExtern : public AptValueNoGC
 {

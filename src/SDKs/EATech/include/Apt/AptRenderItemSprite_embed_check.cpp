@@ -3,6 +3,7 @@
 #include "SDKs/EATech/include/Apt/AptRenderItemButton.h"
 #include "SDKs/EATech/include/Apt/AptRenderItemAnimation.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptRenderItemSprite_EmbedCheckEntry(AptRenderItemSprite* s, AptRenderItemButton* b,
                                          AptRenderItemAnimation* a, AptRenderingContext* ctx)
 {

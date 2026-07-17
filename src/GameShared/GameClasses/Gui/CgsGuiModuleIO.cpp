@@ -28,5 +28,24 @@ namespace CgsGuiModuleIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return mResourceRequestQueue.Append(*lpRequestQueue) ? 1 : 0;
     }
+
+    // X360 0x8285B448-adjacent read twin (original CgsGuiModuleIO.cpp:92): read-lock (bit 4)
+    // handle to the inbound GUI event queue at this+4. The consumer side of the pair --
+    // GuiModule::Update / BridgeFromInputToView walk it via GetFirstEvent/GetNextEvent.
+    const InputBuffer::GuiEventInputQueue* InputBuffer::GetGuiEvents() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mInputQueue;
+    }
+
+    // X360 0x8284F238 (original CgsGuiModuleIO.cpp:110): write-lock (bit 3) handle to the
+    // inbound GUI event queue at this+4. The producer side -- every
+    // GuiModule::AddGuiEvent<T> instantiation fetches the queue through this before its
+    // AddEvent push ("Not locked for writing\n").
+    InputBuffer::GuiEventInputQueue* InputBuffer::GetGuiEvents()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mInputQueue;
+    }
 }
 }

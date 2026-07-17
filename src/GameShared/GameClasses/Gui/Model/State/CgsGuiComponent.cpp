@@ -9,19 +9,12 @@
 #include <cstring>   // strncpy, strlen
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
-
-// FLAG (title-bring-up fallback, retired with the AS-framework milestone): until the
-// level-0 framework movie's ActionScript registers the components + drives their clips
-// (gAptCommunicator.UpdateAll), the observable clip effect of each (key, value) pair is
-// reproduced directly through the Apt runtime bridge. The faithful chain below runs in
-// FULL in parallel (FillAptViewMessage -> UpdateFlashComponent -> the communicator
-// key/value store) -- with no components registered yet it stores nothing, exactly the
-// console's behaviour before a movie's ONLOAD registrations arrive.
-namespace BrnGui
-{
-    bool AptRuntimeSetComponentKeyValue(const char* lpacInstName, const char* lpacKey,
-                                        const char* lpacValue);
-}
+//
+// (2026-07-09, step 6: the title-bring-up fallback that mirrored each (key, value)
+// through the BrnGui Apt runtime bridge is RETIRED -- the AS framework movie's
+// component registration is live, so the faithful chain below IS the drive:
+// FillAptViewMessage -> AptAux::UpdateFlashComponent -> AptCommunicator::
+// UpdateComponent, flushed per frame by UpdateAllComponents into the movie AS.)
 
 namespace CgsGui
 {
@@ -48,10 +41,6 @@ namespace CgsGui
                                              bool lbImmediate)
     {
         FillAptViewMessage(GetName(), lpacAptName, lpacViewState, lbImmediate);
-
-        // FLAG (see the header note above): drive the clip effect directly until the
-        // AS framework movie takes over, then delete this call.
-        BrnGui::AptRuntimeSetComponentKeyValue(GetName(), lpacAptName, lpacViewState);
     }
     // @ 0x82847030 - assert the incoming state interface is non-null, then store it
     // in mpStateInterface (the X360 writes it at +0x88). Path/line from the baked

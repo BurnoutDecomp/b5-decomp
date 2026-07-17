@@ -9,7 +9,10 @@
 // (CgsGuiShared.h).
 namespace CgsModule { template <s32, s32> class EventReceiverQueue; }
 namespace CgsLanguage { class LanguageManager; }
-namespace BrnFlapt { class FileRef; class FlaptManager; }
+// struct (not class) to match the defining headers (BrnFlaptFileRef.h /
+// BrnFlaptManager.h) -- MSVC mangles the class-key, so a mismatched forward
+// declaration forks the decorated names of every function taking these types.
+namespace BrnFlapt { struct FileRef; struct FlaptManager; }
 
 // The global event-queue namespace (see CgsGuiState.h): mpGDMInput points at the GUI-event input
 // queue the GameDataModule fills -- the same InputBuffer::GuiEventQueue the GUI state reads. Declared

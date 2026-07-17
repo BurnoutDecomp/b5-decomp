@@ -74,8 +74,7 @@
 //   AptHook_GetBytesTotal (gAptFuncs slot, X360 dword_8324E8AC) -- host query: total
 //     byte size of a loaded .apt by file path.
 // ---------------------------------------------------------------------------
-extern AptCIH* AptCIH_InsertChild(AptCIH* pNode, AptCIH* pSource, AptCharacter* pCharacter,
-                                  int nDepth, EAStringC* pName, AptValue* pInitObject);   // AptCIH::InsertChild
+// AptCIH::InsertChild is now a member (declared in AptCIH.h, included above).
 extern AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSearchImports);
 extern int  AptHook_GetBytesTotal(const char* pcFilePath, int a2, double a3);             // dword_8324E8AC
 
@@ -191,9 +190,10 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setMask(AptValue* pContext, int nA
 // (1 = play, 0 = stop).
 // ===========================================================================
 // ---------------------------------------------------------------------------
-// AptCIH::_gotoAndX @0x82B0D2F0 -- the shared gotoAndPlay/gotoAndStop core.
-// HOMED 2026-07-02 from the X360 asm (retiring the AptRenderLinkStubs null
-// stub). With at least one argument on the operand stack:
+// AptCIH::_gotoAndX @0x82B0D2F0 -- the shared gotoAndPlay/gotoAndStop core (the
+// REAL static member: the original source declares and calls it exactly as
+// AptCIH::_gotoAndX; promoted from the interim free-function home 2026-07-10).
+// With at least one argument on the operand stack:
 //   * a level placeholder node (charInst mTypeFlags tag 15, 0x3C000000) is a
 //     no-op;
 //   * a STRING argument (the inlined isString(): vtbl 1/33 + defined) is a
@@ -209,7 +209,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setMask(AptValue* pContext, int nA
 // ---------------------------------------------------------------------------
 extern AptActionInterpreter gAptActionInterpreter;   // dword_8324E760 (the AS VM)
 
-AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
+AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
 {
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
     if (nArgCount >= 1)
@@ -258,8 +258,13 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                     static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
                 pSprite->mnClipActionFlags =
                     (pSprite->mnClipActionFlags & ~0x40u) | (bPlay ? 0x40u : 0u);
-                if (!bPlay)
-                    pNode->SetDirtyState(true, true);   // X360 (r4=1, r5=1) on the stop arm
+                // X360 @0x82B0D3F8: `if (v14 == 1) SetDirtyState(1, 1)` where v14 IS the
+                // play flag -- a gotoAndPlay must RE-DIRTY the node so tick() picks the
+                // playing clip back up (tick early-outs on a clean node; without this a
+                // settled clip's transition never advances -- the alpha-0 freeze). The
+                // earlier recon had the arm INVERTED onto the stop path.
+                if (bPlay)
+                    pNode->SetDirtyState(true, true);
             }
         }
     }
@@ -271,9 +276,8 @@ AptValue* AptCIH_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
 // X360 dispatches the host gAptFuncs.pfnGetBytesTotal slot (+0x94,
 // dword_8324E8AC) -- the loader-progress query behind AS getBytesTotal().
 // The trailing (int, double) shim args were call-thunk artifacts; the typed
-// slot takes (path, mode). Null slot answers 0 -- the un-installed-host
-// boundary, the same convention as pfnPointHitTest.
-// ---------------------------------------------------------------------------
+// slot takes (path, mode). Null slot answers 0 -- the un-installed-host boundary.
+// FLAG PC-platform leaf: the host loader-progress callback boundary (gAptFuncs.pfnGetBytesTotal, +0x94).
 int AptHook_GetBytesTotal(const char* pcFilePath, int a2, double /*a3*/)
 {
     if (gAptFuncs.pfnGetBytesTotal != nullptr)
@@ -282,83 +286,20 @@ int AptHook_GetBytesTotal(const char* pcFilePath, int a2, double /*a3*/)
     return 0;
 }
 
-// ---------------------------------------------------------------------------
-// AptLoader_LoadX360 (HOMED 2026-07-02, retiring the null stub). A plain
-// by-value-return wrapper over the homed AptLoader::Load (find-or-register
-// the .apt file handle) -- the X360's out-param calling shape kept for the
-// call sites.
-// ---------------------------------------------------------------------------
-AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName)
-{
-    *pOut = pLoader->Load(*pName);
-    return pOut;
-}
+// (AptLoader_LoadX360 DELETED 2026-07-10: the by-value-return wrapper over the
+// homed AptLoader::Load had no remaining callers -- every call site invokes the
+// member `pLoader->Load(name)` directly.)
+
+// AptValue_EmbeddedNativeHash inlined at its call site (localToGlobal).
+
+// (The recursive display-path builder behind AptActionInterpreter::getName
+// @0x82AF75C8 is the single sub_82AF7400 recon in
+// AptActionInterpreterInterpHelpers.cpp -- the duplicate this TU carried (which
+// lacked the console's synthesised-name write-back into the parent hash) was
+// RETIRED 2026-07-10; callers use the member gAptActionInterpreter.getName.)
 
 // ---------------------------------------------------------------------------
-// AptValue_EmbeddedNativeHash (HOMED 2026-07-02, retiring the null stub). The
-// X360 reads an AptValueWithHash's embedded property hash at value +8 -- the
-// typed mHash member (localToGlobal's point-object x/y lookups etc.).
-// ---------------------------------------------------------------------------
-AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue)
-{
-    // The AptValueWithHash override returns &mHash -- the same +8 sub-object.
-    return static_cast<AptValueWithHash*>(pValue)->GetNativeHashVirtual();
-}
-
-// ---------------------------------------------------------------------------
-// AptInterp_BuildTargetPath -- the recursive display-path builder (X360
-// sub_82AF7400) behind AptActionInterpreter::getName @0x82AF75C8 (HOMED
-// 2026-07-02, retiring the {} stub). Walks up the display-parent chain: the
-// ROOT frame (no parent) renders as "_level%d" of its render-item depth (a
-// dotted build always writes it; the slash form only when the depth is
-// non-zero); every child level appends the separator ("." or "/") plus its
-// instance name -- or "instance%ld" of its depth when the name is the shared
-// empty string.
-// ---------------------------------------------------------------------------
-static void AptInterp_BuildTargetPath(AptCIH* pNode, EAStringC* pOut, int bDots)
-{
-    const char* const pSep = bDots ? "." : "/";
-
-    AptCIH* const pParent = pNode->GetDisplayListParent();
-    if (pParent == nullptr)
-    {
-        const int nDepth = pNode->GetCharacterInst()->GetRenderItem()->GetDepth();
-        if ((bDots == 0 && nDepth != 0) || bDots == 1)
-        {
-            EAStringC lLevel;
-            lLevel.Format("_level%d", nDepth);
-            *pOut = lLevel;
-        }
-        return;
-    }
-
-    AptInterp_BuildTargetPath(pParent, pOut, bDots);
-
-    const EAStringC& rName = pNode->GetInstanceName();
-    if (!rName.IsEmpty())
-    {
-        *pOut += (pSep + rName);   // the free operator+(const char*, EAStringC)
-    }
-    else
-    {
-        const int nDepth = pNode->GetCharacterInst()->GetRenderItem()->GetDepth();
-        *pOut += pSep;
-        EAStringC lInst;
-        lInst.Format("instance%ld", static_cast<long>(nDepth));
-        *pOut += lInst;
-    }
-}
-
-// AptActionInterpreter::getName @0x82AF75C8 -- clear the out-string, then
-// build the dotted target path of pNode ("_level0.child.instance3"-style).
-void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut)
-{
-    *pOut = EAStringC("");
-    AptInterp_BuildTargetPath(pNode, pOut, 1);
-}
-
-// ---------------------------------------------------------------------------
-// AptCIH_ShapeHitTest (HOMED 2026-07-02, retiring the return-0 stub). The
+// AptShapeHitTest (HOMED 2026-07-02, retiring the return-0 stub). The
 // X360 sMethod_hitTest's shape-precise arm @0x82AED868 is a HOST-CALLBACK
 // dispatch: `gAptFuncs.pfnPointHitTest(x, y, node)` (dword_8324E8A4 == the
 // user-function table +0x8C; PPC f1/f2 + r5 == the (float, float, clip) C
@@ -371,7 +312,7 @@ void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut)
 // ---------------------------------------------------------------------------
 extern AptUserFunctions gAptFuncs;   // dword_8324E818 (CgsAptAux.cpp)
 
-int AptCIH_ShapeHitTest(AptValue* pNode, float fX, float fY)
+int AptShapeHitTest(AptValue* pNode, float fX, float fY)
 {
     if (gAptFuncs.pfnPointHitTest != nullptr)
     {
@@ -454,14 +395,14 @@ AptCharacter* findCharacterInLibrary(AptCIH* pNode, EAStringC* pName, char bSear
 }
 
 // ---------------------------------------------------------------------------
-// AptInterp_LabelToFrame (HOMED 2026-07-02, retiring the stub -1). The frame-
+// AptLabelToFrame (HOMED 2026-07-02, retiring the stub -1). The frame-
 // label resolve the GotoLabel/GotoFrame2 opcode handlers extracted: the node's
 // clip movie's label hash (the X360 @0x82B0C618 chain: charInst -> render item
 // -> character -> embedded movie word[2]), Lookup(label) -> toInteger, or -1
 // on a miss / no hash. Returns the 0-based frame (the callers' >= 0 gate and
 // the +1/-1 label arithmetic live at the call sites, matching the asm).
 // ---------------------------------------------------------------------------
-int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel)
+int AptLabelToFrame(AptCIH* pNode, const EAStringC* pLabel)
 {
     const AptCharacter* const pChar =
         pNode->GetCharacterInst()->GetRenderItem()->mpCharacter;
@@ -474,12 +415,12 @@ int AptInterp_LabelToFrame(AptCIH* pNode, const EAStringC* pLabel)
 
 AptValue* AptCIHNativeFunctionHelper::sMethod_gotoAndPlay(AptValue* pContext, int nArgCount)
 {
-    return AptCIH_gotoAndX(pContext, nArgCount, 1);
+    return AptCIH::_gotoAndX(pContext, nArgCount, 1);
 }
 
 AptValue* AptCIHNativeFunctionHelper::sMethod_gotoAndStop(AptValue* pContext, int nArgCount)
 {
-    return AptCIH_gotoAndX(pContext, nArgCount, 0);
+    return AptCIH::_gotoAndX(pContext, nArgCount, 0);
 }
 
 // ===========================================================================
@@ -508,9 +449,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_removeMovieClip(AptValue* pContext
     // coerces the value to the object it designates under (scope, target), writing it
     // through the out-param). Canonical signature (scope, target, value, ppOut); the
     // console reaches it here with target == 0 (a null AptValue*), receiver == pContext.
-    extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                                   AptValue* pValue, AptValue** ppOut);
-    AptActionInterpreter_valueToObject(pContext, nullptr, pContext, &pResolved);
+    // AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
+    gAptActionInterpreter.valueToObject(pContext, nullptr, pContext, &pResolved);
 
     if (pResolved && IsClipHandleOrCIHNone(pResolved))
     {
@@ -548,15 +488,12 @@ extern AptActionInterpreter gAptActionInterpreter;   // &dword_8324E760
 // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, AptCIH*
 // scope, AptValue* target, parent, nameValue, depth, initObject); the console reaches
 // it here with scope == pContext (a CIH node) and target == 0.
-extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
-                                                    AptCIH* pScope, AptValue* pTarget, AptValue* pParent,
-                                                    AptValue* pNameValue, int nDepth, AptValue* pInitObject);
+// AptActionInterpreter::_doCloneSprite is now a member (declared in the header).
 
 // AptActionInterpreter::loadVariables (the AS loadVariables core; homed in
 // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, scope,
 // target, &urlString); the console reaches it here with target == 0.
-extern void AptActionInterpreter_loadVariables(AptActionInterpreter* pInterp,
-                                               AptValue* pScope, AptValue* pTarget, EAStringC* pURL);
+// AptActionInterpreter::loadVariables is now a member (declared in the header).
 
 // ===========================================================================
 // sMethod_duplicateMovieClip @0x82B0DEE8 -- AS duplicateMovieClip(name, depth
@@ -573,7 +510,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_duplicateMovieClip(AptValue* pCont
         : gppAptNativeArgStack[gnAptNativeArgCount - 3];
     const int nDepth = gppAptNativeArgStack[gnAptNativeArgCount - 2]->toInteger();      // arg 1: AS depth
 
-    return AptActionInterpreter_doCloneSprite(&gAptActionInterpreter,
+        return gAptActionInterpreter._doCloneSprite(
                                               static_cast<AptCIH*>(pContext), nullptr, pContext,
                                               pNameValue, nDepth + 0x4000, pInitObject);
 }
@@ -591,7 +528,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadVariables(AptValue* pContext, 
     {
         EAStringC strURL;                                                     // the X360 &unk_82F72FF8 empty sentinel
         gppAptNativeArgStack[gnAptNativeArgCount - 1]->toString(&strURL);     // arg 0 -> the URL
-        AptActionInterpreter_loadVariables(&gAptActionInterpreter, pContext, nullptr, &strURL);
+        gAptActionInterpreter.loadVariables(pContext, nullptr, &strURL);
     }
     return gpUndefinedValue;
 }
@@ -607,7 +544,7 @@ extern void GetBoundingRectClamped(const AptCIH* pThis, float* pOutRect);   // s
 // AptCharacter render-method slot) -- "is local point (x,y) inside the node's drawn
 // shape?". Declared as an extern shim (the indirect target is a render-data method
 // not yet homed), preserving the (node, x, y) call shape.
-extern int AptCIH_ShapeHitTest(AptValue* pNode, float fX, float fY);   // (*dword_8324E8A4)
+extern int AptShapeHitTest(AptValue* pNode, float fX, float fY);   // (*dword_8324E8A4)
 
 // Local: the X360 hitTest receiver/arg type gate -- value type 12 (CharacterInst
 // handle) OR 37 (CIHNone), WITHOUT the defined bit (the asm tests only meValueType,
@@ -659,7 +596,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_hitTest(AptValue* pContext, int nA
 
         if (nArgCount > 2 && gppAptNativeArgStack[gnAptNativeArgCount - 3]->toInteger())
         {
-            nResult = AptCIH_ShapeHitTest(pContext, fX, fY);   // arg 2 truthy -> shape-precise
+            nResult = AptShapeHitTest(pContext, fX, fY);   // arg 2 truthy -> shape-precise
         }
         else
         {
@@ -694,8 +631,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
     // FLAG: the point's embedded per-instance native hash (the X360 reads it at the
     // value's +8 -- an AptValueWithHash's hash sub-object). Declared as an extern
     // shim so the key lookups/stores stay typed without re-narrowing the value here.
-    extern AptNativeHash* AptValue_EmbeddedNativeHash(AptValue* pValue);   // pValue + 8
-    AptNativeHash* const pHash = AptValue_EmbeddedNativeHash(pPoint);
+    AptNativeHash* const pHash = static_cast<AptValueWithHash*>(pPoint)->GetNativeHashVirtual();
 
     AptValue* const pValX = pHash->Lookup(strKeyX);
     AptValue* const pValY = pHash->Lookup(strKeyY);
@@ -733,13 +669,11 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_localToGlobal(AptValue* pContext, 
 extern DOGMA_PoolManager* gpAptPseudoDataPool;   // off_8324D808
 
 // ---------------------------------------------------------------------------
-// FLAG: TextFormat::copyTextFormatObj (X360 callee of get/setTextFormat) overlays
-// pSource's format fields onto pDest in place (the non-allocating field copy, as
-// opposed to the TextFormat copy-ctor). Declared as an extern shim taking the
-// named TextFormat record so setTextFormat keeps the exact (dest, &src) call shape
-// without re-deriving the field offsets here; bodied in the AptTextFormat TU.
+// TextFormat::copyTextFormatObj @0x82AE5820 (the X360 callee of get/setTextFormat)
+// overlays pSource's non-inherit fields onto the receiver in place -- the real
+// member, homed in AptTextFormat.cpp (was a {} link-stub that made every record
+// copy a no-op).
 // ---------------------------------------------------------------------------
-extern void TextFormat_copyTextFormatObj(TextFormat* pDest, const TextFormat* pSource);   // TextFormat::copyTextFormatObj
 
 // ===========================================================================
 // sMethod_getBounds @0x82AF5E28 -- AS getBounds([targetCoordSpace]): the receiver's
@@ -834,12 +768,15 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_setTextFormat(AptValue* pContext, 
         // The item already has a TextFormat: merge in place.
         uMergedStyle = reinterpret_cast<TextFormat*>(pItem->mpTextFormat)->mnStyleFlags | pSrc->mnStyleFlags;
         pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
-        TextFormat_copyTextFormatObj(reinterpret_cast<TextFormat*>(pItem->mpTextFormat), pSrc);
+        reinterpret_cast<TextFormat*>(pItem->mpTextFormat)->copyTextFormatObj(pSrc);
     }
     else
     {
         // No TextFormat yet: allocate a fresh one (copy-ctor from the source) and set it.
-        void* const lpMem = gpAptPseudoDataPool->Allocate(32);
+        // (Console Allocate(32) == its sizeof(TextFormat); the x64 record widens to 40
+        // under the 8-byte EAStringC -- a literal 32 overruns the pool block and
+        // corrupts the adjacent free-list node.)
+        void* const lpMem = gpAptPseudoDataPool->Allocate(sizeof(TextFormat));
         TextFormat* const pNewFmt = lpMem ? new (lpMem) TextFormat(pSrc) : nullptr;
         pItem = static_cast<AptRenderItemDynamicText*>(pInst->GetRenderItemWritable());
         pItem->SetTextFormat(reinterpret_cast<AptValue*>(pNewFmt));
@@ -1034,8 +971,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createEmptyMovieClip(AptValue* pCo
     if (!AptCharacterHelper::spDefaultMovieCharacter)
         AptCharacterHelper::CreateMovieCharacterInst();
 
-    AptCIH* const pInserted = AptCIH_InsertChild(
-        pNode, nullptr, AptCharacterHelper::spDefaultMovieCharacter,
+        AptCIH* const pInserted = pNode->InsertChild(
+        nullptr, AptCharacterHelper::spDefaultMovieCharacter,
         nDepth + 0x4000, &lName, nullptr);
 
     if (IsClipHandleOrCIHNone(pInserted))
@@ -1078,8 +1015,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_attachMovie(AptValue* pContext, in
     pNewName->toString(&lNewName);
     const int nDepth = pDepth->toInteger() + 0x4000;
 
-    AptCIH* const pInserted =
-        AptCIH_InsertChild(pNode, pNode, pCharacter, nDepth, &lNewName, pInitObj);
+        AptCIH* const pInserted =
+        pNode->InsertChild(pNode, pCharacter, nDepth, &lNewName, pInitObj);
     AptAnimationTarget::TickNewInsts();   // static drain of the module new-instance table (retired the AptAnimationTarget_TickNewInsts shim)
 
     return pInserted ? pInserted : gpUndefinedValue;
@@ -1128,8 +1065,8 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createTextField(AptValue* pContext
         AptCharacterHelper::CreateTextCharacterInst();
 
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
-    AptCIH* const pInserted = AptCIH_InsertChild(
-        pNode, nullptr, AptCharacterHelper::spDefaultTextCharacter,
+        AptCIH* const pInserted = pNode->InsertChild(
+        nullptr, AptCharacterHelper::spDefaultTextCharacter,
         nDepth + 0x4000, &lName, nullptr);
 
     AptCharacterInst* const pInst = pInserted->GetCharacterInst();
@@ -1153,10 +1090,6 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_createTextField(AptValue* pContext
 
     return gpUndefinedValue;
 }
-
-// FLAG (un-homed AS-VM callee): AptActionInterpreter::getName -- resolve the AS path
-// name of a node into pOut. Declared so loadMovie compiles against the same entry.
-extern void AptActionInterpreter_getName(AptCIH* pNode, EAStringC* pOut);   // AptActionInterpreter::getName
 
 // ===========================================================================
 // sMethod_loadMovie @0x82B06D10 -- AS loadMovie(url): load an external movie into
@@ -1190,9 +1123,9 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadMovie(AptValue* pContext, int 
         if (nLen >= 4)
             lFileName.Delete(nLen - 4, 4);
 
-        // The node's AS path is the load target name.
+        // The node's AS path is the load target name (getName @0x82AF75C8).
         EAStringC lTargetName;
-        AptActionInterpreter_getName(static_cast<AptCIH*>(pContext), &lTargetName);
+        gAptActionInterpreter.getName(pContext, &lTargetName);
 
         // Console arg order: Load(a2 = stripped name, a3 = target path).
         gpAptTarget->mpLinker->Load(&lFileName, &lTargetName);
@@ -1201,37 +1134,25 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_loadMovie(AptValue* pContext, int 
 }
 
 // ---------------------------------------------------------------------------
-// FLAG (un-homed TextFormat-layer callees -- bodies in the AptTextFormat TU):
-//   AptTextFormat_ConstructRecord (sub_82AFAEB8) -- the AS `TextFormat(...)` field
-//     ctor: builds a 32-byte TextFormat record, setting mFontName (from font.toString),
-//     mfSize, mnColor, mnStyleFlags (from bold/italic/underline), mnIndent/mnLeftMargin/
-//     mnRightMargin, and mnAlign (from align.toString vs "left"/"right"/"true"/"center").
-//     -1 / the undefined value == inherit. (Field map decoded from the asm stores
-//     +0x00..+0x1C; the getters call it only with all-inherit defaults.)
-//   AptTextFormat_ConstructDefault (sub_82AFB2A8) -- allocate+base-construct an empty
-//     AptTextFormat (AptValueWithHash base) into the given GC block.
-//   AptResolveTextFieldFontName -- the serialised .apt default-font name for a text
-//     inst ("" when none); the same font-table-walk family as the static-text
-//     AptResolveTextFontCharacter resolver.
+// AptResolveTextFieldFontName -- the serialised .apt default-font name for a text
+// inst ("" when none); homed in AptCIHText.cpp (the same font-table-walk family as
+// the static-text AptResolveTextFontCharacter resolver).
 // ---------------------------------------------------------------------------
-extern TextFormat*    AptTextFormat_ConstructRecord(TextFormat* pRecord, AptValue* pFont,
-                         float fSize, int nColor, int nBold, int nItalic, int nUnderline,
-                         int nLeftMargin, int nRightMargin, int nIndent, AptValue* pAlign);  // sub_82AFAEB8
-extern AptTextFormat* AptTextFormat_ConstructDefault(void* pBlock, AptValue* pSource, double dArg);  // sub_82AFB2A8
 extern const char*    AptResolveTextFieldFontName(AptCharacterInst* pTextInst);
 
 static const float KF_TEXTFORMAT_INHERIT_SIZE = -1.0f;   // flt_820037C8
 
 // Build the field's default (all-inherit) TextFormat record when it has none, and
 // install it. Shared by getNewTextFormat / getTextFormat (X360: Allocate(32) ->
-// sub_82AFAEB8(undefined,-1.0,-1,...) -> AptRenderItemDynamicText::SetTextFormat).
+// the TextFormat field ctor (sub_82AFAEB8) with the all-inherit set ->
+// AptRenderItemDynamicText::SetTextFormat).
 static void EnsureFieldTextFormat(AptCIH* pNode, AptRenderItemDynamicText* pField)
 {
     if (pField->mpTextFormat)
         return;
     TextFormat* pDefault = nullptr;
     if (void* pBlock = gpAptPseudoDataPool->Allocate(sizeof(TextFormat)))   // X360 Allocate(32)
-        pDefault = AptTextFormat_ConstructRecord(static_cast<TextFormat*>(pBlock),
+        pDefault = ::new (pBlock) TextFormat(
             gpUndefinedValue, KF_TEXTFORMAT_INHERIT_SIZE, -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);
     static_cast<AptRenderItemDynamicText*>(pNode->GetCharacterInst()->GetRenderItemWritable())
         ->SetTextFormat(reinterpret_cast<AptValue*>(pDefault));
@@ -1248,9 +1169,16 @@ static void OverlayFieldTextAttributes(AptCIH* pNode, AptRenderItemDynamicText* 
         pResult->mFormat.mnColor = static_cast<int32_t>(uColor);
     }
 
-    // Default font name from the serialised .apt font table.
-    EAStringC lFontName(AptResolveTextFieldFontName(pNode->GetCharacterInst()));
-    pResult->mFormat.mFontName = lFontName;
+    // Default font name from the serialised .apt font table. Assigned only when the
+    // field's font id RESOLVES (original source: `if (fontID in range && slot is a
+    // FONT char) texFormat->pFontName = font.szName;` -- on a miss, incl. the
+    // setTextFormat negative-id latch, the record's COPIED font name is kept).
+    const char* const pcFontName = AptResolveTextFieldFontName(pNode->GetCharacterInst());
+    if (pcFontName != nullptr && pcFontName[0] != '\0')
+    {
+        EAStringC lFontName(pcFontName);
+        pResult->mFormat.mFontName = lFontName;
+    }
 
     // Alignment = the field's packed alignment (mFlagsAndBackColor bits 3-6, signed).
     pResult->mFormat.mnAlign = static_cast<int32_t>(pField->mFlagsAndBackColor << 25) >> 28;
@@ -1299,14 +1227,15 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getTextFormat(AptValue* pContext, 
 
     AptTextFormat* pResult = nullptr;
     if (void* pBlock = AptTextFormat::operator new(sizeof(AptTextFormat)))   // X360 operator new(64)
-        pResult = AptTextFormat_ConstructDefault(pBlock, gpUndefinedValue, 0.0);
+        pResult = ::new (pBlock) AptTextFormat(   // sub_82AFB2A8 (the AS-object field ctor)
+            gpUndefinedValue, 0.0f, -1, -1, -1, -1, -1, -1, -1, gpUndefinedValue);
 
     EnsureFieldTextFormat(pNode, pField);
 
     // Copy the field's current format into the result, then force the three style
     // flags to "defined" so the returned object reports concrete bold/italic/underline.
-    TextFormat_copyTextFormatObj(&pResult->mFormat,
-                                 reinterpret_cast<const TextFormat*>(pField->mpTextFormat));
+    pResult->mFormat.copyTextFormatObj(
+        reinterpret_cast<const TextFormat*>(pField->mpTextFormat));
     pResult->mFormat.mnStyleFlags |= TextFormat::KU_ITALIC_DEFINED;
     pResult->mFormat.mnStyleFlags |= TextFormat::KU_UNDERLINE_DEFINED;
     pResult->mFormat.mnStyleFlags |= TextFormat::KU_BOLD_DEFINED;

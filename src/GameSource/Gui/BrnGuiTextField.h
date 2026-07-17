@@ -77,6 +77,15 @@ namespace BrnGui
         bool SetLocalisedText(const char* lpacText,
                               CgsLanguage::LanguageManager::ParameterFormatType leFormat);
 
+        // @0x824E7708 (BrnTextField.cpp:224) -- the INTEGER variant (the ledger carries
+        // it un-named as sub_824E7708): format liValue under leFormat straight into
+        // macText (128 cap, the language manager's integer formatter) and push the apt
+        // data. Always reports success (the X360 returns 1). Body links from the
+        // BrnTextField TU (which also carries the ledger-named free forwarder the
+        // ShowtimeInstantResults consumer declared and links against).
+        bool SetLocalisedText(s32 liValue,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat);
+
         // @0x824E5020 (BrnTextField.cpp:100, DWARF h:191) -- adopt already-resolved text:
         // strings that fit go straight into macText; over-long strings are registered in
         // the localisation database under this component's name and displayed as the

@@ -3,6 +3,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"          // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"            // CgsUnicode::IsValidUtf8String
+#include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResource (LoadStringTable)
+
+#include <cstring>   // std::strlen / std::strncpy (the FormatText resolver)
+#include <cstdlib>   // std::atof / std::atoi (the FormatText value branches)
 
 namespace CgsLanguage
 {
@@ -242,6 +246,96 @@ namespace CgsLanguage
         return true;
     }
 
+    // X360 0x828664B8 CgsLanguage::LanguageManager::LoadStringTable.
+    //
+    // Faithful decompile: assert the language id ("Language ID <id> is invalid" for ids >= 24;
+    // streamed on the console -- the StrStream text collapses to the plain string per project
+    // convention), unload any prior table, CAlloc the bulk static element block (one hash
+    // element per entry, mpStringElements), then insert every {hash, string} pair into
+    // mStrings, UTF-8-validating each string. Records the resource (mpResource), re-derives
+    // the formatting strings, picks the language's default font ("dfheic" only for language
+    // 16, the wide-glyph locale), and stamps meLanguage last (the X360 store order).
+    // The entry/offset widths are the x64-widened data layout (see CgsLanguageResourceType.h);
+    // parity is by named member.
+    void LanguageManager::LoadStringTable(CgsResource::LanguageResource* lpResource)
+    {
+        CGS_ASSERT(lpResource->meLanguageID < 0x18u, "Language ID is invalid");
+
+        UnloadStringTable();
+
+        // The X360 ctor leaves mStrings' bins at the uninitialised sentinel; the table must be
+        // live before the inserts (UnloadStringTable only re-Inits when a table was loaded).
+        if (mpResource == 0 && mpStringElements == 0)
+            mStrings.Init();
+
+        mpStringElements = static_cast<HashIDStringArray::Element*>(
+            mpLanguageAllocator->CAlloc(lpResource->muSize,
+                                        static_cast<s32>(sizeof(HashIDStringArray::Element))));
+        if (lpResource->muSize)
+        {
+            const CgsResource::LanguageResourceHashEntry* lpEntries = lpResource->GetEntries();
+            for (s32 li = 0; li < lpResource->muSize; ++li)
+            {
+                const u8* lpcString = reinterpret_cast<const u8*>(
+                    static_cast<uintptr_t>(lpEntries[li].mpString));
+                CGS_ASSERT(CgsUnicode::IsValidUtf8String(lpcString),
+                           "CgsUnicode::IsValidUtf8String( resource.mpEntries[luIndex].GetString() )");
+
+                HashIDStringArray::Element* lpElement = &mpStringElements[li];
+                lpElement->Set(static_cast<u32>(lpEntries[li].muHash), lpcString);
+                mStrings.Insert(lpElement);
+            }
+        }
+
+        mpResource = lpResource;
+        const u32 luLanguageId = lpResource->meLanguageID;
+        // The console re-derives the PER-LOCALE formatting strings here
+        // (PrepareFormattingStrings @0x82865B70, reading the loaded table). NOT YET
+        // RECONSTRUCTED -- the boot language (English) formats identically through the
+        // defaults; land the per-locale variant with the localisation slice.
+        PrepareDefaultFormattingStrings();
+        mpcDefaultFontName = (luLanguageId == 16u) ? "dfheic" : "NODEFAULTFONTSPECIFIED";
+        meLanguage = static_cast<CgsLanguage::ELanguage>(luLanguageId);
+    }
+
+    // X360 0x82862540 CgsLanguage::LanguageManager::UnloadStringTable.
+    //
+    // Faithful decompile: only acts when a table is loaded (mpResource non-null). Re-Init the
+    // mStrings bins, null the resource, drain both dynamic-string live lists head-first back
+    // to their free sublists -- freeing each dynamic entry's heap string copy (+ its element)
+    // for the owned list, and just the element for the pointer list -- then free the bulk
+    // static element block and re-derive the default formatting strings.
+    void LanguageManager::UnloadStringTable()
+    {
+        if (mpResource == 0)
+            return;
+
+        mStrings.Init();
+        mpResource = 0;
+
+        while (DynamicHashElementsList::Node* lpNode = mDynamicStringElements.GetHead())
+        {
+            HashIDStringArray::Element* lpElement = lpNode->mData;
+            mDynamicStringElements.RecycleNode(lpNode);
+            // The owned list heap-copied its string (AddString): free the copy, then the element.
+            mpLanguageAllocator->Free(const_cast<CgsUnicode::CgsUtf8*>(lpElement->GetValue()));
+            mpLanguageAllocator->Free(lpElement);
+        }
+
+        while (DynamicHashElementsList::Node* lpNode = mDynamicStringPointerElements.GetHead())
+        {
+            HashIDStringArray::Element* lpElement = lpNode->mData;
+            mDynamicStringPointerElements.RecycleNode(lpNode);
+            // The pointer list stores the caller's string (caller-owned): free the element only.
+            mpLanguageAllocator->Free(lpElement);
+        }
+
+        mpLanguageAllocator->Free(mpStringElements);
+        mpStringElements = 0;
+
+        PrepareDefaultFormattingStrings();
+    }
+
     // X360 0x82864950 CgsLanguage::LanguageManager::RemoveString.
     //
     // Faithful decompile: validate, hash the key, and remove the hash's entry via
@@ -363,6 +457,26 @@ namespace CgsLanguage
         return true;
     }
 
+    // X360 0x82864000 -- UNVERIFIED body: that address is not in the export set, so
+    // this reconstruction is inferred from the ViewModule::Release call contract (the
+    // caller loops until true) and the <=0x28-byte size budget: reset the lifecycle
+    // stages, drop the allocator, report done. Export 0x82864000 to verify the exact
+    // stores before trusting this beyond the boot path.
+    bool LanguageManager::Release()
+    {
+        meReleaseStage = E_RELEASESTAGE_DONE;
+        mePrepareStage = E_PREPARESTAGE_START;
+        mpLanguageAllocator = 0;
+        return true;
+    }
+
+    // The X360 Destruct is the ICF-folded EMPTY function (resolved to
+    // BaseCollisionGenerator::Destruct @0x8284CB38, body `;`): the guest tears nothing
+    // down here, so neither does this body.
+    void LanguageManager::Destruct()
+    {
+    }
+
     // X360 0x82860940 CgsLanguage::LanguageManager::PrepareDefaultFormattingStrings.
     //
     // Faithful decompile: stamp every per-locale format separator/template member with its
@@ -402,6 +516,164 @@ namespace CgsLanguage
         return true;
     }
 
+    // @ 0x82862650 -- render liValue into the caller's buffer under one of the
+    // four integer formats. The out-of-range assert (cpp:940) and the unknown-
+    // format assert (cpp:968) both stream on the console; folded static. Every
+    // path NUL-terminates the buffer's last byte and returns true.
+    bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize, s32 liValue,
+                                     ParameterFormatType leType)
+    {
+        CGS_ASSERT(leType < E_FORMAT_COUNT,
+                   "Invalid Localisation Format supplied to TextField::FormatText");   // cpp:940
+
+        switch (leType)
+        {
+        case E_FORMAT_INTEGER:
+            FormatIntegerString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_INTEGER_NOSEPERATOR:
+            FormatIntegerNoSeperatorString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_PERCENTAGE:
+            FormatPercentageString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        case E_FORMAT_MONEY:
+            FormatCurrencyString(lpacBuffer, liValue, static_cast<s32>(luBufferSize));
+            break;
+        default:
+            CGS_ASSERT(false, "Invalid Parameter sent to SetLocalisedText with int");   // cpp:968
+            break;
+        }
+
+        lpacBuffer[luBufferSize - 1] = 0;
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // The FormatAndAddText family + the positional-parameter formatters
+    // (reconstructed from BURNOUT_X360_ARTIST.XEX). Their shared FormatText
+    // resolver (@0x82864C48) is still the FLAG trap-stub at the end of this
+    // file; these bodies are faithful and take over the real behaviour the
+    // moment that resolver lands.
+    // ------------------------------------------------------------------------
+
+    // @ 0x828651A0 -- resolve+format lpcSourceText into a 1KB local, then
+    // AddString the result under lpcStringId. Returns FormatText's own result
+    // (the AddString result is discarded, per the X360 body).
+    bool LanguageManager::FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
+                                           ParameterFormatType leType)
+    {
+        char lacBuffer[1024];
+        const bool lbResult = FormatText(lacBuffer, 1024, lpcSourceText, leType);
+        AddString(lpcStringId, reinterpret_cast<const u8*>(lacBuffer));
+        return lbResult;
+    }
+
+    // @ 0x82866450 -- the positional-parameter form: format the source and the
+    // liNumParams (const char* text, ParameterFormatType) vararg pairs through
+    // FormatTextV, then AddString the result. Returns FormatTextV's result.
+    bool LanguageManager::FormatAndAddText(const char* lpcStringId, const char* lpcSourceText,
+                                           ParameterFormatType leType, s32 liNumParams, ...)
+    {
+        char lacBuffer[1024];
+
+        va_list lArguments;
+        va_start(lArguments, liNumParams);
+        const bool lbResult =
+            FormatTextV(lacBuffer, 1024, lpcSourceText, leType, liNumParams, lArguments);
+        va_end(lArguments);
+
+        AddString(lpcStringId, reinterpret_cast<const u8*>(lacBuffer));
+        return lbResult;
+    }
+
+    // @ 0x828651E8 -- resolve+format lpcSourceText into a 1KB local, format each
+    // of the liNumParams (1..3) vararg (const char* text, ParameterFormatType)
+    // pairs into its own 512-byte slot, then print the slots into the source's
+    // %1..%N positional markers, capped at luBufferSize. The X360 walks its
+    // register-save-area va cursor with a per-pair "lpArgument" null tripwire
+    // (cpp:1086); the va_list itself carries that role here.
+    bool LanguageManager::FormatTextV(char* lpacBuffer, u32 luBufferSize,
+                                      const char* lpcSourceText, ParameterFormatType leType,
+                                      s32 liNumParams, va_list lArguments)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");   // cpp:1062
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in LanguageManager::FormatText");  // cpp:1063
+        CGS_ASSERT(liNumParams > 0 && liNumParams < 4, "Wrong number of Parameters int SetLocalisedText"); // cpp:1064
+
+        char lacSourceBuffer[1024];
+        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+
+        // One 512-byte slot + one argument pointer per parameter (the X360 reserves
+        // four pointer slots on its stack; the count is asserted to 1..3 above).
+        const CgsUnicode::CgsUtf8* lapUtf8Params[4];
+        char lacParamBuffers[4][512];
+
+        for (s32 liParam = 0; liParam < liNumParams; ++liParam)
+        {
+            CGS_ASSERT(lArguments != 0, "lpArgument");   // cpp:1086 (the console's va cursor check)
+
+            const char* lpcParamText   = va_arg(lArguments, const char*);
+            const u32   luParamFormat  = va_arg(lArguments, u32);
+
+            CGS_ASSERT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText"); // cpp:1093
+            CGS_ASSERT(luParamFormat <= 0x14, "Invalid Parameter");                                   // cpp:1094
+
+            FormatText(lacParamBuffers[liParam], 512, lpcParamText,
+                       static_cast<ParameterFormatType>(luParamFormat));
+            lapUtf8Params[liParam] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacParamBuffers[liParam]);
+        }
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                           reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
+                           static_cast<s32>(luBufferSize), lapUtf8Params,
+                           static_cast<u8>(liNumParams));
+        return true;
+    }
+
+    // @ 0x82865480 -- as FormatTextV but the liNumParams (1..3) parameter texts /
+    // format types arrive as parallel arrays (the format array read is null-guarded,
+    // defaulting to E_FORMAT_TEXT). Returns false when any parameter failed to
+    // format (the source-format result is discarded, per the X360 body).
+    bool LanguageManager::Obsolete_FormatTextByArray(char* lpacBuffer, u32 luBufferSize,
+                                                     const char* lpcSourceText, ParameterFormatType leType,
+                                                     s32 liNumParams, const char* const* lppcParams,
+                                                     const ParameterFormatType* lpeParamFormatTypes)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");   // cpp:1127
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText");  // cpp:1128
+        CGS_ASSERT(liNumParams > 0 && liNumParams < 4, "Wrong number of Parameters int SetLocalisedText"); // cpp:1129
+
+        bool lbAnyParamFailed = false;
+
+        char lacSourceBuffer[1024];
+        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[4];
+        char lacParamBuffers[4][512];
+
+        for (s32 liParam = 0; liParam < liNumParams; ++liParam)
+        {
+            const char* lpcParamText  = lppcParams[liParam];
+            const u32   luParamFormat =
+                (lpeParamFormatTypes != 0) ? static_cast<u32>(lpeParamFormatTypes[liParam]) : 0;
+
+            CGS_ASSERT(lpcParamText != 0, "Invalid Text Pointer in Parameterised SetLocalisedText"); // cpp:1156
+            CGS_ASSERT(luParamFormat <= 0x14, "Invalid Parameter");                                   // cpp:1157
+
+            const bool lbFormatted = FormatText(lacParamBuffers[liParam], 512, lpcParamText,
+                                                static_cast<ParameterFormatType>(luParamFormat));
+            lbAnyParamFailed |= !lbFormatted;
+            lapUtf8Params[liParam] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacParamBuffers[liParam]);
+        }
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                           reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
+                           static_cast<s32>(luBufferSize), lapUtf8Params,
+                           static_cast<u8>(liNumParams));
+        return !lbAnyParamFailed;
+    }
+
     // ------------------------------------------------------------------------
     // FLAG trap-stub bodies (link scaffold, 2026-07-01): the ten Format*String
     // members below are declared (DWARF) and referenced by the debug component's
@@ -412,6 +684,7 @@ namespace CgsLanguage
     // its faithful decompile.
     // ------------------------------------------------------------------------
     void LanguageManager::FormatIntegerString(char*, s32, s32) const                      { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatIntegerNoSeperatorString(char*, s32, s32) const           { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatXoverYString(char*, s32, s32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatPercentageString(char*, s32, s32) const                   { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatCurrencyString(char*, s32, s32) const                     { __debugbreak(); }   // FLAG trap-stub
@@ -424,4 +697,155 @@ namespace CgsLanguage
     void LanguageManager::FormatSmallDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatLargeDistanceString(char*, f32, s32) const                { __debugbreak(); }   // FLAG trap-stub
     f32  LanguageManager::GetDistanceDisplayScale() const                                 { __debugbreak(); return 1.0f; }   // FLAG trap-stub
+    // FLAG trap-stubs for the float-dispatch leaves 0x828641F0 references beyond the
+    // block above (declared additions; decompiles land with the value-format slice).
+    void LanguageManager::FormatSecondsAndHundredsStringLong(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatSecondsStringLong(char*, f32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatMinutesSecondsStringMediumText(char*, f32, s32) const     { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatAutoDistanceString(char*, f32, s32) const                 { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatAutoDistanceStringLong(char*, f32, s32) const             { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatSmallDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatLargeDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
+    void LanguageManager::FormatHoursAndMinutesAndSecondsString(u8*, f32, s32) const      { __debugbreak(); }   // FLAG trap-stub
+
+    // @ 0x828641F0 -- the FLOAT value dispatcher (DWARF CgsLanguageManager.h: the
+    // (char*, u32, f32, ParameterFormatType) overload): switch the format onto its
+    // time/percentage/currency/distance leaf, streamed-assert on an unknown format
+    // ("Invalid Parameter sent to SetLocalisedText with float"), always NUL the
+    // buffer's last byte, return true. The leaves are the FLAG trap-stubs above until
+    // their decompiles land -- no boot/menu text rides a float format.
+    bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize, f32 lfValue,
+                                     ParameterFormatType leType)
+    {
+        CGS_ASSERT(leType < 21, "Invalid Localisation Format supplied to TextField::FormatText");
+
+        switch (leType)
+        {
+        case 1:  FormatHoursAndMinutesAndSecondsString(
+                     reinterpret_cast<u8*>(lpacBuffer), lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 2:  FormatMinutesAndSecondsAndHundredsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 3:  FormatMinutesAndSecondsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 4:  FormatSecondsAndHundredsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 5:  FormatSecondsAndHundredsStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 6:  FormatSecondsString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 7:  FormatSecondsStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 8:  FormatMinutesSecondsStringMediumText(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 11: FormatIntegerString(lpacBuffer, static_cast<s32>(lfValue),
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 13: FormatPercentageString(lpacBuffer, static_cast<s32>(lfValue),
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 14: FormatCurrencyString(lpacBuffer, static_cast<s32>(lfValue),
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 15: FormatAutoDistanceString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 16: FormatAutoDistanceStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 17: FormatSmallDistanceString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 18: FormatSmallDistanceStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 19: FormatLargeDistanceString(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        case 20: FormatLargeDistanceStringLong(lpacBuffer, lfValue,
+                     static_cast<s32>(luBufferSize));                                    break;
+        default:
+            CGS_ASSERT(false, "Invalid Parameter sent to SetLocalisedText with float : ");
+            break;
+        }
+
+        lpacBuffer[luBufferSize - 1] = 0;
+        return true;
+    }
+
+    // @ 0x82864C48 -- the FormatText RESOLVER (TextField::SetLocalisedText's entry;
+    // the profile/boot prompts ride the type-0 copy and type-9/10 database-lookup
+    // branches). Faithful branch map:
+    //   0      : plain copy (own too-long streamed assert kept as the plain form).
+    //   1-8,
+    //   15-20  : atof -> the float dispatcher above; returns FALSE (value formats
+    //            report "not a literal copy", per the X360 result register).
+    //   9 / 10 : FindString(source): hit -> copy (10 = ToUpperN uppercase copy) of
+    //            the DATABASE string; miss -> copy the source text verbatim.
+    //            Returns TRUE.
+    //   11-14  : atoi -> the s32 formatter; returns FALSE.
+    //   other  : "Invalid Parameter sent to FormatText" assert; returns FALSE.
+    // Every returning path NULs the buffer's last byte, matching the X360 stores.
+    bool LanguageManager::FormatText(char* lpacBuffer, u32 luBufferSize,
+                                     const char* lpcSourceText, ParameterFormatType leType)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in TextField::FormatText");
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::FormatText");
+        CGS_ASSERT(std::strlen(lpcSourceText) < luBufferSize,
+                   "Text string too long in TextField::FormatText");
+        CGS_ASSERT(leType < 21, "Invalid Localisation Format supplied to TextField::FormatText");
+
+        switch (leType)
+        {
+        case 0:
+        {
+            // CgsStringUtils.h:65's streamed "String <s> is too long" -- plain form.
+            CGS_ASSERT(std::strlen(lpcSourceText) < luBufferSize, "String is too long");
+            std::strncpy(lpacBuffer, lpcSourceText, luBufferSize);
+            lpacBuffer[luBufferSize - 1] = 0;
+            return true;
+        }
+
+        case 1: case 2: case 3: case 4: case 5: case 6: case 7: case 8:
+        case 15: case 16: case 17: case 18: case 19: case 20:
+        {
+            FormatText(lpacBuffer, luBufferSize,
+                       static_cast<f32>(std::atof(lpcSourceText)), leType);
+            return false;
+        }
+
+        case 9: case 10:
+        {
+            const u8* lpDatabaseString = FindString(lpcSourceText);
+            if (lpDatabaseString != 0)
+            {
+                CGS_ASSERT(std::strlen(reinterpret_cast<const char*>(lpDatabaseString)) <
+                               luBufferSize,
+                           "Database Text string too long in TextField::FormatText");
+                if (leType != 9)
+                {
+                    CgsUnicode::ToUpperN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                                         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpDatabaseString),
+                                         static_cast<s32>(luBufferSize));
+                    lpacBuffer[luBufferSize - 1] = 0;
+                    return true;
+                }
+                CgsUnicode::CopyN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                                  reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpDatabaseString),
+                                  static_cast<s32>(luBufferSize));
+            }
+            else
+            {
+                CgsUnicode::CopyN(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                                  reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpcSourceText),
+                                  static_cast<s32>(luBufferSize));
+            }
+            lpacBuffer[luBufferSize - 1] = 0;
+            return true;
+        }
+
+        case 11: case 12: case 13: case 14:
+        {
+            FormatText(lpacBuffer, luBufferSize, static_cast<s32>(std::atoi(lpcSourceText)),
+                       leType);
+            return false;
+        }
+
+        default:
+            CGS_ASSERT(false, "Invalid Parameter sent to FormatText");
+            return false;
+        }
+    }
 }

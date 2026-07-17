@@ -7,6 +7,7 @@
 
 namespace
 {
+    // FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
     void AptStringObject_EmbedCheck(AptStringObject* pStr,
                                     AptValue* pThis,
                                     const AptNativeString* pName)

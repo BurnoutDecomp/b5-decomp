@@ -33,11 +33,10 @@
 //     header 0x20 + name slot 0 -- the same native-8 character layout the XB1
 //     AptCharacterAnimation::Fixup / AptMovie::resolve64 walk; verify vs the XB1 char
 //     record, never a converter script).
-//   * The TextFormat object (mpTextFormat) is still an opaque AptValue* in this slice
-//     (its value-type layout is a follow-on). The console overrides colour/style/
-//     indent/margins from it by fixed offsets; modelled here by documented offset
-//     reads behind a null gate + FLAG. TITLE_SCREEN02's fields carry no TextFormat, so
-//     the taken path is the null-TextFormat branch.
+//   * The TextFormat overrides (colour/style/indent/margins/font name) read the
+//     +0x68 slot as the embedded TextFormat RECORD by named member (AptTextFormat.h;
+//     the member's AptValue* typing is the opaque pass-through FLAG). The console's
+//     fixed offsets map onto those members; the font name is mFontName.GetBuffer().
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -53,6 +52,7 @@
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"     // the movie def (font-char table walk)
 #include "SDKs/EATech/include/Apt/AptStd/AptRect.h"
 #include "SDKs/EATech/include/Apt/AptStd/AptMatrix.h"       // mpPositionMatrix->tx (the box-align anchor)
+#include "SDKs/EATech/include/Apt/AptTextFormat.h"          // the TextFormat record (mpTextFormat overrides)
 #include "SDKs/EATech/include/Apt/Apt.h"                    // AptAllocateStringParameters + gAptFuncs
 
 // ---------------------------------------------------------------------------
@@ -61,6 +61,49 @@
 // render data. Declared here (redundant extern is legal) so the SetZID sentinel
 // stores + the "has text" test read the same value the render-item TU does.
 extern intptr_t gAptEmptyTextRenderDataZID;   // &unk_82F72DB0
+
+// ---------------------------------------------------------------------------
+// AptResolveTextFieldFontName -- the text field's AUTHORED font name, resolved via
+// its font id through the owning movie's character table (HOMED 2026-07-10,
+// retiring the AptRenderLinkStubs "" stub; original-source corroboration:
+// AptCIH::getTextFormat resolves texFormat->pFontName as
+//   pParentAnim->animation.apCharacters[text.nFontID]->font.szName
+// when the id is in range and the slot is a FONT character). The walk is the SAME
+// native-8 chain EnsureStringAllocated's draw path uses below: the field char's
+// mpFixupLink back-link -> the def base at +KU_AptEmbeddedMovieOff ->
+// mpCharacterTable[fontId] -> the type-3 font char's name pointer @+0x20
+// (serialised native-8 record; Fixup case 3 relocated it live). A negative id
+// (setTextFormat's "explicit font installed" latch), an out-of-range id, or a
+// non-font slot yields "" -- the contract's no-font value (the getTextFormat
+// overlay then KEEPS the record's copied font name).
+// ---------------------------------------------------------------------------
+const char* AptResolveTextFieldFontName(AptCharacterInst* pTextInst)
+{
+    AptRenderItem* const pItem = pTextInst ? pTextInst->GetRenderItem() : nullptr;
+    AptCharacter*  const pChar = pItem ? pItem->mpCharacter : nullptr;
+    if (pChar == nullptr || pChar->mpFixupLink == nullptr)
+        return "";
+
+    const int32_t nFontIdx =
+        static_cast<const AptRenderItemDynamicText*>(pItem)->mFontID;
+    if (nFontIdx < 0)
+        return "";
+
+    AptCharacterAnimation* const pDef = reinterpret_cast<AptCharacterAnimation*>(
+        reinterpret_cast<char*>(pChar->mpFixupLink) + KU_AptEmbeddedMovieOff);
+    if (pDef->mpCharacterTable == nullptr || nFontIdx >= pDef->mnCharacterCount)
+        return "";
+
+    const AptCharacter* const pFontChar = pDef->mpCharacterTable[nFontIdx];
+    if (pFontChar == nullptr || pFontChar->mnType != 3)   // not a FONT character
+        return "";
+
+    // type-3 font char: name pointer at font-char native-8 +0x20 (console +0x10;
+    // relocated live by Fixup case 3 -- the same slot the draw path reads below).
+    const char* const pName = *reinterpret_cast<const char* const*>(
+        reinterpret_cast<const uint8_t*>(pFontChar) + 0x20);
+    return (pName != nullptr) ? pName : "";
+}
 
 // ---------------------------------------------------------------------------
 // AptCIH::EnsureStringAllocated @0x82B06F08.
@@ -122,15 +165,23 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
             static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable());
         pWritable->SetZID(gAptEmptyTextRenderDataZID);
 
-        // Box-alignment re-nudge of the field edges (unless box alignment == 3 "none").
+        // Collapse the empty field's box ONLY when the field is auto-sized: the X360 tests
+        // the packed dword IN PLACE -- `(*(v36+76) & 0x3C) != 0xC` -- i.e. the 4-bit box-
+        // alignment field (bits 2-5) != 3 == AptStringAlignment_None (the authored default
+        // the ctor seeds; enum value corroborated by the 2.07/3.02.02 Apt SDK source, which
+        // guards this exact block with `GetBoxAlignment() != AptStringAlignment_None`).
+        // A default (non-auto-sized) field KEEPS its authored box while empty -- that is what
+        // preserves a bound-variable multiline field's height (e.g. the SaveLoadComponent
+        // "$message" prompt, authored 668x128, empty until its text resolves) across the
+        // empty pass.
         AptRenderItemDynamicText* pItem2 =
             static_cast<AptRenderItemDynamicText*>(pTextInst->GetRenderItem());
         const int nBoxAlign = (static_cast<int32_t>(pItem2->mFlagsAndBorderColor << 26)) >> 28;
-        if ((nBoxAlign & 0xF) != 0xC)   // console rlwinm r11,0,26,29 ; cmpwi 0xC -> the "none" box
+        if (nBoxAlign != 3)   // != AptStringAlignment_None (X360: (flags & 0x3C) != 0xC)
         {
-            // The console collapses the empty field's box to a fixed 4-pixel edge inset:
-            // right = left + 4.0, bottom = top + 4.0 (flt_82004EF4 == 4.0 -- the literal
-            // is inline in the X360 pseudocode: `*(v36 + 80) + 4.0`).
+            // The console collapses the empty auto-sized field's box to a fixed 4-pixel edge
+            // inset: right = left + 4.0 (unless word-wrapped), bottom = top + 4.0 (always --
+            // flt_82004EF4 == 4.0; the literal is inline in the X360 pseudocode).
             const float fEdgeInset = 4.0f;   // flt_82004EF4
             if (((pItem2->mFlagsAndBorderColor >> 1) & 1u) == 0u)   // not word-wrapped
             {
@@ -161,19 +212,14 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         params.bMultiline = static_cast<int>(pItem->mFlagsAndBorderColor & 1u);         // GetMultiline
         params.bWordWrap  = static_cast<int>((pItem->mFlagsAndBorderColor >> 1) & 1u);  // GetWordWrap
 
-        // Text colour: overridden by the TextFormat object when it carries a valid
-        // colour (its +8 word != -1), else the render item's authored text colour.
+        // Text colour: overridden by the TextFormat record when it carries a valid
+        // colour (console +8 == mnColor; -1 == "no override"), else the render item's
+        // authored text colour. The +0x68 slot holds the embedded TextFormat RECORD
+        // (the AptValue* typing on the member is the opaque pass-through FLAG).
+        const TextFormat* const pFmt = reinterpret_cast<const TextFormat*>(pTextFormat);
         unsigned int nColour = pItem->mTextColor;
-        if (pTextFormat != nullptr)
-        {
-            // FLAG (opaque TextFormat): the console reads the colour override at
-            // TextFormat+8 (a packed RGB; -1 == "no override"). Documented offset read
-            // behind the null gate until the TextFormat value type is homed.
-            const int nFmtColour = *reinterpret_cast<const int*>(
-                reinterpret_cast<const uint8_t*>(pTextFormat) + 8);
-            if (nFmtColour != -1)
-                nColour = static_cast<unsigned int>(nFmtColour) | 0xFF000000u;
-        }
+        if (pFmt != nullptr && pFmt->mnColor != -1)
+            nColour = static_cast<unsigned int>(pFmt->mnColor) | 0xFF000000u;
         params.nColour = nColour;
 
         params.nBackColor   = (pItem->mFlagsAndBackColor   >> 8) | 0xFF000000u;   // GetBackgroundColor
@@ -194,19 +240,16 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         params.szString = pResolvedText->GetBuffer();
         params.eFlags   = pItem->mStateFlags;
 
-        // Font style / indent / margins: overridden by the TextFormat object, else the
-        // "no format" defaults (style 0, indent/margins -1).
-        if (pTextFormat != nullptr)
+        // Font style / indent / margins: overridden by the TextFormat record (console
+        // style @+16 == mnStyleFlags, indent @+20, left/right margins @+24/+28), else
+        // the "no format" defaults (style 0, indent/margins -1).
+        if (pFmt != nullptr)
         {
-            // FLAG (opaque TextFormat): console reads style @+16, indent @+20,
-            // left-margin @+24, right-margin @+28. Documented offset reads behind the
-            // null gate until the TextFormat value type is homed.
-            const uint8_t* pFmt = reinterpret_cast<const uint8_t*>(pTextFormat);
-            const int nStyle = *reinterpret_cast<const int*>(pFmt + 16);
+            const int nStyle = pFmt->mnStyleFlags;
             params.nFontStyle   = static_cast<unsigned int>((nStyle == 2) ? 0 : nStyle);
-            params.nIndent      = *reinterpret_cast<const int*>(pFmt + 20);
-            params.nLeftMargin  = *reinterpret_cast<const int*>(pFmt + 24);
-            params.nRightMargin = *reinterpret_cast<const int*>(pFmt + 28);
+            params.nIndent      = pFmt->mnIndent;
+            params.nLeftMargin  = pFmt->mnLeftMargin;
+            params.nRightMargin = pFmt->mnRightMargin;
         }
         else
         {
@@ -223,16 +266,15 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
                                  : reinterpret_cast<AptAssetString>(
                                        static_cast<intptr_t>(pItem->mZID));
 
-        // The font NAME: from the TextFormat object (+8) when set, else -- when the
-        // character carries a font index (>= 0) -- resolved off the parent movie's
-        // font-character table; else null.
+        // The font NAME: from the TextFormat record's mFontName when a format is set
+        // (the console's `+8` in this arm is the name BUFFER inside the EAStringC's
+        // internal node, i.e. mFontName.GetBuffer(), NOT a record field), else --
+        // when the character carries a font index (>= 0) -- resolved off the parent
+        // movie's font-character table; else null.
         const char* pFontName = nullptr;
-        if (pTextFormat != nullptr)
+        if (pFmt != nullptr)
         {
-            // FLAG (opaque TextFormat): the console uses TextFormat+8 as the font name
-            // pointer in the format path.
-            pFontName = *reinterpret_cast<const char* const*>(
-                reinterpret_cast<const uint8_t*>(pTextFormat) + 8);
+            pFontName = pFmt->mFontName.GetBuffer();
         }
         else if (pCharacter != nullptr && pCharacter->mnDefaultGlyphIndex >= 0 && pParent != nullptr)
         {
@@ -299,7 +341,7 @@ void AptCIH::EnsureStringAllocated(AptCIH* pParent)
         // Store the returned host render-data handle on the render item (X360 SetZID(v22)).
         // On x64 the handle is a host id (see AptRenderItemDynamicText.h mZID note); the
         // host returns a small slot-based id (see the draw/release hooks in
-        // BrnAptRuntimeBringUp.cpp), so it fits the int32 mZID without truncation.
+        // BrnGuiAptRuntime.cpp), so it fits the int32 mZID without truncation.
         AptRenderItemDynamicText* pWritable =
             static_cast<AptRenderItemDynamicText*>(GetCharacterInst()->GetRenderItemWritable());
         pWritable->SetZID(reinterpret_cast<intptr_t>(hHandle));

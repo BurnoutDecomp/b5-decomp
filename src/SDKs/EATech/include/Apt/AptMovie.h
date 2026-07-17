@@ -105,7 +105,6 @@ struct AptMovie
     void* unresolve(int nBase, int a3);
 };
 
-// FLAG (homed by the AptValue conversion layer / the VM): convert an AptValue to
-// an integer (AptInteger -> its value, etc.). Used by labelToFrame on the
-// label-hash's stored frame-index values.
-int AptValue_toInteger(AptValue* pValue);
+// AptValue_toInteger removed -- it was a forwarder to the real member
+// AptValue::toInteger() (declared in AptValue.h). labelToFrame now calls that
+// member directly on the label-hash's stored frame-index values.

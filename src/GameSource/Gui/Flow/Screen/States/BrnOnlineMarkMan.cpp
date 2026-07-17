@@ -2,14 +2,10 @@
 // BrnGui::OnlineMarkMan  -- the online "mark man" screen state (expected-component slice)
 //   class:BrnGui::OnlineMarkMan
 //
-//   SetExpectedComponent        @ 0x82483AC0
-//   ClearExpectedComponent      @ 0x82483BA8
-//   SetExpectedAptComponentList @ 0x82487260
-//   UpdateWFInit                @ 0x82487190
-//   (GetResourcesToLoad @0x825006B8 is header-inline)
-// Reconstructed store-for-store from the X360 asm; the expected-component / apt-list /
-// init-poll surface is the byte-identical twin of BrnGui::ImageGalleryState (and
-// RaceMainHudState::SetExpectedComponent for the hash helper).
+//   SetExpectedComponent   @ 0x82483AC0
+//   ClearExpectedComponent @ 0x82483BA8
+// Reconstructed store-for-store from the X360 asm; byte-identical twin of
+// BrnGui::RaceMainHudState::SetExpectedComponent.
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineMarkMan.h"
 
@@ -18,16 +14,6 @@
 
 namespace BrnGui
 {
-    // The state's one-APT resource list (XEX .rodata @0x8205F8FC; the paired count word
-    // @0x8205F904 == 1). FLAG: the tuple's id + type bytes are not attested in scope --
-    // the DWARF only fixes maResourcesToLoad[1] / muNumResourcesToLoad == 1. Every sibling
-    // state resource list is a single {apt-id, E_GUI_RESOURCETYPE_APT} tuple, so that shape
-    // is reproduced here; the concrete id is a placeholder pending the .rodata read.
-    const CgsGui::sResourceTuple OnlineMarkMan::KA_RESOURCES_TO_LOAD[1] =
-    {
-        { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id + type unattested in scope
-    };
-
     // FLAG boundary no-op: the apt-component watcher half of the cache the X360 reaches is
     // not on the committed GuiCache public API. Faithful default is a no-op; mirrors the
     // committed BrnGui::BootLegalCacheBoundary::ClearExpectedAptComponentList body. GROW when
@@ -81,35 +67,5 @@ namespace BrnGui
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
         OnlineMarkManCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, 0);
-    }
-
-    // ---- SetExpectedAptComponentList @ 0x82487260 ------------------------------
-    // Rebuild the expected-APT-component list and hand it to the cache (flow layer 0).
-    // Clears the current list, registers the single time-field APT component by name
-    // (the name buffer at X360 +0x194), asserts the count fits the bound (non-gating),
-    // then pushes the {hash array, count} to the cache. Twin of
-    // ImageGalleryState::SetExpectedAptComponentList, minus the tab loop.
-    void OnlineMarkMan::SetExpectedAptComponentList()
-    {
-        ClearExpectedComponent();
-        SetExpectedComponent(macTimeComponentName);
-        CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-                   "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM");   // cpp:503 (non-gating)
-        mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_SCREEN, mauExpectedComponentIds,
-                                                muNumExpectedComponents);
-    }
-
-    // ---- UpdateWFInit @ 0x82487190 ---------------------------------------------
-    // The per-frame init poll: once the cache reports every expected component
-    // initialised (flow layer 0), clear the list and report done; otherwise wait.
-    // Twin of ImageGalleryState::UpdateWFInit.
-    bool OnlineMarkMan::UpdateWFInit()
-    {
-        if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
-        {
-            return false;
-        }
-        ClearExpectedComponent();
-        return true;
     }
 }

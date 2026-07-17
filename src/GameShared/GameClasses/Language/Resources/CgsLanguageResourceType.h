@@ -19,24 +19,36 @@ namespace CgsResource
 
     // One string-table slot. X360 v7 stride 8 (a single (size,align)-free pair of dwords): a key/
     // hash + a load-relative pointer to its UTF-8 string. Names from DWARF (LanguageResourceHashEntry
-    // muHash @h:87, mpString @h:88); stored here as load-relative u32 (the on-disk serialised form
-    // the FixUp/FixDown += / -= delta arithmetic operates on, like VehicleList/TimeLine entries).
+    // muHash @h:87, mpString @h:88).
+    //
+    // x64 WIDENED DATA (FLAG; the staged on-disk layout): the staged LANGUAGE\000N bundle
+    // carries the x64-converted table -- 16-byte entries {u64 hash, u64 stringOff} and a 16-byte
+    // header {u32 langid, u32 count, u64 entriesOff} -- so the slots are modelled at the widened
+    // stride the on-disk data attests (the console stride is 8/12; semantic parity is by named
+    // member). The FixUp/FixDown +=/-= delta arithmetic operates on the widened offset slots.
     struct LanguageResourceHashEntry
     {
-        u32 muHash;      // +0  key/hash — NOT touched by FixUp/FixDown/GetSerialisedResourceDescriptor
-        u32 mpString;    // +4  load-relative ptr -> CgsUtf8 string (rebased; ByteLength'd in descriptor)
+        u64 muHash;      // console +0 (u32)  key/hash — NOT touched by FixUp/FixDown/descriptor
+        u64 mpString;    // console +4 (u32)  load-relative ptr -> CgsUtf8 string (rebased)
     };
 
     // The loaded language string table. DWARF (CgsLanguageResourceType.h:166-171) names the first two
     // members meLanguageID (+0) and muSize (+4); the X360 FixUp/FixDown read a2+4 as the ENTRY COUNT
     // that bounds the per-entry loop, so muSize is the count of LanguageResourceHashEntry in mpEntries.
-    // FLAG: meLanguageID (+0) is untouched by these fns (DWARF name carried, semantics not exercised
-    //       here); muSize (+4) is used purely as the entry count.
+    // FLAG: meLanguageID (+0) is untouched by the relocation fns (DWARF name carried); muSize (+4)
+    //       is the entry count; mpEntries widened to u64 (the staged x64 data -- see above).
     struct LanguageResource
     {
-        u32 meLanguageID;  // +0  language id — NOT touched by these fns (DWARF name) — FLAG
-        s32 muSize;        // +4  number of LanguageResourceHashEntry in mpEntries (the loop bound, a2+4)
-        u32 mpEntries;     // +8  load-relative ptr -> LanguageResourceHashEntry[muSize] (rebased)
+        u32 meLanguageID;  // +0  language id (LoadStringTable asserts < 24 and installs it)
+        s32 muSize;        // +4  number of LanguageResourceHashEntry in mpEntries (the loop bound)
+        u64 mpEntries;     // console +8 (u32)  load-relative ptr -> LanguageResourceHashEntry[muSize]
+
+        // The relocated entry array (valid after FixUp).
+        const LanguageResourceHashEntry* GetEntries() const
+        {
+            return reinterpret_cast<const LanguageResourceHashEntry*>(
+                static_cast<uintptr_t>(mpEntries));
+        }
     };
 
     // The language-string-table resource-type handler -- resource type id 0x27 ("Language", 39).

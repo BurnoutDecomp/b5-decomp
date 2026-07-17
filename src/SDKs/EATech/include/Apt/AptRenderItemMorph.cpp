@@ -60,14 +60,16 @@ void AptRenderItemMorph::Render(AptRenderingContext* pCtx, AptMaskRenderOperatio
     if (fStartAlpha >  255.0f) fStartAlpha =  255.0f;
     cxCurrent.scale.SetValuef(AptColorHelper::Alpha, fStartAlpha);
     gAptFuncs.pfnSetColourTransform(&cxCurrent);
-    AptCharacter_render(pMorph->mpStartCharacter, pCtx, eOp, nTick);
+    if (pMorph->mpStartCharacter)
+        pMorph->mpStartCharacter->render(pCtx, eOp, nTick);   // AptCharacter::render @0x810E74
 
     float fEndAlpha = mfRatio * 255.0f;
     if (fEndAlpha < -255.0f) fEndAlpha = -255.0f;
     if (fEndAlpha >  255.0f) fEndAlpha =  255.0f;
     cxCurrent.scale.SetValuef(AptColorHelper::Alpha, fEndAlpha);
     gAptFuncs.pfnSetColourTransform(&cxCurrent);
-    AptCharacter_render(pMorph->mpEndCharacter, pCtx, eOp, nTick);
+    if (pMorph->mpEndCharacter)
+        pMorph->mpEndCharacter->render(pCtx, eOp, nTick);     // AptCharacter::render @0x810E74
 
     pCtx->popColourTransform();
 }

@@ -9,13 +9,16 @@
 // surface. Reconstructed from BURNOUT_X360_ARTIST.XEX (DWARF primary file
 // GameSource/Gui/Flow/Shared/Components/BrnTextField.cpp).
 //
-// Bodied here (4 ledger functions):
-//   TextField::Construct        @0x824E4FA8
-//   TextField::SetDatabaseText  @0x824E5020
-//   TextField::OutputAptData    @0x824E52B8
-//   TextField::SetLocalisedText @0x824E7418
-// (SetText @0x824E7240 / SetColour @0x82481E48 / operator= @0x824470F0 are their
-// own ledger functions -- not part of this TU's export set.)
+// Bodied here (6 ledger functions):
+//   TextField::Construct              @0x824E4FA8
+//   TextField::SetDatabaseText        @0x824E5020
+//   TextField::OutputAptData          @0x824E52B8
+//   TextField::SetText                @0x824E7240
+//   TextField::SetLocalisedText       @0x824E7418
+//   TextField::SetLocalisedText(int)  @0x824E7708 (ledger-unnamed sub_; + its free
+//                                      forwarder spelling)
+// (SetColour @0x82481E48 / operator= @0x824470F0 are their own ledger functions --
+// not part of this TU's export set.)
 
 namespace BrnGui
 {
@@ -125,6 +128,50 @@ bool TextField::SetLocalisedText(const char* lpacText,
     SetDatabaseText(lacFormatted);
     OutputAptData();
     return true;
+}
+
+// @ 0x824E7240 -- cpp:86/:87. Adopt literal text (fits-in-field asserted) into
+// macText via the "%s" print, then push the apt data. Both asserts stream the
+// component name / offending text on the console; folded static per convention.
+void TextField::SetText(const char* lpacText)
+{
+    CGS_ASSERT(lpacText != 0, "Text passed in is invalid for : ");                       // :86 (streamed; folded)
+    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+               "Text string too long : ");                                               // :87 (streamed; folded)
+
+    CgsCore::SPrintf(macText, KU_MAX_TEXTFIELD_LEN, "%s", lpacText);
+    OutputAptData();
+}
+
+// @ 0x824E7708 -- cpp:224. The INTEGER variant (ledger-unnamed sub_824E7708):
+// format liValue under leFormat straight into macText through the language
+// manager's integer formatter (128 cap), then push the apt data. Always reports
+// success (the X360 returns 1).
+bool TextField::SetLocalisedText(s32 liValue,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leFormat)
+{
+    CGS_ASSERT(leFormat < CgsLanguage::LanguageManager::E_FORMAT_COUNT,
+               "Invalid Localisation Format supplied to TextField::SetLocalisedText");  // :224 (streamed; folded)
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        TextFieldGetLanguageManager(mpStateInterface);
+
+    lpLanguageManager->FormatText(macText, KU_MAX_TEXTFIELD_LEN, liValue, leFormat);
+    OutputAptData();
+    return true;
+}
+
+// The ledger-named free shape of the integer SetLocalisedText: the consumer TU
+// (BrnShowtimeInstantResults.cpp) declared the un-named export as a free function
+// over the field pointer before the member homing landed; forward it so both
+// spellings resolve to the one body above.
+int sub_824E7708(TextField* lpField, s32 liValue, s32 liFormatType)
+{
+    return lpField->SetLocalisedText(
+               liValue,
+               static_cast<CgsLanguage::LanguageManager::ParameterFormatType>(liFormatType))
+               ? 1
+               : 0;
 }
 
 }

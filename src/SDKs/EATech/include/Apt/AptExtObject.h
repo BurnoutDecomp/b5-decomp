@@ -67,6 +67,19 @@ public:
     virtual void RegisterReferences();
     virtual void DestroyGCPointers();
 
+    // ---- native-hash object-model overrides (X360 AptExtObject vtbl[2]/[3]) ------
+    // The extension owns its native-member hash at mpNativeHash (console +8). Expose
+    // it through the AptValue object-model virtuals so CallMethod's Extension-typed
+    // (tag 29) method lookup (`GetNativeHashVirtual()->Lookup(name)` in
+    // AptInterp_HashLookupName) and SetMember reach the installed sMethod_* natives.
+    // X360 vtbl[2] returns *(this+8); the base returns 0 -- the MISSING override made
+    // every `CAptCommunicator.<native>()` (SendAptEvent / SetCommunicationObject / ...)
+    // resolve to null on x64, so onLoad's SendAptEvent was a silent no-op and no menu
+    // component ever registered. Pairs with ContainsNativeHashVirtual (cf.
+    // AptValueWithHash's {&mHash, true} convention).
+    virtual AptNativeHash* GetNativeHashVirtual()            { return mpNativeHash; }
+    virtual bool           ContainsNativeHashVirtual() const { return mpNativeHash != nullptr; }
+
     // ---- object-model override (leak AptExtObject.h) ----------------------
     // Store pValue under pName in the native-member hash, but only when no member of
     // that name already exists (the X360 objectMemberSet @0x82AF9720 is "set if

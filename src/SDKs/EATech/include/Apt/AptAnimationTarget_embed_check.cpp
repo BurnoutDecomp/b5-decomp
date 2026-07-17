@@ -9,6 +9,7 @@
 
 namespace
 {
+    // FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
     void AptAnimationTarget_EmbedCheck()
     {
         // Reach the director the way the runtime does: through the context singleton.

@@ -19,7 +19,12 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // CgsGui::sResourceTuple
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"      // BrnGui::MenuComponent
-#include "GameSource/Gui/BrnAptRuntimeBringUp.h"                         // BrnGui::AptRuntimeSetComponentViewState (PC shim)
+#include "SDKs/EATech/include/Apt/AptCharacterHelper.h"     // AptFindAnimationAtLevel (non-creating level probe)
+#include "SDKs/EATech/include/Apt/AptCIH.h"                 // AptCIH (the mounted level node)
+#include "SDKs/EATech/include/Apt/AptCharacterInst.h"       // GetTypeTag
+#include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h" // mDisplayList
+#include "SDKs/EATech/include/Apt/AptDisplayList.h"         // AsState
+#include "SDKs/EATech/include/Apt/AptDisplayListState.h"    // mpFirst
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"             // CgsSound::Playback::Name::MakeHash (homed)
 
 #include <cstdio>   // std::snprintf (the menu facade component names)
@@ -82,7 +87,18 @@ namespace BootLegalCacheBoundary
     // tick and the HDComp/esrb transins were lost -- clip-not-found.)
     bool AreAllAptComponentsInitialised(const GuiCache* /*lpCache*/, s32 /*liFlow*/)
     {
-        return BrnGui::AptRuntimeIsMovieComposed();
+        // Composed == the mounted level-1 (flow) movie's frame-0 place commands
+        // ran (child display list non-empty) -- the engine-native read, formerly
+        // the retired AptRuntimeHost facade's IsMovieComposed.
+        AptCIH* lpRoot = AptFindAnimationAtLevel(1);
+        if (lpRoot == 0)
+            return false;
+        AptCharacterInst* lpCI = lpRoot->GetCharacterInst();
+        if (lpCI == 0 || (lpCI->GetTypeTag() != 5 && lpCI->GetTypeTag() != 9))
+            return false;
+        AptDisplayListState* lpState =
+            static_cast<AptCharacterSpriteInstBase*>(lpCI)->mDisplayList.AsState();
+        return lpState != 0 && lpState->mpFirst != 0;
     }
 
     // The legal screen's static resources are resident (PC loads synchronously).

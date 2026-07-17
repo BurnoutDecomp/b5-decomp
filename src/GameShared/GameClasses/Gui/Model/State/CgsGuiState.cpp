@@ -2,7 +2,10 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
+#include "GameShared/GameClasses/Fsm/CgsEvent.h"         // CgsFsm::Event
 #include "GameShared/GameClasses/Fsm/CgsScriptedFsm.h"   // CgsFsm::ScriptedFsm::IsLuaResourceValid (mpFsm's concrete type)
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // CgsGui::GuiEvent<1>
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // output queue
 
 #include <cstring>   // strlen
 
@@ -17,6 +20,25 @@
 
 namespace CgsGui
 {
+    namespace
+    {
+        // DecFIGS CgsGuiEventTypes.h: GuiEventStateChange derives GuiEvent<1> and
+        // carries the pending state's fixed 16-byte event name. ARTIST PostUpdate
+        // builds its header as {16, 1, 12} and queues the 28-byte record on channel 40.
+        struct GuiEventStateChange : public GuiEvent<1>
+        {
+            char macStateChangeEvent[16];
+
+            GuiEventStateChange() : GuiEvent<1>(16, 12)
+            {
+                macStateChangeEvent[0] = 0;
+            }
+        };
+
+        static_assert(sizeof(GuiEventStateChange) == 28,
+                      "GuiEventStateChange must match the ARTIST 28-byte wire record");
+    }
+
     State::State()
         : mpInGuiEventQueue(0)
         , mpStateInterface(0)
@@ -47,7 +69,30 @@ namespace CgsGui
         mbStateChangePending = false;
     }
 
-    void State::PostUpdate()     {}
+    // ARTIST 0x8285BA00. A pending state event is published to the GUI output
+    // channel, delivered to the owning scripted FSM, then cleared. PreUpdate's
+    // assertion is the next-frame tripwire that this hand-off happened.
+    void State::PostUpdate()
+    {
+        if (mbStateChangePending)
+        {
+            CGS_ASSERT(strlen(macEvent) < sizeof(macEvent),
+                       "Event too long for message. Increase buffer");
+
+            GuiEventStateChange lStateChangeEvent;
+            CgsCore::SPrintf(lStateChangeEvent.macStateChangeEvent,
+                             sizeof(lStateChangeEvent.macStateChangeEvent), macEvent);
+            lStateChangeEvent.macStateChangeEvent[
+                sizeof(lStateChangeEvent.macStateChangeEvent) - 1] = 0;
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                &lStateChangeEvent, 40, static_cast<s32>(sizeof(lStateChangeEvent)));
+
+            CgsFsm::Event lEvent;
+            lEvent.Construct(CgsIDCompress(macEvent));
+            mpFsm->SendEvent(&lEvent);
+            mbStateChangePending = false;
+        }
+    }
 
     void State::GetResourcesToLoad(const sResourceTuple** lppResourceTuples, u32* lpuNumberOfResources) const
     {

@@ -32,6 +32,8 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                      // BrnPhysics::Vehicle::RaceCarState
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"          // InGamePlayerStatusInterface (+ NetworkPlayerStats / LiveRevengeRelationship)
 
 namespace CgsResource
 {
@@ -50,6 +52,36 @@ namespace BrnReplays
     // member sub-objects default-construct; the real ctor body is in BrnReplayModule.cpp
     // (out of the exe build -- see the header audit note).
     ReplayModule::ReplayModule() {}
+}
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // Link stub: the controller-bridge closure links BrnPlayerInfo.cpp (Director camera
+    // VehicleInfo::operator=), whose race-car-state copy calls this user-declared
+    // operator= ("own TU" in BrnVehicleEvents.h; body unreconstructed). Only the Director
+    // camera path -- OFF the boot/title/menu path -- reaches it. Inert no-op until the
+    // real body lands; DELETE when that TU is reconstructed.
+    void RaceCarState::operator=(const RaceCarState&) {}
+}
+}
+
+namespace BrnNetwork
+{
+    // Link stubs: the controller-bridge closure links BrnGameStateModuleIO.cpp ->
+    // BrnNetworkModuleIO.cpp -> the in-game-player-status interface TU, whose record
+    // Clear/operator= call these "own TU" (unreconstructed) leaves. All are network/
+    // multiplayer state -- OFF the boot/title/menu path. Inert until the real bodies
+    // land; DELETE each when its TU is reconstructed.
+    void NetworkPlayerStats::Clear() {}
+    void LiveRevengeRelationship::Construct() {}
+
+namespace BrnNetworkModuleIO
+{
+    s32 InGamePlayerStatusInterface::GetNumPlayers() const { return 0; }
+    const InGamePlayerStatusData* InGamePlayerStatusInterface::GetPlayerStatusData(s32) const { return 0; }
+}
 }
 
 namespace BrnGameState
@@ -100,16 +132,11 @@ namespace BrnGameState
     GameStateModuleIO::CarScoreData::CarScoreData() {}
 }
 
-// Link stubs for the wave-30 MainGameFlowStateInGame virtuals: the reconstructed
-// bodies (BrnGameMainFlowInGameState.cpp) call BrnGameModule::DoUpdate/DoDispatch,
-// which are not reconstructed yet, so that TU is not in the exe source list. The
-// boot/title slice never enters the in-game flow state; inert stubs satisfy the
-// vtable link only. Replace by adding the real TU when DoUpdate/DoDispatch land.
-#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
-void MainGameFlowStateInGame::OnEnter() {}
-void MainGameFlowStateInGame::OnLeave() {}
-void MainGameFlowStateInGame::Update() {}
-void MainGameFlowStateInGame::Render() {}
+// The wave-30 MainGameFlowStateInGame virtual stubs that used to live here are GONE:
+// DoUpdate/DoDispatch landed, so the real TU (BrnGameMainFlowInGameState.cpp) is in
+// the exe source list now. Its OnEnter requests GUI FSM stage 5 (the front-end/
+// freeburn handoff) -- the inert stubs silently swallowed that request, which was
+// the post-intro handoff stall.
 
 namespace CgsSound
 {
@@ -224,3 +251,52 @@ namespace renderengine
 // lives in GameShared/.../BitStream/CgsFloatQuantiser.cpp (wired into build_game_exe.bat).
 // (A prior inert "reconstruct as the range minimum" stub was removed: it collided
 // (LNK2005) with the real body and was itself an invented fallback.)
+
+// ===========================================================================
+// XDK boundary shims (profile link-closure wave, 2026-07-12): the Xbox 360 XDK
+// imports referenced by CgsSaveLoadPS3.cpp (SaveLoadSystem::Update's overlapped
+// pump) and CgsGuideIntegration.cpp (SystemUserProfile's XNotify/XUser watcher),
+// both now in the exe source list. These are XDK IMPORTS on the X360 (no game
+// body to reconstruct); the PC has no XDK, so each returns the value that makes
+// its caller take the no-device/no-user branch. Same precedent as
+// XShowDirtyDiscErrorUI above.
+// ===========================================================================
+
+// FLAG PC-platform leaf: XDK overlapped-result query; 0 (== ERROR_SUCCESS, not the
+// 997/996 still-pending codes) tells SaveLoadSystem::Update the async op is finished,
+// clearing its in-flight state -- no overlapped I/O ever starts on PC.
+extern "C" unsigned long XGetOverlappedResult(void* /*lpOverlapped*/,
+                                              unsigned long* /*lpdwResult*/,
+                                              int /*bWait*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK notification-listener creation; a null handle makes
+// SystemUserProfile::Update early-return (no sign-in/storage/invite events on PC).
+extern "C" void* XNotifyCreateListener(unsigned long long /*qwAreas*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK notification poll; 0 == "no notification pending"
+// (unreached while XNotifyCreateListener hands out no listener).
+extern "C" int XNotifyGetNext(void* /*hListener*/, unsigned long /*dwMsgFilter*/,
+                              unsigned long* /*pdwId*/, unsigned long* /*pParam*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK sign-in-state query; 0 == eXUserSigninState_NotSignedIn,
+// so SystemUserProfile::UpdateUserSigninState derives "not signed in" for any user.
+extern "C" u32 XUserGetSigninState(u32 /*luUserIndex*/) { return 0; }
+
+// FLAG PC-platform leaf: XDK user-name query; success + empty name (unreached: no
+// user ever signs in without XNotify events, so the no-user sentinel holds).
+extern "C" u32 XUserGetName(u32 /*luUserIndex*/, char* lpszUserName, u32 luCchUserName)
+{
+    if (lpszUserName != 0 && luCchUserName != 0)
+    {
+        lpszUserName[0] = 0;
+    }
+    return 0;
+}
+
+// FLAG PC-platform leaf: XDK profile-settings read; a non-zero error return makes the
+// caller treat the read as failed rather than parse an unfilled results buffer
+// (unreached: SystemUserProfile only reads settings for a signed-in user).
+extern "C" u32 XUserReadProfileSettings(u32 /*luTitleId*/, u32 /*luUserIndex*/,
+                                        u32 /*luNumSettingIds*/, unsigned long* /*lpaSettingIds*/,
+                                        unsigned long* /*lpcbResults*/, void* /*lpResults*/,
+                                        void* /*lpOverlapped*/) { return 87u; /* ERROR_INVALID_PARAMETER */ }

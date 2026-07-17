@@ -21,6 +21,38 @@
 namespace BrnGui
 {
 
+// @ 0x8241C120 -- bind the state channel (the base Construct inline, with its
+// h:113 "lpStateInterface" tripwire + mAptRef invalidate), then clear the
+// transition clip handle and the transition-complete flag (the X360 zeroes
+// this+0x0C/+0x10/+0x14 after the base's stores). The name/parent args are
+// unused by the body (DWARF shape Construct(name, iface, parent)).
+void OverlayComponent::Construct(const char* /*lacName*/,
+                                 CgsGui::StateInterface* lpStateInterface,
+                                 const char* /*lpcParentName*/)
+{
+    BrnFlaptComponent::Construct(lpStateInterface);
+
+    mTransitionMovieClipRef.SetInvalid();
+    mbTransitionComplete = false;
+}
+
+// @ 0x82427BF0 -- bind the named overlay clip through the base Prepare with NO
+// parent prefix (the X360 body carries the base inline const-propped with a null
+// parent: the h:133 "lacName != NULL" tripwire, the bare-name FindComponent, the
+// mpMovieClipInst assert and the timeline reset -- no composite-key path), then
+// install the transition-complete timeline callback on the bound clip and clear
+// the transition clip handle + flag.
+void OverlayComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile,
+                               const char* /*lacParentName*/)
+{
+    BrnFlaptComponent::Prepare(lacName, lFile, 0);
+
+    mAptRef.SetFrameTriggerCallback(reinterpret_cast<void*>(&TransitionCompleteCallback), this);
+
+    mTransitionMovieClipRef.SetInvalid();
+    mbTransitionComplete = false;
+}
+
 // @ 0x8241C198
 void OverlayComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
 {

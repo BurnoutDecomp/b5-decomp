@@ -17,15 +17,15 @@
 //
 // FLAG -- the CIH / GC leaf couplings (the value-object lifecycle, not the frame
 // machinery the interpreter needs):
-//   * AptApt_PrepareCallContextScope -- the ctor calls pCallContext's prepare
-//     virtual before capturing the live frame as the closure scope (the call
-//     context type is not pinned, so the call is encapsulated).
+//   * The ctor's pCallContext vtbl+0x60 dispatch is CreateFrameStack (the slot
+//     after CleanupAfterExecution): lazily build the caller's activation frame
+//     before capturing it as the closure scope. Called directly as the member.
 //   * AptApt_DeriveFunctionAnimation -- derive the timeline animation a function is
 //     defined on from its CIH (the X360 walks the CIH/character chain; uses the
 //     reconstructed AptGetAnimationAtLevel at the leaf).
-//   * AptApt_AnimationAddCharacterRef / ReleaseCharacterRef -- the +0x0C character
-//     ref-counter twiddle on the owning animation (+ AptUpdateZombieVector on the
-//     drop to zero); CIH internals.
+//   * The owning animation's "+0x0C character ref" is the CIH ZOMBIE-COUNT field
+//     (bits 7-22, step 0x80): Inc/DecZombieCount are called directly (the drop-
+//     to-zero reap lives inside DecZombieCount).
 //   * gpAptFunctionPrototypeRoot (dword_8324E4EC) -- the Function.prototype object a
 //     freshly-made function prototype's __proto__ links to (wired at AptInit).
 //   * AptValue::sReferenceRegistrationCb -- the GC mark callback (null until AptInit).
@@ -45,24 +45,7 @@
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                  // DOGMA_PoolManager
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h" // gpAptOperandStackPool
 
-// FLAG (CIH / GC leaf couplings -- see header above; wired with the AptCIH + AptInit TUs).
-extern void      AptApt_PrepareCallContextScope(AptValue* pCallContext);          // ctor: vtbl prepare
-extern AptValue* AptApt_DeriveFunctionAnimation(AptValue* pCIH);                  // ctor/derive timeline
-
-// FLAG (bring-up diagnostic probe; weak no-op default, strong logger in the host
-// bring-up TU): script-function birth/teardown tracing for the init-action pass
-// lifetime defect (see DestroyGCPointers).
-#if defined(_MSC_VER)
-extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
-                                     const void* pCIH, const void* pAnim);
-#pragma comment(linker, "/alternatename:AptScriptFnLifeProbe=AptScriptFnLifeProbeDefault")
-extern "C" void AptScriptFnLifeProbeDefault(const char*, const void*, const void*, const void*) {}
-#else
-extern "C" void AptScriptFnLifeProbe(const char* pcEvent, const void* pFn,
-                                     const void* pCIH, const void* pAnim);
-#endif
-extern void      AptApt_AnimationAddCharacterRef(AptValue* pAnimation);           // ctor: +0x0C ref++
-extern void      AptApt_AnimationReleaseCharacterRef(AptValue* pAnimation);       // dtor: +0x0C ref-- (+zombie)
+// FLAG (GC leaf couplings -- see header above; wired at AptInit).
 extern AptValue* gpAptFunctionPrototypeRoot;                                      // dword_8324E4EC
 extern AptValue* gpUndefinedValue;                                               // register-array fill (AptInit)
 
@@ -80,17 +63,7 @@ int32_t        AptScriptFunctionBase::snRegisterBlockSize        = 0;   // dword
 // ctor @0x82AF1030 -- bind to pCIH, capture the enclosing call frame as the closure
 // scope (when defined inside a call), derive the owning timeline animation, and
 // optionally build a fresh prototype object.
-// AptApt_DeriveFunctionAnimation -- the timeline animation a function value is
-// defined on (HOMED 2026-07-01; was the AptRenderLinkStubs null-stub, which AV'd
-// the ctor's unconditional mpParentAnim->AddRef() the first time a ByteCodeBlock
-// was built): the nearest enclosing movie-clip(9)/stage(15) node up the CIH's
-// display-list parent chain -- exactly AptCIH::GetRootAnimation (the homed walk;
-// its CIHNone/empty placeholder resolves to the level-0 root).
-AptValue* AptApt_DeriveFunctionAnimation(AptValue* pCIH)
-{
-    return static_cast<AptValue*>(
-        reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());
-}
+// AptApt_DeriveFunctionAnimation inlined at its call sites (AptCIH::GetRootAnimation).
 
 AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eType,
                                              AptValue* pCallContext,
@@ -105,7 +78,11 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     // Defined inside a live call -> capture the current frame stack as the closure scope.
     if (pCallContext)
     {
-        AptApt_PrepareCallContextScope(pCallContext);   // FLAG: console pCallContext->vtbl prepare
+        // The console dispatches pCallContext's vtbl+0x60 -- the slot after
+        // CleanupAfterExecution (+0x5C) -- then immediately captures spFrameStack:
+        // it is CreateFrameStack (@0x82AF1260, lazily build the caller's activation
+        // frame so the nested function has a live frame to close over).
+        static_cast<AptScriptFunctionBase*>(pCallContext)->CreateFrameStack();
         mpParentScope = reinterpret_cast<AptValue*>(spFrameStack);
         if (spFrameStack)
             spFrameStack->AddRef();
@@ -116,16 +93,15 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     const AptVirtualFunctionTable_Indices eCIH = pCIH->getVtblIndex();
     if ((eCIH == AptVFT_CharacterInstHandle && pCIH->getIsDefined())
         || eCIH == static_cast<AptVirtualFunctionTable_Indices>(37))
-        mpParentAnim = AptApt_DeriveFunctionAnimation(pCIH);   // FLAG: CIH-chain walk (-> AptGetAnimationAtLevel)
+        mpParentAnim = static_cast<AptValue*>(reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());   // CIH-chain walk (-> AptGetAnimationAtLevel)
     else
         mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
 
     mpCIH->AddRef();
     mpParentAnim->AddRef();
-    AptApt_AnimationAddCharacterRef(mpParentAnim);   // FLAG: +0x0C character ref-counter ++
-
-    // FLAG (bring-up diagnostic; see the probe sink + the destroy twin).
-    AptScriptFnLifeProbe("birth", this, mpCIH, mpParentAnim);
+    // The +0x0C "character ref" the console bumps IS the CIH zombie-count field
+    // (bits 7-22, step 0x80 -- the ctor asm's extlwi/addi 0x80/rlwimi on anim+0xC).
+    static_cast<AptCIH*>(mpParentAnim)->IncZombieCount();
 
     if (bMakePrototype)
     {
@@ -157,21 +133,20 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     const AptVirtualFunctionTable_Indices eCIH = pCIH->getVtblIndex();
     if ((eCIH == AptVFT_CharacterInstHandle && pCIH->getIsDefined())
         || eCIH == static_cast<AptVirtualFunctionTable_Indices>(37))
-        mpParentAnim = AptApt_DeriveFunctionAnimation(pCIH);   // FLAG: CIH-chain walk (-> AptGetAnimationAtLevel)
+        mpParentAnim = static_cast<AptValue*>(reinterpret_cast<AptCIH*>(pCIH)->GetRootAnimation());   // CIH-chain walk (-> AptGetAnimationAtLevel)
     else
         mpParentAnim = reinterpret_cast<AptValue*>(AptGetAnimationAtLevel(0));
 
     // AddRef the inherited scope (when present) + the CIH + the owning animation, then
-    // bump the animation's +0x0C character ref-counter (the same twiddle the primary
-    // ctor performs via AptApt_AnimationAddCharacterRef).
+    // bump the animation's zombie-count field (the same IncZombieCount the primary
+    // ctor performs).
     if (mpParentScope)
         mpParentScope->AddRef();
     mpCIH->AddRef();
     mpParentAnim->AddRef();
-    AptApt_AnimationAddCharacterRef(mpParentAnim);   // FLAG: +0x0C character ref-counter ++
-
-    // FLAG (bring-up diagnostic; see the probe sink + the destroy twin).
-    AptScriptFnLifeProbe("birth-copy", this, mpCIH, mpParentAnim);
+    // The +0x0C "character ref" the console bumps IS the CIH zombie-count field
+    // (bits 7-22, step 0x80 -- the ctor asm's extlwi/addi 0x80/rlwimi on anim+0xC).
+    static_cast<AptCIH*>(mpParentAnim)->IncZombieCount();
 
     // Copy the prototype + __proto__ links from the original (a3[5] / a3[4]).
     // GetNativeHashVirtual is non-const (the SDK accessor is not const-qualified), so
@@ -451,11 +426,6 @@ void AptScriptFunctionBase::RegisterReferences()
 // animation's character reference) and tear down the hash.
 void AptScriptFunctionBase::DestroyGCPointers()
 {
-    // FLAG (bring-up diagnostic; see the probe sink): report the teardown state
-    // BEFORE the unguarded scope derefs -- the init-action bring-up dies here on a
-    // dangling member and the probe names which one.
-    AptScriptFnLifeProbe("destroy", this, mpCIH, mpParentAnim);
-
     if (mpParentScope)
         mpParentScope->Release();
     mpParentScope = 0;
@@ -463,7 +433,9 @@ void AptScriptFunctionBase::DestroyGCPointers()
     mpCIH->Release();
     mpCIH = 0;
 
-    AptApt_AnimationReleaseCharacterRef(mpParentAnim);   // FLAG: +0x0C ref-- (+zombie vector)
+    // The inverse of the ctor's IncZombieCount (the zombie-vector reap arm lives
+    // inside DecZombieCount itself, firing when the count reaches zero).
+    static_cast<AptCIH*>(mpParentAnim)->DecZombieCount();
     mpParentAnim->Release();
     mpParentAnim = 0;
 

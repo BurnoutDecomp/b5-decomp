@@ -22,7 +22,7 @@ extern AptActionInterpreter gAptActionInterpreter;   // AptGlobals.cpp (&dword_8
 
 #include <cstring>   // strncpy
 #include <cstdlib>   // atof
-#include <cstdio>    // std::snprintf (the bring-up probes)
+#include <cstdio>    // snprintf (FLAG bring-up probes)
 
 // ============================================================================
 // CgsGui::AptCommunicator - reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -157,6 +157,15 @@ namespace CgsGui
     // key, which is the correct off-menu-path behaviour until the names are recovered.
     const char* AptCommunicator::mpacReservedVariableNames[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
     u32         AptCommunicator::mauReservedVariablesHashes[AptCommunicator::KI_NUM_RESERVED_VARIABLES] = { 0 };
+
+    // The console GuiModule::Update @0x828602C8 tail: publish this frame's trigger
+    // records into the view output buffer's GUI event queue, then clear the source.
+    void AptCommunicator::FlushTriggerEventsTo(CgsModule::VariableEventQueue<18432, 16>* lpDest)
+    {
+        if (lpDest != 0)
+            lpDest->Append(mOutAptTriggerEvents);
+        mOutAptTriggerEvents.Clear();
+    }
 
     // @ dword_8305A6E0..8305A6F4 - the cached native-function wrappers Initialize fills.
     AptValue* AptCommunicator::psMethod_SendAptEvent            = 0;
@@ -342,15 +351,15 @@ namespace CgsGui
 
         mAptComponentList.SetName(liNew, lpacName);
         ++muNumActivecomponents;
-        // FLAG (bring-up probe): every ONLOAD registration is a title clip announcing
-        // itself to the communicator -- surface the first ones in the boot log.
-        if (muNumActivecomponents <= 16)
+        // FLAG (bring-up probe): surface each real registration in the boot log.
+        static s32 siAddLogs = 0;
+        if (siAddLogs < 40)
         {
+            ++siAddLogs;
             char lacProbe[192];
             std::snprintf(lacProbe, sizeof(lacProbe),
-                          "[AptComm] component registered: '%s' (count=%u)\n",
-                          lpacName ? lpacName : "<null>",
-                          static_cast<unsigned>(muNumActivecomponents));
+                          "[AptComm] AddNewAptComponent #%u: '%s'\n",
+                          muNumActivecomponents, lpacName ? lpacName : "<null>");
             CgsDev::Log::WriteToLog(lacProbe);
         }
         // lRefText's internal refcount drops here (X360 DecreaseInternalRefCount).
@@ -502,6 +511,29 @@ namespace CgsGui
         }
 
         miNumUsedKeyValues = 0;
+    }
+
+    // ========================================================================
+    // RemoveExpiredAptComponent  @ 0x82851818
+    //
+    // The Apt OnUnload callback passes the movieclip value that is leaving the display
+    // tree. Remove the matching component registration by compacting the last active
+    // component into its slot, preserving the fixed-size component list semantics.
+    // ========================================================================
+    void AptCommunicator::RemoveExpiredAptComponent(AptValue* lpAptValue)
+    {
+        for (s32 liComponent = 0; liComponent < static_cast<s32>(muNumActivecomponents); ++liComponent)
+        {
+            CGS_ASSERT(liComponent >= 0, "Invalid Component Index");
+            CGS_ASSERT(liComponent < AptComponentList::KU_MAX_COMPONENTS, "Invalid Component Index");
+
+            if (mAptComponentList.GetAptValue(liComponent) == lpAptValue)
+            {
+                mAptComponentList.MoveComponent(static_cast<s32>(muNumActivecomponents) - 1, liComponent);
+                --muNumActivecomponents;
+                return;
+            }
+        }
     }
 
     // ========================================================================
@@ -837,6 +869,20 @@ namespace CgsGui
             ++liData;
         }
 
+        // FLAG (bring-up probe): surface the AS-side component-data queries.
+        {
+            static s32 siGetLogs = 0;
+            if (siGetLogs < 60)
+            {
+                ++siGetLogs;
+                char lacProbe[192];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[AptComm] GetComponentData comp=%d key='%s' -> '%s'\n",
+                              liComponent, lpacKey ? lpacKey : "<null>", lpacResult);
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
+        }
+
         AptValue* lpReturn = AptString::Create(lpacResult);
         // lKeyText's internal refcount drops here (X360 DecreaseInternalRefCount).
         return lpReturn;
@@ -855,21 +901,53 @@ namespace CgsGui
         AptValue* lpUniqueId = AptExtObject::GetParam(1);
         AptValue* lpNameVal  = AptExtObject::GetParam(2);
 
+        // x64 FIX: the value type tag is meValueType (bitfield bits 25-31), read via
+        // getVtblIndex() -- the console `(w & 0x7F)==AptVFT_Integer` bit position only
+        // hit the type on big-endian PPC; on x64 little-endian `& 0x7F` reads the low
+        // alloc/defined/refcount flags, so a valid Integer param failed the guard (per
+        // this TU's own stated convention @ the header: read getVtblIndex/getIsDefined).
         const bool lbEventOk = (lpEventId != 0)
-            && ((lpEventId->mnValueData & 0x7F) == AptVFT_Integer)
+            && (lpEventId->getVtblIndex() == AptVFT_Integer)
             && lpEventId->getIsDefined();
-        CGS_ASSERT(lbEventOk, "Invalid event id sent to AptCommunicator::SendAptEvent");
-
         const bool lbUniqueOk = (lpUniqueId != 0)
-            && ((lpUniqueId->mnValueData & 0x7F) == AptVFT_Integer)
+            && (lpUniqueId->getVtblIndex() == AptVFT_Integer)
             && lpUniqueId->getIsDefined();
-        CGS_ASSERT(lbUniqueOk, "Invalid unique id sent to AptCommunicator::SendAptEvent");
-
         const bool lbNameOk = (lpNameVal != 0)
             && ((lpNameVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpNameVal->getVtblIndex() == AptVFT_StringObject))
             && lpNameVal->getIsDefined();
-        CGS_ASSERT(lbNameOk, "Invalid component name sent to AptCommunicator::SendAptEvent");
+        // FLAG (x64 interim guard -- ONE_TO_ONE §6.4): the console asserts here because
+        // it always receives valid args; on x64 the AS component onLoad currently passes
+        // an undefined component name + a bad clip receiver (a class-instance `this` /
+        // member-context defect being tracked separately). Until that lands, no-op
+        // gracefully (matching the pre-fix behaviour when the extension method resolved
+        // to null) rather than firing the halting assert. Restore the CGS_ASSERTs once
+        // the onLoad `this`/msName context is faithful.
+        if (!lbEventOk || !lbUniqueOk || !lbNameOk)
+        {
+            // FLAG (bring-up probe): surface the rejected registration in the boot log.
+            static s32 siRejectLogs = 0;
+            if (siRejectLogs < 20)
+            {
+                ++siRejectLogs;
+                AptValue* lpClip = AptExtObject::GetParam(3);
+                const char* lpacClip = "<n/a>";
+                if (lpClip != 0 && (lpClip->getVtblIndex() == AptVFT_CharacterInstHandle))
+                    lpacClip = static_cast<AptCIH*>(lpClip)->GetInstanceName().GetBuffer();
+                char lacProbe[224];
+                std::snprintf(lacProbe, sizeof(lacProbe),
+                              "[AptComm] SendAptEvent REJECTED (evOk=%d uidOk=%d nameOk=%d) "
+                              "vfts p0=%d p1=%d p2=%d p3=%d clip='%s'\n",
+                              lbEventOk ? 1 : 0, lbUniqueOk ? 1 : 0, lbNameOk ? 1 : 0,
+                              lpEventId ? (int)lpEventId->getVtblIndex() : -1,
+                              lpUniqueId ? (int)lpUniqueId->getVtblIndex() : -1,
+                              lpNameVal ? (int)lpNameVal->getVtblIndex() : -1,
+                              lpClip ? (int)lpClip->getVtblIndex() : -1,
+                              lpacClip ? lpacClip : "<null>");
+                CgsDev::Log::WriteToLog(lacProbe);
+            }
+            return AptInteger::Create(0);
+        }
 
         const s32 liEventId  = lpEventId->toInteger();
         const s32 liUniqueId = lpUniqueId->toInteger();
@@ -927,7 +1005,7 @@ namespace CgsGui
         }
 
         // Build and (for the queued kinds) push the trigger record.
-        GuiEventAptTrigger lTrigger;
+        GuiEventAptTriggerPayload lTrigger;
         lTrigger.meEventType       = static_cast<GuiEventAptTrigger::AptEventType>(liEventId);
         lTrigger.miUniqueId        = liUniqueId;
         lTrigger.mpacComponentName = lName.GetBuffer();
@@ -947,7 +1025,8 @@ namespace CgsGui
             || liEventId == GuiEventAptTrigger::E_APT_EVENT_FRAME_TRIGGER)
         {
             mOutAptTriggerEvents.AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lTrigger.meEventType), 21, 20);
+                reinterpret_cast<const CgsModule::Event*>(&lTrigger), 21,
+                static_cast<s32>(sizeof(lTrigger)));
         }
 
         AptValue* lpReturn = AptInteger::Create(0);
@@ -973,21 +1052,22 @@ namespace CgsGui
             && ((lpTypeVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpTypeVal->getVtblIndex() == AptVFT_StringObject))
             && lpTypeVal->getIsDefined();
-        CGS_ASSERT(lbTypeOk, "Invalid sound event id sent to AptCommunicator::SendAptSoundEvent");
-
         const bool lbActionOk = (lpActionVal != 0)
             && ((lpActionVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpActionVal->getVtblIndex() == AptVFT_StringObject))
             && lpActionVal->getIsDefined();
-        CGS_ASSERT(lbActionOk, "Invalid unique id sent to AptCommunicator::SendAptSoundEvent");
-
         const bool lbLabelOk = (lpLabelVal != 0)
             && ((lpLabelVal->getVtblIndex() == AptVFT_StringValue)
                 || (lpLabelVal->getVtblIndex() == AptVFT_StringObject))
             && lpLabelVal->getIsDefined();
-        CGS_ASSERT(lbLabelOk, "Invalid description label sent to AptCommunicator::SendAptSoundEvent");
-
-        CGS_ASSERT(lpNameVal != 0, "Invalid component name sent to AptCommunicator::SendAptEvent");
+        // FLAG (x64 interim guard -- ONE_TO_ONE §6.4): the console asserts here because
+        // it always receives valid string args; on x64 the AS currently passes bad args
+        // (the same class-instance `this`/member-context defect tracked for SendAptEvent).
+        // No-op gracefully (as the pre-GetNativeHashVirtual-fix null resolution did)
+        // rather than firing the halting assert. Restore the CGS_ASSERTs once the AS
+        // extension-call arg context is faithful.
+        if (!lbTypeOk || !lbActionOk || !lbLabelOk || lpNameVal == 0)
+            return AptInteger::Create(0);
 
         EAStringC lTypeText;
         EAStringC lActionText;

@@ -35,6 +35,7 @@ bool AptValue::sbSuspendRefcountDeletions = false;
 namespace
 {
     volatile long gAptGCFlagLock = 0;
+    // FLAG PC-platform leaf: single-threaded GC-flag spin lock -- interrupt-masked lwarx/stwcx. modelled as an _InterlockedExchange TAS (threading primitive, not an engine method).
     inline void AptGCFlagLock_Acquire() { while (_InterlockedExchange(&gAptGCFlagLock, 1) != 0) {} }
     inline void AptGCFlagLock_Release() { _InterlockedExchange(&gAptGCFlagLock, 0); }
 }
@@ -183,11 +184,11 @@ extern AptValueVector* gpAptDeferredReleaseVector;   // off_8324E51C
 extern uint32_t        gnAptGCThreadId_Ctor;         // dword_8324E500
 extern uint32_t        gnAptGCThreadId_Release;      // dword_8324E504
 
-// AptValue_CurrentThreadId -- EA::Thread::GetThreadId() (the GC-thread guard).
+// AptCurrentThreadId -- EA::Thread::GetThreadId() (the GC-thread guard).
 // FLAG: the threading subsystem id is host-portable but the captured GC-thread
 // snapshot is not live until AptInit; returns 0 here so the GC-thread branch is
 // dormant (matching the inert ctor path before the collector is up).
-extern uint32_t AptValue_CurrentThreadId();
+extern uint32_t AptCurrentThreadId();
 
 
 // The active script "current target" MovieClips the parent-chain walk stops at
@@ -225,7 +226,7 @@ AptValue::AptValue(AptVirtualFunctionTable_Indices eType)
         (eType == AptVFT_NativeFunction)   ||   // 0x09
         (eType == AptVFT_Extension);            // 0x1D
 
-    if (!lbSkipDefer && gnAptGCThreadId_Ctor == AptValue_CurrentThreadId())
+    if (!lbSkipDefer && gnAptGCThreadId_Ctor == AptCurrentThreadId())
     {
         // On the GC thread: queue into the deferred-release vector if it has room
         // (X360 family-(B) layout: top(+4)=mnCapacity < capacity(+0)=mnTop).
@@ -348,7 +349,7 @@ void AptValue::Release()
         return;
 
     // ON the GC thread: tear down now. OFF the GC thread: try the deferred vector.
-    if (gnAptGCThreadId_Release == AptValue_CurrentThreadId())
+    if (gnAptGCThreadId_Release == AptCurrentThreadId())
     {
         ForceDelete();                 // X360 beq cr6, loc_82AE32C0 -> slot +0x2C
         return;

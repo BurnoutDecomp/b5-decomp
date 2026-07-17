@@ -63,12 +63,14 @@ namespace BrnGui
     class GuiEventQueueSmall;
 }
 
+// The REAL BrnNetwork::EBoostType and BrnGameState::GameStateModuleIO::EGameModeType
+// (their former compile-only slices here clashed once BrnGuiEventTypeDefs.h began
+// including the same real headers everywhere -- the l2 merge).
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
+#include "GameSource/GameState/BrnGameStateSharedIO.h"
+
 namespace BrnNetwork
 {
-    enum EBoostType
-    {
-        E_BOOST_TYPE_DEFAULT = 0,
-    };
     enum EVehicleChoice
     {
         E_VEHICLE_CHOICE_DEFAULT = 0,
@@ -90,16 +92,8 @@ namespace BrnNetwork
     }
 }
 
-namespace BrnGameState
-{
-    struct GameStateModuleIO
-    {
-        enum EGameModeType
-        {
-            E_GAME_MODE_TYPE_DEFAULT = 0,
-        };
-    };
-}
+// (BrnGameState::GameStateModuleIO::EGameModeType arrives from the REAL
+//  BrnGameStateSharedIO.h included above.)
 
 namespace BrnDirector
 {
@@ -227,12 +221,14 @@ struct OptionsDataProfile
     bool IsThereUnreadNews() const;
 
 private:
-    // Leading version/director prefix. The X360 lays miVersionNumber at +0x0; the
-    // first OnlineSaveRoute table starts at +0x8 (asm: SetFromGameParams(this+8,..)),
-    // so exactly 8 bytes precede the created table. The DirectorProfileData (out of
-    // scope for this TU) is reached through a separate accessor; it is not modelled
+    // Leading version/director prefix. The X360 lays miVersionNumber at +0x0
+    // (ValidateProfile @0x824EFF58: `lwz r29, 0(r3)`, compared to KI_VERSION_NUMBER);
+    // the first OnlineSaveRoute table starts at +0x8 (asm: SetFromGameParams(this+8,..)),
+    // so exactly 4 reserved bytes follow the version word. The DirectorProfileData (out
+    // of scope for this TU) is reached through a separate accessor; it is not modelled
     // member-by-member here. Reserved so the created table lands at +0x8.
-    u8 maOpaqueVersionPrefix[0x8];                    // +0x0
+    s32 miVersionNumber;                              // +0x0 (compared to 12 on load)
+    u8  maOpaquePrefixPad[0x4];                       // +0x4
 
     // The created/received online-game-option route tables. The X360 stride between
     // successive entries is 0x5C0 (asm: `mulli r11, index, 0x5C0`); AddReceived

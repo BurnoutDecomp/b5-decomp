@@ -25,17 +25,6 @@ uint8_t  gAptValueGCMinItemSize   = 0;   // byte_8324D805
 uint8_t  gAptValueGCStoreSizeFlag = 0;   // byte_8324D806
 uint32_t gAptValueGCMaxItemSize   = 0;   // dword_8324E2A4
 
-// FLAG (bring-up diagnostic probe; see DeallocateAptValueGC): weak no-op default,
-// overridden by the host bring-up TU with a logger that scans the interpreter's
-// operand stack for the freed pointer. Same alternatename pattern as CgsApt_GalProbe.
-#if defined(_MSC_VER)
-extern "C" void AptGCFreeOnStackProbe(void* pFreed);
-#pragma comment(linker, "/alternatename:AptGCFreeOnStackProbe=AptGCFreeOnStackProbeDefault")
-extern "C" void AptGCFreeOnStackProbeDefault(void*) {}
-#else
-extern "C" void AptGCFreeOnStackProbe(void* pFreed);
-#endif
-
 namespace
 {
     // The X360 GC walk reads the AptValueGC_MemItem allocated-flag and size
@@ -176,12 +165,6 @@ void* AptValueGC_PoolManager::AllocateAptValueGC(size_t nAllocatedSize)
 // ---------------------------------------------------------------------------
 bool AptValueGC_PoolManager::DeallocateAptValueGC(void* pItem, size_t nAllocatedSize)
 {
-    // FLAG (bring-up diagnostic, remove with the dangling-operand fix): a GC value
-    // freed while still sitting on the interpreter's OPERAND STACK is the
-    // use-after-free the FADE_IN-window AV dies on (runStream's unwind Releases the
-    // stale slot). Catch the culprit at the FREE site and name it in the log.
-    AptGCFreeOnStackProbe(pItem);
-
     bool bFreed = Deallocate(pItem, nAllocatedSize);
     if (bFreed)
     {
@@ -288,12 +271,18 @@ AptValue* AptValueGC_PoolManager::GetNextAptValue(AptValue* pCurrent)
 //     by the live count (single-threaded bring-up; the sole caller,
 //     AptReplaceReferences' zombie-survivor fixup, consumes it immediately).
 // ===========================================================================
+// The console reads *(pool+0x28) (mnItemsAllocated) INLINE; this type-erased wrapper keeps
+// the DOGMA pool layout opaque to its caller (AptAnimationTarget.cpp).
+// FLAG PC-platform leaf: header-decoupling wrapper, no console counterpart.
 int AptValueGCPool_GetAllocatedCount(void* pPool)
 {
     return static_cast<int>(
         static_cast<AptValueGC_PoolManager*>(pPool)->mnItemsAllocated);
 }
 
+// PC-only port reconstruction: the DOGMA pool keeps no flat live-array (unlike the console's
+// internal table), so this snapshots into a static scratch buffer; no 1:1 console body exists.
+// FLAG PC-platform leaf: port-only reconstruction, no console counterpart.
 void** AptValueGC_PoolManager_GetAllAllocatedAptValues(void* pPool)
 {
     AptValueGC_PoolManager* const pMgr =

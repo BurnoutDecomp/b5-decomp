@@ -5,6 +5,7 @@
 #include <Windows.h>
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (batch-capacity guards)
 #include "pc/gcm/renderengine/device.h"        // gDevice, gDisplayWidth/Height
 #include "pc/gcm/renderengine/texture.h"       // Texture::mpD3DTexture
 #include "pc/gcm/renderengine/renderstates.h"  // TextureState::mpRaster (SetState(TextureState*))
@@ -104,6 +105,9 @@ namespace CgsGraphics
         lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
         lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        // Frame-start mask reset: any scissor mask left by an unbalanced PushMask on the
+        // previous frame is cleared (the console's mask state is per-frame too).
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
         // Bilinear (D3D9 defaults to POINT -> blocky); no mip filtering for the 1:1 2D content.
         lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
         lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
@@ -122,6 +126,14 @@ namespace CgsGraphics
     }
 
     template <typename V>
+    bool ImRenderer<V>::SetProgram(s8 /*li8Program*/)
+    {
+        // FLAG PC-platform leaf: the PC 2D path uses the D3D9 fixed-function
+        // vertex/texture pipeline, so the console shader slot has no host object.
+        return false;
+    }
+
+    template <typename V>
     void ImRenderer<V>::Render(renderengine::PrimitiveType /*lePrimitiveType*/, const V* lpVertices, u32 luCount)
     {
         IDirect3DDevice9* lpDevice = renderengine::gDevice;
@@ -133,27 +145,29 @@ namespace CgsGraphics
         const f32 lfScaleX = static_cast<f32>(renderengine::gDisplayWidth) / KF_LOGICAL_WIDTH;
         const f32 lfScaleY = static_cast<f32>(renderengine::gDisplayHeight) / KF_LOGICAL_HEIGHT;
 
-        enum { KI_MAX_BATCH = 64 };
-        D3DScreenVertex laBatch[KI_MAX_BATCH];
-        if (luCount > KI_MAX_BATCH)
+        // Same capacity as the reserve/submit scratch run; an over-capacity run fires
+        // the assert (nothing on the 2D path submits runs this large).
+        static D3DScreenVertex saBatch[KU_RENDER_BUFFER_MAX];
+        CGS_ASSERT(luCount <= KU_RENDER_BUFFER_MAX, "Im2d Render run exceeds the batch buffer");
+        if (luCount > KU_RENDER_BUFFER_MAX)
         {
-            luCount = KI_MAX_BATCH;
+            luCount = KU_RENDER_BUFFER_MAX;
         }
         for (u32 i = 0; i < luCount; ++i)
         {
-            laBatch[i].x = lpVertices[i].mv2Pos.x * lfScaleX;
-            laBatch[i].y = lpVertices[i].mv2Pos.y * lfScaleY;
-            laBatch[i].z = 0.0f;
-            laBatch[i].rhw = 1.0f;
-            laBatch[i].color = D3DCOLOR_ARGB(lpVertices[i].mv4Colour.a, lpVertices[i].mv4Colour.r,
+            saBatch[i].x = lpVertices[i].mv2Pos.x * lfScaleX;
+            saBatch[i].y = lpVertices[i].mv2Pos.y * lfScaleY;
+            saBatch[i].z = 0.0f;
+            saBatch[i].rhw = 1.0f;
+            saBatch[i].color = D3DCOLOR_ARGB(lpVertices[i].mv4Colour.a, lpVertices[i].mv4Colour.r,
                                              lpVertices[i].mv4Colour.g, lpVertices[i].mv4Colour.b);
-            laBatch[i].u = lpVertices[i].mv2Tex0UV.x;
-            laBatch[i].v = lpVertices[i].mv2Tex0UV.y;
+            saBatch[i].u = lpVertices[i].mv2Tex0UV.x;
+            saBatch[i].v = lpVertices[i].mv2Tex0UV.y;
         }
 
         lpDevice->SetFVF(KU_SCREEN_FVF);
         // The loading screen submits 4-vertex quads as triangle strips.
-        lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luCount - 2u, laBatch, sizeof(D3DScreenVertex));
+        lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luCount - 2u, saBatch, sizeof(D3DScreenVertex));
     }
 
     // The X360 reserve/submit buffer API, folded onto the PC immediate renderer (see CgsImRenderBuffer.h).
@@ -220,6 +234,106 @@ namespace CgsGraphics
     void Im2dBase<V>::SetTransform(const Im2dTransform& lTransform)
     {
         mCurrentTransform = lTransform;
+    }
+
+    template <typename V>
+    void Im2dBase<V>::BatchTransformTextureBlendRenderStatic(
+        const Im2dTransform& lrTransform,
+        renderengine::Texture* lpTexture,
+        const BlendState* lpBlendState,
+        renderengine::PrimitiveType lePrimitiveType,
+        const V* lpVertices,
+        u32 luNumVertices,
+        u8 /*luFlags*/)
+    {
+        if (lpVertices == nullptr || luNumVertices == 0)
+        {
+            return;
+        }
+
+        SetTransform(lrTransform);
+        this->SetTexture(lpTexture);
+        this->SetState(lpBlendState);
+
+        // A Flapt mesh's vertex count is serialised as a u8 (BrnFlapt::Mesh::muNumVerts),
+        // so a single batch can never exceed 255 vertices -- the fixed transform buffer
+        // covers the whole range; an over-capacity run fires the assert.
+        enum { KI_MAX_FLAPT_BATCH = 256 };
+        V laTransformed[KI_MAX_FLAPT_BATCH];
+        CGS_ASSERT(luNumVertices <= KI_MAX_FLAPT_BATCH,
+                   "Flapt batch exceeds the transform buffer");
+        if (luNumVertices > KI_MAX_FLAPT_BATCH)
+        {
+            luNumVertices = KI_MAX_FLAPT_BATCH;
+        }
+
+        for (u32 luVertex = 0; luVertex < luNumVertices; ++luVertex)
+        {
+            laTransformed[luVertex] = lpVertices[luVertex];
+
+            const f32 lfNdcX =
+                lrTransform.mOriginXYZ.x +
+                lrTransform.mRightUp.x * lpVertices[luVertex].mv2Pos.x +
+                lrTransform.mRightUp.y * lpVertices[luVertex].mv2Pos.y;
+            const f32 lfNdcY =
+                lrTransform.mOriginXYZ.y +
+                lrTransform.mRightUp.z * lpVertices[luVertex].mv2Pos.x +
+                lrTransform.mRightUp.w * lpVertices[luVertex].mv2Pos.y;
+
+            // FLAG PC-platform leaf: ImRenderer::Render consumes the engine's
+            // 1280x720 logical coordinates, while the console command carries NDC.
+            laTransformed[luVertex].mv2Pos.x = (lfNdcX + 1.0f) * 640.0f;
+            laTransformed[luVertex].mv2Pos.y = (1.0f - lfNdcY) * 360.0f;
+        }
+
+        this->Render(lePrimitiveType, laTransformed, luNumVertices);
+    }
+
+    template <typename V>
+    void Im2dBase<V>::PushMask(renderengine::Texture* lpTexture, V* lpaMaskVertices)
+    {
+        if (lpaMaskVertices == nullptr)
+        {
+            return;
+        }
+
+        // FLAG PC-platform leaf: materialise the console's two-corner stencil mask as a
+        // D3D9 scissor rectangle (an axis-aligned approximation -- the console masks by
+        // stencil texture; Flapt masks are axis-aligned quads, so the rect is exact for
+        // them). The corners arrive in the 1280x720 logical space, so scale to the back
+        // buffer like every draw on this path. PopMask (below) disables the scissor;
+        // BeginRendering also clears it at frame start.
+        IDirect3DDevice9* lpDevice = renderengine::gDevice;
+        if (lpDevice == nullptr)
+        {
+            return;
+        }
+
+        const f32 lfScaleX = static_cast<f32>(renderengine::gDisplayWidth) / KF_LOGICAL_WIDTH;
+        const f32 lfScaleY = static_cast<f32>(renderengine::gDisplayHeight) / KF_LOGICAL_HEIGHT;
+
+        RECT lRect;
+        lRect.left = static_cast<LONG>(lpaMaskVertices[0].mv2Pos.x * lfScaleX);
+        lRect.top = static_cast<LONG>(lpaMaskVertices[0].mv2Pos.y * lfScaleY);
+        lRect.right = static_cast<LONG>(lpaMaskVertices[1].mv2Pos.x * lfScaleX);
+        lRect.bottom = static_cast<LONG>(lpaMaskVertices[1].mv2Pos.y * lfScaleY);
+        lpDevice->SetScissorRect(&lRect);
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+        this->SetTexture(lpTexture);
+    }
+
+    // FLAG PC-platform leaf: the pop side of the scissor mask (the console's
+    // ImCommandPopMask). Driven by the Flapt mask path once FlaptRenderer::PopMask is
+    // homed; BeginRendering's frame-start reset bounds any unbalanced push meanwhile.
+    template <typename V>
+    void Im2dBase<V>::PopMask()
+    {
+        IDirect3DDevice9* lpDevice = renderengine::gDevice;
+        if (lpDevice == nullptr)
+        {
+            return;
+        }
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
     }
 
     // Instantiate the coloured+textured 2D renderer the loading screen uses.

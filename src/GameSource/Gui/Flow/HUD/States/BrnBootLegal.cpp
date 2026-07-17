@@ -201,29 +201,6 @@ namespace
         explicit SetPlayer0ControllerPortEvent(s32 liPort) : CgsGui::GuiEvent<156>(0, 12), miPort(liPort) {}
     };
 
-    // BrnGui::GuiAudioTriggerEvent -- a 112-byte audio-trigger record the X360 Construct()s
-    // with (channel, apt-name, trigger-name). Modelled by value; Construct fills the body.
-    struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<201>
-    {
-        u8 maBody[112];
-        GuiAudioTriggerEvent() : CgsGui::GuiEvent<201>(0, 12) { for (s32 i = 0; i < 112; ++i) maBody[i] = 0; }
-        // FLAG (bring-up carrier layout): the X360 fills the 112-byte audio record with the channel +
-        // apt/trigger NAME HASHES for the AEMS sound logic; that exact record layout is the deferred
-        // audio-engine boundary. Until it is recovered, carry { s32 channel @+0, trigger name @+4,
-        // apt name @+68 } so the PC channel-201 consumer can key the trigger (it currently logs the
-        // trigger; the AEMS patch playback is the follow-on).
-        void Construct(s32 liChannel, const char* lpacAptName, const char* lpacTrigger)
-        {
-            *reinterpret_cast<s32*>(&maBody[0]) = liChannel;
-            const char* lpacT = (lpacTrigger != 0) ? lpacTrigger : "";
-            const char* lpacA = (lpacAptName != 0) ? lpacAptName : "";
-            s32 li = 0;
-            for (; li < 63 && lpacT[li] != 0; ++li) maBody[4 + li] = static_cast<u8>(lpacT[li]);
-            maBody[4 + li] = 0;
-            for (li = 0; li < 43 && lpacA[li] != 0; ++li) maBody[68 + li] = static_cast<u8>(lpacA[li]);
-            maBody[68 + li] = 0;
-        }
-    };
 }   // anonymous namespace
 }   // namespace BrnGui
 
@@ -382,12 +359,17 @@ namespace BrnGui
         mSelectionMenu.Clear();
         mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
 
-        // Post the second leave command (GuiEvent<18> { 8, 18, 12, "", 1 }, ch 41, size 20 -- the
-        // X360 packs the empty apt-name pointer + a 1 flag; event type 18, not 25).
+        // Post the second leave command (GuiEvent<18> { 8, 18, 12, "", 1 }, ch 41 -- the
+        // X360 packs the empty apt-name pointer + a 1 flag at size 20 with 4-byte
+        // pointers; on the PC/x64 gate the name pointer widens, so the copied payload is
+        // sizeof(GuiAptNameFlagEvent20) -- the standard x64 record-width rule (a 20-byte
+        // copy truncates the pointer and drops the level word, which the view-module
+        // dispatch then reads as garbage).
         {
             GuiAptNameFlagEvent20 lOption("", 1);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE,
+                static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
         }
 
         // Unload the legal screen's resources from the cache and clear its expected apt list.
@@ -719,9 +701,9 @@ namespace BrnGui
                 mfAcceptTime = BootLegalCacheBoundary::GetTime(mpGuiCache);
 
                 {
-                    GuiAudioTriggerEvent lAudio;
-                    lAudio.Construct(7, "", "Accept");
-                    mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
+                    BrnGui::GuiAudioTriggerEvent lAudio;
+                    lAudio.Construct(7, "", "Accept", "");
+                    mpStateInterface->OutputGuiEvent<BrnGui::GuiAudioTriggerEvent>(lAudio);
                 }
 
                 if (gu8BeatTheTeamDlcEnabled && mu8SelectedMenuIndex == 1)

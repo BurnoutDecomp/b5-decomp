@@ -22,10 +22,11 @@
 namespace CgsResource
 {
     // Load-relative on-disk pointer -> absolute. Pointers in the serialised LanguageResource are
-    // stored as u32 offsets; FixUp/FixDown add/subtract the load base. (Same helper shape as
+    // stored as offsets (console u32; the staged x64 data widens them to u64 -- see the header);
+    // FixUp/FixDown add/subtract the load base. (Same helper shape as
     // BrnEnvironmentTimeLineResourceType / VehicleList.)
     template <typename T>
-    static T* PointerFromU32(u32 luAddress)
+    static T* PointerFromSlot(u64 luAddress)
     {
         return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
     }
@@ -55,11 +56,11 @@ namespace CgsResource
         if (lpRes->muSize)                     // if (*(a3 + 4))
         {
             const LanguageResourceHashEntry* lpEntries =
-                PointerFromU32<const LanguageResourceHashEntry>(lpRes->mpEntries);
-            for (s32 li = 0; li < lpRes->muSize; ++li)   // do/while v6 < *(a3+4), v7 stride 8
+                PointerFromSlot<const LanguageResourceHashEntry>(lpRes->mpEntries);
+            for (s32 li = 0; li < lpRes->muSize; ++li)   // do/while v6 < *(a3+4), v7 stride 8 (x64: 16)
             {
                 // v8 = CgsUnicode::ByteLength(*(v7 + *(a3+8) + 4));  v5 += v8 + 9;
-                const u32 luLen = CgsUnicode::ByteLength(PointerFromU32<const u8>(lpEntries[li].mpString));
+                const u32 luLen = CgsUnicode::ByteLength(PointerFromSlot<const u8>(lpEntries[li].mpString));
                 luSize += luLen + 9;
             }
         }
@@ -87,14 +88,16 @@ namespace CgsResource
     {
         LanguageResource* lpRes = static_cast<LanguageResource*>(lpResource);
 
-        const u32 luDelta = CgsResource::GetLoadBase(lrResource);   // v6 = *a3 (read at top)
+        // x64: the widened offset slots relocate to full 64-bit pointers (GetLoadBase64;
+        // the console delta is the u32 form because its pointers are 32-bit).
+        const uintptr_t luDelta = CgsResource::GetLoadBase64(lrResource);   // v6 = *a3 (read at top)
 
         if (lpRes->muSize)                     // if (*(a2 + 4))
         {
             // *(a2 + 8) (mpEntries) is still the runtime pointer here.
             LanguageResourceHashEntry* lpEntries =
-                PointerFromU32<LanguageResourceHashEntry>(lpRes->mpEntries);
-            for (s32 li = 0; li < lpRes->muSize; ++li)   // do/while v5, v7 stride 8
+                PointerFromSlot<LanguageResourceHashEntry>(lpRes->mpEntries);
+            for (s32 li = 0; li < lpRes->muSize; ++li)   // do/while v5, v7 stride 8 (x64: 16)
             {
                 // X360: if (!*a3) Begin/Fire/EndAssert("No Memory Resource","...cpp",46). The assert
                 // tests the DELTA is non-zero (not the entry); baked line 46 NOT reproduced.
@@ -112,15 +115,16 @@ namespace CgsResource
     {
         LanguageResource* lpRes = static_cast<LanguageResource*>(lpResource);
 
-        const u32 luDelta = CgsResource::GetLoadBase(lrResource);   // *a3
+        // x64: full-width delta (see FixDown's note).
+        const uintptr_t luDelta = CgsResource::GetLoadBase64(lrResource);   // *a3
 
         lpRes->mpEntries += luDelta;           // *(a2 + 8) += *a3 (BEFORE the loop)
 
         if (lpRes->muSize)                     // v6 = *(a2 + 4)
         {
             LanguageResourceHashEntry* lpEntries =
-                PointerFromU32<LanguageResourceHashEntry>(lpRes->mpEntries);
-            for (s32 li = 0; li < lpRes->muSize; ++li)   // do/while v5, v7 stride 8
+                PointerFromSlot<LanguageResourceHashEntry>(lpRes->mpEntries);
+            for (s32 li = 0; li < lpRes->muSize; ++li)   // do/while v5, v7 stride 8 (x64: 16)
             {
                 // X360: if (!*a3) Begin/Fire/EndAssert("No Memory Resource","...cpp",66). Assert the
                 // DELTA is non-zero (not the entry); baked line 66 NOT reproduced.

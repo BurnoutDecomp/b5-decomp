@@ -2,6 +2,8 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue
+#include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"              // CgsGuiModuleIO::InputBuffer (AddGuiEvent target)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT (AddGuiEvent inline)
 
 // ============================================================================
 // b5-decomp/src/GameShared/GameClasses/Gui/CgsGuiModule.h
@@ -71,6 +73,50 @@ namespace CgsGui
         // non-gating). Bodied + explicitly instantiated in CgsGuiModule_AddGuiEvent_Inst.cpp.
         template <class T>
         int AddGuiEvent(const T* lpEvent, CgsGuiModuleIO::InputBuffer* lpBuffer);
+
+        // ---- single-event inbound publisher template (X360-attested instances) ----------
+        // The producer-side twin of OutputBuffer::AddGuiOutEvent<T>: push one GUI event onto
+        // the module INPUT buffer's inbound queue. X360 emits one out-of-line body per event
+        // type (??$AddGuiEvent@V...@GuiModule@CgsGui@@QAAXAAV...@PAVInputBuffer@CgsGuiModuleIO@2@@Z);
+        // every instance is the same three steps, recovered from
+        // AddGuiEvent<GuiEventControllerInputPressed> @0x823DA8A8 (siblings 0x823DA960
+        // ActiveUserIndex / 0x823DAAD0 Axis / 0x823DAB88 Down / 0x823DAC40 Released /
+        // 0x823DAA18 ToggleChangeCar / 0x823DADB0 SetLanguage):
+        //   1. assert the input-buffer pointer ("Input hasn't been locked for write",
+        //      CgsGuiModule.h:286);
+        //   2. fetch the buffer's inbound queue via InputBuffer::GetGuiEvents() @0x8284F238
+        //      (which asserts the write lock);
+        //   3. AddEvent(payload, T's event-type id, payload size) -- the on-queue record is
+        //      the PAYLOAD ONLY (the bytes past the 12-byte GuiEvent<N> header; the id rides
+        //      the queue entry). X360 payload sizes: Pressed/Down/Released 8, Axis 12,
+        //      ActiveUserIndex/SetLanguage 4, and a 1-byte marker for payload-less events
+        //      (GuiEvent<296> and ToggleChangeCar(540) both push size 1).
+        //
+        // The X360 emits these as non-static members of the module embedded in BrnGameModule
+        // (@+7252512); the body never reads `this`, so this reconstruction keeps it callable
+        // as a static until that embed is constructed on PC (the model-module ctor chain is a
+        // GuiFsmController-flow follow-on).
+        template <class T>
+        static void AddGuiEvent(T& lrEvent, CgsGuiModuleIO::InputBuffer* lpInput)
+        {
+            CGS_ASSERT(lpInput != 0, "Input hasn't been locked for write");
+            // GuiEvent<N> header = 3 x u32 (CgsGuiEventTypeDefs.h static_asserts pin +0x0C).
+            const s32 KI_GUI_EVENT_HEADER_SIZE = 12;
+            s32 liPayloadSize = static_cast<s32>(sizeof(T)) - KI_GUI_EVENT_HEADER_SIZE;
+            const void* lpPayload;
+            if (liPayloadSize <= 0)
+            {
+                liPayloadSize = 1;      // payload-less event: the X360 pushes a 1-byte marker
+                lpPayload     = &lrEvent;
+            }
+            else
+            {
+                lpPayload = reinterpret_cast<const char*>(&lrEvent) + KI_GUI_EVENT_HEADER_SIZE;
+            }
+            lpInput->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(lpPayload),
+                lrEvent.GetEventType(), liPayloadSize);
+        }
 
     private:
         // EXPLICIT PADDING: the X360 +0x00..+0x1B3FF head span -- the

@@ -29,17 +29,6 @@
 #include <cstdint>
 #include <cstring>   // strstr (ExportClassDefinitionAssets' __Packages label scan)
 
-// The pass-3 import-registration probe sink (host-implemented; weak no-op default so this TU
-// links standalone). The host (BrnAptRuntimeBringUp) provides the strong definition that logs
-// each import's movie/class name + the loader handle, and then SYNC-loads the import bundle.
-#if defined(_MSC_VER)
-extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle);
-#pragma comment(linker, "/alternatename:CgsApt_ImportProbe=CgsApt_ImportProbeDefault")
-extern "C" void CgsApt_ImportProbeDefault(int, const char*, const char*, void*) {}
-#else
-extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const char* pcClassName, void* pHandle);
-#endif
-
 // ===========================================================================
 // Fixup walk -- un-homed callees / globals.   The serialised .apt records are the
 // in-place file blob (no recovered runtime struct), so this TU addresses them by
@@ -50,13 +39,9 @@ extern "C" void CgsApt_ImportProbe(int nIndex, const char* pcMovieName, const ch
 // FLAG: each lands when its owning TU is reconstructed.
 // ===========================================================================
 
-// AptLoader::Load @0x82AEEA70 -- the X360 3-arg overload (DISTINCT from the PS3
-// AptLoader::Load(const EAStringC&) homed in AptLoader.cpp): registers/looks up the
-// named .apt and writes the resulting AptFilePtr into *pOut, returning pOut. The
-// loader object is gpAptTarget[+0x1C]. Declared free-standing (the X360 AptLoader
-// runtime layout is a follow-on); the call site passes the raw pointers faithfully.
-struct AptLoader;
-extern AptFilePtr* AptLoader_LoadX360(AptFilePtr* pOut, AptLoader* pLoader, const EAStringC* pName);   // AptLoader::Load @0x82AEEA70 (FLAG)
+// (The X360 AptLoader::Load @0x82AEEA70 by-value-return wrapper extern was
+// DELETED 2026-07-10 -- the import pass below calls the homed member
+// `lpLoader->Load(lName)` directly.)
 
 // FLAG (x64 native-8 relocation bounds): the AptData resource span the host stashes so the
 // Fixup case-5/9 -> AptMovie::resolve64 walk can bounds-check every serialised offset slot
@@ -282,7 +267,7 @@ void AptCharacterAnimation::IncCharacterList(AptFilePtr filePtr) const
 // pointer width stays correct on x64; the native-struct transcode lands with the
 // FixupTranscode rebuild. The ref-count bookkeeping is faithful.
 // ===========================================================================
-void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, void* pDataBlock)
+void AptCharacterAnimation::Link(void* pData, void* pDataBlock)
 {
     (void)pData;        // console a2 (r4) -- the asm never reads it
     (void)pDataBlock;   // console a3 (r5) -- the asm never reads it
@@ -291,20 +276,20 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
     // The def-base head fields (importCount/table, charCount/table) are read through
     // the serialized 64-bit AptCharacterAnimation struct (charCount@0x18, charTable@
     // 0x20, importCount@0x34, importTable@0x38 -- the same offsets Fixup relocates).
-    const int32_t nImports = pCharAnim->mnImportCount;      // [c:0x20] mnImportCount
+    const int32_t nImports = mnImportCount;      // [c:0x20] mnImportCount
     if (nImports > 0)
     {
         for (int32_t i = 0; i < nImports; ++i)
         {
-            AptImportEntry& rEntry = pCharAnim->mpImportTable[i];   // [c:0x24] stride 0x20
+            AptImportEntry& rEntry = mpImportTable[i];   // [c:0x24] stride 0x20
             const int32_t nId = rEntry.mnId;                       // importEntry.mnId
 
             // FindExport(entry.mpFile, entry.mpClassName): the imported movie's export
             // table resolves the class name to a character.
             AptCharacter* const pResolved = rEntry.mpFile->FindExport(rEntry.mpClassName);
 
-            // Store the resolved character into mpCharacterTable[importId].
-            AptCharacter** const pTable = pCharAnim->mpCharacterTable;   // [c:0x10] charTable
+                        // Store the resolved character into mpCharacterTable[importId].
+            AptCharacter** const pTable = mpCharacterTable;   // [c:0x10] charTable
             pTable[nId] = pResolved;
 
             // If it resolved, copy the import's AptFile into the resolved character's
@@ -334,10 +319,10 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
     }
 
     // ---- pass 2: turn stored cross-reference INDICES into character pointers ----
-    const int32_t nChars = pCharAnim->mnCharacterCount;    // [c:0x0C] mnCharacterCount
-    if (nChars > 0)
+    const int32_t nChars = mnCharacterCount;    // [c:0x0C] mnCharacterCount
+        if (nChars > 0)
     {
-        AptCharacter** const pTable = pCharAnim->mpCharacterTable;   // [c:0x10] charTable
+        AptCharacter** const pTable = mpCharacterTable;   // [c:0x10] charTable
         for (int32_t i = 0; i < nChars; ++i)
         {
             void* pChar = pTable[i];
@@ -355,13 +340,13 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
                     // 8-BYTE slots @char+0x20 and @char+0x28 (console: 4-byte +0x10/
                     // +0x14) -- the prior console offsets read header padding on the
                     // GUIAPT64 bundles, so type-8 cross-refs never resolved.
-                    AptCharacter** const pT = pCharAnim->mpCharacterTable;
+                                        AptCharacter** const pT = mpCharacterTable;
                     const int32_t nIdx0 = BlobI32(pChar, 0x20);
                     const int32_t nIdx1 = BlobI32(pChar, 0x28);
                     // Data guard (host-only; the XB1 asm is unguarded on trusted data):
                     // only rewrite PLAUSIBLE indices -- a slot that already holds a
                     // pointer (or a stale/padding word) must not index the table.
-                    const int32_t nCount = pCharAnim->mnCharacterCount;
+                                        const int32_t nCount = mnCharacterCount;
                     if (nIdx0 >= 0 && nIdx0 < nCount && nIdx1 >= 0 && nIdx1 < nCount)
                     {
                         BlobPtrRef(pChar, 0x20) = pT[nIdx0];
@@ -389,10 +374,10 @@ void AptCharacterAnimation_Link(AptCharacterAnimation* pCharAnim, void* pData, v
                     (luArr >= 0x10000u) && ((luArr >> 47) == 0u);
                 if (bArrSane)
                 {
-                    const int32_t nCount = pCharAnim->mnCharacterCount;
+                                        const int32_t nCount = mnCharacterCount;
                     for (int32_t r = 0; r < nRefs; ++r)
                     {
-                        AptCharacter** const pT = pCharAnim->mpCharacterTable;
+                                                AptCharacter** const pT = mpCharacterTable;
                         void* pArr = BlobPtr(pChar, 0x30);                 // the glyph index array
                         const int64_t nIdx = *reinterpret_cast<const int64_t*>(BlobAt(pArr, r * 8));
                         if (nIdx >= 0 && nIdx < nCount)
@@ -559,7 +544,7 @@ static void* AptResolveShapeGeometry(void* pBlock, int32_t nGeometryId)
     // The chunk header {u32 recordCount, u32 depCount, u64 recordArrayOffset}.
     const char* const lpChunk = reinterpret_cast<const char*>(luBase + luGeomOff);
     const uint32_t luRecordCount = *reinterpret_cast<const uint32_t*>(lpChunk);
-    const uint64_t luRecArrOff   = *reinterpret_cast<const uint64_t*>(lpChunk + 8);
+    const uint64_t luRecArrOff   = *reinterpret_cast<const uint64_t*>(lpChunk + 8);   // serialized .apt geometry chunk header @+8
     if (luRecordCount == 0 || luRecordCount > 4096u || luRecArrOff == 0 ||
         (luSize != 0 && luRecArrOff + luRecordCount * 8u > luSize))
         return nullptr;
@@ -650,7 +635,7 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
             continue;
 
         // back-link: the asm writes table[0] over the character's (now-consumed) signature slot.
-        *reinterpret_cast<char**>(pChar + 0x08) = reinterpret_cast<char**>(pTable)[0];
+        *reinterpret_cast<char**>(BlobAt(pChar, 0x08)) = reinterpret_cast<char**>(pTable)[0];
 
         switch (i32At(pChar, 0x00))   // character type
         {
@@ -676,10 +661,10 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                     // index (the old bug; libapt2 Shape::Parse reads geometryId via
                     // ReadPointer and GetGeometry(id) resolves with it).
                     const uint32_t luGeomId = static_cast<uint32_t>(
-                        *reinterpret_cast<const uint64_t*>(pChar + 0x30));
+                        *reinterpret_cast<const uint64_t*>(BlobAt(pChar, 0x30)));
                     void* const lpUnit = AptResolveShapeGeometry(
                         pBlock, static_cast<int32_t>(luGeomId));
-                    *reinterpret_cast<void**>(pChar + 0x20) = lpUnit;
+                    *reinterpret_cast<void**>(BlobAt(pChar, 0x20)) = lpUnit;
                 }
                 break;
             case 2:   // Text (edit-text): relocate the text (+0x50) + variable (+0x58) string pointers.
@@ -743,7 +728,7 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
     // "requested" AptFile) and assign that handle into the entry's AptFile slot (+0x18). The
     // loader IS live now (gpAptTarget->mpLoader is initialised by AptCreateTargetInstance, and
     // DriveFaithfulLoad already drives Load/CompleteLoad on it), so the prior "loader
-    // under-initialised -> AV" deferral is retired. The host (BrnAptRuntimeBringUp) then SYNC-
+    // under-initialised -> AV" deferral is retired. The GUI Apt host (BrnGuiAptRuntime) then SYNC-
     // loads the referenced import bundles (GuiApt\<name>.bundle) and resolves them, so
     // charTable[importId] becomes a real character; an import bundle that is missing/unconvertable
     // is left in the "requested" state (AptFile slot resolved but mpData null) -- an honest data
@@ -769,9 +754,6 @@ AptCharacterAnimation* AptCharacterAnimation::Fixup(void* pBase, AptConstFile* p
                 // Assign the loader handle into the import entry's AptFile slot (+0x18, native-8).
                 AptFilePtr* const pSlot = reinterpret_cast<AptFilePtr*>(pEntry + 0x18);
                 pSlot->pData = lHandle.pData;   // share the loader's counted ref (the entry owns one)
-                CgsApt_ImportProbe(i, pcMovieName,
-                                   reinterpret_cast<const char*>(BlobPtr(pEntry, 0x08)),
-                                   lHandle.pData);
             }
         }
     }
@@ -1166,7 +1148,7 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
         {
             case 1:   // Shape: clear the resolved flag, free the host rendering
             {         // unit (+0x30), null the slot.
-                *reinterpret_cast<uint16_t*>(pc + 0x12) &= ~0x8000u;
+                *reinterpret_cast<uint16_t*>(BlobAt(pc, 0x12)) &= ~0x8000u;
                 void** const ppUnit = reinterpret_cast<void**>(pc + 0x30);
                 AptFreeRenderingUnit(*ppUnit);        // qword_14147AA78 host hook
                 *ppUnit = nullptr;
@@ -1174,18 +1156,18 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
                 break;
             }
             case 2:   // Text: un-relocate the text (+0x50) + variable (+0x58).
-                Unreloc(*reinterpret_cast<void**>(pc + 0x50));
-                Unreloc(*reinterpret_cast<void**>(pc + 0x58));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x50)));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x58)));
                 break;
             case 3:   // Font: un-relocate the name (+0x20); glyph pointers
             {         // (+0x30, count +0x28) back to indices; then the array ptr.
-                Unreloc(*reinterpret_cast<void**>(pc + 0x20));
-                const int32_t nGlyphs = *reinterpret_cast<int32_t*>(pc + 0x28);
-                void** const ppGlyphs = *reinterpret_cast<void***>(pc + 0x30);
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x20)));
+                const int32_t nGlyphs = *reinterpret_cast<int32_t*>(BlobAt(pc, 0x28));
+                void** const ppGlyphs = *reinterpret_cast<void***>(BlobAt(pc, 0x30));
                 for (int32_t g = 0; g < nGlyphs; ++g)
                     *reinterpret_cast<int64_t*>(&ppGlyphs[g]) =
                         IndexOfChar(ppGlyphs[g]);
-                Unreloc(*reinterpret_cast<void**>(pc + 0x30));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x30)));
                 break;
             }
             case 5:
@@ -1197,7 +1179,7 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
                 break;
             case 7:   // Image: queued release of the live unit when resolved.
             {
-                uint16_t& rFlags = *reinterpret_cast<uint16_t*>(pc + 0x12);
+                uint16_t& rFlags = *reinterpret_cast<uint16_t*>(BlobAt(pc, 0x12));
                 void** const ppUnit = reinterpret_cast<void**>(pc + 0x20);
                 if ((rFlags & 1u) != 0u)
                 {
@@ -1212,11 +1194,11 @@ void* AptCharacterAnimation::Unresolve(int32_t nBase)
             }
             case 10:  // StaticText: per record (stride 0x40) un-relocate the
             {         // glyph-array slot (+0x38); then the record-array ptr.
-                const int32_t nRecs = *reinterpret_cast<int32_t*>(pc + 0x48);
-                char* const pRecs = *reinterpret_cast<char**>(pc + 0x50);
+                const int32_t nRecs = *reinterpret_cast<int32_t*>(BlobAt(pc, 0x48));
+                char* const pRecs = *reinterpret_cast<char**>(BlobAt(pc, 0x50));
                 for (int32_t r = 0; r < nRecs; ++r)
                     Unreloc(*reinterpret_cast<void**>(pRecs + r * 0x40 + 0x38));
-                Unreloc(*reinterpret_cast<void**>(pc + 0x50));
+                Unreloc(*reinterpret_cast<void**>(BlobAt(pc, 0x50)));
                 break;
             }
             default:

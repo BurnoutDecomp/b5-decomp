@@ -42,6 +42,10 @@ bool          gbRenderItemShuttingDown   = false; // X360 byte_8324E56C
 
 namespace
 {
+    // The console brackets each revision-link swap with an interrupt-masked lwarx/stwcx.
+    // test-and-set on unk_8324E7CC.
+    // FLAG PC-platform leaf: on single-threaded PC this is a plain _InterlockedExchange spin
+    // (a threading primitive, not an engine Class::method).
     inline void AptRenderTreeLock_Acquire()
     {
         while (_InterlockedExchange(&gAptRenderTreeRevisionLock, 1) != 0)
@@ -49,6 +53,7 @@ namespace
             // spin until the previous holder releases (sets it back to 0)
         }
     }
+    // FLAG PC-platform leaf: paired release of the single-threaded render-tree spinlock.
     inline void AptRenderTreeLock_Release()
     {
         _InterlockedExchange(&gAptRenderTreeRevisionLock, 0);
@@ -967,39 +972,10 @@ void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem)
 }
 
 // ---------------------------------------------------------------------------
-// Free-function render-item accessors (AptLinker zombie-swap path). The X360
-// inlines these as raw field reads/writes + a vtbl-slot dispatch; here they are
-// thin wrappers onto the named AptRenderItem members so AptLinker compiles + links
-// against them by name.
-//   AptRenderItem_GetDepth      -- read the placed depth (console *(item+0x14) i16).
-//   AptRenderItem_SetDepth      -- write it (console *(item+0x14) = nDepth).
-//   AptRenderItem_CopyVisualFrom-- carry a node's visual state across (the X360
-//     vtbl[+0x14] dispatch is CopyRenderDataFrom @0x82AE5400; the base impl is the
-//     only one, so the named non-virtual call is faithful).
+// RETIRED (2026-07-06): the AptRenderItem_GetDepth/SetDepth/CopyVisualFrom and
+// AptCharacter_render free-function shims. The X360 inlines these as raw field
+// reads/writes + a vtbl-slot dispatch, so the callers now invoke the named members
+// directly (AptLinker.cpp: GetDepth()/SetDepth()/CopyRenderDataFrom(); the render-
+// item subtypes AptRenderItemShape/Morph::Render: pCharacter->render()) -- no
+// free-function stand-in remains.
 // ---------------------------------------------------------------------------
-int16_t AptRenderItem_GetDepth(const AptRenderItem* pItem)
-{
-    return pItem->GetDepth();
-}
-
-void AptRenderItem_SetDepth(AptRenderItem* pItem, int16_t nDepth)
-{
-    pItem->SetDepth(nDepth);
-}
-
-void AptRenderItem_CopyVisualFrom(AptRenderItem* pDst, const AptRenderItem* pSrc)
-{
-    pDst->CopyRenderDataFrom(pSrc);
-}
-
-// AptCharacter_render -- the geometry-draw helper the render-item subtypes call
-// (homed here, dispatching to AptCharacter::render @0x810E74). Now the shape
-// render path is wired end-to-end: AptRenderItemShape::Render -> PushMatrices ->
-// AptCharacter_render -> AptCharacter::render -> AptHook_DrawShape (the RW
-// rasteriser boundary).
-void AptCharacter_render(AptCharacter* pCharacter, AptRenderingContext* pCtx,
-                         AptMaskRenderOperation eOp, int nTick)
-{
-    if (pCharacter)
-        pCharacter->render(pCtx, eOp, nTick);
-}

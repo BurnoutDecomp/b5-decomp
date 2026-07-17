@@ -12,13 +12,9 @@
 // (references/DecFIGS/dwarfdump/GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h)
 // and gated on the X360 ledger.
 //
-// This header presently declares only the entry points that the BrnFlapt::
-// MovieClipRef forwarders body in BrnFlaptMovieClipRef.cpp need to compile:
-// the named-lookup, navigation, label-playback and trigger-callback methods.
-// The MovieClipInstance member layout and its full method set (Construct /
-// Update / Render / ApplyKeyFrame / ...) live with this class's own TU; grow
-// this header additively as those land. The instance pointer is therefore an
-// incomplete-by-design but method-complete declaration for the Ref TU.
+// The live instance layout and the lifecycle, lookup, navigation, keyframe,
+// FScript, and trigger methods are declared here and implemented in the class TU.
+// Rendering remains a separate milestone because it depends on the renderer body.
 //
 // Calling convention (verified from the ARTIST asm at the BrnFlaptMovieClipRef
 // call sites): each method is invoked on the live instance pointer the Ref
@@ -27,14 +23,46 @@
 // them `void`.
 // ============================================================================
 
+struct RGBA;
+namespace CgsMemory { class LinearMalloc; }
+namespace CgsGraphics { struct Im2dTransform; }
+
 namespace BrnFlapt
 {
+    struct FlaptRenderer;
+    struct MovieClip;
     struct MovieClipRef;
+    class TextFieldInstance;
     struct TextFieldRef;
     struct TriggerParameters;
 
     struct MovieClipInstance
     {
+        typedef void (*SoundTriggerCallback)(void* lpUserData,
+                                             const char* lpcComponentName,
+                                             const char* lpcParameter0,
+                                             const char* lpcParameter1,
+                                             const char* lpcParameter2);
+
+        // ---- lifecycle ------------------------------------------------------
+        // Construct / GotoFrame (DWARF BrnFlaptMovieClipInstance.h:73/:109): bind
+        // this instance to its serialised MovieClip timeline and rewind to a frame.
+        // Called by FlaptFileInstance::SetData @0x82471620 on the root clip
+        // (clip = &mpFile->mpaMovieClips[0], name "_root", no parent). Declared here
+        // for the root clip (clip 0, name "_root", no parent).
+        void Construct(const MovieClip* lpClip, const char* lpcName,
+                       MovieClipInstance* lpParent, CgsMemory::LinearMalloc* lpAllocator,
+                       const FlaptRenderer* lpRenderer, const RGBA* lpAlternateTextColours,
+                       s32 liNumAlternateColours);
+        void GotoFrame(u32 luFrame);
+
+        // ---- per-frame drive ------------------------------------------------
+        // Update / Render: advance / draw this clip node and its children. Called
+        // by FlaptFileInstance::Update @0x82471820 / Render @0x82472480 on the
+        // root clip.
+        void Update(f32 lfTimeStep);
+        void Render(FlaptRenderer* lpRenderer);
+
         // BrnFlaptTypes.h:36 -- per-frame trigger callback signature
         // (DWARF: void (*)(void*, uint16_t)).
         typedef void (*FrameTriggerCallback)(void* lpUserData, u16 luFrame);
@@ -60,6 +88,11 @@ namespace BrnFlapt
 
         // GetParent @ 0x8246CA40 call site -- sret parent handle into lpOutRef.
         void GetParent(MovieClipRef* lpOutRef);
+
+        // GetNthChild @0x8246C450 / inline pointer form @0x8246C560.
+        // The Ref form pairs the live child with its transform slot.
+        void GetNthChild(u32 luChild, MovieClipRef* lpOutRef) const;
+        MovieClipInstance* GetNthChild(u32 luChild) const;
 
         // ---- timeline playback --------------------------------------------
         // ResetTimeline -- rewind/reset this clip instance's timeline to its
@@ -88,8 +121,34 @@ namespace BrnFlapt
         void SetFrameTriggerCallback(FrameTriggerCallback lpCallback,
                                      void* lpUserData);
 
+        static void SetSoundTriggerHandler(SoundTriggerCallback lpCallback,
+                                           void* lpUserData);
+
         // GetTriggerParameters @ 0x8246CAB0 call site (tail-call forward).
         const TriggerParameters* GetTriggerParameters() const;
+
+        void ApplyKeyFrame(u32 luKeyFrameIndex);
+        void ProcessFScript(const struct FScriptCommand* lpStream,
+                            u32 luCommandCount, u32 luCurrentKeyFrame);
+        void FireTrigger(s32 leTriggerType, u16 luArg) const;
+
+        static SoundTriggerCallback gpSoundTriggerCallback;
+        static void* gpSoundTriggerUserData;
+
+        const MovieClip* mpMovieClip;
+        const char* mpcDEBUGName;
+        u32 maxPlacedChildren[3];
+        MovieClipInstance* mpParentInstance;
+        MovieClipInstance* mpaChildInstances;
+        CgsGraphics::Im2dTransform* mpaTransforms;
+        TextFieldInstance* mpaTextFieldInstances;
+        f32 mfTimeTillNextFrame;
+        u16 muCurrentFrame;
+        u16 muLastKeyFrameApplied;
+        FrameTriggerCallback mpFrameTriggerCallback;
+        void* mpFrameTriggerUserData;
+        u16 muParameterIndex;
+        u8 mxFlags;
     };
 }
 

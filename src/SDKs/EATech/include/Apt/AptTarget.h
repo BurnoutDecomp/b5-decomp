@@ -74,6 +74,12 @@ struct AptTarget
     // X360 body: `stw r4,0x24(r3); blr`.
     AptTarget* SetNext(void* pNext) { mpField24 = pNext; return this; }
 
+
+    // GetLoader @PS3 _ZN9AptTarget9GetLoaderEv @0xF15E60 -- the loader the target
+    // holds at +0x1C (`return *(this + 7);`). Body in AptTarget.cpp.
+    AptLoader* GetLoader();
+
+
     // ctor @0x82B00160 / Shutdown @0x82B02328 -- the AptTarget lifecycle (allocates /
     // tears down mpAnimationTarget + mpLoader + mpLinker + the render-root anchor).
     // Bodies in AptTarget.cpp.
@@ -108,3 +114,18 @@ extern int gAptTargetInstanceCount;     // X360 dword_8324E57C
 AptTarget* AptCreateTargetInstance(const u32* pParams);
 AptTarget* AptChangeTargetInstance(AptTarget* pTarget);
 bool       AptDestroyTargetInstance(AptTarget* pTarget);
+
+
+// ---------------------------------------------------------------------------
+// The per-frame update drivers (bodies in AptUpdate.cpp).
+//   AptUpdate @0x82B0DB68        -- run the CURRENT target's frame pacer (bank the
+//       elapsed ms on the root movie, tick once per authored frame period, run the
+//       deferred generalised-process pass), then flush the GC deferred releases.
+//       B4Extern PDB names the entry `void AptUpdate(unsigned int nDeltaTime)`;
+//       the Paradise build adds the depth-layer mask + banked-frame cap.
+//   AptUpdateTarget @0x82B0DE80  -- AptUpdate with pTarget swapped in as the
+//       current context (the CgsGui::AptAux::Update entry point: (ms, -1, 16)).
+// ---------------------------------------------------------------------------
+void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames);
+void AptUpdateTarget(AptTarget* pTarget, int nElapsedMs, int nDepthLayerMask,
+                     int nMaxBankedFrames);

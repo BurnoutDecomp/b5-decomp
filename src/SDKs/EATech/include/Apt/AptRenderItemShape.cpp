@@ -9,6 +9,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptRenderItemShape.h"
+#include "SDKs/EATech/include/Apt/AptCharacter.h"   // AptCharacter::render (geometry draw)
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"             // DOGMA_PoolManager
 #include <new>                                     // placement new
@@ -43,6 +44,7 @@ AptRenderItem* AptRenderItemShape::Clone(int nCreatedOnTick, bool bCopyExtended)
 void AptRenderItemShape::Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const
 {
     PushMatrices(pCtx, this);
-    AptCharacter_render(mpCharacter, pCtx, eOp, nTick);
+    if (mpCharacter)
+        mpCharacter->render(pCtx, eOp, nTick);   // AptCharacter::render @0x810E74 -> AptHook_DrawShape
     PopMatrices(pCtx, this);
 }

@@ -2,6 +2,8 @@
 
 #include "types.hpp"
 
+#include "GameShared/GameClasses/Gui/CgsOpaqueBuffer.h"   // CgsGui::OpaqueBuffer (SaveLoadMetadata::mStoredData)
+
 // CgsGui save/load shared declarations -- the wide-char-to-ASCII conversion helpers and
 // the save/load vocabulary (task-result + content-image-file enums, the SaveInfo /
 // SaveLoadMetadata records, and the MessageDisplay / ContentInformation interfaces).
@@ -76,6 +78,33 @@ namespace CgsGui
                                         u32 luRequiredKb, u32 luFreeKb) = 0;
         virtual void HideMessage() = 0;
         virtual void ShowAutosaveIcon(bool lbVisible) = 0;
+    };
+
+    // ADDITIVE GROW (BrnGuiProfile wave): the two save-description records this header's
+    // banner already names. Shape + names from the DecFIGS DWARF (CgsSaveLoad.h:153/:170).
+    // BrnGui::ProfileManager embeds one of each (X360 mSaveInfo @+267000 / mMetadata @+266944);
+    // ProfileManager::Construct @0x824FEED0 fills the three strings and the save/autosave
+    // starters publish the stored-data image through mStoredData (MakeOpaqueBuffer).
+
+    // CgsSaveLoad.h:153 -- the user-facing description of one save.
+    struct SaveInfo
+    {
+        static const usize TITLELENGTH_MAX       = 32;    // CgsSaveLoad.h:154 [DWARF names kept]
+        static const usize DESCRIPTIONLENGTH_MAX = 256;   // CgsSaveLoad.h:155
+
+        char macTitle[TITLELENGTH_MAX];              // CgsSaveLoad.h:157 (X360 +0x00)
+        char macDescription[DESCRIPTIONLENGTH_MAX];  // CgsSaveLoad.h:158 (X360 +0x20)
+    };
+
+    // CgsSaveLoad.h:170 -- the container/type description of one save plus the raw image view.
+    struct SaveLoadMetadata
+    {
+        static const s32 TYPENAMELENGTH_MAX = 32;    // CgsSaveLoad.h:171 [DWARF names kept]
+        static const s32 FILENAMELENGTH_MAX = 16;    // CgsSaveLoad.h:172
+
+        char         macTypename[TYPENAMELENGTH_MAX];  // CgsSaveLoad.h:174 (X360 +0x00)
+        char         macFilename[FILENAMELENGTH_MAX];  // CgsSaveLoad.h:175 (X360 +0x20)
+        OpaqueBuffer mStoredData;                      // CgsSaveLoad.h:177 (X360 +0x30: {ptr,size})
     };
 
     // CgsSaveLoad.h:189/:195-:212 -- the content-information-file provider the save/load

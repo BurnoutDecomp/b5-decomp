@@ -4,7 +4,7 @@
 // Decompiled store-for-store from the X360 ARTIST.XEX (the `assembly` field is
 // authoritative for the call order + which register/global each store touches).
 // These are the functions CgsGui::AptAux::InitializeApt @0x82848E50 chains to
-// stand up the Apt runtime; the host bring-up (BrnAptRuntimeBringUp.cpp) previously
+// stand up the Apt runtime; the GUI Apt host (BrnGuiAptRuntime.cpp) previously
 // stood these pieces up with an invented facade, which this TU retires.
 //
 // PHYSICALLY-REQUIRED PC DEVIATIONS (each // FLAG'd at its site):
@@ -51,9 +51,11 @@
 // ---- the value singletons AptValueInitialize builds -------------------------
 #include "SDKs/EATech/include/Apt/AptValue/AptNone.h"           // AptNone (the `undefined` singleton; befriended)
 #include "SDKs/EATech/include/Apt/AptExtObject.h"              // CreateNewAptFunction (the registerClass native wrap)
+#include "SDKs/EATech/include/Apt/AptObject.h"                 // AptObject::RegisterClassNative (registerClass native)
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"         // AptNativeFunction (complete type for the AptValue* store)
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"             // the _global hash (builtin class install)
 #include "SDKs/EATech/include/Apt/AptPrototype.h"               // AptPrototype (builtin prototype seeding)
+#include "SDKs/EATech/include/Apt/AptCIHNativeFunctionHelper.h" // the MovieClip prototype's native methods
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"        // AptBoolean::Initialize/Shutdown (befriended)
 #include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"         // AptLookup::Initialize/Shutdown
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"       // AptRegister::Initialize/Shutdown + gnAptRegisterCount
@@ -138,7 +140,7 @@ namespace
     //  AptStringPool.cpp, where StringPool::Initialize lives.)
 
     // ---- the shared thread-id spin lock (unk_8324E724) ---------------------
-    // FLAG: interrupt-masked lwarx/stwcx. TAS elided single-threaded.
+    // FLAG PC-platform leaf: single-threaded thread-id spin lock -- the console's interrupt-masked lwarx/stwcx. TAS elided (threading primitive, not an engine method).
     inline void AptThreadIdLock_Acquire() {}
     inline void AptThreadIdLock_Release() {}
 
@@ -399,8 +401,8 @@ extern const EAStringC gAptObjectClassName;   // &dword_8324E650 "Object"
 extern const EAStringC gAptStringClassName;   // &dword_8324E6B4 "String"
 extern const EAStringC gAptSpriteClassKey;    // dword_8324E640 "MovieClip"
 
-// The registerClass native body (AptObject.cpp; X360 sub_82AF6A38).
-AptValue* AptApt_RegisterClassNative(AptValue* pContext, int nNumParams);
+// The registerClass native is AptObject::RegisterClassNative (AptObject.cpp;
+// X360 sub_82AF6A38); its declaration arrives with AptObject.h below.
 
 int AptValueInitialize()
 {
@@ -468,14 +470,14 @@ int AptValueInitialize()
     // The Object.registerClass native (off_8324D748 == gpObjRegistrationFunc): the
     // console's tail calls sub_82AF6B68, which -- among the builtin prototype seeding
     // -- wraps the registerClass native (sub_82AF6A38, homed as
-    // AptApt_RegisterClassNative in AptObject.cpp) in an AptNativeFunction and pins
+    // AptObject::RegisterClassNative in AptObject.cpp) in an AptNativeFunction and pins
     // it. Installed here (the same boot moment); FLAG: the REST of sub_82AF6B68 (the
     // per-builtin-class AptPrototype seeding over _global's hash entries) stays
     // deferred with the AS-builtin class registry.
     if (gpObjRegistrationFunc == nullptr)
     {
         gpObjRegistrationFunc = AptExtObject::CreateNewAptFunction(
-            reinterpret_cast<AptExtFunctionPtr>(&AptApt_RegisterClassNative));
+            reinterpret_cast<AptExtFunctionPtr>(&AptObject::RegisterClassNative));
         if (gpObjRegistrationFunc)
             gpObjRegistrationFunc->setGCRoot(1);
     }
@@ -546,6 +548,11 @@ int AptValueInitialize()
                 pClass->setGCRoot(1);
                 if (pProto)
                     pProto->setGCRoot(1);
+                // (The MovieClip clip METHODS -- gotoAndPlay / play / getTextFormat /
+                // ... -- are NOT prototype members: the console resolves them through
+                // AptCIH::objectMemberLookup's SpriteMembersIndex recognizer, homed in
+                // AptCIHMembers.cpp 2026-07-09. The interim prototype install this TU
+                // carried was retired with that landing.)
             }
         }
     }
@@ -739,8 +746,8 @@ extern void* AptUpdateZombieVector(char bClear);
 // free wrappers AptTarget::Shutdown uses): PreDestroy releases the director's owned
 // state, CleanRemList drains the shared delayed-release list (a static op -- the pAnim
 // arg is accepted for call parity, matching the console's r3).
-void AptAnimationTarget_PreDestroy(AptAnimationTarget* pAnim);
-void AptAnimationTarget_CleanRemList(AptAnimationTarget* pAnim);
+// (The AptAnimationTarget_PreDestroy / _CleanRemList free-function shims are RETIRED --
+// AptTarget.cpp calls the real members directly; the shutdown below does the same.)
 
 // ===========================================================================
 // AptCommonShutdown @0x82B0AC08 -- the once-only shared static-data teardown
@@ -1125,8 +1132,8 @@ int AptUpdateShutdown(int /*a1*/)
         gAptTargetTls.SetValue(lpCurrent);
 
         AptAnimationTarget* lpAnim = lpCurrent->mpAnimationTarget;   // *(off_8324E570 + 0x18)
-        AptAnimationTarget_PreDestroy(lpAnim);         // release the director's owned state
-        AptAnimationTarget_CleanRemList(lpAnim);       // drain the shared delayed-release list
+        lpAnim->PreDestroy();                          // release the director's owned state
+        AptAnimationTarget::CleanRemList();            // drain the shared delayed-release list
 
         gpAptTargetTLS = lpPrevTLS;                    // off_8324E578 = r26 (restore)
         gAptTargetTls.SetValue(lpPrevTLS);
@@ -1207,18 +1214,6 @@ int AptUpdateShutdown(int /*a1*/)
 // AptRenderLinkStubs.cpp; AptTarget.cpp publishes into the same slot.
 extern EA::Thread::ThreadLocalStorage gAptTargetTls;
 
-// AptUpdate -- the per-frame Apt sim tick (a2/a3/a4 forwarded verbatim).
-extern int AptUpdate(int a1, int a2, int a3);
-
-int AptUpdateTarget(AptTarget* pTarget, int a2, int a3, int a4)
-{
-    AptTarget* pPrev = gpAptTarget;      // v5 = off_8324E574 (save the current context)
-
-    gpAptTarget = pTarget;               // off_8324E574 = a1
-    gAptTargetTls.SetValue(pTarget);     // TLS(unk_8324E814) = a1
-
-    AptUpdate(a2, a3, a4);
-
-    gpAptTarget = pPrev;                 // off_8324E574 = v5 (restore)
-    return static_cast<int>(gAptTargetTls.SetValue(pPrev));   // result = TLS(unk_8324E814) = v5
-}
+// AptUpdateTarget @0x82B0DE80 (the context swap around the per-frame AptUpdate
+// @0x82B0DB68) is homed in AptUpdate.cpp with the frame pacer; the duplicate body
+// that briefly lived here is retired at the l2 merge.

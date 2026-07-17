@@ -54,24 +54,27 @@ namespace BrnReplays
         void* mpStaticBuffer;
         s32   miStaticBufferSize;
 
-        // Declare-only: defined in BaseSerialiser's TU.
+        // Declare-only: defined in BaseSerialiser's TU. (Shapes must match the
+        // canonical BrnReplayBaseSerialiser.h declarations exactly -- MSVC mangles
+        // return types, so Lock/Unlock are bool here, matching the committed
+        // bodies.)
         int  Construct(int nId, int nMode, int nBufferSize, int nStaticSize,
                        const char* pName, int nFlag);
-        void Lock();
-        int  Unlock();
+        bool Lock();
+        bool Unlock();
 
         // Sized transfer overloads (both Read() and Write() use these here).
         int Write(const void* lpData, int nSize);
         int Read(void* lpData, int nSize);
     };
 
-    // Compile-only slice: the GuiModule replay static layout. No DWARF and no
-    // committed home yet; Reset() is declare-only, deferred to its own TU. The
-    // X360 calls it free-function-style on the pointer
-    // (GuiModuleStaticLayout::Reset(ptr)); in C++ that is ptr->Reset().
+    // Compile-only slice: the GuiModule replay static layout. Reset() is
+    // declare-only here, bodied in BrnReplayGuiModuleStaticLayout.cpp -- which
+    // spells it `GuiModuleStaticLayout* Reset()` (the X360 returns the layout as
+    // a tail artefact); the shape must match exactly (MSVC mangles return types).
     struct GuiModuleStaticLayout
     {
-        void Reset();
+        GuiModuleStaticLayout* Reset();
     };
 
     struct GuiModuleSerialiser : BaseSerialiser

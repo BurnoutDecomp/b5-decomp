@@ -3,6 +3,7 @@
 // self-contained).
 #include "SDKs/EATech/include/Apt/AptFile.h"
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 static void AptFile_EmbedCheck(AptFile* p)
 {
     p->mnRefCount     = 0;
@@ -14,6 +15,7 @@ static void AptFile_EmbedCheck(AptFile* p)
     (void)p->mFileName.c_str();
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptFile_EmbedCheckEntry(AptFile* p)
 {
     AptFile_EmbedCheck(p);

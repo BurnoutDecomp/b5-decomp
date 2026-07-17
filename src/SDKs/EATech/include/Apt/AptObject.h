@@ -80,4 +80,11 @@ public:
     // @0x82ADC158 (each a tail-call into the matching AptNativeHash setter).
     void Set__Proto__(AptValue* pValue);   // @0x82ADC150
     void SetPrototype(AptValue* pValue);   // @0x82ADC158
+
+    // The Object.registerClass NATIVE @0x82AF6A38 (gpObjRegistrationFunc wraps it).
+    // registerClass(exportName, class) fills the export-name -> AS-class registry
+    // (gpAptClassRegistry) the clip-placement class binding consumes. A static member
+    // so it keeps the plain C-ABI the AptExtFunctionPtr pin needs (AptInit seats its
+    // address); body in AptObject.cpp.
+    static AptValue* RegisterClassNative(AptValue* pContext, int nNumParams);  // @0x82AF6A38
 };

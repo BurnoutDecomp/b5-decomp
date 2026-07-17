@@ -290,7 +290,9 @@ namespace CgsGui
     }
 
     // -------------------------------------------------------------------------
-    // FreeTexture - PS3 0x5BADFC. No-op (the texture lifetime is owned by the resource system).
+    // FreeTexture - PS3 0x5BADFC. FLAG PC-platform leaf: host render-callback shim -- the
+    // resource system owns the texture lifetime, so there is nothing for the Apt free
+    // callback to release (the console body is itself empty).
     // -------------------------------------------------------------------------
     void AptCallbackRender::FreeTexture(AptAssetTexture /*lpAssetTexture*/)
     {
@@ -333,7 +335,9 @@ namespace CgsGui
     }
 
     // -------------------------------------------------------------------------
-    // FreeRenderingUnit - PS3 0x5BAEEC. No-op (lifetime owned by the resource system).
+    // FreeRenderingUnit - PS3 0x5BAEEC. FLAG PC-platform leaf: host render-callback shim --
+    // the rendering-unit lifetime is owned by the resource system, so there is nothing for the
+    // Apt free callback to release (the console body is itself empty).
     // -------------------------------------------------------------------------
     void AptCallbackRender::FreeRenderingUnit(AptAssetRenderingUnit /*lpRenderingUnit*/)
     {
@@ -437,19 +441,20 @@ namespace CgsGui
     }
 
     // -------------------------------------------------------------------------
-    // Bridge for AllocateString (which lives in the REAL-CgsAptString TU and so cannot include
-    // AptRenderHandler.h / the opaque pool CgsAptString). Performs the opaque-world half of
-    // AptCallbackRender::AllocateString @0x5C7260: (1) free the previous string when the flags say
-    // so, (2) hand out a free pool slot + its preallocated char buffer, (3) surface the text-layout
-    // inputs (font collection / effect / size scale) the caller forwards to CgsAptString::Prepare.
-    // Returns the pool slot as a raw void* (the caller reinterprets it as the REAL CgsAptString*).
+    // AptCallbackRender::AcquireStringSlot -- the opaque-world half of AllocateString @0x5C7260
+    // (see the header). AllocateString lives in the REAL-CgsAptString TU (which cannot include
+    // AptRenderHandler.h / the opaque pool CgsAptString), so this half runs here: (1) free the
+    // previous string when the flags say so, (2) hand out a free pool slot + its preallocated char
+    // buffer, (3) surface the text-layout inputs (font collection / effect / size scale) the caller
+    // forwards to CgsAptString::Prepare. Returns the pool slot as a raw void* (the caller
+    // reinterprets it as the REAL CgsAptString*).
     // -------------------------------------------------------------------------
-    void* AptCallbackRender_AcquireStringSlot(AptAllocateStringParameters* lpParameters,
-                                              CgsUnicode::CgsUtf8** lpcStringBufferOut,
-                                              const void** lppFontsOut,
-                                              s32* lpiEffectOut,
-                                              f32* lpfSizeScaleOut,
-                                              s32* lpiZIDOut)
+    void* AptCallbackRender::AcquireStringSlot(AptAllocateStringParameters* lpParameters,
+                                               CgsUnicode::CgsUtf8** lpcStringBufferOut,
+                                               const void** lppFontsOut,
+                                               s32* lpiEffectOut,
+                                               f32* lpfSizeScaleOut,
+                                               s32* lpiZIDOut)
     {
         AptRenderHandler& lrHandler = AptAuxPointer::mpAptAuxInst->mRenderHandler;
 

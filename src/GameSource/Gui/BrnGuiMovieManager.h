@@ -125,6 +125,43 @@ namespace BrnGui
         bool HasFinishedReporting() const { return meState == E_MOVIEMANAGERSTATE_REPORTING_FINISHED; }
         void AcknowledgeFinishedAndReturnToIdle() { if (HasFinishedReporting()) meState = E_MOVIEMANAGERSTATE_IDLE; }
 
+        // A video frame is presenting (the PLAYING state). The renderer's loading-screen
+        // mirror keys on it: the console layers the fullscreen video OVER the loading
+        // screen apt, while the PC presentation stand-in draws the loading screen LAST --
+        // so it hides the loading screen while a video plays (else the boot logos play
+        // audio-only behind the loading screen).
+        bool IsPlayingMovie() const { return meState == E_MOVIEMANAGERSTATE_PLAYING_MOVIE; }
+
+        // The whole video presentation CYCLE is active: playing, acquiring the next
+        // queued video (audio/data/memory/player prep), tearing the last one down, or a
+        // video is queued. The renderer's loading-screen mirror keys on this so the
+        // screen does not flash back in during the between-logos gap (the console shows
+        // black between the boot videos, not the loading screen).
+        bool IsMoviePresentationActive() const
+        {
+            if (IsMovieQueued())
+                return true;
+            switch (meState)
+            {
+                case E_MOVIEMANAGERSTATE_STOP_MOVIE:
+                case E_MOVIEMANAGERSTATE_REQUESTING_AUDIO:
+                case E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO:
+                case E_MOVIEMANAGERSTATE_PLAYING_MOVIE:
+                case E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER:
+                case E_MOVIEMANAGERSTATE_DELAYING_RETURN_OF_MEMORY:
+                case E_MOVIEMANAGERSTATE_DELAYING_VALIDATE:
+                case E_MOVIEMANAGERSTATE_RETURNING_MEMORY:
+                case E_MOVIEMANAGERSTATE_REPORTING_FINISHED:
+                case E_MOVIEMANAGERSTATE_REQUESTING_MOVIEDATARESOURCE:
+                case E_MOVIEMANAGERSTATE_WAITING_FOR_MOVIEDATARESOURCE:
+                case E_MOVIEMANAGERSTATE_WAITING_FOR_MEMORY:
+                case E_MOVIEMANAGERSTATE_PREPARING_MOVIE_PLAYER:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         // The receiver queue the GUI pushes GuiEventPlayVideo/StopVideo (and the GameDataModule its
         // bundle/acquire responses) onto (X360 EventReceiverQueue<1024,16>).
         CgsModule::VariableEventQueue<1024, 16>* GetReceiverQueue() { return &mReceiverQueue; }

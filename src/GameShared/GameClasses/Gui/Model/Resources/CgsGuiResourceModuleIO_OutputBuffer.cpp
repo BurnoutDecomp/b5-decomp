@@ -6,12 +6,13 @@
 
 // CgsGui::GuiResourceModuleIO::OutputBuffer member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. This TU (class:CgsGui::GuiResourceModuleIO::OutputBuffer) bodies
-// the five X360-emitted OutputBuffer functions NOT already homed in
+// the six X360-emitted OutputBuffer functions NOT already homed in
 // CgsGuiResourceModuleIO.cpp (which bodies GetResourceRequestQueue() const @0x8284DEA8):
 //
+//   Construct()                       @ 0x828582A8 -> status = constructed, Construct + Clear both queues
 //   GetResourceRequestQueue()         @ 0x8284DF50 -> write-lock (bit 3), &mRequestQueue (this+4)
 //   GetLoadNotifications() const      @ 0x8284DFF8 -> read-lock  (bit 4), &mLoadNotifications (this+0x814)
-//   AddLoadNotification(ev)           @ 0x8285AA98 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,14,16)
+//   AddLoadNotification(ev)           @ 0x8285AA98 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,14,widened size)
 //   AddUnloadNotification(ev)         @ 0x8285AB50 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,16,12)
 //   AddUnloadRequestNotification(ev)  @ 0x8285AC08 -> write-lock (bit 3), mLoadNotifications.AddEvent(ev,15,12)
 //
@@ -27,7 +28,7 @@
 //   - The three Add* functions all target the SAME member (this+0x814 == &mLoadNotifications)
 //     via VariableEventQueue<18432,16>::AddEvent(lpEvent, liType, liSize) and return its result.
 //     The (liType, liSize) register loads taken store-for-store from the assembly:
-//       AddLoadNotification          @0x8285AB34: li r5,0xE  (14), li r6,0x10 (16)
+//       AddLoadNotification          @0x8285AB34: li r5,0xE  (14), li r6,0x10 (16, X360)
 //       AddUnloadNotification        @0x8285ABEC: li r5,0x10 (16), li r6,0xC  (12)
 //       AddUnloadRequestNotification @0x8285ACA4: li r5,0xF  (15), li r6,0xC  (12)
 //     (Hex-Rays renders the call as AddEvent(a1+2068, a2, type, size); a1+2068 is the implicit
@@ -46,6 +47,25 @@ namespace GuiResourceModuleIO
     // it is intentionally NOT re-defined here (two definitions of the same external-linkage
     // static member across TUs would be a multiply-defined symbol at link / LNK2005).
 
+    // X360 0x828582A8 (verified store-for-store): `*this = 1` (the constructed status bit,
+    // == IOBuffer::Construct), then VariableEventQueue<2048,16>::Construct(this+4) /
+    // <18432,16>::Construct(this+0x814), then Clear on each in the same order.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mRequestQueue.Construct();
+        mLoadNotifications.Construct();
+        mRequestQueue.Clear();
+        mLoadNotifications.Clear();
+    }
+
+    // The transient-buffer teardown counterpart (IOBufferStack DestroyIOBuffer
+    // @0x8285A590): the queues hold no external state -- the base status drop is the body.
+    void OutputBuffer::Destruct()
+    {
+        CgsModule::IOBuffer::Destruct();
+    }
+
     // X360 0x8284DF50: write-lock (bit 3) non-const handle to the resource-request queue (this+4).
     OutputBuffer::GuiResourceRequestQueue* OutputBuffer::GetResourceRequestQueue()
     {
@@ -60,11 +80,18 @@ namespace GuiResourceModuleIO
         return &mLoadNotifications;
     }
 
-    // X360 0x8285AA98: AddEvent type 14, size 16.
+    // ADDITIVE [PC] (header note): write-lock handle for the persistent-buffer bridge-clear.
+    OutputBuffer::GuiEventQueue* OutputBuffer::GetLoadNotificationsNonConst()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mLoadNotifications;
+    }
+
+    // X360 0x8285AA98: AddEvent type 14; payload size widens on PC with ResourceHandle.
     bool OutputBuffer::AddLoadNotification(const CgsModule::Event* lpEvent)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return mLoadNotifications.AddEvent(lpEvent, 14, 16);
+        return mLoadNotifications.AddEvent(lpEvent, 14, static_cast<s32>(sizeof(GuiEventLoadNotification)));
     }
 
     // X360 0x8285AB50: AddEvent type 16, size 12.

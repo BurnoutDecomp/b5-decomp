@@ -28,7 +28,7 @@ namespace BrnGui
     struct BootVideos;
     struct BootLegal;
     struct BootAttract;
-    struct BootCompoundLoad;
+    struct PostTitleScreenLoad;   // the BF_COMPLOAD slot (DWARF: mpStatePostTitleScreenLoad)
     struct BootProfile;
     struct BootLoading;
     // in-game HUD states
@@ -52,7 +52,8 @@ namespace BrnGui
 
         // @ 0x8251A620 -- base-prepare, then build + install the 14-state HUD pool. The wider
         // overload (adds the linear allocator the states are carved from + the profile manager BF_
-        // PROFILE needs). Distinct vtable slot from BrnBaseFlow::Prepare(access, allocator).
+        // PROFILE needs -- forwarded into BootProfile's 3-arg Construct, X360 vtable slot 9).
+        // Distinct vtable slot from BrnBaseFlow::Prepare(access, allocator).
         bool Prepare(CgsGui::GuiAccessPointers* lpAccessPointers,
                      rw::IResourceAllocator* lpAllocator,
                      CgsMemory::LinearMalloc* lpLinearMalloc,
@@ -60,12 +61,12 @@ namespace BrnGui
 
     private:
         // The 14-state pool, in BrnHudFlow::Prepare build order (X360 flow+0x1024C..+0x10280).
-        BootPreload*          mpPreload;        // BF_PRELOAD
-        BootVideos*           mpVideos;         // BF_VIDEOS
-        BootLegal*            mpLegal;          // BF_LEGAL
-        BootAttract*          mpAttract;        // BF_ATTR
-        BootCompoundLoad*     mpCompoundLoad;   // BF_COMPLOAD
-        BootProfile*          mpProfile;        // BF_PROFILE
+        BootPreload*          mpPreload;               // BF_PRELOAD
+        BootVideos*           mpVideos;                // BF_VIDEOS
+        BootLegal*            mpLegal;                 // BF_LEGAL
+        BootAttract*          mpAttract;               // BF_ATTR
+        PostTitleScreenLoad*  mpPostTitleScreenLoad;   // BF_COMPLOAD (DWARF slot name; plays the post-title intro)
+        BootProfile*          mpProfile;               // BF_PROFILE
         BootLoading*          mpLoading;        // BF_LOADING
         RaceMainHudState*     mpRaceMain;       // RACE_MAIN
         FBurnMainHudState*    mpFBurnMain;      // FBURN_MAIN

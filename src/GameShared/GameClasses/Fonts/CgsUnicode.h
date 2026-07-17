@@ -26,7 +26,9 @@ namespace CgsUnicode
         void Convert(const CgsUtf16* lUtf16String);          // CgsUnicode.h:157 (X360 out-of-batch)
         void Convert(bool lbBool);                           // CgsUnicode.h:161 (X360 out-of-batch)
 
-        const CgsUtf8* GetBuffer();                          // CgsUnicode.h:165
+        // CgsUnicode.h:165 -- header-inline accessor on the console (maBuffer is the
+        // first member, offset 0; the Print<> formatters read the staged text through it).
+        const CgsUtf8* GetBuffer() { return maBuffer; }
 
         static void SetThousandsSeparator(const CgsUtf8* lUtf8ThousandsSeparator);  // :169
         static void SetDecimalPointCharacter(const CgsUtf8* lUtf8DecimalPointChar); // :173
@@ -84,6 +86,14 @@ namespace CgsUnicode
     CgsUtf8* CopyN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
                    s32 lnMaxTargetStringLength);
 
+    // Uppercasing copy: as CopyN, but each plain-ASCII lowercase byte (no high bit,
+    // 'a'..'z') is uppercased in flight; multi-byte UTF-8 sequences pass through
+    // untouched. Returns the write cursor (the target's NUL). X360 ARTIST 0x82834638
+    // (LanguageManager::FormatText's E_FORMAT_ID_LOOKUP_UPPER branch). Body in
+    // CgsUnicode.cpp.
+    CgsUtf8* ToUpperN(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                      s32 lnMaxTargetStringLength);
+
     // ADDITIVE GROW (BrnNetworkLoginManagerBase TU): unbounded copy of a NUL-terminated UTF-8
     // string into lpUtf8TargetString, returning a pointer to the written NUL terminator (stpcpy
     // semantics -- the X360 body advances and returns the target register, so the result points at
@@ -97,17 +107,16 @@ namespace CgsUnicode
     // CgsUnicode.cpp's own TU. Used by GuiHudMessage::GetParam after SnPrintf.
     CgsUtf8* SafelyTerminate(CgsUtf8* lpUtf8String, s32 lnMaxTargetLength);
 
-    // The variadic-string formatter engine (X360 ARTIST 0x82834AF0). Copies lpUtf8SourceString
-    // into lpUtf8TargetString (never writing past lnTargetStringSize bytes), substituting each
-    // "%N" token (N in 1..9) with the (N-1)th converted parameter string from lppArgs. Returns
-    // the advanced target pointer. Bodied in its own file TU (GameShared/.../CgsUnicode.cpp);
-    // declared here in its canonical home so the Print<...> formatters below resolve it under
-    // the per-TU compile gate.
-    CgsUtf8* _Print(CgsUtf8*       lpUtf8TargetString,
-                    const CgsUtf8* lpUtf8SourceString,
-                    s32            lnTargetStringSize,
-                    const CgsUtf8** lppArgs,
-                    u8             luArgCount);
+    // Copy the source into the target substituting each "%<digit>" positional marker with the
+    // matching argument string (%1 == lppUtf8Arguments[0]); capped at lnTargetStringSize bytes,
+    // never splitting a multi-byte UTF-8 character at the cap. Returns the terminator position.
+    // X360 ARTIST 0x82834AF0 (the ledger spells it CgsUnicode::_Print). Used by the
+    // LanguageManager positional formatters (FormatTextV / Obsolete_FormatTextByArray) and the
+    // Print<...> per-arity formatters below (a CgsUtf8** argument array converts by
+    // qualification to the const* const* parameter).
+    CgsUtf8* _Print(CgsUtf8* lpUtf8TargetString, const CgsUtf8* lpUtf8SourceString,
+                    s32 lnTargetStringSize, const CgsUtf8* const* lppUtf8Arguments,
+                    u8 luNumArguments);
 
     // Print<...> -- the per-arity string formatters the GUI in-game message renderer uses
     // (X360 ARTIST 0x824490E8 = 2-arg, 0x82449150 = 3-arg). Each stages its N string arguments

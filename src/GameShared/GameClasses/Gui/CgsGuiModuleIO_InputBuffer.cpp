@@ -46,6 +46,34 @@ namespace CgsGuiModuleIO
                       "ImRendererSet.mCamera @0x20 (head is 5 copied dwords + 12B align pad)");
     }
 
+    // X360 0x82857378: bring the buffer up. Store-for-store:
+    //   1. *this = 1 (the IOBuffer status byte -> eStatusConstructed);
+    //   2. Construct + Clear the inbound GUI event queue (VariableEventQueue<32768,16> @ +4);
+    //   3. default-construct the embedded camera (sub_827F94E8 @ this+0x8040 -- the
+    //      CgsGraphics::Camera default ctor; the camera is opaque storage here, so its
+    //      image is zeroed in place of the foreign ctor) and zero the renderer-set head
+    //      dwords ([0], [2], [3], [4] of the 5-pointer head; the X360 leaves dword [1]).
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mInputQueue.CgsModule::VariableEventQueue<32768, 16>::Construct();
+        mInputQueue.CgsModule::VariableEventQueue<32768, 16>::Clear();
+        std::memset(&mRendererSet.mCamera, 0, sizeof(mRendererSet.mCamera));
+        u32* lpuHead = reinterpret_cast<u32*>(mRendererSet.maRendererPtrs);
+        lpuHead[0] = 0;
+        lpuHead[2] = 0;
+        lpuHead[3] = 0;
+        lpuHead[4] = 0;
+    }
+
+    // X360 0x828573E8: tear the buffer down -- Destruct the inbound queue, then the
+    // IOBuffer base (clears the status flags).
+    void InputBuffer::Destruct()
+    {
+        mInputQueue.CgsModule::VariableEventQueue<32768, 16>::Destruct();
+        CgsModule::IOBuffer::Destruct();
+    }
+
     // X360 0x8284E3D8: read-lock (bit 4) handle to the immediate-mode renderer set. The
     // pseudocode tests ((*a1 >> 4) & 1) == read-lock bit, then returns this+0x8020 (32800).
     const ImRendererSet& InputBuffer::GetImRenderers() const

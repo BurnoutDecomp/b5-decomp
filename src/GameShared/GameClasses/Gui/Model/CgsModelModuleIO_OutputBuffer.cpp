@@ -81,6 +81,15 @@ namespace ModelIO
         return &mLoadNotifications;
     }
 
+    // X360 0x824F75E0: write-lock (bit 3) handle to the load-notification queue (this+0x15034)
+    // -- the accessor GuiModule::Update @0x82527A58 uses for its single-record notification
+    // forwards (events 14/16/481) and the update-tail Clear.
+    OutputBuffer::GuiNotificationQueue* OutputBuffer::GetLoadNotificationsNonConst()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mLoadNotifications;
+    }
+
     // X360 0x8285ACC0: bulk-append into mGuiOutEvents (VariableEventQueue<18432,16>::Append<18432,16>).
     int OutputBuffer::AddGuiOutEvents(const GuiEventQueue& lrSource)
     {

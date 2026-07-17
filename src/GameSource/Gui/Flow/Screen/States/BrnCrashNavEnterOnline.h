@@ -31,14 +31,6 @@ namespace BrnGui
             *lpuNumberOfResources = (u32)miNumResourcesToLoad;
         }
 
-        // State lifecycle virtuals (the FSM entry/leave hooks). The X360 platform sign-in
-        // subclass (CrashNavEnterOnlineX360) overrides OnEnter/OnLeave to create and tear
-        // down the Xbox XNotify listener and chains back to these base bodies via a
-        // qualified (non-virtual) call. Bodies are owned by the
-        // class:BrnGui::CrashNavEnterOnlineBase TU -- declaration-only here.
-        virtual void OnEnter();
-        virtual void OnLeave();
-
     protected:
         // FLAG: partial member set -- the base's full DWARF member list (the sign-in
         // animation components / text fields / menus before this) is owned by the

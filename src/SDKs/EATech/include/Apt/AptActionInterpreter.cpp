@@ -20,6 +20,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptLookup.h"       // AptLookup::GetIndex (Lookup indirection)
 #include "SDKs/EATech/include/Apt/AptValue/AptRegister.h"     // AptRegister::GetIndex (Register indirection)
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"    // GetRegisterValue (Register indirection)
+#include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString peek (FLAG bring-up trace)
 
 // ---------------------------------------------------------------------------
 // stackPush @0x7F1790 -- store at top, advance, AddRef.
@@ -131,10 +132,15 @@ void AptActionInterpreter::stackPopAndPush(int nCount, AptValue* pValue)
 // ---------------------------------------------------------------------------
 void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 {
+    int nRegIndex = -1;
+
     if (pValue->isLookup())            // AptVFT_Lookup (tag 8) && defined
         pValue = mpConstantPool[static_cast<AptLookup*>(pValue)->GetIndex()];
     else if (pValue->isRegister())     // AptVFT_Register (tag 4) && defined
-        pValue = AptScriptFunctionBase::GetRegisterValue(static_cast<AptRegister*>(pValue)->GetIndex());
+    {
+        nRegIndex = static_cast<int>(static_cast<AptRegister*>(pValue)->GetIndex());
+        pValue = AptScriptFunctionBase::GetRegisterValue(nRegIndex);
+    }
 
     stackPush(pValue);
 }
@@ -166,8 +172,9 @@ void AptActionInterpreter::stackPushIndirect(AptValue* pValue)
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                 // DOGMA_PoolManager::Deallocate
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"  // gpAptOperandStackPool (off_8324D808)
 #include <cstring>                                          // strncmp / strlen
-#include <cctype>    // isxdigit (the un-escape codec)
+#include <cctype>    // isxdigit (the un-escape codec) / isalnum (the escape codec)
 #include <cstdlib>   // strtoul (the %XX decode)
+#include <cstdio>    // snprintf (the %XX encode)
 
 // gpUndefinedValue -- the shared `undefined` singleton (console off_8324D814). The
 // dispatch handlers and the builtins reuse it; declared extern here too.
@@ -272,19 +279,19 @@ int AptActionInterpreter::doFSCommand(const char* pUrl, const char* pArgs)
 // walk (console sub_82AF7400, the (value, out, mode) builder) is the path-builder
 // follow-on; declared extern so this entry layer is faithful and links.
 // ---------------------------------------------------------------------------
-extern int AptActionInterpreter_BuildPathName(AptActionInterpreter* pInterp,
+extern int AptBuildPathName(AptActionInterpreter* pInterp,
                                               AptValue* pValue, EAStringC* pOut, int nMode);  // FLAG: sub_82AF7400
 
 void AptActionInterpreter::getName(AptValue* pValue, EAStringC* pOut)
 {
     *pOut = "";   // EAStringC::operator= from the empty seed (console InitFromBuffer + assign)
-    AptActionInterpreter_BuildPathName(this, pValue, pOut, 1);   // FLAG: path-builder follow-on
+    AptBuildPathName(this, pValue, pOut, 1);   // FLAG: path-builder follow-on
 }
 
 void AptActionInterpreter::getName2(AptValue* pValue, EAStringC* pOut)
 {
     *pOut = "";
-    AptActionInterpreter_BuildPathName(this, pValue, pOut, 0);   // FLAG: path-builder follow-on
+    AptBuildPathName(this, pValue, pOut, 0);   // FLAG: path-builder follow-on
     if (pOut->GetLength() == 0)
         *pOut = "/";
 }
@@ -293,12 +300,12 @@ void AptActionInterpreter::getName2(AptValue* pValue, EAStringC* pOut)
 // getObject @0x82B07F18 -- resolve the path name pName (under the (pScope,pTarget)
 // context) to the AptValue object it designates: parse the path context, findChild
 // the leaf, and accept it only if it is a real object (the vtbl "is object" probe).
-// An empty name resolves to pScope unchanged. FLAG: the path-context parser (console
-// sub_82B02F80) is the same path follow-on; declared extern.
+// An empty name resolves to pScope unchanged. The path-context parser is the single
+// sub_82B02F80 recon (AptResolveTargetContext, AptActionInterpreterInterpHelpers.cpp).
 // ---------------------------------------------------------------------------
-extern void AptActionInterpreter_ParsePathContext(AptActionInterpreter* pInterp,
-                                                  AptValue* pTarget, const EAStringC* pName,
-                                                  AptValue** ppOutContext, EAStringC* pOutLeaf);  // FLAG: sub_82B02F80
+extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+                                    const EAStringC* pName,
+                                    AptValue** ppOutContext, EAStringC* pOutLeaf);   // sub_82B02F80
 
 AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, const EAStringC* pName)
 {
@@ -307,7 +314,10 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 
     EAStringC  leaf;
     AptValue*  pContext = 0;
-    AptActionInterpreter_ParsePathContext(this, pTarget, pName, &pContext, &leaf);  // FLAG: path-context parser
+    // console sub_82B02F80(a1=scope, a2=target, a3=name, a4=&ctx, a5=&leaf): the parser
+    // is a pure (scope, target) resolver -- the X360 reaches it with r3 == the SCOPE
+    // value (it collapses scope == the implicit `this`), so pass pScope, not `this`.
+    AptResolveTargetContext(pScope, pTarget, pName, &pContext, &leaf);
 
     AptValue* pResult = 0;
     if (pContext)
@@ -341,7 +351,7 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 //   * anything else: an identity walk down the __proto__ chain (step first --
 //     the object itself is never compared), bailing when a hop is not a
 //     defined object (the in-loop vtbl[+0xC] predicate) or the chain ends.
-int AptActionInterpreter_InstanceOfChainWalk(AptValue* pObject, AptValue* pClass)
+int AptActionInterpreter::instanceOfChainWalk(AptValue* pObject, AptValue* pClass)
 {
     int nResult = 0;
 
@@ -388,7 +398,7 @@ int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
     const bool bBothObjects = pObject->getIsDefined() && pObject->isObject()
                            && pClass->getIsDefined()  && pClass->isObject();
     if (bBothObjects)
-        return AptActionInterpreter_InstanceOfChainWalk(pObject, pClass);  // FLAG: proto/interface chain walk
+        return instanceOfChainWalk(pObject, pClass);  // the proto/interface chain walk (isObjectOfType's object arm)
 
     // Non-object fallback (console LABEL_36 path): a script-function-typed pObject
     // never matches; otherwise a defined Object value of the same value-type matches.
@@ -406,9 +416,9 @@ int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 // urlDecode @0x82AEE208 -- parse one "key=value" pair out of pStream (terminated by
 // '&' or NUL) into (pOutKey, pOutValue), un-escaping each side. Returns the read
 // position past the consumed pair (skipping a trailing '&'), or null when the pair
-// has no '=' / pStream is empty. FLAG: EAStringC::Append's byte-range form and the
-// un-escape pass (console unEscape) are reused via the EAStringC API; unEscape is
-// declared extern (the same value-layer escape codec used by cbCallMethod_unescape).
+// has no '=' / pStream is empty. EAStringC::Append's byte-range form and the
+// un-escape pass are reused via the EAStringC API; unEscape @0x82AEE110 is homed
+// below as the AptActionInterpreter::unEscape static member.
 // ---------------------------------------------------------------------------
 // The un-escape codec -- HOMED 2026-07-02 (retiring the {} stub). The X360
 // _unEscape @0x82AEE110 + _escape2Char @0x82AD90D8: '+' decodes to a space;
@@ -429,7 +439,7 @@ namespace
     }
 }
 
-void AptActionInterpreter_UnEscape(EAStringC* pStr)
+void AptActionInterpreter::unEscape(EAStringC* pStr)
 {
     EAStringC lDecoded("");
     const char* p = pStr->GetBuffer();
@@ -456,6 +466,36 @@ void AptActionInterpreter_UnEscape(EAStringC* pStr)
     *pStr = lDecoded;
 }
 
+// ---------------------------------------------------------------------------
+// escape @0x82AEE008 -- the URL percent-ENCODER (the inverse of unEscape): every
+// byte that is not an ASCII alphanumeric is emitted as "%XX" (uppercase hex);
+// alphanumerics copy through. Original-source corroboration: the leak's _escape
+// is the same isalnum-gated sprintf("%%%X") walk into a fresh string, assigned
+// back over the input. Was the {} `escape` link-stub, which made the AS escape()
+// builtin an identity transform.
+// ---------------------------------------------------------------------------
+void AptActionInterpreter::escape(EAStringC* pStr)
+{
+    EAStringC lEncoded("");
+    const char* p = pStr->GetBuffer();
+    while (*p != 0)
+    {
+        const unsigned char c = static_cast<unsigned char>(*p++);
+        if (c < 0x80 && isalnum(c))
+        {
+            const char aOne[2] = { static_cast<char>(c), 0 };
+            lEncoded += aOne;
+        }
+        else
+        {
+            char aHex[8];
+            snprintf(aHex, sizeof(aHex), "%%%X", c);   // leak: sprintf(strBuffer, "%%%X", cChar)
+            lEncoded += aHex;
+        }
+    }
+    *pStr = lEncoded;
+}
+
 const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOutKey, EAStringC* pOutValue)
 {
     *pOutKey   = "";
@@ -475,9 +515,9 @@ const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOut
         return 0;   // no '=' -> no pair
 
     pOutKey->Append(pStream, static_cast<uint32_t>(pEq - pStream));
-    AptActionInterpreter_UnEscape(pOutKey);                                   // FLAG: un-escape codec
+    unEscape(pOutKey);                                                        // the un-escape codec
     pOutValue->Append(pEq + 1, static_cast<uint32_t>(p - (pEq + 1)));
-    AptActionInterpreter_UnEscape(pOutValue);                                 // FLAG: un-escape codec
+    unEscape(pOutValue);                                                      // the un-escape codec
     if (*p == '&')
         ++p;
     return p;
@@ -492,8 +532,8 @@ const char* AptActionInterpreter::urlDecode(const char* pStream, EAStringC* pOut
 // construction reuses AptString/EAStringC, but the resolve + walk read console
 // globals (the reserved-key sentinels) not yet reconstructed -- declared extern.
 // ---------------------------------------------------------------------------
-extern void AptActionInterpreter_EnumerateMembers(AptActionInterpreter* pInterp,
-                                                 AptValue* pScope, AptValue* pTarget);  // FLAG: native-hash enumerate walk
+// AptActionInterpreter::EnumerateMembers is now a member (declared in the header);
+// _doEnumerate() below forwards to it.
 
 void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
 {
@@ -502,7 +542,7 @@ void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
     // console data globals (dword_8324E580 / dword_8324E698) that are not yet
     // reconstructed as named symbols here; deferred to the enumerate-walk helper so
     // this stays faithful and links.
-    AptActionInterpreter_EnumerateMembers(this, pScope, pTarget);  // FLAG: enumerate walk follow-on
+    EnumerateMembers(pScope, pTarget);  // the native-hash enumerate walk (this member)
 }
 
 // ---------------------------------------------------------------------------
@@ -517,16 +557,14 @@ void AptActionInterpreter::_doEnumerate(AptValue* pScope, AptValue* pTarget)
 // layer is faithful and links; the operand-stack collapse the console performs around
 // it (Burnout_X360_Artist_01e3_0 == the pop-N primitive) is part of that helper.
 // ---------------------------------------------------------------------------
-extern AptValue* AptActionInterpreter_CallFunctionDispatch(AptActionInterpreter* pInterp,
-                                                          AptValue* pScope, AptValue* pFunction,
-                                                          int nArgs, AptValue* pNewTarget,
-                                                          AptValue* pConstructTarget);  // FLAG: call-dispatch core
+// AptActionInterpreter::CallFunctionDispatch is now a member (declared in the header);
+// callFunction() below forwards to it.
 
 AptValue* AptActionInterpreter::callFunction(AptValue* pScope, AptValue* pFunction, int nArgs,
                                              AptValue* pNewTarget, AptValue* pConstructTarget)
 {
-    return AptActionInterpreter_CallFunctionDispatch(this, pScope, pFunction, nArgs,
-                                                     pNewTarget, pConstructTarget);  // FLAG: call-dispatch core
+        return CallFunctionDispatch(pScope, pFunction, nArgs,
+                                pNewTarget, pConstructTarget);  // the dispatch body (this member)
 }
 
 // ---------------------------------------------------------------------------
@@ -541,15 +579,13 @@ AptValue* AptActionInterpreter::callFunction(AptValue* pScope, AptValue* pFuncti
 // transcode helper so this entry layer is faithful and links. (Same deferral the
 // header documents.)
 // ---------------------------------------------------------------------------
-extern const unsigned char* AptActionInterpreter_ResolveTranscode(AptActionInterpreter* pInterp,
-                                                                 const unsigned char* pStream,
-                                                                 int nRelocBase, AptValue* pResolveCtx,
-                                                                 int nDirection);  // FLAG: resolve transcode
+// AptActionInterpreter::ResolveTranscode is now a member (declared in the header);
+// _parseStream() below forwards to it.
 
 const unsigned char* AptActionInterpreter::_parseStream(const unsigned char* pStream, int nRelocBase,
                                                         AptValue* pResolveCtx, int nDirection)
 {
-    return AptActionInterpreter_ResolveTranscode(this, pStream, nRelocBase, pResolveCtx, nDirection);  // FLAG
+    return ResolveTranscode(pStream, nRelocBase, pResolveCtx, nDirection);  // the opcode-length walk (this member)
 }
 
 // ---------------------------------------------------------------------------
@@ -569,8 +605,6 @@ const unsigned char* AptActionInterpreter::_parseStream(const unsigned char* pSt
 // manipulation is deferred to the interval-table helpers and the entry layer here
 // reads the args off the native-arg stack faithfully.
 // ---------------------------------------------------------------------------
-extern AptValue* AptActionInterpreter_SetIntervalImpl(AptValue* pCallback, int nArgCount);   // FLAG: interval-table setup
-extern void      AptActionInterpreter_ClearIntervalImpl(int nId);                            // FLAG: interval-table teardown
 
 AptValue* AptActionInterpreter::cbCallMethod_setInterval(AptValue* /*pThis*/, int nArgCount)
 {
@@ -580,13 +614,13 @@ AptValue* AptActionInterpreter::cbCallMethod_setInterval(AptValue* /*pThis*/, in
     AptValue* pCallback = gppAptNativeArgStack[gnAptNativeArgCount - 1];
     if (!pCallback->getIsDefined())
         return gpUndefinedValue;
-    return AptActionInterpreter_SetIntervalImpl(pCallback, nArgCount);   // FLAG: interval-table setup
+    return SetIntervalImpl(pCallback, nArgCount);   // the interval-table setup body
 }
 
 AptValue* AptActionInterpreter::cbCallMethod_clearInterval(AptValue* /*pThis*/, int /*nArgCount*/)
 {
     AptValue* pIdArg = gppAptNativeArgStack[gnAptNativeArgCount - 1];
     if (pIdArg->getIsDefined())
-        AptActionInterpreter_ClearIntervalImpl(pIdArg->toInteger());   // FLAG: interval-table teardown
+        ClearIntervalImpl(pIdArg->toInteger());   // the interval-table teardown body
     return gpUndefinedValue;
 }

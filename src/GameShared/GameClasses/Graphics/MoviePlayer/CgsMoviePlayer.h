@@ -76,6 +76,7 @@ namespace CgsGraphics
         bool PrepareResources();                  // open the stream (FFmpeg) for mcMovieFileName
         void ReleaseResources();                  // free the stream + frame texture
         bool DecodeFrame();                       // [PC] pull one decoded frame into mpFrame (+ mfFramePtsSec)
+        bool DecodeStripFrame();                  // [PC] 3-strip VP6: one band from its own decoder chain
         bool EnsureTexture(u32 luWidth, u32 luHeight);
         void UploadFrame();                       // [PC] sws_scale mpFrame -> the renderengine texture
         f32  ComputeCrossfadeAlpha(f64 lfElapsedSec) const;
@@ -112,6 +113,20 @@ namespace CgsGraphics
         f64              mfTimeBaseSec;           // the video stream's time_base, in seconds
         bool             mbHaveFrame;             // mpFrame holds a decoded, not-yet-shown frame
         bool             mbEof;                   // demux hit EOF; the decoder is being flushed
+
+        // ---- X360 vertically-strided VP6 (the boot/UI *.vp6 store each 1280x720 display
+        //      frame as N stacked 1280x(720/N) strips; the decoder emits the strips as
+        //      separate frames, so N consecutive decodes recombine into one display frame) --
+        s32              miVerticalStrips;        // 1 = normal; 3 = the X360 1280x240 3-strip form
+        s32              miCurrentStrip;          // which vertical band the next decode fills (0..N-1)
+        s64              miStripsDecoded;         // running count -> display index = /N, band = %N
+        u8*              mpStripStaging;          // CPU BGRA buffer (width x height*N); bands accumulate
+        u32              muStripStagingBytes;     // allocated size of mpStripStaging
+        // The X360 3-strip *.vp6 interleaves N INDEPENDENT VP6 prediction chains (packet i belongs to
+        // band i%N); each band's P-frames reference the previous SAME-band frame, so each needs its own
+        // decoder context. A single shared decoder mispredicts across bands -> macroblock garbage.
+        AVCodecContext*  mpStripCtx[3];           // one decoder per band chain ([0] == mpVideoCtx)
+        u32              muPacketRoute;            // next demuxed video packet -> mpStripCtx[muPacketRoute%N]
 
         // ---- frame texture (drawn through Im2d, the faithful render path) ---------------
         renderengine::Texture* mpFrameTexture;    // current frame, D3DFMT_A8R8G8B8 (BGRA in memory)

@@ -51,6 +51,47 @@ namespace CgsGui
         ResourceRequestTypes meType;
     };
 
+    // CgsGuiResourceModuleIO.h:150 (Feb-2007 source) / DecFIGS DWARF:
+    // request records are { request type, load/unload, file-name pointer, request id,
+    // resource id }. The X360 AddResourceRequests body copies a 24-byte record because
+    // pointers are 4 bytes there; on the PC/x64 gate the file-name pointer widens, so
+    // the queue payload is sizeof(GuiEventLoadRequest) == 32. Event id 39 is carried by
+    // the variable-event queue header, not by an in-payload GuiEvent<39> base.
+    struct GuiEventLoadRequest : public CgsModule::Event
+    {
+        ResourceRequestTypes      meRequestType;
+        ResourceRequestLoadUnload meLoadUnload;
+        const char*               mpacFileToLoad;
+        u32                       muLoadRequestId;
+        u64                       muResourceId;
+
+        GuiEventLoadRequest()
+            : meRequestType(E_GUI_RESOURCETYPE_START)
+            , meLoadUnload(E_GUI_RESOURCEREQUEST_LOAD)
+            , mpacFileToLoad(0)
+            , muLoadRequestId(0)
+            , muResourceId(0)
+        {
+        }
+
+        void Construct(ResourceRequestTypes leRequestType,
+                       ResourceRequestLoadUnload leLoadUnload,
+                       const char* lpacFileToLoad,
+                       u32 luLoadRequestId)
+        {
+            meRequestType   = leRequestType;
+            meLoadUnload    = leLoadUnload;
+            mpacFileToLoad  = lpacFileToLoad;
+            muLoadRequestId = luLoadRequestId;
+            muResourceId    = 0;
+        }
+
+        s32 GetEventType() const { return 39; }
+    };
+
+    static_assert(sizeof(GuiEventLoadRequest) == 32,
+                  "GuiEventLoadRequest PC layout (X360 payload size is 24 with 4-byte ptrs)");
+
     // CgsGuiResourceModuleIO.h:114 (DWARF): GuiEventLoadNotification : public GuiEvent<14>,
     // with members { ResourceHandle mResourceHandle; ResourceRequestTypes meRequestType;
     // u32 muLoadRequestId; }. This is the concrete record the resource loader pushes onto the
@@ -75,7 +116,7 @@ namespace CgsGui
     // the pointers in ResourceHandle widen to 8 bytes (handle = 16, so meRequestType lands at
     // +0x10 and the record is 24 bytes) -- the standard "widen pointers for PC" rule. The
     // size pin below records the PC layout; the X360 figure (16) is noted above.
-    struct GuiEventLoadNotification
+    struct GuiEventLoadNotification : public CgsModule::Event
     {
         CgsResource::ResourceHandle mResourceHandle; // X360 +0x00 (8) / PC +0x00 (16)
         ResourceRequestTypes        meRequestType;   // X360 +0x08    / PC +0x10
@@ -87,28 +128,28 @@ namespace CgsGui
     static_assert(sizeof(GuiEventLoadNotification) == 24,
                   "GuiEventLoadNotification PC layout (X360 payload size is 16 with 4-byte ptrs)");
 
-    // CgsGuiResourceModuleIO.h:134 (Feb-2007 ground truth): GuiEventUnloadNotification :
-    // public GuiEvent<E_GUI_UNLOAD_NOTIFICATION>, members { ResourceRequestTypes meRequestType;
-    // u32 muLoadRequestId; u32 muFileNameHash; }. OutputBuffer::AddUnloadNotification
-    // (@0x8285AB50) pushes it onto mLoadNotifications as queue-type 16, SIZE 12 -- proving
-    // (exactly as with GuiEventLoadNotification above) that the GuiEvent<N> base is EMPTY on
-    // the X360 build and the 12-byte payload is precisely the three words:
-    //     X360 +0x00  meRequestType    (the value the consumer switches on)
-    //     X360 +0x04  muLoadRequestId
-    //     X360 +0x08  muFileNameHash
-    // The X360 consumer BrnGui::LargeCarComponent::HandleUnloadNotification (@0x8241B868)
-    // reads meRequestType as the word at event+0 (`lwz r11, 0(r31); cmpwi 4`) and muLoadRequestId
-    // as the word at event+4 (`lwz r10, 4(r31)`), confirming both the empty base and the field
-    // order. Modelled flat (not `: public GuiEvent<16>`) to match the asm, mirroring
-    // GuiEventLoadNotification. No pointer members, so the PC layout is identical (12 bytes).
-    struct GuiEventUnloadNotification
+    // CgsGuiResourceModuleIO.h:130 / :146 (DWARF). Unlike load notifications, unload records
+    // carry only the request type, the original load-request id, and the file-name hash. The X360
+    // output buffer records both variants as flat 12-byte payloads: queue type 15 for unload-request
+    // notifications and type 16 for unload-complete notifications.
+    struct GuiEventUnloadRequestNotification : public CgsModule::Event
     {
         ResourceRequestTypes meRequestType;   // X360 +0x00
         u32                  muLoadRequestId; // X360 +0x04
         u32                  muFileNameHash;  // X360 +0x08
     };
+
+    struct GuiEventUnloadNotification : public CgsModule::Event
+    {
+        ResourceRequestTypes meRequestType;   // X360 +0x00
+        u32                  muLoadRequestId; // X360 +0x04
+        u32                  muFileNameHash;  // X360 +0x08
+    };
+
+    static_assert(sizeof(GuiEventUnloadRequestNotification) == 12,
+                  "GuiEventUnloadRequestNotification flat payload size");
     static_assert(sizeof(GuiEventUnloadNotification) == 12,
-                  "GuiEventUnloadNotification payload is 12 bytes (X360 AddUnloadNotification size)");
+                  "GuiEventUnloadNotification flat payload size");
 }
 
 namespace CgsGui
@@ -155,7 +196,17 @@ namespace CgsGui
             bool AddResourceRequests(const GuiEventQueueSmall* lpRequests);
 
             // CgsGuiResourceModuleIO.h:205 (DWARF). Read-lock handle to the queue.
+            // X360 @0x8284DE00 (the callee GuiResourceModule::ProcessIncomingLoadRequests
+            // @0x828581A8 links to by name): the read-lock accessor family form.
             const GuiEventQueue* GetLoadRequests() const;
+
+            // ADDITIVE ([PC] drain-clear): write-lock handle so a persistent PC buffer can
+            // Clear the consumed queue after GuiResourceModule::Update -- the console's
+            // buffers are transient (IOBufferStack CreateIOBuffer/DestroyIOBuffer per
+            // frame @0x8285A3D8/0x8285A678, Construct-fresh each time) so the original
+            // never re-cleared. Mirrors the committed ModelIO::InputBuffer non-const
+            // GetLoadRequests precedent.
+            GuiEventQueue* GetLoadRequestsNonConst();
 
             // Byte-offset pin (the embedded queue lands at this+4: 1-byte IOBuffer base
             // + 3 pad, VariableEventQueue alignof == 4).
@@ -194,9 +245,11 @@ namespace CgsGui
             // mLoadNotifications (this+0x814) via VariableEventQueue<18432,16>::AddEvent(
             // lpEvent, type, size). The (type, size) literals are the X360 AddEvent arguments.
             // Returns the AddEvent result. Bodied in CgsGuiResourceModuleIO_OutputBuffer.cpp.
-            //   AddLoadNotification          @0x8285AA98 : type 14, size 16
+            //   AddLoadNotification          @0x8285AA98 : type 14, X360 size 16
             //   AddUnloadNotification        @0x8285AB50 : type 16, size 12
             //   AddUnloadRequestNotification @0x8285AC08 : type 15, size 12
+            // The load-notification payload contains a ResourceHandle; on PC/x64 the
+            // copied size is sizeof(GuiEventLoadNotification) so both pointer slots survive.
             bool AddLoadNotification(const CgsModule::Event* lpEvent);
             bool AddUnloadNotification(const CgsModule::Event* lpEvent);
             bool AddUnloadRequestNotification(const CgsModule::Event* lpEvent);
@@ -206,6 +259,13 @@ namespace CgsGui
             // (status bit 4), returns the handle at this+0x814 (== &mLoadNotifications).
             // Bodied in CgsGuiResourceModuleIO_OutputBuffer.cpp.
             const GuiEventQueue* GetLoadNotifications() const;
+
+            // ADDITIVE ([PC] bridge-clear): write-lock handle so a persistent PC buffer
+            // can Clear the bridged notifications each frame -- the console's buffers are
+            // transient (IOBufferStack CreateIOBuffer/DestroyIOBuffer @0x8285A4C0/
+            // 0x8285A590 per frame). Mirrors the X360-attested ModelIO::OutputBuffer::
+            // GetLoadNotificationsNonConst (@0x824F75E0) write-side accessor form.
+            GuiEventQueue* GetLoadNotificationsNonConst();
 
             // Byte-offset pin (mRequestQueue at this+4).
             static void _AssertLayout();

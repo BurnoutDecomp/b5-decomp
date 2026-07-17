@@ -4,6 +4,46 @@
 #include <cstdlib>   // malloc / free (the PC heap leaf -- see DOGMA_Malloc below)
 #include <intrin.h>  // _Interlocked* (MSVC)
 
+// TEMPORARY DEBUG: guard-page allocator for the DOGMA pool -- every Allocate gets
+// its own virtual page(s), every Deallocate flips the block PAGE_NOACCESS and never
+// reuses it, so a use-after-free faults AT THE WRITER instead of corrupting the
+// free lists. Enable only for a diagnosis boot; must be 0 for committed builds.
+#define APT_DOGMA_GUARD 0
+#if APT_DOGMA_GUARD
+#include <windows.h>
+// Deferred-revoke ring: pages queue here on Deallocate and get PAGE_NOACCESS'd a
+// few Allocate calls later (the GC free path touches its MemItem header right
+// after the pool free; immediate revocation would fault the freeing code itself).
+namespace
+{
+    void*    s_apDogmaGuardPending[64];
+    unsigned s_nDogmaGuardHead;
+    unsigned s_nDogmaGuardCount;
+}
+void DogmaGuard_DrainRevokes(bool bForce)
+{
+    // Keep the newest 32 frees un-revoked (a grace window); revoke the rest.
+    const unsigned nKeep = bForce ? 0u : 32u;
+    while (s_nDogmaGuardCount > nKeep)
+    {
+        void* p = s_apDogmaGuardPending[(s_nDogmaGuardHead - s_nDogmaGuardCount) & 63u];
+        DWORD nOld;
+        ::VirtualProtect(reinterpret_cast<void*>(
+            reinterpret_cast<uintptr_t>(p) & ~static_cast<uintptr_t>(0xFFF)),
+            0x1000, PAGE_NOACCESS, &nOld);
+        --s_nDogmaGuardCount;
+    }
+}
+void DogmaGuard_QueueRevoke(void* p)
+{
+    if (s_nDogmaGuardCount == 64u)
+        DogmaGuard_DrainRevokes(false);
+    s_apDogmaGuardPending[s_nDogmaGuardHead & 63u] = p;
+    ++s_nDogmaGuardHead;
+    ++s_nDogmaGuardCount;
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // DOGMA heap leaf primitives -- the bottom of the DOGMA pool allocator.
 //
@@ -212,12 +252,34 @@ DOGMA_PoolManager::~DOGMA_PoolManager()
 // ---------------------------------------------------------------------------
 void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
 {
-    // Round the request up to a 4-byte multiple, then clamp to the minimum.
+#if APT_DOGMA_GUARD
+    // TEMPORARY DEBUG (see the flag above): one fresh committed region per block,
+    // the payload flushed against the END of the last page so overruns fault too.
+    {
+        extern void DogmaGuard_DrainRevokes(bool bForce);
+        DogmaGuard_DrainRevokes(false);
+        const size_t nGuardSize = (nAllocatedSize + 0xFFFu) & ~static_cast<size_t>(0xFFFu);
+        unsigned char* pRegion = static_cast<unsigned char*>(
+            ::VirtualAlloc(nullptr, nGuardSize + 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+        DWORD nOld;
+        ::VirtualProtect(pRegion + nGuardSize, 0x1000, PAGE_NOACCESS, &nOld);   // tail guard page
+        const size_t nOffset = (nGuardSize - nAllocatedSize) & ~static_cast<size_t>(15);
+        return pRegion + nOffset;
+    }
+#endif
+    // Round the request up, then clamp to the minimum. FLAG (x64 alignment fix): the
+    // console rounds to a 4-BYTE multiple (v3 = (v3&~3)+4) -- fine for its 32-bit
+    // pointers, but the pool CARVES blocks sequentially (ConsumeBytes), so a block
+    // whose size is 4-mod-8 (e.g. a 12/20-byte request) leaves every SUBSEQUENT block
+    // at a 4-mod-8 address. On x64 a vtbl'd AptValue there is MISALIGNED: its 8-byte
+    // members straddle an 8-byte word and the tail (e.g. EAStringC::m_pData's high
+    // dword) shares a word with adjacent free-filled memory -> 0xBAADF00D corruption
+    // (the EAStringC use-after-free in Add2). Round to 8 so every carved block stays
+    // 8-aligned. Deallocate mirrors this so the per-size free-list buckets still match.
     size_t nSize = nAllocatedSize;                          // v3
-    if ((nAllocatedSize & 3) != 0)
-        nSize = (nAllocatedSize & 0xFFFFFFFC) + 4;
     if (nSize < mnMinimumAllocationSize)
         nSize = mnMinimumAllocationSize;
+    nSize = (nSize + 7) & ~static_cast<size_t>(7);
 
     size_t nMax = mnMaxSizeAllocation;                      // v4
     ++mnItemsAllocated;
@@ -309,11 +371,23 @@ void* DOGMA_PoolManager::Allocate(size_t nAllocatedSize)
 // ---------------------------------------------------------------------------
 bool DOGMA_PoolManager::Deallocate(void* pNowFree, size_t nAllocatedSize)
 {
+#if APT_DOGMA_GUARD
+    // TEMPORARY DEBUG (see the flag above): queue the page for revocation a few
+    // allocations from now (the GC-value free path clears its MemItem flag right
+    // AFTER this call, so an immediate revoke would fault on the freeing code
+    // itself); any later touch of the freed block faults at the offender.
+    {
+        extern void DogmaGuard_QueueRevoke(void* p);
+        DogmaGuard_QueueRevoke(pNowFree);
+        return true;
+    }
+#endif
+    // FLAG (x64 alignment fix -- MUST mirror Allocate so the per-size free-list
+    // buckets match): round to an 8-byte multiple, not the console's 4-byte one.
     size_t nSize = nAllocatedSize;                          // v5
-    if ((nAllocatedSize & 3) != 0)
-        nSize = (nAllocatedSize & 0xFFFFFFFC) + 4;
     if (nSize < mnMinimumAllocationSize)
         nSize = mnMinimumAllocationSize;
+    nSize = (nSize + 7) & ~static_cast<size_t>(7);
 
     size_t nMax = mnMaxSizeAllocation;                      // v6
     --mnItemsAllocated;

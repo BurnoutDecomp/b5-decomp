@@ -198,20 +198,17 @@ struct AptRenderItem
 // the item's matrices onto the context's transform/colour stacks, draw, then pop.
 //   PushMatrices @0x7F21E4 / PopMatrices @0x7ECA68  (homed in AptRenderItem.cpp,
 //   against the real AptRenderingContext).
-//   AptCharacter_render -> AptCharacter::render @0x810E74 -- FLAG: the geometry
-//   draw; still homed by the geometry/render-backend layer (not yet built).
+// The shape/morph subtypes draw their geometry with pCharacter->render() directly
+// (AptCharacter::render @0x810E74 -> AptHook_DrawShape) -- the former
+// AptCharacter_render free-function shim is retired.
 void PushMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 void PopMatrices(AptRenderingContext* pCtx, const AptRenderItem* pItem);
-void AptCharacter_render(AptCharacter* pCharacter, AptRenderingContext* pCtx,
-                         AptMaskRenderOperation eOp, int nTick);
 // PushMatricesAbsolute @0x7F28B8 (PS3 External) -- the absolute (world-space) push
 // variant used by PushRenderDataAbsolute (resets the vertex matrix to identity, then
 // appends the item's mask position matrix). Homed in AptRenderItem.cpp.
 void PushMatricesAbsolute(AptRenderingContext* pCtx, const AptRenderItem* pItem);
 
-// Free-function render-item accessors (the AptLinker zombie-swap path). The X360
-// inlines these as raw field reads/writes + a vtbl-slot copy dispatch; homed in
-// AptRenderItem.cpp against the named members (GetDepth/SetDepth/CopyRenderDataFrom).
-int16_t AptRenderItem_GetDepth(const AptRenderItem* pItem);                          // console *(item+0x14)
-void    AptRenderItem_SetDepth(AptRenderItem* pItem, int16_t nDepth);               // console *(item+0x14)=
-void    AptRenderItem_CopyVisualFrom(AptRenderItem* pDst, const AptRenderItem* pSrc); // console (*item->vtbl[+0x14])(dst, src)
+// The AptLinker zombie-swap depth/visual accessors are the named render-item members
+// (GetDepth()/SetDepth()/CopyRenderDataFrom()) called directly -- the X360 inlines
+// them as raw field reads/writes + a vtbl-slot copy dispatch; the free-function shims
+// (AptRenderItem_GetDepth/SetDepth/CopyVisualFrom) are retired.

@@ -14,7 +14,7 @@
 //      These resolvers walk the interpreter's TARGET state (current target + the
 //      CIH/level stacks @ the dword_8324E760 globals) and the global-object
 //      singletons -- none of which are reconstructed yet -- so they are delegated
-//      to AptApt_ResolveSpecialName (FLAG, the follow-on; see below).
+//      to AptResolveSpecialName (FLAG, the follow-on; see below).
 //   2. GENERIC -- otherwise, if this value is defined, look the name up in this
 //      value's native hash (GetNativeHashVirtual), then walk the __proto__ chain
 //      (each proto's native hash), then the global-extension object, then the
@@ -45,7 +45,7 @@
 // Key/String/extern/super) -- HOMED below in this TU. It navigates the active AS
 // interpreter's target stacks + the global-object singletons; switches on the
 // ObjectIndex object-type id (the map is documented above).
-AptValue* AptApt_ResolveSpecialName(int nObjectTypeId, AptValue* pScope,
+AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
                                     const EAStringC* pName, AptValue* pTarget);
 
 // The AS interpreter the special-name arms read their current-target / CIH-call
@@ -77,16 +77,6 @@ extern AptValue* gpAptStringObject;     // off_8324D82C  (String)
 extern AptValue* gpAptExternObject;     // off_8324E2CC  (extern)
 extern AptValue* gpUndefinedValue;      // off_8324D814  (the shared AS `undefined`)
 
-// Probe sink for the global-arm instrumentation (weak default no-op; the host
-// bring-up TU overrides it to log). Same alternatename pattern as CgsApt_GalProbe.
-#if defined(_MSC_VER)
-extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash);
-#pragma comment(linker, "/alternatename:AptFindChildProbe=AptFindChildProbeDefault")
-extern "C" void AptFindChildProbeDefault(int, const void*, const void*, const void*) {}
-#else
-extern "C" void AptFindChildProbe(int nCall, const void* pExt, const void* pVtbl, const void* pHash);
-#endif
-
 namespace
 {
     // Look a name up in an object's native hash (null-safe).
@@ -105,7 +95,7 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
     const ObjectIndex::Entry* pEntry =
         ObjectIndex::in_word_set(pName->GetBuffer(), pName->GetLength());
     if (pEntry)
-        return AptApt_ResolveSpecialName(pEntry->miData, this, pName, pTarget);   // FLAG
+        return AptResolveSpecialName(pEntry->miData, this, pName, pTarget);   // FLAG
 
     // Generic: this value's native hash, then the __proto__ chain.
     if (!getIsDefined())
@@ -136,7 +126,7 @@ AptValue* AptValue::findChild(const EAStringC* pName, AptValue* pTarget)
 }
 
 // ===========================================================================
-// AptApt_ResolveSpecialName -- the special-name dispatch arm of findChild @0x82B01298.
+// AptResolveSpecialName -- the special-name dispatch arm of findChild @0x82B01298.
 //
 // In the X360 this is the inlined `bctr` jump table (37 ObjectIndex ids, table
 // word_821453C0) that follows in_word_set; our decompile splits it into this free
@@ -194,7 +184,7 @@ namespace
     }
 }
 
-AptValue* AptApt_ResolveSpecialName(int nObjectTypeId, AptValue* pScope,
+AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
                                     const EAStringC* pName, AptValue* pTarget)
 {
     AptValue* const pEffectiveScope = pTarget ? pTarget : pScope;   // console r29

@@ -205,10 +205,42 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             AdvanceLoadingStage(E_LOADINGSTAGE_GUIMODULE);
         break;
     case E_LOADINGSTAGE_GUIMODULE:
-        // X360: LoadGUIModule (0x823EF310). The GUI module + MovieManager currently run via
-        // BrnGameModule's inline hookup, so this stage only paces here. [real = GUI-IO/bridge phase]
-        if (StageDwellElapsed())
-            AdvanceLoadingStage(E_LOADINGSTAGE_DIRECTORMODULE);
+        // X360: LoadGUIModule (0x823EF310) -- the GUI module load stage ALSO posts the
+        // initial flow FSMs: GuiEventRunFsm{BrnBFPreFsm -> HUD} (BF_PRELOAD, the first
+        // boot state) and GuiEventRunFsm{BrnOverlay -> OVERLAY} (the popup overlay flow,
+        // record {fsmId, stateId 0, flow 2} @0x823EF3A0). The GUI module itself is
+        // prepared by BrnGameModule's inline hookup; the RunFsm posts are the real kick.
+        {
+            BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+            CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = lpGameModule->GetGuiInputBuffer();
+            if (lpGuiInput != 0)
+            {
+                BrnGui::GuiEventRunFsm lEvent;
+                lEvent.mFsmId          = CgsIDCompress("BrnBFPreFsm");
+                lEvent.mInitialStateId = 0;
+                lEvent.meFsmToRun      = BrnGui::E_GUI_HUD_BOOT;
+                lEvent.meFlowToUse     = BrnGui::E_GUIFLOW_HUD;
+                lpGuiInput->LockForWrite();
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+                    static_cast<s32>(sizeof(lEvent)));
+
+                // The overlay kick (the X360 posts it back-to-back in the same write
+                // bracket; the state id stays 0 = the script's initial state).
+                lEvent.mFsmId          = CgsIDCompress("BrnOverlay");
+                lEvent.mInitialStateId = 0;
+                lEvent.meFsmToRun      = BrnGui::E_GUI_HUD_BOOT;
+                lEvent.meFlowToUse     = BrnGui::E_GUIFLOW_OVERLAY;
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lEvent), 144,
+                    static_cast<s32>(sizeof(lEvent)));
+                lpGuiInput->UnlockForWrite();
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "InitialLoadingScreen: posted RunFsm(BrnBFPreFsm -> HUD) + RunFsm(BrnOverlay -> OVERLAY)\n";
+                AdvanceLoadingStage(E_LOADINGSTAGE_DIRECTORMODULE);
+            }
+        }
         break;
     case E_LOADINGSTAGE_DIRECTORMODULE:
         // X360: LoadDirectorModule. [stub: interim dwell; real load = roadmap]
@@ -312,32 +344,69 @@ void MainGameFlowStateInitialLoadingScreen::FinishLoading()
         BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
 }
 
-// --- remaining leaves (minimal until each state's TU is reconstructed) ------------------
+// --- MainGameFlowStateStartScreen (the legal/title screen phase) -------------------------
 MainGameFlowStateStartScreen::MainGameFlowStateStartScreen() : meLoadingStage(E_STARTSCREEN_START) {}
-void MainGameFlowStateStartScreen::OnEnter() {}
+
+// @ 0x823AAB18 -- request the BF_LEGAL GUI FSM stage (BrnLegalFsm; the X360 writes the
+// pending-stage byte = 2) and clear the load-stage entered flag.
+void MainGameFlowStateStartScreen::OnEnter()
+{
+    BrnGame::GetMainGameModule()->RequestGuiFsmStage(2);
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "StartScreen: OnEnter -> GUI FSM stage 2 (BrnLegalFsm)\n";
+}
 void MainGameFlowStateStartScreen::OnLeave() {}
-void MainGameFlowStateStartScreen::Update() {}
+
+// @ 0x823F2D78 -- the title screen's flow decisions: command 71 (pre-accept) resumes the
+// world load while the accept-dwell animation plays; command 70 (accepted) advances the
+// main flow (-> MEMORY_CARD / BF_PROFILE). The per-frame GUI drive itself runs in
+// BrnGameModule::GameMain (the console's LoadingScriptedState::Update shared spine).
+void MainGameFlowStateStartScreen::Update()
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    if (lpGameModule->ConsumeGuiPreAccept())
+    {
+        // LoadingScriptedState::ResumeLoadingWorld @0x823A85B0 -- the world streaming
+        // resume. [FLAG: the world-load stage machine is unreconstructed on PC; the
+        // initial loading already completed synchronously.]
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "StartScreen: pre-accept (71) -> resume world load\n";
+    }
+    if (lpGameModule->IsGuiPhaseComplete())
+    {
+        if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+            BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+                BrnGameMainFlowController::E_MGE_STATEEND);
+    }
+}
 void MainGameFlowStateStartScreen::Render() {}
 
-// MARKETING_SCREENS is a LoadingScriptedState (module loading) -- NOT a movie player. The boot/attract
-// videos are owned by the GUI module's HUD flow (BrnGui::BootVideos plays the HD/EA/Criterion logos;
-// BrnGui::BootLegal/BootAttract play the post-title attract), driven by GUI events with data from
-// VIDEOS\VIDEOLIST.BUNDLE (see the movie postmortem). Until the real module-loading body is reconstructed,
-// this passes straight through to the next flow state.
+// --- MainGameFlowStateMarketingScreens (the boot-logo phase) -----------------------------
+// The logos themselves are owned by the GUI module's HUD flow (BF_VIDEOS / BrnGui::
+// BootVideos plays the EA/Criterion logos); this state requests the FSM stage and waits
+// for the flow's phase-complete command.
 MainGameFlowStateMarketingScreens::MainGameFlowStateMarketingScreens() {}
 
+// @ 0x823AAA08 -- request the BF_VIDEOS GUI FSM stage (BrnVideoFsm; pending-stage byte = 1).
 void MainGameFlowStateMarketingScreens::OnEnter()
 {
+    BrnGame::GetMainGameModule()->RequestGuiFsmStage(1);
     if (CgsDev::Message::gxMessageFilterFlags & 1)
-        *CgsDev::Log::gpDebugPrint << "MarketingScreens: OnEnter\n";
+        *CgsDev::Log::gpDebugPrint << "MarketingScreens: OnEnter -> GUI FSM stage 1 (BrnVideoFsm)\n";
 }
 
 void MainGameFlowStateMarketingScreens::OnLeave() {}
 
+// @ 0x823F2CD8 -- advance when the GUI posts phase-complete (command 70: the Criterion
+// logo finished).
 void MainGameFlowStateMarketingScreens::Update()
 {
-    if (BrnGameMainFlowController::gpMainGameFlowController != 0)
-        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(BrnGameMainFlowController::E_MGE_STATEEND);
+    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
+        BrnGameMainFlowController::gpMainGameFlowController != 0)
+    {
+        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+            BrnGameMainFlowController::E_MGE_STATEEND);
+    }
 }
 
 void MainGameFlowStateMarketingScreens::Render() {}
@@ -374,16 +443,72 @@ void MainGameFlowStateCheckDiskSpace::OnLeave() {}
 // Update @ 0x823F2D28 lives in its DWARF home TU, BrnGameMainFlowCheckDiskSpace.cpp.
 void MainGameFlowStateCheckDiskSpace::Render() {}
 
+// --- MainGameFlowStateMemoryCard (the profile / save-device phase) -----------------------
 MainGameFlowStateMemoryCard::MainGameFlowStateMemoryCard() {}
-void MainGameFlowStateMemoryCard::OnEnter() {}
+
+// @ 0x823AAC48 -- request the BF_PROFILE GUI FSM stage (BrnBFProFsm; pending-stage byte = 4;
+// the X360 skips to 5 under the autotest flags -- no autotest on PC).
+void MainGameFlowStateMemoryCard::OnEnter()
+{
+    BrnGame::GetMainGameModule()->RequestGuiFsmStage(4);
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "MemoryCard: OnEnter -> GUI FSM stage 4 (BrnBFProFsm)\n";
+}
 void MainGameFlowStateMemoryCard::OnLeave() {}
-void MainGameFlowStateMemoryCard::Update() {}
+
+// @ 0x823F2F98 -- gated on the world-load stage (X360 meLoadingStateStage global == 8);
+// advance when the GUI posts phase-complete (the profile task resolved). [FLAG world
+// gate: the PC initial load completes synchronously; gBrnInitialLoadingComplete is the
+// stand-in for the world-loaded stage.]
+void MainGameFlowStateMemoryCard::Update()
+{
+    if (!gBrnInitialLoadingComplete)
+        return;
+    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
+        BrnGameMainFlowController::gpMainGameFlowController != 0)
+    {
+        BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+            BrnGameMainFlowController::E_MGE_STATEEND);
+    }
+}
 void MainGameFlowStateMemoryCard::Render() {}
 
+// --- MainGameFlowStateCompleteLoading (the post-title / compound-load phase) -------------
 MainGameFlowStateCompleteLoading::MainGameFlowStateCompleteLoading() : mbIsCollisionWorldPrepared(false) {}
-void MainGameFlowStateCompleteLoading::OnEnter() {}
+
+// @ 0x823AABD0 -- request the BF_COMPLOAD GUI FSM stage (BrnCmpLdFsm; pending-stage
+// byte = 3) and reset the settle latch (X360 this+4 = 0).
+void MainGameFlowStateCompleteLoading::OnEnter()
+{
+    BrnGame::GetMainGameModule()->RequestGuiFsmStage(3);
+    mbIsCollisionWorldPrepared = false;
+    if (CgsDev::Message::gxMessageFilterFlags & 1)
+        *CgsDev::Log::gpDebugPrint << "CompleteLoading: OnEnter -> GUI FSM stage 3 (BrnCmpLdFsm)\n";
+}
 void MainGameFlowStateCompleteLoading::OnLeave() {}
-void MainGameFlowStateCompleteLoading::Update() {}
+
+// @ 0x823F2E08 -- when the GUI posts phase-complete (the post-title intro finished) and
+// the world is loaded: first pass stamps the load-state + latches (X360 sets the global
+// load stage to 7), second pass advances to IN_GAME. (The quit-to-dash branch and the
+// X360 load-state global are platform/world follow-ons.)
+void MainGameFlowStateCompleteLoading::Update()
+{
+    if (!gBrnInitialLoadingComplete)
+        return;
+    if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
+    {
+        if (mbIsCollisionWorldPrepared)
+        {
+            if (BrnGameMainFlowController::gpMainGameFlowController != 0)
+                BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
+                    BrnGameMainFlowController::E_MGE_STATEEND);
+        }
+        else
+        {
+            mbIsCollisionWorldPrepared = true;
+        }
+    }
+}
 void MainGameFlowStateCompleteLoading::Render() {}
 
 MainGameFlowStateInGame::MainGameFlowStateInGame() {}

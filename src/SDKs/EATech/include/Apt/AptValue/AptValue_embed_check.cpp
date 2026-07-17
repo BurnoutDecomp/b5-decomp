@@ -25,6 +25,7 @@ namespace
     };
 }
 
+// FLAG PC-platform leaf: ODR/embed-check scaffolding (no console counterpart).
 void AptValueGroup_EmbedCheckEntry()
 {
     // AptValueVector owned methods.

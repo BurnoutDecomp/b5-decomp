@@ -183,14 +183,13 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
 // matching the sibling AptCIHNativeFunctionHelper.cpp): coerce pValue to the object
 // it designates under (pScope, pTarget), writing the result through *ppOut.
 //   AptActionInterpreter::valueToObject @0x82B0... (X360).
-extern void AptActionInterpreter_valueToObject(AptValue* pScope, AptValue* pTarget,
-                                               AptValue* pValue, AptValue** ppOut);
+// AptActionInterpreter::valueToObject is now a member (declared in AptActionInterpreter.h).
 
 // FLAG (AptGC layer -- AptValueVector::ReleaseValues over off_8324E51C): drain the
 // deferred-release value vector once the operand stack empties. Shared with the
 // Var/Member/Control opcodes (declared there too); the host-side vector type/global
 // are not reconstructed yet, so the flush is encapsulated.
-extern void AptApt_FlushDeferredReleases();
+extern void AptFlushDeferredReleases();
 
 // FLAG (homed by the AS-globals layer): the shared "undefined" value (off_8324D814).
 extern AptValue* gpUndefinedValue;
@@ -198,7 +197,7 @@ extern AptValue* gpUndefinedValue;
 // FLAG (host path-context resolver -- console sub_82B02F80, the same one CallFunction
 // uses): parse pName into (*ppOutContext, *pOutLeaf) under (pScope, pTarget). Shared
 // with the StackOps call opcodes (declared there too).
-extern void AptInterp_ResolveTargetContext(AptValue* pScope, AptValue* pTarget,
+extern void AptResolveTargetContext(AptValue* pScope, AptValue* pTarget,
                                            const EAStringC* pName,
                                            AptValue** ppOutContext, EAStringC* pOutLeaf);
 
@@ -228,13 +227,7 @@ struct AptDragState
     float     mGrabOffsetY;   // dir mGrabOffset[1]  [c:0x54]
 };
 
-// HOMED 2026-07-02 (retiring the null stub): the view over the director's
-// drag member run.
-AptDragState* AptApt_GetDragState()
-{
-    return reinterpret_cast<AptDragState*>(
-        &gpAptTarget->mpAnimationTarget->mpDragMC);
-}
+// AptApt_GetDragState inlined at its call site(s).
 
 // FLAG (host mouse position -- the engine's current cursor coords, console
 // dword_8324E534 / dword_8324E538, advanced by the input layer each frame; the
@@ -278,7 +271,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
     // Flush the AptGC deferred-release vector once the operand stack has drained
     // (console: off_8324E51C->count != 0 && mnStackTop == 0).
     if (pInterp->mnStackTop == 0)
-        AptApt_FlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
+        AptFlushDeferredReleases();   // FLAG: off_8324E51C / AptValueVector::ReleaseValues
 }
 
 // ---------------------------------------------------------------------------
@@ -376,12 +369,9 @@ void AptActionInterpreter::_FunctionAptActionCloneSprite(AptActionInterpreter* p
     // AptActionInterpreter::_doCloneSprite (the AS duplicateMovieClip core; homed in
     // AptActionInterpreterInterpHelpers.cpp). Canonical signature (interpreter, AptCIH*
     // scope, AptValue* target, parent, name, depth, initObject=null).
-    extern AptValue* AptActionInterpreter_doCloneSprite(AptActionInterpreter* pInterp,
-                                                        AptCIH* pScope, AptValue* pTarget,
-                                                        AptValue* pParent, AptValue* pNameValue,
-                                                        int nDepth, AptValue* pInitObject);
-    AptActionInterpreter_doCloneSprite(pInterp, pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                       pParentValue, pNameValue, nDepth, nullptr);
+        // AptActionInterpreter::_doCloneSprite is now a member (declared in the header).
+        pInterp->_doCloneSprite(pContext->mpCIH, pContext->mpPendingReleaseValue,
+                            pParentValue, pNameValue, nDepth, nullptr);
 
     pInterp->stackSafePop(3);   // console Burnout_X360_Artist_01e3_0(this, 3)
 }
@@ -399,7 +389,7 @@ void AptActionInterpreter::_FunctionAptActionRemoveSprite(AptActionInterpreter* 
     if (pTop->getIsDefined())
     {
         AptValue* pResolved = nullptr;
-        AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+        pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                            pTop, &pResolved);   // FLAG: un-homed valueToObject
         if (pResolved && IsClipHandleOrCIHNone(pResolved))
         {
@@ -451,7 +441,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
             : (*reinterpret_cast<AptString**>(reinterpret_cast<char*>(pTarget) + 0x20))
                   ->GetInternalString();   // FLAG: type-33 box (console *(Variable+32) then +8)
 
-        AptInterp_ResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
+        AptResolveTargetContext(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pName, &pResolvedContext, &leafName);   // FLAG: sub_82B02F80
         pTarget = pInterp->getVariable(pResolvedContext, pContext->mpPendingReleaseValue,
                                        &leafName, 1, 1, 0);
@@ -460,7 +450,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
     int nPopCount = 3;                                  // console v8 = 3 (becomes 7 with bounds)
     pTarget->AddRef();                                  // console (**Variable)(Variable)
 
-    AptDragState* const pDrag = AptApt_GetDragState();  // FLAG: host drag-state singleton
+    AptDragState* const pDrag = reinterpret_cast<AptDragState*>(&gpAptTarget->mpAnimationTarget->mpDragMC);  // host drag-state view off the director
     pDrag->mpDragTarget = pTarget;
     pDrag->mGrabOffsetX = 0.0f;
     pDrag->mGrabOffsetY = 0.0f;
@@ -504,7 +494,7 @@ void AptActionInterpreter::_FunctionAptActionStartDragMovie(AptActionInterpreter
 void AptActionInterpreter::_FunctionAptActionStopDragMovie(AptActionInterpreter* /*pInterp*/,
                                                            LocalContextT* /*pContext*/)
 {
-    AptDragState* const pDrag = AptApt_GetDragState();  // FLAG: host drag-state singleton
+    AptDragState* const pDrag = reinterpret_cast<AptDragState*>(&gpAptTarget->mpAnimationTarget->mpDragMC);  // host drag-state view off the director
     if (pDrag->mpDragTarget)
         pDrag->mpDragTarget->Release();
     pDrag->mpDragTarget = gpUndefinedValue;
@@ -605,7 +595,7 @@ void AptActionInterpreter::_FunctionAptActionTargetPath(AptActionInterpreter* pI
     AptValue* const pTop = pInterp->mpStack[pInterp->mnStackTop - 1];
 
     AptValue* pResolved = nullptr;
-    AptActionInterpreter_valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
+    pInterp->valueToObject(pContext->mpCIH, pContext->mpPendingReleaseValue,
                                        pTop, &pResolved);   // FLAG: un-homed valueToObject
 
     if (pResolved)

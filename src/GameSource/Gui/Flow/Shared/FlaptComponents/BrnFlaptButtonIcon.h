@@ -75,7 +75,7 @@ namespace BrnGui
         // BrnFlaptButtonIcon.h:87) -- base init (bind the state interface, invalidate
         // the movie-clip handle). Always inlined by the X360 (no standalone symbol);
         // declared here so callers (FlaptHelpItem::Construct) de-inline to a call.
-        // The body lands with ButtonIcon's own member TU.
+        // Bodied in BrnFlaptButtonIcon.cpp.
         void Construct(const char* lacName,
                        CgsGui::StateInterface* lpStateInterface,
                        const char* lpcParentName);
@@ -89,10 +89,8 @@ namespace BrnGui
         // off_8204D190 (X360) == maButtonIdentifiers[16] (DWARF BrnFlaptButtonIcon.h:121)
         // -- per-button apt timeline-label names, indexed by EPadButton (index 0 ==
         // "up"); the glyph clip is goto-and-stopped on maButtonIdentifiers[button].
-        // This static label table is OWNED+DEFINED by ButtonIcon's own data TU (the
-        // full 16-entry string set is serialised data not in the function export, so
-        // it is declared here and defined there, not guessed); FlaptHelpItem::SetItem
-        // indexes it.
+        // Defined in BrnFlaptButtonIcon.cpp with the 16 label strings read straight
+        // from the decrypted XEX @0x8204D190; FlaptHelpItem::SetItem indexes it.
         static const char* const maButtonIdentifiers[E_PADBUTTON_COUNT];
 
     private:
