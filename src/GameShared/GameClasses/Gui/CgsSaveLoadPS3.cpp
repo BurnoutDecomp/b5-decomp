@@ -10,18 +10,26 @@
 //   SetMetadata, ShowMessage, ShowAutosaveIcon, HandleOption, BootupShowAutosaveWarning,
 //   MessageChoiceForOptionIndex (@0x8284BF50), GetMugshotBufferFromImageId (@0x8284C910),
 //   HandleMemcardOption (@0x8284C6D8), BootupStart (@0x82855A60),
-//   LoadHandleConfirmLoad (@0x82855EC0), and the four inherited
-//   ContentInformationFileInterface overrides (FLAG'd PC-boundary leaves; no named X360 body).
+//   LoadHandleConfirmLoad (@0x82855EC0), the four inherited
+//   ContentInformationFileInterface overrides (FLAG'd PC-boundary leaves; no named X360 body),
+//   and the manager-facing task starters the ARTIST export set strips (the 3-arg Save,
+//   Autosave -- composed from the exported siblings' bind-handler + SetMetadata setup) plus
+//   their host-side helpers (SaveFileExists, CaptureStoredDataView, GetMugshotBufferSizeBytes).
 //
 // The RealmcIface memory-card SDK callees (record ctors + the MemcardInterface
 // implementation) are the console storage backend; they are bodied file-locally as FLAG'd
-// PC-platform boundary leaves (zeroed records / an inert no-op interface) so the save/load
-// task machine runs its no-save path safely -- see the anonymous namespace below.
+// PC-platform boundary leaves (zeroed records / an inert no-op interface) so the console-
+// shaped write path stays safe -- see the anonymous namespace below. The REAL PC storage
+// is the CgsSaveLoadPC profile container (GameShared/GameClasses/Gui/PC/CgsSaveLoadPC.cpp):
+// the 3-arg Save/Autosave write it and LoadHandleConfirmLoad's confirm arm reads it back,
+// so the profile image genuinely persists across runs.
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoad.h"       // CgsGui::ConvertAsciiToWideCharSafe, MessageDisplay
+#include "GameShared/GameClasses/Gui/PC/CgsSaveLoadPC.h"   // the PC profile-container storage backend
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log (storage-edge diagnostics)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h" // CgsMemory::LinearMalloc (Prepare mugshot buffer)
 
 #include <cstddef>   // offsetof (layout pins)
@@ -219,6 +227,27 @@ namespace CgsGui
         mbField183              = false;                     // +0x183 (stb r11=0,0x183)
         mbAsyncOpState          = 0;                         // +0x224 (stb r11=0,0x224)
         mField24C               = 0;                         // +0x24C (stb r11=0,0x24C)
+
+        // Host-width stored-data view (see the header note): empty until a task starter
+        // captures it.
+        mStoredDataView.mpData = nullptr;
+        mStoredDataView.miSize = 0;
+    }
+
+    // The host-width form of the X360 SetMetadata +0x30/+0x34 capture (those two console
+    // words are the metadata's OpaqueBuffer {ptr, size}; see the mStoredDataView note in
+    // the header). Every task starter that receives the typed metadata records the view
+    // here for the storage edge.
+    void SaveLoadSystem::CaptureStoredDataView(const SaveLoadMetadata& lrMetadata)
+    {
+        mStoredDataView = lrMetadata.mStoredData;
+    }
+
+    // The mugshot buffer's total byte size -- the same product Prepare allocates and the
+    // X360 Save's "Mugshots" entry publishes (per-mugshot size x types x per-type).
+    s32 SaveLoadSystem::GetMugshotBufferSizeBytes() const
+    {
+        return miExtraFilesSizeBytes * miNumberOfMugshotsPerType * miNumberOfMugshotTypes;
     }
 
     // X360 @0x82473110. The two explicit transition tests preserve the ARTIST
@@ -338,6 +367,11 @@ namespace CgsGui
         mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler); // +0x130 = a2
 
         SetMetadata(lpMetadata, laSaveInfo);
+        // The caller (BrnGui::ProfileManager::Load) passes its typed
+        // CgsGui::SaveLoadMetadata; capture the stored-data view host-width so the
+        // confirm arm can read the container into it (the X360 form of this capture is
+        // SetMetadata's +0x30/+0x34 words -- see the mStoredDataView header note).
+        CaptureStoredDataView(*static_cast<const SaveLoadMetadata*>(lpMetadata));
 
         // Pending option handler = &LoadHandleConfirmLoad. The X360 builds the member-fn pointer
         // { func = LoadHandleConfirmLoad @+0x198, delta = 0 @+0x19C } and stores it via
@@ -413,6 +447,71 @@ namespace CgsGui
         mpMemcardInterface->WriteSave(lpSaveInfo, 2, laEntries[0], 0, lpTitleInfo);
 
         Update();
+    }
+
+    // The manager-facing 3-arg save task (BrnGui::ProfileManager::Save @0x82513B28 drives
+    // it; the entry itself is not in the ARTIST export set -- composed from the exported
+    // sibling Load @0x82859B70's bind-handler + SetMetadata setup, the same composition
+    // Bootup uses). Bind the result handler, push the metadata/save-info, then write.
+    void SaveLoadSystem::Save(SaveLoadTaskResultHandler* lpResultHandler,
+                              const SaveLoadMetadata& lrMetadata, const SaveInfo& lrSaveInfo)
+    {
+        mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler);   // +0x130
+
+        SetMetadata(&lrMetadata, &lrSaveInfo);
+        CaptureStoredDataView(lrMetadata);
+
+        // FLAG PC-platform leaf: the X360 continues into the memory-card write (the
+        // CheckSave pre-flight + WriteSave entries the 0-arg Save builds), whose ASYNC
+        // completion later reports the result to the bound handler. On PC the storage
+        // edge is the CgsSaveLoadPC container: write it synchronously (the profile image
+        // named by the metadata -- macTitle carries the metadata's save filename after
+        // SetMetadata -- plus the mugshot blob, the console's second save entry) and
+        // report the real I/O outcome here.
+        const bool lbOk = SaveLoadPC::WriteContainer(
+            macTitle, mStoredDataView.mpData, mStoredDataView.miSize,
+            mpMugshotBufferData, static_cast<u32>(GetMugshotBufferSizeBytes()),
+            macSaveInfoComment, macSaveInfoDescription);
+
+        CgsDev::Log::WriteToLog(lbOk ? "[SaveLoadPC] profile container WRITTEN\n"
+                                     : "[SaveLoadPC] profile container write FAILED\n");
+
+        Update();
+        reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
+            ->HandleSaveLoadTaskResult(lbOk ? E_SAVELOADTASKRESULT_SUCCESS
+                                            : E_SAVELOADTASKRESULT_FAILURE);
+    }
+
+    // The autosave task (BrnGui::ProfileManager::Autosave @0x82513958 drives it; same
+    // unexported family, same composition as the 3-arg Save). Each valid image record is
+    // committed into its mugshot-buffer slot first, so the container's mugshot payload
+    // persists it -- on the console the same records ride the memcard container's image
+    // files and come back through LoadImageFiles' slot reads.
+    void SaveLoadSystem::Autosave(SaveLoadTaskResultHandler* lpResultHandler,
+                                  const SaveLoadMetadata& lrMetadata, const SaveInfo& lrSaveInfo,
+                                  s32 liNumberOfImageFiles, const ImageFileInfo* laImageFileInfo)
+    {
+        for (s32 liIndex = 0; liIndex < liNumberOfImageFiles; ++liIndex)
+        {
+            const ImageFileInfo& lrRecord = laImageFileInfo[liIndex];
+            if (!lrRecord.IsValid())
+            {
+                continue;
+            }
+            CGS_ASSERT(lrRecord.miSize == miExtraFilesSizeBytes,
+                       "lpImageFile[liIndex].miSize == miExtraFilesSizeBytes");
+            std::memcpy(GetMugshotBufferFromImageId(lrRecord.miId), lrRecord.mpBuffer,
+                        static_cast<usize>(miExtraFilesSizeBytes));
+        }
+
+        Save(lpResultHandler, lrMetadata, lrSaveInfo);
+    }
+
+    // True when a saved profile container exists for lrMetadata's save name. Purely a
+    // query -- no task state, no I/O task started.
+    bool SaveLoadSystem::SaveFileExists(const SaveLoadMetadata& lrMetadata) const
+    {
+        return SaveLoadPC::ContainerExists(lrMetadata.macFilename);
     }
 
     // X360 0x828521E0. Copy each requested image's mugshot buffer into the caller's image-file
@@ -638,12 +737,28 @@ namespace CgsGui
             // FLAG PC-platform leaf: the X360 confirm arm builds the RealmcIface load-entry
             // records (sub_82B51A08 + CreateRealmcMugshotLoadEntryInfo + EntryContentName) and
             // starts the memory-card read (mpMemcardInterface vtable +0x38), whose ASYNC
-            // completion later reports the result. The Realmc SDK is the unrecovered console
-            // storage backend (no PC storage), so the read can neither start nor complete;
-            // report E_SAVELOADTASKRESULT_FAILURE synchronously so the task machine resolves
-            // its no-save path instead of waiting forever.
+            // completion later reports the result. On PC the storage edge is the
+            // CgsSaveLoadPC container: read it synchronously into the stored-data view the
+            // Load starter captured (plus the mugshot blob into the mugshot buffer, the
+            // console's second load entry) and report the real outcome here. A missing,
+            // corrupt, or other-build container reports FAILURE -- the manager's no-save
+            // path, exactly what the console's failed read reported.
+            bool lbOk = false;
+            if (mStoredDataView.mpData != nullptr)
+            {
+                const SaveLoadPC::EContainerReadResult leResult = SaveLoadPC::ReadContainer(
+                    macTitle, mStoredDataView.mpData, mStoredDataView.miSize,
+                    mpMugshotBufferData, static_cast<u32>(GetMugshotBufferSizeBytes()));
+                lbOk = leResult == SaveLoadPC::E_CONTAINERREAD_OK;
+                CgsDev::Log::WriteToLog(
+                    leResult == SaveLoadPC::E_CONTAINERREAD_OK      ? "[SaveLoadPC] profile container READ\n"
+                    : leResult == SaveLoadPC::E_CONTAINERREAD_MISSING ? "[SaveLoadPC] profile container read: MISSING\n"
+                    : leResult == SaveLoadPC::E_CONTAINERREAD_CORRUPT ? "[SaveLoadPC] profile container read: CORRUPT\n"
+                                                                      : "[SaveLoadPC] profile container read: layout MISMATCH\n");
+            }
             reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
-                ->HandleSaveLoadTaskResult(E_SAVELOADTASKRESULT_FAILURE);
+                ->HandleSaveLoadTaskResult(lbOk ? E_SAVELOADTASKRESULT_SUCCESS
+                                                : E_SAVELOADTASKRESULT_FAILURE);
             return;
         }
 
