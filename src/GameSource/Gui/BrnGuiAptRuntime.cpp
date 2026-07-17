@@ -516,10 +516,13 @@ namespace BrnGui
         CgsResource::RegisterAllResourceTypes();   // idempotent (Font 0x21 + raster handlers)
 
 
-        // The language manager: allocator + faithful default formatting, then the string table.
+        // The language manager: allocator + Prepare, then the string-table bundle.
+        // (The explicit PrepareDefaultFormattingStrings host call is REMOVED --
+        // the console's LanguageManager::Prepare @0x82864xxx does NOT run it; the
+        // formatting strings derive when LoadStringTable processes the loaded
+        // table, exactly as the type-12 notification path already does.)
         s_AptLanguageAllocator.Construct(s_aLanguageHeap, static_cast<s32>(KU_LANGUAGE_HEAP_BYTES));
         s_pViewModule->GetLanguageManager()->Prepare(&s_AptLanguageAllocator);
-        s_pViewModule->GetLanguageManager()->PrepareDefaultFormattingStrings();
         const bool lbStrings = AptLoadLanguageBundle(KC_APT_LANGUAGE_BUNDLE, &s_AptLanguagePool);
 
         s_bTextSystemReady = lbStrings;   // fonts ride the module chain now (slice 4a)
