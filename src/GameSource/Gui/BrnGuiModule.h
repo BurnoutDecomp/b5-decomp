@@ -4,7 +4,6 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"      // CgsModule::ModuleSingleBuffered base
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
-#include "GameSource/Gui/BrnGuiAptRuntime.h"                             // BrnGui::AptRuntimeHost (embedded)
 #include "GameSource/Gui/BrnGuiViewModule.h"                             // BrnGui::ViewModule (embedded)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                  // CgsGui::CgsGuiModuleIO::InputBuffer (the inbound GUI event buffer)
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"          // CgsGui::ModelIO Input/OutputBuffer (the FSM controller's IO pair)
@@ -72,7 +71,6 @@ namespace BrnGui
 
         MovieManager* GetMovieManager() { return &mMovieManager; }
         ViewModule* GetViewModule() { return &mViewModule; }
-        AptRuntimeHost* GetAptRuntimeHost() { return &mAptRuntimeHost; }
         AlwaysAvailableComponentsManager* GetAlwaysAvailableComponentsManager()
         {
             return &mAlwaysAvailableComponentsManager;
@@ -152,7 +150,8 @@ namespace BrnGui
         CgsGui::ViewIO::OutputBuffer mViewOutputBuffer;
         s64 miLastViewFrameMs;        // PC frame clock for the time-step event (FLAG: wall clock)
         MovieManager mMovieManager;   // X360 +301600 (drives the boot/attract videos)
-        AptRuntimeHost mAptRuntimeHost; // GUI-owned Apt host published while the module is prepared
+        // (AptRuntimeHost RETIRED: the Apt bring-up + PC render buffer live in
+        // BrnGuiModule.cpp's transplanted block -- the console GuiModule ownership.)
         AlwaysAvailableComponentsManager mAlwaysAvailableComponentsManager;
 
         // ---- the real flow-controller chain (X360 GuiModule members) --------------------
