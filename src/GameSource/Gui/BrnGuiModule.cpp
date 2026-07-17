@@ -318,18 +318,21 @@ namespace BrnGui
         mHudStatePool.Construct();
         mHudStatePool.Create(s_hudStatePoolBacking, sizeof(s_hudStatePoolBacking));
 
-        // Stand up the GUI-owned Apt runtime host (allocator + interpreter + AptAux host
-        // callback table + the render buffer) BEFORE the flow prepares, so the flow
-        // states' access pointers can reach the AptAux singleton. Idempotent + defensive.
-        mAptRuntimeHost.Prepare(&mViewModule);
-
-        // Prepare the embedded FLApt manager before a type-10 load notification can
-        // register FLAPTHUD and construct its live MovieClipInstance tree.
+        // The FLApt linear allocator must exist BEFORE the view-module prepare: the
+        // staged BrnGui::ViewModule::Prepare's FLAPT stage seeds every
+        // FlaptFileInstance from it (a null here leaves null instance allocators --
+        // the state machine one-shots at DONE and never re-seeds).
         s_flaptLinear.Construct();
         s_flaptLinear.Create(s_flaptLinearBacking, sizeof(s_flaptLinearBacking));
         s_flaptLinear.SetAlignment(16);
-        CGS_ASSERT(mViewModule.GetFlaptManager()->Prepare(&s_flaptLinear),
-                   "FLApt manager failed to prepare");
+
+        // Stand up the GUI-owned Apt runtime host (allocator + interpreter + AptAux host
+        // callback table + the render buffer) BEFORE the flow prepares, so the flow
+        // states' access pointers can reach the AptAux singleton. Idempotent + defensive.
+        // The host drives the REAL staged (virtual) ViewModule::Prepare, whose FLAPT
+        // stage prepares the FlaptManager with this linear -- the console prepare shape
+        // (the separate FlaptManager::Prepare call is retired with it).
+        mAptRuntimeHost.Prepare(&mViewModule, &s_flaptLinear);
 
         // Complete the shared access bundle with the AptAux singleton created by the
         // PC runtime host above.  Construct already installed the language, Flapt, and
