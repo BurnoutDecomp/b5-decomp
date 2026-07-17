@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCallbackRender.h"   // AptCallbackRender::DrawString / DeallocateString + AptMaskRenderOperation
 
 // ---- the Apt host adaptor + render handler (the render bridge) --------------
+#include "GameShared/GameClasses/Gui/PC/CgsAptRenderBackendPC.h"             // DispatchAptIm2dRenderBufferPC (slice-5 step A)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"          // CgsGui::AptAux / AptAuxPointer
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"// CgsGui::AptImRendererSet / AptIm2dRenderBuffer
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"                // CgsGui::ViewModule (real Apt/text owner)
@@ -874,28 +875,11 @@ namespace BrnGui
         if (!s_bRuntimeReady || !s_bAuxReady || !s_bRenderBufferReady)
             return;
 
-        const bool lbFirst = !s_bFlushProbed;
-
-        CgsGraphics::ImRenderBuffer<CgsGraphics::Basic2dColouredTexturedVertex>& lrBuffer =
-            s_AptRenderBuffer.mCommandBuffer;
-
-
-        lrBuffer.Swap();               // freeze the write buffer for dispatch
-        // Reset the NEW write buffer's stream positions for the next frame (the faithful
-        // ImRenderBuffer::Clear @0x1EA7D4 -- Swap alone does NOT reset them). Without this the
-        // vertex stream (the text/mask AllocVertices consumer) fills permanently after ~60
-        // text-drawing frames (RenderStart returns null forever -> the dynamic-text glyphs
-        // silently stop landing) and the command stream degrades into rewind churn.
-        lrBuffer.Clear();
-        lrBuffer.Dispatch();           // re-issue every command to the D3D9 device (faithful PC path)
+        // The flush body is re-homed to the PC backend TU (slice 5 step A): the
+        // Swap -> Clear -> Dispatch consumption + its one-shot probe live in
+        // GameShared/GameClasses/Gui/PC/CgsAptRenderBackendPC.cpp.
+        CgsGui::DispatchAptIm2dRenderBufferPC(&s_AptRenderBuffer);
         ++s_iRenderFrame;
-
-        if (lbFirst)
-        {
-            s_bFlushProbed = true;
-            CgsDev::Log::WriteToLog(
-                "[AptRT] render: ViewModule::Render chain -> D3D9 via ImRenderBuffer::Dispatch (OK; per-frame).\n");
-        }
     }
 
     // Non-creating probe for the engine node mounted at a display level: walk the
