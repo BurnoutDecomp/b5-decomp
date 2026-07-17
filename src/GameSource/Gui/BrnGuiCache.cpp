@@ -168,6 +168,12 @@ namespace BrnGui
     void GuiCache::Construct()
     {
         mStateLoadingHelper.Construct();
+        // X360 0x82505860 mid-body: BrnGui::OptionsDataProfile::Construct(this + 47224)
+        // -- default the embedded player-options profile (brightness/contrast 50, the
+        // volume/trax defaults) so its range-asserted getters hold before any save
+        // overwrites it (ScreenLoading's ApplyOptionsDataProfileSettings reads it on
+        // the world-load hand-off).
+        GetOptionsDataProfile()->Construct();
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
@@ -260,7 +266,14 @@ namespace BrnGui
                 lpResource = *reinterpret_cast<void* const*>(
                     lpEvent->mResourceHandle.mpResourceMemory);
             }
-            CGS_ASSERT(lpResource != 0, "Invalid resource pointer");
+            // FLAG PC-platform guard: the console always has the resource, so this asserts
+            // non-null. On PC a MISSING (un-converted) GUI bundle -- e.g. the freeburn
+            // HUD's sat-nav map/mask textures -- completes the load with a null handle
+            // (see GuiResourceModule::ParseResource's matching PC guard). The watcher
+            // still advances the slot to LOADED so the state's EnsureResourcesAreLoaded
+            // count converges; the null resource is simply never rendered.
+            CGS_ASSERT(lpResource != 0 || lpEvent->mResourceHandle.mpResourceMemory == 0,
+                       "Invalid resource pointer");
 
             const bool lbWasCancelled = lrInfo.meState == E_STATE_LOAD_CANCELLED;
             lrInfo.meState = E_STATE_LOADED;
