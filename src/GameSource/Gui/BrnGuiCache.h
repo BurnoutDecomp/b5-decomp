@@ -454,7 +454,13 @@ namespace BrnGui
         u8  mPad_AC3A[2];                                // +0xAC3A..+0xAC3B
         s32 meActiveRoadRule;                            // +0xAC3C (44092) BrnGameState::EActiveRoadRule (PlayerPositionSingle::RenderValue gate @0x824220B4)
         s32 meRoadRuleScoreMode;                         // +0xAC40 (44096) GuiEventSetRoadRuleScoreMode::ERoadPanelModes
-        u8  mPad_AC44[0xB878 - 0xAC44];                  // +0xAC44..+0xB877 (far members --
+        u8  mPad_AC44[0xAC74 - 0xAC44];                  // +0xAC44..+0xAC73
+        // The active-player count (X360 far member @0xAC74/44148): the friends-list
+        // component caches it at attach (GetFriendsListCachedField) and the
+        // burnout-skills manager gates its record-beaten HUD flash on it (`> 1`,
+        // SetSkillsData @0x825118F0). Both header accessors read this one member.
+        u32 muNumActivePlayers;                          // +0xAC74 (44148)
+        u8  mPad_AC78[0xB878 - 0xAC78];                  // +0xAC78..+0xB877 (far members --
         // pre-race messages, replay/online tables, sat-nav zoom -- reached only by
         // declaration-only array accessors; not modelled member-by-member.)
 
