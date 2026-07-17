@@ -191,24 +191,11 @@ namespace
     unsigned char                s_aAptDataHeap[256 * 1024];
     CgsMemory::HeapMalloc        s_AptDataAllocator;
     bool s_bTextSystemReady = false;                     // fonts + strings loaded (one-shot)
-    CgsResource::Font* s_pAptBodyFont = nullptr;         // the FIRST loaded typeface (B5EAConDisS --
-                                                         // the menu-label font; the AS-autofit measure)
 
     // The language allocator's backing heap: ~4.7K hash elements (24B each) + heap overhead.
     const u32 KU_LANGUAGE_HEAP_BYTES = 512u * 1024u;
     u8 s_aLanguageHeap[KU_LANGUAGE_HEAP_BYTES];
 
-    // The 3 typeface bundles the collection holds (KI_MAX_FONTS == 3 slots). The title
-    // movie's type-3 font chars name the "B5EAConDisS(Drop)" family == WESTERNB5BODY_35;
-    // HEADER_70 ("MachineStd-Bold") and DOTMAT_35 ("B5DotMat") are the other two western
-    // typefaces the GUI movies reference (and the FindFont fallback-table entries).
-    const char* const KA_APT_FONT_BUNDLES[3] =
-    {
-        "Language/Fonts/WesternB5Body_35.font",
-        "Language/Fonts/WesternB5Header_70.font",
-        "Language/Fonts/WesternB5DotMat_35.font",
-    };
-    CgsResource::Pool s_aAptFontPools[3];   // one resident pool per typeface bundle
 
     // The language string-table bundle. FLAG: langid selection is host-static (0002 ==
     // langid 8, the clean English table -- verified offline: TITLES_PRESS_START ->
@@ -413,16 +400,15 @@ namespace BrnGui
 
     static bool IsRuntimeReady() { return s_bRuntimeReady; }
 
-    // -------------------------------------------------------------------------
-    // AptLoadOneGuiFont -- load one typeface bundle into its resident pool and register
-    // the Font with the Apt font collection. Mirrors the PROVEN CgsDev::LoadAndSetDebugFont
-    // load shape (pool over malloc backing -> BundleLoader -> type-0x21 entry ->
-    // CreateTextureState -> SafeResourceHandle), but the handle goes to the FontCollection
-    // instead of the debug manager. Returns true when the typeface registered.
-    // -------------------------------------------------------------------------
+    // (AptLoadOneGuiFont RETIRED, slice 4a: the locale fonts load through the REAL
+    // cache/module chain -- GuiModule::Prepare stage 13's font table {17,16},{18,16},
+    // {19,16} -> GuiCache -> GuiResourceModule font bank -> type-16 notifications ->
+    // ViewModule::AddFont. QueueLoadNotification below still carries the language
+    // string-table record until the language request path is recovered.)
+
     // Queue one load notification for a loaded pool entry (see the ring's note above).
     // liRequestType carries the X360 ARTIST request-type numeric the view module's dispatch
-    // switches on (4 = APT data, 12 = the localised-text bundle, 16 = a font).
+    // switches on (12 = the localised-text bundle -- the one remaining host-queued record).
     static void QueueLoadNotification(CgsResource::Entry* lpEntry, s32 liRequestType)
     {
         if (s_uPendingLoadNotificationWrite - s_uPendingLoadNotificationRead
@@ -440,92 +426,6 @@ namespace BrnGui
         lrEvent.meRequestType   = static_cast<CgsGui::ResourceRequestTypes>(liRequestType);
         lrEvent.muLoadRequestId = ++s_uNextLoadRequestId;
         ++s_uPendingLoadNotificationWrite;
-    }
-
-    static bool AptLoadOneGuiFont(const char* lpcBundlePath, CgsResource::Pool* lpPool)
-    {
-        // Pool backing (the same generous fixed sizes the debug-font bring-up uses).
-        const u32 KU_FONT_POOL_BYTES = 4u * 1024u * 1024u;
-        void* lpMainMem   = malloc(KU_FONT_POOL_BYTES);
-        void* lpGfxSysMem = malloc(KU_FONT_POOL_BYTES);
-        void* lpGfxLclMem = malloc(KU_FONT_POOL_BYTES);
-        if (lpMainMem == 0 || lpGfxSysMem == 0 || lpGfxLclMem == 0)
-        {
-            free(lpMainMem); free(lpGfxSysMem); free(lpGfxLclMem);
-            return false;
-        }
-
-        CgsResource::Pool::InitOptions lOptions;
-        lOptions.miId    = 5;
-        lOptions.mpcName = "AptFont";
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_MAINMEMORY].muMaxNodes       = 256u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_MAINMEMORY].muHeapMemorySize = 3u * 1024u * 1024u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_MAINMEMORY].muHeapAlignment  = 16u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM].muMaxNodes       = 256u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM].muHeapMemorySize = KU_FONT_POOL_BYTES - 64u * 1024u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM].muHeapAlignment  = 16u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL].muMaxNodes       = 256u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL].muHeapMemorySize = KU_FONT_POOL_BYTES - 64u * 1024u;
-        lOptions.maHeapInfo[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL].muHeapAlignment  = 16u;
-        lOptions.mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY]      = lpMainMem;
-        lOptions.mResource.m_baseResources[CgsResource::E_MEMTYPE_GRAPHICS_SYSTEM] = lpGfxSysMem;
-        lOptions.mResource.m_baseResources[CgsResource::E_MEMTYPE_GRAPHICS_LOCAL]  = lpGfxLclMem;
-        for (u32 luMemType = 0; luMemType < CgsResource::E_MEMTYPE_NUMTYPES; ++luMemType)
-        {
-            lOptions.mDescriptor.m_baseResourceDescriptors[luMemType].m_size      = KU_FONT_POOL_BYTES;
-            lOptions.mDescriptor.m_baseResourceDescriptors[luMemType].m_alignment = 16u;
-        }
-        lOptions.muMaxResources         = 64u;
-        lOptions.muMaxImports           = 64u;
-        lOptions.miRefCountThreshold    = 0;
-        lOptions.miNumDependencies      = 0;
-        lOptions.miBankId               = 0;
-        lOptions.mbAllowDefragmentation = false;
-        lpPool->InitPool(&lOptions);
-
-        CgsResource::BundleLoader lLoader;
-        const s32 liLoaded = lLoader.LoadBundle(lpcBundlePath, lpPool, CgsResource::ResolveResourceType);
-        char lac[224];
-        if (liLoaded <= 0)
-        {
-            std::snprintf(lac, sizeof(lac), "[AptRT] text: font bundle '%s' FAILED to load.\n", lpcBundlePath);
-            CgsDev::Log::WriteToLog(lac);
-            return false;
-        }
-
-        s32 liIndex = -1;
-        CgsResource::Entry* lpEntry =
-            lpPool->FindFirstResourceOfType(CgsResource::E_RESOURCETYPE_FONT, &liIndex);
-        CgsResource::Font* lpFont = (lpEntry != 0)
-            ? reinterpret_cast<CgsResource::Font*>(lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY])
-            : 0;
-        if (lpFont == 0)
-        {
-            std::snprintf(lac, sizeof(lac), "[AptRT] text: '%s' has no Font (0x21) resource.\n", lpcBundlePath);
-            CgsDev::Log::WriteToLog(lac);
-            return false;
-        }
-
-        // Build the runtime texture state (binds atlas page 0) so the glyph batch can draw.
-        lpFont->CreateTextureState();
-
-        // The first registered typeface is the body font (B5EAConDisS) -- the menu-label
-        // measure font for the AS-autofit observable (see the apt_labeltxt bridge).
-        if (s_pAptBodyFont == nullptr)
-            s_pAptBodyFont = lpFont;
-
-        // Queue the font's load notification: the REAL ViewModule::ProcessIncomingLoadNotification
-        // @0x8285BD30 (request type 16) validates + collects it into the font collection.
-        QueueLoadNotification(lpEntry, 16);
-
-        std::snprintf(lac, sizeof(lac),
-            "[AptRT] text: font '%s' registered (family='%s' chars=%u heightPx=%u atlas=%s).\n",
-            lpcBundlePath, lpFont->macTypefaceFamilyName, lpFont->muNumChars,
-            lpFont->muFontHeightInPixels,
-            (lpFont->mpapTextures != 0 && lpFont->muNumTexturePages > 0 && lpFont->mpapTextures[0] != 0
-             && lpFont->mpapTextures[0]->mpD3DTexture != 0) ? "d3d-ok" : "NO-D3D");
-        CgsDev::Log::WriteToLog(lac);
-        return true;
     }
 
     // -------------------------------------------------------------------------
@@ -614,12 +514,6 @@ namespace BrnGui
 
         CgsResource::RegisterAllResourceTypes();   // idempotent (Font 0x21 + raster handlers)
 
-        s32 liFonts = 0;
-        for (u32 lu = 0; lu < 3u; ++lu)
-        {
-            if (AptLoadOneGuiFont(KA_APT_FONT_BUNDLES[lu], &s_aAptFontPools[lu]))
-                ++liFonts;
-        }
 
         // The language manager: allocator + faithful default formatting, then the string table.
         s_AptLanguageAllocator.Construct(s_aLanguageHeap, static_cast<s32>(KU_LANGUAGE_HEAP_BYTES));
@@ -627,10 +521,10 @@ namespace BrnGui
         s_pViewModule->GetLanguageManager()->PrepareDefaultFormattingStrings();
         const bool lbStrings = AptLoadLanguageBundle(KC_APT_LANGUAGE_BUNDLE, &s_AptLanguagePool);
 
-        s_bTextSystemReady = (liFonts > 0);
+        s_bTextSystemReady = lbStrings;   // fonts ride the module chain now (slice 4a)
         char lac[160];
         std::snprintf(lac, sizeof(lac), "[AptRT] text: system %s (fonts=%d strings=%s).\n",
-                      s_bTextSystemReady ? "READY" : "INCOMPLETE", liFonts, lbStrings ? "ok" : "MISSING");
+                      s_bTextSystemReady ? "READY" : "INCOMPLETE", 0, lbStrings ? "ok" : "MISSING");
         CgsDev::Log::WriteToLog(lac);
     }
 
