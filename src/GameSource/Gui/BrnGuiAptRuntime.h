@@ -9,6 +9,7 @@
 
 
 namespace CgsGui { class ViewModule; struct AptIm2dRenderBuffer; struct GuiEventLoadNotification; }
+namespace CgsMemory { class LinearMalloc; }
 
 namespace BrnGui
 {
@@ -21,7 +22,8 @@ namespace BrnGui
     class AptRuntimeHost
     {
     public:
-        bool Prepare(CgsGui::ViewModule* lpViewModule);
+        bool Prepare(CgsGui::ViewModule* lpViewModule,
+                     CgsMemory::LinearMalloc* lpFlaptLinear);
         bool Prepare();
         // (PlayMovie / StopMovie / UpdateShimResidue RETIRED, slice 2: movie play,
         // mount, tick and unload are ENGINE-NATIVE -- channel-41 event 18 ->

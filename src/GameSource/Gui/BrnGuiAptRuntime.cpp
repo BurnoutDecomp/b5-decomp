@@ -149,6 +149,7 @@ namespace
     bool s_bBringUpAttempted = false;   // ran the (idempotent) bring-up at least once
 
     CgsGui::ViewModule* s_pViewModule = nullptr;
+    CgsMemory::LinearMalloc* s_pFlaptLinear = nullptr;   // the FLApt instance allocator (GuiModule-owned)
 
     // ---- the Apt render buffer the engine's render callbacks fill --------------
     // AptRenderHandler::GetIm2dRendererType() returns mpImRenderers->mpIm2dRenderer
@@ -516,13 +517,10 @@ namespace BrnGui
         CgsResource::RegisterAllResourceTypes();   // idempotent (Font 0x21 + raster handlers)
 
 
-        // The language manager: allocator + Prepare, then the string-table bundle.
-        // (The explicit PrepareDefaultFormattingStrings host call is REMOVED --
-        // the console's LanguageManager::Prepare @0x82864xxx does NOT run it; the
-        // formatting strings derive when LoadStringTable processes the loaded
-        // table, exactly as the type-12 notification path already does.)
-        s_AptLanguageAllocator.Construct(s_aLanguageHeap, static_cast<s32>(KU_LANGUAGE_HEAP_BYTES));
-        s_pViewModule->GetLanguageManager()->Prepare(&s_AptLanguageAllocator);
+        // The language MANAGER is prepared by the real staged ViewModule::Prepare
+        // (slice 6: its LANGUAGE stage runs mLanguageManager.Prepare; formatting
+        // strings derive at LoadStringTable). Only the string-table bundle IO +
+        // its queued type-12 notification remain host-side.
         const bool lbStrings = AptLoadLanguageBundle(KC_APT_LANGUAGE_BUNDLE, &s_AptLanguagePool);
 
         s_bTextSystemReady = lbStrings;   // fonts ride the module chain now (slice 4a)
@@ -646,9 +644,15 @@ namespace BrnGui
                 // Drive the faithful AptAux::Prepare state machine (@0x828503E0): the
                 // data-handler prepare (giving AptAlloc/AptFree a real heap), then
                 // InitializeApt, then the miState0=3 seed AptAux::Update asserts on.
+                // Driven through the REAL staged CgsGui::ViewModule::Prepare
+                // (retirement slice 6; the mbIsNewModule store makes the base
+                // stage fall through, matching the console new-module contract).
                 s_AptDataAllocator.Construct(s_aAptDataHeap,
                                              static_cast<s32>(sizeof(s_aAptDataHeap)));
-                while (!s_pViewModule->GetAptAux()->Prepare(&s_AptDataAllocator))
+                s_AptLanguageAllocator.Construct(s_aLanguageHeap,
+                                                 static_cast<s32>(KU_LANGUAGE_HEAP_BYTES));
+                while (!s_pViewModule->Prepare(&s_AptDataAllocator, nullptr,
+                                               &s_AptLanguageAllocator, s_pFlaptLinear))
                 {
                 }
 
@@ -940,10 +944,12 @@ namespace BrnGui
     }
 
 
-    bool AptRuntimeHost::Prepare(CgsGui::ViewModule* lpViewModule)
+    bool AptRuntimeHost::Prepare(CgsGui::ViewModule* lpViewModule,
+                                 CgsMemory::LinearMalloc* lpFlaptLinear)
     {
         mpViewModule = lpViewModule;
         s_pViewModule = lpViewModule;
+        s_pFlaptLinear = lpFlaptLinear;
         return PrepareRuntime();
     }
 
