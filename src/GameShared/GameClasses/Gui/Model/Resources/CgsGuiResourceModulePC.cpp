@@ -164,6 +164,48 @@ namespace CgsGui
             return &s_AptPersistentBankPool;
         }
 
+        // The GUI TEXTURES bank (type 11 -- GUITEXTURES.BIN, the console's START-state
+        // fire-and-forget alongside PERSISTENTAPT). It holds the shared GUI raster set
+        // the Apt render handler resolves texture ids from (the imported panels' art --
+        // e.g. the autosave prompt's background textures). The bundle is ~3.3 MB; the
+        // Texture resource FixUp realises D3D textures at load (device exists by the
+        // module's up-front phase -- same evidence as the font atlas path).
+        const u32 KU_GUI_TEXTURES_BANK_BYTES     = 8u * 1024u * 1024u;
+        const u32 KU_GUI_TEXTURES_BANK_MAX_NODES = 256u;
+        u8 s_aGuiTexturesBankBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_GUI_TEXTURES_BANK_BYTES];
+        CgsResource::Pool s_GuiTexturesBankPool;
+        bool s_bGuiTexturesBankLive = false;
+
+        CgsResource::Pool* MaterialiseGuiTexturesBankPool(s32 liPoolId)
+        {
+            if (!s_bGuiTexturesBankLive)
+            {
+                CgsResource::RegisterAllResourceTypes();
+                CgsResource::Pool::InitOptions lOptions;
+                lOptions.miId    = liPoolId;
+                lOptions.mpcName = "GuiResourceTexturesBank";
+                for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+                {
+                    lOptions.maHeapInfo[lt].muMaxNodes       = KU_GUI_TEXTURES_BANK_MAX_NODES;
+                    lOptions.maHeapInfo[lt].muHeapMemorySize = KU_GUI_TEXTURES_BANK_BYTES - 256u * 1024u;
+                    lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
+                    lOptions.mResource.m_baseResources[lt]   = s_aGuiTexturesBankBacking[lt];
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_GUI_TEXTURES_BANK_BYTES;
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
+                }
+                lOptions.muMaxResources         = KU_GUI_TEXTURES_BANK_MAX_NODES;
+                lOptions.muMaxImports           = KU_GUI_TEXTURES_BANK_MAX_NODES;
+                lOptions.miRefCountThreshold    = 0;
+                lOptions.miNumDependencies      = 0;
+                lOptions.miBankId               = 0;
+                lOptions.mbAllowDefragmentation = false;
+                s_GuiTexturesBankPool.InitPool(&lOptions);
+                s_bGuiTexturesBankLive = true;
+                CgsDev::Log::WriteToLog("[GuiResourceModule] gui-textures bank pool materialised.\n");
+            }
+            return &s_GuiTexturesBankPool;
+        }
+
         // Emit one type-14 load notification per AptData (0x1E) resource in the pool, each
         // carrying a handle to the entry's main-memory slot + the apt request type. GuiModule's
         // frame bridge routes these (request types 4..7) into the view input buffer, where the
@@ -387,9 +429,27 @@ namespace CgsGui
                                       liLoaded, lpRequest->miPoolId);
                         CgsDev::Log::WriteToLog(lac);
                     }
+                    else if (lpRequest->miPoolId == miTexturesBundlePoolId)
+                    {
+                        // GUITEXTURES.BIN (type 11): the shared GUI raster bank. Load it
+                        // resident; the Texture resource type's FixUp realises the D3D
+                        // textures, and the Apt render handler's texture-id resolution
+                        // finds them through the registered pool entries.
+                        CgsResource::Pool* lpPool = MaterialiseGuiTexturesBankPool(lpRequest->miPoolId);
+                        CgsResource::BundleLoader lLoader;
+                        const s32 liLoaded =
+                            lLoader.LoadBundle(lpRequest->macFileName, lpPool, CgsResource::ResolveResourceType);
+
+                        char lac[192];
+                        std::snprintf(lac, sizeof(lac),
+                                      "[GuiResourceModule] gui-textures bundle '%s' -> %s (%d resources, bank %d).\n",
+                                      lpRequest->macFileName, liLoaded > 0 ? "loaded" : "MISSING",
+                                      liLoaded, lpRequest->miPoolId);
+                        CgsDev::Log::WriteToLog(lac);
+                    }
                     else
                     {
-                        // The bank is not materialised on PC yet (texture/font/language) --
+                        // The bank is not materialised on PC yet (font/language) --
                         // complete the request without IO so the
                         // WAIT counting stays exact; the acquire path reports the miss.
                         char lac[192];
