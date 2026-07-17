@@ -57,6 +57,9 @@ struct RGBA
 extern bool gBrnLoadingScreenShouldShow;   // defined in BrnGameMainFlowStates.cpp
 extern bool gBrnInitialLoadingComplete;    // set by the game-flow when the load stages finish
 extern bool gBrnGuiDrivesLoadingScreen;    // we set this while the HUD flow FSM is live
+// The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- gates the PC
+// ignition-event stand-in in the per-frame view drive below.
+namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 namespace
 {
@@ -2088,6 +2091,50 @@ namespace BrnGui
             mViewInputBuffer.UnlockForWrite();
 
             mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
+
+            // [PC diagnostic] log the level-1 flow-movie state on CHANGE only (live /
+            // composed flips) -- the mount/unmount/remount observability line.
+            {
+                static s32 s_iPrevLevel1State = -1;
+                const s32 liLevel1State =
+                    (AptFlowMovieLive() ? 1 : 0) | (AptFlowMovieComposed() ? 2 : 0);
+                if (liLevel1State != s_iPrevLevel1State)
+                {
+                    char lacState[96];
+                    std::snprintf(lacState, sizeof(lacState),
+                                  "[AptRT] level-1 state -> live=%d composed=%d\n",
+                                  liLevel1State & 1, (liLevel1State >> 1) & 1);
+                    CgsDev::Log::WriteToLog(lacState);
+                    s_iPrevLevel1State = liLevel1State;
+                }
+
+                // FLAG world-load stand-in (the ignition event): on the console the
+                // GameState side posts GuiPlayerEngineEvent 379 when the player's car
+                // engine starts, and FBURN_MAIN's 379 arm drives the HUD's
+                // "apt_Transition" pair visible. With no vehicle side on PC, feed the
+                // one-shot ignition ONCE the in-game HUD movie has composed (its AS
+                // components must be registered before the apt-view writes can land --
+                // an earlier write is silently dropped by AptCommunicator::
+                // UpdateComponent's unknown-component return). The real GameState
+                // producer replaces this when the vehicle/world side lands.
+                {
+                    static bool s_bEngineOnFed = false;
+                    if (!BrnGameMainFlowController::gBrnInGameStateActive)
+                    {
+                        s_bEngineOnFed = false;
+                    }
+                    else if (!s_bEngineOnFed && (liLevel1State & 2) != 0)
+                    {
+                        const s32 laiEngineOn[2] = { 1, 0 };
+                        RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(laiEngineOn),
+                                         379, static_cast<s32>(sizeof(laiEngineOn)));
+                        CgsDev::Log::WriteToLog(
+                            "[GuiModule] in-game HUD movie composed -> engine-on 379 fed "
+                            "(world-load stand-in).\n");
+                        s_bEngineOnFed = true;
+                    }
+                }
+            }
 
             // The view consumed this frame's bridged events; reset the queue for the
             // next frame's bridge fill.

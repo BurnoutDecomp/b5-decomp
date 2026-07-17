@@ -666,7 +666,17 @@ namespace CgsGui
                 for (s32 li = 0; li < miNumPendingResources; ++li)
                 {
                     GuiBundleToLoad& lrBundle = maBundlesPending[li];
-                    CGS_ASSERT(lrBundle.mbParsed, "lBundle.mbParsed");
+                    // FLAG PC-platform guard: on the console every pending record has been
+                    // parsed by the time the notification sweep runs (the acquire response
+                    // always carries real container data). On PC a MISSING bundle completes
+                    // "without IO" with the null handle, so ParseForAcquiredResources
+                    // deliberately never marks it parsed -- relax the assert for exactly
+                    // that case (null resource handle on a LOAD record); the sweep below
+                    // still posts the (null-resource) notification and marks it parsed.
+                    CGS_ASSERT(lrBundle.mbParsed ||
+                                   (lrBundle.meLoadUnload == E_GUI_RESOURCEREQUEST_LOAD &&
+                                    lrBundle.mResourceHandle.mpResourceMemory == 0),
+                               "lBundle.mbParsed");
 
                     if (lrBundle.meLoadUnload != E_GUI_RESOURCEREQUEST_LOAD)
                     {
@@ -681,11 +691,21 @@ namespace CgsGui
                         // The inlined ParseResource sweep: validate the handle (the X360
                         // dev-asserts then dereferences regardless -- log-and-continue),
                         // then post the load notification carrying it.
+                        //
+                        // FLAG PC-platform guard: on the console the container data always
+                        // exists, so both dev-asserts hold and the second dereferences the
+                        // handle unconditionally. On PC a MISSING bundle -- un-converted data,
+                        // e.g. the sat-nav map/mask GUI textures the freeburn HUD requests --
+                        // legitimately leaves a null resource handle. Guard both asserts on
+                        // that condition (matching the resource module's existing "MISSING ...
+                        // completed without IO" PC paths) and still post the notification
+                        // (null resource), which StateLoadingHelper::OnLoadNotification
+                        // tolerates by design. Without the guard every un-converted GUI
+                        // texture spams a dev-assert on the boot path.
                         void* const* lppResourceMemory =
                             static_cast<void* const*>(lrBundle.mResourceHandle.mpResourceMemory);
-                        CGS_ASSERT(lppResourceMemory != 0,
-                                   "Invalid resource in GuiResourceModule::ParseResource");
-                        CGS_ASSERT(*lppResourceMemory != 0,
+                        const bool lbResourcePresent = lppResourceMemory != 0;
+                        CGS_ASSERT(!lbResourcePresent || *lppResourceMemory != 0,
                                    "Invalid memory resource in GuiResourceModule::ParseResource");
 
                         GuiEventLoadNotification lNotification;

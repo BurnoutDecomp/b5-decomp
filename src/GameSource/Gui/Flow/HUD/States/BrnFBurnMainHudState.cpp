@@ -73,15 +73,10 @@ namespace BrnGui
                 : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
         };
 
-        // 20-byte GuiEvent<18> "apt name + level" record { 8, 18, 12, name, level } --
-        // the view-channel mount/unmount post (same record BrnBootProfile/BootLegal use).
-        struct GuiAptNameFlagEvent20 : public CgsGui::GuiEvent<18>
-        {
-            const char* mpacAptName;   // +0x0C
-            s32         miLevel;       // +0x10
-            GuiAptNameFlagEvent20(const char* lpacAptName, s32 liLevel)
-                : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miLevel(liLevel) {}
-        };
+        // (The apt movie mount/unmount goes through StateInterface::PlayAptMovie, not a
+        // hand-rolled record: its GuiEventPlayAptMovie carries an 8-byte name pointer on
+        // x64, so it must be posted at its true sizeof -- a hardcoded 20-byte post
+        // truncates the trailing level field and the ViewModule reads a garbage level.)
 
         // 24-byte GuiEvent<213> show/hide record { 12, 213, 12, show, f32, flag } (the
         // X360 UpdateWFInit/UpdateRunning "ShowHideSatNav/BoostBar" family posts; the
@@ -126,11 +121,15 @@ namespace BrnGui
         }
 
         // FLAG PC-platform leaf: the player engine state (X360 cache word +19220;
-        // 0 == E_ENGINE_OFF, 1 == E_ENGINE_ON). Un-named; the PC boot path has no
-        // vehicle yet, so the engine reads OFF (the HUD takes the "invisible" arm).
+        // 0 == E_ENGINE_OFF, 1 == E_ENGINE_ON). Un-named in the cache recon. In free
+        // drive the player is in a car with the engine running, and it is that ENGINE_ON
+        // state that makes UpdateWFInit take the "visible" arm (the HUD transitions
+        // itself out under ENGINE_OFF). With no live vehicle telemetry on the PC boot
+        // path yet, report ENGINE_ON so the free-drive HUD is shown rather than
+        // immediately hidden.
         s32 GuiCache_GetPlayerEngineState(const GuiCache* /*lpGuiCache*/)
         {
-            return 0;
+            return 1;
         }
 
         // FLAG PC-platform leaf: the hud-ready byte (X360 cache+16496 := 1); un-named.
@@ -386,10 +385,9 @@ namespace BrnGui
 
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        // Unmount the HUD apt: the empty-name level-1 record on the view channel.
-        GuiAptNameFlagEvent20 lUnmount("", 1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnmount), KI_CHANNEL_VIEW_STATE, 20);
+        // Unmount the HUD apt: the empty-name record on the level the mount used (the
+        // ViewModule's case-18 handler treats a <=1-char name as "clear this level").
+        mpStateInterface->PlayAptMovie("", 1);
 
         mRaceMainHudClip.SetVisible(false);
 
@@ -445,8 +443,18 @@ namespace BrnGui
     //  Update -- the phase dispatch (header-inline on X360, not exported; composed
     //  from the phase bodies' advance returns; UpdatePermenant runs every frame)
     // =======================================================================
+    // Stage-transition log (the [BootLegal]/[BootProfile]-style diagnostic every boot/HUD
+    // state carries).
+    static void LogFBurnStage(s32 liFrom, s32 liTo)
+    {
+        char lac[64];
+        std::snprintf(lac, sizeof(lac), "[FBurnMainHud] stage %d -> %d\n", liFrom, liTo);
+        CgsDev::Log::WriteToLog(lac);
+    }
+
     void FBurnMainHudState::Update()
     {
+        const EInternalState lePrevState = meInternalState;
         switch (meInternalState)
         {
         case E_INTERNALSTATE_SETUP:
@@ -467,6 +475,8 @@ namespace BrnGui
         default:
             break;
         }
+        if (meInternalState != lePrevState)
+            LogFBurnStage(lePrevState, meInternalState);
 
         UpdatePermenant();
 
@@ -563,11 +573,12 @@ namespace BrnGui
             // FLAG deferred (Slice B): SatNavComponent::LoadResources.
         }
 
-        // Mount the HUD apt movie: { 8, 18, 12, "B5RaceHud", 1 } on the view channel
-        // (X360 off_82F27BE0[0] == "B5RaceHud").
-        GuiAptNameFlagEvent20 lMount("B5RaceHud", 1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lMount), KI_CHANNEL_VIEW_STATE, 20);
+        // Mount the HUD apt movie at level 1 (X360 off_82F27BE0[0] == "B5RaceHud"). Use
+        // the StateInterface play-movie path so the record is the real GuiEventPlayAptMovie
+        // posted at its true sizeof -- a hand-rolled record posted at the X360's 20-byte
+        // size truncates the level field on x64 (8-byte name pointer) and the ViewModule
+        // reads a garbage level number.
+        mpStateInterface->PlayAptMovie("B5RaceHud", 1);
 
         SetExpectedAptComponentList();
         return true;
@@ -622,11 +633,17 @@ namespace BrnGui
         {
             PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 1);      // {12,213,flag1}
             PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 1);  // ch42 mirror
+            // X360 @0x8247C710: BOTH halves of the "EventHud_Animator" pair -- the
+            // apt-view-state write the movie's AS polls (field_A40) AND the FLAPT
+            // goto-and-play (field_ACC). The apt write is what makes the HUD's master
+            // transition play (the movie starts on its invisible frame).
+            mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "visible", false);
             mEventHudAnimator.Run("visible");
             PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
         }
         else
         {
+            mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "invisible", false);
             mEventHudAnimator.Run("invisible");
             PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
             PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 0);      // {12,213,flag0}
@@ -748,6 +765,7 @@ namespace BrnGui
                 {
                     if (lfBoost >= 0.0099999998f)
                     {
+                        mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "invisible", false);
                         mEventHudAnimator.Run("invisible");
                         PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
                         PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 0);
@@ -756,6 +774,7 @@ namespace BrnGui
                     }
                     else if (GuiCache_GetBoostBarConfig(mpGuiCache) == 1)
                     {
+                        mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "visible", false);
                         mEventHudAnimator.Run("visible");
                         PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
                         PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 1);
@@ -853,11 +872,13 @@ namespace BrnGui
                            "( GuiPlayerEngineEvent::E_ENGINE_OFF == lpEngineChange->meNewEngineState ) || ( GuiPlayerEngineEvent::E_ENGINE_ON == lpEngineChange->meNewEngineState )");   // cpp:772
                 if (lpiPayload[0] == 1)
                 {
+                    mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "transin", false);
                     mEventHudAnimator.Run("transin");
                     PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
                 }
                 else
                 {
+                    mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "transout", false);
                     mEventHudAnimator.Run("transout");
                     PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
                 }

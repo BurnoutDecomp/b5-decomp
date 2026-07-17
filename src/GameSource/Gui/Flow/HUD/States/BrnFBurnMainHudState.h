@@ -9,6 +9,7 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h"   // BrnGui::InGameMessagesComponent
 #include "GameSource/Gui/View/BrnDistrictMarkerComponent.h"                  // BrnGui::DistrictMarkerComponent
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.h" // BrnGui::FlaptAnimatorComponent
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"          // CgsGui::GuiComponent (the apt-side animator half)
 
 namespace BrnGui
 {
@@ -118,7 +119,11 @@ namespace BrnGui
         // reconstructed (symbols demangle-mishomed to CgsStrStream.h in the ledger);
         // calls deferred behind mbBoostMessagesEnabled.
 
-        FlaptAnimatorComponent mEventHudAnimatorIcon; // +0xA40 ("EventHud_Animator" pair, 1st)
+        // The "EventHud_Animator" pair: the APT half (a plain named GuiComponent -- the
+        // X360 UpdateWFInit calls CgsGui::GuiComponent::AddOutputAptViewState on
+        // field_A40 directly, so this is the base type, NOT a Flapt component) and the
+        // FLAPT goto-and-play half.
+        CgsGui::GuiComponent   mEventHudAnimatorIcon; // +0xA40 ("EventHud_Animator" pair, 1st)
         FlaptAnimatorComponent mEventHudAnimator;     // +0xACC (the Run(...) target)
 
         // FLAG absent member: RoadRuleComponent (+0xB10..~+0x103F, with the event-338

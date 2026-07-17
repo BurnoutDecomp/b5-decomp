@@ -10,6 +10,11 @@
 #include <chrono>    // the ToGui repeat-clock feed (FLAG PC time source: wall clock)
 
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
+#include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
+
+// The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
+// stand-in below keys its loading-complete report on it.
+namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 // ---- Xbox 360 XDK entry point (real prototype lives in the XDK). Displays the system
 // "dirty disc" error UI for the given signed-in user. ------------------------------------
@@ -320,6 +325,20 @@ namespace BrnGame
                     case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
                         if (miInputModuleState == 0)
                             miInputModuleState = 1;
+                        break;
+                    case 65:
+                        // The SCREEN flow's in-game entry notice (InGame::OnEnter posts
+                        // {1,65,12,flag=1}). X360: BridgeGuiToGameState @0x823DDB78
+                        // forwards it as GameState action 106; the GameState/world side
+                        // then closes the boot loading-screen lifecycle as its streaming
+                        // settles. [FLAG world-load stand-in: with no world modules on PC
+                        // the "world" is ready the moment gameplay owns the screen, so the
+                        // in-game notice retires the boot loading screen here -- the same
+                        // observable the console produces at this point. The real
+                        // GameState consumer replaces this when the world side lands.]
+                        gBrnLoadingScreenShouldShow = false;
+                        CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
+                                                "loading screen retired (world-load stand-in).\n");
                         break;
                     case 86: case 87: case 89:
                         // Quit-to-dash (X360: XGetLaunchData + XLaunchNewImage). [FLAG PC
@@ -634,6 +653,22 @@ namespace BrnGame
                     // write bracket the console's LoadingScriptedState::Update uses): post
                     // any pending GuiEventRunFsm stage the main flow requested.
                     BridgeGameToGui(mpGuiInputBuffer);
+                    // FLAG world-load stand-in: the console's GameState side reports the
+                    // world-load status as game action 191, which the game module's
+                    // translator (GameBridgeGameStateToX @0x823E9CE0, case 191) forwards to
+                    // the GUI as GuiEvent<136> (load started) / GuiEvent<137> (load
+                    // complete). The SCREEN flow's LOADING state blocks on 137 before it
+                    // hands the flow to the in-game state. The PC has no world streaming
+                    // yet, so its "world load" completes trivially: report loading-complete
+                    // each sub-step while the in-game flow state is live (delivery is
+                    // registration-filtered, so the event only reaches a state that is
+                    // actually waiting on it). The real action-191 producer replaces this
+                    // when the world-streaming pipeline lands.
+                    if (BrnGameMainFlowController::gBrnInGameStateActive)
+                    {
+                        CgsGui::GuiEvent<137> lWorldLoadComplete;
+                        CgsGui::GuiModule::AddGuiEvent(lWorldLoadComplete, mpGuiInputBuffer);
+                    }
                     mpGuiInputBuffer->UnlockForWrite();
                     mPcInputOutputBuffer.UnlockForRead();
 
