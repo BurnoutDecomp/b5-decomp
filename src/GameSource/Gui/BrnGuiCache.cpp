@@ -668,6 +668,29 @@ namespace BrnGui
         mStateLoadingHelper.ClearComponentInitialised(leFlow);
     }
 
+    // The one @0xAC74 far member behind both header accessors (see the header note).
+    u32 GuiCache::GetFriendsListCachedField() const
+    {
+        return muNumActivePlayers;
+    }
+
+    s32 GuiCache::GetNumActivePlayers() const
+    {
+        return static_cast<s32>(muNumActivePlayers);
+    }
+
+    // Replace the flow layer's expected-component list wholesale (the header's
+    // ADDITIVE-GROW declaration; ImageGalleryState @0x82484720 and FBurnMainHudState
+    // @0x82475328 drive it): clear the layer, then append each caller hash.
+    void GuiCache::SetExpectedAptComponentList(GuiFlow leFlow,
+                                               const u32* lpauComponentNameHashes,
+                                               u32 luCount)
+    {
+        mStateLoadingHelper.ClearComponentInitialised(leFlow);
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            mStateLoadingHelper.AppendExpectedAptComponent(leFlow, lpauComponentNameHashes[luIndex]);
+    }
+
     // @ 0x8250DDF0 -- the three event families used by the reconstructed module:
     // resource load/unload completions and Apt ONLOAD component triggers.
     void GuiCache::RecEvent(const CgsModule::Event* lpEvent, s32 liEventId)

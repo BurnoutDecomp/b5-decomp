@@ -43,14 +43,9 @@ namespace BrnGui
     void RaceMainHudState::OnLeave() {}
     void RaceMainHudState::Update()  {}
 
-    // ---- FBURN_MAIN -----------------------------------------------------------------
-    const CgsGui::sResourceTuple FBurnMainHudState::maResourcesToLoad[1] =
-        { { 0u, CgsGui::E_GUI_RESOURCETYPE_START } };   // FLAG: unrecovered .rdata @0x82F26230
-    const u32 FBurnMainHudState::muNumResourcesToLoad = 0;
-
-    void FBurnMainHudState::OnEnter() { LogUnreconstructedState("FBurnMainHudState", "OnEnter"); }
-    void FBurnMainHudState::OnLeave() {}
-    void FBurnMainHudState::Update()  {}
+    // (FBURN_MAIN is no longer stubbed here: BrnFBurnMainHudState.cpp now carries the
+    // real reconstruction -- lifecycle, phase machine, and the 42-entry resource table
+    // read from the XEX image.)
 
     // ---- CRASHEDSTNT ----------------------------------------------------------------
     const CgsGui::sResourceTuple CrashedStuntHudState::maResourcesToLoad[1] =
