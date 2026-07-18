@@ -218,17 +218,6 @@ void AptCharacterAnimation::IncCharacterList(AptFilePtr filePtr) const
             pCharacter->AddCharacterReference();
         }
     }
-
-    // Release the by-value AptFilePtr param. In the asm this is the inlined
-    // AptSharedPtr<AptFile> destructor at the function tail (@0x82AFE3D8): read
-    // filePtr.pData, clear the slot, atomically decrement the file refcount, and
-    // AptSharedPtrDelete() it when the count reaches 0. The committed AptFilePtr
-    // models no destructor, so this release must be spelled out or the caller's
-    // by-value reference leaks (refcount ends one high).
-    AptFile* pRel = filePtr.pData;
-    filePtr.pData = nullptr;
-    if (pRel && AptSharedPtrDecRef(pRel) == 0)
-        AptSharedPtrDelete(pRel);
 }
 
 // ===========================================================================
