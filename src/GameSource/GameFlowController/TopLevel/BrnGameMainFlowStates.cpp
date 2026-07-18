@@ -7,6 +7,7 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (LoadSoundModule args)
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + BrnGame::GetMainSoundModule() (stage 4)
 #include "GameSource/Game/BrnGameModule.hpp"         // BrnGame::GetMainGameModule() (the update IO stacks)
+#include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (the command slot values)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -25,15 +26,17 @@ namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(
 // fields are valid and its vtables are set, no calloc/placement-new needed.)
 static bool g_bLoggedGameDataPrepare = false;
 
-// Option B stand-in for the game-module global the original loading-screen state writes
-// (off_830102D0 + 0x99FE38). BrnRendererModule::Render reads it to show the loading screen.
-bool gBrnLoadingScreenShouldShow = false;
+// Option B stand-in for the dispatch-thread input buffer's loading-screen command dword
+// (+39312 / dword 9828). Edge-triggered: writers post one of BrnGame::ELoadingScreenCommand
+// once; BrnRendererModule::Render forwards it to LoadingScreenRenderer::AddCommand and
+// clears it (the console's per-frame dispatch-buffer refill), see BrnGameMainFlowStates.h.
+s32 gBrnLoadingScreenCommand = 0;
 
 // The boot loading screen is owned by the GUI flow's BF_LOADING state (BrnGui::BootLoading), which
 // shows it (PlayLoadingScreen) and dismisses it (StopLoadingScreen) through its StateInterface -- the
 // faithful path (the X360 GUI flow drives the loading-screen APT movie). When BrnGui::GuiModule has
 // that FSM live it sets gBrnGuiDrivesLoadingScreen, and this game-flow state stops touching
-// gBrnLoadingScreenShouldShow (the GUI drives it); it only does the loading work and, once finished,
+// gBrnLoadingScreenCommand (the GUI drives it); it only does the loading work and, once finished,
 // raises gBrnInitialLoadingComplete so the GUI flow advances BF_LOADING -> BF_VIDEOS. If the GUI FSM
 // is NOT live (gBrnGuiDrivesLoadingScreen false), this state keeps managing the screen itself (the
 // prior behaviour) so the boot never loses its loading screen.
@@ -125,7 +128,7 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
     gBrnInitialLoadingComplete = false;
     // Show the loading screen immediately (no first-frame gap). When the GUI BF_LOADING FSM is live it
     // also shows + later dismisses the screen; here we only ensure it's up from frame 0.
-    gBrnLoadingScreenShouldShow = true;
+    gBrnLoadingScreenCommand = BrnGame::E_LSC_SHOW;
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: OnEnter - loading screen shown\n";
@@ -136,7 +139,7 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
 void MainGameFlowStateInitialLoadingScreen::OnLeave()
 {
     if (!gBrnGuiDrivesLoadingScreen)
-        gBrnLoadingScreenShouldShow = false;
+        gBrnLoadingScreenCommand = BrnGame::E_LSC_HIDE;
 }
 
 // @ 0x823EF688 - the scripted module-by-module load. The X360 body loads one module per stage
@@ -313,7 +316,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             FinishLoading();
             gBrnInitialLoadingComplete = true;
             if (!gBrnGuiDrivesLoadingScreen)
-                gBrnLoadingScreenShouldShow = false;
+                gBrnLoadingScreenCommand = BrnGame::E_LSC_HIDE;
         }
         break;
     }

@@ -13,9 +13,11 @@
 EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 CgsGraphics::BufferedDispatchFrame::BufferedDispatchFrame() {}
 
-// Flow-state signal (MainGameFlowStateInitialLoadingScreen sets this; stands in for the
-// game-module global the X360 reads). True while the loading screen should be shown.
-extern bool gBrnLoadingScreenShouldShow;
+// The dispatch-buffer loading-screen command slot (BrnGameMainFlowStates.h): the console
+// Render forwards lpDispatchIn[9828] into LoadingScreenRenderer::AddCommand every frame;
+// the slot is refilled per frame, so a posted command fires once and reads 0 after.
+// Render below consumes + clears it the same way.
+extern s32 gBrnLoadingScreenCommand;
 
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
@@ -149,6 +151,57 @@ void BrnRendererModule::Render()
         return;
     }
 
+    // Forward the dispatch-buffer loading-screen command into the renderer - the X360
+    // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)))
+    // and the buffer refill makes the slot edge-triggered (0 = AddCommand's no-op
+    // default), so consume + clear it here.
+    //
+    // [FLAG PC video gate] The console presents fullscreen videos inside the GUI pass
+    // (over the loading art); the PC movie player draws its quad AFTER the loading-screen
+    // foreground instead, so a SHOW-class command must drop while a video presents (else
+    // the boot logos would play audio-only behind the loading art). The slot is
+    // edge-triggered, so latch the last visibility-class command and re-issue it when the
+    // video ends.
+    {
+        static s32  sliLatchedShowCommand = BrnGame::E_LSC_NONE;
+        static bool slbMovieWasPresenting = false;
+
+        s32 liCommand = gBrnLoadingScreenCommand;
+        gBrnLoadingScreenCommand = BrnGame::E_LSC_NONE;
+        if (liCommand == BrnGame::E_LSC_SHOW || liCommand == BrnGame::E_LSC_HIDE ||
+            liCommand == BrnGame::E_LSC_SHOWSAVELOADBG)
+            sliLatchedShowCommand = liCommand;
+
+        const bool lbMoviePresenting =
+            BrnGui::gpActiveMovieManager != 0 &&
+            BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
+        if (lbMoviePresenting)
+        {
+            if (liCommand == BrnGame::E_LSC_SHOW ||
+                liCommand == BrnGame::E_LSC_SHOWSAVELOADBG)
+                liCommand = BrnGame::E_LSC_NONE;
+            if (!slbMovieWasPresenting && mLoadingScreenRenderer.IsRenderingLoadingScreen())
+                liCommand = BrnGame::E_LSC_HIDE;
+        }
+        else if (slbMovieWasPresenting &&
+                 (sliLatchedShowCommand == BrnGame::E_LSC_SHOW ||
+                  sliLatchedShowCommand == BrnGame::E_LSC_SHOWSAVELOADBG))
+        {
+            liCommand = sliLatchedShowCommand;
+        }
+        slbMovieWasPresenting = lbMoviePresenting;
+
+        if (liCommand != BrnGame::E_LSC_NONE)
+            mLoadingScreenRenderer.AddCommand(
+                static_cast<BrnGame::ELoadingScreenCommand>(liCommand));
+    }
+
+    // Save/load background layer: in E_LSC_SHOWSAVELOADBG mode the loading screen renders
+    // BENEATH the GUI, so the SaveLoadComponent prompt draws over the dimmed loading art.
+    // Layer order is the console Render tail @0x8240BFA8: RenderBackground -> the GUI
+    // dispatch flush -> RenderForeground.
+    mLoadingScreenRenderer.RenderBackground(&mIm2dRenderer);
+
     // GUI render drive (the Apt/view frame): the X360 render pass runs the GUI module's
     // Render (BrnGui::GuiModule::Render @0x825146B8 -> CgsGui::GuiModule::Render
     // @0x8285AF38 -> ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 ->
@@ -160,25 +213,6 @@ void BrnRendererModule::Render()
         BrnGui::gpActiveGuiModule->Render();
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
-
-    // Mirror the flow state's loading-screen signal into the renderer's command queue -
-    // the X360 Render issues this state-driven AddCommand each frame (Render line ~344).
-    // While a fullscreen video is presenting, the console layers the video OVER the
-    // loading-screen apt; the PC stand-in draws the loading screen LAST, so it hides the
-    // loading screen for the video's duration instead (else the boot logos play
-    // audio-only behind it).
-    const bool lbMoviePresenting =
-        BrnGui::gpActiveMovieManager != 0 &&
-        BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
-    const bool lbShowLoadingScreen = gBrnLoadingScreenShouldShow && !lbMoviePresenting;
-    if (lbShowLoadingScreen && !mLoadingScreenRenderer.IsRenderingLoadingScreen())
-    {
-        mLoadingScreenRenderer.AddCommand(BrnGame::E_LSC_SHOW);
-    }
-    else if (!lbShowLoadingScreen && mLoadingScreenRenderer.IsRenderingLoadingScreen())
-    {
-        mLoadingScreenRenderer.AddCommand(BrnGame::E_LSC_HIDE);
-    }
 
     mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
 

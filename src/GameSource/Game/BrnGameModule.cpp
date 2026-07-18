@@ -11,6 +11,7 @@
 
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
+#include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
@@ -310,11 +311,11 @@ namespace BrnGame
                 const u32 luCommand = reinterpret_cast<const u32*>(lpEvent)[1];
                 switch (luCommand)
                 {
-                    case 19:   // PlayAptLoadingMovie -> the loading screen shows
-                        gBrnLoadingScreenShouldShow = true;
+                    case 19:   // PlayAptLoadingMovie: X360 lpDispatchIn[9828] = 1 (E_LSC_SHOW)
+                        gBrnLoadingScreenCommand = BrnGame::E_LSC_SHOW;
                         break;
-                    case 20:   // StopAptLoadingMovie -> the loading screen drops
-                        gBrnLoadingScreenShouldShow = false;
+                    case 20:   // StopAptLoadingMovie: X360 lpDispatchIn[9828] = 2 (E_LSC_HIDE)
+                        gBrnLoadingScreenCommand = BrnGame::E_LSC_HIDE;
                         break;
                     case 70:   // GUI phase complete -- the main flow advances on it
                         mbGuiPhaseComplete = true;
@@ -336,7 +337,7 @@ namespace BrnGame
                         // in-game notice retires the boot loading screen here -- the same
                         // observable the console produces at this point. The real
                         // GameState consumer replaces this when the world side lands.]
-                        gBrnLoadingScreenShouldShow = false;
+                        gBrnLoadingScreenCommand = BrnGame::E_LSC_HIDE;
                         CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
                                                 "loading screen retired (world-load stand-in).\n");
                         break;
@@ -346,12 +347,21 @@ namespace BrnGame
                         CgsDev::Log::WriteToLog("[GameModule] GUI quit-to-dash command (86/87/89) -- "
                                                 "PC platform no-op (FLAG).\n");
                         break;
-                    case 138:  // dispatch render state 3
-                    case 589:  // dispatch render state 4
-                    case 590:  // dispatch render state 5 (the accept fade)
-                        // The console writes the dispatch-thread input buffer's render-state
-                        // byte (+39312). [FLAG: the PC renderer's mode consumer lands with
-                        // the loading-screen render slice.]
+                    // The "render states" ARE the loading-screen command slot: the console
+                    // BridgeGuiToGame @0x823CB758 writes the dispatch input buffer's dword
+                    // +39312 (== [9828]) that Render forwards to LoadingScreenRenderer::
+                    // AddCommand. 138 = the save/load prompt background (BootProfile posts
+                    // it right before playing SaveLoadComponent: the loading screen renders
+                    // BEHIND the GUI, dimmed); 589/590 = the black-overlay fades BootLegal
+                    // posts around the title screen and the menu accept.
+                    case 138:  // -> 3 (E_LSC_SHOWSAVELOADBG)
+                        gBrnLoadingScreenCommand = BrnGame::E_LSC_SHOWSAVELOADBG;
+                        break;
+                    case 589:  // -> 4 (E_LSC_BLACKFADEIN: reveal from black)
+                        gBrnLoadingScreenCommand = BrnGame::E_LSC_BLACKFADEIN;
+                        break;
+                    case 590:  // -> 5 (E_LSC_BLACKFADEOUT: the accept fade to black)
+                        gBrnLoadingScreenCommand = BrnGame::E_LSC_BLACKFADEOUT;
                         break;
                     default:
                         break;
