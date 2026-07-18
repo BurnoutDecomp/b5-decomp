@@ -52,9 +52,8 @@ struct RGBA
 
 // The loading-screen visual signal (BrnRendererModule::Render shows the loading screen
 // while it's set). Driven by the REAL protocol now: the states post the loading-screen
-// commands 19/20 on the GUI-out channel and the game module's BridgeGuiToGame writes this
-// signal (the console's dispatch-buffer render-state equivalent).
-extern bool gBrnLoadingScreenShouldShow;   // defined in BrnGameMainFlowStates.cpp
+// commands 19/20 on the GUI-out channel and the game module's BridgeGuiToGame writes the
+// dispatch command slot (gBrnLoadingScreenCommand, BrnGameMainFlowStates.h).
 extern bool gBrnInitialLoadingComplete;    // set by the game-flow when the load stages finish
 extern bool gBrnGuiDrivesLoadingScreen;    // we set this while the HUD flow FSM is live
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- gates the PC
@@ -1841,8 +1840,23 @@ namespace BrnGui
                                 reinterpret_cast<const CgsModule::Event*>(&lBody), 18,
                                 static_cast<s32>(sizeof(lBody)));
                     }
-                    // The other view-state records (options 25, transins 214, ...) ride
-                    // the AptCommunicator component path on PC. [FLAG: the raw channel-41
+                    else if (lpPlay->muEventType == 25)   // GuiEventClearScreenSet {mode, alpha}
+                    {
+                        // The view's black-backdrop control: BootLegal enables it (alpha
+                        // 1.0) under the title, BootLegal::OnLeave / BootProfile::OnEnter
+                        // disable it so the save/load prompt composes over the
+                        // loading-screen background (ViewModule case 25 @0x8285FCE8).
+                        const CgsGui::GuiEventClearScreenSet* lpClear =
+                            reinterpret_cast<const CgsGui::GuiEventClearScreenSet*>(lpEvent);
+                        struct { s32 miMode; f32 mfAlpha; } lBody =
+                            { lpClear->meClearScreen, lpClear->mfAlpha };
+                        mViewInputBuffer.GetViewStateQueue()
+                            .CgsModule::VariableEventQueue<65536, 16>::AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lBody), 25,
+                                static_cast<s32>(sizeof(lBody)));
+                    }
+                    // The other view-state records (transins 214, ...) ride the
+                    // AptCommunicator component path on PC. [FLAG: the raw channel-41
                     // bridge for them lands with the full view IO chain.]
                     break;
                 }

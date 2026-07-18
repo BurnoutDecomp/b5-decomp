@@ -1,5 +1,6 @@
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] bring-up traces
 #include "pc/gcm/renderengine/device.h"   // gDisplayWidth/Height
 
 #include <cstdio>
@@ -218,6 +219,13 @@ namespace BrnGame
     // @ 0x823AAD48 - map a command onto the visibility / black-overlay state.
     void LoadingScreenRenderer::AddCommand(ELoadingScreenCommand leCommand)
     {
+        // PC bring-up trace: each command edge (the console's dispatch-slot observable).
+        if (leCommand != E_LSC_NONE)
+        {
+            char lacMsg[64];
+            std::snprintf(lacMsg, sizeof(lacMsg), "[LoadScreen] AddCommand %d\n", leCommand);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
         switch (leCommand)
         {
         case E_LSC_SHOW:
@@ -275,12 +283,15 @@ namespace BrnGame
 
         // --- Fade: one mfFade, two staged outputs (exactly as the source) -------------
         // mfFade ramps IN at KF_FADE_IN_SPEED, OUT at KF_FADE_OUT_SPEED, clamped to
-        // lfFadeMax (1.0; the 0.175 dim is only the save/load-bg mode). The bg ("black")
-        // fade completes by KF_BLACK_FADE_POINT, while the foreground alpha only begins at
+        // lfFadeMax. X360 0x823E79C8: in save/load-background mode the cap is
+        // KF_BLACK_FADE_POINT * 0.35 (= 0.175), which dims the background art to 35%
+        // (0.175 / 0.5) with the foreground spinner/text alpha held at 0 - the dimmed
+        // backdrop the autosave prompt draws over. The bg ("black") fade completes by
+        // KF_BLACK_FADE_POINT, while the foreground alpha only begins at
         // KF_ALPHA_FADE_POINT - so the background reveals from black first, then the
         // spinner + text fade in. Element colours match the source: bg = (b,b,b,b);
         // foreground = (b,b,b,fg) i.e. white once b==1, alpha-gated by the fg fade.
-        const f32 lfFadeMax = 1.0f;
+        const f32 lfFadeMax = mbRenderInBackground ? (KF_BLACK_FADE_POINT * 0.35f) : 1.0f;
         if (mbHiding)
         {
             mfFade -= mfTimeStep * KF_FADE_OUT_SPEED;

@@ -38,6 +38,26 @@ namespace CgsGui
         GuiEventStopAptLoadingMovie() : GuiEvent<20>(1, 12) {}
     };
 
+    // The view's clear-screen (black backdrop) control record (DecFIGS
+    // CgsGuiEventTypeDefs.h:130; X360-attested by the ViewModule case-25 consumer
+    // @0x8285FCE8 and the boot states' posts: BootLegal::OnEnter ACTIVE alpha 1.0,
+    // BootLegal::OnLeave / BootProfile::OnEnter INACTIVE -- the prompt renders over
+    // the save/load loading-screen background, not over black).
+    struct GuiEventClearScreenSet : public GuiEvent<25>
+    {
+        enum EClearScreen
+        {
+            E_CLEAR_SCREEN_ACTIVE   = 0,
+            E_CLEAR_SCREEN_INACTIVE = 1,
+            E_CLEAR_SCREEN_MAX      = 2,
+        };
+
+        EClearScreen meClearScreen;
+        f32          mfAlpha;
+
+        GuiEventClearScreenSet() : GuiEvent<25>(8, 12) {}
+    };
+
     struct GuiEventRequestResource : public CgsModule::Event
     {
         ResourceRequestTypes      meType;
