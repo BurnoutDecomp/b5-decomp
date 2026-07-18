@@ -11,3 +11,6 @@ vendor/ffmpeg-build/
 # vendor/lua/src is committed; the compiled lib + objects are not.
 vendor/lua/obj/
 vendor/lua/lua515.lib
+
+# --- Agent-local session state (never committed) ---
+.claude/
