@@ -16,6 +16,7 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h" // GameMainFlowController + flow states
 #include "SharedClasses/BrnSharedConstants.h"                            // BrnUpdateSet
 #include "GameSource/Game/X360/BrnSystemHWX360.h"                        // BrnHW::System360HW (embedded hardware, by value)
+#include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                // BrnGame::DispatchThreadInputBufferManager (by value, h:531)
 
 // The GameTalk message type used by the RenderMetricsMessageHandler receiver signature.
 // A forward declaration suffices for the pointer-parameter method decl; the .cpp includes
@@ -132,6 +133,11 @@ namespace BrnGame
         // The game module owns the GameDataModule; the loading flow (case 8) prepares it through here
         // (and via BrnGame::GetMainGameDataModule()) so there's ONE instance, not a parallel copy.
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
+        // The dispatch-thread input pair (the flow states post the boot loading-screen
+        // command onto its write buffer, as the X360 InitialLoadingScreen::Update does
+        // through the module global @0x823EF688).
+        BrnGame::DispatchThreadInputBufferManager& GetDispatchThreadInputBufferManager()
+        { return mDispatchThreadInputBufferManager; }
         BrnSound::Module::RootSoundModule& GetSoundModule() { return mSoundModule; }
 
         // Per-frame spines the in-game flow state drives directly (non-virtual; each returns
@@ -481,6 +487,11 @@ namespace BrnGame
         CgsGui::ModelIO::OutputBuffer*         mpGuiModelOutputBuffer;// h:495
         CgsGui::CgsGuiModuleIO::OutputBuffer*  mpGuiOutputBuffer;    // h:496
         BrnDirector::DirectorIO::OutputBuffer* mpDirectorOutputBuffer;// h:497
+        // The double-buffered dispatch-thread input pair (X360 module +10097064): the update
+        // side writes it (BridgeGuiToGame's loading-screen commands, IsStalled/IsDiskError,
+        // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
+        // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
+        BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
         // [remaining members - omitted]
 
         // ---- controller-bridge inputs (real names; off-path absolute offsets noted) -------------

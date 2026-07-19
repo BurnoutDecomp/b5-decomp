@@ -219,12 +219,18 @@ namespace BrnGame
     // @ 0x823AAD48 - map a command onto the visibility / black-overlay state.
     void LoadingScreenRenderer::AddCommand(ELoadingScreenCommand leCommand)
     {
-        // PC bring-up trace: each command edge (the console's dispatch-slot observable).
+        // PC bring-up trace: command edges only (the boot flow re-posts SHOW every tick
+        // through the one-shot dispatch slot, so log value changes, not every fire).
         if (leCommand != E_LSC_NONE)
         {
-            char lacMsg[64];
-            std::snprintf(lacMsg, sizeof(lacMsg), "[LoadScreen] AddCommand %d\n", leCommand);
-            CgsDev::Log::WriteToLog(lacMsg);
+            static ELoadingScreenCommand seLastLogged = E_LSC_NONE;
+            if (leCommand != seLastLogged)
+            {
+                seLastLogged = leCommand;
+                char lacMsg[64];
+                std::snprintf(lacMsg, sizeof(lacMsg), "[LoadScreen] AddCommand %d\n", leCommand);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
         }
         switch (leCommand)
         {

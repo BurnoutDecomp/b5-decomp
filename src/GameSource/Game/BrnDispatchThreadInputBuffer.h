@@ -5,6 +5,10 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer base + IsBufferLockedForReading()
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16> (inter-thread queue Append)
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle (calibration texture handle, by value)
+#include "GameSource/Game/BrnLoadingScreenRenderer.h"    // BrnGame::ELoadingScreenCommand (meLoadingScreenCommand)
+#include "BrnCommonTypes.h"                              // Matrix44 (rw::math::vpu::Matrix44, the occlusion view-projection)
+
+namespace CgsModule { struct IOBufferStack; }            // the manager Construct's stack (pointer-only here)
 
 // BrnGame::DispatchThreadInputBuffer -- the per-frame input payload the particle/effects dispatch
 // thread reads. It derives the shared CgsModule::IOBuffer (status-flag-guarded read/write locking)
@@ -125,6 +129,38 @@ namespace BrnGame
         // ---- snapshot request ------------------------------------------------------------
         SnapShotRequest* GetSnapShotRequest();                                                  // 0x823B4690 (h:134, W)
 
+        // ---- loading-screen command --------------------------------------------------------
+        // DWARF h:166..h:188. The five setters are the commands BridgeGuiToGame @0x823CB758
+        // writes into this buffer on the GUI-out events (19/20/138/589/590); the X360 inlines
+        // them as the raw meLoadingScreenCommand (+0x9990) stores visible in that body, and
+        // BrnRendererModule::Render @0x8240BFA8 forwards GetLoadingScreenCommand() into
+        // LoadingScreenRenderer::AddCommand each frame (`lwzx r4, r26, 0x9990` at 0x8240C17C).
+        // A posted command fires exactly once at the dispatch side: the manager's Swap
+        // (inlined in BrnGameModule::OnEndOfUpdateFrame @0x823DBBA0) Destructs and
+        // re-Constructs the new write buffer every frame, and Construct @0x823C5BB8
+        // zeroes meLoadingScreenCommand -- so the slot never persists across frames
+        // (a persisting BLACKFADEIN would re-arm the overlay fade at 1.2 forever).
+        void ShowLoadingScreen()           { meLoadingScreenCommand = E_LSC_SHOW; }             // h:166
+        void ShowLoadingScreenSaveLoadBG() { meLoadingScreenCommand = E_LSC_SHOWSAVELOADBG; }   // h:169
+        void HideLoadingScreen()           { meLoadingScreenCommand = E_LSC_HIDE; }             // h:172
+        void BlackOverlayFadeIn()          { meLoadingScreenCommand = E_LSC_BLACKFADEIN; }      // h:175
+        void BlackOverlayFadeOut()         { meLoadingScreenCommand = E_LSC_BLACKFADEOUT; }     // h:178
+        ELoadingScreenCommand GetLoadingScreenCommand() const { return meLoadingScreenCommand; } // h:188
+
+        // ---- lifecycle ---------------------------------------------------------------------
+        // Construct @ 0x823C5BB8 -- base construct, queue construct, then the named-member
+        // defaults (the per-frame write-buffer refill rides this via the manager's Swap).
+        void Construct();
+
+        // Manager::Construct sets the write/read mbIsWriteBuffer flags after Construct.
+        void SetIsWriteBuffer(bool lbIsWriteBuffer) { mbIsWriteBuffer = lbIsWriteBuffer; }      // h:88/92 pair
+
+        // ---- full-frame-rate flag ----------------------------------------------------------
+        // DWARF h:181/h:185; X360 inlined (DoDispatch stores +0x99B0 from the camera flags,
+        // Render reads it for the present-interval select).
+        bool GetIsRenderingAtFullFrameRate() const   { return mbIsRenderingAtFullFrameRate; }   // h:181
+        void SetIsRenderingAtFullFrameRate(bool lbFullRate) { mbIsRenderingAtFullFrameRate = lbFullRate; } // h:185
+
     private:
         // Members in DWARF declaration order. With the committed CgsModule::IOBuffer base (a single
         // 1-byte FlagSet8 status field, padded to 4), mxRendererFlags lands at +4, miBrightness at
@@ -139,10 +175,36 @@ namespace BrnGame
         BrnParticle::ParticleModule::ParticleRenderData       mParticleRenderData;       // DWARF h:195  (X360 +0x38A0)
         BrnEffects::BrnCrashTriangleCache                     mBufferCrashTriangleCache; // DWARF h:196  (X360 +0x3B00)
         CappedInterThreadEventQueue                           mParticleInterThreadEventQueue; // DWARF h:197  (X360 +0x5980)
-        CgsResource::ResourceHandle mhCalibrationTextureHandle;         // X360 +0x9994 (8 bytes)
-        SnapShotRequest             mSnapShotRequest;                   // X360 +0x999C
-        bool mbCalibrationUnfriendlyEnablePostFx;                       // X360 +0x99BB
-        bool mbIsStalled;                                               // X360 +0x99BC (h:212)
-        bool mbIsDiskError;                                             // X360 +0x99BD
+        ELoadingScreenCommand       meLoadingScreenCommand;             // DWARF h:198  (X360 +0x9990 == 39312, the BridgeGuiToGame slot)
+        CgsResource::ResourceHandle mhCalibrationTextureHandle;         // DWARF h:204  (X360 +0x9994, 8 bytes)
+        SnapShotRequest             mSnapShotRequest;                   // DWARF h:205  (X360 +0x999C)
+        bool mbIsRenderingAtFullFrameRate;                              // DWARF h:207  (X360 +0x99B0 == 39344, the present-interval select)
+        bool mabThreeThreadsOverBudget[3];                              // DWARF h:208  (the three thread-monitor squares)
+        bool mabEnvMapFaceRender[6];                                    // DWARF h:209
+        bool mbIsWriteBuffer;                                           // DWARF h:210  (X360 +0x99BA == 39354, the IsReadBuffer assert)
+        bool mbCalibrationUnfriendlyEnablePostFx;                       // DWARF h:211  (X360 +0x99BB)
+        bool mbIsStalled;                                               // DWARF h:212  (X360 +0x99BC)
+        bool mbIsDiskError;                                             // DWARF h:213  (X360 +0x99BD)
+        Matrix44 mOcclusionViewProjectionMatrix;                        // DWARF h:215  (X360 +0x99C0 == 39360, the Render vector loads)
+    };
+
+    // BrnGame::DispatchThreadInputBufferManager (DWARF h:341) -- the double-buffered pair the
+    // game module owns (BrnGameModule.h:531, X360 module +10097064): the update side fills
+    // mpWriteBuffer, the dispatch/render side reads mpReadBuffer, and the end-of-frame Swap
+    // (inlined in BrnGameModule::OnEndOfUpdateFrame @0x823DBBA0) rotates them -- the buffer
+    // just written becomes the read buffer, and the other is Destructed + re-Constructed
+    // (the per-frame refill that clears the one-shot loading-screen command).
+    struct DispatchThreadInputBufferManager
+    {
+        void Construct(CgsModule::IOBufferStack* lpIOBufferStack);      // 0x823CBCE0 (h:346)
+        void Swap();                                                    // h:354 (X360 inlined @0x823DBBA0)
+        DispatchThreadInputBuffer* GetWriteBuffer() { return mpWriteBuffer; }   // h:357
+        DispatchThreadInputBuffer* GetReadBuffer()  { return mpReadBuffer; }    // h:360
+
+    private:
+        DispatchThreadInputBuffer* mapBuffers[2];                       // DWARF h:363  (X360 +0)
+        DispatchThreadInputBuffer* mpWriteBuffer;                       // DWARF h:364  (X360 +8)
+        DispatchThreadInputBuffer* mpReadBuffer;                        // DWARF h:365  (X360 +12)
+        u32                        muWriteBufferIndex;                  // DWARF h:366  (X360 +16)
     };
 }

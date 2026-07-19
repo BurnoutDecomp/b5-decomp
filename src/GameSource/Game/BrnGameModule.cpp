@@ -108,6 +108,17 @@ namespace BrnGame
         mpUpdateInputBufferStack = &sUpdateInputStack;
         mpUpdateOutputBufferStack = &sUpdateOutputStack;
 
+        // The dispatch-thread input pair (X360: DispatchThreadInputBufferManager::Construct
+        // @0x823CBCE0 from Prepare @0x823DB848, on the dedicated Dispatch stack main() carves
+        // -- 0x18000 bytes, see the stack note above). [PC stand-in placement: constructed
+        // here with the other stack scaffolding until the real Prepare stage-machine lands;
+        // the stack size is the documented console value.]
+        static CgsModule::IOBufferStack sDispatchStack;
+        static u8 saDispatchMem[0x18000];
+        sDispatchStack.Construct("Dispatch");
+        sDispatchStack.Prepare(saDispatchMem, sizeof(saDispatchMem), 128);
+        mDispatchThreadInputBufferManager.Construct(&sDispatchStack);
+
         // X360 step 4: the debug manager (params block seeded from unk_820DC120 + overrides +
         // Allocators::mpInternalDebugAllocator as the RW allocator; the PC slice passes DEFAULT).
         // ConstructRenderer is the PC bring-up of the 2D debug renderer so the overlay draws over
@@ -311,11 +322,11 @@ namespace BrnGame
                 const u32 luCommand = reinterpret_cast<const u32*>(lpEvent)[1];
                 switch (luCommand)
                 {
-                    case 19:   // PlayAptLoadingMovie: X360 lpDispatchIn[9828] = 1 (E_LSC_SHOW)
-                        gBrnLoadingScreenCommand = BrnGame::E_LSC_SHOW;
+                    case 19:   // PlayAptLoadingMovie -> ShowLoadingScreen (X360 write buffer [9828] = 1)
+                        mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreen();
                         break;
-                    case 20:   // StopAptLoadingMovie: X360 lpDispatchIn[9828] = 2 (E_LSC_HIDE)
-                        gBrnLoadingScreenCommand = BrnGame::E_LSC_HIDE;
+                    case 20:   // StopAptLoadingMovie -> HideLoadingScreen ([9828] = 2)
+                        mDispatchThreadInputBufferManager.GetWriteBuffer()->HideLoadingScreen();
                         break;
                     case 70:   // GUI phase complete -- the main flow advances on it
                         mbGuiPhaseComplete = true;
@@ -337,7 +348,7 @@ namespace BrnGame
                         // in-game notice retires the boot loading screen here -- the same
                         // observable the console produces at this point. The real
                         // GameState consumer replaces this when the world side lands.]
-                        gBrnLoadingScreenCommand = BrnGame::E_LSC_HIDE;
+                        mDispatchThreadInputBufferManager.GetWriteBuffer()->HideLoadingScreen();
                         CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
                                                 "loading screen retired (world-load stand-in).\n");
                         break;
@@ -347,21 +358,22 @@ namespace BrnGame
                         CgsDev::Log::WriteToLog("[GameModule] GUI quit-to-dash command (86/87/89) -- "
                                                 "PC platform no-op (FLAG).\n");
                         break;
-                    // The "render states" ARE the loading-screen command slot: the console
-                    // BridgeGuiToGame @0x823CB758 writes the dispatch input buffer's dword
-                    // +39312 (== [9828]) that Render forwards to LoadingScreenRenderer::
-                    // AddCommand. 138 = the save/load prompt background (BootProfile posts
-                    // it right before playing SaveLoadComponent: the loading screen renders
-                    // BEHIND the GUI, dimmed); 589/590 = the black-overlay fades BootLegal
-                    // posts around the title screen and the menu accept.
-                    case 138:  // -> 3 (E_LSC_SHOWSAVELOADBG)
-                        gBrnLoadingScreenCommand = BrnGame::E_LSC_SHOWSAVELOADBG;
+                    // The "render states" ARE the loading-screen commands: the console
+                    // BridgeGuiToGame @0x823CB758 writes the dispatch write buffer's
+                    // meLoadingScreenCommand (+39312 == [9828]) that Render forwards into
+                    // LoadingScreenRenderer::AddCommand. 138 = the save/load prompt
+                    // background (BootProfile posts it right before playing
+                    // SaveLoadComponent: the loading screen renders BEHIND the GUI,
+                    // dimmed); 589/590 = the black-overlay fades BootLegal posts around
+                    // the title screen and the menu accept.
+                    case 138:  // -> ShowLoadingScreenSaveLoadBG ([9828] = 3)
+                        mDispatchThreadInputBufferManager.GetWriteBuffer()->ShowLoadingScreenSaveLoadBG();
                         break;
-                    case 589:  // -> 4 (E_LSC_BLACKFADEIN: reveal from black)
-                        gBrnLoadingScreenCommand = BrnGame::E_LSC_BLACKFADEIN;
+                    case 589:  // -> BlackOverlayFadeIn ([9828] = 4: reveal from black)
+                        mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeIn();
                         break;
-                    case 590:  // -> 5 (E_LSC_BLACKFADEOUT: the accept fade to black)
-                        gBrnLoadingScreenCommand = BrnGame::E_LSC_BLACKFADEOUT;
+                    case 590:  // -> BlackOverlayFadeOut ([9828] = 5: the accept fade to black)
+                        mDispatchThreadInputBufferManager.GetWriteBuffer()->BlackOverlayFadeOut();
                         break;
                     default:
                         break;
@@ -532,10 +544,17 @@ namespace BrnGame
     {
     }
 
-    // @ BrnGameModule.cpp:1275 - end-of-update-frame hook (metrics + buffer-swap bookkeeping).
-    // Minimal until those subsystems are reconstructed.
+    // @ BrnGameModule.cpp:1275 - end-of-update-frame hook. The X360 body @0x823DBBA0 runs
+    // the render-metrics GameTalk report, the particle end-of-frame, the dispatch-buffer
+    // swap (inlined DispatchThreadInputBufferManager::Swap -- the written buffer becomes
+    // the read buffer and the new write buffer is re-Constructed), then the GUI/renderer
+    // end-of-frame + perfmon swap. The swap is the piece the boot path needs: it publishes
+    // this frame's loading-screen command to the dispatch side and clears the next write
+    // buffer's one-shot slot. [gated] the metrics/particle/GUI/renderer end-of-frame
+    // notifies land with their subsystems.
     void BrnGameModule::OnEndOfUpdateFrame()
     {
+        mDispatchThreadInputBufferManager.Swap();
     }
 
     // @ BrnGameModule.cpp:1533 - resource-update worker-thread body (streams resources while the
@@ -550,7 +569,9 @@ namespace BrnGame
     // module.
     void BrnGameModule::DispatchThread()
     {
-        mRenderModule.Render();
+        // The console dispatch thread hands the renderer the manager's READ buffer (the
+        // frame the update side just published via OnEndOfUpdateFrame's swap).
+        mRenderModule.Render(mDispatchThreadInputBufferManager.GetReadBuffer());
 
         // Bring up the resource (bitmap) debug font from the render path, where the D3D device is live
         // (the atlas raster's FixUp creates a D3D texture). Retried every frame; LoadAndSetDebugFont
