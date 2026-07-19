@@ -53,7 +53,7 @@ struct RGBA
 // The loading-screen visual signal (BrnRendererModule::Render shows the loading screen
 // while it's set). Driven by the REAL protocol now: the states post the loading-screen
 // commands 19/20 on the GUI-out channel and the game module's BridgeGuiToGame writes the
-// dispatch command slot (gBrnLoadingScreenCommand, BrnGameMainFlowStates.h).
+// dispatch write buffer's command (BrnDispatchThreadInputBuffer.h).
 extern bool gBrnInitialLoadingComplete;    // set by the game-flow when the load stages finish
 extern bool gBrnGuiDrivesLoadingScreen;    // we set this while the HUD flow FSM is live
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- gates the PC
@@ -2052,7 +2052,9 @@ namespace BrnGui
             }
             lpRecv->Clear();
         }
-        mMovieManager.Update();
+        // (MovieManager::Update advances from the render pass now -- the console's
+        // UpdateAndRenderMovieManager @0x82511240 -- so the finished check below reads
+        // the flag that pass raised.)
         if (mMovieManager.HasFinishedReporting())
         {
             // Video finished -> feed 510 back to the flow (the real Update posts the
@@ -2216,41 +2218,28 @@ namespace BrnGui
     // the module-prepared byte (+949208), runs CgsGui::GuiModule::Render @0x8285AF38 --
     // whose core copies the GUI input buffer's renderer set into the view input buffer
     // (SetImRenderers) and calls ViewModule::Render @0x82858810 -- then
-    // UpdateAndRenderMovieManager + the effects arbitrator. This PC drive reproduces the
-    // view-render core; the movie manager renders through the renderer's
-    // gpActiveMovieManager hook, and the effects arbitrator is data-gated.
+    // UpdateAndRenderMovieManager (fullscreen movies present INSIDE this pass, over the
+    // view content) + the effects arbitrator (data-gated). lpIm2dRenderBuffer is the
+    // movie player's presentation surface (the console reaches it through the input
+    // buffer's renderer set).
     // FLAG PC-ABI adapter: gates on the Apt bring-up (the console's prepared byte).
-    void GuiModule::Render()
+    void GuiModule::Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer)
     {
         if (!IsRuntimeReady())
-            return;
-
-        // FLAG (presentation stand-in ordering): full-screen movies are presented through
-        // the renderer's gpActiveMovieManager hook (drawn BEFORE this), not through the
-        // GUI view's MovieVideoRenderer as on console -- so the view's black clear
-        // (RenderBlackScreen) would paint over them. Skip the view render whenever a movie
-        // presentation is active (covers the boot logos in BF_VIDEOS AND the intro montage
-        // in BF_COMPLOAD/PostTitleScreenLoad, which is NOT a video-presentation state but
-        // still plays a full-screen movie), plus the two pre-title states that clear before
-        // any movie arrives. The gate dies when the movie presentation moves under the real
-        // view IO chain.
         {
-            if (mMovieManager.IsMoviePresentationActive())
-                return;
-            static const CgsID KI_STATE_PRELOAD = CgsIDCompress("BF_PRELOAD");
-            static const CgsID KI_STATE_VIDEOS  = CgsIDCompress("BF_VIDEOS");
-            CgsGui::State* lpCurrentState = mHudFlow.GetStateMachine().GetCurrentState();
-            if (lpCurrentState == 0)
-                return;
-            const CgsID lStateId = lpCurrentState->GetId();
-            if (lStateId == KI_STATE_PRELOAD || lStateId == KI_STATE_VIDEOS)
-                return;
+            // The movie manager still presents while the apt runtime is warming up (the
+            // EA/Criterion logos play before the GUI view composes anything).
+            UpdateAndRenderMovieManager(lpIm2dRenderBuffer);
+            return;
         }
 
         CgsGui::AptIm2dRenderBuffer* lpAptBuffer =
             s_bRenderBufferReady ? &s_AptRenderBuffer : nullptr;
         if (lpAptBuffer == nullptr)
+        {
+            UpdateAndRenderMovieManager(lpIm2dRenderBuffer);
             return;
+        }
 
         // CgsGui::GuiModule::Render @0x8285AF38 core: publish the active renderer set
         // into the view input buffer. Slot 0 is the Apt Im2d command buffer the engine's
@@ -2274,6 +2263,28 @@ namespace BrnGui
         // console render thread consumes the buffers via the custom-renderer-manager
         // bracket RenderInternal notifies).
         DispatchAptRenderResidue();
+
+        // Fullscreen movies present over the view content, inside this pass -- the X360
+        // Render's UpdateAndRenderMovieManager call (@0x825146B8). The states manage the
+        // loading screen around videos through the real protocol (BootLoading::OnLeave /
+        // PostTitleScreenLoad post StopAptLoadingMovie before playing and re-raise it
+        // after), so nothing else needs to hide for the video's duration.
+        UpdateAndRenderMovieManager(lpIm2dRenderBuffer);
+    }
+
+    // @ 0x82511240 -- pump the movie manager (the movie pass of the GUI render).
+    // FLAG PC-platform presentation split: the console body also calls
+    // MoviePlayer::Render here (through the view input buffer's renderer set, under the
+    // read lock) -- and the X360 XMV presentation then owns the screen ABOVE the whole
+    // 2D frame: the boot logos play over the still-latched loading screen (BootVideos
+    // @0x82478778 posts no hide; nothing does until BootLegal::OnEnter's 20). The PC
+    // FFmpeg substitute draws immediate D3D9 quads, so its call position IS its pixel
+    // order -- to reproduce the console's "video above everything" layering, the
+    // presentation draw runs at the renderer's frame tail (BrnRendererModule::Render,
+    // after the loading-screen foreground), not here.
+    void GuiModule::UpdateAndRenderMovieManager(CgsGraphics::Im2dRenderBuffer* /*lpIm2dRenderBuffer*/)
+    {
+        mMovieManager.Update();
     }
 }
 

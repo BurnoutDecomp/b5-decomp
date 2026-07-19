@@ -213,8 +213,9 @@ namespace BrnGui
         //  mCarPoolResourceDescriptor / mAllocator(MovieAllocator) -- the memory-management objects]
     };
 
-    // The movie manager currently owning the screen (the GUI HUD flow sets it; BrnRendererModule::Render
-    // draws it through the renderer's Im2d each frame while non-null -- interim until the GUI render path).
+    // The movie manager currently owning the screen (the GUI HUD flow sets it). Movies present
+    // through GuiModule::UpdateAndRenderMovieManager (inside the GUI render pass, the console
+    // order) now; this hook remains for non-render queries (e.g. IsMoviePresentationActive).
     extern MovieManager* gpActiveMovieManager;
 }
 

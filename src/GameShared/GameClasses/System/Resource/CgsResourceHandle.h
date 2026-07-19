@@ -21,6 +21,15 @@ namespace CgsResource
         // here, defined in CgsResourceHandle.cpp.
         ID GetResourceId() const;
 
+        // ADDITIVE GROW (DWARF-attested via the DecFIGS DispatchThreadInputBuffer::Construct
+        // call list; the X360 inlines it as the two null stores @0x823C5BB8 +0x9994/+0x9998):
+        // drop the handle back to the null state.
+        void Clear()
+        {
+            mpResourceMemory = 0;
+            mpSourceEntry = 0;
+        }
+
         // ADDITIVE GROW (ColourCalibrationScreen::Update @0x8246AA28, whose inlined
         // "mColourCalibrationTextureHandle != CgsResource::NULLResourceHandle" assert is
         // this pairwise compare): handles are equal when both stored pointers match.

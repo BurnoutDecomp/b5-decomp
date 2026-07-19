@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (canonical)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h"                // BrnGame::LoadingScreenRenderer
+#include "GameSource/Game/BrnDispatchThreadInputBuffer.h"            // BrnGame::DispatchThreadInputBuffer (Render's input)
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"                // BrnGraphics::EffectsArbitrator
 #include "GameSource/Graphics/BrnSunCorona.h"                        // BrnSunCorona (mSunCorona, embedded by value)
@@ -312,10 +313,11 @@ public:
     // @ 0x8240A778 - one-time construction of the renderer's subsystems.
     void Construct();
 
-    // @ 0x8240BFA8 - render one frame. The loading-screen overlay path is reconstructed;
-    // the gameplay-render path (shadows/world/cars/particles/post-fx) is data-gated off
-    // during boot and reconstructed incrementally.
-    void Render();
+    // @ 0x8240BFA8 - render one frame from the dispatch-thread input buffer the game side
+    // published (the X360 a2/lpDispatchThreadInputBuffer). The loading-screen overlay path
+    // is reconstructed; the gameplay-render path (shadows/world/cars/particles/post-fx) is
+    // data-gated off during boot and reconstructed incrementally.
+    void Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
 
     // Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert).
     void RenderAssert(const struct AssertData* lpAssertData);

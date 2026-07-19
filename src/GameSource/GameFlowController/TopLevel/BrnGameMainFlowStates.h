@@ -21,16 +21,12 @@
 // non-virtual and omitted here (they don't affect layout/vtable); they are reconstructed
 // with each state's OnEnter/Update body.
 //
-// Option B bridge: gBrnLoadingScreenCommand stands in for the dispatch-thread input
-// buffer's loading-screen command dword (byte offset +39312 == dword index 9828). The
-// console writes it from the GUI out-events in BridgeGuiToGame @0x823CB758 (19 -> SHOW 1,
-// 20 -> HIDE 2, 138 -> SHOWSAVELOADBG 3, 589 -> BLACKFADEIN 4, 590 -> BLACKFADEOUT 5) and
-// BrnRendererModule::Render forwards it into LoadingScreenRenderer::AddCommand each frame
-// (@0x8240BFA8: AddCommand(*(lpDispatchIn + 9828))). The slot is EDGE-triggered: the
-// dispatch input buffer is refilled per frame, so a command fires once and the slot reads
-// 0 (AddCommand's no-op default) until the next event. Render consumes + clears it.
-
-extern s32 gBrnLoadingScreenCommand;
+// The boot loading-screen commands ride the REAL dispatch-thread input pair now: the
+// flow states and BridgeGuiToGame post onto the game module's write buffer
+// (GetDispatchThreadInputBufferManager().GetWriteBuffer()->Show/HideLoadingScreen()),
+// OnEndOfUpdateFrame swaps it, and BrnRendererModule::Render forwards the read buffer's
+// one-shot command into LoadingScreenRenderer::AddCommand -- see
+// GameSource/Game/BrnDispatchThreadInputBuffer.h.
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }
 

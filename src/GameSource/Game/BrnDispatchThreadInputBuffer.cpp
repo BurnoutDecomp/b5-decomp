@@ -1,6 +1,9 @@
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Module/CgsIOBufferStack.h"  // CgsModule::IOBufferStack (the manager's buffer home)
+
+#include <cstring>   // std::memset (the opaque-payload clears in Construct)
 
 // BrnGame::DispatchThreadInputBuffer -- out-of-line accessors/mutators the X360 build emitted for
 // the particle/effects dispatch-thread input buffer. Each body tests the inherited IOBuffer status
@@ -183,5 +186,66 @@ namespace BrnGame
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         return &mSnapShotRequest;
+    }
+
+    // ---- lifecycle -------------------------------------------------------------------
+
+    // Construct @ 0x823C5BB8. The X360 body, store-for-store by named member: the IOBuffer
+    // base construct (status word), the renderer flags / particle-frame words, the
+    // inter-thread queue construct (+0x5980), then the frame defaults -- full-frame-rate
+    // TRUE, thread-over-budget flags clear, the snapshot take flag clear, post-fx TRUE,
+    // the calibration handle cleared, disk-error clear, and the one-shot loading-screen
+    // command back to NONE (this is the per-frame refill the manager's Swap drives, so a
+    // posted command fires exactly once at the dispatch side).
+    void DispatchThreadInputBuffer::Construct()
+    {
+        mxRendererFlags = 0;                              // +4
+        CgsModule::IOBuffer::Construct();                 // *(+0) status = constructed
+        std::memset(&mParticleData, 0, sizeof(mParticleData));   // +24 = 0 (the particle-frame word; the
+                                                          // opaque model zeroes the whole payload)
+        mParticleInterThreadEventQueue.Construct();       // +0x5980
+        mbIsRenderingAtFullFrameRate = true;              // +0x99B0 = 1
+        mabThreeThreadsOverBudget[0] = false;             // +0x99B1..B3 = 0
+        mabThreeThreadsOverBudget[1] = false;
+        mabThreeThreadsOverBudget[2] = false;
+        std::memset(&mSnapShotRequest, 0, sizeof(mSnapShotRequest));  // the take flag (+0x99AC) = 0
+        mbCalibrationUnfriendlyEnablePostFx = true;       // +0x99BB = 1
+        mhCalibrationTextureHandle.Clear();               // +0x9994/+0x9998 = 0 (ResourceHandle::Clear)
+        mbIsDiskError = false;                            // +0x99BD = 0
+        meLoadingScreenCommand = E_LSC_NONE;              // +0x9990 = 0
+    }
+
+    // ---- the double-buffered manager -------------------------------------------------
+
+    // DispatchThreadInputBufferManager::Construct @ 0x823CBCE0. Create the two buffers on
+    // the supplied IO-buffer stack ("DispatchThreadIOBuffer0"/"1"), seed write = [0] /
+    // read = [1] / index 0, Construct both, and stamp the write/read flags.
+    void DispatchThreadInputBufferManager::Construct(CgsModule::IOBufferStack* lpIOBufferStack)
+    {
+        lpIOBufferStack->CreateIOBuffer<DispatchThreadInputBuffer>(&mapBuffers[0], "DispatchThreadIOBuffer0");
+        lpIOBufferStack->CreateIOBuffer<DispatchThreadInputBuffer>(&mapBuffers[1], "DispatchThreadIOBuffer1");
+        mpReadBuffer      = mapBuffers[1];
+        mpWriteBuffer     = mapBuffers[0];
+        muWriteBufferIndex = 0;
+        mpReadBuffer->Construct();
+        mpWriteBuffer->Construct();
+        mpReadBuffer->SetIsWriteBuffer(false);            // *([1] + 39354) = 0
+        mpWriteBuffer->SetIsWriteBuffer(true);            // *([0] + 39354) = 1
+    }
+
+    // Swap (DWARF h:354; the X360 inlines it in BrnGameModule::OnEndOfUpdateFrame
+    // @0x823DBBA0): the buffer just written becomes the read buffer, the other becomes the
+    // write buffer and is Destructed + re-Constructed (the base destruct then the derived
+    // construct, exactly as the inline), then the write/read flags are restamped.
+    void DispatchThreadInputBufferManager::Swap()
+    {
+        const u32 luWritten = muWriteBufferIndex;
+        muWriteBufferIndex  = 1u - luWritten;
+        mpReadBuffer  = mapBuffers[luWritten];
+        mpWriteBuffer = mapBuffers[muWriteBufferIndex];
+        mpWriteBuffer->CgsModule::IOBuffer::Destruct();
+        mpWriteBuffer->Construct();
+        mpWriteBuffer->SetIsWriteBuffer(true);            // *(write + 39354) = 1
+        mpReadBuffer->SetIsWriteBuffer(false);            // *(read  + 39354) = 0
     }
 }

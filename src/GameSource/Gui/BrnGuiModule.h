@@ -57,11 +57,17 @@ namespace BrnGui
         // into the view input buffer (SetImRenderers), run the view module's render entry
         // (ViewModule::Render @0x82858810 -> the RenderInternal virtual -> AptAux::Render
         // -> the engine render walk), then flush the filled Apt command buffer to D3D9
-        // (the host's PC dispatch leaf). FLAG PC-ABI adapter: the console signature takes
-        // the scheduler's view/GUI IO buffers + the render output buffer and gates on the
-        // module-prepared byte (+949208); this PC drive owns its IO pair and gates on the
-        // Apt bring-up. Called from BrnRendererModule::Render (the PC render thread).
-        void Render();
+        // (the host's PC dispatch leaf), then present the active fullscreen movie
+        // (UpdateAndRenderMovieManager @0x82511240) over the view content, exactly the
+        // console pass order. FLAG PC-ABI adapter: the console signature takes the
+        // scheduler's view/GUI IO buffers + the render output buffer and gates on the
+        // module-prepared byte (+949208); this PC drive owns its IO pair, gates on the
+        // Apt bring-up, and receives the movie presentation surface as the argument.
+        // Called from BrnRendererModule::Render (the PC render thread).
+        void Render(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
+
+        // @ 0x82511240 -- MovieManager::Update + the movie frame draw (the movie pass).
+        void UpdateAndRenderMovieManager(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
 
         static void FlaptSoundTriggerCallback(void* lpUserData,
                                               const char* lpcComponentName,

@@ -1,7 +1,6 @@
 #include "GameSource/Graphics/BrnRendererModule.h"
 #include "pc/gcm/renderengine/device.h"   // renderengine::Device frame bracket
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
-#include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (owns the movie player)
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 
 // Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
@@ -12,12 +11,7 @@
 // the real type, embedded in the module base's DataBuffers - no stub ctor needed.)
 EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 CgsGraphics::BufferedDispatchFrame::BufferedDispatchFrame() {}
-
-// The dispatch-buffer loading-screen command slot (BrnGameMainFlowStates.h): the console
-// Render forwards lpDispatchIn[9828] into LoadingScreenRenderer::AddCommand every frame;
-// the slot is refilled per frame, so a posted command fires once and reads 0 after.
-// Render below consumes + clears it the same way.
-extern s32 gBrnLoadingScreenCommand;
+#include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (the PC presentation draw)
 
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
@@ -144,57 +138,26 @@ void BrnRendererModule::Construct()
 // data, so those passes are data-gated off; Option B reconstructs the part that actually
 // runs - frame begin, the loading-screen foreground overlay, and the present. The gameplay
 // passes are reconstructed incrementally as their subsystems come online.
-void BrnRendererModule::Render()
+void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer)
 {
     if (!renderengine::Device::FrameBegin())
     {
         return;
     }
 
-    // Forward the dispatch-buffer loading-screen command into the renderer - the X360
-    // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)))
-    // and the buffer refill makes the slot edge-triggered (0 = AddCommand's no-op
-    // default), so consume + clear it here.
+    // Forward the dispatch buffer's loading-screen command into the renderer - the X360
+    // Render does exactly this each frame (@0x8240BFA8: AddCommand(*(lpDispatchIn+9828)),
+    // the `lwzx r4, r26, 0x9990` at 0x8240C17C). The command is one-shot: the manager's
+    // end-of-frame Swap re-Constructs each new write buffer, so the slot reads
+    // E_LSC_NONE (AddCommand's no-op default) on the frames between events.
     //
-    // [FLAG PC video gate] The console presents fullscreen videos inside the GUI pass
-    // (over the loading art); the PC movie player draws its quad AFTER the loading-screen
-    // foreground instead, so a SHOW-class command must drop while a video presents (else
-    // the boot logos would play audio-only behind the loading art). The slot is
-    // edge-triggered, so latch the last visibility-class command and re-issue it when the
-    // video ends.
-    {
-        static s32  sliLatchedShowCommand = BrnGame::E_LSC_NONE;
-        static bool slbMovieWasPresenting = false;
-
-        s32 liCommand = gBrnLoadingScreenCommand;
-        gBrnLoadingScreenCommand = BrnGame::E_LSC_NONE;
-        if (liCommand == BrnGame::E_LSC_SHOW || liCommand == BrnGame::E_LSC_HIDE ||
-            liCommand == BrnGame::E_LSC_SHOWSAVELOADBG)
-            sliLatchedShowCommand = liCommand;
-
-        const bool lbMoviePresenting =
-            BrnGui::gpActiveMovieManager != 0 &&
-            BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
-        if (lbMoviePresenting)
-        {
-            if (liCommand == BrnGame::E_LSC_SHOW ||
-                liCommand == BrnGame::E_LSC_SHOWSAVELOADBG)
-                liCommand = BrnGame::E_LSC_NONE;
-            if (!slbMovieWasPresenting && mLoadingScreenRenderer.IsRenderingLoadingScreen())
-                liCommand = BrnGame::E_LSC_HIDE;
-        }
-        else if (slbMovieWasPresenting &&
-                 (sliLatchedShowCommand == BrnGame::E_LSC_SHOW ||
-                  sliLatchedShowCommand == BrnGame::E_LSC_SHOWSAVELOADBG))
-        {
-            liCommand = sliLatchedShowCommand;
-        }
-        slbMovieWasPresenting = lbMoviePresenting;
-
-        if (liCommand != BrnGame::E_LSC_NONE)
-            mLoadingScreenRenderer.AddCommand(
-                static_cast<BrnGame::ELoadingScreenCommand>(liCommand));
-    }
+    // (The old PC video gate died with the movie pass re-home: fullscreen movies now
+    // present inside the GUI pass exactly like the console, and the flow states manage
+    // the loading screen around them through the real 19/20 protocol -- BootLoading::
+    // OnLeave and PostTitleScreenLoad post StopAptLoadingMovie before playing a video.)
+    if (lpDispatchThreadInputBuffer != 0)
+        mLoadingScreenRenderer.AddCommand(
+            lpDispatchThreadInputBuffer->GetLoadingScreenCommand());
 
     // Save/load background layer: in E_LSC_SHOWSAVELOADBG mode the loading screen renders
     // BENEATH the GUI, so the SaveLoadComponent prompt draws over the dimmed loading art.
@@ -206,22 +169,24 @@ void BrnRendererModule::Render()
     // Render (BrnGui::GuiModule::Render @0x825146B8 -> CgsGui::GuiModule::Render
     // @0x8285AF38 -> ViewModule::Render @0x82858810 -> RenderInternal @0x82858AF8 ->
     // AptAux::Render -> the engine render walk), which fills the published Apt command
-    // buffer; the PC dispatch leaf then flushes it to D3D9. Clean no-op until the GUI
-    // module is prepared. This is how BootLegal's Title_Screen02 movie reaches the
-    // screen. [GUI render path]
+    // buffer, then the PC dispatch leaf flushes it to D3D9 and the movie pass presents
+    // the active fullscreen video over it (UpdateAndRenderMovieManager, inside the GUI
+    // pass, exactly the console order). Clean no-op until the GUI module is prepared.
+    // This is how BootLegal's Title_Screen02 movie reaches the screen. [GUI render path]
     if (BrnGui::gpActiveGuiModule != 0)
-        BrnGui::gpActiveGuiModule->Render();
+        BrnGui::gpActiveGuiModule->Render(&mIm2dRenderer);
 
     // (gameplay-render passes here when reconstructed; gated off during the loading screen)
 
     mLoadingScreenRenderer.RenderForeground(&mIm2dRenderer);
 
-    // Full-screen movie (marketing/intro). The X360 presentation owns the screen while
-    // MovieManager is playing; the PC FFmpeg substitute must therefore submit its quad
-    // after the loading-screen foreground, not before it. PostTitleScreenLoad also posts
-    // StopAptLoadingMovie before PlayVideo, so the loading renderer still performs the
-    // original state transition underneath the opaque movie frame. The debug HUD remains
-    // later in the pass, as it is in the ARTIST render tail.
+    // Full-screen movie presentation. FLAG PC-platform: on the X360 the movie frame is
+    // drawn inside the GUI pass (UpdateAndRenderMovieManager) and the XMV presentation
+    // then owns the screen ABOVE the whole 2D frame -- the boot logos play over the
+    // still-latched loading screen (BootVideos @0x82478778 posts no hide; the first 20
+    // is BootLegal::OnEnter's). The PC FFmpeg substitute has no overlay plane, so its
+    // presentation quad draws here, after the loading-screen foreground, to reproduce
+    // that layering. The manager's Update stays in its real GUI-pass home.
     if (BrnGui::gpActiveMovieManager != 0)
     {
         BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
