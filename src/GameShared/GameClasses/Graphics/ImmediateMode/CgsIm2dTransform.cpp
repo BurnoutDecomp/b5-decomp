@@ -50,9 +50,12 @@ namespace CgsGraphics
             CgsDev::Assert::EndAssert();
         }
 
-        // Build the source affine 3x3 from the transform: Right=(mRightUp.x,mRightUp.z),
-        // Up=(mRightUp.y,mRightUp.w), Origin=(mOriginXYZ.x,mOriginXYZ.y); the implicit
-        // homogeneous column is (0,0,1). @0x823DB4E0..0x823DB534.
+        // Build the source affine 3x3 from the transform. mRightUp lanes are
+        // {m00, m10, m01, m11} (right=(x,y), up=(z,w) -- the serialised flapt/apt raw
+        // order, ground-truthed via the FLAPTHUD rotation keyframes; see
+        // BrnFlaptMovieClipInstance.cpp). Row0 = (m00, m01) = (x, z),
+        // Row1 = (m10, m11) = (y, w), Origin row2; the implicit homogeneous column is
+        // (0,0,1). @0x823DB4E0..0x823DB534.
         Matrix33Template<float> lTransform;
         lTransform.mRow0X = mRightUp.x;
         lTransform.mRow0Y = mRightUp.z;
@@ -87,10 +90,10 @@ namespace CgsGraphics
         // Store the product's basis rows back into mRightUp (16B @+0x10) and its origin row
         // into mOriginXYZ (16B @+0x00), preserving mOriginXYZ.z and clearing the 4th origin
         // lane. @0x823DB5F0..0x823DB628 (stvx128 to r30=this+0x10 and r31=this).
-        mRightUp.x = lSrc.mRow0X;
-        mRightUp.y = lSrc.mRow0Y;
-        mRightUp.z = lSrc.mRow1X;
-        mRightUp.w = lSrc.mRow1Y;
+        mRightUp.x = lSrc.mRow0X;   // m00 (right.x)
+        mRightUp.y = lSrc.mRow1X;   // m10 (right.y)
+        mRightUp.z = lSrc.mRow0Y;   // m01 (up.x)
+        mRightUp.w = lSrc.mRow1Y;   // m11 (up.y)
 
         mOriginXYZ.x = lSrc.mRow2X;
         mOriginXYZ.y = lSrc.mRow2Y;
