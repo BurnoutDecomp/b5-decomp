@@ -271,13 +271,18 @@ namespace CgsGraphics
         {
             laTransformed[luVertex] = lpVertices[luVertex];
 
+            // mRightUp lanes are {m00, m10, m01, m11} (right = (.x,.y), up = (.z,.w)) -- the
+            // serialised flapt/apt raw {a,b,c,d} order, matching the Apt dispatch fold and
+            // ComposeDrawTransform (see BrnFlaptMovieClipInstance.cpp: ground-truthed against
+            // the FLAPTHUD save-icon spin keyframes; the transposed reading reversed every
+            // flapt rotation).
             const f32 lfNdcX =
                 lrTransform.mOriginXYZ.x +
                 lrTransform.mRightUp.x * lpVertices[luVertex].mv2Pos.x +
-                lrTransform.mRightUp.y * lpVertices[luVertex].mv2Pos.y;
+                lrTransform.mRightUp.z * lpVertices[luVertex].mv2Pos.y;
             const f32 lfNdcY =
                 lrTransform.mOriginXYZ.y +
-                lrTransform.mRightUp.z * lpVertices[luVertex].mv2Pos.x +
+                lrTransform.mRightUp.y * lpVertices[luVertex].mv2Pos.x +
                 lrTransform.mRightUp.w * lpVertices[luVertex].mv2Pos.y;
 
             // FLAG PC-platform leaf: ImRenderer::Render consumes the engine's

@@ -22,24 +22,26 @@ namespace CgsGui
 {
     // -------------------------------------------------------------------------------------
     // The style tags Prepare searches for in the (lowercased) font name, and the gradient
-    // colour tables it stamps when a tag fires. The tag STRINGS are not byte-recoverable from
-    // the accessor rodata (the X360 holds them as off_82F33174[0] .. off_82F33198[0]); their
-    // NAMES are the PS3 DWARF symbols (CgsGui::KC_*). They are searched as lowercase substrings
-    // of the lowercased font name, so the literals below are the lowercase forms the matching
-    // font-name tags use.  // FLAG: tag literals are reconstructed from the DWARF symbol names;
-    // the exact substrings the artists embedded are not in the binary's accessor rodata.
+    // colour tables it stamps when a tag fires. The tag STRINGS are the REAL rodata literals,
+    // recovered from the X360 pointer table off_82F33174..off_82F33198 (idat 9.3 batch dump of
+    // the decrypted ARTIST XEX, 2026-07-20): "grad" / "drop" / "emb" / "cond" / "bw" plus the
+    // full gradient-range names. The names are the PS3 DWARF symbols (CgsGui::KC_*); note the
+    // literals are ABBREVIATED substrings, so e.g. the font "B5EAConDisS" ("Condensed
+    // Display") matches "cond" -- the earlier guessed full words ("condensed" etc.) never
+    // matched the shipped font names, which left the condensed 0.85 spacing unapplied and the
+    // autosave-prompt text ~17.6% too wide vs the console (Xenia x_03 pixel-measured).
     namespace
     {
-        const char* const KC_GRADIENT_FONT_STRING            = "gradient";
-        const char* const KC_GRADIENT_RANGE_STRING_ORANGE    = "orange";
-        const char* const KC_GRADIENT_RANGE_STRING_GREENBLUE = "greenblue";
-        const char* const KC_GRADIENT_RANGE_STRING_RED       = "red";
-        const char* const KC_GRADIENT_RANGE_STRING_GOLD      = "gold";
-        const char* const KC_GRADIENT_RANGE_STRING_SILVER    = "silver";
-        const char* const KC_GRADIENT_RANGE_STRING_BLUEWHITE = "bluewhite";
-        const char* const KC_DROPSHADOW_FONT_STRING          = "dropshadow";
-        const char* const KC_EMBOSSED_FONT_STRING            = "embossed";
-        const char* const KC_FONT_SPACING_STRING_CONDENSED   = "condensed";
+        const char* const KC_GRADIENT_FONT_STRING            = "grad";        // off_82F33174 -> 0x820E0550
+        const char* const KC_GRADIENT_RANGE_STRING_ORANGE    = "orange";      // off_82F33184 -> 0x820E0534
+        const char* const KC_GRADIENT_RANGE_STRING_GREENBLUE = "greenblue";   // off_82F33188 -> 0x820E0528
+        const char* const KC_GRADIENT_RANGE_STRING_RED       = "red";         // off_82F3318C -> 0x8205CF34
+        const char* const KC_GRADIENT_RANGE_STRING_GOLD      = "gold";        // off_82F33190 -> 0x82048978
+        const char* const KC_GRADIENT_RANGE_STRING_SILVER    = "silver";      // off_82F33194 -> 0x82048998
+        const char* const KC_GRADIENT_RANGE_STRING_BLUEWHITE = "bw";          // off_82F33198 -> 0x820E0524
+        const char* const KC_DROPSHADOW_FONT_STRING          = "drop";        // off_82F33178 -> 0x820E0548
+        const char* const KC_EMBOSSED_FONT_STRING            = "emb";         // off_82F3317C -> 0x820E0544
+        const char* const KC_FONT_SPACING_STRING_CONDENSED   = "cond";        // off_82F33180 -> 0x820E053C
 
         // Gradient colour pairs {top, bottom}, packed RGBA8 -- read verbatim from the X360
         // ARTIST rodata (dword_82F33298 .. dword_82F332C4).

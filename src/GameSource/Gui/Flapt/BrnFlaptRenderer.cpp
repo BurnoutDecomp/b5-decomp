@@ -291,10 +291,11 @@ void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
 // The X360 packs this with VMX: it scales the rwmath unit basis vectors by the two
 // reciprocal half-extents (1/640 = 0.0015625, -1/360 = -0.0027777778) and permutes the
 // lanes (vperm against the KV_IM2DTRANSFORMPERMUTECONST_* tables) into the transform's
-// mRightUp row, which interleaves the right/up basis as {right.x, up.x, right.y, up.y}.
-// TransformByAspectRatio reads the basis back exactly that way (Right=(mRightUp.x,
-// mRightUp.z), Up=(mRightUp.y, mRightUp.w)). De-optimised here to the equivalent
-// named-component writes (this is the inlined CgsGraphics::Im2dTransform::Construct).
+// mRightUp row, which interleaves the right/up basis as {right.x, right.y, up.x, up.y}
+// == the serialised flapt/apt {a,b,c,d} raw order. (The screen transform is DIAGONAL, so
+// the vperm lanes cannot distinguish the interleave; the rotation-bearing FLAPTHUD
+// keyframe data is the ground truth -- see ComposeDrawTransform's note.) De-optimised
+// here to the equivalent named-component writes (the inlined Im2dTransform::Construct).
 void FlaptRenderer::Construct(FlaptRenderSet* lpImRenderSet, void* lpTextRenderer,
                               void* lpLanguageManager, const void* lpFonts)
 {
@@ -330,12 +331,12 @@ void FlaptRenderer::Construct(FlaptRenderSet* lpImRenderSet, void* lpTextRendere
     lScreenXForm.mOriginXYZ.z =  0.0f;
     lScreenXForm.mOriginXYZ.w =  0.0f;
 
-    // Right/Up basis interleaved as {right.x, up.x, right.y, up.y}: a pure scale, so the
-    // off-diagonal lanes (up.x, right.y) are zero.
-    lScreenXForm.mRightUp.x = KF_NDC_PER_HALF_WIDTH;    // right.x
-    lScreenXForm.mRightUp.y = 0.0f;                     // up.x
-    lScreenXForm.mRightUp.z = 0.0f;                     // right.y
-    lScreenXForm.mRightUp.w = KF_NDC_PER_HALF_HEIGHT;   // up.y
+    // Right/Up basis interleaved as {right.x, right.y, up.x, up.y}: a pure scale, so the
+    // off-diagonal lanes (right.y, up.x) are zero.
+    lScreenXForm.mRightUp.x = KF_NDC_PER_HALF_WIDTH;    // right.x (m00)
+    lScreenXForm.mRightUp.y = 0.0f;                     // right.y (m10)
+    lScreenXForm.mRightUp.z = 0.0f;                     // up.x    (m01)
+    lScreenXForm.mRightUp.w = KF_NDC_PER_HALF_HEIGHT;   // up.y    (m11)
 
     // Identity colour transform.
     lScreenXForm.mColourShift.x = 0.0f;

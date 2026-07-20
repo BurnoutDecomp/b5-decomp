@@ -37,33 +37,38 @@ namespace
     // transform (scale multiplies, shift adds). Written as named-component scalar math per
     // the project's x64 semantic-parity-by-named-members rule.
     //
-    // The affine convention is the one CgsIm2d actually applies (CgsIm2d.cpp:275-281):
-    //   out.x = mOriginXYZ.x + mRightUp.x*p.x + mRightUp.y*p.y
-    //   out.y = mOriginXYZ.y + mRightUp.z*p.x + mRightUp.w*p.y
-    // so the world transform (parent(child(p))) gives the products below. Verified against
-    // the authored identity transform (mRightUp = 1,0,0,1): identity child -> parent,
-    // identity parent -> child.
+    // mRightUp lane order: {m00, m10, m01, m11} -- the SERIALISED flapt/apt 2x2 {a,b,c,d}
+    // raw (right basis = (.x,.y), up basis = (.z,.w)), the same packing the Apt path uses
+    // (AptCallbackRender::SetVertexMatrix + the dispatch fold). Point fold (CgsIm2d.cpp):
+    //   out.x = mOriginXYZ.x + mRightUp.x*p.x + mRightUp.z*p.y
+    //   out.y = mOriginXYZ.y + mRightUp.y*p.x + mRightUp.w*p.y
+    // GROUND-TRUTHED via the FLAPTHUD save-icon spin keyframes (2026-07-20): the serialised
+    // lanes are byte-identical to the GUIAPT B5SAVEICONCOMPONENT apt matrices ({a,b,c,d} SWF
+    // order, +12.3 deg/frame CLOCKWISE); the earlier transposed reading ({m00,m01,m10,m11},
+    // inferred from the diagonal-only screen-transform vperm, which cannot distinguish the
+    // two) spun every flapt rotation BACKWARDS while leaving axis-aligned content intact.
     void ComposeDrawTransform(FlaptRenderer* lpRenderer,
                               const CgsGraphics::Im2dTransform& lrLocal)
     {
         const CgsGraphics::Im2dTransform& lrParent = lpRenderer->maTransformStack.Peek();
         CgsGraphics::Im2dTransform* const lpWorld  = lpRenderer->maTransformStack.Grow();
 
-        // Affine basis: world 2x2 = parent 2x2 * child 2x2.
+        // Affine basis: world 2x2 = parent 2x2 * child 2x2 (column-vector convention,
+        // M = [x z; y w]).
         lpWorld->mRightUp.x = lrParent.mRightUp.x * lrLocal.mRightUp.x
-                            + lrParent.mRightUp.y * lrLocal.mRightUp.z;
-        lpWorld->mRightUp.y = lrParent.mRightUp.x * lrLocal.mRightUp.y
-                            + lrParent.mRightUp.y * lrLocal.mRightUp.w;
-        lpWorld->mRightUp.z = lrParent.mRightUp.z * lrLocal.mRightUp.x
-                            + lrParent.mRightUp.w * lrLocal.mRightUp.z;
-        lpWorld->mRightUp.w = lrParent.mRightUp.z * lrLocal.mRightUp.y
+                            + lrParent.mRightUp.z * lrLocal.mRightUp.y;
+        lpWorld->mRightUp.y = lrParent.mRightUp.y * lrLocal.mRightUp.x
+                            + lrParent.mRightUp.w * lrLocal.mRightUp.y;
+        lpWorld->mRightUp.z = lrParent.mRightUp.x * lrLocal.mRightUp.z
+                            + lrParent.mRightUp.z * lrLocal.mRightUp.w;
+        lpWorld->mRightUp.w = lrParent.mRightUp.y * lrLocal.mRightUp.z
                             + lrParent.mRightUp.w * lrLocal.mRightUp.w;
 
         // Translation: world origin = parent 2x2 * child origin + parent origin.
         lpWorld->mOriginXYZ.x = lrParent.mRightUp.x * lrLocal.mOriginXYZ.x
-                              + lrParent.mRightUp.y * lrLocal.mOriginXYZ.y
+                              + lrParent.mRightUp.z * lrLocal.mOriginXYZ.y
                               + lrParent.mOriginXYZ.x;
-        lpWorld->mOriginXYZ.y = lrParent.mRightUp.z * lrLocal.mOriginXYZ.x
+        lpWorld->mOriginXYZ.y = lrParent.mRightUp.y * lrLocal.mOriginXYZ.x
                               + lrParent.mRightUp.w * lrLocal.mOriginXYZ.y
                               + lrParent.mOriginXYZ.y;
         lpWorld->mOriginXYZ.z = lrParent.mOriginXYZ.z;   // 2D depth inherited from parent
