@@ -21,6 +21,11 @@ namespace
     u32  gu32LastMonitorTick = 0;
     bool gbMonitorTickValid  = false;
 
+    // [PC presentation leaf] the movie screen-ownership linger (see the movie block in
+    // Render): tick of the last frame the MovieManager's presentation cycle was active.
+    u32  gu32LastMoviePresentTick = 0;
+    bool gbMoviePresentTickValid  = false;
+
     // Submit one solid-coloured quad (4-vertex triangle strip) through the Im2d, in 1280x720 logical px.
     void EmitColouredQuad(CgsGraphics::Im2d* lpIm2d, f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, CgsGraphics::RGBA8 lColour)
     {
@@ -189,6 +194,35 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // that layering. The manager's Update stays in its real GUI-pass home.
     if (BrnGui::gpActiveMovieManager != 0)
     {
+        // The XMV presentation owns the screen for the WHOLE video cycle, not just the
+        // frames a picture is up: the console shows BLACK between the boot logos (player
+        // teardown + the 10+10-frame memory-return delays before the next video is
+        // queued) and across each crossfade tail -- never the latched loading screen.
+        // The PC stand-in reproduces that ownership with an opaque black underlay while
+        // the manager's presentation cycle is active (IsMoviePresentationActive), held
+        // for a short linger past the cycle's end to cover the event-queue hops between
+        // one video's finish-report and the next play command (logo -> logo) or the
+        // title state's hide/589-overlay takeover (last logo -> BF_LEGAL).
+        const bool lbPresenting = BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
+        const u32  lu32PresentNow  = CgsSystem::GetSystemTimerBaseTime();
+        const u32  lu32PresentFreq = CgsSystem::GetSystemTimerFrequency();
+        if (lbPresenting)
+        {
+            gu32LastMoviePresentTick = lu32PresentNow;
+            gbMoviePresentTickValid  = true;
+        }
+        const bool lbOwnsScreen = lbPresenting ||
+            (gbMoviePresentTickValid && lu32PresentFreq != 0u &&
+             (lu32PresentNow - gu32LastMoviePresentTick) < lu32PresentFreq / 4u);
+        if (lbOwnsScreen)
+        {
+            const CgsGraphics::RGBA8 KC_MOVIE_BLACK = { 0, 0, 0, 255 };
+            mIm2dRenderer.BeginRendering();
+            mIm2dRenderer.SetState(static_cast<const CgsGraphics::BlendState*>(nullptr));
+            mIm2dRenderer.SetTexture(nullptr);   // untextured -> solid vertex colour
+            EmitColouredQuad(&mIm2dRenderer, 0.0f, 0.0f, 1280.0f, 720.0f, KC_MOVIE_BLACK);
+            mIm2dRenderer.EndRendering();
+        }
         BrnGui::gpActiveMovieManager->Render(&mIm2dRenderer);
     }
 

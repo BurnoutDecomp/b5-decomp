@@ -246,6 +246,16 @@ namespace BrnGame
             mbKillBlackOverlayWhenDone = true;
             break;
         case E_LSC_BLACKFADEIN:
+            // [PC timing seam] BF_LEGAL posts the hide (20) and this reveal (589)
+            // back-to-back on the PC (the title resources resolve synchronously); the
+            // console's async load gives the 0.5s hide fade time to finish in between.
+            // The overlay suppresses Render -- and with it the fade's advance -- while
+            // visible, so a still-pending hide would freeze mid-fade and pop the whole
+            // loading screen back over the title animation for its fade tail once the
+            // reveal completes. The overlay starts opaque (1.2 -> alpha clamp 1.0), so
+            // completing the pending hide here is invisible and lands the console-
+            // observed outcome (nothing left under the reveal).
+            if (mbHiding) { mbHiding = false; mbVisible = false; mfFade = 0.0f; }
             mfBlackOverlayFade = 1.2f; mbBlackOverlayVisible = true;
             mbBlackOverlayHiding = true; mbKillBlackOverlayWhenDone = false;
             break;
