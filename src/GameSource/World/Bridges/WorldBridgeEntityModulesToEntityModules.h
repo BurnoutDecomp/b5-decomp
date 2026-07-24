@@ -21,6 +21,9 @@
 // BridgeRaceCarModuleToWorldModule_PreScene DOES read through it (it writes the player index +
 // per-car rival markers into WorldModule members at their X360 byte offsets, cited in the .cpp);
 // the other two never dereference it.
+namespace BrnTraffic { namespace BrnTrafficIO { class InputBuffer_PostScene; } }
+namespace BrnWorld { namespace RaceCarEntityModuleIO { class OutputBuffer_PostScene; } }
+
 namespace WorldModule
 {
     // @ 0x827A52B0 (WorldBridgeEntityModulesToEntityModules.cpp:88; DWARF BrnWorldModule.h:473) --
@@ -34,6 +37,26 @@ namespace WorldModule
     // @ 0x827A51F0 (WorldBridgeEntityModulesToEntityModules.cpp:69; DWARF BrnWorldModule.h:566) --
     // latch the traffic module's post-scene traffic->race-car interface into the race-car
     // pre-physics input.
+    // ---- ADDITIVE DECLS (attested callers in WorldModule::EntityModulePrePhysicsUpdate
+    //      @0x827BD5B8; ledger-'reviewed' PHANTOMS. Reconstruct from @0x827A5270
+    //      (race car -> traffic) and @0x827AEA70 (prop -> traffic). ----
+    // PHANTOM (caller in EntityModulePostSceneUpdate @0x827C3C58) -- reconstruct
+    // from @0x827AD828 (race-car post-scene state -> traffic post-scene input).
+    void BridgeRaceCarModuleToTrafficModule_PostScene(
+        void* lpWorldModule,
+        BrnTraffic::BrnTrafficIO::InputBuffer_PostScene* lpTrafficInputBuffer_PostScene,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene* lpRaceCarOutputBuffer_PostScene);
+
+    void BridgeRaceCarModuleToTrafficModule_PrePhysics(
+        void* lpWorldModule,
+        BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics* lpTrafficInputBuffer_PrePhysics,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpRaceCarOutputBuffer_PrePhysics);
+
+    void BridgePropModuleToTrafficModule_PrePhysics(
+        void* lpWorldModule,
+        BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics* lpTrafficInputBuffer_PrePhysics,
+        const BrnWorld::PropEntityIO::OutputBuffer_PrePhysics* lpPropOutputBuffer_PrePhysics);
+
     void BridgeTrafficToRaceCar_PrePhysics(
         void* lpWorldModule,
         BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpRaceCarInputBuffer_PrePhysics,

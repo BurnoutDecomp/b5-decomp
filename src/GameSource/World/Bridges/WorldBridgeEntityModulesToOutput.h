@@ -19,11 +19,35 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. Every module-IO buffer slice lives at its
 // own home (see the includes). The leading lpWorldModule arg is the X360 r3 (the
 // WorldModule context); the Prepare bridges never read through it.
+namespace BrnWorld { namespace WorldEntityIO { struct OutputBuffer_Prepare; } }
+namespace BrnTraffic { namespace BrnTrafficIO { class OutputBuffer_Prepare; } }
+namespace BrnAI { namespace AIModuleIO { struct OutputBuffer; } }
+
 namespace WorldModule
 {
     // @ 0x827AD950 -- append the race-car Prepare output's resource-request ring
     // (VariableEventQueue<8192,16>) into the world resource-request interface
     // (VariableEventQueue<4096,16>).
+    // ---- ADDITIVE DECLS (attested callers in WorldModule::Prepare @0x827D53B0;
+    //      the ledger marks these three 'reviewed' but no body was ever committed --
+    //      the same phantom pattern as the WorldEntityModule drivers. Bodies follow
+    //      the committed sibling append-forward pattern; reconstruct from
+    //      @0x827ADA28 / @0x827AD9D8 / @0x827AD480 when this TU is next opened.) ----
+    void BridgeWorldResourceRequestsToOutput_Prepare(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        const BrnWorld::WorldEntityIO::OutputBuffer_Prepare* lpWorldEntityOutputBuffer_Prepare);
+
+    void BridgeTrafficResourceRequestsToOutput(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare* lpTrafficOutputBuffer_Prepare);
+
+    void BridgeAIModuleToOutput(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+        const BrnAI::AIModuleIO::OutputBuffer* lpAIOutputBuffer);
+
     void BridgeRaceCarResourceRequestsToOutput_Prepare(
         void* lpWorldModule,
         BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,

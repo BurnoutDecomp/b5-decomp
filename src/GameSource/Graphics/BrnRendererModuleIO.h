@@ -38,12 +38,16 @@ namespace CgsGraphics
 }
 class BrnEffectsFrame;
 class BrnShaderConstantsFrame;
-namespace BrnBlobbyShadowManager { class BrnBlobbyShadowBuffer; }
-// BrnCoronaManager is a CLASS (GameSource/Graphics/BrnCoronaManager.h), not a namespace -- only
-// BrnSubmissionInterface* (a nested type) is used here, by pointer, so it is forward-declared as a
-// nested class inside a partial BrnCoronaManager declaration (AGENTS.md forward-declaration
-// exception (b): pointer-only use, avoids pulling in the full corona-manager header cascade).
-class BrnCoronaManager { public: class BrnSubmissionInterface; };
+// RECONCILED 2026-07-24 (ODR fix): BrnBlobbyShadowBuffer and BrnSubmissionInterface
+// are NESTED classes of the real BrnBlobbyShadowManager / BrnCoronaManager CLASSES.
+// A nested type cannot be forward-declared without (re)declaring its enclosing class,
+// so the previous `namespace BrnBlobbyShadowManager {...}` + partial
+// `class BrnCoronaManager { ... };` spellings collided with the real definitions
+// (C2869 / C2011) in every TU that saw both -- which blocked
+// WorldModule::GenerateFrustumQueries. Per AGENTS.md ("Reconstruct includes; don't
+// fake them"), include the real homes instead of re-declaring the enclosing types.
+#include "GameSource/Graphics/BrnBlobbyShadowManager.h"   // ::BrnBlobbyShadowBuffer
+#include "GameSource/Graphics/BrnCoronaManager.h"         // ::BrnSubmissionInterface
 namespace CgsMemory              { class LinearMalloc; }
 
 namespace RendererIO

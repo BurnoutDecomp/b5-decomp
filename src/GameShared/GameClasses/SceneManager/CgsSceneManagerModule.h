@@ -61,6 +61,8 @@
 namespace rw { struct IResourceAllocator; }
 namespace CgsMemory { class LinearMalloc; }
 
+namespace CgsModule { struct IOBufferStack; }
+
 namespace CgsSceneManager
 {
     // Max in-flight frustum-test job queries the module tracks (DWARF
@@ -100,6 +102,34 @@ namespace CgsSceneManager
     class SceneManagerModule : public CgsModule::ModuleSingleBuffered
     {
     public:
+        // ADDITIVE (WorldModule::ExternalSceneQueriesUpdate @0x827B06C8 forwards to
+        // this virtual -- X360 vtbl slot +68). Declaration-only; body with its own TU.
+        void ExternalSceneQueriesUpdate();
+
+        // ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 hands the staged
+        // frustum-test queries to the job system through this). Declaration-only.
+        void ProcessFrustumTestJobRequests( CgsModule::IOBufferStack* lpInputBufferStack,
+                                            CgsModule::IOBufferStack* lpOutputBufferStack,
+                                            SceneManagerIO::InputBuffer_Query* lpQueryInput,
+                                            SceneManagerIO::OutputBuffer* lpQueryOutput );
+
+        // ADDITIVE (X360 vtbl+68; the entity-module spines run one scene-query
+        // round-trip per module through this). Declaration-only; body with this
+        // module's own TU.
+        void UpdateQueries( CgsModule::IOBufferStack* lpInputBufferStack,
+                            CgsModule::IOBufferStack* lpOutputBufferStack,
+                            SceneManagerIO::InputBuffer_Query* lpQueryInput,
+                            SceneManagerIO::OutputBuffer* lpQueryOutput );
+
+        // ADDITIVE (WorldModule::Prepare @0x827D53B0 drives the scene module once per
+        // stage through this X360 vtbl+64 entry: stacks + the scene in/out buffers +
+        // an is-prepare flag). Declaration-only; body with this module's own TU.
+        bool Update( CgsModule::IOBufferStack* lpInputBufferStack,
+                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                     SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                     SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+                     bool lbPrepare );
+
         // Staged prepare progression (DWARF CgsSceneManagerModule.h:180). Construct
         // leaves the module at START; Prepare advances one stage per resumable call.
         enum ESceneManagerPrepareStage
@@ -156,10 +186,14 @@ namespace CgsSceneManager
 
         // @ 0x828C7838 -- gather the loose-octree frustum-test job results into the
         // scene output event queue.
+        // RECONCILED 2026-07-24: the X360 callers (WorldModule::GenerateDispatchLists
+        // @0x827D1CE8 / GenerateFrustumQueries @0x827DADF8) stack-allocate the third
+        // argument as an InputBuffer_Query (CreateIOBuffer<InputBuffer_Query>), so the
+        // query-input parameter is typed as such (was OutputBuffer*).
         void ProcessFrustumTestJobResults(SceneManagerIO::IOBufferStack* lpInputBufferStack,
                                           SceneManagerIO::IOBufferStack* lpOutputBufferStack,
-                                          SceneManagerIO::OutputBuffer*  lpSceneInputBuffer,
-                                          SceneManagerIO::OutputBuffer*  lpSceneOutputBuffer);
+                                          SceneManagerIO::InputBuffer_Query* lpQueryInputBuffer,
+                                          SceneManagerIO::OutputBuffer*  lpQueryOutputBuffer);
 
         // @ 0x828C7500 -- finish the triangle-cache update for this frame.
         void EndUpdateTriangleCache(SceneManagerIO::IOBufferStack* lpInputBufferStack,

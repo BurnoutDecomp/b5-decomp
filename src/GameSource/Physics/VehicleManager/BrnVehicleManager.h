@@ -18,6 +18,7 @@
 // ones the CheckForAllTypesOfImpacts X360 asm reads (a2+92/+96/+80/+81).
 
 #include "types.hpp"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
 #include <cstddef>                                                // offsetof (layout asserts)
 #include "BrnCommonTypes.h"                                       // Vector3, VecFloat, EntityId, Matrix44Affine
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
@@ -53,34 +54,20 @@ namespace Vehicle
     // a secondary "remapped id" sub-queue at sink+1872, and two driver-feedback bytes at sink+27648/9
     // by raw offset. Here those are exposed by NAME (accessors / declare-only methods) rather than by
     // reproducing the full ~27KB byte layout; the method bodies belong to the interface's own TU.
-    struct VehicleManagerOutputInterface
-    {
-        // sink+26096: the IO event queue the crash record + takedown/grind events push onto.
-        // Returned by reference so the bodies can call .AddEvent / .AddEventSafe by name.
-        CgsModule::VariableEventQueue<1536, 16>& GetEventQueue();
+    // RECONCILE 2026-07-24 (WorldModule fleet embed): the canonical
+    // VehicleManagerOutputInterface home is SharedIO/BrnVehicleOutputInterface.h
+    // (DWARF :82, full member layout). The declare-only shell that lived here was
+    // retired; its method surface moved to the canonical struct additively.
 
-        // The cross-module "a race car crashed" event (X360 AddRaceCarCrashEvent). FLAG: the X360
-        // call passes nine positional args (a leading 0, the victim entity id, a byte-offset/flag, a
-        // local-vs-remote flag, an optional crash matrix, the was-crash-state-1 bool, a 0, and the
-        // splatted crash position). The load-bearing args are kept; the rest are MODELLED as a single
-        // packed call. Declare-only -- bodied by the interface's own TU.
-        void AddRaceCarCrashEvent(EntityId lVictimEntityId,
-                                  bool lbLocalPhysicalCrash,
-                                  const Matrix44Affine& lCrashMatrix,
-                                  bool lbWasInCrashState1,
-                                  Vector3 lvCrashPosition);
-
-        // sink+1872: the secondary "remapped entity id" sub-event the type-2-id path fires. Declare-only.
-        void AddRemappedEntityIdEvent(u32 luRemappedActiveRaceCarIndex);
-
-        // sink+27648 / sink+27649: the two driver-feedback bytes HandleRaceCarRaceCarContact OR-sets
-        // when a takedown is scored (the asm `*(a32+27648) |= ...; *(a32+27649) = ...`). Declare-only.
-        void FlagTakedownScoredForDriver(bool lbVictimIsHighSlot);
-    };
 
     class VehicleManager
     {
     public:
+        // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage-8 success path reads the
+        // surface-property table once the world entity module prepared). Static on the
+        // X360 (a global manager pair). Declaration-only; body with this manager's TU.
+        static void ReadSurfaceProperties();
+
         // The per-contact working set the impact classifiers read/populate. Verbatim DWARF
         // layout (BrnVehicleManager.h:763). Pointer members use the forward-declared collaborators.
         struct RaceCarResponseInfo

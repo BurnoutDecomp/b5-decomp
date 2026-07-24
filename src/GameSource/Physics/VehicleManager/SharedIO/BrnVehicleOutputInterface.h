@@ -114,6 +114,32 @@ namespace Vehicle
     // ------------------------------------------------------------------------
     struct alignas(16) VehicleManagerOutputInterface
     {
+        // ---- ADDITIVE (moved 2026-07-24 from the retired BrnVehicleManager.h shell;
+        //      declare-only surface, bodied by this interface's own TU) ----
+
+        // sink+26096: the IO event queue the crash record + takedown/grind events push onto.
+        // Returned by reference so the bodies can call .AddEvent / .AddEventSafe by name.
+        CgsModule::VariableEventQueue<1536, 16>& GetEventQueue();
+
+        // The cross-module "a race car crashed" event (X360 AddRaceCarCrashEvent). FLAG: the X360
+        // call passes nine positional args (a leading 0, the victim entity id, a byte-offset/flag, a
+        // local-vs-remote flag, an optional crash matrix, the was-crash-state-1 bool, a 0, and the
+        // splatted crash position). The load-bearing args are kept; the rest are MODELLED as a single
+        // packed call. Declare-only -- bodied by the interface's own TU.
+        void AddRaceCarCrashEvent(EntityId lVictimEntityId,
+                                  bool lbLocalPhysicalCrash,
+                                  const Matrix44Affine& lCrashMatrix,
+                                  bool lbWasInCrashState1,
+                                  Vector3 lvCrashPosition);
+
+        // sink+1872: the secondary "remapped entity id" sub-event the type-2-id path fires. Declare-only.
+        void AddRemappedEntityIdEvent(u32 luRemappedActiveRaceCarIndex);
+
+        // sink+27648 / sink+27649: the two driver-feedback bytes HandleRaceCarRaceCarContact OR-sets
+        // when a takedown is scored (the asm `*(a32+27648) |= ...; *(a32+27649) = ...`). Declare-only.
+        void FlagTakedownScoredForDriver(bool lbVictimIsHighSlot);
+    
+
         typedef CgsModule::EventQueue<TrafficCrashedEvent, 20> TrafficCrashedEventQueue;      // :55
         typedef CgsModule::EventQueue<TrafficSlammedEvent, 20> TrafficSlammedEventQueue;      // :56
         typedef CgsModule::EventQueue<TrafficCrashedEvent, 10> FineTrafficCrashedEventQueue;  // :57

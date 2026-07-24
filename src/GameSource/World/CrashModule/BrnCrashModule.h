@@ -35,7 +35,8 @@
 // types; they are documented rather than static_asserted because the base RWMutex/DataBuffer
 // sub-object widths are platform ABI dependent.
 #include "types.hpp"
-#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"                 // CgsModule::ModuleSingleBuffered
+#include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"
+#include "GameShared/GameClasses/Module/CgsIOBuffer.h"                          // CgsModule::IOBuffer                 // CgsModule::ModuleSingleBuffered
 #include "GameShared/GameClasses/Containers/CgsArray.h"                            // Array<T,N>
 #include "GameShared/GameClasses/Containers/CgsSet.h"                              // CgsContainers::Set<T,N>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"                     // CgsContainers::FastBitArray<N>
@@ -56,6 +57,23 @@ namespace BrnWorld
     const u32 KU_MAX_FROZEN_TRAFFIC_VEHICLES = 160;
 
     // BrnCrashModule.h:182 -- the world's crash module (single-buffered).
+    // ------------------------------------------------------------------------
+    // BrnWorld::CrashModuleIO::OutputBuffer_PostScene -- the crash module's
+    // post-scene output the entity-module spines bridge from
+    // (WorldModule::EntityModulePostSceneUpdate @0x827C3C58).
+    //
+    // FLAG (minimal-complete slice, size NOT X360-attested): the real aggregate is
+    // the crash event queues (CrashIO::* element homes are committed); that layout
+    // belongs to the crash IO TU and is NOT recovered here. GROW when that TU lands.
+    // ------------------------------------------------------------------------
+    namespace CrashModuleIO
+    {
+        struct OutputBuffer_PostScene : public CgsModule::IOBuffer
+        {
+            u8 maDeferredPayload[16];   // deferred interior (see FLAG)
+        };
+    }
+
     struct CrashModule : public CgsModule::ModuleSingleBuffered
     {
         // BrnCrashModule.h:254 -- "no crash" sentinel returned by the Find* searches (== -1 as u32).

@@ -19,9 +19,33 @@
 // (the WorldModule context); these bridges never read through it. The module-IO buffer slices
 // live at their own homes (see the includes). Each X360 body tail-forwards the merge call's
 // result; the logical return type is void.
+namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Query; } }
+namespace BrnWorld { namespace RaceCarEntityModuleIO { class OutputBuffer_PostScene; }
+                     namespace TriggerEntityModuleIO { class OutputBuffer_PostScene; } }
+namespace BrnTraffic { namespace BrnTrafficIO { class OutputBuffer_PostScene; } }
+
 namespace WorldModule
 {
     // @ 0x827AB410
+    // ---- ADDITIVE DECLS (callers in WorldModule::EntityModulePostSceneUpdate
+    //      @0x827C3C58; PHANTOMS -- reconstruct from @0x827ADDC8 / @0x827ADE70 /
+    //      @0x827A8B70: each stages the module's scene queries into the scene
+    //      query input buffer. ----
+    void BridgeRaceCarModuleToSceneModule_PostScene(
+        void* lpWorldModule,
+        CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneQueryInput,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene* lpRaceCarOutputBuffer_PostScene);
+
+    void BridgeTrafficModuleToSceneModule_PostScene(
+        void* lpWorldModule,
+        CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneQueryInput,
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene* lpTrafficOutputBuffer_PostScene);
+
+    void BridgeTriggerModuleToSceneModule_PostScene(
+        void* lpWorldModule,
+        CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneQueryInput,
+        const BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene* lpTriggerOutputBuffer_PostScene);
+
     void BridgePropModuleToPhysicsModule_Prepare(
         void* lpWorldModule,
         BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,

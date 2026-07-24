@@ -33,8 +33,13 @@
 
 namespace BrnPhysics { namespace Props { class PropPhysicsDataHeader; } }
 
+namespace CgsModule { struct IOBufferStack; }
+namespace BrnWorld { namespace PropEntityIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; struct InputBuffer_Dispatch; } }
+
 namespace BrnWorld
 {
+struct ShaderLodInfo;
+
     // Partial PropEntityModule -- ONLY the members the prop debug overlay reaches. The
     // padding preserves the X360 offsets of the named members; the full layout (base
     // CgsModule::ModuleSingleBuffered, the IO buffers, the streaming state machine, the
@@ -42,6 +47,52 @@ namespace BrnWorld
     class PropEntityModule
     {
     public:
+        // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
+        //      virtual-dispatches the fleet lifecycle) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Construct();
+        // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Destruct();
+        // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Release();
+
+        // ---- ADDITIVE (WorldModule::EntityModulePrePhysicsUpdate @0x827BD5B8,
+        //      X360 vtbl+76) ----
+        void PrePhysicsUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                               CgsModule::IOBufferStack* lpOutputBufferStack,
+                               PropEntityIO::InputBuffer_PrePhysics* lpInput,
+                               PropEntityIO::OutputBuffer_PrePhysics* lpOutput,
+                               BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePostSceneUpdate @0x827C3C58,
+        //      X360 vtbl+72) ----
+        void PostSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                              CgsModule::IOBufferStack* lpOutputBufferStack,
+                              PropEntityIO::InputBuffer_PostScene* lpInput,
+                              PropEntityIO::OutputBuffer_PostScene* lpOutput,
+                              BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
+        void CachePropGraphicsLists();
+        void GenerateDispatchLists( PropEntityIO::InputBuffer_Dispatch* lpInput,
+                                    const Array<CgsSceneManager::EntityId, 5400u>& lrVisibleEntities,
+                                    Matrix44::InParam lViewProjection,
+                                    Vector3::InParam lCameraPosition,
+                                    f32 lfLodZoomFactor,
+                                    const ShaderLodInfo* lpShaderLodInfo,
+                                    s32 liList, s32 liSortLayer, s32 liSortKey );
+
+        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 9) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Prepare( PropEntityIO::OutputBuffer_Prepare* lpOutputBuffer,
+                      rw::IResourceAllocator* lpPhysicsAllocator );
+        // WorldModule::Construct registers the prop module's nested pre-scene /
+        // post-physics perf monitors through these (X360 call sites in @0x827CF540).
+        void ConstructPreScenePerfMonitors();
+        void ConstructPostPhysicsPerfMonitors();
+
         const BrnPhysics::Props::PropPhysicsDataHeader* GetPropPhysicsDataHeader() const
         {
             return mpPropPhysicsDataHeader;

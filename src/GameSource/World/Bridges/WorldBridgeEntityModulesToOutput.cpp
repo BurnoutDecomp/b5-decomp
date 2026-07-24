@@ -1,3 +1,6 @@
+#include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
+#include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
@@ -75,6 +78,66 @@ void BridgeEntityModulesToOutput_PrePhysics(
     BridgeTrafficCarEntityInfoToOutput_PrePhysics(lpWorldModule, lpOutputBuffer, lpTrafficOutput_PrePhysics);
 
     lpOutputBuffer->SetTriggerEntityOutputInterface(lpTriggerOutput_PrePhysics->GetOutputInterface());
+}
+
+
+// ----------------------------------------------------------------------------
+// BridgeWorldResourceRequestsToOutput_Prepare  @ 0x827ADA28
+//   Append the world-entity prepare output's staged resource requests into the
+//   world update-output request interface. (Ledger-'reviewed' phantom made real
+//   2026-07-24 -- no body had ever been committed.)
+// ----------------------------------------------------------------------------
+void BridgeWorldResourceRequestsToOutput_Prepare(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+    const BrnWorld::WorldEntityIO::OutputBuffer_Prepare* lpWorldEntityOutputBuffer_Prepare)
+{
+    (void)lpWorldModule;
+
+    lpWorldOutput->GetResourceRequestResourceInterface()->Append(
+        *const_cast<BrnWorld::WorldEntityIO::OutputBuffer_Prepare*>(
+            lpWorldEntityOutputBuffer_Prepare )->GetResourceRequestInterface() );
+}
+
+// ----------------------------------------------------------------------------
+// BridgeTrafficResourceRequestsToOutput  @ 0x827AD9D8
+//   Same append for the traffic prepare output. (Phantom made real 2026-07-24.)
+// ----------------------------------------------------------------------------
+void BridgeTrafficResourceRequestsToOutput(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+    const BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare* lpTrafficOutputBuffer_Prepare)
+{
+    (void)lpWorldModule;
+
+    lpWorldOutput->GetResourceRequestResourceInterface()->Append(
+        *lpTrafficOutputBuffer_Prepare->GetResourceRequestInterface() );
+}
+
+// ----------------------------------------------------------------------------
+// BridgeAIModuleToOutput  @ 0x827AD480
+//   Forward the AI prepare/update output into the world update-output buffer:
+//   resource requests, route responses, the AI car-output interface, and the
+//   AI-raised game events. (Phantom made real 2026-07-24.)
+// ----------------------------------------------------------------------------
+void BridgeAIModuleToOutput(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput,
+    const BrnAI::AIModuleIO::OutputBuffer* lpAIOutputBuffer)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT( lpWorldOutput != 0, "lpWorldOutput != NULL" );
+    CGS_ASSERT( lpAIOutputBuffer != 0, "lpAIOutputBuffer != NULL" );
+
+    lpWorldOutput->AppendResourceRequestInterface(
+        lpAIOutputBuffer->GetAIResourceRequestInterface() );
+    lpWorldOutput->AppendRouteResponseQueue(
+        lpAIOutputBuffer->GetRouteResponseQueue() );
+    lpWorldOutput->SetAICarOutputInterface(
+        lpAIOutputBuffer->GetAICarOutputInterfaceConst() );
+    lpWorldOutput->AppendGameEventQueue(
+        lpAIOutputBuffer->GetGameEventQueueConst() );
 }
 
 }   // namespace WorldModule

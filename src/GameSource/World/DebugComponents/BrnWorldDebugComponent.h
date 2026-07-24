@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "DebugSystem/Core/CgsDebugComponent.h"   // CgsDev::DebugComponent (real base)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent (real base)
 
 // BrnWorld::WorldDebugComponent - the in-game debug menu/overlay for the world module (target
 // markers, debug controller, vehicle-gun, velocity readouts). Derives from the real
@@ -12,8 +12,13 @@
 
 namespace BrnWorld
 {
+    class WorldModuleFwd_; // (no-op forward guard)
     class WorldDebugComponent : public CgsDev::DebugComponent
     {
+    public:
+        // ADDITIVE (WorldModule::Construct @0x827CF540 back-pointer mount).
+        void Construct( class WorldModule* lpWorldModule );
+
     protected:
         // @0x827DD1F0: the debug-menu display name for this component.
         //   asm: lis r11,aWorldModule@ha ; addi r3,r11,aWorldModule@l "World Module" ; blr

@@ -54,6 +54,9 @@ namespace BrnWorldIO
         // ---- fog (Vector4 by value) ----
         void     SetFogColourPlusWhiteLevel(rw::math::vpu::Vector4 lvFogColourPlusWhiteLevel);   // 0x827BC5A8 (W)
         Vector4  GetFogScattering() const;                                                      // 0x827BC668 (:468 R)
+        // ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8 reads the packed
+        // fog colour + white level for the car fog constants). Declaration-only.
+        Vector4  GetFogColourPlusWhiteLevel() const;
         void     SetFogScattering(rw::math::vpu::Vector4 lvFogScattering);                       // 0x827BC720 (W)
 
         // ---- key light + average irradiance (Vector3 by value) ----

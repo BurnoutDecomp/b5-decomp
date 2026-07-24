@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h" // InCoarseQueryQueue<N>
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                    // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<32768,16>
@@ -37,6 +38,30 @@ namespace SceneManagerIO
     };
 
     // The scene-manager output buffer (query results side).
+    // ------------------------------------------------------------------------
+    // SceneManagerIO::InputBuffer_Query -- the per-module scene-query input buffer
+    // the entity-module spines stack-allocate for each query round-trip
+    // (WorldModule::EntityModulePostSceneUpdate @0x827C3C58 does three of them).
+    //
+    // FLAG (minimal-complete slice, size NOT X360-attested): this buffer's real
+    // aggregate is the coarse/line-test/etc. query queues (see the sibling
+    // CgsSceneManagerIO_*Query.h element homes); that layout belongs to this
+    // buffer's own TU and is NOT recovered here. The slice exists so the spines'
+    // CreateIOBuffer<InputBuffer_Query> instantiates against a real type. GROW it
+    // (and re-check every CreateIOBuffer call site) when the query-buffer TU lands
+    // -- do NOT treat maDeferredPayload's size as fact.
+    // ------------------------------------------------------------------------
+    struct InputBuffer_Query : public CgsModule::IOBuffer
+    {
+        // X360 GenerateFrustumQueries @0x827DADF8 recycles the buffer each frame and
+        // stages every query through the coarse-query queue.
+        void Construct();
+        void Destruct();
+        InCoarseQueryQueue<16384>* GetInCoarseQueryQueue();
+
+        InCoarseQueryQueue<16384> mInCoarseQueryQueue;   // (see FLAG: position not attested)
+    };
+
     struct OutputBuffer : public CgsModule::IOBuffer
     {
         typedef CgsModule::VariableEventQueue<32768, 16> SceneQueryResultsQueue;

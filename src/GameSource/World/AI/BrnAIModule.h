@@ -5,8 +5,12 @@
 
 #include <eathread/eathread_rwmutex.h>
 
+namespace BrnResource { namespace GameDataIO { template <int N> struct AllocatorListT; struct AllocatorList; } }
+
 namespace BrnAI
 {
+namespace AIModuleIO { struct OutputBuffer; }
+
 struct Route;
 struct AICar;
 struct AISectionsData;
@@ -14,6 +18,22 @@ struct AISectionsData;
 class AIModule
 {
 public:
+        // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
+        //      virtual-dispatches the fleet lifecycle) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Construct();
+        // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Destruct();
+        // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Release();
+
+        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 11) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
+                      AIModuleIO::OutputBuffer* lpOutputBuffer );
+
     AIModule();
 
     // DWARF-authoritative nested enum (BrnAIModule.h:83): the multi-frame prepare state

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BrnCommonTypes.h"   // Vector3
 #include "types.hpp"
 
 #include "GameSource/World/EnvironmentSettings/BrnEnvScatteringData.h"
@@ -7,6 +8,9 @@
 #include "GameSource/World/EnvironmentSettings/BrnEnvCloudsData.h"
 #include "GameSource/World/EnvironmentSettings/BrnEnvironmentKeyframe.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::ResourcePtr<Keyframe>
+
+namespace BrnWorldIO { struct UpdateOutputBuffer; }
+class BrnEffectsFrame;
 
 namespace BrnWorld
 {
@@ -26,6 +30,31 @@ namespace EnvironmentSettings
 class EnvironmentManager
 {
 public:
+        // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
+        //      virtual-dispatches the fleet lifecycle) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Construct();
+
+        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 5) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Prepare( BrnWorldIO::UpdateOutputBuffer* lpOutput );
+
+        // ADDITIVE (WorldModule::ReleaseWorld @0x827BCE58 stage 8 pokes the manager's
+        // leading prepare/release stage pair to {START, RELEASING} -- the inlined
+        // release request). Declaration-only; body with the env-manager TU.
+        void BeginRelease();
+
+        // ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 feeds this to
+        // ShadowMap::CalculateShadowMapCameras). Declaration-only.
+        Vector3 CalcKeyLightDirection() const;
+
+        // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
+        // Declaration-only; bodies with the env-manager TU.
+        void EnableJunkyardLightingSetup();
+        void DisableJunkyardLightingSetup();
+        void GenerateEffects( BrnEffectsFrame* lpFrame0, BrnEffectsFrame* lpFrame1,
+                              BrnEffectsFrame* lpFrame2, BrnEffectsFrame* lpFrame3 );
+
     // A blend frame: four source keyframes and their four blend weights. Built by
     // SetupTimeOfDayBlend / SetupSeasonsBlend / SetupUpdateFromToolBlend and consumed
     // by PerformBlend. Layout attested by SetupUpdateFromToolBlend's fill loop
