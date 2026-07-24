@@ -12,6 +12,12 @@
 EA::Jobs::Job::Job(s32 /*liPriority*/) {}
 CgsGraphics::BufferedDispatchFrame::BufferedDispatchFrame() {}
 #include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (the PC presentation draw)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] BRN_IM2D_TRACE probes
+#include <Windows.h>   // [diag] GetEnvironmentVariableA
+#include <cstdio>      // [diag] snprintf
+
+// [diag] present counter (device.cpp) - stamps the trace lines with their frame.
+namespace renderengine { extern u32 guPresentCount; }
 
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
@@ -214,6 +220,26 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
         const bool lbOwnsScreen = lbPresenting ||
             (gbMoviePresentTickValid && lu32PresentFreq != 0u &&
              (lu32PresentNow - gu32LastMoviePresentTick) < lu32PresentFreq / 4u);
+        // [diag] BRN_IM2D_TRACE: surface the underlay latch state on the same cadence as
+        // the Im2d draw trace (queued id + manager state + owns-screen).
+        {
+            static int siTrace = -1;
+            if (siTrace < 0)
+            {
+                char lacBuf[8];
+                siTrace = (GetEnvironmentVariableA("BRN_IM2D_TRACE", lacBuf, sizeof(lacBuf)) > 0) ? 1 : 0;
+            }
+            if (siTrace == 1 && (renderengine::guPresentCount % 60u) == 0u)
+            {
+                char lacMsg[160];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[MovieOwn] f=%u presenting=%d owns=%d queued=%d state=%d\n",
+                              renderengine::guPresentCount, lbPresenting ? 1 : 0, lbOwnsScreen ? 1 : 0,
+                              BrnGui::gpActiveMovieManager->IsMovieQueued() ? 1 : 0,
+                              static_cast<s32>(BrnGui::gpActiveMovieManager->GetState()));
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
         if (lbOwnsScreen)
         {
             const CgsGraphics::RGBA8 KC_MOVIE_BLACK = { 0, 0, 0, 255 };
