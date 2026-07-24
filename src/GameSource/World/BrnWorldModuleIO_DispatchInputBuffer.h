@@ -93,6 +93,21 @@ namespace BrnWorldIO
 
         // ---- director camera (embedded by value) ----
         const BrnDirector::Camera::Camera* GetCameraInput() const;                              // 0x827A4248 (:385 R)
+
+        // ---- ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 +
+        //      GenerateDispatchLists @0x827D1CE8 gate each render pass on these) ----
+        // X360 byte indices: [0] shadow map, [1] environment map, [2] world,
+        // [3] props, [4] race cars, [5] traffic.
+        struct RenderSwitches
+        {
+            bool mbRenderShadowMap;
+            bool mbRenderEnvironmentMap;
+            bool mbRenderWorld;
+            bool mbRenderProps;
+            bool mbRenderRaceCars;
+            bool mbRenderTraffic;
+        };
+        const RenderSwitches* GetRenderSwitches() const;
         void                               SetCameraInput(const BrnDirector::Camera::Camera* lpCamera); // 0x823C8F28 (W)
 
         // ---- shader-constants frame ----

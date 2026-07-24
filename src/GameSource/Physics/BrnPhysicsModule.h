@@ -38,10 +38,31 @@
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; supplies the vtable + the two RWMutexes the ctor constructs inline)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"   // BrnPhysics::Vehicle::VehicleManager (embedded by value @ +0x4AA0)
 
+namespace CgsModule { struct IOBufferStack; }
+namespace CgsSceneManager { namespace SceneManagerIO { struct InputBuffer_Update; } }
+namespace BrnResource { namespace GameDataIO { struct AllocatorList; } }
+
 namespace BrnPhysics
 {
+namespace PhysicsModuleIO { class InputBuffer; }
+
     struct PhysicsModule : public CgsModule::ModuleSingleBuffered
     {
+        // ADDITIVE (WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 forwards
+        // here -- X360 BrnPhysics::PhysicsModule::UpdateNetworkCatchup). Declaration-
+        // only; body with the physics module's own TU.
+        void UpdateNetworkCatchup( s32 liCatchupSteps, s32 liFlags );
+
+        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 4) ----
+        // Declaration-only; the body lands with the physics module's own TU.
+        bool Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
+                      CgsModule::IOBufferStack* lpOutputBufferStack,
+                      CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                      BrnResource::GameDataIO::AllocatorList* lpAllocatorList );
+
+        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 9) ----
+        void PropPrepareTypes( PhysicsModuleIO::InputBuffer* lpInputBuffer );
+
         // ---- prepare/release state machines (DWARF BrnPhysicsModule.h:75/89) ----
         // Member VALUES are DWARF-attested enumerators (not invented).
         enum EPrepareStage

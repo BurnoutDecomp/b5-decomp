@@ -21,6 +21,7 @@
 // ===========================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector3
 
 namespace rw { struct IResourceAllocator; }
 
@@ -50,7 +51,18 @@ namespace CgsSceneManager
     // its layout (volume budgets / world bounds) is owned by the SpatialPartition TUs.
     struct SpatialPartitionConstructParams
     {
-        ESpatialPartitionType meType;  // +0x00
+        // GROWN 2026-07-24 (WorldModule::Prepare @0x827D53B0 stages the full block:
+        // {type 1, levels 3, origin (0,0,0), 11000.0, 0.3, 32, 10}; the field NAMES
+        // past meType are inferred from the values' roles -- FLAG, refine on the
+        // spatial-partition TU's DWARF).
+        ESpatialPartitionType meType;        // +0x00 (X360 stages 1)
+        s32                   miNumLevels;   //        (X360 stages 3)
+        Vector3               mOrigin;       //        (X360 stages {0,0,0})
+        f32                   mfWorldExtent; //        (X360 stages 11000.0f)
+        f32                   mfLooseness;   //        (X360 stages 0.30000001f)
+        s32                   miMaxEntries;  //        (X360 stages 32)
+        s32                   miMaxDepth;    //        (X360 stages 10)
+        s32                   miPad;         //        (X360 stages 0)
     };
 
     class SpatialPartitionManager

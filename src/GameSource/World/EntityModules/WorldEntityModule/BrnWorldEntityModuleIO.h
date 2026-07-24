@@ -67,14 +67,18 @@ namespace WorldEntityIO
         // 0x827A2728 — read-lock tripwire ("Not locked for reading").
         const ResourceRequestInterface* GetResourceRequestInterface() const;
 
+        // ATTESTED 2026-07-24 by WorldModule::Prepare @0x827D53B0 (stage-8 fail path
+        // appends this buffer's staged scene requests into the live scene input).
+        SceneInputInterface* GetSceneInputInterface();
+
         static void _AssertLayout();
 
     private:
         // X360 layout: 1-byte IOBuffer status, +1..+3 pad, member at +4.
         u8                       maStatusPad[3];
         ResourceRequestInterface mResourceRequestInterface;   // :80 (X360 +4)
-        // (mSceneInputInterface :81 follows in the DWARF; no X360-emitted accessor —
-        //  deferred until a consumer attests it.)
+        SceneInputInterface      mSceneInputInterface;        // :81 (attested by
+                                                              // WorldModule::Prepare)
     };
 
     // ========================================================================
@@ -106,6 +110,12 @@ namespace WorldEntityIO
     // DispatchFrame::GetList / ShadowMap::CalcLodDistanceModifier).
     struct InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
     {
+        // ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8 seeds the
+        // frustum-result event here before the world dispatch feed runs --
+        // X360 accessor sub_827BBCF8, spelled GetSceneResultQueue like the
+        // sibling race-car/traffic/prop dispatch inputs).
+        CgsModule::VariableEventQueue<32768, 16>* GetSceneResultQueue();
+
         // X360 0x822BAA08 (read-lock) / 0x827A2FC8 (write-lock); X360 this+4.
         CgsGraphics::DispatchFrame* GetDispatchFrame() const;
         void SetDispatchFrame( CgsGraphics::DispatchFrame* lpDispatchFrame );

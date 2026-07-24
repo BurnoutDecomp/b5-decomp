@@ -1,6 +1,7 @@
 #ifndef BRN_TRIGGER_ENTITY_MODULE_H
 #define BRN_TRIGGER_ENTITY_MODULE_H
 
+#include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"        // CgsModule::ModuleSingleBuffered (real base)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                 // CgsContainers::BitArray<512> (mUsedTriggerList)
@@ -41,6 +42,9 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct OutEventLineTestFi
 //   Release   (0x822A8EC0): stage machine {<DONE -> base Release; done}.
 // ============================================================================
 
+namespace CgsModule { struct IOBufferStack; }
+namespace BrnWorld { namespace TriggerEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; } }
+
 namespace BrnWorld
 {
     // KU_MAX_TRIGGERS == 512 (DWARF BrnTriggerEntityModule.h:36); the bit set and the trigger
@@ -76,6 +80,22 @@ namespace BrnWorld
 
         // -- module lifecycle (X360 0x822D8ED0 / 0x822A8E10 / 0x822A8EC0 / 0x822C42F8) ----------
         void Construct() override;   // 0x822D8ED0
+
+        // ---- ADDITIVE (WorldModule::EntityModulePrePhysicsUpdate @0x827BD5B8,
+        //      X360 vtbl+72). Declaration-only; body with this module's own TU.
+        void PrePhysicsUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                               CgsModule::IOBufferStack* lpOutputBufferStack,
+                               TriggerEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+                               TriggerEntityModuleIO::OutputBuffer_PrePhysics* lpOutput,
+                               BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePostSceneUpdate @0x827C3C58,
+        //      X360 vtbl+68) ----
+        void PostSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                              CgsModule::IOBufferStack* lpOutputBufferStack,
+                              TriggerEntityModuleIO::InputBuffer_PostScene* lpInput,
+                              TriggerEntityModuleIO::OutputBuffer_PostScene* lpOutput,
+                              BrnUpdateSet lUpdateSet );
         bool Prepare() override;     // 0x822A8E10
         bool Release() override;     // 0x822A8EC0
         void Destruct() override;    // 0x822C42F8

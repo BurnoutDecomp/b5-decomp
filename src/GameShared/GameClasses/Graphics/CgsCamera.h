@@ -74,6 +74,19 @@ namespace CgsGraphics
         // sibling CgsGraphics::Camera::UpdatePerspectiveProjectionMatrix (a separate, not-yet-landed
         // TU). Reconstructing it would require fabricating the tan/atan VMX sequence and the
         // projection-matrix build -- left unbodied per the no-fabrication rule.
+        // ---- ADDITIVE (attested by BrnGraphics::EnvironmentMap @0x827B40D0/
+        //      0x827B4218/0x827B4268, which drives the six cube-face cameras) ----
+        // Declaration-only; bodies land with the Camera TU (per-TU compile gate).
+        void Construct();
+        // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage 1 clears the cached
+        // camera input). Declaration-only; body with the Camera TU.
+        void Clear();
+        void Release();
+        void LookAt(rw::math::vpu::Vector3 lEyePosition,
+                    rw::math::vpu::Vector3 lUpVector,
+                    rw::math::vpu::Vector3 lTargetPosition);
+        void SetPerspectiveProjectionMatrixRightHanded();
+
         void SetFovHorizontal(f32 fovHorizontal);
 
         // CgsGraphics::Camera::UpdateViewProjectionMatrix @0x827E7030 (wave 2) --
@@ -99,11 +112,25 @@ namespace CgsGraphics
         // @call 0x827C1060: fill lpOut from this camera's parallel projection.
         void GetCgsFrustumParallel(CgsGeometric::Frustum* lpOut);
 
-    private:
-        // Out-of-scope sibling helpers (their own TUs): GetFrustum dispatches to these. Declared so
-        // the GetFrustum body type-checks; defined in their own homes.
-        const CgsGeometric::Frustum& GetFrustumParallel();
-        const CgsGeometric::Frustum& GetFrustumPerspective();
+    public:
+        // PROMOTED 2026-07-24: WorldModule::GenerateFrustumQueries @0x827DADF8 reads the
+        // cached perspective frustum from CONST cameras (the six env-map face cameras and
+        // the shadow cascades), so this accessor is public + const, matching its real use.
+        // (GetFrustum still dispatches to these two; defined in their own homes.)
+        const CgsGeometric::Frustum& GetFrustumParallel() const;
+        const CgsGeometric::Frustum& GetFrustumPerspective() const;
+
+        // The cached view-projection the frustum-test events carry.
+        const Matrix44& GetViewProjectionMatrix() const { return mViewProjection; }
+
+        // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
+        // Declaration-only; bodies with the camera TU.
+        Vector3 GetPosition() const;
+        Vector3 GetDirection() const;
+        // The renderer's half-texel/viewport-adjusted view-projection (X360
+        // GetViewProjectionMatrixModified, returned by value).
+        Matrix44 GetViewProjectionMatrixModified() const;
+        void SetFarClip( f32 lfFarClip );
 
     public:
         // +0x00..0x3F -- view transform (4 Vector4 rows).

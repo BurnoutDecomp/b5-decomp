@@ -30,6 +30,8 @@
 // alignas(16): the camera carries Matrix44Affine + Vector3 (SIMD).
 // ============================================================================
 
+#include "BrnCommonTypes.h"   // Vector3
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                            // rw::math::vpu::Matrix44Affine / Vector3
 #include "GameSource/Director/Camera/BrnCameraEffects.h"  // BrnDirector::Camera::CameraEffects (by value)
@@ -108,6 +110,21 @@ namespace BrnDirector
 
             // X360-attested @0x82255E68. Body: Camera.cpp.
             void Construct();
+
+            // ---- ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 copies
+            //      the director's frame camera into the graphics camera the scene
+            //      frustum queries are built from). Declaration-only; body with the
+            //      director-camera TU. ----
+            void CopyToCgsCamera( CgsGraphics::Camera* lpOutCamera ) const;
+
+            // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
+            // The camera flag word's junkyard bit (X360 +0x140 & 0x400000) and the
+            // frame LOD zoom factor. Declaration-only; bodies with the camera TU.
+            bool IsInJunkyard() const;
+            f32  GetLodZoomFactor() const;
+            // The camera's world position / view direction rows (X360 +48 / +32).
+            Vector3 GetPosition() const;
+            Vector3 GetDirection() const;
 
             // ---- effect-request helpers the arbitrator states drive -----------------------
             // These write the camera's mEffects request sub-block. The X360 inlines the field

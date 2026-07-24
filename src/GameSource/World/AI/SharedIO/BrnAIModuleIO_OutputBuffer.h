@@ -39,6 +39,10 @@
 //   GetGameE                 @0x8279C658 R  -> this + 0x1AF30  (110448)  :232
 //   GetGameEventQu           @0x8276D680 W  -> this + 0x1AF30  (110448)  :233
 
+#include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"            // RouteResponseQueue
+#include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"     // AICarOutputInterface
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // RequestInterface<N>
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // VariableEventQueue<N,A>
 #include "types.hpp"                                     // u8
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
 
@@ -65,6 +69,19 @@ namespace AIModuleIO
         u8* GetAIOutputBufferHeader();
 
         // X360 0x8279CAA8 (R, :423) -- read-lock handle at this+0x4.
+        // ---- ADDITIVE typed read accessors (attested by WorldModule::
+        //      BridgeAIModuleToOutput @0x827AD480, which forwards each into the
+        //      world update-output appenders). Declaration-only; bodies land with
+        //      this buffer's own TU. X360: GetAIRes @0x8279CAA8 (this+4), the
+        //      route-response getter @0x8279CB50, GetAICarOutputIn @0x8279CCA0,
+        //      GetGameE (read twin of GetGameEventQu @0x8276D680). ----
+        // (N spelled as the world append target takes it; the AI-side true N is
+        //  pinned when this buffer's own TU lands -- FLAG.)
+        const BrnResource::GameDataIO::RequestInterface<4096>* GetAIResourceRequestInterface() const;
+        const RouteMapModuleIO::RouteResponseQueue* GetRouteResponseQueue() const;
+        const AICarOutputInterface* GetAICarOutputInterfaceConst() const;
+        const CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueueConst() const;
+
         u8* GetAIResultInterface();
 
         // X360 0x8276D9C8 (W, :402) -- write-lock handle at this+0x15120.

@@ -69,12 +69,14 @@
 
 namespace BrnNetwork { enum EPaybackType : s32; }
 namespace CgsGraphics { struct DispatchFrame; }
-namespace BrnBlobbyShadowManager { struct BrnBlobbyShadowBuffer; }
-// BrnCoronaManager is a CLASS (GameSource/Graphics/BrnCoronaManager.h), not a namespace -- only
-// BrnSubmissionInterface* (a nested type) is used here, by pointer, so it is forward-declared as a
-// nested class inside a partial BrnCoronaManager declaration (AGENTS.md forward-declaration
-// exception (b): pointer-only use, avoids pulling in the full corona-manager header cascade).
-class BrnCoronaManager { public: class BrnSubmissionInterface; };
+// RECONCILED 2026-07-24 (ODR fix, see BrnRendererModuleIO.h): BrnBlobbyShadowBuffer
+// is a NESTED class of the real BrnBlobbyShadowManager CLASS -- include the home.
+#include "GameSource/Graphics/BrnBlobbyShadowManager.h"
+// RECONCILED 2026-07-24 (ODR fix, see BrnRendererModuleIO.h): BrnSubmissionInterface is a
+// NESTED class of the real BrnCoronaManager CLASS. The partial-class spelling that used to
+// stand here re-declared the enclosing class and collided (C2011) with the real definition
+// in every TU that saw both -- include the real home instead.
+#include "GameSource/Graphics/BrnCoronaManager.h"   // BrnCoronaManager::BrnSubmissionInterface
 
 namespace BrnWorld
 {

@@ -519,7 +519,7 @@ void SceneManagerModule::UpdateContactGeneration(SceneManagerIO::IOBufferStack* 
 // ===========================================================================
 void SceneManagerModule::ProcessFrustumTestJobResults(SceneManagerIO::IOBufferStack* lpInputBufferStack,
                                                       SceneManagerIO::IOBufferStack* lpOutputBufferStack,
-                                                      SceneManagerIO::OutputBuffer*  lpSceneInputBuffer,
+                                                      SceneManagerIO::InputBuffer_Query*  lpSceneInputBuffer,
                                                       SceneManagerIO::OutputBuffer*  lpSceneOutputBuffer)
 {
     ScopedPerfMon lProcessSceneQueries(siProcessSceneQueriesPerfMon);

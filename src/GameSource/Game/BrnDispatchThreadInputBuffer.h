@@ -155,6 +155,13 @@ namespace BrnGame
         // Manager::Construct sets the write/read mbIsWriteBuffer flags after Construct.
         void SetIsWriteBuffer(bool lbIsWriteBuffer) { mbIsWriteBuffer = lbIsWriteBuffer; }      // h:88/92 pair
 
+        // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8). ----
+        bool IsWriteBuffer() const { return mbIsWriteBuffer; }
+        // Declaration-only; bodies with this buffer's own TU (the camera block
+        // @X360 +39360, the per-face env-map-rendered bytes @+39348).
+        void SetCameraViewProjection( const Matrix44& lrViewProjection );
+        void SetEnvMapFaceRendered( s32 liFace, bool lbRendered );
+
         // ---- full-frame-rate flag ----------------------------------------------------------
         // DWARF h:181/h:185; X360 inlined (DoDispatch stores +0x99B0 from the camera flags,
         // Render reads it for the present-interval select).

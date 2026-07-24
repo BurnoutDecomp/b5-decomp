@@ -23,6 +23,10 @@
 //   GetActiveRaceCar:  return 7376 * a2 + this + 6752; // &maActiveRaceCars[a2]
 // ============================================================================
 
+#include "GameShared/GameClasses/Containers/CgsArray.h"
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
+#include "BrnCommonTypes.h"
+#include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"             // EActiveRaceCarIndex / EGlobalRaceCarIndex
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::EPlayerScoringIndex
@@ -30,6 +34,8 @@
 #include "SharedClasses/Progression/BrnTrainingTypes.h" // BrnProgression::ETrainingType
 
 #include <cstddef>                                   // offsetof
+
+namespace CgsResource { struct ResourceHandle; }
 
 namespace BrnWorld
 {
@@ -42,6 +48,7 @@ const s32 KI_TRAINING_REQUEST_QUEUE_SIZE = 8;
 // SharedIO/BrnRaceCarEntityModuleOutputInterface.h). CopyActiveRaceCarToPlayerScoringMappingToOutput
 // only takes a pointer to it, so a forward declaration suffices here.
 namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }
+namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; }
 
 // ---- PLACEHOLDER element types ---------------------------------------------
 // The real RaceCar / ActiveRaceCar live in their own (not-yet-committed) homes
@@ -67,6 +74,39 @@ public:
 class RaceCarEntityModule
 {
 public:
+        // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
+        //      virtual-dispatches the fleet lifecycle) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Construct();
+        // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Destruct();
+        // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Release();
+
+        // ---- ADDITIVE (WorldModule::EntityModulePrePhysicsUpdate @0x827BD5B8) ----
+        // Declaration-only; body with this module's own TU.
+        void PrePhysicsUpdate( RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+                               RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput,
+                               BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePostSceneUpdate @0x827C3C58) ----
+        void PostSceneUpdate( RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput,
+                              RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput,
+                              BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
+        void GenerateDispatchLists( RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists* lpInput,
+                                    const Array<CgsSceneManager::EntityId, 32u>& lrVisibleEntities,
+                                    Vector4 lvFogScattering,
+                                    Vector4 lvFogColourPlusWhiteLevel,
+                                    Vector3 lvCameraPosition );
+
+        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 6) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Prepare( const CgsResource::ResourceHandle& lrDistrictMapHandle );
+
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
 

@@ -10,6 +10,9 @@
 // by-value using their real committed types where available, or as correctly-sized opaque stand-
 // ins (flagged) sized to the X360 spans so the X360-pinned member offsets are exact.
 
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // CgsSceneManager::EntityId
+#include "GameShared/GameClasses/Containers/CgsArray.h"
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"   // RequestInterface<4096>
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                                   // CgsModule::IOBuffer
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h"    // TrafficAIInterface
@@ -59,6 +62,11 @@ namespace BrnTrafficIO
     public:
         // X360 0x827120D8: read-lock; return the dispatch-frame index (this+0x8014).
         u32  GetDispatchFrame() const;
+
+        // ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8 seeds the
+        // frustum result through this pipe -- X360 accessor sub_827BB138;
+        // VariableEventQueue<32768,16>, the same shape as the sibling buffers).
+        CgsModule::VariableEventQueue<32768, 16>* GetSceneResultQueue();
         // X360 0x827A0EC0: write-lock; set the dispatch-frame index (this+0x8014).
         void SetDispatchFrame(u32 luDispatchFrame);
         // X360 0x82712188 (Hex-Rays "G"): read-lock; return the blobby-shadow buffer handle (this+0x8018).
@@ -451,6 +459,29 @@ namespace BrnTrafficIO
     };
 
     // ============================================================================
+    // ------------------------------------------------------------------------
+    // Dispatch-pass buffers (ADDITIVE minimal slices; callers: WorldModule::
+    // GenerateDispatchLists @0x827D1CE8. FLAG: interiors deferred to this IO
+    // TU's own growth -- sizes NOT X360-attested).
+    // ------------------------------------------------------------------------
+    class InputBuffer_PreDispatch : public CgsModule::IOBuffer
+    {
+    public:
+        void Construct();
+        void SetVisibleEntities( const Array<CgsSceneManager::EntityId, 650u>& lrEntities );
+        void SetCameraPosition( Vector3 lvCameraPosition );
+    private:
+        u8 maDeferredPayload[16];   // FLAG: interior deferred
+    };
+
+    class OutputBuffer_PreDispatch : public CgsModule::IOBuffer
+    {
+    public:
+        void Construct();
+    private:
+        u8 maDeferredPayload[16];   // FLAG: interior deferred
+    };
+
     // OutputBuffer_Prepare  (DWARF :2/:115, prepare/boot output buffer)  -- NEW HOME
     // ============================================================================
     // Owns the scene-input interface (@16, read 0x8279F988 / write 0x827109E0 :130) and the
@@ -461,7 +492,9 @@ namespace BrnTrafficIO
     {
     public:
         struct SceneInputInterface     { unsigned char maBytes[1]; };   // :12 (InSceneUpdateInterface), foreign opaque
-        struct ResourceRequestInterface{ unsigned char maBytes[1]; };   // :12 (RequestInterface<4096>), foreign opaque
+        // RETYPED 2026-07-24 (WorldModule::Prepare/BridgeTrafficResourceRequestsToOutput
+        // consumers need the real pipe; the :12 comment already named it).
+        typedef BrnResource::GameDataIO::RequestInterface<4096> ResourceRequestInterface;
 
         // +16 read/write.
         const SceneInputInterface* GetSceneInputInterface() const;      // 0x8279F988

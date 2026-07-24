@@ -202,8 +202,11 @@ RW_SIZE_ASSERT(rw::IResourceAllocator_vtbl, 72);
 //   [ 6] +48  ?DoAllocate@LinearResourceAllocator@rw@@MEAA?AVResource@2@AEBVResourceDescriptor@2@PEBD@Z
 //   [ 7] +56  ?DoFree@LinearResourceAllocator@rw@@MEAAXAEBVResource@2@@Z
 //   [ 8] +64  ?DoFreeDisposable@IResourceAllocator@rw@@MEAAXAEAVResource@2@@Z
-struct LinearResourceAllocator {  // sizeof = 144 (rwcore.pdb, x64)
-    ::rw::IResourceAllocator field_0x0;  // +0
+// RECONCILE 2026-07-24: the PDB dump flattened the base into a field; the vtbl
+// mangles (DoAllocate@LinearResourceAllocator overriding the IResourceAllocator
+// slots) prove real derivation, and consumers (WorldModule::Prepare) pass a
+// LinearResourceAllocator* where an IResourceAllocator* is taken. Same layout.
+struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 144 (rwcore.pdb, x64)
     ::rw::Resource m_heapResource;  // +8
     ::rw::ResourceDescriptor m_heapCapacity;  // +40
     ::rw::ResourceDescriptor m_currentUsage;  // +72

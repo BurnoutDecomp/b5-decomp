@@ -28,12 +28,20 @@
 //     qwords (`ld/std` x2) at a 16-byte stride (`slwi r11,r11,4`).
 // =============================================================================
 
+#include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "types.hpp"        // u8/u32/s32/u64
 #include "BrnCommonTypes.h" // EntityId, CgsID
 #include "GameShared/GameClasses/Graphics/CgsModel.h" // CgsGraphics::Model::State (VehicleRenderInfo::mLOD)
 
+namespace CgsModule { struct IOBufferStack; }
+namespace BrnDirector { namespace Camera { class Camera; } }
+
 namespace BrnTraffic
 {
+namespace BrnTrafficIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_Dispatch; class InputBuffer_PreDispatch; class OutputBuffer_PreDispatch; }
+
+namespace BrnTrafficIO { class OutputBuffer_Prepare; }
+
     // BrnTrafficEntityModule.h:129 -- one pending traffic-crash record. sizeof == 16
     // (X360-authoritative: Array<TrafficCrashInfo,160> count word sits at +0xA00 == 160*16,
     // and the per-element copy moves 4 dwords / a 16-byte stride).
@@ -199,6 +207,43 @@ namespace BrnTraffic
     // =========================================================================
     struct TrafficEntityModule
     {
+        // ---- ADDITIVE (attested by WorldModule::Construct @0x827CF540, which
+        //      virtual-dispatches the fleet lifecycle) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Construct();
+        // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
+        // Declaration-only; the body lands with this module's own TU.
+        void Destruct();
+        // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Release();
+
+        // ---- ADDITIVE (WorldModule::EntityModulePrePhysicsUpdate @0x827BD5B8) ----
+        void PrePhysicsUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                               CgsModule::IOBufferStack* lpOutputBufferStack,
+                               BrnTrafficIO::InputBuffer_PrePhysics* lpInput,
+                               BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                               BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePostSceneUpdate @0x827C3C58) ----
+        void PostSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                              CgsModule::IOBufferStack* lpOutputBufferStack,
+                              BrnTrafficIO::InputBuffer_PostScene* lpInput,
+                              BrnTrafficIO::OutputBuffer_PostScene* lpOutput,
+                              BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
+        void PreDispatchUpdate( BrnTrafficIO::InputBuffer_PreDispatch* lpInput,
+                                BrnTrafficIO::OutputBuffer_PreDispatch* lpOutput );
+        void GenerateDispatchLists( BrnTrafficIO::InputBuffer_Dispatch* lpInput,
+                                    BrnTrafficIO::OutputBuffer_PreDispatch* lpRenderInfos,
+                                    s32 liList, s32 liSortLayer, s32 liSortKey,
+                                    const BrnDirector::Camera::Camera* lpCamera );
+
+        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 7) ----
+        // Declaration-only; the body lands with this module's own TU.
+        bool Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputBuffer );
+
         // --- DWARF-attested nested enums (BrnTrafficEntityModule.h:486-559) -------------------
 
         // :486

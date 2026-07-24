@@ -22,6 +22,7 @@
 // miLength=0.
 #pragma once
 
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "types.hpp"          // u32, s32
 #include "BrnCommonTypes.h"   // Matrix44Affine (rw::math::vpu::Matrix44Affine)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer
@@ -442,7 +443,10 @@ namespace PropEntityIO
         // Opaque foreign-type storage (see FLAG above): the DWARF :307 scene-query-results queue
         // (OutSmSceneQueryResultsQueue) occupies +0xC..+0x801B; its own home lands elsewhere. Sized
         // exactly so muCoronaSubmissionInterface stays @+0x801C.
-        struct SceneResultQueueStorage { unsigned char maBytes[0x801C - 0xC]; };
+        // RETYPED 2026-07-24: the storage span (0x801C-0xC == 32784 == 32768+16)
+        // is exactly sizeof(VariableEventQueue<32768,16>), and WorldModule::
+        // GenerateDispatchLists @0x827D1CE8 drives Clear/AddEvent through it.
+        typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueueStorage;
 
         // X360 0x822B8EA8: read-lock; return the dispatch-frame index (this+4).
         u32  GetDispatchFrame() const;
@@ -559,6 +563,25 @@ namespace PropEntityIO
     private:
         ContactSpyInterface  mContactSpyInterface;   // +0x04 :576
         UpdatePropEventQueue mUpdatedPropQueue;       // +0x10 :577
+    };
+
+    // ------------------------------------------------------------------------
+    // PropEntityIO post-scene buffers (callers: WorldModule::
+    // EntityModulePostSceneUpdate @0x827C3C58 -- crash bridge in, prop post-scene
+    // update out).
+    //
+    // FLAG (minimal-complete slice, size NOT X360-attested): the real aggregates
+    // are this module's post-scene event queues; that layout belongs to the prop
+    // IO TU and is NOT recovered here. GROW when it lands.
+    // ------------------------------------------------------------------------
+    struct InputBuffer_PostScene : public CgsModule::IOBuffer
+    {
+        u8 maDeferredPayload[16];
+    };
+
+    struct OutputBuffer_PostScene : public CgsModule::IOBuffer
+    {
+        u8 maDeferredPayload[16];
     };
 }
 }

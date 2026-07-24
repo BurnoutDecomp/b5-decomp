@@ -142,6 +142,10 @@ namespace SceneManagerIO
         void ReplaceDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage);
         void SetEntityRadius(CgsSceneManager::EntityId lEntityId, f32 lfBoundingRadius);
         void ClearCullingTable(bool lbCullAll);
+        // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage 3 stages the ten
+        // world culling-group pairs). Declaration-only; body with this TU's home
+        // (pushes an InEventSetCullingGroupPair onto mSetCullingGroupPairQueue).
+        void SetCullingGroupPair(u8 lu8GroupA, u8 lu8GroupB, u8 lu8Flags);
         void ClearEntityVolumesPadding(CgsSceneManager::EntityId lEntityId);
 
         // Merged prop-entity write-side updaters. SetVolumeInstanceTransform(VolumeInstanceId)

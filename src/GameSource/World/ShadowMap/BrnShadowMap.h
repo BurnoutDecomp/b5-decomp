@@ -115,6 +115,12 @@ namespace BrnWorld
         //      did not execute / this dossier does not carry a body for) -------------------
 
         f32                  GetFarPlane() const;                          // BrnShadowMap.h:105
+        // ---- ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 gates the
+        //      whole shadow path on this, and reads the per-cascade cameras for the
+        //      cascade frustum queries). Declaration-only; bodies with this TU.
+        bool                 IsEnabled() const;
+        const CgsGraphics::Camera* GetCascadeCamera( s32 liCascade ) const;
+
         bool                 GetRenderShadowMapView() const;               // BrnShadowMap.h:108
         bool                 GetRenderWorldIntoShadowMap() const;          // BrnShadowMap.h:111
         bool                 GetRenderRaceCarsIntoShadowMap() const;       // BrnShadowMap.h:114
@@ -161,7 +167,12 @@ namespace BrnWorld
         void     SetCurrentShadowMap(u32 luIndex);                        // BrnShadowMap.h:176
         u32      GetCurrentShadowMap();                                   // BrnShadowMap.h:182
         void     ObjectCSMSelect(f32 lfArg) const;                        // BrnShadowMap.h:188
-        void     SetConstantsForEnvmap();                                 // BrnShadowMap.h:191
+        void     SetConstantsForEnvmap();
+        // ---- ADDITIVE (WorldModule::GenerateShadowMapDispatchLists @0x827C96D8
+        //      drives the per-cascade state: the cascade selector @X360 +5364 and
+        //      the rendering latch, the map's FIRST byte, which the world entity
+        //      module's dispatch feed reads back through GetRenderingShadowMap). ----
+        void     SetCurrentCascadeIndex( u32 luCascade );                                 // BrnShadowMap.h:191
 
     protected:
         void              SetConstants(const CgsGraphics::Camera* lpCamera);                 // BrnShadowMap.h:196
