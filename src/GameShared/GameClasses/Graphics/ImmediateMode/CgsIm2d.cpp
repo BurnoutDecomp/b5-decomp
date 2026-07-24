@@ -11,6 +11,7 @@
 #include "pc/gcm/renderengine/renderstates.h"  // TextureState::mpRaster (SetState(TextureState*))
 
 #include <d3d9.h>
+#include <cstdio>   // [diag] BRN_IM2D_TRACE line formatting
 
 // PC / D3D9 implementation of the CgsGraphics immediate-mode 2D renderer. The X360/PS3
 // Im2d batches into platform command buffers via vertex descriptors + program buffers;
@@ -18,8 +19,26 @@
 // (the engine works in a 1280x720 logical space) are scaled to the actual back buffer
 // and submitted pre-transformed (D3DFVF_XYZRHW).
 
+// [diag] BRN_IM2D_TRACE: per-draw attribution trace (throttled to every 60th present).
+// The present counter lives in device.cpp; the last-bound texture is tracked below.
+namespace renderengine { extern u32 guPresentCount; }
+namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
+
 namespace
 {
+    const void* gpIm2dTraceLastTexture = nullptr;
+
+    bool Im2dTraceEnabled()
+    {
+        static int siState = -1;
+        if (siState < 0)
+        {
+            char lacBuf[8];
+            siState = (GetEnvironmentVariableA("BRN_IM2D_TRACE", lacBuf, sizeof(lacBuf)) > 0) ? 1 : 0;
+        }
+        return siState == 1;
+    }
+
     struct D3DScreenVertex
     {
         float x, y, z, rhw;
@@ -41,6 +60,7 @@ namespace CgsGraphics
     // ---- ImRendererBase (non-template) -------------------------------------------
     void ImRendererBase::SetTexture(renderengine::Texture* lpTexture)
     {
+        gpIm2dTraceLastTexture = lpTexture;   // [diag] BRN_IM2D_TRACE attribution
         if (renderengine::gDevice != nullptr)
         {
             renderengine::gDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
@@ -144,6 +164,28 @@ namespace CgsGraphics
 
         const f32 lfScaleX = static_cast<f32>(renderengine::gDisplayWidth) / KF_LOGICAL_WIDTH;
         const f32 lfScaleY = static_cast<f32>(renderengine::gDisplayHeight) / KF_LOGICAL_HEIGHT;
+
+        // [diag] BRN_IM2D_TRACE: log this draw's logical bounds + colour + texture every
+        // 60th present so each on-screen quad can be attributed to its emitter.
+        if (Im2dTraceEnabled() && (renderengine::guPresentCount % 60u) == 0u)
+        {
+            f32 lfMinX = lpVertices[0].mv2Pos.x, lfMaxX = lfMinX;
+            f32 lfMinY = lpVertices[0].mv2Pos.y, lfMaxY = lfMinY;
+            for (u32 i = 1; i < luCount; ++i)
+            {
+                const f32 x = lpVertices[i].mv2Pos.x, y = lpVertices[i].mv2Pos.y;
+                if (x < lfMinX) lfMinX = x; if (x > lfMaxX) lfMaxX = x;
+                if (y < lfMinY) lfMinY = y; if (y > lfMaxY) lfMaxY = y;
+            }
+            char lacMsg[192];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[Im2dTrace] f=%u n=%u xy=(%.0f,%.0f)-(%.0f,%.0f) rgba=%02X%02X%02X%02X tex=%p\n",
+                        renderengine::guPresentCount, luCount, lfMinX, lfMinY, lfMaxX, lfMaxY,
+                        lpVertices[0].mv4Colour.r, lpVertices[0].mv4Colour.g,
+                        lpVertices[0].mv4Colour.b, lpVertices[0].mv4Colour.a,
+                        gpIm2dTraceLastTexture);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
 
         // Same capacity as the reserve/submit scratch run; an over-capacity run fires
         // the assert (nothing on the 2D path submits runs this large).

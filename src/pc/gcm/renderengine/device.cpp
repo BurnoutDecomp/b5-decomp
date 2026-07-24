@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <d3d9.h>
 #include <cstring>
+#include <cstdio>   // [diag] BRN_FRAME_DUMP back-buffer BMP writer
 
 // PC / D3D9 renderengine device bring-up, reversed from TUB (Burnout Paradise: The
 // Ultimate Box):
@@ -128,6 +129,73 @@ bool renderengine::Device::FrameBeginNoClear()
     return SUCCEEDED(gDevice->BeginScene());
 }
 
+// [diag] present counter shared with the draw-trace diagnostics (CgsIm2d.cpp reads it to
+// stamp traced draws with their frame). Plain u32; single render thread on the PC boot.
+namespace renderengine { u32 guPresentCount = 0; }
+
+// [diag] BRN_FRAME_DUMP=<dir>: save the back buffer as BMP into <dir> every 30th present
+// (PrintWindow returns black against this device, so the game dumps its own frames).
+static void DumpBackBufferIfRequested()
+{
+    static char sacDir[512];
+    static int siChecked = 0;
+    if (siChecked == 0)
+    {
+        siChecked = 1;
+        DWORD luLen = GetEnvironmentVariableA("BRN_FRAME_DUMP", sacDir, sizeof(sacDir));
+        if (luLen == 0 || luLen >= sizeof(sacDir)) { sacDir[0] = 0; }
+    }
+    if (sacDir[0] == 0 || (renderengine::guPresentCount % 30u) != 0u)
+    {
+        return;
+    }
+
+    IDirect3DSurface9* lpBack = nullptr;
+    if (FAILED(renderengine::gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBack)) || lpBack == nullptr)
+    {
+        return;
+    }
+    D3DSURFACE_DESC lDesc;
+    lpBack->GetDesc(&lDesc);
+    IDirect3DSurface9* lpSys = nullptr;
+    if (SUCCEEDED(renderengine::gDevice->CreateOffscreenPlainSurface(
+            lDesc.Width, lDesc.Height, lDesc.Format, D3DPOOL_SYSTEMMEM, &lpSys, nullptr)) &&
+        SUCCEEDED(renderengine::gDevice->GetRenderTargetData(lpBack, lpSys)))
+    {
+        D3DLOCKED_RECT lLock;
+        if (SUCCEEDED(lpSys->LockRect(&lLock, nullptr, D3DLOCK_READONLY)))
+        {
+            char lacPath[600];
+            std::snprintf(lacPath, sizeof(lacPath), "%s\\bb_%06u.bmp",
+                          sacDir, renderengine::guPresentCount);
+            FILE* lpFile = std::fopen(lacPath, "wb");
+            if (lpFile != nullptr)
+            {
+                const u32 luW = lDesc.Width, luH = lDesc.Height;
+                const u32 luImageBytes = luW * luH * 4u;
+                u8 laHdr[54] = { 'B','M' };
+                *reinterpret_cast<u32*>(laHdr + 2)  = 54u + luImageBytes;
+                *reinterpret_cast<u32*>(laHdr + 10) = 54u;
+                *reinterpret_cast<u32*>(laHdr + 14) = 40u;
+                *reinterpret_cast<s32*>(laHdr + 18) = static_cast<s32>(luW);
+                *reinterpret_cast<s32*>(laHdr + 22) = -static_cast<s32>(luH);   // top-down
+                *reinterpret_cast<u16*>(laHdr + 26) = 1;
+                *reinterpret_cast<u16*>(laHdr + 28) = 32;
+                *reinterpret_cast<u32*>(laHdr + 34) = luImageBytes;
+                fwrite(laHdr, 1, sizeof(laHdr), lpFile);
+                for (u32 y = 0; y < luH; ++y)
+                {
+                    fwrite(static_cast<const u8*>(lLock.pBits) + y * lLock.Pitch, 1, luW * 4u, lpFile);
+                }
+                fclose(lpFile);
+            }
+            lpSys->UnlockRect();
+        }
+    }
+    if (lpSys != nullptr) { lpSys->Release(); }
+    lpBack->Release();
+}
+
 // End the scene and present the back buffer to the window.
 void renderengine::Device::ShowPixelBuffer()
 {
@@ -136,5 +204,7 @@ void renderengine::Device::ShowPixelBuffer()
         return;
     }
     gDevice->EndScene();
+    DumpBackBufferIfRequested();
     gDevice->Present(nullptr, nullptr, nullptr, nullptr);
+    ++renderengine::guPresentCount;
 }
