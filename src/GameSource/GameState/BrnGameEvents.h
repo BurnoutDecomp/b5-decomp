@@ -26,6 +26,7 @@ const s32 KI_MAX_RACE_CARS = 8;
 // values are placeholders used purely as template tags.
 enum EGameEventType
 {
+    E_EVENT_STREAMING_COMPLETE      = 9,   // DWARF BrnGameEvents.h:19 (full contiguous EGameEventType)
     E_EVENT_CHANGE_NETWORK_CAR      = 7,
     E_EVENT_ONLINE_PLAYER_ADDED     = 127,
     E_EVENT_ONLINE_PLAYER_FINALISED = 128,
@@ -85,6 +86,22 @@ struct HitOverheadSignEvent : public GameEvent<E_EVENT_OVERHEAD_SIGN_HIT>
 
 // X360 element of EventQueue<RecordPropHitEvent,50> (DWARF BrnGameEvents.h:413). 16-byte aligned
 // via the leading Vector3.
+// DWARF BrnGameEvents.h:744 -- the "a module finished streaming" event
+// (E_EVENT_STREAMING_COMPLETE == 9). WorldEntityModule::UpdateStream posts it with
+// meModule == E_MODULE_WORLD_GRAPHICS when a GameAction asked to be told the world
+// stream settled (the X360 16-byte payload {2, 0}).
+struct StreamingCompleteEvent : public GameEvent<E_EVENT_STREAMING_COMPLETE>
+{
+    // BrnGameEvents.h:757 nested enum; value 2 attested by the X360 UpdateStream store.
+    enum EModule
+    {
+        E_MODULE_WORLD_GRAPHICS = 2,
+    };
+
+    EModule meModule;   // :757
+    CgsID   mUserId;    // :758
+};
+
 struct RecordPropHitEvent : public GameEvent<E_EVENT_RECORD_PROP_HIT>
 {
     Vector3 mPosition;   // 0x00 (rw::math::vpu, 16-byte SIMD)

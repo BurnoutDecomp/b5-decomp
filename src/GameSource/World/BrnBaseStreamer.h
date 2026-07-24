@@ -55,6 +55,9 @@ class StreamerTargetEntry
 public:
     CgsID GetId()   const { return mResourceId; }
     bool  IsSafe()  const { return mbSafe; }
+    // WorldEntityModule::QueryWorldGraphicsLoad @0x822A87B0 reads the potential
+    // entry's user id (the zone number rides in its low 32 bits).
+    u64   GetUserId() const { return muUserId; }
 
 private:
     CgsID mResourceId;   // BrnBaseStreamer.h:59
@@ -167,7 +170,7 @@ public:
     bool RemoveEntry( CgsID lId );
     bool RemoveEntry( CgsID lId, u64 luUserId );
 
-    s32  GetEntryListLength() { return miStreamListLength; }
+    s32  GetEntryListLength() const { return miStreamListLength; }
 
     EAssetStatus DebugGetAssetStatus( CgsID lId ) const;
 
@@ -258,26 +261,10 @@ private:
     StreamerCurrentEntry maStreamerCurrentEntries[ListLength]; // BrnBaseStreamer.h:311
 };
 
-// -----------------------------------------------------------------------------
-// FLAG: WorldGraphicsStreamer's true DWARF home is BrnWorldGraphicsStreamer.h
-// (it derives BaseStreamer<32> and adds mpWorldEntityModule + a
-// ResourcePtr<CgsGraphics::InstanceList>[32] table). That home is NOT yet
-// reconstructed. Only IsListLoaded is in this TU's ledger, and its body is a
-// one-line forward into the base owned here. A MINIMAL shell deriving
-// BaseStreamer<32> is provided so IsListLoaded can be bodied faithfully without
-// fabricating the rest of the class. When BrnWorldGraphicsStreamer.h lands,
-// this shell is replaced and IsListLoaded moves into it (the body is identical).
-// -----------------------------------------------------------------------------
-class WorldGraphicsStreamer : public BaseStreamer<32>
-{
-public:
-    // IsListLoaded @0x827B0D00 (DWARF: `bool IsListLoaded(int32_t) const`).
-    // @ 0x827B0D00 -- tail-calls InternalBaseStreamer::IsEntryReady(liIndex).
-    bool IsListLoaded( s32 liIndex ) const
-    {
-        return IsEntryReady( liIndex );
-    }
-};
+// NOTE: WorldGraphicsStreamer's real home is BrnWorldGraphicsStreamer.h (it
+// derives BaseStreamer<32> there and owns IsListLoaded @0x827B0D00, which
+// forwards to InternalBaseStreamer::IsEntryReady as this header documents).
+// The interim shell that used to live here was retired when that home landed.
 
 } // namespace BrnWorld
 

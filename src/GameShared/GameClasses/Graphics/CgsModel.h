@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"
 
 // CgsModel.h - the CgsGraphics::Model wrapper/accessor.
 //
@@ -31,7 +32,10 @@ namespace CgsGraphics
     // concrete RenderWare-backed type is reconstructed in its own TU
     // (CgsRwRenderableResourceType). GetRenderable returns a pointer into the
     // model's renderable table, so an opaque forward declaration is sufficient.
-    struct Renderable;
+    // RECONCILE 2026-07-24: the renderable's ledger home is GLOBAL-scope ::Renderable
+    // (Dispatch/Renderable.h); the old CgsGraphics-scoped forward was the stale guess
+    // that header already documents. Alias it in so existing spellings keep working.
+    using ::Renderable;
 
     // CgsModel.h:61 (DWARF)
     const u32 KU32_MAX_NUM_UNIQUE_KEYS = 2048;
@@ -86,6 +90,15 @@ namespace CgsGraphics
         // --- Accessors bodied in CgsModel.cpp (this group) ---
 
         // CgsModel.h:179
+        // Assert-text-attested flag API ("lbInstancing == GetFlag(
+        // CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER)", CgsModel.h:412):
+        // bit 0 of mu8Flags marks instance-shader models.
+        enum EFlag
+        {
+            E_FLAG_MODEL_USES_INSTANCE_SHADER = 0x01,
+        };
+        bool GetFlag(EFlag leFlag) const { return (mu8Flags & static_cast<u8>(leFlag)) != 0; }
+
         const Renderable* GetRenderable(State leState) const;
 
         // CgsModel.h:186

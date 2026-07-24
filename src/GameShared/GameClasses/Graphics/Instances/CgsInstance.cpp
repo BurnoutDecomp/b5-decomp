@@ -1,5 +1,4 @@
-#include "types.hpp"
-#include <cstdint>
+#include "GameShared/GameClasses/Graphics/Instances/CgsInstance.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetInstance bounds check)
 
@@ -19,21 +18,9 @@
 
 namespace CgsGraphics
 {
-    // Forward-declared only; the element's internal layout is not committed here.
-    struct Instance;
-
-    struct InstanceList
-    {
-        uintptr_t mpaInstances;    // 0x00 Instance* (base of the instance buffer)
-        u32       muArraySize;     // 0x04 total Instance entries
-        u32       muNumInstances;  // 0x08 complete Instance entries
-        u32       muVersionNumber; // 0x0C
-
-        InstanceList* FixDown(int delta);
-        Instance*     GetInstance(u32 luIndex) const;
-    };
-
-    static const u32 kInstanceStride = 80;  // bytes per instance
+    // X360 on-disk stride 80; the PC element follows sizeof(Instance) (the model
+    // pointer widens on x64 -- semantic-by-NAME, x64 gate).
+    static const u32 kInstanceStride = sizeof(Instance);
 
     InstanceList* InstanceList::FixDown(int delta)
     {

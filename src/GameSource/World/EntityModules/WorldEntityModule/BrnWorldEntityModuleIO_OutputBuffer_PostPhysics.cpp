@@ -25,14 +25,13 @@ namespace WorldEntityIO
 {
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_PostPhysics, mResourceRequestInterface) == 4,
-                      "mResourceRequestInterface @4");
-        static_assert(offsetof(OutputBuffer_PostPhysics, mStatusInterface) == 822896,
-                      "mStatusInterface @822896");
+        // X360 32-bit byte offsets retired 2026-07-24: the buffer now holds the real
+        // typed members (several contain host pointers), so per the x64 gate the
+        // layout is semantic-by-NAME; the X360 offsets live as comments in the header.
     }
 
     // X360 0x822BA810: write-lock; return this + 4.
-    OutputBuffer_PostPhysics::ResourceRequestInterfaceStorage*
+    ResourceRequestInterface*
     OutputBuffer_PostPhysics::GetResourceRequestInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -40,7 +39,7 @@ namespace WorldEntityIO
     }
 
     // X360 0x827A2E78: read-lock; return this + 822896.
-    const OutputBuffer_PostPhysics::StatusInterfaceStorage*
+    const StatusInterface*
     OutputBuffer_PostPhysics::GetStatusInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
@@ -48,11 +47,20 @@ namespace WorldEntityIO
     }
 
     // X360 0x822BA8B8: write-lock; return this + 822896.
-    OutputBuffer_PostPhysics::StatusInterfaceStorage*
+    StatusInterface*
     OutputBuffer_PostPhysics::GetStatusInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mStatusInterface;
+    }
+
+    // X360 0x822BA960: write-lock; return &mSceneInputInterface (X360 this + 4116).
+    // Called by BrnWorld::WorldEntityModule::UpdateCollisionValidation.
+    SceneInputInterface*
+    OutputBuffer_PostPhysics::GetSceneInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSceneInputInterface;
     }
 }
 }

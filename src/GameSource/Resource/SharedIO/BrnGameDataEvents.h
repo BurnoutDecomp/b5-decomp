@@ -2,6 +2,7 @@
 #define GAMESOURCE_RESOURCE_SHAREDIO_BRNGAMEDATAEVENTS_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 #include "BrnCommonTypes.h"                                  // CgsID (typedef u64)
 #include "GameSource/Resource/SharedIO/BrnAssetIds.h"        // BrnResource::EAssetSet
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::Event base
@@ -49,6 +50,11 @@ namespace BrnResource
 namespace GameDataIO
 {
     // DWARF: BrnGameDataEvents.h:51
+    // Receiver-side reply id for the surface-list fetch (the X360 assert text
+    // "liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST" in
+    // WorldEntityModule::PrepareSurfaceList @0x822F9B70; observed value 66).
+    static const s32 EVENT_GET_SURFACE_LIST = 66;
+
     struct GameDataEvent : public CgsModule::Event
     {
         s32                                 miEventId;       // +0x00
@@ -62,6 +68,9 @@ namespace GameDataIO
         CgsID     mId;         // +0x10 (u64, 8-aligned)
         EAssetSet meType;      // +0x18 (4-byte enum)
         bool      mbFailFlag;  // +0x1C
+        // The loaded asset's resource handle (WorldGraphicsStreamer::OnLoadComplete
+        // @0x827BE5C8 binds the instance-list slot from event+0x20).
+        CgsResource::ResourceHandle mHandle;   // +0x20
 
         // ADDITIVE GROW: the asset-id accessor the GameData event consumers read. The
         // X360 load-complete handlers read mId straight from +0x10 (e.g.

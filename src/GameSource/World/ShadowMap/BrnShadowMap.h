@@ -152,6 +152,12 @@ namespace BrnWorld
         // all-zero VecFloat while the shadow-LOD-distance optimisation is disabled).
         VecFloat CalcLodDistanceModifier();
 
+        // WorldEntityModule::GenerateDispatchLists @0x822D5AB0 reads the leading
+        // member pair {mbRenderingShadowMap, mbUseZOnlyRenderingPath} (DWARF :226/:227)
+        // to select the shadow pass. Additive read accessors for that consumer.
+        bool IsRenderingShadowMap() const     { return mbRenderingShadowMap; }
+        bool IsUsingZOnlyRenderingPath() const { return mbUseZOnlyRenderingPath; }
+
         void     SetCurrentShadowMap(u32 luIndex);                        // BrnShadowMap.h:176
         u32      GetCurrentShadowMap();                                   // BrnShadowMap.h:182
         void     ObjectCSMSelect(f32 lfArg) const;                        // BrnShadowMap.h:188

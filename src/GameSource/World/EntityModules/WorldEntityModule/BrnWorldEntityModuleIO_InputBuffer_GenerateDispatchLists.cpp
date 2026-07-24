@@ -25,38 +25,36 @@ namespace WorldEntityIO
 {
     void InputBuffer_GenerateDispatchLists::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_GenerateDispatchLists, muDispatchFrame) == 4,
-                      "muDispatchFrame @4");
-        static_assert(offsetof(InputBuffer_GenerateDispatchLists, muShadowMap) == 0x8018,
-                      "muShadowMap @0x8018");
+        // X360 32-bit byte offsets retired 2026-07-24: typed members (host pointers)
+        // -> semantic-by-NAME layout; the X360 offsets live as comments in the header.
     }
 
     // X360 0x822BAA08: read-lock; return muDispatchFrame (this+4).
-    u32 InputBuffer_GenerateDispatchLists::GetDispatchFrame() const
+    CgsGraphics::DispatchFrame* InputBuffer_GenerateDispatchLists::GetDispatchFrame() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muDispatchFrame;
+        return mpDispatchFrame;
     }
 
     // X360 0x827A2FC8: write-lock; set muDispatchFrame (this+4).
-    void InputBuffer_GenerateDispatchLists::SetDispatchFrame(u32 luDispatchFrame)
+    void InputBuffer_GenerateDispatchLists::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muDispatchFrame = luDispatchFrame;
+        mpDispatchFrame = lpDispatchFrame;
     }
 
     // X360 0x822BAAB0: read-lock; return muShadowMap (this+0x8018).
-    u32 InputBuffer_GenerateDispatchLists::GetShadowMap() const
+    BrnWorld::ShadowMap* InputBuffer_GenerateDispatchLists::GetShadowMap() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return muShadowMap;
+        return mpShadowMap;
     }
 
     // X360 0x827A3070: write-lock; set muShadowMap (this+0x8018).
-    void InputBuffer_GenerateDispatchLists::SetShadowMap(u32 luShadowMap)
+    void InputBuffer_GenerateDispatchLists::SetShadowMap(BrnWorld::ShadowMap* lpShadowMap)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        muShadowMap = luShadowMap;
+        mpShadowMap = lpShadowMap;
     }
 }
 }
