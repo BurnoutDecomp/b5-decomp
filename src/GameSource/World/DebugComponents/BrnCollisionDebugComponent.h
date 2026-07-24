@@ -11,11 +11,23 @@
 // returns "Collision draw mode" for GetName (a partial-leak header read the older string
 // "Collision Tags" from a different build). Header-keyed TU; identity accessors inline.
 
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"
+
 namespace BrnWorld
 {
-    class CollisionDebugComponent
+    class WorldEntityModule;
+
+    // ADDITIVE GROW (WorldEntityModule::Construct @0x82302398 mounts + registers this
+    // component like its PVS sibling): derive the CgsDev::DebugComponent registration
+    // base and carry the owning-module back-pointer.
+    class CollisionDebugComponent : public CgsDev::DebugComponent
     {
     public:
+        void Construct( WorldEntityModule* lpWorldEntityModule )
+        {
+            mpWorldEntityModule = lpWorldEntityModule;
+        }
+
         const char* GetName() const { return "Collision draw mode"; }
         const char* GetPath() const { return "World"; }
 
@@ -23,5 +35,8 @@ namespace BrnWorld
         // colour word (the X360 stores it through the result pointer; returned here by value).
         // Defined in BrnCollisionDebugComponent.cpp.
         u32 GetTrafficColour(f32 lfValue) const;
+
+    private:
+        WorldEntityModule* mpWorldEntityModule;
     };
 }

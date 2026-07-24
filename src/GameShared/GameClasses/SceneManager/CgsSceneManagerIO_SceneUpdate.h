@@ -124,6 +124,11 @@ namespace SceneManagerIO
         // declarations are LOAD-BEARING (committed consumers call them) and left unchanged.
         void AddDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage, u8 lu8VolumeTypeFlag);
         void AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag, f32 lfBoundingRadius);
+        // Full producer signature (X360 @ 0x822B11F8 stages the bounding-sphere CENTRE
+        // vmx lane at event +0x00 before the id/flags/radius scalars; the world-entity
+        // consumers pass it explicitly). The 3-arg slice above predates this overload.
+        void AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag,
+                       Vector3 lCentre, f32 lfBoundingRadius);
         void AddVolumeInstance(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
         void RemoveEntity(CgsSceneManager::EntityId lEntityId, u32 luFlags);

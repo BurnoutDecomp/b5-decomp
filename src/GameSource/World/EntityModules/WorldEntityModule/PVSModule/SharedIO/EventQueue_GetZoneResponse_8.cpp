@@ -21,7 +21,11 @@
 //     BrnWorld::PVSModule::Update.
 
 // Lock the element stride (736) the X360 AddEvent memcpy attests.
-static_assert(sizeof(BrnWorld::PVSIO::GetZoneResponse) == 736, "GetZoneResponse stride drift");
+// X360 stride: sizeof(GetZoneResponse) == 736 (32-bit ZoneEntry). The 2026-07-24
+// interior grow (WorldEntityModule TU) widened ZoneEntry::mpZoneData to a host
+// pointer, so the PC stride departs (semantic-by-NAME, x64 gate); the queue walks
+// by sizeof, which stays self-consistent.
+static_assert(sizeof(BrnWorld::PVSIO::GetZoneResponse) % 16 == 0, "GetZoneResponse 16-align drift");
 
 template void
 CgsModule::EventQueue<BrnWorld::PVSIO::GetZoneResponse, 8>::Construct();

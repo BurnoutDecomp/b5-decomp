@@ -26,12 +26,12 @@ namespace WorldEntityIO
 {
     void InputBuffer_PostPhysics::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PostPhysics, mGameActionQueue) == 4,
-                      "mGameActionQueue @4");
+        // X360 32-bit byte offsets retired 2026-07-24: typed members (host pointers)
+        // -> semantic-by-NAME layout; the X360 offsets live as comments in the header.
     }
 
     // X360 0x822BA768: read-lock; return this + 4.
-    const InputBuffer_PostPhysics::GameActionQueueStorage*
+    const InputBuffer_PostPhysics::GameActionQueue*
     InputBuffer_PostPhysics::GetGameActionQueue() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
@@ -39,7 +39,7 @@ namespace WorldEntityIO
     }
 
     // X360 0x827A2D28: write-lock; return this + 4.
-    InputBuffer_PostPhysics::GameActionQueueStorage*
+    InputBuffer_PostPhysics::GameActionQueue*
     InputBuffer_PostPhysics::GetGameActionQueue()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

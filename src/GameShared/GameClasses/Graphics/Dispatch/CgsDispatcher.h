@@ -118,6 +118,10 @@ public:
     DispatchList* ReserveKey();                                       // @ 0x822A0788
     DispatchList* Submit(s32 li32SortKey, DispatchCommand* lpPacket); // @ 0x822A0808
 
+    // WorldEntityModule::RenderInstance @0x822D5AB0 reads the submitted-packet count
+    // (muCount @0x0C) for its every-128th "rebuild excluded list" cadence.
+    u32 GetCount() const { return muCount; }
+
     // ---- Declared-only surface (homed by other TUs) -------------------------
     // @ 0x827EE868 -- rebase this list's command/key pointers for main memory.
     DispatchList* RelocateForMainMemory(u32 luBinBase, u32 luBinOffset, u32 luListOffset);
@@ -159,6 +163,17 @@ public:
     void*            AllocateMemoryFast(u32 luQwords);        // @ 0x822A0620
     void*            BeginAllocateMemory(u32 luMaxQwords);    // @ 0x827F9260
     void             BeginPacket();                           // @ 0x822A06C0
+
+    // WorldEntityModule::GenerateDispatchLists @0x822D5AB0 inline: take the packet
+    // chain built since BeginPacket (read + clear m_pPacketStart/m_pLastCommandInPacket,
+    // the X360 frame+0x90/+0x94 pokes) for DispatchList::Submit.
+    DispatchCommand* EndPacket()
+    {
+        DispatchCommand* lpPacket = reinterpret_cast<DispatchCommand*>(m_pPacketStart);
+        m_pPacketStart = 0;
+        m_pLastCommandInPacket = 0;
+        return lpPacket;
+    }
     void             EndAllocateMemory(u32 luActualQwords);   // @ 0x827E6660
 
     // Inline accessor preserved verbatim from the Feb-2007 leak (ground truth).

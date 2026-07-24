@@ -20,17 +20,13 @@ namespace WorldEntityIO
 {
     void InputBuffer_PreScene::_AssertLayout()
     {
-        static_assert(offsetof(InputBuffer_PreScene, mActiveRaceCarInterface) == 16,
-                      "mActiveRaceCarInterface @16");
-        static_assert(offsetof(InputBuffer_PreScene, mRequestInterface) == 10496,
-                      "mRequestInterface @10496 (16 + 10480)");
-        static_assert(sizeof(InputBuffer_PreScene::ActiveRaceCarInterfaceStorage) == 10480,
-                      "ActiveRaceCarInterface payload is 10480 bytes");
+        // X360 32-bit byte offsets retired 2026-07-24: typed members (host pointers)
+        // -> semantic-by-NAME layout; the X360 offsets live as comments in the header.
     }
 
     // X360 0x822BA228 (R, :96) -- read-lock; return &mActiveRaceCarInterface (this + 16). DWARF
     // BrnWorldEntityModuleIO.h:96 (const). Called by BrnWorld::WorldEntityModule::PreSceneUpdate.
-    const InputBuffer_PreScene::ActiveRaceCarInterfaceStorage*
+    const InputBuffer_PreScene::ActiveRaceCarInterface*
     InputBuffer_PreScene::GetActiveRaceCarInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
@@ -55,10 +51,10 @@ namespace WorldEntityIO
     // X360 0x827A27D0 (W, :97) -- write-lock; block-copy the 10480-byte race-car input payload
     // into mActiveRaceCarInterface (this + 16). The X360 XMemCpy(this+16, src, 0x28F0) is a plain
     // 10480-byte block copy.
-    void InputBuffer_PreScene::SetActiveRaceCarInterface(const ActiveRaceCarInterfaceStorage& lrInterface)
+    void InputBuffer_PreScene::SetActiveRaceCarInterface(const ActiveRaceCarInterface& lrInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        std::memcpy(&mActiveRaceCarInterface, &lrInterface, sizeof(ActiveRaceCarInterfaceStorage));
+        std::memcpy(&mActiveRaceCarInterface, &lrInterface, sizeof(ActiveRaceCarInterface));
     }
 }
 }

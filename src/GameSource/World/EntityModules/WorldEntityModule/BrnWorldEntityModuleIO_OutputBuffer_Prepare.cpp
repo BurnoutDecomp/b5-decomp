@@ -22,12 +22,13 @@ namespace WorldEntityIO
 {
     void OutputBuffer_Prepare::_AssertLayout()
     {
-        static_assert(offsetof(OutputBuffer_Prepare, mResourceRequestInterface) == 4,
-                      "mResourceRequestInterface @4");
+        // X360 32-bit byte offsets retired 2026-07-24: the buffer now holds the real
+        // typed members (several contain host pointers), so per the x64 gate the
+        // layout is semantic-by-NAME; the X360 offsets live as comments in the header.
     }
 
     // X360 0x822BA180: write-lock; return this + 4.
-    OutputBuffer_Prepare::ResourceRequestInterfaceStorage*
+    ResourceRequestInterface*
     OutputBuffer_Prepare::GetResourceRequestInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -38,7 +39,7 @@ namespace WorldEntityIO
     // const overload; the asm tests the read-lock bit (`extrwi r11,r11,1,27` == bit 4 ==
     // IsBufferLockedForReading()) and fires "Not locked for reading". Called by
     // WorldModule::BridgeWorldResourceRequestsToOutput_Prepare.
-    const OutputBuffer_Prepare::ResourceRequestInterfaceStorage*
+    const ResourceRequestInterface*
     OutputBuffer_Prepare::GetResourceRequestInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");

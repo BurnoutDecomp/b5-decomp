@@ -73,6 +73,16 @@ namespace CgsDev
         //       queue being the renderer's second event queue).
         DebugRender& GetRender();
 
+        // ADDITIVE GROW (WorldEntityModule::Construct @0x82302398): the debug-variable
+        // register mirror (X360 0x8282E400 bool / 0x8282E3B8 s32 / RegisterVariable f32)
+        // with the range/step tuners (0x8282F910 / 0x8282F9B8). Declarations only --
+        // bodies belong to the DebugSystem TU (per-TU compile gate).
+        void RegisterVariable(bool* lpbVariable, const char* lpcPath, const char* lpcName);
+        void RegisterVariable(s32* lpiVariable, const char* lpcPath, const char* lpcName);
+        void RegisterVariable(f32* lpfVariable, const char* lpcPath, const char* lpcName);
+        void SetRange(s32* lpiVariable, s32 liMin, s32 liMax);
+        void SetStep(s32* lpiVariable, s32 liStep);
+
     private:
         DebugManager* mpDebugManager;
         bool          mbIsAutomaticClass;

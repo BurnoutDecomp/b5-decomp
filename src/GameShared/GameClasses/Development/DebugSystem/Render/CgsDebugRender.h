@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                              // VariableEventQueue<16384,16> (the event buffer)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // Debug2DImmediateRender, RGBA, Vector2
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h"        // CgsDev::Internal::CInEventDraw* records (canonical home)
@@ -40,6 +41,10 @@ namespace CgsDev
     class DebugRender
     {
     public:
+        // WorldEntityModule::RenderInstance debug path (@0x822D5AB0 tail): draw a
+    // world-space circle (centre, facing, radius, packed colour). Declaration only;
+    // the body lands with the DebugRender TU (per-TU compile gate).
+    void DrawCircle( Vector3 lCentre, Vector3 lNormal, f32 lfRadius, u32 luColour );
         // Text justification for Draw2DTextJustified (DecFIGS DWARF CgsDebugRender.h:112).
         enum Justification
         {

@@ -44,6 +44,8 @@
 
 namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer only
 
+namespace CgsResource { struct ResourceHandle; }
+
 namespace BrnResource
 {
 namespace GameDataIO
@@ -150,6 +152,35 @@ namespace GameDataIO
         // from that single attested site.
         bool AcquireResource(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
                              s32 liEventId, s32 liPoolId, const char* lpcResourceName);
+
+        // Acquire the "TRK_CLIL%d" zone-collision resource list into a caller-owned
+        // handle array. DWARF BrnGameDataRequestQueue.h:234
+        // `AcquireZoneCollision(BaseEventReceiverQueue*, int, ResourceHandle*, int)`;
+        // X360 inline expansion in WorldEntityModule::PrepareZoneCollision @0x82302C38
+        // (SPrintf "TRK_CLIL%d" -> ID::HashString -> AcquireResourceListRequest, pool 2,
+        // AddEvent type 5, event id == the zone number).
+        bool AcquireZoneCollision(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                                  s32 liZoneNumber,
+                                  CgsResource::ResourceHandle* lpaHandles, s32 liMaxHandles);
+
+        // Swap the collision world in/out (DWARF :240/:237). X360: typed
+        // AddEvent<SwapIn/SwapOutCollisionWorldRequest> types 68/67
+        // (WorldEntityModule::ValidateCollision @0x82306A48 / InvalidateCollision
+        // @0x822F9D78; the request is the plain GameDataEvent pair {id, queue}).
+        bool SwapInCollisionWorld(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                                  s32 liEventId);
+        bool SwapOutCollisionWorld(CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+                                   s32 liEventId);
+
+        // Merge another request interface's queued requests into this one (the X360
+        // VariableEventQueue<N,16>::Append<M,16> template call sites:
+        // WorldEntityModule::PostPhysicsUpdate @0x823080F0 appends the streamer's <2048>
+        // interface; BridgePVSToOutput_Prepare @0x822F9EC8 appends the PVS <512> one).
+        template <s32 M>
+        void Append(const RequestInterface<M>& lrOther)
+        {
+            mRequestQueue.Append(lrOther.mRequestQueue);
+        }
     };
 }
 }

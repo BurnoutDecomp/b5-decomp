@@ -21,8 +21,10 @@ namespace vpu
     // the trivial initialisers the SDK exposes as type methods (SetZero/SetIdentity,
     // spelled `v.SetZero()` / `m.SetIdentity()` at the call sites) are provided here.
     struct alignas(16) Vector2 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
-    struct alignas(16) Vector3 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };   // w: unused 4th lane
-    struct alignas(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; } };
+    struct alignas(16) Vector3 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
+                                 typedef const Vector3& InParam; };   // w: unused 4th lane
+    struct alignas(16) Vector4 { float x, y, z, w; void SetZero() { x = y = z = w = 0.0f; }
+                                 typedef const Vector4& InParam; };
     struct alignas(16) Vector3Plus
     {
         float x, y, z, w;
@@ -37,6 +39,7 @@ namespace vpu
     // Row-major; the last row of an affine is implicit (0,0,0,1) but still stored.
     struct alignas(16) Matrix44
     {
+        typedef const Matrix44& InParam;
         Vector4 xAxis, yAxis, zAxis, wAxis;
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()
@@ -47,6 +50,7 @@ namespace vpu
     };
     struct alignas(16) Matrix44Affine
     {
+        typedef const Matrix44Affine& InParam;
         Vector3 xAxis, yAxis, zAxis, wAxis;
         void SetZero() { xAxis.SetZero(); yAxis.SetZero(); zAxis.SetZero(); wAxis.SetZero(); }
         void SetIdentity()

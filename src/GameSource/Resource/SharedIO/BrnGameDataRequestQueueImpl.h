@@ -321,6 +321,61 @@ namespace GameDataIO
 
         return mRequestQueue.AddEvent(&lEvent, 4);
     }
+
+    // -------- AcquireZoneCollision (DWARF :234; inlined into
+    //          WorldEntityModule::PrepareZoneCollision @0x82302C38, <4096>) --------
+    // ASM record: {mpUser@0 = queue, miEventId@4 = the ZONE number, miPoolId@8 = 2,
+    // mListResourceId@0x10 = ID::HashString("TRK_CLIL%d" % zone), mpHandles@0x18,
+    // miMaxHandles@0x1C = 1}; AddEvent type 5 (X360 size 32). The receiver reply is
+    // the same record echoed with the handle array filled.
+    template <s32 N>
+    bool RequestInterface<N>::AcquireZoneCollision(
+            CgsModule::BaseEventReceiverQueue* lpReceiverQueue,
+            s32 liZoneNumber,
+            CgsResource::ResourceHandle* lpaHandles, s32 liMaxHandles)
+    {
+        char lacResourceName[256];
+        CgsCore::SPrintf(lacResourceName, 256, "TRK_CLIL%d", liZoneNumber);
+
+        CgsResource::Events::AcquireResourceListRequest lEvent;
+        lEvent.mpUser       = lpReceiverQueue;
+        lEvent.miEventId    = liZoneNumber;
+        lEvent.miPoolId     = 2;
+        lEvent.mListResourceId.SetHash(
+            static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
+                reinterpret_cast<const u8*>(lacResourceName)))));
+        lEvent.mpHandles    = lpaHandles;
+        lEvent.miMaxHandles = liMaxHandles;
+
+        return mRequestQueue.AddEvent(&lEvent, 5);
+    }
+
+    // -------- SwapInCollisionWorld / SwapOutCollisionWorld (DWARF :240/:237;
+    //          inlined into WorldEntityModule::Validate/InvalidateCollision
+    //          @0x82306A48/@0x822F9D78) --------
+    // ASM record: the plain GameDataEvent pair {miEventId@0, mpReceiverQueue@4};
+    // AddEvent types 68 (swap in) / 67 (swap out), X360 size 8.
+    template <s32 N>
+    bool RequestInterface<N>::SwapInCollisionWorld(
+            CgsModule::BaseEventReceiverQueue* lpReceiverQueue, s32 liEventId)
+    {
+        SwapInCollisionWorldRequest lEvent;
+        lEvent.miEventId       = liEventId;
+        lEvent.mpReceiverQueue = lpReceiverQueue;
+
+        return mRequestQueue.AddEvent(&lEvent, 68);
+    }
+
+    template <s32 N>
+    bool RequestInterface<N>::SwapOutCollisionWorld(
+            CgsModule::BaseEventReceiverQueue* lpReceiverQueue, s32 liEventId)
+    {
+        SwapOutCollisionWorldRequest lEvent;
+        lEvent.miEventId       = liEventId;
+        lEvent.mpReceiverQueue = lpReceiverQueue;
+
+        return mRequestQueue.AddEvent(&lEvent, 67);
+    }
 }
 }
 

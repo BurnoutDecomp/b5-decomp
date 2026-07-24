@@ -201,6 +201,19 @@ namespace Events
         bool mbCheckRefCount;  // FindResource ref-count gate (X360 a2[4])
     };
 
+    // Acquire every resource of a named resource LIST (request id/type 5 -> pool input) into a
+    // caller-owned handle array. DWARF CgsResourceIOEvents.h:410 {mListResourceId, mpHandles,
+    // miMaxHandles}; X360 32-byte record attested by WorldEntityModule::PrepareZoneCollision
+    // @ 0x82302C38 ({mpUser@0, miEventId@4, miPoolId@8, mListResourceId@0x10, mpHandles@0x18,
+    // miMaxHandles@0x1C}, AddEvent type 5). The reply on the receiver queue is this same
+    // record echoed with the handle array filled.
+    struct AcquireResourceListRequest : public PoolEvent
+    {
+        ID              mListResourceId;   // :451 (X360 +0x10)
+        ResourceHandle* mpHandles;         // :452 (X360 +0x18)
+        s32             miMaxHandles;      // :453 (X360 +0x1C)
+    };
+
     // Reply to an AcquireResourceRequest (pool output queue, tag 6): the resolved resource handle -- the
     // ResourceHandle pair (mpResourceMemory -> the entry's main-memory SmallResource slot; mpSourceEntry ->
     // the entry), or both null if the resource is absent.

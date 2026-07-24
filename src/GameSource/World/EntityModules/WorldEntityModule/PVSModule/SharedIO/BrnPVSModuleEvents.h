@@ -43,8 +43,16 @@ struct GetZoneRequest
     // NOT a VMX compute pipeline) and the mbUseVelocity byte.
     void GetVelocity(Vector4* lpOutVelocity, bool* lpbOutUseVelocity) const;
 
-    // --- layout (asm-observed offsets) ---------------------------------------
-    u8      maHeader[0x24];   // +0x00  opaque event header (deferred)
+    // --- layout (asm-observed offsets; header fields attested by
+    //     WorldEntityModule::PreSceneUpdate @ 0x82302A08, which builds the
+    //     request on the stack: player index 0, the PVS position @+0x10, the
+    //     response's lookup index @+0x20, the use-velocity flag @+0x24 and the
+    //     race car's velocity @+0x30) --------------------------------------
+    s32     miPlayerIndex;    // +0x00  (PreSceneUpdate passes 0)
+    s32     miPad04;          // +0x04  (zeroed by the builder)
+    u8      maPad08[0x08];    // +0x08  opaque (deferred)
+    Vector4 mPosition;        // +0x10  the position to resolve a zone for
+    s32     miLookupIndex;    // +0x20  previous response's lookup hint
     u8      mbUseVelocity;    // +0x24  use-velocity flag (lbz 0x24)
     u8      maPad25[0x0B];    // +0x25  opaque padding up to the vector
     Vector4 mVelocity;        // +0x30  velocity hint (lvx128 0x30)
@@ -74,8 +82,69 @@ struct GetZoneRequest
 // fabricated as X360 fact -- only the size/alignment are pinned by asm.
 struct alignas(16) GetZoneResponse
 {
-    // +0x000 .. +0x2DF  opaque response payload (deferred; see FLAG above).
-    u8 maPayload[736];
+    // INTERIOR (X360 offsets; attested 2026-07-24 by the WorldEntityModule TU:
+    // UpdateStream @0x822F9740, QueryWorldGraphicsLoad @0x822A87B0,
+    // PostPhysicsUpdate @0x823080F0, Prepare @0x823027D0 mPlayerZoneResponse
+    // .Construct(-1,0,-1)):
+    //   +0x000 miLookupIndex   +0x004 miNumZones   +0x008 maZones[48]{ptr,zone}
+    //   +0x1E8 mabZoneRequired[48]   +0x218 mafZoneWeights[48]   +0x2D8 miPlayerZone
+    // The zone-record pointer is a host pointer on PC (the PVS module resolves it
+    // into the loaded PVS data), so the x64 layout departs from the 736-byte X360
+    // form; the queue element stride follows sizeof (semantic-by-NAME, x64 gate).
+    static const s32 KI_MAX_ZONES = 48;
+
+    // One visible zone: the PVS zone record + its zone number. The record fields
+    // this slice reads are serialised PVS data (external format): the safe flag
+    // at record-96 and the has-prop-instances count at record+0.
+    struct ZoneEntry
+    {
+        const u8* mpZoneData;     // X360 +0: 32-bit pointer into the PVS data
+        u32       muZoneNumber;   // X360 +4
+    };
+
+    void Construct( s32 liLookupIndex, s32 liNumZones, s32 liPlayerZone )
+    {
+        miLookupIndex = liLookupIndex;
+        miNumZones = liNumZones;
+        miPlayerZone = liPlayerZone;
+    }
+
+    s32  GetLookupIndex() const               { return miLookupIndex; }
+    s32  GetNumZones() const                  { return miNumZones; }
+    s32  GetZoneNumber( u32 luZone ) const
+    {
+        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
+        return static_cast<s32>( maZones[ luZone ].muZoneNumber );
+    }
+    f32  GetZoneWeight( u32 luZone ) const
+    {
+        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
+        return mafZoneWeights[ luZone ];
+    }
+    bool IsZoneRequired( u32 luZone ) const
+    {
+        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
+        return mabZoneRequired[ luZone ] != 0;
+    }
+    // Serialised-PVS-record reads (raw offsets into external data; see above).
+    bool IsZoneSafe( u32 luZone ) const
+    {
+        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
+        return *reinterpret_cast<const u32*>( maZones[ luZone ].mpZoneData - 96 ) != 0;
+    }
+    bool ZoneHasPropInstances( u32 luZone ) const
+    {
+        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
+        return *reinterpret_cast<const u32*>( maZones[ luZone ].mpZoneData ) != 0;
+    }
+
+    s32       miLookupIndex;                  // X360 +0x000
+    s32       miNumZones;                     // X360 +0x004
+    ZoneEntry maZones[KI_MAX_ZONES];          // X360 +0x008 (8B stride on X360)
+    u8        maPad188[0x60];                 // X360 +0x188 (unattested span)
+    u8        mabZoneRequired[KI_MAX_ZONES];  // X360 +0x1E8
+    f32       mafZoneWeights[KI_MAX_ZONES];   // X360 +0x218
+    s32       miPlayerZone;                   // X360 +0x2D8
 };
 
 // ============================================================================
@@ -154,8 +223,17 @@ struct alignas(16) OutputBuffer : public CgsModule::DataStructure
     void Destruct();
     void Clear()    {}
 
-    CgsModule::EventQueue<GetZoneResponse, 8>     mZoneResponseQueue;          // +0x0000
-    BrnResource::GameDataIO::RequestInterface<512> mGameDataRequestInterface;  // +0x1718
+    CgsModule::EventQueue<GetZoneResponse, 8>*    GetZoneResponseQueue() { return &mZoneResponseQueue; }
+    const CgsModule::EventQueue<GetZoneResponse, 8>* GetZoneResponseQueue() const { return &mZoneResponseQueue; }
+
+    // WorldEntityModule::GetTotalZones @ 0x822BB0E0 reads this under the module's
+    // output lock (X360: output-structure + 0x1710, between the queue and the
+    // game-data request interface).
+    u32 GetTotalZones() const { return muTotalZones; }
+
+    CgsModule::EventQueue<GetZoneResponse, 8>     mZoneResponseQueue;          // X360 +0x0000
+    u32                                           muTotalZones;                // X360 +0x1710
+    BrnResource::GameDataIO::RequestInterface<512> mGameDataRequestInterface;  // X360 +0x1718
 
     // Pin the X360-attested layout the two accessors depend on.
     static void _AssertLayout();
