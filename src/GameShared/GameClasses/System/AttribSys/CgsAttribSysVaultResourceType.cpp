@@ -13,6 +13,19 @@
 
 namespace CgsResource
 {
+    // The AttribSysVault registry id. The X360 handler's GetTypeID virtual (vtable
+    // off_820A1400, registered as "AttribSysVaultResourceType" @0x82667EA8 slot #37,
+    // between AttribSysSchema and Model) has no standalone export (ICF-folds with the
+    // other `return 28` bodies); the id is attested by the shipped bundles themselves:
+    // WORLDVAULT.BIN/SURFACELIST.BIN carry their one resource as type 0x1c, and
+    // SURFACELIST.BIN's ResourceStringTable names that rid type="AttribSysVault".
+    static const uint32_t KU_ATTRIB_SYS_VAULT_RESOURCE_TYPE_ID = 28;
+
+    uint32_t AttribSysVaultResourceType::GetTypeID() const
+    {
+        return KU_ATTRIB_SYS_VAULT_RESOURCE_TYPE_ID;
+    }
+
     ResourceDescriptor AttribSysVaultResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
         const u32* lpWords = static_cast<const u32*>(lpResource);

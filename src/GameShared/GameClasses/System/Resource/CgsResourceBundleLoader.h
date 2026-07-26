@@ -32,13 +32,18 @@ namespace CgsResource
         // Load lpcFileName into lpPool. Returns the number of resources loaded, or -1 on a
         // read / format error. If lpfnResolveType is null (or a resource's type is unknown),
         // that resource is created and its data copied, but it is not fixed up.
-        s32 LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType);
+        // lbTagIdsWithPoolId = store each resource under `entry id | pool id << 32` -- the
+        // X360 streaming loader's stored-id form (DoAcquireResourceRequest 0x828FCD48 keys
+        // acquires by the full tagged id). The GameData streaming path passes true; the
+        // GUI-side loads keep the untagged PC convention their requesters use.
+        s32 LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType,
+                       bool lbTagIdsWithPoolId = false);
 
         // Unload lpcFileName's resources from lpPool: re-read the bundle's resource id list and
         // ref-count-release each (Pool::RemoveReference -> frees memory + slot at refcount 0). Returns the
         // number of resources unloaded, or -1 on a read/format error. [The X360 async unload tracks loaded
         // bundles + drives the DeAllocate state machine; this PC synchronous form re-derives the id list
         // from the file and releases directly.]
-        s32 UnloadBundle(const char* lpcFileName, Pool* lpPool);
+        s32 UnloadBundle(const char* lpcFileName, Pool* lpPool, bool lbTagIdsWithPoolId = false);
     };
 }

@@ -45,7 +45,8 @@ namespace CgsResource
 
 namespace CgsResource
 {
-    s32 BundleLoader::LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType)
+    s32 BundleLoader::LoadBundle(const char* lpcFileName, Pool* lpPool, FTypeResolver lpfnResolveType,
+                                 bool lbTagIdsWithPoolId)
     {
         // ---- read the whole bundle file (through the live async FS engine; CRT leaf early) --
         long  llFileSize = 0;
@@ -90,6 +91,19 @@ namespace CgsResource
 
             NewResource lNewResource;
             lNewResource.mID                 = lrEntry.mResourceId;
+            // X360 stored-id form: the streaming loader keys pool resources by the FULL
+            // 64-bit id with the owning pool's id in the high dword -- PoolModule::
+            // DoAcquireResourceRequest (0x828FCD48) derives the pool from the acquire id's
+            // high word and FindResources with the full tagged id, and every game-side
+            // acquire builds `HashString(name) | (pool << 32)` (e.g. WorldModule::
+            // LoadAttribSysVault 0x827D3D08). Bundle ENTRIES carry only the low 32-bit rid,
+            // so the tag is applied at create time. Opt-in per call site: the GameData
+            // streaming path (BundleLoaderModule::ProcessLoadRequests) passes true; the
+            // GUI-side loads keep the untagged PC convention their requesters use
+            // (reconcile with the GUI acquire paths when those are re-homed).
+            if (lbTagIdsWithPoolId)
+                lNewResource.mID.SetHash(lNewResource.mID.GetHash()
+                                         | (static_cast<u64>(static_cast<u32>(lpPool->GetId())) << 32));
             lNewResource.miNumImports        = static_cast<s32>(lrEntry.muImportCount);
             lNewResource.muImportTableOffset = lrEntry.muImportOffset;
             lNewResource.mpResourceType      = (lpfnResolveType != 0) ? lpfnResolveType(lrEntry.muResourceTypeId) : 0;
@@ -169,7 +183,7 @@ namespace CgsResource
     // id list and ref-count-release each one; Pool::RemoveReference frees a resource's heap memory + slot
     // when its ref count reaches zero (so a resource still imported elsewhere survives). [PC synchronous
     // form -- the X360 async unload uses the DeAllocate state machine + tracks loaded bundles.]
-    s32 BundleLoader::UnloadBundle(const char* lpcFileName, Pool* lpPool)
+    s32 BundleLoader::UnloadBundle(const char* lpcFileName, Pool* lpPool, bool lbTagIdsWithPoolId)
     {
         long  llFileSize = 0;
         char* lpcBundle  = ReadBundleFile(lpcFileName, &llFileSize);
@@ -196,7 +210,12 @@ namespace CgsResource
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
             // find the resource by id (any in-use status; ignore the ref-count gate), then release a ref.
-            const s32 liSlot = lpPool->FindResourceIndex(lpEntries[luIndex].mResourceId, true, 0xFF);
+            // Ids tagged at load time (see LoadBundle) must be looked up in the same form.
+            ID lId = lpEntries[luIndex].mResourceId;
+            if (lbTagIdsWithPoolId)
+                lId.SetHash(lId.GetHash()
+                            | (static_cast<u64>(static_cast<u32>(lpPool->GetId())) << 32));
+            const s32 liSlot = lpPool->FindResourceIndex(lId, true, 0xFF);
             if (liSlot >= 0 && lpPool->RemoveReference(static_cast<u32>(liSlot)))
                 ++liUnloaded;
         }

@@ -56,4 +56,68 @@ namespace BrnResource
     };
 
     static const s32 KI_NUM_MEMORY_MAP_POOLS = 27;
+
+    // The memory map's five allocator record tables (unk_82F2A788 header counts @+16..+32,
+    // table offsets @+44..+60): the definitions GameDataModule::CreateAllocators (0x8266DD00)
+    // publishes as type-10 (raw resource) / 14 (linear + heap) / 11 (rw linear) / 12 (rw
+    // general) create requests. miBankId keys the AllocatorList registry; miParentBankId is
+    // the X360 CreateBanks-tree parent the leaf bank is carved from. Descriptor lanes are the
+    // rw 5-entry {size, align} set (only lanes 0/2 are populated by the map).
+    struct MemoryMapAllocatorDef
+    {
+        s32         miBankId;
+        const char* mpcName;
+        s32         miParentBankId;
+        u32         mauSize[5];    // per rw memory-type lane (0 = unused)
+        u32         mauAlign[5];
+    };
+
+    static const MemoryMapAllocatorDef KAC_MEMORY_MAP_RAW_ALLOCATORS[] =
+    {
+        { 34, "Ice", 29, {0x40000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+    };
+    static const s32 KI_NUM_MEMORY_MAP_RAW_ALLOCATORS = 1;
+
+    static const MemoryMapAllocatorDef KAC_MEMORY_MAP_LINEAR_ALLOCATORS[] =
+    {
+        { 22, "AttribSysLinAlloc", 10, {0x44000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 30, "Behaviours", 29, {0x10000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 44, "Gui_State_Allocator", 5, {0xF0000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 48, "Replays Allocator", 47, {0x200000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 61, "SP Allocator", 2, {0x419000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 65, "Mugshots", 5, {0x100000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 66, "FLAPT_Allocator", 5, {0xE1000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+    };
+    static const s32 KI_NUM_MEMORY_MAP_LINEAR_ALLOCATORS = 7;
+
+    static const MemoryMapAllocatorDef KAC_MEMORY_MAP_HEAP_ALLOCATORS[] =
+    {
+        { 19, "AttrSysHeap", 10, {0x94000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 20, "GameTalkAlloc", 10, {0x24000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 21, "EAStl", 10, {0x4000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 27, "Network Memory", 26, {0x6F0000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 32, "Apt_Heap_Allocator", 5, {0xD0000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 38, "Gui_FSM_Lang_Alloc", 5, {0x80000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 41, "VFX Heap", 33, {0x340000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 63, "Massive Heap", 62, {0x20000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+    };
+    static const s32 KI_NUM_MEMORY_MAP_HEAP_ALLOCATORS = 8;
+
+    static const MemoryMapAllocatorDef KAC_MEMORY_MAP_RWLINEAR_ALLOCATORS[] =
+    {
+        { 23, "PhysicsAlloc", 2, {0x3ED800,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 42, "Network Image Allocator", 26, {0x40000,0x0,0x200000,0x0,0x0}, {16,1,128,1,1} },
+        { 49, "Scene Manager", 2, {0x17A800,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 60, "VFX Graphics Allocator", 33, {0x3C000,0x0,0x400000,0x0,0x0}, {16,1,128,1,1} },
+    };
+    static const s32 KI_NUM_MEMORY_MAP_RWLINEAR_ALLOCATORS = 4;
+
+    static const MemoryMapAllocatorDef KAC_MEMORY_MAP_RWGENERAL_ALLOCATORS[] =
+    {
+        { 9, "Playback", 4, {0x13BC00,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 24, "Rwac", 4, {0x35C000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 25, "Logic", 4, {0x3BC00,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+        { 31, "2D Immediate Heap", 8, {0x3FC000,0x0,0x0,0x0,0x0}, {16,1,1,1,1} },
+    };
+    static const s32 KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS = 4;
 }

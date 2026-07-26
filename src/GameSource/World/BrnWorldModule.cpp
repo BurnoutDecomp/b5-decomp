@@ -575,6 +575,21 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
         {
             if ( mReceiverQueue.GetLength() <= 0 )
             {
+                // [FLAG PC boot gate] the RegisterVault reply is posted by the AttribSys
+                // module (X360 ProcessAttribSysRegisterVaultResponse @0x82666590); that
+                // module is not committed and the world output's attrib-sys queue is not
+                // yet bridged into the GameData input, so this stage legitimately holds.
+                // One-shot log so the boot evidence names the terminal hold.
+                static bool s_bLoggedRegisterHold = false;
+                if ( !s_bLoggedRegisterHold )
+                {
+                    s_bLoggedRegisterHold = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "WorldModule::LoadAttribSysVault: vault acquired; "
+                               "REGISTERING_VAULT holding -- AttribSysModule reply pending "
+                               "(module deferred) [FLAG PC boot gate]\n";
+                }
                 break;
             }
 
