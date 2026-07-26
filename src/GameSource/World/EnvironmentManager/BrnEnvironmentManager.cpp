@@ -145,5 +145,15 @@ bool EnvironmentManager::SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame)
     return lbReloaded;
 }
 
+// Request the manager's release (destub wave 2026-07-26). INLINED on the X360 into
+// WorldModule::Release @0x827BCE58 stage 8 (`a1[498648] = 0; a1[498649] = 1;` on the
+// embedded manager): rewind the staged-prepare cursor to START and raise the release
+// latch. Member pair per the IDA-applied struct names in Prepare @0x827D49A8.
+void EnvironmentManager::BeginRelease()
+{
+    mePrepareStage = 0;   // back to E_..PREPARE_START
+    meReleaseStage = 1;   // RELEASING
+}
+
 }
 }

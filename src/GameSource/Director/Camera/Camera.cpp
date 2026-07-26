@@ -25,6 +25,7 @@
 #include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid / Abs (Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"   // rw::math::vpu::IsValid (Matrix44Affine)
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (gpcMessageBuffer substitute)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"   // Utils::GetZoomFromFOVDegs (GetLodZoomFactor)
 #include <cstddef>                                  // offsetof
 
 namespace BrnDirector
@@ -166,6 +167,131 @@ f32 Camera::GetNearClipDistance() const
         return KF_SMALL_NEAR_CLIP_DISTANCE;
     }
     return KF_DEFAULT_NEAR_CLIP_DISTANCE;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::Clear @0x8223CE70 (destub wave 2026-07-26)
+//
+// Reset the camera to its defaults. Store-for-store against the asm:
+//   * mTransform = the identity basis with a zero pos row (the four stvx128 of
+//     {1,0,0,0}/{0,1,0,0}/{0,0,1,0}/{0,0,0,0}) -- Matrix44Affine::SetIdentity;
+//   * NULL the three pointers (+0x50/+0x54/+0x64), clear both has-flags
+//     (+0x15C/+0x15D);
+//   * mfFOV = 90 (flt_82004F64), mfAspectRatio = 16/9 (flt_82009A78);
+//   * the DOF default band (+0x124..+0x134) -> mDepthOfField.Construct() (the
+//     same inlined store set as Camera::Construct);
+//   * mState.Clear() (the out-of-line @0x82220950 call);
+//   * the effects-block default store run (r11 = this+0x68) ->
+//     mEffects.Construct() (same inlined store set as Camera::Construct);
+//   * mShotSelectionInfo = { -1, -1 }.
+// NOT touched by the X360 body: mSubject, mfRunningTime,
+// mfCustomNearClipDistance.
+// ----------------------------------------------------------------------------
+void Camera::Clear()
+{
+    mTransform.SetIdentity();            // stvx128 x4 @ +0x00..+0x30 (pos row zero)
+
+    mpDebugInfoBehaviour = 0;            // stw 0 @+0x50
+    mbHasSubject = false;                // stb 0 @+0x15C
+    mfFOV = 90.0f;                       // flt_82004F64
+    mpSourceShot = 0;                    // stw 0 @+0x54
+    mfAspectRatio = 1.7777778f;          // flt_82009A78
+    mpCrashAnalysis = 0;                 // stw 0 @+0x64
+    mbHasCustomNearClipDistance = false; // stb 0 @+0x15D
+
+    mDepthOfField.Construct();           // the five stfs @+0x124..+0x134
+    mState.Clear();                      // bl @0x82220950 (this+0x138)
+    mEffects.Construct();                // the store run @ r11 = this+0x68
+
+    mShotSelectionInfo.miType = -1;      // stw -1 @+0x154
+    mShotSelectionInfo.miId   = -1;      // stw -1 @+0x158
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::CopyToCgsCamera @0x8220AC48 (destub wave 2026-07-26)
+//
+// Publish this director camera into a graphics camera:
+//   1. ValidateTransformWithDebugInfo() (NaN / unreasonable-position tripwires);
+//   2. reset the target camera (the @0x827F94E8 defaults reset + the empty
+//      ICF-folded teardown stub) -> lpOutCamera->Release();
+//   3. fov: degrees -> radians (0.017453292), clamped to [1 deg, 160 deg]
+//      (2.7925267) with the two fsel arms, then SetFovHorizontal;
+//   4. LookAt(eye = mTransform.Pos() [+0x30], up = mTransform.Up() [+0x10],
+//      target = Pos + At [+0x30 + +0x20], the vaddfp);
+//   5. near clip: the custom-override / small-flag / default selection --
+//      exactly GetNearClipDistance() (+0x15D / +0x150 / the +0x144 & 0x10000
+//      flag test) -> scalar store + UpdatePerspectiveProjectionMatrix;
+//   6. far clip: KF_DEFAULT_FAR_CLIP_DISTANCE (flt_82CDA564; FLAG magnitude
+//      un-recovered, see the definition above) -> scalar store +
+//      UpdatePerspectiveProjectionMatrix again.
+// ----------------------------------------------------------------------------
+void Camera::CopyToCgsCamera(CgsGraphics::Camera* lpOutCamera) const
+{
+    const_cast<Camera*>(this)->ValidateTransformWithDebugInfo();
+
+    lpOutCamera->Release();   // sub_827F94E8 + the empty folded Destruct
+
+    // fovRad = clamp(mfFOV * DEG2RAD, 1 deg, 160 deg) -- the two fsel arms.
+    f32 lfFovRadians = mfFOV * 0.017453292f;
+    if (0.017453292f - lfFovRadians >= 0.0f)
+    {
+        lfFovRadians = 0.017453292f;
+    }
+    if (2.7925267f - lfFovRadians < 0.0f)
+    {
+        lfFovRadians = 2.7925267f;
+    }
+    lpOutCamera->SetFovHorizontal(lfFovRadians);
+
+    // target = Pos + At (the vaddfp of +0x30 and +0x20).
+    rw::math::vpu::Vector3 lTarget;
+    lTarget.x = mTransform.Pos().x + mTransform.At().x;
+    lTarget.y = mTransform.Pos().y + mTransform.At().y;
+    lTarget.z = mTransform.Pos().z + mTransform.At().z;
+    lTarget.w = mTransform.Pos().w + mTransform.At().w;
+    lpOutCamera->LookAt(mTransform.Pos(), mTransform.Up(), lTarget);
+
+    // Near clip (the inlined GetNearClipDistance selection), then rebuild.
+    lpOutCamera->maProjectionScalars[7] = GetNearClipDistance();   // m_nearClipPlane
+    lpOutCamera->UpdatePerspectiveProjectionMatrix();
+
+    // Far clip (flt_82CDA564 == KF_DEFAULT_FAR_CLIP_DISTANCE), then rebuild.
+    lpOutCamera->maProjectionScalars[8] = KF_DEFAULT_FAR_CLIP_DISTANCE;  // m_farClipPlane
+    lpOutCamera->UpdatePerspectiveProjectionMatrix();
+}
+
+// ----------------------------------------------------------------------------
+// The frame-camera reads the WorldModule render feeds inline on the X360
+// (destub wave 2026-07-26):
+//   * GetPosition / GetDirection: the transform's pos / at rows (+0x30 / +0x20
+//     -- the lvx128 reads in WorldModule::GenerateDispatchLists @0x827D1CE8).
+//   * IsInJunkyard: the camera-state current-flag word & 0x400000 (the ld at
+//     +0x140 masked in the junkyard lighting latch).
+//   * GetLodZoomFactor @0x827BAC40: forwards the camera FOV (degrees) into
+//     Utils::GetZoomFromFOVDegs (the 1/tan(fov/2) zoom; @0x821F23E8's xref
+//     list attests the call edge). FLAG: the 0x827BAC40 export JSON is absent
+//     from the dump set, so the body is recovered from the call edge + the
+//     degrees-domain contract (GetZoomFromFOVDegs(90 deg) == 1.0, the neutral
+//     LOD zoom at the camera's default FOV).
+// ----------------------------------------------------------------------------
+Vector3 Camera::GetPosition() const
+{
+    return mTransform.Pos();     // +0x30
+}
+
+Vector3 Camera::GetDirection() const
+{
+    return mTransform.At();      // +0x20
+}
+
+bool Camera::IsInJunkyard() const
+{
+    return (mState_uFlags & 0x400000) != 0;
+}
+
+f32 Camera::GetLodZoomFactor() const
+{
+    return Utils::GetZoomFromFOVDegs(mfFOV);
 }
 
 // ============================================================================

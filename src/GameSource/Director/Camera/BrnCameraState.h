@@ -49,6 +49,12 @@ public:
     // CameraState's own ledger TU (BrnCameraState.cpp).
     void Construct();
 
+    // Reset the state (X360 @0x82220950, called by Camera::Clear @0x8223CE70 and by
+    // Construct's tail): zero both frame bit sets, mask the head set by the
+    // ValidityAccount fail-flag mask (asserting the mask was set up), then raise
+    // bit 0 (the CONSISTENCY_TEST flag) on both frame sets. Body in BrnCameraState.cpp.
+    void Clear();
+
     // Set flag luIndex to lbValue. lbValue!=0 -> SetBit on the current set; lbValue==0 ->
     // UnSetBit on the current set. @0x82204368.
     void SetFlag(u32 luIndex, bool lbValue);

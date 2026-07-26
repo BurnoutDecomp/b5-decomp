@@ -11,6 +11,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnCameraState.h"
+#include "GameSource/Director/Camera/BrnCameraValidityAccount.h"   // sbFailFlagMaskSet / sFailFlagMask (Clear)
 #include <cstddef>   // offsetof
 
 namespace BrnDirector
@@ -80,6 +81,38 @@ bool CameraState::HasChanged(u32 luIndex) const
     const bool lbPrevious = mPreviousFlags.IsBitSet(luIndex);    // second qword read @ this+16
 
     return lbPrevious != lbCurrent;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::CameraState::Clear @0x82220950 (destub wave 2026-07-26)
+//
+// Reset the state:
+//   std 0 -> current (+0x08) and previous (+0x10) sets;
+//   assert the ValidityAccount fail-flag mask was set up
+//     ("sbFailFlagMaskSet", BrnCameraValidityAccount.h:193, non-gating);
+//   head set (+0x00) &= sFailFlagMask (the qword_82FAA5D0 AND -- expressed
+//     bit-for-bit through the container API per the named-member parity rule;
+//     the mask only ever carries bits < 32);
+//   ori 1 -> raise bit 0 (CONSISTENCY_TEST) on current and previous.
+// ----------------------------------------------------------------------------
+void CameraState::Clear()
+{
+    mCurrentFlags.UnSetAll();     // std 0, this+0x08
+    mPreviousFlags.UnSetAll();    // std 0, this+0x10
+
+    CGS_ASSERT(sbFailFlagMaskSet, "sbFailFlagMaskSet");   // :193 (non-gating)
+
+    // mHeadFlags &= sFailFlagMask (single-qword AND on the X360).
+    for (u32 luFlag = 0; luFlag < KU_NUM_FLAGS; ++luFlag)
+    {
+        if (!sFailFlagMask.IsBitSet(luFlag))
+        {
+            mHeadFlags.UnSetBit(luFlag);
+        }
+    }
+
+    mCurrentFlags.SetBit(0);      // ori q,q,1
+    mPreviousFlags.SetBit(0);     // ori q,q,1
 }
 
 } // namespace Camera

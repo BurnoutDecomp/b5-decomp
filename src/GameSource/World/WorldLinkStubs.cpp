@@ -249,73 +249,23 @@ class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> co
 }
 
 // -------------------------------------------------------------------------
-// BrnDirector::Camera::Camera
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnDirector::Camera::Camera::Clear()
-{
-    CGS_ASSERT(false, "Camera::Clear: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnDirector::Camera::Camera::CopyToCgsCamera(class CgsGraphics::Camera *) const
-{
-    CGS_ASSERT(false, "Camera::CopyToCgsCamera: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct rw::math::vpu::Vector3 BrnDirector::Camera::Camera::GetDirection() const
-{
-    CGS_ASSERT(false, "GetDirection: link stub (world fleet mount) -- reconstruct from X360");
-    return rw::math::vpu::Vector3();
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-float BrnDirector::Camera::Camera::GetLodZoomFactor() const
-{
-    CGS_ASSERT(false, "GetLodZoomFactor: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct rw::math::vpu::Vector3 BrnDirector::Camera::Camera::GetPosition() const
-{
-    CGS_ASSERT(false, "GetPosition: link stub (world fleet mount) -- reconstruct from X360");
-    return rw::math::vpu::Vector3();
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnDirector::Camera::Camera::IsInJunkyard() const
-{
-    CGS_ASSERT(false, "IsInJunkyard: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// -------------------------------------------------------------------------
-// BrnDirector::Camera::CameraEffects
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnDirector::Camera::CameraEffects::Construct()
-{
-    CGS_ASSERT(false, "CameraEffects::Construct: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// -------------------------------------------------------------------------
-// BrnDirector::Camera::CameraState
+// BrnDirector::Camera -- DESTUBBED (2026-07-26 wave): Camera::Clear @0x8223CE70,
+// CopyToCgsCamera @0x8220AC48 and the GetPosition/GetDirection/IsInJunkyard/
+// GetLodZoomFactor frame reads now live in GameSource/Director/Camera/Camera.cpp;
+// CameraEffects::Construct / DepthOfField::Construct (the inlined default-init
+// store runs those bring-up paths share) live in BrnCameraEffects.cpp /
+// BrnDepthOfField.cpp; CameraState::Clear @0x82220950 lives in BrnCameraState.cpp.
+//
+// STILL STUBBED: CameraState::Construct @0x82252348 -- its body calls
+// ValidityAccount::SetupFailFlagMask @0x82221118 (the KAAC_FLAG_NAMES table +
+// StrStream assert machinery, not reconstructed) before tail-calling Clear; it
+// is only reached via the director-side Camera::Construct, not the WorldModule
+// lifecycle.
 // -------------------------------------------------------------------------
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void BrnDirector::Camera::CameraState::Construct()
 {
     CGS_ASSERT(false, "CameraState::Construct: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// -------------------------------------------------------------------------
-// BrnDirector::Camera::DepthOfField
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnDirector::Camera::DepthOfField::Construct()
-{
-    CGS_ASSERT(false, "DepthOfField::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // -------------------------------------------------------------------------
@@ -578,14 +528,25 @@ void BrnWorld::EnvironmentSettings::DebugComponent::Construct(class BrnWorld::En
 }
 
 // -------------------------------------------------------------------------
-// BrnWorld::EnvironmentSettings::EnvironmentManager
+// BrnWorld::EnvironmentSettings::EnvironmentManager -- PARTIALLY DESTUBBED
+// (2026-07-26 wave): BeginRelease (the WorldModule::Release stage-8 inline) now
+// lives in BrnEnvironmentManager.cpp. The remaining six stay stubbed, each for
+// a concrete dependency reason:
+//   * Construct @0x827CA408 / Prepare @0x827D49A8: large staged resource
+//     machines (colour-cube dictionary / keyframe bundle loads via the
+//     GameData request queue, StrStream-formatted asserts, debug-variable
+//     registration) over a member region (+0x700..+0x1240) the committed
+//     class model has not homed yet.
+//   * CalcKeyLightDirection @0x827B0638: forwards into BrnWorld::
+//     EnvironmentSettings::ComputeKeyLightDirection @0x82678AB0, which is
+//     built on XMMatrixRotationX/Y (xnamath helpers, not reconstructed) with
+//     a decompiler-garbled register-lane matrix combine.
+//   * Enable/DisableJunkyardLightingSetup @0x827B0F98/@0x827B10E8 and
+//     GenerateEffects @0x827BE698: touch the un-homed +0x1220..+0x1C70 member
+//     region (override-key-light vector, junkyard light table + count, the
+//     time-of-day bounds) -- the committed class model ends at +0x11E8 and
+//     needs a dedicated layout-growth pass first.
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::EnvironmentSettings::EnvironmentManager::BeginRelease()
-{
-    CGS_ASSERT(false, "EnvironmentManager::BeginRelease: link stub (world fleet mount) -- reconstruct from X360");
-}
-
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Vector3 BrnWorld::EnvironmentSettings::EnvironmentManager::CalcKeyLightDirection() const
 {
@@ -869,106 +830,18 @@ enum EGlobalRaceCarIndex BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarO
 }
 
 // -------------------------------------------------------------------------
-// BrnWorld::ShadowMap
+// BrnWorld::ShadowMap -- DESTUBBED (2026-07-26 wave): Construct @0x827B43E8,
+// SetConstantsForEnvmap @0x827C1AD0 and the inlined accessor set now live in
+// GameSource/World/ShadowMap/BrnShadowMap.cpp. ONLY CalculateShadowMapCameras
+// remains: its X360 body @0x827DA820 drives ComputeBoundingBoxMatrix
+// @0x827D91B0 (~2000 lines of VMX pseudocode) + ComputeOptimalViewVolume
+// @0x827D8980 (~800 lines) -- the dependency set explodes; reconstruct as its
+// own dedicated VMX pass (same treatment as the landed ComputeTSMMatrix).
 // -------------------------------------------------------------------------
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void BrnWorld::ShadowMap::CalculateShadowMapCameras(struct rw::math::vpu::Vector3,class CgsGraphics::Camera const *)
 {
     CGS_ASSERT(false, "ShadowMap::CalculateShadowMapCameras: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::ShadowMap::Construct()
-{
-    CGS_ASSERT(false, "ShadowMap::Construct: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-class CgsGraphics::Camera const * BrnWorld::ShadowMap::GetCascadeCamera(int) const
-{
-    CGS_ASSERT(false, "GetCascadeCamera: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderMultipleShadowMaps() const
-{
-    CGS_ASSERT(false, "GetRenderMultipleShadowMaps: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderPropsIntoShadowMap() const
-{
-    CGS_ASSERT(false, "GetRenderPropsIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderPropsNearOnly() const
-{
-    CGS_ASSERT(false, "GetRenderPropsNearOnly: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderRaceCarsIntoShadowMap() const
-{
-    CGS_ASSERT(false, "GetRenderRaceCarsIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderRaceCarsNearOnly() const
-{
-    CGS_ASSERT(false, "GetRenderRaceCarsNearOnly: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderTrafficIntoShadowMap() const
-{
-    CGS_ASSERT(false, "GetRenderTrafficIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderTrafficNearOnly() const
-{
-    CGS_ASSERT(false, "GetRenderTrafficNearOnly: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::GetRenderWorldIntoShadowMap() const
-{
-    CGS_ASSERT(false, "GetRenderWorldIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::ShadowMap::IsEnabled() const
-{
-    CGS_ASSERT(false, "IsEnabled: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::ShadowMap::SetConstantsForEnvmap()
-{
-    CGS_ASSERT(false, "ShadowMap::SetConstantsForEnvmap: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::ShadowMap::SetCurrentCascadeIndex(unsigned int)
-{
-    CGS_ASSERT(false, "ShadowMap::SetCurrentCascadeIndex: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::ShadowMap::SetRenderingShadowMap(bool)
-{
-    CGS_ASSERT(false, "ShadowMap::SetRenderingShadowMap: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // -------------------------------------------------------------------------
@@ -1107,24 +980,12 @@ void BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering(struct BrnShader
 }
 
 // -------------------------------------------------------------------------
-// BrnWorldIO::DispatchInputBuffer
+// BrnWorldIO::DispatchInputBuffer / DispatchOutputBuffer -- DESTUBBED
+// (2026-07-26 wave): GetRenderSwitches now lives in
+// BrnWorldModuleIO_DispatchInputBuffer.cpp and GetFogColourPlusWhiteLevel in
+// BrnWorldModuleIO_DispatchOutputBuffer.cpp (both the read-lock accessor shape
+// their attested siblings share).
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct BrnWorldIO::DispatchInputBuffer::RenderSwitches const * BrnWorldIO::DispatchInputBuffer::GetRenderSwitches() const
-{
-    CGS_ASSERT(false, "GetRenderSwitches: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
-
-// -------------------------------------------------------------------------
-// BrnWorldIO::DispatchOutputBuffer
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct rw::math::vpu::Vector4 BrnWorldIO::DispatchOutputBuffer::GetFogColourPlusWhiteLevel() const
-{
-    CGS_ASSERT(false, "GetFogColourPlusWhiteLevel: link stub (world fleet mount) -- reconstruct from X360");
-    return rw::math::vpu::Vector4();
-}
 
 // -------------------------------------------------------------------------
 // CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>
@@ -1176,6 +1037,27 @@ void CgsDev::DebugInterface::SetStep(int *,int)
     CGS_ASSERT(false, "DebugInterface::SetStep: link stub (world fleet mount) -- reconstruct from X360");
 }
 
+// LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::Construct @0x827B43E8):
+// body not reconstructed yet.
+void CgsDev::DebugInterface::SetRange(float *,float,float)
+{
+    CGS_ASSERT(false, "DebugInterface::SetRange: link stub (world fleet mount) -- reconstruct from X360");
+}
+
+// LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::Construct @0x827B43E8):
+// body not reconstructed yet.
+void CgsDev::DebugInterface::SetStep(float *,float)
+{
+    CGS_ASSERT(false, "DebugInterface::SetStep: link stub (world fleet mount) -- reconstruct from X360");
+}
+
+// LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::Construct @0x827B43E8):
+// body not reconstructed yet.
+void CgsDev::DebugInterface::SetOptions(int *,struct CgsDev::DebugUI::StringList const *)
+{
+    CGS_ASSERT(false, "DebugInterface::SetOptions: link stub (world fleet mount) -- reconstruct from X360");
+}
+
 // -------------------------------------------------------------------------
 // CgsDev::DebugRender
 // -------------------------------------------------------------------------
@@ -1211,31 +1093,32 @@ void CgsGeometric::Frustum::SetFromRwFrustum(struct CgsGraphics::CameraRwFrustum
 }
 
 // -------------------------------------------------------------------------
-// CgsGraphics::Camera
+// CgsGraphics::Camera -- DESTUBBED (2026-07-26 wave): Construct (both overloads,
+// @0x827F0A08 / @0x827F94E8), Release, SetFovHorizontal @0x821F13B0,
+// UpdatePerspectiveProjectionMatrix @0x827EC778,
+// SetPerspectiveProjectionMatrixRightHanded @0x827EC698, LookAt @0x827F9510,
+// Clone @0x827E7018, SetFarClip and the GetPosition/GetDirection additive
+// accessors now live in GameShared/GameClasses/Graphics/CgsCamera.cpp.
+//
+// STILL STUBBED (each with a reason):
+//   * the frustum family (GetFrustum(CameraRwFrustum&), GetFrustumParallel,
+//     GetFrustumPerspective, GetCgsFrustumParallel): the real X360 writers
+//     (@0x827F0AD8 / @0x827F11A8 / @0x827F97B8) are large VMX plane-derivation
+//     pipelines with un-dumped vperm lane controls, AND the committed accessor
+//     shapes (const-ref returns) diverge from the DWARF out-param signatures
+//     (GetFrustumPerspective(Frustum&, bool) etc.) -- needs a reconciliation
+//     pass of its own.
+//   * GetViewProjectionMatrixModified @0x827EC858: the tail is a vperm/vmrghw
+//     row-assembly puzzle over un-dumped lane controls (unk_82CDA3C0/400);
+//     decoding it needs the same symbolic-evaluation treatment as
+//     ComputeTSMMatrix.
+// (Camera::Clear() remains declaration-only in the header -- never referenced
+// by a linked TU, so it carries no stub here.)
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::Clone(class CgsGraphics::Camera *)
-{
-    CGS_ASSERT(false, "Camera::Clone: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::Construct()
-{
-    CGS_ASSERT(false, "Camera::Construct: link stub (world fleet mount) -- reconstruct from X360");
-}
-
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void CgsGraphics::Camera::GetCgsFrustumParallel(struct CgsGeometric::Frustum *)
 {
     CGS_ASSERT(false, "Camera::GetCgsFrustumParallel: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct rw::math::vpu::Vector3 CgsGraphics::Camera::GetDirection() const
-{
-    CGS_ASSERT(false, "GetDirection: link stub (world fleet mount) -- reconstruct from X360");
-    return rw::math::vpu::Vector3();
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1257,48 +1140,12 @@ struct CgsGeometric::Frustum const & CgsGraphics::Camera::GetFrustumPerspective(
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct rw::math::vpu::Vector3 CgsGraphics::Camera::GetPosition() const
-{
-    CGS_ASSERT(false, "GetPosition: link stub (world fleet mount) -- reconstruct from X360");
-    return rw::math::vpu::Vector3();
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Matrix44 CgsGraphics::Camera::GetViewProjectionMatrixModified() const
 {
     CGS_ASSERT(false, "GetViewProjectionMatrixModified: link stub (world fleet mount) -- reconstruct from X360");
     return rw::math::vpu::Matrix44();
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::LookAt(struct rw::math::vpu::Vector3,struct rw::math::vpu::Vector3,struct rw::math::vpu::Vector3)
-{
-    CGS_ASSERT(false, "Camera::LookAt: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::Release()
-{
-    CGS_ASSERT(false, "Camera::Release: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::SetFarClip(float)
-{
-    CGS_ASSERT(false, "Camera::SetFarClip: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::SetPerspectiveProjectionMatrixRightHanded()
-{
-    CGS_ASSERT(false, "Camera::SetPerspectiveProjectionMatrixRightHanded: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::UpdatePerspectiveProjectionMatrix()
-{
-    CGS_ASSERT(false, "Camera::UpdatePerspectiveProjectionMatrix: link stub (world fleet mount) -- reconstruct from X360");
-}
 
 // -------------------------------------------------------------------------
 // CgsGraphics::DispatchBin
@@ -1465,7 +1312,24 @@ class CgsModule::VariableEventQueue<32768,16> const * CgsSceneManager::SceneMana
 }
 
 // -------------------------------------------------------------------------
-// CgsSceneManager::SceneManagerModule
+// CgsSceneManager::SceneManagerModule -- ASSESSED, all seven left stubbed
+// (2026-07-26 wave), each for a concrete reason:
+//   * Update: the committed 5-arg signature is the X360 vtbl+64 VIRTUAL the
+//     WorldModule stages dispatch through; the concrete target (UpdateScene
+//     @0x828D4C28) drives the spatial-partition / overlap sub-modules that are
+//     deliberately seam-stubbed (rw::collision closure) -- reconstructing the
+//     shell would still trap inside the seams. (The X360 symbol literally
+//     named SceneManagerModule::Update @0x827E1F28 is a "Don't use this
+//     function" assert trap, not this entry.)
+//   * UpdateQueries / ExternalSceneQueriesUpdate: vtbl+68 dispatch; the
+//     concrete targets (ProcessSceneQueries @0x828D57D0 / ProcessFineQueries
+//     @0x828D5608 family) cannot be pinned without the un-dumped vtable and
+//     also run the seam-stubbed fine-query sub-modules.
+//   * ProcessFrustumTestJobRequests @0x828C7628: starts the loose-octree
+//     frustum-test jobs (rw::collision + job-system closure, seam-stubbed).
+//   * The three Bridge* bodies (@0x828BA8C8 / @0x828BA538 / the truncated-
+//     symbol third): 2-4KB event-queue merge pipelines over the overlap
+//     sub-module IO formats that are not homed yet.
 // -------------------------------------------------------------------------
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void CgsSceneManager::SceneManagerModule::BridgeOverlapCullerToOutputBuffer(struct CgsSceneManager::SceneManagerIO::OutputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
@@ -1572,6 +1436,14 @@ void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vp
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Vector3)
+{
+    CGS_ASSERT(false, "ShaderConstantTable::SetShaderConstantData: link stub (world fleet mount) -- reconstruct from X360");
+}
+
+// LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::SetConstantsForEnvmap
+// @0x827C1AD0 -- the 16-byte overload with a live w lane): body not reconstructed yet
+// (X360 @0x822B32E8; needs UpdateShaderChangeTableAndGetConstantDestination @0x822A0A20).
+void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Vector4)
 {
     CGS_ASSERT(false, "ShaderConstantTable::SetShaderConstantData: link stub (world fleet mount) -- reconstruct from X360");
 }

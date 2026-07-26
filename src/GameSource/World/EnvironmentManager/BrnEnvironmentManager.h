@@ -39,9 +39,12 @@ public:
         // Declaration-only; the body lands with this module's own TU.
         bool Prepare( BrnWorldIO::UpdateOutputBuffer* lpOutput );
 
-        // ADDITIVE (WorldModule::ReleaseWorld @0x827BCE58 stage 8 pokes the manager's
+        // ADDITIVE (WorldModule::Release @0x827BCE58 stage 8 pokes the manager's
         // leading prepare/release stage pair to {START, RELEASING} -- the inlined
-        // release request). Declaration-only; body with the env-manager TU.
+        // release request: `a1[498648] = 0; a1[498649] = 1;` on the embedded manager
+        // at WorldModule+1994592). BODIED in BrnEnvironmentManager.cpp (destub wave
+        // 2026-07-26); the member pair is IDA-struct-named in the Prepare body
+        // (mePrepareStage / meReleaseStage).
         void BeginRelease();
 
         // ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 feeds this to
@@ -96,7 +99,12 @@ private:
     // keyframe. Returns whether the file was re-read this call.
     bool SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame);
 
-    u8             mPad0[0x444];                // 0x000  (incl. the +0x424 ResourcePtr region, un-homed)
+    // --- named members proven by the stage machines (Prepare @0x827D49A8 switches on
+    //     mePrepareStage; WorldModule::Release @0x827BCE58 stage 8 pokes the pair;
+    //     both names are the IDA-applied struct names in the Prepare body) ---
+    s32            mePrepareStage;              // 0x000  staged-prepare cursor (0 = START)
+    s32            meReleaseStage;              // 0x004  release latch (1 = RELEASING)
+    u8             mPad8[0x43C];                // 0x008  (incl. the +0x424 ResourcePtr region, un-homed)
     // --- named members proven by DiscardCurrSeason (0x827B0E50) / UpdateFromTool (0x827B0DA8) ---
     u32            muCurrSeasonRef;             // 0x444  cleared to 0 by DiscardCurrSeason
     u8             mbCurrSeason;                // 0x448  (byte) set from muDiscardSeason low byte

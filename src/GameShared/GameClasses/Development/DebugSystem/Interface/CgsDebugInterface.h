@@ -16,7 +16,7 @@
 
 namespace CgsDev
 {
-    namespace DebugUI { struct DebugUI; }
+    namespace DebugUI { struct DebugUI; struct StringList; }
     class DebugRender;   // Get2dRender returns a reference (the buffered debug renderer)
 
     struct DebugInterface
@@ -82,6 +82,14 @@ namespace CgsDev
         void RegisterVariable(f32* lpfVariable, const char* lpcPath, const char* lpcName);
         void SetRange(s32* lpiVariable, s32 liMin, s32 liMax);
         void SetStep(s32* lpiVariable, s32 liStep);
+
+        // ADDITIVE (attested by BrnWorld::ShadowMap::Construct @0x827B43E8, which tunes its
+        // f32 debug variables and sets the shadow-map-type option list; declaration shapes =
+        // the DecFIGS DWARF CgsDebugInterface.h:63/:72/:101 overloads). Declarations only --
+        // bodies belong to the DebugSystem TU (per-TU compile gate).
+        void SetRange(f32* lpfVariable, f32 lfMin, f32 lfMax);
+        void SetStep(f32* lpfVariable, f32 lfStep);
+        void SetOptions(s32* lpiVariable, const DebugUI::StringList* lpOptions);
 
     private:
         DebugManager* mpDebugManager;
