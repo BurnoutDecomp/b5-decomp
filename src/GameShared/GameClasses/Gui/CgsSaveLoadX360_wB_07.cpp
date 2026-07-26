@@ -1,10 +1,6 @@
 // CgsGui::SaveLoadSystem -- wave-B load lane, reconstructed from BURNOUT_X360_ARTIST.XEX.
-// Bodies for three of the X360 save/load front-end's load-path functions:
+// Bodies for two of the X360 save/load front-end's load-path functions:
 //
-//   LoadHandleConfirmLoad @ 0x82855EC0  -- confirm-load prompt choice: build the entry
-//                                          content name + the two load-entry records and
-//                                          hand them to the memory-card interface (ReadSave
-//                                          slot +0x38), then pump Update.
 //   LoadDone              @ 0x82855FE0  -- Realmc load result callback: success re-arms the
 //                                          autosave pre-flight, then reports 0/1 to the
 //                                          result handler.
@@ -12,8 +8,16 @@
 //                                          data pair { muSaveDataSizeKb, muGameDataSizeKb }
 //                                          to the SDK's DataBuffer and return 0.
 //
+// (LoadHandleConfirmLoad @0x82855EC0 was also reconstructed here by wave B -- the faithful
+// console confirm arm: EntryContentName + the two LoadEntryInfo records handed to the
+// memory-card ReadSave slot +0x38, then Update() -- but the later PC-storage wave landed its
+// own body in CgsSaveLoadPS3.cpp (the confirm arm reads the CgsSaveLoadPC container into the
+// captured stored-data view, with the console shape documented in its FLAG comment); that TU
+// owns the function now, and the duplicate was removed here in the wave-C reconcile. The
+// wave-B console-faithful body survives in git history @34234be4.)
+//
 // The class layout + member names are frozen in CgsSaveLoadX360.h (X360-authoritative offset
-// map). Two of these three (LoadDone) are Realmc RESULT callbacks whose Hex-Rays displacements
+// map). LoadDone/LoadReady are Realmc RESULT callbacks whose Hex-Rays displacements
 // are (real member offset - 4) -- the X360 multiple-inheritance +4 sub-object mechanics; they
 // are written here as plain member functions using the NAMED members (see the header's `this`
 // convention note). Cross-TU SDK callees resolve to their own RealmcIface TUs at link time.
@@ -31,49 +35,6 @@
 
 namespace CgsGui
 {
-    // X360 0x82855EC0. Confirm-load prompt choice. Option 1 rebuilds the two load-entry
-    // records (the title save + the "Mugshots" blob) exactly like the bootup reload lane,
-    // wraps the entry-content name and hands them to the memory-card interface via the
-    // ReadSave slot (+0x38), then pumps Update. Any other choice reports failure.
-    void SaveLoadSystem::LoadHandleConfirmLoad(u32 luOption)
-    {
-        if (luOption != 1)
-        {
-            // (***(this+0x130))(this+0x130, 1) -- the active display IS the result handler.
-            reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
-                ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(1));
-            return;
-        }
-
-        // Two default-constructed load-entry records (the X360 loop constructs [0] then [1]).
-        RealmcIface::LoadEntryInfo laEntries[2];
-
-        // Entry 0: the title save. The { muSaveDataSizeKb, muGameDataSizeKb } pair is
-        // historically misnamed -- the X360 moves it as one 8-byte { data, size } DataBuffer:
-        // muSaveDataSizeKb becomes the data word, muGameDataSizeKb the size word.
-        RealmcIface::DataBuffer lZeroPair;   // {0,0}
-        RealmcIface::DataBuffer lSavePair;
-        lSavePair.mpData = reinterpret_cast<void*>(static_cast<uintptr_t>(muSaveDataSizeKb));
-        lSavePair.muSize = muGameDataSizeKb;
-        RealmcIface::LoadEntryInfo lTitleRecord(macTitle, &lZeroPair, &lSavePair);
-        laEntries[0] = lTitleRecord;
-
-        // Entry 1: the "Mugshots" blob record.
-        laEntries[1] = CreateRealmcMugshotLoadEntryInfo();
-
-        // The entry-content name: wide metadata title + ascii device title + the derived size
-        // (total mugshot bytes + muGameDataSizeKb).
-        RealmcIface::EntryContentName lName(
-            macwMetadataTitle, macTitle,
-            static_cast<s32>(miExtraFilesSizeBytes * miImageHeight * miImageWidth)
-                + static_cast<s32>(muGameDataSizeKb));
-
-        // ReadSave(&entryContentName, count == 2, entries, flags == 0, TitleInfo::Empty()).
-        mpMemcardInterface->ReadSave(&lName, 2, laEntries, 0, &RealmcIface::TitleInfo::Empty());
-
-        Update();
-    }
-
     // X360 0x82855FE0. Realmc load result callback (+4 sub-object -- written as a plain member).
     // A non-zero result reports failure (1); success re-arms the autosave pre-flight
     // (EnableAutosave(-1)) then reports success (0). Both go through mpActiveMessageDisplay,

@@ -40,8 +40,8 @@ namespace CgsGui
     // data buffer. Returns lpSaveInfo.
     void* SaveLoadSystem::CreateRealmcSaveInfo(void* lpSaveInfo)
     {
-        // Size seed: (extra-file bytes * image height * image width) + the game-data size.
-        const s32 liSizeSeed = miExtraFilesSizeBytes * miImageHeight * miImageWidth
+        // Size seed: (extra-file bytes * mugshots-per-type * type count) + the game-data size.
+        const s32 liSizeSeed = miExtraFilesSizeBytes * miNumberOfMugshotsPerType * miNumberOfMugshotTypes
                              + static_cast<s32>(muGameDataSizeKb);
         RealmcIface::EntryContentName lContentName(macwMetadataTitle, macTitle, liSizeSeed);
 
