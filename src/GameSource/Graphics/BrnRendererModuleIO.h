@@ -32,10 +32,14 @@
 namespace CgsGraphics
 {
     class DispatchFrame;
-    class Im2dRenderBuffer;
+    // Im2dRenderBuffer cannot be forward-declared as a class: on the PC target it is a
+    // TYPEDEF of Im2d (CgsImRenderBuffer.h:15 -- the buffer/renderer split folds onto the
+    // one Im2d type), so the canonical header is included below instead. Surfaced when the
+    // world-module mount first co-included this header after CgsImRenderBuffer.h in one TU.
     class Im3dRenderBuffer;
     class Im3dRenderBufferUntex;
 }
+#include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderBuffer.h"  // CgsGraphics::Im2dRenderBuffer (typedef of Im2d)
 class BrnEffectsFrame;
 class BrnShaderConstantsFrame;
 // RECONCILED 2026-07-24 (ODR fix): BrnBlobbyShadowBuffer and BrnSubmissionInterface

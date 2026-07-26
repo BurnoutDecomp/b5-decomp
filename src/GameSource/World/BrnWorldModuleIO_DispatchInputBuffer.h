@@ -51,31 +51,13 @@ class BrnEffectsFrame;
 struct BrnShaderConstantsFrame;   // struct matches BrnShaderConstantsFrame.h:18 (mangling)
 
 // RendererIO::RenderSwitches -- the per-frame render-enable switches (6 bools) embedded by value at
-// the tail of this buffer (DWARF :438). Its DWARF home is GameSource/Graphics/BrnRendererModuleIO.h
-// (:68), but that header cannot be co-included here: it forward-declares BrnBlobbyShadowManager as a
-// NAMESPACE and BrnCoronaManager with only a nested BrnSubmissionInterface, both of which ODR-clash
-// with the REAL class homes this buffer must include (BrnBlobbyShadowManager.h / BrnCoronaManager.h,
-// packet-authoritative). BrnRendererModule.h carries yet another forward-slice copy (+ its own
-// conflicting BrnBlobbyShadowManager slice). Per the established project minimal-slice convention
-// (see the many canonical-spelling payload slices in BrnWorldModuleIO.h), the 6-bool POD is
-// reproduced here in its canonical RendererIO namespace. It is a trivially-copyable POD accessed
-// only by value/copy-assign. FLAG (duplicate forward-slice to consolidate, not retype): the DWARF
-// home already flags RenderSwitches for consolidation; when the renderer-IO forward-decl defect is
-// fixed this slice should be dropped in favour of the real header.
-namespace RendererIO
-{
-    struct RenderSwitches
-    {
-        bool mbRenderShadows;
-        bool mbRenderEnvmap;
-        bool mbRenderWorld;
-        bool mbRenderProps;
-        bool mbRenderRaceCars;
-        bool mbRenderTraffic;
-
-        void Construct();
-    };
-}
+// the tail of this buffer (DWARF :438). CONSOLIDATED (world-module mount): the DWARF home
+// GameSource/Graphics/BrnRendererModuleIO.h (:68) is co-includable since its 2026-07-24 ODR
+// reconcile (it now includes the REAL BrnBlobbyShadowManager.h / BrnCoronaManager.h homes instead
+// of the clashing forward-slices), so the 6-bool POD copy this header carried was dropped per its
+// own consolidation FLAG -- the mount co-includes this buffer and the renderer headers in one TU
+// (BrnGameModule), which made the duplicate an ODR error.
+#include "GameSource/Graphics/BrnRendererModuleIO.h"    // RendererIO::RenderSwitches (DWARF home)
 
 namespace BrnWorldIO
 {

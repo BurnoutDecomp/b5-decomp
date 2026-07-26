@@ -34,6 +34,11 @@
 #include "GameSource/World/DebugComponents/BrnSkyDebugComponent.h"     // EnvironmentSettings::DebugComponent (mSkyDebugComponent)
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"                 // Camera (mLastCameraInput)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h" // CgsSceneManager::SceneManagerModule
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"     // SceneManagerIO::OutputBuffer (complete type: the
+                                                                       // EntityModulePrePhysicsUpdate / dispatch decls below
+                                                                       // name its NESTED SceneQueryResultsQueue, which a
+                                                                       // forward decl cannot supply -- self-containment fix
+                                                                       // surfaced by the world-module mount into BrnGameModule)
 #include "GameSource/BurnoutConstants.h"                               // EActiveRaceCarIndex
 #include "GameSource/Game/BrnGlobalCpuMonitors.h"                      // BrnCpuMonitors
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"

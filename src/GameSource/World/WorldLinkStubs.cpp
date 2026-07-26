@@ -3,10 +3,13 @@
 //
 // Minimal out-of-line definitions so the game exe LINKS with the world-module
 // fleet TUs mounted (BrnWorldModule + entity modules + scene manager + shadow/
-// environment + physics/AI IO surface). The world module is NOT driven yet:
-// BrnGameModule.hpp still instantiates its own placeholder WorldModule, so none
-// of these bodies execute on the boot -> title path. Every stub is either a
-// CGS_ASSERT(false) trap (side-effectful call) or an inert-return getter.
+// environment + physics/AI IO surface). Since the world-module MOUNT (2026-07-26)
+// BrnGameModule embeds the REAL BrnWorld::WorldModule and wires the real
+// Construct(BrnCpuMonitors&) -- so the Construct-path stubs ARE reached at boot
+// (before the first rendered frame, where CGS_ASSERT logs + continues); the
+// Prepare/Update/Release/dispatch surface is still never driven. Every stub is
+// either a CGS_ASSERT(false) trap (side-effectful call) or an inert-return
+// getter.
 //
 // NEVER add behaviour here -- reconstruct the real body from X360 and then
 // delete the stub (the two definitions must not coexist in one build).
@@ -191,10 +194,13 @@ struct Attrib::Collection const * Attrib::RefSpec::GetCollection()
 // -------------------------------------------------------------------------
 // BrnAI::AIModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
+// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op -- the member
+// stays inert/unprepared (zero-initialised static storage), which the boot
+// path tolerates. Reconstruct from X360 before wiring the world Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnAI::AIModule::Construct()
 {
-    CGS_ASSERT(false, "AIModule::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -305,10 +311,13 @@ bool BrnGraphics::EnvironmentMap::Prepare()
 // -------------------------------------------------------------------------
 // BrnMassive::BrnMassive
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via the real
+// WorldEntityModule::Construct @0x82302398 (mMassive.Construct()); quiet
+// no-op returning 0 -- no subscriber is created, the MassiveAd client is
+// never touched. Reconstruct from X360 before wiring the ad pipeline.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 int BrnMassive::BrnMassive::Construct()
 {
-    CGS_ASSERT(false, "BrnMassive::Construct: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
@@ -320,12 +329,40 @@ int BrnMassive::BrnMassive::Destruct()
 }
 
 // -------------------------------------------------------------------------
+// MassiveAdClient3::CMassiveAdObjectSubscriber (SDK base; body lives in the
+// MassiveAd client package, which is not linked). Link-required since the
+// world-module mount: BrnMassiveSubscriber's default ctor/dtor exist so the
+// by-value pool (BrnMassive::maSubscribers[15], inside WorldEntityModule,
+// inside the mounted WorldModule) is instantiable.
+// -------------------------------------------------------------------------
+// LINK STUB (world-module mount 2026-07-26): MUST be a quiet no-op, NOT a trap --
+// it runs at normal process exit through the static gGameModule destructor chain
+// (~WorldModule -> ~WorldEntityModule -> ~BrnMassive -> 15x ~BrnMassiveSubscriber
+// -> this base dtor); an assert during CRT static destruction is not survivable.
+// No subscriber is ever placement-constructed on the boot path, so there is
+// nothing to tear down.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
+MassiveAdClient3::CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber()
+{
+}
+
+// LINK STUB (world-module mount 2026-07-26): pulled by the scalar deleting dtor in
+// the emitted vtable; never invoked (pool slots are by-value members, never
+// heap-deleted).
+void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
+{
+    CGS_ASSERT(false, "CMassiveAdObjectSubscriber::operator delete: link stub (world-module mount) -- MassiveAd heap not linked");
+}
+
+// -------------------------------------------------------------------------
 // BrnPhysics::PhysicsModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
+// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
+// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnPhysics::PhysicsModule::Construct()
 {
-    CGS_ASSERT(false, "PhysicsModule::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -443,10 +480,12 @@ struct BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::SceneInputInterface const
 // -------------------------------------------------------------------------
 // BrnTraffic::TrafficEntityModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
+// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
+// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnTraffic::TrafficEntityModule::Construct()
 {
-    CGS_ASSERT(false, "TrafficEntityModule::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -527,6 +566,41 @@ void BrnWorld::EnvironmentSettings::DebugComponent::Construct(class BrnWorld::En
     CGS_ASSERT(false, "DebugComponent::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
+// The five vtable-pulled virtuals below became link-required when the game module
+// mounted the REAL WorldModule (2026-07-26): mSkyDebugComponent is embedded by
+// value, so BrnGameModule.obj emits the vtable. None are reached at boot (the
+// component is never Construct()ed/registered -- see the Construct trap above).
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827C7760).
+void BrnWorld::EnvironmentSettings::DebugComponent::Update()
+{
+    CGS_ASSERT(false, "DebugComponent::Update: link stub (world-module mount) -- reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827C79A0).
+void BrnWorld::EnvironmentSettings::DebugComponent::RenderHUD(struct CgsDev::Debug2DImmediateRender *)
+{
+    CGS_ASSERT(false, "DebugComponent::RenderHUD: link stub (world-module mount) -- reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827B23E8).  (inert getter)
+const char * BrnWorld::EnvironmentSettings::DebugComponent::GetName() const
+{
+    return "DebugComponent::GetName link stub";
+}
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet.  (inert getter)
+const char * BrnWorld::EnvironmentSettings::DebugComponent::GetPath() const
+{
+    return "DebugComponent::GetPath link stub";
+}
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827B2408).
+void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
+{
+    CGS_ASSERT(false, "DebugComponent::OnActivate: link stub (world-module mount) -- reconstruct from X360");
+}
+
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings::EnvironmentManager -- PARTIALLY DESTUBBED
 // (2026-07-26 wave): BeginRelease (the WorldModule::Release stage-8 inline) now
@@ -554,10 +628,12 @@ struct rw::math::vpu::Vector3 BrnWorld::EnvironmentSettings::EnvironmentManager:
     return rw::math::vpu::Vector3();
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
+// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
+// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::EnvironmentSettings::EnvironmentManager::Construct()
 {
-    CGS_ASSERT(false, "EnvironmentManager::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -628,10 +704,13 @@ void BrnWorld::InternalBaseStreamer::ClearTargetList()
     CGS_ASSERT(false, "InternalBaseStreamer::ClearTargetList: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via
+// WorldEntityModule::Construct -> WorldGraphicsStreamer::Construct ->
+// BaseStreamer<32>::Construct; quiet no-op -- the streamer stays raw, nothing
+// streams until the world Prepare is wired. Reconstruct from X360 first.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::InternalBaseStreamer::Construct(class BrnWorld::StreamerTargetEntry *,class BrnWorld::StreamerTargetEntry *,class BrnWorld::StreamerCurrentEntry *,int,int,enum BrnResource::EAssetSet,bool)
 {
-    CGS_ASSERT(false, "InternalBaseStreamer::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -649,11 +728,31 @@ void BrnWorld::InternalBaseStreamer::Update()
 
 // -------------------------------------------------------------------------
 // BrnWorld::PVSDebugComponent
+// (world-module mount 2026-07-26: linking the committed BrnPVSDebugComponent.cpp
+// was tried and REVERTED -- it is PARTIAL (RenderPVS / RenderPvsCentrePosition
+// declared, bodies unrecovered) and drags Debug2DImmediateRender::DrawCircle;
+// net-negative closure, so the vtable seam stays stubbed here. RenderHUD /
+// OnActivate below joined Construct when the mounted by-value fleet made
+// BrnGameModule.obj emit the vtable.)
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via the real
+// WorldEntityModule::Construct @0x82302398; quiet no-op -- the component is
+// never registered, so the stubbed RenderHUD/OnActivate below never run.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::PVSDebugComponent::Construct(class BrnWorld::WorldEntityModule *)
 {
-    CGS_ASSERT(false, "PVSDebugComponent::Construct: link stub (world fleet mount) -- reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x827CEAD8).
+void BrnWorld::PVSDebugComponent::RenderHUD(struct CgsDev::Debug2DImmediateRender *)
+{
+    CGS_ASSERT(false, "PVSDebugComponent::RenderHUD: link stub (world-module mount) -- link/reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827B2178).
+void BrnWorld::PVSDebugComponent::OnActivate()
+{
+    CGS_ASSERT(false, "PVSDebugComponent::OnActivate: link stub (world-module mount) -- reconstruct from X360");
 }
 
 // -------------------------------------------------------------------------
@@ -665,22 +764,28 @@ void BrnWorld::PropEntityModule::CachePropGraphicsLists()
     CGS_ASSERT(false, "PropEntityModule::CachePropGraphicsLists: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
+// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
+// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::PropEntityModule::Construct()
 {
-    CGS_ASSERT(false, "PropEntityModule::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- WorldModule::
+// Construct registers the prop module's nested perf monitors mid-way through
+// its own AddMonitor block. Quiet no-op: the handles stay 0/unregistered,
+// consumed only by the un-wired Update path. Reconstruct from X360.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::PropEntityModule::ConstructPostPhysicsPerfMonitors()
 {
-    CGS_ASSERT(false, "PropEntityModule::ConstructPostPhysicsPerfMonitors: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot (see
+// ConstructPostPhysicsPerfMonitors above). Quiet no-op.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::PropEntityModule::ConstructPreScenePerfMonitors()
 {
-    CGS_ASSERT(false, "PropEntityModule::ConstructPreScenePerfMonitors: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -724,10 +829,12 @@ bool BrnWorld::PropEntityModule::Release()
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
+// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
+// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::RaceCarEntityModule::Construct()
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -861,20 +968,57 @@ void BrnWorld::TriggerEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferS
 
 // -------------------------------------------------------------------------
 // BrnWorld::TriggerEntityModuleDebugComponent
+// (world-module mount 2026-07-26: linking the committed
+// BrnTriggerEntityModuleDebugComponent.cpp was tried and REVERTED -- its
+// RenderWorld drags Debug3DImmediateRender::DrawBox/DrawSphere + the
+// rw::RGBA ctor, none linked; net-negative closure, so the vtable seam stays
+// stubbed here. RenderWorld/RenderHUD/GetName/OnActivate below joined
+// Construct when the mounted by-value fleet made BrnGameModule.obj emit the
+// vtable.)
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via the real
+// TriggerEntityModule::Construct; quiet no-op -- the component is never
+// registered, so the stubbed render surface below never runs.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::TriggerEntityModuleDebugComponent::Construct(class BrnWorld::TriggerEntityModule *)
 {
-    CGS_ASSERT(false, "TriggerEntityModuleDebugComponent::Construct: link stub (world fleet mount) -- reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822DA1F0).
+void BrnWorld::TriggerEntityModuleDebugComponent::RenderWorld(struct CgsDev::Debug3DImmediateRender *)
+{
+    CGS_ASSERT(false, "TriggerEntityModuleDebugComponent::RenderWorld: link stub (world-module mount) -- link/reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822C4368).
+void BrnWorld::TriggerEntityModuleDebugComponent::RenderHUD(struct CgsDev::Debug2DImmediateRender *)
+{
+    CGS_ASSERT(false, "TriggerEntityModuleDebugComponent::RenderHUD: link stub (world-module mount) -- link/reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822A8FF8).  (inert getter)
+const char * BrnWorld::TriggerEntityModuleDebugComponent::GetName() const
+{
+    return "TriggerEntityModuleDebugComponent::GetName link stub";
+}
+
+// LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822A9018).
+void BrnWorld::TriggerEntityModuleDebugComponent::OnActivate()
+{
+    CGS_ASSERT(false, "TriggerEntityModuleDebugComponent::OnActivate: link stub (world-module mount) -- link/reconstruct from X360");
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::WorldDebugComponent
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- the tail of the
+// wired WorldModule::Construct is mDebugComponent.Construct(this). Quiet no-op:
+// the component is never registered with the debug manager, so its (real,
+// linked) GetName and the stubbed debug surface are never invoked. Reconstruct
+// from X360 (registration + member wiring) before wiring the world debug UI.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void BrnWorld::WorldDebugComponent::Construct(class BrnWorld::WorldModule *)
 {
-    CGS_ASSERT(false, "WorldDebugComponent::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // -------------------------------------------------------------------------
@@ -1007,55 +1151,58 @@ class CgsDev::DebugRender & CgsDev::DebugInterface::GetRender()
     static CgsDev::DebugRender* sNull = 0; return *sNull;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the real
+// WorldEntityModule::Construct / ShadowMap::Construct dev-menu variable
+// registrations (the DebugInterface automatic-handle idiom). Quiet no-op: the
+// tuning rows simply do not exist until the DebugInterface TU is reconstructed.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::RegisterVariable(int *,char const *,char const *)
 {
-    CGS_ASSERT(false, "DebugInterface::RegisterVariable: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): see RegisterVariable(int*) above.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::RegisterVariable(float *,char const *,char const *)
 {
-    CGS_ASSERT(false, "DebugInterface::RegisterVariable: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): see RegisterVariable(int*) above.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::RegisterVariable(bool *,char const *,char const *)
 {
-    CGS_ASSERT(false, "DebugInterface::RegisterVariable: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): see RegisterVariable(int*) above.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::SetRange(int *,int,int)
 {
-    CGS_ASSERT(false, "DebugInterface::SetRange: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): see RegisterVariable(int*) above.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::SetStep(int *,int)
 {
-    CGS_ASSERT(false, "DebugInterface::SetStep: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::Construct @0x827B43E8):
-// body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26, referenced by ShadowMap::Construct
+// @0x827B43E8): see RegisterVariable(int*) above.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::SetRange(float *,float,float)
 {
-    CGS_ASSERT(false, "DebugInterface::SetRange: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::Construct @0x827B43E8):
-// body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26, referenced by ShadowMap::Construct
+// @0x827B43E8): see RegisterVariable(int*) above.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::SetStep(float *,float)
 {
-    CGS_ASSERT(false, "DebugInterface::SetStep: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::Construct @0x827B43E8):
-// body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26, referenced by ShadowMap::Construct
+// @0x827B43E8): see RegisterVariable(int*) above.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsDev::DebugInterface::SetOptions(int *,struct CgsDev::DebugUI::StringList const *)
 {
-    CGS_ASSERT(false, "DebugInterface::SetOptions: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // -------------------------------------------------------------------------
@@ -1070,11 +1217,21 @@ void CgsDev::DebugRender::DrawCircle(struct rw::math::vpu::Vector3,struct rw::ma
 // -------------------------------------------------------------------------
 // CgsDev::PerfMonCpu
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-int CgsDev::PerfMonCpu::AddMonitor(char const *,int,int,double,int,int)
+// BOOT-GATE FORWARDER (world-module mount 2026-07-26): the 6-arg hierarchical
+// X360 ARTIST form is REACHED at boot ~27x by the real SceneManagerModule::
+// Construct @0x828D09A0 perf-mon block. Forward into the live 5-arg registry
+// (colour == the page id at every call site -- SceneManagerModule's own
+// comments name colour 16/17 as pages; liFlags is the libperf tag). The
+// parent-handle nesting is NOT modelled by the PC registry yet -- reconstruct
+// the hierarchical registry before relying on the perfmon tree view.
+int CgsDev::PerfMonCpu::AddMonitor(char const * lpcName, int liColour, int liMinimum, double lfCpuBudget, int liParentHandle, int liFlags)
 {
-    CGS_ASSERT(false, "PerfMonCpu::AddMonitor: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
+    (void)liParentHandle;
+    return CgsDev::PerfMonCpu::AddMonitor(lpcName,
+                                          static_cast<CgsDev::PerfMonCpuPage>(liColour),
+                                          liMinimum != 0,
+                                          static_cast<float>(lfCpuBudget),
+                                          liFlags != 0);
 }
 
 // -------------------------------------------------------------------------
@@ -1223,10 +1380,12 @@ struct CgsSceneManager::VolumeInstance * CgsSceneManager::EntityManager::GetVolu
 // -------------------------------------------------------------------------
 // CgsSceneManager::FineIntersectionTestModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via the real
+// SceneManagerModule::Construct @0x828D09A0 sub-manager cascade; quiet no-op
+// (see AIModule::Construct). Reconstruct from X360 before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsSceneManager::FineIntersectionTestModule::Construct()
 {
-    CGS_ASSERT(false, "FineIntersectionTestModule::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1250,6 +1409,43 @@ bool CgsSceneManager::OverlapGenerationModule::Prepare(void *,void *)
 {
     CGS_ASSERT(false, "OverlapGenerationModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
     return false;
+}
+
+// The four module virtuals below became link-required when the game module
+// mounted the REAL WorldModule (2026-07-26): SceneManagerModule embeds
+// mOverlapGenerator by value inside the by-value fleet, so BrnGameModule.obj
+// emits the vtable. Construct IS reached at boot (the real
+// SceneManagerModule::Construct @0x828D09A0 constructs each sub-manager);
+// its committed body (@0x828D0460, CgsOverlapGenerationModule TU) is not
+// linked because it drags the rw::collision / loose-octree closure (see the
+// banner) -- boot-fire is diagnosed + gated per the mount-wave log.
+
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via the real
+// SceneManagerModule::Construct @0x828D09A0 sub-manager cascade; quiet no-op --
+// the committed body (@0x828D0460) stays unlinked until the rw::collision
+// closure lands. Link/reconstruct before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
+void CgsSceneManager::OverlapGenerationModule::Construct()
+{
+}
+
+// LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x828CB798).
+bool CgsSceneManager::OverlapGenerationModule::Release()
+{
+    CGS_ASSERT(false, "OverlapGenerationModule::Release: link stub (world-module mount) -- reconstruct/link from X360");
+    return true;
+}
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet.
+void CgsSceneManager::OverlapGenerationModule::Destruct()
+{
+    CGS_ASSERT(false, "OverlapGenerationModule::Destruct: link stub (world-module mount) -- reconstruct from X360");
+}
+
+// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet.
+void CgsSceneManager::OverlapGenerationModule::Update()
+{
+    CGS_ASSERT(false, "OverlapGenerationModule::Update: link stub (world-module mount) -- reconstruct from X360");
 }
 
 // -------------------------------------------------------------------------
@@ -1377,10 +1573,12 @@ void CgsSceneManager::SceneManagerModule::UpdateQueries(struct CgsModule::IOBuff
 // -------------------------------------------------------------------------
 // CgsSceneManager::SpatialPartitionManager
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via the real
+// SceneManagerModule::Construct @0x828D09A0 sub-manager cascade; quiet no-op
+// (see AIModule::Construct). Reconstruct from X360 before wiring Prepare.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void CgsSceneManager::SpatialPartitionManager::Construct()
 {
-    CGS_ASSERT(false, "SpatialPartitionManager::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1565,28 +1763,49 @@ void rw::BitTable::GetResourceDescriptor(struct rw::BaseResourceDescriptor *,int
 // -------------------------------------------------------------------------
 // rw::collision::Volume
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- the real
+// SceneManagerModule::Construct @0x828D09A0 lazily fills the shared Volume
+// processing vtable here. Quiet no-op returning 0: no rw::collision volume is
+// ever processed until the world Prepare/query path is wired. The real body
+// is owned by the rwcollision SDK TU (volume.cpp) -- link it with the
+// rw::collision closure.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 int rw::collision::Volume::InitializeVTable()
 {
-    CGS_ASSERT(false, "Volume::InitializeVTable: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
 // -------------------------------------------------------------------------
 // rw::collision::VolumeVolumeQuery
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- the real
+// OverlapCullingModule::Construct @0x828C18E8 stores the result in
+// mpVolVolQuery. Quiet null return: the handle is only consumed by the
+// un-wired Prepare/CullOverlaps path. Real body = rwcollision SDK TU.
+// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
 void * rw::collision::VolumeVolumeQuery::Initialize(void * *,int,int)
 {
-    CGS_ASSERT(false, "VolumeVolumeQuery::Initialize: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void * rw::collision::VolumeVolumeQuery::GetResourceDescriptor(void *,int,int)
+// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot -- the real
+// OverlapCullingModule::Construct @0x828C18E8 calls this and then COPIES 10
+// words out of the returned pointer (returning null here crashed the first
+// mount boot). Fill the caller's scratch with the two words the asm actually
+// consults -- size <= 0x62000 (the X360's exact scratch budget for the 100/100
+// query) and alignment == 16 (GTALIGN) -- and hand it back. These are the
+// asm-attested immediates of the consuming asserts, not invented behaviour;
+// the real SDK body computes the same-or-smaller size for 100/100. The
+// resulting mpVolVolQuery stays null (Initialize below) and is only consumed
+// by the un-wired Prepare/CullOverlaps path.
+void * rw::collision::VolumeVolumeQuery::GetResourceDescriptor(void * lpScratch, int, int)
 {
-    CGS_ASSERT(false, "VolumeVolumeQuery::GetResourceDescriptor: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
+    unsigned int* lpuWords = static_cast<unsigned int*>(lpScratch);
+    for (int liWord = 0; liWord < 10; ++liWord)
+        lpuWords[liWord] = 0;
+    lpuWords[0] = 0x62000u;   // size word (caller asserts <= 0x62000)
+    lpuWords[1] = 16u;        // alignment word (caller asserts == 16)
+    return lpScratch;
 }
 
 // -------------------------------------------------------------------------

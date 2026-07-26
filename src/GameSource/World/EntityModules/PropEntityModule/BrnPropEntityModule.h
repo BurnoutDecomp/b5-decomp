@@ -34,7 +34,7 @@
 namespace BrnPhysics { namespace Props { class PropPhysicsDataHeader; } }
 
 namespace CgsModule { struct IOBufferStack; }
-namespace BrnWorld { namespace PropEntityIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; struct InputBuffer_Dispatch; } }
+namespace BrnWorld { namespace PropEntityIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; struct InputBuffer_Dispatch; class OutputBuffer_Prepare; } }
 
 namespace BrnWorld
 {
