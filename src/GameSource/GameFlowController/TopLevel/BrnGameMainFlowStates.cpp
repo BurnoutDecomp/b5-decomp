@@ -7,6 +7,7 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (LoadSoundModule args)
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + BrnGame::GetMainSoundModule() (stage 4)
 #include "GameSource/Game/BrnGameModule.hpp"         // BrnGame::GetMainGameModule() (the update IO stacks)
+#include "GameSource/World/BrnWorldModuleIO.h"       // BrnWorldIO::UpdateOutputBuffer (LoadWorldModule scratch buffer)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (the command slot values)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
@@ -48,6 +49,12 @@ namespace
 bool gBrnInitialLoadingComplete = false;
 bool gBrnGuiDrivesLoadingScreen = false;   // set by BrnGui::GuiModule when the BF_LOADING Lua FSM is live
 
+// Defined further down with the CheckDiskSpace state (byte_82FAE28E): the disk-check
+// entered flag DOUBLES as the scripted-load pause flag -- the load spine below skips its
+// stage machine while it is raised, and ResumeLoadingWorld clears it on the title
+// pre-accept.
+extern bool gBrnCheckDiskSpaceEntered;
+
 // --- MainGameFlowState (abstract base) --------------------------------------------------
 MainGameFlowState::MainGameFlowState() {}
 void MainGameFlowState::OnEnter() {}
@@ -63,9 +70,200 @@ LoadingScriptedState::LoadingScriptedState()
 }
 void LoadingScriptedState::OnEnter() {}
 void LoadingScriptedState::OnLeave() {}
-void LoadingScriptedState::Update() {}
 void LoadingScriptedState::Render() {}
 void LoadingScriptedState::FinishLoading() {}
+
+// The scripted world-load stage (X360 dword_82FAE4B0 -- a GLOBAL shared by every flow
+// state, NOT a per-instance member; the ARTIST stage set drifted from the PS3-DWARF
+// ELoadingStateStage enum: 1 sound-again, 2 effects, 3 gamestate2, 4 GUI second prepare,
+// 5 world module, 6 sound world-loaded cue -> 8, 7 world collision, 8 done).
+s32 gBrnScriptedLoadStage = 0;
+
+namespace
+{
+    // One-shot per-stage log (the deferred stages advance immediately; keep the
+    // progression visible in BrnGame.log the way InitialLoadingScreen's stages are).
+    void LogScriptedStageOnce(s32 liStage, const char* lpcWhat)
+    {
+        static bool s_abLogged[9] = { false, false, false, false, false, false, false, false, false };
+        if (liStage < 0 || liStage > 8 || s_abLogged[liStage])
+            return;
+        s_abLogged[liStage] = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "ScriptedLoad: stage " << liStage << " (" << lpcWhat << ")\n";
+    }
+}
+
+// @ 0x823A85B0 -- the title pre-accept resume: assert the scripted load is still parked at
+// START, then clear the pause flag (byte_82FAE28E == gBrnCheckDiskSpaceEntered) so the
+// per-frame spine below starts advancing the stages.
+void LoadingScriptedState::ResumeLoadingWorld()
+{
+    CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
+               "meLoadingStateStage == E_LOADINGSTATESTAGE_START");   // X360 h:209
+    gBrnCheckDiskSpaceEntered = false;
+}
+
+// @ 0x823E72F0 -- one frame of the world-module load. Create a scratch BrnWorldIO::
+// UpdateOutputBuffer on the update output stack ("World"), drive WorldModule::Prepare
+// (vtable +68) with the update IO stacks + the GameData allocator list, and -- while it
+// reports "still preparing" -- forward the world's staged resource requests into the
+// GameData input buffer (that append is what carries the vault / district-map / PVS /
+// surface-list requests into the GameData pump each frame).
+bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                                           const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
+    CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
+    lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
+    // The X360 CreateIOBuffer<UpdateOutputBuffer> instantiation runs the buffer's
+    // Construct after the stack alloc; the generic PC template placement-news only, so
+    // run the real Construct (0x827CA0F8) here (same pattern as the GUI input buffer).
+    lpWorldOutput->Construct();
+
+    // X360 passes the output buffer's allocator list (the module's mutable registry);
+    // the PC read accessor is const-qualified, hence the cast back to the X360 shape.
+    const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
+        lpGameDataOutputBuffer ? lpGameDataOutputBuffer->GetAllocatorList() : 0;
+
+    const bool lbPrepared = lpGameModule->GetWorldModule().Prepare(
+        lpUpdateInputStack, lpUpdateOutputStack, lpWorldOutput,
+        const_cast<BrnResource::GameDataIO::AllocatorList*>(lpAllocatorList));
+
+    if (!lbPrepared && lpGameDataInputBuffer != 0)
+    {
+        lpWorldOutput->LockForRead();
+        // The X360 reads through the CONST accessor (0x823B5780) under the read lock.
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
+        lpGameDataInputBuffer->AppendRequestInterface<4096>(
+            *lpWorldOutputRead->GetResourceRequestResourceInterface());
+        // [deferred with the AttribSysModule] the X360 also appends the buffer's AttribSys
+        // vault request queue (<2048>) into the GameData input's attrib queue
+        // (VariableEventQueue<32768,16>::Append<2048,16>); the GameData-side attrib
+        // storage is still the opaque placeholder, so the vault RegisterVault events stay
+        // parked in the world buffer until that module lands.
+        lpWorldOutput->UnlockForRead();
+    }
+
+    lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
+    return lbPrepared;
+}
+
+// @ 0x823F22D8 -- the shared scripted-load spine EVERY titled flow state's Update runs
+// first (Marketing/StartScreen/MemoryCard/CompleteLoading on the X360 all open with
+// LoadingScriptedState::Update()). Reconstructed slice: the scripted world-load stage
+// machine + the per-frame GameData IO bracket + the GameDataModule pump. The rest of the
+// X360 spine (the per-module input/sound/network/gamestate/GUI drives + RenderGUI) already
+// runs through BrnGameModule::GameMain's inline hookup on the PC -- running it here too
+// would double-drive those modules, so it is [deferred] to the module-scheduler move.
+void LoadingScriptedState::Update()
+{
+    // The per-frame GameData IO pair. [PC placement] the X360 keeps these as game-module
+    // members (+2513860/+2513861) created by the update spine each frame; the PC reuses
+    // one constructed-once static pair (the precedent is GameDataModule::Update's own
+    // static ResourceIO input).
+    static BrnResource::GameDataIO::InputBuffer  s_GameDataInput;
+    static BrnResource::GameDataIO::OutputBuffer s_GameDataOutput;
+    static bool s_bIOConstructed = false;
+    if (!s_bIOConstructed)
+    {
+        s_bIOConstructed = true;
+        // The IOBuffer base status must be raised before any lock (LockForWrite asserts
+        // eStatusConstructed). GameDataIO's own lifecycle members are still the deferred
+        // slice, so run the base Construct explicitly, then bring up the request queue.
+        s_GameDataInput.CgsModule::IOBuffer::Construct();
+        s_GameDataInput.LockForWrite();
+        s_GameDataInput.GetRequestInterface()->mRequestQueue.Construct();
+        s_GameDataInput.UnlockForWrite();
+        s_GameDataOutput.CgsModule::IOBuffer::Construct();
+        s_GameDataOutput.LockForWrite();
+        s_GameDataOutput.Construct();   // the member-clearing OutputBuffer::Construct
+        s_GameDataOutput.UnlockForWrite();
+    }
+
+    if (gBrnScriptedLoadStage != 8)
+    {
+        s_GameDataInput.LockForWrite();
+        s_GameDataOutput.LockForRead();
+
+        // byte_82FAE28E -- the scripted-load pause flag (set by CheckDiskSpace::OnEnter,
+        // cleared by the title pre-accept ResumeLoadingWorld). NOTE the PC flow currently
+        // skips E_MGS_CHECK_DISK_SPACE (initial loading advances straight to marketing),
+        // so the load runs unpaused from the marketing screens.
+        if (!gBrnCheckDiskSpaceEntered)
+        {
+            switch (gBrnScriptedLoadStage)
+            {
+            case 0:
+            case 1:
+                gBrnScriptedLoadStage = 1;
+                // X360: LoadSoundModuleAgain -- the sound module's second prepare pass.
+                // [deferred: the first pass already ran in the initial loading; advance]
+                LogScriptedStageOnce(1, "LoadSoundModuleAgain [deferred]");
+                // fall through
+            case 2:
+                gBrnScriptedLoadStage = 2;
+                // X360: LoadEffectsModule. [deferred: effects module placeholder]
+                LogScriptedStageOnce(2, "LoadEffectsModule [deferred]");
+                // fall through
+            case 3:
+                gBrnScriptedLoadStage = 3;
+                // X360: LoadGameState2. [deferred: game-state module placeholder]
+                LogScriptedStageOnce(3, "LoadGameState2 [deferred]");
+                // fall through
+            case 4:
+                gBrnScriptedLoadStage = 4;
+                // X360: the GUI module's second prepare (GuiModule vtable +92).
+                // [deferred: the PC GUI module prepared through the inline hookup]
+                LogScriptedStageOnce(4, "GUI second prepare [deferred]");
+                // fall through
+            case 5:
+                gBrnScriptedLoadStage = 5;
+                LogScriptedStageOnce(5, "LoadWorldModule -- real");
+                if (!LoadWorldModule(&s_GameDataInput, &s_GameDataOutput))
+                    break;
+                // fall through
+            case 6:
+                gBrnScriptedLoadStage = 6;
+                // X360: post sound event 297 (the "world loaded" cue) into this frame's
+                // Root sound input buffer, then jump straight to DONE (8). [deferred: the
+                // per-frame sound IO bracket is not threaded through this spine yet]
+                LogScriptedStageOnce(6, "sound world-loaded cue [deferred] -> DONE");
+                gBrnScriptedLoadStage = 8;
+                break;
+            case 7:
+                gBrnScriptedLoadStage = 7;
+                // X360: LoadWorldCollision @0x823E73E0 (WorldModule::PrepareWorldCollision
+                // + EffectsModule::PostWorldPreparePrepare on completion). [deferred:
+                // WorldModule::PrepareWorldCollision (0x827C9478) is not reconstructed
+                // yet; log + advance so the flow cannot wedge]
+                LogScriptedStageOnce(7, "LoadWorldCollision [deferred]");
+                gBrnScriptedLoadStage = 8;
+                break;
+            case 8:
+                break;
+            default:
+                CGS_ASSERT(false, "Unhandled meLoadingStage");   // X360 BrnLoadingScriptedState.cpp:237
+                break;
+            }
+        }
+
+        s_GameDataOutput.UnlockForRead();
+        s_GameDataInput.UnlockForWrite();
+
+        // Pump the GameData streaming module with this frame's staged requests. [PC
+        // placement] the X360 pumps GameDataModule::Update on the resource-update thread
+        // while the spine runs; the single-threaded PC host runs it inline here. The pump
+        // drains the input queue, services the world requests, routes the internal
+        // completions (ProcessInternal*Response) and republishes the allocator list.
+        BrnGame::GetMainGameDataModule()->Update(&s_GameDataInput, &s_GameDataOutput);
+    }
+    // stage 8 (DONE): the X360 runs the full module cascade (BrnGameModule::DoUpdate);
+    // the PC host loop owns the module drive -- see DoUpdate's PC-platform note.
+}
 
 // @ 0x823E75A8 - one frame of the sound-module load. The X360 body:
 //   * CreateIOBuffer<Io::RootInputBuffer>(gm->mpUpdateInputBufferStack,  &lpRootIn,  "Sound")
@@ -374,14 +572,20 @@ void MainGameFlowStateStartScreen::OnLeave() {}
 // BrnGameModule::GameMain (the console's LoadingScriptedState::Update shared spine).
 void MainGameFlowStateStartScreen::Update()
 {
+    // X360 0x823F2D78 opens with the shared scripted-load spine.
+    LoadingScriptedState::Update();
+
     BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
     if (lpGameModule->ConsumeGuiPreAccept())
     {
-        // LoadingScriptedState::ResumeLoadingWorld @0x823A85B0 -- the world streaming
-        // resume. [FLAG: the world-load stage machine is unreconstructed on PC; the
-        // initial loading already completed synchronously.]
+        // LoadingScriptedState::ResumeLoadingWorld @0x823A85B0 -- unpause the scripted
+        // world load during the accept dwell. Guarded on the pause flag: the PC flow
+        // skips CHECK_DISK_SPACE, so the load usually runs unpaused (calling the
+        // unconditional X360 resume would fire its stage==START assert mid-load).
         if (CgsDev::Message::gxMessageFilterFlags & 1)
             *CgsDev::Log::gpDebugPrint << "StartScreen: pre-accept (71) -> resume world load\n";
+        if (gBrnCheckDiskSpaceEntered)
+            ResumeLoadingWorld();
     }
     if (lpGameModule->IsGuiPhaseComplete())
     {
@@ -412,6 +616,9 @@ void MainGameFlowStateMarketingScreens::OnLeave() {}
 // logo finished).
 void MainGameFlowStateMarketingScreens::Update()
 {
+    // X360 0x823F2CD8 opens with the shared scripted-load spine.
+    LoadingScriptedState::Update();
+
     if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
         BrnGameMainFlowController::gpMainGameFlowController != 0)
     {
@@ -473,6 +680,11 @@ void MainGameFlowStateMemoryCard::OnLeave() {}
 // stand-in for the world-loaded stage.]
 void MainGameFlowStateMemoryCard::Update()
 {
+    // X360 0x823F2F98 opens with the shared scripted-load spine (its advance gate is the
+    // scripted stage == 8; the PC keeps the gBrnInitialLoadingComplete stand-in gate
+    // below until the world load can really complete).
+    LoadingScriptedState::Update();
+
     if (!gBrnInitialLoadingComplete)
         return;
     if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
@@ -504,6 +716,11 @@ void MainGameFlowStateCompleteLoading::OnLeave() {}
 // X360 load-state global are platform/world follow-ons.)
 void MainGameFlowStateCompleteLoading::Update()
 {
+    // X360 0x823F2E08 opens with the shared scripted-load spine, then -- once the GUI
+    // phase completes with the scripted load DONE -- first pass kicks the world-collision
+    // stage (dword_82FAE4B0 = 7) and latches, second pass advances to IN_GAME.
+    LoadingScriptedState::Update();
+
     if (!gBrnInitialLoadingComplete)
         return;
     if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete())
@@ -516,6 +733,10 @@ void MainGameFlowStateCompleteLoading::Update()
         }
         else
         {
+            // X360: only with the scripted load DONE; the PC keeps the latch permissive
+            // (stand-in gate above) so the flow cannot wedge while the world load holds.
+            if (gBrnScriptedLoadStage == 8)
+                gBrnScriptedLoadStage = 7;   // kick LoadWorldCollision
             mbIsCollisionWorldPrepared = true;
         }
     }

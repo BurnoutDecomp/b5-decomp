@@ -115,5 +115,25 @@ void CameraState::Clear()
     mPreviousFlags.SetBit(0);     // ori q,q,1
 }
 
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::CameraState::Construct @0x82252348 (DRIVE wave 2026-07-26)
+//
+// Zero all three flag sets (std 0 -> +0x00/+0x08/+0x10), run the one-time
+// ValidityAccount::SetupFailFlagMask, then tail into Clear. [folded static per
+// convention] the X360 re-checks `!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST],
+// "CONSISTENCY TEST")` here (BrnCameraState.cpp:82) -- the same static name-table
+// tautology folded in SetupFailFlagMask.
+// ----------------------------------------------------------------------------
+void CameraState::Construct()
+{
+    mCurrentFlags.UnSetAll();     // a1[1] = 0
+    mPreviousFlags.UnSetAll();    // a1[2] = 0
+    mHeadFlags.UnSetAll();        // *a1  = 0
+
+    ValidityAccount::SetupFailFlagMask();
+
+    Clear();                      // the X360 tail call
+}
+
 } // namespace Camera
 } // namespace BrnDirector

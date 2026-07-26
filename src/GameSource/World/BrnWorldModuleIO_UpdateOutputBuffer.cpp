@@ -30,6 +30,51 @@ void UpdateOutputBuffer::_AssertLayout()
     static_assert(offsetof(UpdateOutputBuffer, mVehicleOutputInterface) == 16, "vehicleOutput@16");
 }
 
+// ---- lifecycle -----------------------------------------------------------------
+
+// @ 0x827CA0F8 -- construct the buffer: the IOBuffer base status (X360 `*this = 1` ==
+// eStatusConstructed), then the member-wise Construct/Clear chain over the ~25 output
+// interfaces/queues (X360 order documented inline).
+//
+// PARTIAL SLICE (FLAG): the members whose committed types expose Construct/Clear run the
+// REAL call; the interface interiors whose Construct/Clear bodies are not committed yet
+// (VehicleOutputInterface's three interior queues + head words, the two
+// RCEntityActiveRaceCarOutputInterface Clears, TriggerEntity/DirectorVehicle/RaceCarGlobal/
+// VehicleManager/ContactSpy/TrafficNetwork/Crash/Deformation interfaces, the
+// AICarOutputInterface 35-slot {DIST_MAX, 0x7FFF} splat, and the StatusInterface
+// {0,0,0,1,1} seed whose setters are still WorldLinkStubs traps) are covered by the
+// leading zero-fill stand-in below [marked deviation] and listed here so each lands with
+// its type's own pass. The zero-fill starts at the first member (offset 16, pinned by
+// _AssertLayout) so the IOBuffer base/lock state is never touched.
+void UpdateOutputBuffer::Construct()
+{
+    memset(&mVehicleOutputInterface, 0,
+           sizeof(UpdateOutputBuffer) - offsetof(UpdateOutputBuffer, mVehicleOutputInterface));
+
+    CgsModule::IOBuffer::Construct();                       // X360 *this = 1
+
+    // -- the committed queue constructs, in the X360 call order --
+    mTriggerEntityOutputInterface.Construct();              // X360 VEQ<1024,16> +50816 (Construct+Clear)
+    mRouteResponseQueue.Construct();                        // X360 RouteResponse<16> +60440
+    mResourceRequestInterface.mRequestQueue.Construct();    // X360 VEQ<4096,16> +146660 (Construct+Clear)
+    mResourceRequestInterface.mRequestQueue.Clear();
+    mAttribSysVaultRequestInterface.mRequestQueue.Construct(); // X360 VEQ<2048,16> +150832 (Construct+Clear)
+    mAttribSysVaultRequestInterface.mRequestQueue.Clear();
+    mTrafficTypeResponseQueue.Construct();                  // X360 TrafficTypeResponse<32> +155616
+    mSoundWorldLoadInterface.Construct();                   // X360 SoundWorldLoadEvent<25> +169096
+    mGameEventQueue.Construct();                            // X360 VEQ<1536,16> +216116
+    mPropVFXLocatorQueue.Construct();                       // X360 PropVFXLocatorEvent<10> +169360
+    mAudioCarLoadedDataQueue.Construct();                   // X360 AudioCarDataLoadedEvent<16> +142632
+    mPropBecamePhysicalEventQueue.Construct();              // X360 PropBecamePhysicalEvent<20> +202960
+    mPropUpdateNotificationQueue.Construct();               // X360 PropUpdateNotification<200> +203296
+    mGuiEventQueue.Construct();                             // X360 VEQ<32768,16> +170176 (the tail call)
+
+    // X360 zero stores covered by the zero-fill: mPlayerVehicleControls (+150772, 60 B),
+    // mEffectsEnvironmentInterface (+169072, 16 B vspltisw), mReplayRequestInterface
+    // (+169308, 11 words), mTriangleCacheInterface (+216112, pointer), and
+    mbWorldWantsDebugControllerFocus = false;               // X360 +217668
+}
+
 // ---- player race-car indices -------------------------------------------------
 
 // X360 0x823B6E58 (:514 R) -- read-locked player global race-car index. The X360 body

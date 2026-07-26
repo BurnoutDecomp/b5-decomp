@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
+#include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount::SetupFailFlagMask (interim bridge in Construct)
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
@@ -195,6 +196,12 @@ namespace BrnGame
         mGameStateModule.Construct();    // +0x669380  (slot 0; placeholder -> base)
         mEffectsModule.Construct();      // +0x878A00  (slot 0; placeholder -> base)
         mDirectorModule.Construct();     // +0x6B0C90  [gated] X360 slot +64; placeholder -> base.
+        // [FLAG interim bridge] the console DirectorModule's camera constructs run
+        // CameraState::Construct -> ValidityAccount::SetupFailFlagMask during its real
+        // Construct; the placeholder above skips them, but WorldModule::Prepare's
+        // mLastCameraInput.Clear() (CameraState::Clear @0x82220950) asserts the mask was
+        // set up. Run the one-time setup here until the DirectorModule is real.
+        BrnDirector::Camera::ValidityAccount::SetupFailFlagMask();
         mReplayModule.Construct();       // +0x8BD680  (slot 0; ReplayModule -> base)
         mNetworkModule.Construct();      // +0x8C39C0  [gated] X360 slot +64 with arg 0; placeholder -> base.
 

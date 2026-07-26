@@ -38,6 +38,7 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the SCENE-stage allocator-hold one-shot log
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIO.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManager.h"
@@ -537,6 +538,27 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             const CgsResource::Events::AcquireResourceResponse* lpResponse =
                 reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>( lpEventData );
 
+            // [FLAG PC boot gate] the world vault bundle is still X360 big-endian data on
+            // PC (the loader refuses it), so the acquire legitimately resolves to a null
+            // handle here -- a state the X360 can never reach (its vault always loads).
+            // Registering a null vault would fire RegisterVault's handle assert; hold this
+            // stage (one-shot log) until the vault bundle is ported to platform 4.
+            if ( lpResponse == 0 || lpResponse->mpSourceEntry == 0 )
+            {
+                static bool s_bLoggedVaultHold = false;
+                if ( !s_bLoggedVaultHold )
+                {
+                    s_bLoggedVaultHold = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "WorldModule::LoadAttribSysVault: ACQUIRING_VAULT holding -- "
+                               "'WorldVault' resource absent (vault bundle not PC-converted) "
+                               "[FLAG PC boot gate]\n";
+                }
+                mReceiverQueue.Clear();
+                break;
+            }
+
             mAttribSysVaultResourceHandle.mpResourceMemory = lpResponse->mpResourceMemory;
             mAttribSysVaultResourceHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
 
@@ -638,6 +660,30 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             lParams.miMaxEntries  = 32;
             lParams.miMaxDepth    = 10;
             lParams.miPad         = 0;
+
+            // [FLAG PC boot gate] GameDataModule::CreateAllocators (0x8266DD00) is still an
+            // inert stand-in, so the allocator registry cannot serve the scene (49) /
+            // physics (23) / triangle-collision (61) allocators yet. On the X360 these are
+            // always live by world-prepare time; a null here would fail the asserts below
+            // and then fault inside SceneManagerModule::Prepare. Hold the stage (resumable
+            // "not ready yet" -- the spine keeps re-driving) with a one-shot log instead of
+            // inventing allocators. Remove this gate when CreateAllocators lands.
+            if ( lpAllocatorList == 0 ||
+                 lpAllocatorList->GetRWLinearResourceAllocator( 49 ) == 0 ||
+                 lpAllocatorList->GetRWLinearResourceAllocator( 23 ) == 0 ||
+                 lpAllocatorList->GetLinearAllocator( 61 ) == 0 )
+            {
+                static bool s_bLoggedAllocatorHold = false;
+                if ( !s_bLoggedAllocatorHold )
+                {
+                    s_bLoggedAllocatorHold = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "WorldModule::Prepare: SCENE stage holding -- allocator registry "
+                               "empty (CreateAllocators deferred) [FLAG PC boot gate]\n";
+                }
+                return false;
+            }
 
             rw::IResourceAllocator* lpSceneAllocator =
                 lpAllocatorList->GetRWLinearResourceAllocator( 49 );

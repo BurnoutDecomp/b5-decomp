@@ -137,6 +137,10 @@ namespace CgsResource
         // It receives its own mPoolInitOptions; the front half ignores it (the type-registry /
         // ScratchPool / region allocations that consume it are deferred to the back half).
         mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator);
+        // Bundle loader intake queues (the X360 BundleLoaderModule::Construct 0x828EBAF8
+        // runs from this chain; the PC slice constructs the load/unload request queues the
+        // GameData world-request pump routes into).
+        mBundleLoaderModule.Construct();
     }
     // Update (0x82907948) pumps each sub-module + shuttles requests; Destruct (0x828EC6B0) tears them
     // down. Deferred.
@@ -172,7 +176,12 @@ namespace CgsResource
     }
 
     // Drain the pool module's output queue (DoAcquireResourceRequest etc. responses) and forward each to
-    // its requester's receiver queue (response->mpUser). The pool-response slice of ProcessResourceResponses.
+    // its requester's receiver queue (response->mpUser). The pool-response slice of ProcessResourceResponses
+    // (X360 0x828EC788): the console translates each pool-output tag through the static table
+    // dword_820F7194[tag] before posting to mpUser -- the ACQUIRE response (pool tag 6) reaches the
+    // requester as receiver id 4, which is the id GameDataModule's internal drain (and every X360
+    // receiver-side consumer) switches on. Only the tags the PC pool module emits are mapped; unmapped
+    // tags pass through unchanged (their producers land with their own passes).
     void ResourceModule::ProcessPoolOutputResponses(PoolIO::OutputBuffer* lpPoolOut)
     {
         const PoolIO::OutputBuffer::PoolOutputQueue* lpQ =
@@ -186,7 +195,10 @@ namespace CgsResource
             CgsModule::BaseEventReceiverQueue* lpUser =
                 reinterpret_cast<const Events::PoolEvent*>(lpEvent)->mpUser;
             if (lpUser != 0)
-                lpUser->AddEvent(lpEvent, liId, liSize);
+            {
+                const s32 liUserId = (liId == 6) ? 4 /*AcquireResource response*/ : liId;
+                lpUser->AddEvent(lpEvent, liUserId, liSize);
+            }
             const CgsModule::Event* lpNext = 0;
             liId = lpQ->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
