@@ -184,8 +184,10 @@ namespace BrnGame
         mSoundModule.Construct();        // +0x8A7F00  RootSoundModule::Construct 0x826AF350 (slot 0)
         mRenderModule.Construct();       // +0x004400  BrnRendererModule::Construct (direct call)
         mGameDataModule.Construct();     // +0x5F4A00  GameDataModule::Construct 0x82671B90 (slot 0, NO args)
-        mWorldModule.Construct();        // +0x010E80  [gated] X360 passes &mCpuMonitors (slot +64);
-                                         //            the WorldModule placeholder takes none yet.
+        mWorldModule.Construct(mCpuMonitors); // +0x010E80  WorldModule::Construct 0x827CF540
+                                         //            (slot +64, const BrnCpuMonitors& -- the
+                                         //            handle block filled above). REAL module
+                                         //            mounted 2026-07-26 (world-render campaign).
         mInputModule.Construct();        // +0x6E9430  (slot 0; placeholder -> base)
         mGuiModule.Construct();          // +0x6EA820  [gated] X360 slot +84 with two sub-objects
                                          //            (+0x65A1D0/+0x65A1F4, inside the GameData

@@ -46,14 +46,21 @@ namespace BrnDirector { namespace DirectorIO { struct OutputBuffer {}; } }
 // clash is resolved (the renderer/game-module now share the one real base + EA::Thread::RWMutex).
 // Names/namespaces/order are the real ones (DWARF BrnGameModule.h h:356-368). WorldModule is in
 // the global namespace (DWARF BrnWorldModule.h: struct WorldModule : CgsModule::ModuleSingleBuffered).
-class WorldModule : public CgsModule::ModuleSingleBuffered {};
+// WorldModule is now the REAL reconstruction (world-render campaign mount 2026-07-26; was an empty
+// stub here -- deleted per the ODR-TRAP rule below, exactly like GameDataModule). NAMESPACE
+// RECONCILE: the DWARF declares WorldModule in the GLOBAL namespace (BrnWorldModule.h:124); the
+// reconstruction homes it in BrnWorld. The using-declaration is the minimal-churn reconcile: the
+// game module addresses the ONE real type under the DWARF's global name without renaming the
+// class or moving its home file.
+#include "GameSource/World/BrnWorldModule.h"
+using BrnWorld::WorldModule;   // DWARF: global-namespace WorldModule (BrnWorldModule.h:124)
 // GameDataModule is now the REAL reconstruction (was an empty stub here, which ODR-clashed with the
 // real BrnGameDataModule.h -- different sizeof/ctor in different TUs -> the empty ctor got linked,
 // leaving mResourceModule unconstructed = null vtable crash). Include the real definition so every TU
 // (BrnGameModule + the loading flow) sees ONE GameDataModule.
 #include "GameSource/Resource/BrnGameDataModule.h"
 // !!! ODR TRAP WARNING !!! The remaining empty stubs below (GameStateModule/DirectorModule/InputModule/
-// EffectsModule/RootSoundModule/ReplayModule/BrnNetworkModule/WorldModule) are placeholders so this
+// EffectsModule/RootSoundModule/ReplayModule/BrnNetworkModule) are placeholders so this
 // module can embed them by value. When ANY of them is reconstructed for real in its own header, DELETE
 // the matching stub here and #include the real header instead -- do NOT leave both. Two different
 // definitions of the same class = ODR violation: the linker silently binds the empty do-nothing ctor,

@@ -91,18 +91,11 @@ namespace BrnResource
 class LinearResourceAllocator;
 }
 
-namespace RendererIO
-{
-struct RenderSwitches
-{
-    bool mbRenderShadows;
-    bool mbRenderEnvmap;
-    bool mbRenderWorld;
-    bool mbRenderProps;
-    bool mbRenderRaceCars;
-    bool mbRenderTraffic;
-};
-}
+// RendererIO::RenderSwitches now comes from its DWARF home (BrnRendererModuleIO.h:68) -- the
+// forward-slice copy this header carried was deleted per the consolidation FLAG there, when the
+// world-module mount first co-included both spellings in one TU (BrnGameModule). The include also
+// supplies the REAL BrnBlobbyShadowManager (see the deleted stub below).
+#include "GameSource/Graphics/BrnRendererModuleIO.h"
 
 namespace renderengine
 {
@@ -124,9 +117,11 @@ struct Resource
 {
 };
 
-struct BrnBlobbyShadowManager
-{
-};
+// BrnBlobbyShadowManager is the real type now (GameSource/Graphics/BrnBlobbyShadowManager.h,
+// included via BrnRendererModuleIO.h above). The empty stub that lived here ODR-clashed with the
+// real class once the world-module mount co-included the world dispatch buffer in the game TU
+// (same trap as the BrnGameModule.hpp module stubs; mBlobbyShadowManager below is by value, so
+// the complete real type is required).
 
 // BrnCoronaManager is the real type (GameSource/Graphics/BrnCoronaManager.h, included above) --
 // mCoronaManager is embedded by value below, which needs the complete type, not a stub.

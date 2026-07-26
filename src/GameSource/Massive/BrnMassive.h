@@ -99,6 +99,15 @@ namespace BrnMassive
         // Subscriber IE: <zone>" when message logging is enabled.
         explicit BrnMassiveSubscriber(const char* lpcZoneName);
 
+        // PC instantiability (world-module mount): on the X360 a pool slot in
+        // maSubscribers[15] is RAW storage until CreateSubscriber placement-
+        // constructs it with the zone-name ctor above; C++ requires the by-value
+        // pool default-constructible once BrnMassive is embedded up the
+        // WorldModule chain (WorldEntityModule::mMassive, by value, inside the
+        // game module). Empty body = the raw-slot state; CreateSubscriber remains
+        // the real constructor of record.
+        BrnMassiveSubscriber() {}
+
         // ----- MassiveAd ad-download callbacks (BrnMassiveSubscriber.cpp) -------
         // FLAG: these are the subscriber's MassiveAd callbacks; the constructor
         // installs the derived vtable (off_820369E8), so the class is polymorphic

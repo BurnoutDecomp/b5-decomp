@@ -17,7 +17,11 @@
 // the existing call sites PerfMonCpu::StartMonitor; the X360 spells it a struct of all-static members,
 // which is semantically identical).
 
-namespace rw { class IResourceAllocator; }
+// struct, not class: rw::IResourceAllocator's real home (vendor rwcore_structs.h:168) defines it
+// as a STRUCT; a class-kind forward decl makes MSVC mangle this header's Construct differently in
+// TUs that saw the real header (LNK2019 on the world-module mount when DebugManager began calling
+// PerfMonCpu::Construct).
+namespace rw { struct IResourceAllocator; }
 
 namespace CgsDev
 {

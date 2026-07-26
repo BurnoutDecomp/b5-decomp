@@ -85,10 +85,26 @@ namespace CgsResource
         muThreadId = reinterpret_cast<EAThread::ThreadId>(lpSrcHandle->mpSourceEntry);
 
         // Copy the owner node's identity region (offsets +0x00/+0x04/+0x08) into this, BY NAME.
+        // PC RECONCILE (world-module mount 2026-07-26, null-handle bind): X360 call sites bind
+        // NULL handles through here -- WorldGraphicsStreamer::Construct @0x827CA388 assigns the
+        // all-zero default handle (dword_8300FAA0 = {0,0}) into every instance-list slot, and the
+        // streamer's GetInstanceList comment attests the bound ptr "reads back as the empty/
+        // default pointer". A literal read through the null owner is an AV on Win-x64 (it crashed
+        // the first mounted boot inside this copy), so the attested end state -- the EMPTY
+        // identity -- is expressed as the explicit null case.
         BaseResourcePtr* lpOwner = mpThis;  // owner == *(+0x14)
-        mpResourceMemory         = lpOwner->mpResourceMemory;
-        mHandle.mpResourceMemory = lpOwner->mHandle.mpResourceMemory;
-        mHandle.mpSourceEntry    = lpOwner->mHandle.mpSourceEntry;
+        if (lpOwner != 0)
+        {
+            mpResourceMemory         = lpOwner->mpResourceMemory;
+            mHandle.mpResourceMemory = lpOwner->mHandle.mpResourceMemory;
+            mHandle.mpSourceEntry    = lpOwner->mHandle.mpSourceEntry;
+        }
+        else
+        {
+            mpResourceMemory         = 0;
+            mHandle.mpResourceMemory = 0;
+            mHandle.mpSourceEntry    = 0;
+        }
 
         // Inline RemoveFromCurrentList: splice this out of its current ring (null-safe).
         if (mpNext != 0) mpNext->mpPrev = mpPrev;   // [mpNext+0x10] = mpPrev

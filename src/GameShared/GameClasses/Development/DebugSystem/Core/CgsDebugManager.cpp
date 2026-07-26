@@ -110,7 +110,13 @@ namespace CgsDev
     // the real GetDefaultAllocator wiring is the allocator follow-on.
     const DebugManagerConstructParameters DebugManagerConstructParameters::DEFAULT =
     {
-        /* miPerfMonCpuCount          */ 64,
+        /* miPerfMonCpuCount          */ 256,   // raised 64 -> 256 (world-module mount 2026-07-26):
+                                                // the wired WorldModule::Construct + the real
+                                                // SceneManagerModule::Construct register ~60 more
+                                                // monitors on top of the game module's ~40, and 64
+                                                // overflowed (AddMonitor -1 -> the WorldModule
+                                                // handle asserts fired). Capacity-only, per the
+                                                // note above.
         /* miPerfMonLogBufferSize     */ 8192,
         /* miMenuWindowPoolSize       */ 16,
         /* miMenuPoolSize             */ 64,
@@ -154,6 +160,13 @@ namespace CgsDev
         Internal::SetDebugSingletons(this, mpUI, lpParameters->mpRwAllocator);
 
         mpUI->Construct(lpParameters);
+
+        // Build the CPU perfmon REGISTRY itself (X360 PerfMonCpu::Construct(maxCount, allocator) --
+        // this is what miPerfMonCpuCount exists for). Missing until the world-module mount
+        // (2026-07-26): with the registry unbuilt every AddMonitor returned -1, which the game
+        // module's monitor block silently tolerated but the wired WorldModule::Construct ASSERTS on
+        // (its X360 body checks each returned handle >= 0).
+        CgsDev::PerfMonCpu::Construct(lpParameters->miPerfMonCpuCount, lpParameters->mpRwAllocator);
 
         // Bring up + register the full CPU perfmon overlay component (the detailed per-monitor bar
         // table). Construct inits its state; Register threads it onto mComponentList + the debug menu
