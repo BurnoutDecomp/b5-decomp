@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"   // BundleV2 (struct) + nested ResourceEntry
 
 namespace CgsModule { class BaseEventReceiverQueue; }   // referenced by pointer only
+namespace CgsResource { struct ResourceHandle; }        // AcquireResourceListRequest::mpHandles (by pointer)
 
 namespace CgsResource
 {

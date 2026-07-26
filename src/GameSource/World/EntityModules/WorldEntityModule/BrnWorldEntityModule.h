@@ -70,7 +70,7 @@
 namespace CgsGraphics
 {
     struct Instance;       // pointer-only use here (backdrop instance walk)
-    struct DispatchFrame;  // pointer-only use (dispatch-list generation)
+    class DispatchFrame;   // pointer-only use (dispatch-list generation); class matches CgsDispatcher.h:211 (mangling)
 }
 
 namespace BrnWorld
