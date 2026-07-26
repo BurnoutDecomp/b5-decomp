@@ -87,6 +87,20 @@ public:
         return const_cast<IndexedPool*>(this)->operator[](lsIndex);
     }
 
+    // ADDITIVE (attested by @0x82671B90): bind the pool to its backing element / free-index
+    // arrays and reset it. BrnResource::GameDataModule::Construct wires its event-slot pool
+    // inline with exactly these stores -- capacity (96) at +0x0C, the element array base
+    // (a1+439328) at +0, the free-index array (a1+443936) at +4, then Clear() -- so the
+    // construction step is modeled as this named member on the generic. (The X360 also zeroes
+    // two neighbouring module fields in the same run; those belong to the module, not the pool.)
+    void Construct(T* lpElements, IndexType* lpFreeIndices, IndexType lsCapacity)
+    {
+        maElements     = lpElements;
+        mpFreeIndices  = lpFreeIndices;
+        msCapacity     = lsCapacity;
+        Clear();
+    }
+
     // Clear @ 0x826638D0: reset the free list to the identity permutation
     // (mpFreeIndices[i] = i for i in [0, msCapacity)), then mark every slot free --
     // msNumAllocated = 0, msNumFree = msCapacity. X360 loops over the capacity (`lhz
