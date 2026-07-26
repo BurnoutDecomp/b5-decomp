@@ -48,7 +48,7 @@
 // Forward decls -- these members are used by pointer only and are canonical committed types.
 namespace CgsGraphics { class DispatchFrame; }
 class BrnEffectsFrame;
-class BrnShaderConstantsFrame;
+struct BrnShaderConstantsFrame;   // struct matches BrnShaderConstantsFrame.h:18 (mangling)
 
 // RendererIO::RenderSwitches -- the per-frame render-enable switches (6 bools) embedded by value at
 // the tail of this buffer (DWARF :438). Its DWARF home is GameSource/Graphics/BrnRendererModuleIO.h

@@ -43,11 +43,11 @@
 
 namespace CgsGraphics
 {
-    struct DispatchFrame;   // pointer-only members below
+    class DispatchFrame;    // pointer-only members below; class matches CgsDispatcher.h:211 (mangling)
 }
 namespace BrnWorld
 {
-    class ShadowMap;        // pointer-only member below
+    struct ShadowMap;       // pointer-only member below; struct matches BrnShadowMap.h:64 (mangling)
 }
 
 namespace BrnWorld

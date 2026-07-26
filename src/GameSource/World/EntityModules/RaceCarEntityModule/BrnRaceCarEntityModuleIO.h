@@ -68,7 +68,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h" // local queue slices (GameActionQueue/GameEventQueue/PotentialContactQueue/SceneResultQueue/TakedownEventQueue/ResourceRequestInterface)
 
 namespace BrnNetwork { enum EPaybackType : s32; }
-namespace CgsGraphics { struct DispatchFrame; }
+namespace CgsGraphics { class DispatchFrame; }   // class (matches CgsDispatcher.h:211; struct fwd-decl skewed MSVC mangling)
 // RECONCILED 2026-07-24 (ODR fix, see BrnRendererModuleIO.h): BrnBlobbyShadowBuffer
 // is a NESTED class of the real BrnBlobbyShadowManager CLASS -- include the home.
 #include "GameSource/Graphics/BrnBlobbyShadowManager.h"
