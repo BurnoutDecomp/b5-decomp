@@ -12,15 +12,21 @@
 
 namespace CgsGeometric
 {
+    // SEAM (platform-4 widened blob): the converted x64 data carries the widened
+    // PolygonSoupList header (0x38 bytes) matching the type's primary committed FixUp
+    // consumer, CgsPolygonSoupList.cpp -- pointers widen to u64 so the total-size field
+    // moves from the X360 +0x2C (the descriptor asm reads *(resource + 44)) to +0x34.
+    // Mirrored member-for-member from CgsPolygonSoupList.cpp; only miDataSize is
+    // touched by the descriptor body.
     struct PolygonSoupList
     {
-        PolygonSoupList* FixUp(int liDelta);
+        float     mOverallAabb[8];  // +0x00 AxisAlignedBox
+        uintptr_t mpapPolySoups;    // +0x20 (X360 +0x20, u32) PolygonSoup** table base
+        uintptr_t mpaPolySoupBoxes; // +0x28 (X360 +0x24, u32) AxisAlignedBox4*
+        s32       miNumPolySoups;   // +0x30 (X360 +0x28)
+        s32       miDataSize;       // +0x34 (X360 +0x2C) total serialised byte size
 
-        // The serialised list records its total byte size at +0x2C (the X360
-        // GetSerialisedResourceDescriptor reads *(resource + 44)). Modelled by name; only this
-        // field is touched by the descriptor body.
-        u8  maHeader[0x2C];   // +0x00..+0x2B opaque header (not touched here)
-        u32 muSerialisedSize; // +0x2C   total serialised byte size
+        PolygonSoupList* FixUp(int delta);
     };
 }
 
@@ -47,7 +53,9 @@ namespace CgsResource
 
         ResourceDescriptor lDescriptor;
         u32* lpData = reinterpret_cast<u32*>(&lDescriptor);
-        lpData[0] = lpList->muSerialisedSize;  // entry0 size = *(res+44)
+        // SEAM: named-member read -- the widened blob's size field is miDataSize @+0x34
+        // (X360: u32 @+0x2C, the asm's *(res+44)).
+        lpData[0] = static_cast<u32>(lpList->miDataSize);  // entry0 size = X360 *(res+44)
         lpData[1] = 128u;                      // entry0 align
         lpData[2] = 0u;  lpData[3] = 1u;       // entry1 {0,1}
         lpData[4] = 0u;  lpData[5] = 1u;       // entry2 {0,1}

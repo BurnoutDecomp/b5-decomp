@@ -5,8 +5,10 @@
 // CgsResource::RwRenderableResourceType::FixUpRenderableMesh @ 0x828A8968.
 //
 // Relocates one just-loaded serialised renderable mesh and re-validates its GPU buffers.
-// The mesh carries a u8 vertex-buffer count (+0x26), an index-buffer header pointer (+0x28)
-// and an array of vertex-buffer header pointers (+0x2C). The fix-up block supplies two deltas:
+// SEAM (platform-4 widened data): the mesh is the natural x64 widening of ::RenderableMesh
+// (renderablemesh.h); the walk uses the NAMED members -- muNumVertexBuffers (X360 lbz +0x26),
+// the index-buffer header pointer mapBuffers[0] (X360 +0x28) and the vertex-buffer header
+// pointers mapBuffers[1..numVB] (X360 +0x2C..). The fix-up block supplies two deltas:
 // lpFixUp->muPointerBase (a3[0]) relocates the serialised pointers to their loaded base, and
 // lpFixUp->muBufferOffset (a3[2]) is folded into each GPU buffer header's base-address word.
 //
@@ -28,23 +30,27 @@ namespace CgsResource
         const u32 luPointerBase  = lpFixUp->muPointerBase;   // a3[0]
         const u32 luBufferOffset = lpFixUp->muBufferOffset;  // a3[2]
 
-        // 1) Relocate each serialised vertex-buffer-header pointer to its loaded base.
+        // 1) Relocate each serialised vertex-buffer-header pointer slot to its loaded base.
+        //    SEAM: the widened buffer table holds the IB header pointer at mapBuffers[0] and
+        //    the VB header pointers at mapBuffers[1..numVB] (X360: separate +0x28 / +0x2C
+        //    slots); the slot values are relocated in place, matching the X360 walk.
         for (u32 luI = 0; luI < lpMesh->muNumVertexBuffers; ++luI)
         {
-            // Pointer arithmetic on the stored 32-bit address: add the relocation base.
-            uintptr_t luAddr = reinterpret_cast<uintptr_t>(lpMesh->mapVertexBuffers[luI]) + luPointerBase;
-            lpMesh->mapVertexBuffers[luI] = reinterpret_cast<renderengine::VertexBufferHeader*>(luAddr);
+            // Pointer arithmetic on the stored address: add the relocation base.
+            uintptr_t luAddr = reinterpret_cast<uintptr_t>(lpMesh->mapBuffers[1 + luI]) + luPointerBase;
+            lpMesh->mapBuffers[1 + luI] = reinterpret_cast<void*>(luAddr);
         }
 
-        // 2) Relocate the index-buffer-header pointer the same way.
+        // 2) Relocate the index-buffer-header pointer (mapBuffers[0]) the same way.
         {
-            uintptr_t luAddr = reinterpret_cast<uintptr_t>(lpMesh->mpIndexBuffer) + luPointerBase;
-            lpMesh->mpIndexBuffer = reinterpret_cast<renderengine::IndexBufferHeader*>(luAddr);
+            uintptr_t luAddr = reinterpret_cast<uintptr_t>(lpMesh->mapBuffers[0]) + luPointerBase;
+            lpMesh->mapBuffers[0] = reinterpret_cast<void*>(luAddr);
         }
 
         // 3) Fold the buffer offset into the index buffer's GPU base-address word (straight add),
         //    then re-check its physical-memory flags.
-        renderengine::IndexBufferHeader* lpIndexBuffer = lpMesh->mpIndexBuffer;
+        renderengine::IndexBufferHeader* lpIndexBuffer =
+            static_cast<renderengine::IndexBufferHeader*>(lpMesh->mapBuffers[0]);
         lpIndexBuffer->muBaseAddress += luBufferOffset;
         renderengine::IndexBuffer::Xbox2CheckPhysicalMemoryFlags(reinterpret_cast<u32*>(lpIndexBuffer));
 
@@ -52,7 +58,8 @@ namespace CgsResource
         //    across the relocation, then re-check the flags.
         for (u32 luI = 0; luI < lpMesh->muNumVertexBuffers; ++luI)
         {
-            renderengine::VertexBufferHeader* lpVertexBuffer = lpMesh->mapVertexBuffers[luI];
+            renderengine::VertexBufferHeader* lpVertexBuffer =
+                static_cast<renderengine::VertexBufferHeader*>(lpMesh->mapBuffers[1 + luI]);
             const u32 luOld = lpVertexBuffer->muBaseAddress;
             lpVertexBuffer->muBaseAddress =
                 (((luOld & ~3u) + luBufferOffset) & ~3u) | (luOld & 3u);
