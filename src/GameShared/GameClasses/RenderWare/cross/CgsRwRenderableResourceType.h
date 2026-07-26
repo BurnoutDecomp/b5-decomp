@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 
 namespace renderengine { struct VertexBufferHeader; struct IndexBufferHeader; }
+namespace CgsGraphics   { struct MaterialAssembly; }
 
 // Forward declarations for the two serialised-descriptor bodies added in wave44
 // (GetRenderableBasicResourceDescriptor / GetSerialisedResourceDescriptor). The
@@ -23,19 +24,28 @@ namespace CgsResource
         u32 muBufferOffset;  // +8  (a3[2]) added to each buffer header's base-address word
     };
 
-    // One serialised renderable mesh the PS3/Xbox2 fix-up walks. X360 offsets (32-bit ptrs):
-    // a u8 vertex-buffer count @+0x26, the index-buffer header pointer @+0x28, and the
-    // vertex-buffer header pointer array @+0x2C (FixUpRenderableMesh asm @0x828A8968).
-    // On the 64-bit host the pointer members widen to 8 bytes, so the pointer offsets drift
-    // past the X360 values -- access is by NAME (the fix-up logic is offset-independent), and
-    // the count field that governs both loops stays at +0x26.
+    // One serialised renderable mesh the PS3/Xbox2 fix-up walks.
+    // SEAM (platform-4 widened data): the converted x64 blob carries the NATURAL widening of
+    // the real ::RenderableMesh (GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h --
+    // the type's primary committed consumer); this struct mirrors it member-for-member so the
+    // fix-up walks the same layout the data now has. X360 cross-reference (32-bit ptrs,
+    // FixUpRenderableMesh asm @0x828A8968): MaterialAssembly* u32 @+0x20, the four u8s
+    // @+0x24..+0x27 (vertex-buffer loop count = lbz 0x26), buffer table @+0x28 (IB header ptr
+    // @+0x28, VB header ptrs @+0x2C..). On x64 the pointer slots widen to u64: u8s land at
+    // +0x28..+0x2B and the buffer table starts at +0x30.
     struct RwRenderableMesh
     {
-        u8                            maHead[0x26];          // +0x00  opaque serialised header
-        u8                            muNumVertexBuffers;    // +0x26  loop count (lbz 0x26)
-        u8                            maPad27;               // +0x27
-        renderengine::IndexBufferHeader* mpIndexBuffer;      // +0x28  index-buffer header ptr
-        renderengine::VertexBufferHeader* mapVertexBuffers[1]; // +0x2C  vertex-buffer header ptr array
+        u8                             maPackedBoundingBox[0x10];     // +0x00  PackedOobb (16B, opaque here)
+        u8                             maDrawIndexedParameters[0x10]; // +0x10  DrawIndexedParameters (4x u32, opaque here)
+        CgsGraphics::MaterialAssembly* mpMaterialAssembly;            // +0x20  (X360 +0x20, u32 slot)
+        u8                             muNumVertexDescriptors;        // +0x28  (X360 +0x24)
+        u8                             muInstanceCount;               // +0x29  (X360 +0x25)
+        u8                             muNumVertexBuffers;            // +0x2A  (X360 +0x26 -- the lbz 0x26 loop count)
+        u8                             muFlags;                       // +0x2B  (X360 +0x27)
+        // 4 bytes implicit pad -> the pointer table is 8-aligned
+        void*                          mapBuffers[1];                 // +0x30  (X360 +0x28): [0] = IndexBufferHeader*,
+                                                                      //         [1..numVB] = VertexBufferHeader*s,
+                                                                      //         then vertex-descriptor import slots
     };
 
 // Serialised RenderWare renderable handler. Derives from CgsResource::Type; the

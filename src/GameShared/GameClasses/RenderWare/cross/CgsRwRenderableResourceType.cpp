@@ -3,6 +3,7 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"     // Renderable / ObjectScopeTextureInfo
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h" // RenderableMesh
+#include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"      // CgsGraphics::MaterialAssembly
 #include "pc/gcm/renderengine/IndexBuffer.h"                          // renderengine::IndexBuffer
 #include "pc/gcm/renderengine/VertexBuffer.h"                         // renderengine::VertexBuffer
 
@@ -13,12 +14,15 @@
 //   CgsResource::RwRenderableResourceType::DebugValidate    @ 0x828A7DE0
 //
 // FixDown and GetImportPointer are "not at runtime" stubs (the X360 unconditionally
-// fires its assert). DebugValidate walks the serialised renderable by raw offset — the
-// renderable is an external rw serialised format with no named struct here, so members
-// are reached via reinterpret_cast<const u16/u32*>(luData + offset). Field roles are
-// inferred from the asm: +18 mesh count (lhz, 16-bit), +20 mesh-pointer-array base (lwz),
-// mesh+32 material assembly, assembly+8 non-empty flag (lbz, byte), assembly[0] first
-// material pointer. NB: offsets are RAW BYTES — the Hex-Rays pseudocode renders them as
+// fires its assert). DebugValidate walks the serialised renderable via the NAMED members
+// of Renderable / RenderableMesh / CgsGraphics::MaterialAssembly.
+// SEAM (platform-4 widened blob): the converted x64 data is the natural widening of those
+// committed layouts -- mesh count u16 @+0x12 (unchanged from X360), mesh pointer table
+// @+0x18 with u64 entries (X360: u32 table @+0x14, lwz 0x14), mesh material assembly u64
+// @+0x20 (X360: u32 @+32). Field roles from the ARTIST asm: +0x12 mesh count (lhz, 16-bit),
+// +0x14 mesh-pointer-array base (lwz), mesh+32 material assembly, assembly+8 non-empty
+// count (lbz byte = mu8NumMaterials), assembly[0] technique-table pointer (mappMaterials).
+// NB: the X360 offsets are RAW BYTES — the Hex-Rays pseudocode renders them as
 // *(a2+18)/*(a2+20) in int* arithmetic (=72/80 bytes), but the ARTIST asm is lhz 0x12 /
 // lwz 0x14 = byte 18 / byte 20. Trust the asm.
 
@@ -59,32 +63,37 @@ namespace CgsResource
 
     bool RwRenderableResourceType::DebugValidate(const void* lpResource) const
     {
-        const uintptr_t luData = reinterpret_cast<uintptr_t>(lpResource);
+        // SEAM (platform-4 widened-blob walk): named-struct access replaces the X360
+        // 32-bit-slot byte-offset pokes; the converted data matches the committed
+        // Renderable / RenderableMesh / MaterialAssembly x64 layouts (count u16 @+0x12
+        // unchanged, mesh table u64 entries @+0x18, assembly u64 @+0x20).
+        const Renderable* lpRenderable = static_cast<const Renderable*>(lpResource);
 
         // FLAG: ARTIST `lhz r11,0x12(r29)` — byte offset 18, 16-bit zero-extended count.
-        const u32 luNumMeshes = *reinterpret_cast<const u16*>(luData + 18);  // lhz 0x12(a2)
+        const u32 luNumMeshes = lpRenderable->mu16NumMeshes;                 // lhz 0x12(a2)
         if (luNumMeshes == 0)
             return true;                                                     // LABEL_7: result = 1
 
-        // FLAG: ARTIST `lwz r11,0x14(r29)` — byte offset 20, mesh-ptr array base.
-        const u32 luMeshArray = *reinterpret_cast<const u32*>(luData + 20);  // lwz 0x14(a2)
+        // FLAG: ARTIST `lwz r11,0x14(r29)` — X360 byte 20 mesh-ptr array base; widened
+        // blob: u64-entry table @+0x18 (mppMeshes).
+        RenderableMesh* const* lppMeshes = lpRenderable->mppMeshes;          // lwz 0x14(a2)
 
         for (u32 luI = 0; luI < luNumMeshes; ++luI)                          // v2 < *(a2+18); v3 += 4
         {
-            // Serialised renderable holds 32-bit pointers; widen each to the host
-            // pointer through uintptr_t (avoids C4312 on the 64-bit gate).
-            const u32 luMesh     = *reinterpret_cast<const u32*>(static_cast<uintptr_t>(luMeshArray) + luI * 4);  // *(*(a2+20)+v3)
-            const u32 luAssembly = *reinterpret_cast<const u32*>(static_cast<uintptr_t>(luMesh) + 32);            // *(mesh+32) = v4
-            if (luAssembly)
+            const RenderableMesh* lpMesh = lppMeshes[luI];                   // *(*(a2+20)+v3)
+            const CgsGraphics::MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly; // X360 *(mesh+32); widened +0x20 u64
+            if (lpAssembly)
             {
-                // FLAG: ARTIST `lbz r11,8(r31)` — byte load at assembly+8 (not a word).
-                if (*reinterpret_cast<const u8*>(static_cast<uintptr_t>(luAssembly) + 8) == 0)  // lbz 8(v4)
+                // FLAG: ARTIST `lbz r11,8(r31)` — byte load at X360 assembly+8 = the
+                // mu8NumMaterials technique count (natural x64 home @+0x0C; by NAME).
+                if (lpAssembly->mu8NumMaterials == 0)                        // lbz 8(v4)
                 {
                     CGS_ASSERT(false, "Mesh material assembly is empty");                 // line 1273
                     return false;                                                         // result = 0
                 }
-                const u32 luFirstMaterial = *reinterpret_cast<const u32*>(static_cast<uintptr_t>(luAssembly));  // *v4 (assembly[0])
-                if (*reinterpret_cast<const u32*>(static_cast<uintptr_t>(luFirstMaterial)) == 0)  // if (!**v4)
+                // X360 assembly[0] = the technique-table pointer (mappMaterials); its first
+                // entry must be a non-NULL MaterialTechnique*.
+                if (lpAssembly->mappMaterials[0] == nullptr)                 // if (!**v4)
                 {
                     // X360 breaks out of the loop here, then fires the NULL-material
                     // assert; flattened to the in-loop assert + return (same result).

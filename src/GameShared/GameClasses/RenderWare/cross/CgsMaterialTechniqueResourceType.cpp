@@ -43,6 +43,19 @@ namespace CgsContainers
 
 namespace CgsResource
 {
+    namespace
+    {
+        // SEAM (platform-4 flip-type blob): the MaterialTechnique blob KEEPS the console's
+        // 32-bit u32-slot serialised convention (it is byte-flipped, NOT widened), so every
+        // stored pointer is a u32 slot widened to a host pointer on read (PointerFromU32,
+        // matching the other u32-slot resource handlers).
+        template <typename T>
+        T* PointerFromU32(u32 luAddress)
+        {
+            return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
+        }
+    }
+
     static const uint32_t KU_MATERIAL_TECHNIQUE_RESOURCE_TYPE_ID = 13;
 
     uint32_t MaterialTechniqueResourceType::GetTypeID() const
@@ -104,10 +117,16 @@ namespace CgsResource
 
     void MaterialTechniqueResourceType::PostFixUp(void* lpResource, const rw::Resource&) const
     {
-        void** pMaterial = static_cast<void**>(lpResource);
-        CGS_ASSERT(pMaterial[1] != nullptr, "lpMaterial->mpMaterialState");
-        void** lpMaterialState = reinterpret_cast<void**>(pMaterial[1]);
-        CGS_ASSERT(lpMaterialState[0] != nullptr, "lpMaterial->mpMaterialState->mpBlendState");
+        // SEAM (platform-4 flip-type blob): all technique/material-state/shader slots are
+        // 32-bit u32 slots, indexed with u32 stride — NOT host-pointer stride. The previous
+        // void** indexing read pMaterial[1] at byte +8; the serialised material-state slot
+        // is the u32 @+4 (X360 lwz 4(r3)). Same for pMaterial[0] (shader, u32 @+0) and
+        // pMaterial[5] (context hash source, u32 @+20). Slot values become host pointers
+        // via PointerFromU32.
+        u32* lpuMaterial = static_cast<u32*>(lpResource);
+        CGS_ASSERT(lpuMaterial[1] != 0, "lpMaterial->mpMaterialState");         // u32 slot @+4
+        const u32* lpuMaterialState = PointerFromU32<const u32>(lpuMaterial[1]);
+        CGS_ASSERT(lpuMaterialState[0] != 0, "lpMaterial->mpMaterialState->mpBlendState"); // u32 slot @+0
 
         // Blend-state default parameter block (0x07070706 RGBA write masks etc.),
         // populated in place by GetParameters; the trailing bytes are the per-stage
@@ -130,30 +149,32 @@ namespace CgsResource
         lParams.mauDword[10] = 0;
         lParams.mauDword[11] = static_cast<u32>(-1);
 
-        renderengine::BlendState::GetParameters(lpMaterialState[0], &lParams);
+        renderengine::BlendState::GetParameters(PointerFromU32<void>(lpuMaterialState[0]), &lParams);
 
-        u32* lpuFlags = reinterpret_cast<u32*>(pMaterial) + 4;
+        u32* lpuFlags = lpuMaterial + 4;   // u32 slot @+16 (unchanged: already u32 stride)
         if (lParams.mabEnable[0])
             *lpuFlags |= 1u;       // alpha blend
         if (lParams.mabEnable[6])
             *lpuFlags |= 8u;       // alpha test
 
-        void*  lpShader = pMaterial[0];
-        u32    luVtxShader = reinterpret_cast<u32*>(lpShader)[0];
-        u32    luPixShader = reinterpret_cast<u32*>(lpShader)[1];
+        // SEAM: shader pointer = u32 slot @+0 (was pMaterial[0], which read the u64 @+0);
+        // the shader blob itself is likewise walked with u32 stride (slots 0/1/7/11/37).
+        u32*   lpuShader   = PointerFromU32<u32>(lpuMaterial[0]);
+        u32    luVtxShader = lpuShader[0];
+        u32    luPixShader = lpuShader[1];
         if (luVtxShader
-            && (ShaderConstantsExternal::HasShaderConstant(reinterpret_cast<u32*>(lpShader) + 7, "InstancingMatrixArray")
-             || ShaderConstantsExternal::HasShaderConstant(reinterpret_cast<u32*>(lpShader) + 11, "InstancingMatrixArray")))
+            && (ShaderConstantsExternal::HasShaderConstant(lpuShader + 7, "InstancingMatrixArray")
+             || ShaderConstantsExternal::HasShaderConstant(lpuShader + 11, "InstancingMatrixArray")))
         {
             *lpuFlags |= 0x10u;    // hardware instancing
         }
 
-        u32 luContextHash = reinterpret_cast<u32>(pMaterial[5]);
-        u32* lpuOut = reinterpret_cast<u32*>(pMaterial);
-        lpuOut[7] = CgsContainers::CgsHash16::CalculateHash(&luContextHash, 4);
-        lpuOut[5] = CgsContainers::CgsHash12::CalculateHash(&luVtxShader, 4);
+        // SEAM: context hash source = u32 slot @+20 (was pMaterial[5] = byte +40 on x64).
+        u32 luContextHash = lpuMaterial[5];
+        lpuMaterial[7] = CgsContainers::CgsHash16::CalculateHash(&luContextHash, 4);
+        lpuMaterial[5] = CgsContainers::CgsHash12::CalculateHash(&luVtxShader, 4);
         u32 luResult = CgsContainers::CgsHash12::CalculateHash(&luPixShader, 4);
-        lpuOut[6] = luResult;
-        lpuOut[8] = reinterpret_cast<u32*>(lpShader)[37] - 48;
+        lpuMaterial[6] = luResult;
+        lpuMaterial[8] = lpuShader[37] - 48;
     }
 }

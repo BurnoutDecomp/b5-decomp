@@ -1,10 +1,13 @@
 #include "GameShared/GameClasses/SceneManager/Zones/Zone.h"
 
 // CgsSceneManager::Zone / Neighbour out-of-line member functions, reconstructed from
-// BURNOUT_X360_ARTIST.XEX. This TU homes the three X360-emitted functions:
+// BURNOUT_X360_ARTIST.XEX. This TU homes the X360-emitted functions:
 //
 //   Neighbour::GetZone() const                 @ 0x828AC430 -> mpZone (Neighbour +0)
 //   Neighbour::IsFlagSet(eNeighbourFlags) const @ 0x828AC438 -> flag == (muFlags & flag)
+//   Neighbour::FixUp(void*)                    (X360 inlines it; DecFIGS PS3 @ 0xC4D7DC, home Zone.cpp)
+//   Zone::FixUp(void*)                         @ 0x828CBA20 -> rebase the zone's pointers up by
+//                                                              lpBaseAddress (serialise-in fixup)
 //   Zone::FixDown(void*)                       @ 0x828CBAE8 -> rebase the zone's pointers down by
 //                                                              lpBaseAddress (serialise-out fixup)
 //
@@ -35,6 +38,57 @@ namespace CgsSceneManager
     {
         const u32 luFlag = static_cast<u32>(lxNeighbourFlag);
         return (muFlags & luFlag) == luFlag;
+    }
+
+    // SEAM (platform-4 ZoneList link prerequisite): the resource type now calls the REAL
+    // ZoneList::FixUp (ZoneList.cpp @0x828D05B8), whose per-zone walk calls Zone::FixUp
+    // @0x828CBA20 -- declared here as homed by Zone.cpp but never bodied. The ARTIST export
+    // set has no JSON for 0x828CBA20 (gap between 0x828CB9A0 and 0x828CBAE8), so the body is
+    // reconstructed from the DecFIGS PS3 build (Zone::FixUp @0xC4D820, DWARF home_file
+    // Zone.cpp), which is the source-shaped form: rebase mpPoints, then for each neighbour
+    // array rebase the array pointer FIRST and delegate each element to Neighbour::FixUp
+    // (the X360 compiler inlines that call in FixDown; the source calls it).
+
+    // DecFIGS PS3 0xC4D7DC (X360: inlined). Rebase the neighbour's mpZone, only if non-null.
+    void Neighbour::FixUp(void* lpBaseAddress)
+    {
+        if (mpZone != nullptr)
+        {
+            mpZone = reinterpret_cast<Zone*>(
+                reinterpret_cast<usize>(mpZone) + reinterpret_cast<usize>(lpBaseAddress));
+        }
+    }
+
+    // X360 0x828CBA20 (behaviour from DecFIGS PS3 0xC4D820). Rebase the zone's base-relative
+    // pointers to absolute (serialise-in). Unlike FixDown there is no mpPoints assert, the
+    // neighbour-array pointers are rebased BEFORE the walk, and each element goes through
+    // Neighbour::FixUp.
+    void Zone::FixUp(void* lpBaseAddress)
+    {
+        const usize luBase = reinterpret_cast<usize>(lpBaseAddress);
+
+        mpPoints = reinterpret_cast<rw::math::vpu::Vector2*>(
+            reinterpret_cast<usize>(mpPoints) + luBase);
+
+        if (mpSafeNeighbours != nullptr)
+        {
+            mpSafeNeighbours = reinterpret_cast<Neighbour*>(
+                reinterpret_cast<usize>(mpSafeNeighbours) + luBase);
+            for (s16 liIndex = 0; liIndex < miNumSafeNeighbours; ++liIndex)
+            {
+                mpSafeNeighbours[liIndex].FixUp(lpBaseAddress);
+            }
+        }
+
+        if (mpUnsafeNeighbours != nullptr)
+        {
+            mpUnsafeNeighbours = reinterpret_cast<Neighbour*>(
+                reinterpret_cast<usize>(mpUnsafeNeighbours) + luBase);
+            for (s16 liIndex = 0; liIndex < miNumUnsafeNeighbours; ++liIndex)
+            {
+                mpUnsafeNeighbours[liIndex].FixUp(lpBaseAddress);
+            }
+        }
     }
 
     // X360 0x828CBAE8. Rebase the zone's absolute pointers to base-relative offsets.
