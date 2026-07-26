@@ -196,17 +196,32 @@ namespace BrnGameState
     {
     public:
         // --------------------------------------------------------------------
-        // Nested leaping-data records (DWARF BrnChallengeManager.h:311/:325). 32-byte X360
-        // element stride: EActiveRaceCarIndex @+0x00, Vector3 @+0x10 (16-aligned vector member
-        // -> element align 16). Kept as sized blobs until the (VMX128-blocked) UpdateLeaptCars
-        // slice lands and grows them to the real fields:
-        //   CarLeapingData    = { EActiveRaceCarIndex mActiveRaceCarIndex; Vector3 mPlayerToCar; }
-        //   StoredLeapingData = { EActiveRaceCarIndex mActiveRaceCarIndex; Vector3 mLeapRadiusEntryVector; }
+        // Nested leaping-data records (DWARF BrnChallengeManager.h:311/:325), grown from the
+        // former 32-byte blobs to the real DWARF-named fields for the UpdateLeaptCars slice
+        // (X360 0x82333BB8). 32-byte X360 element stride preserved: EActiveRaceCarIndex @+0x00,
+        // Vector3 @+0x10 (the 16-aligned SIMD member pads the enum out to 16 and aligns the
+        // element to 16 -- attested by the pool stride 32 and the `stvx128 v0, r3, r17`
+        // (r17 == 16) vector stores in UpdateLeaptCars).
+        //   CarLeapingData.mPlayerToCar          = carPos - playerPos this frame (rebuilt per
+        //                                          frame into a LOCAL pool).
+        //   StoredLeapingData.mLeapRadiusEntryVector = the mPlayerToCar snapshot taken when the
+        //                                          car first entered the leap radius (persisted
+        //                                          in mPotentiallyLeaptCars; a sign flip of the
+        //                                          2D dot against the current mPlayerToCar means
+        //                                          the player crossed over the car -> a leap).
         // (Moved here from the provisional BrnChallengeManagerLeapingData.h thin slice, which
         // now forwards to this header -- single owner, grown in place.)
         // --------------------------------------------------------------------
-        struct alignas(16) CarLeapingData    { u8 maBlob[32]; };
-        struct alignas(16) StoredLeapingData { u8 maBlob[32]; };
+        struct alignas(16) CarLeapingData
+        {
+            EActiveRaceCarIndex mActiveRaceCarIndex;   // +0x00 (DWARF :312)
+            Vector3             mPlayerToCar;          // +0x10 (DWARF :313; 16-aligned SIMD)
+        };
+        struct alignas(16) StoredLeapingData
+        {
+            EActiveRaceCarIndex mActiveRaceCarIndex;      // +0x00 (DWARF :326)
+            Vector3             mLeapRadiusEntryVector;   // +0x10 (DWARF :327; 16-aligned SIMD)
+        };
 
         // DWARF BrnChallengeManager.h:295 -- one remote player's challenge-completion record.
         // X360 stride 0x108: the FastBitArray<2000> completion bit store (== the committed

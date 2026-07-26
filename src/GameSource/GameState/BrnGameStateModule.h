@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16> (output GUI event queue)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::NetworkPlayerID (s32 typedef; GetActiveRaceCarIndex param)
 
 // Forward declarations for the BrnTrainingManager additive-grow accessor signatures below (pointer/
 // reference only -- no layout needed here; the real types are included by the TrainingManager TU).
@@ -20,6 +21,9 @@ namespace BrnProgression { class Profile; }
 namespace InputBuffer    { class GameActionQueue; }
 // For the DeveloperChallengeManager additive grow below (pointer-only).
 namespace BrnResource    { struct VehicleList; }
+// For the StreetManager wave-C GetDeveloperChallengeManager grow below (pointer-only;
+// the real class is BrnGameState::DeveloperChallengeManager, BrnDeveloperChallengeManager.h).
+namespace BrnGameState   { class DeveloperChallengeManager; }
 // For the ResetPlayerDebugComponent additive grows below (pointer-only).
 namespace BrnResource    { class  WheelList; }
 namespace BrnTrigger     { struct TriggerData; }
@@ -48,10 +52,30 @@ public:
     // X360 @ 0x823116D0 (BrnGameStateModule.h:982). Out-of-line; defined in BrnGameStateModule.cpp.
     bool IsOnlineGameMode();
 
+    // ADDITIVE GROW (declare-only) for the BrnChallengeManager wave-C TUs (NetworkPlayerRemoved
+    // @0x8234E420 / SetRemotePlayersChallengeCompleted @0x82323DF8 call it through mpGameStateModule
+    // @+0xE48). DWARF BrnGameStateModule.h:618 declares
+    //   `EActiveRaceCarIndex GetActiveRaceCarIndex(RoadRulesRecvData::NetworkPlayerID)`;
+    // the param type is spelled BrnNetwork::NetworkPlayerID here, matching the committed
+    // BrnBurnoutSkillzManager.h precedent for the identical s32 typedef. Maps a network player id
+    // to that player's active-race-car slot, or E_ACTIVE_RACE_CAR_INDEX_INVALID (-1) when the
+    // player has no active car. The callee body is ledgered under the BrnScoringSystem.h TU
+    // (X360 0x82363978); declare-only suffices for the per-TU `cl /c` gate.
+    ::EActiveRaceCarIndex GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lPlayerID);
+
     // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU. CheckCarID
     // resolves the loaded vehicle list off the owning module (the X360 reads the VehicleList* at
     // this+284392). Body + the real member land with the GameStateModule TU. Declare-only.
     BrnResource::VehicleList* GetVehicleList();
+
+    // ADDITIVE GROW (declare-only) for the StreetManager wave-C TU. StreetManager::
+    // ProcessNewRoadScore (X360 0x823496C8) reaches the module's EMBEDDED DeveloperChallengeManager
+    // subobject as the inlined `mpGameStateModule + 185712` (0x2D570) pointer adjust (asserted as
+    // "mpGameStateModule->GetDeveloperChallengeManager()" at BrnGameStateStreetManager.cpp:2615,
+    // then DeveloperChallengeManager::OnSetRoadRule is called on it). De-inlined to this named
+    // accessor; body + the real embedded-manager member land with the GameStateModule TU.
+    // FLAG: declare-only additive grow on the minimal GameStateModule slice.
+    DeveloperChallengeManager* GetDeveloperChallengeManager();
 
     // ADDITIVE GROW (declare-only) for the BrnPaybackManager TU. X360 @ 0x823566F8. Hands back the
     // module's per-frame output GUI event queue (a CgsModule::VariableEventQueue<18432,16>) the
