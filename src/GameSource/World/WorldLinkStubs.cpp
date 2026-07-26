@@ -171,9 +171,10 @@ struct Attrib::Collection * Attrib::FindCollectionWithDefault(int)
 // -------------------------------------------------------------------------
 // Attrib::Instance
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void * Attrib::Instance::GetAttributePointer(unsigned __int64,unsigned int) const
 {
+    CGS_ASSERT(false, "GetAttributePointer: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
@@ -219,27 +220,31 @@ bool BrnAI::AIModule::Release()
 // -------------------------------------------------------------------------
 // BrnAI::AIModuleIO::OutputBuffer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct BrnAI::AIModuleIO::AICarOutputInterface const * BrnAI::AIModuleIO::OutputBuffer::GetAICarOutputInterfaceConst() const
 {
+    CGS_ASSERT(false, "GetAICarOutputInterfaceConst: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnAI::AIModuleIO::OutputBuffer::GetAIResourceRequestInterface() const
 {
+    CGS_ASSERT(false, "GetAIResourceRequestInterface: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 class CgsModule::VariableEventQueue<1536,16> const * BrnAI::AIModuleIO::OutputBuffer::GetGameEventQueueConst() const
 {
+    CGS_ASSERT(false, "GetGameEventQueueConst: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> const * BrnAI::AIModuleIO::OutputBuffer::GetRouteResponseQueue() const
 {
+    CGS_ASSERT(false, "GetRouteResponseQueue: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
@@ -258,27 +263,31 @@ void BrnDirector::Camera::Camera::CopyToCgsCamera(class CgsGraphics::Camera *) c
     CGS_ASSERT(false, "Camera::CopyToCgsCamera: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Vector3 BrnDirector::Camera::Camera::GetDirection() const
 {
+    CGS_ASSERT(false, "GetDirection: link stub (world fleet mount) -- reconstruct from X360");
     return rw::math::vpu::Vector3();
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 float BrnDirector::Camera::Camera::GetLodZoomFactor() const
 {
+    CGS_ASSERT(false, "GetLodZoomFactor: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Vector3 BrnDirector::Camera::Camera::GetPosition() const
 {
+    CGS_ASSERT(false, "GetPosition: link stub (world fleet mount) -- reconstruct from X360");
     return rw::math::vpu::Vector3();
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnDirector::Camera::Camera::IsInJunkyard() const
 {
+    CGS_ASSERT(false, "IsInJunkyard: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
@@ -467,15 +476,17 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetResourceRequestInterface() const
 {
+    CGS_ASSERT(false, "GetResourceRequestInterface: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::SceneInputInterface const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetSceneInputInterface() const
 {
+    CGS_ASSERT(false, "GetSceneInputInterface: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
@@ -662,9 +673,10 @@ void BrnWorld::InternalBaseStreamer::Construct(class BrnWorld::StreamerTargetEnt
     CGS_ASSERT(false, "InternalBaseStreamer::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::InternalBaseStreamer::IsStreamComplete() const
 {
+    CGS_ASSERT(false, "IsStreamComplete: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
@@ -825,30 +837,34 @@ struct BrnWorld::RaceCarEntityModuleIO::SceneResultQueue * BrnWorld::RaceCarEnti
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct BrnPhysics::Vehicle::RaceCarState const * BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::GetRaceCarState(enum EActiveRaceCarIndex) const
 {
+    CGS_ASSERT(false, "GetRaceCarState: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() const
 {
+    CGS_ASSERT(false, "IsPlayerCarActive: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(enum EActiveRaceCarIndex) const
 {
+    CGS_ASSERT(false, "IsRaceCarActive: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 enum EGlobalRaceCarIndex BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::GetPlayerGlobalRaceCarIndex() const
 {
+    CGS_ASSERT(false, "GetPlayerGlobalRaceCarIndex: link stub (world fleet mount) -- reconstruct from X360");
     return (EGlobalRaceCarIndex)0;
 }
 
@@ -867,63 +883,73 @@ void BrnWorld::ShadowMap::Construct()
     CGS_ASSERT(false, "ShadowMap::Construct: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 class CgsGraphics::Camera const * BrnWorld::ShadowMap::GetCascadeCamera(int) const
 {
+    CGS_ASSERT(false, "GetCascadeCamera: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderMultipleShadowMaps() const
 {
+    CGS_ASSERT(false, "GetRenderMultipleShadowMaps: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderPropsIntoShadowMap() const
 {
+    CGS_ASSERT(false, "GetRenderPropsIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderPropsNearOnly() const
 {
+    CGS_ASSERT(false, "GetRenderPropsNearOnly: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderRaceCarsIntoShadowMap() const
 {
+    CGS_ASSERT(false, "GetRenderRaceCarsIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderRaceCarsNearOnly() const
 {
+    CGS_ASSERT(false, "GetRenderRaceCarsNearOnly: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderTrafficIntoShadowMap() const
 {
+    CGS_ASSERT(false, "GetRenderTrafficIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderTrafficNearOnly() const
 {
+    CGS_ASSERT(false, "GetRenderTrafficNearOnly: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::GetRenderWorldIntoShadowMap() const
 {
+    CGS_ASSERT(false, "GetRenderWorldIntoShadowMap: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::ShadowMap::IsEnabled() const
 {
+    CGS_ASSERT(false, "IsEnabled: link stub (world fleet mount) -- reconstruct from X360");
     return false;
 }
 
@@ -1083,18 +1109,20 @@ void BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering(struct BrnShader
 // -------------------------------------------------------------------------
 // BrnWorldIO::DispatchInputBuffer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct BrnWorldIO::DispatchInputBuffer::RenderSwitches const * BrnWorldIO::DispatchInputBuffer::GetRenderSwitches() const
 {
+    CGS_ASSERT(false, "GetRenderSwitches: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
 // -------------------------------------------------------------------------
 // BrnWorldIO::DispatchOutputBuffer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Vector4 BrnWorldIO::DispatchOutputBuffer::GetFogColourPlusWhiteLevel() const
 {
+    CGS_ASSERT(false, "GetFogColourPlusWhiteLevel: link stub (world fleet mount) -- reconstruct from X360");
     return rw::math::vpu::Vector4();
 }
 
@@ -1203,9 +1231,10 @@ void CgsGraphics::Camera::GetCgsFrustumParallel(struct CgsGeometric::Frustum *)
     CGS_ASSERT(false, "Camera::GetCgsFrustumParallel: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Vector3 CgsGraphics::Camera::GetDirection() const
 {
+    CGS_ASSERT(false, "GetDirection: link stub (world fleet mount) -- reconstruct from X360");
     return rw::math::vpu::Vector3();
 }
 
@@ -1227,15 +1256,17 @@ struct CgsGeometric::Frustum const & CgsGraphics::Camera::GetFrustumPerspective(
     static CgsGeometric::Frustum* sNull = 0; return *sNull;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Vector3 CgsGraphics::Camera::GetPosition() const
 {
+    CGS_ASSERT(false, "GetPosition: link stub (world fleet mount) -- reconstruct from X360");
     return rw::math::vpu::Vector3();
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 struct rw::math::vpu::Matrix44 CgsGraphics::Camera::GetViewProjectionMatrixModified() const
 {
+    CGS_ASSERT(false, "GetViewProjectionMatrixModified: link stub (world fleet mount) -- reconstruct from X360");
     return rw::math::vpu::Matrix44();
 }
 
@@ -1301,15 +1332,17 @@ bool CgsGraphics::DrawRenderable::AddToBin(struct Renderable const *,class CgsGr
 // -------------------------------------------------------------------------
 // CgsGraphics::Model
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 unsigned int CgsGraphics::Model::GetNumLods() const
 {
+    CGS_ASSERT(false, "GetNumLods: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 unsigned int CgsGraphics::Model::GetNumRenderables() const
 {
+    CGS_ASSERT(false, "GetNumRenderables: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
@@ -1326,9 +1359,10 @@ bool CgsSceneManager::CachedTriangleList::Prepare(struct rw::IResourceAllocator 
 // -------------------------------------------------------------------------
 // CgsSceneManager::EntityManager
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 int CgsSceneManager::EntityManager::GetVolumeInstanceIndexByID(struct CgsSceneManager::VolumeInstanceId) const
 {
+    CGS_ASSERT(false, "GetVolumeInstanceIndexByID: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
@@ -1423,9 +1457,10 @@ class CgsSceneManager::SceneManagerIO::InCoarseQueryQueue<16384> * CgsSceneManag
 // -------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::OutputBuffer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
+// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 class CgsModule::VariableEventQueue<32768,16> const * CgsSceneManager::SceneManagerIO::OutputBuffer::GetSceneQueryResultsQueue() const
 {
+    CGS_ASSERT(false, "GetSceneQueryResultsQueue: link stub (world fleet mount) -- reconstruct from X360");
     return 0;
 }
 
