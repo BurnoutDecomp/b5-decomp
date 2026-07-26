@@ -52,6 +52,14 @@ namespace CgsUnicode
     // X360 ARTIST 0x827E6B08. Used by the font glyph lookup + the text renderer.
     u16 ConvertUtf8CharToUtf16Char(const u8* lpUtf8Char);
 
+    // Convert a whole NUL-terminated UTF-8 string into the caller's UTF-16 buffer (validates
+    // the source with IsValidUtf8String first, asserting on failure), returning the target.
+    // X360 ARTIST 0x82835828 (from the register shapes: r3 = source UTF-8, r4 = target
+    // UTF-16). Declared here in its canonical home; the body is its own TU
+    // (GameShared/GameClasses/Fonts/CgsUnicode.cpp). Used by CgsGui::SaveLoadSystem::
+    // CardRemoved to stage the XShowMessageBoxUI title/text/button strings.
+    CgsUtf16* ConvertUtf8ToUtf16(const CgsUtf8* lpUtf8String, CgsUtf16* lpUtf16String);
+
     // Advance past one UTF-8 character (lead byte + its trailing bytes). X360 ARTIST 0x827E6A28.
     // Used to walk a UTF-8 string a character at a time (font measurement + rendering).
     const u8* IncrementUtf8Pointer(const u8* lpUtf8Char);

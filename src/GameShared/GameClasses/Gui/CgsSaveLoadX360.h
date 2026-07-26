@@ -12,40 +12,24 @@ class LanguageManager;
 class SystemUserProfile;
 
 // RealmcIface - the Realm memory-card (mc) interface family the X360 save/load path drives.
-// These are the SDK-shaped types the in-scope SaveLoadSystem functions call into. Only the
-// surface the X360 ASM exercises is reconstructed here; the full SDK lives in its own TUs.
+// These are the SDK-shaped types the in-scope SaveLoadSystem functions call into. The memory-card
+// interface object itself (RealmcIface::MemcardInterface -- the vtable slots this front-end
+// dispatches: Update @+0x08, UserSignedIn @+0x10, MessageChoice @+0x14, SetSilent @+0x18,
+// Bootup @+0x24, WriteSave @+0x2C, CheckSave @+0x30, SetActive @+0x34, ReadSave @+0x38) is homed
+// in its own SDK TU; include it so the type is defined once (never fork a type that has a home).
+#include "SDKs/Realmc/RealmcMemcardInterface.h"   // RealmcIface::MemcardInterface
+
 namespace RealmcIface
 {
-    // The memory-card interface object. The X360 dispatches four of its vtable slots:
-    //   slot 2  (+0x08)  Update(int)            -- SaveLoadSystem::Update forwards here
-    //   slot 11 (+0x2C)  WriteSave(...)         -- SaveLoadSystem::Save
-    //   slot 12 (+0x30)  CheckSave(int, void*)  -- SaveLoadSystem::Save
-    //   slot 13 (+0x34)  SetSomething(int)      -- SaveLoadSystem::Prepare (passes 1)
-    // The intervening slots are reserved to pin those four at their attested byte offsets; their
-    // semantics are not recovered by this TU, so they are declared (not invented) as reserved.
-    class MemcardInterface
-    {
-    public:
-        virtual void Reserved00() = 0;                          // slot 0  (+0x00)
-        virtual void Reserved01() = 0;                          // slot 1  (+0x04)
-        virtual int  Update(int liArg) = 0;                     // slot 2  (+0x08)
-        virtual void Reserved03() = 0;                          // slot 3  (+0x0C)
-        virtual void Reserved04() = 0;                          // slot 4  (+0x10)
-        virtual void Reserved05() = 0;                          // slot 5  (+0x14)
-        virtual void SetSilentMode(bool lbSilentMode, s32 liUserIndex) = 0; // slot 6 (+0x18)
-        virtual void Reserved07() = 0;                          // slot 7  (+0x1C)
-        virtual void Reserved08() = 0;                          // slot 8  (+0x20)
-        virtual void Reserved09() = 0;                          // slot 9  (+0x24)
-        virtual void Reserved10() = 0;                          // slot 10 (+0x28)
-        virtual void WriteSave(void* lpSaveInfo, int liCount, void* lpEntries,
-                               int liFlags, void* lpTitleInfo) = 0;       // slot 11 (+0x2C)
-        virtual void CheckSave(int liArg, void* lpCheckParams) = 0;       // slot 12 (+0x30)
-        virtual void SetActive(int liActive) = 0;               // slot 13 (+0x34)
-    };
-
     // Forward-declared SDK helpers used by Save/Prepare; full bodies live in their own TUs.
     class GameInfo;
     class MemcardInterfaceFactory;
+    // Wave-B additions: SDK value types the SaveLoadSystem Create*/Load* helpers build/return.
+    // Complete definitions: SDKs/Realmc/RealmcIfaceSaveCheckParams.h /
+    // RealmcLoadEntryInfo.h / RealmcDataBuffer.h (include those in the .cpp partfiles).
+    class SaveCheckParams;
+    class LoadEntryInfo;
+    class DataBuffer;
 }
 
 // CgsGui::XenonFileInputStream - a read-only file input stream over a Win32 file HANDLE,
@@ -183,6 +167,17 @@ namespace CgsGui
         // transition, passing the all-users sentinel (-1), then latch the flag.
         void SetSilentMode(bool lbSilentMode);
 
+        // X360 0x8284C210. Cache the signed-in user index (miField210); >= 0 forwards
+        // UserSignedIn() to the memory-card interface, < 0 clears mbField183.
+        // (Caller: BrnGui::ProfileManager::SigninStateChanged.) Body: CgsSaveLoadX360_wB_02.cpp.
+        void SetSignedInUserIndex(s32 liUserIndex);
+
+        // X360 0x828522D0. Copy ONE image record's bytes INTO the mugshot-buffer slot its
+        // imageId maps to (same 16-byte { imageId, miSize, data, ... } record LoadImageFiles
+        // walks). (Caller: BrnGui::ProfileManager::CopyImageToBuffer.) Body:
+        // CgsSaveLoadX360_wB_03.cpp.
+        void CopyImageToBuffer(const void* lpImageFile);
+
         // X360 0x82859B70. Begin a load: bind the result handler, push the metadata, prompt the
         // user (SAVELOAD_CONFIRM_LOAD) routing the choice to LoadHandleConfirmLoad.
         void Load(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata);
@@ -265,6 +260,113 @@ namespace CgsGui
         // miExtraFilesSizeBytes. Asserts both components and the flattened index are in range.
         void* GetMugshotBufferFromImageId(s32 liImageId);
 
+        // ---- wave B private surface (X360-attested; bodies in CgsSaveLoadX360_wB_*.cpp) -------
+        //
+        // `this` conventions in the Hex-Rays views of these members (X360 ABI mechanics only --
+        // all of them are written as plain members using the NAMED members below):
+        //   * The Realmc RESULT callbacks (BootupCheckDone / LoadDone / SetAutosaveDone /
+        //     CardRemoved / ClearMessage) receive the +4 interface sub-object, so their raw
+        //     displacements are (real X360 member offset - 4).
+        //   * Everything else (option handlers dispatched by HandleOption, the SignIn family,
+        //     the Create* helpers, direct members) receives the real `this`; displacements are
+        //     the real X360 offsets.
+
+        // X360 0x8284C1B0. The locale string-id lookup callback handed to the Realmc memory
+        // card (Prepare's callback block): maps 0..27 into the maRealmemcardStringIDs table
+        // (asserts the range). Static -- no `this`. Body: CgsSaveLoadX360_wB_01.cpp.
+        static const char* LocaleGetStrCallback(u32 luStringID);
+
+        // X360 0x8284CAD8. If a pending-option member function is armed
+        // (mMessageDisplayOptionFunc.muFunc != 0), hide the prompt via mpMessageDisplay and
+        // clear the pair. (Realmc result-callback family: Hex-Rays displacements are real-4.)
+        void ClearMessage();
+
+        // X360 0x82852368. (Re)arm the autosave pre-flight: build the SaveCheckParams (one
+        // SaveReq for the current save) and hand it to the memory-card interface
+        // (CheckSave(1, &params)). liArg is passed by every caller as -1 and never read.
+        // Body: CgsSaveLoadX360_wB_04.cpp.
+        void EnableAutosave(s32 liArg);
+
+        // X360 0x8284C898. Build the autosave SaveCheckParams: one SaveReq built from
+        // macTitle / CreateRealmcSaveInfo / 0x100 / muGameDataSizeKb / TitleInfo::Empty().
+        // (X360 sret: dest in r3, `this` in r4.) Body: CgsSaveLoadX360_wB_04.cpp.
+        RealmcIface::SaveCheckParams CreateRealmcSaveCheckParams();
+
+        // X360 0x8284C818. Build the RealmcIface::SaveInfo for the current save into
+        // lpSaveInfo (EntryContentName(macwMetadataTitle, macTitle, mugshotBytes +
+        // muGameDataSizeKb) + the { mpContentInfoFileBuffer, miContentInfoFileSize } pair).
+        // Returns lpSaveInfo. SaveInfo itself is an un-homed SDK type (declaration-only ctor
+        // extern in the partfile); callers pass an opaque stack buffer. Body:
+        // CgsSaveLoadX360_wB_04.cpp.
+        void* CreateRealmcSaveInfo(void* lpSaveInfo);
+
+        // X360 0x828523D0. Build the "Mugshots" load-entry record ({ mpMugshotBufferData,
+        // total mugshot bytes }). (X360 sret: dest in r3, `this` in r4.) Body:
+        // CgsSaveLoadX360_wB_03.cpp.
+        RealmcIface::LoadEntryInfo CreateRealmcMugshotLoadEntryInfo();
+
+        // X360 0x82859A38. Realmc bootup-check result callback (0 == ok, 1..2 == failure
+        // lanes, >= 3 asserts "Should not get here"). Success: set mbField183/mbField180,
+        // EnableAutosave(-1), report success. Failure with a signed-in user: prompt
+        // SAVELOAD_RETRY_BOOT (options SAVELOAD_RETRY / SAVELOAD_CONTINUE_WITHOUT_SAVING)
+        // routed to BootupHandleRetryBootup; otherwise report result 2 (cancelled).
+        void BootupCheckDone(u32 luResult);
+
+        // X360 0x82855FE0. Realmc load result callback: success re-arms the autosave
+        // pre-flight (EnableAutosave(-1)); reports 0/1 to the result handler. Body:
+        // CgsSaveLoadX360_wB_07.cpp.
+        void LoadDone(u32 luResult);
+
+        // X360 0x828521A0. Realmc load-ready callback: hand the title-save data pair
+        // { muSaveDataSizeKb, muGameDataSizeKb } to the SDK's DataBuffer and return 0.
+        // Only the last parameter is read (FLAG: the four leading parameter roles are
+        // unrecovered -- shape from the r4..r8 register usage). Body:
+        // CgsSaveLoadX360_wB_07.cpp.
+        s32 LoadReady(s32 liArg1, s32 liArg2, s32 liArg3, s32 liArg4,
+                      RealmcIface::DataBuffer* lpDataBuffer);
+
+        // X360 0x8284C7D8. Realmc save-ready callback -- never expected on X360; fires
+        // "SaveReady called.\n" and returns 0. Body: CgsSaveLoadX360_wB_00.cpp.
+        s32 SaveReady();
+
+        // X360 0x8284CC00. Realmc set-autosave result callback:
+        // mbField180 = (liResult == 0 && liEnabled == 1). liArg2 is never read
+        // (FLAG: parameter roles inferred from the r4/r6 compares). Body:
+        // CgsSaveLoadX360_wB_02.cpp.
+        void SetAutosaveDone(s32 liResult, s32 liArg2, s32 liEnabled);
+
+        // X360 0x8284CC20. Realmc card-removed callback: clear mbField180, arm the
+        // overlapped op (mbAsyncOpState = 1, Construct the XOVERLAPPED @+0x228) and pop the
+        // system message box (XShowMessageBoxUI) with the localised
+        // SAVELOAD_DEVICE_REMOVED_OR_CHANGED text; asserts ERROR_IO_PENDING.
+        void CardRemoved();
+
+        // X360 0x8284C648. Realmc delete result callback -- fires the streamed
+        // "DeleteDone: not implemented." assert (folds to CGS_ASSERT). Body:
+        // CgsSaveLoadX360_wB_00.cpp.
+        void DeleteDone();
+
+        // X360 0x8284CBC0 / 0x8284CB80. Realmc find-entries callbacks -- never expected on
+        // X360; assert-only bodies. Bodies: CgsSaveLoadX360_wB_00.cpp.
+        void FindEntriesDone();
+        void FoundEntry();
+
+        // X360 0x8285D9E8. Pop the Xbox sign-in UI (XShowSigninUI(1, 0)); on immediate
+        // success mark mpSystemUserProfile's mbSignedIn (+0x1C flag byte), then
+        // WaitForUIClosed(&SignInUIClosed). Body: CgsSaveLoadX360_wB_06.cpp.
+        void SignIn();
+
+        // X360 0x82859D48. Sign-in UI closed: a signed-in user (miField210 >= 0) continues
+        // to BootupShowAutosaveWarning(); otherwise reports failure. Body:
+        // CgsSaveLoadX360_wB_06.cpp.
+        void SignInUIClosed();
+
+        // DECLARATION ONLY (body is NOT in this TU's fan-out; do not define): park a
+        // pending member-function to run when the current system UI closes. Callers:
+        // BootupHandleNotSignedInOption (&SignIn), SignIn (&SignInUIClosed). The X360
+        // passes the 8-byte { func, this-delta } pair by value in r4.
+        void WaitForUIClosed(void (SaveLoadSystem::*lpfnUIClosedFunc)());
+
     public:
         // ADDITIVE GROW (profile link-closure wave): the three pending message-display option
         // members. The X360 stores each as a member-function pointer ({func @+0x198, delta
@@ -286,6 +388,20 @@ namespace CgsGui
         // RealmcIface load-entry records and start the memory-card read + pump Update; on NO
         // report E_SAVELOADTASKRESULT_FAILURE to the bound result handler (+0x130, vtable 0).
         void LoadHandleConfirmLoad(u32 luOption);
+
+        // X360 0x82855B80. The retry-bootup prompt handler (armed by BootupCheckDone's
+        // failure lane): option 1 == retry (BootupStart(0)); otherwise mbField183 = true,
+        // mbField180 = false and report failure.
+        void BootupHandleRetryBootup(u32 luOption);
+
+        // X360 0x82856188. The save-retry prompt handler: option 1 == Save(); otherwise
+        // mbField180 = false and report failure.
+        void SaveHandleRetry(u32 luOption);
+
+        // X360 0x8285F200. The not-signed-in prompt handler: option 1 ==
+        // WaitForUIClosed(&SignIn); otherwise report failure. Body:
+        // CgsSaveLoadX360_wB_06.cpp.
+        void BootupHandleNotSignedInOption(u32 luOption);
 
         // ADDITIVE GROW (BrnGuiProfile wave): the inherited ContentInformationFileInterface
         // overrides. X360-attested by the class's provider role (Prepare publishes this as

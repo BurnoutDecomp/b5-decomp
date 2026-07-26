@@ -70,25 +70,28 @@ namespace
 
     // FLAG PC-platform leaf: inert stand-in for the RealmcIface::MemcardInterface
     // implementation (unrecovered SDK; no PC storage backend). Every operation no-ops.
+    // The slot set mirrors the SDK base (SDKs/Realmc/RealmcMemcardInterface.h).
     class NoOpMemcardInterface : public RealmcIface::MemcardInterface
     {
     public:
-        virtual void Reserved00() {}
         virtual void Reserved01() {}
         virtual int  Update(int /*liArg*/) { return 0; }
         virtual void Reserved03() {}
-        virtual void Reserved04() {}
-        virtual void Reserved05() {}
+        virtual void UserSignedIn() {}
+        virtual void MessageChoice(int /*liChoice*/) {}
         // FLAG PC-platform leaf: the host has no console memory-card UI to silence.
-        virtual void SetSilentMode(bool /*lbSilentMode*/, s32 /*liUserIndex*/) {}
+        virtual void SetSilent(int /*liSilent*/, int /*liArg*/) {}
         virtual void Reserved07() {}
         virtual void Reserved08() {}
-        virtual void Reserved09() {}
+        virtual void Bootup(void* /*lpSaveInfo*/, int /*liNumEntries*/, void* /*lpEntries*/,
+                            void* /*lpTitleInfo*/) {}
         virtual void Reserved10() {}
         virtual void WriteSave(void* /*lpSaveInfo*/, int /*liCount*/, void* /*lpEntries*/,
                                int /*liFlags*/, void* /*lpTitleInfo*/) {}
         virtual void CheckSave(int /*liArg*/, void* /*lpCheckParams*/) {}
         virtual void SetActive(int /*liActive*/) {}
+        virtual void ReadSave(void* /*lpEntryContentName*/, int /*liNumEntries*/,
+                              void* /*lpEntries*/, int /*liFlags*/, void* /*lpTitleInfo*/) {}
     };
 
     NoOpMemcardInterface gNoOpMemcardInterface;
@@ -157,11 +160,13 @@ namespace
     // The save/load locale-string callback the memory-card interface is given.
     void* gpfnLocaleGetStrCallback = nullptr;   // CgsGui::SaveLoadSystem::LocaleGetStrCallback
 
-    // FLAG PC-platform leaf: SaveLoadSystem::CreateRealmcSaveInfo (X360 @0x8284C818 builds a
-    // RealmcIface::SaveInfo via the unrecovered EntryContentName/SaveInfo SDK ctors) -- return
-    // the caller's out slot untouched (Save passes a 1-byte slot; only the no-op WriteSave
-    // consumes the result, so nothing may be written through it).
-    void* CreateRealmcSaveInfo(void* lpOut, void* /*lpSystem*/)
+    // FLAG PC-platform leaf: file-local stand-in for the SaveInfo build the X360 Save runs
+    // (the real member SaveLoadSystem::CreateRealmcSaveInfo @0x8284C818 -- bodied in
+    // CgsSaveLoadX360_wB_04.cpp -- goes through the still-un-homed RealmcIface::SaveInfo SDK
+    // ctor) -- return the caller's out slot untouched (Save passes a 1-byte slot; only the
+    // no-op WriteSave consumes the result, so nothing may be written through it). Named
+    // ...PC so it cannot shadow, or be shadowed by, the real member declaration.
+    void* CreateRealmcSaveInfoPC(void* lpOut, void* /*lpSystem*/)
     {
         return lpOut;
     }
@@ -256,9 +261,9 @@ namespace CgsGui
     void SaveLoadSystem::SetSilentMode(bool lbSilentMode)
     {
         if (mbSilentMode && !lbSilentMode)
-            mpMemcardInterface->SetSilentMode(false, -1);
+            mpMemcardInterface->SetSilent(0, -1);
         if (!mbSilentMode && lbSilentMode)
-            mpMemcardInterface->SetSilentMode(true, -1);
+            mpMemcardInterface->SetSilent(1, -1);
         mbSilentMode = lbSilentMode;
     }
 
@@ -443,7 +448,7 @@ namespace CgsGui
 
         void* lpTitleInfo = RealmcTitleInfo_Empty();
         u8    lSaveInfo;
-        void* lpSaveInfo = CreateRealmcSaveInfo(&lSaveInfo, this);
+        void* lpSaveInfo = CreateRealmcSaveInfoPC(&lSaveInfo, this);
         mpMemcardInterface->WriteSave(lpSaveInfo, 2, laEntries[0], 0, lpTitleInfo);
 
         Update();
@@ -691,16 +696,12 @@ namespace CgsGui
     }
 
     // X360 0x8284C6D8. Forward the user's message choice to the memory-card interface. The X360
-    // dispatches mpMemcardInterface vtable slot 5 (+0x14) with
-    // MessageChoiceForOptionIndex(luOption).
+    // dispatches mpMemcardInterface vtable slot 5 (+0x14 == MessageChoice) with
+    // MessageChoiceForOptionIndex(luOption). On PC the interface is the inert no-op boundary
+    // object, so the faithful forward is a safe no-op.
     void SaveLoadSystem::HandleMemcardOption(u32 luOption)
     {
-        const u32 luChoice = MessageChoiceForOptionIndex(luOption);
-        (void)luChoice;
-        // FLAG PC-platform leaf: the memcard forward is vtable slot 5 of the unrecovered
-        // RealmcIface::MemcardInterface (declared Reserved05 -- its SDK semantics are not
-        // recovered), and on PC the interface is the inert no-op boundary object anyway; the
-        // choice is computed (faithful) and the SDK forward is elided.
+        mpMemcardInterface->MessageChoice(static_cast<int>(MessageChoiceForOptionIndex(luOption)));
     }
 
     // X360 0x82855A60. The autosave-warning CONTINUE handler: hide the autosave icon
@@ -756,6 +757,12 @@ namespace CgsGui
                     : leResult == SaveLoadPC::E_CONTAINERREAD_CORRUPT ? "[SaveLoadPC] profile container read: CORRUPT\n"
                                                                       : "[SaveLoadPC] profile container read: layout MISMATCH\n");
             }
+
+            // The X360 confirm arm ends with `mr r3,r31; bl SaveLoadSystem::Update` right after
+            // the ReadSave dispatch (vtable +0x38); keep that pump in asm order -- read, Update,
+            // completion -- as the sibling BootupStart leaf above does.
+            Update();
+
             reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
                 ->HandleSaveLoadTaskResult(lbOk ? E_SAVELOADTASKRESULT_SUCCESS
                                                 : E_SAVELOADTASKRESULT_FAILURE);

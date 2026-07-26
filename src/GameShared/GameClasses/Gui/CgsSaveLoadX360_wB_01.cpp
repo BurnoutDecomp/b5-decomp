@@ -1,11 +1,14 @@
-// CgsGui::SaveLoadSystem - wave-B partfile 01 (locale / option plumbing).
+// CgsGui::SaveLoadSystem - wave-B partfile 01 (locale plumbing).
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The class is homed in CgsSaveLoadX360.h
-// (its assert sites cite gui/CgsSaveLoadX360.cpp); the twelve base functions live in the
-// committed sibling CgsSaveLoadPS3.cpp. This partfile bodies three attested wave-B members:
+// (its assert sites cite gui/CgsSaveLoadX360.cpp); the base functions live in the
+// committed sibling CgsSaveLoadPS3.cpp. This partfile bodies one attested wave-B member:
 //
 //   LocaleGetStrCallback        @ 0x8284C1B0  (static locale-id lookup)
-//   MessageChoiceForOptionIndex @ 0x8284BF50  (static option-index -> Realmc choice code)
-//   HandleMemcardOption         @ 0x8284C6D8  (member; dispatches MemcardInterface::MessageChoice)
+//
+// (MessageChoiceForOptionIndex @0x8284BF50 and HandleMemcardOption @0x8284C6D8 were also
+// reconstructed in this partfile by wave B, but the later profile link-closure wave landed
+// its own bodies in CgsSaveLoadPS3.cpp -- that TU owns them now; the duplicates were removed
+// here in the wave-C reconcile.)
 //
 // Named-member accessors come from the frozen headers; no raw offset arithmetic.
 
@@ -63,42 +66,5 @@ namespace CgsGui
         CGS_ASSERT(luStringID < (sizeof(maRealmemcardStringIDs) / sizeof(maRealmemcardStringIDs[0])),
                    "liStringID < M_ARRAY_SIZE(maRealmemcardStringIDs)");
         return maRealmemcardStringIDs[luStringID];
-    }
-
-    // X360 0x8284BF50 (body originally header-defined at CgsSaveLoadX360.h:745). Map a MessageDisplay
-    // option index 0..3 onto the Realmc message-choice code 1..4; any other index fires the streamed
-    // assert (folded to CGS_ASSERT) and returns 0.
-    s32 SaveLoadSystem::MessageChoiceForOptionIndex(u32 luOptionIndex)
-    {
-        s32 liResult;
-
-        switch (luOptionIndex)
-        {
-        case 0:
-            liResult = 1;
-            break;
-        case 1:
-            liResult = 2;
-            break;
-        case 2:
-            liResult = 3;
-            break;
-        case 3:
-            liResult = 4;
-            break;
-        default:
-            CGS_ASSERT(false, "SaveLoad: unexpected option index: ");
-            liResult = 0;
-            break;
-        }
-
-        return liResult;
-    }
-
-    // X360 0x8284C6D8. Translate the chosen option index and forward it to the memory-card interface
-    // (MessageChoice, vtable slot +0x14).
-    void SaveLoadSystem::HandleMemcardOption(u32 luOption)
-    {
-        mpMemcardInterface->MessageChoice(MessageChoiceForOptionIndex(luOption));
     }
 }
