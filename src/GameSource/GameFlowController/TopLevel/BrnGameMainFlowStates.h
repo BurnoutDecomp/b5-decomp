@@ -79,6 +79,19 @@ protected:
     bool LoadSoundModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
+    // X360 0x823E72F0 -- one frame of the world-module load: create a scratch
+    // BrnWorldIO::UpdateOutputBuffer on the update output stack, drive WorldModule::
+    // Prepare (vtable +68) with the update IO stacks + the GameData allocator list, and
+    // -- while it reports "still preparing" -- forward the world's staged resource
+    // requests (RequestInterface<4096>) and AttribSys vault requests (<2048> queue) into
+    // the GameData input buffer. Returns true once the module reports prepared.
+    bool LoadWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                         const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
+    // X360 0x823A85B0 -- the title-screen pre-accept resume: assert the scripted load is
+    // still parked at START and clear the pause flag (byte_82FAE28E) so the load runs.
+    void ResumeLoadingWorld();
+
     ELoadingStateStage meLoadingStateStage;
     bool               mbLoadingPaused;
 };

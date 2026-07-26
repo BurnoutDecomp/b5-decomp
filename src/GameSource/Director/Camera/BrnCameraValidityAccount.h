@@ -19,10 +19,8 @@ namespace Camera
     // "sbFailFlagMaskSet" at BrnCameraValidityAccount.h:193 and ANDs the state's
     // head set with the mask; DWARF names both at BrnCameraValidityAccount.h:169/
     // :172 -- `extern bool sbFailFlagMaskSet; extern BitArray<32u> sFailFlagMask;`).
-    // Defined in BrnCameraValidityAccount.cpp. The mask CONTENTS are produced by
-    // ValidityAccount::SetupFailFlagMask @0x82221118 (not reconstructed yet --
-    // it drags the KAAC_FLAG_NAMES table + StrStream assert machinery), so the
-    // definitions carry the FLAG un-set defaults.
+    // Defined in BrnCameraValidityAccount.cpp; produced by ValidityAccount::
+    // SetupFailFlagMask @0x82221118 (reconstructed there -- DRIVE wave 2026-07-26).
     extern bool                        sbFailFlagMaskSet;   // byte_82FAA5EC
     extern CgsContainers::BitArray<32u> sFailFlagMask;      // qword_82FAA5D0
 
@@ -38,6 +36,11 @@ namespace Camera
         // @0x82204028 (class TU; body in BrnCameraValidityAccount.cpp) -- record a
         // failure reason: range-check it, then raise its bit.
         void SetFlag(s32 leFlag);
+
+        // @0x82221118 (body in BrnCameraValidityAccount.cpp) -- one-time setup of the
+        // module fail-flag mask pair: raise bits [0..E_END_FAILED_FLAG) in sFailFlagMask
+        // and latch sbFailFlagMaskSet. Called by CameraState::Construct @0x82252348.
+        static void SetupFailFlagMask();
 
     private:
         // The u64-backed 32-slot bit set (the X360 SetFlag inlines the BitArray

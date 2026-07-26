@@ -262,17 +262,12 @@ class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> co
 // store runs those bring-up paths share) live in BrnCameraEffects.cpp /
 // BrnDepthOfField.cpp; CameraState::Clear @0x82220950 lives in BrnCameraState.cpp.
 //
-// STILL STUBBED: CameraState::Construct @0x82252348 -- its body calls
-// ValidityAccount::SetupFailFlagMask @0x82221118 (the KAAC_FLAG_NAMES table +
-// StrStream assert machinery, not reconstructed) before tail-calling Clear; it
-// is only reached via the director-side Camera::Construct, not the WorldModule
-// lifecycle.
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnDirector::Camera::CameraState::Construct()
-{
-    CGS_ASSERT(false, "CameraState::Construct: link stub (world fleet mount) -- reconstruct from X360");
-}
+// CameraState::Construct @0x82252348 DESTUBBED (DRIVE wave 2026-07-26): the real
+// body (zero the three flag sets -> ValidityAccount::SetupFailFlagMask -> Clear)
+// now lives in BrnCameraState.cpp, with SetupFailFlagMask @0x82221118 in
+// BrnCameraValidityAccount.cpp -- the world-prepare path reaches CameraState::
+// Clear through WorldModule::Prepare's mLastCameraInput.Clear(), which asserts
+// the mask was set up.
 
 // -------------------------------------------------------------------------
 // BrnDirector::HookNameStringWrapper
@@ -1134,12 +1129,9 @@ void BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering(struct BrnShader
 // -------------------------------------------------------------------------
 // CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsAttribSys::AttribSysIO::AttribSysRequestInterface<2048>::RegisterVault(class CgsModule::BaseEventReceiverQueue *,struct CgsResource::ResourceHandle,enum CgsAttribSys::AttribSysIO::EAttribSysVaultType)
-{
-    CGS_ASSERT(false, "AttribSysRequestInterface<2048>::RegisterVault: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
+// DESTUBBED (DRIVE wave 2026-07-26): the real <2048>::RegisterVault (generic body
+// in CgsAttribSysSharedIOImpl.h, instantiated by CgsAttribSysModuleIO.cpp) now
+// links -- CgsAttribSysModuleIO.cpp joined the exe build list.
 
 // -------------------------------------------------------------------------
 // CgsDev::DebugInterface

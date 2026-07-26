@@ -140,6 +140,9 @@ namespace BrnGame
         // The game module owns the GameDataModule; the loading flow (case 8) prepares it through here
         // (and via BrnGame::GetMainGameDataModule()) so there's ONE instance, not a parallel copy.
         BrnResource::GameDataModule& GetGameDataModule() { return mGameDataModule; }
+        // The world module (the loading flow's LoadWorldModule drives its Prepare with
+        // the update IO stacks -- X360 vtable +68 dispatch @0x823E72F0).
+        WorldModule& GetWorldModule() { return mWorldModule; }
         // The dispatch-thread input pair (the flow states post the boot loading-screen
         // command onto its write buffer, as the X360 InitialLoadingScreen::Update does
         // through the module global @0x823EF688).

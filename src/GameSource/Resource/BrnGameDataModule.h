@@ -9,6 +9,8 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"           // GameDataIO::AllocatorList (mAllocatorList)
 
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
+namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
+                                           struct AcquireResourceResponse; } } // response params (by pointer)
 namespace CgsModule { struct Event; }                                        // pump param (by pointer)
 
 // BrnResource::GameDataModule - Burnout's game-data streaming module: the ~480KB module that is
@@ -33,9 +35,12 @@ namespace CgsModule { struct Event; }                                        // 
 // world handlers (GetWorldUnit 0x826705D0, LoadPVS 0x8266F9C0, LoadSurfaceList 0x8266F718,
 // LoadPropInstances 0x8266F178). The rw-allocator-gated stages (CreateBanks/CreatePools/
 // CreateAllocators) are inert/bring-up stand-ins; the DLC / AttribSys / HUD / popup prepare
-// stages, Destruct, the non-world ProcessXxxRequest handlers and the ProcessInternal*Response
-// completion path are DEFERRED. The many embedded subsystems beyond ResourceModule are added
-// with their own reconstruction passes.
+// stages, Destruct and the non-world ProcessXxxRequest handlers are DEFERRED. The
+// ProcessInternal*Response completion routing (0x82672630 / 0x826736D8 / 0x8266E3F0 /
+// 0x8266E5D8 / 0x8266E858) + the world GET acquire builders (GetPVS 0x82670880,
+// GetSurfaceList 0x8266FBF8, GetPropInstances 0x8266FB68) are now REAL; the AttribSys
+// vault-registration legs inside them are FLAG PC boot gates pending the AttribSysModule.
+// The many embedded subsystems beyond ResourceModule are added with their own passes.
 namespace BrnResource
 {
     namespace GameDataIO { struct GameDataAssetEvent; }   // dispatcher/handler param (by pointer)
@@ -107,6 +112,32 @@ namespace BrnResource
         // ProcessInternal*Response completion.]
         void DeferredGameDataRequest(const char* lpcHandlerName, GameDataEventSlot* lpSlot);
 
+        // ---- the ProcessInternal*Response completion routing (THIS BATCH) ---------------
+        // Update's mReceiverQueue drain (X360 0x82674670: response type 2/3/4/7/8 switch)
+        // routes each CgsResource completion back out to the original requester's receiver
+        // queue through the event slot staged at request time.
+        void ProcessInternalLoadBundleResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                               const CgsResource::Events::LoadBundleResponse* lpResponse);   // 0x82672630
+        void ProcessInternalUnloadResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                           const CgsResource::Events::UnloadBundleResponse* lpResponse);     // 0x8266E3F0
+        // [FLAG signature deviation] the X360 takes a 4th arg -- the AttribSys module input
+        // buffer the vault-registration legs forward into (asserted non-null @ cpp:3357).
+        // The AttribSysModule is not committed on PC, so the attrib legs are gated inline
+        // (documented FLAG PC boot gates) and the param is omitted.
+        void ProcessInternalAcquireResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                            const CgsResource::Events::AcquireResourceResponse* lpResponse); // 0x826736D8
+        void ProcessInternalInvalidateResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                               const CgsModule::Event* lpResponse);                          // 0x8266E5D8
+        void ProcessInternalValidateResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                             const CgsModule::Event* lpResponse);                            // 0x8266E858
+
+        // Shared completion-post helper (the X360 inlines this 40-byte response build in
+        // every acquire/load-fail case): post a GameDataAssetEvent built from the slot's
+        // captured request (+ the resolved handle / fail flag) to the requester's queue.
+        void PostGameDataResponse(const GameDataEventSlot* lpSlot, s32 liResponseId,
+                                  bool lbFailFlag, u32 luTypeLane,
+                                  const void* lpResourceMemory, void* lpSourceEntry);
+
         // ---- the four reconstructed world handlers --------------------------------------
         void ProcessGetWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                         const GameDataIO::GameDataAssetEvent* lpEvent,
@@ -120,6 +151,19 @@ namespace BrnResource
         void ProcessLoadPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                              const GameDataIO::GameDataAssetEvent* lpEvent,
                                              s32 liEventId, s32 liSlotIndex);          // 0x8266F178
+
+        // ---- the GET acquire builders the completion routing dispatches (THIS BATCH) ----
+        // Each stages its response id at the slot and publishes a type-4 AcquireResource
+        // for the target resource into the ResourceModule input (reply -> mReceiverQueue).
+        void ProcessGetPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                  const GameDataIO::GameDataAssetEvent* lpEvent,
+                                  s32 liEventId, s32 liSlotIndex);                     // 0x82670880
+        void ProcessGetSurfaceListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                          const GameDataIO::GameDataAssetEvent* lpEvent,
+                                          s32 liEventId, s32 liSlotIndex);             // 0x8266FBF8
+        void ProcessGetPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                            const GameDataIO::GameDataAssetEvent* lpEvent,
+                                            s32 liEventId, s32 liSlotIndex);           // 0x8266FB68
 
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])
@@ -140,6 +184,17 @@ namespace BrnResource
         CgsContainers::IndexedPool<GameDataEventSlot, KI_NUM_GAMEDATA_EVENT_SLOTS> mGameDataEventSlotPool;
         GameDataEventSlot              maGameDataEventSlots[KI_NUM_GAMEDATA_EVENT_SLOTS];
         s16                            masGameDataEventSlotFreeIndices[KI_NUM_GAMEDATA_EVENT_SLOTS];
+        // ---- completion-routing state (THIS BATCH) --------------------------------------
+        // X360 a1+439284 -- the in-flight sound-bundle unload countdown; the NAME is
+        // attested by the assert text "muLoadedSoundBundlesCount != 0" @ cpp:3618.
+        u32                            muLoadedSoundBundlesCount;
+        // X360 a1+475936 -- the world-collision bundle ref count (++ on load complete
+        // @0x82672630 case 32, -- on unload response id 45, ==1 gate in the validate
+        // swap-in @0x8266E858). FLAG role name (no DWARF/assert attestation).
+        s32                            miWorldCollisionRefCount;
+        // X360 a1+475940 -- cleared by ProcessInternalValidateResponse; FLAG role name
+        // (its setter lives in the deferred swap-in request path).
+        s32                            miWorldCollisionValidatePending;
         // (AttribSysModule, the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
