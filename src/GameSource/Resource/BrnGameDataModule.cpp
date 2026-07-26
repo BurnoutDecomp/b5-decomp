@@ -16,7 +16,13 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"          // E_RESOURCETYPE_FONT (stream validation)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"            // EventReceiverQueue (acquire response receiver)
 #include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
-#include <cstring>                                                              // memset
+#include "GameSource/Resource/BrnGameDataModuleIO.h"                            // GameDataIO In/OutputBuffer (Update pump)
+#include "GameShared/GameClasses/Core/CgsID.h"                                  // CgsIDUnCompress / CgsIDConvertToString
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                    // CgsDev::StrStream (prop bundle name build)
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
+#include <cstring>                                                              // memset / memcmp / strncmp
+#include <cstdlib>                                                              // atoi (prop-instance zone number)
 
 // BrnResource::GameDataModule - see the header. This pass reconstructs the rw-INDEPENDENT
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
@@ -410,6 +416,21 @@ namespace BrnResource
 
         mbIsNewModule = true;   // X360 *(this+4)=1 (new module type; base Prepare skips the old IO path)
 
+        // X360 0x82671B90: wire the in-flight event-slot pool -- capacity 96
+        // (`*(a1+439324) = 96`), the module-embedded element array (a1+439328) and
+        // free-index array (a1+443936), then Clear -- and the internal receiver queue
+        // (0x8000-byte buffer @a1+363120, 16-byte alignment: `*(a1+363112)=0x8000;
+        // *(a1+363116)=16` + Clear). Every request the world handlers publish into the
+        // ResourceModule names mReceiverQueue as its mpUser reply-to.
+        mGameDataEventSlotPool.Construct(maGameDataEventSlots, masGameDataEventSlotFreeIndices,
+                                         static_cast<s16>(KI_NUM_GAMEDATA_EVENT_SLOTS));
+        mReceiverQueue.Construct();
+
+        // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
+        // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators
+        // (deferred) populates it; Update publishes it to the OutputBuffer each frame.
+        mAllocatorList.Construct();
+
         // [5b] Bring up the resource memory system. This is an incrementally-populated stand-in for the
         // X360 ConstructResourceModule (0x8266D570): it now builds the real CgsResource::ResourceModule::
         // InitOptions composite (memory + pool + bundle-loader option blocks) instead of a bare
@@ -502,5 +523,539 @@ namespace BrnResource
     }
     bool GameDataModule::Release() { return true; }
     void GameDataModule::Destruct() {}
-    bool GameDataModule::Update(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return false; }
+
+    // ====================================================================================
+    // The world-request service path (THIS BATCH): the Update request pump + the GameData
+    // dispatch chain + the four world handlers. Ground truth = the X360 ARTIST build
+    // (addresses on each function); the request-side event/queue types are the committed
+    // SharedIO slice (BrnGameDataRequestQueue.h / BrnGameDataEvents.h / the
+    // RequestInterface<N> builders on the producer side).
+    // ====================================================================================
+
+    namespace
+    {
+        // X360 .rdata world-data file-name globals (values read from the ARTIST .i64 data
+        // segment; the exports are function-only so the pointer targets are attested by the
+        // database, not the JSON).
+        const char* const KPC_SURFACE_LIST_FILE_NAME = "surfacelist.bin";           // off_82F2A704
+        const char* const KPC_PVS_FILE_NAME          = "pvs.bndl";                  // off_82F2A70C
+        const char* const KPC_PROP_INSTANCES_PATH    = "Props/Instances/TRK_UNIT";  // off_82F2A748
+
+        // ProcessLoadPropInstancesRequest baked constants (the assert texts @0x8266F178
+        // name both: "strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER)
+        // == 0" and "luZoneId < KU_MAX_ZONES"; the compare immediates are 9 and 0x1F4).
+        const u32 KU_STRING_INDEX_OF_ZONE_NUMBER = 9;
+        const u32 KU_MAX_ZONES                   = 500;
+    }
+
+    // @ 0x82674670 -- the per-frame pump. Reconstructed slice: the GameData request drain
+    // (raw CgsResource requests forward verbatim into the embedded ResourceModule's input;
+    // GameData-level requests route through ProcessGameDataEvent), the drained-input clear,
+    // the output allocator-list publish and the ResourceModule pump. DEFERRED stages are
+    // marked inline (each with its X360 anchor) -- their subsystems are not committed yet.
+    bool GameDataModule::Update(void* lpInputBuffer, void* lpOutputBuffer)
+    {
+        GameDataIO::InputBuffer*  lpInput  = static_cast<GameDataIO::InputBuffer*>(lpInputBuffer);
+        GameDataIO::OutputBuffer* lpOutput = static_cast<GameDataIO::OutputBuffer*>(lpOutputBuffer);
+
+        // [deferred] dev slot-usage dump toggles (byte_82FFAD00/01 -> AllocatorList::
+        // DebugDumpStats + the "Slot <n> is used" walk over the event-slot free list).
+        // [deferred] CgsGameTalk::GameTalk::Update (X360 a1+399624; module not committed).
+
+        // The per-frame CgsResource input the pump publishes into. The X360 carves it from
+        // the CgsModule::IOBufferStack (CreateIOBuffer<ResourceIO::InputBuffer>("Resource"));
+        // [marked deviation] the IOBufferStack is deferred, so the module reuses one
+        // function-local static buffer, exactly like the committed CreatePools bring-up path.
+        static CgsResource::ResourceIO::InputBuffer s_ResourceInput;
+        static bool s_bResourceInputConstructed = false;
+        if (!s_bResourceInputConstructed) { s_ResourceInput.Construct(); s_bResourceInputConstructed = true; }
+
+        // [deferred] AttribSys input carve ("Attrib") + InputBuffer::
+        // AppendRequestInterface<32768> + the AttribSysModule pump (X360 a1+399000) + the
+        // attrib response receiver drain (a1+395888: 3 -> ProcessAttribSysRegisterVault
+        // Response, 5 -> ProcessUnregisterVehicleAttribsResponse, else "Invalid request
+        // received\n" line 1946).
+
+        if (lpOutput != 0)
+        {
+            // X360: LockForWrite(out); FileSystemStatusInterface::Construct(out+36);
+            // out->mpAllocatorList = 0; SetAllocatorList(out, &mAllocatorList); then the
+            // LiveUpdateIO status copy (SetLiveUpdateStatus from the LiveUpdate output).
+            // The LiveUpdate module + the OutputBuffer's filesystem-status member are
+            // deferred; the allocator-list publish is the live part.
+            lpOutput->LockForWrite();
+            lpOutput->Construct();
+            lpOutput->SetAllocatorList(&mAllocatorList);
+            lpOutput->UnlockForWrite();
+        }
+
+        if (lpInput != 0)
+            lpInput->LockForRead();
+
+        s_ResourceInput.LockForWrite();
+
+        // [deferred] LiveUpdateIO::OutputBuffer request append (X360 Append<512,16> of the
+        // live-update output's request queue into the resource input; module not committed).
+
+        // ---- the request pump: drain the GameData request interface ---------------------
+        // Queue type ids < 26 are raw CgsResource requests (CreatePool 0 / LoadBundle 2 /
+        // UnloadBundle 3 / AcquireResource 4 / AcquireResourceList 5 / ...) forwarded
+        // verbatim into the ResourceModule input; ids >= 26 are GameData-level events
+        // routed through ProcessGameDataEvent (26 == LoadGameDataEvent, the first
+        // GameData-level id -- the X360 boundary compare).
+        if (lpInput != 0)
+        {
+            const GameDataIO::RequestInterface<GameDataIO::InputBuffer::knRequestInterfaceQueueSize>*
+                lpRequestInterface = lpInput->GetRequestInterface();
+
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liType = lpRequestInterface->mRequestQueue.GetFirstEvent(&lpEvent, &liSize);
+            while (lpEvent != 0)
+            {
+                if (liType >= 26)
+                    ProcessGameDataEvent(&s_ResourceInput, lpEvent, liType);
+                else
+                    s_ResourceInput.GetResourceQueue()->AddEvent(lpEvent, liType, liSize);
+
+                liType = lpRequestInterface->mRequestQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
+            }
+            lpInput->UnlockForRead();
+
+            // X360: re-lock the input for write and clear the drained request state (the
+            // 32768-byte request queue, the AttribSys request queue and the debug Im2d
+            // pointer). The AttribSys queue / Im2d members are deferred with their
+            // subsystems; the request-queue clear is the live part.
+            lpInput->LockForWrite();
+            lpInput->GetRequestInterface()->mRequestQueue.Clear();
+            lpInput->UnlockForWrite();
+        }
+
+        // ---- internal response drain (DEFERRED) -----------------------------------------
+        // X360 drains mReceiverQueue here, routing each completion back out:
+        //   2 -> ProcessInternalLoadBundleResponse @0x82672630 (load done -> dispatch the
+        //        paired Get, or post the fail response + free the slot)
+        //   3 -> ProcessInternalUnloadResponse   4 -> ProcessInternalAcquireResponse
+        //        @0x826736D8   7 -> ProcessInternalInvalidateResponse
+        //   8 -> ProcessInternalValidateResponse
+        //   default -> CGS_ASSERT "Invalid request received\n" (line 1904)
+        // then ring-rewinds the queue for the next frame. The ProcessInternal* completion
+        // handlers are DEFERRED (they close the loop back to the requesters); [marked
+        // deviation] the queue is Clear()ed so the deferred drain cannot overflow it.
+        mReceiverQueue.Clear();
+
+        s_ResourceInput.UnlockForWrite();
+
+        // Pump the embedded streaming engine with the requests published above. The X360
+        // wraps this in UpdateResourceModule @0x826663B0, which also carves a ResourceIO::
+        // OutputBuffer from the IOBufferStack and copies the filesystem status out
+        // (a1+475952) -- both deferred with their consumers.
+        const bool lbResult = mResourceModule.Update(&s_ResourceInput, 0);
+
+        // [deferred] final output publish of the filesystem status interface (X360
+        // SetFileSystemStatusInterface(out, a1+475952); member not committed).
+        return lbResult;
+    }
+
+    // @ 0x826744F0 -- route one queued GameData-level event by its queue type id.
+    void GameDataModule::ProcessGameDataEvent(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                              const CgsModule::Event* lpEvent, s32 liEventType)
+    {
+        switch (liEventType)
+        {
+        case 26:   // LoadGameDataEvent
+            ProcessLoadGameDataEvent(lpResourceInput,
+                                     static_cast<const GameDataIO::GameDataAssetEvent*>(lpEvent), -1);
+            break;
+        case 39:   // UnloadGameDataEvent
+            ProcessUnloadGameDataEvent(lpResourceInput,
+                                       static_cast<const GameDataIO::GameDataAssetEvent*>(lpEvent), -1);
+            break;
+        case 49:   // GetGameDataEvent
+            ProcessGetGameDataEvent(lpResourceInput,
+                                    static_cast<const GameDataIO::GameDataAssetEvent*>(lpEvent), -1);
+            break;
+        case 67:   // SwapOutCollisionWorldRequest
+            ProcessSwapOutCollisionWorldRequest();
+            break;
+        case 68:   // SwapInCollisionWorldRequest
+            ProcessSwapInCollisionWorldRequest();
+            break;
+        default:
+            CGS_ASSERT(false, "Invalid event id\n");   // X360 line 2791
+            break;
+        }
+    }
+
+    // @ 0x826664A0 -- fetch (liSlotIndex >= 0) or allocate (liSlotIndex < 0, the dispatch
+    // path) an event slot, then capture the request event into it (the X360 copies
+    // miEventId / the receiver queue / miPoolId / mId / meType and clears the fail flag).
+    GameDataEventSlot* GameDataModule::GetGameDataEventSlot(
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liSlotIndex)
+    {
+        GameDataEventSlot* lpSlot;
+        if (liSlotIndex >= 0)
+        {
+            lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
+        }
+        else
+        {
+            lpSlot = mGameDataEventSlotPool.Pop();
+            CGS_ASSERT(lpSlot != 0,
+                       "No space for new requests - extend size of game data event pool\n");
+            if (lpSlot == 0)
+                return 0;   // [marked deviation] the X360 assert is non-fatal and the next
+                            // store would fault on a full pool; guard the host instead.
+            lpSlot->miResponseEventId = 69;   // fresh-slot sentinel (X360 `*(slot+40) = 69`)
+        }
+
+        // X360 store order: fail flag(+36)=0, meType(+32), mId(+24), miPoolId(+16),
+        // queue(+12), miEventId(+8).
+        lpSlot->mEvent.mbFailFlag      = false;
+        lpSlot->mEvent.meType          = lpEvent->meType;
+        lpSlot->mEvent.mId             = lpEvent->mId;
+        lpSlot->mEvent.miPoolId        = lpEvent->miPoolId;
+        lpSlot->mEvent.mpReceiverQueue = lpEvent->mpReceiverQueue;
+        lpSlot->mEvent.miEventId       = lpEvent->miEventId;
+        return lpSlot;
+    }
+
+    // PC bring-up scaffolding (NOT an X360 function) -- see the header note.
+    void GameDataModule::DeferredGameDataRequest(const char* lpcHandlerName, GameDataEventSlot* lpSlot)
+    {
+        *CgsDev::Log::gpDebugPrint << "[GameData] request handler DEFERRED: "
+                                   << lpcHandlerName << "\n";
+        mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
+    }
+
+    // @ 0x82671EA0 -- dispatch a LoadGameDataEvent by the uncompressed prefix of its CgsID.
+    // (The export set is function-gapped here; the body was decompiled straight from the
+    // ARTIST .i64.) The X360 switches on the packed 4-char dwords of the uncompressed id;
+    // the memcmp prefix compares below test the same bytes in the same order,
+    // host-endian-safely. Response event ids (stored at slot->miResponseEventId by each
+    // handler) are the X360 case immediates: Vehicle 27, TrafficVehicle 28, AILanes 29,
+    // TrafficLanes 30, WorldUnit 31, WorldCollision 32, PVS 33, PropPhysics 34,
+    // PropInstances 35, Wheel 36, SurfaceList 37.
+    void GameDataModule::ProcessLoadGameDataEvent(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                  const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                  s32 liSlotIndex)
+    {
+        char lacName[KI_CGSID_STRING_LEN];
+        CgsIDUnCompress(lpEvent->mId, lacName);
+
+        GameDataEventSlot* lpSlot = GetGameDataEventSlot(lpEvent, liSlotIndex);
+        if (lpSlot == 0)
+            return;   // [marked deviation] full-pool guard (see GetGameDataEventSlot)
+        const s32 liIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+        lpSlot->meStage = GameDataEventSlot::E_LOADING;
+
+        if (memcmp(lacName, "VEH_", 4) == 0)
+        {
+            DeferredGameDataRequest("LoadVehicle (0x8266EB98, id 27)", lpSlot);
+        }
+        else if (memcmp(lacName, "WHE_", 4) == 0)
+        {
+            DeferredGameDataRequest("LoadWheel (0x8266EDB8, id 36)", lpSlot);
+        }
+        else if (memcmp(lacName, "TVEH", 4) == 0)
+        {
+            DeferredGameDataRequest("LoadTrafficVehicle (0x8266EF00, id 28)", lpSlot);
+        }
+        else if (memcmp(lacName, "ICE_", 4) == 0)
+        {
+            // X360: the ICE_ load id dispatches to NO handler (empty case -> fall out).
+        }
+        else if (memcmp(lacName, "PRP_", 4) == 0)
+        {
+            if (memcmp(lacName + 4, "PHYS", 4) == 0)
+                DeferredGameDataRequest("LoadPropPhysics (id 34)", lpSlot);
+            else if (memcmp(lacName + 4, "INST", 4) == 0)
+                ProcessLoadPropInstancesRequest(lpResourceInput, lpEvent, 35, liIndex);
+            else
+                CGS_ASSERT(false, "Invalid game data id: ");   // X360 streams the id (line 2899)
+        }
+        else if (memcmp(lacName, "GD__", 4) == 0)
+        {
+            if (memcmp(lacName + 8, "LANE", 4) == 0)
+                DeferredGameDataRequest("LoadTrafficLanes (0x8266F398, id 30)", lpSlot);
+            else if (memcmp(lacName + 4, "AI__", 4) == 0)
+                DeferredGameDataRequest("LoadAILanes (0x8266F4B0, id 29)", lpSlot);
+            else
+                CGS_ASSERT(false, "Invalid game data id: ");   // X360 streams the id (line 2914)
+        }
+        else if (memcmp(lacName, "TRK_", 4) == 0)
+        {
+            if (memcmp(lacName + 4, "UNIT", 4) == 0)
+                DeferredGameDataRequest("LoadWorldUnit (0x8266F5C8, id 31)", lpSlot);
+            else if (memcmp(lacName + 4, "COLL", 4) == 0)
+                DeferredGameDataRequest("LoadWorldCollision (0x8266F830, id 32)", lpSlot);
+            else if (memcmp(lacName + 4, "ZONE", 4) == 0)
+                ProcessLoadPVSRequest(lpResourceInput, lpEvent, 33, liIndex);
+            else
+                CGS_ASSERT(false, "Invalid track data id: ");   // X360 streams the id (line 2933)
+        }
+        else if (memcmp(lacName, "SURF", 4) == 0)
+        {
+            ProcessLoadSurfaceListRequest(lpResourceInput, lpEvent, 37, liIndex);
+        }
+        else
+        {
+            CGS_ASSERT(false, "Invalid data id: ");   // X360 streams the id (line 2945)
+        }
+    }
+
+    // @ 0x82672268 -- dispatch a GetGameDataEvent by the uncompressed prefix of its CgsID.
+    // Response event ids are the X360 case immediates: Vehicle 50, TrafficVehicle 51,
+    // VehicleList 52, FreeburnChallengeList 53, AILanes 54, TrafficLanes 55, WorldUnit 56,
+    // WorldCollision 57, PVS 58, WheelList 59, Wheel 60, PropPhysics 61, PropInstances 62,
+    // PropGraphicsList 63, ICEList 64, ICEMovie 65.
+    void GameDataModule::ProcessGetGameDataEvent(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                 const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                 s32 liSlotIndex)
+    {
+        char lacName[KI_CGSID_STRING_LEN];
+        CgsIDUnCompress(lpEvent->mId, lacName);
+
+        GameDataEventSlot* lpSlot = GetGameDataEventSlot(lpEvent, liSlotIndex);
+        if (lpSlot == 0)
+            return;   // [marked deviation] full-pool guard (see GetGameDataEventSlot)
+        const s32 liIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+        lpSlot->meStage = GameDataEventSlot::E_AQUIRING;
+
+        if (memcmp(lacName, "VEH_", 4) == 0)
+        {
+            DeferredGameDataRequest("GetVehicle (0x8266FDA0, id 50)", lpSlot);
+        }
+        else if (memcmp(lacName, "ICE_", 4) == 0)
+        {
+            DeferredGameDataRequest("GetICEMovie (id 65)", lpSlot);
+        }
+        else if (memcmp(lacName, "WHE_", 4) == 0)
+        {
+            DeferredGameDataRequest("GetWheel (0x82670140, id 60)", lpSlot);
+        }
+        else if (memcmp(lacName, "TVEH", 4) == 0)
+        {
+            DeferredGameDataRequest("GetTrafficVehicle (0x82670280, id 51)", lpSlot);
+        }
+        else if (memcmp(lacName, "VL__", 4) == 0)
+        {
+            DeferredGameDataRequest("GetVehicleList (id 52)", lpSlot);
+        }
+        else if (memcmp(lacName, "CL__", 4) == 0)
+        {
+            DeferredGameDataRequest("GetFreeburnChallengeList (id 53)", lpSlot);
+        }
+        else if (memcmp(lacName, "IL__", 4) == 0)
+        {
+            DeferredGameDataRequest("GetICEList (id 64)", lpSlot);
+        }
+        else if (memcmp(lacName, "PRP_", 4) == 0)
+        {
+            if (memcmp(lacName + 4, "PHYS", 4) == 0)
+                DeferredGameDataRequest("GetPropPhysics (id 61)", lpSlot);
+            else if (memcmp(lacName + 4, "GL__", 4) == 0)
+                DeferredGameDataRequest("GetPropGraphicsList (id 63)", lpSlot);
+            else if (memcmp(lacName + 4, "INST", 4) == 0)
+                DeferredGameDataRequest("GetPropInstances (id 62)", lpSlot);
+            else
+                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3114
+        }
+        else if (memcmp(lacName, "WL__", 4) == 0)
+        {
+            DeferredGameDataRequest("GetWheelList (id 59)", lpSlot);
+        }
+        else if (memcmp(lacName, "GD__", 4) == 0)
+        {
+            if (memcmp(lacName + 8, "LANE", 4) == 0)
+                DeferredGameDataRequest("GetTrafficLanes (0x826703B0, id 55)", lpSlot);
+            else if (memcmp(lacName + 4, "AI__", 4) == 0)
+                DeferredGameDataRequest("GetAILanes (0x826704C0, id 54)", lpSlot);
+            else
+                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3133
+        }
+        else if (memcmp(lacName, "TRK_", 4) == 0)
+        {
+            if (memcmp(lacName + 4, "UNIT", 4) == 0)
+                ProcessGetWorldUnitRequest(lpResourceInput, lpEvent, 56, liIndex);
+            else if (memcmp(lacName + 4, "COLL", 4) == 0)
+                DeferredGameDataRequest("GetWorldCollision (0x82670700, id 57)", lpSlot);
+            else if (memcmp(lacName + 4, "PVS_", 4) == 0)
+                DeferredGameDataRequest("GetPVS (0x82670880, id 58)", lpSlot);
+            else
+                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3152
+        }
+        else
+        {
+            CGS_ASSERT(false, "Invalid id\n");   // X360 line 3157
+        }
+    }
+
+    // @ 0x826733F8 -- dispatch an UnloadGameDataEvent. DEFERRED with the unload handler
+    // family: the X360 stages E_UNLOADING then routes exactly like the load dispatcher
+    // (VEH_ -> UnloadVehicle 40 @0x82672DE0, TVEH -> 41 @0x82670BE0, GD__/AI__ -> 42
+    // @0x82670E40, GD__/LANE -> 43, TRK_/UNIT -> 44 @0x82671160, TRK_/COLL -> 45
+    // @0x826712A0, TRK_/PVS_ -> 46 @0x82671420, WHE_ -> 47 @0x82670AA0, PRP_/INST -> 48
+    // @0x82670F50; unknown ids assert "Invalid id\n" / "Invalid game data id: ").
+    void GameDataModule::ProcessUnloadGameDataEvent(CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+                                                    const GameDataIO::GameDataAssetEvent* /*lpEvent*/,
+                                                    s32 /*liSlotIndex*/)
+    {
+        *CgsDev::Log::gpDebugPrint << "[GameData] ProcessUnloadGameDataEvent DEFERRED\n";
+    }
+
+    // @ 0x826717A8 / @ 0x82671530 -- swap the collision world in/out. DEFERRED with the
+    // collision-world swap machinery (WorldEntityModule Validate/InvalidateCollision).
+    void GameDataModule::ProcessSwapInCollisionWorldRequest()
+    {
+        *CgsDev::Log::gpDebugPrint << "[GameData] ProcessSwapInCollisionWorldRequest DEFERRED\n";
+    }
+    void GameDataModule::ProcessSwapOutCollisionWorldRequest()
+    {
+        *CgsDev::Log::gpDebugPrint << "[GameData] ProcessSwapOutCollisionWorldRequest DEFERRED\n";
+    }
+
+    // @ 0x826705D0 -- service a GET world-unit request: acquire the unit's "<name>_list"
+    // instance-list resource from the pool named by the request. The reply lands on
+    // mReceiverQueue and (X360) ProcessInternalAcquireResponse posts it back to the
+    // requester with the response id staged at slot->miResponseEventId (56).
+    void GameDataModule::ProcessGetWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                    const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                    s32 liEventId, s32 liSlotIndex)
+    {
+        char lacResourceName[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacResourceName);
+
+        // X360: `if (event->meType) assert` -- track units are asset set 0 (GRAPHICS).
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for track units\n");   // X360 line 4897
+
+        // "<TRK_UNITn>_list" -- the unit's instance-list resource name (X360 SPrintf cap 128).
+        char lacListName[128];
+        CgsCore::SPrintf(lacListName, 128, "%s_list", lacResourceName);
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        // The X360 24-byte type-4 record: {mpUser = &mReceiverQueue, miEventId = the slot
+        // index, miPoolId = the request's pool, mResourceId = ID::HashString(list name)}.
+        // mbCheckRefCount lies outside the X360 record; false per the committed convention.
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacListName)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266F9C0 -- service a LOAD PVS request: stream the world's PVS bundle
+    // ("pvs.bndl") into the request's pool. Response id staged at the slot (33).
+    void GameDataModule::ProcessLoadPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                               const GameDataIO::GameDataAssetEvent* lpEvent,
+                                               s32 liEventId, s32 liSlotIndex)
+    {
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for pvs\n");   // X360 line 4355
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        // The X360 148-byte type-2 LoadBundle record: {mpUser = &mReceiverQueue,
+        // miEventId = the slot index, filename = the baked PVS bundle name,
+        // mbLiveUpdateReplace = false, miPoolId = the request's pool,
+        // mbAllowFailiure = the request's fail flag, mbUseHDCache = false}.
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(KPC_PVS_FILE_NAME);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266F718 -- service a LOAD surface-list request: stream the world's surface
+    // list ("surfacelist.bin") into the request's pool. Response id staged at the slot
+    // (37 -- the id the WorldEntityModule surface-list consumer waits on).
+    void GameDataModule::ProcessLoadSurfaceListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                       const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                       s32 liEventId, s32 liSlotIndex)
+    {
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_ATTRIBS,
+                   "Invalid asset type for surface list\n");   // X360 line 4285
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(KPC_SURFACE_LIST_FILE_NAME);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266F178 -- service a LOAD prop-instances request: parse the zone number out of
+    // the "PRP_INST_<n>" id, build the zone's prop-instance bundle path
+    // ("Props/Instances/TRK_UNIT<n>_PropInstances.bundle") through the StrStream chain,
+    // and stream it into the request's pool. Response id staged at the slot (35).
+    void GameDataModule::ProcessLoadPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                         const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                         s32 liEventId, s32 liSlotIndex)
+    {
+        // X360: the stream is constructed over a 208-byte stack buffer with a 100-byte
+        // capacity argument, first byte pre-cleared, at function entry.
+        char lacFileName[208];
+        lacFileName[0] = '\0';
+        CgsDev::StrStream lStream(lacFileName, 100);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_PHYSICS,
+                   "Invalid asset type for prop physics \n");   // X360 line 4149 (verbatim, incl. the space)
+
+        char lacResourceName[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacResourceName);
+
+        // X360 line 4155 (message-less assert: the stringized condition is the message).
+        CGS_ASSERT(strncmp(lacResourceName, "PRP_INST_", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0,
+                   "strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0");
+
+        const u32 luZoneId = static_cast<u32>(atoi(&lacResourceName[KU_STRING_INDEX_OF_ZONE_NUMBER]));
+        // X360 fires this guard TWICE (lines 4157 and 4160) inside one out-of-range branch;
+        // both asserts are reproduced.
+        CGS_ASSERT(luZoneId < KU_MAX_ZONES, "luZoneId < KU_MAX_ZONES");
+        CGS_ASSERT(luZoneId < KU_MAX_ZONES, "luZoneId < KU_MAX_ZONES");
+
+        lStream << KPC_PROP_INSTANCES_PATH << luZoneId << "_PropInstances.bundle";
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(lacFileName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
 }
