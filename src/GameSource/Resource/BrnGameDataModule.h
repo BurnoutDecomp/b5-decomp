@@ -7,7 +7,11 @@
 #include "GameShared/GameClasses/Containers/CgsIndexedPool.h"                // mGameDataEventSlotPool
 #include "GameSource/Resource/BrnGameDataEventSlot.h"                        // GameDataEventSlot (pool element)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"           // GameDataIO::AllocatorList (mAllocatorList)
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                   // maGeneratedLinearAllocators / mAudioStreamAllocator
+#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                     // maGeneratedHeapAllocators
+#include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
+namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
 namespace CgsResource { namespace ResourceIO { struct InputBuffer; } }       // handler param (by pointer)
 namespace CgsResource { namespace Events { struct LoadBundleResponse; struct UnloadBundleResponse;
                                            struct AcquireResourceResponse; } } // response params (by pointer)
@@ -176,9 +180,28 @@ namespace BrnResource
         // EventReceiverQueue<32768,16> instantiation.
         CgsModule::EventReceiverQueue<32768, 16> mReceiverQueue;
         // X360 a1+426400: the bank->allocator registry published to the OutputBuffer each
-        // Update (SetAllocatorList). Populated by CreateAllocators (deferred); Construct
-        // resets it (the inline `map[0..66] = -1` loop == AllocatorList::Construct).
+        // Update (SetAllocatorList). Populated by CreateAllocators; Construct resets it
+        // (the inline `map[0..66] = -1` loop == AllocatorList::Construct).
         GameDataIO::AllocatorList      mAllocatorList;
+        // ---- CreateAllocators storage (DWARF BrnGameDataModule.h:264..303, member names +
+        //      order attested; X360 offsets in dwords off `a1`: raw resources @106766x5,
+        //      descriptors @106776x10, linear allocators @106796 stride 7, heap allocators
+        //      @106852 stride 328, rw pointer mirrors @109804/@109809, audio-stream linear
+        //      @109814, request counter @109826). The AllocatorList's private map arrays
+        //      point into these; CreateAllocators fills both. -------------------------------
+        rw::Resource                        maGeneratedRawResources[2];
+        rw::ResourceDescriptor              maGeneratedRawResourceDescriptors[2];
+        CgsMemory::LinearMalloc             maGeneratedLinearAllocators[7];
+        CgsMemory::HeapMalloc               maGeneratedHeapAllocators[8];
+        rw::LinearResourceAllocator*        mapGeneratedRWLinearAllocators[5];
+        rw::core::GeneralResourceAllocator* mapGeneratedRWGeneralAllocators[5];
+        CgsMemory::LinearMalloc             mAudioStreamAllocator;
+        // X360 a1+439304 (dword 109826): outstanding allocator-create requests published to
+        // the ResourceModule; the drain zeroes it once every response has been stored.
+        s32                                 miNumAllocatorCreationRequests;
+        // DWARF :303 sibling counter; its X360 updater is outside the CreateAllocators
+        // pseudocode (FLAG: maintained here as the created-allocator total).
+        s32                                 miNumAllocatorsCreated;
         // X360 a1+439312: the in-flight request slot pool (IndexedPool<GameDataEventSlot,short>,
         // capacity 96) + its module-embedded backing arrays (X360 a1+439328 / a1+443936).
         CgsContainers::IndexedPool<GameDataEventSlot, KI_NUM_GAMEDATA_EVENT_SLOTS> mGameDataEventSlotPool;

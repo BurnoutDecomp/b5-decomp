@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
 #include "GameSource/Resource/BrnResourceAllocator.h"        // Allocators::mpInternalDebugAllocator
 #include "rw/rwcore_structs.h"                                // rw::IResourceAllocator / Resource / ResourceDescriptor
+#include "rw/rwcore_general_alloc.h"                          // rw::core::GeneralResourceAllocator (CreateAllocators)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [5b trace] (Construct runs at runtime, gpDebugPrint ready)
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistration.h" // RegisterAllResourceTypes (bridge)
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeRegistry.h"     // ResolveResourceType (bridge)
@@ -406,7 +407,257 @@ namespace BrnResource
         return true;
     }
 
-    bool GameDataModule::CreateAllocators(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/) { return true; }
+    // ------------------------------------------------------------------------------------------
+    // The rw allocator OBJECTS the registry's pointer rows reference. On the X360 the create
+    // requests are serviced by CgsMemory::MemoryModule (ProcessCreateLinearAllocatorRequest
+    // @0x8286D130 / the rw-general sibling), which carves a leaf memory bank per allocator and
+    // materialises the allocator object service-side, returning its pointer in the response the
+    // CreateAllocators drain stores into mapGeneratedRW*Allocators. [marked deviation: the async
+    // memory dispatch is deferred (CreatePools precedent), so the objects live here, TU-local.]
+    static rw::LinearResourceAllocator        s_aRWLinearAllocators[5];
+    static rw::core::GeneralResourceAllocator s_aRWGeneralAllocators[5];
+
+    // @ 0x8266DD00 - create the memory map's allocator set and publish it through the
+    // bank->allocator registry (mAllocatorList) the OutputBuffer hands to every module Prepare.
+    //
+    // The X360 is a resumable two-phase machine: phase 1 walks the memory map's five allocator
+    // record tables (mpMemoryMap +16..+32 counts / +44..+60 tables) and publishes one create
+    // request per record into the ResourceModule input (event types 10 raw-resource / 14 linear +
+    // heap / 11 rw-linear / 12 rw-general; each request carries &mReceiverQueue as mpUser, the
+    // slot index, and - for the type-14s - the module-embedded LinearMalloc/HeapMalloc object the
+    // service constructs in place), registering each record's bank id in the AllocatorList
+    // (maiAllocatorMap[bank] = per-type slot, maeAllocatorType[bank] = family) as it goes; later
+    // calls pump UpdateResourceModule until every response is back in mReceiverQueue, then drain:
+    // case 10 stores the returned rw::Resource + descriptor into maGeneratedRawResources /
+    // ...Descriptors, cases 11/12 store the returned allocator pointers into
+    // mapGeneratedRW{Linear,General}Allocators AND the AllocatorList rows, case 14 has nothing to
+    // store (the embedded objects were constructed in place). [marked deviation, CreatePools
+    // precedent: the request/response round-trip through the ResourceModule + the per-allocator
+    // leaf-bank carve (CreateBanks' bank tree is not stood up on PC) are deferred - the same
+    // memory-map records (BrnMemoryMapData.h allocator tables, dumped from unk_82F2A788) are
+    // driven synchronously here, backing memory comes from the root debug allocator, and the
+    // registry/embedded-object stores are the faithful part.] Runs once (the Prepare stage
+    // machine re-enters until done).
+    bool GameDataModule::CreateAllocators(void* /*lpInputBuffer*/, void* /*lpOutputBuffer*/)
+    {
+        // X360 (every call, before the outstanding-request check): wire the audio-stream
+        // allocator row at the module-embedded LinearMalloc (`a1[106765] = a1 + 109814`).
+        mAllocatorList.mpAudioStreamAllocator = &mAudioStreamAllocator;
+
+        static bool s_bAllocatorsCreated = false;
+        if (s_bAllocatorsCreated)
+            return true;
+        s_bAllocatorsCreated = true;
+
+        rw::IResourceAllocator* lpAllocator =
+            static_cast<rw::IResourceAllocator*>(Allocators::mpInternalDebugAllocator);
+        if (lpAllocator == 0)
+            return true;
+
+        miNumAllocatorCreationRequests = 0;
+        s32 lNumCreated = 0;
+
+        // Carve one memory-type lane from the root debug allocator (the deviation's stand-in for
+        // the per-allocator leaf-bank carve).
+        struct LaneAlloc
+        {
+            static void* Carve(rw::IResourceAllocator* lpRoot, u32 luSize, u32 luAlign,
+                               const char* lpcName)
+            {
+                rw::ResourceDescriptor lDesc;
+                for (u32 lu = 0; lu < 4; ++lu)
+                {
+                    lDesc.m_baseResourceDescriptors[lu].m_size      = 0;
+                    lDesc.m_baseResourceDescriptors[lu].m_alignment = 1;
+                }
+                lDesc.m_baseResourceDescriptors[0].m_size      = luSize;
+                lDesc.m_baseResourceDescriptors[0].m_alignment = luAlign < 1 ? 1 : luAlign;
+                rw::Resource lRes = lpRoot->DoAllocate(lDesc, lpcName);
+                return lRes.m_baseResources[0];
+            }
+        };
+
+        // ---- type-10 records: raw resources (the drain's case 10 fills the embedded pair) ----
+        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RAW_ALLOCATORS && li < 2; ++li)
+        {
+            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_RAW_ALLOCATORS[li];
+            ++miNumAllocatorCreationRequests;
+
+            rw::Resource&           lrRes  = maGeneratedRawResources[li];
+            rw::ResourceDescriptor& lrDesc = maGeneratedRawResourceDescriptors[li];
+            for (u32 lu = 0; lu < 4; ++lu)
+            {
+                lrRes.m_baseResources[lu] = 0;
+                lrDesc.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
+                lrDesc.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
+                if (lrDef.mauSize[lu] != 0)
+                    lrRes.m_baseResources[lu] =
+                        LaneAlloc::Carve(lpAllocator, lrDef.mauSize[lu], lrDef.mauAlign[lu],
+                                         lrDef.mpcName);
+            }
+
+            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
+            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
+            mAllocatorList.mapRawResources[li]              = &lrRes;
+            mAllocatorList.mapRawResourceDescriptors[li]    = &lrDesc;
+            ++lNumCreated;
+        }
+
+        // ---- type-14 records, linear family: LinearMalloc constructed over the module-embedded
+        //      objects (the service side does `LinearMalloc::Create(record.mpLinear, bankMem,
+        //      size)` @0x8286D9F0; the publisher passed &maGeneratedLinearAllocators[i]) --------
+        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_LINEAR_ALLOCATORS && li < 7; ++li)
+        {
+            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_LINEAR_ALLOCATORS[li];
+            ++miNumAllocatorCreationRequests;
+
+            void* lpMem = LaneAlloc::Carve(lpAllocator, lrDef.mauSize[0], lrDef.mauAlign[0],
+                                           lrDef.mpcName);
+            if (lpMem == 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for linear "
+                                          << lrDef.mpcName << "\n";
+                continue;
+            }
+            maGeneratedLinearAllocators[li].Construct();
+            maGeneratedLinearAllocators[li].Create(lpMem, lrDef.mauSize[0]);
+
+            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
+            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
+            mAllocatorList.mapLinearAllocators[li]          = &maGeneratedLinearAllocators[li];
+            ++lNumCreated;
+        }
+
+        // ---- type-14 records, heap family: HeapMalloc constructed over the embedded objects
+        //      (service side: `HeapMalloc::Construct(record.mpHeap, bankMem, size)`) ------------
+        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_HEAP_ALLOCATORS && li < 8; ++li)
+        {
+            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_HEAP_ALLOCATORS[li];
+            ++miNumAllocatorCreationRequests;
+
+            void* lpMem = LaneAlloc::Carve(lpAllocator, lrDef.mauSize[0], lrDef.mauAlign[0],
+                                           lrDef.mpcName);
+            if (lpMem == 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for heap "
+                                          << lrDef.mpcName << "\n";
+                continue;
+            }
+            maGeneratedHeapAllocators[li].Construct(lpMem, static_cast<s32>(lrDef.mauSize[0]));
+
+            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
+            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
+            mAllocatorList.mapHeapAllocators[li]            = &maGeneratedHeapAllocators[li];
+            ++lNumCreated;
+        }
+
+        // ---- type-11 records: rw linear resource allocators (service @0x8286D130: bank carve
+        //      per non-zero descriptor lane, then LinearResourceAllocator::Initialize(resource,
+        //      capacity); the drain's case 11 stores the returned pointer) --------------------
+        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RWLINEAR_ALLOCATORS && li < 5; ++li)
+        {
+            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_RWLINEAR_ALLOCATORS[li];
+            ++miNumAllocatorCreationRequests;
+
+            rw::Resource           lRes;
+            rw::ResourceDescriptor lCapacity;
+            bool lbAllocOk = true;
+            for (u32 lu = 0; lu < 4; ++lu)
+            {
+                lCapacity.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
+                lCapacity.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
+                lRes.m_baseResources[lu] = 0;
+                if (lrDef.mauSize[lu] == 0)
+                    continue;
+                lRes.m_baseResources[lu] =
+                    LaneAlloc::Carve(lpAllocator, lrDef.mauSize[lu], lrDef.mauAlign[lu],
+                                     lrDef.mpcName);
+                if (lRes.m_baseResources[lu] == 0)
+                    lbAllocOk = false;
+            }
+            if (!lbAllocOk)
+            {
+                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for rw linear "
+                                          << lrDef.mpcName << "\n";
+                continue;
+            }
+            // (LinearResourceAllocator::GetResourceDescriptor is the identity - a linear
+            // allocator keeps its bookkeeping in its own object - so the carve == the capacity.)
+            s_aRWLinearAllocators[li].Initialize(lRes, lCapacity);
+
+            mapGeneratedRWLinearAllocators[li]              = &s_aRWLinearAllocators[li];
+            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
+            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR;
+            mAllocatorList.mapRWLinearAllocators[li]        = &s_aRWLinearAllocators[li];
+            ++lNumCreated;
+        }
+
+        // ---- type-12 records: rw general resource allocators (EA GeneralAllocator pair). The
+        //      X360 service sizes the carve via GetResourceDescriptor (lane 0 grows by the
+        //      in-heap bookkeeping overhead, rounded to the lane alignment) then Initializes
+        //      with the ORIGINAL capacity - mirrored here; the drain's case 12 stores the
+        //      returned pointer. -----------------------------------------------------------
+        for (s32 li = 0; li < KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS && li < 5; ++li)
+        {
+            const MemoryMapAllocatorDef& lrDef = KAC_MEMORY_MAP_RWGENERAL_ALLOCATORS[li];
+            ++miNumAllocatorCreationRequests;
+
+            rw::BaseResourceDescriptors<5> lWanted, lCarve;
+            for (u32 lu = 0; lu < 5; ++lu)
+            {
+                lWanted.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
+                lWanted.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
+            }
+            rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lCarve, &lWanted);
+
+            rw::Resource           lRes;
+            rw::ResourceDescriptor lCapacity;
+            bool lbAllocOk = true;
+            for (u32 lu = 0; lu < 4; ++lu)
+            {
+                lCapacity.m_baseResourceDescriptors[lu].m_size      = lrDef.mauSize[lu];
+                lCapacity.m_baseResourceDescriptors[lu].m_alignment = lrDef.mauAlign[lu];
+                lRes.m_baseResources[lu] = 0;
+                if (lCarve.m_baseResourceDescriptors[lu].m_size == 0)
+                    continue;
+                lRes.m_baseResources[lu] =
+                    LaneAlloc::Carve(lpAllocator,
+                                     lCarve.m_baseResourceDescriptors[lu].m_size,
+                                     lCarve.m_baseResourceDescriptors[lu].m_alignment,
+                                     lrDef.mpcName);
+                if (lRes.m_baseResources[lu] == 0)
+                    lbAllocOk = false;
+            }
+            if (!lbAllocOk)
+            {
+                *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] alloc FAILED for rw general "
+                                          << lrDef.mpcName << "\n";
+                continue;
+            }
+            s_aRWGeneralAllocators[li].Initialize(lRes, lCapacity);
+
+            mapGeneratedRWGeneralAllocators[li]             = &s_aRWGeneralAllocators[li];
+            mAllocatorList.maiAllocatorMap[lrDef.miBankId]  = li;
+            mAllocatorList.maeAllocatorType[lrDef.miBankId] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP;
+            mAllocatorList.mapRWGeneralAllocators[li]       = &s_aRWGeneralAllocators[li];
+            ++lNumCreated;
+        }
+
+        *CgsDev::Log::gpDebugPrint << "[5c ALLOCATORS] created " << lNumCreated << " of "
+                                  << miNumAllocatorCreationRequests
+                                  << " memory-map allocators (raw "
+                                  << KI_NUM_MEMORY_MAP_RAW_ALLOCATORS << ", linear "
+                                  << KI_NUM_MEMORY_MAP_LINEAR_ALLOCATORS << ", heap "
+                                  << KI_NUM_MEMORY_MAP_HEAP_ALLOCATORS << ", rw linear "
+                                  << KI_NUM_MEMORY_MAP_RWLINEAR_ALLOCATORS << ", rw general "
+                                  << KI_NUM_MEMORY_MAP_RWGENERAL_ALLOCATORS << ")\n";
+
+        // X360 (end of the drain): the outstanding counter is zeroed and the receiver cleared
+        // once every response has been stored.
+        miNumAllocatorsCreated         = lNumCreated;   // FLAG: updater outside this fn's asm
+        miNumAllocatorCreationRequests = 0;
+        return true;
+    }
 
     void GameDataModule::Construct()
     {

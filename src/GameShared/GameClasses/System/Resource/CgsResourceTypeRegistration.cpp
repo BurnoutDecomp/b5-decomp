@@ -13,6 +13,8 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceHierarchyResourceType.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsSnrResourceType.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSchemaResourceType.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultResourceType.h"   // CgsResource::AttribSysVaultResourceType (0x1C)
+#include "GameShared/GameClasses/World/Resources/CgsWorldPainter2DResourceType.h"    // CgsResource::WorldPainter2DResourceType (0x30)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
@@ -90,8 +92,12 @@ namespace CgsResource
         TypeRegistry::Register(&sInstanceList);
         static AttribSysSchemaResourceType sAttribSysSchema;   // [game #36] 0x1B  AttribSys schema
         TypeRegistry::Register(&sAttribSysSchema);
+        static AttribSysVaultResourceType  sAttribSysVault;    // [game #37] 0x1C  AttribSys vault (WORLDVAULT/SURFACELIST)
+        TypeRegistry::Register(&sAttribSysVault);
         static ModelResourceType           sModel;             // [game #38] 0x2A  Model (serialised model)
         TypeRegistry::Register(&sModel);
+        static WorldPainter2DResourceType  sWorldPainter2D;    // [game #40] 0x30  WorldPainter2D (DISTRICTS.DAT map)
+        TypeRegistry::Register(&sWorldPainter2D);
         static PolygonSoupListResourceType sPolygonSoupList;   // [game #71] 0x43  PolygonSoupList (collision)
         TypeRegistry::Register(&sPolygonSoupList);
 

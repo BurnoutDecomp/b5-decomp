@@ -36,10 +36,17 @@ namespace rw
 // accessed by name, not by offset.]
 namespace BrnResource
 {
+    class GameDataModule;   // CreateAllocators/DestroyAllocators populate the registry
+
     namespace GameDataIO
     {
         class AllocatorList
         {
+            // The owning module's CreateAllocators (0x8266DD00) writes maiAllocatorMap /
+            // maeAllocatorType / the per-type pointer arrays directly as it builds each
+            // allocator (the X360 pokes them in-module; the DWARF lists no setters).
+            friend class ::BrnResource::GameDataModule;
+
         public:
             // Valid bank ids are 0..KI_MAX_BANK_ID (X360 GetHeapAllocator asserts id > 0x42 is out of range).
             enum { KI_MAX_BANK_ID = 0x42, KI_NUM_BANKS = 0x43 };
