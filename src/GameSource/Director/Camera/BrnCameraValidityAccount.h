@@ -15,6 +15,17 @@ namespace BrnDirector
 {
 namespace Camera
 {
+    // ADDITIVE (attested by CameraState::Clear @0x82220950, which asserts
+    // "sbFailFlagMaskSet" at BrnCameraValidityAccount.h:193 and ANDs the state's
+    // head set with the mask; DWARF names both at BrnCameraValidityAccount.h:169/
+    // :172 -- `extern bool sbFailFlagMaskSet; extern BitArray<32u> sFailFlagMask;`).
+    // Defined in BrnCameraValidityAccount.cpp. The mask CONTENTS are produced by
+    // ValidityAccount::SetupFailFlagMask @0x82221118 (not reconstructed yet --
+    // it drags the KAAC_FLAG_NAMES table + StrStream assert machinery), so the
+    // definitions carry the FLAG un-set defaults.
+    extern bool                        sbFailFlagMaskSet;   // byte_82FAA5EC
+    extern CgsContainers::BitArray<32u> sFailFlagMask;      // qword_82FAA5D0
+
     class ValidityAccount
     {
     public:

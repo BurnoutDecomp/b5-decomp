@@ -84,12 +84,13 @@ namespace BrnWorld
         // ---- lifecycle / per-frame update (all DECLARATION-ONLY, VMX-dominated) --------
 
         // BrnShadowMap.h:89, X360 0x827B43E8 (EXECUTED in goal trace). Initialise the
-        // shadow-map manager: seed the per-map cameras/frustums/matrices, the TSM info
-        // table, the debug-render options and the texture-state resource.
-        // DECLARATION-ONLY + FLAG: the body is a long VMX-laden field-splat/zero-fill
-        //   sequence over the entire aggregate plus CgsDev::DebugInterface variable
-        //   registration calls; the reconstruction rules forbid paraphrasing the VMX
-        //   pipeline to scalar. Left declaration-only.
+        // shadow-map manager: seed the render toggles, per-slot config (ortho scale /
+        // at-offset / type / enabled / cached-matrix identity), the TSM sub-frustum
+        // table, the fade/bias scalars, then register the debug-variable surface.
+        // RECONSTRUCTED in the .cpp (destub wave 2026-07-26): every store is a named-
+        // member splat (the stvx128s are 16-byte zero/identity-row stores, rendered as
+        // member assignments per the x64 semantic-parity rule) + the DebugInterface
+        // automatic-handle registration idiom.
         void Construct();
 
         // BrnShadowMap.h:93. Per-frame update entry point.
@@ -110,14 +111,15 @@ namespace BrnWorld
         // DECLARATION-ONLY (not attested by a standalone X360 body in this dossier).
         void UpdateShadowMapFocusPoint(Vector3 lv3Arg);
 
-        // ---- simple accessors (DECLARATION-ONLY: no standalone X360 body in this dossier;
-        //      trivial member getters/setters the DWARF attests but this wave's boot trace
-        //      did not execute / this dossier does not carry a body for) -------------------
+        // ---- simple accessors (inlined on console -- no standalone X360 bodies; the
+        //      ones the WorldModule render feed reads are BODIED in the .cpp, destub
+        //      wave 2026-07-26, semantics attested at the @0x827DADF8 / @0x827C96D8
+        //      call sites; the rest stay declaration-only) ---------------------------
 
         f32                  GetFarPlane() const;                          // BrnShadowMap.h:105
         // ---- ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 gates the
         //      whole shadow path on this, and reads the per-cascade cameras for the
-        //      cascade frustum queries). Declaration-only; bodies with this TU.
+        //      cascade frustum queries). Bodied in the .cpp.
         bool                 IsEnabled() const;
         const CgsGraphics::Camera* GetCascadeCamera( s32 liCascade ) const;
 

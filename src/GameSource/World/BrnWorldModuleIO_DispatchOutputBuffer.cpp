@@ -73,6 +73,15 @@ Vector4 DispatchOutputBuffer::GetFogScattering() const
     return mvFogScattering;
 }
 
+// Const fog-colour + white-level accessor (member @ +0x90). Inlined on the X360
+// at the WorldModule dispatch-feed read (no standalone export); the body mirrors
+// the attested sibling GetFogScattering @0x827BC668 read-lock shape.
+Vector4 DispatchOutputBuffer::GetFogColourPlusWhiteLevel() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return mvFogColourPlusWhiteLevel;
+}
+
 // X360 0x827BC720 -- write-lock store of the fog-scattering Vector4 (this+0xA0). Incoming Vector4
 // spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetFogScattering(rw::math::vpu::Vector4 lvFogScattering)

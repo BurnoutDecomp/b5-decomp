@@ -57,5 +57,23 @@ void DepthOfField::SetParams(f32 lfFocusStartDistanceMeters,
     mfFocusEndDistanceMeters          = lfFocusEndDistanceMeters;          // stfs f26, 0x0C
 }
 
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::DepthOfField::Construct (destub wave 2026-07-26)
+//
+// Default-initialise the focus band. INLINED on the X360: both director-camera
+// bring-up paths (Camera::Construct @0x82255E68 and Camera::Clear @0x8223CE70)
+// emit the same five raw stfs into the DOF block at camera +0x124..+0x134 --
+// flt_82004014(0.1) / flt_82004744(0.2) / flt_82004740(0.3) / flt_8200473C(0.4)
+// / 0.0 -- with NO SetParams range asserts, so this is a plain default-init.
+// ----------------------------------------------------------------------------
+void DepthOfField::Construct()
+{
+    mfFocusStartDistanceMeters        = 0.1f;   // +0x00
+    mfPerfectFocusStartDistanceMeters = 0.2f;   // +0x04
+    mfPerfectFocusEndDistanceMeters   = 0.3f;   // +0x08
+    mfFocusEndDistanceMeters          = 0.4f;   // +0x0C
+    mfBlurriness                      = 0.0f;   // +0x10
+}
+
 } // namespace Camera
 } // namespace BrnDirector

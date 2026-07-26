@@ -68,18 +68,25 @@ namespace CgsGraphics
         const CgsGeometric::Frustum& GetFrustum();
 
         // CgsGraphics::Camera::SetFovHorizontal @0x821F13B0 -- recompute the cached projection
-        // scalars from a horizontal field-of-view and rebuild the perspective projection matrix.
-        // DECLARATION-ONLY + FLAGGED: the body is a multi-stage transcendental pipeline built on
-        // XMVectorTan / XMVectorATan (both still external [todo] in this cluster) feeding the
-        // sibling CgsGraphics::Camera::UpdatePerspectiveProjectionMatrix (a separate, not-yet-landed
-        // TU). Reconstructing it would require fabricating the tan/atan VMX sequence and the
-        // projection-matrix build -- left unbodied per the no-fabrication rule.
-        // ---- ADDITIVE (attested by BrnGraphics::EnvironmentMap @0x827B40D0/
-        //      0x827B4218/0x827B4268, which drives the six cube-face cameras) ----
-        // Declaration-only; bodies land with the Camera TU (per-TU compile gate).
+        // scalars from a horizontal field-of-view (RADIANS) and rebuild the perspective
+        // projection matrix. BODIED in CgsCamera.cpp (destub wave 2026-07-26): the DWARF scalar
+        // names (m_fovHorizontal / m_(oneOver)TanHalfFov* / m_fovVertical / m_aspectRatio) pin
+        // every store; the XMVectorTan/XMVectorATan polynomial pair is lowered to tanf/atanf
+        // per the ICEMath.cpp precedent (FLAG there: poly table un-recovered, libm equivalent).
+        //
+        // ---- Construct family (X360): the DWARF (CgsCamera.h:59/:66/:78) declares BOTH the
+        //      no-arg Construct() and Construct(f32,f32,f32,f32), plus Release(). The 4-arg
+        //      body is @0x827F0A08 (aspect/near/far stores + identity view + SetFovHorizontal
+        //      tail call); the no-arg Construct()/Release() pair ICF-fold to one X360 body
+        //      @0x827F94E8 that forwards the KF_DEFAULT_* camera defaults. All bodied in
+        //      CgsCamera.cpp. ----
         void Construct();
+        // ADDITIVE overload (DWARF CgsCamera.h:66, X360 @0x827F0A08).
+        void Construct(f32 lfFovHorizontal, f32 lfAspectRatio, f32 lfNearClipPlane, f32 lfFarClipPlane);
         // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage 1 clears the cached
-        // camera input). Declaration-only; body with the Camera TU.
+        // camera input). Declaration-only; body with the Camera TU. FLAG: no DWARF
+        // Clear() member and no identified X360 body -- referencing site not yet
+        // reconciled (see WorldLinkStubs.cpp).
         void Clear();
         void Release();
         void LookAt(rw::math::vpu::Vector3 lEyePosition,
@@ -124,7 +131,12 @@ namespace CgsGraphics
         const Matrix44& GetViewProjectionMatrix() const { return mViewProjection; }
 
         // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
-        // Declaration-only; bodies with the camera TU.
+        // Bodied in CgsCamera.cpp. FLAG: the DWARF Camera has NO GetPosition/
+        // GetDirection members -- the X360 call sites read the DIRECTOR camera's
+        // transform rows (+0x30/+0x20) directly; these PC-additive accessors return
+        // the same values derived from the orthonormal view matrix this camera was
+        // built from (LookAt/CopyToCgsCamera), so the committed WorldModule call
+        // shape keeps X360 semantics.
         Vector3 GetPosition() const;
         Vector3 GetDirection() const;
         // The renderer's half-texel/viewport-adjusted view-projection (X360
@@ -140,11 +152,18 @@ namespace CgsGraphics
         Matrix44 mProjection;
         // +0x80..0xBF -- combined view*projection transform.
         Matrix44 mViewProjection;
-        // +0xC0..0x13F -- sixteen f64 of clip/derived state (un-named: no field access in this TU).
+        // +0xC0..0x13F -- DWARF (CgsCamera.h:206): `Matrix44_64 m_viewMatrix_64bit`, the
+        // DOUBLE-precision view matrix (row-major 4x4 of f64). LookAt @0x827F9510 builds the
+        // view in double precision here, then narrows it into mView. Kept as the flat f64[16]
+        // span (row-major: element [row*4 + col]) to preserve the committed layout pins.
         f64      maClipState[16];
-        // +0x140..0x163 -- cached projection scalars (the 0x140 block SetFovHorizontal writes:
-        // fov, per-axis tangent + reciprocal-tangent terms, aspect). Nine floats are copied by the
-        // ctor/operator= (through +0x160); the 9th lands the copied tail at +0x160.
+        // +0x140..0x163 -- cached projection scalars. DWARF names (CgsCamera.h:209-219):
+        //   [0] m_fovHorizontal              [1] m_oneOverTanHalfFovHorizontal
+        //   [2] m_tanHalfFovHorizontal       [3] m_fovVertical
+        //   [4] m_oneOverTanHalfFovVertical  [5] m_tanHalfFovVertical
+        //   [6] m_aspectRatio                [7] m_nearClipPlane
+        //   [8] m_farClipPlane
+        // (kept as the committed flat span -- the ShadowMap TU already pins [7]/[8] by index).
         f32      maProjectionScalars[9];
 
         // Pad to the 368-byte (0x170) attested sizeof / 16-byte alignment (copied tail +0x160 + 4

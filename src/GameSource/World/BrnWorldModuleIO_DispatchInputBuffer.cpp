@@ -177,4 +177,18 @@ void DispatchInputBuffer::SetRenderSwitches(const RendererIO::RenderSwitches& lr
     mRenderSwitches = lrSwitches;
 }
 
+// Read-lock handle to the embedded per-frame render switches (this+0x198). The world
+// render feeds (WorldModule::GenerateFrustumQueries @0x827DADF8 / GenerateDispatchLists
+// @0x827D1CE8 / GenerateShadowMapDispatchLists @0x827C96D8) call this out-of-line and
+// index the returned byte block ([0] shadow map .. [5] traffic); the body shape matches
+// the attested sibling RendererIO::OutputBuffer::GetRenderSwitches @0x823B3FE0
+// (read-lock assert + return &switches). The nested RenderSwitches POD is the additive
+// consumer-side view of the same 6-bool block (see the header's consolidation FLAG);
+// the cast is layout-exact by construction.
+const DispatchInputBuffer::RenderSwitches* DispatchInputBuffer::GetRenderSwitches() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const RenderSwitches*>(&mRenderSwitches);
+}
+
 }   // namespace BrnWorldIO

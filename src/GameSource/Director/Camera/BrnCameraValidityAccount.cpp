@@ -10,6 +10,14 @@ namespace BrnDirector
 namespace Camera
 {
 
+// The fail-flag mask pair CameraState::Clear/Construct consume (DWARF
+// BrnCameraValidityAccount.h:169/:172; X360 byte_82FAA5EC / qword_82FAA5D0).
+// FLAG: the producing SetupFailFlagMask @0x82221118 is not reconstructed yet, so
+// these carry the pre-setup defaults (flag unset, mask zero) -- exactly the X360
+// zero-initialised .bss state before SetupFailFlagMask runs.
+bool                         sbFailFlagMaskSet = false;
+CgsContainers::BitArray<32u> sFailFlagMask     = {};
+
 // @ 0x82204028 -- range-check the failure reason (h:219; the streamed
 // CgsBitArray.h:222 index guard folded static per convention), then raise its bit
 // in the u64-backed set (the X360 inlines the BitArray 64-bit-field SetBit).

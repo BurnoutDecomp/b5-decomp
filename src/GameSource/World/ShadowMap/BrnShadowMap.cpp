@@ -1,7 +1,11 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SnPrintf (Construct's per-CSM debug paths)
 #include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h" // CgsNumeric::Min (CalcOptimisedLod)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // Construct's debug-variable registration
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"           // CgsDev::DebugUI::StringList (type options)
+#include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"    // ShaderConstantTable (SetConstantsForEnvmap)
 
 #include <cmath>     // std::sqrt (ComputeTSMMatrix -- vrsqrtefp + 2x NR de-optimised exact)
 #include <cstring>   // memcpy (the 128-byte frustum copy at 0x827C1274)
@@ -31,6 +35,11 @@ namespace rw { namespace math { namespace vpu {
     // r5 = &determinant-out).
     Matrix44 Inverse(const Matrix44& lrMatrix, Vector4& lrDeterminant);
 } } }
+
+// The global runtime shader-constant register (X360 symbol mShaderConstantTable;
+// same per-TU extern idiom as BrnWorldModule.cpp -- the defining home lands with
+// the shader TU). SetConstantsForEnvmap stages c15/c16 through it.
+namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
 namespace BrnWorld
 {
@@ -93,6 +102,242 @@ namespace BrnWorld
 
         const f32 lfModifier = KA_SHADOWMAP_LOD_DISTANCE_MODIFIER[muCurrentShadowMap];
         return VecFloat{ lfModifier, lfModifier, lfModifier, lfModifier };
+    }
+
+    // ========================================================================
+    // Construct-time configuration constants (DWARF globals block, BrnShadowMap.cpp
+    // :7..:61 -- names are the DWARF ground truth). The SCALAR values are recovered
+    // from the X360 Construct asm (the pseudocode resolves the float immediates);
+    // the per-slot ARRAYS live in un-dumped rodata (IDA exports carry no data --
+    // see [[ida-exports-no-data]]), carried as honest zeros per the project
+    // convention (same as KA_SHADOWMAP_LOD_MODIFIER above).
+    // ========================================================================
+    const f32 KF_SHADOWMAP_NEAR_PLANE_OFFSET = -450.0f;  // flt_820CA850 (@0x827B4468 -> +0x14D0)
+    const f32 KF_SHADOWMAP_FAR_PLANE_OFFSET  = 650.0f;   // flt_820CA854 (@0x827B4488 -> +0x14D4)
+    const f32 KF_SHADOWMAP_EYE_OFFSET        = 450.0f;   // flt_820CA858 (@0x827B4490 -> +0x14D8)
+    const f32 KF_FADE_START_DISTANCE         = 30.0f;    // @0x827B468C -> +0x14F0
+    const f32 KF_SHADOWMAP_FADE_TO_VALUE     = 0.825f;   // @0x827B46A8 -> +0x1518
+    const f32 KF_DYNAMIC_FAR_CLIP_OFFSET     = 10.0f;    // @0x827B46A4 -> +0x1514
+    const f32 KF_VARIABLE_BIAS_MIN           = 0.51f;    // 0x3F028F5C  -> +0x1520
+    const f32 KF_BIAS_FRUSTUM_LENGTH         = 500.0f;   // @0x827B46C0 -> +0x1524
+
+    // FLAG: rodata not recovered (values live in the un-dumped 0x820CA81C..0x820CA8A4
+    // block the Construct loops index; the names/extents are DWARF-attested).
+    const BrnWorld::ShadowMapType KA_SHADOWMAPTYPE[KU_NUM_SHADOW_MAPS] =
+        { E_SHADOWMAP_TYPE_ORTHO, E_SHADOWMAP_TYPE_ORTHO, E_SHADOWMAP_TYPE_ORTHO };  // dword_820CA81C -- FLAG: rodata not recovered
+    const f32 KAF_ORTHO_SCALE[KU_NUM_SHADOW_MAPS]                      = { 0.0f, 0.0f, 0.0f }; // flt_820CA870 -- FLAG: rodata not recovered
+    const f32 KAF_CENTRE_AT_OFFSET[KU_NUM_SHADOW_MAPS]                 = { 0.0f, 0.0f, 0.0f }; // flt_820CA87C -- FLAG: rodata not recovered
+    const f32 KAF_SHADOWMAP_SUBSET_FRUSTUM_NEAR_CLIP[KU_NUM_SHADOW_MAPS] = { 0.0f, 0.0f, 0.0f }; // flt_820CA88C -- FLAG: rodata not recovered
+    const f32 KAF_SHADOWMAP_SUBSET_FRUSTUM_FAR_CLIP[KU_NUM_SHADOW_MAPS]  = { 0.0f, 0.0f, 0.0f }; // flt_820CA898 -- FLAG: rodata not recovered
+
+    // DWARF BrnShadowMap.cpp:10 -- `const StringList[5] KA_SHADOWMAP_TYPE_OPTIONS`
+    // (unk_820CA828), the option table Construct binds to each per-CSM "Type"
+    // variable. FLAG: rodata (the four names + terminator) not recovered.
+    const CgsDev::DebugUI::StringList KA_SHADOWMAP_TYPE_OPTIONS[5] =
+    {
+        { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },  // FLAG: rodata not recovered
+    };
+
+    // ========================================================================
+    // BrnWorld::ShadowMap::Construct @ 0x827B43E8
+    //
+    // Initialise the shadow-map manager: seed the render toggles, the per-slot
+    // configuration (ortho scale / centre-at offset / type / enabled + the
+    // cached-matrix identity), the TSM sub-frustum table, the fade/bias tuning
+    // scalars, then register the whole debug-variable surface under
+    // "World\ShadowMap" (the CgsDev::DebugInterface automatic-handle idiom --
+    // the X360 inlines the manager assert + critical-section enter/leave that
+    // the committed DebugInterface default ctor / scope-exit models; same
+    // rendering as WorldEntityModule::Construct @0x82302398).
+    //
+    // Every store below is asm-attested (r28 == 0 / r11 == 1 byte stores; the
+    // float immediates resolved by the dossier pseudocode). Notably NOT
+    // initialised by this body: muCurrentShadowMap (+0x14F4), mpTextureState /
+    // mTextureStateParams / mTextureStateResource, mfNDotLFallOffCutoffWorld /
+    // mfNDotLFallOffScaleWorld, and the camera/frustum aggregates themselves.
+    // ========================================================================
+    void ShadowMap::Construct()
+    {
+        // ---- render toggles + tuning scalars (0x827B4434..0x827B44E0) -------
+        mbRenderTrafficIntoShadowMap  = false;                        // stb r28, 0x14FB
+        mbRenderShadowMapView         = true;                         // stb r11, 0x14F8
+        mbRenderWorldIntoShadowMap    = true;                         // stb r11, 0x14F9
+        mfShadowMapNearPlane          = KF_SHADOWMAP_NEAR_PLANE_OFFSET; // stfs 0x14D0
+        mbRenderRaceCarsIntoShadowMap = true;                         // stb r11, 0x14FA
+        mShadowMapFocusPoint.SetZero();                   // stvx128 zero @+0x14E0
+        mbRenderMultipleShadowMaps    = true;                         // stb r11, 0x14FC
+        mfShadowMapFarPlane           = KF_SHADOWMAP_FAR_PLANE_OFFSET; // stfs 0x14D4
+        mbRenderPropsIntoShadowMap    = true;                         // stb r11, 0x14FD
+        mfEyeOffset                   = KF_SHADOWMAP_EYE_OFFSET;      // stfs 0x14D8
+        mfIdealAspectRatio            = 2.0f;                         // flt_82001D9C, stfs 0x1508
+        mbRenderPropsNearOnly         = false;                        // stb r28, 0x14FE
+        mbRenderTrafficNearOnly       = false;                        // stb r28, 0x14FF
+        mbRenderRaceCarsNearOnly      = false;                        // stb r28, 0x1500
+        mbRenderingShadowMap          = false;                        // stb r28, 0(this)
+        mbUseZOnlyRenderingPath       = true;                         // stb r11, 1(this)
+        mbOptimiseForIdealAspectRatio = true;                         // stb r11, 0x1505
+        mbShowLightFrustumInDebugRender = false;                      // stb r28, 0x1504
+
+        // ---- per-slot configuration (loop @0x827B4524..0x827B45E0) ----------
+        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+        {
+            mafShadowMapOrthoScale[luMap] = KAF_ORTHO_SCALE[luMap];       // stfs -0xC(r8)
+            mafShadowMapAtOffset[luMap]   = KAF_CENTRE_AT_OFFSET[luMap];  // stfs 0(r8)
+            maShadowMapTypes[luMap]       = KA_SHADOWMAPTYPE[luMap];      // stw 0x194(r8)
+            mabMapEnabled[luMap]          = true;                         // stb r11, 0(r7)
+
+            // maCachedMatrix[luMap] = the identity basis with a ZERO fourth row
+            // (the four stvx128 @r9-0x20/-0x10/+0/+0x10, stride 0x40): rows
+            // {1,0,0,0} {0,1,0,0} {0,0,1,0} {0,0,0,0} exactly as stored.
+            maCachedMatrix[luMap].xAxis = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+            maCachedMatrix[luMap].yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+            maCachedMatrix[luMap].zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
+            maCachedMatrix[luMap].wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        }
+
+        mbUpdateDebugRender = true;                                   // stb r11, 0x1501
+        mbUpdateTsmCamera   = true;                                   // stb r11, 0x1502
+        mCachedOffsetWorld.SetZero();                     // stvx128 zero @+0x940
+
+        // ---- TSM sub-frustum table (loop @0x827B4638..0x827B465C) -----------
+        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+        {
+            maTsmBBInfo[luMap].mfNearClip      = KAF_SHADOWMAP_SUBSET_FRUSTUM_NEAR_CLIP[luMap]; // stfs -4(r10)
+            maTsmBBInfo[luMap].mfFarClip       = KAF_SHADOWMAP_SUBSET_FRUSTUM_FAR_CLIP[luMap];  // stfs 0(r10)
+            maTsmBBInfo[luMap].mbInvertCullMode = true;               // stb r11, 0x23C(r10)
+            maTsmBBInfo[luMap].mfTsmSlideBack  = -0.6f;               // flt_820BC9D4, stfs 0x30C(r10)
+            maTsmBBInfo[luMap].mbDebugRender   = false;               // stb r28, 0x310(r10)
+        }
+
+        mbPreferShortAndFatProjection = true;                         // stb r11, 0x1503
+        mbDynamicFarClipPlane         = false;                        // stb r28, 0x151C
+        mfFadeStartDistance           = KF_FADE_START_DISTANCE;       // stfs 0x14F0
+        mfDynamicFarClipOffset        = KF_DYNAMIC_FAR_CLIP_OFFSET;   // stfs 0x1514
+        mfShadowFadeToValue           = KF_SHADOWMAP_FADE_TO_VALUE;   // stfs 0x1518
+        mfVariableBiasMin             = KF_VARIABLE_BIAS_MIN;         // stw 0x3F028F5C -> 0x1520
+        mfBiasFrustumLength           = KF_BIAS_FRUSTUM_LENGTH;       // stfs 0x1524
+
+        // ---- debug-variable registration (0x827B46CC..0x827B4938) -----------
+        // The automatic DebugInterface handle = the inlined DebugManager
+        // singleton-assert + DebugCriticalSection Enter/Leave pair.
+        {
+            CgsDev::DebugInterface lDebugInterface;
+            char lacPath[64];   // the SnPrintf scratch (v76, 64 bytes)
+
+            lDebugInterface.RegisterVariable( &mbUseZOnlyRenderingPath,      "World\\ShadowMap", "Z-only rendering" );
+            lDebugInterface.RegisterVariable( &mbRenderShadowMapView,        "World\\ShadowMap", "Render Shadow map" );
+            lDebugInterface.RegisterVariable( &mbRenderWorldIntoShadowMap,   "World\\ShadowMap", "Cast shadows from world" );
+            lDebugInterface.RegisterVariable( &mbRenderRaceCarsIntoShadowMap,"World\\ShadowMap", "Cast shadows from cars" );
+            lDebugInterface.RegisterVariable( &mbRenderTrafficIntoShadowMap, "World\\ShadowMap", "Cast shadows from traffic" );
+            lDebugInterface.RegisterVariable( &mbRenderPropsIntoShadowMap,   "World\\ShadowMap", "Cast shadows from props" );
+            lDebugInterface.RegisterVariable( &mfFadeStartDistance,          "World\\ShadowMap", "Fade start distance" );
+            lDebugInterface.RegisterVariable( &mbRenderMultipleShadowMaps,   "World\\ShadowMap", "Render multiple shadow maps (CSM)" );
+
+            for (u32 luCsm = 0; luCsm < KU_NUM_SHADOW_MAPS; ++luCsm)
+            {
+                CgsCore::SnPrintf( lacPath, 63, "World\\ShadowMap\\CSM %d", luCsm );
+                lDebugInterface.RegisterVariable( &mafShadowMapAtOffset[luCsm],   lacPath, "Offset" );
+                lDebugInterface.RegisterVariable( &mafShadowMapOrthoScale[luCsm], lacPath, "Scale" );
+                lDebugInterface.RegisterVariable( &mabMapEnabled[luCsm],          lacPath, "Enabled" );
+            }
+
+            lDebugInterface.RegisterVariable( &mfShadowMapNearPlane, "World\\ShadowMap", "Near plane offset" );
+            lDebugInterface.SetStep( &mfShadowMapNearPlane, 1.0f );
+            lDebugInterface.RegisterVariable( &mfShadowMapFarPlane, "World\\ShadowMap", "Far plane offset" );
+            lDebugInterface.SetStep( &mfShadowMapFarPlane, 5.0f );
+            lDebugInterface.RegisterVariable( &mbDynamicFarClipPlane,  "World\\ShadowMap", "Dynamic far clip plane" );
+            lDebugInterface.RegisterVariable( &mfDynamicFarClipOffset, "World\\ShadowMap", "Dynamic far clip offset" );
+            lDebugInterface.RegisterVariable( &mfEyeOffset, "World\\ShadowMap", "Eye offset" );
+            lDebugInterface.SetStep( &mfEyeOffset, 5.0f );
+            lDebugInterface.RegisterVariable( &mbRenderRaceCarsNearOnly, "World\\ShadowMap", "RaceCars Near Shadowmap Only" );
+            lDebugInterface.RegisterVariable( &mbRenderTrafficNearOnly,  "World\\ShadowMap", "Traffic Near Shadowmap Only" );
+            lDebugInterface.RegisterVariable( &mbRenderPropsNearOnly,    "World\\ShadowMap", "Props Near Shadowmap Only" );
+            lDebugInterface.RegisterVariable( &mfVariableBiasMin, "World\\ShadowMap", "Variable bias min" );
+            lDebugInterface.SetStep( &mfVariableBiasMin, 0.05f );
+            lDebugInterface.RegisterVariable( &mfBiasFrustumLength, "World\\ShadowMap", "Bias frustum length" );
+            lDebugInterface.SetStep( &mfBiasFrustumLength, 10.0f );
+            lDebugInterface.RegisterVariable( &mbUpdateDebugRender,          "World\\ShadowMap\\BB,TSM", "Update DebugRender" );
+            lDebugInterface.RegisterVariable( &mbUpdateTsmCamera,            "World\\ShadowMap\\BB,TSM", "Update TSM Camera" );
+            lDebugInterface.RegisterVariable( &mbPreferShortAndFatProjection,"World\\ShadowMap\\BB,TSM", "Prefer short and fat projection" );
+            lDebugInterface.RegisterVariable( &mbOptimiseForIdealAspectRatio,"World\\ShadowMap\\BB,TSM", "Optimise for ideal aspect ratio" );
+            lDebugInterface.RegisterVariable( &mfIdealAspectRatio, "World\\ShadowMap\\BB,TSM", "Ideal aspect ratio" );
+            lDebugInterface.SetStep( &mfIdealAspectRatio, 0.1f );
+            lDebugInterface.RegisterVariable( &mfShadowFadeToValue, "World\\ShadowMap", "Fade to value" );
+            lDebugInterface.SetStep( &mfShadowFadeToValue, 0.025f );
+            lDebugInterface.SetRange( &mfShadowFadeToValue, 0.0f, 1.0f );
+            lDebugInterface.RegisterVariable( &mbShowLightFrustumInDebugRender, "World\\ShadowMap\\BB,TSM", "Show light frustum (DR)" );
+
+            for (u32 luCsm = 0; luCsm < KU_NUM_SHADOW_MAPS; ++luCsm)
+            {
+                CgsCore::SnPrintf( lacPath, 63, "World\\ShadowMap\\BB,TSM\\CSM %d", luCsm );
+                // The per-slot type is registered through the s32 mirror (the X360
+                // 0x8282E3B8 overload); ShadowMapType is the 4-byte enum slot.
+                lDebugInterface.RegisterVariable( reinterpret_cast<s32*>( &maShadowMapTypes[luCsm] ), lacPath, "Type" );
+                lDebugInterface.SetOptions( reinterpret_cast<s32*>( &maShadowMapTypes[luCsm] ), KA_SHADOWMAP_TYPE_OPTIONS );
+                lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mfFarClip,  lacPath, "Subfrustum Far Clip" );
+                lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mfNearClip, lacPath, "Subfrustum Near Clip" );
+                lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mbInvertCullMode, lacPath, "Invert cull mode" );
+                lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mfTsmSlideBack, lacPath, "TSM slideback" );
+                lDebugInterface.SetStep( &maTsmBBInfo[luCsm].mfTsmSlideBack, 0.05f );
+                lDebugInterface.RegisterVariable( &maTsmBBInfo[luCsm].mbDebugRender, lacPath, "DebugRender" );
+            }
+        }
+    }
+
+    // ========================================================================
+    // Inlined-on-console accessors. None of these has a standalone X360 body;
+    // each is the member read/write the callers inline (semantics attested at
+    // WorldModule::GenerateFrustumQueries @0x827DADF8 and WorldModule::
+    // GenerateShadowMapDispatchLists @0x827C96D8 -- the offsets in the comments
+    // are the console loads/stores those bodies perform on the embedded
+    // ShadowMap at WorldModule+6170336).
+    // ========================================================================
+
+    // @0x827DADF8: the whole shadow path gates on the byte at ShadowMap+0x14F8
+    // (mbRenderShadowMapView -- the "Render Shadow map" debug toggle).
+    bool ShadowMap::IsEnabled() const                    { return mbRenderShadowMapView; }
+
+    // @0x827DADF8 / @0x827C96D8: the per-cascade camera the frustum queries and
+    // the dispatch feed read (viewproj rows @ +0x430 + 0x170*i + 0x80 ==
+    // maCgsShadowMapCamera[i].mViewProjection).
+    const CgsGraphics::Camera* ShadowMap::GetCascadeCamera( s32 liCascade ) const
+    {
+        return &maCgsShadowMapCamera[liCascade];
+    }
+
+    // @0x827C96D8: `*(ShadowMap+0x14F4) = luCascade` at the top of each cascade pass.
+    void ShadowMap::SetCurrentCascadeIndex( u32 luCascade ) { muCurrentShadowMap = luCascade; }
+
+    // @0x827C96D8: `*(ShadowMap+0) = 1` before the cascade dispatch (and the
+    // matching clear on exit) -- the latch WorldEntityModule::GenerateDispatchLists
+    // reads back through IsRenderingShadowMap.
+    void ShadowMap::SetRenderingShadowMap( bool lbValue ) { mbRenderingShadowMap = lbValue; }
+
+    // @0x827C96D8 (byte reads on the toggle block at +0x14F9..+0x1500).
+    bool ShadowMap::GetRenderWorldIntoShadowMap() const    { return mbRenderWorldIntoShadowMap; }
+    bool ShadowMap::GetRenderRaceCarsIntoShadowMap() const { return mbRenderRaceCarsIntoShadowMap; }
+    bool ShadowMap::GetRenderTrafficIntoShadowMap() const  { return mbRenderTrafficIntoShadowMap; }
+    bool ShadowMap::GetRenderMultipleShadowMaps() const    { return mbRenderMultipleShadowMaps; }
+    bool ShadowMap::GetRenderPropsIntoShadowMap() const    { return mbRenderPropsIntoShadowMap; }
+    bool ShadowMap::GetRenderPropsNearOnly() const         { return mbRenderPropsNearOnly; }
+    bool ShadowMap::GetRenderTrafficNearOnly() const       { return mbRenderTrafficNearOnly; }
+    bool ShadowMap::GetRenderRaceCarsNearOnly() const      { return mbRenderRaceCarsNearOnly; }
+
+    // ========================================================================
+    // BrnWorld::ShadowMap::SetConstantsForEnvmap @ 0x827C1AD0
+    //
+    // Stage the two environment-map shadow constants: c15 = {5,5,5,1} (the
+    // env-map shadow tint/attenuation vector, flt_8200426C == 5.0 splat with a
+    // 1.0 w) and c16 = {5, 1, mfBiasFrustumLength / (far - near), 0.2} -- the
+    // bias term rides lane 2 (the vrefp + NR reciprocal of the +0x14D4-0x14D0
+    // plane span, de-optimised exact).
+    // ========================================================================
+    void ShadowMap::SetConstantsForEnvmap()
+    {
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 15u, Vector4{ 5.0f, 5.0f, 5.0f, 1.0f } );
+
+        const f32 lfBias = mfBiasFrustumLength / ( mfShadowMapFarPlane - mfShadowMapNearPlane );
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 16u, Vector4{ 5.0f, 1.0f, lfBias, 0.2f } );
     }
 
     // ========================================================================
