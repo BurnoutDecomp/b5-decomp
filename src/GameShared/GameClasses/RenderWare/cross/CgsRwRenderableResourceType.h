@@ -14,14 +14,23 @@ struct RenderableMesh;
 
 namespace CgsResource
 {
-    // The fix-up relocation block FixUp/FixUpRenderableMesh are handed (a3): two relocation
-    // deltas read by index -- [0] relocates serialised pointers to their loaded base,
-    // [2] is added to each GPU buffer header's base-address word. Modelled by name.
+    // The fix-up relocation block FixUp/FixUpRenderableMesh are handed. On the X360 this IS the
+    // rw::Resource view Pool::FixUpEntry (@0x828EB860) builds on its stack -- five words seeded
+    // { small[0] (main memory), 0, small[1] (graphics memory), 0, 0 } -- and the two bodies read
+    // it as `*a3` and `a3[2]`. Named here so the two deltas are used by role:
+    //   muPointerBase  == rw::Resource::m_baseResources[0], added to every serialised pointer
+    //                     slot inside the resource. WIDENED to host width: the converted
+    //                     platform-4 blob carries 8-byte pointer slots (the X360 delta is 32-bit
+    //                     only because its pointers are).
+    //   muBufferOffset == rw::Resource::m_baseResources[2] (= the resource's GRAPHICS block,
+    //                     bundle memory type 1 -- SmallResource::ConvertToRWResource maps
+    //                     small[1] -> rw[2]), folded into each GPU buffer header's base-address
+    //                     word. Stays 32-bit: muBaseAddress is a console u32 slot, resolved
+    //                     through the project's low-4 GB reservation.
     struct RwRenderableFixUpData
     {
-        u32 muPointerBase;   // +0  (a3[0]) added to serialised buffer-header pointers
-        u32 muField04;       // +4  (a3[1])
-        u32 muBufferOffset;  // +8  (a3[2]) added to each buffer header's base-address word
+        uintptr_t muPointerBase;   // a3[0]  serialised-pointer relocation base (host width)
+        u32       muBufferOffset;  // a3[2]  GPU buffer-block base (console u32 slot)
     };
 
     // One serialised renderable mesh the PS3/Xbox2 fix-up walks.
@@ -59,6 +68,14 @@ class RwRenderableResourceType : public Type
 {
 public:
     uint32_t GetTypeID() const override;
+
+    // @0x828A9498 -- override (X360 vtable slot #4). Relocates the whole serialised renderable
+    // graph to its loaded base: the mesh pointer table, the object-scope texture-info block
+    // (its three interior tables + every texture-name string pointer), then each mesh pointer,
+    // handing every mesh to FixUpRenderableMesh. Ends by setting the "fixed up" bit (8) in
+    // mu16Flags. Without this override nothing in a streamed renderable is walkable.
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
+
     void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
     void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
     bool     DebugValidate(const void* lpResource) const override;

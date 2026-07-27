@@ -601,16 +601,39 @@ namespace CgsResource
 
         Pool*  lpOutPool = 0;
         Entry* lpFound   = FindResourceWithDependencies(lpImport->mResourceId, &lpOutPool, true, 3, 0);
-        void** lppDest   = reinterpret_cast<void**>(static_cast<char*>(lpEntry->mResource.m_baseResources[0]) + lpImport->muOffset);
+
+        // SEAM (x64 serialised-pointer width). The console stores a 32-BIT pointer at the
+        // import offset. The ported data uses BOTH widths: the world resources whose
+        // consumers keep the console layout (CgsGraphics::Model, InstanceList, Material,
+        // MaterialTechnique...) hold 4-BYTE slots resolved through the project's low-4 GB
+        // reservation (Ptr32<T> / PointerFromU32 -- see CgsModel.h / CgsInstance.h), while
+        // the deliberately widened graphs (the Renderable mesh table) and the GUI/Apt banks
+        // hold 8-BYTE slots. A blanket 8-byte store overruns every 4-byte slot and clobbers
+        // the NEXT field: CgsGraphics::Model's three renderable imports sit at +0x14/+0x18/
+        // +0x1C, so the third store wiped the first four bytes of mpu8StateRenderableIndices
+        // at +0x20 and collapsed every LOD state onto renderable 0.
+        //
+        // The address itself is the discriminator, and it is exact: a 4-byte slot can only
+        // ever hold a sub-4 GB pointer, so a target ABOVE 4 GB must be in a widened slot and
+        // needs the full store. Below 4 GB the low-half store is right for BOTH widths --
+        // import slots are serialised-null, so a widened slot's high half is already zero.
+        char* lpSlot = static_cast<char*>(lpEntry->mResource.m_baseResources[0]) + lpImport->muOffset;
 
         if (lpFound != 0)
         {
             CGS_ASSERT(lpFound->mResource.m_baseResources[0] != 0, "Entry to import is NULL - this is insane!\n");   // :1766
-            *lppDest = lpFound->mResource.m_baseResources[0];
+            void* const     lpTarget  = lpFound->mResource.m_baseResources[0];
+            const uintptr_t luTarget  = reinterpret_cast<uintptr_t>(lpTarget);
+            if ((luTarget >> 32) != 0)
+                *reinterpret_cast<void**>(lpSlot) = lpTarget;                  // widened slot
+            else
+                *reinterpret_cast<u32*>(lpSlot) = static_cast<u32>(luTarget);  // console slot
             return true;
         }
 
-        *lppDest = 0;
+        // Unresolved: null the slot. Narrow store only -- a widened slot's high half is
+        // already zero and a 4-byte slot must not be overrun.
+        *reinterpret_cast<u32*>(lpSlot) = 0;
         // [FLAG PC boot gate] The console always has every dependency bundle resident, so this
         // is an assert there. On this build the world bundles are being brought up one at a
         // time (COMMONDATA/SHADERS staging is still in flight), so a cross-bundle import can

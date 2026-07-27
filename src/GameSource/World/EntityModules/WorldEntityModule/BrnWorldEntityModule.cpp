@@ -42,6 +42,8 @@
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
 
+#include <cmath>   // sqrtf (the [FLAG PC bring-up] loaded-world bounds helper)
+
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // bodied by the CgsShaderConstants TU). Slot 0 holds the per-draw world transform.
 namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
@@ -1659,10 +1661,18 @@ WorldEntityModule::RenderInstance(
     }
     else
     {
+        // CORRECTED (world-pixels wave 2026-07-28) to AddToBin's asm-attested arg roles
+        // (renderer_wave_log.md: renderable, frame, rebuildDirty, OPAQUE LIST s8,
+        // TECHNIQUE s8, frustumEnable, TRANSPARENT LIST u8, zOnly, preZList,
+        // preZTechnique, instanceCount, excludeBits). The previous mapping put liSortKey
+        // in the technique slot and the LOD technique in the transparent-list slot, so a
+        // transparent world mesh would have been routed into mesh list 0/1/2 -- the
+        // SHADOW cascades. liSortLayer/liSortKey are the world opaque/transparent mesh
+        // list ids (11/15); the LOD technique picked above is the technique byte.
         CgsGraphics::DrawRenderable::AddToBin(
             lpRenderable, lpDispatchFrame, lbFirstInList,
-            static_cast<s8>( liSortLayer ), static_cast<s8>( liSortKey ),
-            1, luTechnique, false, 0, 1, 0, 0 );
+            static_cast<s8>( liSortLayer ), static_cast<s8>( luTechnique ),
+            1, static_cast<u8>( liSortKey ), false, 0, 1, 0, 0 );
     }
 
     lpDispatchList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
@@ -1812,6 +1822,153 @@ WorldEntityModule::GenerateDispatchLists(
     }
 
     lpInputBuffer->UnlockForRead();
+}
+
+// =============================================================================
+// [FLAG PC bring-up] GenerateDispatchListsFromStreamer -- NOT an X360 function.
+//
+// The real feed above consumes the scene manager's frustum-test result. On this
+// build SceneManagerModule::UpdateScene / InSceneUpdateInterface::Append are inert
+// gates, so no world entity is ever registered and the visible list is always
+// empty. This walks the streamer's loaded instance lists directly -- exactly the
+// instances OnWorldGraphicsLoadComplete would have registered -- and dispatches each
+// through the REAL RenderInstance. No culling beyond the instance's own
+// mfMaxDrawDistanceSq (the frustum test is what is missing).
+// DELETE when the scene manager's frustum query is live.
+// =============================================================================
+void
+WorldEntityModule::GenerateDispatchListsFromStreamer(
+    CgsGraphics::DispatchFrame* lpDispatchFrame,
+    const ShaderLodInfo* lpShaderLodInfo,
+    Vector3::InParam lCameraPosition,
+    f32 lfDrawDistanceScale,
+    s32 liList,
+    s32 liSortLayer,
+    s32 liSortKey )
+{
+    if ( lpDispatchFrame == 0 || lpShaderLodInfo == 0 )
+    {
+        return;
+    }
+
+    const f32 lfInvScaleSq = 1.0f / ( lfDrawDistanceScale * lfDrawDistanceScale );
+
+    for ( s32 liSlot = 0; liSlot < WorldGraphicsStreamer::KI_MAX_INSTANCE_LISTS; liSlot++ )
+    {
+        if ( !mWorldGraphicsStreamer.IsListLoaded( liSlot ) )
+        {
+            continue;
+        }
+
+        CgsGraphics::InstanceList* lpList = mWorldGraphicsStreamer.GetInstanceList( liSlot );
+        if ( lpList == 0 )
+        {
+            continue;
+        }
+
+        siCurrentTrackUnitIndex = liSlot;
+
+        // [0, muNumInstances) are the real entries; the tail is the backdrop
+        // stand-in set the world module swaps in for unloaded neighbours.
+        for ( u32 luInstance = 0; luInstance < lpList->muNumInstances; luInstance++ )
+        {
+            CgsGraphics::Instance* lpInstance = lpList->GetInstance( luInstance );
+            if ( lpInstance == 0 || lpInstance->mpModel == 0 )
+            {
+                continue;
+            }
+
+            const f32 lfScaledDistanceSq =
+                rw::math::vpu::MagnitudeSquared( lCameraPosition - lpInstance->mTransform.Pos() )
+                * lfInvScaleSq;
+
+            if ( lfScaledDistanceSq > lpInstance->mfMaxDrawDistanceSq )
+            {
+                continue;
+            }
+
+            RenderInstance( lpInstance, false, lCameraPosition, lfScaledDistanceSq,
+                            liList, liSortLayer, liSortKey, lpDispatchFrame, lpShaderLodInfo );
+        }
+    }
+}
+
+// [FLAG PC bring-up] centre + radius of every loaded world instance (see the header).
+bool
+WorldEntityModule::GetLoadedWorldBounds( Vector3* lpCentreOut, f32* lpfRadiusOut )
+{
+    Vector3 lSum;
+    lSum.SetZero();
+    u32 luCount = 0;
+
+    for ( s32 liSlot = 0; liSlot < WorldGraphicsStreamer::KI_MAX_INSTANCE_LISTS; liSlot++ )
+    {
+        if ( !mWorldGraphicsStreamer.IsListLoaded( liSlot ) )
+        {
+            continue;
+        }
+        CgsGraphics::InstanceList* lpList = mWorldGraphicsStreamer.GetInstanceList( liSlot );
+        if ( lpList == 0 )
+        {
+            continue;
+        }
+        for ( u32 luInstance = 0; luInstance < lpList->muNumInstances; luInstance++ )
+        {
+            CgsGraphics::Instance* lpInstance = lpList->GetInstance( luInstance );
+            if ( lpInstance == 0 || lpInstance->mpModel == 0 )
+            {
+                continue;
+            }
+            const Vector3& lrPos = lpInstance->mTransform.Pos();
+            lSum.x += lrPos.x;
+            lSum.y += lrPos.y;
+            lSum.z += lrPos.z;
+            luCount++;
+        }
+    }
+
+    if ( luCount == 0 )
+    {
+        return false;
+    }
+
+    Vector3 lCentre;
+    lCentre.x = lSum.x / static_cast<f32>( luCount );
+    lCentre.y = lSum.y / static_cast<f32>( luCount );
+    lCentre.z = lSum.z / static_cast<f32>( luCount );
+    lCentre.w = 0.0f;
+
+    f32 lfMaxDistSq = 0.0f;
+    for ( s32 liSlot = 0; liSlot < WorldGraphicsStreamer::KI_MAX_INSTANCE_LISTS; liSlot++ )
+    {
+        if ( !mWorldGraphicsStreamer.IsListLoaded( liSlot ) )
+        {
+            continue;
+        }
+        CgsGraphics::InstanceList* lpList = mWorldGraphicsStreamer.GetInstanceList( liSlot );
+        if ( lpList == 0 )
+        {
+            continue;
+        }
+        for ( u32 luInstance = 0; luInstance < lpList->muNumInstances; luInstance++ )
+        {
+            CgsGraphics::Instance* lpInstance = lpList->GetInstance( luInstance );
+            if ( lpInstance == 0 || lpInstance->mpModel == 0 )
+            {
+                continue;
+            }
+            const f32 lfDistSq =
+                rw::math::vpu::MagnitudeSquared( lCentre - lpInstance->mTransform.Pos() );
+            if ( lfDistSq > lfMaxDistSq )
+            {
+                lfMaxDistSq = lfDistSq;
+            }
+        }
+    }
+
+    *lpCentreOut  = lCentre;
+    *lpfRadiusOut = ( lfMaxDistSq > 0.0f ) ? sqrtf( lfMaxDistSq ) : 1.0f;
+    return true;
 }
 
 // =============================================================================

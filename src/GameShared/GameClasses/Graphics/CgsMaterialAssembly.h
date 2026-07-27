@@ -2,6 +2,9 @@
 #define CGS_MATERIAL_ASSEMBLY_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"   // Ptr32<T> (the 32-bit slot)
+
+#include <cstddef>
 
 // renderengine::Texture -- the sampled texture type (forward-declared; pointer-only use).
 namespace renderengine { class Texture; }
@@ -26,22 +29,32 @@ namespace CgsGraphics
     struct ShaderConstantsCPU;
     struct Texture;
 
+    // *** ON-DISC LAYOUT (world-pixels wave 2026-07-28) ***
+    // MaterialAssembly is NOT a host object: it IS the streamed Material resource body
+    // that CgsResource::MaterialResourceType relocates in place (its FixUp pokes exactly
+    // the u32 slots at +0x00/+0x0C/+0x10/+0x14/+0x18 and walks 20-byte samplers), and the
+    // world-data porter emits the console 32-bit form for Material. Declared with host-
+    // width pointers the struct grew to 40 bytes and every field past mappMaterials moved:
+    // GetLength() read byte +0x0C instead of the technique count at +0x08, so
+    // DrawRenderable::Interpret's "GetNumVertexDescriptors() == GetLength()" tripwire
+    // fired on the first streamed mesh. Same class of bug (and same fix) as
+    // CgsGraphics::Model / Instance -- see CgsSerialisedPtr.h.
     struct MaterialAssembly
     {
         friend class CgsResource::MaterialResourceType;
 
-        MaterialTechnique** mappMaterials;          // +0x00  per-technique table
+        Ptr32<Ptr32<MaterialTechnique> > mappMaterials; // +0x00  per-technique table
         u32                 muNameHash;             // +0x04
         u8                  mu8NumMaterials;        // +0x08  technique count (bounds limit)
         s8                  mi8NumSamplers;         // +0x09
         s8                  mi8NumInternalSamplers; // +0x0A
         s8                  mi8NumExternalSamplers; // +0x0B
-        Sampler*            mpaSamplers;            // +0x0C
+        Ptr32<Sampler>      mpaSamplers;            // +0x0C
 
     private:
-        ShaderConstantsInternal* mpVertexShaderConstants; // +0x10
-        ShaderConstantsInternal* mpPixelShaderConstants;  // +0x14
-        ShaderConstantsCPU*      mpCPUShaderConstants;     // +0x18
+        Ptr32<ShaderConstantsInternal> mpVertexShaderConstants; // +0x10
+        Ptr32<ShaderConstantsInternal> mpPixelShaderConstants;  // +0x14
+        Ptr32<ShaderConstantsCPU>      mpCPUShaderConstants;    // +0x18
 
         void FixupAnimatedMaterial();
 
@@ -60,6 +73,12 @@ namespace CgsGraphics
         // in this class's own TU.
         bool UsesTexture(const renderengine::Texture* lpTexture) const;
     };
+
+    // The console header size MaterialResourceType::FixUp relocates in place.
+    static_assert(sizeof(MaterialAssembly) == 28,
+                  "CgsGraphics::MaterialAssembly must be the console's 28-byte on-disc header");
+    static_assert(offsetof(MaterialAssembly, mu8NumMaterials) == 0x08,
+                  "MaterialAssembly::mu8NumMaterials must be at +0x08");
 }
 
 #endif // CGS_MATERIAL_ASSEMBLY_H

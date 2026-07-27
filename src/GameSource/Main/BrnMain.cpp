@@ -176,6 +176,12 @@ void EngineUpdate()
             gGameModule.OnStartOfUpdateFrame();
             gGameModule.OnCompletionOfVsyncWait();
             gGameModule.UpdateThread();
+            // The render feed (X360 BrnGameModule::DoDispatch @0x823DC458) writes the
+            // game-side dispatch lists for THIS update frame, so it has to run after the
+            // world update and BEFORE OnEndOfUpdateFrame's GDL swap publishes the frame
+            // to the render side. On the console the same ordering is enforced by the
+            // dispatch thread's handshake.
+            gGameModule.DoDispatch();
             gGameModule.OnEndOfUpdateFrame();
             gGameModule.DispatchThread();
         }

@@ -248,6 +248,20 @@ namespace BrnWorld
             BrnWorldIO::DispatchOutputBuffer* lpDispatchOutputBuffer,
             const BrnUpdateSet* lpUpdateSet );
 
+        // ---- [FLAG PC bring-up] the world dispatch producer -----------------
+        // NOT an X360 function. The console producer is BrnGameModule::DoDispatch
+        // @0x823DC458 -> WorldModule::GenerateDispatchLists (above), which needs the
+        // director's camera output, the renderer/world dispatch IO buffer set and the
+        // scene manager's frustum-test result -- none of which is live on this build
+        // (the director module is inert, and SceneManagerModule::UpdateScene /
+        // InSceneUpdateInterface::Append are documented gates). This produces the
+        // world-opaque dispatch stream directly: it frames a camera on the loaded
+        // world, publishes the camera shader constants the dispatch interpreter reads
+        // (0 = per-object world transform, 3 = view-projection, 8 = view position) and
+        // runs WorldEntityModule::GenerateDispatchListsFromStreamer.
+        // DELETE the whole entry when DoDispatch + the frustum query are real.
+        void GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame );
+
         // @0x827DADF8 -- stage this frame's frustum-test queries for the scene
         // manager: the main camera frustum, the six environment-map face frusta
         // (alternating halves under the 30Hz env-map policy) and the three shadow

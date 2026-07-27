@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"  // CgsResource::GetLoadBase64
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"     // Renderable / ObjectScopeTextureInfo
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h" // RenderableMesh
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"      // CgsGraphics::MaterialAssembly
@@ -40,9 +41,103 @@ namespace CgsResource
 
     static const uint32_t KU_RW_RENDERABLE_RESOURCE_TYPE_ID = 12;
 
+    // The single renderable data version the code understands (X360 fires BOTH the
+    // "Data is out of date" (<) and "Code is out of date" (>) asserts against 11).
+    static const u32 KU_RENDERABLE_DATA_VERSION = 11;
+
+    // Renderable::mu16Flags bit set once the graph has been relocated (X360 `ori r11,r11,8`).
+    static const u16 KU_RENDERABLE_FLAG_FIXED_UP = 8;
+
     uint32_t RwRenderableResourceType::GetTypeID() const
     {
         return KU_RW_RENDERABLE_RESOURCE_TYPE_ID;
+    }
+
+    namespace
+    {
+        // Relocate one serialised pointer slot: the converted platform-4 blob stores a
+        // resource-relative OFFSET in a host-width slot, so the load base is simply added.
+        template <typename T>
+        inline T* RebaseSlot(T* lpSlot, uintptr_t luBase)
+        {
+            return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(lpSlot) + luBase);
+        }
+    }
+
+    // @0x828A9498 -- override. The serialise-IN relocation for a whole renderable graph.
+    //
+    // X360 store-for-store (asm, byte offsets: version lhz 0x10, mesh count lhz 0x12, mesh table
+    // lwz 0x14, object-scope texture info lwz 0x18, flags lhz 0x1C):
+    //   1) two version tripwires against 11
+    //   2) *(this+0x14) += delta                                   (the mesh pointer table)
+    //   3) if (*(this+0x18)) { *(this+0x18) += delta; then its +4/+8/+0xC slots += delta;
+    //      then for i < *(u16*)(osti+0): ((u32*)osti->+0xC)[i] += delta }   (the name pool)
+    //   4) for i < numMeshes: table[i] += delta; FixUpRenderableMesh(this, table[i], a3)
+    //   5) flags |= 8 (only when clear)
+    //
+    // SEAM (platform-4 widened data): the pointer slots are 8 bytes wide in the converted blob
+    // (tools/assets/bundles/renderable_transcode.py emits the natural MSVC x64 relayout:
+    // Renderable 0x30 with mppMeshes @+0x18 / mpObjectScopeTextureInfo @+0x20 / flags @+0x28,
+    // ObjectScopeTextureInfo 0x20 with the three tables @+0x08/+0x10/+0x18), so the walk is by
+    // NAME over the committed Renderable / RenderableMesh layouts and the delta is the full-width
+    // load base. The graph is otherwise identical store-for-store to the console's.
+    void RwRenderableResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        Renderable* lpRenderable = static_cast<Renderable*>(lpResource);
+
+        RwRenderableFixUpData lFixUp;
+        lFixUp.muPointerBase  = CgsResource::GetLoadBase64(lrResource);               // *a3
+        lFixUp.muBufferOffset = static_cast<u32>(reinterpret_cast<uintptr_t>(
+                                    lrResource.m_baseResources[2]));                  // a3[2]
+
+        // CgsRwRenderableResourceType.cpp:490 / :492 -- the two halves of the version tripwire.
+        CGS_ASSERT(lpRenderable->mu16VersionNumber >= KU_RENDERABLE_DATA_VERSION,
+                   "Error loading renderable. Data is out of date. Data version : ");
+        CGS_ASSERT(lpRenderable->mu16VersionNumber <= KU_RENDERABLE_DATA_VERSION,
+                   "Error loading renderable. Code is out of date. Data version : ");
+
+        // 2) the mesh pointer table (X360 `lwz r10,0x14` / `add` / `stw` -- unconditional).
+        lpRenderable->mppMeshes = RebaseSlot(lpRenderable->mppMeshes, lFixUp.muPointerBase);
+
+        // 3) the object-scope texture-info block and everything it points at.
+        Renderable::ObjectScopeTextureInfo* lpTextureInfo = lpRenderable->mpObjectScopeTextureInfo;
+        if (lpTextureInfo != 0)
+        {
+            lpTextureInfo = RebaseSlot(lpTextureInfo, lFixUp.muPointerBase);
+            lpRenderable->mpObjectScopeTextureInfo = lpTextureInfo;
+
+            // The three interior tables (X360 +4 / +8 / +0xC, read into temporaries before the
+            // stores). The purpose map and the texture-pointer array are relocated even when the
+            // count is zero, exactly as the console does.
+            lpTextureInfo->mpi16PurposeToIndexMapping =
+                RebaseSlot(lpTextureInfo->mpi16PurposeToIndexMapping, lFixUp.muPointerBase);
+            lpTextureInfo->mppTextures =
+                RebaseSlot(lpTextureInfo->mppTextures, lFixUp.muPointerBase);
+            lpTextureInfo->mppcTextureNames =
+                RebaseSlot(lpTextureInfo->mppcTextureNames, lFixUp.muPointerBase);
+
+            // ...then each texture-name string pointer in the name table.
+            const u32 luNumTextures = lpTextureInfo->mu16NumTextures;
+            for (u32 luName = 0; luName < luNumTextures; ++luName)
+            {
+                lpTextureInfo->mppcTextureNames[luName] =
+                    RebaseSlot(lpTextureInfo->mppcTextureNames[luName], lFixUp.muPointerBase);
+            }
+        }
+
+        // 4) each mesh pointer, then the mesh's own buffer relocation.
+        const u32 luNumMeshes = lpRenderable->mu16NumMeshes;
+        for (u32 luMesh = 0; luMesh < luNumMeshes; ++luMesh)
+        {
+            RenderableMesh* lpMesh =
+                RebaseSlot(lpRenderable->mppMeshes[luMesh], lFixUp.muPointerBase);
+            lpRenderable->mppMeshes[luMesh] = lpMesh;
+            FixUpRenderableMesh(reinterpret_cast<RwRenderableMesh*>(lpMesh), &lFixUp);
+        }
+
+        // 5) mark the graph relocated.
+        if ((lpRenderable->mu16Flags & KU_RENDERABLE_FLAG_FIXED_UP) == 0)
+            lpRenderable->mu16Flags |= KU_RENDERABLE_FLAG_FIXED_UP;
     }
 
     void RwRenderableResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const

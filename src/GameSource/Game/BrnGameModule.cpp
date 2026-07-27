@@ -498,10 +498,29 @@ namespace BrnGame
         (void)lbDestroyed;
     }
 
-    // FLAG PC-platform leaf: see DoUpdate above (the render dispatch runs from the PC
-    // render thread's BrnRendererModule::Render drive).
+    // @ 0x823DC458 -- the dispatch (render-feed) spine. The X360 body creates the
+    // world-dispatch + renderer IO buffer pairs, stages the director's camera into the
+    // renderer input, runs BrnRendererModule::Update (which publishes the game-side
+    // dispatch frame through RendererIO::OutputBuffer::SetDispatchFrame),
+    // BridgeRendererToWorld/ToGui/ToEffects, then WorldModule::GenerateFrustumQueries
+    // and WorldModule::GenerateDispatchLists, the effects dispatch and the debug render.
+    //
+    // [FLAG PC bring-up] Only the WORLD leg is driven here, and through the world
+    // module's bring-up producer rather than the X360 call: the director module
+    // publishes no camera, none of the four IO buffers is created on PC, and
+    // WorldModule::GenerateDispatchLists' frustum-test result comes from the scene
+    // manager's job path, which is still an inert gate. The GDL frame is taken
+    // straight from the renderer's write slot -- the exact expression
+    // BrnRendererModule::Update @0x82405E28 publishes, and the same one
+    // BrnRendererModule::Render walks after OnEndOfUpdateFrame's swap.
+    // Restore the real body when DoDispatch's IO set + the frustum query are live.
     int BrnGameModule::DoDispatch()
     {
+        CgsGraphics::DispatchFrame* lpDispatchFrame = mRenderModule.GetDispatchFrameForWrite();
+        if (lpDispatchFrame != 0)
+        {
+            mWorldModule.GenerateDispatchListsBringUp(lpDispatchFrame);
+        }
         return 0;
     }
 

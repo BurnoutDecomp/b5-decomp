@@ -187,6 +187,40 @@ void BrnRendererModule::Construct()
     maShaderConstantsFrames[0].Construct();
     maShaderConstantsFrames[1].Construct();
 
+    // ---- the GAME-side named shader constants (X360 Construct, in this order) --
+    // Slots 0..7 belong to the engine and are registered by the table's own ctor
+    // (@0x827EDDC8); these 27 are the game set. The registration ORDER is the
+    // console's -- AddShaderConstant bumps mu8NumUsedConstants once per call, and
+    // the setters bounds-check the slot index against that COUNT, so the whole set
+    // has to be registered before the first SetShaderConstantData.
+    CgsGraphics::mShaderConstantTable.AddShaderConstant( 8u, "ViewPosition",                 16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant( 9u, "KeyLightColour",               16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(10u, "KeyLightDirection",            16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(11u, "KeyLightSpecularColour",       16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(12u, "KeyLightClampedColour",        16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(13u, "Time",                         16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(34u, "ViewProjectionModified",       64);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(27u, "ScattCoeffs",                  16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(28u, "FogColourPlusWhiteLevel",      16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(33u, "SkyReflectionColour",          16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(29u, "HDRConstants",                 16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstantArray(14u, "ShadowMap_WorldToLight", 64, 3);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(15u, "ShadowMap_Constants",          16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(16u, "ShadowMap_Constants2",         16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(17u, "ShadowMap_ObjectCsmSelect",    16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(20u, "g_paintColour",                16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(21u, "g_pearlescentColour",          16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstantArray(22u, "g_verletOffsets", 16, 128);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(23u, "g_damageConstants",            16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(24u, "g_selfIlluminationMask",       16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(25u, "g_wheelConstants",             16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(26u, "g_PerVehicleFog",              16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(18u, "IrradianceQuadricA",           64);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(19u, "IrradianceQuadricB",           64);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(30u, "g_glassFractureStrength",      16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(31u, "g_glassFractureUVOffsets",     16);
+    CgsGraphics::mShaderConstantTable.AddShaderConstant(32u, "g_glassFractureFresnelRanges", 16);
+
     // ---- The render-dispatch machinery (X360 Construct mid-section) ----------
     // DispatchFrame::Construct(&this+768, 25, dword_82F24238, mpGraphicsAllocator)
     // + SetupBuiltinInterpreters(&maInterpretFunctions) + the interpreter object.
@@ -376,6 +410,34 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     mu32NumWorldTransparentObjectTotals += luWorldTransparent;
     mu32NumCarTransparentObjectTotals   += luCarTransparent;
 
+    // [FLAG PC bring-up] One-shot map of where the world producer's records actually
+    // landed. The world feed's AddToBin list bytes were flagged provisional by the
+    // renderer wave (BrnWorldEntityModule's camera call site), so name every non-empty
+    // mesh list the first frame ANY of them is non-empty. DELETE once the producer's
+    // list ids are pinned against the X360 call-site asm.
+    {
+        static bool sbLoggedLists = false;
+        if (!sbLoggedLists && CgsDev::Log::gpDebugPrint != 0)
+        {
+            u32 luTotal = 0;
+            for (u32 luList = 0; luList < 25u; ++luList)
+                luTotal += mSingleBufferedDispatchFrame.GetList(luList)->GetCount();
+            if (luTotal != 0)
+            {
+                sbLoggedLists = true;
+                *CgsDev::Log::gpDebugPrint << "[FLAG PC bring-up] first non-empty MESH lists:";
+                for (u32 luList = 0; luList < 25u; ++luList)
+                {
+                    const u32 luCount = mSingleBufferedDispatchFrame.GetList(luList)->GetCount();
+                    if (luCount != 0)
+                        *CgsDev::Log::gpDebugPrint << " [" << static_cast<s32>(luList)
+                                                   << "]=" << static_cast<s32>(luCount);
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+        }
+    }
+
     const bool lbOpaqueWork = (mbRenderCarsOpaque && luCarOpaque != 0)
                            || (mbRenderWorldOpaque && luWorldOpaque != 0);
     const bool lbTransparentWork = (mbRenderWorldTransparent && luWorldTransparent != 0)
@@ -463,6 +525,24 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // car passes). On the X360 this whole block precedes the 2D overlay tail;
     // with no world GDL data the lists are empty and every pass no-ops.
     RenderWorldPasses(lpDispatchThreadInputBuffer);
+
+    // [FLAG PC diagnostic] BRN_WORLD_ONLY=1 suppresses the whole 2D overlay tail
+    // (loading-screen background/foreground, GUI, movie) for ONE purpose: seeing the
+    // world pass. The loading screen paints an opaque full-screen quad here, so during
+    // bring-up -- when the flow is still parked on the loading screen -- the world
+    // geometry the passes above just drew is completely covered. Environment-gated and
+    // read once; the default path is untouched. DELETE with the bring-up.
+    static int siWorldOnly = -1;
+    if (siWorldOnly < 0)
+    {
+        char lacWorldOnly[8];
+        siWorldOnly = (GetEnvironmentVariableA("BRN_WORLD_ONLY", lacWorldOnly, sizeof(lacWorldOnly)) > 0) ? 1 : 0;
+    }
+    if (siWorldOnly == 1)
+    {
+        renderengine::Device::ShowPixelBuffer();
+        return;
+    }
 
     // Save/load background layer: in E_LSC_SHOWSAVELOADBG mode the loading screen renders
     // BENEATH the GUI, so the SaveLoadComponent prompt draws over the dimmed loading art.

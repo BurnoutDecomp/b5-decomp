@@ -129,3 +129,112 @@ Vector4* ShaderConstantTable::UpdateShaderChangeTableAndGetConstantDestination(u
 
     return lpConstantsInDispatchBin;
 }
+
+// @ 0x827EDDC8 -- ShaderConstantTable::ShaderConstantTable.
+//
+// Clears all 50 element records (size 0, one entry, no cached array size) and their
+// debug-name slots, zeroes the used/dirty counts, then registers the eight constants
+// the ENGINE owns. The remaining 27 are registered by BrnRendererModule::Construct
+// @0x8240A778 (the game-side set: view position, key light, fog, shadow map, the
+// per-vehicle blocks and the two irradiance quadrics).
+//
+// This was an empty stub in WorldLinkStubs.cpp, which left mu8NumUsedConstants at 0 --
+// so every SetShaderConstantData tripped "luIndex < mu8NumUsedConstants" and the
+// dispatch interpreter found a NULL constant-0 (world transform) on the first world
+// packet ("lpWorldMatrix != NULL").
+ShaderConstantTable::ShaderConstantTable()
+{
+    mu8NumUsedConstants = 0;
+
+    for (u32 luIndex = 0; luIndex < KU_MAX_SHADER_CONSTANTS; ++luIndex)
+    {
+        mapConstantNames[luIndex]                = 0;
+        maConstants[luIndex].mu16SizeOfArrayInQw = 0;
+        maConstants[luIndex].mu8SizeInBytes      = 0;
+        maConstants[luIndex].mu8NumEntries       = 1;
+    }
+
+    AddShaderConstant(0u, "world",          64);
+    AddShaderConstant(1u, "view",           64);
+    AddShaderConstant(2u, "projection",     64);
+    AddShaderConstant(3u, "viewProjection", 64);
+    AddShaderConstant(4u, "worldViewProj",  64);
+    AddShaderConstant(5u, "viewInverse",    64);
+    AddShaderConstantArray(6u, "InstancingMatrixArray", 64, 5);
+    AddShaderConstantArray(7u, "InstancingIndexArray",  16, 5);
+
+    mu8NumDirtyConstants = 0;
+}
+
+// @ 0x823F4260 -- AddShaderConstant: the single-entry form of AddShaderConstantArray
+// (SetSize(luSizeInBytes) + SetNumEntries(1)). Same heap-duplicated debug name.
+void ShaderConstantTable::AddShaderConstant(u32 luIndex, const char* lpcName, u8 lu8SizeInBytes)
+{
+    AddShaderConstantArray(luIndex, lpcName, lu8SizeInBytes, 1);
+}
+
+// @ 0x822B32E8 -- SetShaderConstantData(u32, Vector4). Bounds-check the slot, take a
+// fresh destination in the active dispatch bin, check the declared entry size matches
+// the value being written, then store the 16-byte value.
+// (CgsShaderConstants.h:396 / :400 / :401 assert sites.)
+void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Vector4 lValue)
+{
+    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+    Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
+    CGS_ASSERT(lpDest, "lpDest");
+    CGS_ASSERT(maConstants[luIndex].GetSizeInBytes() == 16u,
+               "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()");
+
+    *lpDest = lValue;
+}
+
+// The Vector3 overload: rw::math::vpu::Vector3 IS a 16-byte lane register with an
+// unused w, so the store is the same single quad-word as the Vector4 form.
+void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Vector3 lValue)
+{
+    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+    Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
+    CGS_ASSERT(lpDest, "lpDest");
+    CGS_ASSERT(maConstants[luIndex].GetSizeInBytes() == 16u,
+               "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()");
+
+    lpDest->x = lValue.x;
+    lpDest->y = lValue.y;
+    lpDest->z = lValue.z;
+    lpDest->w = lValue.w;
+}
+
+// The Matrix44 overload: four quad-words stored verbatim (declared size 64).
+void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Matrix44 lValue)
+{
+    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+    Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
+    CGS_ASSERT(lpDest, "lpDest");
+    CGS_ASSERT(maConstants[luIndex].GetSizeInBytes() == 64u,
+               "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()");
+
+    lpDest[0] = lValue.xAxis;
+    lpDest[1] = lValue.yAxis;
+    lpDest[2] = lValue.zAxis;
+    lpDest[3] = lValue.wAxis;
+}
+
+// @ 0x822B33B8 (the X360's `sub_822B33B8`, called as the world transform setter from
+// WorldEntityModule::RenderInstance) -- SetShaderConstantData(u32, Matrix44Affine).
+// Widens the three-row affine into a full Matrix44: rows 0..2 get their w lane forced
+// to 0 and row 3 (the translation) gets w = 1. That is exactly the asm's four
+// vrlimi128 inserts (a zero vector into rows 0..2, vcfsx-produced 1.0f into row 3).
+void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Matrix44Affine lValue)
+{
+    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+    Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
+
+    lpDest[0].x = lValue.xAxis.x; lpDest[0].y = lValue.xAxis.y; lpDest[0].z = lValue.xAxis.z; lpDest[0].w = 0.0f;
+    lpDest[1].x = lValue.yAxis.x; lpDest[1].y = lValue.yAxis.y; lpDest[1].z = lValue.yAxis.z; lpDest[1].w = 0.0f;
+    lpDest[2].x = lValue.zAxis.x; lpDest[2].y = lValue.zAxis.y; lpDest[2].z = lValue.zAxis.z; lpDest[2].w = 0.0f;
+    lpDest[3].x = lValue.wAxis.x; lpDest[3].y = lValue.wAxis.y; lpDest[3].z = lValue.wAxis.z; lpDest[3].w = 1.0f;
+}

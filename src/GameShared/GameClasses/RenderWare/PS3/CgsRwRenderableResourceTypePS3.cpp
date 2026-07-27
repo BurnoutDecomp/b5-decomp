@@ -27,8 +27,11 @@ namespace CgsResource
     void RwRenderableResourceType::FixUpRenderableMesh(RwRenderableMesh* lpMesh,
                                                        const RwRenderableFixUpData* lpFixUp) const
     {
-        const u32 luPointerBase  = lpFixUp->muPointerBase;   // a3[0]
-        const u32 luBufferOffset = lpFixUp->muBufferOffset;  // a3[2]
+        // SEAM (platform-4 widened data): the serialised pointer slots are host-width, so the
+        // relocation base is too (X360: a 32-bit `lwz 0(a3)`). The buffer offset stays 32-bit --
+        // muBaseAddress is a console u32 slot resolved through the low-4 GB reservation.
+        const uintptr_t luPointerBase  = lpFixUp->muPointerBase;   // a3[0]
+        const u32       luBufferOffset = lpFixUp->muBufferOffset;  // a3[2]
 
         // 1) Relocate each serialised vertex-buffer-header pointer slot to its loaded base.
         //    SEAM: the widened buffer table holds the IB header pointer at mapBuffers[0] and

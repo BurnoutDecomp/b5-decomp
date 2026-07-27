@@ -29,6 +29,8 @@
 #include "types.hpp"
 #include "pc/gcm/renderengine/device.h"          // renderengine::gDevice
 #include "pc/gcm/renderengine/VertexDescriptor.h" // renderengine::D3DVertexDeclaration (opaque)
+#include "pc/gcm/renderengine/IndexBuffer.h"      // renderengine::IndexBuffer  (Xbox2CheckPhysicalMemoryFlags leaf)
+#include "pc/gcm/renderengine/VertexBuffer.h"     // renderengine::VertexBuffer (Xbox2CheckPhysicalMemoryFlags leaf)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -82,9 +84,13 @@ namespace
         u32 muFormat;         // +0x24
     };
 
+    // The console buffer headers carry their memory-protection class in the LOW TWO BITS of
+    // muBaseAddress (RwRenderableResourceType::FixUpRenderableMesh @0x828A8968 relocates the
+    // word with clrrwi/add/insrwi precisely to preserve them), so the address itself is the
+    // slot with those bits cleared.
     inline const void* ResolveGuestPointer(u32 luSlot)
     {
-        return reinterpret_cast<const void*>(static_cast<uintptr_t>(luSlot));
+        return reinterpret_cast<const void*>(static_cast<uintptr_t>(luSlot & ~3u));
     }
 
     // ---- Xenon primitive types -> D3D9 --------------------------------------
@@ -747,6 +753,37 @@ extern "C"
     void* XMemCpy(void* lpDest, const void* lpSrc, u32 luCount)
     {
         return std::memcpy(lpDest, lpSrc, luCount);
+    }
+
+}
+
+namespace renderengine
+{
+    // FLAG PC-platform leaf: the GPU buffers' physical-memory classification.
+    //
+    // X360 IndexBuffer::Xbox2CheckPhysicalMemoryFlags @0x82B60818 / VertexBuffer's
+    // @0x82B61148 read the buffer's GPU base address, ask the Xenon kernel for that
+    // page's protection class (XQueryMemoryProtect) and set/clear the "system memory"
+    // bit 0x200000 in the D3DResource Common word accordingly. Those X360 bodies ARE
+    // reconstructed, in pc/gcm/renderengine/IndexBuffer.cpp and VertexBuffer.cpp -- but
+    // neither TU is on the exe source list (they pull the whole XGRAPHICS header-layout
+    // surface), and on this backend there is no Xenon physical page behind a buffer at
+    // all: the data lives in the resource pool's ordinary host allocation and the draw
+    // leaf reads it straight through DrawIndexedPrimitiveUP. So there is nothing to
+    // query and no flag to set, exactly as for renderengine::Texture::
+    // Xbox2CheckPhysicalMemoryFlags (texture.cpp, same X360 idiom, same PC verdict).
+    //
+    // Called per mesh from CgsResource::RwRenderableResourceType::FixUpRenderableMesh.
+    // DELETE these two definitions if IndexBuffer.cpp / VertexBuffer.cpp ever join the
+    // source list -- they would then be LNK2005 duplicates of the X360 bodies.
+    u32 IndexBuffer::Xbox2CheckPhysicalMemoryFlags(u32* /*lpHeaderDwords*/)
+    {
+        return 0u;
+    }
+
+    u32 VertexBuffer::Xbox2CheckPhysicalMemoryFlags(u32* /*lpHeaderDwords*/)
+    {
+        return 0u;
     }
 }
 
