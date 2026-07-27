@@ -200,6 +200,17 @@ void MassiveLeaveCriticalSection(MassiveCriticalSectionStorage* pSection);
 // ---------------------------------------------------------------------------
 class CMassiveBaseObject
 {
+    // The zone layer reads/writes the CLIENT CORE's base state dword (+0x10)
+    // and error/name fields directly on the X360 (cross-object bare lwz/stw, not
+    // through any accessor): CMassiveZoneManager::CreateImpUpdateReque
+    // @ 0x82BD2E00 gates on core state == 4 (`lwz r11, 0x10(r3)` on the
+    // Instance() result), HandleResponse @ 0x82BD3410 folds core state
+    // 13/15 -> 14, and Tick @ 0x82BD3130 stores core state 15 (`stw r11,
+    // 0x10(r30)`). The protected accessors below only reach the OWN base
+    // subobject, so the sibling zone manager gets friendship to keep those
+    // attested cross-object accesses named-member reads, not offset hacks.
+    friend class CMassiveZoneManager;
+
 public:
     // @ 0x82BCEE90. Copies the supplied name (or the default name when the name
     // is null/empty) into a MassiveMalloc'd buffer. On allocation failure it

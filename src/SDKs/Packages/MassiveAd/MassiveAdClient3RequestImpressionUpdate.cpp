@@ -62,6 +62,41 @@ const char* CRequestImpressionUpdate::GetRequestURL()
 }
 
 // ---------------------------------------------------------------------------
+// CRequestImpressionUpdate::CreateRequest @ 0x82BD95A0
+//
+// NOT in the ledger/export set (IDA exported no JSON for this address; the body
+// was recovered from the shared .i64 via idat -- see the CMassiveZoneManager
+// unblock spec). Called by CMassiveZoneManager::CreateImpUpdateReque
+// @ 0x82BD2E00 (`bl CRequestImpressionUpdate::CreateRequest` with r4 = the zone
+// manager). Rejects a null builder (-1100), chains the base
+// CreateRequest(pBuilder, 512, 512), pre-writes the client player ID (tag 42)
+// and session ID (tag 43) in PREPEND mode (bPrepend = 1, the `li r5, 1`
+// operands -- value first, then its tag, mirroring the committed prepend
+// convention in CRequestCloseSession/CRequestHeartbeat), and sets status 1
+// (building -- the zone layer keeps appending impression reports before
+// Finish() seals it to status 2). Returns 0.
+//
+//   cmplwi r4, 0 ; beq -> li r3, -0x44C (-1100)
+//   bl CRequestObject::CreateRequest(this, pBuilder, 0x200, 0x200)
+//   bl WriteU32(this, gnMassivePlayerID, 1) ; bl WriteU8(this, 42, 1)
+//   bl WriteU32(this, gnMassiveSessionID, 1) ; bl WriteU8(this, 43, 1)
+//   bl SetStatus(this, 1) ; li r3, 0
+// ---------------------------------------------------------------------------
+int CRequestImpressionUpdate::CreateRequest(CRequestBuilder* pBuilder)
+{
+    if (!pBuilder)
+        return -1100;
+
+    CRequestObject::CreateRequest(pBuilder, 512, 512);
+    WriteU32(gnMassivePlayerID, 1);  // dword_8327F2D0 ; li r5, 1
+    WriteU8(42, 1);
+    WriteU32(gnMassiveSessionID, 1); // dword_8327F2CC ; li r5, 1
+    WriteU8(43, 1);
+    SetStatus(1);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // CRequestImpressionUpdate::AddModelReport @ 0x82BD9AC8
 //
 // Block: 223, U32 41, [54,u8][38,u32][21,u32][50,u32][51,u64][52,u64][53,u16]

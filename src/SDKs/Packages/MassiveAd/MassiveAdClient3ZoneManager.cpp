@@ -7,9 +7,13 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h" // CRequestObject::GetServerType
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Asset.h"      // CMassiveAsset (AssetFind / DeleteElements / Resume / ReportImpressions)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Objects.h"    // CMassiveOrder complete type (SetAssetExpiredByOrderID reads mnNumber)
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3AdObject.h"   // CMassiveAdObject (SubscriberAdd / MAOFind name / SetAssetExpired / ReportImpressions / Resume)
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h" // CMassiveAdObjectSubscriber::mpcName (PreSubscriberAssignT)
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestImpressionUpdate.h" // CRequestImpressionUpdate::Finish (ReportImpressions)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestImpressionUpdate.h" // CRequestImpressionUpdate::Finish / CreateRequest
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h"        // CMassiveClientCore::Instance / mBenchmark / ZoneManagerRemove
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestEnterZone.h"  // CRequestEnterZone (Tick state 1, HandleResponse server type 0x33)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestExitZone.h"   // CRequestExitZone (Tick state 17)
 
 // External MassiveAd string-compare helper (`bl CompareStrings`). Returns 0 when
 // the two NUL-terminated strings are equal -- the X360 branches on the result
@@ -24,11 +28,14 @@ extern int CompareStrings(const char* pcA, const char* pcB);
 // SHAPE and BODIES are reconstructed from BURNOUT_X360_ARTIST.XEX (there is no
 // leak source / DecFIGS for this vendor middleware). Stores are reproduced
 // member-for-member against the X360 disassembly; see MassiveAdClient3ZoneManager.h
-// for the per-offset layout map and the list of BLOCKED bodies left for a later
-// ledger slice (they dispatch through collaborators -- CRequestEnterZone /
-// CRequestImpressionUpdate / CMassiveClientCore internal state / un-exposed
-// CMassiveAdObject vftable slots -- whose owning layout is not yet reconstructed
-// and must not be guessed).
+// for the per-offset layout map.
+//
+// The TU is now COMPLETE -- the four bodies that were previously blocked on
+// un-homed collaborators (CreateImpUpdateReque / HandleResponse / Tick /
+// SetAssetExpiredByOrderID) are reconstructed here, now that CRequestEnterZone,
+// CRequestExitZone, CRequestImpressionUpdate::CreateRequest, the client core's
+// CRequestBuilder base (its state dword + embedded CMassiveBenchmark) and
+// CMassiveAdObject's Tic vftable slot all have owning homes.
 // ===========================================================================
 
 namespace MassiveAdClient3
@@ -114,6 +121,78 @@ void* CMassiveZoneManager::VectorDeletingDestructor(char bDelete)
     if (bDelete & 1)
         CMassiveBaseObject::operator delete(this);
     return this;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::HandleResponse @ 0x82BD3410
+//
+// CRequestBuilder vtable slot 1: a request owned by this zone completed. Switch
+// on the request's server-type word:
+//   0x33 '3' enter zone -- drain the parsed reply into this zone's own lists
+//        (GetMAOs stamps each copied ad object's owner zone; GetOrders takes the
+//        orders), then seed the asset list with ONE default-constructed
+//        CMassiveAsset (all-zero; its zero crex skips the ctor's validation gate,
+//        so the null URL/hash are safe) BEFORE draining the downloaded assets on
+//        top of it, start the pending impression update, move the zone to state 2
+//        (entered) and fold the client core's own state 13/15 -> 14.
+//   0x43 'C' exit zone  -- move the zone to state 4 (exit complete).
+//   0x65 'e' impression update -- log only.
+// Then the request leaves the builder's collection and, when the zone reached
+// state 4, the client core unlinks + DELETES this zone manager (so `this` is
+// dead past that call -- the X360 returns the core's result unchanged).
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::HandleResponse(CRequestObject* pRequest)
+{
+    switch (pRequest->GetServerType())  // v4 = *(a2 + 20)
+    {
+        case 0x33:  // '3' -- enter zone
+        {
+            CRequestEnterZone* lpEnterZone = static_cast<CRequestEnterZone*>(pRequest);
+            lpEnterZone->GetMAOs(&mAdObjectList, this);  // addi r4, r31, 0x3C
+            lpEnterZone->GetOrders(&mOrderList);         // addi r4, r31, 0x5C
+
+            void* lpAssetMem = CMassiveListNode::operator new(sizeof(CMassiveAsset)); // li r3,0x78
+            CMassiveAsset* lpAsset =
+                lpAssetMem ? ::new (lpAssetMem) CMassiveAsset(0, 0, 0, 0, 0, 0, 0,
+                                                              0.0f, 0.0f,  // flt_82001CC0 twice
+                                                              0, 0, 0, 0)
+                           : 0;
+
+            void* lpNodeMem = CMassiveListNode::operator new(sizeof(CMassiveListNode)); // li r3,0xC
+            CMassiveListNode* lpNode =
+                lpNodeMem ? ::new (lpNodeMem) CMassiveListNode(lpAsset) : 0;
+            mAssetList.Append(lpNode);                   // the default asset goes on first
+            lpEnterZone->GetAssets(&mAssetList);         // then the parsed/downloaded ones
+
+            CreateImpUpdateReque();
+            SetValid(2);  // *(a1 + 16) = 2 -- zone entered
+
+            // The X360 re-fetches the singleton for each access (Instance() is an
+            // opaque call, so the compiler could not fold them).
+            if (CMassiveClientCore::Instance()->mbIsValid == 13
+                || CMassiveClientCore::Instance()->mbIsValid == 15)
+            {
+                CMassiveClientCore::Instance()->mbIsValid = 14;
+            }
+            break;
+        }
+        case 0x43:  // 'C' -- exit zone
+            SetValid(4);  // *(a1 + 16) = 4 -- exit complete
+            break;
+        case 0x65:  // 'e' -- impression update
+            MassiveLog(5, GetName(), "Impression Update received successfully");
+            break;
+        default:
+            break;
+    }
+
+    int lnResult = RemoveFromRequestCollect(pRequest);
+    if (GetValid() == 4)  // *(a1 + 16) == 4
+    {
+        // Unlinks and DELETES this zone manager -- nothing may touch `this` after.
+        lnResult = CMassiveClientCore::Instance()->ZoneManagerRemove(this);
+    }
+    return lnResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -345,6 +424,44 @@ int CMassiveZoneManager::SetAssetExpired(int nAssetExpiry)
 }
 
 // ---------------------------------------------------------------------------
+// CMassiveZoneManager::SetAssetExpiredByOrderID @ 0x82BD3710
+//
+// An order has expired server-side: walk the zone's asset list and, for every
+// asset carrying a real id whose owning order number matches nOrderId, log the
+// expiry and expire that asset id on every ad object (SetAssetExpired). Returns 1.
+//
+// The X360 guards ONLY on a non-null cursor payload (`mr. r31,r3; beq`) and a
+// non-zero mnAssetId (`lwz r7,0x3C(r31); cmplwi; beq`) -- mpOrder is dereferenced
+// WITHOUT a null test (`lwz r11,0x38(r31); lwz r11,0x14(r11)`), reproduced as-is.
+// The log takes the already-loaded id in r7 while the SetAssetExpired call
+// re-reads +0x3C (`lwz r4, 0x3C(r31)`), so both reads are kept distinct.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::SetAssetExpiredByOrderID(int nOrderId)
+{
+    mAssetList.GoToStart();
+    while (mAssetList.GetCurrent())  // while (*(a1 + 0x54)) -- mAssetList cursor
+    {
+        CMassiveAsset* lpAsset = static_cast<CMassiveAsset*>(mAssetList.GetCurrData());
+        if (lpAsset)
+        {
+            int lnAssetId = lpAsset->mnAssetId;  // v7 = CurrData[15]
+            if (lnAssetId)
+            {
+                if (lpAsset->mpOrder->mnNumber == nOrderId)  // *(CurrData[14] + 20) == a2
+                {
+                    MassiveLog(5, GetName(),
+                               "Order Expired: %d.  Expiring Asset: %d Crex: %d on All MAOs.",
+                               nOrderId, lnAssetId, lpAsset->mnCrex);  // r6/r7/r8
+                    SetAssetExpired(lpAsset->mnAssetId);  // v6[15] -- re-read
+                }
+            }
+        }
+        mAssetList.GoToNext();
+    }
+    return 1;
+}
+
+// ---------------------------------------------------------------------------
 // CMassiveZoneManager::Resume @ 0x82BD3088
 //
 // Resumes the base request builder's outstanding requests (name-hides
@@ -373,6 +490,55 @@ int CMassiveZoneManager::Resume()
         mAssetList.GoToNext();
     }
     return 1;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::CreateImpUpdateReque @ 0x82BD2E00
+//
+// Lazily allocates the zone's ONE pending CRequestImpressionUpdate. A live one
+// short-circuits (0). A shutting-down client core (its base state dword == 4,
+// read cross-object through the CMassiveBaseObject friendship) logs and returns
+// -299 without allocating. The fresh update is stored into the member BEFORE the
+// null test (the X360 `stw r3, 0x6C(r31)` precedes the branch), and the two
+// failure paths differ: a failed allocation clears the zone state, while a failed
+// CRequestImpressionUpdate::CreateRequest only drops the update (the X360 branch
+// lands AFTER the `stw r30, 0x10(r31)`).
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::CreateImpUpdateReque()
+{
+    if (mpImpressionUpdate)  // a1[27]
+        return 0;
+
+    if (CMassiveClientCore::Instance()->mbIsValid == 4)  // lwz r11, 0x10(core)
+    {
+        MassiveLog(5, GetName(),
+                   "Shutting Down Client, no Need to Allocate CRequestImpressionUpdate");
+        return -299;
+    }
+
+    void* lpMem = CMassiveListNode::operator new(sizeof(CRequestImpressionUpdate)); // li r3,0x58
+    CRequestImpressionUpdate* lpUpdate =
+        lpMem ? ::new (lpMem) CRequestImpressionUpdate() : 0;
+    mpImpressionUpdate = lpUpdate;  // a1[27] = v3, stored before the null test
+
+    if (!lpUpdate)
+    {
+        MassiveLog(2, GetName(), "ALLOCATION Failed for CRequestImpressionUpdate");
+        SetValid(0);  // stw r30, 0x10(r31) -- BEFORE the SetLastError call
+        return SetLastError(-99, reinterpret_cast<const char*>(0)); // &unk_820046A7
+    }
+
+    if (lpUpdate->CreateRequest(this))
+    {
+        // The X360 reloads a1[27] and null-tests it before the deleting-destructor
+        // dispatch `(**v5)(v5, 1)`.
+        if (mpImpressionUpdate)
+            delete mpImpressionUpdate;
+        mpImpressionUpdate = 0;  // stw r30, 0x6C(r31); the zone state is NOT cleared here
+        return SetLastError(-299, reinterpret_cast<const char*>(0)); // &unk_820046A7
+    }
+
+    return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -414,6 +580,135 @@ int CMassiveZoneManager::ReportImpressions()
         return 0;
     }
     return lResult;
+}
+
+// ---------------------------------------------------------------------------
+// CMassiveZoneManager::Tick @ 0x82BD3130
+//
+// The zone state machine, pumped once per client tick. It is gated on a live
+// session id (gnMassiveSessionID) and on a non-zero zone state; a live state
+// first clears the base last-error dword, then dispatches:
+//   state 1  -- build + submit a CRequestEnterZone carrying the zone name and the
+//               client core's bandwidth-usage triple, moving BOTH the zone state
+//               and the client-core state to 15 on success.
+//   state 2  -- entered: tick every ad object in the zone (vftable slot +0x0C).
+//   state 17 -- build a CRequestExitZone the same way, tear the zone's elements
+//               down, submit, and move the zone state to 16.
+// Every error path clears the zone state and returns 0 -- except the missing-
+// client-core one on the enter path, which only records -200 (the X360 branches
+// straight to the `return 0` epilogue, past the state store). The failed enter/
+// exit requests are NOT freed on any of those paths: that leak is the X360's,
+// reproduced here rather than silently fixed.
+// ---------------------------------------------------------------------------
+int CMassiveZoneManager::Tick()
+{
+    if (!gnMassiveSessionID)  // dword_8327F2CC
+        return 0;
+
+    int lnState = GetValid();  // v2 = a1[4]
+    if (!lnState)
+        return 0;
+
+    ClearLastError();  // a1[1] = 0
+
+    if (lnState == 1)
+    {
+        void* lpMem = CMassiveListNode::operator new(sizeof(CRequestEnterZone)); // li r3,0x90
+        CRequestEnterZone* lpEnterZone = lpMem ? ::new (lpMem) CRequestEnterZone() : 0;
+        if (!lpEnterZone)
+        {
+            MassiveLog(2, GetName(), "ALLOCATION Failed for CRequestEnterZone");
+            SetLastError(-99, reinterpret_cast<const char*>(0)); // &unk_820046A7
+            SetValid(0);
+            return 0;
+        }
+
+        CMassiveClientCore* lpCore = CMassiveClientCore::Instance();
+        if (!lpCore)
+        {
+            SetLastError(-200, reinterpret_cast<const char*>(0)); // &unk_820046A7
+            return 0;  // NOTE: the zone state is deliberately NOT cleared here
+        }
+
+        // lwz r6/r7 = core +0x3C/+0x40, lwz r10 = core +0x44 narrowed to u16.
+        int lnCreate = lpEnterZone->CreateRequest(
+            this, mpcZoneName,
+            lpCore->mBenchmark.mnTotalA,
+            lpCore->mBenchmark.mnTotalB,
+            static_cast<unsigned short>(lpCore->mBenchmark.mnCount));
+        if (lnCreate)
+        {
+            MassiveLog(2, GetName(), "Failed to Create Request for Enter Zone: %d", lnCreate);
+            SetValid(0);
+            return 0;
+        }
+
+        int lnSubmit = lpEnterZone->Submit();
+        if (lnSubmit)
+        {
+            SetLastError(lnSubmit, "Failed to Submit Request for Enter Zone: %d", lnSubmit);
+            SetValid(0);
+            return 0;
+        }
+
+        SetValid(15);              // stw r11, 0x10(r31)
+        lpCore->mbIsValid = 15;    // stw r11, 0x10(r30) -- the client core follows
+        return 1;
+    }
+
+    if (lnState == 2)
+    {
+        mAdObjectList.GoToStart();
+        while (mAdObjectList.GetCurrent())  // while (*(a1 + 0x44))
+        {
+            CMassiveAdObject* lpObject =
+                static_cast<CMassiveAdObject*>(mAdObjectList.GetCurrData());
+            lpObject->Tic();  // (*(*CurrData + 0x0C))(CurrData)
+            mAdObjectList.GoToNext();
+        }
+        return 1;
+    }
+
+    if (lnState == 17)
+    {
+        void* lpMem = CMassiveListNode::operator new(sizeof(CRequestExitZone)); // li r3,0x50
+        CRequestExitZone* lpExitZone = lpMem ? ::new (lpMem) CRequestExitZone() : 0;
+        if (!lpExitZone)
+        {
+            MassiveLog(2, GetName(), "ALLOCATION Failed for CRequestExitZone");
+            SetLastError(-99, reinterpret_cast<const char*>(0)); // &unk_820046A7
+            SetValid(0);
+            return 0;
+        }
+
+        // The exit path does NOT null-check the singleton (the X360 reads the
+        // benchmark counters straight off the Instance() result).
+        CMassiveClientCore* lpCore = CMassiveClientCore::Instance();
+        if (lpExitZone->CreateRequest(
+                this, mpcZoneName,
+                lpCore->mBenchmark.mnTotalA,
+                lpCore->mBenchmark.mnTotalB,
+                static_cast<unsigned short>(lpCore->mBenchmark.mnCount)))
+        {
+            SetLastError(-297, "Failed to Create Request to Exit Zone");
+            SetValid(0);
+            return 0;
+        }
+
+        DeleteElements();
+
+        if (lpExitZone->Submit())
+        {
+            SetLastError(-297, "Failed to Submit Request to Exit Zone");
+            SetValid(0);
+            return 0;
+        }
+
+        SetValid(16);  // stw r11, 0x10(r31)
+        return 1;
+    }
+
+    return 1;  // any other live state: nothing to pump this tick
 }
 
 } // namespace MassiveAdClient3

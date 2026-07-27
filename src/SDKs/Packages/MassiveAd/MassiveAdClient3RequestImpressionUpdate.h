@@ -81,6 +81,14 @@ public:
     // response path dispatches; body lives in the ReadRemoveSignature/STUB slice.
     int Parse() override;
 
+    // @ 0x82BD95A0 (NOT in the ledger/export set -- recovered from the shared
+    // .i64 via idat for the CMassiveZoneManager slice; body in this TU's .cpp).
+    // Called by CMassiveZoneManager::CreateImpUpdateReque @ 0x82BD2E00: rejects
+    // a null builder (-1100), chains the base CreateRequest(pBuilder, 512, 512),
+    // pre-writes the client player ID (tag 42) and session ID (tag 43) in
+    // prepend mode, and sets status 1 (building). Returns 0.
+    int CreateRequest(CRequestBuilder* pBuilder);
+
     // @ 0x82BD9AC8. Appends a model impression-report block (block type 41) and
     // bumps mnReportCount. Returns 0.
     int AddModelReport(unsigned char uTag54, unsigned int nTag38,

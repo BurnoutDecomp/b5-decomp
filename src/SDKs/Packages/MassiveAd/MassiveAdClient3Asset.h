@@ -55,7 +55,12 @@
 // 20 downloaded, 23 failed), written through the base SetValid helper. The ctor
 // stores are (register args a2..a10 + stack args a30/a32/a38/a40):
 //   +0x28  mRecordList   (CMassiveList of CMassiveRecord; zeroed in place)
-//   +0x38  mnField38     (0)
+//   +0x38  mpOrder       (0 at ctor; the owning CMassiveOrder, attached by
+//                         CRequestEnterZone::ReadOrderBlock @ 0x82BDBEE0
+//                         `*(asset + 0x38) = order` -- "Attached Asset(%d) to
+//                         Order(%d)"; read back by CMassiveZoneManager::
+//                         SetAssetExpiredByOrderID @ 0x82BD3710
+//                         `*(mpOrder + 0x14) == nOrderId`)
 //   +0x3C  mnAssetId     (a2; the asset "ID" logged everywhere)
 //   +0x40  mnCrex        (a3; the asset "Crex"; the ctor's `if (a3)` gate)
 //   +0x44  mnMediaType   (a4; the media-type band SendReport switches on)
@@ -87,6 +92,7 @@ namespace MassiveAdClient3
 class CRequestObject;
 class CMassiveRecord;
 class CMassiveRecordImpression;
+class CMassiveOrder;  // owning home: MassiveAdClient3Objects.h (pointer-only here)
 
 class CMassiveAsset : public CRequestBuilder
 {
@@ -186,7 +192,7 @@ public:
 
 private:
     CMassiveList   mRecordList;   // +0x28 (CMassiveRecord list)
-    int            mnField38;     // +0x38 (0)
+    CMassiveOrder* mpOrder;       // +0x38 (0 at ctor; attached by ReadOrderBlock)
     int            mnAssetId;     // +0x3C (a2; the asset "ID")
     int            mnCrex;        // +0x40 (a3; the asset "Crex")
     int            mnMediaType;   // +0x44 (a4; SendReport's media-type band)

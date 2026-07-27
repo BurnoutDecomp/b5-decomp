@@ -33,6 +33,13 @@ namespace MassiveAdClient3
 
 class CMassiveBenchmark : public CMassiveBaseObject
 {
+    // CMassiveZoneManager::Tick @ 0x82BD3130 reads the CLIENT CORE's embedded
+    // benchmark counters directly on the X360 (`lwz r6/r7/r10, 0x3C/0x40/0x44`
+    // off the Instance() result = this subobject's +0x14/+0x18/+0x1C) to pass
+    // the bandwidth-usage triple into CRequestEnterZone/CRequestExitZone::
+    // CreateRequest. Friendship keeps those attested reads named-member reads.
+    friend class CMassiveZoneManager;
+
 public:
     // @ 0x82BD38E8. Chains the base ctor ("CMassiveBenchMark"), installs this
     // class's vftable (off_821859F4 -- modelled by the virtual dtor), and zeroes

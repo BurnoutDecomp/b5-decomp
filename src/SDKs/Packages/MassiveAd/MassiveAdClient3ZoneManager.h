@@ -26,13 +26,13 @@
 //     MassiveAdClient3::CMassiveZoneManager::DeleteElements            @ 0x82BD2A88
 //     MassiveAdClient3::CMassiveZoneManager::PreSubscriberAssignT      @ 0x82BD3630
 //     MassiveAdClient3::CMassiveZoneManager::MAOFind                   @ 0x82BD2CB0
-//     MassiveAdClient3::CMassiveZoneManager::CreateImpUpdateReque      @ 0x82BD2E00 (BLOCKED)
-//     MassiveAdClient3::CMassiveZoneManager::HandleResponse            @ 0x82BD3410 (BLOCKED)
+//     MassiveAdClient3::CMassiveZoneManager::CreateImpUpdateReque      @ 0x82BD2E00
+//     MassiveAdClient3::CMassiveZoneManager::HandleResponse            @ 0x82BD3410
 //     MassiveAdClient3::CMassiveZoneManager::ReportImpressions         @ 0x82BD2F08
 //     MassiveAdClient3::CMassiveZoneManager::Resume                    @ 0x82BD3088
 //     MassiveAdClient3::CMassiveZoneManager::SetAssetExpired           @ 0x82BD2DA0
-//     MassiveAdClient3::CMassiveZoneManager::SetAssetExpiredByOrderID  @ 0x82BD3710 (BLOCKED)
-//     MassiveAdClient3::CMassiveZoneManager::Tick                      @ 0x82BD3130 (BLOCKED)
+//     MassiveAdClient3::CMassiveZoneManager::SetAssetExpiredByOrderID  @ 0x82BD3710
+//     MassiveAdClient3::CMassiveZoneManager::Tick                      @ 0x82BD3130
 //
 // W38 UNBLOCK: DeleteElements, AssetFind and PreSubscriberAssignT are now
 // implemented -- their collaborator layouts have since been homed. DeleteElements
@@ -52,21 +52,27 @@
 // on the pending update (its CreateImpUpdateReque helper stays blocked below, but
 // is declared, so the flush body compiles and is faithful).
 //
-// The 4 still-BLOCKED bodies are DECLARED here (so the class shape / vftable is
-// complete and the compile gate is clean) but left for a later ledger slice:
-// they read/dispatch through collaborators whose owning layout is not yet
-// reconstructed and must not be guessed --
-//   - CRequestEnterZone (Tick / HandleResponse build + query one): no home.
-//   - CMassiveClientCore internal state at +0x10 and player/session fields at
-//     +0x3C..+0x44 (CreateImpUpdateReque / HandleResponse / Tick read them):
-//     ClientCore is a memberless surface-pin here (no state field homed), and
-//     CRequestImpressionUpdate::CreateRequest is not attested here either.
-//   - CMassiveClientCore::ZoneManagerRemove (HandleResponse tail): no home.
-//   - CMassiveAsset::mnField38's un-homed order-record pointee (SetAssetExpired
-//     ByOrderID reads asset.mnField38->+0x14 for the CMassiveOrder number): the
-//     committed CMassiveAsset stores +0x38 as a 32-bit int, so reading it as a
-//     CMassiveOrder* would need a NON-ADDITIVE int->pointer width change on that
-//     committed member -- left blocked rather than fork the asset layout.
+// waveE UNBLOCK: the final 4 bodies (CreateImpUpdateReque / HandleResponse /
+// Tick / SetAssetExpiredByOrderID) are now implementable -- every collaborator
+// surface they touch has been homed:
+//   - CRequestEnterZone now has its owning home (MassiveAdClient3RequestEnter
+//     Zone.h): ctor / CreateRequest / GetMAOs / GetOrders / GetAssets declared.
+//   - CMassiveClientCore is now modelled with its ATTESTED CRequestBuilder base
+//     (its ctor @ 0x82BCD440 chains CRequestBuilder("CMassiveClientCore")), so
+//     the "client state" dword at core+0x10 is the inherited CMassiveBaseObject
+//     valid/state dword, and the "player/session fields" at core+0x3C..+0x44
+//     are the embedded CMassiveBenchmark's mnTotalA/mnTotalB/mnCount (the
+//     bandwidth-usage triple). The zone manager reaches both through friendship
+//     (CMassiveBaseObject / CMassiveBenchmark / CMassiveClientCore).
+//   - CMassiveClientCore::ZoneManagerRemove @ 0x82BCCCC8 is declared.
+//   - CRequestImpressionUpdate::CreateRequest @ 0x82BD95A0 (un-ledgered; body
+//     recovered via idat into the committed impression-update TU) is declared.
+//   - CMassiveAsset's +0x38 word is now the attested CMassiveOrder* mpOrder
+//     (attached by CRequestEnterZone::ReadOrderBlock `*(asset+0x38) = order`;
+//     the old int mnField38 model predated that attestation), so SetAssetExpired
+//     ByOrderID's `*(mpOrder + 0x14)` read is CMassiveOrder::mnNumber (the
+//     committed home in MassiveAdClient3Objects.h, now a zone-manager friend).
+//   - gnMassiveSessionID (dword_8327F2CC, MassiveAdClient3Request.h) gates Tick.
 //
 // Layout over the CRequestBuilder base (base = CMassiveBaseObject[+0x00..+0x13]
 // + CMassiveList mRequestList[+0x14] + int mnSubmitStatus[+0x24]; own members
@@ -123,12 +129,15 @@ public:
 
     // ----- CRequestBuilder completion callbacks (vftable slots 1 / 2) --------
 
-    // @ 0x82BD3410 (slot 1 override). BLOCKED -- advances the zone state on a
-    // completed Enter/Exit/Impression request: parses the enter-zone reply into
-    // the MAO/asset/order lists (CRequestEnterZone getters + a CMassiveAsset),
-    // touches CMassiveClientCore state, then RemoveFromRequestCollect. Declared so
-    // the class overrides the pure base slot; body left for the CRequestEnterZone
-    // / CMassiveAsset / ClientCore-state slice.
+    // @ 0x82BD3410 (slot 1 override). Advances the zone state on a completed
+    // request, switched on the request's server-type word: Enter (0x33) drains
+    // the reply into the MAO/asset/order lists (CRequestEnterZone::GetMAOs /
+    // GetOrders / GetAssets, plus one default-constructed CMassiveAsset appended
+    // first), starts the pending impression update, sets zone state 2 and folds
+    // client-core state 13/15 -> 14; Exit (0x43) sets zone state 4; Impression
+    // (0x65) logs. Then RemoveFromRequestCollect, and -- when the zone reached
+    // state 4 -- CMassiveClientCore::ZoneManagerRemove(this), WHICH DELETES THIS
+    // ZONE MANAGER.
     int HandleResponse(CRequestObject* pRequest) override;
 
     // @ 0x82BD3368 (slot 2 override). On a failed Enter (-298) / Exit (-297) /
@@ -168,11 +177,14 @@ public:
     // equals nAssetId, or null when none match.
     CMassiveAsset* AssetFind(int nAssetId);
 
-    // ----- impression aggregation (BLOCKED) ----------------------------------
+    // ----- impression aggregation --------------------------------------------
 
-    // @ 0x82BD2E00. BLOCKED -- lazily allocates the pending CRequestImpression
-    // Update (rejects allocation while the client core is shutting down, state
-    // +0x10 == 4). Reads CMassiveClientCore internal state.
+    // @ 0x82BD2E00. Lazily allocates the pending CRequestImpressionUpdate: a
+    // live one short-circuits (0); a shutting-down client core (core state ==
+    // 4, read through the base-friendship) logs and returns -299; an allocation
+    // failure logs, clears the zone state and records -99; a failed
+    // CRequestImpressionUpdate::CreateRequest deletes the fresh update and
+    // records -299. Returns 0 once a pending update exists.
     int CreateImpUpdateReque();
 
     // @ 0x82BD2F08. Flushes queued impressions: ensures a pending impression
@@ -182,11 +194,17 @@ public:
     // error when none could be allocated.
     int ReportImpressions();
 
-    // ----- zone lifecycle (BLOCKED) ------------------------------------------
+    // ----- zone lifecycle ----------------------------------------------------
 
-    // @ 0x82BD3130. BLOCKED -- the zone state machine: builds and submits a
-    // CRequestEnterZone (state 1) or CRequestExitZone (state 17), ticks every ad
-    // object (state 2). Reads CMassiveClientCore player/session fields.
+    // @ 0x82BD3130. The zone state machine, gated on a live gnMassiveSessionID
+    // and a non-zero zone state (returns 0 otherwise, clearing the base last-
+    // error dword first when the state is live): state 1 builds + submits a
+    // CRequestEnterZone (zone AND client-core state -> 15 on success); state 2
+    // ticks every ad object (vftable slot +0x0C, the committed Tic()); state 17
+    // builds a CRequestExitZone, DeleteElements, submits (zone state -> 16 on
+    // success). The bandwidth-usage triple both requests carry is read off the
+    // client core's embedded benchmark (friendship). Returns 1 on the live
+    // paths, 0 on the error paths (which clear the zone state).
     int Tick();
 
     // @ 0x82BD3088. Resumes the base builder (name-hides CRequestBuilder::Resume,
@@ -203,8 +221,11 @@ public:
     // (dispatch through CMassiveAdObject vftable slot +0x08). Returns 1.
     int SetAssetExpired(int nAssetExpiry);
 
-    // @ 0x82BD3710. BLOCKED -- expires the asset carrying order id nOrderId across
-    // all ad objects. Reads CMassiveAsset +0x38/+0x3C/+0x40.
+    // @ 0x82BD3710. Walks the asset list for assets whose attached order
+    // (CMassiveAsset::mpOrder, NOT null-checked -- the X360 guards only on a
+    // non-zero mnAssetId) carries order id nOrderId (CMassiveOrder::mnNumber),
+    // logs, and expires that asset id on every ad object (SetAssetExpired).
+    // Returns 1.
     int SetAssetExpiredByOrderID(int nOrderId);
 
     // Additive accessor (FLAG: not its own X360 function). CMassiveAsset::SendReport
