@@ -53,7 +53,7 @@ CMassiveAsset::CMassiveAsset(int nAssetId, int nCrex, int nMediaType, int nField
                              const char* pcUrl, const void* pHash)
     : CRequestBuilder("CMassiveAsset"),
       mRecordList(),
-      mnField38(0),          // *(this + 0x38) = 0
+      mpOrder(0),            // *(this + 0x38) = 0 (attached later by ReadOrderBlock)
       mnAssetId(nAssetId),   // *(this + 0x3C) = a2
       mnCrex(nCrex),         // *(this + 0x40) = a3
       mnMediaType(nMediaType), // *(this + 0x44) = a4

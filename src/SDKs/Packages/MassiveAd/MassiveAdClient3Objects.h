@@ -156,6 +156,18 @@ private:
 // ---------------------------------------------------------------------------
 class CMassiveOrder : public CMassiveBaseObject
 {
+    // CMassiveZoneManager::SetAssetExpiredByOrderID @ 0x82BD3710 reads mnNumber
+    // directly on the X360 (`*(asset->mpOrder + 0x14) == nOrderId`, a bare lwz
+    // through the asset's attached order); the zone manager owns the mOrderList
+    // the orders live on. Friendship keeps that a named-member read rather than
+    // an offset hack (same pattern as CMassiveAsset::mnAssetId).
+    friend class CMassiveZoneManager;
+
+    // CRequestEnterZone::ReadOrderBlock @ 0x82BDBEE0 constructs the order from
+    // the wire block (tag 19 -> mnNumber, tag 3 -> mnType) and reads mnNumber
+    // back for its "Attached Asset(%d) to Order(%d)" log line.
+    friend class CRequestEnterZone;
+
 public:
     // @ 0x82BDEFA8. Chains the base ctor ("CMassiveOrder"), installs this
     // class's vftable, stores (nNumber, nType), and zeroes the two trailing

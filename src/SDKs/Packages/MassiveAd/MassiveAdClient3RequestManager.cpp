@@ -21,18 +21,13 @@ namespace MassiveAdClient3
 CRequestManager* spRequestManager = 0;
 
 // ---------------------------------------------------------------------------
-// dword_8327F2CC / dword_8327F2D0 -- two MassiveAd client .data slots that
-// CRequestManager::Shutdown zeroes alongside the third-party-state teardown. Their
-// producers live outside this TU and their exact semantics are not attested here,
-// so they are modelled as opaque pointer-width slots purely to preserve the
-// shutdown side-effect. FLAG: names/types are placeholders for un-homed globals.
-// ---------------------------------------------------------------------------
-namespace
-{
-void* gpMassiveClientState_8327F2CC = 0;
-void* gpMassiveClientState_8327F2D0 = 0;
-} // namespace
-
+// dword_8327F2CC / dword_8327F2D0 -- the client-wide MassiveAd session / player
+// IDs. Their real homes are gnMassiveSessionID / gnMassivePlayerID
+// (MassiveAdClient3Request.h, defined in MassiveAdClient3Request.cpp); the
+// earlier anonymous-namespace `gpMassiveClientState_*` placeholder pair this TU
+// carried was a duplicate model of the SAME two .data slots (it would have made
+// Shutdown clear file-local copies instead of the live IDs) and was removed
+// when the globals were homed.
 // ---------------------------------------------------------------------------
 // CRequestManager::CRequestManager @ 0x82BD06D0
 //
@@ -109,9 +104,9 @@ void* CRequestManager::Shutdown()
 {
     CRequestObject::ClearThirdPartyID();       // bl ...ClearThirdPartyID
     CRequestObject::ClearThirdPartyService();  // bl ...ClearThirdPartyService (r3 noise dropped)
-    gpMassiveClientState_8327F2D0 = 0;         // stw 0, dword_8327F2D0
+    gnMassivePlayerID = 0;                     // stw 0, dword_8327F2D0
     void* lpResult = spRequestManager;         // lwz r3, off_8327F368
-    gpMassiveClientState_8327F2CC = 0;         // stw 0, dword_8327F2CC
+    gnMassiveSessionID = 0;                    // stw 0, dword_8327F2CC
     if (spRequestManager)                      // beq -> skip
         lpResult = spRequestManager->ScalarDeletingDestructor(1); // vtable[0](this, 1)
     spRequestManager = 0;                      // stw 0, off_8327F368
