@@ -63,4 +63,30 @@ namespace CgsGraphics
 
         return mpfLodDistances[luLodIndex];
     }
+
+    // The three trivial field accessors the DWARF declares as header inlines
+    // (CgsModel.h:182 / :189 / :213 -- no out-of-line X360 symbols exist, they are
+    // inlined into every caller). They are gathered here beside the other three
+    // accessors; each is a single named-field read, pinned by the same asm the
+    // accessors above quote:
+    //   GetNumLods        -> mu8NumStates       (lbz 0x12; every LOD walk bounds on it,
+    //                                            and GetLodDistance asserts against it)
+    //   GetNumRenderables -> mu8NumRenderables  (lbz 0x10; GetRenderable's index bound)
+    //   GetVersionNumber  -> mu8VersionNumber   (lbz 0x13)
+    // (They previously resolved to WorldLinkStubs "return 0" gates, which made every
+    // streamed instance fail RenderInstance's "Model in unit has no lods!" assert.)
+    u32 Model::GetNumLods() const
+    {
+        return mu8NumStates;
+    }
+
+    u32 Model::GetNumRenderables() const
+    {
+        return mu8NumRenderables;
+    }
+
+    u32 Model::GetVersionNumber() const
+    {
+        return mu8VersionNumber;
+    }
 }

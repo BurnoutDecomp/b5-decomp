@@ -67,9 +67,17 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"       // CgsResource::ID::HashString
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"       // BrnResource::GameDataIO::RequestInterface<4096>
 
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"     // DispatchFrame / DispatchList
+#include <cmath>   // sqrtf / tanf ([FLAG PC bring-up] the dispatch producer's camera)
+
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // same extern as the world-entity TU -- the defining home lands with the shader TU).
 namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
+
+// [FLAG PC bring-up] the PC back-buffer extent (pc/gcm/renderengine/device.h). Declared
+// here rather than included: that header pulls <windows.h>/<d3d9.h>, which must not enter
+// this TU. Only the aspect ratio of the bring-up dispatch camera reads them.
+namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
 
 namespace BrnWorld
 {
@@ -81,12 +89,22 @@ static CgsGraphics::Camera gFrustumQueryCamera;
 static CgsGraphics::Camera gDispatchCamera;
 
 // The world dispatch/sort list ids the X360 passes in registers to the world
-// module's dispatch feed (dropped by the decompiler at the call site -- FLAG:
-// role-correct values pinned at postmortem from the 0x827D1CE8 asm).
-static const s32 KI_WORLD_OPAQUE_LIST = 2;
-static const s32 KI_WORLD_SORT_LAYER  = 19;
-static const s32 KI_WORLD_SORT_KEY    = 20;
-static const s32 KI_WORLD_PREZ_LIST   = 15;
+// module's dispatch feed (dropped by the decompiler at the call site).
+//
+// CORRECTED (world-pixels wave 2026-07-28) against the renderer's list map and a
+// live run. `liList` is the GDL OBJECT list RenderInstance submits the
+// DRAWRENDERABLE packet into (ConvertObjectsToMeshes expands object lists 0..12);
+// `liSortLayer` / `liSortKey` are the DESTINATION MESH list ids DrawRenderable::
+// Interpret routes each expanded mesh to -- opaque and transparent respectively.
+// The old 19/20 were the CAR opaque/transparent mesh lists, and a boot with the
+// producer live proved it: the world's 187 expanded meshes landed in mesh list 19.
+// The X360 world pass is list 11 opaque / 15 transparent / 21 pre-Z (renderer
+// Render @0x8240BFA8: mbRenderWorldOpaque walks 11, mbRenderWorldTransparent 15,
+// mbRenderPreZ 21, mbRenderCarsOpaque 19, mbRenderCarsTransparent 20).
+static const s32 KI_WORLD_OPAQUE_LIST = 2;    // GDL object list
+static const s32 KI_WORLD_SORT_LAYER  = 11;   // -> mesh list: WORLD OPAQUE
+static const s32 KI_WORLD_SORT_KEY    = 15;   // -> mesh list: WORLD TRANSPARENT
+static const s32 KI_WORLD_PREZ_LIST   = 21;   // -> mesh list: PRE-Z
 
 // Clamp a colour to [0, white level] per channel (the X360 vmaxfp/vminfp pair).
 static void ClampColourToWhiteLevel( Vector3& lrColour, f32 lfWhiteLevel )
@@ -3701,6 +3719,169 @@ WorldModule::GenerateShadowMapDispatchLists(
         PerfMonCpu::StopMonitor( miPropGenerateDispListClearPM );
 
         mShadowMap.SetRenderingShadowMap( false );
+    }
+}
+
+
+// =============================================================================
+// [FLAG PC bring-up] GenerateDispatchListsBringUp -- NOT an X360 function.
+//
+// The console producer chain is BrnGameModule::DoDispatch @0x823DC458 ->
+// (BrnRendererModule::Update publishes the GDL frame; BridgeRendererToWorld hands
+// it to the world) -> WorldModule::GenerateFrustumQueries -> ::GenerateDispatchLists.
+// On this build that chain has three dead links: the director module produces no
+// camera, the renderer/world dispatch IO buffer set is not created anywhere, and the
+// scene manager's entity registration + frustum-test jobs are documented inert gates
+// (so ::GenerateDispatchLists' frustum result would be null). This is the smallest
+// honest stand-in: frame a camera on the geometry the streamer has actually
+// delivered, publish the three camera shader constants the dispatch interpreter
+// reads back, and run the world entity module's streamer-driven feed.
+//
+// Everything downstream of here is the real reconstructed path: RenderInstance ->
+// DrawRenderable::AddToBin -> DispatchList::Submit -> ConvertObjectsToMeshes ->
+// DrawRenderable::Interpret -> DispatchAllMeshes -> the D3D9 draw leaf.
+//
+// DELETE the whole function (and its DoDispatch call) once DoDispatch and the scene
+// manager's frustum query are real.
+// =============================================================================
+void
+WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame )
+{
+    if ( lpDispatchFrame == 0 )
+    {
+        return;
+    }
+
+    // ---- frame an establishing camera on the loaded world -------------------
+    Vector3 lCentre;
+    f32     lfRadius = 0.0f;
+    if ( !mWorldEntityModule.GetLoadedWorldBounds( &lCentre, &lfRadius ) )
+    {
+        return;   // the streamer has delivered nothing yet
+    }
+    if ( lfRadius < 1.0f )
+    {
+        lfRadius = 1.0f;
+    }
+
+    // Eye: pulled back and up from the centroid along -Z, looking at the centroid.
+    // (Burnout world space is Y-up -- the PVS query is a ground-plane XZ lookup.)
+    Vector3 lEye;
+    lEye.x = lCentre.x;
+    lEye.y = lCentre.y + lfRadius * 0.45f;
+    lEye.z = lCentre.z - lfRadius * 1.15f;
+    lEye.w = 0.0f;
+
+    Vector3 lForward;
+    lForward.x = lCentre.x - lEye.x;
+    lForward.y = lCentre.y - lEye.y;
+    lForward.z = lCentre.z - lEye.z;
+    lForward.w = 0.0f;
+    {
+        const f32 lfLen = sqrtf( lForward.x * lForward.x + lForward.y * lForward.y
+                                 + lForward.z * lForward.z );
+        const f32 lfInv = ( lfLen > 0.0001f ) ? ( 1.0f / lfLen ) : 1.0f;
+        lForward.x *= lfInv;
+        lForward.y *= lfInv;
+        lForward.z *= lfInv;
+    }
+
+    // Right = normalize(cross(worldUp, forward)); Up = cross(forward, right).
+    Vector3 lRight;
+    lRight.x =  lForward.z;
+    lRight.y =  0.0f;
+    lRight.z = -lForward.x;
+    lRight.w =  0.0f;
+    {
+        const f32 lfLen = sqrtf( lRight.x * lRight.x + lRight.z * lRight.z );
+        if ( lfLen > 0.0001f )
+        {
+            lRight.x /= lfLen;
+            lRight.z /= lfLen;
+        }
+        else
+        {
+            lRight.x = 1.0f;
+            lRight.z = 0.0f;
+        }
+    }
+    Vector3 lUp;
+    lUp.x = lForward.y * lRight.z - lForward.z * lRight.y;
+    lUp.y = lForward.z * lRight.x - lForward.x * lRight.z;
+    lUp.z = lForward.x * lRight.y - lForward.y * lRight.x;
+    lUp.w = 0.0f;
+
+    // View matrix, ROW-VECTOR convention (the whole dispatch path is row-vector:
+    // DrawRenderable::Interpret computes WVP = world * viewProjection and the draw
+    // leaf evaluates hpos = pos.x*row0 + pos.y*row1 + pos.z*row2 + row3).
+    Matrix44 lView;
+    lView.xAxis = Vector4{ lRight.x, lUp.x, lForward.x, 0.0f };
+    lView.yAxis = Vector4{ lRight.y, lUp.y, lForward.y, 0.0f };
+    lView.zAxis = Vector4{ lRight.z, lUp.z, lForward.z, 0.0f };
+    lView.wAxis = Vector4{
+        -( lRight.x   * lEye.x + lRight.y   * lEye.y + lRight.z   * lEye.z ),
+        -( lUp.x      * lEye.x + lUp.y      * lEye.y + lUp.z      * lEye.z ),
+        -( lForward.x * lEye.x + lForward.y * lEye.y + lForward.z * lEye.z ),
+        1.0f };
+
+    // Perspective projection (left-handed, D3D depth 0..1), 60 degrees vertical.
+    const f32 lfAspect = ( renderengine::gDisplayHeight > 0 )
+        ? ( static_cast< f32 >( renderengine::gDisplayWidth )
+            / static_cast< f32 >( renderengine::gDisplayHeight ) )
+        : ( 16.0f / 9.0f );
+    const f32 lfNear = 0.5f;
+    const f32 lfFar  = ( lfRadius * 4.0f > 4000.0f ) ? ( lfRadius * 4.0f ) : 4000.0f;
+    const f32 lfCotHalfFov = 1.0f / tanf( 0.5f * 1.0471976f );   // 60 degrees
+
+    Matrix44 lProjection;
+    lProjection.xAxis = Vector4{ lfCotHalfFov / lfAspect, 0.0f, 0.0f, 0.0f };
+    lProjection.yAxis = Vector4{ 0.0f, lfCotHalfFov, 0.0f, 0.0f };
+    lProjection.zAxis = Vector4{ 0.0f, 0.0f, lfFar / ( lfFar - lfNear ), 1.0f };
+    lProjection.wAxis = Vector4{ 0.0f, 0.0f, -lfNear * lfFar / ( lfFar - lfNear ), 0.0f };
+
+    Matrix44 lViewProjection;
+    {
+        const Vector4* lapV[ 4 ] = { &lView.xAxis, &lView.yAxis, &lView.zAxis, &lView.wAxis };
+        const Vector4* lapP[ 4 ] = { &lProjection.xAxis, &lProjection.yAxis,
+                                     &lProjection.zAxis, &lProjection.wAxis };
+        Vector4* lapO[ 4 ] = { &lViewProjection.xAxis, &lViewProjection.yAxis,
+                               &lViewProjection.zAxis, &lViewProjection.wAxis };
+        for ( int liRow = 0; liRow < 4; liRow++ )
+        {
+            const Vector4& lrV = *lapV[ liRow ];
+            Vector4&       lrO = *lapO[ liRow ];
+            lrO.x = lrV.x * lapP[0]->x + lrV.y * lapP[1]->x + lrV.z * lapP[2]->x + lrV.w * lapP[3]->x;
+            lrO.y = lrV.x * lapP[0]->y + lrV.y * lapP[1]->y + lrV.z * lapP[2]->y + lrV.w * lapP[3]->y;
+            lrO.z = lrV.x * lapP[0]->z + lrV.y * lapP[1]->z + lrV.z * lapP[2]->z + lrV.w * lapP[3]->z;
+            lrO.w = lrV.x * lapP[0]->w + lrV.y * lapP[1]->w + lrV.z * lapP[2]->w + lrV.w * lapP[3]->w;
+        }
+    }
+
+    // ---- the camera shader constants the dispatch interpreter reads back -----
+    // (the same three ids WorldModule::GenerateDispatchLists publishes: 8 = view
+    //  position, 3 = view-projection, 34 = the modified view-projection.)
+    mShaderLodInfo.Update();
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, lEye );
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData( 3, lViewProjection );
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lViewProjection );
+
+    mWorldEntityModule.GenerateDispatchListsFromStreamer(
+        lpDispatchFrame, &mShaderLodInfo, lEye, 1.0f,
+        KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY );
+
+    {
+        static bool sbLogged = false;
+        if ( !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            sbLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] world dispatch producer live: centre ("
+                << lCentre.x << ", " << lCentre.y << ", " << lCentre.z
+                << ") radius " << lfRadius << " -- object list "
+                << static_cast< s32 >( KI_WORLD_OPAQUE_LIST ) << " count "
+                << static_cast< s32 >( lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() )
+                << "\n";
+        }
     }
 }
 

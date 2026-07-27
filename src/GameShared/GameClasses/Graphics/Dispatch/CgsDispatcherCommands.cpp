@@ -51,6 +51,7 @@
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"            // ShaderConstantTable
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // the one-shot bring-up gates
 #include "BrnCommonTypes.h"                                                // Vector4 / Matrix44
 
 #include <cstring>   // memcpy
@@ -112,6 +113,18 @@ namespace
         return static_cast<u32>(reinterpret_cast<uintptr_t>(lpPointer));
     }
 
+    // The command id lives in word0's HIGH byte, not its low bits:
+    // DispatchCommand::GetCommandID() == (word0 >> KU_SIZE_BITS(24)) & 0x7F, and every
+    // AddToBin stamps word0 = packetLength | (id << 24) (e.g. DrawRenderable's
+    // `| 0x01000000`). The six id checks in this TU had been reading `word0 & 0x7F`,
+    // which is the low byte of the LENGTH -- so DispatchAllObjectToMesh asserted
+    // "pCommand->GetCommandID() == DRAWRENDERABLE" on the first real world packet and
+    // InterpretOcclusionQuery would have mis-routed zonly/mesh commands.
+    inline u32 CommandIdOf(u32 luWord0)
+    {
+        return (luWord0 >> DispatchCommand::KU_SIZE_BITS) & 0x7Fu;
+    }
+
     // Sorted/unsorted record decode (asm @0x827F7700): packet = binBase + offset*16.
     inline u32* PacketFromRecord(DispatchCommand* lpBinBase, u64 luRecord)
     {
@@ -169,7 +182,7 @@ void CallbackFn::Interpret(DispatchCommand* lpCommand, DispatchFrame* /*lpFrame*
 {
     u32* lpWords = reinterpret_cast<u32*>(lpCommand);
 
-    CGS_ASSERT((lpWords[0] & 0x7Fu) == DispatchCommand::E_CALLBACKFN,
+    CGS_ASSERT(CommandIdOf(lpWords[0]) == DispatchCommand::E_CALLBACKFN,
                "lpCommand->GetCommandID() == CALLBACKFN");
 
     typedef void (*CallbackProc)(void*, u32);
@@ -399,7 +412,12 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
         // [PC bring-up gate] SHADERS.BNDL not yet loaded/fixed on this path: no
         // technique constant tables exist. Return a live empty scratch so the
         // command stream stays well-formed (the walk skips constant upload).
-        return reinterpret_cast<Vector4**>(lpBin->AllocateMemoryFast(1));
+        // The reservation MUST go through the same Begin/EndAllocateMemory bracket
+        // the real path uses: this runs inside the caller's open packet, and
+        // AllocateMemoryFast asserts m_pPacketStart == NULL.
+        Vector4** lppEmpty = reinterpret_cast<Vector4**>(lpBin->BeginAllocateMemory(1));
+        lpBin->EndAllocateMemory(1);
+        return lppEmpty;
     }
 
     const u8*  lpST    = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
@@ -586,7 +604,7 @@ bool DrawRenderableMeshZOnly::AddToBin(const RenderableMesh* lpMesh, DispatchBin
 void DrawRenderableMesh::InterpretOcclusionQuery(DispatchCommand* lpCommand, f32 /*lfTime*/)
 {
     u32* lpWords = reinterpret_cast<u32*>(lpCommand);
-    u32  luCommandId = lpWords[0] & 0x7Fu;
+    u32  luCommandId = CommandIdOf(lpWords[0]);
     CGS_ASSERT(luCommandId == DispatchCommand::E_DRAWRENDERABLEMESH
                    || luCommandId == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
                "pCommand->GetCommandID() == DRAWRENDERABLEMESH || "
@@ -628,7 +646,7 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
     CGS_ASSERT(lpCommand != 0, "lpCommand");
     CGS_ASSERT(lpFrame != 0,   "lpMeshOnlyDispatchFrame");
     CGS_ASSERT(lpContext != 0, "lpDispatchObjectContextVoid");
-    CGS_ASSERT((lpWords[0] & 0x7Fu) == DispatchCommand::E_DRAWRENDERABLE,
+    CGS_ASSERT(CommandIdOf(lpWords[0]) == DispatchCommand::E_DRAWRENDERABLE,
                "lpCommand->GetCommandID() == DRAWRENDERABLE");
 
     const Renderable* lpRenderable =
@@ -751,10 +769,37 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
         // Clamp the technique to the mesh's descriptor count.
         const u32 luNumVd = lpMesh->mu8NumVertexDescriptors;
         const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
+
+        // [FLAG PC boot gate] The console always has every material resident, so it
+        // dereferences the assembly unguarded. Here the world bundles are still being
+        // brought up one at a time: a mesh whose Material import lives in a bundle that
+        // is not staged (or that the pool refused when its heap filled) keeps the null
+        // Pool::ResolveImportForEntry wrote, and the read below is an access violation
+        // inside the per-frame render walk. Skip such a mesh and name it once.
+        // DELETE when every world bundle resolves (the streamer's unload leg + the
+        // remaining COMMONDATA/SHADERS staging).
+        if (lpAssembly == 0 || lpAssembly->GetLength() == 0)
+        {
+            static bool sbLoggedNullAssembly = false;
+            if (!sbLoggedNullAssembly && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbLoggedNullAssembly = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "DrawRenderable::Interpret: mesh has no material assembly"
+                       " (unresolved Material import) -- mesh skipped [FLAG PC boot gate]\n";
+            }
+            continue;
+        }
+
         CGS_ASSERT(luNumVd == lpAssembly->GetLength(),
                    "lpRenderableMesh->GetNumVertexDescriptors() == lpMaterialAssembly->GetLength()");
         u32 luTechnique = lu8Technique;
         if (luNumVd - 1u < luTechnique) luTechnique = luNumVd - 1u;
+        // FLAG [PC bring-up]: the console relies on the tripwire above holding, so its
+        // clamp is against the descriptor count alone. Re-clamp into the assembly's real
+        // range so a mismatch reported by that assert cannot walk off the technique table.
+        if (luTechnique >= lpAssembly->GetLength())
+            luTechnique = lpAssembly->GetLength() - 1u;
 
         const MaterialTechniqueView* lpTechnique =
             reinterpret_cast<const MaterialTechniqueView*>(lpAssembly->GetMaterial(luTechnique));
@@ -896,7 +941,7 @@ DispatchCommand* DispatchList::DispatchAllObjectToMesh(DispatchPacketInterpreter
                 {
                     u32* lpPacket = PacketFromRecord(m_pBinBase, lpBlock->mpKeys[liKey]);
                     CGS_ASSERT(lpPacket != 0, "pPacket");
-                    CGS_ASSERT((lpPacket[0] & 0x7Fu) == DispatchCommand::E_DRAWRENDERABLE,
+                    CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLE,
                                "pCommand->GetCommandID() == DRAWRENDERABLE");
                     DrawRenderable::Interpret(reinterpret_cast<DispatchCommand*>(lpPacket),
                                               lpMeshOnlyFrame, lpContext, 0.0f);
@@ -949,7 +994,7 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/
     {
         CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
         u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
-        CGS_ASSERT((lpPacket[0] & 0x7Fu) == DispatchCommand::E_DRAWRENDERABLEMESH,
+        CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESH,
                    "lpCommand->GetCommandID() == DRAWRENDERABLEMESH");
 
         RenderableMesh* lpMesh =
@@ -1026,7 +1071,7 @@ void DispatchList::DispatchAllMeshesZOnly(DispatchPacketInterpreter* lpInterpret
         CGS_ASSERT(luIndex < muCount, "luIndex < muTotalKeyCount");
         u32* lpPacket = PacketFromRecord(m_pBinBase, mpSortedKeys[luIndex]);
         CGS_ASSERT(lpPacket != 0, "pPacket");
-        CGS_ASSERT((lpPacket[0] & 0x7Fu) == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
+        CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
                    "pCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY");
         DrawRenderableMeshZOnly::Interpret(reinterpret_cast<DispatchCommand*>(lpPacket),
                                            0, lpContext, lpInterpreter->GetTime());

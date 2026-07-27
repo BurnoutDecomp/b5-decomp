@@ -224,6 +224,37 @@ public:
         s32 liPreZList,
         bool lbGenerateShadows );
 
+    // ---- [FLAG PC bring-up] streamer-driven dispatch feed ------------------
+    // NOT an X360 function. GenerateDispatchLists above is fed the scene manager's
+    // frustum-test result (WorldModule::GenerateDispatchLists -> SceneManagerModule::
+    // ProcessFrustumTestJobResults -> FilterFrustumTestResults). On this build the
+    // scene manager's entity registration and frustum-test job path are still inert
+    // gates ("SceneManagerModule::UpdateScene: inert", "InSceneUpdateInterface::Append:
+    // inert"), so that result queue is always empty and no world entity id reaches the
+    // real feed. This walks the streamer's own loaded instance lists instead -- the
+    // same instances the scene manager would have registered -- and hands each one to
+    // the REAL RenderInstance. Everything downstream (LOD pick, technique pick,
+    // DrawRenderable::AddToBin, the dispatch walk, the draw leaf) is the real path.
+    // DELETE the moment the scene manager's frustum query is live.
+    void GenerateDispatchListsFromStreamer(
+        CgsGraphics::DispatchFrame* lpDispatchFrame,
+        const ShaderLodInfo* lpShaderLodInfo,
+        Vector3::InParam lCameraPosition,
+        f32 lfDrawDistanceScale,
+        s32 liList,
+        s32 liSortLayer,
+        s32 liSortKey );
+
+    // [FLAG PC bring-up] the position the PVS query streamed around this frame --
+    // the only world-space anchor available while the director/camera modules are
+    // inert. Read by the bring-up dispatch driver to place its camera.
+    Vector3 GetPositionUsedForPVS() const { return mPositionUsedForPVS; }
+
+    // [FLAG PC bring-up] centre + radius of every loaded world instance, used by the
+    // bring-up dispatch driver to frame an establishing shot. Returns false when the
+    // streamer has delivered nothing yet.
+    bool GetLoadedWorldBounds( Vector3* lpCentreOut, f32* lpfRadiusOut );
+
     void GenerateDispatchListsForEnvironmentMap(                         // @0x822D7298
         const WorldEntityIO::InputBuffer_GenerateDispatchLists* lpInputBuffer,
         const Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,

@@ -156,9 +156,9 @@ namespace CgsGraphics
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert:
 // runs in the static-initializer of mShaderConstantTable above, BEFORE main --
 // must NOT assert; members stay default/garbage until the real ctor lands.)
-ShaderConstantTable::ShaderConstantTable()
-{
-}
+// (ShaderConstantTable::ShaderConstantTable is REAL now, in its home TU
+//  GameShared/GameClasses/Graphics/CgsShaderConstantTable.cpp -- the empty stub here
+//  left mu8NumUsedConstants at 0, so no shader constant could ever be set.)
 
 // ---------------------------------------------------------------------------
 // rw::math::vpu::Inverse @ X360 0x825B2628 -- 4x4 inverse + determinant out.
@@ -2019,39 +2019,12 @@ void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
 // -------------------------------------------------------------------------
 // CgsGraphics::Model
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-unsigned int CgsGraphics::Model::GetNumLods() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetNumLods: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-unsigned int CgsGraphics::Model::GetNumRenderables() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetNumRenderables: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// GetNumLods / GetNumRenderables are REAL now, in their home TU
+// (GameShared/GameClasses/Graphics/CgsModel.cpp, beside GetRenderable /
+// DoesStateExist / GetLodDistance): both are single named-field reads
+// (mu8NumStates @+0x12, mu8NumRenderables @+0x10). Their "return 0" gates here made
+// every streamed world instance fail RenderInstance's "Model in unit has no lods!"
+// assert, so they were the first hard stop on the world-draw path. Stubs DELETED.
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::CachedTriangleList
@@ -2620,48 +2593,18 @@ bool CgsSceneManager::VolumeManager::Prepare()
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Matrix44)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Matrix44Affine)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Vector3)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
 
 // LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::SetConstantsForEnvmap
 // @0x827C1AD0 -- the 16-byte overload with a live w lane): body not reconstructed yet
@@ -2670,16 +2613,6 @@ void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vp
 // one-shot log -- reached on the per-frame world drive, where a trap stops the
 // simulation. The body is still NOT reconstructed; the fix is the real X360 body
 // in its own TU, not this gate.
-void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Vector4)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
 
 // -------------------------------------------------------------------------
 // WorldModule
