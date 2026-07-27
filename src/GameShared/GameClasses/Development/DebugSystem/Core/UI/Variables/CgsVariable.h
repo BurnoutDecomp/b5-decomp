@@ -13,10 +13,20 @@ namespace CgsDev
 {
     namespace DebugUI
     {
+        struct Variable;
+
         // One attribute attached to a Variable (X360 keyed by Type). Holds the attribute value in a
         // raw UValue (interpreted per meType) and threads onto the variable's metadata list.
         struct VariableMetadata
         {
+            // The owning Variable walks and re-links the chain directly: FindMetadata / AddMetadata /
+            // RemoveMetadata read meType + mpNextMetadata and the attribute's mValue, all of which the
+            // DWARF marks private. dwarfdump does not surface friend declarations, so the original's
+            // access grant is attested by the X360 code rather than by the dump: the metadata walks
+            // inlined into ScriptInterface::SaveState (0x828328B8-0x82832938) load meType at +4,
+            // mpNextMetadata at +8 and the value byte at +0 straight out of the node.
+            friend struct Variable;
+
             enum Type
             {
                 E_TYPE_MIN = 0,
