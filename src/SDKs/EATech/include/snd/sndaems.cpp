@@ -53,8 +53,10 @@ bool gbAemsActive = false;
 // SetSamplePlayerFactory.
 IAemsSamplePlayerFactory* gpSamplePlayerFactory = 0;
 
-// One 12-byte slot queued into the audio System's deferred-command ring by
+// One record slot queued into the audio System's deferred-command ring by
 // BeginRemoveModuleBank; replayed on the audio thread by Snd9::RemoveModuleBankHandler.
+// The X360 lays it out in 12 bytes (4-byte handler pointer); on the host it is 16.
+// Offsets in the member comments are the console ones the asm encodes.
 struct RemoveModuleBankCommand
 {
     int (*mpfnHandler)(void* apCommand); // +0x00  &Snd9::RemoveModuleBankHandler
@@ -125,7 +127,8 @@ s32 BeginRemoveModuleBank(s32 aiBankHandle)
         }
 
         // Free the bank's auxiliary allocation, mark it removed, and queue a deferred
-        // RemoveModuleBankHandler command onto the System's command ring (12-byte slot).
+        // RemoveModuleBankHandler command onto the System's command ring (one
+        // RemoveModuleBankCommand slot -- 12 bytes on the X360).
         if (lpBank->mpAllocatedBlock)
         {
             rw::audio::core::System::Free(lpSystem, lpBank->mpAllocatedBlock, 0);
@@ -135,7 +138,15 @@ s32 BeginRemoveModuleBank(s32 aiBankHandle)
         const u32 luCursor = lpSystem->muDeferredRingCursor;
         RemoveModuleBankCommand* lpCmd = reinterpret_cast<RemoveModuleBankCommand*>(
             lpSystem->mpDeferredRingBase + luCursor);
-        lpSystem->muDeferredRingCursor = luCursor + 12; // X360 12-byte command
+        // RECORD STRIDE (X360-literal trap): the asm's `addi r10,r10,0xC` @0x82B72358 IS
+        // the console sizeof(RemoveModuleBankCommand) ({int(*)(void*), u32, s32} = 4+4+4).
+        // The host record is 16 (the handler pointer widened), and the ring consumer
+        // advances by the handler's return, so the enqueue stride must be the HOST sizeof
+        // rather than the literal 12. Snd9::RemoveModuleBankHandler is declared in
+        // sndaems.h but not yet bodied anywhere in the tree; when its TU is reconstructed
+        // it must return this same sizeof, or producer and consumer will disagree.
+        lpSystem->muDeferredRingCursor =
+            luCursor + static_cast<u32>(sizeof(RemoveModuleBankCommand)); // X360: +0xC
         lpCmd->mpfnHandler  = &Snd9::RemoveModuleBankHandler;
         lpCmd->muReserved   = 0;
         lpCmd->miBankHandle = aiBankHandle;

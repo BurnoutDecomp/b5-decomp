@@ -122,7 +122,9 @@ public:
                                  PlugIn ***outPlugIns, System *system);
 
     // @0x82B6C020 -- deferred handler: insert the voice into the priority-sorted active list
-    // (growing it if full; else park the voice on the expelled list). Returns 8.
+    // (growing it if full; else park the voice on the expelled list). Returns the record
+    // size: X360 `li r3,8`, i.e. the CONSOLE sizeof -- on the host return
+    // sizeof(VoiceCreateCommand) (16), which must equal the producer's cursor advance.
     static int CreateInstanceHandler(void *cmd);
 
     // @0x82B6BFD8 -- begin a fade-out: latch the decay target and queue the voice on the
@@ -136,7 +138,9 @@ public:
     // @0x82B6EEA0 -- queue a release command (ReleaseHandler) into the System ring.
     static Voice *Release(Voice *self);
 
-    // @0x82B6E0F8 -- deferred handler: ReleaseImmediate(voice, 0). Returns 8.
+    // @0x82B6E0F8 -- deferred handler: ReleaseImmediate(voice, 0). Returns the record size:
+    // X360 `li r3,8` is the CONSOLE sizeof -- on the host return sizeof(VoiceReleaseCommand)
+    // (16), matching the producer's cursor advance.
     static int ReleaseHandler(void *cmd);
 
     // @0x82B6DF38 -- tear down every stage PlugIn, unlink from the active/expelled lists
@@ -150,7 +154,9 @@ public:
     // @0x82B6EED0 -- queue a set-priority command (SetPriorityHandler) into the System ring.
     static Voice *SetPriority(Voice *self, f32 priority);
 
-    // @0x82B6E128 -- deferred handler: write the queued priority into mfPriority. Returns 12.
+    // @0x82B6E128 -- deferred handler: write the queued priority into mfPriority. Returns the
+    // record size: X360 `li r3,0xC` is the CONSOLE sizeof -- on the host return
+    // sizeof(VoiceSetPriorityCommand) (24), matching the producer's cursor advance.
     static int SetPriorityHandler(void *cmd);
 
     // ---- layout (X360 byte offsets in the file-header comment; x64 widths, by-name access) ----
