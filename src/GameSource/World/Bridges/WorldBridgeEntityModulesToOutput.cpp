@@ -94,9 +94,12 @@ void BridgeWorldResourceRequestsToOutput_Prepare(
 {
     (void)lpWorldModule;
 
+    // The source buffer is READ-locked by the caller's LockBuffersForIO bracket
+    // (dest write / source read -- CgsModuleUtils.h), so the read side must go
+    // through the CONST accessor (@0x827A2728, the read-lock tripwire); the old
+    // const_cast into the write accessor tripped "Not locked for writing".
     lpWorldOutput->GetResourceRequestResourceInterface()->Append(
-        *const_cast<BrnWorld::WorldEntityIO::OutputBuffer_Prepare*>(
-            lpWorldEntityOutputBuffer_Prepare )->GetResourceRequestInterface() );
+        *lpWorldEntityOutputBuffer_Prepare->GetResourceRequestInterface() );
 }
 
 // ----------------------------------------------------------------------------

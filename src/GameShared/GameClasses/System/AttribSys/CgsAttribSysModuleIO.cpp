@@ -43,21 +43,22 @@ namespace AttribSysIO
             &lpInputBuffer->mVaultRequestInterface.mRequestQueue);
     }
 
-    // @ 0x82256428 -- AttribSysRequestInterface<512>::RegisterVault (3-arg overload, DWARF
+    // @ 0x82256428 -- AttribSysRequestInterface<512>::RegisterVault (DWARF
     // CgsAttribSysSharedIO.h:273). Assert the resource handle's memory pointer and the receiver
     // queue are non-NULL, then enqueue a type-0 RegisterVaultRequest into the interface's request
     // queue. Provided as an explicit member specialization so exactly the X360-attested <512>
     // symbol is emitted (an explicit `template struct ...<512>;` instantiation would also pull in
     // the not-yet-reconstructed Construct/Clear/etc. members, so it is deliberately omitted).
     //
-    // X360 store map (payload @ var_60): stw r28@+0 (queue); std r26@+4 (8-byte handle);
-    // stw r25@+12 == a4 == the handle's high dword (mpSourceEntry) -> miEventId; stw r24@+16
-    // (vault type). In the 3-arg overload there is no explicit event id, so the compiler left a4
-    // in r25 and stored it into miEventId; reproduced store-for-store below.
+    // X360 store map (payload @ var_60): stw r28@+0 (queue); std r26=r5@+4 (the 8-byte handle
+    // rides ONE 64-bit GPR); stw r25=r6@+12 (miEventId -- a REAL parameter, not register reuse:
+    // the GameData legs pass their event-slot index and the module's type-3 reply echoes this
+    // field); stw r24=r7@+16 (vault type).
     template <>
     bool AttribSysRequestInterface<512>::RegisterVault(
         BaseEventReceiverQueue* lpUserReceiverQueue,
         ResourceHandle lVaultResourceHandle,
+        s32 liEventId,
         EAttribSysVaultType leVaultType)
     {
         CGS_ASSERT(lVaultResourceHandle.mpResourceMemory != 0,
@@ -67,10 +68,7 @@ namespace AttribSysIO
         RegisterVaultRequest lRequest;
         lRequest.mpUserReceiverQueue  = lpUserReceiverQueue;
         lRequest.mVaultResourceHandle = lVaultResourceHandle;
-        // X360: miEventId = a4 = the handle's high dword (mpSourceEntry); the 3-arg overload
-        // supplies no event id, so this reproduces the compiler's register reuse store-for-store.
-        lRequest.miEventId            =
-            static_cast<s32>(reinterpret_cast<intptr_t>(lVaultResourceHandle.mpSourceEntry));
+        lRequest.miEventId            = liEventId;
         lRequest.meVaultType          = leVaultType;
 
         mRequestQueue.AddEvent<RegisterVaultRequest>(&lRequest, 0);
@@ -83,9 +81,9 @@ namespace AttribSysIO
     template bool AttribSysRequestInterface<2048>::RegisterSchema(
         BaseEventReceiverQueue*, void*, s32, void*, s32);
     template bool AttribSysRequestInterface<2048>::RegisterVault(
-        BaseEventReceiverQueue*, ResourceHandle, EAttribSysVaultType);
+        BaseEventReceiverQueue*, ResourceHandle, s32, EAttribSysVaultType);
     template bool AttribSysRequestInterface<2048>::UnregisterVault(
-        BaseEventReceiverQueue*, ResourceHandle);
+        BaseEventReceiverQueue*, ResourceHandle, s32);
 
     // -------- InputBuffer::AppendRequestInterface<32768> @ X360 0x82671948 --------
     // Explicit instantiation of the member template (generic body in CgsAttribSysModuleIO.h).

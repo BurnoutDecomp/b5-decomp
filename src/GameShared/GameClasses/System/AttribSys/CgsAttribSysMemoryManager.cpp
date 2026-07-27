@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"  // LinearMalloc::SetAlignment (Prepare)
 
 namespace CgsAttribSys
 {
@@ -26,5 +27,49 @@ AttribSysPackageAllocator* AttribSysMemoryManager::GetAttribSysAllocator()
     CGS_ASSERT(sbHasLinearAllocator, "sbHasLinearAllocator");
 
     return &sAttribSysAllocator;
+}
+
+// Reset the manager's static state (called from AttribSysModule::Construct @0x8280AD50;
+// the X360 inlines the two stores -- no standalone symbol).
+void AttribSysMemoryManager::Construct()
+{
+    spLinearAllocator    = NULL;
+    sbHasLinearAllocator = false;
+}
+
+// @ 0x828043B8 -- adopt the engine's linear allocator + the three package heaps: pin the
+// linear allocator's alignment to 16, raise the prepared flag, then Construct + Prepare
+// the three package allocators (AttribSys align 16, GameTalk align 4, EASTL align 4 --
+// the KI_*_ALLOC_ALIGNMENT constants). The X360 inlines each PackageAllocator::Construct
+// as the field-reset store runs before the Prepare calls.
+bool AttribSysMemoryManager::Prepare(CgsMemory::LinearMalloc* lpLinearAllocator,
+                                     CgsMemory::HeapMalloc* lpAttribSysHeap,
+                                     CgsMemory::HeapMalloc* lpGameTalkHeap,
+                                     CgsMemory::HeapMalloc* lpEaStlHeap)
+{
+    CGS_ASSERT(!sbHasLinearAllocator, "!sbHasLinearAllocator");                  // .cpp:139
+    CGS_ASSERT(lpLinearAllocator != NULL, "lpLinearAllocator != NULL");          // .cpp:142
+    CGS_ASSERT(lpAttribSysHeap != NULL, "lpAttribSysHeap != NULL");              // .cpp:143
+    CGS_ASSERT(lpGameTalkHeap != NULL, "lpGameTalkHeap != NULL");                // .cpp:144
+    CGS_ASSERT(lpEaStlHeap != NULL, "lpEaStlHeap != NULL");                      // .cpp:145
+
+    spLinearAllocator = lpLinearAllocator;
+    lpLinearAllocator->SetAlignment(KI_LINEAR_ALLOC_ALIGNMENT);
+    sbHasLinearAllocator = true;
+
+    sAttribSysAllocator.Construct(AttribSysPackageAllocator::E_PACKAGE_ATTRIBSYS);
+    sGameTalkAllocator.Construct(AttribSysPackageAllocator::E_PACKAGE_GAMETALK);
+    sEaStlAllocator.Construct(AttribSysPackageAllocator::E_PACKAGE_EASTL);
+
+    sAttribSysAllocator.Prepare(lpAttribSysHeap, KI_ATTRIBSYS_ALLOC_ALIGNMENT);
+    sGameTalkAllocator.Prepare(lpGameTalkHeap, KI_GAMETALK_ALLOC_ALIGNMENT);
+    sEaStlAllocator.Prepare(lpEaStlHeap, KI_EASTL_ALLOC_ALIGNMENT);
+    return true;
+}
+
+// The prepared-flag getter (the EASTL deallocate adapter asserts through it).
+bool AttribSysMemoryManager::HasMemoryBuffer()
+{
+    return sbHasLinearAllocator;
 }
 }

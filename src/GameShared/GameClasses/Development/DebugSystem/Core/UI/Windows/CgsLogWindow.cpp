@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
 
+#include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugCollections.h"   // the debug operator new[] shim (Construct's line-ring alloc)
+
 // CgsDev::DebugUI::LogWindow / LogWindowStrStream - the default ctor + the stream sink. Recovered
 // from the DecFIGS DWARF (Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h) + the X360 default
 // ctor at 0x827DFED0.
@@ -41,6 +43,27 @@ namespace CgsDev
             if (mpWindow && lpcText)
                 mpWindow->Append(lpcText);
             return *this;
+        }
+
+        // @ 0x8281A188 -- size the line ring: store the capacity, allocate maxLines x
+        // 60-byte console lines from the debug resource allocator (X360
+        // `operator new(60*maxLines, *(DebugInternal::mpInstance+8284), 0)` -- the PC
+        // route is the committed CgsDebugCollections operator new[] shim over the same
+        // GetAllocator() singleton), default the layout fields (width 100, autosize on,
+        // zero indents), zero each line's first byte and reset the head.
+        void LogWindow::Construct(s32 liMaxLines)
+        {
+            miLineCount = static_cast<s8>(liMaxLines);   // +72 (the ring capacity store)
+            mpLinesArray = static_cast<CConsoleTextLine*>(
+                ::operator new[](sizeof(CConsoleTextLine) * static_cast<size_t>(liMaxLines),
+                                 GetAllocator(), Internal::E_ALLOCATION_NORMAL));
+            mfCurrentWidth     = 100.0f;   // +84
+            mbAutosize         = true;     // +88
+            mfHorizontalIndent = 0.0f;     // +76
+            mfVerticalIndent   = 0.0f;     // +80
+            for (s32 liLine = 0; liLine < liMaxLines; ++liLine)
+                mpLinesArray[liLine].macText[0] = 0;
+            miLineHead = 0;                // +73
         }
 
         // FLAG: MINIMAL STUBS FOR LINK (not decompiled). The LogWindow render/update protocol + the

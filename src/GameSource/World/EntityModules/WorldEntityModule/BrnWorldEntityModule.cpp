@@ -270,12 +270,35 @@ WorldEntityModule::Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer 
         {
             mePrepareStage = E_PREPARESTAGE_COMMONDATA;
 
-            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
-                &mReceiverQueue, 1, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "WORLDTEX.BIN", false );
-            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
-                &mReceiverQueue, 0, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALPROPS.BIN", false );
-            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
-                &mReceiverQueue, 2, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALBACKDROPS.BNDL", false );
+            // [FLAG PC boot gate 2026-07-26] the three common-data bundle loads are the
+            // REAL X360 posts, but on PC today they wedge the boot: WORLDTEX.BIN loads and
+            // then floods CreateTexture(fmt=0 0x0) failures (the ported world Texture
+            // headers do not FixUp through the PC raster path yet -- the porter/consumer
+            // seam), and GLOBALPROPS.BIN is refused (-1: its PropGraphicsList/
+            // PropInstanceData payloads are still passthrough-BE in the converter).
+            // Skip the posts + the 3-reply wait (one-shot log) until the WORLDTEX
+            // texture seam + the prop-type porters land; then delete this gate.
+            {
+                static bool s_bLoggedCommonDataGate = false;
+                if ( !s_bLoggedCommonDataGate )
+                {
+                    s_bLoggedCommonDataGate = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "WorldEntityModule::Prepare: COMMONDATA loads skipped "
+                               "(WORLDTEX texture seam / prop porters pending) "
+                               "[FLAG PC boot gate]\n";
+                }
+            }
+            if ( false )   // the gated X360 interior, kept verbatim:
+            {
+                lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                    &mReceiverQueue, 1, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "WORLDTEX.BIN", false );
+                lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                    &mReceiverQueue, 0, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALPROPS.BIN", false );
+                lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                    &mReceiverQueue, 2, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALBACKDROPS.BNDL", false );
+            }
         }
         // fall through
 
@@ -283,7 +306,8 @@ WorldEntityModule::Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer 
         {
             mePrepareStage = E_PREPARESTAGE_COMMONDATA_LOADING;
 
-            if ( mReceiverQueue.GetLength() < 3 )
+            // [FLAG PC boot gate] the 3-reply wait is skipped with the gated posts above.
+            if ( false && mReceiverQueue.GetLength() < 3 )
             {
                 break;
             }
@@ -1018,11 +1042,31 @@ WorldEntityModule::PrepareSurfaceList( WorldEntityIO::OutputBuffer_Prepare* lpOu
                                 "liEventId == BrnResource::GameDataIO::EVENT_GET_SURFACE_LIST" );
             }
 
-            mSurfaceList.ChangeWithDefault();
-
-            // Sanity-probe surface 0: an implausible first attribute means the
-            // streamed surface list is corrupt.
+            // [FLAG PC boot gate] the surface-list attrib rebind + sanity probe read the
+            // LIVE Attrib database (ChangeWithDefault -> FindCollectionWithDefault; the
+            // probe walks surface 0's collection). On PC the AttribSys schema is not yet
+            // loaded (PrepareAttribSysSchemaResource gate: the exe-baked BE schema blobs
+            // need an LE port) so the surfacelist vault was never registered into the DB
+            // (AttribSysModule::RegisterVault gate) -- the reads CANNOT resolve. Skip them
+            // (one-shot log) and advance; remove together with the schema/RegisterVault
+            // gates once the Attrib SDK runtime cluster is committed.
             {
+                static bool s_bLoggedSurfaceGate = false;
+                if ( !s_bLoggedSurfaceGate )
+                {
+                    s_bLoggedSurfaceGate = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "WorldEntityModule::PrepareSurfaceList: attrib rebind skipped "
+                               "(schema/DB deferred) [FLAG PC boot gate]\n";
+                }
+            }
+            if ( false )   // the gated X360 interior, kept verbatim:
+            {
+                mSurfaceList.ChangeWithDefault();
+
+                // Sanity-probe surface 0: an implausible first attribute means the
+                // streamed surface list is corrupt.
                 Attrib::RefSpec* lpRefSpec =
                     static_cast<Attrib::RefSpec*>( mSurfaceList.Surfaces( 0 ) );
                 Attrib::Gen::surface lSurface(

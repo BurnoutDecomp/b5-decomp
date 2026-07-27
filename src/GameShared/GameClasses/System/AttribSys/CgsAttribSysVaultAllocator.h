@@ -3,6 +3,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"
 
+namespace CgsMemory { class LinearMalloc; }
+
 namespace CgsAttribSys
 {
 // Fixed-size pool allocator that hands out streamed-vault memory in equal-sized
@@ -30,7 +32,10 @@ public:
     typedef CgsContainers::BitArray<24u> UsedStreamedVaults;
 
     void Construct();
-    void Prepare(class LinearMalloc* lpAllocator);
+    // (Parameter type fixed: the old `class LinearMalloc*` declared a phantom
+    // CgsAttribSys::LinearMalloc -- the real allocator is CgsMemory::LinearMalloc,
+    // per the X360 Prepare @0x82803C18 calling CgsMemory::LinearMalloc::Malloc.)
+    void Prepare(CgsMemory::LinearMalloc* lpAllocator);
     s32 GetFreeSlot(u8* lpau8BinData, u32 lu16BinSizeInBytes);
     void ReleaseSlot(s32 liSlotIndex);
     u8* GetSlotMemory(s32 liSlotIndex);

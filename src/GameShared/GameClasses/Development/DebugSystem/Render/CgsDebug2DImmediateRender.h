@@ -25,7 +25,7 @@
 // font API are the text follow-on (the squares need only the box path); they are declared but the
 // members are deferred, so this models the box-path layout, not the byte-exact X360 offsets.
 
-namespace rw { class IResourceAllocator; }
+namespace rw { struct IResourceAllocator; }   // struct -- must match rwcore_structs.h's class-key (MSVC mangling)
 
 namespace CgsDev
 {

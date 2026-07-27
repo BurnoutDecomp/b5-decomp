@@ -54,17 +54,22 @@ namespace AttribSysIO
     }
 
     // -------- RegisterVault @ X360 0x8229D6C8 (<2048>) --------
-    // 3-param overload (recv, by-value 8-byte ResourceHandle, vault type). Builds a
+    // (recv, by-value 8-byte ResourceHandle, event id, vault type). Builds a
     // RegisterVaultRequest (event type id 0). The X360 null-guards the handle's memory
     // pointer (a NULL handle can not register a vault); the de-inlined StrStream assert
     // collapses to one CGS_ASSERT.
-    // FLAG: miEventId is not a parameter of this overload; the X360 reg-pair HIDWORD store
-    // is a handle-materialization artifact, not a real field write. Fields set by name;
-    // miEventId left default (confidence medium on that field only).
+    // Param map re-attested vs the asm (both 0x8229D6C8 and the <512> 0x82256428): the
+    // Xenon ABI passes the 8-byte handle in ONE 64-bit GPR (r5, `std r26`), so
+    // r6 = liEventId (`stw r25 @+12`) and r7 = vault type (`stw r24 @+16`) are REAL
+    // parameters -- the earlier "miEventId is a register artifact" note was wrong (the
+    // GameData id-50/66 legs pass their event-slot index in r6 and the reply payload
+    // AttribSysModule::RegisterVault posts is exactly that field; the slot lookup in
+    // ProcessAttribSysRegisterVaultResponse @0x82666590 depends on it).
     template <s32 N>
     bool AttribSysRequestInterface<N>::RegisterVault(
             CgsModule::BaseEventReceiverQueue* lpUserReceiverQueue,
             CgsResource::ResourceHandle lVaultResourceHandle,
+            s32 liEventId,
             EAttribSysVaultType leVaultType)
     {
         CGS_ASSERT(lVaultResourceHandle.mpResourceMemory != 0,
@@ -74,26 +79,29 @@ namespace AttribSysIO
         RegisterVaultRequest lEvent;
         lEvent.mpUserReceiverQueue  = lpUserReceiverQueue;   // +0x00 (var_60)
         lEvent.mVaultResourceHandle = lVaultResourceHandle;  // +0x04 (var_5C, 8 bytes)
+        lEvent.miEventId            = liEventId;             // +0x0C (var_54)
         lEvent.meVaultType          = leVaultType;           // +0x10 (var_50)
 
         return mRequestQueue.AddEvent(&lEvent, 0);
     }
 
     // -------- UnregisterVault @ X360 0x826731E8 (<2048>) --------
-    // 2-param overload (recv, by-value 8-byte ResourceHandle). Builds an
-    // UnregisterVaultRequest (event type id 2).
-    // FLAG: miEventId is not a parameter of this overload; the X360 reg-pair HIDWORD store
-    // is a handle-materialization artifact. Fields set by name; miEventId left default.
+    // (recv, by-value 8-byte ResourceHandle, event id). Builds an
+    // UnregisterVaultRequest (event type id 2). r6 = liEventId is a real parameter
+    // (same ABI note as RegisterVault); AttribSysModule::UnregisterVault echoes it as
+    // the type-5 reply payload.
     template <s32 N>
     bool AttribSysRequestInterface<N>::UnregisterVault(
             CgsModule::BaseEventReceiverQueue* lpUserReceiverQueue,
-            CgsResource::ResourceHandle lVaultResourceHandle)
+            CgsResource::ResourceHandle lVaultResourceHandle,
+            s32 liEventId)
     {
         CGS_ASSERT(lpUserReceiverQueue != 0, "lpUserReceiverQueue");
 
         UnregisterVaultRequest lEvent;
         lEvent.mpUserReceiverQueue  = lpUserReceiverQueue;   // +0x00 (var_40)
         lEvent.mVaultResourceHandle = lVaultResourceHandle;  // +0x04 (var_3C, 8 bytes)
+        lEvent.miEventId            = liEventId;             // +0x0C
 
         return mRequestQueue.AddEvent(&lEvent, 2);
     }

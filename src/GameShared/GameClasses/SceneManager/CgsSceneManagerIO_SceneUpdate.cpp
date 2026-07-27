@@ -226,6 +226,58 @@ namespace SceneManagerIO
         mAddVolumeInstanceForCachingQueue.AddEvent(lEvent);
     }
 
+    // ----- Enable/disable a culling-group adjacency pair (X360 0x822B1B60) -----
+    // Stages { muGroupA, muGroupB, muEnabled } (three 32-bit words) and appends to
+    // mSetCullingGroupPairQueue after the standard "queue too small" tripwire
+    // (X360-baked CgsSceneManagerIO_SceneUpdate.h:1133).
+    void InSceneUpdateInterface::SetCullingGroupPair(u8 lu8GroupA, u8 lu8GroupB, u8 lu8Flags)
+    {
+        InEventSetCullingGroupPair lEvent;
+        lEvent.muGroupA  = lu8GroupA;
+        lEvent.muGroupB  = lu8GroupB;
+        lEvent.muEnabled = lu8Flags;
+
+        CGS_ASSERT(mSetCullingGroupPairQueue.GetLength() < mSetCullingGroupPairQueue.GetMaxLength(),
+                   "SceneManager.mSetCullingGroupPairQueue too small, increase value in SceneManagerConstants.h");
+        mSetCullingGroupPairQueue.AddEvent(lEvent);
+    }
+
+    // (ClearCullingTable @0x827BAB78 already lives earlier in this TU.)
+
+    // ----- One-time bring-up: point every embedded queue at its inline storage -----
+    // (X360 0x822E6550: 25 EventQueue<T,N>::Construct calls -- each stores the inline
+    // maEvents base, the capacity and a zero live count; the 25 stored queue bases are
+    // exactly Clear's queue set. The per-instantiation out-of-line Construct bodies are
+    // this tree's EventQueue_*_Construct explicit-instantiation TUs.)
+    void InSceneUpdateInterface::Construct()
+    {
+        mUpdatePositionQueue.Construct();
+        mSetVolumeInstanceTransformQueue.Construct();
+        mAddEntityQueue.Construct();
+        mAddDynamicVolumeQueue.Construct();
+        mAddForCollisionQueue.Construct();
+        mAddVolumeInstanceQueue.Construct();
+        mForceNoPaddingQueue.Construct();
+        mRemoveEntityQueue.Construct();
+        mRemoveForCollisionQueue.Construct();
+        mRemoveVolumeQueue.Construct();
+        mRemoveVolumeInstanceQueue.Construct();
+        mReplaceDynamicVolumeQueue.Construct();
+        mSetCullingGroupPairQueue.Construct();
+        mClearCullingTableQueue.Construct();
+        mSetEntityRadiusQueue.Construct();
+        mSetPaddingQueue.Construct();
+        mAddVolumeInstanceForCachingQueue.Construct();
+        mClearEntityPaddingQueue.Construct();
+        mSetVolumeInstanceCullingGroupQueue.Construct();
+        mAddToCacheQueue.Construct();
+        mUpdateCachedPositionQueue.Construct();
+        mRemoveFromCacheQueue.Construct();
+        mAddPolySoupListQueue.Construct();
+        mClearPolySoupListsQueue.Construct();
+        mRemoveAllEntitiesQueue.Construct();
+    }
+
     // ----- Reset every embedded queue's live count (X360 0x822B10C8) -----
     // The X360 inlines a `stw 0, miLength(queue)` for each of the 25 embedded queues (the 25
     // zeroed offsets == Construct's 25 queue bases + 8). Each maps to the queue's own Clear()

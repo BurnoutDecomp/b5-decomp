@@ -12,6 +12,30 @@
 namespace CgsAttribSys
 {
 
+// The static streamed-vault-allocator registry (X360 dword_83011B60): published by
+// VaultArray::Construct (which inlines this setter as a direct store), read by DoLoad's
+// streamed-vault path.
+StreamedVaultAllocator* VaultSlot::spVaultAllocator = nullptr;
+
+void VaultSlot::SetVaultAllocator(StreamedVaultAllocator* lpAllocator)
+{
+    spVaultAllocator = lpAllocator;
+}
+
+// Reset this slot to the free state. The X360 inlines the four stores into
+// VaultArray::Prepare's per-slot loop (@0x82805CB0: `*(v11+8)=0; *(v11+12)=0;
+// *(v11+16)=-1; *v11=0` = mpVault/miRefCount/miStreamedVaultIndex/mResourceId),
+// with this method's own allocator guard baked per iteration
+// (CgsAttribSysVaultSlot.cpp:52 "lpAllocator != NULL").
+void VaultSlot::Construct(CgsMemory::LinearMalloc* lpAllocator)
+{
+    CGS_ASSERT(lpAllocator != nullptr, "lpAllocator != NULL");   // .cpp:52
+    mpVault              = nullptr;
+    miRefCount           = 0;
+    miStreamedVaultIndex = -1;
+    mResourceId.SetHash(0);
+}
+
 // @ 0x82802390 -- an occupied slot reports whether it holds a streamed vault. An
 // unoccupied slot must never carry a streamed-vault index.
 bool VaultSlot::ContainsStreamedVault() const

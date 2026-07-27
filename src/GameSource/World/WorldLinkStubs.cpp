@@ -51,6 +51,11 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIO.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultArray.h"    // VaultArray Register/UnregisterVault stubs
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultSlot.h"     // VaultSlot::DoLoad stub
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"       // Attrib::Database stubs
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault / IGarbageCollector stubs
+#include "SDKs/EA/GameTalk/GameTalk.h"                                          // GameTalkMessage accessor stubs
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManager.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h"
 #include "GameSource/World/Bridges/WorldBridgeToEntityModules.h"
@@ -61,6 +66,7 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (the boot-gate one-shot logs)
 #include "GameSource/World/BrnWorldModuleIO_DispatchInputBuffer.h"
 #include "GameSource/World/BrnWorldModuleIO_DispatchOutputBuffer.h"
 #include "GameSource/World/BrnBaseStreamer.h"
@@ -172,6 +178,111 @@ struct Attrib::Collection * Attrib::FindCollectionWithDefault(int)
 }
 
 // -------------------------------------------------------------------------
+// Attrib SDK runtime cluster (AttribSysModule mount 2026-07-26). These are the
+// symbols CgsAttribSysModule.cpp's REAL bodies reference on paths the PC gates
+// while the schema is unloaded (RegisterSchema / the vault-array load interior /
+// the GameTalk LiveLink hook): unreachable at runtime until the schema bring-up
+// (the exe-baked BE blobs' LE port) + the SDK runtime TUs land.
+// -------------------------------------------------------------------------
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+Attrib::Vault::Vault(Attrib::ExportManager&, AssetID, void*, unsigned int, u8, Attrib::IGarbageCollector*)
+    : mExportMgr(*static_cast<Attrib::ExportManager*>(nullptr))
+{
+    CGS_ASSERT(false, "Attrib::Vault::Vault: link stub (attribsys module mount) -- reconstruct from X360 0x8280A2E8");
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+void Attrib::Vault::ResolveDependency(unsigned int, void*, unsigned int, u8)
+{
+    CGS_ASSERT(false, "Attrib::Vault::ResolveDependency: link stub (attribsys module mount) -- reconstruct from X360 0x82803338");
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+void Attrib::Vault::Initialize()
+{
+    CGS_ASSERT(false, "Attrib::Vault::Initialize: link stub (attribsys module mount) -- reconstruct from X360 0x8280A660");
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+Attrib::Database& Attrib::Database::Get()
+{
+    CGS_ASSERT(false, "Attrib::Database::Get: link stub (attribsys module mount) -- reconstruct from X360");
+    return *static_cast<Attrib::Database*>(nullptr);
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+bool Attrib::Database::IsInitialized()
+{
+    CGS_ASSERT(false, "Attrib::Database::IsInitialized: link stub (attribsys module mount) -- reconstruct from X360");
+    return false;
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+Attrib::ExportManager& Attrib::Database::GetExportPolicies()
+{
+    CGS_ASSERT(false, "Attrib::Database::GetExportPolicies: link stub (attribsys module mount) -- reconstruct from X360");
+    return *static_cast<Attrib::ExportManager*>(nullptr);
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+void Attrib::Database::CollectGarbage()
+{
+    CGS_ASSERT(false, "Attrib::Database::CollectGarbage: link stub (attribsys module mount) -- reconstruct from X360");
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+// (Declared inline here -- its home TU attriblivelink.cpp is not reconstructed;
+// CgsAttribSysModule.cpp forward-declares the same signature.)
+namespace Attrib { void DecodeLiveLinkMessage(const char*); }
+void Attrib::DecodeLiveLinkMessage(const char*)
+{
+    CGS_ASSERT(false, "Attrib::DecodeLiveLinkMessage: link stub (attribsys module mount) -- reconstruct from X360 0x8280FD10");
+}
+
+// BOOT-GATE (AttribSysModule mount 2026-07-26): the interface destructor RUNS on
+// the process-exit destruction chain of the embedded AttribSysGarbageCollector,
+// so it must be the REAL trivially-empty body (the X360 base dtor @0x827DBA70
+// is empty; home = attribgarbagecollector.cpp when that TU lands) -- NOT a trap.
+Attrib::IGarbageCollector::~IGarbageCollector()
+{
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): bodies not reconstructed yet --
+// the vault-array load interior (gated in AttribSysModule while !sbSchemaLoaded).
+void CgsAttribSys::VaultArray::RegisterVault(CgsAttribSys::AttribSysIO::RegisterVaultRequest*)
+{
+    CGS_ASSERT(false, "VaultArray::RegisterVault: link stub (attribsys module mount) -- reconstruct from X360 0x8280E978");
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+void CgsAttribSys::VaultArray::UnregisterVault(CgsAttribSys::AttribSysIO::UnregisterVaultRequest*)
+{
+    CGS_ASSERT(false, "VaultArray::UnregisterVault: link stub (attribsys module mount) -- reconstruct from X360 0x8280F6C8");
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+void CgsAttribSys::VaultSlot::DoLoad(const CgsAttribSys::AttribSysIO::RegisterVaultRequest*, Attrib::IGarbageCollector*)
+{
+    CGS_ASSERT(false, "VaultSlot::DoLoad: link stub (attribsys module mount) -- reconstruct from X360 0x8280E060");
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): bodies not reconstructed yet --
+// the GameTalk message accessors the (unregistered on PC) Attribulator LiveLink
+// handler reads.
+const char* EA::GameTalk::GameTalkMessage::GetChannel() const
+{
+    CGS_ASSERT(false, "GameTalkMessage::GetChannel: link stub (attribsys module mount) -- reconstruct from X360");
+    return 0;
+}
+
+// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
+const char* EA::GameTalk::GameTalkMessage::GetKeyContent(const char*) const
+{
+    CGS_ASSERT(false, "GameTalkMessage::GetKeyContent: link stub (attribsys module mount) -- reconstruct from X360");
+    return 0;
+}
+
+// -------------------------------------------------------------------------
 // Attrib::Instance
 // -------------------------------------------------------------------------
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -212,8 +323,18 @@ void BrnAI::AIModule::Destruct()
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnAI::AIModule::Prepare(class BrnResource::GameDataIO::AllocatorList *,struct BrnAI::AIModuleIO::OutputBuffer *)
 {
-    CGS_ASSERT(false, "AIModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "AIModule::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -299,8 +420,18 @@ void BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered(int,bool)
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnGraphics::EnvironmentMap::Prepare()
 {
-    CGS_ASSERT(false, "EnvironmentMap::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentMap::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // -------------------------------------------------------------------------
@@ -363,14 +494,32 @@ void BrnPhysics::PhysicsModule::Construct()
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnPhysics::PhysicsModule::Prepare(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,class BrnResource::GameDataIO::AllocatorList *)
 {
-    CGS_ASSERT(false, "PhysicsModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PhysicsModule::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void BrnPhysics::PhysicsModule::PropPrepareTypes(class BrnPhysics::PhysicsModuleIO::InputBuffer *)
 {
-    CGS_ASSERT(false, "PhysicsModule::PropPrepareTypes: link stub (world fleet mount) -- reconstruct from X360");
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the prop stage tail of
+    // WorldModule::Prepare. The physics module is boot-gated inert; quiet no-op.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PhysicsModule::PropPrepareTypes: inert [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -385,7 +534,16 @@ void BrnPhysics::PhysicsModule::UpdateNetworkCatchup(int,int)
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void BrnPhysics::Props::PropInputInterface::Append(struct BrnPhysics::Props::PropInputInterface const &)
 {
-    CGS_ASSERT(false, "PropInputInterface::Append: link stub (world fleet mount) -- reconstruct from X360");
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the prop->physics prepare
+    // bridge (WorldModule::Prepare prop stage). The physics module is boot-gated
+    // inert, so the staged prop-type merge is dropped consistently. One-shot log.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropInputInterface::Append: inert [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -394,7 +552,17 @@ void BrnPhysics::Props::PropInputInterface::Append(struct BrnPhysics::Props::Pro
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void BrnPhysics::Vehicle::VehicleManager::ReadSurfaceProperties()
 {
-    CGS_ASSERT(false, "VehicleManager::ReadSurfaceProperties: link stub (world fleet mount) -- reconstruct from X360");
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED right after the WORLDENTITY
+    // prepare stage (WorldModule::Prepare @0x827D53B0 tail). Reads the surface
+    // attributes out of the LIVE Attrib database -- gated with the schema/DB
+    // cluster (see PrepareSurfaceList's gate). One-shot log + no-op.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "VehicleManager::ReadSurfaceProperties: inert [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -522,8 +690,18 @@ void BrnTraffic::TrafficEntityModule::PrePhysicsUpdate(struct CgsModule::IOBuffe
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnTraffic::TrafficEntityModule::Prepare(class BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare *)
 {
-    CGS_ASSERT(false, "TrafficEntityModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -558,7 +736,17 @@ void BrnWorld::EnvironmentSettings::CloudsData::SetToBlend(class BrnWorld::Envir
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void BrnWorld::EnvironmentSettings::DebugComponent::Construct(class BrnWorld::EnvironmentSettings::EnvironmentManager *)
 {
-    CGS_ASSERT(false, "DebugComponent::Construct: link stub (world fleet mount) -- reconstruct from X360");
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by WorldModule::Prepare's
+    // env-manager stage (mSkyDebugComponent.Construct @0x827C7668 -- no ida export;
+    // body when the EnvironmentSettings debug TU lands). Quiet one-shot log; the
+    // component stays unregistered-inert.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::DebugComponent::Construct: inert [FLAG PC boot gate]\n";
+    }
 }
 
 // The five vtable-pulled virtuals below became link-required when the game module
@@ -652,8 +840,18 @@ void BrnWorld::EnvironmentSettings::EnvironmentManager::GenerateEffects(class Br
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::EnvironmentSettings::EnvironmentManager::Prepare(struct BrnWorldIO::UpdateOutputBuffer *)
 {
-    CGS_ASSERT(false, "EnvironmentManager::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentManager::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // -------------------------------------------------------------------------
@@ -810,8 +1008,18 @@ void BrnWorld::PropEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStac
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::PropEntityModule::Prepare(class BrnWorld::PropEntityIO::OutputBuffer_Prepare *,struct rw::IResourceAllocator *)
 {
-    CGS_ASSERT(false, "PropEntityModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -866,8 +1074,18 @@ void BrnWorld::RaceCarEntityModule::PrePhysicsUpdate(struct BrnWorld::RaceCarEnt
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::RaceCarEntityModule::Prepare(struct CgsResource::ResourceHandle const &)
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1026,15 +1244,9 @@ class CgsModule::VariableEventQueue<32768,16> * BrnWorld::WorldEntityIO::InputBu
     return 0;
 }
 
-// -------------------------------------------------------------------------
-// BrnWorld::WorldEntityIO::OutputBuffer_Prepare
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct CgsSceneManager::SceneManagerIO::InSceneUpdateInterface * BrnWorld::WorldEntityIO::OutputBuffer_Prepare::GetSceneInputInterface()
-{
-    CGS_ASSERT(false, "OutputBuffer_Prepare::GetSceneInputInterface: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
+// (BrnWorld::WorldEntityIO::OutputBuffer_Prepare::GetSceneInputInterface stub
+// RETIRED 2026-07-26: the real accessor now lives in its owning TU,
+// BrnWorldEntityModuleIO_OutputBuffer_Prepare.cpp.)
 
 // -------------------------------------------------------------------------
 // BrnWorld::WorldEntityIO::StatusInterface
@@ -1081,8 +1293,18 @@ void BrnWorld::WorldEntityModule::GenerateMassiveImpressionData(struct CgsGraphi
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool BrnWorld::WorldEntityModule::PrepareMassive(struct BrnWorld::WorldEntityIO::OutputBuffer_Prepare *)
 {
-    CGS_ASSERT(false, "WorldEntityModule::PrepareMassive: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldEntityModule::PrepareMassive: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1348,8 +1570,19 @@ unsigned int CgsGraphics::Model::GetNumRenderables() const
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool CgsSceneManager::CachedTriangleList::Prepare(struct rw::IResourceAllocator *,int)
 {
-    CGS_ASSERT(false, "CachedTriangleList::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
+    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
+    // report success so the scripted load advances; the sub-manager stays
+    // inert (zero-initialised storage) and its consumers keep their traps.
+    // Reconstruct from X360 (triangle-cache cluster).
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "CachedTriangleList::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // -------------------------------------------------------------------------
@@ -1383,8 +1616,19 @@ void CgsSceneManager::FineIntersectionTestModule::Construct()
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool CgsSceneManager::FineIntersectionTestModule::Prepare(class CgsSceneManager::EntityManager *,class CgsSceneManager::VolumeManager *)
 {
-    CGS_ASSERT(false, "FineIntersectionTestModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
+    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
+    // report success so the scripted load advances; the sub-manager stays
+    // inert (zero-initialised storage) and its consumers keep their traps.
+    // Reconstruct from X360 (FineIntersectionTest + rw::collision query cluster).
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "FineIntersectionTestModule::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // -------------------------------------------------------------------------
@@ -1399,8 +1643,19 @@ void CgsSceneManager::OverlapGenerationModule::GenerateOverlaps(void *,void cons
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool CgsSceneManager::OverlapGenerationModule::Prepare(void *,void *)
 {
-    CGS_ASSERT(false, "OverlapGenerationModule::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
+    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
+    // report success so the scripted load advances; the sub-manager stays
+    // inert (zero-initialised storage) and its consumers keep their traps.
+    // Reconstruct from X360 (overlap-generation cluster).
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // The four module virtuals below became link-required when the game module
@@ -1455,17 +1710,26 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
     CGS_ASSERT(false, "InSceneUpdateInterface::AddVolumeInstance: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT-GATE (attribsys wave 2026-07-26): REACHED by WorldModule::Prepare's
+// WORLDENTITY fail path (merge the world-entity buffer's staged scene adds into
+// the live scene input). Quiet one-shot log + drop -- the scene managers the
+// merged events would feed are themselves gated inert, so the drop is the
+// consistent observable. Reconstruct the 25-queue whole-interface Append from
+// the X360 alongside SceneManagerModule::Update.
 void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Append(struct CgsSceneManager::SceneManagerIO::InSceneUpdateInterface const &)
 {
-    CGS_ASSERT(false, "InSceneUpdateInterface::Append: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InSceneUpdateInterface::Append: inert [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::SetCullingGroupPair(unsigned char,unsigned char,unsigned char)
-{
-    CGS_ASSERT(false, "InSceneUpdateInterface::SetCullingGroupPair: link stub (world fleet mount) -- reconstruct from X360");
-}
+// (InSceneUpdateInterface::SetCullingGroupPair stub RETIRED 2026-07-26: the real
+// producer @0x822B1B60 now lives in CgsSceneManagerIO_SceneUpdate.cpp, alongside
+// the new ClearCullingTable @0x827BAB78 + InSceneUpdateInterface::Construct.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::InputBuffer_Query
@@ -1552,8 +1816,18 @@ void CgsSceneManager::SceneManagerModule::ProcessFrustumTestJobRequests(struct C
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool CgsSceneManager::SceneManagerModule::Update(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *,bool)
 {
-    CGS_ASSERT(false, "SceneManagerModule::Update: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
+    // chain. One-shot log + report success so the scripted load advances toward
+    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
+    // deeper consumers keep their traps. Reconstruct from X360.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::Update: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1576,8 +1850,19 @@ void CgsSceneManager::SpatialPartitionManager::Construct()
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool CgsSceneManager::SpatialPartitionManager::Prepare(struct CgsSceneManager::SpatialPartitionConstructParams *,struct rw::IResourceAllocator *)
 {
-    CGS_ASSERT(false, "SpatialPartitionManager::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
+    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
+    // report success so the scripted load advances; the sub-manager stays
+    // inert (zero-initialised storage) and its consumers keep their traps.
+    // Reconstruct from X360 (SpatialPartition/LooseOctree cluster).
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SpatialPartitionManager::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // -------------------------------------------------------------------------
@@ -1595,8 +1880,19 @@ void CgsSceneManager::TriangleCacheManager::EndUpdateTriangleCaches(void *,void 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool CgsSceneManager::TriangleCollisionManager::Prepare(class CgsMemory::LinearMalloc *,int)
 {
-    CGS_ASSERT(false, "TriangleCollisionManager::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
+    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
+    // report success so the scripted load advances; the sub-manager stays
+    // inert (zero-initialised storage) and its consumers keep their traps.
+    // Reconstruct from X360 0x828D0C40 (TriangleCollisionManager::Prepare; see ledger).
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriangleCollisionManager::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // -------------------------------------------------------------------------
@@ -1605,8 +1901,19 @@ bool CgsSceneManager::TriangleCollisionManager::Prepare(class CgsMemory::LinearM
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 bool CgsSceneManager::VolumeManager::Prepare()
 {
-    CGS_ASSERT(false, "VolumeManager::Prepare: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
+    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
+    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
+    // report success so the scripted load advances; the sub-manager stays
+    // inert (zero-initialised storage) and its consumers keep their traps.
+    // Reconstruct from X360 0x828CFD38.
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "VolumeManager::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
 }
 
 // -------------------------------------------------------------------------
@@ -1743,14 +2050,8 @@ void WorldModule::BridgeTriggerModuleToSceneModule_PostScene(void *,struct CgsSc
     CGS_ASSERT(false, "WorldModule::BridgeTriggerModuleToSceneModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// -------------------------------------------------------------------------
-// rw::BitTable
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void rw::BitTable::GetResourceDescriptor(struct rw::BaseResourceDescriptor *,int,int)
-{
-    CGS_ASSERT(false, "BitTable::GetResourceDescriptor: link stub (world fleet mount) -- reconstruct from X360");
-}
+// (rw::BitTable::GetResourceDescriptor stub RETIRED 2026-07-26: the real body now
+// lives in its owning TU, src/vendor/renderware/collision/BitTable.cpp.)
 
 // -------------------------------------------------------------------------
 // rw::collision::Volume

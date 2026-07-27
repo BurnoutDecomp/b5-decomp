@@ -9,6 +9,7 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"           // GameDataIO::AllocatorList (mAllocatorList)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                   // maGeneratedLinearAllocators / mAudioStreamAllocator
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                     // maGeneratedHeapAllocators
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"      // mAttribSysModule (X360 a1+399000)
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
@@ -55,7 +56,11 @@ namespace BrnResource
         enum EPrepareStage
         {
             E_PREPARE_START = 0, E_PREPARE_BASE = 1, E_PREPARE_RESOURCE = 2, E_PREPARE_BANKS = 3,
-            E_PREPARE_POOLS = 4, E_PREPARE_ALLOCATORS = 5, E_PREPARE_DONE = 6
+            E_PREPARE_POOLS = 4, E_PREPARE_ALLOCATORS = 5, E_PREPARE_ATTRIBSYS = 6,
+            E_PREPARE_DONE = 7
+            // (X360 stage 6 = the AttribSysModule prepare + the baked-schema registration;
+            // the DLC 16-18 / GameTalk 7 / vehicle-table 8.. stages remain deferred and are
+            // skipped between ATTRIBSYS and DONE.)
         };
 
         // X360 @0x82671B90 Construct: event-slot pool capacity (96 slots wired inline:
@@ -124,16 +129,36 @@ namespace BrnResource
                                                const CgsResource::Events::LoadBundleResponse* lpResponse);   // 0x82672630
         void ProcessInternalUnloadResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                            const CgsResource::Events::UnloadBundleResponse* lpResponse);     // 0x8266E3F0
-        // [FLAG signature deviation] the X360 takes a 4th arg -- the AttribSys module input
-        // buffer the vault-registration legs forward into (asserted non-null @ cpp:3357).
-        // The AttribSysModule is not committed on PC, so the attrib legs are gated inline
-        // (documented FLAG PC boot gates) and the param is omitted.
+        // X360 4th arg = the AttribSys module input buffer the vault-registration legs
+        // forward into (asserted non-null @ cpp:3357). The attrib legs (40/50-attribs/66)
+        // push Register/UnregisterVault requests into it with THIS module's attrib
+        // receiver queue as the reply target and the event-slot index as the request's
+        // miEventId; the slot stays staged until ProcessAttribSysRegisterVaultResponse /
+        // ProcessUnregisterVehicleAttribsResponse completes it.
         void ProcessInternalAcquireResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
-                                            const CgsResource::Events::AcquireResourceResponse* lpResponse); // 0x826736D8
+                                            const CgsResource::Events::AcquireResourceResponse* lpResponse,
+                                            CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer); // 0x826736D8
         void ProcessInternalInvalidateResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                                const CgsModule::Event* lpResponse);                          // 0x8266E5D8
         void ProcessInternalValidateResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                              const CgsModule::Event* lpResponse);                            // 0x8266E858
+
+        // ---- the AttribSys completion routing (THIS BATCH) ------------------------------
+        // Update's mAttribSysReceiverQueue drain (X360 0x82674670: reply type 3 -> vault
+        // registered, 5 -> vault unregistered). The type-3 payload is the event-slot index
+        // the acquire leg staged; the reply to the ORIGINAL requester echoes the captured
+        // request (id 50/66, 32 bytes on the X360, asset-set lane 4 = ATTRIBS, no handle).
+        void ProcessAttribSysRegisterVaultResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                   const CgsModule::Event* lpResponse);                      // 0x82666590
+        void ProcessUnregisterVehicleAttribsResponse(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                     const CgsModule::Event* lpResponse);                    // 0x8266EAA0 (deferred body)
+
+        // @ 0x82673258 -- the staged schema registration (Prepare stage 6 helper): stage 0
+        // pushes RegisterSchema (the exe-baked schema .vlt/.bin blobs) into the AttribSys
+        // input and runs the module's ProcessInputs directly, stage 1 waits for the
+        // SchemaRegisteredResponse on mReceiverQueue, stage 2 reports done. Returns TRUE
+        // when complete (Prepare advances), false while still registering.
+        bool PrepareAttribSysSchemaResource(CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer);
 
         // Shared completion-post helper (the X360 inlines this 40-byte response build in
         // every acquire/load-fail case): post a GameDataAssetEvent built from the slot's
@@ -218,7 +243,24 @@ namespace BrnResource
         // X360 a1+475940 -- cleared by ProcessInternalValidateResponse; FLAG role name
         // (its setter lives in the deferred swap-in request path).
         s32                            miWorldCollisionValidatePending;
-        // (AttribSysModule, the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
+        // ---- AttribSys service (THIS BATCH) ---------------------------------------------
+        // X360 a1+395888: the attrib reply receiver -- the queue the vault-registration
+        // legs name as the RegisterVault/UnregisterVault reply target; Update drains it
+        // (3 -> ProcessAttribSysRegisterVaultResponse, 5 -> ProcessUnregisterVehicle
+        // AttribsResponse). Buffer span on the X360 = 3112 bytes between the queue head
+        // (+395888) and the module (+399000) == EventReceiverQueue<3072,16> (3072 payload
+        // + the 40-byte queue head). FLAG: capacity inferred from that span (the receiver
+        // is only ever posted 4-byte replies, so the capacity is not behaviour-bearing).
+        CgsModule::EventReceiverQueue<3072, 16> mAttribSysReceiverQueue;
+        // X360 a1+576 (a1[144]) -- the staged-resource-prepare counter the Prepare*Resource
+        // helpers (schema/vehicle-list/...) step through (0 push, 1 wait, 2 done). FLAG
+        // role name (the DWARF field name for this word is not yet pulled).
+        s32                            miResourcePrepareStage;
+        // X360 a1+399000: the embedded AttribSys module (vault array + schema owner).
+        // Prepare stage 6 brings it up with the memory-map allocators (heap banks 19/20/21
+        // + linear bank 22, liMaxNumVaults 80); Update pumps it with the "Attrib" input.
+        CgsAttribSys::AttribSysModule  mAttribSysModule;
+        // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
 }

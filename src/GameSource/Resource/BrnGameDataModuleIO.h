@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                 // CgsModule::IOBuffer base + IsBufferLockedFor{Reading,Writing}()
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"      // BrnResource::GameDataIO::RequestInterface<N>
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"     // BrnResource::GameDataIO::AllocatorList (OutputBuffer member)
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // CgsAttribSys::AttribSysIO::AttribSysRequestInterface<N> (mAttribSysRequestInterface)
 // CgsGraphics::Im2dRenderBuffer is a typedef (== CgsGraphics::Im2d), not a struct, so its canonical
 // home header is included rather than forward-declared (a `struct Im2dRenderBuffer;` fwd-decl would
 // clash with the typedef). InputBuffer::mpDebug2dRenderBuffer is pointer-only.
@@ -53,14 +54,12 @@ namespace BrnResource { rw::core::GeneralResourceAllocator* GetGameDataGeneralAl
 // AttribSysRequestInterface<32768> is CgsAttribSys::AttribSysIO's templated request interface. The DWARF
 // .cpp (BrnGameDataModuleIO.cpp:53/55) confirms its Construct/Clear delegate to
 // CgsModule::VariableEventQueue<32768,16>::Construct/Clear -- i.e. it embeds one VariableEventQueue<32768,16>
-// (== 32768 payload + 16-byte VEQ header == 32784 bytes), exactly like the committed NON-templated
-// CgsAttribSys::AttribSysIO::AttribSysRequestInterface (a single AttribSysEventQueue). Because only the
-// non-templated form is currently committed (CgsAttribSysModuleIO.h), and no committed templated <N>
-// AttribSys type exists yet, mAttribSysRequestInterface is declared here as explicitly-sized opaque storage
-// (32784 bytes, DWARF-attested) to keep this header self-consistent and correctly sized WITHOUT inventing a
-// template body or forking the committed AttribSys home. FLAG: swap for the real
-// CgsAttribSys::AttribSysIO::AttribSysRequestInterface<32768> (and tighten the AttribSys accessor return
-// types from void*) once that shared template lands.
+// (== 32768 payload + 16-byte VEQ header == 32784 bytes). The templated
+// CgsAttribSys::AttribSysIO::AttribSysRequestInterface<N> is NOW committed (CgsAttribSysModuleIO.h), so
+// the former opaque byte-storage placeholder has been swapped for the REAL member and the accessor return
+// types tightened (the earlier FLAG resolved). GameDataModule::Update appends this interface into the
+// AttribSys module input each frame (AttribSysIO::InputBuffer::AppendRequestInterface<32768>
+// @ 0x82671948), and LoadWorldModule bulk-appends the world output's <2048> attrib queue into it.
 //
 // OUTPUTBUFFER LAYOUT FIX (verified this batch): the +4 member is a POINTER, not an embedded list.
 // GetAllocatorList() const @ 0x823B18D8 emits `lwz r3,4(r28)` (LOAD a pointer VALUE); SetAllocatorList
@@ -102,14 +101,15 @@ namespace GameDataIO
         RequestInterface<knRequestInterfaceQueueSize>* GetRequestInterface();               // DWARF h:103
 
         // GetAttribSysRequestInterface() @ 0x823B1830 (fires at DWARF h:226) -- WRITE-lock; returns
-        // this+32788 (= &mAttribSysRequestInterface). DWARF h:108. FLAG: DWARF return type is
-        // AttribSysRequestInterface<32768>*; opaque storage -> void* (see header note).
-        void* GetAttribSysRequestInterface();                                                // DWARF h:108
+        // this+32788 (= &mAttribSysRequestInterface). DWARF h:108 (real DWARF return type now that
+        // the templated AttribSys interface is committed).
+        CgsAttribSys::AttribSysIO::AttribSysRequestInterface<kiAttribSysRequestInterfaceQueueSize>*
+            GetAttribSysRequestInterface();                                                  // DWARF h:108
 
         // GetAttribSysRequestInterface() const @ 0x82664038 (fires at DWARF h:233) -- READ-lock; returns
-        // this+32788 (= &mAttribSysRequestInterface). DWARF h:112. FLAG: DWARF return type is
-        // const AttribSysRequestInterface<32768>*; opaque storage -> const void* (see header note).
-        const void* GetAttribSysRequestInterface() const;                                    // DWARF h:112
+        // this+32788 (= &mAttribSysRequestInterface). DWARF h:112.
+        const CgsAttribSys::AttribSysIO::AttribSysRequestInterface<kiAttribSysRequestInterfaceQueueSize>*
+            GetAttribSysRequestInterface() const;                                            // DWARF h:112
 
         // AppendRequestInterface<N> -- bulk-append a source RequestInterface<N>'s packed request
         // bytes into the embedded mRequestInterface's VariableEventQueue<32768,16>. X360-attested
@@ -131,9 +131,10 @@ namespace GameDataIO
         // DWARF h:123 -- lands at this+4 (after the 1-byte IOBuffer base padded to 4-byte queue
         // alignment) -- matching the asm's `return a1 + 4` in both GetRequestInterface overloads.
         RequestInterface<knRequestInterfaceQueueSize> mRequestInterface;
-        // DWARF h:127 -- lands at this+32788 (= 4 + sizeof(mRequestInterface)). Opaque, size-exact
-        // (VariableEventQueue<32768,16> == 32784 bytes; see header note).
-        u8 mAttribSysRequestInterface[kiAttribSysRequestInterfaceStorageBytes];
+        // DWARF h:127 -- lands at this+32788 (= 4 + sizeof(mRequestInterface)). The REAL committed
+        // templated interface (one VariableEventQueue<32768,16> at offset 0; see header note).
+        CgsAttribSys::AttribSysIO::AttribSysRequestInterface<kiAttribSysRequestInterfaceQueueSize>
+            mAttribSysRequestInterface;
         // DWARF h:130 -- the optional debug Im2d render buffer (SetIm2dDebugRenderBuffer stashes it).
         // Pointer-only; forward-declared type.
         CgsGraphics::Im2dRenderBuffer* mpDebug2dRenderBuffer;

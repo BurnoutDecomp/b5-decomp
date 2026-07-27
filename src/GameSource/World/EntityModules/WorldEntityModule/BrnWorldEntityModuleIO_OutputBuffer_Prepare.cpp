@@ -45,5 +45,18 @@ namespace WorldEntityIO
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mResourceRequestInterface;
     }
+
+    // The scene-input aggregate accessor (ATTESTED by WorldModule::Prepare @0x827D53B0:
+    // the WORLDENTITY fail path reads the staged scene requests through it under the
+    // scene-input/world-entity LockBuffersForIO bracket, i.e. with THIS buffer
+    // READ-locked -- so the guard is the read-lock tripwire, mirroring the const
+    // request-interface accessor above). Returns &mSceneInputInterface.
+    SceneInputInterface*
+    OutputBuffer_Prepare::GetSceneInputInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForReading() || IsBufferLockedForWriting(),
+                   "Not locked");
+        return &mSceneInputInterface;
+    }
 }
 }

@@ -140,11 +140,12 @@ bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer*
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
         lpGameDataInputBuffer->AppendRequestInterface<4096>(
             *lpWorldOutputRead->GetResourceRequestResourceInterface());
-        // [deferred with the AttribSysModule] the X360 also appends the buffer's AttribSys
+        // X360 (headless-IDA @0x823E72F0): also bulk-append the world output's AttribSys
         // vault request queue (<2048>) into the GameData input's attrib queue
-        // (VariableEventQueue<32768,16>::Append<2048,16>); the GameData-side attrib
-        // storage is still the opaque placeholder, so the vault RegisterVault events stay
-        // parked in the world buffer until that module lands.
+        // (VariableEventQueue<32768,16>::Append<2048,16>) -- this is what carries the
+        // world's RegisterVault into the GameData pump's AttribSysModule update.
+        lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpWorldOutputRead->GetAttribSysVaultRequestInterface()->mRequestQueue);
         lpWorldOutput->UnlockForRead();
     }
 
@@ -177,6 +178,9 @@ void LoadingScriptedState::Update()
         s_GameDataInput.CgsModule::IOBuffer::Construct();
         s_GameDataInput.LockForWrite();
         s_GameDataInput.GetRequestInterface()->mRequestQueue.Construct();
+        // The AttribSys request queue (DWARF BrnGameDataModuleIO.cpp:53: InputBuffer::
+        // Construct also runs VariableEventQueue<32768,16>::Construct on it).
+        s_GameDataInput.GetAttribSysRequestInterface()->mRequestQueue.Construct();
         s_GameDataInput.UnlockForWrite();
         s_GameDataOutput.CgsModule::IOBuffer::Construct();
         s_GameDataOutput.LockForWrite();

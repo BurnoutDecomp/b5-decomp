@@ -3,10 +3,11 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultAllocator.h"
 
-namespace Attrib { class IGarbageCollector; }
+namespace Attrib { struct IGarbageCollector; }   // struct -- must match attribloadandgo.h's class-key (MSVC mangling)
 namespace CgsMemory { class LinearMalloc; }
 namespace CgsDev { struct StrStreamBase; }
-namespace CgsAttribSys { namespace AttribSysIO { struct UnregisterVaultRequest; } }
+namespace CgsAttribSys { namespace AttribSysIO { struct RegisterVaultRequest;
+                                                 struct UnregisterVaultRequest; } }
 
 namespace CgsAttribSys
 {
@@ -30,6 +31,12 @@ public:
     // Reserve liMaxNumVaults slots out of the linear allocator and ready the streamed
     // vault allocator (called from AttribSysModule::Prepare).
     void Prepare(s32 liMaxNumVaults, CgsMemory::LinearMalloc* lpLinearAllocator);
+
+    // @ 0x8280E978 -- register the request's vault into a slot (ref-count bump or
+    // VaultSlot::DoLoad; called from AttribSysModule::RegisterVault). Body deferred with
+    // the vault-load interior (GetFreeSlotIndex + the Attrib SDK runtime); the PC
+    // AttribSysModule gates the call while the schema is unloaded (link stub trap).
+    void RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegisterVaultRequest);
 
     // Drop the vault named by the request from the array (called from
     // AttribSysModule::UnregisterVault / ProcessInputs).

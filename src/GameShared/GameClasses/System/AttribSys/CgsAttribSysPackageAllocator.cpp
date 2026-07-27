@@ -7,6 +7,18 @@
 
 namespace CgsAttribSys
 {
+// Reset to the unprepared state for the given consumer package (the X360 inlines these
+// stores into AttribSysMemoryManager::Prepare @0x828043B8 right before each package's
+// Prepare call -- no standalone symbol): null heap, not-live, package id, zeroed totals.
+void AttribSysPackageAllocator::Construct(EAttribSysUserPackage leUserPackage)
+{
+    mpHeapAllocator = NULL;
+    mbHasAllocator  = false;
+    meUserPackage   = leUserPackage;
+    miAllocTotal    = 0;
+    miFreeTotal     = 0;
+}
+
 // @ 0x828041B0 - adopt the supplied heap + alignment and clear the running totals.
 // Asserts (mbHasAllocator == false), (lpHeapAllocator != NULL) and a resolvable
 // package name, then stores: mpHeapAllocator, miAlignment, clears miAllocTotal,
