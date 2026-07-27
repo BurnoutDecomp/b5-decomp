@@ -111,11 +111,17 @@ namespace BrnNetwork
         // Called by BrnNetworkManager::ProcessAfterSimulation.
         u32 Update();
 
-        // X360 0x825616B8 -- register a remote player: find/allocate its slot, resolve its XUID
-        // (from the games server-interface while in a game, or the local player-info otherwise),
-        // store the id + XUID, and start the download if none is in flight. Called by
-        // BrnNetwork::StateManager::UpdateLogin / BrnNetworkManager::PlayerManagerEventCallback.
-        GamerPictureData* AddPlayer(s32 liPlayerID);
+        // X360 0x825616B8 -- register a player's picture slot: early-out when Get(liPlayerID)
+        // already finds one; otherwise assert the manager + player manager, classify the player
+        // (PlayerManager::GetPlayerByID(liPlayerID) == null -> the LOCAL player), pick the local
+        // slot or the first free remote slot (assert "lpDataEntry"), resolve the XUID (in a game:
+        // ServerInterfaceGamesX360::GetPlayerXUIDByID; otherwise the local player-info record's
+        // GetXUID, asserting its id matches liPlayerID), store id + XUID (clearing mbReady for a
+        // remote slot only), and kick DownloadNextGamerPicture when mDownloadingXuid == 0.
+        // void: the X360 never deliberately sets r3 (every exit leaves the last callee's result).
+        // Called by BrnNetwork::StateManager::UpdateLogin /
+        // BrnNetworkManager::PlayerManagerEventCallback.
+        void AddPlayer(s32 liPlayerID);
 
         // X360 0x82557770 -- unregister a player: free its slot and, if it was the one downloading,
         // cancel + advance the queue. Returns the freed slot (or null). Called by

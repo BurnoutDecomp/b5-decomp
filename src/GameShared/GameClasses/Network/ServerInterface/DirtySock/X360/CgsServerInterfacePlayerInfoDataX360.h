@@ -42,6 +42,13 @@ namespace CgsNetwork
         // DirtyAddrToHostAddr(&muXUID, 8, ...). Returns that call's result.
         virtual bool SerialiseFromUser(const void* lpUser);
 
+        // The decoded 8-byte secure address / XUID. ADDITIVE GROW
+        // (GamerPictureManagerX360 TU): BrnNetwork::GamerPictureManagerX360::AddPlayer
+        // @ 0x825616B8 reads the filled record's +0xF8 whole (`ld r10, var_48(r1)` @
+        // 0x8256184C) to key the gamer-picture download -- the inlined read of this
+        // accessor (same inline-accessor idiom as the base's GetID/GetRank).
+        u64 GetXUID() const { return muXUID; }
+
     protected:
         // CgsServerInterfacePlayerInfoDataX360 leaf member, +0xF8 (after the base
         // tail-pad); 8-byte-aligned (the asm touches it with std / an 8-byte len).
