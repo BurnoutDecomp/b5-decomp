@@ -1,6 +1,7 @@
 #ifndef BRN_PROFILE_H
 #define BRN_PROFILE_H
 
+#include <cstddef>  // offsetof (Profile::_AssertLayout)
 #include "types.hpp"
 #include "BrnCommonTypes.h"                               // CgsID, Vector3 (rw::math::vpu::Vector3)
 #include "SharedClasses/Progression/BrnTrainingTypes.h"  // BrnProgression::ETrainingType (Profile training-flag accessors)
@@ -503,6 +504,26 @@ private:
     Array<BrnNetwork::LocalEventScoreUploadData, 49>             maEventScoresToUpload; // X360 +120040 (count @ +120824 == +0x310 into the array)
     CgsContainers::FastBitArray<15u>                             mDeveloperChallengesCompleted; // X360 +120832 (one u64 field; 15 == GsmIO::E_DEVELOPER_CHALLENGE_COUNT)
     // X360 end: +120840 == sizeof(Profile)
+
+    // Never-called compile-time attestation of the completion-sequence flag cluster (X360
+    // accessor asm: Get/SetSeen100PercentCompletionSequence lbzx/stbx @ +0x1CD10 (118032),
+    // Get/SetSeenEliteCompletionSequence @ +0x1CD16 (118038)). The ABSOLUTE X360 offsets are
+    // not pinnable on the x64 gate host (pointer-bearing members earlier in the image widen --
+    // see the NOTE above), so pin the pointer-width-INVARIANT facts the four accessors depend
+    // on: the flags are single bytes, and the elite flag sits exactly 6 bytes after the
+    // 100%-completion flag (the bool run between them is attested by Construct's byte stores
+    // @ +118032..+118039).
+    static void _AssertLayout()
+    {
+        static_assert(sizeof(mb100PercentCompletionSequenceShown) == 1,
+                      "completion flags are single bytes (X360 lbzx/stbx)");
+        static_assert(offsetof(Profile, mbHaveSeenEliteCompletionSequence) -
+                      offsetof(Profile, mb100PercentCompletionSequenceShown) == 6,
+                      "X360: elite flag @ +0x1CD16 == 100%-completion flag @ +0x1CD10 + 6");
+        static_assert(offsetof(Profile, mbRedundantBool4) -
+                      offsetof(Profile, mb100PercentCompletionSequenceShown) == 7,
+                      "X360: the eight-bool completion cluster is contiguous (+118032..+118039)");
+    }
 };
 
 } // namespace BrnProgression
