@@ -52,6 +52,13 @@ namespace CgsDev
 
         struct DebugUI
         {
+            // The script runner iterates the (private, accessor-less) window list directly: the
+            // *WINDOW command moves/opens a window by menu path (X360 ScriptCommand_Window
+            // 0x828318A8 walks mWindowList inline) and SaveState serialises every open window
+            // (X360 0x82832660). dwarfdump does not surface friend declarations, so this access
+            // is attested by that inlined asm.
+            friend struct ScriptInterface;
+
         private:
             Window*                          mpActiveWindow;
             Internal::DebugLinkedList<Window> mWindowList;

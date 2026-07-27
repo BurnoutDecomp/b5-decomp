@@ -25,7 +25,7 @@ namespace CgsDev
     struct Debug2DImmediateRender;   // the 2D debug renderer (HUD squares/lines/text)
     struct Debug3DImmediateRender;   // the 3D (world-space) debug renderer - render follow-on
 
-    namespace DebugUI { struct DebugUI; }
+    namespace DebugUI { struct DebugUI; struct ScriptInterface; }
     namespace Assert { struct AssertData; }   // RenderAssert's input (the failing assert)
 
     // X360 CgsDebugManager.h:95. The pool sizes + perfmon/console configuration the whole debug
@@ -130,6 +130,11 @@ namespace CgsDev
         // of it through the 2D renderer for the single-threaded freeze.
         void RenderAssert(const Assert::AssertData* lpData);
         void RenderAssertOverlay();
+
+        // The script runner's SaveState serialises the active components by walking the (private,
+        // accessor-less) registered-component list inline (X360 SaveState 0x82832660 reads the head
+        // at this+0x816C). dwarfdump does not surface friend declarations; attested by that asm.
+        friend struct DebugUI::ScriptInterface;
 
     private:
         // INCREMENTAL: the registered-component list (X360 this+33132) + the UI the manager owns

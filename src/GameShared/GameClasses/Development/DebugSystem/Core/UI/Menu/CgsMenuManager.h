@@ -18,6 +18,7 @@ namespace CgsDev
     namespace DebugUI
     {
         struct Menu;
+        struct MenuItem;
         struct MenuWindow;
         struct Window;
 
@@ -40,6 +41,16 @@ namespace CgsDev
             // the leaf menu (the variable/function managers register their items into it). A null
             // path or parent resolves to mpMainMenu. X360 CreateMenuPath 0x82829650.
             Menu* CreateMenuPath(const char* lpcPath, Menu* lpParent);
+
+            // Find the menu a pooled item belongs to (DWARF CgsMenuManager.h:85; X360 FindMenu
+            // 0x82819DB0). The script runner's SaveState resolves each menu-item variable back to
+            // its menu to serialise its full path.
+            Menu* FindMenu(const MenuItem* lpMenuItem) const;
+
+            // Resolve a '/'-separated menu path and open that menu's window (DWARF
+            // CgsMenuManager.h:115; X360 OpenWindowFromPath - called by the script runner's
+            // *WINDOW command 0x828318A8). Returns the opened window, or null if no menu matches.
+            Window* OpenWindowFromPath(const char* lpcPath);
 
         private:
             Menu* FindSubMenu(const char* lpcName, Menu* lpParent);  // X360 0x82819D20
