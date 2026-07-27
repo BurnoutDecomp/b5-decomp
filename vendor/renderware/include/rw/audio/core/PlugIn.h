@@ -24,11 +24,17 @@
 #include "types.hpp" // f32, u32 (project primitives)
 #include "coreallocator/icoreallocator_interface.h" // EA::Allocator::ICoreAllocator
 #include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager -- embedded by value in System (+0x60)
+#include "rw/audio/core/ITask.h" // rw::audio::core::ITask / ListDNode -- the System timer list (+0x5C)
+
+#include <new> // placement new (System::New2 constructs in the allocation)
 
 // EA::Thread::Mutex is used only through pointer members of System here; the full
 // definition (eathread_mutex.h) is pulled in by the System .cpp, not by this widely
 // included header.
 namespace EA { namespace Thread { class Mutex; } }
+// EA::Jobs::JobScheduler is a pointer-only System member (@+0x38); the ARTIST build only
+// ever zeroes the slot (CreateInstance), so a forward declaration is the whole surface.
+namespace EA { namespace Jobs { class JobScheduler; } }
 
 namespace rw
 {
@@ -44,13 +50,25 @@ class System;
 class Voice;              // rwaudio PDB: PlugIn::mpVoice (+0x08)
 struct VoiceListLink;     // intrusive expelled-voice list node (defined in Voice.h)
 struct VoiceActiveNode;   // one entry of System::mppVoiceListNodes (defined in Voice.h)
+class DecoderRegistry;    // System::mpDecoderRegistry (+0x2C); defined in DecoderRegistry.h
+class EncoderRegistry;    // System::mpEncoderRegistry (+0x30); ProStreet PDB [sizeof=16]:
+                          //   ListQueue mEncoderDescList {phead,ptail,entries} + System* mpSystem @+0x0C.
+                          //   No ARTIST body touches its interior beyond the teardown in
+                          //   System::Release (frees it via its +0x0C back-pointer), so it is
+                          //   forward-declared only until an encoder TU needs the layout.
+class Profiler;           // System::mpProfiler (+0x34); defined in Profiler.h
 
 // The System's swappable lock/unlock/is-locked hooks (function slots @+0x3C/+0x40/+0x44).
-// Each is tail-called with the System in r3 (the pseudocode renders it as a nullary call
-// because r3 is preserved), so the real prototype takes the System. When null the System
-// falls back to its own EA::Thread::Mutex; when set (VectorToCsisMutex) they route to the
-// Csis integration's mutex primitives.
-typedef int (*SystemLockHook)(System *self);
+// NULLARY -- rwaudio PDB: bool (*mMutexIsLockedFn)() / void (*mMutexLockFn)() /
+// void (*mMutexUnlockFn)(); confirmed by the ARTIST asm: the second lock site inside
+// ExecuteCommands @0x82B6F7D4 dispatches the hook while r3 still holds a GetCpuCycle
+// result, so the hook cannot take the System. (An earlier recon pass modelled these as
+// taking System* because the FIRST call sites happen to leave `this` in r3.) When null
+// the System falls back to its own EA::Thread::Mutex; when set (VectorToCsisMutex) they
+// route to the Csis integration's global-mutex primitives, which are likewise nullary
+// (Csis::System::Lock @0x82B0F248 ignores r3, waits on a global handle).
+typedef bool (*SystemMutexIsLockedHook)();
+typedef void (*SystemMutexHook)();
 // Physical (non-cached) memory allocator hooks (@+0x18/+0x1C). PhysicalAlloc lazily seeds
 // them to the Xbox defaults. The alloc hook is called with four words (only the first three
 // are consumed by the default); the free hook with the block pointer.
@@ -186,6 +204,11 @@ public:
 class PlugInRegistry
 {
 public:
+    // Default ctor = zero the ListQueue state. Grounded in System::New2<PlugInRegistry>
+    // @0x82B6C350, whose inlined construction zeroes exactly these three words (the
+    // remaining members are written by CreateInstance afterwards).
+    PlugInRegistry() : mpHead(0), mppTail(0), muCount(0) {}
+
     static PlugInRegistry *CreateInstance(System *system);
     static void *GetPlugInHandle(PlugInRegistry *self, int id);
     static void *RegisterPlugInRunTime(PlugInRegistry *self, PlugInDescRunTime *info);
@@ -199,19 +222,17 @@ public:
 };
 
 // -------------------------------------------------------------------------------------
-// System -- the owning rwaudio sub-system. Only the surface the plug-in family
-// touches is reconstructed:
-//   +0x20    mDeferredRingBase  (base offset added to the ring cursor; the per-System
-//                                command ring used by PlugIn::SetAttribute)
-//   +0x10B8  muDeferredRingCursor (4280: byte cursor into the command ring; advanced
-//                                  by 16 per queued PlugInSetAttributeCommand)
-// (grounded in SetAttribute @0x82B6E848: v3=this->mpFactory; ring = *(this+0x20) +
-//  *(this+0x10B8); cursor += 16.)
+// System -- the owning rwaudio sub-system: the hub every audio-core family hangs off
+// (the singleton lives at off_83271928, defined in System.cpp). The layout below is the
+// FULL System (rwaudio PDB reconcile, wave E -- see the FLAG note over the member list);
+// the bodies live in System.cpp. The deferred-command ring (mpDeferredRingBase +
+// muDeferredRingCursor) is the queue PlugIn::SetAttribute / Voice::Release / etc. push
+// 8-16 byte {handler, args...} records into; ExecuteCommands replays it once per audio
+// frame (each handler returns its own record size).
 //
-// New2<T> is the placement allocator helper (mangled
-//   ??$New2@VPlugInRegistry@...@System@... ) defined in another TU; reconstructed
-// here as an inline template so the registry's CreateInstance compiles. FLAGGED:
-// the real definition lives in the System allocator TU.
+// New2<T> is the templated allocate-and-default-construct helper (mangled
+//   ??$New2@VPlugInRegistry@...@System@... ); its three X360 instantiations belong to
+// this TU and are reconstructed as the single uniform inline template below.
 // -------------------------------------------------------------------------------------
 class System
 {
@@ -221,10 +242,43 @@ public:
                      unsigned align, EA::Allocator::ICoreAllocator *allocator);
 
     // Placement-construct the System's leaf fields: clear the expelled-voice list head and
-    // the per-frame processor list head, default-construct the embedded TimerManager, and
-    // wire the object table pointer. (The full CreateInstance allocate-and-init path is a
-    // separate ledger function.) X360 @0x82B6DD20.
+    // the timer-task list head, default-construct the embedded TimerManager, and wire the
+    // object table pointer. (The full CreateInstance allocate-and-init path is a separate
+    // ledger function.) X360 @0x82B6DD20.
     static System *System_ctor(System *self);
+
+    // Allocate the singleton System (align 16) through `allocator`, placement-construct it
+    // (System_ctor), carve the two mutexes + the two thread-id slots from the allocation
+    // tail, allocate the first VoiceListNode entry and the deferred-command ring
+    // (`commandBufferSize` bytes), and seed every field. Publishes off_83271928 (BEFORE
+    // the mutexes are initialised, and it is NOT cleared on the failure path -- both
+    // faithful to the asm). Returns the System, or null when any allocation fails (the
+    // partial allocations are freed). X360 @0x82B6F420. Full per-store map:
+    // scratchpad/waveE/AudioSystem.spec.md.
+    static System *CreateInstance(EA::Allocator::ICoreAllocator *allocator,
+                                  u32 commandBufferSize);
+
+    // Tear the System down: queue a deferred ReleaseHandler record into the ring, pump
+    // ExecuteCommands (sleeping 1ms per lap, the command mutex held) until the ring is
+    // empty and miRefCount drains to 0, then release the XMA contexts, the three
+    // registries, the profiler, the TimerManager, the ring + voice-node allocations and
+    // finally the System block itself; off_83271928 is cleared. (The X360 r3 return is a
+    // dead unlock-result passthrough -- modelled void, same as Lock/Unlock.)
+    // X360 @0x82B6F998.
+    static void Release(System *self);
+
+    // The audio-frame pump: under the system lock, tick every ITask on the timer list and
+    // the TimerManager's due timers; then (unlocked) expel fully-faded voices; then (locked
+    // again) replay the deferred-command ring, latch the ring high-water mark, advance
+    // muFrameCounter; finally run the deferred-removal timer phase + defragment. The three
+    // phases' CPU cycle costs land in muTimerExecutionCpuTicks / muExpelVoicesCpuTicks /
+    // muCommandExecutionCpuTicks. (X360 r3 return = dead unlock-result passthrough --
+    // modelled void.) X360 @0x82B6F6D0.
+    static void ExecuteCommands(System *self);
+
+    // Lazily construct the file-scope Profiler singleton (vtable install + field seeding,
+    // time source = this System) and cache it at mpProfiler (@+0x34). X360 @0x82B6DE08.
+    static Profiler *GetProfiler(System *self);
 
     // Free `mem` back through `allocatorOverride` (or, when null, the System's own
     // ICoreAllocator @+0x14). Grounded in Free @0x82B6BE48: v3 = a3 ? a3 : this->mpAllocator;
@@ -305,67 +359,135 @@ public:
     // ----------------------------------------------------------------------------------
     // Layout. The +0xNN annotations are the X360 (32-bit-pointer) offsets from the asm and
     // are documentary only; members are declared with x64 widths so only the ORDER is
-    // load-bearing, and every access is by name. The additional members below (over the
-    // original PlugIn-family surface) are the fields the System-TU bodies touch, grounded in
-    // the System.cpp / Voice.cpp disassembly (mpDeferredRingBase/muDeferredRingCursor keep
-    // their names/roles so PlugIn/Route/RawPuller2/Decoder are unaffected). Slots the System
-    // TU does not read (the CreateInstance-only init fields and the tail-carved mutex storage)
-    // stay as opaque padding.
+    // load-bearing, and every access is by name.
+    //
+    // FLAG (rwaudio PDB reconcile, wave E -- IDA Files/ProStreet08Milestone.pdb,
+    // rw::audio::core::System [sizeof=256]): the PDB names the ENTIRE layout. The Burnout
+    // System == the ProStreet System with a 0x1000-byte insert at +0xA8 (the inline
+    // expel-after-decay Voice* array + its count), i.e. every tail field maps at
+    // Burnout-offset == PDB-offset + 0x1004; verified store-for-store against
+    // CreateInstance @0x82B6F420 / ExecuteCommands @0x82B6F6D0 / Release @0x82B6F998
+    // (mCommandBufferSize/mCommandIndex/mCommandBufferHighWater/mSystemTimerPeriod/
+    // mSampleRate/mCpuFrequency/mCpuLoadLimit/the five CpuTicks/mCommandTimeStamp/
+    // mRefCount/mThreadPriority/mThreadStackSize/mNumActiveVoices/mMaxActiveVoices/
+    // mProcessor/mDebugFeatures all line up exactly). Members ALREADY NAMED by earlier
+    // waves keep their committed names (the PDB name rides in the comment) because the
+    // in-flight plug-in WIP elsewhere in this directory also uses them; NEW members adopt
+    // convention-prefixed PDB names. Two hook slots (+0x10AC/+0x10B0) are PDB-mapped but
+    // untouched by any ARTIST body we have -- they are typed void* and flagged as such.
     // ----------------------------------------------------------------------------------
-    void *mpObjectTable;                          // +0x00  points at a shared 4-word table (ctor)
-    u8 mHeader08[0x10 - 0x08];                     // +0x08..0x0F  (config double; CreateInstance-only)
-    VoiceListLink *mpExpelledVoiceList;          // +0x10  head of the expelled/pending Voice list
-    EA::Allocator::ICoreAllocator *mpAllocator;  // +0x14  the sub-system allocator
-    PhysicalAllocHook mpfnPhysicalAlloc;         // +0x18  physical alloc hook (lazy-seeded)
-    PhysicalFreeHook mpfnPhysicalFree;           // +0x1C  physical free hook (lazy-seeded)
-    char *mpDeferredRingBase;                     // +0x20  deferred-command ring base
-    u8 mPad24[0x28 - 0x24];                        // +0x24..0x27
-    PlugInRegistry *mpPlugInRegistry;            // +0x28  lazily-created plug-in registry
-    u8 mPad2C[0x3C - 0x2C];                        // +0x2C..0x3B  (Release-torn sub-objects; opaque)
-    SystemLockHook mpfnIsLocked;                 // +0x3C  "is locked" hook (0 = unlocked)
-    SystemLockHook mpfnLock;                     // +0x40  lock hook (0 = use mpSystemMutex)
-    SystemLockHook mpfnUnlock;                   // +0x44  unlock hook (0 = use mpSystemMutex)
-    EA::Thread::Mutex *mpCommandMutex;           // +0x48  guards ExecuteCommands
-    EA::Thread::Mutex *mpSystemMutex;            // +0x4C  the general system mutex
-    u8 mPad50[0x54 - 0x50];                        // +0x50  (extra tail-mutex slot)
-    u32 *mppThreadId;                            // +0x54  points at the tail thread-id storage
-    VoiceActiveNode *mppVoiceListNodes;          // +0x58  sorted active-voice array
-    void *mpProcessorListHead;                    // +0x5C  per-frame processor list head
+    void *mpObjectTable;                          // +0x00  (PDB: StackAllocator *mpStackAllocator -- the ctor
+                                                  //   points it at the static 4-word StackAllocator
+                                                  //   {mpSystem,mpUpperLimit,mpLowerLimit,mpTop} @dword_83271930;
+                                                  //   Mixer::Mixer @0x82B6D880 seeds it; AiffWriter/Delay read
+                                                  //   slot [3] (mpTop) as the scratch-stack top)
+    f64 mfSystemTime;                             // +0x08  (PDB: mSystemTime; CreateInstance seeds 0.0
+                                                  //   (dbl_82001CA8); the Profiler samples it -- via its
+                                                  //   mpTimeSource=System -- as its wall clock)
+    VoiceListLink *mpExpelledVoiceList;          // +0x10  (PDB: ListDStack mExpelledVoiceList) expelled Voice list
+    EA::Allocator::ICoreAllocator *mpAllocator;  // +0x14  (PDB: mpAllocator) the sub-system allocator
+    PhysicalAllocHook mpfnPhysicalAlloc;         // +0x18  (PDB: mpPhysicalAlloc) lazy-seeded physical alloc hook
+    PhysicalFreeHook mpfnPhysicalFree;           // +0x1C  (PDB: mpPhysicalFree) lazy-seeded physical free hook
+    char *mpDeferredRingBase;                     // +0x20  (PDB: mpCommandBuffer) deferred-command ring base
+    PlugIn *mpMasteringSubMix;                    // +0x24  (PDB: mpMasteringSubMix; CreateInstance zeroes it --
+                                                  //   no other System-TU access)
+    PlugInRegistry *mpPlugInRegistry;            // +0x28  (PDB: mpPlugInRegistry) lazily-created plug-in registry
+    DecoderRegistry *mpDecoderRegistry;          // +0x2C  (PDB: mpDecoderRegistry; Release frees it through its
+                                                  //   own +0x0C mpSystem back-pointer's allocator)
+    EncoderRegistry *mpEncoderRegistry;          // +0x30  (PDB: mpEncoderRegistry; same teardown shape)
+    Profiler *mpProfiler;                        // +0x34  (PDB: mpProfiler; GetProfiler lazily points it at the
+                                                  //   file-scope singleton; Release invokes its vt[0])
+    EA::Jobs::JobScheduler *mpJobScheduler;      // +0x38  (PDB: mpJobScheduler; only zeroed in this build)
+    SystemMutexIsLockedHook mpfnIsLocked;        // +0x3C  (PDB: mMutexIsLockedFn) "is locked" hook (0 = unset)
+    SystemMutexHook mpfnLock;                    // +0x40  (PDB: mMutexLockFn) lock hook (0 = use mpSystemMutex)
+    SystemMutexHook mpfnUnlock;                  // +0x44  (PDB: mMutexUnlockFn) unlock hook (0 = use mpSystemMutex)
+    EA::Thread::Mutex *mpCommandMutex;           // +0x48  (PDB: mpExecuteCommandsMutex) guards ExecuteCommands;
+                                                  //   points into the tail carve (see CreateInstance)
+    EA::Thread::Mutex *mpSystemMutex;            // +0x4C  (PDB: mpMutex) the general system mutex; tail-carved
+    void *mpLockThreadId;                        // +0x50  (PDB: mpLockThreadId; points at the 8-byte tail block
+                                                  //   after the two carved mutexes)
+    u32 *mppThreadId;                            // +0x54  (PDB: mpRwAudioCoreThreadId; points at the 4-byte tail
+                                                  //   word -- SetRwAudioCoreThreadId writes through it)
+    VoiceActiveNode *mppVoiceListNodes;          // +0x58  (PDB: VoiceListNode *mpVoiceListNodes) active-voice array
+    ListDNode *mpTimerListHead;                  // +0x5C  (PDB: ListDStack mTimerList.phead -- the ITask list
+                                                  //   ExecuteCommands ticks; each node lives at ITask +0x04 (X360))
     TimerManager mTimerManager;                   // +0x60  embedded profiling-timer manager
     // +0xA8  inline "expel after decay" candidate list (Voice::ExpelAfterDecay stores into
     // it at index muExpelAfterDecayCount). Capacity inferred from the 0xA8..0x10A8 gap
     // (1024 slots on the X360 image); indexed by name so the exact span is not load-bearing.
+    // This array + its count are the Burnout-only insert relative to the ProStreet layout.
     Voice *mpExpelAfterDecayList[(0x10A8 - 0xA8) / 4];
     u32 muExpelAfterDecayCount;                   // +0x10A8  live entries in mpExpelAfterDecayList
-    u8 mPad10AC[0x10B8 - 0x10AC];                  // +0x10AC..0x10B7
-    u32 muDeferredRingCursor;                     // +0x10B8  byte cursor into the command ring
-    u8 mPad10BC[0x10C8 - 0x10BC];                  // +0x10BC..0x10C7
-    f32 mfCpuClockRate;                           // +0x10C8  CPU clock rate in Hz (CpuLoadBalancer::Init seeds 3.2e9)
-    f32 mfCpuLoadPercent;                         // +0x10CC  CPU-load headroom % read by CpuLoadBalancer::Balance's cull gate
-    u8 mPad10D0[0x10DC - 0x10D0];                  // +0x10D0..0x10DB
-    u32 muBalanceCycles;                          // +0x10DC  CPU cycles spent in the last CpuLoadBalancer::Balance
-    u8 mPad10E0[0x10E4 - 0x10E0];                  // +0x10E0..0x10E3  (ring stats + timing; System-TU-only paths blocked)
-    u32 muFrameCounter;                           // +0x10E4  executed-frame counter (IsCommandComplete)
-    u8 mPad10E8[0x10F4 - 0x10E8];                  // +0x10E8..0x10F3
-    u16 muActiveVoiceCount;                       // +0x10F4  live entries in mppVoiceListNodes
-    u16 muActiveVoiceCapacity;                    // +0x10F6  capacity of mppVoiceListNodes
-    u8 mPad10F8[0x10FA - 0x10F8];                  // +0x10F8..0x10F9
-    u8 mucThreadProcessor;                        // +0x10FA  hardware thread for the audio update
+    void *mpAssertHandler;                        // +0x10AC (PDB: bool (*mpAssertHandler)(const char*).
+                                                  //   PDB-mapped only -- no ARTIST body we have touches it, so it
+                                                  //   is typed opaque; give it the real signature when a body does)
+    void *mpfnGetCsisLibraryType;                 // +0x10B0 (PDB: unsigned char (*mGetCsisLibraryType)().
+                                                  //   PDB-mapped only, opaque -- as above)
+    u32 muCommandBufferSize;                      // +0x10B4 (PDB: mCommandBufferSize; CreateInstance stores its
+                                                  //   commandBufferSize argument here)
+    u32 muDeferredRingCursor;                     // +0x10B8 (PDB: mCommandIndex) byte cursor into the command ring
+    u32 muDeferredRingHighWater;                  // +0x10BC (PDB: mCommandBufferHighWater; ExecuteCommands latches
+                                                  //   the max cursor seen before each ring reset)
+    f32 mfSystemTimerPeriod;                      // +0x10C0 (PDB: mSystemTimerPeriod; passed in f1 to every
+                                                  //   ITask::Execute by ExecuteCommands)
+    f32 mfSampleRate;                             // +0x10C4 (PDB: mSampleRate; CreateInstance seeds 0.0f)
+    f32 mfCpuClockRate;                           // +0x10C8 (PDB: mCpuFrequency; CreateInstance seeds 1.0f,
+                                                  //   CpuLoadBalancer::Init later seeds 3.2e9)
+    f32 mfCpuLoadPercent;                         // +0x10CC (PDB: mCpuLoadLimit; CreateInstance seeds 90.0f; read
+                                                  //   by CpuLoadBalancer::Balance's cull gate)
+    u32 muMixerCpuTicks;                          // +0x10D0 (PDB: mMixerCpuTicks; CreateInstance zeroes)
+    u32 muCommandExecutionCpuTicks;               // +0x10D4 (PDB: mCommandExecutionCpuTicks; ExecuteCommands'
+                                                  //   ring-replay phase cycle cost)
+    u32 muTimerExecutionCpuTicks;                 // +0x10D8 (PDB: mTimerExecutionCpuTicks; ExecuteCommands' two
+                                                  //   timer phases' summed cycle cost)
+    u32 muBalanceCycles;                          // +0x10DC (PDB: mLoadBalancerCpuTicks) last CpuLoadBalancer cost
+    u32 muExpelVoicesCpuTicks;                    // +0x10E0 (PDB: mExpelVoicesCpuTicks; UpdateExpellingVoices cost)
+    u32 muFrameCounter;                           // +0x10E4 (PDB: mCommandTimeStamp; CreateInstance seeds 1;
+                                                  //   ExecuteCommands increments; IsCommandComplete compares)
+    volatile s32 miRefCount;                      // +0x10E8 (PDB: volatile int mRefCount; Release pumps the ring
+                                                  //   until it drains to <= 0)
+    s32 miThreadPriority;                         // +0x10EC (PDB: mThreadPriority; CreateInstance seeds 15)
+    u32 muThreadStackSize;                        // +0x10F0 (PDB: mThreadStackSize; CreateInstance zeroes)
+    u16 muActiveVoiceCount;                       // +0x10F4 (PDB: mNumActiveVoices) live mppVoiceListNodes entries
+    u16 muActiveVoiceCapacity;                    // +0x10F6 (PDB: mMaxActiveVoices) mppVoiceListNodes capacity
+    u8 mucCommandsExecuting;                      // +0x10F8 (PDB: mCommandsExecuting; PDB-mapped -- untouched by
+                                                  //   the bodies reconstructed so far)
+    u8 mucMutexLockAttempted;                     // +0x10F9 (PDB: mMutexLockAttempted; PDB-mapped -- as above)
+    u8 mucThreadProcessor;                        // +0x10FA (PDB: mProcessor; CreateInstance seeds 4)
+    u8 maucDebugFeatures[6];                      // +0x10FB..0x1100 (PDB: mDebugFeatures[6]; CreateInstance
+                                                  //   memsets all six to 1)
 };
 
-// New2<T> reconstruction (FLAGGED): the real templated allocator helper is defined in
-// the System allocator TU (mangled ??$New2@...@System@core@audio@rw@@). Modelled here
-// as the minimal allocate-aligned-then-store behaviour its call site relies on so
-// PlugInRegistry::CreateInstance compiles. It allocates `size` bytes at `align` from
-// `allocator` (falling back to the System's own allocator when null) and writes the
-// result through `outResult`.
+// New2<T> -- the templated allocate-and-default-construct helper. Reconstructed as ONE
+// uniform template body from its three exported X360 instantiations, which differ ONLY
+// by the inlined default constructor and the default size:
+//   New2<Decoder>         @0x82B6C2D0: default size 52 (X360 sizeof), ctor = vtable install
+//   New2<PlugInRegistry>  @0x82B6C350: default size 24 (X360 sizeof), ctor = zero the
+//                                       ListQueue words (see PlugInRegistry())
+//   New2<Voice>           @0x82B6E140: default size 80 (X360 sizeof), ctor = zero mUnk0C
+// Uniform behaviour (identical in all three): size 0 -> sizeof(T); allocator null -> the
+// System's own mpAllocator (@+0x14); allocate via ICoreAllocator::Alloc(size, name,
+// /*flags*/1, align, /*alignOffset*/0) (vtable slot +4); store the result through
+// `outResult` both before and after construction, constructing only when non-null.
+// (An earlier recon pass stubbed this as `allocator ? Alloc(...) : 0` with no name/flags,
+// no default size and no construction -- every call site passes allocator=0, so that stub
+// made ALL the CreateInstance paths return null. Fixed wave E.)
 template <class T>
-inline void System::New2(System * /*self*/, T **outResult, const char * /*name*/,
+inline void System::New2(System *self, T **outResult, const char *name,
                          unsigned size, unsigned align,
                          EA::Allocator::ICoreAllocator *allocator)
 {
-    void *mem = allocator ? allocator->Alloc(size, 0, 0, align) : 0;
-    *outResult = static_cast<T *>(mem);
+    if (!size)
+        size = sizeof(T);
+    if (!allocator)
+        allocator = self->mpAllocator;
+    T *result = static_cast<T *>(allocator->Alloc(size, name, 1, align, 0));
+    *outResult = result;
+    if (result)
+    {
+        new (result) T;
+        *outResult = result;
+    }
 }
 
 } // namespace core

@@ -110,6 +110,11 @@ struct VoiceStageConfig
 class Voice
 {
 public:
+    // Default ctor = zero mUnk0C only. Grounded in System::New2<Voice> @0x82B6E140, whose
+    // inlined construction performs exactly this one store (every other field is written
+    // by CreateInstance afterwards).
+    Voice() : mUnk0C(0) {}
+
     // @0x82B6EC50 -- allocate + lay out a voice for `numStages` stages, placement-construct
     // each stage's PlugIn, insert the create-handler command into the ring. Returns the
     // voice (and writes its plug-in array through outPlugIns) or null on failure.

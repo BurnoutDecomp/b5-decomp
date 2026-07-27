@@ -74,6 +74,12 @@ struct DecoderDescLink
 class DecoderRegistry
 {
 public:
+    // Default ctor = zero the ListQueue state, mirroring the (ICF-shared) inlined
+    // construction in System::New2 -- see New2<PlugInRegistry> @0x82B6C350; the
+    // DecoderRegistry instantiation has no separate X360 body. CreateInstance writes
+    // mpSystem afterwards.
+    DecoderRegistry() : mpHead(0), mppTail(0), muCount(0) {}
+
     static DecoderRegistry *CreateInstance(System *system);
     static DecoderDesc *GetDecoderHandle(DecoderRegistry *self, int id);
     static DecoderDesc *RegisterDecoder(DecoderRegistry *self, DecoderDesc *info);
