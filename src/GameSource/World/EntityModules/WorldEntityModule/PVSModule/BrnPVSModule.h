@@ -14,25 +14,37 @@
 // this header is the path baked into the X360 asserts:
 //   d:\p4\b5_main\...\worldentitymodule\PVSModule/BrnPVSModule.h
 //
-// This slice homes the four functions the X360 ARTIST build emitted out-of-line for
-// the class (the dossier's TU):
+// X360 ARTIST functions homed by this class:
 //   PVSModule()              @ 0x827E4CC8  ctor
+//   Construct()              @ 0x822C3F50
+//   Prepare()                @ 0x82302E00
+//   Update()                 @ 0x822EE050
+//   Release()                @ 0x822A8AD8
 //   GetInputInterface()      @ 0x822BAF78  (BrnPVSModule.h:122 assert)
 //   GetOutputInterface()     @ 0x822BAFF0  (BrnPVSModule.h:130 assert)
 //   GetGameDataRequestInt()  @ 0x822BB068  (BrnPVSModule.h:138 assert)
 //
-// FLAG (deferred PVSModule-specific members): the X360 ctor zeroes one flag byte at
-// this+0x1B58 (stb) and initialises a circular list-head sentinel at this+0x1D78
-// (three zero words then three self-pointers then a zero word -- an empty intrusive
-// list whose element type is NOT recovered by this slice). They sit AFTER the whole
-// ModuleSingleBufferedTemplate sub-object (base + embedded InputBuffer + OutputBuffer);
-// they are modelled here as honestly-named members initialised to the ctor-observed
-// empty state. Their absolute offsets (0x1B58 / 0x1D78) depend on the exact embedded
-// buffer sizes and are NOT asserted -- only the empty-state initialisation is pinned.
+// X360 MEMBER MAP (byte offsets into the module object, all attested by the four
+// bodies above; the sub-object base is the ModuleSingleBufferedTemplate with its two
+// embedded IO buffers):
+//   +0x1D70  s32                        mePrepareStage   (Prepare's switch variable)
+//   +0x1D74  s32                        meReleaseStage   (Release's switch variable)
+//   +0x1D78  ResourcePtr<ZoneList>      mZoneList        (Prepare: CreateFromHandle;
+//                                                         Update: operator->)
+//   +0x1D98  EventReceiverQueue<512,16> mReceiverQueue   (Construct seeds miCapacity
+//                                                         512 / miAlignment 16 /
+//                                                         mpBuffer = member+0x18)
+//   +0x1FB0  bool                       mbCurrentZoneOnly (Construct clears it; Update
+//                                                          tests it -- see below)
+// The x64 build keeps these BY NAME (semantic parity); the absolute offsets are X360
+// documentation only.
 // ============================================================================
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBufferedTemplate.h"  // ModuleSingleBufferedTemplate
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"        // EventReceiverQueue<512,16>
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"          // ResourcePtr<T>
+#include "GameShared/GameClasses/SceneManager/Zones/ZoneList.h"             // CgsSceneManager::ZoneList
 #include "GameSource/World/EntityModules/WorldEntityModule/PVSModule/SharedIO/BrnPVSModuleEvents.h" // PVSIO::InputBuffer/OutputBuffer
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"           // RequestInterface<512>
 
@@ -42,9 +54,48 @@ namespace BrnWorld
         : public CgsModule::ModuleSingleBufferedTemplate<PVSIO::InputBuffer, PVSIO::OutputBuffer>
     {
     public:
+        // Prepare's stage machine (X360 Prepare @0x82302E00 switches on mePrepareStage with a
+        // 5-entry jump table; the "Invalid Stage\n" default fires at BrnPVSModule.cpp:200).
+        enum EPrepareStage
+        {
+            E_PREPARESTAGE_START   = 0,   // nothing done yet (Construct's seed)
+            E_PREPARESTAGE_MODULE  = 1,   // driving the ModuleSingleBuffered base Prepare
+            E_PREPARESTAGE_REQUEST = 2,   // post the LoadPVS game-data request
+            E_PREPARESTAGE_WAITING = 3,   // waiting for the type-58 zone-list reply
+            E_PREPARESTAGE_DONE    = 4
+        };
+
+        // Release's stage machine (X360 Release @0x822A8AD8; "Invalid Stage\n" at :257 for >= 3).
+        enum EReleaseStage
+        {
+            E_RELEASESTAGE_START  = 0,
+            E_RELEASESTAGE_MODULE = 1,
+            E_RELEASESTAGE_DONE   = 2     // Construct's seed
+        };
+
         // X360 0x827E4CC8. Chains the base (which constructs the two RWMutexes), sets the
-        // PVSModule vtable, clears the PVS flag byte and seeds the empty PVS list-head sentinel.
+        // PVSModule vtable, clears the PVS flag byte and default-constructs the zone-list
+        // resource pointer (the "three zero words then three self-pointers then a zero word"
+        // the ctor asm writes at +0x1D78 IS BaseResourcePtr's empty state).
         PVSModule();
+
+        // X360 0x822C3F50. Chains ModuleSingleBuffered::Construct, seeds the two stage
+        // machines (prepare START / release DONE), constructs the 512-byte game-data
+        // receiver queue and clears the current-zone-only flag.
+        void Construct() override;
+
+        // X360 0x82302E00. Stage machine: base module prepare -> post LoadPVS -> wait for the
+        // type-58 reply -> bind the ZoneList resource pointer + publish the total zone count.
+        bool Prepare() override;
+
+        // X360 0x822A8AD8. Unwinds the base module and resets the two stage machines.
+        bool Release() override;
+
+        // X360 0x822EE050. THE PVS QUERY: drains the GetZoneRequest queue, resolves each
+        // request position to a Zone via the loaded ZoneList, and publishes one
+        // GetZoneResponse per request (centre zone + its safe/unsafe neighbours, with the
+        // per-zone render/immediate flags and the velocity-weighted zone weights).
+        void Update() override;
 
         // X360 0x822BAF78. Returns the module's input data structure (the GetZoneRequest queue
         // buffer). The base GetInputStructure() is the lpInputBuffer the asm reads; the
@@ -61,34 +112,30 @@ namespace BrnWorld
         BrnResource::GameDataIO::RequestInterface<512>* GetGameDataRequestInt();
 
     private:
-        // FLAG (see header banner): PVSModule-specific tail members the X360 ctor initialises.
-        // A circular intrusive list-head sentinel; its element type is not recovered by this
-        // slice. The X360 ctor stores: three zero words, then mpHead/mpTail/mpCursor pointing
-        // back at the sentinel itself, then a trailing zero word -- the empty-list state.
-        struct PvsListHead
-        {
-            void* mpField0;   // +0x00  cleared to 0
-            void* mpField1;   // +0x04  cleared to 0
-            void* mpField2;   // +0x08  cleared to 0
-            void* mpHead;     // +0x0C  self-pointer (empty list)
-            void* mpTail;     // +0x10  self-pointer (empty list)
-            void* mpCursor;   // +0x14  self-pointer (empty list)
-            u32   muField18;  // +0x18  cleared to 0
+        // The receiver-queue event TYPE the game-data module posts when the PVS zone list has
+        // been acquired (GameDataModule::ProcessInternalAcquireResponse case 58 ->
+        // PostGameDataResponse; Prepare asserts "Invalid event received\n" on anything else).
+        static const s32 KI_EVENT_GET_PVS = 58;
 
-            PvsListHead()
-                : mpField0(nullptr)
-                , mpField1(nullptr)
-                , mpField2(nullptr)
-                , mpHead(this)
-                , mpTail(this)
-                , mpCursor(this)
-                , muField18(0)
-            {
-            }
-        };
+        // The pool the PVS zone list is loaded into (Prepare passes 3 to LoadPVS -- the
+        // open-world graphics pool, the same id WorldEntityModule::Prepare uses).
+        static const s32 KI_PVS_POOL_ID = 3;
 
-        bool        mbPvsFlag;   // X360 ctor: stb 0 @ this+0x1B58 -- a cleared flag/state byte.
-        PvsListHead mPvsList;    // X360 ctor: empty circular list-head sentinel @ this+0x1D78.
+        s32 mePrepareStage;   // X360 +0x1D70
+        s32 meReleaseStage;   // X360 +0x1D74
+
+        // The loaded PVS zone list (bound from the type-58 reply's ResourceHandle).
+        CgsResource::ResourcePtr<CgsSceneManager::ZoneList> mZoneList;   // X360 +0x1D78
+
+        // The game-data reply queue the LoadPVS request names as its receiver.
+        CgsModule::EventReceiverQueue<512, 16> mReceiverQueue;           // X360 +0x1D98
+
+        // X360 +0x1FB0, cleared by Construct. When set, Update answers every request with the
+        // centre zone ALONE (miNumZones == 1) instead of the centre plus its neighbours -- the
+        // "no PVS expansion" path. FLAG: no writer for this byte was recovered in this slice
+        // (Construct is the only attested store); the name describes the behaviour Update
+        // selects on it, which IS attested (0x822EE138 lbz +0x1FB0 -> the single-zone branch).
+        bool mbCurrentZoneOnly;                                          // X360 +0x1FB0
     };
 }
 

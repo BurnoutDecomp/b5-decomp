@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsModelResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (FixUp version tripwire)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::ModelResourceType::FixDown                       @ 0x828A8548
@@ -38,6 +39,28 @@ namespace CgsResource
         return KU_MODEL_RESOURCE_TYPE_ID;
     }
 
+    // FixUp @ 0x828A8578 -- the serialise-IN counterpart of FixDown. Tripwires the model
+    // data version (a BYTE at +19; the X360 streams "Model data version mismatch. Code
+    // version = 2 Data version = <n>" at CgsModelResourceType.cpp:219), then rebases the
+    // three u32 pointer slots at +0/+4/+8 by the load base -- reading +4 and +8 into
+    // temporaries BEFORE storing +0, exactly like FixDown. Without this override the model
+    // keeps its file-relative LOD-radius / renderable tables and every consumer
+    // (InstanceListResourceType::PostFixUp first) walks from a raw file offset.
+    void ModelResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
+        const u32 luDelta = CgsResource::GetLoadBase(lrResource);
+
+        CGS_ASSERT(*reinterpret_cast<const u8*>(lBase + 19) == 2,   // serialised blob
+                   "Model data version mismatch. Code version = ");
+
+        u32 luP1 = *reinterpret_cast<u32*>(lBase + 4) + luDelta;   // serialised blob
+        u32 luP2 = *reinterpret_cast<u32*>(lBase + 8) + luDelta;   // serialised blob
+        *reinterpret_cast<u32*>(lBase + 0) += luDelta;   // serialised blob
+        *reinterpret_cast<u32*>(lBase + 4) = luP1;
+        *reinterpret_cast<u32*>(lBase + 8) = luP2;
+    }
+
     void ModelResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
         uintptr_t lBase = reinterpret_cast<uintptr_t>(lpResource);
@@ -46,8 +69,8 @@ namespace CgsResource
         u32 luP1 = *reinterpret_cast<u32*>(lBase + 4) - luDelta;
         u32 luP2 = *reinterpret_cast<u32*>(lBase + 8) - luDelta;
         *reinterpret_cast<u32*>(lBase + 0) -= luDelta;
-        *reinterpret_cast<u32*>(lBase + 4) = luP1;
-        *reinterpret_cast<u32*>(lBase + 8) = luP2;
+        *reinterpret_cast<u32*>(lBase + 4) = luP1;   // serialised blob
+        *reinterpret_cast<u32*>(lBase + 8) = luP2;   // serialised blob
     }
 
     uint32_t ModelResourceType::GetImportCount(const void* lpResource) const

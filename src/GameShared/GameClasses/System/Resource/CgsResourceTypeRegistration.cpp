@@ -15,6 +15,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSchemaResourceType.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultResourceType.h"   // CgsResource::AttribSysVaultResourceType (0x1C)
 #include "GameShared/GameClasses/World/Resources/CgsWorldPainter2DResourceType.h"    // CgsResource::WorldPainter2DResourceType (0x30)
+#include "GameShared/GameClasses/SceneManager/Zones/Resources/ZoneListResourceType.h" // CgsResource::ZoneListResourceType (0xB000)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
@@ -108,6 +109,11 @@ namespace CgsResource
         TypeRegistry::Register(&sWorldPainter2D);
         static PolygonSoupListResourceType sPolygonSoupList;   // [game #71] 0x43  PolygonSoupList (collision)
         TypeRegistry::Register(&sPolygonSoupList);
+        // PVS wave (2026-07-27): PVS.BNDL's single resource is type 45056 (0xB000). With no
+        // registered handler CgsResource::Pool::CreateEntryInSlot stores a NULL mpResourceType
+        // and AllocateMemoryForResource null-derefs it (GetCachedCanDefrag).
+        static ZoneListResourceType        sZoneList;          // 0xB000 ZoneList (PVS zone grid)
+        TypeRegistry::Register(&sZoneList);
         // The three world-prop/sound types (X360 GameDataModule::RegisterResourceTypes
         // @0x82667EA8 registers all three; exact [game #] positions pending that
         // function's order decode -- id-keyed lookup is order-independent).

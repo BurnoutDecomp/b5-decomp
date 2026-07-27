@@ -3,32 +3,43 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetInstance bounds check)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsGraphics::InstanceList::FixDown     @ 0x...      (inverse load-time fix-up)
+//   CgsGraphics::InstanceList::FixUp       @ 0x827F9318 (load-time fix-up)
+//   CgsGraphics::InstanceList::FixDown     @ 0x827F9478 (inverse load-time fix-up)
 //   CgsGraphics::InstanceList::GetInstance @ 0x822A3D90 (indexed element accessor)
-// First-pass reconstruction: behaviour-faithful to the X360 pseudocode / asm.
-// FixDown is the inverse of a load-time pointer fix-up: it clears each instance's
-// leading handle and rebases the instance buffer back down by `delta`. Member
-// names/types per burnout.wiki (Instance List -> InstanceList); the base pointer is
-// kept as uintptr_t for the relocation arithmetic.
+// Behaviour-faithful to the X360 pseudocode / asm. FixUp rebases the instance buffer
+// slot up by `delta` (only when non-zero) and tripwires the data version; FixDown is
+// its inverse and additionally clears each instance's leading model handle (the model
+// pointers are re-supplied by the bundle's import table on the way back in).
 //
-// The 80-byte Instance element (an ON-DISK relocated resource body) is NOT committed
-// to a shared header; only its stride is attested here, so GetInstance walks it via
-// the documented opaque-element-stride precedent (the same reinterpret used by FixDown
-// above) rather than a member-by-name access into an undeclared element layout.
+// The instance buffer slot is the console's 32-BIT on-disc slot -- see the layout note
+// in CgsInstance.h. The relocation arithmetic runs in u32 exactly as the console does
+// (the whole resource heap is reserved below 4 GB).
 
 namespace CgsGraphics
 {
-    // X360 on-disk stride 80; the PC element follows sizeof(Instance) (the model
-    // pointer widens on x64 -- semantic-by-NAME, x64 gate).
+    // X360 on-disk stride 80 == sizeof(Instance) (pinned by the header's static_assert).
     static const u32 kInstanceStride = sizeof(Instance);
+
+    // X360 0x827F9318. `if (*this) *this += delta;` then the version tripwire
+    // ("Instance data version mismatch. Code version = " ... the X360 streams both
+    // versions through StrStream; CGS_ASSERT carries the static lead text).
+    InstanceList* InstanceList::FixUp(int delta)
+    {
+        if (muaInstances)
+        {
+            muaInstances += static_cast<u32>(delta);
+        }
+        CGS_ASSERT(muVersionNumber == 1, "Instance data version mismatch. Code version = ");
+        return this;
+    }
 
     InstanceList* InstanceList::FixDown(int delta)
     {
-        if (mpaInstances)
+        if (muaInstances)
         {
             for (u32 i = 0; i < muArraySize; ++i)
-                *reinterpret_cast<u32*>(mpaInstances + i * kInstanceStride) = 0;
-            mpaInstances -= delta;
+                *reinterpret_cast<u32*>(static_cast<uintptr_t>(muaInstances) + i * kInstanceStride) = 0;
+            muaInstances -= static_cast<u32>(delta);
         }
         return this;
     }
@@ -40,6 +51,6 @@ namespace CgsGraphics
     Instance* InstanceList::GetInstance(u32 luIndex) const
     {
         CGS_ASSERT(luIndex < muArraySize, "Instance index out of range");
-        return reinterpret_cast<Instance*>(mpaInstances + luIndex * kInstanceStride);
+        return reinterpret_cast<Instance*>(static_cast<uintptr_t>(muaInstances) + luIndex * kInstanceStride);
     }
 }

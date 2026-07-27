@@ -167,7 +167,10 @@ namespace BrnResource
                                   bool lbFailFlag, u32 luTypeLane,
                                   const void* lpResourceMemory, void* lpSourceEntry);
 
-        // ---- the four reconstructed world handlers --------------------------------------
+        // ---- the reconstructed world handlers --------------------------------------------
+        void ProcessLoadWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                         const GameDataIO::GameDataAssetEvent* lpEvent,
+                                         s32 liEventId, s32 liSlotIndex);              // 0x8266F5C8
         void ProcessGetWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                         const GameDataIO::GameDataAssetEvent* lpEvent,
                                         s32 liEventId, s32 liSlotIndex);               // 0x826705D0

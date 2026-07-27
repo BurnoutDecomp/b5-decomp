@@ -16,6 +16,7 @@ struct InstanceListResourceType : public CgsResource::Type
 {
     uint32_t                   GetTypeID() const override;
     CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
+    void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
     void     FixDown(void* lpResource, const rw::Resource& lrResource) const override;
     void     PostFixUp(void* lpResource, const rw::Resource& lrResource) const override;
 };

@@ -5,6 +5,7 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/Instances/CgsInstance.h"   // the on-disc InstanceList/Instance layout
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsGraphics::InstanceListResourceType::GetTypeID  @ 0x827E6EE8  (EXECUTED in goal trace)
@@ -30,49 +31,14 @@ namespace CgsGraphics
         return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
     }
 
-    // ---------------------------------------------------------------------------
-    // FLAG: TU-local MIRROR of the COMMITTED-but-HEADERLESS CgsGraphics::InstanceList
-    // (defined TU-local in CgsInstance.cpp). Layout is byte-identical to that home
-    // (mpaInstances/muArraySize/muNumInstances/muVersionNumber) so it is ODR-safe;
-    // FixDown(int) is declared (not defined) here and links to the committed symbol.
-    // BaseCollisionGenerator / VehicleListResourceType precedent.
-    // ---------------------------------------------------------------------------
-    struct InstanceList
-    {
-        uintptr_t mpaInstances;    // +0x00 Instance* (base of the instance buffer)
-        u32       muArraySize;     // +0x04 total Instance entries (PostFixUp loop count)
-        u32       muNumInstances;  // +0x08 complete Instance entries
-        u32       muVersionNumber; // +0x0C
-
-        InstanceList* FixDown(int delta);   // committed symbol (CgsInstance.cpp)
-    };
-
-    struct CgsModel;
+    // The on-disc InstanceList / Instance layout now lives in the committed
+    // CgsInstance.h (32-bit slots, 16-byte header, 80-byte element). The TU-local
+    // mirrors this file used to carry are gone -- they had drifted to host-width
+    // pointers, which put muArraySize at byte +8 and spliced the instance-buffer slot
+    // with it.
 
     // ---------------------------------------------------------------------------
-    // FLAG: minimal slice of the (NOT committed) 80-byte on-disk Instance element.
-    // Only the two fields PostFixUp touches are modelled; padding preserves the
-    // X360 stride-80 / offset layout (4-byte pointer slot). Offsets verified vs the
-    // X360 pseudocode: model @+0 (v6 = *v5), mfLodRadiusSquared @+12 (v5[3]). The
-    // model pointer is a load-relative u32 (PointerFromU32). Field names INFERRED.
-    // ---------------------------------------------------------------------------
-    struct Instance
-    {
-        u32 muModel;              // +0x00  v6 = *v5 (the instance's model, u32 ptr)
-        u8  maPad4[8];            // +0x04..+0x0C
-        f32 mfLodRadiusSquared;   // +0x0C  v5[3] = radius * radius
-        u8  maPad16[64];          // +0x10..+0x50 (stride = 80 bytes)
-
-        CgsModel* GetModel() const { return PointerFromU32<CgsModel>(muModel); }
-    };
-
-    static const u32 KU_INSTANCE_STRIDE = 80;   // bytes per Instance (X360 v4 += 80)
-
-    static_assert(sizeof(Instance) == KU_INSTANCE_STRIDE, "Instance must be 80 bytes (X360 stride)");
-    static_assert(offsetof(Instance, mfLodRadiusSquared) == 12, "mfLodRadiusSquared must be at +12 (v5[3])");
-
-    // ---------------------------------------------------------------------------
-    // FLAG: minimal slice of the (NOT committed) CgsModel. Only the two members
+    // FLAG: minimal slice of the (NOT committed) CgsModel body. Only the two members
     // PostFixUp reads are modelled, at their X360 BYTE offsets -- the asm loads are
     // byte-displacement, NOT dword-scaled (the Hex-Rays `*(LODWORD(v6)+8/+18)` render
     // is a byte-pointer index, so the bytes are +0x08 and +0x12, not +0x20/+0x48):
@@ -82,7 +48,7 @@ namespace CgsGraphics
     // over those fields (the radius table is itself an on-disk u32 ptr -> PointerFromU32).
     // Padding/field names INFERRED; offsets verified vs the asm.
     // ---------------------------------------------------------------------------
-    struct CgsModel
+    struct SerialisedModel
     {
         u8  maPad0[8];      // +0x00..+0x08
         u32 muLodRadii;     // +0x08  (lwz 8) coarsest-first radius table (u32 ptr)
@@ -93,8 +59,13 @@ namespace CgsGraphics
         f32 GetLodRadius(u32 luIndex) const { return PointerFromU32<f32>(muLodRadii)[luIndex]; }
     };
 
-    static_assert(offsetof(CgsModel, muLodRadii) == 8,  "muLodRadii must be at +0x08 (lwz 8)");
-    static_assert(offsetof(CgsModel, muNumLods)  == 18, "muNumLods must be at +0x12 (lbz 0x12)");
+    static_assert(offsetof(SerialisedModel, muLodRadii) == 8,  "muLodRadii must be at +0x08 (lwz 8)");
+    static_assert(offsetof(SerialisedModel, muNumLods)  == 18, "muNumLods must be at +0x12 (lbz 0x12)");
+
+    static const u32 KU_INSTANCE_STRIDE = 80;   // bytes per Instance (X360 v4 += 80)
+
+    static_assert(sizeof(Instance) == KU_INSTANCE_STRIDE, "Instance must be 80 bytes (X360 stride)");
+    static_assert(offsetof(Instance, mfMaxDrawDistanceSq) == 12, "mfMaxDrawDistanceSq must be at +12 (v5[3])");
 
     // GetTypeID @ 0x827E6EE8 (EXECUTED): return 35.
     static const uint32_t KU_INSTANCE_LIST_RESOURCE_TYPE_ID = 35;   // 0x23
@@ -162,12 +133,24 @@ namespace CgsGraphics
             for (u32 luI = 0; luI < lpList->muArraySize; ++luI)
             {
                 // v5 = mpaInstances + luI*80 (Instance*); v6 = *v5 = mpModel.
-                Instance* lpInstance =
-                    reinterpret_cast<Instance*>(lpList->mpaInstances + luI * KU_INSTANCE_STRIDE);
-                CgsModel* lpModel = lpInstance->GetModel();
+                Instance* lpInstance = lpList->GetInstance(luI);
+                SerialisedModel* lpModel = PointerFromU32<SerialisedModel>(lpInstance->mpModel.muSlot);
+
+                // [FLAG PC boot gate] the model is a bundle IMPORT; an unresolved import
+                // leaves the slot null and the console-faithful walk below dereferences it.
+                // Skip the entry (its LOD radius stays as serialised) and let the load
+                // continue. DELETE once every world bundle resolves its imports.
+                if (lpModel == 0)
+                {
+                    continue;
+                }
 
                 CGS_ASSERT(lpModel != nullptr, "lpModel");                          // :245
                 CGS_ASSERT(lpModel->GetNumLods() > 0, "lpModel->GetNumLods() > 0"); // :246
+                if (lpModel->GetNumLods() == 0)
+                {
+                    continue;
+                }
 
                 u32 luLastLod = lpModel->GetNumLods() - 1;          // v8 = dword18 - 1
 
@@ -175,8 +158,19 @@ namespace CgsGraphics
                 CGS_ASSERT(lpModel->GetNumLods() != 0, "Invalid LOD index");        // CgsModel.h:367
 
                 f32 lfRadius = lpModel->GetLodRadius(luLastLod);    // table[v8]
-                lpInstance->mfLodRadiusSquared = lfRadius * lfRadius;   // v5[3]
+                lpInstance->mfMaxDrawDistanceSq = lfRadius * lfRadius;   // v5[3]
             }
         }
+    }
+
+    // FixUp @ CgsInstanceListResourceType.cpp:203 (the X360 override; no ARTIST export
+    // address in the name index, but the member it forwards to IS exported).
+    // The X360 body is the mirror of FixDown: `CgsGraphics::InstanceList::FixUp(a2, *a3)`
+    // -- rebase the instance-buffer slot by the load base and tripwire the data version.
+    // Without it the streamed list keeps its file-relative buffer offset and PostFixUp
+    // walks from address 0x10.
+    void InstanceListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    {
+        static_cast<InstanceList*>(lpResource)->FixUp(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
     }
 }

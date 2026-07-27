@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
 
 #include <cstdint>   // uintptr_t (heap-memory alignment check)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the node-exhaustion boot gate
 
 // CgsResource::Heap method bodies, decompiled from the X360 ARTIST IDA (addresses noted).
 // Built up incrementally: Prepare (setup) first; the live allocator (Reprepare/GetNewNode/
@@ -210,6 +211,27 @@ namespace CgsResource
 
         if (lpFreeNode == 0)
             return 0;
+
+        // [FLAG PC boot gate] Bail out BEFORE mutating the free block when the node pool is
+        // exhausted -- the X360 asserts in GetNewNode and carries on, which here corrupts the
+        // address-ordered list. Returning null makes the caller
+        // (CgsResource::Pool::AllocateMemoryForResource) report OUT-OF-MEMORY for that one
+        // resource, which the bundle loader already handles. Hit today because the world
+        // streamer loads the whole 25-zone PVS set without unloading anything (the unload leg
+        // is still inert), so pool 3's 8500 heap nodes run out around the 6th TRK_UNIT.
+        // DELETE when the streamer's unload leg is live and the working set is bounded.
+        if (mUnusedNodes.IsEmpty())
+        {
+            static bool sbLoggedNodeExhaustion = false;
+            if (!sbLoggedNodeExhaustion && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sbLoggedNodeExhaustion = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "CgsResource::Heap: out of heap NODES -- refusing further allocations"
+                       " in this heap [FLAG PC boot gate]\n";
+            }
+            return 0;
+        }
 
         HeapEntry*  lpFreeEntry = lpFreeNode->GetData();
         char* const lpcFreeAddr = lpFreeEntry->GetAddress();

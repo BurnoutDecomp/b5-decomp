@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsMaterialTechniqueResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the unresolved-import boot gate
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 
@@ -124,9 +125,34 @@ namespace CgsResource
         // pMaterial[5] (context hash source, u32 @+20). Slot values become host pointers
         // via PointerFromU32.
         u32* lpuMaterial = static_cast<u32*>(lpResource);
+
+        // [FLAG PC boot gate] mpShader (u32 slot @+0) and mpMaterialState (@+4) are cross-bundle
+        // IMPORTS. SHADERS.BNDL is not staged on this build (every technique is routed through
+        // the renderer's fallback shader), so CgsResource::Pool::ResolveImportForEntry writes a
+        // NULL there and this console-faithful walk -- which never sees a null on hardware --
+        // dereferences it. Report once and leave the technique's derived flags/hashes at their
+        // serialised values. DELETE when SHADERS.BNDL is staged.
+        if (lpuMaterial[0] == 0 || lpuMaterial[1] == 0)
+        {
+            static bool sbLoggedUnresolved = false;
+            if (!sbLoggedUnresolved && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sbLoggedUnresolved = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "MaterialTechniqueResourceType::PostFixUp: shader/material-state import"
+                       " unresolved (SHADERS.BNDL not staged) -- technique left as serialised"
+                       " [FLAG PC boot gate]\n";
+            }
+            return;
+        }
+
         CGS_ASSERT(lpuMaterial[1] != 0, "lpMaterial->mpMaterialState");         // u32 slot @+4
         const u32* lpuMaterialState = PointerFromU32<const u32>(lpuMaterial[1]);
         CGS_ASSERT(lpuMaterialState[0] != 0, "lpMaterial->mpMaterialState->mpBlendState"); // u32 slot @+0
+        if (lpuMaterialState[0] == 0)
+        {
+            return;   // same gate: the blend state never arrived
+        }
 
         // Blend-state default parameter block (0x07070706 RGBA write masks etc.),
         // populated in place by GetParameters; the trailing bytes are the per-stage

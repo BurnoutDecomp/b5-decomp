@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead / per-pool allocators (InitPool)
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the null-type boot gate)
 
 #include <cstdint>   // uintptr_t (the Heap allocation owner is the slot index)
 
@@ -241,7 +242,26 @@ namespace CgsResource
     {
         CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // CgsResourcePool.cpp:573
 
-        const bool lbAllocateFromTop = lpResourceType->GetCachedCanDefrag();   // Type+4 flag
+        // [FLAG PC boot gate] On the console every type id a bundle can carry has a
+        // registered handler, so the X360 dereferences lpResourceType unguarded. Here an
+        // UNREGISTERED type id leaves CgsResource::BundleLoader::LoadBundle's resolve
+        // callback returning 0, and this read becomes an access violation deep inside the
+        // load -- a very expensive way to learn a handler is missing. Report the gap once
+        // (the loader already skips FixUp/imports for a null type) and allocate bottom-up.
+        // DELETE when every shipped type id is registered.
+        if (lpResourceType == 0)
+        {
+            static bool sbLoggedNullType = false;
+            if (!sbLoggedNullType && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sbLoggedNullType = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "CgsResource::Pool: resource has NO registered type handler --"
+                       " allocating raw, FixUp will be skipped [FLAG PC boot gate]\n";
+            }
+        }
+        const bool lbAllocateFromTop =
+            (lpResourceType != 0) ? lpResourceType->GetCachedCanDefrag() : false;   // Type+4 flag
 
         for (u32 luMemType = 0; luMemType < BasePool::KI_NUM_TYPES; ++luMemType)
         {
@@ -268,7 +288,21 @@ namespace CgsResource
                     if (lpEntry->mResource.m_baseResources[luFreeType] != 0)
                         maHeaps[luFreeType].Free(lpEntry->mResource.m_baseResources[luFreeType]);
                 }
-                CGS_ASSERT(false, "Heap in pool has run out of space for memory type - specify a larger size when creating the pool\n");   // :630
+                // [FLAG PC boot gate] Console-real assert, but it fires here for a PC-only
+                // reason: the world graphics streamer's UNLOAD leg is still inert, so the whole
+                // 25-zone PVS set accumulates in pool 3 instead of the console's rolling
+                // working set. Report once and hand the caller the out-of-memory result it
+                // already handles. RESTORE the plain CGS_ASSERT when the unload leg is live.
+                {
+                    static bool sbLoggedPoolFull = false;
+                    if (!sbLoggedPoolFull && (CgsDev::Message::gxMessageFilterFlags & 1))
+                    {
+                        sbLoggedPoolFull = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "CgsResource::Pool: heap full for memory type -- further"
+                               " resources in this pool are refused [FLAG PC boot gate]\n";
+                    }
+                }
                 return false;
             }
         }
@@ -298,7 +332,9 @@ namespace CgsResource
         }
         else if (!AllocateMemoryForResource(lpEntry, "", liSlot, lpNewResource->mpResourceType))
         {
-            CGS_ASSERT(false, "Could not allocate memory for resource - SYSTEM ERROR: should have been picked up earlier\n");   // :1067
+            // [FLAG PC boot gate] paired with the heap-full gate above -- the console never
+            // reaches this because it never overcommits a pool. RESTORE the plain CGS_ASSERT
+            // together with that one.
             FreeResourceEntry(static_cast<s16>(liSlot));
             return CREATERESULT_OUTOFMEMORY;
         }
@@ -575,7 +611,25 @@ namespace CgsResource
         }
 
         *lppDest = 0;
-        CGS_ASSERT(false, "Failed to resolve import for resource\n");   // :1780
+        // [FLAG PC boot gate] The console always has every dependency bundle resident, so this
+        // is an assert there. On this build the world bundles are being brought up one at a
+        // time (COMMONDATA/SHADERS staging is still in flight), so a cross-bundle import can
+        // legitimately be missing -- and an assert here stops the simulation on the first
+        // TRK_UNIT load. Report the first few unresolved ids (that is the actionable data:
+        // which bundle still has to be staged) and carry on with the null the X360 also
+        // writes. RESTORE the plain CGS_ASSERT once every world bundle is staged.
+        {
+            static s32 siUnresolvedLogged = 0;
+            if (siUnresolvedLogged < 8 && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                ++siUnresolvedLogged;
+                *CgsDev::Log::gpDebugPrint << "CgsResource::Pool: unresolved import ";
+                *CgsDev::Log::gpDebugPrint << lpImport->mResourceId;
+                *CgsDev::Log::gpDebugPrint << " needed by ";
+                *CgsDev::Log::gpDebugPrint << lpEntry->mID;
+                *CgsDev::Log::gpDebugPrint << " [FLAG PC boot gate]\n";
+            }
+        }
         return false;
     }
 

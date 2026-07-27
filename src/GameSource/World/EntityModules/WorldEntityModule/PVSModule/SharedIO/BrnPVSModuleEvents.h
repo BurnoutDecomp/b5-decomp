@@ -73,48 +73,63 @@ struct GetZoneRequest
 // maEvents[8] at the 16-aligned +0x10 -- so GetZoneResponse is 16-aligned (it
 // carries a 16-aligned vector/matrix payload).
 //
-// FLAG (opaque payload): no getter for GetZoneResponse was recovered in this
-// slice and there is no DWARF for the type, so its 736 internal bytes are NOT
-// individually named. They are modelled as one correctly-sized, 16-aligned
-// opaque byte span so the queue element stride (736) and the owning buffer's
-// member offsets are byte-exact. Grow this ADDITIVELY into named fields when a
-// later PVS-module TU (a GetZoneResponse accessor) attests them. Nothing here is
-// fabricated as X360 fact -- only the size/alignment are pinned by asm.
+// INTERIOR (X360 offsets, now FULLY attested -- the whole 736-byte body is written
+// field by field by BrnWorld::PVSModule::Update @0x822EE050, which settled the three
+// byte arrays and the true type of the zone entries):
+//   +0x000 miPlayerIndex          (echo of GetZoneRequest::miPlayerIndex)
+//   +0x004 miNumZones
+//   +0x008 maZoneIds[48]          (u64 -- a verbatim copy of CgsSceneManager::Zone::GetId())
+//   +0x188 mabZoneSafe[48]        (1 = centre zone or reached over a SAFE edge)
+//   +0x1B8 mabZoneRender[48]      (Neighbour::IsFlagSet(E_NEIGHBOURFLAG_RENDER))
+//   +0x1E8 mabZoneRequired[48]    (Neighbour::IsFlagSet(E_NEIGHBOURFLAG_IMMEDIATE))
+//   +0x218 mafZoneWeights[48]
+//   +0x2D8 miLookupIndex          (the centre zone's INDEX -- next frame's search hint)
+//
+// *** CORRECTIONS this brought (all X360-proven, previous slice was inferred) ***
+//  - maZones was modelled as {const u8* mpZoneData; u32 muZoneNumber}. The X360 fills
+//    each 8-byte slot with ONE instruction, `ld r25,0x10(zone)` / `std r25,0(entry)` --
+//    i.e. the Zone's 64-bit muZoneId, copied whole. Nothing in the PVS module ever
+//    produces a pointer into "PVS data". The id's LOW 32 bits are the zone NUMBER
+//    (UpdateStream @0x822F9740 does `clrlwi r3,r28,0` before MakeTrackUnitId) and the
+//    whole 64-bit value is what the world graphics streamer stores as its user id
+//    (AddEntry r6 = r28; IsAssetLoaded r5 = r31, PostPhysicsUpdate @0x823080F0).
+//  - IsZoneSafe was modelled as `*(u32*)(mpZoneData - 96)`. That -96 is the byte
+//    distance between the two ARRAYS: UpdateStream walks mabZoneRequired (r27 =
+//    response+0x1E8) and reads the safe flag as `lbz r29,-0x60(r27)` == mabZoneSafe.
+//  - ZoneHasPropInstances was modelled as `*(u32*)mpZoneData`. UpdateStream's prop
+//    gate is `lbz r11,0(r27)` == mabZoneRequired[i]; the accessor is retired.
+//  - +0x000 / +0x2D8: Update stores GetZoneRequest::miPlayerIndex into +0x000 and the
+//    centre zone's index ((zone - zoneList->GetZones())) into +0x2D8, and
+//    WorldEntityModule::PreSceneUpdate @0x82302A08 feeds +0x2D8 (`lwz r27,0x28F8(r31)`
+//    == mPlayerZoneResponse + 0x2D8) back into the next request's miLookupIndex. So
+//    +0x2D8 is the lookup index and +0x000 is the player index -- the two names were
+//    swapped in the previous slice.
 struct alignas(16) GetZoneResponse
 {
-    // INTERIOR (X360 offsets; attested 2026-07-24 by the WorldEntityModule TU:
-    // UpdateStream @0x822F9740, QueryWorldGraphicsLoad @0x822A87B0,
-    // PostPhysicsUpdate @0x823080F0, Prepare @0x823027D0 mPlayerZoneResponse
-    // .Construct(-1,0,-1)):
-    //   +0x000 miLookupIndex   +0x004 miNumZones   +0x008 maZones[48]{ptr,zone}
-    //   +0x1E8 mabZoneRequired[48]   +0x218 mafZoneWeights[48]   +0x2D8 miPlayerZone
-    // The zone-record pointer is a host pointer on PC (the PVS module resolves it
-    // into the loaded PVS data), so the x64 layout departs from the 736-byte X360
-    // form; the queue element stride follows sizeof (semantic-by-NAME, x64 gate).
     static const s32 KI_MAX_ZONES = 48;
 
-    // One visible zone: the PVS zone record + its zone number. The record fields
-    // this slice reads are serialised PVS data (external format): the safe flag
-    // at record-96 and the has-prop-instances count at record+0.
-    struct ZoneEntry
+    void Construct( s32 liPlayerIndex, s32 liNumZones, s32 liLookupIndex )
     {
-        const u8* mpZoneData;     // X360 +0: 32-bit pointer into the PVS data
-        u32       muZoneNumber;   // X360 +4
-    };
-
-    void Construct( s32 liLookupIndex, s32 liNumZones, s32 liPlayerZone )
-    {
+        miPlayerIndex = liPlayerIndex;
+        miNumZones    = liNumZones;
         miLookupIndex = liLookupIndex;
-        miNumZones = liNumZones;
-        miPlayerZone = liPlayerZone;
     }
 
+    s32  GetPlayerIndex() const               { return miPlayerIndex; }
     s32  GetLookupIndex() const               { return miLookupIndex; }
     s32  GetNumZones() const                  { return miNumZones; }
+
+    // The whole 64-bit Zone id -- the world graphics streamer's per-entry user id.
+    u64  GetZoneId( u32 luZone ) const
+    {
+        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
+        return maZoneIds[ luZone ];
+    }
+    // Its low half: the zone NUMBER (the TRK_UNIT index).
     s32  GetZoneNumber( u32 luZone ) const
     {
         CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
-        return static_cast<s32>( maZones[ luZone ].muZoneNumber );
+        return static_cast<s32>( static_cast<u32>( maZoneIds[ luZone ] ) );
     }
     f32  GetZoneWeight( u32 luZone ) const
     {
@@ -126,25 +141,25 @@ struct alignas(16) GetZoneResponse
         CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
         return mabZoneRequired[ luZone ] != 0;
     }
-    // Serialised-PVS-record reads (raw offsets into external data; see above).
+    bool IsZoneRender( u32 luZone ) const
+    {
+        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
+        return mabZoneRender[ luZone ] != 0;
+    }
     bool IsZoneSafe( u32 luZone ) const
     {
         CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
-        return *reinterpret_cast<const u32*>( maZones[ luZone ].mpZoneData - 96 ) != 0;
-    }
-    bool ZoneHasPropInstances( u32 luZone ) const
-    {
-        CGS_ASSERT( luZone < static_cast<u32>( KI_MAX_ZONES ), "zone index out of range" );
-        return *reinterpret_cast<const u32*>( maZones[ luZone ].mpZoneData ) != 0;
+        return mabZoneSafe[ luZone ] != 0;
     }
 
-    s32       miLookupIndex;                  // X360 +0x000
+    s32       miPlayerIndex;                  // X360 +0x000
     s32       miNumZones;                     // X360 +0x004
-    ZoneEntry maZones[KI_MAX_ZONES];          // X360 +0x008 (8B stride on X360)
-    u8        maPad188[0x60];                 // X360 +0x188 (unattested span)
+    u64       maZoneIds[KI_MAX_ZONES];        // X360 +0x008
+    u8        mabZoneSafe[KI_MAX_ZONES];      // X360 +0x188
+    u8        mabZoneRender[KI_MAX_ZONES];    // X360 +0x1B8
     u8        mabZoneRequired[KI_MAX_ZONES];  // X360 +0x1E8
     f32       mafZoneWeights[KI_MAX_ZONES];   // X360 +0x218
-    s32       miPlayerZone;                   // X360 +0x2D8
+    s32       miLookupIndex;                  // X360 +0x2D8
 };
 
 // ============================================================================

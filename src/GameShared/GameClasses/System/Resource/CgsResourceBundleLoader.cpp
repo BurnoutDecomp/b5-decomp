@@ -102,6 +102,25 @@ namespace CgsResource
             lNewResource.miNumImports        = static_cast<s32>(lrEntry.muImportCount);
             lNewResource.muImportTableOffset = lrEntry.muImportOffset;
             lNewResource.mpResourceType      = (lpfnResolveType != 0) ? lpfnResolveType(lrEntry.muResourceTypeId) : 0;
+            // [FLAG PC boot gate] Name the unregistered type ids as they appear -- a type
+            // with no registered handler bypasses FixUp/imports without a word and shows up
+            // much later as a half-built resource graph. DELETE once every shipped type id
+            // is registered.
+            if (lNewResource.mpResourceType == 0 && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                static u32 sauReported[16] = { 0 };
+                static u32 suReportedCount = 0;
+                bool lbSeen = false;
+                for (u32 luSeen = 0; luSeen < suReportedCount; ++luSeen)
+                    lbSeen = lbSeen || (sauReported[luSeen] == lrEntry.muResourceTypeId);
+                if (!lbSeen && suReportedCount < 16)
+                {
+                    sauReported[suReportedCount++] = lrEntry.muResourceTypeId;
+                    *CgsDev::Log::gpDebugPrint << "[bundle] UNREGISTERED resource type id "
+                        << static_cast<s32>(lrEntry.muResourceTypeId) << " in '" << lpcFileName
+                        << "' [FLAG PC boot gate]\n";
+                }
+            }
             for (u32 luMemType = 0; luMemType < BundleV2::E_MEMTYPE_NUMTYPES; ++luMemType)
             {
                 lNewResource.mResourceDescriptor.m_baseResourceDescriptors[luMemType].m_size      = lrEntry.GetUncompressedSize(luMemType);
