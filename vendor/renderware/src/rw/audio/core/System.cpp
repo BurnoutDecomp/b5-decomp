@@ -6,23 +6,14 @@
 // (the canonical home of the plug-in/System family). No Feb-2007 source, no DecFIGS DWARF,
 // and no ProStreet08 PDB entry exist for these bodies.
 //
-// ONE ledger function remains to be reconstructed here (per-function guidance, the
-// recovered rodata and the tail-carve recipe live in scratchpad/waveE/AudioSystem.spec.md):
-//   ExecuteCommands @0x82B6F6D0 -- the audio-frame pump: tick the ITask timer list (now
-//                                  homed in ITask.h), run the TimerManager, expel faded
-//                                  voices, replay the deferred-command ring.
-//                                  BLOCKED on a MISSING DECLARATION: the asm's final timer
-//                                  phase calls rw::audio::core::TimerManager::Defragment
-//                                  @0x82B6EC08 (r3 = &System::mTimerManager, immediately
-//                                  after ExecuteTimers(&mTimerManager, 1)). That function is
-//                                  NOT declared in TimerManager.h, has no per-address IDA
-//                                  export and no ledger identity (an exporter gap, same
-//                                  class as EaXmaDec::DeallocateResources). Omitting the call
-//                                  would drop a side effect the binary has, and standing a
-//                                  free function in for it would be an invented shim -- so
-//                                  the body is withheld. It unblocks with ONE additive line
-//                                  in TimerManager.h:
-//                                      static void Defragment(TimerManager *self); // @0x82B6EC08
+// The deferred-command ring this TU owns (mpDeferredRingBase + muDeferredRingCursor) is
+// replayed by ExecuteCommands below: every record leads with its own handler, the handler
+// is called with the record's address, and its return IS the byte advance. That makes the
+// record stride a HOST sizeof, never the X360 immediate -- the producer/handler contract,
+// the full record table and the asm evidence live in
+// scratchpad/waveF/audio_ring.spec.md (SystemReleaseCommand here is the reference shape).
+// The CreateInstance tail-carve recipe and the recovered rodata live in
+// scratchpad/waveE/AudioSystem.spec.md.
 // =====================================================================================
 
 #include "rw/audio/core/PlugIn.h"       // rw::audio::core::System (+ PlugInRegistry, hooks)
@@ -68,6 +59,12 @@ extern "C" System *off_83271928 = 0;
 void CsisMutexLock();
 void CsisMutexUnlock();
 
+// Free-running CPU cycle counter (rw::audio::core::GetCpuCycle). Its body lives in a
+// platform timing TU that is not yet reconstructed; only the declaration is needed for the
+// per-TU compile gate. Same file-local namespace-scope declaration precedent as
+// TimerManager.cpp:31 / Profiler.cpp:28 / CpuLoadBalancer.cpp:29.
+u32 GetCpuCycle();
+
 // The shared 4-word table the constructor points mpObjectTable at (dword_83271930..0x3C).
 // rwaudio PDB: this is the static StackAllocator {System* mpSystem, u32 mpUpperLimit,
 // u32 mpLowerLimit, u32 mpTop} -- Mixer::Mixer @0x82B6D880 seeds mpSystem/the limits, and
@@ -81,6 +78,17 @@ struct SystemReleaseCommand
 {
     int (*mpHandler)(void *); // +0x00 -- &System::ReleaseHandler
     System *mpSystem;          // +0x04 -- the owning System
+};
+
+// The common prefix of EVERY deferred-command record: its handler. ExecuteCommands' replay
+// walk reads the word at the cursor (asm 0x82B6F7F4 `lwz r11,0(r30)`), calls it with the
+// record's own address in r3 (0x82B6F7F8/0x82B6F800), and advances the cursor by the r3 it
+// returns (0x82B6F804 `add r30,r3,r30`). Every producer's record -- SystemReleaseCommand
+// above, PlugInSetAttributeCommand, VoiceCreateCommand, ... -- leads with this field, so the
+// consumer only ever needs the header to dispatch.
+struct SystemCommandHeader
+{
+    int (*mpHandler)(void *); // +0x00 -- the record's handler; returns the record's size
 };
 
 // The file-scope Profiler singleton GetProfiler lazily seeds and publishes at
@@ -367,6 +375,94 @@ Profiler *System::GetProfiler(System *self)
         self->mpProfiler = &skProfiler;
     }
     return self->mpProfiler;
+}
+
+// -------------------------------------------------------------------------------------
+// ExecuteCommands @0x82B6F6D0 -- the audio-frame pump. Four phases, in asm order (r31 =
+// self throughout); each phase is timed with GetCpuCycle and the cost stored in its own
+// counter:
+//   A. (locked)   tick every ITask on the timer list, then the phase-0 TimerManager pass;
+//   B. (UNLOCKED) expel fully-faded voices                -> muExpelVoicesCpuTicks;
+//   C. (locked)   replay the deferred-command ring, latch the high-water mark, reset the
+//                 cursor and bump muFrameCounter          -> muCommandExecutionCpuTicks;
+//   D. (locked)   the phase-1 TimerManager pass + Defragment; muTimerExecutionCpuTicks
+//                 gets the SUM of phase A's and phase D's costs.
+// Every lock/unlock site in the asm is the hook-or-mutex sequence inlined
+// (`lwz r11,0x40(r31)` / `lwz r3,0x4C(r31); bl Mutex::Lock(&unk_8214B050)`), byte-identical
+// to Lock @0x82B6BCC8 / Unlock @0x82B6BCF0 -- restored to calls here (inlining reversal).
+// The X360 r3 return is the dead unlock-result passthrough, so this is void.
+// -------------------------------------------------------------------------------------
+void System::ExecuteCommands(System *self)
+{
+    // ---- A. timer phase 0, under the system lock -------------------------------------
+    Lock(self);
+    u32 luTimerPhase0Start = GetCpuCycle(); // r29
+
+    // Walk the ITask list (mpTimerListHead @+0x5C). The asm's `addi r3,r11,-4` is
+    // ITask::GetITaskFromNode inlined -- a container-of whose CONSOLE displacement is 4
+    // (the X360 vptr width). GetITaskFromNode does it with the host offsetof, so nothing
+    // here depends on the literal. The next node is fetched and converted BEFORE the task
+    // is dispatched, because a task may unlink itself from inside Execute.
+    ListDNode *lpHeadNode = self->mpTimerListHead;
+    ITask *lpTask = lpHeadNode ? ITask::GetITaskFromNode(lpHeadNode) : 0;
+    while (lpTask)
+    {
+        ListDNode *lpNextNode = lpTask->mListDNode.pnext; // asm: lwz r11, 4(r3)
+        ITask *lpNextTask = lpNextNode ? ITask::GetITaskFromNode(lpNextNode) : 0;
+        lpTask->Execute(self->mfSystemTimerPeriod); // vtable slot 1, f1 = +0x10C0
+        lpTask = lpNextTask;
+    }
+
+    TimerManager::ExecuteTimers(&self->mTimerManager, 0);
+    // Kept live across phases B and C -- it is added into muTimerExecutionCpuTicks at the
+    // very end (asm r26, `subf r26,r29,r3` here and `subf r10,r30,r26` at 0x82B6F8A8).
+    u32 luTimerPhase0Cost = GetCpuCycle() - luTimerPhase0Start;
+    Unlock(self);
+
+    // ---- B. voice expulsion, deliberately OUTSIDE the lock (faithful) ----------------
+    u32 luExpelStart = GetCpuCycle();
+    UpdateExpellingVoices(self);
+    self->muExpelVoicesCpuTicks = GetCpuCycle() - luExpelStart; // +0x10E0
+
+    // ---- C. deferred-command ring replay, under the system lock ----------------------
+    Lock(self);
+    u32 luCommandStart = GetCpuCycle();
+
+    // The end of the ring is latched ONCE, from the cursor as it stands now. Records that a
+    // handler enqueues DURING the replay are therefore not executed this frame -- and the
+    // cursor reset below then discards them. Faithful to the asm (the bound is computed at
+    // 0x82B6F7EC, outside the loop); do not "fix" it.
+    char *lpCursor = self->mpDeferredRingBase;                       // +0x20
+    char *lpEnd = lpCursor + self->muDeferredRingCursor;             // +0x10B8
+    while (lpCursor < lpEnd)
+    {
+        // The handler returns the record's size, which is the ring advance. It is a HOST
+        // sizeof on both sides of the contract (see the file header) -- reproducing the
+        // X360 immediates would overrun every reserved record.
+        lpCursor += reinterpret_cast<SystemCommandHeader *>(lpCursor)->mpHandler(lpCursor);
+    }
+
+    // The cursor is RE-READ (asm 0x82B6F810), not reused from the latch above: a handler may
+    // have pushed more records, and the high-water mark must account for them.
+    u32 luCursor = self->muDeferredRingCursor;
+    if (luCursor > self->muDeferredRingHighWater)
+        self->muDeferredRingHighWater = luCursor; // +0x10BC
+
+    self->muDeferredRingCursor = 0; // +0x10B8 (stored first, asm 0x82B6F830)
+    ++self->muFrameCounter;         // +0x10E4 (asm 0x82B6F834)
+
+    self->muCommandExecutionCpuTicks = GetCpuCycle() - luCommandStart; // +0x10D4
+    Unlock(self);
+
+    // ---- D. timer phase 1 + defragment, under the system lock ------------------------
+    Lock(self);
+    u32 luTimerPhase1Start = GetCpuCycle();
+    TimerManager::ExecuteTimers(&self->mTimerManager, 1);
+    TimerManager::Defragment(&self->mTimerManager);
+    // BOTH timer phases are billed to this counter (asm: subf r10,r30,r26; add r10,r3,r10).
+    self->muTimerExecutionCpuTicks =
+        GetCpuCycle() + luTimerPhase0Cost - luTimerPhase1Start; // +0x10D8
+    Unlock(self);
 }
 
 // -------------------------------------------------------------------------------------

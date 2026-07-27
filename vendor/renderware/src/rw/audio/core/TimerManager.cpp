@@ -8,6 +8,7 @@
 //   RemoveTimer         @0x82B6DE70 -- store-for-store
 //   Release             @0x82B6DEE8 -- store-for-store
 //   AddTimer            @0x82B6EB88 -- store-for-store
+//   Defragment          @0x82B6EC08 -- from the IDA DB (scratchpad/waveF/defrag_dump.txt)
 // See TimerManager.h for the byte layout and TimerHandle.h / Collection.h for the record
 // types. Every method is scalar pointer/list manipulation -- no SIMD, no DSP.
 //
@@ -126,6 +127,24 @@ void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
             pHandle->mCpuTicks = GetCpuCycle() - startCycle;
         }
     }
+}
+
+// -------------------------------------------------------------------------------------
+// Defragment @0x82B6EC08
+// Compact both owned Collections. Verified from the IDA database (the per-address JSON
+// export is missing -- an exporter gap, not a nameless function;
+// scratchpad/waveF/defrag_dump.txt):
+//   mr r30,r3 / li r31,2 / loop: mr r3,r30; bl Collection::Defragment;
+//   addic. r31,r31,-1; addi r30,r30,0x1C; bne loop
+// X360-LITERAL TRAP: the 0x1C stride IS the console sizeof(Collection); on the host that
+// type is wider, so the pair is indexed by name instead. The X360 r3 return is the last
+// Collection::Defragment result, dead at the only call site (System::ExecuteCommands
+// passes it straight into GetCpuCycle, which ignores its argument) -- modelled void.
+// -------------------------------------------------------------------------------------
+void TimerManager::Defragment(TimerManager *self)
+{
+    for (int i = 0; i < 2; ++i)
+        Collection::Defragment(&self->maCollections[i]);
 }
 
 // -------------------------------------------------------------------------------------

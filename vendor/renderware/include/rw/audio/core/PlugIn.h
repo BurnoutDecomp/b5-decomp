@@ -141,7 +141,12 @@ public:
 
 // A queued SetAttribute command, pushed into the System command ring by
 // SetAttribute and replayed by SetAttributeHandler. Grounded in SetAttribute
-// @0x82B6E848 (16-byte stride: handler / target / index / value).
+// @0x82B6E848 (handler / target / index / value; 16 bytes on the X360).
+// RECORD-STRIDE RULE (X360-literal trap): the producer's cursor advance and the
+// handler's return are BOTH this record's size, and on the host that is
+// sizeof(PlugInSetAttributeCommand) (24 on x64 -- the pointers widened), never the
+// console literal 16. Producer and handler must always agree, or each enqueue
+// overruns its reserved stride and the ring replay eats the record's tail.
 struct PlugInSetAttributeCommand
 {
     int (*mpHandler)(void *); // +0x00 -- always &PlugIn::SetAttributeHandler
@@ -227,8 +232,13 @@ public:
 // FULL System (rwaudio PDB reconcile, wave E -- see the FLAG note over the member list);
 // the bodies live in System.cpp. The deferred-command ring (mpDeferredRingBase +
 // muDeferredRingCursor) is the queue PlugIn::SetAttribute / Voice::Release / etc. push
-// 8-16 byte {handler, args...} records into; ExecuteCommands replays it once per audio
-// frame (each handler returns its own record size).
+// {handler, args...} records into (8-24 bytes each on the X360); ExecuteCommands replays
+// it once per audio frame: it calls each record's leading handler with the record's own
+// address and advances the byte cursor by the handler's return. THE RING CONTRACT: a
+// record's producer advance and its handler return are the SAME value, and on the host
+// that value is the HOST sizeof of the record struct (the X360 immediates are console
+// record sizes that do not survive pointer widening). The full producer/handler table
+// with the asm evidence lives in scratchpad/waveF/audio_ring.spec.md.
 //
 // New2<T> is the templated allocate-and-default-construct helper (mangled
 //   ??$New2@VPlugInRegistry@...@System@... ); its three X360 instantiations belong to
@@ -336,8 +346,8 @@ public:
     static PlugInRegistry *GetPlugInRegistry(System *self);
 
     // Deferred-teardown handler queued into the command ring by Release: release every
-    // active voice, then every voice on the expelled list. Returns its own 8-byte record
-    // size. @0x82B6EA50.
+    // active voice, then every voice on the expelled list. Returns its own record size --
+    // host sizeof(SystemReleaseCommand) (X360: 8) per the ring contract. @0x82B6EA50.
     static int ReleaseHandler(void *cmd);
 
     // Remove the manager's timer (@+0x60). @0x82B6EB80.
