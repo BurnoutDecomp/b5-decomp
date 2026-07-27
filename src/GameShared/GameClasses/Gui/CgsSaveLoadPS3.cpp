@@ -385,8 +385,13 @@ namespace CgsGui
             reinterpret_cast<uintptr_t>(&SaveLoadSystem_LoadHandleConfirmLoad);
         mMessageDisplayOptionFunc.muDelta = 0;
 
-        mpActiveMessageDisplay->ShowMessage(static_cast<MessageDisplay::OptionHandler*>(this),
-                                            KSTR_CONFIRM_LOAD, lapcOptions, 2);
+        // 0x82859BF0 dispatches the prompt on `lwz r3,0x134(r31)` == mpMessageDisplay, NOT the
+        // result handler at +0x130. mpActiveMessageDisplay was just re-pointed at the
+        // SaveLoadTaskResultHandler (a BrnGui::ProfileManager) on the line above, and its vtable
+        // slot 0 is HandleSaveLoadTaskResult -- calling ShowMessage through it would invoke the
+        // wrong virtual, so the confirm-load prompt would never appear.
+        mpMessageDisplay->ShowMessage(static_cast<MessageDisplay::OptionHandler*>(this),
+                                      KSTR_CONFIRM_LOAD, lapcOptions, 2);
     }
 
     // X360 0x828601D8 (entry NOT in the ARTIST export set). Begin the profile boot-up. The body is
@@ -519,33 +524,48 @@ namespace CgsGui
         return SaveLoadPC::ContainerExists(lrMetadata.macFilename);
     }
 
-    // X360 0x828521E0. Copy each requested image's mugshot buffer into the caller's image-file
-    // records (each record: { imageId, ?, miSize, dest }), then report the load result.
-    void SaveLoadSystem::LoadImageFiles(SaveLoadTaskResultHandler* lpResultHandler,
-                                        s32 liNumberOfImageFiles, const void* lpImageFile)
+    // X360 0x828521E0. Copy each requested image's mugshot buffer OUT into the caller's
+    // CgsGui::ImageFileInfo records, then report the load result. This is the outbound twin of
+    // CopyImageToBuffer @0x828522D0, which walks the same record inbound.
+    //
+    // SIGNATURE (from the asm prologue, not the a3-short Hex-Rays view): `this` in r3 plus FOUR
+    // arguments -- r4 (the result handler), r5 (the metadata), r6 -> r30 (the record count),
+    // r7 -> r31 (the record array). The sole caller BrnGui::ProfileManager::LoadImageFiles
+    // @0x82513C00 loads exactly that (@0x82513E9C..0x82513EB4) and r5 is the very same
+    // &mMetadata it hands SaveLoadSystem::Load @0x82523E28. Neither r4 nor r5 is referenced by
+    // the body -- see the tail note for why the handler argument is dropped.
+    void SaveLoadSystem::LoadImageFiles(SaveLoadTaskResultHandler* /*lpResultHandler*/,
+                                        const void* /*lpMetadata*/, s32 liNumberOfImageFiles,
+                                        const ImageFileInfo* laImageFileInfo)
     {
         CGS_ASSERT(liNumberOfImageFiles > 0, "liNumberOfImageFiles > 0");
-        CGS_ASSERT(lpImageFile != nullptr, "lpImageFile != NULL");
+        CGS_ASSERT(laImageFileInfo != nullptr, "lpImageFile != NULL");
 
-        // Each ImageFileInfo record is 16 bytes: [0]=imageId, [1]=?, [2]=miSize, [3]=destBuffer.
-        const u32* lpRecord = reinterpret_cast<const u32*>(lpImageFile);
+        // The X360 walks the array as `r31 = laImageFileInfo + 8` (@0x82852254) stepping by
+        // `addi r31,r31,0x10` (@0x828522A4): 0x10 is the CONSOLE sizeof(CgsGui::ImageFileInfo)
+        // with 4-byte pointers, so it must NOT be reproduced as a literal -- mpBuffer widens to
+        // 8 bytes on the x64 host (24-byte record) and a baked 16-byte stride would desynchronise
+        // after the first element. Index the typed array and read named members:
+        //   lwz r11,-4(r31)  == record+0x04 == miSize    (compared to miExtraFilesSizeBytes)
+        //   lwz r4,-8(r31)   == record+0x00 == miId      (-> GetMugshotBufferFromImageId)
+        //   lwz r3,0(r31)    == record+0x08 == mpBuffer  (the XMemCpy DESTINATION)
         for (s32 liIndex = 0; liIndex < liNumberOfImageFiles; ++liIndex)
         {
-            const s32   liImageId    = static_cast<s32>(lpRecord[0]);
-            const s32   liRecordSize = static_cast<s32>(lpRecord[2]);
-            void* const lpDest       = reinterpret_cast<void*>(static_cast<uintptr_t>(lpRecord[3]));
+            const ImageFileInfo& lrRecord = laImageFileInfo[liIndex];
 
-            CGS_ASSERT(liRecordSize == miExtraFilesSizeBytes,
+            CGS_ASSERT(lrRecord.miSize == miExtraFilesSizeBytes,
                        "lpImageFile[liIndex].miSize == miExtraFilesSizeBytes");
 
-            void* lpSource = GetMugshotBufferFromImageId(liImageId);
-            std::memcpy(lpDest, lpSource, static_cast<usize>(miExtraFilesSizeBytes));
-
-            lpRecord += 4;
+            std::memcpy(lrRecord.mpBuffer, GetMugshotBufferFromImageId(lrRecord.miId),
+                        static_cast<usize>(miExtraFilesSizeBytes));
         }
 
-        mpActiveMessageDisplay = reinterpret_cast<MessageDisplay*>(lpResultHandler);
-        // (***(this+0x130))(this+0x130, 0) -- the result handler's first vtable slot.
+        // (***(this+0x130))(this+0x130, 0) -- the bound result handler's first vtable slot.
+        // NOTE: the X360 only READS +0x130 here (`lwz r3,0x130(r29)` @0x828522B0); there is no
+        // store to +0x130 anywhere in this body, which is why the r4 handler argument is
+        // dropped. The binding is established by the preceding task starter -- Load
+        // @0x82859B70 / Bootup (`stw r29,0x130(r31)` @0x82859BD4) -- which the same
+        // ProfileManager drives with the same `this`, so the read resolves to that object.
         reinterpret_cast<SaveLoadTaskResultHandler*>(mpActiveMessageDisplay)
             ->HandleSaveLoadTaskResult(static_cast<ESaveLoadTaskResult>(0));
     }
