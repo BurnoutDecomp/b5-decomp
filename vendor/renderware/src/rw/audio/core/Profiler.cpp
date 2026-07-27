@@ -27,10 +27,12 @@ namespace core
 // function TimerManager.cpp declares/uses.
 u32 GetCpuCycle();
 
-// off_8214B260 -- the Profiler vtable the deleting destructor reinstalls. It is an opaque
-// foreign static in the XEX (no exported contents); modelled as an honest placeholder slot
-// so the body links without fabricating its address (the Limiter1 / CMpegBase precedent).
-static void *const KPF_VTable = nullptr; // off_8214B260
+// off_8214B260 -- the Profiler vtable the deleting destructor reinstalls (and
+// System::GetProfiler installs at singleton construction; declared in Profiler.h). Slot
+// contents recovered wave E: [0]=Profiler::Release, [1]=this deleting destructor. The
+// host value stays an honest placeholder (the Limiter1 / CMpegBase precedent) -- no host
+// code dispatches through it.
+void *const KPF_ProfilerVTable = nullptr; // off_8214B260
 
 // The wall-clock object the profiler samples (mpTimeSource, self+0x30). Only its +0x08
 // double -- the current time in seconds -- is read here, so it is treated as a documented
@@ -140,7 +142,7 @@ void *Profiler::Release(Profiler *self)
 // -------------------------------------------------------------------------------------
 void *Profiler::VectorDeletingDestructor(Profiler *self, char flags)
 {
-    self->mpVTable = KPF_VTable; // off_8214B260
+    self->mpVTable = KPF_ProfilerVTable; // off_8214B260
     if ((flags & 1) != 0)
         ::operator delete(self);
     return self;

@@ -40,6 +40,17 @@ namespace audio
 namespace core
 {
 
+// off_8214B260 -- the Profiler vtable value (installed by System::GetProfiler at
+// singleton construction and reinstalled by the deleting destructor). The X360 table's
+// two slots are RECOVERED: [0] = Profiler::Release @0x82B6A9B0, [1] = the vector deleting
+// destructor @0x82B6DC20 (scratchpad/waveE/AudioSystem.rodata.txt). On the host the slot
+// VALUE is modelled as an honest opaque placeholder (the Limiter1 / CMpegBase precedent)
+// because no host code dispatches through it -- the one X360 dispatch site
+// (System::Release's vt[0] call) resolves statically to Profiler::Release, a leaf class.
+// Defined in Profiler.cpp; shared here so System.cpp's GetProfiler installs the SAME
+// symbol the destructor reinstalls.
+extern void *const KPF_ProfilerVTable;
+
 class Profiler
 {
 public:

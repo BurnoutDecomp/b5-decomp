@@ -55,6 +55,15 @@ public:
     // Called by DecoderRegistry::RegisterStandardRunTimeDecoders to register the XMA decoder.
     static DecoderDesc *GetDecoderDesc();
 
+    // @0x82B93BB0 -- release the codec's SHARED hardware resources: under a one-shot
+    // guard flag, XMAReleaseContext every allocated context record, then free the
+    // context table + scratch through the System allocator. Nullary -- the asm reads
+    // only file-scope statics (its r3 on entry is garbage at the System::Release call
+    // site). Declared so System::Release can call it; the body belongs to this codec's
+    // own (not yet reconstructed) slice -- the function has no ledger identity/export
+    // because the exporter missed it, see scratchpad/waveE/AudioSystem.spec.md.
+    static void DeallocateResources();
+
     // @0x82B93C78 -- report the codec's per-instance allocation footprint: writes the
     // required alignment (16) through *puAlignment and returns the instance size, which
     // grows with the channel count -- 88 bytes of fixed state plus one 28-byte XMA
