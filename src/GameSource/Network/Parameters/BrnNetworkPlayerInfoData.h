@@ -2,7 +2,7 @@
 #define BRN_NETWORK_PLAYER_INFO_DATA_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfacePlayerInfoDataX360.h"
 
 // ===========================================================================
 // BrnNetwork::PlayerInfoData
@@ -19,16 +19,32 @@
 // it to ServerInterfacePlayerInfo::GetLocalPlayerInfo (whose parameter is a
 // CgsNetwork::ServerInterfacePlayerInfoDataBase*), then reads its player id at +0xC0
 // (GetID()) and proceeds once it is no longer -1. That pins PlayerInfoData as a
-// derivative of CgsNetwork::ServerInterfacePlayerInfoDataBase (the lobby player-info
-// record -- single vptr at +0x00, miID at +0xC0) plus its own Prepare() step. The base
-// supplies the layout / GetID(); the empty virtual-dtor body is unchanged (the compiler
-// synthesises the base-dtor chain). Prepare() is declared-only here; its body lands with
-// this class's own (login player-info) TU.
+// derivative of the lobby player-info record (single vptr at +0x00, miID at +0xC0)
+// plus its own Prepare() step. The base supplies the layout / GetID(); the empty
+// virtual-dtor body is unchanged (the compiler synthesises the base-dtor chain).
+// Prepare() is declared-only here; its body lands with this class's own (login
+// player-info) TU.
+//
+// BASE REFINED Base -> X360 leaf (GamerPictureManagerX360 TU): the X360
+// GamerPictureManagerX360::AddPlayer @ 0x825616B8 builds this same stack record
+// (vtable off_820821EC, ctor stw @ 0x82561808), has GetLocalPlayerInfo fill it, and
+// then reads its 8-byte XUID WHOLE at record +0xF8 (`ld r10, var_48(r1)` @
+// 0x8256184C, record base sp+0x60 -> +0xF8) -- the exact muXUID slot the committed
+// CgsNetwork::ServerInterfacePlayerInfoDataX360 leaf adds after the +0xF4 base tail
+// (and the record's 256-byte size == that leaf's 0x100). So on the X360 build the
+// game-side record derives from the X360 PLATFORM leaf, not the raw base. The
+// DecFIGS DWARF agrees in shape: BrnNetwork::PlayerInfoData derives from the
+// per-platform `CgsNetwork::ServerInterfacePlayerInfoData` wrapper declared at
+// CgsServerInterface.h:85 (PS3 flavour there); resolving the platform selection
+// straight to the X360 leaf mirrors the committed
+// `ServerInterface : ServerInterfaceDirtySockX360` pattern (CgsServerInterface.h).
+// Upcasts to ServerInterfacePlayerInfoDataBase* (GetLocalPlayerInfo's parameter)
+// still hold through the leaf.
 // ===========================================================================
 
 namespace BrnNetwork
 {
-    class PlayerInfoData : public CgsNetwork::ServerInterfacePlayerInfoDataBase
+    class PlayerInfoData : public CgsNetwork::ServerInterfacePlayerInfoDataX360
     {
     public:
         virtual ~PlayerInfoData();

@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"              // PlayerManager::GetPlayerByID
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h"     // GetLocalPlayerInfo
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h" // ServerInterfacePlayerInfoDataBase
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfaceGamesX360.h" // IsPlayerInGameByID / GetPlayerXUIDByID
+#include "GameSource/Network/Parameters/BrnNetworkPlayerInfoData.h"               // BrnNetwork::PlayerInfoData
 #include "GameSource/Network/BrnNetworkManager.h"  // BrnNetworkManager accessors
 
 // ---- XDK / Xbox-LIVE entry points -------------------------------------------
@@ -557,20 +559,98 @@ namespace BrnNetwork
     }
 
     // =======================================================================
-    // AddPlayer @ 0x825616B8 -- DECLARATION-ONLY (deferred, un-homed deps).
+    // AddPlayer @ 0x825616B8
     //
-    // The faithful spine (Get gate, GetPlayerByID local/remote split, free-slot scan, id/XUID
-    // store, remote-only not-ready clear, DownloadNext kick when mDownloadingXuid==0) is fully
-    // recovered, but its XUID-resolution fork dead-ends on TUs that are not yet homed:
-    //   * the in-game branch needs class:CgsNetwork::ServerInterfaceGamesX360 (`todo`) for the
-    //     in-game predicate (sub_82878620) + GetPlayerXUIDByID, and
-    //   * the local branch builds a BrnNetwork::PlayerInfoData on the stack (vtable off_820821EC +
-    //     a XUID member past the homed ServerInterfacePlayerInfoDataBase +0xF0 tail) whose derived
-    //     layout / Prepare / XUID accessor are not in any homed type.
-    // Rather than route the XUID sources through fabricated placeholders, AddPlayer is left
-    // declaration-only (header decl present) until ServerInterfaceGamesX360 + the derived
-    // PlayerInfoData land. This TU is therefore a 15/16 partial -- BLOCKED, not done.
+    // Register a player's gamer-picture slot: early-out when the player already owns one;
+    // otherwise classify the player (absent from the session registry -> the LOCAL player),
+    // pick the local slot or the first free remote slot, resolve the player's XUID (from the
+    // games component while in a game, otherwise from the local player-info record), store
+    // id + XUID, and -- for a remote slot only -- clear the ready flag so the download queue
+    // picks it up. Finally kick the queue when nothing is currently downloading.
+    //
+    // void: the X360 never deliberately sets r3 -- every exit path simply leaves the last
+    // callee's result in place (Get's on the early-out; GetPlayerXUIDByID /
+    // GetLocalPlayerInfo / DownloadNextGamerPicture's otherwise), and no caller reads it.
     // =======================================================================
+    void GamerPictureManagerX360::AddPlayer(s32 liPlayerID)
+    {
+        // The player already has a slot -> nothing to do (X360: `bne cr6` straight to the epilogue).
+        if (Get(liPlayerID))
+        {
+            return;
+        }
+
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0,
+                   "mpNetworkManager->GetPlayerManager()");
+
+        // A player the session registry does not know is the LOCAL player.
+        const bool lbLocalPlayer =
+            (mpNetworkManager->GetPlayerManager()->GetPlayerByID(liPlayerID) == 0);
+
+        GamerPictureData* lpDataEntry;
+        if (lbLocalPlayer)
+        {
+            lpDataEntry = &mLocalPlayerGamerPictureData;
+        }
+        else
+        {
+            // First free remote slot; null when the table is full (the X360 falls out of the
+            // bounded scan with the entry pointer still zero, then asserts).
+            lpDataEntry = 0;
+            for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
+            {
+                if (maGamerPictureData[liPlayerIndex].miPlayerID == KI_INVALID_PLAYER_ID)
+                {
+                    lpDataEntry = &maGamerPictureData[liPlayerIndex];
+                    break;
+                }
+            }
+
+            CGS_ASSERT(lpDataEntry, "lpDataEntry");
+        }
+
+        u64 lXuid = 0;
+
+        // The games component off the network manager's server interface, downcast to the X360
+        // leaf that owns GetPlayerXUIDByID (the X360 loads the same component pointer for both
+        // calls).
+        CgsNetwork::ServerInterfaceGamesX360* lpGames =
+            static_cast<CgsNetwork::ServerInterfaceGamesX360*>(
+                mpNetworkManager->GetServerInterface()->GetGameComponent());
+
+        if (lpGames->IsPlayerInGameByID(liPlayerID))
+        {
+            lpGames->GetPlayerXUIDByID(liPlayerID, &lXuid);
+        }
+        else
+        {
+            // Not in a game: the only XUID we can resolve is the local console's own, read out
+            // of the local player-info record.
+            PlayerInfoData lPlayerInfo;
+            lPlayerInfo.Prepare();   // result deliberately NOT asserted here (a plain call)
+            mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()
+                ->GetLocalPlayerInfo(&lPlayerInfo);
+
+            CGS_ASSERT(lPlayerInfo.GetID() == liPlayerID,
+                       "Can only get local player XUID when not in a game");
+
+            lXuid = lPlayerInfo.GetXUID();
+        }
+
+        lpDataEntry->miPlayerID = liPlayerID;
+        lpDataEntry->mXuid      = lXuid;
+        if (!lbLocalPlayer)
+        {
+            // Only a remote slot is forced not-ready; the local slot's flag is left alone.
+            lpDataEntry->mbReady = false;
+        }
+
+        if (mDownloadingXuid == 0)
+        {
+            DownloadNextGamerPicture();
+        }
+    }
 
     // =======================================================================
     // _AssertLayout -- never called; pins the recovered per-entry + tail member RELATIONSHIPS.
