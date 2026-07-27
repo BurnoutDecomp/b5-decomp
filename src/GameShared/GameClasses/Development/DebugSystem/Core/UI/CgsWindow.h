@@ -23,11 +23,17 @@ namespace CgsDev
     {
         struct Palette;
         struct Metrics;
+        struct ScriptInterface;
 
         struct Window : public Internal::DebugInternal
         {
             // The DebugUI window stack threads Windows through mpDebugLinkedListNext.
             friend struct CgsDev::Internal::DebugLinkedList<Window>;
+            // The script runner drives the protected surface from outside the window family:
+            // ScriptCommand_Window (X360 0x828318A8) and SaveState (0x82832660) call the protected
+            // GetMenuPath virtual (vtable slot +0x10) and ClampToScreen on arbitrary list windows.
+            // dwarfdump does not surface friend declarations; attested by that asm.
+            friend struct ScriptInterface;
 
             // Window flag bits (X360 CgsWindow.h:62-72).
             static const s32 KX_FLAGNORMAL        = 0;

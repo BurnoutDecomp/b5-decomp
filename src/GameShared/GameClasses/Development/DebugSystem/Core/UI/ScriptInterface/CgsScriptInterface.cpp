@@ -16,40 +16,56 @@
 
 // CgsDev::DebugUI::ScriptInterface - script command runner.
 //
-// NOTE ON SCOPE: 4 of the 21 ledger functions remain BLOCKED (re-checked W38, after the debug-UI
-// collaborator headers were homed):
-//   * ExecuteScriptCommand / ScriptCommand_Help walk KA_COMMAND_TABLE (X360 rodata off_820DC198,
-//     12 {handler, name, help} triples). Only entry 0 is attested - {ScriptCommand_Window,
-//     "*WINDOW", "<PATH> <X> <Y> [PINNED] - Open window..."}; the other 11 entries' command words
-//     and (runtime-printed) help strings live in rodata that is NOT in the ARTIST export (the table
-//     address is referenced only by these two functions), so the table cannot be defined without
-//     fabricating the dispatch strings. Still blocked - rodata unrecovered, not a type-home gap.
-//   * ScriptCommand_Window: Window and Metrics ARE now homed (CgsWindow.h flags/geometry match the
-//     asm exactly; CgsTypes.h Metrics carries the screen-bound floats), but the "*WINDOW" action
-//     still needs CgsDev::DebugUI::MenuManager::OpenWindowFromPath (un-homed - absent from the whole
-//     tree; MenuManager exposes only Open/CreateMenuPath), and it iterates the DebugUI window-list
-//     head + clamps against the DebugUI screen-geometry block by raw offset into the DebugUI layout,
-//     which is deliberately NOT offset-modelled (see CgsDebugUI.h) and exposes no public window-list
-//     iterator / clamp accessor to ScriptInterface. Narrowed but still blocked.
-//   * SaveState serialises the whole debug-UI state by walking the DebugManager component array
-//     (mpInstance[+0x8283*4]), the VariableManager MenuItemVariable array, and Menu/MenuItem/Variant
-//     metadata chains, almost entirely by raw offset into foreign layouts (MenuItemVariable, the
-//     Variant chain, VariableManager internals) that have no reconstructed home yet. Still blocked.
-// They stay blocked in the ledger with those reasons.
+// NOTE ON SCOPE (updated wave D): the former blockers are RESOLVED -
+//   * KA_COMMAND_TABLE (X360 rodata @ 0x820DC198, 12 {handler, name, help} triples + null
+//     terminator) was recovered with headless IDA from the local ARTIST database; it is declared
+//     in the header and defined alongside ExecuteScriptCommand / ScriptCommand_Help.
+//   * MenuManager::FindMenu (DWARF :85, X360 0x82819DB0) and MenuManager::OpenWindowFromPath
+//     (DWARF :115) are declared in CgsMenuManager.h.
+//   * The window-list walk / component-list walk / menu-item-pool walk the asm inlines are
+//     modelled by name through DebugUI::mWindowList, DebugManager::mComponentList and
+//     VariableManager::mMenuItemPool via ScriptInterface friend declarations (dwarfdump never
+//     surfaces DW_TAG_friend; the access is attested by the inlined asm in ScriptCommand_Window
+//     0x828318A8 / SaveState 0x82832660).
+// The remaining functions land here: ExecuteScriptCommand, ScriptCommand_Help, ScriptCommand_Save
+// (the 0x82833110 tail-call thunk the exporter skipped), ScriptCommand_Window, SaveState.
 
 namespace CgsDev
 {
     namespace DebugUI
     {
 
+        // -- the built-in command table ----------------------------------------------------------
+        //
+        // X360 ARTIST rodata @ 0x820DC198: 12 {handler, name, help} triples (stride 12 = three
+        // 4-byte pointers) followed by an all-zero terminator @0x820DC228. Both ExecuteScriptCommand
+        // and ScriptCommand_Help walk it until the handler slot is null. Names starting with '*'
+        // are hidden from the HELP listing.
+        ScriptInterface::ScriptCommand ScriptInterface::KA_COMMAND_TABLE[] =
+        {
+            { ScriptCommand_Window,            "*WINDOW",   "<PATH> <X> <Y> [PINNED] - Open window position" },
+            { ScriptCommand_IncrementVariable, "INCREMENT", "<PATH/VAR> - Increment a variable" },
+            { ScriptCommand_DecrementVariable, "DECREMENT", "<PATH/VAR> - Decrement a variable" },
+            { ScriptCommand_Help,              "HELP",      " - Displays help" },
+            { ScriptCommand_SetVariable,       "SET",       "<PATH/VAR> <VAL> - Set a variable" },
+            { ScriptCommand_Function,          "CALL",      "<PATH/FUNC> - Call a function" },
+            { ScriptCommand_Save,              "SAVE",      "<FILE> - Save UI state" },
+            { ScriptCommand_Exec,              "EXEC",      "<FILE> - Execute the given script file" },
+            { ScriptCommand_ActivateComponent, "COMPONENT", "<PATH/NAME> - Activate the debug component" },
+            { ScriptCommand_Print,             "PRINT",     "<MESSAGE> - Display a message on the console" },
+            { ScriptCommand_Alias,             "ALIAS",     "<ALIAS> <PATH/NAME> - Create a shortcut alias" },
+            { ScriptCommand_Bind,              "BIND",      "<Fx> <CMD> - Bind F1-F12 to a command" },
+            { nullptr,                         nullptr,     nullptr },
+        };
+
         // -- alias / variable / function lookup -------------------------------------------------
 
         ScriptInterface::Alias* ScriptInterface::FindAlias(const char* lpcAlias)
         {
-            for (s32 liIndex = 0; liIndex < KI_MAX_ALIASES; ++liIndex)
+            for (s32 liCommandIndex = 0; liCommandIndex < KI_MAX_ALIASES; ++liCommandIndex)
             {
-                if (_stricmp(maAliasTable[liIndex].macAlias, lpcAlias) == 0)
-                    return &maAliasTable[liIndex];
+                if (_stricmp(maAliasTable[liCommandIndex].macAlias, lpcAlias) == 0)
+                    return &maAliasTable[liCommandIndex];
             }
             return nullptr;
         }
@@ -102,16 +118,16 @@ namespace CgsDev
             }
             else
             {
-                s32 liIndex = 0;
-                while (maAliasTable[liIndex].macAlias[0])
+                s32 liCommandIndex = 0;
+                while (maAliasTable[liCommandIndex].macAlias[0])
                 {
-                    if (++liIndex >= KI_MAX_ALIASES)
+                    if (++liCommandIndex >= KI_MAX_ALIASES)
                     {
                         OutputMessage("Too many aliases");
                         return false;
                     }
                 }
-                lpAlias = &maAliasTable[liIndex];
+                lpAlias = &maAliasTable[liCommandIndex];
             }
 
             CgsCore::StrCpy(lpAlias->macAlias, KU_MAX_ALIAS_LENGTH, lpcAlias);
@@ -273,6 +289,26 @@ namespace CgsDev
             }
 
             rw::core::debug::host::Close(liFile);
+        }
+
+        void ScriptInterface::ExecuteScriptCommand(const char* lpcCommand, const char** lppcParameters, s32 liParameterCount)
+        {
+            // Built-in command first: a case-insensitive match on the command word.
+            for (s32 liCommandIndex = 0; KA_COMMAND_TABLE[liCommandIndex].mpFunction; ++liCommandIndex)
+            {
+                if (_stricmp(lpcCommand, KA_COMMAND_TABLE[liCommandIndex].mpcName) == 0)
+                {
+                    KA_COMMAND_TABLE[liCommandIndex].mpFunction(this, lppcParameters, liParameterCount);
+                    return;
+                }
+            }
+
+            // Otherwise a user alias, then a debug component name.
+            if (!ExecuteScriptAlias(lpcCommand, lppcParameters, liParameterCount))
+            {
+                if (!ExecuteScriptComponent(lpcCommand, lppcParameters, liParameterCount))
+                    OutputMessage("Unknown command");
+            }
         }
 
         bool ScriptInterface::ExecuteScriptAlias(const char* lpcCommand, const char** lppcParameters, s32 liParameterCount)
@@ -471,6 +507,25 @@ namespace CgsDev
                 lpfCallback(lpFunction->GetParameter());
         }
 
+        void ScriptInterface::ScriptCommand_Help(ScriptInterface* lpThis, const char** lppcParameters, s32 liParameterCount)
+        {
+            (void)lppcParameters;
+            (void)liParameterCount;
+
+            lpThis->OutputMessage("Available Commands:");
+
+            char lacMessage[256];
+            for (s32 liCommandIndex = 0; KA_COMMAND_TABLE[liCommandIndex].mpFunction; ++liCommandIndex)
+            {
+                // A leading '*' marks a command that is hidden from the help listing.
+                if (KA_COMMAND_TABLE[liCommandIndex].mpcName[0] != '*')
+                {
+                    CgsCore::SPrintf(lacMessage, 256, "  %s %s", KA_COMMAND_TABLE[liCommandIndex].mpcName, KA_COMMAND_TABLE[liCommandIndex].mpcHelp);
+                    lpThis->OutputMessage(lacMessage);
+                }
+            }
+        }
+
         void ScriptInterface::ScriptCommand_IncrementVariable(ScriptInterface* lpThis, const char** lppcParameters, s32 liParameterCount)
         {
             if (liParameterCount != 1)
@@ -498,6 +553,12 @@ namespace CgsDev
         {
             (void)liParameterCount;
             lpThis->GetUI().GetLogWindow().Print(*lppcParameters);
+        }
+
+        void ScriptInterface::ScriptCommand_Save(ScriptInterface* lpThis, const char** lppcParameters, s32 liParameterCount)
+        {
+            (void)liParameterCount;
+            lpThis->SaveState(*lppcParameters);
         }
 
         void ScriptInterface::ScriptCommand_SetVariable(ScriptInterface* lpThis, const char** lppcParameters, s32 liParameterCount)

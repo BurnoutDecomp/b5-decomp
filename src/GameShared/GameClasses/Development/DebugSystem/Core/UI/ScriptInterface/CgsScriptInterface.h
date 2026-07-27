@@ -92,12 +92,11 @@ namespace CgsDev
 
             void OutputMessage(const char* lpcMessage);
 
-            // The command dispatch table. BLOCKED: only the "*WINDOW" entry's name+help are attested
-            // in the ARTIST rodata; the remaining 11 entries' command words and (runtime-printed) help
-            // strings are not recovered, so the table - and the two functions that walk it
-            // (ExecuteScriptCommand, ScriptCommand_Help) - cannot be reconstructed without guessing
-            // runtime dispatch strings. Reconstruct once the rodata is recovered.
-            // static ScriptCommand KA_COMMAND_TABLE[];
+            // The command dispatch table (DWARF CgsScriptInterface.h:85). 12 built-in commands +
+            // a null-handler terminator, RECOVERED from the X360 ARTIST rodata at 0x820DC198
+            // (headless-IDA dump, wave D - handler/name/help triples chased through the pointer
+            // table; see scratchpad/waveD/ScriptInterface.spec.md in the workflow repo).
+            static ScriptCommand KA_COMMAND_TABLE[];
 
             // -- data (the alias table is first; the binding table follows) --
             Alias   maAliasTable[KI_MAX_ALIASES];
