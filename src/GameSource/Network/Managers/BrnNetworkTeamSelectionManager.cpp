@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"   // CgsNetwork::PlayerManager
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"   // CgsNetwork::NetworkPlayer (Register/UnRegisterMessageType)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // ServerInterfaceGames
+#include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h" // BrnNetwork::PlayerParams (stack lobby params)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // CgsModule::VariableEventQueue<14000,16>
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 
@@ -20,17 +21,9 @@
 //   StartProcess                       @ 0x8254B978   SetNextAction                 @ 0x8254BA70
 //   ProcessBeforeSimulation            @ 0x825656D8   ProcessAfterSimulation        @ 0x8254B8B0
 //   ActionAssignCoopStuntRunTeams      @ 0x8254BC48   ActionBroadcastFinalTeamSelection @ 0x82557178
+//   ActionAssignFFAStuntRunTeams       @ 0x8256C278   ActionAutobalanceStuntRunTeams    @ 0x8256C4C8
 //   _TeamSelectionMessageArrivedCallback @ 0x8254BE78
 //   (UpdateWaitIdle @ 0x82556EE8 / ActionWaitFinalTeamSelection @ 0x8254BE60 are inline in the header.)
-//
-// DECLARATION-ONLY (no faithful body): ActionAssignFFAStuntRunTeams @ 0x8256C278 and
-//   ActionAutobalanceStuntRunTeams @ 0x8256C4C8. Both derive each player's team by building a
-//   BrnNetwork::PlayerParams subclass on the stack (vtable off_82083550), calling PreparePattern,
-//   GetPlayerParametersByPlayerID, and reading a per-player team byte out of that subclass'
-//   un-homed field layout. They also reach the in-game predicate sub_82878620 on the still-`todo`
-//   ServerInterfaceGamesX360. Rather than fabricate the PlayerParams field offset / vtable, these
-//   two actions are left as the header declaration only (same precedent as
-//   GamerPictureManagerX360::AddPlayer, which dead-ends on the same un-homed dependencies).
 
 namespace BrnNetwork
 {
@@ -466,6 +459,109 @@ namespace BrnNetwork
         }
 
         meSubState = 1;
+        return 1;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // ActionAssignFFAStuntRunTeams @ 0x8256C278
+    //   Same skeleton as the co-op action, but every in-game player gets its OWN team: fetch that
+    //   player's lobby parameters and derive the team from its player-colour index (team =
+    //   colour + 1, so the colours 0..N map onto teams 1..N+1). Arms the output substate.
+    // ---------------------------------------------------------------------------------
+    int TeamSelectionManager::ActionAssignFFAStuntRunTeams()
+    {
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, "mpNetworkManager->GetServerInterface()");
+
+        CgsNetwork::PlayerManager*        lpPlayerManager = mpNetworkManager->GetPlayerManager();
+        CgsNetwork::ServerInterfaceGames* lpGames =
+            mpNetworkManager->GetServerInterface()->GetGameComponent();
+
+        miNumPlayersAssigned = 0;
+        for (s32 liCar = 0; liCar < KI_MAX_ACTIVE_RACE_CARS; ++liCar)
+        {
+            maActiveRaceCarTeam[liCar].mPlayerID = KI_INVALID_PLAYER_ID;
+            maActiveRaceCarTeam[liCar].miTeam    = 0;
+        }
+
+        NetworkPlayerID lPlayerID = KI_INVALID_PLAYER_ID;
+        while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
+        {
+            if (lpGames->IsPlayerInGameByID(lPlayerID))
+            {
+                // The stack-built lobby params (X360 seeds the leaf vptr off_82083550 here, then
+                // restores the base chain's off_8207C88C at scope end -- the inlined ctor/dtor).
+                PlayerParams lPlayerParams;
+                lPlayerParams.PreparePattern();
+                lpGames->GetPlayerParametersByPlayerID(lPlayerID, &lPlayerParams);
+
+                const s32 liActiveRaceCarIndex = mpNetworkManager->GetActiveRaceCarIndex(lPlayerID);
+                CGS_ASSERT(liActiveRaceCarIndex != -1,
+                           "Trying to assign a team to a player with no race car index");
+
+                // X360: lbz mData.mi8PlayerColourIndex ; extsb ; addi 1.
+                const s32 liTeam = lPlayerParams.GetPlayerColourIndex() + 1;
+
+                maActiveRaceCarTeam[liActiveRaceCarIndex].mPlayerID = lPlayerID;
+                maActiveRaceCarTeam[liActiveRaceCarIndex].miTeam    = liTeam;
+                ++miNumPlayersAssigned;
+            }
+        }
+
+        meSubState = 1;
+        return 1;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // ActionAutobalanceStuntRunTeams @ 0x8256C4C8
+    //   Same skeleton again, but the team is the parity of the player-colour index: an EVEN colour
+    //   goes on team 2, an ODD colour on team 1 -- splitting the lobby into two balanced sides.
+    //   Unlike the FFA/co-op actions this one does NOT arm the output substate; the autobalance
+    //   process runs the broadcast action next, which does.
+    // ---------------------------------------------------------------------------------
+    int TeamSelectionManager::ActionAutobalanceStuntRunTeams()
+    {
+        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, "mpNetworkManager->GetServerInterface()");
+
+        CgsNetwork::PlayerManager*        lpPlayerManager = mpNetworkManager->GetPlayerManager();
+        CgsNetwork::ServerInterfaceGames* lpGames =
+            mpNetworkManager->GetServerInterface()->GetGameComponent();
+
+        miNumPlayersAssigned = 0;
+        for (s32 liCar = 0; liCar < KI_MAX_ACTIVE_RACE_CARS; ++liCar)
+        {
+            maActiveRaceCarTeam[liCar].mPlayerID = KI_INVALID_PLAYER_ID;
+            maActiveRaceCarTeam[liCar].miTeam    = 0;
+        }
+
+        NetworkPlayerID lPlayerID = KI_INVALID_PLAYER_ID;
+        while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
+        {
+            if (lpGames->IsPlayerInGameByID(lPlayerID))
+            {
+                PlayerParams lPlayerParams;
+                lPlayerParams.PreparePattern();
+                lpGames->GetPlayerParametersByPlayerID(lPlayerID, &lPlayerParams);
+
+                const s32 liActiveRaceCarIndex = mpNetworkManager->GetActiveRaceCarIndex(lPlayerID);
+                CGS_ASSERT(liActiveRaceCarIndex != -1,
+                           "Trying to assign a team to a player with no race car index");
+
+                // X360 computes this branchlessly as `((cntlzw(colour & 1) >> 5) & 1) + 1`: the
+                // count-leading-zeros of a single bit is 32 when the bit is clear and 31 when it is
+                // set, so bit 5 of the count IS the "(colour & 1) == 0" predicate. Even colour -> 2,
+                // odd colour -> 1.
+                const s32 liTeam = ((lPlayerParams.GetPlayerColourIndex() & 1) == 0) ? 2 : 1;
+
+                maActiveRaceCarTeam[liActiveRaceCarIndex].mPlayerID = lPlayerID;
+                maActiveRaceCarTeam[liActiveRaceCarIndex].miTeam    = liTeam;
+                ++miNumPlayersAssigned;
+            }
+        }
+
         return 1;
     }
 

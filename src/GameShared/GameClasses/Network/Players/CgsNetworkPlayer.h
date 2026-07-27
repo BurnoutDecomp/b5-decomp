@@ -61,18 +61,14 @@
 #include "GameShared/GameClasses/Network/Packeting/CgsNetworkAdapterBase.h"  // NetworkAdapter, ConnectionData
 #include "GameShared/GameClasses/Network/Packeting/CgsCompressionAndEncryptionUtils.h"  // CompressionAndEncryptionUtils
 
+// CgsSystem::EFrameRate comes from its canonical home (the X360 Prepare asserts the
+// value is exactly 50 or 60 == E_FRAMERATE_50HZ/E_FRAMERATE_60HZ). The stripped local
+// copy this header used to carry clashed with the canonical enum once both reached the
+// same TU (via BrnNetworkPlayerParams.h) -- de-forked to the include.
+#include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"
+
 namespace CgsSystem
 {
-    // Console refresh rate. The X360 Prepare asserts the value is exactly 50 or 60, so the
-    // enumerators carry their literal Hz values (the network frame pacing scales off them).
-    // (CgsNetworkManager.cpp models a stripped local copy with only E_FRAMERATE_UNKNOWN;
-    //  this is the home that names the real values the ARTIST asm compares against.)
-    enum EFrameRate
-    {
-        E_FRAMERATE_50HZ = 50,
-        E_FRAMERATE_60HZ = 60,
-    };
-
     class TimerStatus;   // fwd: Update/CheckForPlayerDisconnectTimeout/UpdatePing param
 }
 

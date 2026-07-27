@@ -42,4 +42,15 @@ namespace CgsNetwork
     ServerInterfaceStructureInterface::~ServerInterfaceStructureInterface()
     {
     }
+
+    // GetPatternLength @ 0x82876410 (DWARF CgsServerInterfaceStructureInterface.cpp:41).
+    // The default pattern-buffer length every structure subclass inherits: the X360
+    // vtable slot +0x08 of off_8207C88C holds a real `li r3, 0x14 ; blr` body
+    // (COMDAT-folded with unrelated `return 20` getters), not __purecall -- observed
+    // in the waveE rodata dump. 20 == sizeof the shared pattern buffers (e.g.
+    // BrnNetwork::PlayerParamsBase::macPattern[20]).
+    s32 ServerInterfaceStructureInterface::GetPatternLength() const
+    {
+        return 20;
+    }
 }

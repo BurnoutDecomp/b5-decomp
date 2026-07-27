@@ -10,8 +10,9 @@
 namespace CgsSystem
 {
     // CgsSystem::EFrameRate - the display refresh rate the game is running at. This is the
-    // canonical home (CgsFrameRate.h per the DecFIGS DWARF); CgsNetworkManager.cpp /
-    // CgsNetworkPlayer.h carry stripped local copies for their own translation units.
+    // canonical home (CgsFrameRate.h per the DecFIGS DWARF); CgsNetworkManager.cpp still
+    // carries a stripped local copy for its own translation unit (CgsNetworkPlayer.h now
+    // includes this header instead of its former local copy).
     // Values are the literal Hz figures the ARTIST asm compares against (ThreadLayout::Begin
     // seeds meFrameRate with 60 = E_FRAMERATE_60HZ).
     enum EFrameRate

@@ -179,9 +179,11 @@ namespace BrnNetwork
         // === process-action drivers (registered into maActionFunctions) ===
         // Co-op assigns every in-game player to one shared team (KI_COOP_TEAM).
         int  ActionAssignCoopStuntRunTeams();
-        // FFA / autobalance derive each player's team from their server player-parameters; both
-        // dead-end on the un-homed ServerInterfaceGamesX360 in-game predicate + the un-homed
-        // BrnNetwork::PlayerParams subclass team field -- DECLARATION-ONLY (see the .cpp note).
+        // FFA / autobalance derive each player's team from a stack-built
+        // BrnNetwork::PlayerParams (vtable off_82083550) filled via
+        // ServerInterfaceGames::GetPlayerParametersByPlayerID: FFA gives each player
+        // their own team (GetPlayerColourIndex()+1 @ 0x8256C278); autobalance splits
+        // on the colour index's parity (@ 0x8256C4C8).
         int  ActionAssignFFAStuntRunTeams();
         int  ActionAutobalanceStuntRunTeams();
         // Broadcasts the assembled per-player team table to every other player (host).
