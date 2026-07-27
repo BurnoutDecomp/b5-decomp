@@ -43,7 +43,7 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct OutEventLineTestFi
 // ============================================================================
 
 namespace CgsModule { struct IOBufferStack; }
-namespace BrnWorld { namespace TriggerEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; } }
+namespace BrnWorld { namespace TriggerEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_PreScene; class OutputBuffer_PreScene; } }
 
 namespace BrnWorld
 {
@@ -96,6 +96,15 @@ namespace BrnWorld
                               TriggerEntityModuleIO::InputBuffer_PostScene* lpInput,
                               TriggerEntityModuleIO::OutputBuffer_PostScene* lpOutput,
                               BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0,
+        //      X360 vtbl+64). Declaration-only; body gated in WorldLinkStubs.cpp
+        //      until this module's own TU lands. ----
+        void PreSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             TriggerEntityModuleIO::InputBuffer_PreScene* lpInput,
+                             TriggerEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+                             BrnUpdateSet lUpdateSet );
         bool Prepare() override;     // 0x822A8E10
         bool Release() override;     // 0x822A8EC0
         void Destruct() override;    // 0x822C42F8

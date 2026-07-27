@@ -1,15 +1,18 @@
 #pragma once
 
 #include "types.hpp"
+#include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"
 
 #include <eathread/eathread_rwmutex.h>
 
 namespace BrnResource { namespace GameDataIO { template <int N> struct AllocatorListT; struct AllocatorList; } }
 
+namespace CgsModule { struct IOBufferStack; }
+
 namespace BrnAI
 {
-namespace AIModuleIO { struct OutputBuffer; }
+namespace AIModuleIO { struct OutputBuffer; struct InputBuffer; struct InputBuffer_PostPhysics; }
 
 struct Route;
 struct AICar;
@@ -33,6 +36,16 @@ public:
         // Declaration-only; the body lands with this module's own TU.
         bool Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                       AIModuleIO::OutputBuffer* lpOutputBuffer );
+
+        // ---- ADDITIVE (WorldModule::Update @0x827D63E8; DWARF BrnAIModule.h
+        //      :232/:235). Declaration-only; bodies gated in WorldLinkStubs.cpp
+        //      until this module's own TU lands. ----
+        void Update( CgsModule::IOBufferStack* lpInputBufferStack,
+                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                     const AIModuleIO::InputBuffer* lpInputBuffer,
+                     AIModuleIO::OutputBuffer* lpOutputBuffer,
+                     BrnUpdateSet lUpdateSet );
+        void PostPhysicsUpdate( const AIModuleIO::InputBuffer_PostPhysics* lpInputBuffer );
 
     AIModule();
 

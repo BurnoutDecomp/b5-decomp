@@ -126,3 +126,41 @@ void WorldModule::BridgeActionsToTrafficModule(
         liType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
 }
+
+// @ 0x827AC488 -- WorldBridgeToEntityModules.cpp:178. The WORLD-ENTITY leg of the
+// game-action fan-out, run by WorldModule::Update @0x827D63E8 just before the
+// post-physics spine: CLEAR the world-entity module's post-physics game-action queue
+// (this destination is rebuilt every frame, unlike the physics/traffic ones), then
+// forward every type-192 game action verbatim. Type 192 is the world/streamer action
+// the world-entity module consumes in its post-physics update -- this is the last hop
+// before the streamer's own request machine sees the frame's world actions.
+// Both null tripwires are NON-gating; the X360 tail leaves the last GetNextEvent
+// result in r3 as a register artifact (logical return type void).
+void WorldModule::BridgeActionsToWorldModule(
+    void* lpWorldModule,
+    BrnWorld::WorldEntityIO::InputBuffer_PostPhysics* lpWorldEntityInputBuffer_PostPhysics,
+    const BrnWorldIO::UpdateInputBuffer* lpWorldInput)
+{
+    (void)lpWorldModule;   // X360 r3 -- never read by this bridge
+
+    const BrnWorldIO::GameActionQueue* lpInQueue = lpWorldInput->GetGameActionQueue();
+    BrnWorld::WorldEntityIO::InputBuffer_PostPhysics::GameActionQueue* lpOutQueue =
+        lpWorldEntityInputBuffer_PostPhysics->GetGameActionQueue();
+
+    CGS_ASSERT(lpInQueue != 0, "lpInQueue");     // :178 (non-gating)
+    CGS_ASSERT(lpOutQueue != 0, "lpOutQueue");   // :179 (non-gating)
+
+    lpOutQueue->Clear();
+
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    s32 liType = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent)
+    {
+        if (liType == 192)
+        {
+            lpOutQueue->AddEvent(lpEvent, 192, liSize);
+        }
+        liType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+}

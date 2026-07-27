@@ -104,6 +104,24 @@ public:
     Attrib::Class* Find(u64 luKey) const;                                 // 0x828064D0
     u64            GetKeyAtIndex(u32 luIndex) const;                      // 0x82807430
 
+    // The reserving-construction pair the Attrib::ClassTable ctor runs (the
+    // X360 inlines both into the DatabasePrivate ctor @0x8280C598): zero the
+    // five-field header, and re-size the bucket array through RebuildTable
+    // (Reserve asserts the table is not a fixed allocation -- vechashmap.h:304).
+    void ZeroHeaderForConstruct()
+    {
+        mpTable = NULL;
+        muTableSize = 0;
+        muNumEntries = 0;
+        muFixedAlloc = 0;
+        muWorstCollision = 0;
+    }
+    void Reserve(unsigned int luCount)
+    {
+        CGS_ASSERT(muFixedAlloc == 0, "Attempted to reserve table with fixed allocation");
+        RebuildTable(luCount);
+    }
+
     // In-range AND non-sentinel test the asserting index accessors guard on.
     bool ValidIndex(u32 luIndex) const
     {
@@ -249,11 +267,12 @@ namespace Attrib
         Collection* GetCollectionWithDefault(u64 luKey) const;
 
         // The plain collection-table lookup with NO default fallback -- the Attrib::Class::Ta
-        // call site of Attrib::RefSpec::GetCollection / Attrib::FindCollection (asm:
+        // call site of Attrib::RefSpec::GetCollection / Attrib::FindCollection (X360 asm:
         // addi r3, mpPrivates, 0x1C; bl <table Find>). Returns the collection stored under
-        // luKey in this class's table (ClassPrivate::mCollections @ mpPrivates+0x1C), or NULL
-        // when the key is absent.
-        Collection* GetCollection(u64 luKey) const { return GetCollectionTable()->Find(luKey); }
+        // luKey in this class's table (ClassPrivate::mCollections), or NULL when the key is
+        // absent. Out-of-line (vechashmap.cpp) so the table is reached through the real
+        // named ClassPrivate member rather than the retired X360 byte offset.
+        Collection* GetCollection(u64 luKey) const;
 
         // @ 0x8280ADD8 -- remove lpCollection (located by its own 64-bit key at
         // collection+0x10) from this class's collection table. Returns true iff a live
@@ -266,15 +285,13 @@ namespace Attrib
         // inserts r10's low dword 0xD7EDBD36 into r4's HIGH half -> 0xD7EDBD36_2D7D2152.
         static const u64 KU_DEFAULT_COLLECTION_KEY = 0xD7EDBD362D7D2152ull;
 
-        // ClassPrivate::mCollections lives at mpPrivates+0x1C (X360 lwz 8(this) + addi 0x1C).
-        CollectionHashMap* GetCollectionTable() const
-        {
-            return reinterpret_cast<CollectionHashMap*>(
-                reinterpret_cast<u8*>(mpPrivates) + 0x1C);
-        }
+        // ClassPrivate::mCollections (X360 mpPrivates+0x1C; reached through the
+        // real named member now the x64 ClassPrivate layout is committed --
+        // body in vechashmap.cpp, which can see attribclassprivate.h).
+        CollectionHashMap* GetCollectionTable() const;
 
-        Key   mKey;        // +0x00  class key
-        u32   muPad0;      // +0x04
-        void* mpPrivates;  // +0x08  ClassPrivate* (owns mCollections @ +0x1C)
+        u64   mKey;        // +0x00  class key (u64 hash -- the ClassPrivate ctor
+                           //         @0x8280EC80 ld/std's the serialised base)
+        void* mpPrivates;  // +0x08  ClassPrivate* (owns mCollections)
     };
 }

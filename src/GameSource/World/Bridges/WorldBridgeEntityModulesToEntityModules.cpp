@@ -50,12 +50,13 @@ void BridgeRaceCarModuleToWorldModule_PreScene(
         lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface();
     CGS_ASSERT(lpRaceCarEntityOutputInterface != 0, "lpRaceCarEntityOutputInterface");     // :100
 
-    // FLAG cross-home cast: both the race-car active output interface and the world-entity
-    // input buffer's ActiveRaceCarInterfaceStorage model the SAME 10480-byte X360 payload;
-    // the setter block-copies it (the X360 re-fetches GetActiveRaceCarOutputInterface).
+    // RECONCILED 2026-07-27: the committed world-entity input buffer now names the
+    // race-car interface by its real type (InputBuffer_PreScene::ActiveRaceCarInterface
+    // == RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface), so the old
+    // cross-home cast through an opaque storage stand-in is gone -- the setter
+    // block-copies the same 10480-byte payload the X360 re-fetches.
     lpWorldInputBuffer_PreScene->SetActiveRaceCarInterface(
-        *reinterpret_cast<const BrnWorld::WorldEntityIO::InputBuffer_PreScene::ActiveRaceCarInterfaceStorage*>(
-            lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface()));
+        *lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface());
 
     // ---- publish the player active-race-car index into the WorldModule -------------------
     u8* lpWorldModuleBytes = static_cast<u8*>(lpWorldModule);

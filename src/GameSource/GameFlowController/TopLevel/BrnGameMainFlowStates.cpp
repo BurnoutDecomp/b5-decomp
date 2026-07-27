@@ -8,6 +8,8 @@
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // RootSoundModule + BrnGame::GetMainSoundModule() (stage 4)
 #include "GameSource/Game/BrnGameModule.hpp"         // BrnGame::GetMainGameModule() (the update IO stacks)
 #include "GameSource/World/BrnWorldModuleIO.h"       // BrnWorldIO::UpdateOutputBuffer (LoadWorldModule scratch buffer)
+#include "GameSource/World/BrnWorldModule.h"         // BrnWorld::WorldModule::Update (the per-frame world drive)
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h" // CgsMemory::LinearMalloc (the world frame allocator)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (the command slot values)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
@@ -153,6 +155,78 @@ bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer*
     return lbPrepared;
 }
 
+// The per-frame world UPDATE leg of the scripted-load spine (X360 0x823F22D8, the
+// `dword_82FAE4B0 > 5` block). Split out of Update() for readability; the X360 inlines it.
+//
+//   * the world update IO pair: the X360 spine creates BrnWorldIO::UpdateInputBuffer and
+//     UpdateOutputBuffer on the update stacks near the top of the frame (v40/v39) and
+//     threads them through every world bridge; this slice creates the pair here, drives the
+//     world, forwards the requests and destroys it -- the same lifetime, narrower scope
+//     (no other consumer of the pair is wired on the PC yet).
+//   * the frame allocator: X360 gm+10094128, published by GamePrepare @0x823EFBD0 as the
+//     RENDERER's reusable loading-screen allocator (RendererIO::OutputBuffer::
+//     GetReusableLoadingScreenAllocator @0x823B4088). The PC renderer never publishes it
+//     (GamePrepare is gated), so this slice owns an equivalent bump allocator --
+//     FLAG PC-platform leaf: the region SIZE is a PC choice (the X360 size belongs to the
+//     renderer's loading-screen allocator and is not recovered); WorldModule::Update makes
+//     exactly ONE 336896-byte carve per frame and the FreeAll below resets it every frame,
+//     so 512 KiB covers the frame with headroom. Swap for the renderer's allocator when
+//     GamePrepare lands.
+//   * BridgeWorldToResource @0x823E5300: append the world output's resource-request
+//     interface (RequestInterface<4096>) into the GameData input, then bulk-append its
+//     AttribSys vault request queue (<2048> into VariableEventQueue<32768,16>) -- the same
+//     pair LoadWorldModule runs during the prepare stages, now running per frame.
+void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer)
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
+    CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+
+    // FLAG PC-platform leaf (see the note above): the world's per-frame linear allocator.
+    static const size_t KN_WORLD_FRAME_ALLOCATOR_SIZE = 512 * 1024;
+    static CgsMemory::LinearMalloc s_WorldFrameAllocator;
+    static bool s_bFrameAllocatorCreated = false;
+    if (!s_bFrameAllocatorCreated)
+    {
+        s_bFrameAllocatorCreated = true;
+        s_WorldFrameAllocator.Construct();
+        s_WorldFrameAllocator.Create(new u8[KN_WORLD_FRAME_ALLOCATOR_SIZE],
+                                     KN_WORLD_FRAME_ALLOCATOR_SIZE);
+    }
+
+    BrnWorldIO::UpdateInputBuffer*  lpWorldInput  = 0;
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
+    lpUpdateInputStack->CreateIOBuffer(&lpWorldInput, "World");
+    lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
+    // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc; the
+    // generic PC template placement-news only (same restoration as LoadWorldModule).
+    lpWorldInput->Construct();
+    lpWorldOutput->Construct();
+
+    // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
+    // dispatch. The loading update set is 0x80 (frustum testing on, nothing else).
+    s_WorldFrameAllocator.FreeAll();
+    lpGameModule->GetWorldModule().Update(KU_LOADING_UPDATE_SET,
+                                          lpUpdateInputStack, lpUpdateOutputStack,
+                                          lpWorldInput, lpWorldOutput,
+                                          &s_WorldFrameAllocator);
+
+    // BridgeWorldToResource @0x823E5300 -- the streamer's request forward.
+    if (lpGameDataInputBuffer != 0)
+    {
+        lpWorldOutput->LockForRead();
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
+        lpGameDataInputBuffer->AppendRequestInterface<4096>(
+            *lpWorldOutputRead->GetResourceRequestResourceInterface());
+        lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+            lpWorldOutputRead->GetAttribSysVaultRequestInterface()->mRequestQueue);
+        lpWorldOutput->UnlockForRead();
+    }
+
+    lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
+    lpUpdateInputStack->DestroyIOBuffer(&lpWorldInput);
+}
+
 // @ 0x823F22D8 -- the shared scripted-load spine EVERY titled flow state's Update runs
 // first (Marketing/StartScreen/MemoryCard/CompleteLoading on the X360 all open with
 // LoadingScriptedState::Update()). Reconstructed slice: the scripted world-load stage
@@ -257,6 +331,30 @@ void LoadingScriptedState::Update()
 
         s_GameDataOutput.UnlockForRead();
         s_GameDataInput.UnlockForWrite();
+
+        // ---- the per-frame WORLD UPDATE leg (X360 0x823F22D8, stage > 5) ------------
+        // Once the scripted load is past LoadWorldModule (stage > 5) the spine drives the
+        // world module's per-frame Update and then forwards its staged resource requests
+        // into the GameData input -- this is what turns the world streamer's per-frame
+        // PVS/zone work into TRK/PVS/prop LoadBundle requests on the GameData pump.
+        //
+        // X360 order (reproduced):
+        //   if (stage > 5) { BridgeSoundToWorld(worldIn, soundOut);
+        //                    if (!(updateSet & 0x20) && !(updateSet & 0x40)) {
+        //                        LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator);
+        //                        world->vtbl+76(updateSet, inStack, outStack,
+        //                                       worldIn, worldOut, frameAllocator); } }
+        //   ... later ...  if (stage > 5) BridgeWorldToResource(gameDataIn, worldOut);
+        // The loading update set is 0x80 (ConstructUpdateSetFromFsm @0x823BD420 base),
+        // so neither the boot-video (0x20) nor the paused (0x40) bit is set here.
+        //
+        // [deferred] BridgeSoundToWorld: the per-frame Root sound IO bracket is not
+        // threaded through this spine yet (same deferral as the stage-6 sound cue), and
+        // BridgeWorldToSound likewise. Neither feeds the streamer.
+        if (gBrnScriptedLoadStage > 5)
+        {
+            UpdateWorldModule(&s_GameDataInput);
+        }
 
         // Pump the GameData streaming module with this frame's staged requests. [PC
         // placement] the X360 pumps GameDataModule::Update on the resource-update thread

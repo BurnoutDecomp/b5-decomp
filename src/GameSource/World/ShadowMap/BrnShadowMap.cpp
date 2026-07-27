@@ -817,8 +817,9 @@ namespace BrnWorld
 
         // ---- 11. CGS frustum refresh (0x827C1048..0x827C1060) ------------------
         // r3 = this+0x430+0x170*i (maCgsShadowMapCamera[i]), r4 = this+0x1340+
-        // 0x80*i (maFrustum[i]).
-        maCgsShadowMapCamera[luIndex].GetCgsFrustumParallel(&maFrustum[luIndex]);
+        // 0x80*i (maFrustum[i]). (Call shape reconciled 2026-07-27 to the DWARF
+        // reference form -- CgsCamera.h:153.)
+        maCgsShadowMapCamera[luIndex].GetCgsFrustumParallel(maFrustum[luIndex]);
 
         // ---- 12. Debug-render fill (0x827C11C4..0x827C161C, gated) -------------
         // The 11-entry stage list the selector indexes (built at
@@ -906,5 +907,496 @@ namespace BrnWorld
             }
             lrBlob.mLightToWorld = lLightToWorld;
         }
+    }
+
+    // ========================================================================
+    // Shadow-camera wave (2026-07-27): CalculateShadowMapCameras @0x827DA820,
+    // SetConstants @0x827C16E0, ObjectCSMSelect @0x827C1630, plus the shared
+    // per-frame BSS the constant stage reads. Every reconstructed body below
+    // was decoded from the raw X360 instruction stream (member offsets resolved
+    // against the DWARF layout; the VMX blocks decoded lane-by-lane; the
+    // numeric-emulator tooling and per-function analyses live in the session
+    // scratchpad vmx_wave_log.md).
+    // ========================================================================
+
+    // ------------------------------------------------------------------------
+    // File-scope BSS the shadow constant stage shares with the bounding-box
+    // solve (the X360 addresses are this TU's .bss block):
+    //   unk_8300F470  -- the post-view-projection matrix the c14 upload
+    //                    multiplies every cascade VP with (clip -> shadow UV).
+    //   unk_8300F9A0  -- the per-map second-stage matrix triple (64B stride).
+    //   unk_8300E9F0  -- the matrix substituted for DISABLED maps.
+    //   unk_8300FB00  -- the row-3 (translation) add applied to every result.
+    // FLAG (writers not recovered): no function in the .ida-exports set writes
+    // these blobs -- the writers are expected inside the not-yet-reconstructed
+    // ComputeBoundingBoxMatrix/ComputeOptimalViewVolume pair (whose sibling
+    // stores hit the adjacent unk_8300F460/unk_8300F5C0/unk_8300F980 slots) or
+    // in un-exported setup code. Carried as zero-initialised statics exactly
+    // like the console BSS boot state; role names are semantic, not symbol
+    // ground truth.
+    // ------------------------------------------------------------------------
+    static Matrix44 gShadowPostProjectionMatrix;                       // unk_8300F470 -- FLAG: writer not recovered
+    static Matrix44 gaShadowConstantMatrix[KU_NUM_SHADOW_MAPS];        // unk_8300F9A0 -- FLAG: writer not recovered
+    static Matrix44 gShadowDisabledConstantMatrix;                     // unk_8300E9F0 -- FLAG: writer not recovered
+    static Vector4  gShadowConstantRowOffset;                          // unk_8300FB00 -- FLAG: writer not recovered
+
+    namespace
+    {
+        // --------------------------------------------------------------------
+        // The outlined Director camera-utils transform builder @0x8220C960
+        // (asserts name its home: GameSource/Director/Camera/Utils/
+        // CameraUtils.cpp:779-797). Expressed as a FILE-LOCAL helper because
+        // that TU is outside this wave's ownership -- when CameraUtils.cpp is
+        // reconstructed, re-home this body there and call it (the semantics
+        // below are the full decode of the X360 body; the vpermwi128-0x63
+        // pairs are the (y,z,x) cross-product rotate).
+        //
+        //   Z = IsZero(lrEyePoint - lrFocus) ? {0,0,1,0}   (unk_82181520, the
+        //                                       identity z row)
+        //                                    : normalize(lrEyePoint - lrFocus)
+        //   assert IsValid(Z)  ("Invalid Z Axis after normalisation, ...":779)
+        //   X = IsZero(cross(lrUpReference, Z)) ? {1,0,0,0} (gIVector)
+        //                                       : normalize(cross(lrUpReference, Z))
+        //   assert IsValid(X)  ("IsValid(lXaxis)":793)
+        //   Y = cross(Z, X)                     (NOT normalised)
+        //   assert !IsZero(Y)  ("!IsZero(lYaxis)":797)
+        //   rows out: X, Y, Z, lrFocus
+        //
+        // FLAG: the IsZero epsilon (flt_82001770) is un-dumped rodata; carried
+        // as the flagged constant below (component-abs threshold, matching the
+        // vandc/vcmpgtfp shape).
+        // --------------------------------------------------------------------
+        const f32 KF_ISZERO_EPSILON = 1e-6f;   // flt_82001770 -- FLAG: value not recovered
+
+        inline bool IsZero3(f32 lfX, f32 lfY, f32 lfZ)
+        {
+            // vandc(sign) + vcmpgtfp vs the epsilon splat, all-lanes-not-greater
+            return !(std::fabs(lfX) > KF_ISZERO_EPSILON ||
+                     std::fabs(lfY) > KF_ISZERO_EPSILON ||
+                     std::fabs(lfZ) > KF_ISZERO_EPSILON);
+        }
+
+        inline bool IsValid3(f32 lfX, f32 lfY, f32 lfZ)
+        {
+            // the vcmpeqfp. self-compare NaN checks on lanes 0..2
+            return lfX == lfX && lfY == lfY && lfZ == lfZ;
+        }
+
+        void BuildLightCameraTransform(Vector4* lapRowsOut,
+                                       const Vector4& lrFocus,
+                                       const Vector4& lrEyePoint,
+                                       const Vector4& lrUpReference)
+        {
+            // ---- Z axis (0x8220C990..0x8220CA14) ----------------------------
+            const f32 lfDx = lrEyePoint.x - lrFocus.x;
+            const f32 lfDy = lrEyePoint.y - lrFocus.y;
+            const f32 lfDz = lrEyePoint.z - lrFocus.z;
+            Vector4 lvZ;
+            if (IsZero3(lfDx, lfDy, lfDz))
+            {
+                lvZ = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };   // unk_82181520
+            }
+            else
+            {
+                const f32 lfInvLen = 1.0f / std::sqrt(lfDx * lfDx + lfDy * lfDy + lfDz * lfDz); // vrsqrtefp + 2x NR
+                lvZ = Vector4{ lfDx * lfInvLen, lfDy * lfInvLen, lfDz * lfInvLen, 0.0f };
+            }
+            CGS_ASSERT(IsValid3(lvZ.x, lvZ.y, lvZ.z),
+                       "Invalid Z Axis after normalisation, pre-normalised: ");   // CameraUtils.cpp:779
+
+            // ---- X axis (0x8220CB00..0x8220CB98) ----------------------------
+            const f32 lfCx = lrUpReference.y * lvZ.z - lrUpReference.z * lvZ.y;
+            const f32 lfCy = lrUpReference.z * lvZ.x - lrUpReference.x * lvZ.z;
+            const f32 lfCz = lrUpReference.x * lvZ.y - lrUpReference.y * lvZ.x;
+            Vector4 lvX;
+            if (IsZero3(lfCx, lfCy, lfCz))
+            {
+                lvX = Vector4{ 1.0f, 0.0f, 0.0f, 0.0f };   // w::math::vpu::detail::gIVector
+            }
+            else
+            {
+                const f32 lfInvLen = 1.0f / std::sqrt(lfCx * lfCx + lfCy * lfCy + lfCz * lfCz);
+                lvX = Vector4{ lfCx * lfInvLen, lfCy * lfInvLen, lfCz * lfInvLen, 0.0f };
+            }
+            CGS_ASSERT(IsValid3(lvX.x, lvX.y, lvX.z), "IsValid(lXaxis)");        // CameraUtils.cpp:793
+
+            // ---- Y axis (0x8220CC1C..0x8220CC50, unnormalised) --------------
+            Vector4 lvY;
+            lvY.x = lvZ.y * lvX.z - lvZ.z * lvX.y;
+            lvY.y = lvZ.z * lvX.x - lvZ.x * lvX.z;
+            lvY.z = lvZ.x * lvX.y - lvZ.y * lvX.x;
+            lvY.w = 0.0f;
+            CGS_ASSERT(!IsZero3(lvY.x, lvY.y, lvY.z), "!IsZero(lYaxis)");        // CameraUtils.cpp:797
+
+            // ---- row stores (0x8220CC80..0x8220CC9C) ------------------------
+            lapRowsOut[0] = lvX;
+            lapRowsOut[1] = lvY;
+            lapRowsOut[2] = lvZ;
+            lapRowsOut[3] = lrFocus;
+        }
+    }
+
+    // ========================================================================
+    // BrnWorld::ShadowMap::CalculateShadowMapCameras @0x827DA820
+    //
+    // Per-frame shadow camera build. r3 = this, v1 = the key-light direction,
+    // r4 = the DIRECTOR render camera (see the header reconcile note).
+    //
+    //   1. lightOffset = lv3LightDirection * splat(mfEyeOffset)   (vmulfp v127)
+    //   2. per map i (loop @0x827DA8B4..0x827DA9E4):
+    //        maShadowMapCamera[i] = *lpRenderCamera        (director operator=)
+    //        maShadowMapCamera[i].mfFOV = 70.0f            (flt_820051BC @+0x58)
+    //        luConfig = (maShadowMapTypes[i] != ORTHO) ? 0 : i
+    //        focus = renderCam.At * splat(mafShadowMapAtOffset[luConfig])
+    //              + renderCam.Pos                          (vmaddfp)
+    //        mShadowMapFocusPoint = focus                  (stvx this+0x14E0;
+    //                                                       each map overwrites
+    //                                                       it -- last wins,
+    //                                                       exactly as on X360)
+    //        transform = BuildLightCameraTransform(focus, focus + lightOffset,
+    //                                              renderCam.At)
+    //        maShadowMapCamera[i].mTransform = transform   (4 stvx rows)
+    //        maShadowMapCamera[i].ValidateTransformWithDebugInfo()
+    //        maShadowMapCamera[i].CopyToCgsCamera(&maCgsShadowMapCamera[i])
+    //        cgs.m_aspectRatio = 1.0f; cgs.SetFovHorizontal(cgs.m_fovHorizontal)
+    //        cgs.UpdatePerspectiveProjectionMatrix()
+    //        cgs.m_farClipPlane  = mfShadowMapFarPlane;  Update...
+    //        cgs.m_nearClipPlane = mfShadowMapNearPlane; Update...
+    //        cgs.UpdateOrthogonalProjectionMatrix(mafShadowMapOrthoScale[luConfig])
+    //   3. lFrameCamera = CGS copy of the render camera (CopyToCgsCamera)
+    //   4. per map i (loop @0x827DAA10..0x827DABFC), switch maShadowMapTypes[i]:
+    //        ORTHO       -> maCgsShadowMapCamera[i].GetCgsFrustumParallel(maFrustum[i])
+    //        TSM         -> ComputeTSMMatrix(i, lFrameCamera);
+    //                       mProjection = mProjection * maTsmBBInfo[i].mBestFitMatrix;
+    //                       UpdateViewProjectionMatrix()
+    //        BOUNDINGBOX -> ComputeBoundingBoxMatrix(i, lFrameCamera); same
+    //                       best-fit post-multiply + VP rebuild
+    //        CACHED      -> nothing
+    //   5. dynamic far clip (@0x827DAC00.., gated on mbDynamicFarClipPlane &&
+    //      maShadowMapTypes[0] == BOUNDINGBOX): clone the frame camera, clamp
+    //      its near/far to maTsmBBInfo[0].mfNearClip / maTsmBBInfo[2].mfFarClip
+    //      (fsel max/min + projection rebuilds), CalcVertices of its frustum,
+    //      run the 8 verts through cascade 0's VP keeping the max clip z,
+    //      refit mfShadowMapFarPlane = near + (far-near)*maxZ + offset, then
+    //      re-write every cascade's ortho z terms (zAxis.z = 1/(newFar-near),
+    //      wAxis.z = -near/(newFar-near), the vrlimi lane-2 inserts) + VP.
+    //   6. SetConstants(lpRenderCamera); DebugRender(i) for every map whose
+    //      maTsmBBInfo[i].mbDebugRender toggle is set.
+    // ========================================================================
+    void ShadowMap::CalculateShadowMapCameras(Vector3 lv3LightDirection,
+                                              const BrnDirector::Camera::Camera* lpRenderCamera)
+    {
+        // ---- 1. the light-direction eye offset (vmulfp128 v127, v1, splat) --
+        Vector4 lvLightOffset;
+        lvLightOffset.x = lv3LightDirection.x * mfEyeOffset;
+        lvLightOffset.y = lv3LightDirection.y * mfEyeOffset;
+        lvLightOffset.z = lv3LightDirection.z * mfEyeOffset;
+        lvLightOffset.w = lv3LightDirection.w * mfEyeOffset;
+
+        const rw::math::vpu::Vector3& lrAt  = lpRenderCamera->mTransform.At();   // r4+0x20
+        const rw::math::vpu::Vector3& lrPos = lpRenderCamera->mTransform.Pos();  // r4+0x30
+
+        // ---- 2. per-map director/CGS camera build ---------------------------
+        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+        {
+            BrnDirector::Camera::Camera& lrDirCamera = maShadowMapCamera[luMap];
+            lrDirCamera = *lpRenderCamera;                       // operator= @0x82233A80
+            lrDirCamera.mfFOV = 70.0f;                           // flt_820051BC -> +0x58
+
+            const u32 luConfig = (maShadowMapTypes[luMap] != E_SHADOWMAP_TYPE_ORTHO) ? 0u : luMap;
+
+            // focus = At * atOffset + Pos (vmaddfp v0, v0, v13, v12)
+            const f32 lfAtOffset = mafShadowMapAtOffset[luConfig];
+            Vector4 lvFocus;
+            lvFocus.x = lrAt.x * lfAtOffset + lrPos.x;
+            lvFocus.y = lrAt.y * lfAtOffset + lrPos.y;
+            lvFocus.z = lrAt.z * lfAtOffset + lrPos.z;
+            lvFocus.w = lrAt.w * lfAtOffset + lrPos.w;
+            mShadowMapFocusPoint.x = lvFocus.x;                  // stvx this+0x14E0
+            mShadowMapFocusPoint.y = lvFocus.y;
+            mShadowMapFocusPoint.z = lvFocus.z;
+            mShadowMapFocusPoint.w = lvFocus.w;
+
+            const Vector4 lvEyePoint{ lvFocus.x + lvLightOffset.x, lvFocus.y + lvLightOffset.y,
+                                      lvFocus.z + lvLightOffset.z, lvFocus.w + lvLightOffset.w };
+            const Vector4 lvUpReference{ lrAt.x, lrAt.y, lrAt.z, lrAt.w };
+
+            // the outlined CameraUtils builder (bl sub_8220C960) -> mTransform rows
+            Vector4 laRows[4];
+            BuildLightCameraTransform(laRows, lvFocus, lvEyePoint, lvUpReference);
+            lrDirCamera.mTransform.xAxis = rw::math::vpu::Vector3{ laRows[0].x, laRows[0].y, laRows[0].z, laRows[0].w };
+            lrDirCamera.mTransform.yAxis = rw::math::vpu::Vector3{ laRows[1].x, laRows[1].y, laRows[1].z, laRows[1].w };
+            lrDirCamera.mTransform.zAxis = rw::math::vpu::Vector3{ laRows[2].x, laRows[2].y, laRows[2].z, laRows[2].w };
+            lrDirCamera.mTransform.wAxis = rw::math::vpu::Vector3{ laRows[3].x, laRows[3].y, laRows[3].z, laRows[3].w };
+
+            lrDirCamera.ValidateTransformWithDebugInfo();        // bl @0x827DA974
+            lrDirCamera.CopyToCgsCamera(&maCgsShadowMapCamera[luMap]);
+
+            CgsGraphics::Camera& lrCgsCamera = maCgsShadowMapCamera[luMap];
+            const f32 lfFov = lrCgsCamera.maProjectionScalars[0];   // lfs 0x140 (m_fovHorizontal)
+            lrCgsCamera.maProjectionScalars[6] = 1.0f;              // stfs 0x158 (m_aspectRatio)
+            lrCgsCamera.SetFovHorizontal(lfFov);
+            lrCgsCamera.UpdatePerspectiveProjectionMatrix();
+            lrCgsCamera.maProjectionScalars[8] = mfShadowMapFarPlane;   // stfs 0x160 <- +0x14D4
+            lrCgsCamera.UpdatePerspectiveProjectionMatrix();
+            lrCgsCamera.maProjectionScalars[7] = mfShadowMapNearPlane;  // stfs 0x15C <- +0x14D0
+            lrCgsCamera.UpdatePerspectiveProjectionMatrix();
+            lrCgsCamera.UpdateOrthogonalProjectionMatrix(mafShadowMapOrthoScale[luConfig]);
+        }
+
+        // ---- 3. the frame camera in CGS form (stack v73) --------------------
+        CgsGraphics::Camera lFrameCamera;
+        lpRenderCamera->CopyToCgsCamera(&lFrameCamera);
+
+        // ---- 4. per-map projection solve ------------------------------------
+        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+        {
+            CgsGraphics::Camera& lrCgsCamera = maCgsShadowMapCamera[luMap];
+            switch (maShadowMapTypes[luMap])
+            {
+            case E_SHADOWMAP_TYPE_ORTHO:
+                lrCgsCamera.GetCgsFrustumParallel(maFrustum[luMap]);
+                break;
+
+            case E_SHADOWMAP_TYPE_TSM:
+                ComputeTSMMatrix(luMap, lFrameCamera);
+                // mProjection = mProjection * mBestFitMatrix (the inlined
+                // row-by-row vmaddfp block @0x827DAB10..0x827DABCC)
+                lrCgsCamera.mProjection = MultMatrix(lrCgsCamera.mProjection,
+                                                     maTsmBBInfo[luMap].mBestFitMatrix);
+                lrCgsCamera.UpdateViewProjectionMatrix();
+                break;
+
+            case E_SHADOWMAP_TYPE_BOUNDINGBOX:
+                ComputeBoundingBoxMatrix(luMap, lFrameCamera);
+                // same best-fit post-multiply, own inlined copy @0x827DAA38..
+                lrCgsCamera.mProjection = MultMatrix(lrCgsCamera.mProjection,
+                                                     maTsmBBInfo[luMap].mBestFitMatrix);
+                lrCgsCamera.UpdateViewProjectionMatrix();
+                break;
+
+            default:   // E_SHADOWMAP_TYPE_CACHED -- nothing (@0x827DAA20 bge)
+                break;
+            }
+        }
+
+        // ---- 5. dynamic far-clip refit (@0x827DAC00..0x827DADA0) ------------
+        if (mbDynamicFarClipPlane && maShadowMapTypes[0] == E_SHADOWMAP_TYPE_BOUNDINGBOX)
+        {
+            // cascade 0's VP rows (lvx v127..v124 @ this+0x4B0)
+            const Matrix44 lCascadeVP = maCgsShadowMapCamera[0].mViewProjection;
+
+            CgsGraphics::Camera lClampedCamera;
+            lFrameCamera.Clone(&lClampedCamera);
+            {
+                // near = max(maTsmBBInfo[0].mfNearClip, clone near) -- fsel @0x827DAC48
+                f32& lrfNear = lClampedCamera.maProjectionScalars[7];
+                lrfNear = (maTsmBBInfo[0].mfNearClip - lrfNear >= 0.0f) ? maTsmBBInfo[0].mfNearClip : lrfNear;
+                lClampedCamera.UpdatePerspectiveProjectionMatrix();
+            }
+            {
+                // far = min(clone far, maTsmBBInfo[2].mfFarClip) -- fsel @0x827DAC64
+                f32& lrfFar = lClampedCamera.maProjectionScalars[8];
+                lrfFar = (maTsmBBInfo[2].mfFarClip - lrfFar >= 0.0f) ? lrfFar : maTsmBBInfo[2].mfFarClip;
+                lClampedCamera.UpdatePerspectiveProjectionMatrix();
+            }
+
+            CgsGeometric::Frustum lClampedFrustum;
+            Vector4 laVerts[8];
+            lClampedCamera.GetCgsFrustum(lClampedFrustum);
+            lClampedFrustum.CalcVertices(laVerts);
+
+            // max clip z of the 8 verts through cascade 0's VP (loop
+            // @0x827DAC9C..0x827DACD8: vrlimi w<-1, row combine, vmaxfp)
+            f32 lfMaxZ = 0.0f;                                  // vspltisw v12, 0
+            for (int liVert = 0; liVert < 8; ++liVert)
+            {
+                Vector4 lvVert = laVerts[liVert];
+                lvVert.w = 1.0f;                                 // vrlimi128 mask=1
+                const f32 lfClipZ = MultRow(lvVert, lCascadeVP).z;
+                lfMaxZ = (lfClipZ > lfMaxZ) ? lfClipZ : lfMaxZ;  // vmaxfp
+            }
+
+            // refit the shared far plane (fmadds + fadds @0x827DAD18)
+            const f32 lfNear   = mfShadowMapNearPlane;
+            const f32 lfNewFar = (mfShadowMapFarPlane - lfNear) * lfMaxZ
+                               + mfDynamicFarClipOffset + lfNear;
+            mfShadowMapFarPlane = lfNewFar;                      // stfs +0x14D4
+
+            // vrefp + 2x NR reciprocal of the new span; the wAxis term rides
+            // the pre-negated near (fneg @0x827DACF4)
+            const f32 lfInvSpan  = 1.0f / (lfNewFar - lfNear);
+            const f32 lfWzTerm   = lfInvSpan * (-lfNear);
+
+            // per-cascade ortho z rewrite (loop @0x827DAD58..0x827DADA0:
+            // vrlimi128 mask=2 lane-z inserts on zAxis/wAxis + VP rebuild)
+            for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+            {
+                CgsGraphics::Camera& lrCgsCamera = maCgsShadowMapCamera[luMap];
+                lrCgsCamera.mProjection.zAxis.z = lfInvSpan;
+                lrCgsCamera.mProjection.wAxis.z = lfWzTerm;
+                lrCgsCamera.UpdateViewProjectionMatrix();
+            }
+        }
+
+        // ---- 6. constants + debug render (@0x827DADA4..0x827DADD8) ----------
+        SetConstants(lpRenderCamera);
+        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+        {
+            if (maTsmBBInfo[luMap].mbDebugRender)                // lbz tsm+0x314
+            {
+                DebugRender(luMap);
+            }
+        }
+    }
+
+    // ========================================================================
+    // BrnWorld::ShadowMap::SetConstants @0x827C16E0
+    //
+    // Stage the per-frame shadow shader constants from the (director) render
+    // camera and the three cascade cameras:
+    //
+    //   1. mCachedOffsetWorld = renderCam.At * (mafShadowMapAtOffset[0] -
+    //      mafShadowMapAtOffset[1])   (the vmulfp/vsubfp pair -> stvx +0x940)
+    //   2. per map i: laMatrices[i] = (cascadeVP_i * gShadowPostProjectionMatrix)
+    //                                 * gaShadowConstantMatrix[i]
+    //      -- both full 4x4 row-by-row vmaddfp products; if the map is
+    //      DISABLED (!mabMapEnabled[i], lbz +0x14CC+i) the product is replaced
+    //      by gShadowDisabledConstantMatrix; then the w row gets
+    //      gShadowConstantRowOffset added (vaddfp on the +0x30 row).
+    //   3. SetShaderConstantArrayData(14, laMatrices)  (bl sub_827BAE60 -- the
+    //      Matrix44* overload, CgsShaderConstants.h:526 assert)
+    //   4. ObjectCSMSelect(0.0f)
+    //   5. c15 = { maTsmBBInfo[0].mfFarClip, [1].mfFarClip, [2].mfFarClip,
+    //              fadeScale } where fadeScale = |far2 - mfFadeStartDistance| >
+    //              0.001 ? far2 / (far2 - mfFadeStartDistance) : 1.0
+    //   6. c16 = { (far0 + far1) * 0.5, mfShadowFadeToValue,
+    //              mfBiasFrustumLength / (mfShadowMapFarPlane -
+    //              mfShadowMapNearPlane), (1/far2) * fadeScale }
+    // ========================================================================
+    void ShadowMap::SetConstants(const BrnDirector::Camera::Camera* lpCamera)
+    {
+        // ---- 1. the cached world offset (0x827C1700..0x827C1750) ------------
+        const rw::math::vpu::Vector3& lrAt = lpCamera->mTransform.At();   // lvx r4+0x20
+        const f32 lfOffsetDelta = mafShadowMapAtOffset[0] - mafShadowMapAtOffset[1];
+        mCachedOffsetWorld.x = lrAt.x * lfOffsetDelta;
+        mCachedOffsetWorld.y = lrAt.y * lfOffsetDelta;
+        mCachedOffsetWorld.z = lrAt.z * lfOffsetDelta;
+        mCachedOffsetWorld.w = lrAt.w * lfOffsetDelta;
+
+        // ---- 2. the c14 matrix triple (loop @0x827C17F0..) ------------------
+        Matrix44 laMatrices[KU_NUM_SHADOW_MAPS];
+        for (u32 luMap = 0; luMap < KU_NUM_SHADOW_MAPS; ++luMap)
+        {
+            const Matrix44& lrCascadeVP = maCgsShadowMapCamera[luMap].mViewProjection;
+            laMatrices[luMap] = MultMatrix(MultMatrix(lrCascadeVP, gShadowPostProjectionMatrix),
+                                           gaShadowConstantMatrix[luMap]);
+            if (!mabMapEnabled[luMap])                          // lbz +0x14CC+i
+            {
+                laMatrices[luMap] = gShadowDisabledConstantMatrix;
+            }
+            laMatrices[luMap].wAxis.x += gShadowConstantRowOffset.x;   // vaddfp on the w row
+            laMatrices[luMap].wAxis.y += gShadowConstantRowOffset.y;
+            laMatrices[luMap].wAxis.z += gShadowConstantRowOffset.z;
+            laMatrices[luMap].wAxis.w += gShadowConstantRowOffset.w;
+        }
+
+        // ---- 3. upload (bl sub_827BAE60 == the Matrix44* array overload) ----
+        CgsGraphics::mShaderConstantTable.SetShaderConstantArrayData(14u, laMatrices);
+
+        // ---- 4. the CSM-select seed ----------------------------------------
+        ObjectCSMSelect(0.0f);
+
+        // ---- 5. c15 (0x827C1A00..) ------------------------------------------
+        const f32 lfFar2 = maTsmBBInfo[2].mfFarClip;             // this+0x1004
+        f32 lfFadeScale = 1.0f;
+        if (std::fabs(lfFar2 - mfFadeStartDistance) > 0.001f)
+        {
+            lfFadeScale = lfFar2 / (lfFar2 - mfFadeStartDistance);
+        }
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+            15u, Vector4{ maTsmBBInfo[0].mfFarClip, maTsmBBInfo[1].mfFarClip, lfFar2, lfFadeScale });
+
+        // ---- 6. c16 ---------------------------------------------------------
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+            16u, Vector4{ (maTsmBBInfo[0].mfFarClip + maTsmBBInfo[1].mfFarClip) * 0.5f,
+                          mfShadowFadeToValue,
+                          mfBiasFrustumLength / (mfShadowMapFarPlane - mfShadowMapNearPlane),
+                          (1.0f / lfFar2) * lfFadeScale });
+    }
+
+    // ========================================================================
+    // BrnWorld::ShadowMap::ObjectCSMSelect @0x827C1630
+    //
+    // Select the near/far CSM pair for an object at lfDistance: the split is
+    // the midpoint of maTsmBBInfo[1]'s near/far clip pair (fadds + fmuls 0.5);
+    // sel = (lfDistance >= mid) ? 1 : 0 (the fcmpu/blt), and c17 =
+    // { (f32)sel, (f32)(sel + 1), maTsmBBInfo[sel].mfFarClip, 0 } (the two
+    // std/fcfid integer->float conversions + the 0x320-stride far-clip load).
+    // ========================================================================
+    void ShadowMap::ObjectCSMSelect(f32 lfDistance) const
+    {
+        const f32 lfMid = (maTsmBBInfo[1].mfFarClip + maTsmBBInfo[1].mfNearClip) * 0.5f;   // flt_82001DA0
+        const u32 luSelect = (lfDistance >= lfMid) ? 1u : 0u;
+
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData(
+            17u, Vector4{ static_cast<f32>(luSelect), static_cast<f32>(luSelect + 1u),
+                          maTsmBBInfo[luSelect].mfFarClip, 0.0f });
+    }
+
+    // ========================================================================
+    // FLAG assert-trap bodies (shadow-camera wave 2026-07-27) -- the three
+    // remaining VMX pipelines of this TU. Each is documented in the header;
+    // the full recovered analysis (entry structure, member roles, shared BSS,
+    // callee sets, emulator tooling) is in the session vmx_wave_log.md so the
+    // next wave can pick them up without re-deriving.
+    //
+    // Reachability with the shipping defaults: KA_SHADOWMAPTYPE is un-dumped
+    // rodata carried as ORTHO, which routes CalculateShadowMapCameras through
+    // GetCgsFrustumParallel -- none of these traps is on that path; they arm
+    // only when a map is switched to TSM/BOUNDINGBOX (debug menu or the real
+    // rodata values once recovered) or the per-map DebugRender toggle is set.
+    // ========================================================================
+
+    // @0x827D91B0 (~1450 instructions). Recovered entry structure: gated on
+    // mbUpdateTsmCamera it snapshots the cascade's mViewProjection/mView into
+    // maTsmBBInfo[i].mWorldToLight/mWorldToLightView, clones lrCamera into
+    // maTsmBBInfo[i].mCamera and clamps its near/far to the TSM sub-frustum
+    // range; then GetFrustumPerspective -> mSubFrustum.SetFromRwFrustum ->
+    // CalcVertices, transforms the 8 verts into light space and runs the
+    // extent/optimal-view-volume reduction that fills mBestFitMatrix and the
+    // shared constant-matrix BSS (unk_8300F5C0/F630/F980 block).
+    void ShadowMap::ComputeBoundingBoxMatrix(u32 /*luIndex*/, CgsGraphics::Camera& /*lrCamera*/)
+    {
+        CGS_ASSERT(false,
+                   "ShadowMap::ComputeBoundingBoxMatrix: FLAG -- VMX pass @0x827D91B0 not yet "
+                   "faithfully decoded (see BrnShadowMap.h + vmx_wave_log.md); reachable only for "
+                   "E_SHADOWMAP_TYPE_BOUNDINGBOX maps");
+    }
+
+    // @0x827D8980 (~520 instructions): the candidate-view-volume solve --
+    // walks the 6 source planes (GetPlaneByIndex), builds
+    // BrnWorld::CandidateViewVolumePlane records, std::_Sorts them, and
+    // intersects the winning silhouette set into lrOutFrustum.
+    void ShadowMap::ComputeOptimalViewVolume(const CgsGeometric::Frustum& /*lrFrustum*/,
+                                             Matrix44Affine /*lm44WorldToLight*/,
+                                             CgsGeometric::Frustum& /*lrOutFrustum*/,
+                                             const rw::math::vpu::Vector3* /*lpArg4*/,
+                                             const rw::math::vpu::Vector3* /*lpArg5*/)
+    {
+        CGS_ASSERT(false,
+                   "ShadowMap::ComputeOptimalViewVolume: FLAG -- VMX pass @0x827D8980 not yet "
+                   "faithfully decoded (see BrnShadowMap.h + vmx_wave_log.md); reachable only "
+                   "through ComputeBoundingBoxMatrix");
+    }
+
+    // @0x827C1BB8 (~1650 pseudocode lines): the immediate-mode debug renderer
+    // over gaTsmDebugRenderInfo / the bounding-box debug blobs. Dormant unless
+    // a per-map mbDebugRender toggle is set (Construct defaults all false).
+    void ShadowMap::DebugRender(u32 /*luIndex*/) const
+    {
+        CGS_ASSERT(false,
+                   "ShadowMap::DebugRender: FLAG -- debug-only VMX/IM pipeline @0x827C1BB8 not yet "
+                   "reconstructed; set no maTsmBBInfo[].mbDebugRender toggle until it lands");
     }
 }

@@ -290,8 +290,12 @@ private:
                                WorldEntityIO::OutputBuffer_PreScene* lpOutputBuffer );
 
     // ---- collision world ---------------------------------------------------
+public:
+    // PUBLIC per the DecFIGS DWARF (BrnWorldEntityModule.h public block :269..:321;
+    // WorldModule::UpdateForBootUpVideo @0x827CFDE0 calls both cross-class).
     void ProcessValidationRequests( const WorldEntityIO::RequestInterface* lpRequestInterface ); // @0x822A85E0
     void UpdateCollisionValidation( WorldEntityIO::OutputBuffer_PostPhysics* lpOutputBuffer );   // @0x82307FC0
+private:
     bool PrepareWorldCollision(                                          // @0x823068F8
         WorldEntityIO::ResourceRequestInterface* lpRequestInterface,
         WorldEntityIO::SceneInputInterface* lpSceneInterface,

@@ -53,7 +53,10 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIO.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultArray.h"    // VaultArray Register/UnregisterVault stubs
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultSlot.h"     // VaultSlot::DoLoad stub
-#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"       // Attrib::Database stubs
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h" // CollectionHashMap (RemoveIndex gap stub)
+#include "SDKs/Realmc/RealmcMemcardInterface.h" // MemcardInterface base ctor/dtor (trivial real bodies)
+#include "GameShared/GameClasses/Graphics/Resources/CgsShaderTechniqueResourceType.h" // the two documented deferrals below       // Attrib::Database stubs
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault / IGarbageCollector stubs
 #include "SDKs/EA/GameTalk/GameTalk.h"                                          // GameTalkMessage accessor stubs
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManager.h"
@@ -63,6 +66,16 @@
 #include "GameSource/World/Bridges/WorldBridgeCrashToEntityModules.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToScene.h"
+#include "GameSource/World/Bridges/WorldBridgeInputToEntityModules.h"
+#include "GameSource/World/Bridges/WorldBridgeInputToAI.h"
+#include "GameSource/World/Bridges/WorldBridgeEntityModulesToAI.h"
+#include "GameSource/World/Bridges/WorldBridgeEntityModulesToCrash.h"
+#include "GameSource/World/Bridges/WorldBridgeEntityModulesToPhysics.h"
+#include "GameSource/World/Bridges/WorldBridgeAIToEntityModules.h"
+#include "GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.h"
+#include "GameSource/World/Bridges/WorldBridgePhysicsToScene.h"
+#include "GameSource/World/Bridges/WorldBridgeSceneToPhysics.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -161,110 +174,23 @@ Matrix44 Inverse(const Matrix44&, Vector4&)
 }
 } } }
 
-// -------------------------------------------------------------------------
-// Attrib
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void Attrib::AssertOnClassCheck(int,int,void *)
-{
-    CGS_ASSERT(false, "Attrib::AssertOnClassCheck: link stub (world fleet mount) -- reconstruct from X360");
-}
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct Attrib::Collection * Attrib::FindCollectionWithDefault(int)
-{
-    CGS_ASSERT(false, "Attrib::FindCollectionWithDefault: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
 
-// -------------------------------------------------------------------------
-// Attrib SDK runtime cluster (AttribSysModule mount 2026-07-26). These are the
-// symbols CgsAttribSysModule.cpp's REAL bodies reference on paths the PC gates
-// while the schema is unloaded (RegisterSchema / the vault-array load interior /
-// the GameTalk LiveLink hook): unreachable at runtime until the schema bring-up
-// (the exe-baked BE blobs' LE port) + the SDK runtime TUs land.
-// -------------------------------------------------------------------------
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-Attrib::Vault::Vault(Attrib::ExportManager&, AssetID, void*, unsigned int, u8, Attrib::IGarbageCollector*)
-    : mExportMgr(*static_cast<Attrib::ExportManager*>(nullptr))
-{
-    CGS_ASSERT(false, "Attrib::Vault::Vault: link stub (attribsys module mount) -- reconstruct from X360 0x8280A2E8");
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-void Attrib::Vault::ResolveDependency(unsigned int, void*, unsigned int, u8)
-{
-    CGS_ASSERT(false, "Attrib::Vault::ResolveDependency: link stub (attribsys module mount) -- reconstruct from X360 0x82803338");
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-void Attrib::Vault::Initialize()
-{
-    CGS_ASSERT(false, "Attrib::Vault::Initialize: link stub (attribsys module mount) -- reconstruct from X360 0x8280A660");
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-Attrib::Database& Attrib::Database::Get()
-{
-    CGS_ASSERT(false, "Attrib::Database::Get: link stub (attribsys module mount) -- reconstruct from X360");
-    return *static_cast<Attrib::Database*>(nullptr);
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-bool Attrib::Database::IsInitialized()
-{
-    CGS_ASSERT(false, "Attrib::Database::IsInitialized: link stub (attribsys module mount) -- reconstruct from X360");
-    return false;
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-Attrib::ExportManager& Attrib::Database::GetExportPolicies()
-{
-    CGS_ASSERT(false, "Attrib::Database::GetExportPolicies: link stub (attribsys module mount) -- reconstruct from X360");
-    return *static_cast<Attrib::ExportManager*>(nullptr);
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-void Attrib::Database::CollectGarbage()
-{
-    CGS_ASSERT(false, "Attrib::Database::CollectGarbage: link stub (attribsys module mount) -- reconstruct from X360");
-}
 
 // LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
 // (Declared inline here -- its home TU attriblivelink.cpp is not reconstructed;
 // CgsAttribSysModule.cpp forward-declares the same signature.)
 namespace Attrib { void DecodeLiveLinkMessage(const char*); }
-void Attrib::DecodeLiveLinkMessage(const char*)
-{
-    CGS_ASSERT(false, "Attrib::DecodeLiveLinkMessage: link stub (attribsys module mount) -- reconstruct from X360 0x8280FD10");
-}
 
-// BOOT-GATE (AttribSysModule mount 2026-07-26): the interface destructor RUNS on
-// the process-exit destruction chain of the embedded AttribSysGarbageCollector,
-// so it must be the REAL trivially-empty body (the X360 base dtor @0x827DBA70
-// is empty; home = attribgarbagecollector.cpp when that TU lands) -- NOT a trap.
-Attrib::IGarbageCollector::~IGarbageCollector()
-{
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): bodies not reconstructed yet --
-// the vault-array load interior (gated in AttribSysModule while !sbSchemaLoaded).
-void CgsAttribSys::VaultArray::RegisterVault(CgsAttribSys::AttribSysIO::RegisterVaultRequest*)
-{
-    CGS_ASSERT(false, "VaultArray::RegisterVault: link stub (attribsys module mount) -- reconstruct from X360 0x8280E978");
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-void CgsAttribSys::VaultArray::UnregisterVault(CgsAttribSys::AttribSysIO::UnregisterVaultRequest*)
-{
-    CGS_ASSERT(false, "VaultArray::UnregisterVault: link stub (attribsys module mount) -- reconstruct from X360 0x8280F6C8");
-}
 
-// LINK STUB (AttribSysModule mount 2026-07-26): body not reconstructed yet.
-void CgsAttribSys::VaultSlot::DoLoad(const CgsAttribSys::AttribSysIO::RegisterVaultRequest*, Attrib::IGarbageCollector*)
-{
-    CGS_ASSERT(false, "VaultSlot::DoLoad: link stub (attribsys module mount) -- reconstruct from X360 0x8280E060");
-}
 
 // LINK STUB (AttribSysModule mount 2026-07-26): bodies not reconstructed yet --
 // the GameTalk message accessors the (unregistered on PC) Attribulator LiveLink
@@ -282,25 +208,7 @@ const char* EA::GameTalk::GameTalkMessage::GetKeyContent(const char*) const
     return 0;
 }
 
-// -------------------------------------------------------------------------
-// Attrib::Instance
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void * Attrib::Instance::GetAttributePointer(unsigned __int64,unsigned int) const
-{
-    CGS_ASSERT(false, "GetAttributePointer: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
 
-// -------------------------------------------------------------------------
-// Attrib::RefSpec
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct Attrib::Collection const * Attrib::RefSpec::GetCollection()
-{
-    CGS_ASSERT(false, "RefSpec::GetCollection: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
 
 // -------------------------------------------------------------------------
 // BrnAI::AIModule
@@ -522,11 +430,10 @@ void BrnPhysics::PhysicsModule::PropPrepareTypes(class BrnPhysics::PhysicsModule
     }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnPhysics::PhysicsModule::UpdateNetworkCatchup(int,int)
-{
-    CGS_ASSERT(false, "PhysicsModule::UpdateNetworkCatchup: link stub (world fleet mount) -- reconstruct from X360");
-}
+// (PhysicsModule::UpdateNetworkCatchup(int,int) stub RETIRED 2026-07-27: the
+// signature was a decompiler misread -- the world drive passes the physics INPUT
+// buffer + the frame update set. The retyped gate lives in the world-drive block
+// at the end of this file.)
 
 // -------------------------------------------------------------------------
 // BrnPhysics::Props::PropInputInterface
@@ -1151,19 +1058,16 @@ enum EGlobalRaceCarIndex BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarO
 
 // -------------------------------------------------------------------------
 // BrnWorld::ShadowMap -- DESTUBBED (2026-07-26 wave): Construct @0x827B43E8,
-// SetConstantsForEnvmap @0x827C1AD0 and the inlined accessor set now live in
-// GameSource/World/ShadowMap/BrnShadowMap.cpp. ONLY CalculateShadowMapCameras
-// remains: its X360 body @0x827DA820 drives ComputeBoundingBoxMatrix
-// @0x827D91B0 (~2000 lines of VMX pseudocode) + ComputeOptimalViewVolume
-// @0x827D8980 (~800 lines) -- the dependency set explodes; reconstruct as its
-// own dedicated VMX pass (same treatment as the landed ComputeTSMMatrix).
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::ShadowMap::CalculateShadowMapCameras(struct rw::math::vpu::Vector3,class CgsGraphics::Camera const *)
-{
-    CGS_ASSERT(false, "ShadowMap::CalculateShadowMapCameras: link stub (world fleet mount) -- reconstruct from X360");
-}
-
+// SetConstantsForEnvmap @0x827C1AD0 and the inlined accessor set live in
+// GameSource/World/ShadowMap/BrnShadowMap.cpp.
+// DESTUBBED (shadow-camera wave 2026-07-27): CalculateShadowMapCameras
+// @0x827DA820 is now REAL in BrnShadowMap.cpp (director-camera overload; the
+// CGS-camera shape the committed WorldModule call site uses is a documented
+// trap bridge there until that call site passes the director camera input),
+// together with SetConstants @0x827C16E0 + ObjectCSMSelect @0x827C1630.
+// ComputeBoundingBoxMatrix/ComputeOptimalViewVolume/DebugRender carry FLAG
+// assert-trap bodies in the same TU (off the default ORTHO path) -- see
+// BrnShadowMap.h for the per-function notes.
 // -------------------------------------------------------------------------
 // BrnWorld::TriggerEntityModule
 // -------------------------------------------------------------------------
@@ -1471,53 +1375,16 @@ void CgsGeometric::Frustum::SetFromRwFrustum(struct CgsGraphics::CameraRwFrustum
 // Clone @0x827E7018, SetFarClip and the GetPosition/GetDirection additive
 // accessors now live in GameShared/GameClasses/Graphics/CgsCamera.cpp.
 //
-// STILL STUBBED (each with a reason):
-//   * the frustum family (GetFrustum(CameraRwFrustum&), GetFrustumParallel,
-//     GetFrustumPerspective, GetCgsFrustumParallel): the real X360 writers
-//     (@0x827F0AD8 / @0x827F11A8 / @0x827F97B8) are large VMX plane-derivation
-//     pipelines with un-dumped vperm lane controls, AND the committed accessor
-//     shapes (const-ref returns) diverge from the DWARF out-param signatures
-//     (GetFrustumPerspective(Frustum&, bool) etc.) -- needs a reconciliation
-//     pass of its own.
-//   * GetViewProjectionMatrixModified @0x827EC858: the tail is a vperm/vmrghw
-//     row-assembly puzzle over un-dumped lane controls (unk_82CDA3C0/400);
-//     decoding it needs the same symbolic-evaluation treatment as
-//     ComputeTSMMatrix.
+// DESTUBBED (camera-frustum wave 2026-07-27): the whole frustum-writer family
+// -- GetFrustum(CameraRwFrustum&)/GetFrustumParallel/GetFrustumPerspective
+// (@0x82277298 / @0x827F11A8 / @0x827F0AD8, out-param DWARF shapes, numeric-
+// emulation-verified), the GetCgsFrustum/GetCgsFrustumParallel wrappers
+// (@0x827F9778 / @0x827F97B8), UpdateOrthogonalProjectionMatrix @0x827E72E0,
+// GetViewProjectionMatrixModified @0x827EC858 (the un-dumped unk_82CDA3C0/400
+// vperm controls resolved by derivation -- see CgsCamera.cpp), and the no-arg
+// PC-bridge accessors -- all now live in CgsCamera.cpp.
 // (Camera::Clear() remains declaration-only in the header -- never referenced
 // by a linked TU, so it carries no stub here.)
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::GetCgsFrustumParallel(struct CgsGeometric::Frustum *)
-{
-    CGS_ASSERT(false, "Camera::GetCgsFrustumParallel: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsGraphics::Camera::GetFrustum(struct CgsGraphics::CameraRwFrustum &)
-{
-    CGS_ASSERT(false, "Camera::GetFrustum: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
-struct CgsGeometric::Frustum const & CgsGraphics::Camera::GetFrustumParallel() const
-{
-    static CgsGeometric::Frustum* sNull = 0; return *sNull;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.  (inert getter)
-struct CgsGeometric::Frustum const & CgsGraphics::Camera::GetFrustumPerspective() const
-{
-    static CgsGeometric::Frustum* sNull = 0; return *sNull;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct rw::math::vpu::Matrix44 CgsGraphics::Camera::GetViewProjectionMatrixModified() const
-{
-    CGS_ASSERT(false, "GetViewProjectionMatrixModified: link stub (world fleet mount) -- reconstruct from X360");
-    return rw::math::vpu::Matrix44();
-}
-
-
 // -------------------------------------------------------------------------
 // CgsGraphics::DispatchBin
 // -------------------------------------------------------------------------
@@ -1528,24 +1395,13 @@ void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
 }
 
 // -------------------------------------------------------------------------
-// CgsGraphics::DispatchList
+// CgsGraphics::DispatchList / CgsGraphics::DrawRenderable
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-class CgsGraphics::DispatchList * CgsGraphics::DispatchList::AllocateKeyBlock()
-{
-    CGS_ASSERT(false, "DispatchList::AllocateKeyBlock: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
-
-// -------------------------------------------------------------------------
-// CgsGraphics::DrawRenderable
-// -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsGraphics::DrawRenderable::AddToBin(struct Renderable const *,class CgsGraphics::DispatchFrame *,bool,signed char,signed char,unsigned char,unsigned char,bool,unsigned char,unsigned char,int,unsigned char)
-{
-    CGS_ASSERT(false, "DrawRenderable::AddToBin: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
+// (renderer world-pass wave 2026-07-27): DispatchList::AllocateKeyBlock
+// @0x827FA730 and DrawRenderable::AddToBin @0x827FA0D0 are now REAL in their
+// home TUs (Dispatch/CgsGraphicsDispatchList.cpp and
+// Dispatch/CgsDispatcherCommands.cpp, both on the exe source list) -- their
+// link stubs were DELETED here to clear the duplicate-symbol errors.
 
 // -------------------------------------------------------------------------
 // CgsGraphics::Model
@@ -1813,27 +1669,80 @@ void CgsSceneManager::SceneManagerModule::ProcessFrustumTestJobRequests(struct C
     CGS_ASSERT(false, "SceneManagerModule::ProcessFrustumTestJobRequests: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsSceneManager::SceneManagerModule::Update(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *,bool)
+// BOOT GATE -- SceneManagerModule::UpdateScene @0x828D4C28 (X360 vtbl+64).
+// RENAMED 2026-07-27 (world-drive wave) from the placeholder "Update"; the X360
+// symbol literally named SceneManagerModule::Update @0x827E1F28 is the assert
+// "Don't use this function. Use UpdateScene(), UpdateSceneQueries() and
+// UpdateContactGeneration() instead" (CgsSceneManagerModule.h:276).
+//
+// The X360 shell, step for step (CgsSceneManagerModule.cpp:728..):
+//   1. StartMonitor(the module's UpdateScene CPU monitor, dword_82F33EC8);
+//   2. four null tripwires (:728 lpInputBufferStack, :729 lpOutputBufferStack,
+//      :730 lpSceneInputBuffer, :731 lpSceneOutputBuffer);
+//   3. CreateIOBuffer<SpatialPartitionIO::InputBuffer_Update>  ("SpatialPartition")
+//      and <OverlapGenerationIO::InputBuffer> ("OverlapGeneration") on the INPUT
+//      stack; <SpatialPartitionIO::OutputBuffer> + <OverlapGenerationIO::OutputBuffer>
+//      on the OUTPUT stack;
+//   4. read-lock the scene input, write-lock both sub-module inputs, and fan the
+//      scene input's update interface out through
+//      SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(ogIn, spIn,
+//      sceneIn, lbPrepare), then unlock in reverse;
+//   5. SpatialPartitionManager::UpdateScene(&mSpatialPartitionManager, spIn) --
+//      i.e. drain the add/remove/set-position/set-radius queue into the octree;
+//   6. (*(vtbl(mOverlapGenerator) + 68))(&mOverlapGenerator, ogIn) -- the overlap
+//      generator's own update;
+//   7. write-lock the scene output and publish &mTriangleCacheManager on it
+//      (the "lpTriangleCacheManager != NULL" tripwire, CgsSceneManagerModuleIO.h:1268);
+//   8. destroy the four buffers; StopMonitor.
+//
+// WHY INERT IS FAITHFUL HERE: steps 5-7 are pure transfers into sub-modules that
+// hold NO DATA on the PC build -- the spatial partition's octree and the overlap
+// generator are both boot-gated (their Prepare never allocates), and the scene
+// input's update interface is empty because every entity-module -> scene bridge
+// feeding it is itself gated. With no entities registered, the X360 shell's
+// observable effect reduces to the triangle-cache-manager pointer publish, which
+// no committed consumer reads yet. Reconstruct steps 3-7 for real when the
+// SpatialPartition/OverlapGeneration IO buffers + BridgeInputSceneUpdateInterface-
+// ToSubModules land, and DELETE this gate.
+bool CgsSceneManager::SceneManagerModule::UpdateScene(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *,bool)
 {
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
     static bool s_bLogged = false;
     if (!s_bLogged)
     {
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::Update: inert [FLAG PC boot gate]\n";
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::UpdateScene: inert [FLAG PC boot gate]\n";
     }
     return true;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsSceneManager::SceneManagerModule::UpdateQueries(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
+// BOOT GATE -- SceneManagerModule::ProcessSceneQueries @0x828D57D0 (X360 vtbl+68).
+// RENAMED 2026-07-27 from the placeholder "UpdateQueries", and SOFTENED from a
+// CGS_ASSERT trap: WorldModule::Update @0x827D63E8 now drives it every frame (the
+// physics query round trip) and the entity-module post-scene spine drives it once
+// per module, so a trap here would block the sim on frame 1.
+//
+// The X360 shell (CgsSceneManagerModule.cpp:806..):
+//   1. StartMonitor(dword_82F33ECC);
+//   2. four null tripwires (:806..:809);
+//   3. StartMonitor(dword_82F33ED0); ProcessCoarseQueries(inStack, outStack,
+//      sceneIn, sceneOut); StopMonitor;
+//   4. StartMonitor(dword_82F33ED4); ProcessFineQueries(inStack, outStack,
+//      sceneIn, sceneOut); StopMonitor;
+//   5. write-lock the scene output, publish &mTriangleCacheManager on it
+//      (same :1268 tripwire as UpdateScene), unlock; StopMonitor.
+// Both query passes walk the coarse/fine query queues; on the PC build those
+// queues are empty (no entity is registered with the scene manager while the
+// partition managers are gated), so the pass is a no-op with or without this gate.
+void CgsSceneManager::SceneManagerModule::ProcessSceneQueries(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
 {
-    CGS_ASSERT(false, "SceneManagerModule::UpdateQueries: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::ProcessSceneQueries: inert [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -2038,11 +1947,9 @@ void WorldModule::BridgeTrafficModuleToSceneModule_PostScene(void *,struct CgsSc
     CGS_ASSERT(false, "WorldModule::BridgeTrafficModuleToSceneModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void WorldModule::BridgeTrafficToRaceCar_PrePhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
-{
-    CGS_ASSERT(false, "WorldModule::BridgeTrafficToRaceCar_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
-}
+// (BridgeTrafficToRaceCar_PrePhysics stub RETIRED 2026-07-27: the REAL body
+// @0x827A51F0 lives in its own home TU, Bridges/WorldBridgeEntityModulesToEntityModules.cpp,
+// which the world-drive wave mounts on the build list.)
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
 void WorldModule::BridgeTriggerModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene const *)
@@ -2132,3 +2039,1191 @@ void BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::oper
     CGS_ASSERT(false, "RCEntityGlobalRaceCarOutputInterface::operator=: link stub (world fleet mount) -- reconstruct from X360");
 }
 
+// ---------------------------------------------------------------------------
+// Attrib mount closure stubs (2026-07-27): symbols the linked SDK TUs
+// reference whose bodies are documented NEXT-WAVE gaps (attrib_sdk_wave_log
+// G-list). Each traps loudly; none is on the schema/vault-register path.
+// ---------------------------------------------------------------------------
+// LINK STUB (attrib mount closure): generated-accessor keyed lookup; the X360
+// no-arg form is real in attribinstance.cpp -- this keyed overload is gap G5
+// (runs only when Gen:: accessors walk a materialized collection).
+void * Attrib::Instance::GetAttributePointer(unsigned __int64, unsigned int) const
+{
+    CGS_ASSERT(false, "Attrib::Instance::GetAttributePointer(key,idx): attrib gap G5 -- reconstruct");
+    return 0;
+}
+
+// LINK STUB (attrib mount closure): gap G5 sibling (Gen:: ChangeWithDefault edit path).
+Attrib::Collection * Attrib::FindCollectionWithDefault(int)
+{
+    CGS_ASSERT(false, "Attrib::FindCollectionWithDefault: attrib gap G5 -- reconstruct");
+    return 0;
+}
+
+// LINK STUB (attrib mount closure): GameTalk live-edit decode (gap G6).
+void Attrib::DecodeLiveLinkMessage(char const *)
+{
+    CGS_ASSERT(false, "Attrib::DecodeLiveLinkMessage: attrib gap G6 -- reconstruct");
+}
+
+// LINK STUB (attrib mount closure): hashmap removal (gap G2, edit/GC path).
+Attrib::Collection * Attrib::CollectionHashMap::RemoveIndex(unsigned int)
+{
+    CGS_ASSERT(false, "Attrib::CollectionHashMap::RemoveIndex: attrib gap G2 -- reconstruct");
+    return 0;
+}
+
+// LINK STUB (attrib mount closure): node schema lookup (gap G2, GC/Clear path).
+Attrib::TypeDesc const * Attrib::Node::GetTypeDesc(void) const
+{
+    CGS_ASSERT(false, "Attrib::Node::GetTypeDesc: attrib gap G2 -- reconstruct");
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// RealmcIface::MemcardInterface base ctor/dtor -- TRIVIAL REAL BODIES (the
+// header's own notes: ctor @0x82B51C00 is a single vtable store == an empty
+// C++ ctor; the virtual dtor backs the vector-deleting slot @0x82B51BB8).
+// Their DWARF home RealmcMemcardInterface.cpp is NOT linked because its
+// CreateInstance drags the uncommitted RealmcCore closure (ObjectManager /
+// AllocateMem / Locale callbacks) -- cost rule; the wave-B SaveLoad PS3 TU
+// needs only this base pair for its NoOpMemcardInterface.
+// ---------------------------------------------------------------------------
+RealmcIface::MemcardInterface::MemcardInterface()
+{
+}
+
+RealmcIface::MemcardInterface::~MemcardInterface()
+{
+}
+
+// ===========================================================================
+// WORLD-DRIVE BOOT GATES (2026-07-27)
+//
+// WorldModule::Update @0x827D63E8 + its four entity-module phase spines are now
+// REAL, so every per-frame bridge and module entry point they call must exist.
+// The ones below are not reconstructed yet; each is a QUIET ONE-SHOT-LOG NO-OP
+// (never a CGS_ASSERT trap -- a trap here blocks the sim on the first frame).
+// Every gate names its X360 address so the reconstruction replaces it in place;
+// delete the gate when the real body lands (the two definitions must not coexist).
+//
+// Why inert is the consistent observable: the destination modules (race car /
+// traffic / prop / trigger / crash / AI / physics) are themselves gated inert,
+// so a bridged payload would have no consumer. The world-entity legs -- the ones
+// the STREAMER rides -- are deliberately NOT in this list: BridgeWorldEntityInfoToOutput
+// @0x827ADD78, BridgeActionsToWorldModule @0x827AC488 and
+// BridgeRaceCarModuleToWorldModule_PreScene @0x827A52B0 are real bodies in their
+// own TUs.
+// ===========================================================================
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827A50E0 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeRaceCarModuleToTrafficModule_PreScene(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PreScene *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToTrafficModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827A5510 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeRaceCarModuleToPropModule_PreScene(void *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToPropModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AACF8 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeWorldModuleToPropModule_PreScene(void *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,struct BrnWorld::WorldEntityIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeWorldModuleToPropModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AE9D0 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AB910 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AB998 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePhysicsModuleToPropModule_PostPhysics(void *,class BrnWorld::PropEntityIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToPropModule_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AB8B0 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePhysicsModuleToCrashModule_PostPhysics(void *,struct BrnWorld::CrashIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToCrashModule_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827A5680 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePhysicsModuleToAIModule_PostPhysics(void *,struct BrnAI::AIModuleIO::InputBuffer_PostPhysics *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsModuleToAIModule_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AD708 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeTrafficToCrashModule_PostPhysics(void *,struct BrnWorld::CrashIO::InputBuffer_PostPhysics *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficToCrashModule_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 the Update input fan-out -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeInputToPhysicsModule(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorldIO::UpdateInputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToPhysicsModule: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827ADEE8 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeInputToCrashModule(void *,struct BrnWorld::CrashIO::InputBuffer_PreScene *,struct BrnWorldIO::UpdateInputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToCrashModule: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827ABF40 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeActionsToRaceCarModule(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene *,struct BrnWorldIO::UpdateInputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeActionsToRaceCarModule: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AF258 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePropToOutput_PreScene(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePropToOutput_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AF318 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeRaceCarEntityInfoToOutput_PreScene(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarEntityInfoToOutput_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 the _PrePhysics sibling's pre-scene twin -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeTrafficEntityInfoToOutput_PreScene(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficEntityInfoToOutput_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 the post-physics output fan-in -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeEntityModulesToOutput_PostPhysics(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics const *,class BrnWorld::PropEntityIO::OutputBuffer_PostPhysics const *,struct BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToOutput_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AEB18 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePhysicsToOutput(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsToOutput: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 the scene-output leg of the query round trip -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeSceneModuleToOutput(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneModuleToOutput: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 the crash post-physics output leg -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnWorld::CrashIO::OutputBuffer_PostPhysics const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToOutput: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AB490 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeEntityModulesToSceneModule_PreScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene const *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene const *,struct BrnWorld::WorldEntityIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToSceneModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AB608 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeEntityModulesToScene_PostPhysics(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics const *,class BrnWorld::PropEntityIO::OutputBuffer_PostPhysics const *,struct BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToScene_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AADB8 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeEntityModulesToPhysicsModule_PreScene(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToPhysicsModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AAEC0 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics const *,class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AB738 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeInputToAIModule(void *,struct BrnAI::AIModuleIO::InputBuffer *,struct BrnWorldIO::UpdateInputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToAIModule: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827A5020 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeTrafficModuleToAIModule_Update(void *,struct BrnAI::AIModuleIO::InputBuffer *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficModuleToAIModule_Update: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AD688 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeRaceCarModuleToAIModule_PostScene(void *,struct BrnAI::AIModuleIO::InputBuffer *,class BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToAIModule_PostScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827AD540 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeAIToEntityModules_PrePhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,class BrnWorld::PropEntityIO::InputBuffer_PrePhysics *,struct BrnAI::AIModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeAIToEntityModules_PrePhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827A4F58 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeAIToEntityModules_PostPhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics *,struct BrnAI::AIModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeAIToEntityModules_PostPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 the AI -> physics staging -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeAIModuleToPhysicsModule(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnAI::AIModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeAIModuleToPhysicsModule: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827A8D20 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgePhysicsSceneQueriesToScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsSceneQueriesToScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827A8E88 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeSceneQueryResultsToPhysics(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneQueryResultsToPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
+// X360 0x827ABD80 -- reconstruct and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void WorldModule::BridgeScenePotentialContactsToPhysics(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeScenePotentialContactsToPhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+
+// ---- module entry points driven by the spines ----------------------------
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the race-car pre-scene tick.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::RaceCarEntityModule::PreSceneUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the race-car post-physics tick.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::RaceCarEntityModule::PostPhysicsUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the traffic pre-scene tick.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnTraffic::TrafficEntityModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PreScene *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the traffic post-physics tick (also driven by UpdateForBootUpVideo @0x827CFDE0).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnTraffic::TrafficEntityModule::PostPhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the prop pre-scene tick (X360 vtbl+68).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::PropEntityModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the prop post-physics tick (X360 vtbl+80).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::PropEntityModule::PostPhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::PropEntityIO::InputBuffer_PostPhysics *,class BrnWorld::PropEntityIO::OutputBuffer_PostPhysics *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the trigger pre-scene tick (X360 vtbl+64).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::TriggerEntityModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriggerEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the crash pre-scene tick.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::CrashModule::PreSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct BrnWorld::CrashIO::InputBuffer_PreScene const *,struct BrnWorld::CrashIO::OutputBuffer_PreScene *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "CrashModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the crash post-physics tick.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::CrashModule::PostPhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct BrnWorld::CrashIO::InputBuffer_PostPhysics const *,struct BrnWorld::CrashIO::OutputBuffer_PostPhysics *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "CrashModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the AI update (X360 vtbl+68).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnAI::AIModule::Update(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct BrnAI::AIModuleIO::InputBuffer const *,struct BrnAI::AIModuleIO::OutputBuffer *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "AIModule::Update: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the AI post-physics tick.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnAI::AIModule::PostPhysicsUpdate(struct BrnAI::AIModuleIO::InputBuffer_PostPhysics const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "AIModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the cached-position restage into the scene input (@0x8259C370).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnPhysics::PhysicsModule::UpdateCachedPositions(struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PhysicsModule::UpdateCachedPositions: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the physics post-scene tick (@0x825ABC10).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnPhysics::PhysicsModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnPhysics::PhysicsModuleIO::InputBuffer const *,class BrnPhysics::PhysicsModuleIO::OutputBuffer *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PhysicsModule::PostSceneUpdate: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the physics scene-query producer (@0x825A1428).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnPhysics::PhysicsModule::GenerateSceneQueries(class BrnPhysics::PhysicsModuleIO::OutputBuffer *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PhysicsModule::GenerateSceneQueries: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the physics step (@0x825B0640).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnPhysics::PhysicsModule::Update(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnPhysics::PhysicsModuleIO::InputBuffer const *,class BrnPhysics::PhysicsModuleIO::OutputBuffer *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PhysicsModule::Update: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the network catch-up step WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 forwards to.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnPhysics::PhysicsModule::UpdateNetworkCatchup(class BrnPhysics::PhysicsModuleIO::InputBuffer const *,unsigned short)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PhysicsModule::UpdateNetworkCatchup: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the environment tick (time of day / fog / key light) -- DWARF BrnEnvironmentManager.h:386.
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::EnvironmentSettings::EnvironmentManager::Update(float,struct BrnWorldIO::UpdateOutputBuffer *,struct rw::math::vpu::Vector3)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::EnvironmentManager::Update: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the world debug-menu pump (@0x827BF818).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void BrnWorld::WorldDebugComponent::Update(struct BrnWorldIO::DebugController const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldDebugComponent::Update: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// (BrnGraphics::EnvironmentMap::Update gate NOT needed: the real body already lives
+//  in its own TU, GameSource/World/EnvironmentMap/BrnEnvironmentMap.cpp, which is
+//  on the build list -- WorldModule::Update's env-map refresh is REAL.)
+
+// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
+// WorldModule::Update @0x827D63E8 once the drive is wired. the per-frame triangle-cache kick (@0x828C73D8).
+// Reconstruct from X360 and DELETE this gate.
+// One-shot log + inert: the module/interface it would feed is itself gated
+// inert, so dropping the transfer is the consistent observable.
+void CgsSceneManager::SceneManagerModule::StartUpdateTriangleCache(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct CgsSceneManager::CgsCollision::BaseCollisionGenerator *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::StartUpdateTriangleCache: inert [FLAG PC boot gate]\n";
+    }
+}
+
+
+
+// ===========================================================================
+// WORLD-DRIVE BOOT GATES, part 2 (2026-07-27) -- the link closure of the real
+// WorldModule::Update @0x827D63E8.
+// ===========================================================================
+
+// ---- module-IO buffer Construct() ------------------------------------------
+// WorldModule::Update creates ~30 module IO buffers per frame on the update
+// stacks. The X360 CreateIOBuffer<T> template instantiation runs T::Construct
+// after the stack alloc; the generic PC template placement-news only, so the
+// drive calls Construct explicitly. For the buffers below the owning IO TU has
+// no Construct body yet -- these gates run ONLY the IOBuffer base bring-up
+// (raising the status the Lock/Unlock tripwires assert on). The member queue /
+// interface bring-up each real Construct also performs is deferred with that
+// IO TU; every one of these buffers belongs to a module whose update is itself
+// boot-gated, so nothing writes into the un-constructed members.
+// Replace each with the real T::Construct in its own IO TU (and delete here).
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnAI::AIModuleIO::InputBuffer_PostPhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::PropEntityIO::InputBuffer_PostPhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::PropEntityIO::InputBuffer_PrePhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+// BOOT GATE: base bring-up only (see the block note above).
+void BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+}
+
+
+// ---- the collision generator the frame carves -------------------------------
+// WorldModule::Update carves ONE 336896-byte BaseCollisionGenerator out of the
+// world frame allocator (object + a 0x40000 result region) and hands it to
+// SceneManagerModule::StartUpdateTriangleCache. The REAL bodies (Construct
+// @0x828105F8 / Prepare @0x82810660) live in
+// GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.cpp,
+// which is NOT on the build list (it drags the EA::Jobs job-system + collision
+// batch closure -- cost rule). Gated here: the generator's only consumer,
+// StartUpdateTriangleCache, is itself gated, so an unconstructed generator is
+// never dereferenced. Mount that TU (and delete these two) with the contact-
+// generation wave.
+void CgsSceneManager::CgsCollision::BaseCollisionGenerator::Construct()
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "BaseCollisionGenerator::Construct: inert [FLAG PC boot gate]\n";
+    }
+}
+
+bool CgsSceneManager::CgsCollision::BaseCollisionGenerator::Prepare(void *, int)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "BaseCollisionGenerator::Prepare: inert [FLAG PC boot gate]\n";
+    }
+    return true;
+}
+
+// ---- two read accessors the drive reads through ------------------------------
+// BrnWorldIO::UpdateInputBuffer::GetPlayerVehicleControls (X360 read-lock, the
+// controls block Update copies straight into the update output) and the traffic
+// pre-scene output's traffic->race-car interface (the 544-byte block Update
+// snapshots for the post-scene spine). Both belong to their own IO TUs; gated
+// here as read-lock-checked null returns -- the drive tolerates null on both
+// paths (the copy and the snapshot are skipped) because the producing modules
+// are boot-gated.
+struct BrnWorldIO::PlayerVehicleControls const * BrnWorldIO::UpdateInputBuffer::GetPlayerVehicleControls(void) const
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "UpdateInputBuffer::GetPlayerVehicleControls: inert [FLAG PC boot gate]\n";
+    }
+    return 0;
+}
+
+struct BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene const * BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene(void) const
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene: inert [FLAG PC boot gate]\n";
+    }
+    return 0;
+}
+
+// ---- the six unmounted sibling bridge TUs' entry points ----------------------
+// Each of these has a REAL committed body in its own home TU; those TUs are not
+// on the build list because each drags declaration-only module-IO accessors (see
+// the bat note next to the world-fleet block). Gated here so the real drive links
+// TODAY; delete each gate when its home TU is mounted.
+
+// BOOT GATE -- real body @0x827ADF88 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgeInputToEntityModules(void *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PostScene *,class BrnTraffic::BrnTrafficIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct BrnWorld::WorldEntityIO::InputBuffer_PreScene *,class BrnWorld::PropEntityIO::InputBuffer_PreScene *,struct BrnWorldIO::UpdateInputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeInputToEntityModules: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE -- real body @0x827ABA40 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgePhysicsSceneUpdateToScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,class BrnPhysics::PhysicsModuleIO::OutputBuffer const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgePhysicsSceneUpdateToScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE -- real body @0x827A52B0 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgeRaceCarModuleToWorldModule_PreScene(void *,struct BrnWorld::WorldEntityIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToWorldModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE -- real body @0x827AD788 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgeTrafficToTrigger_PreScene(void *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficToTrigger_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE -- real body @0x827A51F0 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgeTrafficToRaceCar_PrePhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficToRaceCar_PrePhysics: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE -- real body @0x827A4FA0 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgeRaceCarModuleToAIModule_PreScene(void *,struct BrnAI::AIModuleIO::InputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToAIModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE -- real body @0x827A5060 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgeEntityModulesToCrashModule_PreScene(void *,struct BrnWorld::CrashIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToCrashModule_PreScene: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// BOOT GATE -- real body @0x827AAC70 in its own home TU (not mounted: IO accessor closure).
+void WorldModule::BridgeCrashModuleToPhysicsModule(void *,class BrnPhysics::PhysicsModuleIO::InputBuffer *,struct BrnWorld::CrashIO::OutputBuffer_PreScene const *)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeCrashModuleToPhysicsModule: inert [FLAG PC boot gate]\n";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CgsResource::ShaderTechniqueResourceType -- the two members its own TU
+// documents as DEFERRED (declared, deliberately not bodied there):
+//   PostFixUp @0x827EEBF0 -- the ~150-line shader-profile classification pass.
+//   GetShaderConstantExternalSerialisedResourceDescriptorSize -- its private
+//   descriptor-size helper.
+// The type is now REGISTERED (world-render resource types, 2026-07-27), so the
+// vtable is emitted and the linker needs both symbols. Marked link stubs until
+// that TU's deferral is lifted.
+// ---------------------------------------------------------------------------
+void CgsResource::ShaderTechniqueResourceType::PostFixUp(void* /*lpResource*/,
+                                                         const rw::Resource& /*lrResource*/) const
+{
+    CGS_ASSERT(false, "ShaderTechniqueResourceType::PostFixUp @0x827EEBF0: documented deferral -- reconstruct");
+}
+
+uint32_t CgsResource::ShaderTechniqueResourceType::GetShaderConstantExternalSerialisedResourceDescriptorSize(
+    const ShaderConstantsExternal* /*lpBlock*/) const
+{
+    CGS_ASSERT(false, "ShaderTechniqueResourceType::GetShaderConstantExternalSerialisedResourceDescriptorSize: documented deferral -- reconstruct");
+    return 0;
+}

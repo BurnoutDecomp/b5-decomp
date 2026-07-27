@@ -1,5 +1,16 @@
 #include "types.hpp"
-#include "SDKs/EATech/include/rw/math/vpu/matrix44.h"   // rw::math::vpu::Matrix44 / Vector4 (the four clip rows)
+// The four clip rows come in as rw::math::vpu::Matrix44. VOCABULARY NOTE: the
+// project carries TWO declarations of that type -- the EATech SDK header
+// (SDKs/EATech/include/rw/math/vpu/matrix44.h, `class`, SIMD-register lanes
+// behind GetComponent()/GetW() proxies) and the portable PC reconstruction
+// vendor/renderware/include/rw/math/vpu/types.h (`struct`, named float lanes)
+// that BrnCommonTypes.h aliases. MSVC bakes the class-key into the mangling, so
+// this TU MUST use the same declaration as its only caller, the dispatch walker
+// in CgsDispatcherCommands.cpp -- which builds its clip rows through
+// BrnCommonTypes.h. Using the EATech header here forked
+// `?FrustumTest@CgsGraphics@@YAIAEBVMatrix44@...` (V) from the caller's
+// `...AEBUMatrix44@...` (U) and left the call unresolvable at link.
+#include "BrnCommonTypes.h"   // rw::math::vpu::Matrix44 / Vector4 (the four clip rows)
 
 #include <cmath>  // std::fabs
 
@@ -43,16 +54,24 @@ namespace CgsGraphics
         // Per-row w splat (lane 3 of each row -- the `vspltw v,vX,3`), broadcast across lanes.
         const f32 lafW[4] =
         {
-            lapRow[0]->GetW().GetFloat(), lapRow[1]->GetW().GetFloat(),
-            lapRow[2]->GetW().GetFloat(), lapRow[3]->GetW().GetFloat(),
+            lapRow[0]->w, lapRow[1]->w, lapRow[2]->w, lapRow[3]->w,
         };
 
-        // rowK component in lane L (0=x,1=y,2=z,3=w).
+        // rowK component in lane L (0=x,1=y,2=z,3=w). The PC vector type stores the
+        // four register lanes as named floats in lane order, so the SDK's
+        // GetComponent(L).GetFloat() proxy is the indexed named read here.
         struct LaneComp
         {
             static f32 Get(const rw::math::vpu::Vector4* const* lapRow, int liRow, int liLane)
             {
-                return lapRow[liRow]->GetComponent(liLane).GetFloat();
+                const rw::math::vpu::Vector4& lrRow = *lapRow[liRow];
+                switch (liLane)
+                {
+                case 0:  return lrRow.x;
+                case 1:  return lrRow.y;
+                case 2:  return lrRow.z;
+                default: return lrRow.w;
+                }
             }
         };
 

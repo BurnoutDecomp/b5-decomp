@@ -35,6 +35,7 @@
 // name, so the bodies are faithful regardless of host pointer width.
 
 #include "types.hpp"
+#include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h" // CgsModule::ModuleSingleBuffered (the base; supplies the vtable + the two RWMutexes the ctor constructs inline)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"   // BrnPhysics::Vehicle::VehicleManager (embedded by value @ +0x4AA0)
 
@@ -44,14 +45,34 @@ namespace BrnResource { namespace GameDataIO { struct AllocatorList; } }
 
 namespace BrnPhysics
 {
-namespace PhysicsModuleIO { class InputBuffer; }
+namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; }
 
     struct PhysicsModule : public CgsModule::ModuleSingleBuffered
     {
         // ADDITIVE (WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 forwards
         // here -- X360 BrnPhysics::PhysicsModule::UpdateNetworkCatchup). Declaration-
         // only; body with the physics module's own TU.
-        void UpdateNetworkCatchup( s32 liCatchupSteps, s32 liFlags );
+        // RETYPED 2026-07-27 (world-drive wave): WorldModule::UpdatePhysicsNetworkCatchup
+        // @0x827B06E0 forwards the physics INPUT buffer + the frame update set.
+        void UpdateNetworkCatchup( const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+                                   BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::Update @0x827D63E8; DWARF BrnPhysicsModule.h
+        //      :192..:201). Declaration-only; bodies gated in WorldLinkStubs.cpp
+        //      until the physics module's own TU lands. ----
+        void UpdateCachedPositions( CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer );  // @0x8259C370
+        void PostSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,                                     // @0x825ABC10
+                              CgsModule::IOBufferStack* lpOutputBufferStack,
+                              const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+                              PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                              BrnUpdateSet lUpdateSet );
+        void GenerateSceneQueries( PhysicsModuleIO::OutputBuffer* lpOutputBuffer,                               // @0x825A1428
+                                   BrnUpdateSet lUpdateSet );
+        void Update( CgsModule::IOBufferStack* lpInputBufferStack,                                              // @0x825B0640
+                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                     const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+                     PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
+                     BrnUpdateSet lUpdateSet );
 
         // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 4) ----
         // Declaration-only; the body lands with the physics module's own TU.

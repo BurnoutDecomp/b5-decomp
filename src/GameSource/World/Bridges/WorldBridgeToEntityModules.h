@@ -5,6 +5,8 @@
 #include "GameSource/World/BrnWorldModuleIO.h"                                            // BrnWorldIO::UpdateInputBuffer / GameActionQueue
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                                        // BrnPhysics::PhysicsModuleIO::InputBuffer
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h" // BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // RaceCarEntityModuleIO::InputBuffer_PreScene
+#include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"     // WorldEntityIO::InputBuffer_PostPhysics
 
 // WorldModule game-action -> physics / traffic module bridges -- owning header
 //   b5-decomp/src/GameSource/World/Bridges/WorldBridgeToEntityModules.cpp
@@ -37,5 +39,24 @@ namespace WorldModule
     void BridgeActionsToTrafficModule(
         void* lpWorldModule,
         BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficModuleInputBuffer,
+        const BrnWorldIO::UpdateInputBuffer* lpWorldInput);
+
+    // ---- ADDITIVE (world-drive wave 2026-07-27; same X360 TU) --------------
+
+    // @ 0x827ABF40 -- forward the race-car-relevant game actions into the
+    // race-car module's pre-scene input buffer (WorldModule::Update's input
+    // fan-out, before the pre-scene spine).
+    void BridgeActionsToRaceCarModule(
+        void* lpWorldModule,
+        BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarModuleInputBuffer,
+        const BrnWorldIO::UpdateInputBuffer* lpWorldInput);
+
+    // @ 0x827AC488 (WorldBridgeToEntityModules.cpp:178) -- clear the world-entity
+    // module's post-physics game-action queue, then forward every type-192 game
+    // action (the world/streamer action) verbatim into it. BODIED in
+    // WorldBridgeToEntityModules.cpp.
+    void BridgeActionsToWorldModule(
+        void* lpWorldModule,
+        BrnWorld::WorldEntityIO::InputBuffer_PostPhysics* lpWorldEntityInputBuffer_PostPhysics,
         const BrnWorldIO::UpdateInputBuffer* lpWorldInput);
 }

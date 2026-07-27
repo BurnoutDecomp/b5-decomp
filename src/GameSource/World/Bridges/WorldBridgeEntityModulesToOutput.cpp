@@ -143,4 +143,35 @@ void BridgeAIModuleToOutput(
         lpAIOutputBuffer->GetGameEventQueueConst() );
 }
 
+// ----------------------------------------------------------------------------
+// BridgeWorldEntityInfoToOutput  @ 0x827ADD78
+//   The pre-scene WORLD-ENTITY flush -- the leg the world streamer's per-frame
+//   traffic rides out of the world module. Two forwards, exactly as the X360:
+//     * the world-entity pre-scene out-event queue (VariableEventQueue<1536,16>,
+//       read through OutputBuffer_PreScene::GetGameEventQueue() const @0x827A29E0)
+//       is appended into the update output's game-event queue
+//       (UpdateOutputBuffer::GetGameEventQueue() @0x827A4B30, then
+//       VariableEventQueue<1536,16>::Append<1536,16>);
+//     * the world-entity sound world-load events (GetSoundWorldLoadInterface()
+//       const @0x827A2C80) are appended through
+//       UpdateOutputBuffer::AppendSoundWorldLoadInterface @0x827AA7C8.
+//   Both buffers are locked by the CALLER (WorldModule::Update brackets the whole
+//   pre-scene output bridge set with LockBuffersForIO), so no locking here.
+//   The X360 tail returns the AppendSoundWorldLoadInterface result in r3; the
+//   logical return type is void.
+// ----------------------------------------------------------------------------
+void BridgeWorldEntityInfoToOutput(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnWorld::WorldEntityIO::OutputBuffer_PreScene* lpWorldEntityOutput_PreScene)
+{
+    (void)lpWorldModule;   // X360 r3 -- never read by this bridge
+
+    lpOutputBuffer->GetGameEventQueue()->Append(
+        *lpWorldEntityOutput_PreScene->GetGameEventQueue() );
+
+    lpOutputBuffer->AppendSoundWorldLoadInterface(
+        lpWorldEntityOutput_PreScene->GetSoundWorldLoadInterface() );
+}
+
 }   // namespace WorldModule

@@ -64,7 +64,13 @@ public:
     static DepthStencilState* Initialize(DepthStencilState** ppState, const Parameters* lpParameters);
 
 private:
-    u32 maState[17];
+    // The 0x60-byte object the X360 GetResourceDescriptor (0x82B636F8) sizes ({0x60, 4} entry-0
+    // qword) and the serialised world MaterialState blob embeds: the 17 marshalled state words,
+    // then the six Parameters flag bytes stw-widened to words (the BlendState::Initialize
+    // 0x82B627C8 lbz->stw sibling pattern), then the initialised word Initialize sets to 1.
+    u32 maState[17];       // +0x00 the 17 marshalled state words
+    u32 mauFlagWords[6];   // +0x44 mbDepthTestEnable.. widened to u32 lanes
+    u32 muInitialised;     // +0x5C 1 once Initialize has run
 };
 
 class Texture;  // the imported raster's runtime type (texture.h)
@@ -126,18 +132,35 @@ public:
     Texture* mpRaster;             // +0x20 imported / bound RwRaster
 };
 
-// renderengine::MaterialState (a.k.a. BlendState) -- a material's render-state block. FixUp /
-// FixDown rebase three main-memory self-pointers at the front (serialised as offsets); the rest
-// is opaque render state. X360 object = 252 bytes (three 4-byte pointers + 240 bytes); on x64
-// the pointers widen, so the leading block is 24 bytes. FixDown also marks the sub-object the
-// third pointer references (sets its +0x28 u32 to 1).
+// renderengine's packed 19-word blend material block (the vendor home is
+// SDKs/RenderEngineClub .../states/blendstate.h: BlendMaterialState { u32 maState[19] };
+// BlendState::Initialize @0x82B627C8 is stw-only -- all-u32 -- and the last word +0x48 is the
+// initialised flag). Forward-declared here so MaterialState can hold a typed pointer without
+// coupling this header to the vendor tree.
+struct BlendMaterialState;
+class RasterizerState;   // defined below (13 u32 words)
+
+// renderengine::MaterialState -- a material's render-state block: three self-pointers to the
+// state objects serialised in the same resource, then those objects. The X360 assert strings in
+// CgsMaterialTechniqueResourceType::PostFixUp (0x828A7EC8: "lpMaterial->mpMaterialState->
+// mpBlendState", with *mpBlendState handed to renderengine::BlendState::GetParameters) name the
+// first field; the second and third blocks match the DepthStencilState (24 words, function word
+// first, the E_FUNCTION_ALWAYS=7 lanes at +0x10/+0x20) and RasterizerState (13 words; FixDown
+// 0x828A8A80 marks its +0x28 word) objects respectively.
+//
+// Serialised form: X360 blob = 252 bytes { 3 u32 offsets {0xC, 0x5C, 0xBC} + blend 0x50 +
+// depth-stencil 0x60 + rasterizer 0x40 }. The platform-4 (x64) blob widens ONLY the three
+// pointer slots (u64 offsets {0x18, 0x68, 0xC8}) = 264 bytes == sizeof(MaterialState); the
+// state objects are pointer-free u32 blocks and keep their X360 layout. Porter:
+// tools/assets/bundles/world_type_transcode.py transcode_materialstate.
 class MaterialState
 {
 public:
-    void* mpField0;        // +0  (X360 +0x00) main-memory self-pointer
-    void* mpField1;        // +8  (X360 +0x04) main-memory self-pointer
-    void* mpField2;        // +16 (X360 +0x08) -> sub-object (FixDown sets its +0x28 u32 = 1)
-    u8    mauState[240];   // remaining opaque render state (X360 +0x0C..+0xFB)
+    BlendMaterialState* mpBlendState;         // +0  (X360 +0x00) -> +0x18 blend block
+    DepthStencilState*  mpDepthStencilState;  // +8  (X360 +0x04) -> +0x68 depth-stencil block
+    RasterizerState*    mpRasterizerState;    // +16 (X360 +0x08) -> +0xC8 rasterizer block
+                                              //      (FixDown sets its +0x28 u32 = 1)
+    u8    mauState[240];   // the three serialised state objects (X360 +0x0C..+0xFB)
 };
 
 class RasterizerState

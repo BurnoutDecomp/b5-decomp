@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultAllocator.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"   // ResourceHandle (GetFreeSlotIndex)
 
 namespace Attrib { struct IGarbageCollector; }   // struct -- must match attribloadandgo.h's class-key (MSVC mangling)
 namespace CgsMemory { class LinearMalloc; }
@@ -41,6 +42,15 @@ public:
     // Drop the vault named by the request from the array (called from
     // AttribSysModule::UnregisterVault / ProcessInputs).
     void UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest);
+
+    // @ 0x828036A8 -- find the slot for the request's vault: an occupied slot
+    // already holding that resource wins (ref-count bump), else the first free
+    // slot; asserts when neither exists ("Ran out of free vault slots") or the
+    // array is unprepared. Body in CgsAttribSysVaultArray.cpp.
+    s32 GetFreeSlotIndex(CgsResource::ResourceHandle lVaultResHandle) const;
+
+    // The live slot count (the X360 reads miNumSlots inline at every walk).
+    s32 GetNumSlots() const { return miNumSlots; }
 
     // The debug dump reads the private mpaSlots/miNumSlots (@ 0x82803888).
     friend CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lStream,

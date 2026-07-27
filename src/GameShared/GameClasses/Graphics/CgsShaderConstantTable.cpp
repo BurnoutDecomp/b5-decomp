@@ -87,6 +87,25 @@ void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math
     FastNonOverlappedVectorMemcpy(lpDest, lpaValues, maConstants[luIndex].GetNumEntries());
 }
 
+// The Matrix44* overload @ 0x827BAE60 (attested need: the shadow/frustum wave's cascade
+// constant feed). Same slot bookkeeping as the Vector4* overload; the X360 loop copies
+// 64 bytes (four quad-words == one Matrix44) per entry, mu8NumEntries entries, contiguous
+// -- reproduced as a 4-qw-per-entry bulk copy. (No destination assert on the X360 here,
+// unlike the Vector4* sibling -- matched.)
+void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math::vpu::Matrix44* lpaValues)
+{
+    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+    Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
+
+    const u32 luNumEntries = maConstants[luIndex].GetNumEntries();
+    if (luNumEntries > 0)
+    {
+        FastNonOverlappedVectorMemcpy(
+            lpDest, reinterpret_cast<const rw::math::vpu::Vector4*>(lpaValues), luNumEntries * 4u);
+    }
+}
+
 // Record that constant luIndex changed this frame and hand back a fresh destination for its
 // value in the active dispatch bin. Appends luIndex to the dirty list, allocates
 // mu16SizeOfArrayInQw quad-words from the bin, stores that pointer as the constant's latest

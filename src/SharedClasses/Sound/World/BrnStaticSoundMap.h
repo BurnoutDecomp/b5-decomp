@@ -32,6 +32,14 @@ struct SubRegionDescriptor
 // data home: only the fields, giving the resource-type FixUp a real, named layout
 // to relocate. The data type's many methods (Construct/GetEntity/...) are deferred
 // to the StaticSoundMap data TU.
+//
+// SERIALISED (platform-4) FORM: this host layout (0x50 header; offsets pinned by
+// the static_asserts in BrnStaticSoundMapResourceType.cpp) is the on-disk x64
+// form; the porter (tools/assets/bundles/world_type_transcode.py
+// transcode_staticsoundmap) rebuilds the 0x40-byte X360 header to it. The
+// 16-byte entities {f32 x,y,z, u16, u16} and the 4-byte grid cells
+// {u16 firstEntity (0xFFFF = empty), u16 count} are pointer-free and keep
+// their console strides; mpSubRegions/mpEntities serialise as u64 offsets.
 struct StaticSoundMap
 {
     // BrnStaticSoundMap.h:380 — root-classification enum (enumerator names/values

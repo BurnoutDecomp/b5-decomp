@@ -157,6 +157,21 @@ namespace BrnGame
         int DoUpdate();
         int DoDispatch();
 
+        // @ 0x823E8BD0 -- the WORLD leg of the per-frame update cascade: create this
+        // frame's BrnWorldIO::UpdateInputBuffer on the update input stack, stage the
+        // controller / network / game-state / GUI / replay / sound state into it, then
+        // dispatch the world module (UpdateForBootUpVideo @0x827CFDE0 when the update set
+        // carries 0x20, otherwise Update @0x827D63E8 = vtable +76 with the world frame
+        // allocator), read the world-entity status back out of the output buffer and
+        // destroy the input buffer. The world UPDATE OUTPUT buffer is owned by the caller
+        // (DoUpdate), as is the update set.
+        void DoUpdate_World(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                            CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                            const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                            BrnWorldIO::UpdateOutputBuffer* lpWorldUpdateOutputBuffer,
+                            CgsMemory::LinearMalloc* lpWorldFrameAllocator,
+                            BrnUpdateSet lUpdateSet);
+
         // The per-frame update IO stacks. The scripted module loads (LoadingScriptedState::
         // LoadXxxModule) create their per-frame module IO buffers on these, exactly as the
         // X360 reads them off the game-module global (e.g. LoadSoundModule 0x823E75A8).
@@ -262,6 +277,16 @@ namespace BrnGame
         // X360 0x823CD890 -- publish player-0 controller state into the World update input buffer.
         void BridgeControllerToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInput,
                                      const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer);
+
+        // X360 0x823CDD20 -- copy this frame's renderer-produced handles (the GDL
+        // DispatchFrame, the shader-constants frame, the four world effects frames, the
+        // blobby-shadow buffer, the corona submission interface, the frame camera and the
+        // render switches) out of the renderer OUTPUT buffer and into the world's dispatch
+        // INPUT buffer. Run by DoDispatch @0x823DC458 right after BrnRendererModule::Update;
+        // it is what gives WorldModule::GenerateDispatchLists a frame to stamp
+        // DRAWRENDERABLE commands into. Home TU: GameBridgeRendererToX.cpp.
+        void BridgeRendererToWorld(BrnWorldIO::DispatchInputBuffer* lpWorldDispatchInput,
+                                   RendererIO::OutputBuffer* lpRendererOutput);
 
         // X360 0x823CD738 -- publish player-0 controller state into the GameState PreWorld input
         // buffer (+ merge the bind/unbind result queues). FLAG: ledger dest is

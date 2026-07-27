@@ -41,6 +41,10 @@ namespace BrnTraffic
 namespace BrnTrafficIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_Dispatch; class InputBuffer_PreDispatch; class OutputBuffer_PreDispatch; }
 
 namespace BrnTrafficIO { class OutputBuffer_Prepare; }
+// ADDITIVE (world-drive wave: WorldModule::EntityModulePreSceneUpdate @0x827BD1F0
+// and EntityModulePostPhysicsUpdate @0x827D3F10 name these IO buffers).
+namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene;
+                         class InputBuffer_PostPhysics; class OutputBuffer_PostPhysics; }
 
     // BrnTrafficEntityModule.h:129 -- one pending traffic-crash record. sizeof == 16
     // (X360-authoritative: Array<TrafficCrashInfo,160> count word sits at +0xA00 == 160*16,
@@ -231,6 +235,25 @@ namespace BrnTrafficIO { class OutputBuffer_Prepare; }
                               BrnTrafficIO::InputBuffer_PostScene* lpInput,
                               BrnTrafficIO::OutputBuffer_PostScene* lpOutput,
                               BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0) ----
+        // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
+        // own TU lands.
+        void PreSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                             BrnTrafficIO::OutputBuffer_PreScene* lpOutput,
+                             BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePostPhysicsUpdate @0x827D3F10 +
+        //      WorldModule::UpdateForBootUpVideo @0x827CFDE0) ----
+        // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
+        // own TU lands.
+        void PostPhysicsUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                                CgsModule::IOBufferStack* lpOutputBufferStack,
+                                BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput,
+                                BrnUpdateSet lUpdateSet );
 
         // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
         void PreDispatchUpdate( BrnTrafficIO::InputBuffer_PreDispatch* lpInput,

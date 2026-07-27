@@ -59,8 +59,21 @@ namespace Props
     };
 
     // BrnPhysicsPropZoneData.h:156 -- the streamed prop-zone record.
+    //
+    // SERIALISED (platform-4) FORM: the host layout below IS the on-disk x64 form
+    // (porter: tools/assets/bundles/world_type_transcode.py transcode_propinstancedata):
+    // 0x28 header {maCells u64 @0, muNumCells @8, maInstances u64 @0x10, muSizeInBytes
+    // @0x18, muNumberOfInstances @0x1C, muNumberOfProps @0x20, muZoneId @0x24}, the
+    // 80-byte pointer-free instance records 16-aligned at +0x30, then the 12-byte
+    // cells and the reserved zero tail. X360 header was 0x1C {u32 maCells @0, muNumCells
+    // @4, u32 maInstances @8, muSizeInBytes @0xC, counts @0x10/0x14, muZoneId @0x18}.
     struct PropZoneData
     {
+        // The resource-type handler reads muSizeInBytes and relocates maCells /
+        // maInstances during FixUp; grant it friendship rather than exposing the
+        // private data (the StaticSoundMap precedent).
+        friend class PropInstanceDataResourceType;
+
     public:
         // BrnPhysicsPropZoneData.h:211 -- classify a prop (by its index into the zone's instance
         // array) into its respawn behaviour. X360 @ 0x822BB1F0: walks cells; within each cell the

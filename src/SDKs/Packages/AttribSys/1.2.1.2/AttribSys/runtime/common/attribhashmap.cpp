@@ -17,7 +17,21 @@
 
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribhashmap.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // Free (teardown bucket release)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"            // Attrib::Database (Node type-index resolve)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"   // Attrib::TypeDesc
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsysallochooks.h"  // Attrib::Alloc (RebuildTable carve)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h"           // Attrib::TableFreeFunc (old-array census release)
 #include <new>   // placement new (in-place Node construction in Add)
+
+// ~ClassPrivate's bucket release (@0x8280F4D8 tail): free the bucket array by
+// its capacity (X360 capacity << 4 == capacity * node stride; sizeof-based for
+// the widened x64 node).
+void Attrib::HashMap::ReleaseBucketsForTeardown()
+{
+    if (mpBuckets != NULL)
+        Attrib::HashMapTablePolicy::Free(mpBuckets, muCapacity * sizeof(Node));
+}
 
 // ============================================================================
 // Attrib::HashMap::HashMap @ 0x828094E8
@@ -65,8 +79,8 @@ Attrib::HashMap::HashMap(unsigned int luCount, u8 lu8KeyShift, u8 lu8Dynamic)
 // run length (mu8SearchLen) and the table-wide worst-collision high-water mark
 // (mu8MaxSearchLength). Bump the live count, and -- unless the caller passed lbNoGrow --
 // grow-and-rehash once more if the worst run now exceeds 16.
-bool Attrib::HashMap::Add(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbLaidOut,
-                          u8 lu8Max, bool lbNoGrow, void* lpHandler)
+bool Attrib::HashMap::Add(u64 luKey, u64 luTypeKey, void* lpValue, bool lbLaidOut,
+                          u8 lu8Flags, bool lbNoGrow, void* lpBase)
 {
     // Grow-and-rehash when the table is exactly full. The X360 uses signed /16
     // (srawi + addze); for the always-positive capacity it is a plain truncating divide.
@@ -98,15 +112,13 @@ bool Attrib::HashMap::Add(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbLaid
         return false;
 
     // Placement-construct the node in the selected free slot.
-    Node* lpDest = reinterpret_cast<Node*>(
-        reinterpret_cast<u8*>(mpBuckets) + luDest * 16u);
+    Node* lpDest = &mpBuckets[luDest];
     if (lpDest)
-        new (lpDest) Node(luKey, luTypeIndex, lpValue, lbLaidOut, lu8Max, lpHandler);
+        new (lpDest) Node(luKey, luTypeKey, lpValue, lbLaidOut, lu8Flags, lpBase);
 
     // Fold the probe cost into the home bucket's cached run length (max of the two).
     const u8 lu8Steps = static_cast<u8>(liSteps);
-    Node* lpHome = reinterpret_cast<Node*>(
-        reinterpret_cast<u8*>(mpBuckets) + luHome * 16u);
+    Node* lpHome = &mpBuckets[luHome];
     if (lpHome->mu8SearchLen <= lu8Steps)
         lpHome->mu8SearchLen = lu8Steps;
 
@@ -134,6 +146,87 @@ bool Attrib::HashMap::Add(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbLaid
 }
 
 // ============================================================================
+// Attrib::HashMap::RebuildTable @ 0x82807C18 (attrib-sdk wave 2026-07-27;
+// recovered via headless IDA -- absent from .ida-exports)
+// ============================================================================
+// Grow (or first-build) the bucket array: stash the old {table, capacity},
+// install the new capacity with zeroed count + worst-collision mark, carve the
+// new array from the AttribSys allocator ("Attrib::HashMapTable" tag), clear
+// every new bucket to the free state (key 0, value self-homed, flags 0),
+// Transfer every live old entry across, then census-release the old buffer
+// (the X360 frees capacity*16 through the package allocator's heap and bumps
+// the table-policy freed-byte counter; sizeof-based for the widened node).
+void Attrib::HashMap::RebuildTable(unsigned int luCount)
+{
+    if (luCount == 0)
+        return;
+
+    Node* lpOldTable = mpBuckets;
+    const u16 lu16OldCapacity = muCapacity;
+
+    muCapacity = static_cast<u16>(luCount);
+    muCount = 0;
+    mu8MaxSearchLength = 0;
+
+    // X360 Alloc((16 * count) & 0xFFFF0, "Attrib::HashMapTable") -- the mask is
+    // the u16-capacity clamp of the byte size; sizeof-based on x64.
+    mpBuckets = static_cast<Node*>(
+        Attrib::Alloc(sizeof(Node) * muCapacity, "Attrib::HashMapTable"));
+    for (u16 lu16Slot = 0; lu16Slot < muCapacity; ++lu16Slot)
+    {
+        Node* lpNode = &mpBuckets[lu16Slot];
+        lpNode->mKey = 0;
+        lpNode->mpValue = lpNode;   // free bucket self-homes its value slot
+        lpNode->mTypeIndex = 0;
+        lpNode->mu8SearchLen = 0;
+        lpNode->mFlags = 0;
+    }
+
+    if (lpOldTable != NULL)
+    {
+        for (u16 lu16Slot = 0; lu16Slot < lu16OldCapacity; ++lu16Slot)
+        {
+            Node& lrOld = lpOldTable[lu16Slot];
+            if (lrOld.IsOccupied())
+            {
+                lrOld.mu8SearchLen = 0;
+                Transfer(lrOld);
+            }
+        }
+
+        // Census-release the old array (the X360 decrements the live-byte
+        // census, refreshes the peak, then frees through the package
+        // allocator's heap and bumps the table-policy freed-byte counter --
+        // the committed TableFreeFunc is exactly that sequence).
+        Attrib::TableFreeFunc(lpOldTable, sizeof(Node) * lu16OldCapacity);
+    }
+}
+
+// ============================================================================
+// Attrib::Node::Node @ 0x82809430 (attrib-sdk wave 2026-07-27)
+// ============================================================================
+// In-place bucket construction: store the key and payload word, resolve the
+// stored type INDEX from the 64-bit type key through the attribute database's
+// type registry (GetTypeDesc falls back to the NULL type when the key is
+// unregistered), raise the occupied bit over the serialised flag byte, and --
+// for laid-out/inherited payloads under a live base -- rebase the payload word
+// (value -= base, the X360's offset-relative store).
+Attrib::HashMap::Node::Node(u64 luKey, u64 luTypeKey, void* lpValue,
+                            bool lbLaidOut, u8 lu8Flags, void* lpBase)
+{
+    mKey = luKey;
+    mpValue = lpValue;
+    mTypeIndex = static_cast<u16>(Database::Get().GetTypeDesc(luTypeKey).mIndex);
+    // (mu8SearchLen untouched -- the X360 ctor leaves the slot's cached run length)
+    mFlags = static_cast<u8>(lu8Flags | 0x80);
+    if (lbLaidOut && ((lu8Flags & 0x10) != 0 || (lu8Flags & 0x20) != 0))
+    {
+        mpValue = reinterpret_cast<void*>(
+            reinterpret_cast<uintptr_t>(lpValue) - reinterpret_cast<uintptr_t>(lpBase));
+    }
+}
+
+// ============================================================================
 // Attrib::HashMap::CountSearchCacheLines @ 0x828048C8
 // ============================================================================
 // Replay the probe run a lookup of luKey would walk and count how many DISTINCT
@@ -155,8 +248,7 @@ int Attrib::HashMap::CountSearchCacheLines(u64 luKey, u8 lu8CacheLineShift) cons
                                         (luKey << lu8KeyShift));
     u32 luIndex = luHash % luCapacity;
 
-    Bucket* lpBucket = reinterpret_cast<Bucket*>(
-        reinterpret_cast<u8*>(lpBuckets) + luIndex * 16u);
+    Bucket* lpBucket = &lpBuckets[luIndex];
     const u8 lu8SearchLen = lpBucket->mu8SearchLen;
 
     // Seed the cache-line accumulator from the home bucket's address.
@@ -169,14 +261,12 @@ int Attrib::HashMap::CountSearchCacheLines(u64 luKey, u8 lu8CacheLineShift) cons
         u32 luStep = 0;
         do
         {
-            Bucket* lpProbe = reinterpret_cast<Bucket*>(
-                reinterpret_cast<u8*>(lpBuckets) + luIndex * 16u);
+            Bucket* lpProbe = &lpBuckets[luIndex];
             if (lpProbe->Key() == luKey)
                 break;
 
             luIndex = (luIndex + 1) % luCapacity;
-            Bucket* lpNext = reinterpret_cast<Bucket*>(
-                reinterpret_cast<u8*>(lpBuckets) + luIndex * 16u);
+            Bucket* lpNext = &lpBuckets[luIndex];
             const u32 luCacheLine =
                 reinterpret_cast<uintptr_t>(lpNext) >> lu8CacheLineShift;
             if (luCacheLine != luPrevCacheLine)
@@ -208,15 +298,13 @@ Attrib::HashMap::Bucket* Attrib::HashMap::Find(u64 luKey) const
     }
     else
     {
-        Bucket* lpBucket = reinterpret_cast<Bucket*>(
-            reinterpret_cast<u8*>(mpBuckets) + luIndex * 16u);
+        Bucket* lpBucket = &mpBuckets[luIndex];
         if (!lpBucket->IsOccupied())
             lbValid = false;
     }
 
     if (lbValid)
-        return reinterpret_cast<Bucket*>(
-            reinterpret_cast<u8*>(mpBuckets) + luIndex * 16u);
+        return &mpBuckets[luIndex];
     return NULL;
 }
 
@@ -241,8 +329,7 @@ unsigned int Attrib::HashMap::FindIndex(u64 luKey) const
                                         (luKey << lu8KeyShift));
     u32 luIndex = luHash % luCapacity;
 
-    Bucket* lpHome = reinterpret_cast<Bucket*>(
-        reinterpret_cast<u8*>(lpBuckets) + luIndex * 16u);
+    Bucket* lpHome = &lpBuckets[luIndex];
     const u8 lu8SearchLen = lpHome->mu8SearchLen;
 
     if (lu8SearchLen != 0)
@@ -250,8 +337,7 @@ unsigned int Attrib::HashMap::FindIndex(u64 luKey) const
         u32 luStep = 0;
         do
         {
-            Bucket* lpProbe = reinterpret_cast<Bucket*>(
-                reinterpret_cast<u8*>(lpBuckets) + luIndex * 16u);
+            Bucket* lpProbe = &lpBuckets[luIndex];
             if (lpProbe->Key() == luKey)
                 break;
 
@@ -263,8 +349,7 @@ unsigned int Attrib::HashMap::FindIndex(u64 luKey) const
         while (luStep < lu8SearchLen);
     }
 
-    Bucket* lpFinal = reinterpret_cast<Bucket*>(
-        reinterpret_cast<u8*>(lpBuckets) + luIndex * 16u);
+    Bucket* lpFinal = &lpBuckets[luIndex];
     if (lpFinal->Key() != luKey)
         return muCapacity;
     return luIndex;
@@ -284,16 +369,14 @@ u64 Attrib::HashMap::GetKeyAtIndex(u32 luIndex) const
     }
     else
     {
-        Bucket* lpBucket = reinterpret_cast<Bucket*>(
-            reinterpret_cast<u8*>(mpBuckets) + luIndex * 16u);
+        Bucket* lpBucket = &mpBuckets[luIndex];
         if (!lpBucket->IsOccupied())
             lbValid = false;
     }
 
     CGS_ASSERT(lbValid, "Attrib::HashMap invalid index used.");
 
-    Bucket* lpBucket = reinterpret_cast<Bucket*>(
-        reinterpret_cast<u8*>(mpBuckets) + luIndex * 16u);
+    Bucket* lpBucket = &mpBuckets[luIndex];
     if (!lpBucket->IsOccupied())
         return 0;
     return lpBucket->mKey;
@@ -311,8 +394,7 @@ unsigned int Attrib::HashMap::PreFlightAdd(u64 luKey, unsigned int luStartIndex,
     u32 luIndex = luStartIndex;
     *lpiSteps = 0;
 
-    Bucket* lpBucket = reinterpret_cast<Bucket*>(
-        reinterpret_cast<u8*>(mpBuckets) + luIndex * 16u);
+    Bucket* lpBucket = &mpBuckets[luIndex];
     if (!lpBucket->IsOccupied())
         return luIndex;
 
@@ -326,8 +408,7 @@ unsigned int Attrib::HashMap::PreFlightAdd(u64 luKey, unsigned int luStartIndex,
         *lpiSteps = *lpiSteps + 1;
         luIndex = luNext % luCapacity;
 
-        lpBucket = reinterpret_cast<Bucket*>(
-            reinterpret_cast<u8*>(mpBuckets) + luIndex * 16u);
+        lpBucket = &mpBuckets[luIndex];
         if (!lpBucket->IsOccupied())
             return luIndex;
     }
@@ -464,48 +545,46 @@ void* Attrib::HashMap::Remove(Node* lpNode, void* lpBase, const Collection* lpCo
 // bucket's max-search length and the table's worst-collision high-water mark.
 void Attrib::HashMap::Transfer(Node& lrNode)
 {
-    u8* lpThis = reinterpret_cast<u8*>(this);
-    u8* lpNode = reinterpret_cast<u8*>(&lrNode);
-
-    CGS_ASSERT(*reinterpret_cast<u16*>(lpThis + 6) < *reinterpret_cast<u16*>(lpThis + 4),
+    // (Named-member x64 form of the raw X360 offset walk -- the earlier
+    // byte-offset transcription addressed the X360 container/16-byte-node
+    // layout, wrong once the pointers widened.)
+    CGS_ASSERT(muCount < muCapacity,
                "Attrib::HashMap number of entries is not valid during Transfer.");
 
-    const u8 lu8Flags = *reinterpret_cast<u8*>(lpNode + 0xF);
-    const u64 lu64Value = (lu8Flags >> 7) != 0 ? *reinterpret_cast<u64*>(lpNode) : 0;
-    const u8 lu8KeyShift = *reinterpret_cast<u8*>(lpThis + 0xB);
-    const unsigned int luTableSize = *reinterpret_cast<u16*>(lpThis + 4);
+    const u64 lu64Key = lrNode.IsOccupied() ? lrNode.mKey : 0;
+    const u8 lu8KeyShift = mu8KeyShift;
+    const unsigned int luTableSize = muCapacity;
 
-    const u64 lu64Rot = (lu64Value >> (64 - lu8KeyShift)) | (lu64Value << lu8KeyShift);
+    const u64 lu64Rot = (lu64Key >> (64 - lu8KeyShift)) | (lu64Key << lu8KeyShift);
     const unsigned int luHome = static_cast<unsigned int>(lu64Rot % luTableSize);
 
     int liProbeCount = 0;
-    const u64 lu64Key = (lu8Flags >> 7) != 0 ? *reinterpret_cast<u64*>(lpNode) : 0;
     const unsigned int luDest = PreFlightAdd(lu64Key, luHome, &liProbeCount);
     const unsigned int luProbeCount = static_cast<unsigned int>(liProbeCount);
 
     CGS_ASSERT(luDest < luTableSize, "Attrib::HashMap Transfer to invalid index.");
 
     // Copy the source node's payload into the destination slot.
-    u8* lpDest = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis)) + (luDest << 4);
+    Node* lpDest = &mpBuckets[luDest];
     const u8 lu8ProbeByte = static_cast<u8>(luProbeCount);
-    *reinterpret_cast<u64*>(lpDest) = *reinterpret_cast<u64*>(lpNode);          // key
-    *reinterpret_cast<u16*>(lpDest + 0xC) = *reinterpret_cast<u16*>(lpNode + 0xC); // mTypeIndex
-    *reinterpret_cast<u32*>(lpDest + 8) = *reinterpret_cast<u32*>(lpNode + 8);   // value
-    *reinterpret_cast<u8*>(lpDest + 0xF) = *reinterpret_cast<u8*>(lpNode + 0xF); // mFlags
+    lpDest->mKey = lrNode.mKey;
+    lpDest->mTypeIndex = lrNode.mTypeIndex;
+    lpDest->mpValue = lrNode.mpValue;
+    lpDest->mFlags = lrNode.mFlags;
 
-    // Invalidate the source node.
-    *reinterpret_cast<u8**>(lpNode + 8) = lpNode;
-    *reinterpret_cast<u8*>(lpNode + 0xF) = 0;
-    *reinterpret_cast<u64*>(lpNode) = 0;
+    // Invalidate the source node (value re-homed to itself, key/flags cleared).
+    lrNode.mpValue = &lrNode;
+    lrNode.mFlags = 0;
+    lrNode.mKey = 0;
 
     // Fold the probe cost into the home bucket's max-search and the worst-collision mark.
-    u8* lpHome = reinterpret_cast<u8*>(*reinterpret_cast<Node**>(lpThis)) + (luHome << 4);
-    if (*reinterpret_cast<u8*>(lpHome + 0xE) <= lu8ProbeByte)
-        *reinterpret_cast<u8*>(lpHome + 0xE) = lu8ProbeByte; // mMax
-    if (luProbeCount > *reinterpret_cast<u8*>(lpThis + 0xA))
-        *reinterpret_cast<u8*>(lpThis + 0xA) = lu8ProbeByte; // mWorstCollision
+    Node* lpHome = &mpBuckets[luHome];
+    if (lpHome->mu8SearchLen <= lu8ProbeByte)
+        lpHome->mu8SearchLen = lu8ProbeByte;
+    if (luProbeCount > mu8MaxSearchLength)
+        mu8MaxSearchLength = lu8ProbeByte;
 
-    ++*reinterpret_cast<u16*>(lpThis + 6); // mNumEntries
+    ++muCount;
 }
 
 // ============================================================================

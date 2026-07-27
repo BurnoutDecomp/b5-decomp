@@ -5,6 +5,9 @@
 #include "pc/gcm/renderengine/VertexProgramState.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 
+struct RenderableMesh;                                   // renderablemesh.h
+namespace CgsGraphics { struct MaterialTechniqueView; }  // CgsDispatcherCommands.h
+
 namespace shadow
 {
     class Device
@@ -68,6 +71,32 @@ namespace shadow
         // passes (last == 0) so the device can take the full-set path). Returns the device/result
         // pointer (X360 r3 passthrough). Body is the X360 shadow device's low-level setter.
         static void* Xbox2SetStateLowLevelShadowed(void* lpState, bool lbWasUnset);
+
+        // ---- The mesh-dispatch flush seam (DispatchList::DispatchAllMeshes) ----
+        // The X360 walk resets the program shadows inline at each walk start
+        // (dword_8301095C = 0 / dword_83010960 = -1); reproduced as this named reset.
+        static void ResetProgramShadows();
+
+        // [PC leaf] Bind everything the current technique implies: the render-state
+        // triple, the vertex/pixel programs and the technique shader constants.
+        // On the bring-up path (converted SHADERS bundle not yet loaded / constant
+        // dispatch not yet reconstructed) this binds the FLAGGED fallback world
+        // shader and per-pass default states instead -- see shadowingdevice.cpp.
+        static void SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
+                                       void* const* lppConstScratch, bool lbZOnly);
+
+        // [PC bring-up shim] Upload the per-object world-view-projection carried in
+        // the PC mesh command (see CgsDispatcherCommands.cpp header note).
+        static void SetObjectTransformPC(const f32* lpWvpRows16);
+
+        // [PC leaf] Bind the mesh's index/vertex buffers + the vertex declaration
+        // for the given technique index (the X360 shadow::Device::SetMeshBuffers
+        // @0x827E68A0, whose export was not decompiled; PC condenses the Xenon
+        // stream-shadow dance into direct binds through the D3DDevice_* seam).
+        static void SetMeshBuffersPC(const RenderableMesh* lpMesh, u32 luTechniqueIndex);
+
+        // [PC leaf] Issue the mesh's indexed draw (mDrawIndexedParameters).
+        static void DrawIndexedMeshPC(const RenderableMesh* lpMesh);
 
     private:
         // The X360 build keeps the live vertex-program binding as a small static

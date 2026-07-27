@@ -2,11 +2,13 @@
 
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                                                     // EActiveRaceCarIndex
+#include "SharedClasses/BrnSharedConstants.h"                                                // BrnUpdateSet
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"          // WorldEntityIO::InputBuffer_PreScene
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"      // RaceCarEntityModuleIO::OutputBuffer_PreScene / InputBuffer_PrePhysics
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"      // TriggerEntityModuleIO::InputBuffer_PreScene
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"      // BrnTrafficIO::OutputBuffer_PreScene / OutputBuffer_PostScene
+#include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"            // PropEntityIO::OutputBuffer_PrePhysics / InputBuffer_PreScene
 
 // WorldModule entity-module -> entity-module bridges -- owning header
 //   b5-decomp/src/GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h
@@ -69,4 +71,32 @@ namespace WorldModule
         void* lpWorldModule,
         BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene* lpTriggerInputBuffer_PreScene,
         const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutputBuffer_PreScene);
+
+    // ---- ADDITIVE (world-drive wave 2026-07-27; same X360 TU): the three
+    //      pre-scene hand-offs WorldModule::EntityModulePreSceneUpdate
+    //      @0x827BD1F0 runs. ----
+
+    // @ 0x827A50E0 -- prime the traffic module's pre-scene / post-scene /
+    // post-physics inputs from the race-car pre-scene output.
+    void BridgeRaceCarModuleToTrafficModule_PreScene(
+        void* lpWorldModule,
+        BrnTraffic::BrnTrafficIO::InputBuffer_PreScene* lpTrafficInputBuffer_PreScene,
+        BrnTraffic::BrnTrafficIO::InputBuffer_PostScene* lpTrafficInputBuffer_PostScene,
+        BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene);
+
+    // @ 0x827A5510 -- stage the race-car pre-scene output into the prop
+    // module's pre-scene input.
+    void BridgeRaceCarModuleToPropModule_PreScene(
+        void* lpWorldModule,
+        BrnWorld::PropEntityIO::InputBuffer_PreScene* lpPropInputBuffer_PreScene,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene,
+        BrnUpdateSet lUpdateSet);
+
+    // @ 0x827AACF8 -- stage the world-entity pre-scene output (the streamed
+    // world's prop-relevant state) into the prop module's pre-scene input.
+    void BridgeWorldModuleToPropModule_PreScene(
+        void* lpWorldModule,
+        BrnWorld::PropEntityIO::InputBuffer_PreScene* lpPropInputBuffer_PreScene,
+        const BrnWorld::WorldEntityIO::OutputBuffer_PreScene* lpWorldOutputBuffer_PreScene);
 }

@@ -30,21 +30,14 @@ public:
 }
 }
 
+// The REAL dispatch-frame family (BufferedDispatchFrame / DispatchFrame /
+// DispatchList / DispatchBin / DispatchObjectContext / the interpreter) -- the
+// world render pass drives them, so the former local placeholders are gone.
+#include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h"
+
 namespace CgsGraphics
 {
-class BufferedDispatchFrame
-{
-public:
-    BufferedDispatchFrame();
-};
-
-class DispatchFrame
-{
-};
-
-class DispatchPacketInterpreter;
-class DispatchCommand;
-
 // CgsGraphics::Im2dRenderBuffer is the real type (CgsImRenderBuffer.h, ImRenderBuffer<Basic2dColouredTexturedVertex>).
 // CgsGraphics::Im2d is the real type (CgsIm2d.h) - the loading screen renders through it.
 
@@ -146,13 +139,8 @@ struct OcclusionJobData
 {
 };
 
-struct DispatchObjectContext
-{
-};
-
-struct DispatchList
-{
-};
+// DispatchObjectContext / DispatchList are the real CgsGraphics types now
+// (CgsDispatcherCommands.h / CgsDispatcher.h, included above).
 
 struct BrnSkyDomeManager
 {
@@ -317,6 +305,25 @@ public:
     // Renders the on-screen assert overlay (forwarded from BrnGameModule::RenderAssert).
     void RenderAssert(const struct AssertData* lpAssertData);
 
+    // ---- the per-frame GDL (game-side dispatch list) ring contract ----------
+    // X360 drives the this+680 BufferedDispatchFrame from three entry points; the
+    // three below are the slices of them that exist on PC (their other work --
+    // the seven immediate-mode buffers, the effects arbitrator, the corona /
+    // blobby-shadow index flips -- lands with those subsystems).
+
+    // @ 0x823FC160 - start-of-update-frame: rewind the GDL frame the game side is
+    // about to fill and open the shader-constant table's frame on its bin.
+    void StartOfFrame();
+
+    // @ 0x823FFE28 - end-of-update-frame (X360 calls SwapBuffers @0x823FC678).
+    void EndOfFrame();
+
+    // @ 0x82405E28 (BrnRendererModule::Update) publishes exactly this expression
+    // into RendererIO::OutputBuffer::SetDispatchFrame; the world side reads it
+    // back through WorldModuleIO::DispatchInputBuffer::GetDispatchFrame(). Exposed
+    // as a named accessor so the renderer->world bridge has one seam to bind to.
+    CgsGraphics::DispatchFrame* GetDispatchFrameForWrite();
+
 private:
     enum
     {
@@ -326,6 +333,9 @@ private:
         KU_NUM_INTERPRET_FUNCTIONS = 4,
         KU_SCREENSHOT_TEXT_LENGTH = 32
     };
+
+    // @ 0x823FC678 - the buffer-flip half of EndOfFrame (X360 calls it from there).
+    void SwapBuffers();
 
     void ClearDispatchCounters();
     void ClearScreenshotState();
@@ -343,6 +353,22 @@ private:
     // is (1 - lfDestAspectRatio) * 0.5 of the height and spans the full width. Drawn through the
     // immediate-mode 2D renderer (DWARF signature CgsGraphics::Im2d& + float).
     void RenderLetterBoxBars(CgsGraphics::Im2d& lIm2d, f32 lfDestAspectRatio);
+
+    // @ 0x823F5898 - expand every GDL object list (0..12) of the read-side buffered
+    // frame into the mesh lists (0..24) of the render frame. The PC runs the X360's
+    // own single-threaded fallback path (the 16-job path needs the job scheduler).
+    void ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame* lpGdlFrames,
+                                CgsGraphics::DispatchFrame* lpMeshFrame,
+                                CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+                                const CgsGraphics::DispatchObjectContext* lpContext);
+
+    // @ 0x823F5F70 - sort every pass list of the render frame (X360: RadixSort jobs;
+    // PC: the synchronous DispatchList::SortForDispatch stand-in).
+    void SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFrame);
+
+    // The world/car/sky pass block of Render (@0x8240BFA8 mid-section), split out
+    // for readability; runs between the frame begin and the 2D overlay tail.
+    void RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
 
     ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;
@@ -393,8 +419,8 @@ private:
     CgsDepthStencilStateFactory         mDepthStencilStateFactory;
     BrnResource::LinearResourceAllocator* mpGraphicsAllocator;
     EA::Jobs::Job                       maObjectToMeshJob[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
-    DispatchObjectContext               maObjectToMeshJobContext[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
-    DispatchList*                       mapaObjectToMeshJobOutputDispatchLists[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
+    CgsGraphics::DispatchObjectContext  maObjectToMeshJobContext[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
+    CgsGraphics::DispatchList*          mapaObjectToMeshJobOutputDispatchLists[KU_NUM_OBJECT_TO_MESH_DISPATCH_JOBS];
     EA::Jobs::Job                       maShadowMapSortJob[KU_NUM_SHADOWMAP_DISPATCH_JOBS];
     SortInfo                            maShadowMapSortJobData[KU_NUM_SHADOWMAP_DISPATCH_JOBS];
     EA::Jobs::Job                       maEnvmapSortJobs[KU_NUM_ENVMAP_SORT_JOBS];

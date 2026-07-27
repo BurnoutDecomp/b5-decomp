@@ -27,6 +27,11 @@ namespace CgsResource
     class RwShaderProgramBufferResourceType : public Type
     {
     public:
+        // The registry id (0x12 == E_RESOURCETYPE_RW_SHADER_PROGRAM_BUFFER; see
+        // the class note above). Trivial ICF-folded getter on the X360 -- the
+        // VALUE is attested, the body is the one-line return. Needed for
+        // registration (id-keyed lookup).
+        virtual uint32_t           GetTypeID() const;
         virtual ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const;
         virtual void               ReBase(void* lpResource, rw::Resource& lrSource, rw::Resource& lrDest,
                                           ResourceDescriptor& lrSize, s32 liMemType) const;

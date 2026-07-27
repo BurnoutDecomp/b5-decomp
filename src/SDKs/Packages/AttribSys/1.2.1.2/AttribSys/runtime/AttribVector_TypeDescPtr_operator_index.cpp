@@ -19,7 +19,7 @@
 
 namespace Attrib
 {
-class TypeDesc;
+struct TypeDesc;   // class-key = struct (attribarray.h; MSVC mangles U/V from the key)
 
 // Minimal EASTL vector<TypeDesc*> face: only the begin/end pointers the X360 operator[]
 // reads. (Full EASTL vector layout is reconstructed in its own TU.)

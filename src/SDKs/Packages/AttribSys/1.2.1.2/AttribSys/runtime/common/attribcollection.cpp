@@ -2,7 +2,12 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribute.h"      // Attrib::Node
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"    // Array/TypeDesc/ITypeHandler
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabase.h" // AttribListNode/Base + delete-queue seam
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabaseprivate.h" // Attrib::DatabasePrivate (named registry members)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h"    // Attrib::ClassPrivate (named layout table / static data)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsysallochooks.h"   // Attrib::Free
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"             // Attrib::Database (load ctor type lookup)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault (the collection source AddRef)
+#include <new>                                                                        // placement new (the load ctor site)
 
 #include <cstdint> // intptr_t, uintptr_t
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -20,9 +25,10 @@
 // The class-owned internals it reaches through (the Class object's private impl and its
 // embedded inherited-layout HashMap / inherited data area) are AttribSys-owned and reached
 // by the recovered byte offsets -- the same convention the committed Array::GetTypeDesc and
-// Attribute::GetInternalPointer bodies use. NextKey (@0x828050D0) is NOT reconstructed here:
-// it dispatches through the un-homed Attrib::ScanForValidKey<Attrib::HashMap> template
-// (mangled ___ScanForValidKey_VHashMap_Attrib___), which has no reconstructed home yet.
+// Attribute::GetInternalPointer bodies use. Attrib::ScanForValidKey<Attrib::HashMap>
+// (@0x82803CC0, mangled ??$ScanForValidKey@VHashMap@Attrib@@@Attrib@@YA_KABVHashMap@0@I@Z)
+// and Collection::NextKey (@0x828050D0) are homed here as of the collection-load wave --
+// the load ctor's default-layout pass is their first caller.
 //
 // A Collection IS-A Attrib::HashMap (attribhashmap.h): the X360 passes a Collection*
 // straight into HashMap::Release and reaches the shared refcount at the HashMap +0x08
@@ -33,11 +39,11 @@
 
 namespace Attrib
 {
-    // ---- cross-TU trap stubs (own ledger TUs) -------------------------------
-    // Read the process attribute database's private impl pointer (off_83011BC4 followed to
-    // +4 = mPrivates; asserts the database is initialized). Bodied in attribclassprivate.cpp;
-    // declared here so Release compiles without dragging in attribsys.h.
-    void* GetDatabasePrivate();
+    // Read the process attribute database's private impl (off_83011BC4 followed
+    // to mPrivates; asserts the database is initialized). Typed against the real
+    // x64 DatabasePrivate (attribdatabaseprivate.h); bodied in attribdatabase.cpp.
+    struct DatabasePrivate;
+    DatabasePrivate* GetDatabasePrivate();
 
     // Attrib::DatabasePrivate::QueueForDelete<Attrib::Collection> @ 0x8280BEA8. Defer a
     // collection for garbage collection on the database's collection garbage list (an intrusive
@@ -79,6 +85,18 @@ namespace Attrib
 }
 
 // ============================================================================
+// Attrib::Collection::~Collection @ 0x8280C3F8 -- the full teardown (unlink from
+// the owning class, release the parent chain, clear the attribute table, drop
+// the source vault). Deferred to the Collection load/teardown TU with the load
+// ctor @0x82809740 (the container-layer x64 pass); the GC bag drain is the only
+// present caller and is itself unreached until vault unregistration.
+// ============================================================================
+Attrib::Collection::~Collection()
+{
+    CGS_ASSERT(false, "Attrib::Collection::~Collection @0x8280C3F8: deferred TU (teardown path)");
+}
+
+// ============================================================================
 // Attrib::Collection::AddRef @ 0x828028E0
 // ============================================================================
 // Bump the shared refcount (the HashMap base's muRefCount @ +0x08), asserting it has not
@@ -104,9 +122,11 @@ int Attrib::Collection::Release()
     const int liReleased = HashMap::Release() ? 1 : 0;
     if (liReleased != 0)
     {
-        u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
+        // The database's deferred-collection ring (X360 mPrivates+0x6C), by name
+        // now the x64 DatabasePrivate layout is real.
         return static_cast<int>(reinterpret_cast<intptr_t>(
-            DatabasePrivate_QueueCollectionForDelete(this, lpPrivates + 0x6C)));
+            DatabasePrivate_QueueCollectionForDelete(
+                this, &GetDatabasePrivate()->mGarbageCollections)));
     }
     return liReleased;
 }
@@ -120,7 +140,7 @@ int Attrib::Collection::Release()
 // fall back (only if this collection carries instance data) to the owning class's shared
 // inherited-layout table (the HashMap embedded at classPrivate + 0x10). Returns null with a
 // null container when the key is absent everywhere.
-Attrib::Node* Attrib::Collection::GetNode(Key luKey, const Collection*& lrpContainer) const
+Attrib::Node* Attrib::Collection::GetNode(u64 luKey, const Collection*& lrpContainer) const
 {
     for (const Collection* lpCollection = this; lpCollection != NULL;
          lpCollection = lpCollection->mpParent)
@@ -135,10 +155,11 @@ Attrib::Node* Attrib::Collection::GetNode(Key luKey, const Collection*& lrpConta
 
     if (mpData != NULL)
     {
-        u8* lpClass        = reinterpret_cast<u8*>(mpClass);
-        u8* lpClassPrivate = *reinterpret_cast<u8**>(lpClass + 0x08);
-        const HashMap* lpLayoutTable =
-            reinterpret_cast<const HashMap*>(lpClassPrivate + 0x10);
+        // The owning class's shared layout table (X360 classPrivate+0x10),
+        // by name now the x64 ClassPrivate layout is real.
+        const ClassPrivate* lpClassPrivate =
+            reinterpret_cast<const ClassPrivate*>(mpClass)->mpPrivates;
+        const HashMap* lpLayoutTable = &lpClassPrivate->mLayoutTable;
 
         Attrib::Node* lpNode = reinterpret_cast<Attrib::Node*>(lpLayoutTable->Find(luKey));
         if (lpNode != NULL)
@@ -161,7 +182,7 @@ Attrib::Node* Attrib::Collection::GetNode(Key luKey, const Collection*& lrpConta
 // class's inherited data area when inherited (0x20), or the node's own value word when plain
 // -- then index it. For a non-array node only element 0 is valid; return the node's
 // instance-resolved pointer against the owner's data area.
-void* Attrib::Collection::GetData(Key luKey, unsigned int luIndex) const
+void* Attrib::Collection::GetData(u64 luKey, unsigned int luIndex) const
 {
     const Collection* lpOwner = NULL;
     Attrib::Node* lpNode = GetNode(luKey, lpOwner);
@@ -182,9 +203,11 @@ void* Attrib::Collection::GetData(Key luKey, unsigned int luIndex) const
         {
             // Inherited: Array header in the owning class's inherited data area
             // (classPrivate + 0x34), reached by the recovered offsets.
-            u8* lpClass        = reinterpret_cast<u8*>(lpOwner->mpClass);
-            u8* lpClassPrivate = *reinterpret_cast<u8**>(lpClass + 0x08);
-            u8* lpDataBase     = *reinterpret_cast<u8**>(lpClassPrivate + 0x34);
+            // The class's inherited data area (X360 classPrivate+0x34 ==
+            // mStaticData), by name.
+            const ClassPrivate* lpOwnerPrivate =
+                reinterpret_cast<const ClassPrivate*>(lpOwner->mpClass)->mpPrivates;
+            u8* lpDataBase = static_cast<u8*>(lpOwnerPrivate->mStaticData);
             lpArray = reinterpret_cast<Array*>(lpDataBase + lpNode->muValue);
         }
         else
@@ -249,8 +272,11 @@ void Attrib::Collection::Clear()
     unsigned int luCleared = 0;
 
     // Expected total = this collection's own live entries + the class layout-table entries.
-    u8* lpClassPrivate = *reinterpret_cast<u8**>(reinterpret_cast<u8*>(mpClass) + 0x08);
-    HashMap* lpLayout  = reinterpret_cast<HashMap*>(lpClassPrivate + 0x10);
+    // The owning class's private impl + shared layout table (X360 class+0x08 /
+    // classPrivate+0x10), by name now the x64 ClassPrivate layout is real.
+    ClassPrivate* lpClassPrivate =
+        reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+    HashMap* lpLayout = &lpClassPrivate->mLayoutTable;
     const unsigned int luExpected =
         static_cast<unsigned int>(lpLayout->muCount) + static_cast<unsigned int>(muCount);
 
@@ -270,17 +296,17 @@ void Attrib::Collection::Clear()
         const bool lbIsArray         = (lu8Flags & 0x2u) != 0;
 
         // Resolve the node's schema TypeDesc from the attribute database's indexed-type
-        // vector (DatabasePrivate: type count @ +0x14, vector<TypeDesc*> begin/end @
-        // +0x18/+0x1C), reached by the recovered offsets exactly as Array::GetTypeDesc
-        // does. The index is clamped to 0 when out of range, then bounds-checked (the
+        // vector (X360 mPrivates +0x14 count / +0x18/+0x1C begin/end -- the named
+        // mNumCompiledTypes/mCompiledTypes now the x64 DatabasePrivate layout is real).
+        // The index is clamped to 0 when out of range, then bounds-checked (the
         // inlined EASTL vector::operator[]).
-        u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
-        const u32 luNumTypes  = *reinterpret_cast<u32*>(lpPrivates + 0x14);
+        DatabasePrivate* lpPrivates = GetDatabasePrivate();
+        const u32 luNumTypes  = lpPrivates->mNumCompiledTypes;
         u32 luTypeIndex = lpBucket->mTypeIndex;
         if (luTypeIndex >= luNumTypes)
             luTypeIndex = 0;
-        TypeDesc** lppBegin = *reinterpret_cast<TypeDesc***>(lpPrivates + 0x18);
-        TypeDesc** lppEnd   = *reinterpret_cast<TypeDesc***>(lpPrivates + 0x1C);
+        const TypeDesc** lppBegin = lpPrivates->mCompiledTypes.mpBegin;
+        const TypeDesc** lppEnd   = lpPrivates->mCompiledTypes.mpEnd;
         CGS_ASSERT(luTypeIndex < static_cast<u32>(lppEnd - lppBegin),
                    "!\"vector::operator[] -- out of range\"");
         const TypeDesc* lpTypeDesc = lppBegin[luTypeIndex];
@@ -297,8 +323,8 @@ void Attrib::Collection::Clear()
     }
 
     // ---- Phase 2: free this instance's data for every laid-out/inherited attribute ---
-    lpClassPrivate = *reinterpret_cast<u8**>(reinterpret_cast<u8*>(mpClass) + 0x08);
-    lpLayout       = reinterpret_cast<HashMap*>(lpClassPrivate + 0x10);
+    lpClassPrivate = reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+    lpLayout       = &lpClassPrivate->mLayoutTable;
 
     unsigned int luLayoutCap = lpLayout->muCapacity;
     unsigned int luJ = 0;
@@ -334,9 +360,9 @@ void Attrib::Collection::Clear()
             }
             else if ((lu8Flags & 0x20u) != 0)
             {
-                // Inherited: an offset into the class's inherited data area.
-                u8* lpDataBase = *reinterpret_cast<u8**>(lpClassPrivate + 0x34);
-                lpData = lpDataBase + lpNode->muValue;
+                // Inherited: an offset into the class's inherited data area
+                // (X360 classPrivate+0x34 == mStaticData), by name.
+                lpData = static_cast<u8*>(lpClassPrivate->mStaticData) + lpNode->muValue;
             }
             else
             {
@@ -366,4 +392,199 @@ void Attrib::Collection::Clear()
 
     CGS_ASSERT(luExpected == luCleared,
                "Not all attributes were cleared in Collection::Clear");
+}
+
+// ============================================================================
+// Attrib::ScanForValidKey<Attrib::HashMap> @ 0x82803CC0
+// ============================================================================
+// The key cursor every collection walk is built on: advance past luIndex, skip
+// free buckets, and hand back the key of the first occupied one (tail-calling
+// HashMap::GetKeyAtIndex); 0 when the table has no live bucket left. Callers
+// start a fresh walk with luIndex == 0xFFFFFFFF, which the leading increment
+// wraps to bucket 0 (the X360 `addi r4,r4,1` on the raw uint).
+u64 Attrib::ScanForValidKey(const HashMap& lrMap, unsigned int luIndex)
+{
+    const unsigned int luCapacity = lrMap.muCapacity;
+    ++luIndex;
+    while (luIndex < luCapacity && !lrMap.mpBuckets[luIndex].IsOccupied())
+        ++luIndex;
+
+    if (luIndex < luCapacity && lrMap.mpBuckets[luIndex].IsOccupied())
+        return lrMap.GetKeyAtIndex(luIndex);
+    return 0;
+}
+
+// ============================================================================
+// Attrib::Collection::NextKey @ 0x828050D0
+// ============================================================================
+// Step the two-phase attribute walk. While lrbInLayoutTable is false the cursor
+// is inside THIS collection's own bucket array: re-home luKey, and if it still
+// names a live bucket scan on from it. When that phase is exhausted the walk
+// flips to the owning class's shared layout table (classPrivate + 0x10) and
+// restarts there. In the layout phase the same re-home/scan runs against that
+// table; 0 ends the walk.
+u64 Attrib::Collection::NextKey(u64 luKey, bool& lrbInLayoutTable) const
+{
+    if (!lrbInLayoutTable)
+    {
+        const unsigned int luIndex = FindIndex(luKey);
+        if (luIndex < muCapacity && mpBuckets[luIndex].IsOccupied())
+        {
+            const u64 luNext = ScanForValidKey(*this, luIndex);
+            if (luNext != 0)
+                return luNext;
+        }
+
+        // Own table exhausted -- continue in the class's shared layout table.
+        lrbInLayoutTable = true;
+        const ClassPrivate* lpClassPrivate =
+            reinterpret_cast<const ClassPrivate*>(mpClass)->mpPrivates;
+        return ScanForValidKey(lpClassPrivate->mLayoutTable, 0xFFFFFFFFu);
+    }
+
+    const ClassPrivate* lpClassPrivate =
+        reinterpret_cast<const ClassPrivate*>(mpClass)->mpPrivates;
+    const HashMap& lrLayout = lpClassPrivate->mLayoutTable;
+    const unsigned int luIndex = lrLayout.FindIndex(luKey);
+    if (luIndex < lrLayout.muCapacity && lrLayout.mpBuckets[luIndex].IsOccupied())
+        return ScanForValidKey(lrLayout, luIndex);
+    return 0;
+}
+
+// ============================================================================
+// Attrib::Collection::Collection (the LOAD ctor) @ 0x82809740
+// ============================================================================
+// Build a live collection from one serialised CollectionLoadData export: size the
+// attribute table from the load data, bind the collection's identity (key / owning
+// class / layout block / source vault), take the references the collection owns
+// (itself, its source vault, the class's shared layout table, and -- when the load
+// data names a parent -- the parent collection), insert every serialised attribute
+// entry into the table, and finally stamp each visible array attribute's header
+// with its schema type index.
+namespace Attrib
+{
+    namespace
+    {
+        // Diagnostic-only census accumulators (X360 dword_83011BB8 / _BBC / _BC0):
+        // total probe cache lines, attributes added, by-value payload bytes.
+        // Nothing in the runtime reads them back.
+        u32 sLoadSearchCacheLines = 0;   // X360 dword_83011BB8
+        u32 sLoadAttributesAdded  = 0;   // X360 dword_83011BBC
+        u32 sLoadByValueBytes     = 0;   // X360 dword_83011BC0
+    }
+}
+
+Attrib::Collection::Collection(const CollectionLoadData& lrLoad, Vault* lpSource)
+    : HashMap(lrLoad.mTableReserve, static_cast<u8>(lrLoad.mTableKeyShift), 1)
+{
+    mpParent = NULL;
+    mKey     = lrLoad.mKey;
+
+    // Owning class (must already be registered -- ClassExportPolicy runs first).
+    DatabasePrivate* lpPrivates = GetDatabasePrivate();
+    mpClass  = lpPrivates->mClasses.Find(lrLoad.mClass);
+    mpData   = lrLoad.GetLayout();
+    mpSource = lpSource;
+
+    AddRef();
+    CGS_ASSERT(mpClass != NULL, "Attrib::Class not found for collection.");
+
+    // The collection owns a reference on the vault its serialised data lives in
+    // (X360 `++vault->mRefCount` inline).
+    mpSource->AddRef(0);
+
+    ClassPrivate* lpClassPrivate = reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+    const bool lbAdded = lpClassPrivate->mCollections.Add(mKey, this);
+    CGS_ASSERT(lbAdded, "Failed to add Attrib::Collection.");
+    (void)lbAdded;
+
+    // ... and one on the class's shared layout table it resolves inherited
+    // attributes through.
+    lpClassPrivate->mLayoutTable.AddRef();
+
+    if (lrLoad.mParent != 0)
+    {
+        mpParent = lpClassPrivate->mCollections.Find(lrLoad.mParent);
+        CGS_ASSERT(mpParent != NULL, "Parent collection not found for collection.");
+        CGS_ASSERT(mpParent != NULL && mpParent->mpClass == mpClass,
+                   "Parent's class doesn't match child's class.");
+        if (mpParent != NULL)
+            mpParent->AddRef();
+    }
+
+    // ---- insert every serialised attribute entry ----------------------------
+    const u64* lpTypeKeys = lrLoad.GetTypeKeys();
+    const CollectionLoadData::Entry* lpEntries = lrLoad.GetEntries();
+    for (u32 luEntry = 0; luEntry < lrLoad.mNumEntries; ++luEntry)
+    {
+        const CollectionLoadData::Entry& lrEntry = lpEntries[luEntry];
+        CGS_ASSERT(lrEntry.muTypeIndex <= lrLoad.mNumTypes,
+                   "Invalid type index while loading collection.");
+
+        // By-value attributes (flag 0x40) fold their payload size into the census
+        // -- but only for the small types the X360 counts (size <= 4).
+        if ((lrEntry.mu8Flags & 0x40u) != 0)
+        {
+            const TypeDesc& lrDesc =
+                Database::Get().GetTypeDesc(lpTypeKeys[lrEntry.muTypeIndex]);
+            if (lrDesc.mSize <= 4u)
+                sLoadByValueBytes += lrDesc.mSize;
+        }
+
+        Add(lrEntry.mKey, lpTypeKeys[lrEntry.muTypeIndex],
+            reinterpret_cast<void*>(static_cast<uintptr_t>(lrEntry.muValue)),
+            /*lbLaidOut*/ false, lrEntry.mu8Flags, /*lbNoGrow*/ true, mpData);
+
+        sLoadSearchCacheLines += static_cast<u32>(CountSearchCacheLines(lrEntry.mKey, 7));
+        ++sLoadAttributesAdded;
+    }
+
+    // ---- stamp the type index into every visible array header ---------------
+    // Walk every attribute key this collection resolves (own table first, then
+    // the class layout table) and, for the array-typed nodes THIS collection
+    // owns, write the schema type index into the Array header's packed type word
+    // (preserving its top bit).
+    bool lbInLayoutTable;
+    u64  luKey = ScanForValidKey(*this, 0xFFFFFFFFu);
+    if (luKey != 0)
+    {
+        lbInLayoutTable = false;
+    }
+    else
+    {
+        luKey = ScanForValidKey(lpClassPrivate->mLayoutTable, 0xFFFFFFFFu);
+        lbInLayoutTable = true;
+    }
+
+    for (; luKey != 0; luKey = NextKey(luKey, lbInLayoutTable))
+    {
+        const Collection* lpContainer = NULL;
+        Attrib::Node* lpNode = GetNode(luKey, lpContainer);
+        if (lpContainer != this || lpNode == NULL || (lpNode->muFlags & 0x2u) == 0)
+            continue;
+
+        // Resolve the node's schema TypeDesc through the database's indexed-type
+        // vector (index clamped to 0 when out of range, then bounds-checked --
+        // the inlined EASTL vector::operator[]).
+        DatabasePrivate* lpDb = GetDatabasePrivate();
+        u32 luTypeIndex = lpNode->mTypeIndex;
+        if (luTypeIndex >= lpDb->mNumCompiledTypes)
+            luTypeIndex = 0;
+        CGS_ASSERT(luTypeIndex < lpDb->mCompiledTypes.Size(),
+                   "vector::operator[] -- out of range");
+        const TypeDesc* lpDesc = lpDb->mCompiledTypes.mpBegin[luTypeIndex];
+
+        // The Array header address, by the node's storage class.
+        Array* lpArray;
+        if ((lpNode->muFlags & 0x10u) != 0)
+            lpArray = reinterpret_cast<Array*>(static_cast<u8*>(mpData) + lpNode->muValue);
+        else if ((lpNode->muFlags & 0x20u) != 0)
+            lpArray = reinterpret_cast<Array*>(
+                static_cast<u8*>(lpClassPrivate->mStaticData) + lpNode->muValue);
+        else
+            lpArray = reinterpret_cast<Array*>(static_cast<uintptr_t>(lpNode->muValue));
+
+        lpArray->muTypeInfo = static_cast<u16>((lpArray->muTypeInfo & 0x8000u) |
+                                               static_cast<u16>(lpDesc->mIndex));
+    }
 }

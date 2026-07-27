@@ -58,11 +58,17 @@ struct VaultSlot
     s32                    GetStreamedVaultIndex() const { return miStreamedVaultIndex; }
 
 private:
-    // Load the request's vault into this (currently free) slot. Body in its own TU.
+    // @ 0x8280E060 -- load the request's vault into this (currently free) slot.
+    // Body: CgsAttribSysVaultLoad.cpp (staged with the vault-array interior).
     void DoLoad(const AttribSysIO::RegisterVaultRequest* lpRegisterRequest,
                 Attrib::IGarbageCollector* lpGarbageCollector);
 
 public:
+    // @ 0x8280F1B8 -- actually unload this slot's vault (the last reference):
+    // deinitialize + destroy the vault, collect the database garbage, release
+    // any streamed slot, free this slot. Body: CgsAttribSysVaultLoad.cpp.
+    void DoUnload();
+
     // @ 0x82802288 / 0x82802330 -- adjust the slot's live reference count.
     void DecreaseRefCount();
     void IncreaseRefCount();

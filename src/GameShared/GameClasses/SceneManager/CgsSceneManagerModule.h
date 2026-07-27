@@ -82,7 +82,12 @@ namespace CgsSceneManager
 
     // The contact-generator interface the triangle-cache stage uses. Referenced by
     // pointer only (mpTriangleCacheCollisionGenerator + the Start/EndUpdate APIs).
-    class BaseCollisionGenerator;
+    // Its real home is Collision/ContactGenerator/CgsCollisionGenerator.h
+    // (CgsSceneManager::CgsCollision::BaseCollisionGenerator) -- WorldModule::Update
+    // @0x827D63E8 carves one per frame out of the world linear allocator and hands
+    // it to StartUpdateTriangleCache.
+    namespace CgsCollision { struct BaseCollisionGenerator; }
+    typedef CgsCollision::BaseCollisionGenerator BaseCollisionGenerator;
 
     namespace SceneManagerIO
     {
@@ -113,22 +118,40 @@ namespace CgsSceneManager
                                             SceneManagerIO::InputBuffer_Query* lpQueryInput,
                                             SceneManagerIO::OutputBuffer* lpQueryOutput );
 
-        // ADDITIVE (X360 vtbl+68; the entity-module spines run one scene-query
-        // round-trip per module through this). Declaration-only; body with this
-        // module's own TU.
-        void UpdateQueries( CgsModule::IOBufferStack* lpInputBufferStack,
-                            CgsModule::IOBufferStack* lpOutputBufferStack,
-                            SceneManagerIO::InputBuffer_Query* lpQueryInput,
-                            SceneManagerIO::OutputBuffer* lpQueryOutput );
+        // @ 0x828D57D0 -- the X360 vtbl+68 entry: run this frame's staged scene
+        // queries (coarse pass then fine pass, each under its own CPU monitor) and
+        // publish the triangle-cache manager on the scene output. The entity-module
+        // spines round-trip one query batch per module through it.
+        // RENAMED 2026-07-27 (world-drive wave) from the placeholder name
+        // "UpdateQueries" to the X360 symbol: CgsSceneManagerModule.cpp:806..
+        void ProcessSceneQueries( CgsModule::IOBufferStack* lpInputBufferStack,
+                                  CgsModule::IOBufferStack* lpOutputBufferStack,
+                                  SceneManagerIO::InputBuffer_Query* lpQueryInput,
+                                  SceneManagerIO::OutputBuffer* lpQueryOutput );
 
-        // ADDITIVE (WorldModule::Prepare @0x827D53B0 drives the scene module once per
-        // stage through this X360 vtbl+64 entry: stacks + the scene in/out buffers +
-        // an is-prepare flag). Declaration-only; body with this module's own TU.
-        bool Update( CgsModule::IOBufferStack* lpInputBufferStack,
-                     CgsModule::IOBufferStack* lpOutputBufferStack,
-                     SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
-                     SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
-                     bool lbPrepare );
+        // @ 0x828D4C28 -- the X360 vtbl+64 entry: fan the scene input's update
+        // interface out into the spatial-partition + overlap-generation sub-modules,
+        // tick both, and publish the triangle-cache manager on the scene output.
+        // WorldModule::Prepare @0x827D53B0 drives it once per stage (lbPrepare set)
+        // and WorldModule::Update @0x827D63E8 twice per frame (pre-scene / post-
+        // physics). RENAMED 2026-07-27 from the placeholder name "Update": the X360
+        // symbol literally named SceneManagerModule::Update @0x827E1F28 is the
+        // "Don't use this function. Use UpdateScene(), UpdateSceneQueries() and
+        // UpdateContactGeneration() instead" assert (CgsSceneManagerModule.h:276).
+        bool UpdateScene( CgsModule::IOBufferStack* lpInputBufferStack,
+                          CgsModule::IOBufferStack* lpOutputBufferStack,
+                          SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                          SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+                          bool lbPrepare );
+
+        // @ 0x828C73D8 -- begin this frame's triangle-cache update: latch the
+        // frame's collision generator (carved from the world's per-frame linear
+        // allocator by WorldModule::Update @0x827D63E8) and kick the cache
+        // manager's per-frame cache refresh.
+        void StartUpdateTriangleCache( CgsModule::IOBufferStack* lpInputBufferStack,
+                                       CgsModule::IOBufferStack* lpOutputBufferStack,
+                                       SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                                       BaseCollisionGenerator* lpCollisionGenerator );
 
         // Staged prepare progression (DWARF CgsSceneManagerModule.h:180). Construct
         // leaves the module at START; Prepare advances one stage per resumable call.
@@ -179,9 +202,9 @@ namespace CgsSceneManager
         // @ 0x828D5CA0 -- the per-frame contact generation pass (generate -> cull ->
         // bridge -> tri-cache). Takes the in/out IO buffer stacks + the scene
         // in/out buffers (by pointer).
-        void UpdateContactGeneration(SceneManagerIO::IOBufferStack* lpInputBufferStack,
-                                     SceneManagerIO::IOBufferStack* lpOutputBufferStack,
-                                     SceneManagerIO::OutputBuffer*  lpSceneInputBuffer,
+        void UpdateContactGeneration(CgsModule::IOBufferStack* lpInputBufferStack,
+                                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                                     SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
                                      SceneManagerIO::OutputBuffer*  lpSceneOutputBuffer);
 
         // @ 0x828C7838 -- gather the loose-octree frustum-test job results into the
@@ -190,14 +213,14 @@ namespace CgsSceneManager
         // @0x827D1CE8 / GenerateFrustumQueries @0x827DADF8) stack-allocate the third
         // argument as an InputBuffer_Query (CreateIOBuffer<InputBuffer_Query>), so the
         // query-input parameter is typed as such (was OutputBuffer*).
-        void ProcessFrustumTestJobResults(SceneManagerIO::IOBufferStack* lpInputBufferStack,
-                                          SceneManagerIO::IOBufferStack* lpOutputBufferStack,
+        void ProcessFrustumTestJobResults(CgsModule::IOBufferStack* lpInputBufferStack,
+                                          CgsModule::IOBufferStack* lpOutputBufferStack,
                                           SceneManagerIO::InputBuffer_Query* lpQueryInputBuffer,
                                           SceneManagerIO::OutputBuffer*  lpQueryOutputBuffer);
 
         // @ 0x828C7500 -- finish the triangle-cache update for this frame.
-        void EndUpdateTriangleCache(SceneManagerIO::IOBufferStack* lpInputBufferStack,
-                                    SceneManagerIO::IOBufferStack* lpOutputBufferStack);
+        void EndUpdateTriangleCache(CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack);
 
     protected:
         // @ 0x828CF8E8 -- apply a "set volume-instance culling group" scene event.

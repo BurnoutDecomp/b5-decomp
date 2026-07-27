@@ -39,6 +39,18 @@ public:
         // Declaration-only; the body lands with this module's own TU.
         bool Prepare( BrnWorldIO::UpdateOutputBuffer* lpOutput );
 
+        // ---- ADDITIVE (attested by WorldModule::Update @0x827D63E8) ----
+        // The per-frame environment tick: (player speed, the update output the
+        // fog/lighting outputs land in, the frame camera position). DWARF
+        // BrnEnvironmentManager.h:386; body gated in WorldLinkStubs.cpp until
+        // this module's own TU lands.
+        void Update( f32 lfPlayerSpeed, BrnWorldIO::UpdateOutputBuffer* lpOutput,
+                     Vector3 lCameraPosition );
+
+        // ---- ADDITIVE (WorldModule pre-scene spine @0x827BD1F0: the time-of-day
+        //      copy into the traffic pre-scene input reads +0x504 directly) ----
+        f32 GetCurrTimeOfDay() const { return mfCurrTimeOfDay; }
+
         // ADDITIVE (WorldModule::Release @0x827BCE58 stage 8 pokes the manager's
         // leading prepare/release stage pair to {START, RELEASING} -- the inlined
         // release request: `a1[498648] = 0; a1[498649] = 1;` on the embedded manager

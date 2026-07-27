@@ -1,0 +1,761 @@
+// =============================================================================
+// XenonD3D9Shims.cpp  (pc/gcm/renderengine)
+//
+// [PC platform leaf] The Xenon D3DDevice_* fast-set surface, realised over the
+// PC IDirect3DDevice9. Every project TU that drives the Xbox 360 fast-path
+// binders (shadowingdevice.cpp, MeshHelper.cpp, CgsImRenderer.cpp, the
+// dispatch walkers) declares these as externs with no home; this TU is that
+// home, following the established Apt/GUI D3D9 backend pattern (CgsIm2d.cpp:
+// direct device calls in a PC leaf).
+//
+// It also carries the WORLD-PASS bring-up support the mesh-dispatch flush
+// (CgsGraphics::DispatchList::DispatchAllMeshes -> shadow::Device::*PC) binds
+// through:
+//   * the geometry stash + DrawIndexedPrimitiveUP draw path over the converted
+//     world data's serialised IndexBuffer/VertexBuffer headers,
+//   * a vertex-declaration cache built from the 32-bit serialised
+//     VertexDescriptor images (Xenon GPU type dwords -> D3D9 decl types),
+//   * the FLAGGED fallback world shader (compiled once via d3dcompiler_47)
+//     used until the converted SHADERS bundle (tools/assets/shaders/out/
+//     SHADERS_PC.BNDL) is loaded and the technique constant dispatch is
+//     reconstructed -- a loud, temporary visual bring-up shim.
+//
+// FLAG [x64 data seam]: the serialised buffer headers keep the console u32
+// muBaseAddress slot. The renderable fix-up currently stores low-4GB host
+// pointers there (the PointerFromU32 convention); if that consumer widens,
+// ResolveGuestPointer below is the single point to follow it.
+// =============================================================================
+
+#include "types.hpp"
+#include "pc/gcm/renderengine/device.h"          // renderengine::gDevice
+#include "pc/gcm/renderengine/VertexDescriptor.h" // renderengine::D3DVertexDeclaration (opaque)
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+
+#include <Windows.h>
+#include <d3d9.h>
+#include <cstring>
+#include <cstdio>
+#include <unordered_map>
+
+// The renderengine D3D device singleton alias the fast-path callers name
+// (X360 off_83271608 dereferenced). Defined here; refreshed from
+// renderengine::gDevice on every shim entry (device creation happens later
+// than static init).
+IDirect3DDevice9* gpD3DDevice = nullptr;
+
+namespace
+{
+    inline IDirect3DDevice9* Dev()
+    {
+        gpD3DDevice = renderengine::gDevice;
+        return gpD3DDevice;
+    }
+
+    void LogOnce(const char* lpcKey, const char* lpcMessage)
+    {
+        static std::unordered_map<const char*, bool> sLogged;
+        if (!sLogged[lpcKey])
+        {
+            sLogged[lpcKey] = true;
+            CgsDev::Log::WriteToLog(lpcMessage);
+        }
+    }
+
+    // ---- serialised world-buffer views (32-bit console images) --------------
+    struct IndexBufferHeader32
+    {
+        u32 muCommon;         // +0x00: high bits select the index width
+        u32 muReferenceCount; // +0x04
+        u32 muFields[4];      // +0x08..0x14
+        u32 muBaseAddress;    // +0x18: data pointer slot (low-4GB convention)
+        u32 muSizeRounded;    // +0x1C
+        u32 muIndexCount;     // +0x20
+    };
+    struct VertexBufferHeader32
+    {
+        u32 muCommon;         // +0x00
+        u32 muFields[5];      // +0x04..0x14
+        u32 muBaseAddress;    // +0x18: data pointer slot (low-4GB convention)
+        u32 muUnused1C;       // +0x1C
+        u32 muSize;           // +0x20: buffer size in bytes
+        u32 muFormat;         // +0x24
+    };
+
+    inline const void* ResolveGuestPointer(u32 luSlot)
+    {
+        return reinterpret_cast<const void*>(static_cast<uintptr_t>(luSlot));
+    }
+
+    // ---- Xenon primitive types -> D3D9 --------------------------------------
+    bool MapPrimitive(u32 luXenonType, u32 luIndexCount,
+                      D3DPRIMITIVETYPE* lpeType, UINT* lpuPrimCount)
+    {
+        switch (luXenonType)
+        {
+        case 1:  *lpeType = D3DPT_POINTLIST;     *lpuPrimCount = luIndexCount;          return luIndexCount != 0;
+        case 2:  *lpeType = D3DPT_LINELIST;      *lpuPrimCount = luIndexCount / 2u;     return luIndexCount >= 2;
+        case 3:  *lpeType = D3DPT_LINESTRIP;     *lpuPrimCount = luIndexCount - 1u;     return luIndexCount >= 2;
+        case 4:  *lpeType = D3DPT_TRIANGLELIST;  *lpuPrimCount = luIndexCount / 3u;     return luIndexCount >= 3;
+        case 5:  *lpeType = D3DPT_TRIANGLEFAN;   *lpuPrimCount = luIndexCount - 2u;     return luIndexCount >= 3;
+        case 6:  *lpeType = D3DPT_TRIANGLESTRIP; *lpuPrimCount = luIndexCount - 2u;     return luIndexCount >= 3;
+        default:
+            LogOnce("prim", "[XenonD3D9] unsupported Xenon primitive type (RECTLIST/QUADLIST?) - draw skipped\n");
+            return false;
+        }
+    }
+
+    // ---- the world-draw stash (filled by shadow::Device::SetMeshBuffersPC) --
+    const IndexBufferHeader32*  spIndexSource  = nullptr;
+    const VertexBufferHeader32* spVertexSource = nullptr;
+    u32                          suVertexStride = 0;
+
+    // ---- vertex-declaration cache over 32-bit VertexDescriptor images -------
+    // On-disk image (attested by tools/assets/bundles/renderable_transcode.py
+    // parse_vertex_descriptor + the TRK_UNIT285 set): 16B header with u16
+    // numElements @+0x08; numElements x 16B elements {u16 stream, u16 offset,
+    // u32 Xenon GPU type dword, u16 usage, u16 usageIndex, u32 1}; then one
+    // stride byte per element.
+    struct Vd32Cached
+    {
+        IDirect3DVertexDeclaration9* mpDeclaration;
+        u32                          muStride;
+    };
+    std::unordered_map<const void*, Vd32Cached> sVdCache;
+
+    // Xenon GPU vertex-format dword -> D3D9 D3DDECLTYPE.
+    bool MapXenonDeclType(u32 luXenon, u8* lpu8Type)
+    {
+        switch (luXenon)
+        {
+        case 0x2C83A4: *lpu8Type = D3DDECLTYPE_FLOAT1;    return true;
+        case 0x2C23A5: *lpu8Type = D3DDECLTYPE_FLOAT2;    return true;
+        case 0x2A23B9: *lpu8Type = D3DDECLTYPE_FLOAT3;    return true;
+        case 0x1A23A6: *lpu8Type = D3DDECLTYPE_FLOAT4;    return true;
+        case 0x182886: *lpu8Type = D3DDECLTYPE_D3DCOLOR;  return true;
+        case 0x1A2286: *lpu8Type = D3DDECLTYPE_UBYTE4;    return true;
+        case 0x1A2086: *lpu8Type = D3DDECLTYPE_UBYTE4N;   return true;
+        case 0x2C2359: *lpu8Type = D3DDECLTYPE_SHORT2;    return true;
+        case 0x1A235A: *lpu8Type = D3DDECLTYPE_SHORT4;    return true;
+        case 0x2C2159: *lpu8Type = D3DDECLTYPE_SHORT2N;   return true;
+        case 0x1A215A: *lpu8Type = D3DDECLTYPE_SHORT4N;   return true;
+        case 0x2C2059: *lpu8Type = D3DDECLTYPE_USHORT2N;  return true;
+        case 0x1A205A: *lpu8Type = D3DDECLTYPE_USHORT4N;  return true;
+        case 0x2A2287: *lpu8Type = D3DDECLTYPE_UDEC3;     return true;
+        case 0x2A2187: *lpu8Type = D3DDECLTYPE_DEC3N;     return true;
+        case 0x2C235F: *lpu8Type = D3DDECLTYPE_FLOAT16_2; return true;
+        case 0x1A235F: *lpu8Type = D3DDECLTYPE_FLOAT16_4; return true;
+        default: return false;
+        }
+    }
+
+    // ---- the FLAGGED fallback world shader ----------------------------------
+    // Compiled once through d3dcompiler_47 (loaded dynamically; no import-lib
+    // dependency). Transforms by the row-vector WVP uploaded to c0..c3 and
+    // shades by a screen-space-derivative face normal, so raw geometry reads as
+    // 3D without any real material data. LOUD BRING-UP SHIM: replaced by the
+    // converted per-technique shaders (SHADERS_PC.BNDL) when their load path +
+    // constant dispatch land.
+    typedef HRESULT (WINAPI* D3DCompileProc)(
+        LPCVOID pSrcData, SIZE_T SrcDataSize, LPCSTR pSourceName, const void* pDefines,
+        void* pInclude, LPCSTR pEntrypoint, LPCSTR pTarget, UINT Flags1, UINT Flags2,
+        void** ppCode, void** ppErrorMsgs);
+
+    struct ID3DBlobLite
+    {
+        // The two ID3DBlob vtable entries used (QueryInterface/AddRef/Release +
+        // GetBufferPointer/GetBufferSize), reached positionally.
+        virtual HRESULT __stdcall QueryInterface(const void*, void**) = 0;
+        virtual ULONG   __stdcall AddRef() = 0;
+        virtual ULONG   __stdcall Release() = 0;
+        virtual LPVOID  __stdcall GetBufferPointer() = 0;
+        virtual SIZE_T  __stdcall GetBufferSize() = 0;
+    };
+
+    const char* KPC_FALLBACK_VS =
+        "float4 gWvp0 : register(c0);\n"
+        "float4 gWvp1 : register(c1);\n"
+        "float4 gWvp2 : register(c2);\n"
+        "float4 gWvp3 : register(c3);\n"
+        "struct VsOut { float4 hpos : POSITION; float3 opos : TEXCOORD0; };\n"
+        "VsOut main(float4 pos : POSITION) {\n"
+        "  VsOut o;\n"
+        "  o.hpos = pos.x * gWvp0 + pos.y * gWvp1 + pos.z * gWvp2 + gWvp3;\n"
+        "  o.opos = pos.xyz;\n"
+        "  return o;\n"
+        "}\n";
+
+    const char* KPC_FALLBACK_PS =
+        "float4 main(float3 opos : TEXCOORD0) : COLOR {\n"
+        "  float3 n = normalize(cross(ddx(opos), ddy(opos)));\n"
+        "  float l = 0.35 + 0.65 * saturate(abs(n.y) * 0.7 + (abs(n.x) + abs(n.z)) * 0.25);\n"
+        "  return float4(l * 0.62, l * 0.66, l * 0.72, 1.0);\n"
+        "}\n";
+
+    IDirect3DVertexShader9* spFallbackVs = nullptr;
+    IDirect3DPixelShader9*  spFallbackPs = nullptr;
+    bool                    sbFallbackCompileFailed = false;
+
+    bool CompileFallbackShaders(IDirect3DDevice9* lpDevice)
+    {
+        if (spFallbackVs != nullptr && spFallbackPs != nullptr)
+            return true;
+        if (sbFallbackCompileFailed)
+            return false;
+
+        HMODULE lhCompiler = ::LoadLibraryA("d3dcompiler_47.dll");
+        if (lhCompiler == nullptr)
+            lhCompiler = ::LoadLibraryA("d3dcompiler_43.dll");
+        D3DCompileProc lpfnCompile = lhCompiler
+            ? reinterpret_cast<D3DCompileProc>(::GetProcAddress(lhCompiler, "D3DCompile"))
+            : nullptr;
+        if (lpfnCompile == nullptr)
+        {
+            sbFallbackCompileFailed = true;
+            LogOnce("d3dc", "[WorldFallback] d3dcompiler not available - world fallback shader disabled\n");
+            return false;
+        }
+
+        ID3DBlobLite* lpCode = nullptr;
+        ID3DBlobLite* lpErrors = nullptr;
+        HRESULT lhr = lpfnCompile(KPC_FALLBACK_VS, std::strlen(KPC_FALLBACK_VS), "world_fallback_vs",
+                                  nullptr, nullptr, "main", "vs_3_0", 0, 0,
+                                  reinterpret_cast<void**>(&lpCode),
+                                  reinterpret_cast<void**>(&lpErrors));
+        if (SUCCEEDED(lhr) && lpCode != nullptr)
+        {
+            lpDevice->CreateVertexShader(static_cast<const DWORD*>(lpCode->GetBufferPointer()), &spFallbackVs);
+            lpCode->Release();
+        }
+        if (lpErrors != nullptr) lpErrors->Release();
+
+        lpCode = nullptr; lpErrors = nullptr;
+        lhr = lpfnCompile(KPC_FALLBACK_PS, std::strlen(KPC_FALLBACK_PS), "world_fallback_ps",
+                          nullptr, nullptr, "main", "ps_3_0", 0, 0,
+                          reinterpret_cast<void**>(&lpCode),
+                          reinterpret_cast<void**>(&lpErrors));
+        if (SUCCEEDED(lhr) && lpCode != nullptr)
+        {
+            lpDevice->CreatePixelShader(static_cast<const DWORD*>(lpCode->GetBufferPointer()), &spFallbackPs);
+            lpCode->Release();
+        }
+        if (lpErrors != nullptr) lpErrors->Release();
+
+        if (spFallbackVs == nullptr || spFallbackPs == nullptr)
+        {
+            sbFallbackCompileFailed = true;
+            LogOnce("d3dcf", "[WorldFallback] fallback shader compile/create FAILED - world draws skipped\n");
+            return false;
+        }
+        LogOnce("d3dcs", "[WorldFallback] fallback world shader compiled + bound (BRING-UP SHIM)\n");
+        return true;
+    }
+
+    // ---- the D3D9-bytecode shader cache (the converted-shader path) ---------
+    // shadow::Device::SetPixelProgram / FlushVertexProgramState hand this leaf a
+    // pointer to the program image at ProgramBufferData+0x14; when the converted
+    // SHADERS bundle is live that memory holds D3D9 bytecode (version token
+    // 0xFFFE03xx / 0xFFFF03xx). Shader objects are created once per image.
+    std::unordered_map<const void*, IDirect3DVertexShader9*> sVsCache;
+    std::unordered_map<const void*, IDirect3DPixelShader9*>  sPsCache;
+
+    inline bool LooksLikeD3D9Bytecode(const void* lpShader, bool lbPixel)
+    {
+        if (lpShader == nullptr) return false;
+        const u32 luToken = *static_cast<const u32*>(lpShader);
+        return (luToken & 0xFFFF0000u) == (lbPixel ? 0xFFFF0000u : 0xFFFE0000u)
+            && (luToken & 0x0000FF00u) <= 0x0300u;
+    }
+}
+
+namespace renderengine
+{
+    // [PC bring-up] renderengine::Device::SetWorldPassDefaultStates -- the
+    // per-pass default render states the world bring-up runs on until the
+    // MaterialState/state-group path lands (declared in device.h).
+    void Device::SetWorldPassDefaultStates(bool lbTransparentPass)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return;
+
+        lpDevice->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, lbTransparentPass ? FALSE : TRUE);
+        lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, lbTransparentPass ? TRUE : FALSE);
+        lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+        lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+        lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);   // FLAG: real cull mode comes
+                                                                  // from the rasterizer state group
+        lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
+        lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+    }
+
+    // ---- world-pass leaf hooks (declared in shadowingdevice.cpp) -----------
+
+    bool WorldFallbackShader_Bind()
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr || !CompileFallbackShaders(lpDevice))
+            return false;
+        lpDevice->SetVertexShader(spFallbackVs);
+        lpDevice->SetPixelShader(spFallbackPs);
+        return true;
+    }
+
+    void WorldFallbackShader_SetWvp(const f32* lpWvpRows16)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice != nullptr)
+            lpDevice->SetVertexShaderConstantF(0, lpWvpRows16, 4);
+    }
+
+    void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride)
+    {
+        *lpuStride = 0;
+        if (lpVdImage == nullptr)
+            return nullptr;
+
+        std::unordered_map<const void*, Vd32Cached>::iterator lIt = sVdCache.find(lpVdImage);
+        if (lIt != sVdCache.end())
+        {
+            *lpuStride = lIt->second.muStride;
+            return lIt->second.mpDeclaration;
+        }
+
+        Vd32Cached lEntry = { nullptr, 0 };
+        const u8* lpImage = static_cast<const u8*>(lpVdImage);
+        u16 lu16NumElements;
+        std::memcpy(&lu16NumElements, lpImage + 0x08, 2);
+
+        D3DVERTEXELEMENT9 laElements[17];
+        bool lbOk = (lu16NumElements > 0 && lu16NumElements <= 16);
+        u32 luMaxEnd = 0;
+        for (u32 lu = 0; lbOk && lu < lu16NumElements; ++lu)
+        {
+            const u8* lpElem = lpImage + 0x10 + 16 * lu;
+            u16 lu16Stream, lu16Offset, lu16Usage, lu16UsageIndex;
+            u32 luXenonType;
+            std::memcpy(&lu16Stream,     lpElem + 0, 2);
+            std::memcpy(&lu16Offset,     lpElem + 2, 2);
+            std::memcpy(&luXenonType,    lpElem + 4, 4);
+            std::memcpy(&lu16Usage,      lpElem + 8, 2);
+            std::memcpy(&lu16UsageIndex, lpElem + 10, 2);
+
+            u8 lu8Type;
+            if (lu16Stream != 0 || !MapXenonDeclType(luXenonType, &lu8Type))
+            {
+                lbOk = false;
+                break;
+            }
+            laElements[lu].Stream     = 0;
+            laElements[lu].Offset     = lu16Offset;
+            laElements[lu].Type       = lu8Type;
+            laElements[lu].Method     = D3DDECLMETHOD_DEFAULT;
+            laElements[lu].Usage      = static_cast<BYTE>(lu16Usage);
+            laElements[lu].UsageIndex = static_cast<BYTE>(lu16UsageIndex);
+            if (static_cast<u32>(lu16Offset) + 16u > luMaxEnd)
+                luMaxEnd = lu16Offset + 16u;
+        }
+
+        if (lbOk)
+        {
+            const D3DVERTEXELEMENT9 lEnd = D3DDECL_END();
+            laElements[lu16NumElements] = lEnd;
+
+            // The per-element stride bytes follow the element table; element 0's
+            // byte is stream 0's stride.
+            lEntry.muStride = lpImage[0x10 + 16 * lu16NumElements];
+
+            IDirect3DDevice9* lpDevice = Dev();
+            if (lpDevice != nullptr)
+                lpDevice->CreateVertexDeclaration(laElements, &lEntry.mpDeclaration);
+        }
+        else
+        {
+            LogOnce("vd32", "[WorldVd32] unsupported vertex-descriptor image (multi-stream/unknown type) - decl skipped\n");
+        }
+
+        sVdCache[lpVdImage] = lEntry;
+        *lpuStride = lEntry.muStride;
+        return lEntry.mpDeclaration;
+    }
+
+    void WorldDraw_SetIndexSource(const void* lpIndexBufferHeader)
+    {
+        spIndexSource = static_cast<const IndexBufferHeader32*>(lpIndexBufferHeader);
+    }
+
+    void WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride)
+    {
+        spVertexSource = static_cast<const VertexBufferHeader32*>(lpVertexBufferHeader);
+        suVertexStride = luStride;
+    }
+
+    void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
+                             u32 luStartIndex, u32 luIndexCount)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr || spIndexSource == nullptr || spVertexSource == nullptr
+            || suVertexStride == 0)
+        {
+            LogOnce("updraw", "[WorldDraw] draw skipped: no device/geometry stash (stride 0?)\n");
+            return;
+        }
+
+        const void* lpIndexData  = ResolveGuestPointer(spIndexSource->muBaseAddress);
+        const void* lpVertexData = ResolveGuestPointer(spVertexSource->muBaseAddress);
+        if (lpIndexData == nullptr || lpVertexData == nullptr)
+        {
+            LogOnce("upnull", "[WorldDraw] draw skipped: buffer base unresolved (x64 widening seam?)\n");
+            return;
+        }
+
+        // Index width from the console header Common tag (0x20000000 = 16-bit,
+        // 0xC0000000 = 32-bit; the high bit selects the width).
+        const bool lb32Bit = (spIndexSource->muCommon & 0x80000000u) != 0;
+        const u32  luIndexSize = lb32Bit ? 4u : 2u;
+
+        D3DPRIMITIVETYPE lePrim;
+        UINT luPrimCount;
+        if (!MapPrimitive(luPrimTypeXenon, luIndexCount, &lePrim, &luPrimCount))
+            return;
+
+        const u8* lpIndices  = static_cast<const u8*>(lpIndexData) + luStartIndex * luIndexSize;
+        const u8* lpVertices = static_cast<const u8*>(lpVertexData) + luBaseVertexIndex * suVertexStride;
+        const UINT luNumVertices = spVertexSource->muSize / suVertexStride;
+
+        lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
+                                         lpIndices,
+                                         lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
+                                         lpVertices, suVertexStride);
+    }
+
+    // renderengine::D3DDevice_CreateVertexDeclaration (VertexDescriptor.cpp
+    // CreateD3DObject): the input array uses the XENON 12-byte element records
+    // {u16 stream, u16 offset, u32 Xenon type, u8 method, u8 usage, u8 usageIdx,
+    // pad} terminated by {0xFF, 0, -1, 0,0,0}. Translate to PC records.
+    D3DVertexDeclaration* D3DDevice_CreateVertexDeclaration(const void* lpVertexElements)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return nullptr;
+
+        const u8* lpIn = static_cast<const u8*>(lpVertexElements);
+        D3DVERTEXELEMENT9 laElements[65];
+        u32 luCount = 0;
+        for (; luCount < 64; ++luCount, lpIn += 12)
+        {
+            u16 lu16Stream;
+            std::memcpy(&lu16Stream, lpIn, 2);
+            if (lu16Stream == 0x00FFu)
+                break;
+            u16 lu16Offset;
+            u32 luXenonType;
+            std::memcpy(&lu16Offset, lpIn + 2, 2);
+            std::memcpy(&luXenonType, lpIn + 4, 4);
+            u8 lu8Type;
+            if (!MapXenonDeclType(luXenonType, &lu8Type))
+                return nullptr;
+            laElements[luCount].Stream     = lu16Stream;
+            laElements[luCount].Offset     = lu16Offset;
+            laElements[luCount].Type       = lu8Type;
+            laElements[luCount].Method     = lpIn[6];
+            laElements[luCount].Usage      = lpIn[7];
+            laElements[luCount].UsageIndex = lpIn[8];
+        }
+        const D3DVERTEXELEMENT9 lEnd = D3DDECL_END();
+        laElements[luCount] = lEnd;
+
+        IDirect3DVertexDeclaration9* lpDecl = nullptr;
+        lpDevice->CreateVertexDeclaration(laElements, &lpDecl);
+        return reinterpret_cast<D3DVertexDeclaration*>(lpDecl);
+    }
+}
+
+// =============================================================================
+// The extern "C" Xenon fast-set surface.
+// =============================================================================
+extern "C"
+{
+
+void D3DDevice_SetVertexShader(IDirect3DDevice9* /*lpDeviceArg*/, void* lpShader)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice == nullptr) return;
+
+    if (lpShader == nullptr)
+    {
+        lpDevice->SetVertexShader(nullptr);
+        return;
+    }
+    // The pointer is the program image at ProgramBufferData+0x14. When the
+    // converted PC shader container is live it holds D3D9 bytecode; create-once
+    // and bind. Anything else (Xenos microcode) falls back to the world shim.
+    if (LooksLikeD3D9Bytecode(lpShader, false))
+    {
+        IDirect3DVertexShader9*& lrpVs = sVsCache[lpShader];
+        if (lrpVs == nullptr)
+            lpDevice->CreateVertexShader(static_cast<const DWORD*>(lpShader), &lrpVs);
+        if (lrpVs != nullptr)
+        {
+            lpDevice->SetVertexShader(lrpVs);
+            return;
+        }
+    }
+    LogOnce("vsraw", "[XenonD3D9] SetVertexShader: not D3D9 bytecode - fallback world shader\n");
+    renderengine::WorldFallbackShader_Bind();
+}
+
+void D3DDevice_SetPixelShader(IDirect3DDevice9* /*lpDeviceArg*/, void* lpShader)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice == nullptr) return;
+
+    if (lpShader == nullptr)
+    {
+        lpDevice->SetPixelShader(nullptr);
+        return;
+    }
+    if (LooksLikeD3D9Bytecode(lpShader, true))
+    {
+        IDirect3DPixelShader9*& lrpPs = sPsCache[lpShader];
+        if (lrpPs == nullptr)
+            lpDevice->CreatePixelShader(static_cast<const DWORD*>(lpShader), &lrpPs);
+        if (lrpPs != nullptr)
+        {
+            lpDevice->SetPixelShader(lrpPs);
+            return;
+        }
+    }
+    LogOnce("psraw", "[XenonD3D9] SetPixelShader: not D3D9 bytecode - fallback world shader\n");
+    renderengine::WorldFallbackShader_Bind();
+}
+
+void D3DDevice_SetVertexDeclaration(IDirect3DDevice9* /*lpDeviceArg*/, void* lpDecl)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr && lpDecl != nullptr)
+        lpDevice->SetVertexDeclaration(static_cast<IDirect3DVertexDeclaration9*>(lpDecl));
+}
+
+void D3DDevice_SetIndices(IDirect3DDevice9* /*lpDeviceArg*/, void* lpIndexData)
+{
+    // The Xenon fast path binds serialised index-buffer headers; on PC the UP
+    // draw path consumes the stash instead.
+    renderengine::WorldDraw_SetIndexSource(lpIndexData);
+}
+
+void D3DDevice_SetStreamSource(IDirect3DDevice9* /*lpDeviceArg*/, u32 luStreamNumber,
+                               const void* lpStreamData, u32 /*luOffsetInBytes*/,
+                               u32 luStride, u32 /*luFlags*/)
+{
+    if (luStreamNumber == 0)
+        renderengine::WorldDraw_SetVertexSource(lpStreamData, luStride);
+}
+
+unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampler,
+                                  void* lpTexture, unsigned int /*luFlags*/)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetTexture(luSampler, static_cast<IDirect3DBaseTexture9*>(lpTexture));
+    return 0;
+}
+
+void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
+                                   u32 lePrimitiveType,
+                                   u32 luBaseVertexIndex,
+                                   u32 luMinVertexIndex,
+                                   u32 luNumVertices)
+{
+    // Xenon signature: (PrimitiveType, BaseVertexIndex, StartIndex, IndexCount).
+    renderengine::WorldDraw_IndexedUP(lePrimitiveType, luBaseVertexIndex,
+                                      luMinVertexIndex, luNumVertices);
+}
+
+// The low-level sampler-state setter (X360 sub_827E8950). The Xenon sampler
+// state object is a packed GPU register block; translating it waits on the
+// TextureState/MaterialState reconciliation. FLAG [PC bring-up]: no-op.
+void* SetSamplerStateLowLevel(void* lpState, u32 /*luSamplerId*/, bool /*lbWasUnset*/)
+{
+    return lpState;
+}
+
+// ---- packed render-state fast-sets ------------------------------------------
+// The Xenon values are packed GPU register words; a faithful translation waits
+// on the state-object (MaterialState) reconstruction. The alpha-test trio maps
+// 1:1 (Xenon uses the D3D9 D3DCMPFUNC values); the rest are FLAGGED no-ops --
+// the world bring-up runs on per-pass default states set by the renderer.
+//
+// FLAG PC-platform leaf: D3DDevice_SetBlendState takes a Xenos packed blend
+// register word (RB_BLENDCONTROL) with no D3D9 counterpart -- PC blending is
+// eight separate D3DRS_* render states. Decoding that word needs the
+// MaterialState porter (still open, see the world data-seam wave), so it stays
+// inert here rather than guessing a bit layout; the renderer's per-pass
+// SetWorldPassDefaultStates supplies opaque/transparent blending meanwhile.
+void D3DDevice_SetBlendState(IDirect3DDevice9*, u32, u32) {}
+void D3DDevice_SetRenderState_ColorWriteEnable(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, luValue);
+}
+void D3DDevice_SetRenderState_ColorWriteEnable1(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_ColorWriteEnable2(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_ColorWriteEnable3(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_BlendFactor(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_BLENDFACTOR, luValue);
+}
+void D3DDevice_SetRenderState_AlphaToMaskEnable(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_AlphaToMaskOffsets(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HighPrecisionBlendEnable(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HighPrecisionBlendEnable1(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HighPrecisionBlendEnable2(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HighPrecisionBlendEnable3(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_AlphaTestEnable(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, luValue != 0);
+}
+void D3DDevice_SetRenderState_AlphaRef(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_ALPHAREF, luValue);
+}
+void D3DDevice_SetRenderState_AlphaFunc(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_ALPHAFUNC, luValue);
+}
+
+// The Xenos shader GPR split and the ring present-interval fast-set have no PC
+// equivalent (the D3D9 runtime owns both); inert by design, not placeholders.
+void D3DDevice_SetShaderGPRAllocation(void*, u32, u32, u32) {}
+void D3DDevice_SetRenderState_PresentInterval(void*, u32) {}
+
+} // extern "C"
+
+// =============================================================================
+// The Xenon predicated-draw (conditional rendering) extension the occlusion-cull
+// manager brackets its mesh draws with (CgsXboxConditionalRenderShims.h declares
+// them; CgsOcclusionCullManager.cpp @0x827E9130 / @0x827E9190 calls them). The
+// X360 reads the device from off_83271608, the same global as gpD3DDevice above.
+//
+// FLAG PC-platform leaf: D3DDevice_Begin/EndConditionalRendering are an Xbox 360
+// XDK D3D9 extension (GPU-side predicated draw keyed on an occlusion-query id).
+// Direct3D 9 on PC has no equivalent -- predication arrived with D3D10. The
+// bring-up therefore runs the draws UNPREDICATED, which is conservatively
+// correct (it draws geometry the console would have skipped, never the
+// opposite). Both occlusion switches (mbOcclusionCullWorldOpaque et al.) are off
+// on the PC render path, so these are not on the live world-opaque walk.
+namespace CgsGraphics
+{
+    void* gpXboxD3DDevice = nullptr;
+
+    void D3DDevice_BeginConditionalRendering(void* /*lpDevice*/, u32 /*luIdentifier*/)
+    {
+        gpXboxD3DDevice = renderengine::gDevice;
+    }
+
+    void D3DDevice_EndConditionalRendering(void* /*lpDevice*/)
+    {
+        gpXboxD3DDevice = renderengine::gDevice;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// XGRegisterVertexShader / XGRegisterPixelShader
+//
+// The Xenon XDK microcode-registration entry points (declared extern "C" in
+// SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h). On the
+// X360 they patch a shader header so the GPU can fetch the microcode from its
+// physical address; they are called by ProgramBuffer::ReBase and by
+// CgsResource::RwShaderProgramBufferResourceType::ReBase @0x828A8E90 when a
+// compiled program moves in memory.
+//
+// FLAG PC-platform leaf: there is no D3D9-on-PC equivalent -- shader objects
+// are created through IDirect3DDevice9::Create{Vertex,Pixel}Shader from
+// bytecode and have no client-visible physical address to re-point. The PC
+// bring-up compiles/creates its shaders through the renderengine shader path
+// instead, so these registrations are inert here. Kept as no-ops (rather than
+// asserts) because ReBase runs whenever a resource block is relocated, which
+// is normal pool behaviour and must not fault the sim.
+// ---------------------------------------------------------------------------
+// (the two opaque XDK shader-object types, declared exactly as
+// programbuffer.h declares them -- that header is NOT included here because it
+// must not precede <d3d9.h> in this TU)
+// (the two opaque XDK shader-object types + the microcode-parts struct,
+// declared exactly as programbuffer.h declares them -- that header is NOT
+// included here because it must not precede <d3d9.h> in this TU)
+struct D3DVertexShader;
+struct D3DPixelShader;
+struct XGMICROCODE_SHADER_PARTS;
+
+extern "C"
+{
+    // Microcode inspection: on the X360 these parse a compiled Xenos shader blob
+    // (its parts table / constant table). PC shaders are D3D9 bytecode created
+    // through the device, so there is nothing to parse: report "no parts" and an
+    // empty constant table. Callers (ProgramBuffer::GetResourceDescriptor /
+    // Xbox2CreateConstantTable) then size the resource with no microcode tail.
+    void* XGGetMicrocodeShaderParts(const void* /*lpFunction*/, XGMICROCODE_SHADER_PARTS* /*lpParts*/)
+    {
+        return 0;
+    }
+
+    s32 XGMicrocodeGetConstantTable(const void* /*lpFunction*/, void** lppConstantTable, u32* lpuSize)
+    {
+        if (lppConstantTable != 0) *lppConstantTable = 0;
+        if (lpuSize != 0)          *lpuSize = 0;
+        return 0;
+    }
+
+    // Header stamping: the X360 writes the GPU-visible shader header in place so
+    // the command processor can fetch the microcode. No PC equivalent exists --
+    // shader objects are opaque COM interfaces. Inert.
+    void XGSetVertexShaderHeader(D3DVertexShader* /*lpShader*/, u32 /*luShaderSize*/,
+                                 const XGMICROCODE_SHADER_PARTS* /*lpParts*/)
+    {
+    }
+
+    void XGSetPixelShaderHeader(D3DPixelShader* /*lpShader*/, u32 /*luShaderSize*/,
+                                const XGMICROCODE_SHADER_PARTS* /*lpParts*/)
+    {
+    }
+
+    // Registration: patches a shader header to point at the microcode's PHYSICAL
+    // address after a pool move (ProgramBuffer::ReBase / RwShaderProgramBuffer-
+    // ResourceType::ReBase @0x828A8E90). PC has no client-visible physical
+    // address to re-point. Inert -- and deliberately NOT an assert, because
+    // ReBase runs on ordinary pool relocation and must not fault the sim.
+    void XGRegisterVertexShader(D3DVertexShader* /*lpShader*/, void* /*lpPhysicalPart*/)
+    {
+    }
+
+    void XGRegisterPixelShader(D3DPixelShader* /*lpShader*/, void* /*lpPhysicalPart*/)
+    {
+    }
+
+    // The Xenon block-copy intrinsic -- plain memcpy semantics.
+    void* XMemCpy(void* lpDest, const void* lpSrc, u32 luCount)
+    {
+        return std::memcpy(lpDest, lpSrc, luCount);
+    }
+}
+
+// ProgramBuffer_ReleaseResource (X360 sub_82B62088) -- the external resource-
+// release hook programbuffer.cpp calls from ProgramBuffer::Release. On the X360
+// it hands the microcode block back to the GPU resource heap; the PC build
+// creates its shaders through the device instead, so the block it would release
+// does not exist here.
+namespace renderengine { struct ProgramBufferData; }
+void ProgramBuffer_ReleaseResource(renderengine::ProgramBufferData* /*lpData*/)
+{
+}

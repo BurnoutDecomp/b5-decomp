@@ -26,6 +26,12 @@ namespace Attrib
     // Malloc flags argument is the literal 0 the asm stores, not a passed-through param).
     void* Alloc(size_t lnSize);
 
+    // The tagged form the X360 emits at the vault/export-table sites (Alloc(size,
+    // "Attrib::DataBlocks"/"Attrib::AssetIDs"/"Attrib::ExportPolicyPair", or a NULL
+    // tag): same accounting + package-allocator Malloc; the tag is diagnostic only.
+    // Body: attribsysallochooks.cpp.
+    void* Alloc(size_t lnSize, const char* lpcTag);
+
     // @ 0x82804270 -- the AttribSys library's generic deallocation hook. Decrement the
     // shared live-byte census by lnSize, refresh the high-water mark, then (only when
     // both block and size are non-zero) hand the block back to the AttribSys package

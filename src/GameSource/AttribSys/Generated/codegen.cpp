@@ -31,7 +31,9 @@ namespace Attrib
     int  RefSpec_Clean(int liRefSpec);
     int  RefSpec_Clean(int) { __debugbreak(); return 0; }
     u32  StringToKey(const char* pcName);
-    u32  StringToKey(const char*) { __debugbreak(); return 0; }
+    // StringToKey: the real definition lives in the SDK attribhash64.cpp
+    // (Bob Jenkins lookup8, seed 0xABCDEF0011223344) -- the placeholder that
+    // lived here was removed at the AttribSys mount (LNK2005 otherwise).
 
     class Attrib_RefSpec_TypeHandler
     {

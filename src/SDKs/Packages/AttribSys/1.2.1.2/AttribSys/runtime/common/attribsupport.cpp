@@ -149,10 +149,12 @@ const Collection* RefSpec::GetCollectionWithDefault()
 // Attrib::Private::GetLength @ 0x82803558
 // ===========================================================================
 // The live element count of the variable-length array attribute this 8-byte header
-// fronts: the u16 at byte offset +2 (X360 `lhz r3, 2(r3)`).
+// fronts (X360 `lhz r3, 2(r3)`). Attrib::Private IS the Attrib::Array header
+// (attribarray.h) seen through the generated accessors' opaque 8-byte spelling, so
+// the count is read BY NAME through that type rather than by raw byte offset.
 unsigned int Private::GetLength() const
 {
-    return *reinterpret_cast<const u16*>(mData + 2);
+    return reinterpret_cast<const Array*>(mData)->muNumElements;
 }
 
 // ===========================================================================
@@ -170,9 +172,9 @@ unsigned int Private::GetLength() const
 // specifier count. The message text is diagnostic-only and does not affect behavior.
 static char sacAssertMessage[1024];
 
-void AssertOnClassCheck(int liClass, int liExpectedClass, void* lpCollection)
+void AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey)
 {
-    const u64 luCollection = static_cast<u64>(reinterpret_cast<uintptr_t>(lpCollection));
+    const u64 luCollection = luCollectionKey;
     const u64 luClass = static_cast<u64>(static_cast<u32>(liClass));
     const u64 luExpected = static_cast<u64>(static_cast<u32>(liExpectedClass));
 

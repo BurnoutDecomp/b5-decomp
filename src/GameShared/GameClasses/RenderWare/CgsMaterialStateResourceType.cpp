@@ -50,30 +50,38 @@ namespace CgsResource
         // Faithful port of X360 0x828A8AB8:
         //     base = *a2;                       // a2[0] = rw::Resource main base
         //     result[0] += base; result[1] += base; result[2] += base;
-        // i.e. rebase the three serialised main-memory self-pointers offset -> absolute.
+        // i.e. rebase the three serialised state-object self-pointers offset -> absolute. The
+        // platform-4 blob (tools/assets/bundles/world_type_transcode.py transcode_materialstate)
+        // serialises them as u64 offsets {0x18, 0x68, 0xC8} into the same 264-byte resource.
         renderengine::MaterialState* lpState = static_cast<renderengine::MaterialState*>(lpResource);
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
-        lpState->mpField0 = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(lpState->mpField0) + luBase);
-        lpState->mpField1 = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(lpState->mpField1) + luBase);
-        lpState->mpField2 = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(lpState->mpField2) + luBase);
+        lpState->mpBlendState = reinterpret_cast<renderengine::BlendMaterialState*>(
+            reinterpret_cast<uintptr_t>(lpState->mpBlendState) + luBase);
+        lpState->mpDepthStencilState = reinterpret_cast<renderengine::DepthStencilState*>(
+            reinterpret_cast<uintptr_t>(lpState->mpDepthStencilState) + luBase);
+        lpState->mpRasterizerState = reinterpret_cast<renderengine::RasterizerState*>(
+            reinterpret_cast<uintptr_t>(lpState->mpRasterizerState) + luBase);
     }
 
     void MaterialStateResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
         // Faithful port of X360 0x828A8A80: inverse of FixUp (absolute -> offset), and -- before
-        // un-rebasing the third pointer -- mark the sub-object it references:
-        //     v3 = result[2];                   // the (still absolute) third pointer
+        // un-rebasing the third pointer -- mark the rasterizer object it references:
+        //     v3 = result[2];                   // the (still absolute) rasterizer pointer
         //     result[0] -= base; result[1] -= base;
-        //     *(u32*)(v3 + 0x28) = 1;
+        //     *(u32*)(v3 + 0x28) = 1;           // rasterizer word 10 (serialised-blob poke)
         //     result[2] -= base;
         renderengine::MaterialState* lpState = static_cast<renderengine::MaterialState*>(lpResource);
         const uintptr_t luBase = reinterpret_cast<uintptr_t>(lrResource.m_baseResources[0]);
-        u8* lpReferenced = static_cast<u8*>(lpState->mpField2);
-        lpState->mpField0 = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(lpState->mpField0) - luBase);
-        lpState->mpField1 = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(lpState->mpField1) - luBase);
+        u8* lpReferenced = reinterpret_cast<u8*>(lpState->mpRasterizerState);
+        lpState->mpBlendState = reinterpret_cast<renderengine::BlendMaterialState*>(
+            reinterpret_cast<uintptr_t>(lpState->mpBlendState) - luBase);
+        lpState->mpDepthStencilState = reinterpret_cast<renderengine::DepthStencilState*>(
+            reinterpret_cast<uintptr_t>(lpState->mpDepthStencilState) - luBase);
         if (lpReferenced != 0)
             *reinterpret_cast<u32*>(lpReferenced + 0x28) = 1u;
-        lpState->mpField2 = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(lpReferenced) - luBase);
+        lpState->mpRasterizerState = reinterpret_cast<renderengine::RasterizerState*>(
+            reinterpret_cast<uintptr_t>(lpReferenced) - luBase);
     }
 
     uint32_t MaterialStateResourceType::GetImportCount(const void* /*lpResource*/) const

@@ -3,24 +3,30 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"  // CgsDev::DebugManager (debug HUD overlay)
 #include "GameSource/Gui/BrnGuiModule.h"         // BrnGui::gpActiveGuiModule (the GUI render drive)
 
-// Minimal constructors for the off-path placeholder types embedded in BrnRendererModule
-// (Option B). The job system and the buffered dispatch frame are reconstructed with the
-// threading / dispatch core; on the single-threaded loading-screen boot they carry no
-// behaviour, so these definitions keep the link closed without faking functionality. They
-// move to their real homes when those subsystems come online. (The EAThread RWMutex is now
-// the real type, embedded in the module base's DataBuffers - no stub ctor needed.)
+// Minimal constructor for the off-path job placeholder embedded in BrnRendererModule
+// (Option B). The job system is reconstructed with the threading core; on the
+// single-threaded boot it carries no behaviour, so this definition keeps the link
+// closed without faking functionality. (BufferedDispatchFrame is the REAL type now --
+// its stub ctor is gone with the world-pass mount.)
 EA::Jobs::Job::Job(s32 /*liPriority*/) {}
-CgsGraphics::BufferedDispatchFrame::BufferedDispatchFrame() {}
 #include "GameSource/Gui/BrnGuiMovieManager.h"   // BrnGui::gpActiveMovieManager (the PC presentation draw)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diag] BRN_IM2D_TRACE probes
+#include "rw/rwcore_structs.h"                   // rw::LinearResourceAllocator (world dispatch bin memory)
+#include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"  // ShaderConstantTable::BeginFrame (StartOfFrame)
 #include <Windows.h>   // [diag] GetEnvironmentVariableA
 #include <cstdio>      // [diag] snprintf
+#include <cstring>     // memcpy (per-pass DispatchObjectContext copies)
+#include <new>         // world dispatch bring-up heap
 
 // [diag] present counter (device.cpp) - stamps the trace lines with their frame.
 namespace renderengine { extern u32 guPresentCount; }
 
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+
+// The engine-global shader-constant table (bodied by the CgsShaderConstants TU); the X360
+// StartOfFrame @0x823FC160 opens its frame on the GDL write bin.
+namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 
 namespace
 {
@@ -131,14 +137,297 @@ void BrnRendererModule::RenderLetterBoxBars(CgsGraphics::Im2d& lIm2d, f32 lfDest
 // target memory, corona/postfx/occlusion/shadow/sun managers) are held as opaque storage
 // and their construction is reconstructed incrementally; none of them draws during the
 // loading screen, so the screen boots through the real module without them.
+namespace
+{
+    // [PC bring-up] The dispatch bins' backing memory. The X360 carves them from
+    // the renderer's graphics allocator (BrnRendererMemory::Construct ->
+    // mpGraphicsAllocator, this+14668) whose reconstruction is still open; until
+    // it lands, a renderer-owned rw::LinearResourceAllocator over one heap block
+    // supplies DoAllocate with identical semantics.
+    rw::LinearResourceAllocator sWorldDispatchAllocator;
+    bool                        sbWorldDispatchAllocatorReady = false;
+
+    // The X360 render-frame bin size is the rodata global dword_82F24238, which
+    // the function-only exports leave UNVALUED; this PC sizing is a documented
+    // choice (world-city frames: object commands + expanded mesh commands +
+    // constant scratch + sort arrays all live in the frame bin).
+    const u32 KU_PC_DISPATCH_BIN_BYTES     = 12u * 1024u * 1024u;
+    const u32 KU_PC_GDL_DISPATCH_BIN_BYTES = 8u * 1024u * 1024u;
+    const u32 KU_NUM_DISPATCH_LISTS        = 25u;   // X360 Construct: GetList ids 0..24
+
+    bool EnsureWorldDispatchAllocator()
+    {
+        if (sbWorldDispatchAllocatorReady)
+            return true;
+
+        const u32 luHeapBytes = KU_PC_DISPATCH_BIN_BYTES
+                              + 2u * KU_PC_GDL_DISPATCH_BIN_BYTES
+                              + (3u * 4096u); // per-bin align128(size)+128 slop + headroom
+        void* lpHeap = ::operator new(luHeapBytes, std::nothrow);
+        if (lpHeap == 0)
+            return false;
+
+        rw::Resource lHeapResource;
+        rw::ResourceDescriptor lHeapCapacity;
+        for (u32 luLane = 0; luLane < 4; ++luLane)
+        {
+            lHeapResource.m_baseResources[luLane] = (luLane == 0) ? lpHeap : 0;
+            lHeapCapacity.m_baseResourceDescriptors[luLane].m_size      = (luLane == 0) ? luHeapBytes : 0u;
+            lHeapCapacity.m_baseResourceDescriptors[luLane].m_alignment = (luLane == 0) ? 128u : 1u;
+        }
+        sWorldDispatchAllocator.Initialize(lHeapResource, lHeapCapacity);
+        sbWorldDispatchAllocatorReady = true;
+        return true;
+    }
+}
+
 void BrnRendererModule::Construct()
 {
     // Double-buffered per-frame shader constants (maShaderConstantsFrames[2]).
     maShaderConstantsFrames[0].Construct();
     maShaderConstantsFrames[1].Construct();
 
+    // ---- The render-dispatch machinery (X360 Construct mid-section) ----------
+    // DispatchFrame::Construct(&this+768, 25, dword_82F24238, mpGraphicsAllocator)
+    // + SetupBuiltinInterpreters(&maInterpretFunctions) + the interpreter object.
+    // The GDL side (mDoubleBufferedDispatchFrame, this+680) is built through the
+    // real BufferedDispatchFrame with 2 slots so the game thread can fill the
+    // write frame while Render walks the read frame.
+    if (EnsureWorldDispatchAllocator())
+    {
+        mSingleBufferedDispatchFrame.Construct(KU_NUM_DISPATCH_LISTS,
+                                               KU_PC_DISPATCH_BIN_BYTES,
+                                               &sWorldDispatchAllocator);
+
+        mDoubleBufferedDispatchFrame.SetNumDispatchFrames(2);
+        mDoubleBufferedDispatchFrame.Construct(KU_NUM_DISPATCH_LISTS,
+                                               KU_PC_GDL_DISPATCH_BIN_BYTES,
+                                               &sWorldDispatchAllocator);
+
+        CgsGraphics::SetupBuiltinInterpreters(maInterpretFunctions);
+        mpInterpreter = new CgsGraphics::DispatchPacketInterpreter(maInterpretFunctions, 4);
+        mpInterpreter->SetSingleBufferedDispatchFrame(&mSingleBufferedDispatchFrame);
+        mpInterpreter->SetTime(0.0f);
+    }
+
     // The loading-screen renderer (creates its textures + scratch buffer, picks language).
     mLoadingScreenRenderer.Construct();
+}
+
+// @ 0x82405E28 (BrnRendererModule::Update, the SetDispatchFrame expression)
+// The GDL frame the game side fills this update frame:
+//   v26 = (*(*(this + 680) + 28))(this + 680);   // vtable slot 7
+//   RendererIO::OutputBuffer::SetDispatchFrame(lpOutput, v26);
+// The full Update (camera copy, the fourteen other OutputBuffer publications,
+// the render-switch/effects-frame plumbing) lands with the renderer IO buffers;
+// this accessor is the one lane the world dispatch feed needs, named so the
+// renderer -> world bridge binds to a real seam instead of poking the member.
+CgsGraphics::DispatchFrame* BrnRendererModule::GetDispatchFrameForWrite()
+{
+    return &mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite();
+}
+
+// @ 0x823FC160 - BrnRendererModule::StartOfFrame.
+// X360 order: Reset the GDL write frame, rewind the seven immediate-mode render
+// buffers, ShaderConstantTable::BeginFrame on the GDL write bin, clear the 7x7
+// texture-scope scratch (unk_83011A8C), rewind the corona submission interface.
+// Reconstructed here: the two GDL halves (the parts whose subsystems exist).
+// FLAG [PC gate]: the im-buffer rewinds / texture-scope clear / corona rewind
+// land with CgsTextureScopeTable and the corona manager.
+void BrnRendererModule::StartOfFrame()
+{
+    if (mpInterpreter == 0)
+        return;   // Construct's allocator gate did not open -- no GDL ring.
+
+    mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
+    CgsGraphics::mShaderConstantTable.BeginFrame(
+        &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
+}
+
+// @ 0x823FC678 - BrnRendererModule::SwapBuffers (called by EndOfFrame @0x823FFE28).
+// X360 order: the GDL ring Swap (vtable slot 4), two ShaderConstantTable
+// Destruct calls, EffectsArbitrator::EndOfFrame, the shader-constants frame
+// flip (+2768 <- +2769, +2769 <- 1 - old, BrnShaderConstantsFrame::Construct on
+// the new write slot and the two +1964 flags), the seven im-buffer Swaps and the
+// blobby-shadow / corona index flips.
+// Reconstructed here: the GDL Swap + the shader-constants frame flip.
+// FLAG [PC gate]: the rest lands with those subsystems.
+void BrnRendererModule::SwapBuffers()
+{
+    if (mpInterpreter == 0)
+        return;
+
+    mDoubleBufferedDispatchFrame.Swap();
+
+    mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal;
+    mu8ShaderConstantsFrameExternal =
+        static_cast<u8>(1u - mu8ShaderConstantsFrameInternal);
+    maShaderConstantsFrames[mu8ShaderConstantsFrameExternal].Construct();
+}
+
+// @ 0x823FFE28 - BrnRendererModule::EndOfFrame, called from
+// BrnGame::BrnGameModule::OnEndOfUpdateFrame @0x823DBBA0.
+//
+// The X360 body takes a `freeze rendering` bool and runs a 3-state latch over
+// this+50548 / this+50552 that suppresses SwapBuffers while the freeze is held
+// (0 = running -> swap; 1 = entering, swap once the 2-frame counter expires;
+// 2 = frozen-but-still-swapping-once). It then consumes the this+50276 ->
+// this+50277 camera-cut edge Update sets. FLAG [PC gate]: neither the freeze
+// latch pair nor the camera-cut pair is in the PC member layout yet, and no PC
+// caller passes the bool -- this is the freeze=false path, which is the only one
+// the game runs outside the debug freeze-frame feature.
+void BrnRendererModule::EndOfFrame()
+{
+    SwapBuffers();
+}
+
+// @ 0x823F5898 - BrnRendererModule::ConvertObjectsToMeshes. The X360 runs 16
+// object-to-mesh jobs when the MT switch (byte_82F2423C) is on, else the
+// single-threaded fallback: per GDL object list j in 0..12, reset the constant
+// table's dispatch shadow, take a fresh copy of the 240-byte object context and
+// expand the read-side frame's list into the render frame's mesh lists.
+// The PC bring-up runs that ST fallback (the job scheduler is not up).
+void BrnRendererModule::ConvertObjectsToMeshes(CgsGraphics::BufferedDispatchFrame* lpGdlFrames,
+                                               CgsGraphics::DispatchFrame* /*lpMeshFrame*/,
+                                               CgsGraphics::DispatchPacketInterpreter* lpInterpreter,
+                                               const CgsGraphics::DispatchObjectContext* lpContext)
+{
+    for (u32 luListId = 0; luListId < 13u; ++luListId)
+    {
+        // X360 per-pass prologue: mShaderConstantTable.ResetShadowingForDispatch()
+        // + the 7x7 texture-scope scratch clear (unk_83011A90). Both shadow the
+        // PRODUCER-side dirty tracking; the expansion context below is a fresh
+        // copy each pass, so the bring-up defers them with the texture-scope
+        // reconstruction. FLAG [deferred with CgsTextureScopeTable].
+
+        CgsGraphics::DispatchObjectContext lContextCopy;
+        std::memcpy(&lContextCopy, lpContext, sizeof(lContextCopy));
+
+        CgsGraphics::DispatchFrame& lrGdlFrame = lpGdlFrames->GetDispatchFrameForRead();
+        lrGdlFrame.GetList(luListId)->DispatchAllObjectToMesh(
+            lpInterpreter, lpInterpreter->GetSingleBufferedDispatchFrame(),
+            &lContextCopy, 0, -1);
+    }
+}
+
+// @ 0x823F5F70 - BrnRendererModule::SortDispatchLists. The X360 preps 16
+// RadixSort jobs over lists {0,2,1,3,4, 5..10, 21, 11, 19, 15, 20}; the PC
+// bring-up sorts the same lists synchronously.
+void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFrame)
+{
+    static const u32 KAU_SORTED_LISTS[16] =
+        { 0u, 2u, 1u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 21u, 11u, 19u, 15u, 20u };
+    for (u32 luIndex = 0; luIndex < 16u; ++luIndex)
+    {
+        lpMeshFrame->GetList(KAU_SORTED_LISTS[luIndex])->SortForDispatch();
+    }
+}
+
+// The world/car/sky pass block of Render (@0x8240BFA8 mid-section). Pass order
+// and list ids are the X360's (see the renderer wave log for the full map):
+//   shadow cascades (lists 0,2,1,3,4)  -> gated OFF on PC (Z-only interpreter
+//     + shadow-map render manager still under reconstruction)
+//   env-map faces (lists 5..10)        -> gated OFF on PC (env-map targets)
+//   pre-Z (list 21)                    -> gated OFF on PC (Z-only interpreter)
+//   CARS OPAQUE  (list 19)  -> DispatchAllMeshes
+//   WORLD OPAQUE (list 11)  -> DispatchAllMeshes
+//   sky                     -> gated OFF on PC (SkyDomeManager not constructed)
+//   WORLD TRANSPARENT (15)  -> DispatchAllMeshes
+//   CARS TRANSPARENT  (20)  -> DispatchAllMeshes (blobby shadows gated off)
+// Occlusion-query interleaving is the mbOcclusionCull* path (default false).
+void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* /*lpDispatchThreadInputBuffer*/)
+{
+    using namespace CgsGraphics;
+
+    if (mpInterpreter == 0)
+        return;
+
+    // Start-of-frame: reset the render frame + point the interpreter at it
+    // (X360: DispatchFrame::Reset(this+768); interp+12 = frame; interp+8 = 0).
+    mSingleBufferedDispatchFrame.Reset();
+    mpInterpreter->SetSingleBufferedDispatchFrame(&mSingleBufferedDispatchFrame);
+    mpInterpreter->SetTime(0.0f);
+
+    // The 240-byte object context (X360 builds it on the Render stack):
+    // constant shadow cleared, list base 0, the pre-Z config from the module.
+    DispatchObjectContext lContext;
+    std::memset(&lContext, 0, sizeof(lContext));
+    lContext.ResetShadowing();
+    lContext.miListIdBase       = 0;
+    lContext.mbPreZEnabled      = false;   // FLAG [PC gate]: real value = mbRenderPreZ once the
+                                           // Z-only interpreter is reconstructed
+    lContext.mbPreZAlphaEnabled = mbRenderPreZAlpha;
+    const f32 lfPreZDistance = mbPreZNearOnly ? mfPreZDistanceThreshold : 100000.0f;
+    for (u32 luLane = 0; luLane < 4; ++luLane)
+        lContext.mvPreZDistanceThreshold[luLane] = lfPreZDistance * lfPreZDistance;
+
+    // Object -> mesh expansion + the pass sorts.
+    ConvertObjectsToMeshes(&mDoubleBufferedDispatchFrame, &mSingleBufferedDispatchFrame,
+                           mpInterpreter, &lContext);
+    SortDispatchLists(&mSingleBufferedDispatchFrame);
+
+    // Pass stats (X360 60-frame averages; the raw totals feed the debug HUD).
+    const u32 luCarOpaque        = mSingleBufferedDispatchFrame.GetList(19)->GetCount();
+    const u32 luWorldOpaque      = mSingleBufferedDispatchFrame.GetList(11)->GetCount();
+    const u32 luWorldTransparent = mSingleBufferedDispatchFrame.GetList(15)->GetCount();
+    const u32 luCarTransparent   = mSingleBufferedDispatchFrame.GetList(20)->GetCount();
+    mu32NumWorldOpaqueObjectTotals      += luWorldOpaque;
+    mu32NumCarOpaqueObjectTotals        += luCarOpaque;
+    mu32NumWorldTransparentObjectTotals += luWorldTransparent;
+    mu32NumCarTransparentObjectTotals   += luCarTransparent;
+
+    const bool lbOpaqueWork = (mbRenderCarsOpaque && luCarOpaque != 0)
+                           || (mbRenderWorldOpaque && luWorldOpaque != 0);
+    const bool lbTransparentWork = (mbRenderWorldTransparent && luWorldTransparent != 0)
+                                || (mbRenderCarsTransparent && luCarTransparent != 0);
+
+    // [PC bring-up states] The per-pass render states normally come from the
+    // technique state groups the walk binds on each technique change
+    // (MaterialState -- its porter + the x64 state-object seam are still open).
+    // Opaque passes: Z test+write on, no blending. FLAG: replace with the real
+    // state-group binds when the MaterialState path lands.
+    //
+    // Applied ONLY when a pass will actually walk records: with no world data
+    // (boot, menus, every frame before the streamer delivers geometry) the whole
+    // block leaves the device state untouched, so the 2D/GUI tail below sees
+    // exactly the state it saw before this pass existed.
+    if (lbOpaqueWork)
+    {
+        renderengine::Device::SetWorldPassDefaultStates(false);
+
+        if (mbRenderCarsOpaque)
+        {
+            mSingleBufferedDispatchFrame.GetList(19)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+        }
+        if (mbRenderWorldOpaque)
+        {
+            mSingleBufferedDispatchFrame.GetList(11)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+        }
+    }
+
+    // (sky here when BrnSkyDomeManager comes online)
+
+    // Transparent passes: Z test on / write off, alpha blend on. Same FLAG.
+    if (lbTransparentWork)
+    {
+        renderengine::Device::SetWorldPassDefaultStates(true);
+
+        if (mbRenderWorldTransparent)
+        {
+            mSingleBufferedDispatchFrame.GetList(15)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+        }
+        if (mbRenderCarsTransparent)
+        {
+            mSingleBufferedDispatchFrame.GetList(20)->DispatchAllMeshes(mpInterpreter, &lContext, 0, -1);
+        }
+    }
+
+    // Back to the opaque default before the 2D overlay tail (the Im2d path re-sets
+    // its own states, so this only matters for the frames a world pass ran).
+    if (lbOpaqueWork || lbTransparentWork)
+    {
+        renderengine::Device::SetWorldPassDefaultStates(false);
+    }
 }
 
 // @ 0x8240BFA8 - BrnRendererModule::Render. Reconstructed from the X360 ARTIST build.
@@ -169,6 +458,11 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     if (lpDispatchThreadInputBuffer != 0)
         mLoadingScreenRenderer.AddCommand(
             lpDispatchThreadInputBuffer->GetLoadingScreenCommand());
+
+    // The gameplay render walk (object->mesh conversion, pass sorts, the world/
+    // car passes). On the X360 this whole block precedes the 2D overlay tail;
+    // with no world GDL data the lists are empty and every pass no-ops.
+    RenderWorldPasses(lpDispatchThreadInputBuffer);
 
     // Save/load background layer: in E_LSC_SHOWSAVELOADBG mode the loading screen renders
     // BENEATH the GUI, so the SaveLoadComponent prompt draws over the dimmed loading art.

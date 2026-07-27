@@ -38,6 +38,15 @@ namespace WorldEntityIO
         return &mResourceRequestInterface;
     }
 
+    // Read-lock const twin (WorldModule::BridgeEntityModulesToOutput_PostPhysics
+    // @0x827AEEB0 drains the streamer's staged requests through it).
+    const ResourceRequestInterface*
+    OutputBuffer_PostPhysics::GetResourceRequestInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mResourceRequestInterface;
+    }
+
     // X360 0x827A2E78: read-lock; return this + 822896.
     const StatusInterface*
     OutputBuffer_PostPhysics::GetStatusInterface() const
