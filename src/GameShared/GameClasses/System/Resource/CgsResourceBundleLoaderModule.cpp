@@ -100,7 +100,17 @@ namespace CgsResource
     // deferred remainder; the request/response machinery + the per-resource pool create/fixup are faithful.]
     void BundleLoaderModule::ProcessLoadRequests(PoolModule* lpPoolModule, FTypeResolver lpfnResolveType)
     {
-        const s32 liCount = mLoadRequests.GetLength();
+        // FLAG PC-platform leaf: ONE BUNDLE PER UPDATE.
+        // The console's bundle loader is a DMA/async engine -- a LoadBundle request posted
+        // this frame replies on a LATER frame, so every requester sees at most one completion
+        // per Update. This PC loader is synchronous (ReadWholeFile + an in-place fix-up), so
+        // draining the whole queue in one pass delivered N replies in the same frame and broke
+        // that invariant: BrnWorld::InternalBaseStreamer::UpdateLoading pipelines two world-unit
+        // loads and asserts `mGDReceiverQueue.GetLength() == 1` in its WAIT stage, then stalls
+        // because its state machine only consumes one reply per visit. Servicing exactly one
+        // request per Update restores the console pacing (and bounds the per-frame hitch); the
+        // rest stay queued for the next Update, which is what the hardware queue does anyway.
+        const s32 liCount = (mLoadRequests.GetLength() > 0) ? 1 : 0;
         for (s32 li = 0; li < liCount; ++li)
         {
             const Events::LoadBundleRequest& lrRequest = mLoadRequests.GetEvent(li);
@@ -135,7 +145,12 @@ namespace CgsResource
                 lrRequest.mpUser->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lResponse), 2,
                                            static_cast<s32>(sizeof(lResponse)));
         }
-        mLoadRequests.Clear();
+        // Only the serviced head is retired; the tail stays queued for the next Update
+        // (see the pacing note above).
+        for (s32 li = 0; li < liCount; ++li)
+        {
+            mLoadRequests.PopFront();
+        }
     }
 
     void BundleLoaderModule::EnqueueUnloadRequest(const Events::UnloadBundleRequest& lrRequest)

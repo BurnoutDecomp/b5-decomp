@@ -100,6 +100,26 @@ namespace CgsGeometric
     }
 
     // ------------------------------------------------------------------------
+    // PlaneToVector -- the exact inverse of VectorToPlane (see above): the stored
+    // frustum lane IS the negation of the plane it represents, so packing a plane
+    // back into its lane form is the same whole-vector sign flip. The X360 folds
+    // this into SetPlaneByIndex's prologue (one `vxor` against the 0x80000000
+    // splat, same idiom as 0x82840DB0); declared out-of-line by the header, so it
+    // is homed here beside its only caller. `this` is untouched.
+    // ------------------------------------------------------------------------
+    Vector4 Frustum::PlaneToVector(const rw::collision::Plane& lrPlane) const
+    {
+        const Vector4& lrPlaneVector = *reinterpret_cast<const Vector4*>(&lrPlane);
+
+        Vector4 lNegated;
+        lNegated.x = -lrPlaneVector.x;
+        lNegated.y = -lrPlaneVector.y;
+        lNegated.z = -lrPlaneVector.z;
+        lNegated.w = -lrPlaneVector.w;
+        return lNegated;
+    }
+
+    // ------------------------------------------------------------------------
     // GetPlaneByIndex @ 0x8274EFE8
     //
     // r3 = sret Plane buffer, r4 = this, r5 = luPlaneIndex. Asserts index < 8,

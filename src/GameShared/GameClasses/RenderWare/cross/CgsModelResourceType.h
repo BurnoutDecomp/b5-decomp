@@ -12,6 +12,7 @@ class ModelResourceType : public Type
 {
 public:
     uint32_t           GetTypeID() const override;
+    void               FixUp(void* lpResource, const rw::Resource& lrResource) const override;   // @0x828A8578
     void               FixDown(void* lpResource, const rw::Resource& lrResource) const override;
     uint32_t           GetImportCount(const void* lpResource) const override;
     void               GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;

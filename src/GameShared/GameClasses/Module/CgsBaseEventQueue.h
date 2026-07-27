@@ -120,6 +120,21 @@ namespace CgsModule
             return true;
         }
 
+        // Drop the HEAD event, shifting the remaining ones down. ADDITIVE GROW (flagged):
+        // no layout change, no effect on existing users. Added for the PC bundle loader's
+        // one-request-per-Update pacing (CgsResourceBundleLoaderModule.cpp), which has to
+        // leave the un-serviced tail queued for the next frame the way the console's async
+        // loader does.
+        void PopFront()
+        {
+            if (miLength <= 0) return;
+            for (s32 liIndex = 1; liIndex < miLength; ++liIndex)
+            {
+                mpEvents[liIndex - 1] = mpEvents[liIndex];
+            }
+            --miLength;
+        }
+
         // Drop all live events without touching the backing buffer (X360 sets miLength = 0
         // directly; e.g. inlined into NetworkInputInterface::operator= before each per-car
         // Append). ADDITIVE GROW (flagged): pure miLength reset, no layout/behaviour change to

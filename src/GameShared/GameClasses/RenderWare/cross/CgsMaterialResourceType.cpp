@@ -5,6 +5,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h" // ProgramBuffer::GetVariableHandleByName
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the unresolved-technique boot gate
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the body
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -37,6 +38,29 @@ namespace CgsResource
     {
         "", "", "", "", "", "", ""
     };
+
+    // [FLAG PC boot gate] A material's per-technique program buffer is an IMPORT: it lives in
+    // SHADERS.BNDL, which this build does not stage yet (every technique is routed through the
+    // renderer's fallback shader instead). CgsResource::Pool::ResolveImportForEntry therefore
+    // writes a NULL into the technique slot, and the console-faithful PostFixUp walk -- which
+    // never sees a null on the real hardware -- dereferences it. Report once and skip the
+    // affected technique so the rest of the world data still fixes up. DELETE this gate when
+    // SHADERS.BNDL is staged.
+    namespace
+    {
+        void LogUnresolvedTechniqueOnce()
+        {
+            static bool sbLogged = false;
+            if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sbLogged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "MaterialResourceType::PostFixUp: technique/program import unresolved"
+                       " (SHADERS.BNDL not staged) -- skipping the binding fix-up"
+                       " [FLAG PC boot gate]\n";
+            }
+        }
+    }
 
 // --- FixUp @ 0x828A8280 -----------------------------------------------------------
     // Relocate a streamed-in material. Delta = the rw::Resource's load base (asm reads *a3,
@@ -89,7 +113,12 @@ namespace CgsResource
 
                 // Resolve the sampler's type index by matching its name against the engine's
                 // sampler-type name table (7 entries; on no match -> -1).
-                const char* const lpName = *reinterpret_cast<const char* const*>(lpSampler);
+                // SERIALISED SLOT: the sampler's name is a 32-BIT slot (the whole material
+                // blob is the console 32-bit layout -- every other access in this function
+                // is a u32 poke). Reading it as a host pointer splices the following word in
+                // and faults; low-4GB PointerFromU32 is the project convention here.
+                const char* const lpName = reinterpret_cast<const char*>(
+                    static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpSampler)));
                 s32 liType = -1;
                 for (u32 luEntry = 0; luEntry < KU_MATERIAL_SAMPLER_TYPE_COUNT; ++luEntry)
                 {
@@ -108,7 +137,7 @@ namespace CgsResource
                     if (liType >= 0)
                         break;
                 }
-                *reinterpret_cast<s32*>(lpSampler + 12) = liType;
+                *reinterpret_cast<s32*>(lpSampler + 12) = liType;   // serialised blob
 
                 ++luSampler;
             }
@@ -148,8 +177,20 @@ namespace CgsResource
 
         for (u32 luMat = 0; luMat < luNumMaterials; ++luMat)
         {
-            u8* const lpTech    = reinterpret_cast<u8* const*>(*reinterpret_cast<u32*>(lpBlob + 0x00))[luMat];
-            u8* const lpProgram = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpTech + 0x00));
+            // SERIALISED SLOT: the technique-pointer array is 32-bit slots (see FixUp).
+            u8* const lpTech    = reinterpret_cast<u8*>(static_cast<uintptr_t>(
+                reinterpret_cast<const u32*>(static_cast<uintptr_t>(*reinterpret_cast<u32*>(lpBlob + 0x00)))[luMat]));
+            if (lpTech == 0)
+            {
+                LogUnresolvedTechniqueOnce();
+                continue;
+            }
+            u8* const lpProgram = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpTech + 0x00));   // serialised blob
+            if (lpProgram == 0)
+            {
+                LogUnresolvedTechniqueOnce();
+                continue;
+            }
 
             // Mirror the program's per-stage constant count into the technique and read the
             // per-stage ProgramBufferData* used for the register lookup.
@@ -188,7 +229,7 @@ namespace CgsResource
                     if (luBlockCount != 0)
                     {
                         const u32* const lpuIds =
-                            reinterpret_cast<u32*>(*reinterpret_cast<u32*>(lpBlock + 0x0C));
+                            reinterpret_cast<u32*>(*reinterpret_cast<u32*>(lpBlock + 0x0C));   // serialised blob
                         u32  luEntry = 0;
                         bool lbFound = false;
                         while (true)
@@ -252,26 +293,38 @@ namespace CgsResource
 
         for (u32 luMat = 0; luMat < luNumMaterials; ++luMat)
         {
-            u8* const lpTech = reinterpret_cast<u8* const*>(*reinterpret_cast<u32*>(lpBlob + 0x00))[luMat];
-            *reinterpret_cast<u8*>(lpTech + 0x22) = 0;   // sampler-binding total
-            *reinterpret_cast<u8*>(lpTech + 0x23) = 0;   // external-sampler count
+            // SERIALISED SLOT: the technique-pointer array is 32-bit slots (see FixUp).
+            u8* const lpTech = reinterpret_cast<u8*>(static_cast<uintptr_t>(
+                reinterpret_cast<const u32*>(static_cast<uintptr_t>(*reinterpret_cast<u32*>(lpBlob + 0x00)))[luMat]));
+            if (lpTech == 0)
+            {
+                LogUnresolvedTechniqueOnce();
+                continue;
+            }
+            *reinterpret_cast<u8*>(lpTech + 0x22) = 0;   // sampler-binding total (serialised blob)
+            *reinterpret_cast<u8*>(lpTech + 0x23) = 0;   // external-sampler count (serialised blob)
 
             const s32 liNumSamplers = *reinterpret_cast<s8*>(lpBlob + 0x09);
             for (s32 liSampler = 0; liSampler < liNumSamplers; ++liSampler)
             {
-                u8* const lpProgram   = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpTech + 0x00));
-                const s32 liNumEntries = *reinterpret_cast<s8*>(lpProgram + 0x90);
+                u8* const lpProgram   = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpTech + 0x00));   // serialised blob
+                if (lpProgram == 0)
+                {
+                    LogUnresolvedTechniqueOnce();
+                    break;
+                }
+                const s32 liNumEntries = *reinterpret_cast<s8*>(lpProgram + 0x90);   // serialised blob
                 if (liNumEntries > 0)
                 {
-                    u8* const lpEntries = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpProgram + 0x8C));
+                    u8* const lpEntries = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpProgram + 0x8C));   // serialised blob
                     u8* const lpSampler = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpBlob + 0x0C)) + 20 * liSampler;
-                    const s16 li16SamplerId = *reinterpret_cast<s16*>(lpSampler + 0x08);
+                    const s16 li16SamplerId = *reinterpret_cast<s16*>(lpSampler + 0x08);   // serialised blob
 
                     s32  liEntry = 0;
                     bool lbMatch = false;
                     while (true)
                     {
-                        if (*reinterpret_cast<s16*>(lpEntries + 8 * liEntry + 4) == li16SamplerId)
+                        if (*reinterpret_cast<s16*>(lpEntries + 8 * liEntry + 4) == li16SamplerId)   // serialised blob
                         {
                             lbMatch = true;
                             break;
@@ -283,18 +336,18 @@ namespace CgsResource
 
                     if (lbMatch)
                     {
-                        const s8  li8Count = *reinterpret_cast<s8*>(lpTech + 0x22);
-                        u8* const lpList   = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpTech + 0x24));
+                        const s8  li8Count = *reinterpret_cast<s8*>(lpTech + 0x22);   // serialised blob
+                        u8* const lpList   = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpTech + 0x24));   // serialised blob
                         lpList[li8Count]   = static_cast<u8>(liSampler);
-                        ++*reinterpret_cast<u8*>(lpTech + 0x22);
-                        if (*reinterpret_cast<u16*>(lpSampler + 0x0A) != 0)
-                            ++*reinterpret_cast<u8*>(lpTech + 0x23);
+                        ++*reinterpret_cast<u8*>(lpTech + 0x22);   // serialised blob
+                        if (*reinterpret_cast<u16*>(lpSampler + 0x0A) != 0)   // serialised blob
+                            ++*reinterpret_cast<u8*>(lpTech + 0x23);   // serialised blob
                     }
                 }
             }
 
-            *reinterpret_cast<u8*>(lpTech + 0x22) =
-                static_cast<u8>(*reinterpret_cast<u8*>(lpTech + 0x22) - *reinterpret_cast<u8*>(lpTech + 0x23));
+            *reinterpret_cast<u8*>(lpTech + 0x22) =   // serialised blob
+                static_cast<u8>(*reinterpret_cast<u8*>(lpTech + 0x22) - *reinterpret_cast<u8*>(lpTech + 0x23));   // serialised blob
         }
     }
 }

@@ -270,35 +270,15 @@ WorldEntityModule::Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer 
         {
             mePrepareStage = E_PREPARESTAGE_COMMONDATA;
 
-            // [FLAG PC boot gate 2026-07-26] the three common-data bundle loads are the
-            // REAL X360 posts, but on PC today they wedge the boot: WORLDTEX.BIN loads and
-            // then floods CreateTexture(fmt=0 0x0) failures (the ported world Texture
-            // headers do not FixUp through the PC raster path yet -- the porter/consumer
-            // seam), and GLOBALPROPS.BIN is refused (-1: its PropGraphicsList/
-            // PropInstanceData payloads are still passthrough-BE in the converter).
-            // Skip the posts + the 3-reply wait (one-shot log) until the WORLDTEX
-            // texture seam + the prop-type porters land; then delete this gate.
-            {
-                static bool s_bLoggedCommonDataGate = false;
-                if ( !s_bLoggedCommonDataGate )
-                {
-                    s_bLoggedCommonDataGate = true;
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "WorldEntityModule::Prepare: COMMONDATA loads skipped "
-                               "(WORLDTEX texture seam / prop porters pending) "
-                               "[FLAG PC boot gate]\n";
-                }
-            }
-            if ( false )   // the gated X360 interior, kept verbatim:
-            {
-                lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
-                    &mReceiverQueue, 1, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "WORLDTEX.BIN", false );
-                lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
-                    &mReceiverQueue, 0, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALPROPS.BIN", false );
-                lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
-                    &mReceiverQueue, 2, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALBACKDROPS.BNDL", false );
-            }
+            // The three common-data bundle loads (PVS wave 2026-07-27: UN-GATED -- the world
+            // units import their textures out of WORLDTEX.BIN, so with these skipped every
+            // streamed TRK_UNIT bundle failed to resolve its imports).
+            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                &mReceiverQueue, 1, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "WORLDTEX.BIN", false );
+            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                &mReceiverQueue, 0, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALPROPS.BIN", false );
+            lpOutputBuffer->GetResourceRequestInterface()->LoadBundle(
+                &mReceiverQueue, 2, 3 /* open-world graphics pool (GameDataModule pool table id 3) */, "GLOBALBACKDROPS.BNDL", false );
         }
         // fall through
 
@@ -306,8 +286,7 @@ WorldEntityModule::Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer 
         {
             mePrepareStage = E_PREPARESTAGE_COMMONDATA_LOADING;
 
-            // [FLAG PC boot gate] the 3-reply wait is skipped with the gated posts above.
-            if ( false && mReceiverQueue.GetLength() < 3 )
+            if ( mReceiverQueue.GetLength() < 3 )
             {
                 break;
             }
@@ -475,25 +454,6 @@ WorldEntityModule::PreSceneUpdate(
 
     mPVSModule.LockForInput();
 
-    // [FLAG PC boot gate] The console's PVSModule::Update consumes the zone-request queue
-    // every frame; that body is not reconstructed here yet, so nothing drains it and the
-    // 8-deep queue overflows a few frames in ("EventQueue::AddEvent - Reached Max length").
-    // Drop the stale requests once the queue is full so the drive keeps running -- DELETE
-    // this the moment PVSModule::Update lands.
-    if ( mPVSModule.GetInputInterface()->mZoneRequestQueue.GetLength() >=
-         mPVSModule.GetInputInterface()->mZoneRequestQueue.GetMaxLength() )
-    {
-        static bool sbZoneRequestOverflowLogged = false;
-        if ( !sbZoneRequestOverflowLogged && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
-        {
-            sbZoneRequestOverflowLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "PreSceneUpdate: PVS zone-request queue full -- PVSModule::Update not"
-                   " reconstructed, dropping stale requests [FLAG PC boot gate]\n";
-        }
-        mPVSModule.GetInputInterface()->mZoneRequestQueue.Clear();
-    }
-
     if ( lpInputBuffer->GetActiveRaceCarInterface()->IsPlayerCarActive() )
     {
         const EActiveRaceCarIndex lePlayerActiveRaceCarIndex =
@@ -603,9 +563,11 @@ WorldEntityModule::PostPhysicsUpdate(
 
     // The world counts as graphically streamed when the player's zone -- and
     // every zone the PVS marks as required -- is resident in the streamer.
+    // X360: `ld r31,0x2628(this)` -- the WHOLE 64-bit zone id is both the MakeTrackUnitId
+    // argument (which reads its low half) and the streamer user id.
     bool lbWorldStreamed = mWorldGraphicsStreamer.IsAssetLoaded(
         BrnResource::MakeTrackUnitId( mPlayerZoneResponse.GetZoneNumber( 0 ) ),
-        mPlayerZoneResponse.GetZoneNumber( 0 ) );
+        mPlayerZoneResponse.GetZoneId( 0 ) );
 
     for ( u32 luZone = 1; luZone < static_cast<u32>( mPlayerZoneResponse.GetNumZones() ); luZone++ )
     {
@@ -616,7 +578,7 @@ WorldEntityModule::PostPhysicsUpdate(
 
         if ( !mWorldGraphicsStreamer.IsAssetLoaded(
                  BrnResource::MakeTrackUnitId( mPlayerZoneResponse.GetZoneNumber( luZone ) ),
-                 mPlayerZoneResponse.GetZoneNumber( luZone ) ) )
+                 mPlayerZoneResponse.GetZoneId( luZone ) ) )
         {
             lbWorldStreamed = false;
         }
@@ -654,40 +616,7 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
 
     PVSIO::OutputBuffer* lpPVSOutput = mPVSModule.GetOutputInterface();
 
-    // [DIAG world-IO wave 2026-07-27] one-shot streamer trace: how many PVS zone
-    // responses came back and what the streamer made of them. Delete once the first
-    // TRK_UNIT request is confirmed end to end.
-    static bool sbStreamTraceLogged = false;
-    const bool lbTraceThisFrame = !sbStreamTraceLogged;
-    if ( lbTraceThisFrame && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
-    {
-        sbStreamTraceLogged = true;
-        *CgsDev::Log::gpDebugPrint << "[stream-diag] UpdateStream frame "
-            << siUpdateStreamFrameCounter << " zoneResponses="
-            << lpPVSOutput->GetZoneResponseQueue()->GetLength() << "\n";
-    }
-
-    // [FLAG PC boot gate] The X360 body asserts here ("Expected zone response\n") and then
-    // reads event 0 regardless, because on the console the PVS module ALWAYS answers the
-    // zone request raised earlier in PreSceneUpdate. On this build the PVS module has no
-    // zone data yet (WorldEntityModule::Prepare's COMMONDATA/PVS legs are documented inert
-    // gates), so the queue is empty every frame: the assert would stop the simulation and
-    // GetEvent(0) would read past the queue. Report it once and skip the rest of the stream
-    // update -- RESTORE the plain CGS_ASSERT and DELETE this early-out the moment the PVS
-    // module starts answering (the [stream-diag] line above reports the response count).
-    if ( lpPVSOutput->GetZoneResponseQueue()->GetLength() <= 0 )
-    {
-        static bool sbNoZoneResponseLogged = false;
-        if ( !sbNoZoneResponseLogged && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
-        {
-            sbNoZoneResponseLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "UpdateStream: Expected zone response -- PVS module answered none"
-                   " (PVS/COMMONDATA prepare still gated) [FLAG PC boot gate]\n";
-        }
-        mPVSModule.UnlockForOutput();
-        return;
-    }
+    CGS_ASSERT( lpPVSOutput->GetZoneResponseQueue()->GetLength() > 0, "Expected zone response\n" );
 
     // Latch the newest PVS reply as the player-zone response.
     mPlayerZoneResponse = lpPVSOutput->GetZoneResponseQueue()->GetEvent( 0 );
@@ -711,12 +640,17 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
     {
         const s32 liZoneNumber = mPlayerZoneResponse.GetZoneNumber( luZone );
 
+        // X360: `ld r28,0(r25)` reads the whole 64-bit zone id; `clrlwi r3,r28,0` feeds its
+        // low half to MakeTrackUnitId while the FULL id goes in as the streamer user id
+        // (r6). The safe flag is mabZoneSafe[i] (`lbz r29,-0x60(r27)` off mabZoneRequired).
         mWorldGraphicsStreamer.AddEntry(
             BrnResource::MakeTrackUnitId( liZoneNumber ),
             mPlayerZoneResponse.IsZoneSafe( luZone ),
-            static_cast<u64>( static_cast<u32>( liZoneNumber ) ) );
+            mPlayerZoneResponse.GetZoneId( luZone ) );
 
-        if ( mPlayerZoneResponse.ZoneHasPropInstances( luZone ) )
+        // `lbz r11,0(r27)` == mabZoneRequired[i] -- the IMMEDIATE-flag zones are the ones
+        // whose prop instances have to be resident.
+        if ( mPlayerZoneResponse.IsZoneRequired( luZone ) )
         {
             PropEntityIO::PropInstancesNeededForZoneEvent lEvent;
             lEvent.muZoneId = static_cast<u16>( liZoneNumber );
@@ -727,21 +661,7 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
     muNumZonesLoadedThisFrame = 0;
     muNumZonesUnloadedThisFrame = 0;
 
-    if ( lbTraceThisFrame && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
-    {
-        *CgsDev::Log::gpDebugPrint << "[stream-diag] numZones="
-            << mPlayerZoneResponse.GetNumZones() << " playerZone="
-            << miPlayerZoneNumber << "\n";
-    }
-
     mWorldGraphicsStreamer.Update();
-
-    if ( lbTraceThisFrame && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
-    {
-        *CgsDev::Log::gpDebugPrint << "[stream-diag] after Update: staged requests="
-            << mWorldGraphicsStreamer.GetGameDataRequestInterface()->mRequestQueue.GetLength()
-            << "\n";
-    }
 
     // A GameAction asked us to report when the world stream settles.
     if ( mbWaitingForStreaming && mWorldGraphicsStreamer.IsStreamComplete() )

@@ -62,11 +62,18 @@ CgsID MakeTrackUnitId(u32 luUnitIndex)
 
     // The id is the fixed track-unit base id with the (zero-padded, base-40 decimal)
     // digits of the index folded in. The X360 computes the digit fold in 32-bit
-    // signed arithmetic (mullw/mulli + extsw), then adds the 64-bit base CgsID
-    // constant 0x89568000BEB7A6A5 (Hex-Rays renders this as the "- 1990819840"
-    // low-word artifact; the asm `insrdi`/64-bit `add` are authoritative). The three
-    // index ranges select how many decimal digits participate.
-    const s64 lnBase = static_cast<s64>(0x89568000BEB7A6A5LL);
+    // signed arithmetic (mullw/mulli + extsw), then adds the 64-bit base CgsID.
+    //
+    // *** CORRECTION (PVS wave 2026-07-27) *** the base was transcribed with its two
+    // halves SWAPPED (0x89568000BEB7A6A5). The asm builds it as
+    //   r9 = 0x89568000 ; r8 = 0xBEB7A6A5 ; insrdi r9, r8, 32, 0
+    // and `insrdi rA,rS,32,0` writes rS's low word into rA's bits 0..31 -- i.e. the
+    // HIGH half -- giving 0xBEB7A6A589568000. That is exactly CgsIDCompress("TRK_UNIT")
+    // (verified by running the committed base-40 codec over the string), whereas the
+    // swapped form uncompresses to the nonsense "KKS300L32D12" and made every world
+    // streaming request fall through GameDataModule::ProcessLoadGameDataEvent's name
+    // dispatch into `CGS_ASSERT(false, "Invalid data id: ")`.
+    const s64 lnBase = static_cast<s64>(0xBEB7A6A589568000ULL);
 
     if (luUnitIndex < 10)
     {

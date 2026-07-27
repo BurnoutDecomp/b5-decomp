@@ -14,6 +14,70 @@
 // console behaviour are preserved. The FixUp/frame functions do not assert; the two
 // ShaderConstantTableElement setters do (CGS_ASSERT: luNumQwInArray <= 0xFFFF).
 
+// ============================================================================================
+// *** SERIALISED-BLOCK SEAM (world-data wave 2026-07-27) ***
+// The three ShaderConstants* blocks are SERIALISED RESOURCE DATA, not host objects: they live
+// inside a Material / ShaderTechnique blob exactly as the console laid them out, i.e. a run of
+// 32-BIT words. The consumer that owns that blob agrees --
+// CgsResource::MaterialResourceType::FixUp walks the material with explicit `u32` slot pokes
+// (+0x00/+0x0C/+0x10/+0x14/+0x18, sampler stride 20) and the world-data porter emits the
+// console 32-bit form for Material/MaterialTechnique/TextureState/VertexDescriptor.
+//
+// The struct declarations in CgsShaderConstants.h are the HOST-width (x64) shape, so walking a
+// serialised block through them reads each pointer member at twice its real offset. That is
+// exactly what killed the first TRK_UNIT52_GR.BNDL load: MaterialResourceType::FixUp ->
+// ShaderConstantsInternal::FixUp read mppaConstantsInstanceData across the +0x10/+0x14 word
+// pair and dereferenced 0x01000000_04769674.
+//
+// So every function below that touches a block *as loaded from disc* goes through the
+// SerialisedInternal / SerialisedExternal / SerialisedCPU views: the console word layout, with
+// the u32 slots resolved through the project's low-4 GB PointerFromU32 convention (the engine's
+// whole root allocation is reserved below 4 GB -- see CgsMemory::LowMemory).
+//
+// FLAG (open): the RUNTIME accessors that are not yet bodied (ShaderConstantsInternal::
+// GetValue/GetConstant/Dispatch*ShaderConstants) must use the same view when they land -- do
+// NOT read the host-width members on a streamed block.
+// ============================================================================================
+namespace
+{
+    // Console word layout of ShaderConstantsInternal (5 words).
+    struct SerialisedInternal
+    {
+        u32 muNumConstantsInstances;   // +0x00
+        u32 muConstantsInstanceSize;   // +0x04  u32*
+        u32 muConstantsInstanceData;   // +0x08  u32**
+        u32 muNamesHash;               // +0x0C  u32*
+        u32 muProgramStateHandles;     // +0x10  ProgramVariableHandle*
+    };
+
+    // Console word layout of ShaderConstantsExternal (4 words).
+    struct SerialisedExternal
+    {
+        u32 muNumConstantsInstances;   // +0x00
+        u32 muConstantsInstanceData;   // +0x04  u32*
+        u32 muNames;                   // +0x08  const char**
+        u32 muProgramStateHandles;     // +0x0C  ProgramVariableHandle*
+    };
+
+    // Console word layout of ShaderConstantsCPU (4 words).
+    struct SerialisedCPU
+    {
+        u32 muCPUShader;               // +0x00  ICPUShader* (nulled by FixUp)
+        u32 muNumConstantsInstances;   // +0x04
+        u32 muConstantsInstanceData;   // +0x08  u32**
+        u32 muNames;                   // +0x0C  const char**
+    };
+
+    inline u32* SlotArray(u32 luSlot)
+    {
+        return reinterpret_cast<u32*>(static_cast<uintptr_t>(luSlot));
+    }
+    inline const char* SlotString(u32 luSlot)
+    {
+        return reinterpret_cast<const char*>(static_cast<uintptr_t>(luSlot));
+    }
+}
+
 // CgsShaderConstants.cpp:54-56
 // File-static shadowing-policy flags. The X360 build compiles these as constant globals
 // in this TU (used by the dispatch helpers reconstructed in other TUs).
@@ -31,20 +95,22 @@ namespace ShaderConstantShadowing
 // header signature is u32, matching the DWARF's u32 FixUp(u8*).
 u32 ShaderConstantsExternal::FixUp(u8* lpBaseData)
 {
-    const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+    // SERIALISED-BLOCK SEAM (see the banner): walk the console word layout.
+    SerialisedExternal* const lpBlock = reinterpret_cast<SerialisedExternal*>(this);
+    const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lpBaseData));
 
-    mppaConstantsInstanceData = reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
-    mpaProgramStateHandles = reinterpret_cast<renderengine::ProgramVariableHandle*>(reinterpret_cast<uintptr_t>(mpaProgramStateHandles) + luBase);
-    mppacNames = reinterpret_cast<const char**>(reinterpret_cast<uintptr_t>(mppacNames) + luBase);
+    lpBlock->muConstantsInstanceData += luDelta;
+    lpBlock->muProgramStateHandles   += luDelta;
+    lpBlock->muNames                 += luDelta;
 
-    if (muNumConstantsInstances != 0)
+    if (lpBlock->muNumConstantsInstances != 0)
     {
-        for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
+        u32* const lpaNames = SlotArray(lpBlock->muNames);
+        for (u32 luIndex = 0; luIndex < lpBlock->muNumConstantsInstances; ++luIndex)
         {
-            const uintptr_t luName = reinterpret_cast<uintptr_t>(mppacNames[luIndex]);
-            if (luName != 0)
+            if (lpaNames[luIndex] != 0)
             {
-                mppacNames[luIndex] = reinterpret_cast<const char*>(luName + luBase);
+                lpaNames[luIndex] += luDelta;
             }
         }
     }
@@ -59,15 +125,18 @@ u32 ShaderConstantsExternal::FixUp(u8* lpBaseData)
 // true, otherwise advance to the next name until muNumConstantsInstances is exhausted.
 bool ShaderConstantsExternal::HasShaderConstant(const char* lpName) const
 {
-    if (muNumConstantsInstances == 0)
+    // SERIALISED-BLOCK SEAM (see the banner): the callers (MaterialTechniqueResourceType::
+    // PostFixUp) hand this a block inside a streamed technique blob.
+    const SerialisedExternal* const lpBlock = reinterpret_cast<const SerialisedExternal*>(this);
+    if (lpBlock->muNumConstantsInstances == 0)
     {
         return false;
     }
 
     u32 luIndex = 0;
-    for (const char* const* lppName = mppacNames; ; ++lppName)
+    for (const u32* lppName = SlotArray(lpBlock->muNames); ; ++lppName)
     {
-        const char* lpCandidate = *lppName;
+        const char* lpCandidate = SlotString(*lppName);
         const char* lpQuery = lpName;
 
         int liDiff;
@@ -88,7 +157,7 @@ bool ShaderConstantsExternal::HasShaderConstant(const char* lpName) const
             return true;
         }
 
-        if (++luIndex >= muNumConstantsInstances)
+        if (++luIndex >= lpBlock->muNumConstantsInstances)
         {
             return false;
         }
@@ -102,19 +171,21 @@ bool ShaderConstantsExternal::HasShaderConstant(const char* lpName) const
 // int 0 on X360; u32 in the header per the DWARF.
 u32 ShaderConstantsInternal::FixUp(u8* lpBaseData)
 {
-    const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+    // SERIALISED-BLOCK SEAM (see the banner): walk the console word layout.
+    SerialisedInternal* const lpBlock = reinterpret_cast<SerialisedInternal*>(this);
+    const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lpBaseData));
 
-    mpaProgramStateHandles = reinterpret_cast<renderengine::ProgramVariableHandle*>(reinterpret_cast<uintptr_t>(mpaProgramStateHandles) + luBase);
-    mppaConstantsInstanceData = reinterpret_cast<u32**>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
-    mpauNamesHash = reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mpauNamesHash) + luBase);
-    mpauConstantsInstanceSize = reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mpauConstantsInstanceSize) + luBase);
+    lpBlock->muProgramStateHandles   += luDelta;
+    lpBlock->muConstantsInstanceData += luDelta;
+    lpBlock->muNamesHash             += luDelta;
+    lpBlock->muConstantsInstanceSize += luDelta;
 
-    if (muNumConstantsInstances != 0)
+    if (lpBlock->muNumConstantsInstances != 0)
     {
-        for (u32 luIndex = 0; luIndex < muNumConstantsInstances; ++luIndex)
+        u32* const lpaInstanceData = SlotArray(lpBlock->muConstantsInstanceData);
+        for (u32 luIndex = 0; luIndex < lpBlock->muNumConstantsInstances; ++luIndex)
         {
-            mppaConstantsInstanceData[luIndex] =
-                reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) + luBase);
+            lpaInstanceData[luIndex] += luDelta;
         }
     }
 
@@ -221,31 +292,35 @@ void ShaderConstantTableElement::SetNumEntries(u8 lu8NumEntries)
 // fits a byte (< 256). Returns int 0 on X360 (u32 per the DWARF signature).
 u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
 {
-    CGS_ASSERT(muNumConstantsInstances < 256, "muNumConstantsInstances<256");
+    // SERIALISED-BLOCK SEAM (see the banner): walk the console word layout.
+    SerialisedCPU* const lpBlock = reinterpret_cast<SerialisedCPU*>(this);
 
-    const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+    CGS_ASSERT(lpBlock->muNumConstantsInstances < 256, "muNumConstantsInstances<256");
 
-    mpCPUShader = nullptr;
-    mppaConstantsInstanceData = reinterpret_cast<u32**>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData) + luBase);
-    mppacNames = reinterpret_cast<const char**>(reinterpret_cast<uintptr_t>(mppacNames) + luBase);
+    const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lpBaseData));
 
-    if (muNumConstantsInstances != 0)
+    lpBlock->muCPUShader              = 0;
+    lpBlock->muConstantsInstanceData += luDelta;
+    lpBlock->muNames                 += luDelta;
+
+    if (lpBlock->muNumConstantsInstances != 0)
     {
+        u32* const lpaNames        = SlotArray(lpBlock->muNames);
+        u32* const lpaInstanceData = SlotArray(lpBlock->muConstantsInstanceData);
+
         u32 luIndex = 0;
         do
         {
-            const uintptr_t luName = reinterpret_cast<uintptr_t>(mppacNames[luIndex]);
-            if (luName != 0)
+            if (lpaNames[luIndex] != 0)
             {
-                mppacNames[luIndex] = reinterpret_cast<const char*>(luName + luBase);
+                lpaNames[luIndex] += luDelta;
             }
 
-            mppaConstantsInstanceData[luIndex] =
-                reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mppaConstantsInstanceData[luIndex]) + luBase);
+            lpaInstanceData[luIndex] += luDelta;
 
             ++luIndex;
         }
-        while (luIndex < muNumConstantsInstances);
+        while (luIndex < lpBlock->muNumConstantsInstances);
     }
 
     return 0;
@@ -259,16 +334,19 @@ u32 ShaderConstantsCPU::FixUp(u8* lpBaseData)
 // ShaderConstantsExternal::HasShaderConstant strcmp loop.
 bool ShaderConstantsCPU::GetValue(const char* lpName, Vector4& lrOutValue) const
 {
-    const u32 luNum = muNumConstantsInstances;
+    // SERIALISED-BLOCK SEAM (see the banner): the block lives inside the streamed material.
+    const SerialisedCPU* const lpBlock = reinterpret_cast<const SerialisedCPU*>(this);
+
+    const u32 luNum = lpBlock->muNumConstantsInstances;
     if (luNum == 0)
     {
         return false;
     }
 
     u32 luIndex = 0;
-    for (const char* const* lppName = mppacNames; ; ++lppName)
+    for (const u32* lppName = SlotArray(lpBlock->muNames); ; ++lppName)
     {
-        const char* lpCandidate = *lppName;
+        const char* lpCandidate = SlotString(*lppName);
         const char* lpQuery = lpName;
 
         int liDiff;
@@ -286,7 +364,9 @@ bool ShaderConstantsCPU::GetValue(const char* lpName, Vector4& lrOutValue) const
 
         if (liDiff == 0)
         {
-            lrOutValue = *reinterpret_cast<const Vector4*>(mppaConstantsInstanceData[luIndex]);
+            const u32* const lpaInstanceData = SlotArray(lpBlock->muConstantsInstanceData);
+            lrOutValue = *reinterpret_cast<const Vector4*>(
+                static_cast<uintptr_t>(lpaInstanceData[luIndex]));
             return true;
         }
 

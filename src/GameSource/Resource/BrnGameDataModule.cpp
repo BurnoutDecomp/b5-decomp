@@ -991,6 +991,14 @@ namespace BrnResource
         // == 0" and "luZoneId < KU_MAX_ZONES"; the compare immediates are 9 and 0x1F4).
         const u32 KU_STRING_INDEX_OF_ZONE_NUMBER = 9;
         const u32 KU_MAX_ZONES                   = 500;
+
+        // off_82F2A6BC -- the per-asset-set bundle-name suffix table
+        // ProcessLoadWorldUnitRequest indexes with the request's meType to build
+        // "<TRK_UNITn>_<suffix>.bndl". Values read from the ARTIST .i64 data segment
+        // (0x82001700 "GR", 0x820016FC "PH", 0x820016F8 "SO", 0x820016F4 "DA",
+        // 0x820016F0 "AT") -- i.e. exactly the BrnResource::EAssetSet order.
+        const char* const KAPC_ASSET_SET_SUFFIXES[] = { "GR", "PH", "SO", "DA", "AT" };
+        const char* const KPC_TRACK_UNIT_FILE_FORMAT = "%s_%s.bndl";   // off_82F2A6B4-adjacent format literal
     }
 
     // @ 0x82674670 -- the per-frame pump. Reconstructed slice: the GameData request drain
@@ -1309,7 +1317,7 @@ namespace BrnResource
         else if (memcmp(lacName, "TRK_", 4) == 0)
         {
             if (memcmp(lacName + 4, "UNIT", 4) == 0)
-                DeferredGameDataRequest("LoadWorldUnit (0x8266F5C8, id 31)", lpSlot);
+                ProcessLoadWorldUnitRequest(lpResourceInput, lpEvent, 31, liIndex);
             else if (memcmp(lacName + 4, "COLL", 4) == 0)
                 DeferredGameDataRequest("LoadWorldCollision (0x8266F830, id 32)", lpSlot);
             else if (memcmp(lacName + 4, "ZONE", 4) == 0)
@@ -1436,6 +1444,50 @@ namespace BrnResource
     void GameDataModule::ProcessSwapOutCollisionWorldRequest()
     {
         *CgsDev::Log::gpDebugPrint << "[GameData] ProcessSwapOutCollisionWorldRequest DEFERRED\n";
+    }
+
+    // @ 0x8266F5C8 -- service a LOAD world-unit request: post the LoadBundle for the unit's
+    // per-asset-set bundle ("<TRK_UNITn>_<GR|PH|SO|DA|AT>.bndl"). The reply lands on
+    // mReceiverQueue and ProcessInternalLoadBundleResponse's case 31 then dispatches the
+    // paired GET (ProcessGetWorldUnitRequest, id 56) which acquires the unit's instance
+    // list. This is the FIRST hop of the world graphics streamer's load chain.
+    void GameDataModule::ProcessLoadWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                     const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                     s32 liEventId, s32 liSlotIndex)
+    {
+        // X360 store order: the response id is staged FIRST (before the name work).
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacResourceName[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacResourceName);
+
+        // X360: `if (event->meType) assert` -- the streamer always asks for asset set 0.
+        // The suffix lookup runs on meType regardless (the assert is a non-gating tripwire).
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for track units\n");   // X360 line 4256
+
+        const u32 luAssetSet = static_cast<u32>(lpEvent->meType);
+        const char* lpcSuffix =
+            (luAssetSet < (sizeof(KAPC_ASSET_SET_SUFFIXES) / sizeof(KAPC_ASSET_SET_SUFFIXES[0])))
+                ? KAPC_ASSET_SET_SUFFIXES[luAssetSet]
+                : KAPC_ASSET_SET_SUFFIXES[0];
+
+        char lacFileName[208];
+        CgsCore::SPrintf(lacFileName, 128, KPC_TRACK_UNIT_FILE_FORMAT, lacResourceName, lpcSuffix);
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(lacFileName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = true;   // X360 stores 1 here (v33), unlike the prop path
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
     }
 
     // @ 0x826705D0 -- service a GET world-unit request: acquire the unit's "<name>_list"

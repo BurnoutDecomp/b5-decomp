@@ -2,6 +2,9 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Graphics/Dispatch/Renderable.h"
+#include "GameShared/GameClasses/Graphics/CgsSerialisedPtr.h"   // Ptr32<T> (the 32-bit slot)
+
+#include <cstddef>
 
 // CgsModel.h - the CgsGraphics::Model wrapper/accessor.
 //
@@ -21,8 +24,17 @@
 //   +0x11 mu8Flags                     u8
 //   +0x12 mu8NumStates                 u8             (lbz 0x12(this))
 //   +0x13 mu8VersionNumber             u8
-// NOTE: pointer members are 4 bytes on the X360 and 8 bytes on the PC host; do NOT
-// pin absolute offsets across them. Members are accessed BY NAME below.
+//
+// *** ON-DISC LAYOUT (PVS wave 2026-07-27) ***
+// Model is NOT a host object: it IS the streamed resource body that
+// CgsResource::ModelResourceType relocates in place (@0x828A8578 rebases exactly
+// the three u32 slots at +0/+4/+8, and GetSerialisedResourceDescriptor sizes the
+// header at 20 bytes). Modelling the three tables as host-width pointers doubled
+// every offset past the first, so mpu8StateRenderableIndices read the splice of
+// the +4/+8 slots -- an access violation in Model::DoesStateExist the moment the
+// first streamed TRK_UNIT instance list was walked. The slots are pinned to the
+// console's 4 bytes with Ptr32<T> (the low-4 GB PointerFromU32 convention); every
+// member is still accessed BY NAME, and the static_assert below is the tripwire.
 
 namespace renderengine { class Texture; }   // Model::UsesTexture param (pointer only)
 
@@ -121,22 +133,25 @@ namespace CgsGraphics
         bool UsesTexture(const renderengine::Texture* lpTexture) const;
 
     protected:
-        // CgsModel.h:268 - table of renderable pointers (mu8NumRenderables long).
-        Renderable** mppRenderables;
+        // CgsModel.h:268 - table of renderable pointers (mu8NumRenderables long). +0x00
+        Ptr32<Ptr32<Renderable> > mppRenderables;
         // CgsModel.h:269 - per-state index into mppRenderables (mu8NumStates long);
-        //                  K_INDEX_UNUSED (255) marks an absent state.
-        u8* mpu8StateRenderableIndices;
-        // CgsModel.h:270 - per-state LOD switch distance (mu8NumStates long).
-        f32* mpfLodDistances;
+        //                  K_INDEX_UNUSED (255) marks an absent state. +0x04
+        Ptr32<u8> mpu8StateRenderableIndices;
+        // CgsModel.h:270 - per-state LOD switch distance (mu8NumStates long). +0x08
+        Ptr32<f32> mpfLodDistances;
         // CgsModel.h:271
-        s32 miGameExplorerIndex;
+        s32 miGameExplorerIndex;   // +0x0C
         // CgsModel.h:272
-        u8 mu8NumRenderables;
+        u8 mu8NumRenderables;      // +0x10
         // CgsModel.h:273
-        u8 mu8Flags;
+        u8 mu8Flags;               // +0x11
         // CgsModel.h:274
-        u8 mu8NumStates;
+        u8 mu8NumStates;           // +0x12
         // CgsModel.h:275
-        u8 mu8VersionNumber;
+        u8 mu8VersionNumber;       // +0x13
     };
+
+    // The console header size ModelResourceType::GetSerialisedResourceDescriptor adds (20).
+    static_assert(sizeof(Model) == 20, "CgsGraphics::Model must be the console's 20-byte on-disc header");
 }
