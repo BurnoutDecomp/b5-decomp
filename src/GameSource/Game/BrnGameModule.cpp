@@ -97,11 +97,16 @@ namespace BrnGame
         // Until that Prepare + the allocator layer land, two fixed scratch blocks stand in.
         static CgsModule::IOBufferStack sUpdateInputStack;
         static CgsModule::IOBufferStack sUpdateOutputStack;
-        // Sized to the DOCUMENTED X360 values (main() @0x827E60D8 carves 0x780000 each;
-        // see the comment above) -- the 64KB scratch stand-ins overflowed once the sound
-        // module's ~66KB Root IO buffers started allocating here (the stage-4 assert).
-        static u8 saUpdateInputMem[0x780000];
-        static u8 saUpdateOutputMem[0x780000];
+        // FLAG PC-platform leaf: sizing. The DOCUMENTED X360 value is 0x780000 each (main()
+        // @0x827E60D8), but that is a 32-bit-pointer budget: on this LLP64 host every IO
+        // buffer carrying pointers/handles is wider than its console twin, and
+        // WorldModule::Update pushes ~30 of them (several ~800 KB) in one frame. With
+        // 0x780000 the world drive overflowed the stacks mid-frame -- CreateIOBuffer then
+        // returns NULL and the failure only surfaces later as a "not Constructed" assert on
+        // the buffer that was never allocated (IOBufferStack::Alloc now names the overflow
+        // when it happens). Doubled to 0x1000000 each; the console ratio is documented above.
+        static u8 saUpdateInputMem[0x1000000];
+        static u8 saUpdateOutputMem[0x1000000];
         sUpdateInputStack.Construct("UpdateInput");
         sUpdateInputStack.Prepare(saUpdateInputMem, sizeof(saUpdateInputMem), 16);
         sUpdateOutputStack.Construct("UpdateOutput");

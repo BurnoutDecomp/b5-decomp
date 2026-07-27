@@ -475,6 +475,25 @@ WorldEntityModule::PreSceneUpdate(
 
     mPVSModule.LockForInput();
 
+    // [FLAG PC boot gate] The console's PVSModule::Update consumes the zone-request queue
+    // every frame; that body is not reconstructed here yet, so nothing drains it and the
+    // 8-deep queue overflows a few frames in ("EventQueue::AddEvent - Reached Max length").
+    // Drop the stale requests once the queue is full so the drive keeps running -- DELETE
+    // this the moment PVSModule::Update lands.
+    if ( mPVSModule.GetInputInterface()->mZoneRequestQueue.GetLength() >=
+         mPVSModule.GetInputInterface()->mZoneRequestQueue.GetMaxLength() )
+    {
+        static bool sbZoneRequestOverflowLogged = false;
+        if ( !sbZoneRequestOverflowLogged && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
+        {
+            sbZoneRequestOverflowLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "PreSceneUpdate: PVS zone-request queue full -- PVSModule::Update not"
+                   " reconstructed, dropping stale requests [FLAG PC boot gate]\n";
+        }
+        mPVSModule.GetInputInterface()->mZoneRequestQueue.Clear();
+    }
+
     if ( lpInputBuffer->GetActiveRaceCarInterface()->IsPlayerCarActive() )
     {
         const EActiveRaceCarIndex lePlayerActiveRaceCarIndex =
@@ -635,7 +654,40 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
 
     PVSIO::OutputBuffer* lpPVSOutput = mPVSModule.GetOutputInterface();
 
-    CGS_ASSERT( lpPVSOutput->GetZoneResponseQueue()->GetLength() > 0, "Expected zone response\n" );
+    // [DIAG world-IO wave 2026-07-27] one-shot streamer trace: how many PVS zone
+    // responses came back and what the streamer made of them. Delete once the first
+    // TRK_UNIT request is confirmed end to end.
+    static bool sbStreamTraceLogged = false;
+    const bool lbTraceThisFrame = !sbStreamTraceLogged;
+    if ( lbTraceThisFrame && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
+    {
+        sbStreamTraceLogged = true;
+        *CgsDev::Log::gpDebugPrint << "[stream-diag] UpdateStream frame "
+            << siUpdateStreamFrameCounter << " zoneResponses="
+            << lpPVSOutput->GetZoneResponseQueue()->GetLength() << "\n";
+    }
+
+    // [FLAG PC boot gate] The X360 body asserts here ("Expected zone response\n") and then
+    // reads event 0 regardless, because on the console the PVS module ALWAYS answers the
+    // zone request raised earlier in PreSceneUpdate. On this build the PVS module has no
+    // zone data yet (WorldEntityModule::Prepare's COMMONDATA/PVS legs are documented inert
+    // gates), so the queue is empty every frame: the assert would stop the simulation and
+    // GetEvent(0) would read past the queue. Report it once and skip the rest of the stream
+    // update -- RESTORE the plain CGS_ASSERT and DELETE this early-out the moment the PVS
+    // module starts answering (the [stream-diag] line above reports the response count).
+    if ( lpPVSOutput->GetZoneResponseQueue()->GetLength() <= 0 )
+    {
+        static bool sbNoZoneResponseLogged = false;
+        if ( !sbNoZoneResponseLogged && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
+        {
+            sbNoZoneResponseLogged = true;
+            *CgsDev::Log::gpDebugPrint
+                << "UpdateStream: Expected zone response -- PVS module answered none"
+                   " (PVS/COMMONDATA prepare still gated) [FLAG PC boot gate]\n";
+        }
+        mPVSModule.UnlockForOutput();
+        return;
+    }
 
     // Latch the newest PVS reply as the player-zone response.
     mPlayerZoneResponse = lpPVSOutput->GetZoneResponseQueue()->GetEvent( 0 );
@@ -675,7 +727,21 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
     muNumZonesLoadedThisFrame = 0;
     muNumZonesUnloadedThisFrame = 0;
 
+    if ( lbTraceThisFrame && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
+    {
+        *CgsDev::Log::gpDebugPrint << "[stream-diag] numZones="
+            << mPlayerZoneResponse.GetNumZones() << " playerZone="
+            << miPlayerZoneNumber << "\n";
+    }
+
     mWorldGraphicsStreamer.Update();
+
+    if ( lbTraceThisFrame && ( CgsDev::Message::gxMessageFilterFlags & 1 ) )
+    {
+        *CgsDev::Log::gpDebugPrint << "[stream-diag] after Update: staged requests="
+            << mWorldGraphicsStreamer.GetGameDataRequestInterface()->mRequestQueue.GetLength()
+            << "\n";
+    }
 
     // A GameAction asked us to report when the world stream settles.
     if ( mbWaitingForStreaming && mWorldGraphicsStreamer.IsStreamComplete() )

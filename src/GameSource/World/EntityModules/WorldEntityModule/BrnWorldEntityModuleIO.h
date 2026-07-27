@@ -95,6 +95,17 @@ namespace WorldEntityIO
     // BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics (DWARF BrnWorldEntityModuleIO.h:234).
     struct OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
+        // X360 0x822EDFF0 -- IOBuffer status, the request queue Construct+Clear, the five
+        // status flags (0/0/0/1/1) and the scene input aggregate.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mResourceRequestInterface.mRequestQueue.Construct();
+            mResourceRequestInterface.mRequestQueue.Clear();
+            mStatusInterface.Construct();
+            mSceneInputInterface.Construct();
+        }
+
         // X360 0x822BA810: write-lock; X360 this+4.
         ResourceRequestInterface* GetResourceRequestInterface();
         // Read-lock const twin (the world streamer's request flush is drained through
@@ -123,11 +134,29 @@ namespace WorldEntityIO
     // DispatchFrame::GetList / ShadowMap::CalcLodDistanceModifier).
     struct InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
     {
+        typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueue;
+
+        // X360 0x822D8BC8 -- IOBuffer status, the dispatch-frame pointer cleared, the
+        // scene-result queue Construct (VariableEventQueue<32768,16>, the maPayload span --
+        // X360 +8, and 8 + sizeof(VEQ<32768,16>) == 0x8018 == the shadow-map slot) and the
+        // shadow-map pointer cleared.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mpDispatchFrame = 0;
+            GetSceneResultQueue()->Construct();
+            mpShadowMap = 0;
+        }
+
         // ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8 seeds the
         // frustum-result event here before the world dispatch feed runs --
         // X360 accessor sub_827BBCF8, spelled GetSceneResultQueue like the
-        // sibling race-car/traffic/prop dispatch inputs).
-        CgsModule::VariableEventQueue<32768, 16>* GetSceneResultQueue();
+        // sibling race-car/traffic/prop dispatch inputs). The member it returns is
+        // pinned by the X360 span: Construct @0x822D8BC8 runs
+        // VariableEventQueue<32768,16>::Construct(this+8) and the shadow-map pointer
+        // sits at this+0x8018 == 8 + sizeof(VariableEventQueue<32768,16>) (32784).
+        // (Was a declaration-only accessor whose WorldLinkStubs trap returned NULL.)
+        SceneResultQueue* GetSceneResultQueue() { return &mSceneResultQueue; }
 
         // X360 0x822BAA08 (read-lock) / 0x827A2FC8 (write-lock); X360 this+4.
         CgsGraphics::DispatchFrame* GetDispatchFrame() const;
@@ -140,8 +169,7 @@ namespace WorldEntityIO
 
     private:
         CgsGraphics::DispatchFrame* mpDispatchFrame;             // X360 +4
-        // Intervening dispatch-list payload (own members not yet attested).
-        unsigned char               maPayload[0x8018 - 8];       // X360 +8..+0x8017
+        SceneResultQueue            mSceneResultQueue;           // X360 +8 (32784 B)
         BrnWorld::ShadowMap*        mpShadowMap;                 // X360 +0x8018
     };
 
@@ -150,6 +178,16 @@ namespace WorldEntityIO
     struct InputBuffer_PreScene : public CgsModule::IOBuffer
     {
         typedef RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarInterface;
+
+        // X360 0x822D8B18 -- IOBuffer status, the race-car interface Clear, then the two
+        // RequestInterface flag bytes (+10496/+10497) cleared.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mActiveRaceCarInterface.Clear();
+            mRequestInterface.mbInvalidateCollisionWorld = false;
+            mRequestInterface.mbValidateCollisionWorld   = false;
+        }
 
         // X360 0x822BA228: read-lock; X360 this+16.
         const ActiveRaceCarInterface* GetActiveRaceCarInterface() const;
@@ -174,6 +212,13 @@ namespace WorldEntityIO
         // The GameAction event pipe (X360 VariableEventQueue<13312,16>).
         typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueue;
 
+        // X360 0x822D8BB0 -- IOBuffer status then the game-action queue (this+4).
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mGameActionQueue.Construct();
+        }
+
         // X360 0x822BA768: read-lock; X360 this+4.
         const GameActionQueue* GetGameActionQueue() const;
         // X360 0x827A2D28: write-lock; X360 this+4.
@@ -195,6 +240,22 @@ namespace WorldEntityIO
         typedef CgsModule::EventQueue<BrnWorld::PropEntityIO::PropGraphicsUnloadedEvent, 25>       PropGraphicsUnloadedQueue;
         typedef CgsModule::VariableEventQueue<1536, 16>                                            GameEventQueue;
         typedef CgsModule::EventQueue<BrnSound::Module::Io::SoundWorldLoadEvent, 25>               SoundWorldLoadInterface;
+
+        // X360 0x822EDF78 -- IOBuffer status then, in the console's own call order, the
+        // scene input aggregate, the game-event queue, the two prop graphics queues, the
+        // prop-instances-needed queue, the sound world-load queue and the player zone number
+        // seeded to -1.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mSceneInputInterface.Construct();
+            mGameEventQueue.Construct();
+            mPropGraphicsLoadedQueue.Construct();
+            mPropGraphicsUnloadedQueue.Construct();
+            mPropInstancesNeededForZoneQueue.Construct();
+            mSoundWorldLoadInterface.Construct();
+            miPlayerZoneNumber = -1;
+        }
 
         // X360 0x827A2938 (read-lock) / 0x822BA378 (write-lock); X360 this+208.
         const SceneInputInterface* GetSceneInputInterface() const;

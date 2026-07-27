@@ -28,9 +28,9 @@ static const CgsResource::BaseResourcePtr KS_EMPTY_INSTANCE_LIST_PTR;
 void
 WorldGraphicsStreamer::Construct( WorldEntityModule* lpWorldEntityModule )
 {
-    // X360: list length 32, pool 3 (E_POOL_OW_GRAPHICS), asset-set 0,
-    // allow-failure true.
-    BaseStreamer<32>::Construct( 3, static_cast<BrnResource::EAssetSet>( 0 ), true );
+    // X360 0x827CA388: list length 32, pool 3 (E_POOL_OW_GRAPHICS), slot-pool-system
+    // false (r10 == 0), asset-set 0, allow-failure true.
+    BaseStreamer<32>::Construct( 3, false, static_cast<BrnResource::EAssetSet>( 0 ), true );
 
     mpWorldEntityModule = lpWorldEntityModule;
 

@@ -58,7 +58,7 @@ namespace TriggerEntityModuleIO
     // returns &mInputInterface (this + 4). Read by ProcessTriggerQueryEvents. Const overload of
     // GetInputInterface (the write overload @0x827A3270 :119 is committed in
     // BrnTriggerEntityModuleIO_Accessors.cpp).
-    const InputBuffer_PreScene::InputInterfaceStorage*
+    const InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");

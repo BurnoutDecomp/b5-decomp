@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h" // InCoarseQueryQueue<N>
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                    // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT (lock tripwires)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // VariableEventQueue<32768,16>
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"  // InSceneUpdateInterface (canonical home)
 
@@ -64,9 +65,18 @@ namespace SceneManagerIO
     // ------------------------------------------------------------------------
     struct InputBuffer_Query : public CgsModule::IOBuffer
     {
-        // X360 GenerateFrustumQueries @0x827DADF8 recycles the buffer each frame and
-        // stages every query through the coarse-query queue.
-        void Construct();
+        // X360 0x828C7BC0 -- IOBuffer status, then VariableEventQueue<16384,16>::Construct
+        // on the coarse-query queue (this+40) followed by the nine typed line/volume/sphere
+        // test queues and the nine cached pointers to them (this+4..+36). Only the coarse
+        // queue is committed on this side, so the PARTIAL SLICE below runs the base status +
+        // that queue; the nine typed sub-queues land with their own TUs [marked deviation].
+        // (Was a declaration-only accessor whose WorldLinkStubs body asserted; every
+        // per-frame scene-query block Locks this buffer, so the trap stopped the drive.)
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mInCoarseQueryQueue.Construct();
+        }
         void Destruct();
         InCoarseQueryQueue<16384>* GetInCoarseQueryQueue();
 
@@ -85,8 +95,16 @@ namespace SceneManagerIO
             mSceneQueryResultsQueue.Construct();
         }
 
-        // @ 0x823B1ED0 -- read-lock tripwire, then the query-results ring.
-        const SceneQueryResultsQueue* GetSceneQueryResultsQueue() const;   // +4, read
+        // @ 0x823B1ED0 -- read-lock tripwire, then the query-results ring. (Was a
+        // declaration-only accessor whose WorldLinkStubs body asserted; every scene-query
+        // round trip in WorldModule::EntityModulePostSceneUpdate reads the results
+        // through it, so the trap stopped the world drive. The member IS committed, so
+        // this is the real body.)
+        const SceneQueryResultsQueue* GetSceneQueryResultsQueue() const
+        {
+            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mSceneQueryResultsQueue;
+        }
 
     private:
         u8                     maStatusPad[3];            // +1..+3 (force +4)

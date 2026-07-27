@@ -828,6 +828,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             RaceCarEntityModuleIO::OutputBuffer_Prepare* lpRaceCarOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput, "RaceCar" );
+            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+            // T::Construct after the alloc; the generic PC template placement-news only).
+            lpRaceCarOutput->Construct();
             // PC Construct restoration (base IOBuffer status; the buffer interior is a
             // minimal slice and its module Prepare is boot-gated).
             lpRaceCarOutput->CgsModule::IOBuffer::Construct();
@@ -852,6 +855,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare* lpTrafficOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput, "Traffic" );
+            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+            // T::Construct after the alloc; the generic PC template placement-news only).
+            lpTrafficOutput->Construct();
             // PC Construct restoration (see the RaceCar stage above).
             lpTrafficOutput->CgsModule::IOBuffer::Construct();
 
@@ -943,6 +949,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             PropEntityIO::OutputBuffer_Prepare* lpPropOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpPropOutput, "Prop" );
+            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+            // T::Construct after the alloc; the generic PC template placement-news only).
+            lpPropOutput->Construct();
             // PC Construct restoration (see the RaceCar stage above).
             lpPropOutput->CgsModule::IOBuffer::Construct();
 
@@ -1548,6 +1557,10 @@ WorldModule::EntityModulePostSceneUpdate(
         CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
         lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
         lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
+        // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+        // T::Construct after the alloc; the generic PC template placement-news only).
+        lpQueryInput->Construct();
+        lpQueryOutput->Construct();
 
         PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
         CgsModule::LockBuffersForIO( lpQueryInput, lpRaceCarOutputBuffer_PostScene );
@@ -1601,6 +1614,10 @@ WorldModule::EntityModulePostSceneUpdate(
         CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
         lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
         lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
+        // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+        // T::Construct after the alloc; the generic PC template placement-news only).
+        lpQueryInput->Construct();
+        lpQueryOutput->Construct();
 
         PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Traffic_Bridge );
         CgsModule::LockBuffersForIO( lpQueryInput, lpTrafficOutputBuffer_PostScene );
@@ -1656,6 +1673,9 @@ WorldModule::EntityModulePostSceneUpdate(
     {
         TriggerEntityModuleIO::OutputBuffer_PostScene* lpTriggerOutput = 0;
         lpOutputBufferStack->CreateIOBuffer( &lpTriggerOutput, "TriggerPostScene" );
+        // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+        // T::Construct after the alloc; the generic PC template placement-news only).
+        lpTriggerOutput->Construct();
 
         mTriggerEntityModule.PostSceneUpdate( lpInputBufferStack, lpOutputBufferStack,
                                               lpTriggerInputBuffer_PostScene,
@@ -1667,6 +1687,10 @@ WorldModule::EntityModulePostSceneUpdate(
             CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
             lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
+            // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+            // T::Construct after the alloc; the generic PC template placement-news only).
+            lpQueryInput->Construct();
+            lpQueryOutput->Construct();
 
             CgsModule::LockBuffersForIO( lpQueryInput, lpTriggerOutput );
             ::WorldModule::BridgeTriggerModuleToSceneModule_PostScene(
@@ -2911,6 +2935,10 @@ WorldModule::GenerateFrustumQueries(
     CgsSceneManager::SceneManagerIO::OutputBuffer* lpQueryOutput = 0;
     lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
     lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
+    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+    // T::Construct after the alloc; the generic PC template placement-news only).
+    lpQueryInput->Construct();
+    lpQueryOutput->Construct();
 
     lpDispatchInputBuffer->LockForRead();
 
@@ -3129,8 +3157,19 @@ WorldModule::GenerateDispatchLists(
     lpInputBufferStack->CreateIOBuffer( &lpPropDispatchInput, "PropDispatch" );
     lpInputBufferStack->CreateIOBuffer( &lpQueryInput, "Scene" );
     lpOutputBufferStack->CreateIOBuffer( &lpQueryOutput, "Scene" );
+    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+    // T::Construct after the alloc; the generic PC template placement-news only).
+    lpQueryInput->Construct();
+    lpQueryOutput->Construct();
     lpInputBufferStack->CreateIOBuffer( &lpRaceCarDispatchInput, "RaceCar" );
     lpInputBufferStack->CreateIOBuffer( &lpFilteredEntityData, "Filtered Entity Data" );
+    // PC Construct restoration (the X360 CreateIOBuffer<T> stack template runs
+    // T::Construct after the alloc; the generic PC template placement-news only).
+    lpWorldDispatchInput->Construct();
+    lpTrafficDispatchInput->Construct();
+    lpPropDispatchInput->Construct();
+    lpRaceCarDispatchInput->Construct();
+    lpFilteredEntityData->Construct();
     lpInputBufferStack->CreateIOBuffer( &lpTrafficPreDispatchInput, "TrafficVisibleEntities" );
     lpOutputBufferStack->CreateIOBuffer( &lpTrafficRenderInfos, "TrafficRenderInfos" );
 

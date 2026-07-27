@@ -214,6 +214,9 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
     // BridgeWorldToResource @0x823E5300 -- the streamer's request forward.
     if (lpGameDataInputBuffer != 0)
     {
+        // The X360 brackets the bridge with the standard destination-write /
+        // source-read pair; the GameData input's own accessors assert the write lock.
+        lpGameDataInputBuffer->LockForWrite();
         lpWorldOutput->LockForRead();
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputRead = lpWorldOutput;
         lpGameDataInputBuffer->AppendRequestInterface<4096>(
@@ -221,6 +224,7 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
         lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
             lpWorldOutputRead->GetAttribSysVaultRequestInterface()->mRequestQueue);
         lpWorldOutput->UnlockForRead();
+        lpGameDataInputBuffer->UnlockForWrite();
     }
 
     lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
@@ -331,7 +335,9 @@ void LoadingScriptedState::Update()
 
         s_GameDataOutput.UnlockForRead();
         s_GameDataInput.UnlockForWrite();
+    }
 
+    {
         // ---- the per-frame WORLD UPDATE leg (X360 0x823F22D8, stage > 5) ------------
         // Once the scripted load is past LoadWorldModule (stage > 5) the spine drives the
         // world module's per-frame Update and then forwards its staged resource requests

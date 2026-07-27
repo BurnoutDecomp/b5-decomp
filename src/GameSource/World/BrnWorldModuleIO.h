@@ -67,6 +67,8 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"     // BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"       // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"           // BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface
+#include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface
+#include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityRequestInterface.h"  // BrnWorld::WorldEntityIO::RequestInterface
 #include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityStatusInterface.h"   // BrnWorld::WorldEntityIO::StatusInterface
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"                          // BrnGameState::TakedownEvent
 
@@ -104,6 +106,12 @@ namespace BrnWorldIO
             if (lpSource && lpSource != this)
                 std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
         }
+        // X360 UpdateInputBuffer::Construct @0x827C9E90 calls
+        // BrnPhysics::Vehicle::VehicleInputInterface::Construct on this member (+96). That
+        // interior (three per-car input queues + head words) belongs to the canonical
+        // BrnVehicleInputInterface TU; until it lands the slice's construct is the zero-fill
+        // stand-in the sibling UpdateOutputBuffer::Construct already uses [marked deviation].
+        void Construct() { std::memset(maPayload, 0, sizeof(maPayload)); }
         u8 maPayload[256];   // NOMINAL -- grown by BrnVehicleInputInterface TU
     };
 
@@ -119,17 +127,16 @@ namespace BrnWorldIO
     // dispatches CgsModule::VariableEventQueue<4096,16>::Append). Reused by name.
     typedef CgsModule::VariableEventQueue<KI_WORLD_EVENT_QUEUE_MAX_SIZE, 16> TriggerQueryInputInterface;
 
-    // Trigger management input interface (Append* exists in DWARF :276; modelled as a sized
-    // slice with an Append entry; not in the 32 out-of-line ledger set -- inlined on X360).
-    struct TriggerManagementInputInterface
-    {
-        void Append(const TriggerManagementInputInterface* lpSource)
-        {
-            if (lpSource && lpSource != this)
-                std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
-        }
-        u8 maPayload[64];    // NOMINAL
-    };
+    // Trigger management input interface: the canonical home IS committed
+    // (BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface, add queue
+    // VariableEventQueue<131072,16> @+0 + EventQueue<InRemoveTriggerEvent,256> @+131088).
+    // UpdateInputBuffer::Construct @0x827C9E90 proves this member IS that aggregate: it runs
+    //   VariableEventQueue<131072,16>::Construct(this+161288)
+    //   InRemoveTriggerEvent_256_::Construct(this+292376)      // == +161288 + 131088
+    // i.e. exactly the committed aggregate's two embedded queues at its own two offsets.
+    // (Was an opaque 64-byte slice; the WorldBridgeInputToEntityModules consumer already
+    // reinterpret_cast it to the real type, so this retype also retires that cross-home cast.)
+    typedef BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface TriggerManagementInputInterface;
 
     // TimerStatusInterface (X360 SetTimerStatusInterface copies 12 words from the source into
     // this+160900..+160948; modelled as a fixed POD the setter struct-assignment-copies field-
@@ -138,24 +145,39 @@ namespace BrnWorldIO
     // second 6-field block, i.e. base+0x18+0x14 = base+0x2C), so the 12th word is load-bearing.
     struct TimerStatusInterface
     {
+        // X360 UpdateInputBuffer::Construct calls CgsSystem::TimerStatusInterface::Clear on
+        // this member (+160900); the canonical Clear zeroes the two embedded CgsSystem::
+        // TimerStatus records, i.e. the whole 48-byte block.
+        void Clear() { std::memset(maData, 0, sizeof(maData)); }
         f32 maData[12];      // X360 copies *a2 .. *(a2+48): 12 words
     };
 
     // RaceCarRaceDistanceInterface (X360 SetRaceCarRaceDistanceInterface copies 10 words).
     struct RaceCarRaceDistanceInterface
     {
+        // X360 Construct calls BrnGameState::GameStateModuleIO::RaceCarRaceDistanceInterface
+        // ::Clear on this member (+317496); the canonical Clear zeroes the 10-word block.
+        void Clear() { std::memset(maData, 0, sizeof(maData)); }
         s32 maData[10];      // X360 copies a 10-word block
     };
 
     // ScoringInterface (X360 SetScoringInterface XMemCpy 2736 bytes into +317536).
     struct ScoringInterface
     {
+        // X360 Construct clears the whole interface with a literal memset(+317536, 0, 2736).
+        void Clear() { std::memset(maData, 0, sizeof(maData)); }
         u8 maData[2736];     // X360 SetScoringInterface copies 2736 bytes
     };
 
     // OnlineScoringInterface (X360 SetOnlineScoringInterface memcpy 164 bytes into +322384).
     struct OnlineScoringInterface
     {
+        // X360 UpdateInputBuffer::Construct tail: the eight-word block at interface+32 is
+        // seeded to -1 (the per-active-race-car online-scoring slot ids, the same
+        // "invalid index" sentinel the sibling arrays use). The rest of the interface is
+        // covered by Construct's zero-fill. The interior is not named yet (its own TU owns
+        // the layout), so the seed is written through the payload by offset [FLAG].
+        void Construct();
         u8 maData[164];      // X360 SetOnlineScoringInterface copies 164 bytes
     };
 
@@ -175,6 +197,13 @@ namespace BrnWorldIO
             if (lpSource && lpSource != this)
                 std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
         }
+        // X360 UpdateInputBuffer::Construct: ActivateHullEvent_8_::Construct(+301644) then
+        // the mbDiverged byte at interface+0x6C = 0 -- i.e. the committed
+        // BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface::Construct. Until this slice
+        // is retyped onto that home (blocked on its whole-interface Set mutator, see above)
+        // the construct is the zero-fill stand-in [marked deviation]; a zeroed
+        // EventQueue header reads as an empty queue, which is what the loading frames see.
+        void Construct() { std::memset(maPayload, 0, sizeof(maPayload)); }
         u8 maPayload[256];   // NOMINAL
     };
 
@@ -188,13 +217,20 @@ namespace BrnWorldIO
     // PlayerVehicleControls (X360 SetPlayerVehicleControls memcpy 60 bytes into +317264).
     struct PlayerVehicleControls
     {
+        // X360 UpdateInputBuffer::Construct zeroes the whole record in place (13 f32 stores
+        // at +317264..+317312 then 7 byte stores at +317316..+317322).
+        void Clear() { std::memset(maData, 0, sizeof(maData)); }
         u8 maData[60];       // X360 SetPlayerVehicleControls copies 60 bytes
     };
 
     // DebugController (X360 Get const at +317324 read-lock, Get non-const at +317324 write-lock).
+    // Size 172 == the X360 span +317324..+317496 (Construct's DebugController::Clear target
+    // followed by the RaceCarRaceDistanceInterface::Clear target). Was 212 (NOMINAL guess).
     struct DebugController
     {
-        u8 maData[212];      // NOMINAL (between +317324 and +317536)
+        // X360 Construct calls BrnDirector::Camera::Utils::DebugController::Clear here.
+        void Clear() { std::memset(maData, 0, sizeof(maData)); }
+        u8 maData[172];      // X360 span +317324 .. +317496
     };
 
     // ReplayStatusInterface: canonical home is committed (GameSource/Replays/
@@ -205,11 +241,14 @@ namespace BrnWorldIO
     typedef BrnReplays::ReplayIO::StatusInterface ReplayStatusInterface;
 
     // RequestInterface (mWorldEntityRequestInterface; X360 returns &member, both const R and
-    // non-const W overloads). Modelled as a sized slice (accessed by-name only).
-    struct WorldEntityRequestInterface
-    {
-        u8 maPayload[64];    // NOMINAL
-    };
+    // non-const W overloads). The canonical home IS committed
+    // (BrnWorld::WorldEntityIO::RequestInterface == two bools, mbInvalidateCollisionWorld /
+    // mbValidateCollisionWorld) and the X360 pins it EXACTLY: GetWorldEntityRequestI
+    // @0x823B4D48 returns this+320273 and UpdateInputBuffer::Construct @0x827C9E90 zeroes
+    // precisely the two bytes +320273/+320274 right after the mbControllerActive byte at
+    // +320272. Retyped from the old opaque 64-byte slice (which also retires the
+    // WorldBridgeInputToEntityModules cross-home cast).
+    typedef BrnWorld::WorldEntityIO::RequestInterface WorldEntityRequestInterface;
 
     // GameActionQueue / TakedownEventQueue are large variable-size queues whose Append merges a
     // source queue. GameActionQueue = VariableEventQueue<13312,16> (X360 +147572 Append).
@@ -236,6 +275,13 @@ namespace BrnWorldIO
         // committed BrnAI::RouteMapModuleIO::RaceRouteRequestQueue (== EventQueue<RaceRouteRequest,1>,
         // BrnRouteMapModuleIO.h:231).
         typedef BrnAI::RouteMapModuleIO::RaceRouteRequestQueue     RaceRouteRequestQueue;
+
+        // ---- lifecycle (X360 0x827C9E90; the IOBufferStack CreateIOBuffer<T> path runs it) --
+        // NOTE: the address is NOT in the .ida-exports name index -- it is named in the
+        // xrefs of CgsModule::IOBufferStack::CreateIOBuffer<BrnWorldIO::UpdateInputBuffer>
+        // @0x823AD5F8 (which also gives the X360 sizeof: 322560) and recovered by headless
+        // IDA over the ARTIST database.
+        void Construct();   // X360 0x827C9E90
 
         // ---- AI race-route-request queue (consumed by WorldModule::BridgeInputToAIModule) ----
         const RaceRouteRequestQueue* GetRaceRouteRequestQueue() const;                           // :255 R (0x827A3510, "Upda")
