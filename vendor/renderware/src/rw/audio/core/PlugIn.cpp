@@ -91,8 +91,9 @@ PlugIn *PlugIn::GetAttribute(PlugIn *self, int index, f32 *outValue)
 
 // -------------------------------------------------------------------------------------
 // PlugIn::SetAttribute @0x82B6E848
-// Queues a deferred attribute write into the System's command ring (16-byte slot),
-// rather than writing immediately. Replayed later by SetAttributeHandler.
+// Queues a deferred attribute write into the System's command ring (one
+// PlugInSetAttributeCommand slot -- 16 bytes on the X360), rather than writing
+// immediately. Replayed later by SetAttributeHandler.
 // -------------------------------------------------------------------------------------
 PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 {
@@ -100,7 +101,15 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
     u32 cursor = system->muDeferredRingCursor;                  // lwz 0x10B8
     PlugInSetAttributeCommand *cmd =                            // *(self+0x20)+cursor
         reinterpret_cast<PlugInSetAttributeCommand *>(system->mpDeferredRingBase + cursor);
-    system->muDeferredRingCursor = cursor + 16;                 // cursor += 0x10
+    // RECORD STRIDE (X360-literal trap): the asm's `addi r9,r9,0x10` IS the console
+    // sizeof(PlugInSetAttributeCommand) ({int(*)(void*), PlugIn*, int, f32} = 4+4+4+4).
+    // On the host the widened pointers make the same record 24 bytes, and ExecuteCommands
+    // advances the ring by the handler's return -- SetAttributeHandler below likewise
+    // returns sizeof(PlugInSetAttributeCommand) -- so the enqueue stride must be the HOST
+    // sizeof, never the literal 16. The cursor is advanced before the fields are written,
+    // exactly as the asm orders the stores.
+    system->muDeferredRingCursor =
+        cursor + static_cast<u32>(sizeof(PlugInSetAttributeCommand)); // X360: cursor += 0x10
 
     cmd->mfValue = value;                                       // stfs f1 -> +0xC
     cmd->mpHandler = &PlugIn::SetAttributeHandler;              // stw &handler -> +0x00
@@ -111,14 +120,17 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 
 // -------------------------------------------------------------------------------------
 // PlugIn::SetAttributeHandler @0x82B6DBA0
-// The deferred-command callback: performs the actual attribute store, returns 16
-// (the consumed command size, so the ring consumer can advance its cursor).
+// The deferred-command callback: performs the actual attribute store, then returns the
+// consumed command size so the ring consumer can advance its cursor.
 // -------------------------------------------------------------------------------------
 int PlugIn::SetAttributeHandler(void *cmd)
 {
     PlugInSetAttributeCommand *c = static_cast<PlugInSetAttributeCommand *>(cmd);
     c->mpTarget->mpAttribute[c->miIndex].mfValue = c->mfValue; // *(8*idx + *(target+0xC)) = value
-    return 16;
+    // The asm's `li r3,0x10` is the console sizeof(PlugInSetAttributeCommand); it must
+    // stay identical to the producer's advance in SetAttribute above, so both sides use
+    // the HOST sizeof (24 on x64).
+    return static_cast<int>(sizeof(PlugInSetAttributeCommand)); // X360: li r3,0x10
 }
 
 } // namespace core
