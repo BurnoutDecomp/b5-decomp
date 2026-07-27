@@ -336,9 +336,129 @@ int SetBaseTextureHeader(int a1, int a2, int a3, int a4, int a5, int a6,
     return static_cast<int>(luBaseSize) + liBlock0;
 }
 
-// @ 0x8295E070 -- DECL-ONLY + FLAG (multi-stage VMX cache-aligned memcpy; the
-// hand-tuned lvx128/stvlx/stvrx/dcbz128 vector pipeline is NOT paraphrased to
-// scalar per the hard rule). No body emitted.
+// @ 0x8295E070 -- multi-stage cache-line-aware memcpy. The VMX in the asm is the
+// pure WIDE-COPY idiom, not vector arithmetic (lvx128 = aligned 16-byte load,
+// stvlx+stvrx = unaligned 16-byte store pair, lvlx+lvrx+vor = unaligned 16-byte
+// load merge, dcbz128 = destination cache-line pre-zero), so the documented
+// lvx-as-memcpy exception applies and the faithful reconstruction is the same
+// staged copy with plain fixed-width moves. The stage structure, the guards and
+// the branch polarity are reproduced exactly -- including the tail stages, which
+// really are still conditioned on the SOURCE alignment, so a 16-byte-aligned
+// source with a non-multiple-of-16 length leaves the last bytes uncopied. That
+// is the binary's behaviour; the sole caller (XGUntileSurface) never hits it, and
+// it is deliberately NOT "fixed" here.
+u8* CopyMemoryCachedDst(u8* apDst, u8* apSrc, u32 auBytes)
+{
+    u8* lpSrc = apSrc; // r11
+    u8* lpDst = apDst; // r10
+
+    // ---- stage 1: single bytes until the SOURCE is 4-byte aligned (lbz/stb) ----
+    while ((reinterpret_cast<uintptr_t>(lpSrc) & 3u) != 0 && auBytes >= 1u)
+    {
+        *lpDst = *lpSrc;
+        ++lpSrc;
+        ++lpDst;
+        auBytes -= 1u;
+    }
+
+    // ---- stage 2: 4-byte steps until the source is 8-byte aligned (lwz/stw) ----
+    while ((reinterpret_cast<uintptr_t>(lpSrc) & 7u) != 0 && auBytes >= 4u)
+    {
+        std::memcpy(lpDst, lpSrc, 4);
+        lpSrc += 4;
+        lpDst += 4;
+        auBytes -= 4u;
+    }
+
+    // ---- stage 3: 8-byte steps until the source is 16-byte aligned (ld/std) ----
+    while ((reinterpret_cast<uintptr_t>(lpSrc) & 15u) != 0 && auBytes >= 8u)
+    {
+        std::memcpy(lpDst, lpSrc, 8);
+        lpSrc += 8;
+        lpDst += 8;
+        auBytes -= 8u;
+    }
+
+    // ---- stage 4: 16-byte blocks until (dst + 15) sits in the low quadword of a
+    // 128-byte cache line, i.e. until the next dcbz128 line is the one about to be
+    // written. The asm carries r8 = dst + 15 incrementally and adds 0x10 per pass;
+    // recomputing it from lpDst each pass is the same value. --------------------
+    while (((reinterpret_cast<uintptr_t>(lpDst) + 15u) & 0x7Fu) >= 0x10u && auBytes >= 0x10u)
+    {
+        std::memcpy(lpDst, lpSrc, 16);
+        lpSrc += 0x10;
+        lpDst += 0x10;
+        auBytes -= 0x10u;
+    }
+
+    // ---- main loop: one 128-byte cache line per outer pass ---------------------
+    while (auBytes >= 0x8Fu)
+    {
+        // X360 issues dcbz128 at EA (lpDst + 15) here, pre-zeroing the destination
+        // cache line it is about to write. The zeroed line lies inside
+        // [lpDst, lpDst + 143), which is why the guard is 0x8F (128 + 15) and not
+        // 0x80. Those bytes are covered by this loop plus the stages below EXCEPT
+        // in the same src-16-aligned / auBytes % 16 != 0 corner this file already
+        // documents for the tails (e.g. auBytes == 0x8F with an aligned source
+        // leaves lpDst+128..lpDst+142 zeroed on X360 but untouched here). Emitting
+        // no code is still the right call off X360 -- a cache hint is not portable
+        // and the caller never reads that tail -- but the equivalence is not total.
+        u32 luHalves = 2u; // the asm's r6 counter: 2 x 64 bytes = one 128-byte line
+        do
+        {
+            // four 16-byte moves at +0x00/+0x10/+0x20/+0x30 (lvlx+lvrx+vor loads,
+            // stvlx+stvrx stores -- wide copy only, no vector arithmetic)
+            for (u32 luBlock = 0u; luBlock < 4u; ++luBlock)
+                std::memcpy(lpDst + 0x10 * luBlock, lpSrc + 0x10 * luBlock, 16);
+            lpSrc += 0x40;
+            lpDst += 0x40;
+            auBytes -= 0x40u;
+        }
+        while (--luHalves);
+    }
+
+    // ---- post loop: whole 16-byte blocks (lvx128 aligned load + unaligned store) --
+    if (auBytes >= 0x10u)
+    {
+        u32 luBlocks = auBytes >> 4;
+        do
+        {
+            std::memcpy(lpDst, lpSrc, 16);
+            auBytes -= 0x10u;
+            lpSrc += 0x10;
+            lpDst += 0x10;
+        }
+        while (--luBlocks);
+    }
+
+    // ---- tails: stages 3/2/1 mirrored, still keyed off the SOURCE alignment -----
+    while ((reinterpret_cast<uintptr_t>(lpSrc) & 15u) != 0 && auBytes >= 8u)
+    {
+        std::memcpy(lpDst, lpSrc, 8);
+        lpSrc += 8;
+        lpDst += 8;
+        auBytes -= 8u;
+    }
+    while ((reinterpret_cast<uintptr_t>(lpSrc) & 7u) != 0 && auBytes >= 4u)
+    {
+        std::memcpy(lpDst, lpSrc, 4);
+        lpSrc += 4;
+        lpDst += 4;
+        auBytes -= 4u;
+    }
+    while ((reinterpret_cast<uintptr_t>(lpSrc) & 3u) != 0 && auBytes >= 1u)
+    {
+        *lpDst = *lpSrc;
+        ++lpSrc;
+        ++lpDst;
+        auBytes -= 1u;
+    }
+
+    // The binary leaves r3 clobbered (the main loop reuses it as a scratch address)
+    // and its one caller ignores the result; the u8* return follows the Hex-Rays
+    // param-seed, so the destination pointer is returned. FLAG.
+    return apDst;
+}
 
 // ===========================================================================
 // helper: emit the optional verbose trace for an integer-valued state.
@@ -580,10 +700,60 @@ int CompileGetMemExportConstant1(AS_Object* apObject, int aiStage, u32* apOut, C
     return 1;
 }
 
-// @ 0x82C25CC0  MemExportConstant2: DECL-ONLY + FLAG -- packs an un-homed rodata
-// lookup (unk_82FA5220) keyed by AS_GetArrayStateI(91)/(92); the table contents
-// are not attested by this function's asm, so the result cannot be grounded.
-// (no body)
+// The Xenos memory-export surface-format codes CompileGetMemExportConstant2
+// indexes. RECOVERED from X360 rodata 0x82FA5220 -- 16 big-endian dwords bounded
+// by pointer data on both sides (0x82FA521C = 0 below, 0x82FA5260 = a pointer
+// above); see scratchpad/waveD/XGRAPHICS.rodata.txt. The asm's effective address
+// is `unk_82FA5220 + 4*(4*format + count) - 4`, i.e. table[4*format + count - 1]
+// over format 0..3 x count 1..4.
+static const s32 kaiMemExportConstant2Format[16] =
+{
+    36, 37, 38, 38, // format 0 (FLOAT32): k_32_FLOAT/k_32_32_FLOAT/k_32_32_32_32_FLOAT, count 1..4
+    30, 31, 32, 32, // format 1 (FLOAT16): k_16_FLOAT/k_16_16_FLOAT/k_16_16_16_16_FLOAT, count 1..4
+    24, 25, 26, 26, // format 2 (16-bit fixed): k_16/k_16_16/k_16_16_16_16,               count 1..4
+     2, 10,  6,  6  // format 3 (8-bit fixed):  k_8/k_8_8/k_8_8_8_8,                      count 1..4
+};
+
+// @ 0x82C25CC0  MemExportConstant2: format = AS_GetArrayStateI(91, stage),
+// count = AS_GetArrayStateI(92, stage); packs ((sel << 8) | 0x4B0000 | entry) << 8
+// with sel = 2 for the NON-float formats (2 and 3) and 7 for the float ones.
+// The assert names FLOAT16/FLOAT32, which are formats 0 and 1: only those two
+// bypass SSMDebugPrint at 0x82C25D64-0x82C25D8C. Msg index 89.
+int CompileGetMemExportConstant2(AS_Object* apObject, int aiStage, u32* apOut, CompilePrintFn apfnPrint, int aiChannel)
+{
+    CGS_ASSERT(apObject, "pAS_Object");
+    u32 luFormat = static_cast<u32>(AS_GetArrayStateI(apObject, 91, static_cast<u32>(aiStage)));
+    s32 liCount  = AS_GetArrayStateI(apObject, 92, static_cast<u32>(aiStage));
+    // the asm loads the table entry before the format branch (slwi/add/lwz -4(r11))
+    s32 liEntry  = kaiMemExportConstant2Format[4u * luFormat + static_cast<u32>(liCount) - 1u];
+
+    s32 liSel;
+    if (luFormat == 2 || luFormat == 3)
+    {
+        liSel = 2;
+    }
+    else
+    {
+        // formats 0 and 1 branch past the assert silently; it fires only for >= 4.
+        CGS_ASSERT(luFormat < 2,
+                   "format == AS_VS_EXPORT_STREAM_FORMAT_N__FLOAT16 || format == AS_VS_EXPORT_STREAM_FORMAT_N__FLOAT32");
+        liSel = 7;
+    }
+    *apOut = static_cast<u32>(((liSel << 8) | 0x4B0000 | liEntry) << 8);
+
+    if (apfnPrint && aiChannel)
+    {
+        char laText[112]; // frame-attested buffer (sp+0x50 .. sp+0xC0 of a 0xC0 frame)
+        // the binary passes *(float*)apOut to the formatter in f1; the un-homed
+        // sub_82C22190 shim is declared (int, void*), so 0 goes through here exactly
+        // as every committed sibling does. FLAG.
+        sub_82C22190(0, laText);
+        // name-table entry 89 @ 0x82FA51C4 -> "CompileGetMemExportConstant2"
+        // (RECOVERED rodata, so the real name prints instead of kpcUnknownStateName)
+        apfnPrint(aiChannel, "%s (%d) %d : %s\n", "CompileGetMemExportConstant2", 89, aiStage, laText);
+    }
+    return 1;
+}
 
 // @ 0x82C25E08  MemExportConstant3: AS_GetArrayStateI(90) | 0x4B000000, msg 90
 int CompileGetMemExportConstant3(AS_Object* apObject, int aiStage, int* apOut, CompilePrintFn apfnPrint, int aiChannel)

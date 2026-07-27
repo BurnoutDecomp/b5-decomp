@@ -131,10 +131,18 @@ int  SetBaseTextureHeader(int a1, int a2, int a3, int a4, int a5, int a6,
                           int a37, int a38, int a39, u32* a40, int a41,
                           u32* a42);
 
-// @ 0x8295E070 -- DECL-ONLY + FLAG: a multi-stage VMX (lvx128/stvlx/stvrx/
-// dcbz128) cache-line-aligned memcpy. The asm is a hand-tuled vector pipeline;
-// per the hard rule a multi-stage VMX/hardware pipeline is NOT paraphrased to
-// scalar -- declaration only.
+// @ 0x8295E070 -- a multi-stage cache-line-aware memcpy. The VMX in the asm is
+// the pure WIDE-COPY idiom, not vector arithmetic: lvx128 = aligned 16-byte
+// load; stvlx+stvrx = unaligned 16-byte store pair; lvlx+lvrx+vor = unaligned
+// 16-byte load merge; dcbz128 = dst cache-line pre-zero whose 128 zeroed bytes
+// are always fully overwritten (the len>=0x8F loop guard exists precisely so
+// the <=15 bytes zeroed past the 128-byte block are covered by the following
+// copy stages). So the faithful reconstruction is the same staged copy
+// (1/4/8-byte src-alignment stages, 16-byte blocks, the 128-byte main loop,
+// then the mirrored tail stages) with plain fixed-width moves -- the
+// documented lvx-as-memcpy exception. NOTE: the binary leaves r3 clobbered
+// (return value unused by its one caller, XGUntileSurface); the u8* return
+// follows the Hex-Rays param-seed (returns apDst).
 u8*  CopyMemoryCachedDst(u8* apDst, u8* apSrc, u32 auBytes);
 
 // ===== CompileGet* register-field getters ==================================
@@ -157,9 +165,11 @@ int CompileGetLodBias(AS_Object* apObject, int aiStage, f32* apOut, CompilePrint
 int CompileGetLodClampMax(AS_Object* apObject, int aiStage, f32* apOut, CompilePrintFn apfnPrint, int aiChannel);
 int CompileGetMemExportConstant0(AS_Object* apObject, u32 auStage, u32* apOut, CompilePrintFn apfnPrint, int aiChannel);
 int CompileGetMemExportConstant1(AS_Object* apObject, int aiStage, u32* apOut, CompilePrintFn apfnPrint, int aiChannel);
-// @ 0x82C25CC0 -- DECL-ONLY + FLAG: indexes an un-homed rodata lookup table
-// (unk_82FA5220) by AS_GetArrayStateI(91,..)/(92,..); that table's contents are
-// not attested by this function's asm, so the packed result cannot be grounded.
+// @ 0x82C25CC0 -- indexes the export-stream format/count lookup table at X360
+// rodata 0x82FA5220 (16 big-endian dwords, RECOVERED from the local ARTIST
+// .i64 -- see scratchpad/waveD/XGRAPHICS.rodata.txt) as
+// table[4*format + count - 1], format = AS_GetArrayStateI(91, stage),
+// count = AS_GetArrayStateI(92, stage); packs ((sel<<8)|0x4B0000|entry)<<8.
 int CompileGetMemExportConstant2(AS_Object* apObject, int aiStage, u32* apOut, CompilePrintFn apfnPrint, int aiChannel);
 int CompileGetMemExportConstant3(AS_Object* apObject, int aiStage, int* apOut, CompilePrintFn apfnPrint, int aiChannel);
 int CompileGetPointSizeMax(AS_Object* apObject, int aiStage, f32* apOut, CompilePrintFn apfnPrint, int aiChannel);
