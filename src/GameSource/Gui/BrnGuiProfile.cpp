@@ -1059,9 +1059,10 @@ void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandle
     mMetadata.mStoredData = CgsGui::MakeOpaqueBuffer(mStoredData);
     StartTask(&ProfileManager::LoadImageFilesResult, lpTaskResultHandler);
 
-    // The X360 call also carries &mMetadata; the committed recon reads the record
-    // array + count only, so the metadata rides implicitly.
-    mSaveLoadSystem.LoadImageFiles(this, miNumberOfImageFiles, maImageFileInfo);
+    // X360 @0x82513E9C..0x82513EB4: r4 = this, r5 = manager+0x412C0 (&mMetadata -- the same
+    // argument ProfileManager::Load hands SaveLoadSystem::Load), r6 = the count,
+    // r7 = manager+0x4143C (maImageFileInfo).
+    mSaveLoadSystem.LoadImageFiles(this, &mMetadata, miNumberOfImageFiles, maImageFileInfo);
 }
 
 // ---------------------------------------------------------------------------

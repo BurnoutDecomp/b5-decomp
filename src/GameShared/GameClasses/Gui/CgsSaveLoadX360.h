@@ -173,8 +173,10 @@ namespace CgsGui
         void SetSignedInUserIndex(s32 liUserIndex);
 
         // X360 0x828522D0. Copy ONE image record's bytes INTO the mugshot-buffer slot its
-        // imageId maps to (same 16-byte { imageId, miSize, data, ... } record LoadImageFiles
-        // walks). (Caller: BrnGui::ProfileManager::CopyImageToBuffer.) Body:
+        // miId maps to -- the inbound direction of the same CgsGui::ImageFileInfo record
+        // LoadImageFiles walks outbound ({ miId @+0, miSize @+4, mpBuffer @+8 }; 16 bytes on
+        // the console, 24 on the x64 host -- see CgsImageFileInfo.h).
+        // (Caller: BrnGui::ProfileManager::CopyImageToBuffer.) Body:
         // CgsSaveLoadX360_wB_03.cpp.
         void CopyImageToBuffer(const void* lpImageFile);
 
@@ -218,10 +220,22 @@ namespace CgsGui
         // query; starts no I/O task and touches no task state.
         bool SaveFileExists(const SaveLoadMetadata& lrMetadata) const;
 
-        // X360 0x828521E0. Copy each requested image's mugshot buffer into the caller's image
-        // file records, then report the load result.
-        void LoadImageFiles(SaveLoadTaskResultHandler* lpResultHandler, s32 liNumberOfImageFiles,
-                            const void* lpImageFile);
+        // X360 0x828521E0. Copy each requested image's mugshot buffer OUT into the caller's
+        // CgsGui::ImageFileInfo records, then report the load result to the ALREADY-BOUND
+        // handler.
+        //
+        // SIGNATURE FROM THE ASM PROLOGUE (the Hex-Rays view of this entry is a3-short):
+        // `this` in r3 plus FOUR arguments -- r4 (the result handler), r5 (the metadata),
+        // r6 -> r30 (the record count) and r7 -> r31 (the record array). The sole caller
+        // BrnGui::ProfileManager::LoadImageFiles @0x82513C00 loads exactly that shape
+        // (@0x82513E9C..0x82513EB4): r4 = the ProfileManager, r5 = manager+0x412C0 -- the very
+        // same &mMetadata ProfileManager::Load hands SaveLoadSystem::Load @0x82523E28 --
+        // r6 = *(manager+0x4146C) (the count), r7 = manager+0x4143C (the ImageFileInfo array).
+        // r4 and r5 are never referenced by the body: unlike Load/Bootup this task does NOT
+        // bind +0x130 and does NOT call SetMetadata; it only READS the handler bound by the
+        // preceding task starter. Both are therefore declared but unused.
+        void LoadImageFiles(SaveLoadTaskResultHandler* lpResultHandler, const void* lpMetadata,
+                            s32 liNumberOfImageFiles, const ImageFileInfo* laImageFileInfo);
 
     private:
         // X360 0x8284C240. Copy the metadata's title (wide + ascii) and the save-info comment
