@@ -8,7 +8,7 @@
 // DecFIGS DWARF for this type, so every offset below is grounded directly in the
 // disassembly of the bodied methods:
 //   TimerManager (ctor) @0x82B6BED0   ExecuteTimers @0x82B6BF18   RemoveTimer @0x82B6DE70
-//   Release             @0x82B6DEE8   AddTimer      @0x82B6EB88
+//   Release             @0x82B6DEE8   AddTimer      @0x82B6EB88   Defragment  @0x82B6EC08
 //
 // The manager owns two Collections (@+0x00 and @+0x1C -- 28 bytes each). Each Collection
 // hands out doubly-linked Nodes whose owner back-pointer is a TimerHandle (see
@@ -73,6 +73,16 @@ public:
     // Walk Collection `collectionIndex`'s used list, invoking each handle's callback and
     // timing it into TimerHandle::mCpuTicks; honour any deferred self-remove.
     static void ExecuteTimers(TimerManager *self, int collectionIndex);
+
+    // Compact both owned Collections (Collection::Defragment on each), called by
+    // System::ExecuteCommands' final timer phase. X360 @0x82B6EC08 (verified from the IDA
+    // DB, scratchpad/waveF/defrag_dump.txt -- the per-address JSON export is missing):
+    //   r30 = this; r31 = 2; do { Collection::Defragment(r30); r30 += 0x1C; } while (--r31);
+    // X360-LITERAL TRAP: the +0x1C stride IS the console sizeof(Collection); the host body
+    // must index maCollections[i] by name, never advance by a byte stride. (The X360 r3
+    // return is the last Collection::Defragment result, dead at the only call site --
+    // declared void.)
+    static void Defragment(TimerManager *self);
 
     // Clear + release both owned Collections (frees their NodeBlocks).
     static void Release(TimerManager *self);
