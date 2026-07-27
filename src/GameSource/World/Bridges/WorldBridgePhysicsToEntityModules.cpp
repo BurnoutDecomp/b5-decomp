@@ -1,67 +1,39 @@
 // ============================================================================
 // b5-decomp/src/GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.cpp
 //
-// WorldModule::BridgePhysicsModuleToAIModule_PostPhysics (X360 0x827A5680).
+// WorldModule physics -> entity-module post-physics bridges (X360 TU
+// GameSource/Unity/../World/Bridges/WorldBridgePhysicsToEntityModules.cpp).
 //
-// A per-frame bridge run from WorldModule::Update: it copies one word out of the physics
-// module's PostPhysics output sub-interface into the AI module's PostPhysics input buffer.
+// RETIRED BODY NOTE (world-drive wave 2026-07-27)
+// -----------------------------------------------
+// This TU previously carried a single reconstruction of
+// WorldModule::BridgePhysicsModuleToAIModule_PostPhysics (X360 0x827A5680) written
+// against by-name STAND-IN buffer structs, because BrnAI::AIModuleIO::
+// InputBuffer_PostPhysics / BrnPhysics::PhysicsModuleIO::OutputBuffer were not
+// committed when it landed. The real IO homes exist now and the world-drive spine
+// (WorldModule::Update @0x827D63E8 -> EntityModulePostPhysicsUpdate @0x827D3F10)
+// calls all five of this TU's bridges with the REAL buffer types, so the header was
+// retyped and the stand-in structs retired -- keeping the old body would have
+// bound the drive call site to fabricated types.
 //
-// Reconstructed store-for-store from the X360 asm; cross-checked against the PS3 DecFIGS
-// body WorldModule::BridgePhysicsModuleToAIModule_PostPhysics (DecFIGS 0xA2B84C):
-//   if (!aiInput)       assert "lpAIModuleInputBuffer_PostPhysics != NULL" (:142)
-//   if (!physicsOutput) assert "lpPhysicsModuleOutputBuffer != NULL"       (:143)
-//   if (!(physicsOutput->Flags & 0x10)) assert "Not locked for reading"
-//                                              (Physics/BrnPhysicsModuleIO.h:369)
-//   *(aiInput + 4) = *(physicsOutput + 998192)        ; the read-locked sub-interface word
+// The X360 data flow it recorded is preserved verbatim for the reconstruction that
+// replaces the boot gate (WorldLinkStubs.cpp):
+//   BridgePhysicsModuleToAIModule_PostPhysics @0x827A5680
+//     if (!aiInput)       assert "lpAIModuleInputBuffer_PostPhysics != NULL"  (:142)
+//     if (!physicsOutput) assert "lpPhysicsModuleOutputBuffer != NULL"        (:143)
+//     read-lock check on the physics output (bit 0x10, "Not locked for reading",
+//       Physics/BrnPhysicsModuleIO.h:369)
+//     *(aiInput + 4) = *(physicsOutput + 998192)   ; 0xF3CB0, the post-physics
+//                                                  ; AI sub-interface's leading word
+//   (the X360 `bl sub_8279F8E0` getter is the read-lock + that direct read; the PS3
+//    DecFIGS body @0xA2B84C inlines it.)
 //
-// The PS3 body INLINES the X360's `bl sub_8279F8E0` getter: it is a read-lock check (bit 0x10,
-// "Not locked for reading") followed by a direct read of the PostPhysics sub-interface word at
-// OutputBuffer +998192 (0xF3CB0), not a call returning a small offset-0 sub-interface. The two
-// real buffer types are BrnAI::AIModuleIO::InputBuffer_PostPhysics and
-// BrnPhysics::PhysicsModuleIO::OutputBuffer.
-//
-// FLAG: the two buffer payloads are not fully homed in this slice; they are modelled by name
-// (see WorldBridgePhysicsToEntityModules.h) so the read-locked word copy is reproduced. The
-// real +998192 read offset and the BrnAI/BrnPhysics buffer types are header-level and left
-// deferred. The baked assert file/line are discarded per project convention; the stringized
-// conditions match the X360/PS3 assert text.
+// The four sibling bridges (@0x827AE9D0 race car, @0x827AB910 traffic,
+// @0x827AB998 prop, @0x827AB8B0 crash) are declaration-only here for the same
+// reason: their bodies walk physics-output sub-interfaces whose accessor band is
+// not homed yet. This TU is therefore intentionally body-free; it stays in the tree
+// as the declared home so the reconstruction lands here (and not in the link-stub
+// TU) when the physics IO pass runs.
 // ============================================================================
 
 #include "GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.h"
-
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
-namespace WorldModule
-{
-
-// FLAG: placeholder for the X360 read-locking getter sub_8279F8E0. The real getter
-// read-locks the OutputBuffer and returns &<sub-interface>; here it returns the modelled
-// member so the bridge's word copy is well defined.
-const PhysicsToAIPostPhysicsInterface*
-PhysicsModuleOutputBuffer::GetPhysicsToAIPostPhysicsInterface() const
-{
-    LockForRead();
-    return &mInterface;
-}
-
-// @ 0x827A5680
-const PhysicsToAIPostPhysicsInterface* BridgePhysicsModuleToAIModule_PostPhysics(
-    void* lpWorldModule,
-    AIModuleInputBuffer_PostPhysics* lpAIModuleInputBuffer_PostPhysics,
-    const PhysicsModuleOutputBuffer* lpPhysicsModuleOutputBuffer)
-{
-    (void)lpWorldModule;   // X360 r3 -- never read by this bridge
-
-    CGS_ASSERT(lpAIModuleInputBuffer_PostPhysics != 0, "lpAIModuleInputBuffer_PostPhysics != NULL");
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");
-
-    const PhysicsToAIPostPhysicsInterface* lpInterface =
-        lpPhysicsModuleOutputBuffer->GetPhysicsToAIPostPhysicsInterface();
-
-    // X360: lwz r11, 0(result) ; stw r11, 4(aiInput)  -- copy the leading word.
-    lpAIModuleInputBuffer_PostPhysics->muPhysicsValue = lpInterface->muValue;
-
-    return lpInterface;
-}
-
-} // namespace WorldModule

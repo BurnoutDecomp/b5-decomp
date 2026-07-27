@@ -26,6 +26,20 @@ namespace Attrib
     ::Attribute::Key StringToKey(const char* lpcText, u32 luLength, u64 luSeed);
 
     // The NUL-terminated convenience form (@0x82805828; MomentPlayerStunt hashes
-    // its take-guid strings through it). DECLARATION-ONLY.
+    // its take-guid strings through it). Body: attribhash64.cpp.
     ::Attribute::Key StringToKey(const char* lpcText);
+
+    // The seed every X360 StringToKey site stages (lis/ori/insrdi pairs).
+    const u64 KU_ATTRIB_STRING_TO_KEY_SEED = 0xABCDEF0011223344ull;
+
+    // The full 64-bit hash the X360 body @0x82802940 actually computes (Bob
+    // Jenkins lookup8 "hash64"; the 32-bit ::Attribute::Key forms above are its
+    // low-doubleword truncation). The 64-bit VALUE is what the vault/schema
+    // containers store: class keys, dependency ids, export ids, type ids and
+    // Definition keys are all full 64-bit hashes of their source strings
+    // (attested: hash64('boostparamsasset') == 0xDA21657C48943FAC, the schema
+    // DepN ids == hash64('schema.vlt'/'schema.bin'), gDatabaseType ==
+    // hash64('Attrib::DatabaseLoadData'), the Definition mType fields ==
+    // hash64('EA::Reflection::<type>')). Body: attribhash64.cpp.
+    u64 StringToKey64(const char* lpcText, u32 luLength, u64 luSeed);
 }

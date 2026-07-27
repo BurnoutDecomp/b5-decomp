@@ -5,8 +5,9 @@
 // rw::math::vpu Vector4 / Matrix44 (BrnCommonTypes.h). See CgsCamera.h for the layout authority.
 
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetViewProjectionMatrixModified devs)
 
-#include <cmath>    // tanf/atanf (SetFovHorizontal -- the XMVectorTan/ATan lowering), sqrt (LookAt)
+#include <cmath>    // tanf/atanf (SetFovHorizontal -- the XMVectorTan/ATan lowering), sqrt (LookAt / frustum normalizes)
 #include <cstring>  // memcpy (Clone)
 
 // ----------------------------------------------------------------------------
@@ -65,23 +66,306 @@ namespace CgsGraphics
         return *this;
     }
 
-    // CgsGraphics::Camera::GetFrustum @0x82277298
+    // ========================================================================
+    // The frustum-writer family (camera-frustum wave 2026-07-27).
     //
-    // The X360 body splats the second transform's wAxis lane0 (+0x70) and compares it (vcmpeqfp.
-    // lane0) against the immediate 1.0 (flt_82001C98). If equal -> parallel (orthographic)
-    // projection; otherwise perspective. The single-lane equality de-optimises to a scalar compare
-    // on mProjection.wAxis lane0 (.x).
-    const CgsGeometric::Frustum& Camera::GetFrustum()
+    // Every body below was decoded from the raw X360 instruction stream and
+    // VERIFIED numerically: a per-instruction VMX emulator (session scratchpad
+    // ppcnum.py) executed the dumps @0x827F11A8 / @0x827F0AD8 / @0x82277298 /
+    // @0x827F9778 / @0x827F97B8 / @0x827EC858 / @0x827E72E0 over randomised
+    // cameras (orthonormal AND general-invertible view matrices, both bool
+    // values), and the C++ formulations below (mirrored in mirror.py) match
+    // every output lane to within float32 rounding of the emulated stream.
+    //
+    // Shared head (inlined in both writers): the camera's WORLD basis + eye
+    // are recovered from the mView 3x3 by the adjugate/determinant inverse --
+    //   cross-pair build:      vpermwi128 0x63 == the (y,z,x,w) word rotate,
+    //                          crossAB = perm(a*perm(b) - perm(a)*b)
+    //   det  = dot3(row0, cross(row1,row2))          (vmsum3fp128)
+    //   1/det = vrefp + 2x Newton-Raphson            (de-optimised exact)
+    //   basis rows (right/up/dir) = the transposed crosses * 1/det
+    //     (the vmrghw/vmrglw interleave block is exactly that transpose)
+    //   eye  = -(w-row * inverse)                    (vmaddfp chain + vxor)
+    // For the orthonormal cameras the game builds (LookAt / CopyToCgsCamera)
+    // this equals the transpose, but the CODE computes the true inverse and is
+    // reproduced as such.
+    // ========================================================================
+
+    namespace
     {
-        // immediate flt_82001C98 == 1.0f
-        if (mProjection.wAxis.x == 1.0f)
+        struct Vec3 { f32 x, y, z; };
+
+        inline Vec3 Cross3(const Vec3& lrA, const Vec3& lrB)
         {
-            return GetFrustumParallel();
+            // the vpermwi128-0x63 cross shape: perm(a*perm(b) - perm(a)*b)
+            Vec3 lvOut;
+            lvOut.x = lrA.y * lrB.z - lrA.z * lrB.y;
+            lvOut.y = lrA.z * lrB.x - lrA.x * lrB.z;
+            lvOut.z = lrA.x * lrB.y - lrA.y * lrB.x;
+            return lvOut;
+        }
+
+        inline f32 Dot3(const Vec3& lrA, const Vec3& lrB)
+        {
+            return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;   // vmsum3fp128
+        }
+
+        inline Vec3 Sub3(const Vec3& lrA, const Vec3& lrB)
+        {
+            Vec3 lvOut; lvOut.x = lrA.x - lrB.x; lvOut.y = lrA.y - lrB.y; lvOut.z = lrA.z - lrB.z;
+            return lvOut;
+        }
+
+        inline Vec3 Normalize3(const Vec3& lrA)
+        {
+            // vmsum3fp128 + vrsqrtefp + 2x Newton-Raphson -> exact
+            const f32 lfInvLen = 1.0f / std::sqrt(Dot3(lrA, lrA));
+            Vec3 lvOut; lvOut.x = lrA.x * lfInvLen; lvOut.y = lrA.y * lfInvLen; lvOut.z = lrA.z * lfInvLen;
+            return lvOut;
+        }
+
+        inline Vec3 RowXYZ(const Vector4& lrRow)
+        {
+            Vec3 lvOut; lvOut.x = lrRow.x; lvOut.y = lrRow.y; lvOut.z = lrRow.z;
+            return lvOut;
+        }
+
+        // The shared inlined head of both frustum writers (see the banner):
+        // world right/up/dir basis + eye from the view matrix inverse.
+        struct CameraWorldBasis { Vec3 mRight, mUp, mDir, mEye; };
+
+        CameraWorldBasis ComputeWorldBasisAndEye(const Matrix44& lrView)
+        {
+            const Vec3 lvRow0 = RowXYZ(lrView.xAxis);
+            const Vec3 lvRow1 = RowXYZ(lrView.yAxis);
+            const Vec3 lvRow2 = RowXYZ(lrView.zAxis);
+            const Vec3 lvRowW = RowXYZ(lrView.wAxis);
+
+            const Vec3 lvC12 = Cross3(lvRow1, lvRow2);
+            const Vec3 lvC20 = Cross3(lvRow2, lvRow0);
+            const Vec3 lvC01 = Cross3(lvRow0, lvRow1);
+            const f32  lfInvDet = 1.0f / Dot3(lvRow0, lvC12);   // vrefp + 2x NR
+
+            CameraWorldBasis lBasis;
+            // inverse rows == transposed crosses * 1/det (the vmrghw/vmrglw block)
+            lBasis.mRight.x = lvC12.x * lfInvDet; lBasis.mRight.y = lvC20.x * lfInvDet; lBasis.mRight.z = lvC01.x * lfInvDet;
+            lBasis.mUp.x    = lvC12.y * lfInvDet; lBasis.mUp.y    = lvC20.y * lfInvDet; lBasis.mUp.z    = lvC01.y * lfInvDet;
+            lBasis.mDir.x   = lvC12.z * lfInvDet; lBasis.mDir.y   = lvC20.z * lfInvDet; lBasis.mDir.z   = lvC01.z * lfInvDet;
+
+            // eye = -(w-row through the inverse) -- the vmaddfp accumulate + vxor sign flip
+            lBasis.mEye.x = -(lvRowW.x * lBasis.mRight.x + lvRowW.y * lBasis.mUp.x + lvRowW.z * lBasis.mDir.x);
+            lBasis.mEye.y = -(lvRowW.x * lBasis.mRight.y + lvRowW.y * lBasis.mUp.y + lvRowW.z * lBasis.mDir.y);
+            lBasis.mEye.z = -(lvRowW.x * lBasis.mRight.z + lvRowW.y * lBasis.mUp.z + lvRowW.z * lBasis.mDir.z);
+            return lBasis;
+        }
+
+        inline void StorePlane(Vector4& lrOut, const Vec3& lrN, f32 lfD)
+        {
+            lrOut.x = lrN.x; lrOut.y = lrN.y; lrOut.z = lrN.z; lrOut.w = lfD;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // CgsGraphics::Camera::GetFrustumParallel @0x827F11A8 (DWARF CgsCamera.h:170)
+    //
+    // World-space planes of the orthogonal view volume. The X360:
+    //   1. inverse-basis head (see the banner above);
+    //   2. half extents sx = 1/mProjection[0][0], sy = 1/mProjection[1][1]
+    //      (fdivs of flt_82001C98 == 1.0), near/far from scalars [7]/[8];
+    //   3. near-face corners walked (+r+u) -> (-r+u) -> (-r-u) -> (+r-u)
+    //      (corner0 = eye + sx*right + sy*up + near*dir, then the two
+    //      2*sx*right / 2*sy*up edge subtractions), far corners = the
+    //      4-iteration loop adding (far-near)*dir (@0x827F1434..0x827F146C);
+    //   4. planes (write order == CameraRwFrustum order):
+    //        near  [ dir, dot3(dir, c0n)]     (dir NOT normalised)
+    //        far   [-dir, -dot3(dir, c0f)]    (vxor sign flips)
+    //        left  n=norm(cross(c1n-c1f, c2f-c1f)), d=dot3(n, c1n)
+    //        right n=norm(cross(c3n-c3f, c0f-c3f)), d=dot3(n, c3n)
+    //        top   n=norm(cross(c0n-c0f, c1f-c0f)), d=dot3(n, c0n)
+    //        bottom n=norm(cross(c2n-c2f, c3f-c2f)), d=dot3(n, c2n)
+    // ------------------------------------------------------------------------
+    void Camera::GetFrustumParallel(CameraRwFrustum& lrOut) const
+    {
+        const CameraWorldBasis lBasis = ComputeWorldBasisAndEye(mView);
+        const Vec3& lrRight = lBasis.mRight;
+        const Vec3& lrUp    = lBasis.mUp;
+        const Vec3& lrDir   = lBasis.mDir;
+
+        const f32 lfSx   = 1.0f / mProjection.xAxis.x;   // fdivs 1.0 / [0][0]
+        const f32 lfSy   = 1.0f / mProjection.yAxis.y;   // fdivs 1.0 / [1][1]
+        const f32 lfNear = maProjectionScalars[7];       // lfs 0x15C
+        const f32 lfFar  = maProjectionScalars[8];       // lfs 0x160
+        const f32 lfSpan = lfFar - lfNear;
+
+        // near corners: (+r+u), (-r+u), (-r-u), (+r-u); far = +span*dir.
+        Vec3 laNear[4], laFar[4];
+        laNear[0].x = lBasis.mEye.x + lrRight.x * lfSx + lrUp.x * lfSy + lrDir.x * lfNear;
+        laNear[0].y = lBasis.mEye.y + lrRight.y * lfSx + lrUp.y * lfSy + lrDir.y * lfNear;
+        laNear[0].z = lBasis.mEye.z + lrRight.z * lfSx + lrUp.z * lfSy + lrDir.z * lfNear;
+        laNear[1] = Sub3(laNear[0], Vec3{ lrRight.x * (2.0f * lfSx), lrRight.y * (2.0f * lfSx), lrRight.z * (2.0f * lfSx) });
+        laNear[2] = Sub3(laNear[1], Vec3{ lrUp.x * (2.0f * lfSy), lrUp.y * (2.0f * lfSy), lrUp.z * (2.0f * lfSy) });
+        laNear[3].x = laNear[2].x + lrRight.x * (2.0f * lfSx);
+        laNear[3].y = laNear[2].y + lrRight.y * (2.0f * lfSx);
+        laNear[3].z = laNear[2].z + lrRight.z * (2.0f * lfSx);
+        for (int liCorner = 0; liCorner < 4; ++liCorner)   // the 4x far loop
+        {
+            laFar[liCorner].x = laNear[liCorner].x + lrDir.x * lfSpan;
+            laFar[liCorner].y = laNear[liCorner].y + lrDir.y * lfSpan;
+            laFar[liCorner].z = laNear[liCorner].z + lrDir.z * lfSpan;
+        }
+
+        StorePlane(lrOut.maPlanes[0], lrDir, Dot3(lrDir, laNear[0]));                       // near
+        const Vec3 lvNegDir{ -lrDir.x, -lrDir.y, -lrDir.z };                                // vxor
+        StorePlane(lrOut.maPlanes[1], lvNegDir, -Dot3(lrDir, laFar[0]));                    // far
+        const Vec3 lvLeft   = Normalize3(Cross3(Sub3(laNear[1], laFar[1]), Sub3(laFar[2], laFar[1])));
+        StorePlane(lrOut.maPlanes[2], lvLeft, Dot3(lvLeft, laNear[1]));                     // left
+        const Vec3 lvRightN = Normalize3(Cross3(Sub3(laNear[3], laFar[3]), Sub3(laFar[0], laFar[3])));
+        StorePlane(lrOut.maPlanes[3], lvRightN, Dot3(lvRightN, laNear[3]));                 // right
+        const Vec3 lvTop    = Normalize3(Cross3(Sub3(laNear[0], laFar[0]), Sub3(laFar[1], laFar[0])));
+        StorePlane(lrOut.maPlanes[4], lvTop, Dot3(lvTop, laNear[0]));                       // top
+        const Vec3 lvBottom = Normalize3(Cross3(Sub3(laNear[2], laFar[2]), Sub3(laFar[3], laFar[2])));
+        StorePlane(lrOut.maPlanes[5], lvBottom, Dot3(lvBottom, laNear[2]));                 // bottom
+    }
+
+    // ------------------------------------------------------------------------
+    // CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8 (DWARF CgsCamera.h:166)
+    //
+    // Same construction as the parallel writer with the corner spreads coming
+    // from the cached tan-half-fov scalars ([2]/[5], lfs 0x148/0x154): the four
+    // corner RAYS are dir +/- tanH*right +/- tanV*up (sign order (+,+), (-,+),
+    // (-,-), (+,-)), corners = eye + near*ray / eye + far*ray (the 4x loop
+    // @0x827F0D00..0x827F0D4C). When lbNegateNearFar is set the X360 fnegs both
+    // clip distances on entry (@0x827EC0C..) and fully negates ALL SIX result
+    // planes on exit (the 6-iteration vxor/vrlimi loop @0x827F1104..0x827F1194).
+    // ------------------------------------------------------------------------
+    void Camera::GetFrustumPerspective(CameraRwFrustum& lrOut, bool lbNegateNearFar) const
+    {
+        const CameraWorldBasis lBasis = ComputeWorldBasisAndEye(mView);
+        const Vec3& lrRight = lBasis.mRight;
+        const Vec3& lrUp    = lBasis.mUp;
+        const Vec3& lrDir   = lBasis.mDir;
+
+        const f32 lfTanH = maProjectionScalars[2];   // lfs 0x148 (m_tanHalfFovHorizontal)
+        const f32 lfTanV = maProjectionScalars[5];   // lfs 0x154 (m_tanHalfFovVertical)
+        f32 lfNear = maProjectionScalars[7];
+        f32 lfFar  = maProjectionScalars[8];
+        if (lbNegateNearFar)                         // the two fnegs @0x827F0C0C
+        {
+            lfNear = -lfNear;
+            lfFar  = -lfFar;
+        }
+
+        static const f32 KAF_SIGNS[4][2] = { { 1.0f, 1.0f }, { -1.0f, 1.0f }, { -1.0f, -1.0f }, { 1.0f, -1.0f } };
+        Vec3 laNear[4], laFar[4];
+        for (int liCorner = 0; liCorner < 4; ++liCorner)
+        {
+            const f32 lfS = KAF_SIGNS[liCorner][0] * lfTanH;
+            const f32 lfT = KAF_SIGNS[liCorner][1] * lfTanV;
+            const Vec3 lvRay{ lrDir.x + lfS * lrRight.x + lfT * lrUp.x,
+                              lrDir.y + lfS * lrRight.y + lfT * lrUp.y,
+                              lrDir.z + lfS * lrRight.z + lfT * lrUp.z };
+            laNear[liCorner].x = lBasis.mEye.x + lfNear * lvRay.x;
+            laNear[liCorner].y = lBasis.mEye.y + lfNear * lvRay.y;
+            laNear[liCorner].z = lBasis.mEye.z + lfNear * lvRay.z;
+            laFar[liCorner].x  = lBasis.mEye.x + lfFar * lvRay.x;
+            laFar[liCorner].y  = lBasis.mEye.y + lfFar * lvRay.y;
+            laFar[liCorner].z  = lBasis.mEye.z + lfFar * lvRay.z;
+        }
+
+        StorePlane(lrOut.maPlanes[0], lrDir, Dot3(lrDir, laNear[0]));                       // near
+        const Vec3 lvNegDir{ -lrDir.x, -lrDir.y, -lrDir.z };
+        StorePlane(lrOut.maPlanes[1], lvNegDir, -Dot3(lrDir, laFar[0]));                    // far
+        const Vec3 lvLeft   = Normalize3(Cross3(Sub3(laNear[1], laFar[1]), Sub3(laFar[2], laFar[1])));
+        StorePlane(lrOut.maPlanes[2], lvLeft, Dot3(lvLeft, laNear[1]));                     // left
+        const Vec3 lvRightN = Normalize3(Cross3(Sub3(laNear[3], laFar[3]), Sub3(laFar[0], laFar[3])));
+        StorePlane(lrOut.maPlanes[3], lvRightN, Dot3(lvRightN, laNear[3]));                 // right
+        const Vec3 lvTop    = Normalize3(Cross3(Sub3(laNear[0], laFar[0]), Sub3(laFar[1], laFar[0])));
+        StorePlane(lrOut.maPlanes[4], lvTop, Dot3(lvTop, laNear[0]));                       // top
+        const Vec3 lvBottom = Normalize3(Cross3(Sub3(laNear[2], laFar[2]), Sub3(laFar[3], laFar[2])));
+        StorePlane(lrOut.maPlanes[5], lvBottom, Dot3(lvBottom, laNear[2]));                 // bottom
+
+        if (lbNegateNearFar)   // the 6-plane negate loop @0x827F1104
+        {
+            for (int liPlane = 0; liPlane < 6; ++liPlane)
+            {
+                Vector4& lrPlane = lrOut.maPlanes[liPlane];
+                lrPlane.x = -lrPlane.x; lrPlane.y = -lrPlane.y;
+                lrPlane.z = -lrPlane.z; lrPlane.w = -lrPlane.w;
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // CgsGraphics::Camera::GetFrustum @0x82277298 (DWARF CgsCamera.h:158)
+    //
+    // Dispatch on the projection type: the X360 selects word lane THREE of
+    // mProjection.wAxis (lvsl 0xC + vperm) and vcmpeqfp.-compares it against
+    // 1.0 (flt_82001C98) -- the affine 1.0 the orthogonal projection stores at
+    // [3][3]; equal -> parallel, else perspective with the negate flag FALSE
+    // (li r5, 0 @0x82277314).
+    // ------------------------------------------------------------------------
+    void Camera::GetFrustum(CameraRwFrustum& lrOut) const
+    {
+        if (mProjection.wAxis.w == 1.0f)
+        {
+            GetFrustumParallel(lrOut);
         }
         else
         {
-            return GetFrustumPerspective();
+            GetFrustumPerspective(lrOut, false);
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // CgsGraphics::Camera::GetCgsFrustum @0x827F9778 / GetCgsFrustumParallel
+    // @0x827F97B8 -- thin wrappers: write the RW frustum into a stack snapshot,
+    // convert with CgsGeometric::Frustum::SetFromRwFrustum.
+    // ------------------------------------------------------------------------
+    void Camera::GetCgsFrustum(CgsGeometric::Frustum& lrOut) const
+    {
+        CameraRwFrustum lRwFrustum;
+        GetFrustum(lRwFrustum);
+        lrOut.SetFromRwFrustum(lRwFrustum);
+    }
+
+    void Camera::GetCgsFrustumParallel(CgsGeometric::Frustum& lrOut) const
+    {
+        CameraRwFrustum lRwFrustum;
+        GetFrustumParallel(lRwFrustum);
+        lrOut.SetFromRwFrustum(lRwFrustum);
+    }
+
+    // ------------------------------------------------------------------------
+    // PC-ADDITIVE no-arg bridges (see the header FLAG): run the REAL writer
+    // into a function-local static (POD, zero-init) so the committed
+    // BrnWorldModule call shape keeps X360 semantics.
+    // ------------------------------------------------------------------------
+    const CgsGeometric::Frustum& Camera::GetFrustumParallel() const
+    {
+        static CgsGeometric::Frustum sFrustum;
+        CameraRwFrustum lRwFrustum;
+        GetFrustumParallel(lRwFrustum);
+        sFrustum.SetFromRwFrustum(lRwFrustum);
+        return sFrustum;
+    }
+
+    const CgsGeometric::Frustum& Camera::GetFrustumPerspective() const
+    {
+        static CgsGeometric::Frustum sFrustum;
+        CameraRwFrustum lRwFrustum;
+        GetFrustumPerspective(lRwFrustum, false);
+        sFrustum.SetFromRwFrustum(lRwFrustum);
+        return sFrustum;
+    }
+
+    const CgsGeometric::Frustum& Camera::GetFrustum()
+    {
+        // the @0x82277298 dispatch through the bridge pair
+        if (mProjection.wAxis.w == 1.0f)
+        {
+            return GetFrustumParallel();
+        }
+        return GetFrustumPerspective();
     }
 
     // ------------------------------------------------------------------------
@@ -192,6 +476,92 @@ namespace CgsGraphics
                                      (lfNearTimesFar * -2.0f) / (lfFar - lfNear), 0.0f }; // v16
 
         UpdateViewProjectionMatrix();
+    }
+
+    // ------------------------------------------------------------------------
+    // CgsGraphics::Camera::UpdateOrthogonalProjectionMatrix @0x827E72E0
+    // (DWARF CgsCamera.h:184; camera-frustum wave 2026-07-27)
+    //
+    // Rebuild mProjection as the orthogonal projection for half-extent scale
+    // lfOrthoScale (n/f = scalars [7]/[8], lfs 0x15C/0x160):
+    //   xAxis = { 1/s, 0, 0, 0 }            (fdivs flt_82001C98 / f1)
+    //   yAxis = { 0, 1/s, 0, 0 }
+    //   zAxis = { 0, 0, 1/(f-n), 0 }        (fdivs of the fsubs pair)
+    //   wAxis = { 0, 0, n/(n-f), 1 }        (the [3][3] affine 1.0 is what
+    //                                        GetFrustum dispatches on)
+    // then rebuild mViewProjection (bl UpdateViewProjectionMatrix). Store
+    // stream transcribed operand-for-operand from the asm.
+    // ------------------------------------------------------------------------
+    void Camera::UpdateOrthogonalProjectionMatrix(f32 lfOrthoScale)
+    {
+        const f32 lfNear = maProjectionScalars[7];   // f13
+        const f32 lfFar  = maProjectionScalars[8];   // f10
+        const f32 lfInvScale = 1.0f / lfOrthoScale;  // f11
+
+        mProjection.xAxis = Vector4{ lfInvScale, 0.0f, 0.0f, 0.0f };
+        mProjection.yAxis = Vector4{ 0.0f, lfInvScale, 0.0f, 0.0f };
+        mProjection.zAxis = Vector4{ 0.0f, 0.0f, 1.0f / (lfFar - lfNear), 0.0f };
+        mProjection.wAxis = Vector4{ 0.0f, 0.0f, lfNear / (lfNear - lfFar), 1.0f };
+
+        UpdateViewProjectionMatrix();
+    }
+
+    // ------------------------------------------------------------------------
+    // CgsGraphics::Camera::GetViewProjectionMatrixModified @0x827EC858
+    // (DWARF CgsCamera.h:136; camera-frustum wave 2026-07-27 -- verified
+    // lane-for-lane against the numeric emulation, see the family banner)
+    //
+    // The shader-constant form of the view-projection (SetShaderConstantData
+    // slot 34 in the WorldModule feeds): a TRANSPOSED clip x/y with a
+    // LINEARISED depth pair --
+    //   row0 = mViewProjection column 0     (clip.x = dot(row0, pos))
+    //   row1 = mViewProjection column 1     (clip.y = dot(row1, pos))
+    //   row2 = mView column 2               (LINEAR view-space z)
+    //   row3 = { proj[2][2], proj[3][2], proj[2][3], proj[3][3] }
+    //          (the projection z/w coefficient quartet: the consumer rebuilds
+    //           clip.z = viewZ*row3.x + row3.y, clip.w = viewZ*row3.z + row3.w)
+    //
+    // The X360 assembles rows 0/1/2 with the vmrghw/vmrglw transpose ladder and
+    // row3 with two vperm+vsldoi combines whose lane controls live in the
+    // UN-DUMPED rodata pair unk_82CDA3C0 / unk_82CDA400. DERIVATION (no silent
+    // guess): both vperm sources are single-element SPLATS (vperm(splat(p22),
+    // splat(p32), ctlA) / vperm(splat(p23), splat(p33), ctlB)) and the vsldoi
+    // #8 keeps ctlA's lanes 2,3 and ctlB's lanes 0,1 -- so the only observable
+    // freedom is "lane from source A vs source B", and the surviving lane
+    // pattern is forced to [A,B] / [A,B] by what the consumer must read back
+    // (the z/w reconstruction above): row3 == {p22, p32, p23, p33} exactly.
+    // The initial whole-mViewProjection copy into the return slot is fully
+    // overwritten (dead stores @0x827ECBD0..0x827ECBF0) and is not reproduced.
+    //
+    // The four leading dev asserts check the projection has no off-axis z/w
+    // terms in its x/y rows: RwMath::IsSimilar(GetElem, 0) on [0][2], [1][2],
+    // [0][3] and (the fourth block re-checks [1][2] with the same assert
+    // string aRwmathIssimila_5 -- a duplicated source line, kept faithfully).
+    // The IsSimilar epsilon (unk_820D16CC) is un-dumped rodata -- FLAG: the
+    // asserts are reproduced with exact-zero compares, the conservative form.
+    // ------------------------------------------------------------------------
+    Matrix44 Camera::GetViewProjectionMatrixModified() const
+    {
+        // the four RwMath::IsSimilar(m_projectionMatrix.GetElem(..), 0.0f) devs
+        // (CgsCamera.cpp:0xB6..0xB9) -- FLAG: epsilon rodata un-dumped, exact
+        // compares carried instead.
+        CGS_ASSERT(mProjection.xAxis.z == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 2), 0.0f )");
+        CGS_ASSERT(mProjection.yAxis.z == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )");
+        CGS_ASSERT(mProjection.xAxis.w == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(0, 3), 0.0f )");
+        CGS_ASSERT(mProjection.yAxis.z == 0.0f, "RwMath::IsSimilar( m_projectionMatrix.GetElem(1, 2), 0.0f )"); // duplicated source line (same string @0xB9)
+
+        Matrix44 lResult;
+        // row0/row1 = VP columns 0/1 (the vmrghw ladder)
+        lResult.xAxis = Vector4{ mViewProjection.xAxis.x, mViewProjection.yAxis.x,
+                                 mViewProjection.zAxis.x, mViewProjection.wAxis.x };
+        lResult.yAxis = Vector4{ mViewProjection.xAxis.y, mViewProjection.yAxis.y,
+                                 mViewProjection.zAxis.y, mViewProjection.wAxis.y };
+        // row2 = mView column 2 (the vmrglw pair over the view rows)
+        lResult.zAxis = Vector4{ mView.xAxis.z, mView.yAxis.z, mView.zAxis.z, mView.wAxis.z };
+        // row3 = the projection z/w coefficient quartet (vperm/vsldoi combine)
+        lResult.wAxis = Vector4{ mProjection.zAxis.z, mProjection.wAxis.z,
+                                 mProjection.zAxis.w, mProjection.wAxis.w };
+        return lResult;
     }
 
     // ------------------------------------------------------------------------

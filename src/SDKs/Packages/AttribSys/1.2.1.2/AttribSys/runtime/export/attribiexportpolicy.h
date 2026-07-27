@@ -38,9 +38,16 @@
 // own (vptr only); concrete payload lives in the derived policy TUs.
 // ===========================================================================
 
+#include "types.hpp"
+
 namespace Attrib
 {
     class Vault;   // the vault a policy operates over (attribloadandgo.h)
+
+    // The 64-bit granularity/type + export-instance keys (the attribloadandgo.h
+    // typedefs; spelled here so this header stays standalone).
+    typedef u64 TypeID;
+    typedef u64 ExportID;
 
     class IExportPolicy
     {
@@ -50,13 +57,30 @@ namespace Attrib
         // so the vtable + the deleting-destructor thunk are emitted here.
         virtual ~IExportPolicy();
 
-        // Per-policy pre-deinitialize hook. When a Database's ExportManager tears a
-        // vault down it fans this out to every registered policy
-        // (Attrib::ExportManager::PrepareToDeinitialize @ 0x828031A8 calls it through
-        // the policy vtable for each ExportPolicyPair). Pure here -- IExportPolicy is a
-        // bare interface; the real bodies live in the concrete per-granularity policy
-        // TUs (Class/Collection/DatabaseExportPolicy). Additive interface method; the
-        // object still owns no data members (vptr only).
-        virtual void PrepareToDeinitialize(const Vault& lrVault) = 0;
+        // The full DWARF interface, in X360 vtable-slot order (DecFIGS
+        // attribloadandgo.h:46-88; slot numbers verified against the concrete
+        // policy vtables off_820D9630/654/700 dumped from the ARTIST .i64):
+        //   [1] IsExported            [2] Initialize        [3] AnyReferences
+        //   [4] IsReferenced          [5] PrepareToClean    [6] Clean
+        //   [7] PrepareToDeinitialize [8] Deinitialize
+        // A Vault dispatches [1] while counting its export slots (ctor
+        // @0x8280A2E8), [2] while initializing its serialised exports
+        // (Initialize @0x8280A660) and [8] while tearing them down
+        // (Deinitialize @0x8280E6F0); the ExportManager fans out [7]
+        // (@0x828031A8). Pure here -- the bodies live in the concrete
+        // per-granularity policy TUs.
+        virtual bool IsExported(const TypeID& lrType) = 0;
+        virtual void Initialize(Vault& lrVault, const TypeID& lrType,
+                                const ExportID& lrExport, void* lpData,
+                                unsigned int luSize) = 0;
+        virtual bool AnyReferences(const Vault& lrVault) = 0;
+        virtual bool IsReferenced(const Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport) = 0;
+        virtual void PrepareToClean(Vault& lrVault) = 0;
+        virtual void Clean(Vault& lrVault, const TypeID& lrType,
+                           const ExportID& lrExport) = 0;
+        virtual void PrepareToDeinitialize(Vault& lrVault) = 0;
+        virtual void Deinitialize(Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport) = 0;
     };
 }

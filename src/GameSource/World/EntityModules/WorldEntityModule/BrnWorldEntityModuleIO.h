@@ -97,6 +97,9 @@ namespace WorldEntityIO
     {
         // X360 0x822BA810: write-lock; X360 this+4.
         ResourceRequestInterface* GetResourceRequestInterface();
+        // Read-lock const twin (the world streamer's request flush is drained through
+        // it by WorldModule::BridgeEntityModulesToOutput_PostPhysics @0x827AEEB0).
+        const ResourceRequestInterface* GetResourceRequestInterface() const;
         // X360 0x822BA960: write-lock; the scene input interface (X360 this+4116).
         SceneInputInterface* GetSceneInputInterface();
         // X360 0x827A2E78: read-lock; X360 this+822896.
@@ -198,6 +201,9 @@ namespace WorldEntityIO
         SceneInputInterface* GetSceneInputInterface();
         // X360 0x822BA420: write-lock; X360 this+818976.
         GameEventQueue* GetGameEventQueue();
+        // X360 0x827A29E0: read-lock (WorldModule::BridgeWorldEntityInfoToOutput
+        // @0x827ADD78 drains the queue through it).
+        const GameEventQueue* GetGameEventQueue() const;
         // Queue trio (:146/:147/:148; X360 +16/+76/+140).
         PropInstancesNeededForZoneQueue* GetPropInstancesNeededForZoneQueue();
         // X360 0x822BA4C8: write-lock; X360 this+76.
@@ -206,6 +212,8 @@ namespace WorldEntityIO
         PropGraphicsUnloadedQueue* GetPropGraphicsUnloadedQueue();
         // X360 0x822BA6C0: write-lock; X360 this+820528.
         SoundWorldLoadInterface* GetSoundWorldLoadInterface();
+        // X360 0x827A2C80: read-lock (BridgeWorldEntityInfoToOutput @0x827ADD78).
+        const SoundWorldLoadInterface* GetSoundWorldLoadInterface() const;
         // miPlayerZoneNumber :152 (the X360 UpdateStream store @ this+821764).
         void SetPlayerZoneNumber( s32 liPlayerZoneNumber );
 

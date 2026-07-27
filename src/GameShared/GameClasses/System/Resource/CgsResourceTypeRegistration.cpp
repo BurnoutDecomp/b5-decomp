@@ -18,6 +18,14 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsAptDataHeaderType.h"
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"   // CgsResource::LuaCodeResourceType (0x22)
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResourceType (0x27)
+#include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"          // 0xC
+#include "GameShared/GameClasses/RenderWare/cross/CgsMaterialResourceType.h"              // 0x1
+#include "GameShared/GameClasses/RenderWare/cross/CgsMaterialTechniqueResourceType.h"     // 0xD
+#include "GameShared/GameClasses/Graphics/Resources/CgsShaderTechniqueResourceType.h"     // 0x32
+#include "GameShared/GameClasses/RenderWare/x360/materialstates/CgsRwShaderProgramBufferResourceTypeX360.h" // 0x12
+#include "SharedClasses/Physics/Props/BrnPropGraphicsListResourceType.h"       // Props::PropGraphicsListResourceType (0x10010)
+#include "SharedClasses/Physics/Props/BrnPropInstanceDataResourceType.h"       // Props::PropInstanceDataResourceType (0x10011)
+#include "SharedClasses/Sound/World/BrnStaticSoundMapResourceType.h"           // World::StaticSoundMapResourceType (0x10016)
 #include "SharedClasses/Gui/Flapt/BrnFlaptFileResourceType.h"                  // BrnFlapt::FlaptFileResourceType (0x10020)
 
 // ============================================================================================
@@ -100,6 +108,30 @@ namespace CgsResource
         TypeRegistry::Register(&sWorldPainter2D);
         static PolygonSoupListResourceType sPolygonSoupList;   // [game #71] 0x43  PolygonSoupList (collision)
         TypeRegistry::Register(&sPolygonSoupList);
+        // The three world-prop/sound types (X360 GameDataModule::RegisterResourceTypes
+        // @0x82667EA8 registers all three; exact [game #] positions pending that
+        // function's order decode -- id-keyed lookup is order-independent).
+        static BrnPhysics::Props::PropGraphicsListResourceType sPropGraphicsList; // 0x10010 (65552)
+        TypeRegistry::Register(&sPropGraphicsList);
+        static BrnPhysics::Props::PropInstanceDataResourceType sPropInstanceData; // 0x10011 (65553)
+        TypeRegistry::Register(&sPropInstanceData);
+        static BrnSound::World::StaticSoundMapResourceType     sStaticSoundMap;   // 0x10016 (65558)
+        TypeRegistry::Register(&sStaticSoundMap);
+
+        // ---- the world-render resource types (2026-07-27) -------------------------------------
+        // The streamed TRK_UNIT bundles carry these; without a registered handler the
+        // loader cannot FixUp them, so the renderable mesh/material graph is never built
+        // (found by the renderer wave: nothing registered Renderable/Material/technique).
+        static RwRenderableResourceType    sRwRenderable;      // 0xC   Renderable (mesh graph)
+        TypeRegistry::Register(&sRwRenderable);
+        static MaterialResourceType        sMaterial;          // 0x1   Material (assembly)
+        TypeRegistry::Register(&sMaterial);
+        static MaterialTechniqueResourceType sMaterialTechnique; // 0xD MaterialTechnique
+        TypeRegistry::Register(&sMaterialTechnique);
+        static ShaderTechniqueResourceType sShaderTechnique;       // 0x32 ShaderTechnique
+        TypeRegistry::Register(&sShaderTechnique);
+        static RwShaderProgramBufferResourceType sShaderProgramBuffer;    // 0x12 vertex/pixel program
+        TypeRegistry::Register(&sShaderProgramBuffer);
 
         // ---- owning-module registrations (NOT in GameDataModule::RegisterResourceTypes) -------
         // The X360 registers these in their owning subsystem's bring-up, not the game-data module.

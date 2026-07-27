@@ -77,6 +77,13 @@ void* AttribSysPackageAllocator::Malloc(size_t lnSize, int /*liFlags*/)
 // @ 0x828020C8 - free a block back to the adopted heap. The byte count is part of
 // the interface but unused here (the heap tracks block sizes); only mbHasAllocator
 // is asserted before forwarding to HeapMalloc::Free(this->mpHeapAllocator, block).
+// The declared 3-arg spelling (ptr, size, tag) the AttribList helpers call --
+// the X360 folds it onto the 2-arg body; size/tag are debug-only.
+void AttribSysPackageAllocator::Free(void* lpBlock, s32 /*liSize*/, const char* /*lpcTag*/)
+{
+    Free(lpBlock, 0u);
+}
+
 void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
 {
     CGS_ASSERT(mbHasAllocator, "mbHasAllocator");

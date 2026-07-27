@@ -48,7 +48,7 @@ const s32 KI_TRAINING_REQUEST_QUEUE_SIZE = 8;
 // SharedIO/BrnRaceCarEntityModuleOutputInterface.h). CopyActiveRaceCarToPlayerScoringMappingToOutput
 // only takes a pointer to it, so a forward declaration suffices here.
 namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }
-namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; }
+namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; }
 
 // ---- PLACEHOLDER element types ---------------------------------------------
 // The real RaceCar / ActiveRaceCar live in their own (not-yet-committed) homes
@@ -95,6 +95,20 @@ public:
         void PostSceneUpdate( RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput,
                               RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput,
                               BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0) ----
+        // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
+        // own TU lands.
+        void PreSceneUpdate( RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+                             RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+                             BrnUpdateSet lUpdateSet );
+
+        // ---- ADDITIVE (WorldModule::EntityModulePostPhysicsUpdate @0x827D3F10) ----
+        // Declaration-only; body gated in WorldLinkStubs.cpp until this module's
+        // own TU lands.
+        void PostPhysicsUpdate( RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+                                RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
+                                BrnUpdateSet lUpdateSet );
 
         // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
         void GenerateDispatchLists( RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists* lpInput,

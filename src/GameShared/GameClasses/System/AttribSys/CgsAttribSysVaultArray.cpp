@@ -102,4 +102,35 @@ CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lStream, const VaultArr
 
     return lStream;
 }
+
+// @ 0x828036A8 -- find the slot for the request's vault. Walk the array once:
+// remember the FIRST free slot; if an occupied slot already holds this resource
+// (the X360 compares the id's low 32-bit word -- the slot id word @BE +4), that
+// slot wins immediately (the caller ref-count-bumps it). Otherwise the first
+// free slot; asserts when the array is unprepared or exhausted.
+s32 VaultArray::GetFreeSlotIndex(CgsResource::ResourceHandle lVaultResHandle) const
+{
+    CGS_ASSERT(mbPrepared,
+               "Trying to access a vault slot before Prepare() has been called");   // .cpp:126
+
+    s32 liFirstFree = -1;
+    for (s32 liSlot = 0; liSlot < GetNumSlots(); ++liSlot)
+    {
+        const VaultSlot& lrSlot = mpaSlots[liSlot];
+        if (lrSlot.GetRefCount() <= 0 && liFirstFree < 0)
+            liFirstFree = liSlot;
+
+        // The X360 compares only the low 32-bit halves of the two 64-bit ids
+        // (lwz of the BE +4 words); reproduced as the truncated compare.
+        if (lrSlot.GetRefCount() > 0 &&
+            static_cast<u32>(lrSlot.GetResourceId().GetHash()) ==
+                static_cast<u32>(lVaultResHandle.GetResourceId().GetHash()))
+        {
+            return liSlot;
+        }
+    }
+
+    CGS_ASSERT(liFirstFree >= 0, "Ran out of free vault slots");                     // .cpp:147
+    return liFirstFree;
+}
 }

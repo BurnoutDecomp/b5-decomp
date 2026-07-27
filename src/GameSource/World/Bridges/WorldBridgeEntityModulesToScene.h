@@ -5,6 +5,9 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"        // PropEntityIO::OutputBuffer_Prepare
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"  // BrnTrafficIO::OutputBuffer_Prepare
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                        // SceneManagerIO::InputBuffer_Update / InSceneUpdateInterface
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"  // RaceCarEntityModuleIO::OutputBuffer_PreScene / _PostPhysics
+#include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"  // TriggerEntityModuleIO::OutputBuffer_PreScene
+#include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"      // WorldEntityIO::OutputBuffer_PreScene / _PostPhysics
 
 // WorldModule entity-modules -> scene/physics prepare-phase bridges -- owning header
 //   b5-decomp/src/GameSource/World/Bridges/WorldBridgeEntityModulesToScene.h
@@ -62,4 +65,30 @@ namespace WorldModule
         void* lpWorldModule,
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
         const BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare* lpTrafficOutputBuffer_Prepare);
+
+    // ---- ADDITIVE (world-drive wave 2026-07-27; same X360 TU): the two
+    //      per-FRAME entity-modules -> scene merges WorldModule::Update
+    //      @0x827D63E8 runs (pre-scene staging + the post-physics restage). ----
+
+    // @ 0x827AB490 -- merge every entity module's pre-scene scene-update output
+    // (trigger / traffic / race car / prop / world entity) into the scene
+    // manager's update input buffer.
+    void BridgeEntityModulesToSceneModule_PreScene(
+        void* lpWorldModule,
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+        const BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene* lpTriggerOutputBuffer_PreScene,
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutputBuffer_PreScene,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene,
+        const BrnWorld::PropEntityIO::OutputBuffer_PreScene* lpPropOutputBuffer_PreScene,
+        const BrnWorld::WorldEntityIO::OutputBuffer_PreScene* lpWorldEntityOutputBuffer_PreScene);
+
+    // @ 0x827AB608 -- the post-physics restage (traffic / race car / prop /
+    // world entity) into the scene manager's update input buffer.
+    void BridgeEntityModulesToScene_PostPhysics(
+        void* lpWorldModule,
+        CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutputBuffer_PostPhysics,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutputBuffer_PostPhysics,
+        const BrnWorld::PropEntityIO::OutputBuffer_PostPhysics* lpPropOutputBuffer_PostPhysics,
+        const BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutputBuffer_PostPhysics);
 }

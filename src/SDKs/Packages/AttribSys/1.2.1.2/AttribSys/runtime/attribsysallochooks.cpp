@@ -10,6 +10,15 @@
 
 namespace Attrib
 {
+    // @ 0x82803490 -- the SDK's allocation-accounting counters. That address has
+    // NO entry in the function export set (an export gap, like 0x827C7668), so
+    // the counter layout cannot be reconstructed yet. FLAG PC-platform leaf:
+    // telemetry-only no-op until the body is recovered via headless IDA; both
+    // call sites (Alloc/Free) pass (size, +/-1) and ignore the result.
+    void AllocationAccounting(int /*liSize*/, int /*liDirection*/)
+    {
+    }
+
     // @ 0x821F0478 -- the AttribSys library's generic allocation hook. Account the
     // request (AllocationAccounting(size, 1)), short-circuit a zero-byte request to
     // NULL, then Malloc the bytes from the static AttribSys package allocator with
@@ -28,6 +37,14 @@ namespace Attrib
         CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
             CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator();
         return lpAllocator->Malloc(lnSize, 0);
+    }
+
+    // The tagged Alloc form (same X360 body; the tag is a diagnostic-only string
+    // the vault/export sites stage -- "Attrib::DataBlocks", "Attrib::AssetIDs",
+    // "Attrib::ExportPolicyPair" -- and the allocator does not consume).
+    void* Alloc(size_t lnSize, const char* /*lpcTag*/)
+    {
+        return Alloc(lnSize);
     }
 
     // @ 0x82804270 -- the AttribSys library's generic deallocation hook. Decrement the

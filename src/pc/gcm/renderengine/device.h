@@ -38,5 +38,11 @@ namespace renderengine
         // X360 guest renderengine__Device__SetState). The post-fx render-target wrapper calls this to
         // install its colour/depth surfaces before drawing.
         static void SetState(const RenderTargetState* lpState);
+
+        // [PC bring-up] The world-pass default render states (opaque: Z test+write,
+        // no blend; transparent: Z test only + alpha blend). Stands in for the
+        // technique state-group binds until the MaterialState path lands.
+        // Defined in XenonD3D9Shims.cpp.
+        static void SetWorldPassDefaultStates(bool lbTransparentPass);
     };
 }

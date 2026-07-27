@@ -6,6 +6,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"      // BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"            // PropEntityIO::OutputBuffer_Prepare
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"      // TriggerEntityModuleIO::OutputBuffer_PrePhysics
+#include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"          // WorldEntityIO::OutputBuffer_PreScene / _PostPhysics
 
 // WorldModule entity-modules -> update-output bridge -- owning header
 //   b5-decomp/src/GameSource/World/Bridges/WorldBridgeEntityModulesToOutput.h
@@ -22,6 +23,9 @@
 namespace BrnWorld { namespace WorldEntityIO { struct OutputBuffer_Prepare; } }
 namespace BrnTraffic { namespace BrnTrafficIO { class OutputBuffer_Prepare; } }
 namespace BrnAI { namespace AIModuleIO { struct OutputBuffer; } }
+namespace BrnPhysics { namespace PhysicsModuleIO { class OutputBuffer; } }
+namespace CgsSceneManager { namespace SceneManagerIO { struct OutputBuffer; } }
+namespace BrnWorld { namespace CrashIO { struct OutputBuffer_PostPhysics; } }
 
 namespace WorldModule
 {
@@ -82,4 +86,65 @@ namespace WorldModule
         void* lpWorldModule,
         BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
         const BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics* lpTrafficOutput_PrePhysics);
+
+    // ====================================================================
+    // ADDITIVE (world-drive wave 2026-07-27): the per-frame ...ToOutput set
+    // WorldModule::Update @0x827D63E8 drives. Every one of these lives in
+    // this same X360 TU (their addresses cluster in the 0x827AD..0x827AF
+    // band next to the committed siblings). Signatures come from the Update
+    // call sites; the leading lpWorldModule arg is the X360 r3.
+    // ====================================================================
+
+    // @ 0x827ADD78 -- the STREAMER-CRITICAL pre-scene world-entity flush:
+    // append the world-entity module's out-event queue into the update
+    // output's game-event queue, then forward its sound world-load events.
+    // BODIED in WorldBridgeEntityModulesToOutput.cpp.
+    void BridgeWorldEntityInfoToOutput(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnWorld::WorldEntityIO::OutputBuffer_PreScene* lpWorldEntityOutput_PreScene);
+
+    // @ 0x827AF318
+    void BridgeRaceCarEntityInfoToOutput_PreScene(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutput_PreScene);
+
+    // (X360 sibling of the _PrePhysics traffic-info bridge; same TU.)
+    void BridgeTrafficEntityInfoToOutput_PreScene(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutput_PreScene);
+
+    // @ 0x827AF258
+    void BridgePropToOutput_PreScene(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnWorld::PropEntityIO::OutputBuffer_PreScene* lpPropOutput_PreScene);
+
+    // The post-physics output fan-in (the world-entity leg carries the
+    // streamer's staged GameData resource requests + the status interface).
+    void BridgeEntityModulesToOutput_PostPhysics(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutput_PostPhysics,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutput_PostPhysics,
+        const BrnWorld::PropEntityIO::OutputBuffer_PostPhysics* lpPropOutput_PostPhysics,
+        const BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutput_PostPhysics);
+
+    // @ 0x827AEB18
+    void BridgePhysicsToOutput(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsOutputBuffer);
+
+    void BridgeSceneModuleToOutput(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutputBuffer);
+
+    void BridgeCrashModuleToOutput(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnWorld::CrashIO::OutputBuffer_PostPhysics* lpCrashOutput_PostPhysics);
 }

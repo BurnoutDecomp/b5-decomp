@@ -17,8 +17,65 @@ namespace Attrib
     typedef u32 Key;   // X360: 32-bit class/attribute key (an earlier SDK rev was 64-bit).
 
     class Class;       // full definition in vechashmap.h; RefSpec::GetClass returns it by pointer.
+    class Vault;       // full definition in attribloadandgo.h; a collection's source vault.
     struct Node;       // schema node (full definition in attribute.h); GetNode/GetData use it.
     struct TypeDesc;   // schema type descriptor (full definition in attribarray.h).
+
+    // ------------------------------------------------------------------------
+    // The serialised CollectionLoadData (DWARF attribprivate.h:167, members
+    // :178-186; 48-byte head -- CollectionExportPolicy::Initialize's `>= 0x30`
+    // guard). mLayout is a 4-byte pointer SLOT the vault PtrN fixups resolve
+    // (the world vault points it at the collection's payload block in the bin;
+    // the committed serialised-resource PointerFromU32 convention).
+    //
+    // The head is followed by mTypesLen 64-bit TYPE KEYS (the entry loop indexes
+    // them with the per-entry type index) and then mNumEntries 16-byte entries:
+    //   {u64 mKey, u32 muValue, u16 muTypeIndex, u8 mu8Flags, u8 pad}
+    // (load ctor @0x82809740: `addi r26,r28,0x30` = the type table, entries at
+    // r28 + 8*(mTypesLen+6) with a 16-byte stride).
+    // ------------------------------------------------------------------------
+    struct CollectionLoadData
+    {
+        u64 mKey;            // +0x00  collection key
+        u64 mClass;          // +0x08  owning class key
+        u64 mParent;         // +0x10  parent collection key (0 = none)
+        u32 mTableReserve;   // +0x18  attribute-table bucket reserve
+        u32 mTableKeyShift;  // +0x1C  attribute-table rotate-hash shift
+        u32 mNumEntries;     // +0x20
+        u16 mNumTypes;       // +0x24  highest valid type index (the load assert's bound)
+        u16 mTypesLen;       // +0x26  length of the trailing type-key table
+        u32 mLayout;         // +0x28  layout/payload slot (fixed up)
+        u32 mPad;            // +0x2C
+
+        // One serialised attribute entry.
+        struct Entry
+        {
+            u64 mKey;         // +0x00  attribute key
+            u32 muValue;      // +0x08  value word (offset into the layout block / inline)
+            u16 muTypeIndex;  // +0x0C  index into the trailing type-key table
+            u8  mu8Flags;     // +0x0E  node flag byte
+            u8  mu8Pad;       // +0x0F
+        };
+
+        const u64* GetTypeKeys() const
+        {
+            return reinterpret_cast<const u64*>(this + 1);
+        }
+        const Entry* GetEntries() const
+        {
+            return reinterpret_cast<const Entry*>(GetTypeKeys() + mTypesLen);
+        }
+        void* GetLayout() const
+        {
+            return reinterpret_cast<void*>(static_cast<uintptr_t>(mLayout));
+        }
+    };
+
+    // Attrib::ScanForValidKey<Attrib::HashMap> @ 0x82803CC0 -- the key cursor the
+    // collection walk is built on: the key of the first OCCUPIED bucket strictly
+    // after luIndex, or 0 when the table has none left. (luIndex == 0xFFFFFFFF
+    // starts the walk at bucket 0 -- the X360 `addi r4,r4,1` wrap.)
+    u64 ScanForValidKey(const HashMap& lrMap, unsigned int luIndex);
 
     // Attrib::Collection -- a refcounted attribute table plus the collection metadata
     // (parent/default fallback, sub-collection, owning class, data area). It DERIVES from
@@ -31,11 +88,25 @@ namespace Attrib
     struct Collection : public HashMap
     {
         Collection* mpParent;        // +0x0C  parent/default collection an unmodify falls back to
-        void*       mpSubCollection; // +0x10
-        u8          mPad2[4];        // +0x14
-        int*        mpClass;         // +0x18
-        void*       mpData;          // +0x1C
-        u32         muHasNoDefault;  // +0x20
+        // CORRECTED (2026-07-27, load-ctor asm @0x82809740 `ld r11,0(r28)` /
+        // `std r11,0x10(r31)`): +0x10 is the collection's own 64-BIT KEY, not a
+        // sub-collection pointer -- the load ctor stores CollectionLoadData::mKey
+        // there and registers the collection into the class table under it, and
+        // Instance::GetCollection @0x82802F40 returns it with a 64-bit `ld`.
+        u64         mKey;            // +0x10  collection key
+        Class*      mpClass;         // +0x18  owning class
+        void*       mpData;          // +0x1C  this collection's attribute-data block
+        // CORRECTED (same asm, `stw r30,0x20(r31)` with r30 = the ctor's Vault*
+        // argument, immediately followed by `++vault->mRefCount`): +0x20 is the
+        // SOURCE VAULT pointer (the mirror of ClassPrivate::mSource @+48), not a
+        // "has no default" flag. Instance's ctor/Change test it for null -- a
+        // collection with no source vault has no default layout to inherit.
+        Vault*      mpSource;        // +0x20  vault this collection was loaded from
+
+        // @ 0x82809740 -- the LOAD ctor: build a live collection from one serialised
+        // CollectionLoadData export (the world vault's boostparams collections).
+        // Body: attribcollection.cpp.
+        Collection(const CollectionLoadData& lrLoad, Vault* lpSource);
 
         // Bump the shared refcount (asserts it has not saturated at 0xFFFF); returns this.
         Collection* AddRef();                       // @0x828028E0  (attribcollection.cpp)
@@ -52,10 +123,19 @@ namespace Attrib
         // parent/default chain and finally the owning class's shared layout table; reports
         // via lrpContainer which collection actually held the key (null when not found).
         // (Attrib::Node fully qualified: the inherited HashMap::Node would otherwise win.)
-        Attrib::Node* GetNode(Key luKey, const Collection*& lrpContainer) const; // @0x82804EF0
+        // (WIDENED to the attested 64-bit attribute key: the X360 `mr r4,r29` into
+        // HashMap::FindIndex carries the whole doubleword -- the file-scope
+        // `typedef u32 Key` is an earlier-revision leftover.)
+        Attrib::Node* GetNode(u64 luKey, const Collection*& lrpContainer) const; // @0x82804EF0
         // Raw data pointer for element luIndex of an attribute -- an array element for
         // array-typed attributes, or the instance-resolved pointer at index 0 otherwise.
-        void* GetData(Key luKey, unsigned int luIndex) const;               // @0x82804FD0
+        void* GetData(u64 luKey, unsigned int luIndex) const;               // @0x82804FD0
+        // @ 0x828050D0 -- the key cursor: given the current key and whether the walk has
+        // moved on to the owning class's shared layout table (lrbInLayoutTable, updated
+        // in place), return the next attribute key visible through this collection, or 0
+        // when the walk is finished. Walks this collection's own table first, then the
+        // class layout table.
+        u64  NextKey(u64 luKey, bool& lrbInLayoutTable) const;              // @0x828050D0
         // Tear the collection down: remove every attribute this collection owns and free
         // every inherited/laid-out attribute's backing data, asserting the count balances.
         void  Clear();                                                      // @0x8280AE60
@@ -126,7 +206,10 @@ namespace Attrib
     void*       Collection_Get(void* lpOut, int liKey, int* lpName, int liArg);
     void*       Collection_GetData(Collection* lpCollection);
     int         RefSpec_GetCollectionWithDefault(int* lpRefSpec);
-    void        AssertOnClassCheck(int liClass, int liExpectedClass, void* lpCollection);
+    // (third argument WIDENED to the collection KEY: Instance::GetCollection
+    // @0x82802F40 hands over a 64-bit `ld` and the diagnostic formats it as a
+    // %08x%08x hi/lo pair -- it was never a host pointer.)
+    void        AssertOnClassCheck(int liClass, int liExpectedClass, u64 luCollectionKey);
     void*       DefaultDataArea(u32 luBytes);
 
     // A ref-counted handle onto a Collection. Construction/destruction maintain the
@@ -150,7 +233,10 @@ namespace Attrib
         // shotgroup ShotList key). Declaration-only (bodied with the AttribSys TUs).
         void*       GetAttributePointer(u64 luAttributeKey, u32 luIndex) const;
         int         GetClass() const;
-        void*       GetCollection() const;
+        // @0x82802F40 -- the referenced collection's 64-bit KEY (`ld r3,0x10(r11)`),
+        // 0 when the instance holds no collection. (Was modelled as a `void*`
+        // sub-collection pointer; the load ctor pins +0x10 as Collection::mKey.)
+        u64         GetCollection() const;
 
         // Raw-field accessors used by Attrib::Attribute (ctor @ 0x82805AF0 reads the
         // layout block; IsInherited @ 0x82803600 reads the resolved collection + flags).

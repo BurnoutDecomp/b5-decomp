@@ -368,8 +368,8 @@ bool SceneManagerModule::Prepare(SpatialPartitionConstructParams* lpConstructPar
 // Forward to the triangle-cache manager with the cached collision generator the
 // matching StartUpdateTriangleCache stashed, and the triangle-collision scene.
 // ===========================================================================
-void SceneManagerModule::EndUpdateTriangleCache(SceneManagerIO::IOBufferStack* /*lpInputBufferStack*/,
-                                                SceneManagerIO::IOBufferStack* /*lpOutputBufferStack*/)
+void SceneManagerModule::EndUpdateTriangleCache(CgsModule::IOBufferStack* /*lpInputBufferStack*/,
+                                                CgsModule::IOBufferStack* /*lpOutputBufferStack*/)
 {
     // X360 tail-call: TriangleCacheManager::EndUpdateTriangleCaches(&mTriangleCacheManager,
     //   mpTriangleCacheCollisionGenerator, &mTriangleCollisionManager's collision scene).
@@ -429,9 +429,9 @@ void SceneManagerModule::ProcessSetVolumeInstanceCullingGroupEvent(
 // truncated-name accessors live in the SceneManager bridge TU; this body reconstructs
 // the pipeline at the IO-buffer + named-stage level the SceneManagerModule owns.
 // ===========================================================================
-void SceneManagerModule::UpdateContactGeneration(SceneManagerIO::IOBufferStack* lpInputBufferStack,
-                                                 SceneManagerIO::IOBufferStack* lpOutputBufferStack,
-                                                 SceneManagerIO::OutputBuffer*  lpSceneInputBuffer,
+void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInputBufferStack,
+                                                 CgsModule::IOBufferStack* lpOutputBufferStack,
+                                                 SceneManagerIO::InputBuffer_Update*  lpSceneInputBuffer,
                                                  SceneManagerIO::OutputBuffer*  lpSceneOutputBuffer)
 {
     ScopedPerfMon lUpdate(siContactGen_UpdatePerfMon);
@@ -441,8 +441,8 @@ void SceneManagerModule::UpdateContactGeneration(SceneManagerIO::IOBufferStack* 
     CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");
     CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");
 
-    CgsModule::IOBufferStack* lpInStack  = reinterpret_cast<CgsModule::IOBufferStack*>(lpInputBufferStack);
-    CgsModule::IOBufferStack* lpOutStack = reinterpret_cast<CgsModule::IOBufferStack*>(lpOutputBufferStack);
+    CgsModule::IOBufferStack* lpInStack  = lpInputBufferStack;
+    CgsModule::IOBufferStack* lpOutStack = lpOutputBufferStack;
 
     // --- allocate the pipeline IO buffers on the in/out stacks ---
     OverlapCullingIO::InputBuffer*     lpCullInput   = nullptr;
@@ -517,8 +517,8 @@ void SceneManagerModule::UpdateContactGeneration(SceneManagerIO::IOBufferStack* 
 // SceneManagerModule owns is reconstructed here; the truncated-name accessors are the
 // documented boundary (their full homes are the SpatialPartition / Entity TUs).
 // ===========================================================================
-void SceneManagerModule::ProcessFrustumTestJobResults(SceneManagerIO::IOBufferStack* lpInputBufferStack,
-                                                      SceneManagerIO::IOBufferStack* lpOutputBufferStack,
+void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* lpInputBufferStack,
+                                                      CgsModule::IOBufferStack* lpOutputBufferStack,
                                                       SceneManagerIO::InputBuffer_Query*  lpSceneInputBuffer,
                                                       SceneManagerIO::OutputBuffer*  lpSceneOutputBuffer)
 {
@@ -531,7 +531,7 @@ void SceneManagerModule::ProcessFrustumTestJobResults(SceneManagerIO::IOBufferSt
 
     ScopedPerfMon lCoarse(siProcessCoarseQueriesPerfMon);
 
-    CgsModule::IOBufferStack* lpOutStack = reinterpret_cast<CgsModule::IOBufferStack*>(lpOutputBufferStack);
+    CgsModule::IOBufferStack* lpOutStack = lpOutputBufferStack;
 
     // The octree writes its frustum-test results into a SpatialPartition output buffer
     // pushed on the output stack; the SceneManagerModule reads the resolved entity ids

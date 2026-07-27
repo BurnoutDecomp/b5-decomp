@@ -29,6 +29,24 @@ AttribSysPackageAllocator* AttribSysMemoryManager::GetAttribSysAllocator()
     return &sAttribSysAllocator;
 }
 
+// The GameTalk / EASTL package-allocator getters -- the same guarded-static
+// shape as GetAttribSysAllocator (their X360 bodies are the sibling stores of
+// the 0x821F02A0 family; the EASTL one backs Attrib::AttribListAllocateNode on
+// the vault-load path).
+AttribSysPackageAllocator* AttribSysMemoryManager::GetGameTalkAllocator()
+{
+    CGS_ASSERT(sbHasLinearAllocator, "sbHasLinearAllocator");
+
+    return &sGameTalkAllocator;
+}
+
+AttribSysPackageAllocator* AttribSysMemoryManager::GetEaStlAllocator()
+{
+    CGS_ASSERT(sbHasLinearAllocator, "sbHasLinearAllocator");
+
+    return &sEaStlAllocator;
+}
+
 // Reset the manager's static state (called from AttribSysModule::Construct @0x8280AD50;
 // the X360 inlines the two stores -- no standalone symbol).
 void AttribSysMemoryManager::Construct()

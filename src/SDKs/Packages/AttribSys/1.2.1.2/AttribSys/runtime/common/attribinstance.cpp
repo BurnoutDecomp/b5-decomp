@@ -78,7 +78,9 @@ namespace Attrib
     {
         if (lpCollection)
         {
-            if (!lpCollection->muHasNoDefault)
+            // X360 `lwz r11,0x20(r30); if (!r11) instance[0xC] = 1` -- a collection
+            // with NO source vault carries no default layout to fall back on.
+            if (lpCollection->mpSource == nullptr)
                 muFlags = 1;
             mpAttributeData = lpCollection->mpData;
             CGS_ASSERT(lpCollection->muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
@@ -107,7 +109,7 @@ namespace Attrib
             {
                 lResult = reinterpret_cast<Collection*>(Collection_AddRef(lpNewCollection, 0));
                 mpAttributeData = mpCollection->mpData;
-                lbHasDefault = (mpCollection->muHasNoDefault == 0);
+                lbHasDefault = (mpCollection->mpSource == nullptr);
             }
 
             if (!lbHasDefault)
@@ -151,12 +153,15 @@ namespace Attrib
     {
         if (!mpCollection)
             return 0;
-        int* lpClass = mpCollection->mpClass;
+        // X360 reads the owning class's leading key word (Class +0). Kept as the raw
+        // leading-word read the recovered body performs; Attrib::Class is only
+        // forward-declared in this TU.
+        const int* lpClass = reinterpret_cast<const int*>(mpCollection->mpClass);
         return lpClass ? *lpClass : 0;
     }
 
-    void* Instance::GetCollection() const
+    u64 Instance::GetCollection() const
     {
-        return mpCollection ? mpCollection->mpSubCollection : nullptr;
+        return mpCollection ? mpCollection->mKey : 0;
     }
 }

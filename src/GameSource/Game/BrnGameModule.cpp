@@ -414,6 +414,85 @@ namespace BrnGame
         return 0;
     }
 
+    // @ 0x823E8BD0 -- DoUpdate's WORLD leg. Reconstructed against the X360 body; the
+    // per-frame world drive itself (the vtable +76 dispatch and the boot-video variant) is
+    // REAL here. NOTE the caller DoUpdate is still the PC-platform leaf above (the PC host
+    // loop owns the module drive), so today the world is driven per frame by the scripted
+    // loading spine's LoadingScriptedState::UpdateWorldModule instead; this entry is the
+    // in-game cascade's hook and goes live with the DoUpdate reconstruction.
+    //
+    // X360 order:
+    //   StartMonitor(gm+10055508);
+    //   CreateIOBuffer<BrnWorldIO::UpdateInputBuffer>(inStack, &worldIn, "World")
+    //     (asserting "mpStack->CreateIOBuffer( &mpBuffer, lpcName )", CgsModuleIOHelper.h:52);
+    //   sub_823B7620(worldIn, controllerOut, gameStateOut, guiOut, replayOut, soundOut)
+    //     == LockBuffersForIO with FIVE sources;
+    //   UpdateInputBuffer::SetTimerStatusInterface(worldIn, gm+10095372);
+    //   LockForRead(networkOut);
+    //   BridgeControllerToWorld / BridgeNetworkToWorld / BridgeGameStateToWorld /
+    //   BridgeGuiToWorld; SetReplayStatusInterface(ReplayIO::OutputBuffer_PreSim::
+    //   GetStatusInterface(replayOut)); BridgeSoundToWorld; UnlockForRead(networkOut);
+    //   sub_823B7760(...) == the matching UnlockBuffersForIO;
+    //   StopMonitor;
+    //   (updateSet & 0x20) ? WorldModule::UpdateForBootUpVideo(updateSet, inStack, outStack,
+    //                            worldIn, worldOut)
+    //                      : world->vtbl+76(updateSet, inStack, outStack, worldIn, worldOut,
+    //                            gm->mpWorldUpdateFrameAllocator);
+    //   LockForRead(worldOut);
+    //   gm+10094123 = (worldOut->GetWorldEntityStatusInterface()->GetImmediateStreamed() == 0);
+    //   UnlockForRead(worldOut);
+    //   DestroyIOBuffer(inStack, &worldIn) (asserting CgsModuleIOHelper.h:57).
+    void BrnGameModule::DoUpdate_World(CgsModule::IOBufferStack* lpUpdateInputBufferStack,
+                                       CgsModule::IOBufferStack* lpUpdateOutputBufferStack,
+                                       const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                       BrnWorldIO::UpdateOutputBuffer* lpWorldUpdateOutputBuffer,
+                                       CgsMemory::LinearMalloc* lpWorldFrameAllocator,
+                                       BrnUpdateSet lUpdateSet)
+    {
+        BrnWorldIO::UpdateInputBuffer* lpWorldInput = 0;
+        const bool lbCreated = lpUpdateInputBufferStack->CreateIOBuffer(&lpWorldInput, "World");
+        CGS_ASSERT(lbCreated, "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");  // CgsModuleIOHelper.h:52
+        (void)lbCreated;
+        // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc.
+        lpWorldInput->Construct();
+
+        // The controller leg of the five-source input staging (the only one of the six
+        // X360 bridges whose body is committed).
+        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGameStateToWorld
+        // @0x823E1890, BridgeGuiToWorld @0x823CBE90, BridgeSoundToWorld @0x823CDC98 and the
+        // replay-status latch (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are not
+        // reconstructed; their source modules' output buffers are not threaded into this
+        // leg on the PC yet, so the staging is omitted rather than faked. The world drive
+        // below reads NONE of those fields on the streaming path (the streamer runs off the
+        // world-entity module's own PVS state + the game-action queue), so the observable
+        // streaming behaviour is unchanged. Restore them with the DoUpdate cascade.
+        // The X360's SetTimerStatusInterface(gm+10095372) is part of that same staging.
+        lpWorldInput->LockForWrite();
+        BridgeControllerToWorld(lpWorldInput, lpInputOutputBuffer);
+        lpWorldInput->UnlockForWrite();
+
+        if ((lUpdateSet & 0x20) != 0)
+        {
+            mWorldModule.UpdateForBootUpVideo(lUpdateSet, lpUpdateInputBufferStack,
+                                              lpUpdateOutputBufferStack,
+                                              lpWorldInput, lpWorldUpdateOutputBuffer);
+        }
+        else
+        {
+            mWorldModule.Update(lUpdateSet, lpUpdateInputBufferStack, lpUpdateOutputBufferStack,
+                                lpWorldInput, lpWorldUpdateOutputBuffer, lpWorldFrameAllocator);
+        }
+
+        // [FLAG] the X360 latches !GetImmediateStreamed() into gm+10094123 here (the
+        // "world still streaming" flag the in-game flow polls); that member sits in this
+        // incremental layout's omitted range and has no committed consumer -- it lands
+        // with the DoUpdate cascade that reads it.
+
+        const bool lbDestroyed = lpUpdateInputBufferStack->DestroyIOBuffer(&lpWorldInput);
+        CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");        // CgsModuleIOHelper.h:57
+        (void)lbDestroyed;
+    }
+
     // FLAG PC-platform leaf: see DoUpdate above (the render dispatch runs from the PC
     // render thread's BrnRendererModule::Render drive).
     int BrnGameModule::DoDispatch()
@@ -546,11 +625,14 @@ namespace BrnGame
         return true;
     }
 
-    // @ BrnGameModule.cpp:1253 - start-of-update-frame hook (resets the frame's lookback timer
-    // and signals the renderer module's start-of-frame). Minimal until the renderer's
-    // StartOfFrame + the lookback timer are reconstructed.
+    // @ BrnGameModule.cpp:1253 (X360 0x823A8BB0) - start-of-update-frame hook. The X360 body is
+    // exactly two statements: `*(this + 8919372) = 0.0` (the frame lookback timer) then
+    // `BrnRendererModule::StartOfFrame(this + 15808)`. The renderer call is live now (it rewinds
+    // the game-side dispatch-list ring the world modules fill this frame and opens the shader-
+    // constant table's frame on its bin); the lookback timer member is not in this layout yet.
     void BrnGameModule::OnStartOfUpdateFrame()
     {
+        mRenderModule.StartOfFrame();
     }
 
     // @ BrnGameModule.cpp:1275 - end-of-update-frame hook. The X360 body @0x823DBBA0 runs
@@ -559,11 +641,17 @@ namespace BrnGame
     // the read buffer and the new write buffer is re-Constructed), then the GUI/renderer
     // end-of-frame + perfmon swap. The swap is the piece the boot path needs: it publishes
     // this frame's loading-screen command to the dispatch side and clears the next write
-    // buffer's one-shot slot. [gated] the metrics/particle/GUI/renderer end-of-frame
-    // notifies land with their subsystems.
+    // buffer's one-shot slot. [gated] the metrics/particle/GUI end-of-frame notifies land with
+    // their subsystems.
+    //
+    // BrnRendererModule::EndOfFrame @0x823FFE28 is live now: its SwapBuffers @0x823FC678 advances
+    // the game-side dispatch-list ring so the frame the world modules filled this update becomes
+    // the frame BrnRendererModule::Render walks next (without it the read cursor never reaches the
+    // written slot and every world dispatch list reads empty).
     void BrnGameModule::OnEndOfUpdateFrame()
     {
         mDispatchThreadInputBufferManager.Swap();
+        mRenderModule.EndOfFrame();
     }
 
     // @ BrnGameModule.cpp:1533 - resource-update worker-thread body (streams resources while the

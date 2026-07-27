@@ -1,5 +1,7 @@
 #include "SharedClasses/Sound/World/BrnStaticSoundMapResourceType.h"
 
+#include <cstddef>   // offsetof (porter-contract asserts)
+
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> complete for the descriptor body
 #include "SharedClasses/Sound/World/BrnStaticSoundMap.h"
@@ -21,15 +23,17 @@ uint32_t StaticSoundMapResourceType::GetTypeID() const
     return KU_STATIC_SOUND_MAP_RESOURCE_TYPE_ID;
 }
 
-// GetSerialisedResourceDescriptor @ 0x8267AFC0 (store-for-store). The serialised
-// StaticSoundMap occupies one 16-byte-aligned block sized from the sub-region grid
-// and the entity count. The X360 reads three serialised dwords:
+// GetSerialisedResourceDescriptor @ 0x8267AFC0. The serialised StaticSoundMap
+// occupies one 16-byte-aligned block: header + 16-byte entities + 4-byte grid
+// cells. The X360 reads three serialised dwords:
 //   r8 = miNumSubRegionsX (+0x28), r7 = miNumSubRegionsZ (+0x2C), r9 = miNumEntities (+0x34)
-// and computes  size = 4 * ( miNumSubRegionsX * miNumSubRegionsZ + 4 * (miNumEntities + 4) ).
-//   r10 = (miNumEntities + 4) << 2 ; r11 = miNumSubRegionsX * miNumSubRegionsZ
-//   r11 = r11 + r10 ; r11 = r11 << 2     -> entry0 size ; entry0 align = 0x10 ; entries 1..4 {0,1}.
-// Members are read BY NAME (private; StaticSoundMapResourceType is a friend struct);
-// the X360 +0x28/+0x2C/+0x34 byte offsets are over the console 16-byte Vector2 layout.
+// and computes  size = 4 * ( miNumSubRegionsX * miNumSubRegionsZ + 4 * (miNumEntities + 4) )
+//             ==  0x40 (the console header) + 16*miNumEntities + 4*gridCells.
+// The x64 serialised header is the host StaticSoundMap (0x50 -- the porter
+// contract asserted in FixUp below), so the header term is sizeof-derived; the
+// entity/grid terms are unchanged (both records are pointer-free).
+// entry0 align = 0x10; entries 1..4 = {0,1}. Members are read BY NAME (private;
+// StaticSoundMapResourceType is a friend struct).
 CgsResource::ResourceDescriptor
 StaticSoundMapResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
 {
@@ -37,8 +41,9 @@ StaticSoundMapResourceType::GetSerialisedResourceDescriptor(const void* lpResour
 
     const u32 luGridCells  = static_cast<u32>(lpMap->miNumSubRegionsX)
                            * static_cast<u32>(lpMap->miNumSubRegionsZ);
-    const u32 luEntityTerm = (static_cast<u32>(lpMap->miNumEntities) + 4u) << 2;  // 4*(miNumEntities+4)
-    const u32 luSize       = (luGridCells + luEntityTerm) << 2;                    // *4
+    const u32 luSize       = static_cast<u32>(sizeof(StaticSoundMap))      // X360: 0x40
+                           + (static_cast<u32>(lpMap->miNumEntities) << 4) // 16-byte entities
+                           + (luGridCells << 2);                           // 4-byte grid cells
 
     CgsResource::ResourceDescriptor lDescriptor;
     lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;  // entry0 size
@@ -53,16 +58,27 @@ StaticSoundMapResourceType::GetSerialisedResourceDescriptor(const void* lpResour
 
 // FixUp @ 0x826775C8. A relocation fix-up: the two on-disk pointers (mpSubRegions,
 // mpEntities) are stored as load-relative offsets and are rebased by the resource
-// load base (X360 *a3 = CgsResource::GetLoadBase(lrResource)). The X360 accessed
-// the resource by dword index (a2[9]=mpSubRegions, a2[12]=mpEntities,
-// a2[13]=miNumEntities under the console 16-byte Vector2); NAMED member access here
-// relocates the right fields regardless of the PC Vector2 byte size (semantic
+// load base (X360 *a3 = the 32-bit load base; the x64 heap base needs the full-width
+// form). The X360 accessed the resource by dword index (a2[9]=mpSubRegions,
+// a2[12]=mpEntities, a2[13]=miNumEntities under the console 16-byte Vector2); NAMED
+// member access here relocates the right fields over the x64 layout (semantic
 // parity, not byte parity). Then a per-entity validation loop.
 void StaticSoundMapResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
 {
+    // Porter-contract pins (world_type_transcode.py transcode_staticsoundmap): the host
+    // layout below is the platform-4 serialised header form.
+    static_assert(offsetof(StaticSoundMap, mMin)             == 0x00, "StaticSoundMap::mMin @ +0");
+    static_assert(offsetof(StaticSoundMap, mMax)             == 0x10, "StaticSoundMap::mMax @ +0x10");
+    static_assert(offsetof(StaticSoundMap, mfSubRegionSize)  == 0x20, "StaticSoundMap::mfSubRegionSize @ +0x20");
+    static_assert(offsetof(StaticSoundMap, mpSubRegions)     == 0x28, "StaticSoundMap::mpSubRegions @ +0x28");
+    static_assert(offsetof(StaticSoundMap, miNumSubRegionsX) == 0x30, "StaticSoundMap::miNumSubRegionsX @ +0x30");
+    static_assert(offsetof(StaticSoundMap, mpEntities)       == 0x38, "StaticSoundMap::mpEntities @ +0x38");
+    static_assert(offsetof(StaticSoundMap, miNumEntities)    == 0x40, "StaticSoundMap::miNumEntities @ +0x40");
+    static_assert(sizeof(StaticSoundMap) == 0x50, "StaticSoundMap header 0x50 (porter contract)");
+
     StaticSoundMap* lpMap = static_cast<StaticSoundMap*>(lpResource);
 
-    const u32 luBase = CgsResource::GetLoadBase(lrResource);
+    const uintptr_t luBase = CgsResource::GetLoadBase64(lrResource);
 
     // Relocate the two serialised pointers by the load base.
     lpMap->mpSubRegions = reinterpret_cast<const SubRegionDescriptor*>(

@@ -3,16 +3,18 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"   // GetAttribSysAllocator
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // FreeWithCensusIf
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h"       // Attrib::ClassPrivate (named mCollections)
 
 // AttribSys runtime -- the two live VecHashMap instantiations off the X360 spine:
 //   VecHashMap<Attrib::Key, Attrib::Class,      Attrib::Class::TablePolicy, false, 16u>
 //   VecHashMap<Attrib::Key, Attrib::Collection, Attrib::Class::TablePolicy, true,  96u>
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX (CgsAttribSysUnity TU).
 //
-// Node stride is 16 bytes throughout (X360 slwi ,4 / addi ,0x10). A bucket is FREE/INVALID
-// iff its value pointer points at the node itself (the X360 self-pointer sentinel). The
-// divwu/mullw/subf + twllei guard pairs are the compiler's guarded unsigned modulo,
-// reproduced here as plain %.
+// Node stride is 16 bytes on the X360 (slwi ,4 / addi ,0x10); the x64 node widens the
+// value pointer, so every stride/byte-size here is sizeof(Node)-based (semantic parity by
+// named members). A bucket is FREE/INVALID iff its value pointer points at the node itself
+// (the X360 self-pointer sentinel). The divwu/mullw/subf + twllei guard pairs are the
+// compiler's guarded unsigned modulo, reproduced here as plain %.
 
 namespace Attrib
 {
@@ -423,8 +425,14 @@ void VecHashMap_Attrib_Class_TablePolicy_0_16::RebuildTable(unsigned int luNewCo
 
         CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
             CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator();
+        // TablePolicy::Alloc byte size: the X360 emits ((u16)luSize << 4) -- with the
+        // 16-byte X360 node the & 0xFFFF0 clamp never changes the value. The x64 node
+        // widens to sizeof(Node) == 24, so the byte size is the plain product; keeping
+        // the X360 low-nibble mask here TRUNCATED odd-count tables by 8 bytes and the
+        // invalidation pass then stomped the next heap block's header (the schema-
+        // registration boot hang, 2026-07-27).
         mpTable = static_cast<Node*>(
-            lpAllocator->Malloc((luSize * sizeof(Node)) & 0xFFFF0u, 0));
+            lpAllocator->Malloc(luSize * sizeof(Node), 0));
 
         CopyFromOldTable(lpOldTable, luOldSize, true);
     }
@@ -512,9 +520,10 @@ bool CollectionHashMap::InternalAdd(u64 luKey, Collection* lpPtr)
     // X360: divwu on the LOW 32 bits of the key (clrlwi r11,key,0). twllei r10,0 is the
     // compiler divide-by-zero trap on a zero modulus.
     u32 luIndex = static_cast<u32>(luKey) % luSize;
-    // The HOME bucket offset (16 * initial index): fixed for the whole call, it is the
-    // slot whose mMax the probe distance is recorded against (X360 r5, never reloaded).
-    const u32 luHomeByteOff = 16u * luIndex;
+    // The HOME bucket offset (node stride * initial index): fixed for the whole call, it
+    // is the slot whose mMax the probe distance is recorded against (X360 r5, never
+    // reloaded; the X360 stride is the literal 16 -- sizeof-based for the widened x64 node).
+    const u32 luHomeByteOff = static_cast<u32>(sizeof(Node)) * luIndex;
     u32 luByteOff = luHomeByteOff;
 
     Node* lpProbe = reinterpret_cast<Node*>(reinterpret_cast<u8*>(lpBase) + luByteOff);
@@ -532,7 +541,7 @@ bool CollectionHashMap::InternalAdd(u64 luKey, Collection* lpPtr)
             lpBase = mTable;
             ++luSearchLen;
             luIndex = (luIndex + 1u) % luSize;
-            luByteOff = 16u * luIndex;
+            luByteOff = static_cast<u32>(sizeof(Node)) * luIndex;
 
             Node* lpNext = reinterpret_cast<Node*>(reinterpret_cast<u8*>(lpBase) + luByteOff);
             if (lpNext->IsEmpty())
@@ -540,8 +549,9 @@ bool CollectionHashMap::InternalAdd(u64 luKey, Collection* lpPtr)
         }
     }
 
-    // Insert at the found empty slot (lpBase + 16 * luIndex).
-    Node* lpSlot = reinterpret_cast<Node*>(reinterpret_cast<u8*>(lpBase) + 16u * luIndex);
+    // Insert at the found empty slot (lpBase + stride * luIndex).
+    Node* lpSlot = reinterpret_cast<Node*>(reinterpret_cast<u8*>(lpBase) +
+                                           static_cast<u32>(sizeof(Node)) * luIndex);
     if (lpSlot != NULL)
     {
         lpSlot->mKey = luKey;
@@ -673,7 +683,7 @@ void CollectionHashMap::RebuildTable(u32 luNewSize)
         // Release path: only free when the table is neither fixed nor holding entries.
         if (mFixedAlloc == 0 && mNumEntries == 0 && mTable != NULL)
         {
-            TableFreeFunc(mTable, static_cast<size_t>(mTableSize) << 4);
+            TableFreeFunc(mTable, sizeof(Node) * mTableSize);
             mTable = NULL;
         }
         return;
@@ -689,13 +699,15 @@ void CollectionHashMap::RebuildTable(u32 luNewSize)
         mWorstCollision = 0;
         mTableSize      = luSize;
 
-        // TablePolicy::Alloc: ((16 * luSize) masked to 16 bits << 4) & 0xFFFF0 bytes from
-        // the AttribSys package allocator (X360 reads &sAttribSysAllocator directly; the
-        // sbHasLinearAllocator assert is the GetAttribSysAllocator() guard).
+        // TablePolicy::Alloc: the X360 emits ((u16)luSize << 4) & 0xFFFF0 -- the literal
+        // 16-byte node stride (the mask never changes the value there). The x64 node
+        // widens to sizeof(Node), so the byte size is the plain product (the low-nibble
+        // mask would truncate odd-count tables and overrun the heap block -- the same
+        // defect that hung the schema-registration boot in the class-map twin above).
         CGS_ASSERT(CgsAttribSys::AttribSysMemoryManager::HasMemoryBuffer(), "sbHasLinearAllocator");
         CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
             CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator();
-        const size_t lnBytes = (static_cast<size_t>(luSize) << 4) & 0xFFFF0u;
+        const size_t lnBytes = sizeof(Node) * luSize;
         mTable = static_cast<Node*>(lpAllocator->Malloc(lnBytes, 0));
 
         CopyFromOldTable(lpOldTable, luOldSize, true);
@@ -722,7 +734,7 @@ void CollectionHashMap::CopyFromOldTable(Node* lpOldTable, u32 luOldSize, bool l
                 lpNode->mPtr = reinterpret_cast<Collection*>(lpNode); // self == empty
                 lpNode->mMax = 0;
             }
-            luByteOff += 16u;
+            luByteOff += static_cast<u32>(sizeof(Node));   // X360 literal 16; widened node
         }
     }
 
@@ -739,7 +751,7 @@ void CollectionHashMap::CopyFromOldTable(Node* lpOldTable, u32 luOldSize, bool l
                 if (reinterpret_cast<const void*>(lpEntry) != reinterpret_cast<const void*>(lpOld))
                     InternalAdd(lpOld->mKey, lpEntry);
                 --luRemaining;
-                lpOld = reinterpret_cast<Node*>(reinterpret_cast<u8*>(lpOld) + 16u);
+                lpOld = lpOld + 1;   // X360 literal +16 stride; widened node
             }
             while (luRemaining != 0);
         }
@@ -754,8 +766,8 @@ void CollectionHashMap::CopyFromOldTable(Node* lpOldTable, u32 luOldSize, bool l
             CGS_ASSERT(CgsAttribSys::AttribSysMemoryManager::HasMemoryBuffer(), "sbHasLinearAllocator");
             CgsAttribSys::AttribSysPackageAllocator* lpAllocator =
                 CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator();
-            lpAllocator->Free(lpOldTable, static_cast<size_t>(luOldSize) << 4);
-            gTablePolicyFreedBytes += 16u * luOldSize;
+            lpAllocator->Free(lpOldTable, sizeof(Node) * luOldSize);
+            gTablePolicyFreedBytes += static_cast<u32>(sizeof(Node)) * luOldSize;
         }
     }
 }
@@ -781,14 +793,14 @@ void CollectionHashMap::Clear()
                 --mNumEntries;
             }
 
-            luByteOff += 16u;
+            luByteOff += static_cast<u32>(sizeof(Node));   // X360 literal 16; widened node
         }
     }
 
     if (mFixedAlloc == 0)
     {
         if (mTable != NULL)
-            TableFreeFunc(mTable, static_cast<size_t>(mTableSize) << 4);
+            TableFreeFunc(mTable, sizeof(Node) * mTableSize);
         mTable     = NULL;
         mTableSize = 0;
     }
@@ -828,6 +840,27 @@ bool Class::RemoveCollection(Collection* lpCollection)
     CollectionHashMap* lpTable = GetCollectionTable();
     const u32 luIndex = lpTable->FindIndex(luKey);
     return lpTable->RemoveIndex(luIndex) != NULL;
+}
+
+// @ 0x82806320 (Attrib::Class::Ta... Find wrapper) -- resolve the slot via
+// FindIndex and hand back the stored collection; NULL when the key is absent.
+Collection* CollectionHashMap::Find(u64 luKey) const
+{
+    const u32 luIndex = FindIndex(luKey);
+    return (luIndex < mTableSize) ? mTable[luIndex].Get() : NULL;
+}
+
+// ClassPrivate::mCollections through the real named member (the X360 inlines
+// mpPrivates+0x1C; attribclassprivate.h owns the x64 layout).
+CollectionHashMap* Class::GetCollectionTable() const
+{
+    return &static_cast<ClassPrivate*>(mpPrivates)->mCollections;
+}
+
+// The no-default collection lookup (the Attrib::Class::Ta call sites).
+Collection* Class::GetCollection(u64 luKey) const
+{
+    return GetCollectionTable()->Find(luKey);
 }
 
 } // namespace Attrib

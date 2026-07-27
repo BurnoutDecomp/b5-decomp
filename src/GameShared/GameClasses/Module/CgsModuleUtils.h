@@ -69,6 +69,64 @@ namespace CgsModule
         lpDestBuffer->UnlockForWrite();
     }
 
+    // four-source variant (X360 sub_823B7400 / sub_823B7510)
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
+              typename TSourceD>
+    inline void LockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
+                                  TSourceB* lpSourceB, TSourceC* lpSourceC,
+                                  TSourceD* lpSourceD )
+    {
+        lpDestBuffer->LockForWrite();
+        lpSourceA->LockForRead();
+        lpSourceB->LockForRead();
+        lpSourceC->LockForRead();
+        lpSourceD->LockForRead();
+    }
+
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
+              typename TSourceD>
+    inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
+                                    TSourceB* lpSourceB, TSourceC* lpSourceC,
+                                    TSourceD* lpSourceD )
+    {
+        lpSourceD->UnlockForRead();
+        lpSourceC->UnlockForRead();
+        lpSourceB->UnlockForRead();
+        lpSourceA->UnlockForRead();
+        lpDestBuffer->UnlockForWrite();
+    }
+
+    // five-source variant (X360 sub_823B7620 / sub_823B7760) -- the widest set the
+    // world drive uses (WorldModule::Update @0x827D63E8's entity-modules -> scene
+    // staging locks the scene input plus five module outputs).
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
+              typename TSourceD, typename TSourceE>
+    inline void LockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
+                                  TSourceB* lpSourceB, TSourceC* lpSourceC,
+                                  TSourceD* lpSourceD, TSourceE* lpSourceE )
+    {
+        lpDestBuffer->LockForWrite();
+        lpSourceA->LockForRead();
+        lpSourceB->LockForRead();
+        lpSourceC->LockForRead();
+        lpSourceD->LockForRead();
+        lpSourceE->LockForRead();
+    }
+
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
+              typename TSourceD, typename TSourceE>
+    inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
+                                    TSourceB* lpSourceB, TSourceC* lpSourceC,
+                                    TSourceD* lpSourceD, TSourceE* lpSourceE )
+    {
+        lpSourceE->UnlockForRead();
+        lpSourceD->UnlockForRead();
+        lpSourceC->UnlockForRead();
+        lpSourceB->UnlockForRead();
+        lpSourceA->UnlockForRead();
+        lpDestBuffer->UnlockForWrite();
+    }
+
     // Single-buffer overloads (the X360 also emits the pair against one module
     // buffer, e.g. WorldModule::Prepare's prop-module Lock/UnlockBuffersForIO).
     template <typename TBuffer>

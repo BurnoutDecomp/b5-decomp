@@ -42,6 +42,7 @@
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"                  // CgsGraphics::Camera
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"     // CgsGeometric::Frustum
 #include "GameShared/GameClasses/Graphics/CgsModel.h"                   // CgsGraphics::Model::State (CalcOptimisedLod param/return)
+#include "GameSource/Director/Camera/Camera.h"                          // BrnDirector::Camera::Camera (maShadowMapCamera / the render-camera params)
 #include "pc/gcm/renderengine/renderstates.h"                           // renderengine::TextureState (+ its Parameters)
 
 namespace rw { struct Resource; }   // opaque -- see FLAG above; no reconstructed complete-type home yet
@@ -98,14 +99,17 @@ namespace BrnWorld
         //   (folds into the VMX-dominated per-frame pipeline); declared for shape only.
         void Update(Vector3 lv3Arg);
 
-        // BrnShadowMap.h:98, X360 0x827DA820. Compute the per-map shadow cameras (view
-        // volumes, best-fit matrices, TSM trapezoids) for this frame from the light
-        // direction and the render camera.
-        // DECLARATION-ONLY + FLAG: a very large VMX/float pipeline (candidate view-volume
-        //   plane sorting, line-intersection math, best-fit matrix solve) the rules forbid
-        //   paraphrasing to scalar. Calls the also-declaration-only ComputeBoundingBoxMatrix/
-        //   ComputeOptimalViewVolume/DebugRender.
-        void CalculateShadowMapCameras(Vector3 lv3LightDirection, const CgsGraphics::Camera* lpRenderCamera);
+        // BrnShadowMap.h:98, X360 0x827DA820. Compute the per-map shadow cameras (light
+        // transforms + projections, per-type frustum/TSM/bounding-box solves, the dynamic
+        // far-clip refit, the shader constants) for this frame from the light direction
+        // and the render camera. RECONSTRUCTED in the .cpp (shadow-camera wave 2026-07-27).
+        //
+        // RECONCILE (DWARF BrnShadowMap.h:98 `CalculateShadowMapCameras(Vector3, const
+        // Camera*)`): the unqualified `Camera` resolves to the DIRECTOR camera -- the body
+        // copies r4 with BrnDirector::Camera::Camera::operator= into maShadowMapCamera
+        // (352-byte stride), pokes its mfFOV (+0x58) and hands it to CopyToCgsCamera /
+        // ValidateTransformWithDebugInfo / SetConstants. This is the real overload:
+        void CalculateShadowMapCameras(Vector3 lv3LightDirection, const BrnDirector::Camera::Camera* lpRenderCamera);
 
         // BrnShadowMap.h:102. Update the focus point the shadow maps are centred on.
         // DECLARATION-ONLY (not attested by a standalone X360 body in this dossier).
@@ -129,7 +133,9 @@ namespace BrnWorld
         bool                 GetRenderTrafficIntoShadowMap() const;        // BrnShadowMap.h:117
         bool                 GetRenderMultipleShadowMaps() const;          // BrnShadowMap.h:120
         bool                 GetRenderPropsIntoShadowMap() const;          // BrnShadowMap.h:123
-        CgsGraphics::Camera* GetShadowMapCamera(s32 liIndex);              // BrnShadowMap.h:126
+        // RECONCILE 2026-07-27: returns the DIRECTOR camera slot (maShadowMapCamera
+        // retype below); no committed caller existed.
+        BrnDirector::Camera::Camera* GetShadowMapCamera(s32 liIndex);      // BrnShadowMap.h:126
         bool                 GetRenderingShadowMap();                     // BrnShadowMap.h:129
         bool                 UseZOnlyRenderingPath();                     // BrnShadowMap.h:135
         void                 SetRenderingShadowMap(bool lbValue);          // BrnShadowMap.h:141
@@ -140,9 +146,11 @@ namespace BrnWorld
 
         // BrnShadowMap.h:161, X360 0x827C1BB8. Debug-render the shadow-map frustums/
         // trapezoids/cameras for a given map index.
-        // DECLARATION-ONLY + FLAG: a large immediate-mode-renderer VMX pipeline (line-list
-        //   building from gTsmDebugRenderInfo / gBoundingBoxDebugRenderInfo); the rules
-        //   forbid paraphrasing it. Called (declaration-only) by CalculateShadowMapCameras.
+        // FLAG (assert-trap body in the .cpp, 2026-07-27): a ~1650-line immediate-mode-
+        //   renderer VMX pipeline (line-list building from gTsmDebugRenderInfo /
+        //   gBoundingBoxDebugRenderInfo); the rules forbid paraphrasing it. Reached ONLY
+        //   when a per-map maTsmBBInfo[i].mbDebugRender debug toggle is set (Construct
+        //   defaults all three false), so the trap is dormant on the shipping path.
         void DebugRender(u32 luIndex) const;
 
         const CgsGeometric::Frustum& GetFrustum(u32 luIndex) const;        // BrnShadowMap.h:165
@@ -168,7 +176,10 @@ namespace BrnWorld
 
         void     SetCurrentShadowMap(u32 luIndex);                        // BrnShadowMap.h:176
         u32      GetCurrentShadowMap();                                   // BrnShadowMap.h:182
-        void     ObjectCSMSelect(f32 lfArg) const;                        // BrnShadowMap.h:188
+        // BrnShadowMap.h:188, X360 0x827C1630 (RECONSTRUCTED in the .cpp 2026-07-27):
+        // select the near/far CSM pair for an object at lfDistance and stage shader
+        // constant c17 = { (f32)sel, (f32)(sel+1), maTsmBBInfo[sel].mfFarClip, 0 }.
+        void     ObjectCSMSelect(f32 lfDistance) const;
         void     SetConstantsForEnvmap();
         // ---- ADDITIVE (WorldModule::GenerateShadowMapDispatchLists @0x827C96D8
         //      drives the per-cascade state: the cascade selector @X360 +5364 and
@@ -177,23 +188,36 @@ namespace BrnWorld
         void     SetCurrentCascadeIndex( u32 luCascade );                                 // BrnShadowMap.h:191
 
     protected:
-        void              SetConstants(const CgsGraphics::Camera* lpCamera);                 // BrnShadowMap.h:196
+        // BrnShadowMap.h:196, X360 0x827C16E0 (RECONSTRUCTED in the .cpp 2026-07-27):
+        // stage the per-frame shadow shader constants (mCachedOffsetWorld, the c14
+        // world-to-shadow matrix triple, c15/c16 fade+bias vectors, the c17 seed).
+        // RECONCILE: the DWARF `const Camera*` is the DIRECTOR camera (the caller
+        // passes CalculateShadowMapCameras' r4 straight through; the body reads its
+        // mTransform At row).
+        void              SetConstants(const BrnDirector::Camera::Camera* lpCamera);
         bool              CameraMatrixNeedsUpdate(Matrix44Affine lm44Matrix, u32 luIndex);    // BrnShadowMap.h:201
         void              ComputeTSMMatrix(u32 luIndex, CgsGraphics::Camera& lrCamera);       // BrnShadowMap.h:206
 
         // BrnShadowMap.h:211, X360 0x827D91B0. Compute the axis-aligned-bounding-box shadow
-        // map's ortho projection matrix for a given map slot.
-        // DECLARATION-ONLY + FLAG: a VMX min/max-reduction + matrix-build pipeline; the
-        //   rules forbid paraphrasing it. Called (declaration-only) by CalculateShadowMapCameras.
+        // map's camera + projection for a given map slot (clamped sub-frustum -> light-space
+        // extent reduction -> ortho fit; fills the shared per-map constant matrices
+        // SetConstants uploads).
+        // FLAG (assert-trap body in the .cpp, 2026-07-27): the ~1450-instruction VMX pipeline
+        //   (plus its ComputeOptimalViewVolume callee) resisted this wave's faithful-decode
+        //   budget -- see the .cpp trap comment for the full recovered entry structure and
+        //   the session log (vmx_wave_log.md) for the analysis. Reached only for maps
+        //   configured E_SHADOWMAP_TYPE_BOUNDINGBOX (the KA_SHADOWMAPTYPE rodata is un-dumped
+        //   and carried as ORTHO, which routes GetCgsFrustumParallel instead).
         void ComputeBoundingBoxMatrix(u32 luIndex, CgsGraphics::Camera& lrCamera);
 
         BrnWorld::ShadowMapType GetShadowMapType(u32 luIndex);                                // BrnShadowMap.h:215
 
         // BrnShadowMap.h:223, X360 0x827D8980. Compute the optimal (minimal) view volume
         // enclosing the render frustum from the light's point of view.
-        // DECLARATION-ONLY + FLAG: a large candidate-plane / view-volume-intersection VMX
-        //   pipeline (CandidateViewVolumePlane sort, line-intersection tests); the rules
-        //   forbid paraphrasing it. Called (declaration-only) by ComputeBoundingBoxMatrix.
+        // FLAG (assert-trap body in the .cpp, 2026-07-27): a large candidate-plane /
+        //   view-volume-intersection VMX pipeline (CandidateViewVolumePlane std::_Sort,
+        //   GetPlaneByIndex walks, silhouette-edge intersection) -- resisted this wave's
+        //   faithful-decode budget; only reachable through ComputeBoundingBoxMatrix.
         void ComputeOptimalViewVolume(const CgsGeometric::Frustum& lrFrustum, Matrix44Affine lm44WorldToLight,
                                        CgsGeometric::Frustum& lrOutFrustum,
                                        const rw::math::vpu::Vector3* lpArg4, const rw::math::vpu::Vector3* lpArg5);
@@ -203,7 +227,12 @@ namespace BrnWorld
         bool   mbRenderingShadowMap;                              // :226
         bool   mbUseZOnlyRenderingPath;                           // :227
 
-        CgsGraphics::Camera    maShadowMapCamera[KU_NUM_SHADOW_MAPS];      // :229
+        // :229 -- RECONCILE 2026-07-27: the DWARF's unqualified `Camera[3]` is the
+        // DIRECTOR camera (X360 CalculateShadowMapCameras copies into it with
+        // BrnDirector::Camera::Camera::operator= at 352-byte stride from this+0x10,
+        // writes mfFOV @slot+0x58 and mTransform @slot+0x00; the sibling
+        // maCgsShadowMapCamera strides 368 from this+0x430 == 0x10 + 3*352).
+        BrnDirector::Camera::Camera maShadowMapCamera[KU_NUM_SHADOW_MAPS]; // :229
         CgsGraphics::Camera    maCgsShadowMapCamera[KU_NUM_SHADOW_MAPS];   // :230
 
         Matrix44Affine maCachedMatrix[KU_NUM_SHADOW_MAPS];        // :232

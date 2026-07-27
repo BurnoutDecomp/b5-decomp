@@ -1,7 +1,8 @@
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 
-#include <new>   // ::operator new[] / ::operator delete[] (the frame-pointer array backing)
+#include <new>      // ::operator new[] / ::operator delete[] (the frame-pointer array backing)
+#include <malloc.h> // _aligned_malloc / _aligned_free (the PC RW aligned-memory thunks)
 
 // =============================================================================
 // CgsBufferedDispatchFrame.cpp
@@ -29,12 +30,25 @@
 namespace
 {
 // The two global RenderWare aligned-memory thunks the X360 calls indirectly
-// through off_82F91A04 / off_82F91A0C. Declared here (not forked as a type) so
-// this TU compiles; the real definitions live with the RenderWare memory layer.
+// through off_82F91A04 / off_82F91A0C.
 // X360: RwMallocMemAligned(0x180, 0x10) per per-slot DispatchFrame; the result
-// is the storage Construct placement-constructs the frame into.
-void* RwMallocMemAligned(u32 luSize, u32 luAlignment);   // @ off_82F91A04
-void  RwFreeMemAligned(void* lpMemory);                  // @ off_82F91A0C
+// is the storage Construct places the frame into.
+//
+// FLAG PC-platform leaf: the RenderWare aligned-memory function table
+// (off_82F91A04 / off_82F91A0C) is an engine-global indirection whose PC entries
+// are the CRT aligned allocator -- the X360 slots point at the console's
+// RwMallocMemAligned/RwFreeMemAligned, which are themselves thin wrappers over
+// the platform aligned heap. Routed straight to _aligned_malloc/_aligned_free
+// here until the RenderWare memory layer's function table is homed.
+void* RwMallocMemAligned(u32 luSize, u32 luAlignment)
+{
+    return ::_aligned_malloc(static_cast<size_t>(luSize), static_cast<size_t>(luAlignment));
+}
+
+void RwFreeMemAligned(void* lpMemory)
+{
+    ::_aligned_free(lpMemory);
+}
 }
 
 namespace CgsGraphics
@@ -62,6 +76,30 @@ void BufferedDispatchFrame::Construct(u32 luFramesPerList, u32 luBinSizeQwords, 
     {
         muCurrentFrameForRead = 1;
     }
+}
+
+// CgsBufferedDispatchFrame.cpp:77 / :95 (DecFIGS DWARF) -- the class' own
+// Prepare/Release lifecycle slots. NOT RECONSTRUCTED: neither carries an entry
+// in the X360 ARTIST export set (the ledger lists Construct/Destruct/Swap and
+// the four cursor accessors only; the two lifecycle slots are either folded by
+// ICF onto another trivial body or never emitted). They are declared to keep the
+// vtable order the DWARF attests, and trap rather than fake a return value --
+// nothing on the PC render path calls them (BrnRendererModule drives the frame
+// through Construct/Swap/GetDispatchFrameFor* and tears down via Destruct).
+bool BufferedDispatchFrame::Prepare()
+{
+    CGS_ASSERT(false,
+               "BufferedDispatchFrame::Prepare: no X360 body in the ARTIST export set "
+               "(vtable-order slot; unreferenced on the PC render path)");
+    return false;
+}
+
+bool BufferedDispatchFrame::Release()
+{
+    CGS_ASSERT(false,
+               "BufferedDispatchFrame::Release: no X360 body in the ARTIST export set "
+               "(vtable-order slot; unreferenced on the PC render path)");
+    return false;
 }
 
 // @ 0x827ECE90

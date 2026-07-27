@@ -24,7 +24,7 @@ namespace Attrib
 
     // Forward declarations for the heavy query API (owned by attribdatabase.cpp / SDK).
     class Class;
-    class TypeDesc;
+    struct TypeDesc;   // class-key MUST be struct (attribarray.h defines struct TypeDesc; MSVC mangles U/V from the key)
     class ExportManager;
     class DatabasePrivate;
 
@@ -39,7 +39,11 @@ namespace Attrib
         static bool IsInitialized();
 
         // --- declared-only query API (bodies in attribdatabase.cpp) ---
-        ExportManager& GetExportPolicies();
+        // static on PC: the body never touches `this` and the X360 RegisterSchema
+        // site calls it BEFORE the database singleton exists (@0x8280E4A0 calls
+        // @0x8280DC70 with no valid this) -- semantic parity keeps it callable
+        // pre-database without the Get() assert.
+        static ExportManager& GetExportPolicies();
         void           ReleaseExportPolicies();
         // NOTE: fully qualify the top-level ::Attribute namespace here. Inside namespace
         // Attrib an unqualified `Attribute::` binds to the Attrib::Attribute cursor class
@@ -51,13 +55,26 @@ namespace Attrib
         ::Attribute::Key GetNextClass(::Attribute::Key key) const;
         unsigned int     GetNumIndexedTypes() const;
         const TypeDesc&  GetIndexedTypeDesc(u16 index) const;
-        const TypeDesc&  GetTypeDesc(::Attribute::Type type) const;
+        // @ 0x82808118 -- the keyed type-registry lookup; takes the 64-bit type
+        // key (hash64 of the type name) and falls back to the NULL type row when
+        // the key is unregistered. Body: attribdatabase.cpp.
+        const TypeDesc&  GetTypeDesc(u64 type) const;
         ::Attribute::Type AddType(const char* name, unsigned int bytes);
         void             CollectGarbage();
         void             DumpContents(::Attribute::Key key) const;
 
     private:
-        explicit Database(DatabasePrivate& privates);
+        // The concrete registry impl derives Database and self-installs as its
+        // own mPrivates (the X360 ctor @0x8280C598 stores this at +4); the
+        // GetDatabasePrivate() helper (attribclassprivate.h seam) reads the
+        // private singleton the same way the X360 reads off_83011BC4->+4 inline.
+        friend struct DatabasePrivate;
+        friend DatabasePrivate* GetDatabasePrivate();
+        // DatabaseExportPolicy::Initialize (@0x8280CAC8) installs the freshly
+        // built registry as the singleton (off_83011BC4 store).
+        friend class DatabaseExportPolicy;
+
+        explicit Database(DatabasePrivate& privates) : mPrivates(privates) {}
         Database(const Database& src);
         virtual ~Database();
         const Database& operator=(const Database& rhs);

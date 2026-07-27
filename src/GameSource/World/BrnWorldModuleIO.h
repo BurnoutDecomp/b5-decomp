@@ -544,6 +544,11 @@ namespace BrnWorldIO
         void SetTriggerEntityOutputInterface(const TriggerEntityModuleOutputInterface* lpInterface); // :542 W (0x827A46F0)
         void SetActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface); // :545 W (0x827A47A8)
         void SetReplayActiveRaceCarOutputInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface); // :548 W (0x827A4860)
+        // The two const race-car output getters WorldModule::Update's tail reads the
+        // player car through (the replay one is selected when the update set carries
+        // 0x100 -- X360 h:544/:547, bodies @0x823B5C18/@0x823B5CC0).
+        const RCEntityActiveRaceCarOutputInterface* GetActiveRaceCarOutputInterface() const;       // :544 R (0x823B5C18, +29856)
+        const RCEntityActiveRaceCarOutputInterface* GetReplayActiveRaceCarOutputInterface() const; // :547 R (0x823B5CC0, +40336)
 
         // ---- contact spy ----
         const ContactSpyInterface* GetContactSpyInterface() const;                         // :550 R (0x823B5D68, "GetContactSpy")
@@ -592,6 +597,12 @@ namespace BrnWorldIO
         // ---- world entity status ----
         const StatusInterface* GetWorldEntityStatusInterface() const;                      // :591 R (0x823B6548, "GetWorldEntitySt")
         void SetWorldEntityStatusInterface(const StatusInterface* lpInterface);            // :592 W (0x827A4BD8)
+
+        // ---- world-wants-debug-controller-focus flag ----
+        // WorldModule::Update @0x827D63E8 copies the debug component's focus byte
+        // straight into +217668 under the write lock (a raw stb on X360; expressed
+        // as this named setter on the PC).
+        void SetWorldWantsDebugControllerFocus(bool lbWantsFocus);                          // (Update @0x827D63E8 store)
 
         // ---- sound world load ----
         const SoundWorldLoadInterface* GetSoundWorldLoadInterface() const;                 // :694 R (0x823B65F0, "Upd")

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet (the loading update set)
 
 // Top-level game-flow states. Hierarchy reconstructed from the X360 ARTIST build
 // (GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h):
@@ -87,6 +88,18 @@ protected:
     // the GameData input buffer. Returns true once the module reports prepared.
     bool LoadWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                          const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
+    // The per-frame world UPDATE leg of the spine (X360 0x823F22D8's `stage > 5` block,
+    // inlined there): FreeAll the world frame allocator, drive WorldModule::Update
+    // (vtable +76) with the frame's world IO pair and the loading update set, then run
+    // BridgeWorldToResource @0x823E5300 -- the forward that carries the world streamer's
+    // per-frame LoadBundle requests (TRK / PVS / prop graphics) into the GameData pump.
+    void UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer);
+
+    // The update set the loading spine drives the world with: ConstructUpdateSetFromFsm
+    // @0x823BD420's base value 128 (frustum testing on; no in-game / boot-video / paused
+    // bits while the scripted load runs).
+    static const BrnUpdateSet KU_LOADING_UPDATE_SET = 0x80;
 
     // X360 0x823A85B0 -- the title-screen pre-accept resume: assert the scripted load is
     // still parked at START and clear the pause flag (byte_82FAE28E) so the load runs.

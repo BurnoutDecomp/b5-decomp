@@ -4,6 +4,8 @@
 #include <cstdint>
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"        // RenderableMesh (mesh-dispatch seam)
+#include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // MaterialTechniqueView
 #include "pc/gcm/renderengine/Device.h"
 
 struct IDirect3DDevice9;
@@ -57,6 +59,26 @@ renderengine::VertexProgramState* gpCurrentVertexProgramState = nullptr;
 // renderengine helper with no project home and no recovered asm for this TU; declared here so the
 // shadow setter can call it by name. Returns the device/result pointer (X360 r3 passthrough).
 extern "C" void* SetSamplerStateLowLevel(void* lpState, u32 luSamplerId, bool lbWasUnset);
+
+// ---- The PC mesh-dispatch leaf hooks (pc/gcm/renderengine/XenonD3D9Shims.cpp) -----------------
+// The Xenon-side geometry stash + fallback world shader. The dispatch walk binds through these;
+// the shim TU owns the D3D9 objects (shader cache, vertex-declaration cache, draw stash).
+namespace renderengine
+{
+    // Bind the FLAGGED fallback world shader (compiled once at first use); returns false when the
+    // device/compiler is unavailable (the draw is skipped rather than issued undefined).
+    bool WorldFallbackShader_Bind();
+    // Upload the row-vector WVP (4x float4) for the fallback shader.
+    void WorldFallbackShader_SetWvp(const f32* lpWvpRows16);
+    // Resolve + cache a D3D9 vertex declaration and the stream-0 stride from the 32-bit
+    // serialised VertexDescriptor image the converted world data carries.
+    void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride);
+    // The draw stash the D3DDevice_* shims fill (index/vertex source for the UP draw path).
+    void  WorldDraw_SetIndexSource(const void* lpIndexBufferHeader);
+    void  WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride);
+    void  WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
+                              u32 luStartIndex, u32 luIndexCount);
+}
 
 namespace
 {
@@ -514,5 +536,74 @@ namespace shadow
             }
         }
         return lpState;
+    }
+
+    // ============================================================================
+    // The mesh-dispatch flush seam (DispatchList::DispatchAllMeshes).
+    // ============================================================================
+
+    // X360 walk prologue: dword_8301095C = 0 (vertex program shadow) and
+    // dword_83010960 = -1 (pixel program shadow).
+    void Device::ResetProgramShadows()
+    {
+        mpVertexProgramShadow = nullptr;
+        mpPixelProgramShadow  = reinterpret_cast<const renderengine::ProgramBufferData*>(
+            static_cast<uintptr_t>(~0u));
+    }
+
+    // [PC leaf] Technique-change bind. The X360 path (DispatchAllMeshes
+    // @0x827F2718) binds the technique's render-state triple through the
+    // shadowed low-level setters, the vertex/pixel Xenos programs through
+    // SetVertexProgram/SetPixelProgram, and gathers the technique constants
+    // into the GPU constant memory. The PC bring-up substitutes:
+    //   * states: NOT bound from data yet (the MaterialState porter + the
+    //     x64 state-object seam are still open) -- the per-pass defaults set by
+    //     the renderer stand; FLAG [PC bring-up].
+    //   * programs/constants: the FLAGGED fallback world shader (the converted
+    //     SHADERS bundle exists -- tools/assets/shaders/out/SHADERS_PC.BNDL --
+    //     but its load/PostFixUp path and the constant dispatch are not wired;
+    //     until then every technique draws through the fallback).
+    void Device::SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* /*lpTechnique*/,
+                                    void* const* /*lppConstScratch*/, bool /*lbZOnly*/)
+    {
+        renderengine::WorldFallbackShader_Bind();
+    }
+
+    // [PC bring-up shim] Per-object WVP for the fallback shader.
+    void Device::SetObjectTransformPC(const f32* lpWvpRows16)
+    {
+        renderengine::WorldFallbackShader_SetWvp(lpWvpRows16);
+    }
+
+    // [PC leaf] Bind the mesh geometry: index buffer, stream-0 vertex buffer and
+    // the technique's vertex declaration. The mesh buffer table (renderablemesh.h
+    // maBuffers, widened x64 image) holds [0] = IndexBufferHeader*,
+    // [1..numVB] = VertexBufferHeader*s, then the per-technique serialised
+    // vertex-descriptor pointers. The Xenon stream-shadow dance collapses into
+    // direct binds through the D3DDevice_* seam (single-stream world data --
+    // the converter hard-fails multi-stream descriptors upstream).
+    void Device::SetMeshBuffersPC(const RenderableMesh* lpMesh, u32 luTechniqueIndex)
+    {
+        const void* const* lppBuffers = lpMesh->maBuffers;
+        const u32 luNumVb = lpMesh->mu8NumVertexBuffers;
+
+        // The technique's vertex descriptor (32-bit serialised image).
+        const void* lpVdImage = lppBuffers[1u + luNumVb + luTechniqueIndex];
+        u32 luStride = 0;
+        void* lpDeclaration = renderengine::WorldVd32_GetDeclaration(lpVdImage, &luStride);
+        D3DDevice_SetVertexDeclaration(gpD3DDevice, lpDeclaration);
+
+        renderengine::WorldDraw_SetIndexSource(lppBuffers[0]);
+        renderengine::WorldDraw_SetVertexSource(luNumVb != 0 ? lppBuffers[1] : 0, luStride);
+    }
+
+    // [PC leaf] Issue the indexed draw from the mesh's DrawIndexedParameters
+    // (X360: FlushVertexProgramState + D3DDevice_DrawIndexedVertices).
+    void Device::DrawIndexedMeshPC(const RenderableMesh* lpMesh)
+    {
+        renderengine::WorldDraw_IndexedUP(lpMesh->mDrawIndexedParameters.mePrimitiveType,
+                                          lpMesh->mDrawIndexedParameters.muBaseVertexIndex,
+                                          lpMesh->mDrawIndexedParameters.muMinVertexIndex,
+                                          lpMesh->mDrawIndexedParameters.muNumVertices);
     }
 }

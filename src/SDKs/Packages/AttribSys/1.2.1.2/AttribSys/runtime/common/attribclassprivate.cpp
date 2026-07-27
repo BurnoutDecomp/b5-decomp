@@ -3,93 +3,39 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // HashMapTablePolicy::Free
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabase.h"           // AttribListNode/Base + delete-queue seam
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabaseprivate.h"    // Attrib::DatabasePrivate (named registry members)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h"          // Attrib::Vault (AddRef / live-class count)
 
-// AttribSys runtime -- Attrib::ClassPrivate bodies, reconstructed store-for-store from
+// AttribSys runtime -- Attrib::ClassPrivate bodies, reconstructed from
 // BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2):
 //   Attrib::ClassPrivate::ClassPrivate  @ 0x8280EC80
 //   Attrib::ClassPrivate::Release       @ 0x8280C370
 //   Attrib::ClassPrivate::~ClassPrivate @ 0x8280F4D8
 //
-// The cross-TU helpers ClassPrivate depends on (the layout HashMap ctor/adder/releaser,
-// the class-registry table, the collection table, the DatabasePrivate garbage queue, the
-// Vault destructor, and the database-private accessor) live in their own AttribSys TUs.
-// Until those land they are free-function trap stubs here, exactly as the sibling
-// attribute.cpp / attribinstance.cpp reconstructions stub their own not-yet-landed
-// helpers. HashMapTablePolicy::Free is the committed helper and is used directly.
+// 2026-07-27 (attrib-sdk wave): re-homed onto the named-member x64 layout
+// (attribclassprivate.h). The earlier raw-byte-offset bodies wrote X360 offsets
+// with widened pointer stores, which overlapped on the 64-bit host (mpDefinitions
+// @+0x2C vs mpSource @+0x30) -- retired per the x64 semantic-parity rule. The
+// layout HashMap / collection table / class registry are now driven through the
+// committed real container types (attribhashmap.cpp / vechashmap.cpp).
 
 namespace Attrib
 {
-    // ---- cross-TU trap stubs (own ledger TUs) -------------------------------
-    void HashMap_Construct(void* lpHashMap, unsigned int luCount, u8 lu8KeyShift, u8 lu8Dynamic)
-    {
-        (void)lpHashMap; (void)luCount; (void)lu8KeyShift; (void)lu8Dynamic;
-        __debugbreak();
-    }
-
-    void HashMap_Add(void* lpHashMap, u64 luKey, u64 luValue, u16 lu16Type,
-                     int liArg4, unsigned int luFlags, char lcArg6, int liArg7)
-    {
-        (void)lpHashMap; (void)luKey; (void)luValue; (void)lu16Type;
-        (void)liArg4; (void)luFlags; (void)lcArg6; (void)liArg7;
-        __debugbreak();
-    }
-
-    int HashMap_Release(void* lpHashMap)
-    {
-        (void)lpHashMap;
-        __debugbreak();
-        return 0;
-    }
-
-    void ClassTable_Add(u16* lpTable, u32 luKey, void* lpClass)
-    {
-        (void)lpTable; (void)luKey; (void)lpClass;
-        __debugbreak();
-    }
-
-    unsigned int ClassTable_Find(u16* lpTable, u32 luKey)
-    {
-        (void)lpTable; (void)luKey;
-        __debugbreak();
-        return 0;
-    }
-
-    void ClassTable_EraseAt(u16* lpTable, unsigned int luIndex)
-    {
-        (void)lpTable; (void)luIndex;
-        __debugbreak();
-    }
-
-    void CollectionTable_Rebu()
-    {
-        __debugbreak();
-    }
-
-    void CollectionTable_Clear(void* lpTable)
-    {
-        (void)lpTable;
-        __debugbreak();
-    }
-
-    // Attrib::DatabasePrivate::QueueForDelete<Attrib::Class> @ 0x8280BF78. The Class twin of the
-    // Collection delete-queue push (attribcollection.cpp). Identical ring logic; the only
-    // difference is the referenced-check: a Class carries its shared refcount indirectly -- the
-    // X360 loads the ClassPrivate pointer at Class+0x08 and reads the u16 refcount at
-    // ClassPrivate+0x18 (Class is opaque here, so this stays a byte-offset reach, per the
-    // AttribSys convention). Reached from Attrib::ClassPrivate::Release on the final drop.
+    // Attrib::DatabasePrivate::QueueForDelete<Attrib::Class> @ 0x8280BF78. The Class twin of
+    // the Collection delete-queue push (attribcollection.cpp). Identical ring logic; the
+    // referenced-check reads the shared layout-table refcount through the Class's
+    // ClassPrivate. Reached from Attrib::ClassPrivate::Release on the final drop.
     void* DatabasePrivate_QueueClassForDelete(void* lpClass, void* lpGarbageList)
     {
         AttribListBase* lpQueue = reinterpret_cast<AttribListBase*>(lpGarbageList);
 
-        // X360: refcount = *(u16*)( *(void**)(class + 0x08) + 0x18 ).
+        // X360: refcount = ClassPrivate(mpPrivates)->mLayoutTable.muRefCount.
         bool lbNullOrReferenced = (lpClass == NULL);
         if (!lbNullOrReferenced)
         {
-            const void* lpClassPrivate =
-                *reinterpret_cast<void* const*>(reinterpret_cast<const u8*>(lpClass) + 0x08);
-            const u16 lu16RefCount =
-                *reinterpret_cast<const u16*>(reinterpret_cast<const u8*>(lpClassPrivate) + 0x18);
-            lbNullOrReferenced = (lu16RefCount != 0);
+            const ClassPrivate* lpClassPrivate =
+                reinterpret_cast<const ClassPrivate*>(lpClass)->mpPrivates;
+            lbNullOrReferenced = (lpClassPrivate->mLayoutTable.GetRefCount() != 0);
         }
         CGS_ASSERT(!lbNullOrReferenced,
                    "Cannot queue NULL or referenced object for delete.");
@@ -111,113 +57,84 @@ namespace Attrib
         return lpNewNode;
     }
 
-    // Attrib::Vault scalar deleting destructor -- real body now landed in the Vault home TU
-    // (attribloadandgo.cpp @ 0x8280F098). ~ClassPrivate drops the source Vault's last
-    // live-class reference here, so forward to the real deleting destructor rather than trap.
-    // Vault is only forward-declared in this TU (attribclassprivate.h), so declare the free
-    // helper locally and pass the block through as an (incomplete) Vault*.
-    void* Vault_ScalarDeletingDtor(Vault* lpVault, int liDeleteFlag);
-
-    void Vault_Destroy(void* lpVault, char lcDeleting)
+    // The class-registry EraseAt (X360 sub_82808A98 -- the VecHashMap<false,16>
+    // slot-vacate with probe-run repair). Teardown-path only (~ClassPrivate);
+    // deferred to its own TU with the remaining VecHashMap removal family.
+    static void ClassTable_EraseAt(ClassTable& lrTable, unsigned int luIndex)
     {
-        Vault_ScalarDeletingDtor(reinterpret_cast<Vault*>(lpVault), lcDeleting);
-    }
-
-    void* GetDatabasePrivate()
-    {
-        __debugbreak();
-        return NULL;
+        (void)lrTable; (void)luIndex;
+        CGS_ASSERT(false, "ClassTable EraseAt @0x82808A98: deferred TU (teardown path)");
     }
 }
 
 // ============================================================================
 // Attrib::ClassPrivate::ClassPrivate @ 0x8280EC80
 // ============================================================================
-// Store-for-store from the X360. Builds the private impl of an attribute Class:
-// copies the 8-byte Class base out of the load descriptor, installs the self
-// back-pointer, constructs the layout HashMap, zero-inits the collection table,
-// seeds the definition/layout metadata, bumps the source Vault's live-class count,
-// pushes every in-layout searchable definition into the layout HashMap, and finally
-// registers the Class with the process attribute database's class table.
+// Build the private impl of an attribute Class from its serialised load record:
+// copy the Class base key, install the self back-pointer, construct the layout
+// HashMap from the load's {count, key-shift} (dynamic), zero + optionally
+// reserve the collection table, seed the definition/layout metadata, take a
+// layout-table reference and the source Vault's live-class reference, push every
+// laid-out searchable definition into the layout HashMap, and finally register
+// the Class with the process database's class table.
 Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
+    : mKey(lrLoad.mClass)
+    , mpPrivates(this)
+    , mLayoutTable(lrLoad.mLayoutCount, static_cast<u8>(lrLoad.mLayoutKeyShift), 1)
 {
-    u8* lpThis = reinterpret_cast<u8*>(this);
-    const u8* lpLoad = reinterpret_cast<const u8*>(&lrLoad);
+    // mCollections: zero the table header in place, then reserve when the load
+    // record carries a seed (X360 TablePolicy_1_96_::Rebuild gated on it).
+    mCollections = CollectionHashMap();
+    if (lrLoad.mCollectionReserve != 0)
+        mCollections.RebuildTable(lrLoad.mCollectionReserve);
 
-    // Copy the 8-byte Class base (mKey + mpPrivates) out of the load descriptor, then
-    // point the self back-reference (this+8) at ourselves.
-    *reinterpret_cast<u64*>(lpThis) = *reinterpret_cast<const u64*>(lpLoad);
-    *reinterpret_cast<ClassPrivate**>(lpThis + 8) = this;
+    mLayoutSize = static_cast<u16>(lrLoad.mLayoutSize);
+    mNumDefinitions = static_cast<u16>(lrLoad.mNumDefinitions);
+    mDefinitions = lrLoad.GetDefinitions();
+    mSource = lpSource;
 
-    // mLayoutTable @ +0x10 -- HashMap seeded from the load descriptor's layout
-    // (count @+0x22, key-shift @+0x20), dynamic=1.
-    HashMap_Construct(lpThis + 0x10,
-                      *reinterpret_cast<const u16*>(lpLoad + 0x22),
-                      static_cast<u8>(*reinterpret_cast<const u16*>(lpLoad + 0x20)),
-                      1);
+    // Layout-table shared refcount (overflow guard + AddRef), then the source
+    // Vault's live-class count (X360 ++vault->mRefCount @+16).
+    mLayoutTable.AddRef();
+    mSource->AddRef(0);   // the source Vault gains one live-class reference
 
-    // mCollections @ +0x1C -- zero the table header in place.
-    *reinterpret_cast<u32*>(lpThis + 0x1C) = 0;
-    *reinterpret_cast<u16*>(lpThis + 0x20) = 0;
-    *reinterpret_cast<u16*>(lpThis + 0x22) = 0;
-    *reinterpret_cast<u16*>(lpThis + 0x24) = 0;
-    *reinterpret_cast<u16*>(lpThis + 0x26) = 0;
-
-    const u32 luNumDefinitions = *reinterpret_cast<const u32*>(lpLoad + 0x08);
-    if (luNumDefinitions != 0)
-        CollectionTable_Rebu();
-
-    *reinterpret_cast<u16*>(lpThis + 0x28) =
-        static_cast<u16>(*reinterpret_cast<const u32*>(lpLoad + 0x1C)); // mLayoutSize
-    *reinterpret_cast<u16*>(lpThis + 0x2A) =
-        static_cast<u16>(*reinterpret_cast<const u32*>(lpLoad + 0x0C)); // mNumDefinitions
-    *reinterpret_cast<void**>(lpThis + 0x2C) =
-        *reinterpret_cast<void* const*>(lpLoad + 0x10);                 // mpDefinitions
-    *reinterpret_cast<Vault**>(lpThis + 0x30) = lpSource;               // mpSource
-
-    // mLayoutTable collection refcount (u16 @ +0x18) -- overflow guard + AddRef.
-    u16* lpuRefCount = reinterpret_cast<u16*>(lpThis + 0x18);
-    CGS_ASSERT(*lpuRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
-    ++*lpuRefCount;
-    ++*reinterpret_cast<u32*>(*reinterpret_cast<u8**>(lpThis + 0x30) + 0x10); // mSource live-class count
-
-    // Push every in-layout, searchable definition into the layout HashMap. The X360
-    // re-reads the self back-pointer (this+8) each iteration.
-    ClassPrivate* lpSelf = *reinterpret_cast<ClassPrivate**>(lpThis + 8);
-    u8* lpSelfBytes = reinterpret_cast<u8*>(lpSelf);
-    if (*reinterpret_cast<u16*>(lpSelfBytes + 0x2A) != 0)
+    // Push every laid-out (flag bit1), searchable (not bit3) definition into the
+    // layout HashMap. The X360 re-reads the self back-pointer each iteration.
+    ClassPrivate* lpSelf = mpPrivates;
+    if (lpSelf->mNumDefinitions != 0)
     {
-        u32 luByteOffset = 0;
-        u32 luIndex = 0;
-        do
+        for (unsigned int luIndex = 0; luIndex < lpSelf->mNumDefinitions; ++luIndex)
         {
-            u8* lpDef = *reinterpret_cast<u8**>(lpSelfBytes + 0x2C) + luByteOffset;
-            const u8 lu8Flags = *reinterpret_cast<const u8*>(lpDef + 0x16);
-            if ((lu8Flags & 2) != 0 && (lu8Flags & 8) == 0)
+            const Definition& lrDef = lpSelf->mDefinitions[luIndex];
+            if ((lrDef.mFlags & 2) != 0 && (lrDef.mFlags & 8) == 0)
             {
-                const u32 luAddFlags =
-                    (static_cast<u32>(lu8Flags & 1) << 1) | ((lu8Flags & 2) != 0 ? 0x10u : 0x20u);
-                HashMap_Add(lpSelfBytes + 0x10,
-                            *reinterpret_cast<u64*>(lpDef + 0x00),
-                            *reinterpret_cast<u64*>(lpDef + 0x08),
-                            *reinterpret_cast<u16*>(lpDef + 0x10),
-                            0,
-                            luAddFlags,
-                            1,
-                            0);
+                // X360 stages Add(key, typeKey, {offset,size} word, 0, addFlags,
+                // 1, 0): the layout node's payload is the def's packed
+                // {mOffset << 16 | mSize} word (the X360's 32-bit load at
+                // def+16), the type rides as the 64-bit key (the Node ctor
+                // resolves the index), the laid-out rebase is OFF (r7 = 0), and
+                // the node flags are (flags&1)<<1 | (laid-out ? 0x10 : 0x20).
+                const u32 luPacked =
+                    (static_cast<u32>(lrDef.mOffset) << 16) | lrDef.mSize;
+                const u8 lu8AddFlags = static_cast<u8>(
+                    ((lrDef.mFlags & 1) << 1) |
+                    (((lrDef.mFlags & 2) != 0) ? 0x10 : 0x20));
+                lpSelf->mLayoutTable.Add(lrDef.mKey,
+                                         lrDef.mType,
+                                         reinterpret_cast<void*>(
+                                             static_cast<uintptr_t>(luPacked)),
+                                         false,
+                                         lu8AddFlags,
+                                         true,
+                                         NULL);
             }
-            ++luIndex;
-            luByteOffset += 0x18;
         }
-        while (luIndex < *reinterpret_cast<u16*>(lpSelfBytes + 0x2A));
     }
 
-    // Register this Class with the process attribute database's class table (the X360
-    // reads off_83011BC4->mPrivates(+4), asserting the database is initialized first).
-    u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
-    ClassTable_Add(reinterpret_cast<u16*>(lpPrivates + 8),
-                   *reinterpret_cast<u32*>(lpThis),
-                   this);
+    // Register this Class with the process attribute database's class table
+    // (the X360 reads off_83011BC4->mPrivates, asserting initialization first).
+    DatabasePrivate* lpPrivates = GetDatabasePrivate();
+    lpPrivates->mClasses.Add(mKey, reinterpret_cast<Attrib::Class*>(this));
 }
 
 // ============================================================================
@@ -228,13 +145,12 @@ Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
 // (a byte-wide bool widened to int, exactly as the X360 threads r3 through).
 int Attrib::ClassPrivate::Release()
 {
-    u8* lpThis = reinterpret_cast<u8*>(this);
-    const int liReleased = static_cast<u8>(HashMap_Release(lpThis + 0x10));
+    const int liReleased = static_cast<int>(mLayoutTable.Release());
     if (liReleased != 0)
     {
-        u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
+        DatabasePrivate* lpPrivates = GetDatabasePrivate();
         return static_cast<int>(reinterpret_cast<intptr_t>(
-            DatabasePrivate_QueueClassForDelete(this, lpPrivates + 0x8C)));
+            DatabasePrivate_QueueClassForDelete(this, &lpPrivates->mGarbageClasses)));
     }
     return liReleased;
 }
@@ -248,36 +164,21 @@ int Attrib::ClassPrivate::Release()
 // layout HashMap's bucket buffer.
 Attrib::ClassPrivate::~ClassPrivate()
 {
-    u8* lpThis = reinterpret_cast<u8*>(this);
-
-    // Clear mLayoutTable's count (u16 @ +0x16).
-    *reinterpret_cast<u16*>(lpThis + 0x16) = 0;
+    mLayoutTable.ClearCountForTeardown();
 
     // Drop the source Vault's live-class refcount; delete it when it hits zero.
-    u8* lpSource = *reinterpret_cast<u8**>(lpThis + 0x30);
-    const u32 luNewRefs = *reinterpret_cast<u32*>(lpSource + 0x10) - 1;
-    *reinterpret_cast<u32*>(lpSource + 0x10) = luNewRefs;
-    if (luNewRefs == 0)
-        Vault_Destroy(lpSource, 1);
+    if (mSource->Release(0))
+        Vault_ScalarDeletingDtor(mSource, 1);
 
     // Unregister the Class from the database class table.
-    u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
-    u16* lpTable = reinterpret_cast<u16*>(lpPrivates + 8);
-    const unsigned int luIndex = ClassTable_Find(lpTable, *reinterpret_cast<u32*>(lpThis));
-    ClassTable_EraseAt(lpTable, luIndex);
+    DatabasePrivate* lpPrivates = GetDatabasePrivate();
+    const unsigned int luIndex = lpPrivates->mClasses.FindIndex(mKey);
+    ClassTable_EraseAt(lpPrivates->mClasses, luIndex);
 
-    // Clear the collection table (mCollections @ +0x1C).
-    CollectionTable_Clear(lpThis + 0x1C);
+    mCollections.Clear();
 
-    CGS_ASSERT(*reinterpret_cast<u16*>(lpThis + 0x16) == 0,
+    CGS_ASSERT(mLayoutTable.GetCount() == 0,
                "Attrib::HashMap not empty when destroyed.");
 
-    // Release the layout HashMap's bucket buffer. Free size = ROL4(capacity-shift, 4).
-    void* lpBuckets = *reinterpret_cast<void**>(lpThis + 0x10);
-    if (lpBuckets != nullptr)
-    {
-        const u32 lu32Shift = *reinterpret_cast<u16*>(lpThis + 0x14);
-        const u32 luSize = (lu32Shift << 4) | (lu32Shift >> 28);
-        HashMapTablePolicy::Free(lpBuckets, luSize);
-    }
+    mLayoutTable.ReleaseBucketsForTeardown();
 }

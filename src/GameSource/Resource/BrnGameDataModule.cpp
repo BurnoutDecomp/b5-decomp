@@ -24,6 +24,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
 #include <cstring>                                                              // memset / memcmp / strncmp
 #include <cstdlib>                                                              // atoi (prop-instance zone number)
+#include <cstdio>                                                               // fopen/fread (PC schema-file leaf)
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"  // GetAttribSysAllocator (schema blob carve)
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h" // AttribSysPackageAllocator::Malloc
 
 // BrnResource::GameDataModule - see the header. This pass reconstructs the rw-INDEPENDENT
 // lifecycle spine (Prepare's base -> ResourceModule::Prepare core). The rw-allocator-gated
@@ -721,22 +724,81 @@ namespace BrnResource
         {
         case 0:
         {
-            static bool s_bLoggedSchemaGate = false;
-            if (!s_bLoggedSchemaGate)
+            // [PC seam] the schema pair is exe-baked rodata on the X360; the PC
+            // build loads the LE-ported files the schema port tool stages
+            // (build/game/schema.vlt + schema.bin -- the filenames the vault's
+            // own DepN dependency table records). One-time load into the
+            // AttribSys package allocator (the blobs stay live for the process
+            // exactly like the X360 rodata). Gated on KB_PC_ATTRIB_SCHEMA_FILES
+            // until the Attrib SDK runtime cluster is linked (see the constant's
+            // note in CgsAttribSysModule.h).
+            static void* s_pSchemaVlt = 0;
+            static void* s_pSchemaBin = 0;
+            static s32   s_iSchemaVltSize = 0;
+            static s32   s_iSchemaBinSize = 0;
+            if (CgsAttribSys::KB_PC_ATTRIB_SCHEMA_FILES && s_pSchemaVlt == 0)
             {
-                s_bLoggedSchemaGate = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "GameDataModule::PrepareAttribSysSchemaResource: schema blobs not "
-                       "PC-ported -- RegisterSchema skipped [FLAG PC boot gate]\n";
+                static const char* s_apcSchemaFiles[2] = { "schema.vlt", "schema.bin" };
+                void* lapBlobs[2] = { 0, 0 };
+                s32 laiSizes[2] = { 0, 0 };
+                for (int liFile = 0; liFile < 2; ++liFile)
+                {
+                    FILE* lpFile = fopen(s_apcSchemaFiles[liFile], "rb");
+                    CGS_ASSERT(lpFile != 0, "PC schema file missing (run attribsys_schema_port.py)");
+                    if (lpFile == 0)
+                        break;
+                    fseek(lpFile, 0, SEEK_END);
+                    laiSizes[liFile] = static_cast<s32>(ftell(lpFile));
+                    fseek(lpFile, 0, SEEK_SET);
+                    lapBlobs[liFile] =
+                        CgsAttribSys::AttribSysMemoryManager::GetAttribSysAllocator()->Malloc(
+                            static_cast<size_t>(laiSizes[liFile]), 0);
+                    fread(lapBlobs[liFile], 1, static_cast<size_t>(laiSizes[liFile]), lpFile);
+                    fclose(lpFile);
+                }
+                s_pSchemaVlt = lapBlobs[0];
+                s_iSchemaVltSize = laiSizes[0];
+                s_pSchemaBin = lapBlobs[1];
+                s_iSchemaBinSize = laiSizes[1];
             }
-            // X360: RegisterSchema(&mReceiverQueue, schemaVlt, 5664, schemaBin, 20352);
-            // mReceiverQueue.Clear(); miResourcePrepareStage = 1; + the ProcessInputs tail.
-            miResourcePrepareStage = 2;   // gated jump (see FLAG above)
+
+            if (!CgsAttribSys::KB_PC_ATTRIB_SCHEMA_FILES || s_pSchemaVlt == 0 || s_pSchemaBin == 0)
+            {
+                static bool s_bLoggedSchemaGate = false;
+                if (!s_bLoggedSchemaGate)
+                {
+                    s_bLoggedSchemaGate = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "GameDataModule::PrepareAttribSysSchemaResource: Attrib SDK "
+                           "runtime not mounted -- RegisterSchema skipped [FLAG PC boot gate]\n";
+                }
+                // X360: RegisterSchema(&mReceiverQueue, schemaVlt, 5664, schemaBin, 20352);
+                // mReceiverQueue.Clear(); miResourcePrepareStage = 1; + the ProcessInputs tail.
+                miResourcePrepareStage = 2;   // gated jump (see the seam note above)
+                return false;
+            }
+
+            // X360 stage 0: push RegisterSchema (event type 1) with the two blobs
+            // (exe-baked there, the ported LE files here), clear the receiver, advance.
+            lpAttribModuleInputBuffer->GetVaultRequestInterface()->RegisterSchema(
+                &mReceiverQueue, s_pSchemaVlt, s_iSchemaVltSize, s_pSchemaBin, s_iSchemaBinSize);
+            mReceiverQueue.Clear();
+            miResourcePrepareStage = 1;
+
+            // The shared X360 per-pass tail: a DIRECT AttribSysModule::ProcessInputs
+            // on the attrib input (the schema request is consumed synchronously; the
+            // SchemaRegisteredResponse lands on mReceiverQueue for stage 1).
+            mAttribSysModule.ProcessInputs(lpAttribModuleInputBuffer);
             return false;
         }
         case 1:
             if (mReceiverQueue.GetLength() <= 0)
+            {
+                // Keep draining while the reply is pending (the X360 tail runs
+                // ProcessInputs on every stage-0/1 pass).
+                mAttribSysModule.ProcessInputs(lpAttribModuleInputBuffer);
                 return false;
+            }
             mReceiverQueue.Clear();
             miResourcePrepareStage = 2;
             return false;
@@ -834,6 +896,24 @@ namespace BrnResource
         lrMem.maResourceSets[1].muDataSize  = KU_TYPE1;
         lrMem.maResourceSets[1].muNumBlocks = static_cast<u16>(KU_TYPE1 / KU_BLOCK);
         // memory types 2-4 left zeroed (skipped by CreateRootBank)
+
+        // [PC diagnostic] the serialised resource format stores pointers in FOUR-BYTE slots
+        // (the PointerFromU32 convention); on x64 that only round-trips while the pointee is
+        // below 4 GB, which is what BrnResourceAllocator's LowMemory::Reserve guarantees for
+        // this root. Log the carved bases so a regression is visible in BrnGame.log rather
+        // than as a truncated-pointer access violation deep in a FixUp consumer.
+        {
+            const u64 lu0 = reinterpret_cast<u64>(lType0.m_baseResources[0]);
+            const u64 lu1 = reinterpret_cast<u64>(lType1.m_baseResources[0]);
+            const bool lbLow = (lu0 + KU_TYPE0) <= 0x100000000ull && (lu1 + KU_TYPE1) <= 0x100000000ull;
+            *CgsDev::Log::gpDebugPrint << "[5b ROOT] GameDataRoot0="
+                                      << CgsDev::E_PRINTMODE_HEXONCE << lu0
+                                      << " GameDataRoot1="
+                                      << CgsDev::E_PRINTMODE_HEXONCE << lu1
+                                      << (lbLow ? " (below 4GB: OK for PointerFromU32)"
+                                                : " *** ABOVE 4GB -- PointerFromU32 slots WILL TRUNCATE ***")
+                                      << "\n";
+        }
 
         // [BRIDGE -- marked deviation from X360 RegisterResourceTypes 0x82667EA8] Populate the pool type
         // list from our existing singleton resource-type handlers. The X360 operator-new's ~50 Type objects

@@ -1,7 +1,7 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
-#include <cstdlib>                          // malloc
+#include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"   // LowMemory::Reserve (low-4GB root block)
 
 // BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
 // the heap the whole GameData resource system (ConstructResourceModule -> ResourceModule::Construct)
@@ -27,12 +27,24 @@ namespace BrnResource
         HeapResourceAllocator           s_DebugResourceAllocator;
         bool                            s_bDebugHeapBacked = false;
 
-        // Lazily malloc + adopt the backing block (avoids a 64 MB allocation at static init).
+        // Lazily reserve + adopt the backing block (avoids the reservation at static init).
+        //
+        // FLAG PC-platform leaf: the block MUST live below 4 GB. Everything the resource
+        // system touches is carved from this one root -- the MemoryModule root banks and
+        // all 27 pools (so every bnd2 resource payload and its in-place FixUp), plus all
+        // 24 memory-map allocators (so the AttribSys package heap: every Attrib::Alloc,
+        // the schema.vlt/.bin blobs and the Attrib vault's PtrN pointer fixups). The
+        // shipped serialised format stores those pointers in FOUR-BYTE slots, read back
+        // with the committed PointerFromU32 idiom; on the 32-bit X360 that is free, on
+        // x64 it only round-trips when the pointee is under 4 GB. The plain CRT malloc
+        // this used to be handed out ~0x21e_00000000 on Windows x64, so the first fixed-up
+        // slot dereference faulted (strlen on Attrib's truncated typenames pointer).
+        // See GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h.
         void EnsureDebugHeapBacked()
         {
             if (s_bDebugHeapBacked)
                 return;
-            void* lpBlock = malloc(KN_DEBUG_HEAP_SIZE);
+            void* lpBlock = CgsMemory::LowMemory::Reserve(KN_DEBUG_HEAP_SIZE);
             if (lpBlock)
                 s_DebugGeneralAllocator.AddCore(lpBlock, KN_DEBUG_HEAP_SIZE);
             s_bDebugHeapBacked = true;

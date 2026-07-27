@@ -7,6 +7,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"        // RaceCarEntityModuleIO::InputBuffer_PreScene/_PrePhysics
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"            // WorldEntityIO::InputBuffer_PreScene
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"              // PropEntityIO::InputBuffer_PreScene
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"                             // CrashIO::InputBuffer_PreScene
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                                              // BrnPhysics::PhysicsModuleIO::InputBuffer
 
 // WorldModule GUI/game-input -> entity-modules bridge -- owning header
 //   b5-decomp/src/GameSource/World/Bridges/WorldBridgeInputToEntityModules.h
@@ -42,4 +44,22 @@ namespace WorldModule
         BrnWorld::WorldEntityIO::InputBuffer_PreScene*          lpWorldEntityInputBuffer_PreScene,
         BrnWorld::PropEntityIO::InputBuffer_PreScene*           lpPropEntityInputBuffer_PreScene,
         const BrnWorldIO::UpdateInputBuffer*                    lpWorldInput);
+
+    // ---- ADDITIVE (world-drive wave 2026-07-27; same X360 TU -- their
+    //      addresses sit immediately below BridgeInputToEntityModules) -------
+
+    // WorldModule::Update @0x827D63E8's first input bridge: stage the world
+    // input's physics-facing state into the physics module's input buffer.
+    void BridgeInputToPhysicsModule(
+        void* lpWorldModule,
+        BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
+        const BrnWorldIO::UpdateInputBuffer* lpWorldInput);
+
+    // @ 0x827ADEE8 -- stage the crash module's pre-scene input: the player
+    // vehicle-controls word (+59), the crash network input interface, the game
+    // action queue, the vehicle-driver interface and the timer status.
+    void BridgeInputToCrashModule(
+        void* lpWorldModule,
+        BrnWorld::CrashIO::InputBuffer_PreScene* lpCrashInputBuffer_PreScene,
+        const BrnWorldIO::UpdateInputBuffer* lpWorldInput);
 }

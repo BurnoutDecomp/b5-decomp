@@ -58,9 +58,12 @@
 #include "GameSource/World/BrnWorldModuleIO_DispatchOutputBuffer.h"  // BrnWorldIO::DispatchOutputBuffer                         // BrnWorldIO::UpdateOutputBuffer (real home)
 
 namespace BrnWorldIO { struct DispatchInputBuffer; }
+namespace CgsMemory { class LinearMalloc; }
 struct BrnShaderConstantsFrame;
-namespace BrnTraffic { namespace BrnTrafficIO { struct TrafficToRaceCarInterface_PreScene; class InputBuffer_PostPhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; } }
+namespace BrnTraffic { namespace BrnTrafficIO { struct TrafficToRaceCarInterface_PreScene; class InputBuffer_PostPhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_PreScene; class OutputBuffer_PreScene; class OutputBuffer_PostPhysics; } }
 namespace BrnWorld { namespace CrashModuleIO { class OutputBuffer_PostScene; } }
+namespace BrnWorld { namespace CrashIO { struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; } }
+namespace BrnPhysics { namespace PhysicsModuleIO { class OutputBuffer; } }
 
 namespace BrnWorld
 {
@@ -187,6 +190,31 @@ namespace BrnWorld
         void Destruct()  override;
         void Update()    override { CgsModule::ModuleSingleBuffered::Update(); }
 
+        // DWARF :358 (virtual). @0x827D63E8 -- the real per-frame world UPDATE
+        // spine (the X360 vtable+76 slot the game module's DoUpdate_World and the
+        // loading spine dispatch through): input bridging, the four entity-module
+        // phase spines (pre-scene -> post-scene -> pre-physics -> post-physics)
+        // interleaved with the scene manager / physics / AI / crash module
+        // updates, then the output bridges and the environment-manager /
+        // environment-map tail. lpFrameAllocator is the per-frame world linear
+        // allocator (FreeAll'd by the caller each frame); the one Malloc carves
+        // the frame's triangle-cache collision generator (336896 = generator
+        // object 74752 + 0x40000 result buffer).
+        virtual void Update( BrnUpdateSet lUpdateSet,
+                             CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer,
+                             BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
+                             CgsMemory::LinearMalloc* lpFrameAllocator );
+
+        // DWARF :361. @0x827CFDE0 -- the trimmed update the game module runs
+        // while the boot-up video plays (updateSet & 0x20).
+        void UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
+                                   CgsModule::IOBufferStack* lpInputBufferStack,
+                                   CgsModule::IOBufferStack* lpOutputBufferStack,
+                                   const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer,
+                                   BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer );
+
         // ====================================================================
         // X360 WorldModule methods (DWARF-declared). BODIED so far: Construct,
         // Destruct, ExternalSceneQueriesUpdate, UpdatePhysicsNetworkCatchup,
@@ -228,6 +256,50 @@ namespace BrnWorld
             CgsModule::IOBufferStack* lpInputBufferStack,
             CgsModule::IOBufferStack* lpOutputBufferStack,
             const BrnWorldIO::DispatchInputBuffer* lpDispatchInputBuffer,
+            BrnUpdateSet lUpdateSet );
+
+        // @0x827BD1F0 (DWARF :398) -- the per-frame PRE-SCENE entity-module
+        // spine: race car pre-scene, the race-car -> traffic staging (+ the
+        // environment time-of-day copy into the traffic input), traffic
+        // pre-scene, the race-car -> WORLD staging, the WORLD ENTITY pre-scene
+        // (the PVS zone query + UpdateStream -- the world streamer's per-frame
+        // drive), prop pre-scene, then the traffic -> trigger staging and the
+        // trigger pre-scene.
+        void EntityModulePreSceneUpdate(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            TriggerEntityModuleIO::InputBuffer_PreScene* lpTriggerInputBuffer_PreScene,
+            TriggerEntityModuleIO::OutputBuffer_PreScene* lpTriggerOutputBuffer_PreScene,
+            BrnTraffic::BrnTrafficIO::InputBuffer_PreScene* lpTrafficInputBuffer_PreScene,
+            BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutputBuffer_PreScene,
+            BrnTraffic::BrnTrafficIO::InputBuffer_PostScene* lpTrafficInputBuffer_PostScene,
+            BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
+            RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarInputBuffer_PreScene,
+            RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene,
+            PropEntityIO::InputBuffer_PreScene* lpPropInputBuffer_PreScene,
+            PropEntityIO::OutputBuffer_PreScene* lpPropOutputBuffer_PreScene,
+            WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
+            WorldEntityIO::OutputBuffer_PreScene* lpWorldOutputBuffer_PreScene,
+            BrnUpdateSet lUpdateSet );
+
+        // @0x827D3F10 (DWARF :407) -- the per-frame POST-PHYSICS entity-module
+        // spine: race car, traffic, prop, WORLD ENTITY (the collision-world
+        // validate protocol + the streamer's GameData request flush) and crash,
+        // each staged from the physics module's output.
+        void EntityModulePostPhysicsUpdate(
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            const BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer,
+            BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
+            BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutputBuffer_PostPhysics,
+            RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpRaceCarInputBuffer_PostPhysics,
+            RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutputBuffer_PostPhysics,
+            CrashIO::InputBuffer_PostPhysics* lpCrashInputBuffer_PostPhysics,
+            CrashIO::OutputBuffer_PostPhysics* lpCrashOutputBuffer_PostPhysics,
+            PropEntityIO::InputBuffer_PostPhysics* lpPropInputBuffer_PostPhysics,
+            PropEntityIO::OutputBuffer_PostPhysics* lpPropOutputBuffer_PostPhysics,
+            WorldEntityIO::InputBuffer_PostPhysics* lpWorldInputBuffer_PostPhysics,
+            WorldEntityIO::OutputBuffer_PostPhysics* lpWorldOutputBuffer_PostPhysics,
             BrnUpdateSet lUpdateSet );
 
         // @0x827C3C58 -- the per-frame POST-SCENE entity-module spine: for each
@@ -290,9 +362,17 @@ namespace BrnWorld
             void* lpUnusedA, void* lpUnusedB,
             const BrnWorldIO::UpdateInputBuffer* lpWorldInput );
 
+        // RETYPED 2026-07-27 (world-drive wave) against the X360 body @0x827B06E0
+        // and its Update call site: the two middle arguments are the physics
+        // module's INPUT and OUTPUT buffers (not step/flag counters), and the last
+        // is the frame update set -- the body forwards (input, updateSet) to
+        // PhysicsModule::UpdateNetworkCatchup.
         void UpdatePhysicsNetworkCatchup(
-            void* lpInputBufferStack, void* lpOutputBufferStack,
-            s32 liCatchupSteps, void* lpPhysicsModuleOutputBuffer, s32 liFlags );
+            CgsModule::IOBufferStack* lpInputBufferStack,
+            CgsModule::IOBufferStack* lpOutputBufferStack,
+            const BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
+            const BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer,
+            BrnUpdateSet lUpdateSet );
 
         // @0x827D53B0 -- the 15-stage world prepare chain: base module -> vault +
         // district map -> scene manager (allocators + culling table) -> physics ->
@@ -446,6 +526,10 @@ namespace BrnWorld
         BrnGame::BrnCpuMonitors    mGlobalCpuMonitors; // (+6167576, 160-byte ctor copy)
         BrnGraphics::EnvironmentMap mEnvironmentMap;   // (+6168096)
         ShadowMap                  mShadowMap;         // (+6170336)
+        // The active player car's world position, latched by Update's tail for
+        // the environment-map / dispatch consumers (X360 stvx128 @ +6175680,
+        // right after the shadow map -- WorldModule::Update @0x827D63E8).
+        Vector4                    mPlayerCarPosition; // (+6175680)
         // The last director camera the dispatch pass consumed (X360 +6167744;
         // GenerateDispatchLists copies the frame camera into it each dispatch).
         BrnDirector::Camera::Camera mLastCameraInput;

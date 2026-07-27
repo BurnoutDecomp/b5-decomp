@@ -63,11 +63,15 @@ AttribSysGarbageCollector::~AttribSysGarbageCollector()
 {
 }
 
-// The GC callback body lives in the garbage-collector's own TU; trap here so the vtable links.
-void AttribSysGarbageCollector::ReleaseData(u8 /*luType*/, Attribute::HashInt /*lAssetId*/,
-                                            void* /*lpData*/, unsigned int /*luSize*/)
+// @ 0x827DD330 -- the GC callback (real body; the trap is retired). The X360's
+// four instructions accumulate the third GPR argument -- the released block's
+// DATA POINTER at every DataBlock::ReleaseAsset site -- into the debug counter
+// (a shipped quirk of the diagnostic; kept faithfully as the truncated add).
+// The engine statically owns every vault image, so no memory is freed here.
+void AttribSysGarbageCollector::ReleaseData(u8 /*luType*/, Attrib::Vault::AssetID /*lAssetId*/,
+                                            void* lpData, unsigned int /*luSize*/)
 {
-    CGS_ASSERT(false, "AttribSysGarbageCollector::ReleaseData (deferred TU)");
+    miTotalFreedSoFar += static_cast<s32>(reinterpret_cast<uintptr_t>(lpData));
 }
 
 // @ 0x8280AD50 -- one-time construction. Builds the base module, the GC, vault array and debug
@@ -349,7 +353,9 @@ void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegis
     {
         // Placement-construct the schema vault over the request's serialised image. (The X360
         // build passes the schema-vault storage in as the Vault ctor's `this`.)
-        Attrib::ExportManager& lExportPolicies = Attrib::Database::Get().GetExportPolicies();
+        // X360 @0x8280E4A0 calls GetExportPolicies pre-database (no Get() -- the
+        // database singleton does not exist yet at schema registration).
+        Attrib::ExportManager& lExportPolicies = Attrib::Database::GetExportPolicies();
         lpNewVault = new (mpSchemaVault) Attrib::Vault(
             lExportPolicies,
             /*lAssetId*/ 0,

@@ -48,6 +48,17 @@
 #include "GameSource/World/Bridges/WorldBridgeCrashToEntityModules.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToScene.h"
+// ---- the world-drive (Update @0x827D63E8) bridge families -------------------
+#include "GameSource/World/Bridges/WorldBridgeInputToEntityModules.h"
+#include "GameSource/World/Bridges/WorldBridgeInputToAI.h"
+#include "GameSource/World/Bridges/WorldBridgeEntityModulesToAI.h"
+#include "GameSource/World/Bridges/WorldBridgeEntityModulesToCrash.h"
+#include "GameSource/World/Bridges/WorldBridgeEntityModulesToPhysics.h"
+#include "GameSource/World/Bridges/WorldBridgeAIToEntityModules.h"
+#include "GameSource/World/Bridges/WorldBridgePhysicsToEntityModules.h"
+#include "GameSource/World/Bridges/WorldBridgePhysicsToScene.h"
+#include "GameSource/World/Bridges/WorldBridgeSceneToPhysics.h"
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // the frame collision generator Update carves
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/BrnWorldModule.h"
 
@@ -461,14 +472,20 @@ WorldModule::ExternalSceneQueriesUpdate()
 // ============================================================================
 void
 WorldModule::UpdatePhysicsNetworkCatchup(
-    void* lpInputBufferStack, void* lpOutputBufferStack,
-    s32 liCatchupSteps, void* lpPhysicsModuleOutputBuffer, s32 liFlags )
+    CgsModule::IOBufferStack* lpInputBufferStack,
+    CgsModule::IOBufferStack* lpOutputBufferStack,
+    const BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
+    const BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer,
+    BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT( lpInputBufferStack != 0, "lpInputBufferStack != NULL" );
-    CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" );
-    CGS_ASSERT( lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL" );
+    CGS_ASSERT( lpInputBufferStack != 0, "lpInputBufferStack != NULL" );   // X360 cpp:2305
+    CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" ); // X360 cpp:2306
+    CGS_ASSERT( lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL" ); // :2307
 
-    mPhysicsModule.UpdateNetworkCatchup( liCatchupSteps, liFlags );
+    // X360: PhysicsModule::UpdateNetworkCatchup(this + 1561376, a4, a6) -- the
+    // physics INPUT buffer and the frame update set (the output buffer is only
+    // null-checked here).
+    mPhysicsModule.UpdateNetworkCatchup( lpPhysicsModuleInputBuffer, lUpdateSet );
 }
 
 
@@ -750,7 +767,7 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             }
             lpSceneInput->UnlockForWrite();
 
-            mSceneModule.Update( lpInputBufferStack, lpOutputBufferStack,
+            mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
                                  lpSceneInput, lpSceneOutput, true );
 
             lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput );
@@ -775,7 +792,7 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                 lpInputBufferStack, lpOutputBufferStack, lpSceneInput, lpAllocatorList );
             lpSceneInput->UnlockForWrite();
 
-            mSceneModule.Update( lpInputBufferStack, lpOutputBufferStack,
+            mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
                                  lpSceneInput, lpSceneOutput, true );
 
             lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput );
@@ -853,7 +870,7 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                     this, lpSceneInput, lpTrafficOutput );
                 CgsModule::UnlockBuffersForIO( lpSceneInput, lpTrafficOutput );
 
-                mSceneModule.Update( lpInputBufferStack, lpOutputBufferStack,
+                mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
                                      lpSceneInput, lpSceneOutput, true );
 
                 lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput );
@@ -899,7 +916,7 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                     *lpWorldEntityOutput->GetSceneInputInterface() );
                 CgsModule::UnlockBuffersForIO( lpSceneInput, lpWorldEntityOutput );
 
-                mSceneModule.Update( lpInputBufferStack, lpOutputBufferStack,
+                mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
                                      lpSceneInput, lpSceneOutput, true );
 
                 lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput );
@@ -958,7 +975,7 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                     this, lpSceneInput, lpPropOutput );
                 CgsModule::UnlockBuffersForIO( lpSceneInput, lpPropOutput );
 
-                mSceneModule.Update( lpInputBufferStack, lpOutputBufferStack,
+                mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
                                      lpSceneInput, lpSceneOutput, true );
 
                 lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput );
@@ -1540,7 +1557,7 @@ WorldModule::EntityModulePostSceneUpdate(
         PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
 
         PerfMonCpu::StartMonitor( miSceneManagerQueryPM );
-        mSceneModule.UpdateQueries( lpInputBufferStack, lpOutputBufferStack,
+        mSceneModule.ProcessSceneQueries( lpInputBufferStack, lpOutputBufferStack,
                                     lpQueryInput, lpQueryOutput );
         PerfMonCpu::StopMonitor( miSceneManagerQueryPM );
 
@@ -1593,7 +1610,7 @@ WorldModule::EntityModulePostSceneUpdate(
         PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Traffic_Bridge );
 
         PerfMonCpu::StartMonitor( miSceneManagerQueryPM );
-        mSceneModule.UpdateQueries( lpInputBufferStack, lpOutputBufferStack,
+        mSceneModule.ProcessSceneQueries( lpInputBufferStack, lpOutputBufferStack,
                                     lpQueryInput, lpQueryOutput );
         PerfMonCpu::StopMonitor( miSceneManagerQueryPM );
 
@@ -1657,7 +1674,7 @@ WorldModule::EntityModulePostSceneUpdate(
             CgsModule::UnlockBuffersForIO( lpQueryInput, lpTriggerOutput );
 
             PerfMonCpu::StartMonitor( miSceneManagerQueryPM );
-            mSceneModule.UpdateQueries( lpInputBufferStack, lpOutputBufferStack,
+            mSceneModule.ProcessSceneQueries( lpInputBufferStack, lpOutputBufferStack,
                                         lpQueryInput, lpQueryOutput );
             PerfMonCpu::StopMonitor( miSceneManagerQueryPM );
 
@@ -1676,6 +1693,1169 @@ WorldModule::EntityModulePostSceneUpdate(
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Triggers );
 }
 
+
+
+// ============================================================================
+// EntityModulePreSceneUpdate  @ 0x827BD1F0   (DWARF BrnWorldModule.h:398)
+//
+// The per-frame PRE-SCENE entity-module spine:
+//   * race car pre-scene (bracketed by NetworkAIRaceCar + RaceCar UT monitors);
+//   * the race-car -> traffic staging (pre-scene + post-scene + post-physics
+//     traffic inputs primed from the race-car pre-scene output) and the
+//     environment time-of-day copy into the traffic pre-scene input;
+//   * traffic pre-scene;
+//   * the race-car -> WORLD staging, then the WORLD ENTITY pre-scene -- the PVS
+//     zone query + UpdateStream, i.e. the world streamer's per-frame drive. The
+//     X360 loads the simulated camera position from this+6167792 (the last
+//     director camera's position row) into v1 for the call;
+//   * prop pre-scene (race-car + world staged in first), via the prop module's
+//     X360 vtbl+68 slot (devirtualised per the PC convention);
+//   * the traffic -> trigger staging, then trigger pre-scene (X360 vtbl+64).
+// ============================================================================
+void
+WorldModule::EntityModulePreSceneUpdate(
+    CgsModule::IOBufferStack* lpInputBufferStack,
+    CgsModule::IOBufferStack* lpOutputBufferStack,
+    TriggerEntityModuleIO::InputBuffer_PreScene* lpTriggerInputBuffer_PreScene,
+    TriggerEntityModuleIO::OutputBuffer_PreScene* lpTriggerOutputBuffer_PreScene,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PreScene* lpTrafficInputBuffer_PreScene,
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutputBuffer_PreScene,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostScene* lpTrafficInputBuffer_PostScene,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
+    RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarInputBuffer_PreScene,
+    RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene,
+    PropEntityIO::InputBuffer_PreScene* lpPropInputBuffer_PreScene,
+    PropEntityIO::OutputBuffer_PreScene* lpPropOutputBuffer_PreScene,
+    WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
+    WorldEntityIO::OutputBuffer_PreScene* lpWorldOutputBuffer_PreScene,
+    BrnUpdateSet lUpdateSet )
+{
+    using namespace CgsDev;
+
+    // ---- race car ----------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RaceCar );
+
+    mRaceCarEntityModule.PreSceneUpdate( lpRaceCarInputBuffer_PreScene,
+                                         lpRaceCarOutputBuffer_PreScene, lUpdateSet );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RaceCar );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+
+    // ---- race car -> traffic staging + the env time-of-day copy ------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Traffic );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Traffic_Bridge );
+
+    CgsModule::LockBuffersForIO( lpTrafficInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+    lpTrafficInputBuffer_PostScene->LockForWrite();
+    lpTrafficInputBuffer_PostPhysics->LockForWrite();
+    ::WorldModule::BridgeRaceCarModuleToTrafficModule_PreScene(
+        this, lpTrafficInputBuffer_PreScene, lpTrafficInputBuffer_PostScene,
+        lpTrafficInputBuffer_PostPhysics, lpRaceCarOutputBuffer_PreScene );
+    lpTrafficInputBuffer_PostPhysics->UnlockForWrite();
+    lpTrafficInputBuffer_PostScene->UnlockForWrite();
+    CgsModule::UnlockBuffersForIO( lpTrafficInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+
+    // The environment manager's current time-of-day seconds into the traffic
+    // input (X360 raw f32 store: trafficPreIn+13072 <- this+1995876).
+    lpTrafficInputBuffer_PreScene->LockForWrite();
+    lpTrafficInputBuffer_PreScene->SetTimeOfDaySeconds( mEnvironmentManager.GetCurrTimeOfDay() );
+    lpTrafficInputBuffer_PreScene->UnlockForWrite();
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Traffic_Bridge );
+
+    mTrafficEntityModule.PreSceneUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                         lpTrafficInputBuffer_PreScene,
+                                         lpTrafficOutputBuffer_PreScene, lUpdateSet );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Traffic );
+
+    // ---- WORLD entity module (the PVS query + streamer drive) --------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+
+    CgsModule::LockBuffersForIO( lpWorldInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+    ::WorldModule::BridgeRaceCarModuleToWorldModule_PreScene(
+        this, lpWorldInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+    CgsModule::UnlockBuffersForIO( lpWorldInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+
+    // v1 = the last director camera's position row (X360 lvx128 this+6167792).
+    mWorldEntityModule.PreSceneUpdate( lpWorldInputBuffer_PreScene,
+                                       lpWorldOutputBuffer_PreScene,
+                                       mLastCameraInput.GetPosition(), lUpdateSet );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- prop --------------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StartMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StartMonitor( miPhysicsPropSummaryPM );
+    PerfMonCpu::StartMonitor( miPhysicsPropBridgePM );
+
+    CgsModule::LockBuffersForIO( lpPropInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+    ::WorldModule::BridgeRaceCarModuleToPropModule_PreScene(
+        this, lpPropInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene, lUpdateSet );
+    CgsModule::UnlockBuffersForIO( lpPropInputBuffer_PreScene, lpRaceCarOutputBuffer_PreScene );
+
+    CgsModule::LockBuffersForIO( lpPropInputBuffer_PreScene, lpWorldOutputBuffer_PreScene );
+    ::WorldModule::BridgeWorldModuleToPropModule_PreScene(
+        this, lpPropInputBuffer_PreScene, lpWorldOutputBuffer_PreScene );
+    CgsModule::UnlockBuffersForIO( lpPropInputBuffer_PreScene, lpWorldOutputBuffer_PreScene );
+
+    PerfMonCpu::StopMonitor( miPhysicsPropBridgePM );
+
+    PerfMonCpu::StartMonitor( miPhysicsPropPreSceneUpdatePM );
+    // X360 (*(vtbl(mPropEntityModule) + 68)) -- devirtualised.
+    mPropEntityModule.PreSceneUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                      lpPropInputBuffer_PreScene,
+                                      lpPropOutputBuffer_PreScene, lUpdateSet );
+    PerfMonCpu::StopMonitor( miPhysicsPropPreSceneUpdatePM );
+
+    PerfMonCpu::StopMonitor( miPhysicsPropSummaryPM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StopMonitor( miPhysicsSummaryPM );
+
+    // ---- trigger -----------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Triggers );
+
+    CgsModule::LockBuffersForIO( lpTriggerInputBuffer_PreScene, lpTrafficOutputBuffer_PreScene );
+    ::WorldModule::BridgeTrafficToTrigger_PreScene(
+        this, lpTriggerInputBuffer_PreScene, lpTrafficOutputBuffer_PreScene );
+    CgsModule::UnlockBuffersForIO( lpTriggerInputBuffer_PreScene, lpTrafficOutputBuffer_PreScene );
+
+    // X360 (*(vtbl(mTriggerEntityModule) + 64)) -- devirtualised.
+    mTriggerEntityModule.PreSceneUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                         lpTriggerInputBuffer_PreScene,
+                                         lpTriggerOutputBuffer_PreScene, lUpdateSet );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Triggers );
+}
+
+
+// ============================================================================
+// EntityModulePostPhysicsUpdate  @ 0x827D3F10   (DWARF BrnWorldModule.h:407)
+//
+// The per-frame POST-PHYSICS entity-module spine: race car, traffic, prop
+// (X360 vtbl+80), the WORLD ENTITY module (the collision-world validate
+// protocol + the streamer's GameData request flush) and the crash module, each
+// staged from the physics module's output buffer first.
+// ============================================================================
+void
+WorldModule::EntityModulePostPhysicsUpdate(
+    CgsModule::IOBufferStack* lpInputBufferStack,
+    CgsModule::IOBufferStack* lpOutputBufferStack,
+    const BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutputBuffer_PostPhysics,
+    RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpRaceCarInputBuffer_PostPhysics,
+    RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutputBuffer_PostPhysics,
+    CrashIO::InputBuffer_PostPhysics* lpCrashInputBuffer_PostPhysics,
+    CrashIO::OutputBuffer_PostPhysics* lpCrashOutputBuffer_PostPhysics,
+    PropEntityIO::InputBuffer_PostPhysics* lpPropInputBuffer_PostPhysics,
+    PropEntityIO::OutputBuffer_PostPhysics* lpPropOutputBuffer_PostPhysics,
+    WorldEntityIO::InputBuffer_PostPhysics* lpWorldInputBuffer_PostPhysics,
+    WorldEntityIO::OutputBuffer_PostPhysics* lpWorldOutputBuffer_PostPhysics,
+    BrnUpdateSet lUpdateSet )
+{
+    CGS_ASSERT( lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL" );
+
+    using namespace CgsDev;
+
+    // ---- race car ----------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
+
+    CgsModule::LockBuffersForIO( lpRaceCarInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+    ::WorldModule::BridgePhysicsModuleToRaceCarModule_PostPhysics(
+        this, lpRaceCarInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+    CgsModule::UnlockBuffersForIO( lpRaceCarInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
+
+    mRaceCarEntityModule.PostPhysicsUpdate( lpRaceCarInputBuffer_PostPhysics,
+                                            lpRaceCarOutputBuffer_PostPhysics, lUpdateSet );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RaceCar );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+
+    // ---- traffic -----------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Traffic );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Traffic_Bridge );
+
+    CgsModule::LockBuffersForIO( lpTrafficInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+    ::WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics(
+        this, lpTrafficInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+    CgsModule::UnlockBuffersForIO( lpTrafficInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Traffic_Bridge );
+
+    mTrafficEntityModule.PostPhysicsUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                            lpTrafficInputBuffer_PostPhysics,
+                                            lpTrafficOutputBuffer_PostPhysics, lUpdateSet );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Traffic );
+
+    // ---- prop --------------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StartMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StartMonitor( miPhysicsPropSummaryPM );
+    PerfMonCpu::StartMonitor( miPhysicsPropBridgePM );
+
+    CgsModule::LockBuffersForIO( lpPropInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+    ::WorldModule::BridgePhysicsModuleToPropModule_PostPhysics(
+        this, lpPropInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+    CgsModule::UnlockBuffersForIO( lpPropInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+
+    PerfMonCpu::StopMonitor( miPhysicsPropBridgePM );
+
+    PerfMonCpu::StartMonitor( miPhysicsPropPostPhysicsUpdatePM );
+    // X360 (*(vtbl(mPropEntityModule) + 80)) -- devirtualised.
+    mPropEntityModule.PostPhysicsUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                         lpPropInputBuffer_PostPhysics,
+                                         lpPropOutputBuffer_PostPhysics, lUpdateSet );
+    PerfMonCpu::StopMonitor( miPhysicsPropPostPhysicsUpdatePM );
+
+    PerfMonCpu::StopMonitor( miPhysicsPropSummaryPM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StopMonitor( miPhysicsSummaryPM );
+
+    // ---- WORLD entity module (validate protocol + streamer request flush) --
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    mWorldEntityModule.PostPhysicsUpdate( lpWorldInputBuffer_PostPhysics,
+                                          lpWorldOutputBuffer_PostPhysics, lUpdateSet );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- crash -------------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_CrashManager );
+
+    CgsModule::LockBuffersForIO( lpCrashInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer,
+                                 lpTrafficOutputBuffer_PostPhysics );
+    ::WorldModule::BridgePhysicsModuleToCrashModule_PostPhysics(
+        this, lpCrashInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer );
+    ::WorldModule::BridgeTrafficToCrashModule_PostPhysics(
+        this, lpCrashInputBuffer_PostPhysics, lpTrafficOutputBuffer_PostPhysics );
+    CgsModule::UnlockBuffersForIO( lpCrashInputBuffer_PostPhysics, lpPhysicsModuleOutputBuffer,
+                                   lpTrafficOutputBuffer_PostPhysics );
+
+    mCrashModule.PostPhysicsUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                    lpCrashInputBuffer_PostPhysics,
+                                    lpCrashOutputBuffer_PostPhysics, lUpdateSet );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_CrashManager );
+}
+
+
+// ============================================================================
+// UpdateForBootUpVideo  @ 0x827CFDE0   (DWARF BrnWorldModule.h:361)
+//
+// The trimmed world update the game module runs while the boot-up video plays
+// (updateSet & 0x20): drain the world in-event queue into the traffic
+// post-physics input, run the world-entity validation protocol, tick traffic
+// post-physics, then flush the world-entity resource requests + status and the
+// traffic GUI events into the update output.
+// ============================================================================
+void
+WorldModule::UpdateForBootUpVideo( BrnUpdateSet lUpdateSet,
+                                   CgsModule::IOBufferStack* lpInputBufferStack,
+                                   CgsModule::IOBufferStack* lpOutputBufferStack,
+                                   const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer,
+                                   BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer )
+{
+    WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutput_PostPhysics = 0;
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInput_PostPhysics = 0;
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutput_PostPhysics = 0;
+
+    lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput_PostPhysics, "WorldEntityPostPhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PostPhysics, "TrafficPostPhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostPhysics, "TrafficPostPhysics" );
+    // PC Construct restoration (see WorldModule::Prepare's SCENE stage).
+    lpWorldEntityOutput_PostPhysics->Construct();
+    lpTrafficInput_PostPhysics->Construct();
+    lpTrafficOutput_PostPhysics->Construct();
+
+    // Drain the world in-event queue into the traffic post-physics action queue.
+    // FLAG cross-home cast (the committed bridge precedent): the traffic input's
+    // game-action member is an opaque 13328-byte storage stand-in, but it IS the
+    // same CgsModule::VariableEventQueue<13312,16> the world input publishes (the
+    // X360 calls VariableEventQueue<13312,16>::Append on it directly).
+    lpUpdateInputBuffer->LockForRead();
+    lpTrafficInput_PostPhysics->LockForWrite();
+    reinterpret_cast<BrnWorldIO::GameActionQueue*>(
+        lpTrafficInput_PostPhysics->GetGameActionQueue() )->Append(
+            *lpUpdateInputBuffer->GetGameActionQueue() );
+    lpTrafficInput_PostPhysics->UnlockForWrite();
+    lpUpdateInputBuffer->UnlockForRead();
+
+    // The world-entity validation protocol.
+    // FLAG cross-home cast: BrnWorldIO::WorldEntityRequestInterface and
+    // WorldEntityIO::RequestInterface model the SAME X360 payload (the world
+    // module's update input carries the world-entity module's own request
+    // interface verbatim); the X360 passes the pointer straight through.
+    lpUpdateInputBuffer->LockForRead();
+    mWorldEntityModule.ProcessValidationRequests(
+        reinterpret_cast<const WorldEntityIO::RequestInterface*>(
+            lpUpdateInputBuffer->GetWorldEntityRequestInterface() ) );
+    lpUpdateInputBuffer->UnlockForRead();
+
+    lpWorldEntityOutput_PostPhysics->LockForWrite();
+    mWorldEntityModule.UpdateCollisionValidation( lpWorldEntityOutput_PostPhysics );
+    lpWorldEntityOutput_PostPhysics->UnlockForWrite();
+
+    mTrafficEntityModule.PostPhysicsUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                            lpTrafficInput_PostPhysics,
+                                            lpTrafficOutput_PostPhysics, lUpdateSet );
+
+    // Flush the world-entity requests + status and the traffic GUI events out.
+    lpWorldEntityOutput_PostPhysics->LockForWrite();
+    lpTrafficOutput_PostPhysics->LockForWrite();
+    lpUpdateOutputBuffer->LockForWrite();
+
+    lpUpdateOutputBuffer->GetResourceRequestResourceInterface()->Append(
+        *static_cast<const WorldEntityIO::OutputBuffer_PostPhysics*>(
+            lpWorldEntityOutput_PostPhysics )->GetResourceRequestInterface() );
+    lpUpdateOutputBuffer->SetWorldEntityStatusInterface(
+        static_cast<const WorldEntityIO::OutputBuffer_PostPhysics*>(
+            lpWorldEntityOutput_PostPhysics )->GetStatusInterface() );
+    // [FLAG PC boot gate] the traffic GUI-event forward
+    // (VariableEventQueue<32768,16>::Append of the traffic post-physics output's
+    // GUI queue into the update output's GUI queue) is deferred with the traffic
+    // module: the traffic OutputBuffer_PostPhysics slice has no GUI-event queue
+    // accessor committed yet, and the gated traffic PostPhysicsUpdate stages
+    // nothing into it. Restore with the traffic post-physics IO pass.
+
+    lpUpdateOutputBuffer->UnlockForWrite();
+    lpTrafficOutput_PostPhysics->UnlockForWrite();
+    lpWorldEntityOutput_PostPhysics->UnlockForWrite();
+
+    lpOutputBufferStack->DestroyIOBuffer( &lpTrafficOutput_PostPhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpTrafficInput_PostPhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpWorldEntityOutput_PostPhysics );
+}
+
+
+// ============================================================================
+// Update  @ 0x827D63E8   (DWARF BrnWorldModule.h:358 -- the X360 vtable+76 slot)
+//
+// The real per-frame world UPDATE spine. Frame shape (X360, reproduced in
+// order):
+//   1. create the frame IO buffers (physics / scene / trigger / AI / traffic /
+//      crash) and carve the frame's triangle-cache collision generator from the
+//      per-frame world linear allocator (one 336896-byte Malloc: the generator
+//      object + its 0x40000 result buffer);
+//   2. debug component + player-vehicle-controls copies;
+//   3. input bridges (physics / crash / game actions / race car / entity
+//      modules), then the PRE-SCENE spine and the pre-scene output bridges;
+//   4. crash pre-scene; the pre-scene -> scene/physics staging;
+//   5. physics cached positions; StartUpdateTriangleCache; the scene manager
+//      UpdateScene pass; the POST-SCENE spine (in EntityModulePostSceneUpdate);
+//      AI update; physics network catch-up; the PRE-PHYSICS spine;
+//   6. physics post-scene + scene queries round-trip + physics update + the
+//      second scene UpdateScene pass (post-physics);
+//   7. the POST-PHYSICS spine (world streamer request flush rides it), the
+//      output bridges, the environment manager/map tail and the player-car
+//      position/speed latch.
+// ============================================================================
+void
+WorldModule::Update( BrnUpdateSet lUpdateSet,
+                     CgsModule::IOBufferStack* lpInputBufferStack,
+                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                     const BrnWorldIO::UpdateInputBuffer* lpUpdateInputBuffer,
+                     BrnWorldIO::UpdateOutputBuffer* lpUpdateOutputBuffer,
+                     CgsMemory::LinearMalloc* lpFrameAllocator )
+{
+    using namespace CgsDev;
+
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+
+    CGS_ASSERT( lpInputBufferStack != 0, "lpInputBufferStack != NULL" );   // X360 cpp:1248
+    CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" ); // X360 cpp:1249
+
+    // ---- the frame IO buffers ---------------------------------------------
+    BrnPhysics::PhysicsModuleIO::InputBuffer*  lpPhysicsInput  = 0;
+    BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsOutput = 0;
+    CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
+    TriggerEntityModuleIO::InputBuffer_PreScene*   lpTriggerInput_PreScene  = 0;
+    TriggerEntityModuleIO::OutputBuffer_PreScene*  lpTriggerOutput_PreScene = 0;
+    TriggerEntityModuleIO::InputBuffer_PostScene*  lpTriggerInput_PostScene  = 0;
+    TriggerEntityModuleIO::OutputBuffer_PostScene* lpTriggerOutput_PostScene = 0;
+    TriggerEntityModuleIO::InputBuffer_PrePhysics*  lpTriggerInput_PrePhysics  = 0;
+    TriggerEntityModuleIO::OutputBuffer_PrePhysics* lpTriggerOutput_PrePhysics = 0;
+    BrnAI::AIModuleIO::OutputBuffer* lpAIOutput = 0;
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostScene*   lpTrafficInput_PostScene   = 0;
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInput_PostPhysics = 0;
+    CrashIO::InputBuffer_PreScene*     lpCrashInput_PreScene     = 0;
+    CrashIO::OutputBuffer_PreScene*    lpCrashOutput_PreScene    = 0;
+    CrashIO::InputBuffer_PostPhysics*  lpCrashInput_PostPhysics  = 0;
+    CrashIO::OutputBuffer_PostPhysics* lpCrashOutput_PostPhysics = 0;
+
+    lpInputBufferStack->CreateIOBuffer( &lpPhysicsInput, "Physics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpPhysicsOutput, "Physics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
+    lpInputBufferStack->CreateIOBuffer( &lpTriggerInput_PreScene, "TriggerPreScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpTriggerOutput_PreScene, "TriggerPreScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpTriggerInput_PostScene, "TriggerPostScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpTriggerOutput_PostScene, "TriggerPostScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpTriggerInput_PrePhysics, "TriggerPrePhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpTriggerOutput_PrePhysics, "TriggerPrePhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpAIOutput, "AI" );
+    lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PostScene, "TrafficPostScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PostPhysics, "TrafficPostPhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpCrashInput_PreScene, "CrashPreScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpCrashOutput_PreScene, "CrashPreScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpCrashInput_PostPhysics, "CrashPostPhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpCrashOutput_PostPhysics, "CrashPostPhysics" );
+    // PC Construct restoration (see WorldModule::Prepare's SCENE stage; the X360
+    // CreateIOBuffer<T> stack template runs T::Construct after the alloc).
+    lpPhysicsInput->Construct();
+    lpPhysicsOutput->Construct();
+    lpSceneOutput->Construct();
+    lpTriggerInput_PreScene->Construct();
+    lpTriggerOutput_PreScene->Construct();
+    lpTriggerInput_PostScene->Construct();
+    lpTriggerOutput_PostScene->Construct();
+    lpTriggerInput_PrePhysics->Construct();
+    lpTriggerOutput_PrePhysics->Construct();
+    lpAIOutput->Construct();
+    lpTrafficInput_PostScene->Construct();
+    lpTrafficInput_PostPhysics->Construct();
+    lpCrashInput_PreScene->Construct();
+    lpCrashOutput_PreScene->Construct();
+    lpCrashInput_PostPhysics->Construct();
+    lpCrashOutput_PostPhysics->Construct();
+
+    // ---- the frame's triangle-cache collision generator --------------------
+    // ONE carve from the per-frame world allocator: the generator object at the
+    // base + its 0x40000-byte collision result region (74752 + 0x40000 == 336896).
+    void* lpCollisionGeneratorMemory = lpFrameAllocator->Malloc( 336896 );
+    CgsSceneManager::CgsCollision::BaseCollisionGenerator* lpCollisionGenerator =
+        static_cast<CgsSceneManager::CgsCollision::BaseCollisionGenerator*>(
+            lpCollisionGeneratorMemory );
+    lpCollisionGenerator->Construct();
+
+    // ---- pre-scene output + pre-physics input buffers ----------------------
+    RaceCarEntityModuleIO::OutputBuffer_PreScene*   lpRaceCarOutput_PreScene = 0;
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutput_PreScene = 0;
+    PropEntityIO::OutputBuffer_PreScene*            lpPropOutput_PreScene    = 0;
+    WorldEntityIO::OutputBuffer_PreScene*           lpWorldEntityOutput_PreScene = 0;
+    RaceCarEntityModuleIO::InputBuffer_PrePhysics*  lpRaceCarInput_PrePhysics = 0;
+    BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics* lpTrafficInput_PrePhysics = 0;
+    PropEntityIO::InputBuffer_PrePhysics*           lpPropInput_PrePhysics   = 0;
+    CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInput_Update = 0;
+
+    lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput_PreScene, "RaceCarPreScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PreScene, "TrafficPreScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpPropOutput_PreScene, "PropPreScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput_PreScene, "WorldEntityPreScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpRaceCarInput_PrePhysics, "RaceCarPrePhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PrePhysics, "TrafficPrePhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpPropInput_PrePhysics, "PropPrePhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpSceneInput_Update, "SceneInput_Update" );
+    lpRaceCarOutput_PreScene->Construct();
+    lpTrafficOutput_PreScene->Construct();
+    lpPropOutput_PreScene->Construct();
+    lpWorldEntityOutput_PreScene->Construct();
+    lpRaceCarInput_PrePhysics->Construct();
+    lpTrafficInput_PrePhysics->Construct();
+    lpPropInput_PrePhysics->Construct();
+    lpSceneInput_Update->Construct();
+
+    lpUpdateInputBuffer->LockForRead();
+
+    // ---- debug component (excluded from the frame totals) -------------------
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_TotalUpdate );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_EachUpdate );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_DebugManager );
+
+    mDebugComponent.Update( lpUpdateInputBuffer->GetDebugController() );
+    lpUpdateOutputBuffer->LockForWrite();
+    lpUpdateOutputBuffer->SetWorldWantsDebugControllerFocus(
+        mDebugComponent.GetWantsDebugControllerFocus() );
+    lpUpdateOutputBuffer->UnlockForWrite();
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_DebugManager );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_EachUpdate );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_TotalUpdate );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- player vehicle controls copy ---------------------------------------
+    // [FLAG PC boot gate] UpdateInputBuffer::GetPlayerVehicleControls is still the
+    // WorldLinkStubs read-lock stub (its producing module is boot-gated) and returns
+    // NULL; the faithful setter is an unguarded 60-byte memcpy, so skip the copy
+    // while the source is absent. Delete the guard when the real accessor lands.
+    {
+        const BrnWorldIO::PlayerVehicleControls* lpControls =
+            lpUpdateInputBuffer->GetPlayerVehicleControls();
+        if ( lpControls != 0 )
+        {
+            lpUpdateOutputBuffer->LockForWrite();
+            lpUpdateOutputBuffer->SetPlayerVehicleControls( lpControls );
+            lpUpdateOutputBuffer->UnlockForWrite();
+        }
+    }
+
+    // ---- input bridges ------------------------------------------------------
+    CGS_ASSERT( lpPhysicsInput != 0, "lpInputBuffer" );   // X360 CgsModuleUtils.h:238
+    lpPhysicsInput->LockForWrite();
+    ::WorldModule::BridgeInputToPhysicsModule( this, lpPhysicsInput, lpUpdateInputBuffer );
+    lpPhysicsInput->UnlockForWrite();
+
+    CGS_ASSERT( lpCrashInput_PreScene != 0, "lpInputBuffer" );
+    lpCrashInput_PreScene->LockForWrite();
+    ::WorldModule::BridgeInputToCrashModule( this, lpCrashInput_PreScene, lpUpdateInputBuffer );
+    lpCrashInput_PreScene->UnlockForWrite();
+
+    HandleGameActions( lpPhysicsInput, lpTrafficInput_PostPhysics, 0, 0, lpUpdateInputBuffer );
+
+    // ---- pre-scene inputs + the input fan-out -------------------------------
+    RaceCarEntityModuleIO::InputBuffer_PreScene*   lpRaceCarInput_PreScene = 0;
+    BrnTraffic::BrnTrafficIO::InputBuffer_PreScene* lpTrafficInput_PreScene = 0;
+    PropEntityIO::InputBuffer_PreScene*            lpPropInput_PreScene    = 0;
+    WorldEntityIO::InputBuffer_PreScene*           lpWorldEntityInput_PreScene = 0;
+    lpInputBufferStack->CreateIOBuffer( &lpRaceCarInput_PreScene, "RaceCarPreScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpTrafficInput_PreScene, "TrafficPreScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpPropInput_PreScene, "PropPreScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpWorldEntityInput_PreScene, "WorldEntityPreScene" );
+    lpRaceCarInput_PreScene->Construct();
+    lpTrafficInput_PreScene->Construct();
+    lpPropInput_PreScene->Construct();
+    lpWorldEntityInput_PreScene->Construct();
+
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
+    CGS_ASSERT( lpRaceCarInput_PreScene != 0, "lpInputBuffer" );
+    lpRaceCarInput_PreScene->LockForWrite();
+    ::WorldModule::BridgeActionsToRaceCarModule( this, lpRaceCarInput_PreScene,
+                                                 lpUpdateInputBuffer );
+    lpRaceCarInput_PreScene->UnlockForWrite();
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RaceCar_Bridge );
+
+    lpRaceCarInput_PreScene->LockForWrite();
+    lpRaceCarInput_PrePhysics->LockForWrite();
+    lpTrafficInput_PreScene->LockForWrite();
+    lpTriggerInput_PreScene->LockForWrite();
+    lpTriggerInput_PostScene->LockForWrite();
+    lpWorldEntityInput_PreScene->LockForWrite();
+    lpPropInput_PreScene->LockForWrite();
+    ::WorldModule::BridgeInputToEntityModules(
+        this, lpTriggerInput_PreScene, lpTriggerInput_PostScene, lpTrafficInput_PreScene,
+        lpRaceCarInput_PreScene, lpRaceCarInput_PrePhysics, lpWorldEntityInput_PreScene,
+        lpPropInput_PreScene, lpUpdateInputBuffer );
+    lpPropInput_PreScene->UnlockForWrite();
+    lpWorldEntityInput_PreScene->UnlockForWrite();
+    lpTriggerInput_PostScene->UnlockForWrite();
+    lpTriggerInput_PreScene->UnlockForWrite();
+    lpTrafficInput_PreScene->UnlockForWrite();
+    lpRaceCarInput_PrePhysics->UnlockForWrite();
+    lpRaceCarInput_PreScene->UnlockForWrite();
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- PRE-SCENE spine ----------------------------------------------------
+    EntityModulePreSceneUpdate(
+        lpInputBufferStack, lpOutputBufferStack,
+        lpTriggerInput_PreScene, lpTriggerOutput_PreScene,
+        lpTrafficInput_PreScene, lpTrafficOutput_PreScene,
+        lpTrafficInput_PostScene, lpTrafficInput_PostPhysics,
+        lpRaceCarInput_PreScene, lpRaceCarOutput_PreScene,
+        lpPropInput_PreScene, lpPropOutput_PreScene,
+        lpWorldEntityInput_PreScene, lpWorldEntityOutput_PreScene,
+        lUpdateSet );
+
+    // ---- pre-scene output bridges -------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+
+    CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpPropOutput_PreScene );
+    ::WorldModule::BridgePropToOutput_PreScene( this, lpUpdateOutputBuffer,
+                                                lpPropOutput_PreScene );
+    CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpPropOutput_PreScene );
+
+    CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpWorldEntityOutput_PreScene,
+                                 lpRaceCarOutput_PreScene );
+    ::WorldModule::BridgeWorldEntityInfoToOutput( this, lpUpdateOutputBuffer,
+                                                  lpWorldEntityOutput_PreScene );
+    ::WorldModule::BridgeRaceCarEntityInfoToOutput_PreScene( this, lpUpdateOutputBuffer,
+                                                             lpRaceCarOutput_PreScene );
+    ::WorldModule::BridgeTrafficEntityInfoToOutput_PreScene( this, lpUpdateOutputBuffer,
+                                                             lpTrafficOutput_PreScene );
+    CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpWorldEntityOutput_PreScene,
+                                   lpRaceCarOutput_PreScene );
+
+    // Snapshot the traffic -> race-car pre-scene interface before its buffer dies
+    // (the X360 memcpy's the 544-byte block to the stack for the post-scene spine).
+    // FLAG cross-home: the buffer-nested and class-level spellings of
+    // TrafficToRaceCarInterface_PreScene model the SAME 544-byte payload; the
+    // snapshot is taken in the nested form and handed to the spine (which names
+    // the class-level one) through the documented adapter cast.
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene
+        lTrafficToRaceCar_PreScene;
+    lpTrafficOutput_PreScene->LockForRead();
+    {
+        // [FLAG PC boot gate] same seam as the controls copy above: the traffic
+        // pre-scene accessor is still the WorldLinkStubs null return, and the
+        // snapshot is a 544-byte structure copy. Skip it while the producer is gated.
+        const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene*
+            lpTrafficToRaceCar = lpTrafficOutput_PreScene->GetTrafficToRaceCarInterface_PreScene();
+        if ( lpTrafficToRaceCar != 0 )
+            lTrafficToRaceCar_PreScene = *lpTrafficToRaceCar;
+    }
+    lpTrafficOutput_PreScene->UnlockForRead();
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    lpInputBufferStack->DestroyIOBuffer( &lpWorldEntityInput_PreScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpPropInput_PreScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpTrafficInput_PreScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpRaceCarInput_PreScene );
+
+    // ---- crash pre-scene ----------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    PerfMonCpu::StartMonitor( miCrashModuleUpdatePM );
+
+    CgsModule::LockBuffersForIO( lpCrashInput_PreScene, lpRaceCarOutput_PreScene );
+    ::WorldModule::BridgeEntityModulesToCrashModule_PreScene(
+        this, lpCrashInput_PreScene, lpRaceCarOutput_PreScene );
+    CgsModule::UnlockBuffersForIO( lpCrashInput_PreScene, lpRaceCarOutput_PreScene );
+
+    mCrashModule.PreSceneUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                 lpCrashInput_PreScene, lpCrashOutput_PreScene, lUpdateSet );
+
+    PerfMonCpu::StopMonitor( miCrashModuleUpdatePM );
+
+    // ---- pre-scene -> scene / physics staging -------------------------------
+    CgsModule::LockBuffersForIO( lpSceneInput_Update, lpTriggerOutput_PreScene,
+                                 lpTrafficOutput_PreScene, lpRaceCarOutput_PreScene,
+                                 lpPropOutput_PreScene, lpWorldEntityOutput_PreScene );
+    ::WorldModule::BridgeEntityModulesToSceneModule_PreScene(
+        this, lpSceneInput_Update, lpTriggerOutput_PreScene, lpTrafficOutput_PreScene,
+        lpRaceCarOutput_PreScene, lpPropOutput_PreScene, lpWorldEntityOutput_PreScene );
+    CgsModule::UnlockBuffersForIO( lpSceneInput_Update, lpTriggerOutput_PreScene,
+                                   lpTrafficOutput_PreScene, lpRaceCarOutput_PreScene,
+                                   lpPropOutput_PreScene, lpWorldEntityOutput_PreScene );
+
+    CgsModule::LockBuffersForIO( lpPhysicsInput, lpRaceCarOutput_PreScene,
+                                 lpPropOutput_PreScene );
+    ::WorldModule::BridgeEntityModulesToPhysicsModule_PreScene(
+        this, lpPhysicsInput, lpRaceCarOutput_PreScene, lpPropOutput_PreScene );
+    CgsModule::UnlockBuffersForIO( lpPhysicsInput, lpRaceCarOutput_PreScene,
+                                   lpPropOutput_PreScene );
+
+    lpOutputBufferStack->DestroyIOBuffer( &lpWorldEntityOutput_PreScene );
+    lpOutputBufferStack->DestroyIOBuffer( &lpPropOutput_PreScene );
+    lpOutputBufferStack->DestroyIOBuffer( &lpTrafficOutput_PreScene );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- physics cached positions -------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Physics );
+    lpSceneInput_Update->LockForWrite();
+    mPhysicsModule.UpdateCachedPositions( lpSceneInput_Update );
+    lpSceneInput_Update->UnlockForWrite();
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Physics );
+
+    // ---- triangle cache + the first scene UpdateScene pass ------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    PerfMonCpu::StartMonitor( miSceneModuleUpdateContactsPM );
+
+    lpCollisionGenerator->Prepare(
+        static_cast<u8*>( lpCollisionGeneratorMemory ) + 74752, 0x40000 );
+    mSceneModule.StartUpdateTriangleCache( lpInputBufferStack, lpOutputBufferStack,
+                                           lpSceneInput_Update, lpCollisionGenerator );
+
+    PerfMonCpu::StopMonitor( miSceneModuleUpdateContactsPM );
+
+    PerfMonCpu::StartMonitor( miSceneManagerUpdatePM );
+    // X360 (*(vtbl(mSceneModule) + 64)) == UpdateScene; devirtualised.
+    mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
+                              lpSceneInput_Update, lpSceneOutput, false );
+    lpSceneInput_Update->LockForWrite();
+    lpSceneInput_Update->GetInSceneUpdateInterface()->Clear();
+    lpSceneInput_Update->UnlockForWrite();
+    PerfMonCpu::StopMonitor( miSceneManagerUpdatePM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- contact generation --------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StartMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StartMonitor( miSceneModuleUpdateContactsPM );
+    if ( ( lUpdateSet & 1 ) == 0 )
+    {
+        // X360 (*(vtbl(mSceneModule) + 72)) == UpdateContactGeneration; devirtualised.
+        mSceneModule.UpdateContactGeneration( lpInputBufferStack, lpOutputBufferStack,
+                                              lpSceneInput_Update, lpSceneOutput );
+    }
+    mSceneModule.EndUpdateTriangleCache( lpInputBufferStack, lpOutputBufferStack );
+    PerfMonCpu::StopMonitor( miSceneModuleUpdateContactsPM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StopMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+
+    lpInputBufferStack->DestroyIOBuffer( &lpSceneInput_Update );
+
+    // ---- post-scene buffers --------------------------------------------------
+    // [FLAG PC boot gate] the WORLD-ENTITY post-scene IO pair: the X360 creates
+    // WorldEntityIO::InputBuffer_PostScene / OutputBuffer_PostScene around the
+    // post-scene spine and destroys them straight after -- the spine itself never
+    // reads or writes them (they are not in its parameter list). Neither type is
+    // committed in BrnWorldEntityModuleIO.h yet, so the pair is omitted here; the
+    // observable frame is unchanged. Restore both with the world-entity post-scene
+    // IO pass.
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene* lpTrafficOutput_PostScene = 0;
+    RaceCarEntityModuleIO::OutputBuffer_PostScene*    lpRaceCarOutput_PostScene = 0;
+    PropEntityIO::OutputBuffer_PostScene*             lpPropOutput_PostScene    = 0;
+    lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostScene, "TrafficPostScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput_PostScene, "RaceCarPostScene" );
+    lpOutputBufferStack->CreateIOBuffer( &lpPropOutput_PostScene, "PropPostScene" );
+    lpTrafficOutput_PostScene->Construct();
+    lpRaceCarOutput_PostScene->Construct();
+    lpPropOutput_PostScene->Construct();
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    RaceCarEntityModuleIO::InputBuffer_PostScene* lpRaceCarInput_PostScene = 0;
+    PropEntityIO::InputBuffer_PostScene*          lpPropInput_PostScene    = 0;
+    lpInputBufferStack->CreateIOBuffer( &lpRaceCarInput_PostScene, "RaceCarPostScene" );
+    lpInputBufferStack->CreateIOBuffer( &lpPropInput_PostScene, "PropPostScene" );
+    lpRaceCarInput_PostScene->Construct();
+    lpPropInput_PostScene->Construct();
+
+    // ---- POST-SCENE spine ----------------------------------------------------
+    // (The world-entity post-scene pair is created/destroyed around the call per
+    // the X360 frame; the reviewed spine signature omits the pair -- the X360
+    // callee never touches it. The crash argument is the crash PRE-SCENE output;
+    // the committed spine still carries the minimal-slice CrashModuleIO::
+    // OutputBuffer_PostScene type [FLAG: type reconcile with the crash IO TU --
+    // the DWARF spells OutputBuffer_PreScene], hence the cast.)
+    EntityModulePostSceneUpdate(
+        lpInputBufferStack, lpOutputBufferStack,
+        lpTriggerInput_PrePhysics, lpTriggerInput_PostScene,
+        lpTrafficInput_PostScene,
+        reinterpret_cast<const BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene*>(
+            &lTrafficToRaceCar_PreScene ),
+        lpTrafficOutput_PostScene, lpTrafficInput_PostPhysics, lpTrafficInput_PrePhysics,
+        lpRaceCarInput_PostScene, lpRaceCarOutput_PostScene, lpRaceCarInput_PrePhysics,
+        reinterpret_cast<const CrashModuleIO::OutputBuffer_PostScene*>( lpCrashOutput_PreScene ),
+        lpPropInput_PostScene, lpPropOutput_PostScene,
+        lUpdateSet );
+    lpInputBufferStack->DestroyIOBuffer( &lpPropInput_PostScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpRaceCarInput_PostScene );
+
+    // ---- AI update -----------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI );
+
+    BrnAI::AIModuleIO::InputBuffer* lpAIInput = 0;
+    lpInputBufferStack->CreateIOBuffer( &lpAIInput, "AIInput" );
+    lpAIInput->Construct();
+
+    CgsModule::LockBuffersForIO( lpAIInput, lpTrafficOutput_PostScene,
+                                 lpRaceCarOutput_PostScene, lpSceneOutput,
+                                 lpRaceCarOutput_PreScene );
+    ::WorldModule::BridgeInputToAIModule( this, lpAIInput, lpUpdateInputBuffer );
+    ::WorldModule::BridgeTrafficModuleToAIModule_Update( this, lpAIInput,
+                                                         lpTrafficOutput_PostScene );
+    ::WorldModule::BridgeRaceCarModuleToAIModule_PostScene( this, lpAIInput,
+                                                            lpRaceCarOutput_PostScene );
+    ::WorldModule::BridgeRaceCarModuleToAIModule_PreScene( this, lpAIInput,
+                                                           lpRaceCarOutput_PreScene );
+    CgsModule::UnlockBuffersForIO( lpAIInput, lpTrafficOutput_PostScene,
+                                   lpRaceCarOutput_PostScene, lpSceneOutput,
+                                   lpRaceCarOutput_PreScene );
+
+    // The player-car-under-AI-control latch + the AI camera copy: the X360 pokes
+    // both straight into mAIModule's interior (this+0x5DFD00 camera <-
+    // mLastCameraInput; this+0x5DFE82 byte <- maeCarControls[player] == 2).
+    // [FLAG PC boot gate] the AI module's committed slice models that interior as
+    // opaque padding, so the two stores have no named home yet; the AI update
+    // below is gated inert, so the observable is unchanged. Restore both with
+    // the AI module TU (add SetPlayerUnderAIControl + the camera member).
+
+    PerfMonCpu::StartMonitor( miAIModuleUpdatePM );
+    // X360 (*(vtbl(mAIModule) + 68)) == Update; devirtualised.
+    mAIModule.Update( lpInputBufferStack, lpOutputBufferStack, lpAIInput, lpAIOutput,
+                      lUpdateSet );
+    PerfMonCpu::StopMonitor( miAIModuleUpdatePM );
+
+    lpInputBufferStack->DestroyIOBuffer( &lpAIInput );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_AI );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    lpOutputBufferStack->DestroyIOBuffer( &lpPropOutput_PostScene );
+    lpOutputBufferStack->DestroyIOBuffer( &lpRaceCarOutput_PostScene );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- physics network catch-up -------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StartMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StartMonitor( miPhysicsNetworkCatchupPM );
+    UpdatePhysicsNetworkCatchup( lpInputBufferStack, lpOutputBufferStack,
+                                 lpPhysicsInput, lpPhysicsOutput, lUpdateSet );
+    PerfMonCpu::StopMonitor( miPhysicsNetworkCatchupPM );
+    PerfMonCpu::StopMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Physics );
+
+    // ---- pre-physics buffers + AI staging -----------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    RaceCarEntityModuleIO::OutputBuffer_PrePhysics*   lpRaceCarOutput_PrePhysics = 0;
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics* lpTrafficOutput_PrePhysics = 0;
+    PropEntityIO::OutputBuffer_PrePhysics*            lpPropOutput_PrePhysics    = 0;
+    WorldEntityIO::InputBuffer_PostPhysics*           lpWorldEntityInput_PrePhysics = 0;
+    WorldEntityIO::OutputBuffer_PostPhysics*          lpWorldEntityOutput_PrePhysics = 0;
+    lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput_PrePhysics, "RaceCarPrePhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PrePhysics, "TrafficPrePhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpPropOutput_PrePhysics, "PropPrePhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpWorldEntityInput_PrePhysics, "WorldEntityPrePhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput_PrePhysics, "WorldEntityPrePhysics" );
+    lpRaceCarOutput_PrePhysics->Construct();
+    lpTrafficOutput_PrePhysics->Construct();
+    lpPropOutput_PrePhysics->Construct();
+    lpWorldEntityInput_PrePhysics->Construct();
+    lpWorldEntityOutput_PrePhysics->Construct();
+
+    lpRaceCarInput_PrePhysics->LockForWrite();
+    lpPropInput_PrePhysics->LockForWrite();
+    lpAIOutput->LockForRead();
+    ::WorldModule::BridgeAIToEntityModules_PrePhysics(
+        this, lpRaceCarInput_PrePhysics, lpPropInput_PrePhysics, lpAIOutput );
+    lpAIOutput->UnlockForRead();
+    lpPropInput_PrePhysics->UnlockForWrite();
+    lpRaceCarInput_PrePhysics->UnlockForWrite();
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- PRE-PHYSICS spine ---------------------------------------------------
+    EntityModulePrePhysicsUpdate(
+        lpInputBufferStack, lpOutputBufferStack,
+        lpTriggerInput_PrePhysics, lpTriggerOutput_PrePhysics,
+        lpSceneOutput,
+        lpTrafficInput_PrePhysics, lpTrafficOutput_PrePhysics,
+        lpTrafficOutput_PostScene,
+        lpRaceCarInput_PrePhysics, lpRaceCarOutput_PrePhysics,
+        lpPropInput_PrePhysics, lpPropOutput_PrePhysics,
+        lpWorldEntityInput_PrePhysics, lpWorldEntityOutput_PrePhysics,
+        lUpdateSet );
+
+    // ---- pre-physics -> physics / output staging -----------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    CgsModule::LockBuffersForIO( lpPhysicsInput, lpTrafficOutput_PrePhysics,
+                                 lpRaceCarOutput_PrePhysics, lpPropOutput_PrePhysics );
+    ::WorldModule::BridgeEntityModulesToPhysicsModule_PrePhysics(
+        this, lpPhysicsInput, lpTrafficOutput_PrePhysics, lpRaceCarOutput_PrePhysics,
+        lpPropOutput_PrePhysics );
+    CgsModule::UnlockBuffersForIO( lpPhysicsInput, lpTrafficOutput_PrePhysics,
+                                   lpRaceCarOutput_PrePhysics, lpPropOutput_PrePhysics );
+
+    CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpRaceCarOutput_PrePhysics,
+                                 lpTrafficOutput_PrePhysics, lpTriggerOutput_PrePhysics );
+    ::WorldModule::BridgeEntityModulesToOutput_PrePhysics(
+        this, lpUpdateOutputBuffer, lpRaceCarOutput_PrePhysics, lpTrafficOutput_PrePhysics,
+        lpTriggerOutput_PrePhysics );
+    CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpRaceCarOutput_PrePhysics,
+                                   lpTrafficOutput_PrePhysics, lpTriggerOutput_PrePhysics );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    lpOutputBufferStack->DestroyIOBuffer( &lpWorldEntityOutput_PrePhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpWorldEntityInput_PrePhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpPropOutput_PrePhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpTrafficOutput_PrePhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpRaceCarOutput_PrePhysics );
+
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    lpOutputBufferStack->DestroyIOBuffer( &lpTrafficOutput_PostScene );
+    lpOutputBufferStack->DestroyIOBuffer( &lpRaceCarOutput_PreScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpPropInput_PrePhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpTrafficInput_PrePhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpRaceCarInput_PrePhysics );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- physics post-scene + scene queries + physics update -----------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StartMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StartMonitor( miPhysicsBridgesPM );
+    CgsModule::LockBuffersForIO( lpPhysicsInput, lpAIOutput, lpCrashOutput_PreScene );
+    ::WorldModule::BridgeAIModuleToPhysicsModule( this, lpPhysicsInput, lpAIOutput );
+    ::WorldModule::BridgeCrashModuleToPhysicsModule( this, lpPhysicsInput,
+                                                     lpCrashOutput_PreScene );
+    CgsModule::UnlockBuffersForIO( lpPhysicsInput, lpAIOutput, lpCrashOutput_PreScene );
+    PerfMonCpu::StopMonitor( miPhysicsBridgesPM );
+
+    PerfMonCpu::StartMonitor( miPhysicsModulePreSceneUpdatePM );
+    mPhysicsModule.PostSceneUpdate( lpInputBufferStack, lpOutputBufferStack,
+                                    lpPhysicsInput, lpPhysicsOutput, lUpdateSet );
+    PerfMonCpu::StopMonitor( miPhysicsModulePreSceneUpdatePM );
+
+    CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneInput_PhysicsQueries = 0;
+    lpInputBufferStack->CreateIOBuffer( &lpSceneInput_PhysicsQueries, "SceneInput_PhysicsQueries" );
+    lpSceneInput_PhysicsQueries->Construct();
+
+    PerfMonCpu::StartMonitor( miPhysicsModuleGenerateSceneQueriesPM );
+    mPhysicsModule.GenerateSceneQueries( lpPhysicsOutput, lUpdateSet );
+    PerfMonCpu::StopMonitor( miPhysicsModuleGenerateSceneQueriesPM );
+
+    PerfMonCpu::StartMonitor( miPhysicsBridgesPM );
+    CgsModule::LockBuffersForIO( lpSceneInput_PhysicsQueries, lpPhysicsOutput );
+    ::WorldModule::BridgePhysicsSceneQueriesToScene( this, lpSceneInput_PhysicsQueries,
+                                                     lpPhysicsOutput );
+    CgsModule::UnlockBuffersForIO( lpSceneInput_PhysicsQueries, lpPhysicsOutput );
+    PerfMonCpu::StopMonitor( miPhysicsBridgesPM );
+
+    PerfMonCpu::StartMonitor( miSceneManagerQueryPM );
+    // X360 (*(vtbl(mSceneModule) + 68)) == ProcessSceneQueries; devirtualised.
+    mSceneModule.ProcessSceneQueries( lpInputBufferStack, lpOutputBufferStack,
+                                      lpSceneInput_PhysicsQueries, lpSceneOutput );
+    PerfMonCpu::StopMonitor( miSceneManagerQueryPM );
+
+    PerfMonCpu::StartMonitor( miPhysicsBridgesPM );
+    CgsModule::LockBuffersForIO( lpPhysicsInput, lpSceneOutput );
+    ::WorldModule::BridgeSceneQueryResultsToPhysics( this, lpPhysicsInput, lpSceneOutput );
+    ::WorldModule::BridgeSceneModuleToOutput( this, lpUpdateOutputBuffer, lpSceneOutput );
+    ::WorldModule::BridgeScenePotentialContactsToPhysics( this, lpPhysicsInput,
+                                                          lpSceneOutput );
+    CgsModule::UnlockBuffersForIO( lpPhysicsInput, lpSceneOutput );
+    PerfMonCpu::StopMonitor( miPhysicsBridgesPM );
+
+    lpInputBufferStack->DestroyIOBuffer( &lpSceneInput_PhysicsQueries );
+
+    PerfMonCpu::StartMonitor( miPhysicsModuleUpdatePM );
+    mPhysicsModule.Update( lpInputBufferStack, lpOutputBufferStack, lpPhysicsInput,
+                           lpPhysicsOutput, lUpdateSet );
+    PerfMonCpu::StopMonitor( miPhysicsModuleUpdatePM );
+
+    PerfMonCpu::StartMonitor( miPhysicsBridgesPM );
+    lpInputBufferStack->CreateIOBuffer( &lpSceneInput_Update, "SceneInput_Update" );
+    lpSceneInput_Update->Construct();
+    CgsModule::LockBuffersForIO( lpSceneInput_Update, lpPhysicsOutput );
+    ::WorldModule::BridgePhysicsSceneUpdateToScene( this, lpSceneInput_Update,
+                                                    lpPhysicsOutput );
+    CgsModule::UnlockBuffersForIO( lpSceneInput_Update, lpPhysicsOutput );
+    PerfMonCpu::StopMonitor( miPhysicsBridgesPM );
+    PerfMonCpu::StopMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Physics );
+
+    // ---- environment tail ----------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // X360: (*vtbl(mSkyDebugComponent))[0] -- the sky debug component's per-frame
+    // virtual Update (the environment-settings tuning page).
+    mSkyDebugComponent.Update();
+
+    // [FLAG PC boot gate] the environment time-of-day override + frame-delta
+    // staging (X360: when the director camera's override byte [camera+289] is
+    // set, mEnvironmentManager's time-of-day <- camera float [camera+256] * 3600;
+    // then env frame delta [env+4548] <- timer scale * timer delta from the
+    // world input's TimerStatusInterface). The committed Director camera slice
+    // has no named home for the two override fields and the committed
+    // EnvironmentManager slice none for the frame delta; the env Update below is
+    // gated inert, so the staging is unobservable. Restore with those TUs.
+
+    mEnvironmentManager.Update( mfLocalPlayerActiveRaceCarSpeed, lpUpdateOutputBuffer,
+                                mLastCameraInput.GetPosition() );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- AI post-physics -----------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI );
+
+    BrnAI::AIModuleIO::InputBuffer_PostPhysics* lpAIInput_PostPhysics = 0;
+    lpInputBufferStack->CreateIOBuffer( &lpAIInput_PostPhysics, "AIInputPostPhysics" );
+    lpAIInput_PostPhysics->Construct();
+
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI_Bridge );
+    CgsModule::LockBuffersForIO( lpAIInput_PostPhysics, lpPhysicsOutput );
+    ::WorldModule::BridgePhysicsModuleToAIModule_PostPhysics(
+        this, lpAIInput_PostPhysics, lpPhysicsOutput );
+    CgsModule::UnlockBuffersForIO( lpAIInput_PostPhysics, lpPhysicsOutput );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_AI_Bridge );
+
+    PerfMonCpu::StartMonitor( miAIModuleUpdatePM );
+    mAIModule.PostPhysicsUpdate( lpAIInput_PostPhysics );
+    PerfMonCpu::StopMonitor( miAIModuleUpdatePM );
+
+    lpInputBufferStack->DestroyIOBuffer( &lpAIInput_PostPhysics );
+
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_AI );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- post-physics buffers ------------------------------------------------
+    RaceCarEntityModuleIO::OutputBuffer_PostPhysics*    lpRaceCarOutput_PostPhysics = 0;
+    BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutput_PostPhysics = 0;
+    PropEntityIO::OutputBuffer_PostPhysics*             lpPropOutput_PostPhysics    = 0;
+    WorldEntityIO::OutputBuffer_PostPhysics*            lpWorldEntityOutput_PostPhysics = 0;
+    RaceCarEntityModuleIO::InputBuffer_PostPhysics*     lpRaceCarInput_PostPhysics  = 0;
+    PropEntityIO::InputBuffer_PostPhysics*              lpPropInput_PostPhysics     = 0;
+    WorldEntityIO::InputBuffer_PostPhysics*             lpWorldEntityInput_PostPhysics = 0;
+    lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput_PostPhysics, "RaceCarPostPhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput_PostPhysics, "TrafficPostPhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpPropOutput_PostPhysics, "PropPostPhysics" );
+    lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput_PostPhysics, "WorldEntityPostPhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpRaceCarInput_PostPhysics, "RaceCarPostPhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpPropInput_PostPhysics, "PropPostPhysics" );
+    lpInputBufferStack->CreateIOBuffer( &lpWorldEntityInput_PostPhysics, "WorldEntityPostPhysics" );
+    lpRaceCarOutput_PostPhysics->Construct();
+    lpTrafficOutput_PostPhysics->Construct();
+    lpPropOutput_PostPhysics->Construct();
+    lpWorldEntityOutput_PostPhysics->Construct();
+    lpRaceCarInput_PostPhysics->Construct();
+    lpPropInput_PostPhysics->Construct();
+    lpWorldEntityInput_PostPhysics->Construct();
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- AI -> entity modules post-physics ----------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI_Bridge );
+    CgsModule::LockBuffersForIO( lpRaceCarInput_PostPhysics, lpAIOutput );
+    ::WorldModule::BridgeAIToEntityModules_PostPhysics(
+        this, lpRaceCarInput_PostPhysics, lpAIOutput );
+    CgsModule::UnlockBuffersForIO( lpRaceCarInput_PostPhysics, lpAIOutput );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_AI_Bridge );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_AI );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+
+    // ---- world-entity action staging ----------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    CGS_ASSERT( lpWorldEntityInput_PostPhysics != 0, "lpInputBuffer" );
+    lpWorldEntityInput_PostPhysics->LockForWrite();
+    ::WorldModule::BridgeActionsToWorldModule( this, lpWorldEntityInput_PostPhysics,
+                                               lpUpdateInputBuffer );
+    lpWorldEntityInput_PostPhysics->UnlockForWrite();
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- POST-PHYSICS spine (streamer request flush rides it) ---------------
+    EntityModulePostPhysicsUpdate(
+        lpInputBufferStack, lpOutputBufferStack,
+        lpPhysicsOutput,
+        lpTrafficInput_PostPhysics, lpTrafficOutput_PostPhysics,
+        lpRaceCarInput_PostPhysics, lpRaceCarOutput_PostPhysics,
+        lpCrashInput_PostPhysics, lpCrashOutput_PostPhysics,
+        lpPropInput_PostPhysics, lpPropOutput_PostPhysics,
+        lpWorldEntityInput_PostPhysics, lpWorldEntityOutput_PostPhysics,
+        lUpdateSet );
+
+    // ---- post-physics -> scene / output staging ------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    CgsModule::LockBuffersForIO( lpSceneInput_Update, lpTrafficOutput_PostPhysics,
+                                 lpRaceCarOutput_PostPhysics, lpPropOutput_PostPhysics,
+                                 lpWorldEntityOutput_PostPhysics );
+    ::WorldModule::BridgeEntityModulesToScene_PostPhysics(
+        this, lpSceneInput_Update, lpTrafficOutput_PostPhysics, lpRaceCarOutput_PostPhysics,
+        lpPropOutput_PostPhysics, lpWorldEntityOutput_PostPhysics );
+    CgsModule::UnlockBuffersForIO( lpSceneInput_Update, lpTrafficOutput_PostPhysics,
+                                   lpRaceCarOutput_PostPhysics, lpPropOutput_PostPhysics,
+                                   lpWorldEntityOutput_PostPhysics );
+
+    CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpTrafficOutput_PostPhysics,
+                                 lpRaceCarOutput_PostPhysics, lpPropOutput_PostPhysics,
+                                 lpWorldEntityOutput_PostPhysics );
+    ::WorldModule::BridgeEntityModulesToOutput_PostPhysics(
+        this, lpUpdateOutputBuffer, lpTrafficOutput_PostPhysics, lpRaceCarOutput_PostPhysics,
+        lpPropOutput_PostPhysics, lpWorldEntityOutput_PostPhysics );
+    CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpTrafficOutput_PostPhysics,
+                                   lpRaceCarOutput_PostPhysics, lpPropOutput_PostPhysics,
+                                   lpWorldEntityOutput_PostPhysics );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    lpInputBufferStack->DestroyIOBuffer( &lpWorldEntityInput_PostPhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpPropInput_PostPhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpRaceCarInput_PostPhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpWorldEntityOutput_PostPhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpPropOutput_PostPhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpTrafficOutput_PostPhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpRaceCarOutput_PostPhysics );
+
+    // ---- the second scene UpdateScene pass (post-physics) -------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    PerfMonCpu::StartMonitor( miSceneManagerUpdatePM );
+    mSceneModule.UpdateScene( lpInputBufferStack, lpOutputBufferStack,
+                              lpSceneInput_Update, lpSceneOutput, true );
+    PerfMonCpu::StopMonitor( miSceneManagerUpdatePM );
+    lpInputBufferStack->DestroyIOBuffer( &lpSceneInput_Update );
+    lpUpdateInputBuffer->UnlockForRead();
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- output bridges ------------------------------------------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI );
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_AI_Bridge );
+    CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpAIOutput );
+    ::WorldModule::BridgeAIModuleToOutput( this, lpUpdateOutputBuffer, lpAIOutput );
+    CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpAIOutput );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_AI_Bridge );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_AI );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_NetworkAIRaceCar );
+
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StartMonitor( miPhysicsSummaryPM );
+    PerfMonCpu::StartMonitor( miPhysicsBridgesPM );
+    CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpPhysicsOutput );
+    ::WorldModule::BridgePhysicsToOutput( this, lpUpdateOutputBuffer, lpPhysicsOutput );
+    CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpPhysicsOutput );
+    PerfMonCpu::StopMonitor( miPhysicsBridgesPM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_Physics );
+    PerfMonCpu::StopMonitor( miPhysicsSummaryPM );
+
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpCrashOutput_PostPhysics );
+    ::WorldModule::BridgeCrashModuleToOutput( this, lpUpdateOutputBuffer,
+                                              lpCrashOutput_PostPhysics );
+    CgsModule::UnlockBuffersForIO( lpUpdateOutputBuffer, lpCrashOutput_PostPhysics );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- player-car position/speed latch + environment map -------------------
+    PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
+    lpUpdateOutputBuffer->LockForRead();
+    {
+        // The replay interface is selected when the update set carries 0x100.
+        const BrnWorldIO::UpdateOutputBuffer::RCEntityActiveRaceCarOutputInterface*
+            lpActiveRaceCars = ( lUpdateSet & 0x100 )
+                ? lpUpdateOutputBuffer->GetReplayActiveRaceCarOutputInterface()
+                : lpUpdateOutputBuffer->GetActiveRaceCarOutputInterface();
+
+        if ( lpActiveRaceCars->IsPlayerCarActive() )
+        {
+            const EActiveRaceCarIndex lePlayerIndex =
+                lpActiveRaceCars->GetPlayerActiveRaceCarIndex();
+            const BrnPhysics::Vehicle::RaceCarState* lpPlayerState =
+                lpActiveRaceCars->GetRaceCarState( lePlayerIndex );
+
+            // Env-map refresh around the player car; latch its position.
+            mEnvironmentMap.Update( lpPlayerState->mTransform.Pos() );
+            const Vector3 lPlayerPosition = lpPlayerState->mTransform.Pos();
+            mPlayerCarPosition =
+                Vector4{ lPlayerPosition.x, lPlayerPosition.y, lPlayerPosition.z, 0.0f };
+
+            // |linear velocity| -> the player speed member (X360 vmsum3fp + vrsqrte
+            // + Newton refinement == rw::math::vpu::Magnitude).
+            mfLocalPlayerActiveRaceCarSpeed =
+                rw::math::vpu::Magnitude( lpPlayerState->mLinearVelocity );
+        }
+    }
+    lpUpdateOutputBuffer->UnlockForRead();
+
+    // The data-dump monitor pair (X360 start/stop back-to-back -- the dump body
+    // itself is compiled out of the ARTIST build).
+    PerfMonCpu::StartMonitor( miWorldModuleDataDumpPM );
+    PerfMonCpu::StopMonitor( miWorldModuleDataDumpPM );
+    PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_World );
+
+    // ---- teardown ------------------------------------------------------------
+    lpOutputBufferStack->DestroyIOBuffer( &lpCrashOutput_PostPhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpCrashInput_PostPhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpCrashOutput_PreScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpCrashInput_PreScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpTrafficInput_PostPhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpTrafficInput_PostScene );
+    lpOutputBufferStack->DestroyIOBuffer( &lpAIOutput );
+    lpOutputBufferStack->DestroyIOBuffer( &lpTriggerOutput_PrePhysics );
+    lpInputBufferStack->DestroyIOBuffer( &lpTriggerInput_PrePhysics );
+    lpOutputBufferStack->DestroyIOBuffer( &lpTriggerOutput_PostScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpTriggerInput_PostScene );
+    lpOutputBufferStack->DestroyIOBuffer( &lpTriggerOutput_PreScene );
+    lpInputBufferStack->DestroyIOBuffer( &lpTriggerInput_PreScene );
+    lpOutputBufferStack->DestroyIOBuffer( &lpSceneOutput );
+    lpOutputBufferStack->DestroyIOBuffer( &lpPhysicsOutput );
+    lpInputBufferStack->DestroyIOBuffer( &lpPhysicsInput );
+}
 
 // ============================================================================
 // GenerateFrustumQueries  @ 0x827DADF8
@@ -1744,12 +2924,11 @@ WorldModule::GenerateFrustumQueries(
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderShadowMap );
     if ( mShadowMap.IsEnabled() )
     {
-        // FLAG: the decompiler's r4 reads as the DIRECTOR camera input, but the
-        // committed CalculateShadowMapCameras decl takes CgsGraphics::Camera*;
-        // the frustum-query camera is the same frame camera re-homed --
-        // reconcile when the ShadowMap TU's camera math lands.
+        // RECONCILED with the landed ShadowMap camera math: the X360 r4 IS the
+        // DIRECTOR camera input (asm-proven in the CalculateShadowMapCameras
+        // reconstruction; the real overload takes BrnDirector::Camera::Camera*).
         mShadowMap.CalculateShadowMapCameras( mEnvironmentManager.CalcKeyLightDirection(),
-                                              &gFrustumQueryCamera );
+                                              lpCameraInput );
     }
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RenderShadowMap );
 
@@ -2008,12 +3187,11 @@ WorldModule::GenerateDispatchLists(
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_FrustumTesting );
     PerfMonCpu::StartMonitor( miSceneManagerFrustumTestPM );
     PerfMonCpu::StartMonitor( miSceneManagerFrustumTestWaitOnJobsPM );
-    // (the committed :189 signature takes the scene-local IOBufferStack alias --
-    //  the same stack object; the alias is reconciled when that TU's stack lands)
-    mSceneModule.ProcessFrustumTestJobResults(
-        reinterpret_cast<CgsSceneManager::SceneManagerIO::IOBufferStack*>( lpInputBufferStack ),
-        reinterpret_cast<CgsSceneManager::SceneManagerIO::IOBufferStack*>( lpOutputBufferStack ),
-        lpQueryInput, lpQueryOutput );
+    // (RECONCILED 2026-07-27: the scene module's stack parameters are the plain
+    //  CgsModule::IOBufferStack the world drive threads everywhere; the old
+    //  scene-local alias casts are retired.)
+    mSceneModule.ProcessFrustumTestJobResults( lpInputBufferStack, lpOutputBufferStack,
+                                               lpQueryInput, lpQueryOutput );
     PerfMonCpu::StopMonitor( miSceneManagerFrustumTestWaitOnJobsPM );
     PerfMonCpu::StopMonitor( miSceneManagerFrustumTestPM );
 

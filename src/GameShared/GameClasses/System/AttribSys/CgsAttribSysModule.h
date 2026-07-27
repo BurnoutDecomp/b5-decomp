@@ -69,12 +69,28 @@ public:
     // Out-of-line so MSVC emits the ??_G scalar deleting destructor @ X360 0x827DD340.
     ~AttribSysGarbageCollector() override;
 
-    void ReleaseData(u8 luType, Attribute::HashInt lAssetId,
+    // @ 0x827DD330 (16-byte body, dumped from the ARTIST .i64 via the GC vtable
+    // @0x820CEA34): lwz miTotalFreedSoFar / add r6 / stw / blr -- the debug
+    // counter accumulates the r6 argument, which at every ReleaseAsset call
+    // site holds the block DATA POINTER (not the size; an X360-shipped quirk of
+    // the diagnostic counter, reproduced as the truncated add). The asset id is
+    // the 64-bit vault AssetID (attribloadandgo.h).
+    void ReleaseData(u8 luType, Attrib::Vault::AssetID lAssetId,
                      void* lpData, unsigned int luSize) override;
 
 private:
     s32 miTotalFreedSoFar;   // CgsAttribSysModule.h:99
 };
+
+// [PC mount switch -- attrib-sdk wave 2026-07-27] true once the Attrib SDK
+// runtime cluster is LINKED into the exe (WorldLinkStubs' Attrib stubs deleted +
+// the SDK TUs added to the source list -- the wave log carries the exact list).
+// While false, GameDataModule::PrepareAttribSysSchemaResource keeps its PC boot
+// gate (no RegisterSchema push) so the real Vault machinery is never entered
+// through the still-stubbed SDK symbols. Flip to true as part of that ONE
+// mount change set; the LE schema pair (build/game/schema.vlt + schema.bin,
+// tools/assets/bundles/attribsys_schema_port.py) is already staged.
+const bool KB_PC_ATTRIB_SCHEMA_FILES = true;
 
 class AttribSysModule : public CgsModule::ModuleSingleBuffered
 {

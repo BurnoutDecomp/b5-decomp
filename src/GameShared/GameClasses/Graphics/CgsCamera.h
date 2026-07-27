@@ -35,15 +35,23 @@
 
 namespace CgsGraphics
 {
-    // FLAG (opaque placeholder): the RW-side frustum snapshot
-    // Camera::GetFrustum(CameraRwFrustum&) writes and CgsGeometric::Frustum::
-    // SetFromRwFrustum consumes (both pending externals; the only attested
-    // producer/consumer pair is BrnWorld::ShadowMap::ComputeTSMMatrix
-    // @ 0x827BFF58). 128 bytes of 16-aligned storage is provenance-honest
-    // (the X360 stack slot region), not a decoded layout.
+    // The RW-side frustum snapshot the Camera frustum writers produce and
+    // CgsGeometric::Frustum::SetFromRwFrustum consumes. DECODED (camera-frustum
+    // wave 2026-07-27) from the X360 GetFrustumParallel @0x827F11A8 /
+    // GetFrustumPerspective @0x827F0AD8 store streams (the stack slot is 96
+    // bytes: 6 stvx128 rows copied out through the ld/std pairs -- the old
+    // 128-byte opaque placeholder is RETIRED): SIX world-space planes, each
+    // stored [Nx, Ny, Nz, D] with D == dot3(N, PointOnPlane) (i.e. the plane
+    // satisfies dot3(N, p) == D; N points INTO the view volume; the near/far
+    // normals are the UN-normalised world view direction, the four side
+    // normals are unit-normalised face-edge crosses).
+    //
+    // Plane order (attested by the write order of both writers):
+    //   [0] near   [1] far   [2] left(-right face)   [3] right(+right face)
+    //   [4] top(+up face)    [5] bottom(-up face)
     struct CameraRwFrustum
     {
-        Vector4 maData[8];
+        Vector4 maPlanes[6];
     };
 
     class Camera
@@ -62,10 +70,53 @@ namespace CgsGraphics
         // the copy ctor).
         Camera& operator=(const Camera& rhs);
 
-        // CgsGraphics::Camera::GetFrustum @0x82277298 -- dispatch on the projection type. The X360
-        // body broadcasts the second transform's wAxis lane0 and compares it against 1.0; equal ->
-        // parallel (orthographic) projection, otherwise perspective.
-        const CgsGeometric::Frustum& GetFrustum();
+        // ---- the DWARF frustum-writer family (CgsCamera.h:144-174), RECONSTRUCTED
+        //      (camera-frustum wave 2026-07-27; every body verified lane-for-lane
+        //      against a numeric emulation of the X360 instruction stream) --------
+        //
+        // RECONCILE NOTES vs the previously-committed shapes:
+        //   * the real GetFrustum/GetFrustumParallel/GetFrustumPerspective take the
+        //     RW-side 6-plane OUT-PARAM (DWARF `void GetFrustum(Frustum&) const` --
+        //     the unqualified "Frustum" is the rw-side type, modelled here as
+        //     CameraRwFrustum); the old committed no-arg `const CgsGeometric::
+        //     Frustum&` accessors are PC-ADDITIVE bridges (kept below, now bodied).
+        //   * GetFrustumPerspective carries the DWARF bool (negate-near/far: the
+        //     X360 fnegs both clip planes on entry and fully negates all six
+        //     result planes on exit) the committed decl had dropped.
+        //   * GetCgsFrustumParallel is reconciled from `(CgsGeometric::Frustum*)`
+        //     to the DWARF `(Frustum&) const`.
+        //   * the projection-type discriminator is mProjection.wAxis lane THREE
+        //     (the affine 1.0 the orthogonal projection carries in +0x7C), NOT
+        //     lane0 as the earlier committed dispatch body read -- @0x82277298
+        //     `lvsl v0,0,0xC / vspltw v7 / vperm` selects word lane 3.
+
+        // CgsGraphics::Camera::GetFrustum @0x82277298 (DWARF CgsCamera.h:158) --
+        // dispatch on the projection type: wAxis.w == 1.0 -> parallel, else
+        // perspective (with the negate flag false).
+        void GetFrustum(CameraRwFrustum& lrOut) const;
+
+        // CgsGraphics::Camera::GetFrustumParallel @0x827F11A8 (DWARF :170) --
+        // write the 6 world-space planes of the orthogonal view volume.
+        void GetFrustumParallel(CameraRwFrustum& lrOut) const;
+
+        // CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8 (DWARF :166) --
+        // write the 6 world-space planes of the perspective view volume;
+        // lbNegateNearFar negates the near/far clip distances for the corner
+        // build and negates every result plane.
+        void GetFrustumPerspective(CameraRwFrustum& lrOut, bool lbNegateNearFar) const;
+
+        // CgsGraphics::Camera::GetCgsFrustum @0x827F9778 (DWARF :144) -- the RW
+        // frustum converted into the CGS swizzled-plane form.
+        void GetCgsFrustum(CgsGeometric::Frustum& lrOut) const;
+
+        // CgsGraphics::Camera::GetCgsFrustumParallel @0x827F97B8 (DWARF :153).
+        void GetCgsFrustumParallel(CgsGeometric::Frustum& lrOut) const;
+
+        // CgsGraphics::Camera::UpdateOrthogonalProjectionMatrix @0x827E72E0
+        // (DWARF :184) -- rebuild mProjection as the orthogonal projection for
+        // the half-extent scale lfOrthoScale (near/far from the cached scalars),
+        // then rebuild mViewProjection.
+        void UpdateOrthogonalProjectionMatrix(f32 lfOrthoScale);
 
         // CgsGraphics::Camera::SetFovHorizontal @0x821F13B0 -- recompute the cached projection
         // scalars from a horizontal field-of-view (RADIANS) and rebuild the perspective
@@ -113,19 +164,20 @@ namespace CgsGraphics
         // @calls 0x827BFFF0 / 0x827C000C: rebuild mProjection/mViewProjection
         // from the cached projection scalars.
         void UpdatePerspectiveProjectionMatrix();
-        // @call 0x827C004C: overload writing an RW-side frustum snapshot to
-        // lrOut (see CameraRwFrustum above).
-        void GetFrustum(CameraRwFrustum& lrOut);
-        // @call 0x827C1060: fill lpOut from this camera's parallel projection.
-        void GetCgsFrustumParallel(CgsGeometric::Frustum* lpOut);
 
     public:
         // PROMOTED 2026-07-24: WorldModule::GenerateFrustumQueries @0x827DADF8 reads the
         // cached perspective frustum from CONST cameras (the six env-map face cameras and
         // the shadow cascades), so this accessor is public + const, matching its real use.
-        // (GetFrustum still dispatches to these two; defined in their own homes.)
+        // FLAG (PC-additive bridge, re-bodied 2026-07-27): the DWARF camera has NO no-arg
+        // frustum accessors and NO cached CgsGeometric::Frustum member -- the real X360
+        // shape is the out-param family above. These bridges run the REAL writer into a
+        // function-local static CgsGeometric::Frustum (via Frustum::SetFromRwFrustum) so
+        // the committed BrnWorldModule call shape keeps X360 semantics; reconcile those
+        // call sites to the out-param family when that TU is next reworked.
         const CgsGeometric::Frustum& GetFrustumParallel() const;
         const CgsGeometric::Frustum& GetFrustumPerspective() const;
+        const CgsGeometric::Frustum& GetFrustum();
 
         // The cached view-projection the frustum-test events carry.
         const Matrix44& GetViewProjectionMatrix() const { return mViewProjection; }
@@ -139,8 +191,11 @@ namespace CgsGraphics
         // shape keeps X360 semantics.
         Vector3 GetPosition() const;
         Vector3 GetDirection() const;
-        // The renderer's half-texel/viewport-adjusted view-projection (X360
-        // GetViewProjectionMatrixModified, returned by value).
+        // The shader-constant view-projection form @0x827EC858 (DWARF :136,
+        // returned by value): rows = VP col0 / VP col1 / mView col2 (linear
+        // view z) / the projection z-w coefficient quartet. RECONSTRUCTED in
+        // CgsCamera.cpp (camera-frustum wave 2026-07-27) -- the earlier
+        // "half-texel adjusted" role note was a guess and is superseded.
         Matrix44 GetViewProjectionMatrixModified() const;
         void SetFarClip( f32 lfFarClip );
 

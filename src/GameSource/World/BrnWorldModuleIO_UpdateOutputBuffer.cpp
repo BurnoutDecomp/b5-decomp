@@ -213,6 +213,33 @@ void UpdateOutputBuffer::SetReplayActiveRaceCarOutputInterface(const RCEntityAct
     mReplayActiveRaceCarOutputInterface = *lpInterface;
 }
 
+// X360 0x823B5C18 (h:544 R) -- const active-race-car interface accessor (+29856).
+// WorldModule::Update's player-car tail reads through this when the update set does
+// NOT carry 0x100.
+const UpdateOutputBuffer::RCEntityActiveRaceCarOutputInterface*
+UpdateOutputBuffer::GetActiveRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mActiveRaceCarOutputInterface;
+}
+
+// X360 0x823B5CC0 (h:547 R) -- const replay active-race-car interface accessor (+40336;
+// selected by WorldModule::Update when the update set carries 0x100).
+const UpdateOutputBuffer::RCEntityActiveRaceCarOutputInterface*
+UpdateOutputBuffer::GetReplayActiveRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mReplayActiveRaceCarOutputInterface;
+}
+
+// WorldModule::Update @0x827D63E8 -- the debug component's "wants controller focus"
+// byte copy into +217668 (raw stb on X360, the named member store here).
+void UpdateOutputBuffer::SetWorldWantsDebugControllerFocus(bool lbWantsFocus)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mbWorldWantsDebugControllerFocus = lbWantsFocus;
+}
+
 // ---- contact spy ------------------------------------------------------------------
 
 // X360 0x823B5D68 (:550 R, "GetContactSpy") -- const contact-spy accessor (+146656).

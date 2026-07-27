@@ -53,6 +53,9 @@ namespace Attrib
         // the bucket array to tear it down, and GetNode/GetData/NextKey probe it. Grant the
         // derived collection access to the private table members its bodies read by name.
         friend struct Collection;
+        // Attrib::ScanForValidKey<Attrib::HashMap> @0x82803CC0 -- the bucket-scanning
+        // key cursor (a free template on the X360); it reads the table directly.
+        friend u64 ScanForValidKey(const HashMap& lrMap, unsigned int luIndex);
 
         // One bucket. 16-byte stride (X360 slwi ,4). FREE iff the occupied flag (bit7 of
         // mFlags @ +0xF) is clear; a free bucket reads back key 0.
@@ -73,13 +76,15 @@ namespace Attrib
             // The stored key (0 when free), matching the X360 `flags&0x80 ? key : 0` idiom.
             u64  Key() const { return IsOccupied() ? mKey : 0; }
 
-            // In-place node construction (Attrib::Node::Node @ own TU). Add() placement-
-            // constructs a freshly-selected bucket from (key, type, payload, laid-out flag,
-            // per-home probe length, per-element handler). Declaration-only here (the ctor
-            // body lands with the Attrib::Node slice); the enclosing bucket is otherwise
-            // written store-for-store by the recovered bodies.
-            Node(u64 luKey, u16 luTypeIndex, void* lpValue,
-                 bool lbLaidOut, u8 lu8Max, void* lpHandler);
+            // In-place node construction (Attrib::Node::Node @ 0x82809430, body in
+            // attribhashmap.cpp). SIGNATURE RE-ATTESTED vs the asm (attrib-sdk
+            // wave 2026-07-27): the ctor takes the 64-bit TYPE KEY (not a
+            // pre-resolved index) and resolves the stored mTypeIndex itself
+            // through Attrib::Database::GetTypeDesc; lu8Flags is the serialised
+            // node-flag byte (bit7 gets OR'd in as occupied); lpBase rebases the
+            // payload word for laid-out/inherited nodes (value -= base).
+            Node(u64 luKey, u64 luTypeKey, void* lpValue,
+                 bool lbLaidOut, u8 lu8Flags, void* lpBase);
         };
 
         // Bucket is the recovered spelling the accessor bodies use for a table slot.
@@ -97,8 +102,30 @@ namespace Attrib
         // cached run length and the table-wide worst-collision mark, bumps the live count, and
         // -- unless lbNoGrow -- grows again if the worst run now exceeds 16. Returns whether a
         // node was inserted.
-        bool         Add(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbLaidOut,
-                         u8 lu8Max, bool lbNoGrow, void* lpHandler);         // 0x82809580
+        // SIGNATURE RE-ATTESTED vs the asm (attrib-sdk wave 2026-07-27): the type
+        // rides as the 64-bit type key (forwarded to the Node ctor, which
+        // resolves the index via the database); lu8Flags is the node-flag byte;
+        // lpBase the laid-out rebase pointer (ClassPrivate passes NULL, the
+        // Collection loader passes its layout block).
+        bool         Add(u64 luKey, u64 luTypeKey, void* lpValue, bool lbLaidOut,
+                         u8 lu8Flags, bool lbNoGrow, void* lpBase);          // 0x82809580
+
+        // ---- shared-refcount + teardown accessors (the X360 inlines these raw
+        //      +0x06/+0x08 field ops at the ClassPrivate/Collection sites; named
+        //      here per the x64 semantic-parity rule) ----
+        u16  GetRefCount() const { return muRefCount; }
+        u16  GetCount() const { return muCount; }
+        void AddRef()
+        {
+            CGS_ASSERT(muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
+            ++muRefCount;
+        }
+        // ~ClassPrivate's teardown pair (@0x8280F4D8): zero the live count up
+        // front, and release the bucket array at the end (X360 frees
+        // capacity << 4 bytes == capacity * sizeof(Node); sizeof-based here for
+        // the widened x64 node). Body of the free helper: AttribHashMapTablePolicy.
+        void ClearCountForTeardown() { muCount = 0; }
+        void ReleaseBucketsForTeardown();
 
         int          CountSearchCacheLines(u64 luKey, u8 lu8CacheLineShift) const; // 0x828048C8
         Bucket*      Find(u64 luKey) const;                                 // 0x82804838
@@ -114,7 +141,7 @@ namespace Attrib
         // Grow (or first-build) the bucket array to hold luCount buckets and re-home every
         // live entry via Transfer. Own AttribSys TU (not part of this group); declared so the
         // ctor links against the real member.
-        void RebuildTable(unsigned int luCount);                           // (own TU)
+        void RebuildTable(unsigned int luCount);                           // 0x82807C18 (attribhashmap.cpp)
 
         Node* mpBuckets;          // +0x00  flat bucket array
         u16   muCapacity;         // +0x04  number of buckets (table size)

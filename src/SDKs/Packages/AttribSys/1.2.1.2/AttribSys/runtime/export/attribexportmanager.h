@@ -27,9 +27,11 @@
 namespace Attrib
 {
     // Base policy: a bare polymorphic object (vptr only, X360 sizeof == 4). The three
-    // concrete policies below share its layout and its vtable address; the differentiating
-    // export behaviour is virtual and reconstructed in their own (non-boot) TUs.
-    class ExportPolicy
+    // concrete policies below share its layout; the differentiating export behaviour
+    // is virtual. Derives the full IExportPolicy interface (the DWARF base of all
+    // three concrete policies) so the ExportManager's IExportPolicy* table can hold
+    // them and the Vault's slot-numbered dispatch lands on the right methods.
+    class ExportPolicy : public IExportPolicy
     {
     public:
         virtual ~ExportPolicy();
@@ -91,10 +93,29 @@ namespace Attrib
         virtual ~CollectionExportPolicy();
     };
 
-    // Whole-Database export policy. Vtable off_820D8E08; deleting-destructor @ 0x82807F98.
+    // Whole-Database export policy. Deleting-destructor @ 0x82807F98; vtable
+    // off_820D9630 (dumped from the ARTIST .i64):
+    //   IsExported = the ICF-folded `return true` @0x82C296C8; Initialize
+    //   @0x8280CAC8 builds the DatabasePrivate; AnyReferences = the folded
+    //   `return false` @0x827E2F38; IsReferenced @0x82807EC0; PrepareToClean/
+    //   Clean/PrepareToDeinitialize = the folded empty body @0x8284CB38;
+    //   Deinitialize @0x8280F5D0.
     class DatabaseExportPolicy : public ExportPolicy
     {
     public:
+        virtual bool IsExported(const TypeID& lrType);                              // @ 0x82C296C8 (fold)
+        virtual void Initialize(Vault& lrVault, const TypeID& lrType,
+                                const ExportID& lrExport, void* lpData,
+                                unsigned int luSize);                               // @ 0x8280CAC8
+        virtual bool AnyReferences(const Vault& lrVault);                           // @ 0x827E2F38 (fold)
+        virtual bool IsReferenced(const Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport);                        // @ 0x82807EC0 (own TU)
+        virtual void PrepareToClean(Vault& lrVault);                                // @ 0x8284CB38 (fold)
+        virtual void Clean(Vault& lrVault, const TypeID& lrType,
+                           const ExportID& lrExport);                               // @ 0x8284CB38 (fold)
+        virtual void PrepareToDeinitialize(Vault& lrVault);                         // @ 0x8284CB38 (fold)
+        virtual void Deinitialize(Vault& lrVault, const TypeID& lrType,
+                                  const ExportID& lrExport);                        // @ 0x8280F5D0 (own TU)
         virtual ~DatabaseExportPolicy();
     };
 
@@ -137,6 +158,27 @@ namespace Attrib
         // Deinitialize every registered policy against lrVault (X360 0x828031A8).
         // Body lives in the AttribSys load-and-go TU (attribloadandgo.cpp).
         void PrepareToDeinitialize(const Vault& lrVault);
+
+        // TypeID -> policy lookups over the sorted table (DWARF attribloadandgo.h:
+        // 109/112). The X360 inlines the eastl::lower_bound instantiation
+        // (@0x82808FE8) at every Vault call site (ctor export counting /
+        // Initialize dispatch / Export kind resolution); the DWARF-declared
+        // member accessors are that same search. GetExportPolicyIndex returns
+        // mNumPolicies when the type has no policy (the Vault sites test the
+        // result against the live count). Bodies: attribloadandgo.cpp.
+        IExportPolicy* GetExportPolicy(TypeID luType) const;
+        unsigned int   GetExportPolicyIndex(TypeID luType) const;
+
+        // Live-table accessors the Vault dispatch loops read (mpPolicies/mNumPolicies
+        // by name; the X360 reads the raw +0/+8 fields inline).
+        unsigned int            GetNumPolicies() const  { return mNumPolicies; }
+        const ExportPolicyPair& GetPair(unsigned int luIndex) const { return mpPolicies[luIndex]; }
+
+        // Sort the pair table ascending by TypeID (Database::GetExportPolicies
+        // @0x8280DC70 runs the eastl::quick_sort<ExportPolicyPair*> instantiation
+        // after registering the three granularity policies). Body:
+        // attribloadandgo.cpp.
+        void SortPolicies();
 
     private:
         ExportPolicyPair* mpPolicies;    // X360 +0 : reserved, TypeID-sorted table

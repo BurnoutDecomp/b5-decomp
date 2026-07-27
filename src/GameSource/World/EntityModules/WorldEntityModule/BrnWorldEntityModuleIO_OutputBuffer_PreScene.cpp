@@ -55,6 +55,22 @@ namespace WorldEntityIO
         return &mGameEventQueue;
     }
 
+    // X360 0x827A29E0: read-lock const twin (WorldModule::BridgeWorldEntityInfoToOutput
+    // @0x827ADD78 appends the queue into the world update output's game event queue).
+    const OutputBuffer_PreScene::GameEventQueue* OutputBuffer_PreScene::GetGameEventQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mGameEventQueue;
+    }
+
+    // X360 0x827A2C80: read-lock const twin (BridgeWorldEntityInfoToOutput @0x827ADD78
+    // forwards the sound world-load events into the world update output).
+    const OutputBuffer_PreScene::SoundWorldLoadInterface* OutputBuffer_PreScene::GetSoundWorldLoadInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mSoundWorldLoadInterface;
+    }
+
     // X360 0x822BA4C8: write-lock; return &mPropGraphicsLoadedQueue (this + 76). DWARF
     // BrnWorldEntityModuleIO.h:127 (non-const). Called by
     // BrnWorld::WorldEntityModule::OnWorldGraphicsLoadComplete.

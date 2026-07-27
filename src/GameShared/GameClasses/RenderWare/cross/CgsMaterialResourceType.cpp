@@ -21,6 +21,14 @@
 
 namespace CgsResource
 {
+    // E_RESOURCETYPE_MATERIAL (CgsResourceTypeIds.h); see the header note.
+    static const uint32_t KU_MATERIAL_RESOURCE_TYPE_ID = 0x1;
+
+    uint32_t MaterialResourceType::GetTypeID() const
+    {
+        return KU_MATERIAL_RESOURCE_TYPE_ID;
+    }
+
     // FixUp's sampler-type name table (X360 unk_83011A78, 7 entries / 28-byte stride; only
     // the leading char* of each slot is dereferenced). The strings are NOT present in the
     // repo rodata exports, so the CONTENTS are un-attested: placeholder empty strings are

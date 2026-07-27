@@ -119,6 +119,15 @@ namespace BrnTrafficIO
         // X360 0x827ACD28 -- write-lock; clear+append the hull queue, copy mbDiverged into +12960.
         void SetTrafficNetworkInputInterface(const TrafficNetworkInputInterface* lpTrafficNetworkInputInterface);     // DWARF :160
 
+        // ADDITIVE (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0): the spine's
+        // raw time-of-day store into +13072 under the write lock, expressed as the
+        // named member set (source = EnvironmentManager::mfCurrTimeOfDay).
+        void SetTimeOfDaySeconds(f32 lfSeconds)
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+            mfTimeOfDay_Seconds = lfSeconds;
+        }
+
         static void _AssertLayout();
 
     private:

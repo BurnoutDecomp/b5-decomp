@@ -49,14 +49,23 @@ namespace Attrib
     // 4-byte fields sit in the older source, so a 4-byte reserved slot precedes mHandler in
     // this XEX's layout. The handler offset is the X360-attested value; only mHandler is
     // touched by this batch (the rest is recorded for future TypeDesc TUs).
+    // CORRECTED (attrib-sdk wave 2026-07-27): the earlier model split the type
+    // key into {u32 mType, u32 mReserved10} -- the "reserved" slot was the
+    // other half of the 64-BIT type key (DWARF attribsys.h:702 members
+    // :724-728: mType is Attribute::Type == the hash64 of the reflection type
+    // name; the schema Definition mType fields carry the same full-width
+    // values). X360 layout {u64 mType @0, mName @8, mSize @12, mIndex @16,
+    // mHandler @20} -- the attested +0x14 handler offset is unchanged.
     struct TypeDesc
     {
-        u32           mType;        // +0x00
-        const char*   mName;        // +0x04
-        u32           mSize;        // +0x08
-        u32           mIndex;       // +0x0C
-        u32           mReserved10;  // +0x10 (present in the v1.2.1.2 XEX layout)
-        ITypeHandler* mHandler;     // +0x14 : per-element release handler (may be null)
+        u64           mType;     // +0x00  64-bit type key (hash64 of the type name)
+        const char*   mName;     // +0x08
+        u32           mSize;     // +0x0C
+        u32           mIndex;    // +0x10  (mCompiledTypes slot)
+        ITypeHandler* mHandler;  // +0x14 : per-element release handler (may be null)
+
+        // The eastl::set<TypeDesc> ordering (less<TypeDesc>) keys on the type id.
+        bool operator<(const TypeDesc& lrOther) const { return mType < lrOther.mType; }
     };
 
     // The variable-length attribute-array header. 8-byte descriptor followed inline by

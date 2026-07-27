@@ -16,6 +16,14 @@
 
 namespace CgsResource
 {
+    // E_RESOURCETYPE_RW_SHADER_PROGRAM_BUFFER (see the header note).
+    static const uint32_t KU_RW_SHADER_PROGRAM_BUFFER_RESOURCE_TYPE_ID = 0x12;
+
+    uint32_t RwShaderProgramBufferResourceType::GetTypeID() const
+    {
+        return KU_RW_SHADER_PROGRAM_BUFFER_RESOURCE_TYPE_ID;
+    }
+
     ResourceDescriptor RwShaderProgramBufferResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
         // Faithful to X360 0x828A9910. The runtime resource is a renderengine::ProgramBuffer

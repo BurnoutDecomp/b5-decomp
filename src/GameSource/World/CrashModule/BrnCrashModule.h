@@ -48,6 +48,10 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h" // CrashIO::TrafficInputInterface
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                // BrnPhysics::Vehicle::eCrashTrafficType
+#include "SharedClasses/BrnSharedConstants.h"                                     // BrnUpdateSet
+
+namespace CgsModule { struct IOBufferStack; }
+namespace BrnWorld { namespace CrashIO { struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; } }
 
 namespace BrnWorld
 {
@@ -105,6 +109,20 @@ namespace BrnWorld
         // X360 0x827DE960. Default ctor: base ModuleSingleBuffered init (the two RWMutexes), then
         // mark the two crash arrays unconstructed (count = -1). Called by WorldModule::WorldModule.
         CrashModule();
+
+        // ---- ADDITIVE (WorldModule::Update @0x827D63E8 / EntityModulePostPhysicsUpdate
+        //      @0x827D3F10; DWARF BrnCrashModule.h:297/:300). Declaration-only; bodies
+        //      gated in WorldLinkStubs.cpp until this module's own TU lands. ----
+        void PreSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             const CrashIO::InputBuffer_PreScene* lpInput,
+                             CrashIO::OutputBuffer_PreScene* lpOutput,
+                             BrnUpdateSet lUpdateSet );
+        void PostPhysicsUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                                CgsModule::IOBufferStack* lpOutputBufferStack,
+                                const CrashIO::InputBuffer_PostPhysics* lpInput,
+                                CrashIO::OutputBuffer_PostPhysics* lpOutput,
+                                BrnUpdateSet lUpdateSet );
 
         // NOTE: the DWARF declares the full ModuleSingleBuffered override set
         // (Construct/Prepare/Release/Destruct), the PreSceneUpdate/PostPhysicsUpdate entry points
