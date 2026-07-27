@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStreamBase (operator<< dump)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"       // CgsCore::SPrintf (resource-id hex)
+#include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"    // LinearMalloc::Malloc (Prepare's slot carve)
 
 namespace CgsAttribSys
 {
@@ -25,6 +26,29 @@ void VaultArray::Construct(Attrib::IGarbageCollector* lpGarbageCollector)
     mbPrepared = false;
 }
 
+// @ 0x82805CB0 -- reserve liMaxNumVaults slots from the AttribSys linear allocator and
+// ready the streamed-vault allocator. Asserts single-Prepare, a positive slot count and
+// the allocator; carves 24 bytes per slot (the X360 stride; the x64 slot is wider --
+// semantic parity by sizeof), Constructs each slot free, Prepares the embedded
+// StreamedVaultAllocator, then raises mbPrepared.
+void VaultArray::Prepare(s32 liMaxNumVaults, CgsMemory::LinearMalloc* lpLinearAllocator)
+{
+    CGS_ASSERT(!mbPrepared, "Trying to call Prepare() more than once");   // .cpp:75
+    CGS_ASSERT(liMaxNumVaults > 0, "liNumSlots > 0");                     // .cpp:76
+    CGS_ASSERT(lpLinearAllocator != nullptr, "lpAllocator != NULL");      // .cpp:77
+
+    miNumSlots = liMaxNumVaults;
+    mpaSlots   = static_cast<VaultSlot*>(
+        lpLinearAllocator->Malloc(sizeof(VaultSlot) * static_cast<size_t>(liMaxNumVaults)));
+    CGS_ASSERT(mpaSlots != nullptr, "mpaSlots != NULL");                  // .cpp:90
+
+    for (s32 liSlot = 0; liSlot < miNumSlots; ++liSlot)
+        mpaSlots[liSlot].Construct(lpLinearAllocator);
+
+    mVaultAllocator.Prepare(lpLinearAllocator);
+    mbPrepared = true;
+}
+
 // @ 0x82803888 -- operator<<(CgsDev::StrStreamBase&, const VaultArray&): the debug dump of the
 // whole vault array. Streams a header, then per slot a line describing empty/occupied, the 64-bit
 // resource id (8 hex bytes), the live ref count, and -- for occupied slots -- whether it backs a
@@ -33,21 +57,20 @@ void VaultArray::Construct(Attrib::IGarbageCollector* lpGarbageCollector)
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The X360 inlines StrStreamBase::operator<<(s32)'s
 // print-mode juggling at each integer insertion; that same operator is reconstructed in the
 // CgsStrStream TU, so streaming an s32 via `lStream << value` reproduces the inlined sequence.
-// Slot fields are read at raw X360 byte offsets (resourceId @+0x00 8B, miRefCount @+0x0C,
-// miStreamedVaultIndex @+0x10; slot stride 24) -- the committed VaultSlot is missing mpVault @+0x08
-// (16 vs true 24 bytes), so the dump reaches the count fields by offset rather than by member.
-// The occupied-slot ContainsStreamedVault() call mirrors the asm's bl on the raw slot pointer.
+// The X360 loads the slot fields raw (resourceId @+0x00 8B, miRefCount @+0x0C,
+// miStreamedVaultIndex @+0x10; stride 24); with the FULL VaultSlot layout now committed the
+// dump reads the same fields by NAME (the x64 gate's semantic-parity form).
+// The occupied-slot ContainsStreamedVault() call mirrors the asm's bl on the slot pointer.
 CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lStream, const VaultArray& lVaultArray)
 {
     lStream << "\n\nCgsAttribSys::VaultArray:\n";
 
-    const u8* lpSlotBytes = reinterpret_cast<const u8*>(lVaultArray.mpaSlots);
     for (s32 liSlot = 0; liSlot < lVaultArray.miNumSlots; ++liSlot)
     {
-        const u8*        lpSlot       = lpSlotBytes + liSlot * 24;
-        const VaultSlot* lpVaultSlot  = reinterpret_cast<const VaultSlot*>(lpSlot);
-        const s32        liRefCount   = *reinterpret_cast<const s32*>(lpSlot + 0x0C);
-        const u8*        lpResourceId = lpSlot + 0x00;   // 8 raw id bytes
+        const VaultSlot& lrSlot      = lVaultArray.mpaSlots[liSlot];
+        const s32        liRefCount  = lrSlot.GetRefCount();
+        const u8*        lpResourceId =
+            reinterpret_cast<const u8*>(&lrSlot.GetResourceId());   // 8 raw id bytes
 
         lStream << "\nSlot ";
         lStream << liSlot;
@@ -66,16 +89,14 @@ CgsDev::StrStreamBase& operator<<(CgsDev::StrStreamBase& lStream, const VaultArr
         }
         else
         {
-            const s32 liStreamVaultIndex = *reinterpret_cast<const s32*>(lpSlot + 0x10);
-
             lStream << ": occupied, ResourceId = ";
             lStream << lacHex;
             lStream << ", RefCount = ";
             lStream << liRefCount;
             lStream << ", StreamedVault = ";
-            lStream << (lpVaultSlot->ContainsStreamedVault() ? "true" : "false");
+            lStream << (lrSlot.ContainsStreamedVault() ? "true" : "false");
             lStream << ", StreamVaultIndex = ";
-            lStream << liStreamVaultIndex;
+            lStream << lrSlot.GetStreamedVaultIndex();
         }
     }
 

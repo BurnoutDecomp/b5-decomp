@@ -151,22 +151,24 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
             {
                 // Clear the queue and push a GetGameDataEvent (type 24) acquiring the loaded
                 // "Districts" data from pool 5. The X360 builds the event payload on the stack
-                // as { &mReceiverQueue, 1, 5 (pool), (HashString("Districts") | (5 << 32)) } and pushes
+                // as { &mReceiverQueue, 1, 5 (pool), HashString("Districts") } and pushes
                 // it via VariableEventQueue<4096,16>::AddEvent(payload, type=4, size=24).
                 mReceiverQueue.Clear();
                 BrnResource::GameDataIO::RequestInterface<4096>* lpRequest =
                     lpOutput->GetResourceRequestResourceInterface();
 
                 // CONSOLE payload order (asm 0x827D11D8): v9[0]=&queue, v9[1]=1, v9[2]=5 (pool),
-                // then the u64 v10 = HashString("Districts")|0x500000000 at sp+0x60. So poolId
-                // lands at +8 and the u64 resourceId at +16 (NOT the reverse).
+                // then the u64 = the RAW HashString("Districts") return at sp+0x60 (the
+                // `| 0x500000000` in the pseudocode is a fusion artifact of the `li r10,5 /
+                // stw @+8` miPoolId store -- HashString zero-extends, high dword is 0).
+                // PoolId lands at +8 and the u64 resourceId at +16 (NOT the reverse).
                 struct AcquireEvent
                 {
                     CgsModule::BaseEventReceiverQueue* mpReceiverQueue; // CONSOLE +0
                     s32                                miEventId;       // CONSOLE +4  (=1)
                     s32                                miPoolId;        // CONSOLE +8  (=5)
                     s32                                mi_pad;          // CONSOLE +12
-                    u64                                muResourceId;    // CONSOLE +16 (id | pool<<32)
+                    u64                                muResourceId;    // CONSOLE +16 (untagged hash)
                 } lEvent;
                 lEvent.mpReceiverQueue = &mReceiverQueue;
                 lEvent.miEventId       = 1;
@@ -174,8 +176,7 @@ static void ScaleIrradiance( Matrix44& lrIrradiance, f32 lfScale )
                 lEvent.mi_pad          = 0;
                 lEvent.muResourceId    =
                     static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
-                        reinterpret_cast<const u8*>("Districts"))))
-                    | 0x500000000ULL;   // pool 5 in the high dword
+                        reinterpret_cast<const u8*>("Districts"))));   // untagged (high dword 0)
 
                 // The request interface's queue IS a VariableEventQueue<4096,16> (RequestQueue
                 // <4096> -> ResourceRequestQueue<4096> -> VariableEventQueue<4096,16>); the X360
@@ -476,8 +477,8 @@ WorldModule::UpdatePhysicsNetworkCatchup(
 //
 // The AttribSys world-vault streaming machine (meVaultResourceStage):
 //   START            -> LoadBundle "WorldVault.bin" (event id 1, pool 7)
-//   LOADING_VAULT    -> on reply, acquire "WorldVault" (type-4 request; the id
-//                       carries the pool in its upper word, X360 | 0x7'00000000)
+//   LOADING_VAULT    -> on reply, acquire "WorldVault" (type-4 request; untagged
+//                       hash id + pool 7 in the miPoolId field)
 //   ACQUIRING_VAULT  -> on reply, capture the resource handle + register the
 //                       vault with the AttribSys request pipe
 //   REGISTERING_VAULT-> on reply, done
@@ -509,11 +510,14 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             lRequest.mpUser     = &mReceiverQueue;
             lRequest.miEventId  = 1;
             lRequest.miPoolId   = 7;
-            // X360 id word: HashString("WorldVault") | (7ull << 32).
+            // X360 id = the RAW zero-extended HashString return (asm @0x827D3DEC:
+            // `bl HashString; mr r11,r3; std r11` -- HashString @0x828D84A8 ends
+            // `clrldi r3,32`, so the high dword is ZERO). The earlier `| 0x700000000`
+            // was a Hex-Rays fusion artifact of the separate `li r10,7 / stw @+8`
+            // miPoolId store; the pool rides the miPoolId field, never the id.
             lRequest.mResourceId.SetHash(
                 static_cast<u64>( static_cast<u32>( CgsResource::ID::HashString(
-                    reinterpret_cast<const u8*>( "WorldVault" ) ) ) )
-                | 0x700000000ull );
+                    reinterpret_cast<const u8*>( "WorldVault" ) ) ) ) );
             lRequest.mbCheckRefCount = false;
 
             lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(
@@ -562,9 +566,12 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
             mAttribSysVaultResourceHandle.mpResourceMemory = lpResponse->mpResourceMemory;
             mAttribSysVaultResourceHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
 
+            // X360 @0x827D3F04-ish: RegisterVault(iface, &mReceiverQueue, handle,
+            // r7 = 1 (miEventId), r8 = 0 (E_VAULT_TYPE_RESIDENT)) -- the push helper
+            // @0x8229D6C8 stores r7 @+12 (miEventId) and r8 @+16 (meVaultType).
             lpOutput->GetAttribSysVaultRequestInterface()->RegisterVault(
                 &mReceiverQueue, mAttribSysVaultResourceHandle,
-                static_cast<CgsAttribSys::AttribSysIO::EAttribSysVaultType>( 1 ) );
+                /*liEventId*/ 1, CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT );
 
             mReceiverQueue.Clear();
             meVaultResourceStage = E_RESOURCESTAGE_REGISTERING_VAULT;
@@ -575,23 +582,18 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
         {
             if ( mReceiverQueue.GetLength() <= 0 )
             {
-                // [FLAG PC boot gate] the RegisterVault reply is posted by the AttribSys
-                // module (X360 ProcessAttribSysRegisterVaultResponse @0x82666590); that
-                // module is not committed and the world output's attrib-sys queue is not
-                // yet bridged into the GameData input, so this stage legitimately holds.
-                // One-shot log so the boot evidence names the terminal hold.
-                static bool s_bLoggedRegisterHold = false;
-                if ( !s_bLoggedRegisterHold )
-                {
-                    s_bLoggedRegisterHold = true;
-                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                        *CgsDev::Log::gpDebugPrint
-                            << "WorldModule::LoadAttribSysVault: vault acquired; "
-                               "REGISTERING_VAULT holding -- AttribSysModule reply pending "
-                               "(module deferred) [FLAG PC boot gate]\n";
-                }
+                // Waiting for the AttribSysModule's type-3 RegisterVault reply (posted by
+                // AttribSysModule::RegisterVault @0x8280EBF0 straight to this receiver
+                // queue; the request rode the world output's attrib interface ->
+                // LoadWorldModule's Append<2048> into the GameData input -> the GameData
+                // pump's "Attrib" module input). Same wait shape as the X360.
                 break;
             }
+
+            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                *CgsDev::Log::gpDebugPrint
+                    << "WorldModule::LoadAttribSysVault: vault registered (AttribSys "
+                       "reply received)\n";
 
             mReceiverQueue.Clear();
             meVaultResourceStage = E_RESOURCESTAGE_DONE;
@@ -723,6 +725,11 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
             lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
+            // The X360 CreateIOBuffer<T> instantiations run the buffers' Construct after
+            // the stack alloc; the generic PC template placement-news only (same pattern
+            // as LoadWorldModule's world output buffer).
+            lpSceneInput->Construct();
+            lpSceneOutput->Construct();
 
             lpSceneInput->LockForWrite();
             {
@@ -759,6 +766,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
             lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
+            // PC Construct restoration (see the SCENE stage above).
+            lpSceneInput->Construct();
+            lpSceneOutput->Construct();
 
             lpSceneInput->LockForWrite();
             const bool lbPhysicsPrepared = mPhysicsModule.Prepare(
@@ -801,6 +811,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             RaceCarEntityModuleIO::OutputBuffer_Prepare* lpRaceCarOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpRaceCarOutput, "RaceCar" );
+            // PC Construct restoration (base IOBuffer status; the buffer interior is a
+            // minimal slice and its module Prepare is boot-gated).
+            lpRaceCarOutput->CgsModule::IOBuffer::Construct();
 
             if ( !mRaceCarEntityModule.Prepare( mDistrictMapResourceHandle ) )
             {
@@ -822,6 +835,8 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare* lpTrafficOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpTrafficOutput, "Traffic" );
+            // PC Construct restoration (see the RaceCar stage above).
+            lpTrafficOutput->CgsModule::IOBuffer::Construct();
 
             if ( !mTrafficEntityModule.Prepare( lpTrafficOutput ) )
             {
@@ -829,6 +844,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                 CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
                 lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
                 lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
+                // PC Construct restoration (see the SCENE stage above).
+                lpSceneInput->Construct();
+                lpSceneOutput->Construct();
 
                 CgsModule::LockBuffersForIO( lpSceneInput, lpTrafficOutput );
                 ::WorldModule::BridgeTrafficModuleToSceneModule_Prepare(
@@ -864,6 +882,10 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             lpOutputBufferStack->CreateIOBuffer( &lpWorldEntityOutput, "WorldEntityPrepare" );
             lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
             lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
+            // PC Construct restoration (see the SCENE stage above).
+            lpWorldEntityOutput->Construct();
+            lpSceneInput->Construct();
+            lpSceneOutput->Construct();
 
             if ( !mWorldEntityModule.Prepare( lpWorldEntityOutput ) )
             {
@@ -904,6 +926,8 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             PropEntityIO::OutputBuffer_Prepare* lpPropOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpPropOutput, "Prop" );
+            // PC Construct restoration (see the RaceCar stage above).
+            lpPropOutput->CgsModule::IOBuffer::Construct();
 
             CgsModule::LockBuffersForIO( lpPropOutput );
             const bool lbPropPrepared =
@@ -925,6 +949,9 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
                 CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneOutput = 0;
                 lpInputBufferStack->CreateIOBuffer( &lpSceneInput, "Scene" );
                 lpOutputBufferStack->CreateIOBuffer( &lpSceneOutput, "Scene" );
+                // PC Construct restoration (see the SCENE stage above).
+                lpSceneInput->Construct();
+                lpSceneOutput->Construct();
 
                 CgsModule::LockBuffersForIO( lpSceneInput, lpPropOutput );
                 ::WorldModule::BridgePropModuleToSceneModule_Prepare(
@@ -941,6 +968,8 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             {
                 BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsInput = 0;
                 lpInputBufferStack->CreateIOBuffer( &lpPhysicsInput, "Physics" );
+                // PC Construct restoration (base IOBuffer status; minimal-slice interior).
+                lpPhysicsInput->CgsModule::IOBuffer::Construct();
 
                 CgsModule::LockBuffersForIO( lpPhysicsInput, lpPropOutput );
                 ::WorldModule::BridgePropModuleToPhysicsModule_Prepare(
@@ -973,6 +1002,8 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             BrnAI::AIModuleIO::OutputBuffer* lpAIOutput = 0;
             lpOutputBufferStack->CreateIOBuffer( &lpAIOutput, "AI" );
+            // PC Construct restoration (see the RaceCar stage above).
+            lpAIOutput->CgsModule::IOBuffer::Construct();
             CGS_ASSERT( lpAIOutput, "lpAIOutputBuffer" );
 
             if ( !mAIModule.Prepare( lpAllocatorList, lpAIOutput ) )
@@ -994,7 +1025,23 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
         {
             mePrepareStage = eWorldPrepareCrashModule;
 
-            if ( !mCrashModule.Prepare() )
+            // [FLAG PC boot gate 2026-07-26] CrashModule's own staged Prepare override is
+            // not committed (the behavioural slice defers the lifecycle set to its own TU),
+            // so the call resolves to the BASE ModuleSingleBuffered::Prepare, which asserts
+            // "new module type" on the data-structure path. Skip (one-shot log) until the
+            // crash lifecycle TU lands; the module stays inert.
+            {
+                static bool s_bLoggedCrashGate = false;
+                if ( !s_bLoggedCrashGate )
+                {
+                    s_bLoggedCrashGate = true;
+                    if ( CgsDev::Message::gxMessageFilterFlags & 1 )
+                        *CgsDev::Log::gpDebugPrint
+                            << "WorldModule::Prepare: CrashModule::Prepare skipped "
+                               "(lifecycle TU deferred) [FLAG PC boot gate]\n";
+                }
+            }
+            if ( false && !mCrashModule.Prepare() )
             {
                 return false;
             }

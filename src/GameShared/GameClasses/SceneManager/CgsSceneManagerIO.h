@@ -29,6 +29,17 @@ namespace SceneManagerIO
     // The scene-manager update-phase input buffer.
     struct InputBuffer_Update : public CgsModule::IOBuffer
     {
+        // PC restoration of the CreateIOBuffer<T> Construct step (the X360 stack template
+        // runs T::Construct after the alloc; the PC generic placement-news only): raise the
+        // IOBuffer status base, then bring up the embedded scene-update aggregate (the X360
+        // InputBuffer_Update::Construct constructs the aggregate's 25 queues -- see
+        // InSceneUpdateInterface::Construct @0x822E6550).
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mInSceneUpdateInterface.Construct();
+        }
+
         // @ 0x825BD8C0 -- write-lock tripwire, then the in-scene-update aggregate.
         InSceneUpdateInterface* GetInSceneUpdateInterface();   // +16, write
 
@@ -65,6 +76,14 @@ namespace SceneManagerIO
     struct OutputBuffer : public CgsModule::IOBuffer
     {
         typedef CgsModule::VariableEventQueue<32768, 16> SceneQueryResultsQueue;
+
+        // PC restoration of the CreateIOBuffer<T> Construct step (see InputBuffer_Update):
+        // raise the IOBuffer status base + bring up the query-results ring.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mSceneQueryResultsQueue.Construct();
+        }
 
         // @ 0x823B1ED0 -- read-lock tripwire, then the query-results ring.
         const SceneQueryResultsQueue* GetSceneQueryResultsQueue() const;   // +4, read

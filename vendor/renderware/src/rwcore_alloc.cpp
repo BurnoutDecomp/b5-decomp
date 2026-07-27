@@ -20,6 +20,8 @@ namespace rw
     // Base default (vtbl[3] +24, ?Free@IResourceAllocator@rw@@UEAAXPEAX_K@Z): the concrete
     // game allocator overrides this. The default is a no-op (matching the elided PC-LEAF
     // allocators, whose frees happen en masse via re-Initialize, not per-block).
+    // FLAG PC-platform leaf: base-interface default of the [PC-LEAF, user-approved 2026-06-20]
+    // allocator reconstruction (see the file header) -- the rwcore.lib chunk engine is elided.
     void IResourceAllocator::Free(void* /*lpBlock*/, uint64_t /*luSizeOrFlags*/)
     {
     }
@@ -68,6 +70,22 @@ namespace rw
         lrUsage.m_size = luOffset + luSize;
         ++m_numAllocations;
         return lpBlock;
+    }
+
+    // The virtual DoAllocate slot (rwcore vtable [6]; the override the PDB vtable dump in
+    // rwcore_structs.h proves): satisfy each per-type lane of the descriptor by bumping the
+    // matching pool. A lane that cannot be satisfied yields a null base resource (the rw
+    // convention the consumers' null-checks key on); zero-size lanes are null too.
+    Resource LinearResourceAllocator::DoAllocate(const ResourceDescriptor& lrDescriptor, const char* /*lpcName*/)
+    {
+        Resource lResult;
+        for (uint32_t luType = 0; luType < 4; ++luType)
+        {
+            const BaseResourceDescriptor& lrLane = lrDescriptor.m_baseResourceDescriptors[luType];
+            lResult.m_baseResources[luType] =
+                (lrLane.m_size != 0) ? Alloc(luType, lrLane.m_size, lrLane.m_alignment) : 0;
+        }
+        return lResult;
     }
 
     // Linear allocator: individual frees are no-ops; the pools are reclaimed en masse by a

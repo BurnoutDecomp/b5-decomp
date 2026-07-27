@@ -225,6 +225,13 @@ struct LinearResourceAllocator : IResourceAllocator {  // sizeof = 144 (rwcore.p
     void  Initialize(const Resource& lrResource, const ResourceDescriptor& lrCapacity);
     void* Alloc(uint32_t luType, uint32_t luSize, uint32_t luAlignment);
     void  Free(void* lpBlock);
+
+    // The vtable's DoAllocate slot ([6] +48, ?DoAllocate@LinearResourceAllocator@rw@@MEAA...
+    // -- the override the PDB vtable dump above proves): carve one Resource matching the
+    // descriptor by bumping each per-type pool. Consumers that only hold the abstract
+    // IResourceAllocator* (TriangleCacheManager::Prepare's "CachedObjectSlots" carve) reach
+    // the linear pools through this. Body in renderware/src/rwcore_alloc.cpp.
+    virtual ::rw::Resource DoAllocate(const ::rw::ResourceDescriptor& lrDescriptor, const char* lpcName) override;
 };
 RW_SIZE_ASSERT(rw::LinearResourceAllocator, 144);
 

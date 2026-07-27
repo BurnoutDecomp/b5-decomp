@@ -5,7 +5,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle (ContainsVaultResource param)
 
 namespace Attrib { class Vault; }
-namespace Attrib { class IGarbageCollector; }
+namespace Attrib { struct IGarbageCollector; }   // struct -- must match attribloadandgo.h's class-key (MSVC mangling)
+namespace CgsMemory { class LinearMalloc; }
 
 namespace CgsAttribSys
 {
@@ -27,6 +28,13 @@ struct VaultSlot
     static StreamedVaultAllocator* spVaultAllocator;
     static void SetVaultAllocator(StreamedVaultAllocator* lpAllocator);
 
+    // Reset this slot to the free state (X360 inlines the four stores into
+    // VaultArray::Prepare's per-slot loop @0x82805CB0: mpVault=0, miRefCount=0,
+    // miStreamedVaultIndex=-1, mResourceId=0 -- plus the per-slot
+    // "lpAllocator != NULL" assert baked at CgsAttribSysVaultSlot.cpp:52, which is
+    // this method's own allocator guard).
+    void Construct(CgsMemory::LinearMalloc* lpAllocator);
+
     // @ 0x82802390 -- an occupied slot reports whether it holds a streamed vault;
     // an unoccupied slot asserts it carries no streamed-vault index.
     bool ContainsStreamedVault() const;
@@ -41,6 +49,13 @@ struct VaultSlot
 
     // A slot is occupied while at least one reference is live.
     bool IsOccupied() const { return miRefCount > 0; }
+
+    // Named read accessors for the VaultArray debug dump (@0x82803888) -- the X360
+    // inlines the raw field loads there; with the full slot layout committed the dump
+    // reads by name through these.
+    const CgsResource::ID& GetResourceId()         const { return mResourceId; }
+    s32                    GetRefCount()           const { return miRefCount; }
+    s32                    GetStreamedVaultIndex() const { return miStreamedVaultIndex; }
 
 private:
     // Load the request's vault into this (currently free) slot. Body in its own TU.

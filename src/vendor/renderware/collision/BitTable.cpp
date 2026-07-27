@@ -1,5 +1,7 @@
 #include "vendor/renderware/collision/BitTable.hpp"
 
+#include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptor (GetResourceDescriptor)
+
 // ===========================================================================
 // rw::BitTable -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -52,6 +54,22 @@ BitTable::Storage* BitTable::Initialize(Storage** lppStorage, int liWidth, int l
     }
 
     return lpStorage;
+}
+
+// ---------------------------------------------------------------------------
+// BitTable::GetResourceDescriptor -- the backing-store memory requirement for a
+// liWidth x liHeight grid: the 12-byte header + ceil(width*height / 32) packed
+// 32-bit words, 4-byte aligned. The X360 CullingGroupManager::CreateCullingTable
+// (0x828BAB48) inlines the 24x24 result as the literal descriptor lane
+// {m_size 0x54 (84 == 12 + 18*4), m_alignment 4} it hands the scene allocator;
+// this is the generic producer that math folds from.
+// ---------------------------------------------------------------------------
+void BitTable::GetResourceDescriptor(BaseResourceDescriptor* lpDescriptor,
+                                     int liWidth, int liHeight)
+{
+    const u32 luWordCount = static_cast<u32>(liWidth * liHeight + 31) >> 5;
+    lpDescriptor->m_size      = 12u + luWordCount * 4u;
+    lpDescriptor->m_alignment = 4u;
 }
 
 } // namespace rw

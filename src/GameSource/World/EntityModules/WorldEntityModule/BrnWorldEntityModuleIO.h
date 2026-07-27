@@ -62,6 +62,16 @@ namespace WorldEntityIO
     // DWARF BrnWorldEntityModuleIO.h:61 — the world-entity "prepare" phase output buffer.
     struct OutputBuffer_Prepare : public CgsModule::IOBuffer
     {
+        // PC restoration of the CreateIOBuffer<T> Construct step (the X360 stack template
+        // runs T::Construct after the alloc; the PC generic placement-news only): raise
+        // the IOBuffer status base, bring up the request queue + the scene input aggregate.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mResourceRequestInterface.mRequestQueue.Construct();
+            mSceneInputInterface.Construct();
+        }
+
         // 0x822BA180 — write-lock tripwire ("Not locked for writing"); X360 this+4.
         ResourceRequestInterface* GetResourceRequestInterface();
         // 0x827A2728 — read-lock tripwire ("Not locked for reading").

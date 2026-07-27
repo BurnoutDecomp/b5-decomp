@@ -209,8 +209,11 @@ struct alignas(16) OutputBuffer : public CgsModule::DataStructure
     void Construct()
     {
         mZoneResponseQueue.Construct();
-        // mGameDataRequestInterface (a VariableEventQueue<512,16>) Constructs via its
-        // own per-instance hook; OutputBuffer::Construct drives both.
+        // The embedded game-data request pipe (X360 OutputBuffer::Construct @0x822EE658
+        // drives both members; the request interface's VariableEventQueue<512,16> must be
+        // Constructed before the Prepare/Release Clears run their "Not Constructed" guard).
+        mGameDataRequestInterface.mRequestQueue.Construct();
+        muTotalZones = 0;
     }
     // X360 0x822EE6A0 -- real body (clears the zone-response queue + the game-data request
     // interface, returns true). De-inlined; body in BrnPVSModuleIO.cpp.

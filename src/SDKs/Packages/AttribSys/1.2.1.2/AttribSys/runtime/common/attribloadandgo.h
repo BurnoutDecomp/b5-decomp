@@ -28,13 +28,17 @@ namespace Attrib
     class Vault;
 
     // Namespace-scope key aliases the export subsystem passes by const-reference
-    // (DecFIGS attribloadandgo.h:24/25). Both are the 32-bit attribsys hash id:
+    // (DecFIGS attribloadandgo.h:24/25). NB every `Attribute::` here is fully
+    // qualified `::Attribute::` -- inside namespace Attrib the unqualified name
+    // binds to the Attrib::Attribute cursor CLASS whenever attribute.h is visible
+    // in the same TU (the AttributeKey.h StringToKey note documents the same trap).
+    // Both are the 32-bit attribsys hash id:
     //   TypeID   -- names an attribute TYPE (the gDatabaseType / gClassType /
     //               gCollectionType granularity keys, and every ExportPolicy method's
     //               `const TypeID&` parameter).
     //   ExportID -- names one exported attribute instance within a Vault.
-    typedef Attribute::HashInt TypeID;    // attribloadandgo.h:25
-    typedef Attribute::HashInt ExportID;  // attribloadandgo.h:24
+    typedef ::Attribute::HashInt TypeID;    // attribloadandgo.h:25
+    typedef ::Attribute::HashInt ExportID;  // attribloadandgo.h:24
 
     // The host garbage-collector callback. AttribSys calls ReleaseData when it
     // reclaims a vault's asset so the host can free any transient data it attached.
@@ -51,7 +55,7 @@ namespace Attrib
 
         // luType selects the asset class, lAssetId names the asset, lpData/luSize
         // the transient block being released.
-        virtual void ReleaseData(u8 luType, Attribute::HashInt lAssetId,
+        virtual void ReleaseData(u8 luType, ::Attribute::HashInt lAssetId,
                                  void* lpData, unsigned int luSize) = 0;
     };
 
@@ -63,7 +67,7 @@ namespace Attrib
     {
     public:
         // Hashed asset id (the serialised dependency/export keys).
-        typedef Attribute::HashInt AssetID;
+        typedef ::Attribute::HashInt AssetID;
 
         // Construct over the export policies + serialised blob (X360 0x8280A2E8).
         // lAssetId is the vault's own id (0 for the schema vault); lpData/luSize the

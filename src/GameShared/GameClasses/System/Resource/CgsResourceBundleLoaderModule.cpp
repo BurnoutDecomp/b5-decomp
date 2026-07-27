@@ -118,9 +118,10 @@ namespace CgsResource
             else
             {
                 BundleLoader lLoader;
-                // true = store ids in the X360 tagged form (`entry id | pool << 32`) so the
-                // game-side acquires (which build tagged ids) resolve -- see LoadBundle.
-                const s32 liLoaded = lLoader.LoadBundle(lrRequest.macFileName, lpPool, lpfnResolveType, true);
+                // Ids are stored RAW/untagged (the X360 form -- CreateResourceList
+                // 0x828FF480 registers the on-disc u64 verbatim; acquires are untagged
+                // zero-extended hashes and select the pool via miPoolId; see LoadBundle).
+                const s32 liLoaded = lLoader.LoadBundle(lrRequest.macFileName, lpPool, lpfnResolveType);
                 *CgsDev::Log::gpDebugPrint << "[stream] LoadBundle '" << lrRequest.macFileName
                                           << "' -> pool " << (s32)lrRequest.miPoolId
                                           << ": " << (s32)liLoaded << " resources\n";
@@ -155,7 +156,7 @@ namespace CgsResource
             if (lpPool != 0)
             {
                 BundleLoader lLoader;
-                const s32 liUnloaded = lLoader.UnloadBundle(lrRequest.macFileName, lpPool, true);
+                const s32 liUnloaded = lLoader.UnloadBundle(lrRequest.macFileName, lpPool);
                 *CgsDev::Log::gpDebugPrint << "[stream] UnloadBundle '" << lrRequest.macFileName
                                           << "' <- pool " << (s32)lrRequest.miPoolId
                                           << ": " << (s32)liUnloaded << " resources\n";

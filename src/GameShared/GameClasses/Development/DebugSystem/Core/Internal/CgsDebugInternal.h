@@ -9,7 +9,7 @@
 // resource allocator - to every derived class through protected accessors. Recovered from the
 // DecFIGS DWARF (Development/DebugSystem/Core/Internal/CgsDebugInternal.h).
 
-namespace rw { class IResourceAllocator; }
+namespace rw { struct IResourceAllocator; }   // struct -- must match rwcore_structs.h's class-key (MSVC mangling)
 
 namespace CgsDev
 {

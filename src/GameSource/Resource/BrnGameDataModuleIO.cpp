@@ -56,23 +56,22 @@ namespace GameDataIO
     }
 
     // @ 0x823B1830 -- write-locked AttribSys accessor (fires assert at DWARF h:226). Returns this+32788
-    // (= &mAttribSysRequestInterface). FLAG: DWARF return type is AttribSysRequestInterface<32768>*;
-    // opaque byte-storage member -> address handed back as void* (see header note).
-    void* InputBuffer::GetAttribSysRequestInterface()
+    // (= &mAttribSysRequestInterface -- the real committed templated interface).
+    CgsAttribSys::AttribSysIO::AttribSysRequestInterface<InputBuffer::kiAttribSysRequestInterfaceQueueSize>*
+    InputBuffer::GetAttribSysRequestInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        return &mAttribSysRequestInterface[0];
+        return &mAttribSysRequestInterface;
     }
 
     // @ 0x82664038 -- read-locked AttribSys accessor (fires assert at DWARF h:233). Returns this+32788
     // (= &mAttribSysRequestInterface, right after the 4-byte IOBuffer base + RequestInterface<32768>
-    // (32784 bytes)). FLAG: DWARF return type is const AttribSysRequestInterface<32768>*; the member is
-    // opaque byte storage pending the committed templated AttribSys request interface, so its address is
-    // handed back as const void* (see header note).
-    const void* InputBuffer::GetAttribSysRequestInterface() const
+    // (32784 bytes)).
+    const CgsAttribSys::AttribSysIO::AttribSysRequestInterface<InputBuffer::kiAttribSysRequestInterfaceQueueSize>*
+    InputBuffer::GetAttribSysRequestInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-        return &mAttribSysRequestInterface[0];
+        return &mAttribSysRequestInterface;
     }
 
     // @ 0x823B18D8 -- read-locked accessor. Tests IOBuffer status bit 4 (read-lock); on failure fires

@@ -75,8 +75,45 @@ namespace BrnResource
             mePrepareStage = E_PREPARE_ALLOCATORS;
             if (!CreateAllocators(lpInputBuffer, lpOutputBuffer))
                 return false;
-            // (X360: DLC stages 16-18+ and the AttribSys/HUD/popup prepares - deferred)
+            // (X360: DLC stages 16-18 run between the allocators and stage 6 - deferred)
             // fall through
+        case E_PREPARE_ATTRIBSYS:
+        {
+            mePrepareStage = E_PREPARE_ATTRIBSYS;
+            // X360 stage 6 (0x82673F38 LABEL_18): AttribSysModule::Prepare (vtbl+64) with
+            // the memory-map allocators -- GetLinearAllocator(22 AttribSysLinAlloc) +
+            // GetHeapAllocator(0x13 AttrSysHeap / 0x14 GameTalkAlloc / 0x15 EAStl) -- and
+            // liMaxNumVaults = 80; then the "Attrib" input carve + the staged schema
+            // registration (PrepareAttribSysSchemaResource loops until its stage machine
+            // reports done).
+            CgsMemory::HeapMalloc*   lpEastlHeap    = mAllocatorList.GetHeapAllocator(0x15);
+            CgsMemory::HeapMalloc*   lpGameTalkHeap = mAllocatorList.GetHeapAllocator(0x14);
+            CgsMemory::HeapMalloc*   lpAttribHeap   = mAllocatorList.GetHeapAllocator(0x13);
+            CgsMemory::LinearMalloc* lpLinearAlloc  = mAllocatorList.GetLinearAllocator(22);
+            if (!mAttribSysModule.Prepare(lpLinearAlloc, lpAttribHeap, lpGameTalkHeap,
+                                          lpEastlHeap, 80))
+                return false;
+
+            // The schema registration ([FLAG PC boot gate] inside the helper: the exe-baked
+            // schema blobs are big-endian and not yet ported, so the PC helper logs and
+            // completes without a live schema; the AttribSysModule's vault-array interior
+            // stays gated on sbSchemaLoaded).
+            {
+                static CgsAttribSys::AttribSysIO::InputBuffer s_AttribPrepareInput;
+                static bool s_bAttribPrepareInputConstructed = false;
+                if (!s_bAttribPrepareInputConstructed)
+                {
+                    s_bAttribPrepareInputConstructed = true;
+                    s_AttribPrepareInput.CgsModule::IOBuffer::Construct();
+                    s_AttribPrepareInput.LockForWrite();
+                    s_AttribPrepareInput.GetVaultRequestInterface()->mRequestQueue.Construct();
+                    s_AttribPrepareInput.UnlockForWrite();
+                }
+                if (!PrepareAttribSysSchemaResource(&s_AttribPrepareInput))
+                    return false;   // still registering -- re-enter next frame
+            }
+            // fall through
+        }
         case E_PREPARE_DONE:
             meReleaseStage = E_PREPARE_START;
             mePrepareStage = E_PREPARE_DONE;
@@ -659,6 +696,58 @@ namespace BrnResource
         return true;
     }
 
+    // @ 0x82673258 -- the staged schema registration (Prepare stage 6 helper). X360:
+    //   stage 0: push RegisterSchema(mReceiverQueue, vlt = the exe-baked schema .vlt blob
+    //            @0x82CD3D88 [size @0x82CD3D84 = 5664], bin = the .bin blob @0x82CD53AC
+    //            [size @0x82CD53A8 = 20352]) into the attrib input, Clear the receiver,
+    //            stage = 1; then the shared tail (UpdateResourceModule + a DIRECT
+    //            AttribSysModule::ProcessInputs on the attrib input) and return false.
+    //   stage 1: wait for the SchemaRegisteredResponse on mReceiverQueue; on arrival
+    //            Clear + stage = 2 (still returns false through the tail).
+    //   stage 2: return true (complete). stage >= 3 asserts "Invalid resource prepare stage.\n".
+    //
+    // [FLAG PC boot gate] the schema blobs are X360 BIG-ENDIAN rodata; their LE port (the
+    // schema-vault chunk container flips like attribsys_transcode.py's data vaults, but the
+    // BIN payload is the SDK ClassLoadData record set) and the Attrib SDK runtime cluster
+    // are not committed. Until then the PC stage 0 logs one-shot and jumps straight to
+    // stage 2 WITHOUT registering a schema -- AttribSysModule::sbSchemaLoaded stays false
+    // and its vault-array interior stays gated (see CgsAttribSysModule.cpp).
+    bool GameDataModule::PrepareAttribSysSchemaResource(
+            CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
+    {
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL");   // X360 line 1481
+
+        switch (miResourcePrepareStage)
+        {
+        case 0:
+        {
+            static bool s_bLoggedSchemaGate = false;
+            if (!s_bLoggedSchemaGate)
+            {
+                s_bLoggedSchemaGate = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "GameDataModule::PrepareAttribSysSchemaResource: schema blobs not "
+                       "PC-ported -- RegisterSchema skipped [FLAG PC boot gate]\n";
+            }
+            // X360: RegisterSchema(&mReceiverQueue, schemaVlt, 5664, schemaBin, 20352);
+            // mReceiverQueue.Clear(); miResourcePrepareStage = 1; + the ProcessInputs tail.
+            miResourcePrepareStage = 2;   // gated jump (see FLAG above)
+            return false;
+        }
+        case 1:
+            if (mReceiverQueue.GetLength() <= 0)
+                return false;
+            mReceiverQueue.Clear();
+            miResourcePrepareStage = 2;
+            return false;
+        case 2:
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid resource prepare stage.\n");   // X360 line 1534
+            return false;
+        }
+    }
+
     void GameDataModule::Construct()
     {
         // X360 0x82671B90 first runs the module base's Construct (stage/DataBuffer reset; it
@@ -677,6 +766,11 @@ namespace BrnResource
                                          static_cast<s16>(KI_NUM_GAMEDATA_EVENT_SLOTS));
         mReceiverQueue.Construct();
 
+        // X360 0x82671B90: the attrib reply receiver (a1+395888) + the embedded
+        // AttribSysModule (a1+399000) are constructed in the same pass.
+        mAttribSysReceiverQueue.Construct();
+        mAttribSysModule.Construct();
+
         // Completion-routing state words (X360 a1+439284 / a1+475936 / a1+475940). [reliable
         // init] zero-start so the counters are coherent from the first Update; the X360
         // Construct's full store list for this region is not mapped (the module rides
@@ -684,6 +778,7 @@ namespace BrnResource
         muLoadedSoundBundlesCount       = 0;
         miWorldCollisionRefCount        = 0;
         miWorldCollisionValidatePending = 0;
+        miResourcePrepareStage          = 0;
 
         // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
         // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators
@@ -840,11 +935,19 @@ namespace BrnResource
         static bool s_bResourceInputConstructed = false;
         if (!s_bResourceInputConstructed) { s_ResourceInput.Construct(); s_bResourceInputConstructed = true; }
 
-        // [deferred] AttribSys input carve ("Attrib") + InputBuffer::
-        // AppendRequestInterface<32768> + the AttribSysModule pump (X360 a1+399000) + the
-        // attrib response receiver drain (a1+395888: 3 -> ProcessAttribSysRegisterVault
-        // Response, 5 -> ProcessUnregisterVehicleAttribsResponse, else "Invalid request
-        // received\n" line 1946).
+        // The per-frame AttribSys module input. The X360 carves it from the IOBufferStack
+        // (CreateIOBuffer<AttribSysIO::InputBuffer>("Attrib")); [marked deviation] same
+        // one-static-buffer pattern as the ResourceIO input below.
+        static CgsAttribSys::AttribSysIO::InputBuffer s_AttribInput;
+        static bool s_bAttribInputConstructed = false;
+        if (!s_bAttribInputConstructed)
+        {
+            s_bAttribInputConstructed = true;
+            s_AttribInput.CgsModule::IOBuffer::Construct();
+            s_AttribInput.LockForWrite();
+            s_AttribInput.GetVaultRequestInterface()->mRequestQueue.Construct();
+            s_AttribInput.UnlockForWrite();
+        }
 
         if (lpOutput != 0)
         {
@@ -893,14 +996,23 @@ namespace BrnResource
 
                 liType = lpRequestInterface->mRequestQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
             }
+            // X360 (0x82674670, still under the input read lock): bulk-append the GameData
+            // input's AttribSys request queue into the module input ("Attrib") --
+            // AttribSysIO::InputBuffer::AppendRequestInterface<32768> @0x82671948.
+            s_AttribInput.LockForWrite();
+            s_AttribInput.AppendRequestInterface<
+                GameDataIO::InputBuffer::kiAttribSysRequestInterfaceQueueSize>(
+                    lpInputRead->GetAttribSysRequestInterface());
+            s_AttribInput.UnlockForWrite();
+
             lpInput->UnlockForRead();
 
             // X360: re-lock the input for write and clear the drained request state (the
-            // 32768-byte request queue, the AttribSys request queue and the debug Im2d
-            // pointer). The AttribSys queue / Im2d members are deferred with their
-            // subsystems; the request-queue clear is the live part.
+            // 32768-byte request queue, the AttribSys request queue @a4+8197 and the debug
+            // Im2d pointer @a4[16393]). The Im2d member is deferred with its subsystem.
             lpInput->LockForWrite();
             lpInput->GetRequestInterface()->mRequestQueue.Clear();
+            lpInput->GetAttribSysRequestInterface()->mRequestQueue.Clear();
             lpInput->UnlockForWrite();
         }
 
@@ -927,7 +1039,8 @@ namespace BrnResource
                     break;
                 case 4:
                     ProcessInternalAcquireResponse(&s_ResourceInput,
-                        reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent));
+                        reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent),
+                        &s_AttribInput);
                     break;
                 case 7:
                     ProcessInternalInvalidateResponse(&s_ResourceInput, lpEvent);
@@ -947,6 +1060,34 @@ namespace BrnResource
         }
 
         s_ResourceInput.UnlockForWrite();
+
+        // ---- the AttribSys module pump (X360 0x82674670: `(*(module vtbl+68))(module,
+        // attribIn)` right after the resource-input unlock) + the attrib reply receiver
+        // drain (a1+395888: 3 -> vault registered, 5 -> vault unregistered, else "Invalid
+        // request received\n" line 1946). Handlers that need the resource input re-lock it
+        // themselves (the X360 passes it unlocked here too). ------------------------------
+        mAttribSysModule.Update(&s_AttribInput);
+        // [PC placement] the X360 destroys the per-frame "Attrib" carve at the end of
+        // Update; the persistent static must drop the drained requests itself.
+        s_AttribInput.LockForWrite();
+        s_AttribInput.GetVaultRequestInterface()->mRequestQueue.Clear();
+        s_AttribInput.UnlockForWrite();
+        {
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            s32 liType = mAttribSysReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            while (lpEvent != 0)
+            {
+                if (liType == 3)
+                    ProcessAttribSysRegisterVaultResponse(&s_ResourceInput, lpEvent);
+                else if (liType == 5)
+                    ProcessUnregisterVehicleAttribsResponse(&s_ResourceInput, lpEvent);
+                else
+                    CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1946
+                liType = mAttribSysReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
+            }
+            mAttribSysReceiverQueue.Clear();   // X360 ring-rewind, same as mReceiverQueue
+        }
 
         // Pump the embedded streaming engine with the requests published above. The X360
         // wraps this in UpdateResourceModule @0x826663B0, which also carves a ResourceIO::
@@ -1647,14 +1788,16 @@ namespace BrnResource
     // @ 0x826736D8 -- an AcquireResource completed: post the resolved handle back to the
     // requester with the staged response id and free the slot. The AttribSys legs (vehicle
     // vault register 50/meType 4, vehicle vault unregister 40, surface-list vault register
-    // 66) forward into the AttribSysModule on the X360; that module is not committed, so
-    // those legs are documented FLAG PC boot gates (log + free -- the requester never
-    // receives the reply, holding its stage machine, which is the honest observable).
+    // 66) forward Register/UnregisterVault into the AttribSys module input with THIS
+    // module's attrib receiver as the reply target and the event-slot index as the
+    // request's miEventId; the slot stays STAGED until the type-3/5 reply completes it
+    // (ProcessAttribSysRegisterVaultResponse / ProcessUnregisterVehicleAttribsResponse).
     void GameDataModule::ProcessInternalAcquireResponse(
             CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
-            const CgsResource::Events::AcquireResourceResponse* lpResponse)
+            const CgsResource::Events::AcquireResourceResponse* lpResponse,
+            CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        // (X360 line 3357 asserts the AttribSys input buffer non-null -- gated with it.)
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL");   // X360 line 3357
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
         const s32 liSlotIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
 
@@ -1671,11 +1814,20 @@ namespace BrnResource
 
         switch (lpSlot->miResponseEventId)
         {
-        case 40:   // vehicle unload -> AttribSys UnregisterVault [FLAG PC boot gate]
+        case 40:   // vehicle unload -> AttribSys UnregisterVault (slot stays staged; the
+                   // type-5 reply routes through ProcessUnregisterVehicleAttribsResponse)
+        {
             CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
                        "lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS");   // line 3542
-            DeferredGameDataRequest("AttribSys UnregisterVault (id 40) -- module deferred", lpSlot);
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry    = static_cast<CgsResource::Entry*>(lpResponse->mpSourceEntry);
+            lpAttribModuleInputBuffer->LockForWrite();
+            lpAttribModuleInputBuffer->GetVaultRequestInterface()->UnregisterVault(
+                &mAttribSysReceiverQueue, lHandle, liSlotIndex);
+            lpAttribModuleInputBuffer->UnlockForWrite();
             break;
+        }
 
         case 50:   // vehicle
             if (lpSlot->mEvent.meType == E_ASSETSET_GRAPHICS ||
@@ -1690,9 +1842,27 @@ namespace BrnResource
             }
             else if (lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS)
             {
-                // X360: assert the vault resource loaded (line 3409) then AttribSys
-                // RegisterVault (handling flag off the "VEH_T" prefix). [FLAG PC boot gate]
-                DeferredGameDataRequest("AttribSys RegisterVault for vehicle (id 50) -- module deferred", lpSlot);
+                // X360 (internal_handlers.txt @0x826736D8 case 50/type 4): assert the vault
+                // resource loaded (line 3409, CgsIDUnCompress'd name in the message), pick
+                // the vault type off the "VEH_T" id prefix (prefix match -> RESIDENT 0,
+                // else STREAMED 1), then RegisterVault(queue = the attrib receiver, handle,
+                // miEventId = the slot index, type). Slot stays staged for the type-3 reply.
+                CGS_ASSERT(lpResponse->mpSourceEntry != 0,
+                           "Trying to register handling attrib vault before vault resource has been loaded");   // line 3409
+                char lacResourceName[16];
+                CgsIDUnCompress(lpSlot->mEvent.mId, lacResourceName);
+                lacResourceName[5] = 0;
+                const CgsAttribSys::AttribSysIO::EAttribSysVaultType leVaultType =
+                    (strcmp(lacResourceName, "VEH_T") == 0)
+                        ? CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT
+                        : CgsAttribSys::AttribSysIO::E_VAULT_TYPE_STREAMED;
+                CgsResource::ResourceHandle lHandle;
+                lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+                lHandle.mpSourceEntry    = static_cast<CgsResource::Entry*>(lpResponse->mpSourceEntry);
+                lpAttribModuleInputBuffer->LockForWrite();
+                lpAttribModuleInputBuffer->GetVaultRequestInterface()->RegisterVault(
+                    &mAttribSysReceiverQueue, lHandle, liSlotIndex, leVaultType);
+                lpAttribModuleInputBuffer->UnlockForWrite();
             }
             else
             {
@@ -1727,13 +1897,22 @@ namespace BrnResource
             mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             break;
 
-        case 66:   // surface list -> AttribSys RegisterVault(surface vault) [FLAG PC boot
-                   // gate]. X360 forwards the acquired vault into the AttribSysModule and
-                   // posts the id-66 reply from ProcessAttribSysRegisterVaultResponse
-                   // (@0x82666590) once registration lands; without the module the
-                   // requester's PrepareSurfaceList stage holds (honest observable).
-            DeferredGameDataRequest("AttribSys RegisterVault for surfacelist (id 66) -- module deferred", lpSlot);
+        case 66:   // surface list -> AttribSys RegisterVault(surface vault). X360 case 'B':
+                   // RegisterVault(queue = the attrib receiver, handle = the response's
+                   // resolved handle, miEventId = the slot index, type 0 RESIDENT); the
+                   // id-66 reply to the requester is posted by ProcessAttribSysRegister
+                   // VaultResponse (@0x82666590) once registration lands. Slot stays staged.
+        {
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry    = static_cast<CgsResource::Entry*>(lpResponse->mpSourceEntry);
+            lpAttribModuleInputBuffer->LockForWrite();
+            lpAttribModuleInputBuffer->GetVaultRequestInterface()->RegisterVault(
+                &mAttribSysReceiverQueue, lHandle, liSlotIndex,
+                CgsAttribSys::AttribSysIO::E_VAULT_TYPE_RESIDENT);
+            lpAttribModuleInputBuffer->UnlockForWrite();
             break;
+        }
 
         default:
             CGS_ASSERT(false, "Invalid event type received\n");   // X360 line 3559
@@ -1904,5 +2083,56 @@ namespace BrnResource
             reinterpret_cast<const CgsModule::Event*>(&lReply), 68,
             static_cast<s32>(sizeof(lReply)));
         mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+    }
+
+    // @ 0x82666590 -- an AttribSys RegisterVault completed (attrib receiver type 3): the
+    // 4-byte reply payload is the event-slot index the acquire leg staged. Look the slot
+    // up, require its response id to be 50 (vehicle) or 66 (surface list) and its captured
+    // asset set to be ATTRIBS (a non-ATTRIBS slot silently returns, slot untouched -- X360
+    // `bne cr6 -> epilogue`), then echo the captured request back to the ORIGINAL
+    // requester (X360 32-byte build: {miEventId, 0 receiver lane, miPoolId, mId u64,
+    // asset-set lane 4, fail 0} -- PostGameDataResponse's field set with a zeroed handle;
+    // the PC struct additionally carries the zeroed handle lanes the X360's 32-byte
+    // truncation stops short of) and free the slot.
+    void GameDataModule::ProcessAttribSysRegisterVaultResponse(
+            CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+            const CgsModule::Event* lpResponse)
+    {
+        const s32 liSlotIndex = *reinterpret_cast<const s32*>(lpResponse);
+        GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
+
+        const s32 liResponseId = lpSlot->miResponseEventId;
+        if (liResponseId != 50 && liResponseId != 66)
+        {
+            CGS_ASSERT(false, "Invalid event type received\n");   // X360 line 3817
+            return;
+        }
+        if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
+            return;   // X360: silent return, slot untouched
+
+        PostGameDataResponse(lpSlot, liResponseId, false,
+                             static_cast<u32>(E_ASSETSET_ATTRIBS), 0, 0);
+        mGameDataEventSlotPool.PushIndex(
+            static_cast<s16>(mGameDataEventSlotPool.GetObjectIndex(lpSlot)));
+    }
+
+    // @ 0x8266EAA0 -- an AttribSys UnregisterVault completed (attrib receiver type 5): the
+    // X360 asserts the slot's asset set is ATTRIBS, rebuilds the vehicle bundle file name
+    // ("Vehicles\%s_%s.bin" from the CgsIDUnCompress'd id + the off_82F2A6BC asset-set
+    // suffix table) and publishes the type-3 UnloadBundle that completes the vehicle
+    // unload chain. [FLAG PC boot gate] the vehicle GameData path (ids 27/39/40/50) is
+    // not exercised on the PC boot-to-world path and its suffix table/unload chain is not
+    // committed -- log + free the slot (honest observable: the vehicle unload never
+    // completes).
+    void GameDataModule::ProcessUnregisterVehicleAttribsResponse(
+            CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+            const CgsModule::Event* lpResponse)
+    {
+        const s32 liSlotIndex = *reinterpret_cast<const s32*>(lpResponse);
+        GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
+        CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
+                   "leBundleAssetSet == E_ASSETSET_ATTRIBS");   // X360 line 3861
+        DeferredGameDataRequest(
+            "vehicle attrib unload continuation (0x8266EAA0) -- vehicle path deferred", lpSlot);
     }
 }

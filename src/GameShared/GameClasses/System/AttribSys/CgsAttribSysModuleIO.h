@@ -109,15 +109,21 @@ namespace AttribSysIO
                             void* lpSchemaVltData, s32 liSchemaVltDataSize,
                             void* lpSchemaBinData, s32 liSchemaBinDataSize);
 
-        // Push a RegisterVaultRequest (type 0), 3-param overload. X360 0x8229D6C8 for
-        // <2048>, X360 0x82256428 for <512>.
+        // Push a RegisterVaultRequest (type 0). X360 0x8229D6C8 for <2048>, 0x82256428
+        // for <512>. Param map from the asm (Xenon ABI passes the 8-byte handle in ONE
+        // 64-bit GPR): r4 = queue, r5 = handle, r6 = liEventId (stored @+12 -- the reply
+        // AddEvent payload AttribSysModule::RegisterVault posts back; GameData passes its
+        // event-slot index here, the world passes 1), r7 = vault type (stored @+16).
         bool RegisterVault(BaseEventReceiverQueue* lpUserReceiverQueue,
                            ResourceHandle lVaultResourceHandle,
+                           s32 liEventId,
                            EAttribSysVaultType leVaultType);
 
-        // Push an UnregisterVaultRequest (type 2), 2-param overload. X360 0x826731E8 for <2048>.
+        // Push an UnregisterVaultRequest (type 2). X360 0x826731E8 for <2048>. Same lane
+        // map as RegisterVault minus the type: r6 = liEventId (echoed in the type-5 reply).
         bool UnregisterVault(BaseEventReceiverQueue* lpUserReceiverQueue,
-                             ResourceHandle lVaultResourceHandle);
+                             ResourceHandle lVaultResourceHandle,
+                             s32 liEventId);
     };
 
     // Forward-declare the namespace-scope free accessors so InputBuffer can friend them.
