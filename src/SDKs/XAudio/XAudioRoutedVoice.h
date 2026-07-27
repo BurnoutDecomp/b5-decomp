@@ -68,6 +68,27 @@ struct SVoiceOutputConfig
     SVoiceOutputEntry* mpEntries; // +0x04
 };
 
+// One entry of the volume array passed to SetVoiceOutputVolume @ 0x82C31AF0.
+// The X360 build strides these at 8 bytes (`v8 += 8`): the route index byte at
+// +0x00 (`lbz r10,0(r11)`, scaled by the 12-byte route stride) and the volume
+// word at +0x04 (`lwz r4,4(r11)`, handed to the per-route effect's SetVolume
+// vtable slot at +0x38).
+struct SVoiceOutputVolumeEntry
+{
+    u8  muRouteIndex; // +0x00
+    // +0x01..+0x03 alignment padding (X360)
+    u32 muVolume;     // +0x04
+};
+
+// The volume-configuration descriptor handed to SetVoiceOutputVolume. Same
+// count/entries shape as SVoiceOutputConfig (`lbz 0(a2)` / `lwz 4(a2)`).
+struct SVoiceOutputVolumeConfig
+{
+    u8                       muCount;   // +0x00
+    // +0x01..+0x03 alignment padding (X360)
+    SVoiceOutputVolumeEntry* mpEntries; // +0x04
+};
+
 class CRoutedVoice : public CVoice
 {
 public:
@@ -82,7 +103,23 @@ public:
     // @ 0x82C31C28 -- (re)bind this voice's output set. Detaches the current
     // outputs, then either attaches each output in `apConfig` (recording the
     // count) or, when `apConfig` is null, attaches the single default output.
-    s32 SetVoiceOutput(const SVoiceOutputConfig* apConfig);
+    // Overrides CVoice's pure vtable slot 9 (wave-D vtable recovery).
+    s32 SetVoiceOutput(const SVoiceOutputConfig* apConfig) override;
+
+    // @ 0x82C31AF0 -- set each listed route's output volume by dispatching the
+    // per-route effect's SetVolume (CEffect vtable slot at +0x38) with the
+    // volume word and a started-state flag. Overrides CVoice's pure vtable
+    // slot 10. BLOCKED body (the CEffect vtable slot order is not reconstructed
+    // by the CEffect TU); declared so the slot is seated.
+    s32 SetVoiceOutputVolume(const SVoiceOutputVolumeConfig* apConfig) override;
+
+    // @ 0x82C317B0 -- set the base voice format, then rebind the output set
+    // through the virtual SetVoiceOutput (own vtable slot 9). This is the ONE
+    // slot CRoutedVoice appends to the CVoice vtable (slot 22, wave-D dump); it
+    // OVERLOADS (and hides) the non-virtual single-arg CVoice::SetVoiceFormat.
+    // Body belongs to the CRoutedVoice TU; declared so the slot is seated.
+    virtual s32 SetVoiceFormat(const SVoiceFormat* apFormat,
+                               const SVoiceOutputConfig* apConfig);
 
     // @ 0x82C319D0 -- attach one destination voice into a route slot (resolve the
     // output + channel map, AddRef the output, push the channel map). Declared

@@ -39,7 +39,8 @@
 // SIZE: the object is allocated as 372 (0x174) bytes -- both CreateObject
 // (`(*(*allocator + 20))(allocator, 372)`) and the Initialize scratch confirm
 // it. The X360 byte offsets in the comments below tile that 372 exactly:
-//   +0x00 vptr .. +0x0C effect managers[12] .. +0x3C effect mgr .. +0x40 default
+//   +0x00 vptr .. +0x0C per-thread frame-buffer pairs[6][2] .. +0x3C effect mgr
+//   .. +0x40 default
 //   output .. +0x44 list-D .. +0x50 master list(44) .. +0x7C active-list array
 //   .. +0x80 count .. +0x84/+0x88 category volumes .. +0x8C change mask ..
 //   +0xA8 callback groups[2*64] .. +0x128 cur-cb .. +0x12C thread marker ..
@@ -80,6 +81,7 @@ namespace XAUDIO
 // are not needed to lay out CEngine (keeps the CEngine include surface small).
 class CVoice;          // the default-output / mastering voice at +0x40
 class CEffectManager;  // the XAudio effect-manager handle at +0x3C
+class CFrameBuffer;    // the per-thread frame buffers at +0x0C (XAudioFrameBuffer.h)
 
 // ---------------------------------------------------------------------------
 // The engine creation descriptor handed to CreateObject / GetObjectAdditional-
@@ -170,8 +172,8 @@ public:
 
     // @ 0x82C2E2D0 -- teardown: stop the mastering voice, join + close the six
     // processing threads, unregister the title-terminate callback, drain every
-    // voice list, release the per-category + main effect managers, run the
-    // embedded list dtors and release the allocator, clearing the singleton.
+    // voice list, release the per-thread frame buffers + the effect manager, run
+    // the embedded list dtors and release the allocator, clearing the singleton.
     // BLOCKED: Xbox kernel threading/spinlock primitives + module-state globals +
     // foreign vtable Release slots; body deferred.
     virtual ~CEngine();
@@ -211,11 +213,11 @@ public:
     s32 AssignThreadUsage(u8 auThreadUsage, SThreadUsagePlan* apPlan);
 
     // @ 0x82C30BD8 -- resolve the voice list a voice belongs to: query the voice
-    // for its category (its vtable slot at +0x34), then return &mMasterVoiceList
-    // (category 0), the addressed active-list entry (category 1) or null.
-    // BLOCKED: dispatches the still-un-recovered CVoice vtable slot at +0x34; body
-    // deferred. (See the observed-dispatch note appended to XAudioVoice.h.)
-    void* GetVoiceList(CVoice* apVoice);
+    // for its category (vtable slot 13 at +0x34 = CVoice::GetVoiceType, recovered
+    // wave D), then return &mMasterVoiceList (type 0), the addressed active-list
+    // entry (type 1) or null. BLOCKED body: the un-recovered module state globals;
+    // deferred. (CVoice::OnStartVoice consumes the returned list.)
+    SEngineVoiceList* GetVoiceList(CVoice* apVoice);
 
     // @ 0x82C2E910 -- one engine tick under the module critical section: either
     // signal the worker threads and wait, or (single-threaded) swap the active
@@ -232,9 +234,9 @@ public:
     s32 ProcessFrame(u8 abRunCallbacks);
 
     // @ 0x82C2DDE8 -- drain one voice list under the module spinlock, dispatching
-    // each pending voice's Process (its vtable slot at +0x44).
-    // BLOCKED: Xbox spinlock/IRQL primitives + the CVoice Process vtable slot;
-    // body deferred.
+    // each pending voice's Process (vtable slot 17 at +0x44 = CVoice::Process,
+    // recovered wave D).
+    // BLOCKED: Xbox spinlock/IRQL primitives + module state globals; body deferred.
     s32 ProcessVoiceList(int aListSelector);
 
     // @ 0x82C2D8B0 -- run the eight callbacks of the selected engine callback
@@ -284,10 +286,17 @@ public:
     // ----- layout (declared in X360 offset order; see the header banner) -----
     u32               miRefCount;             // +0x04  ctor seeds 1
     void*             mpAllocator;            // +0x08  ctor arg (AddRef/Release)
-    CEffectManager*   mpEffectManagers[12];   // +0x0C  per-category effect mgrs
-                                              //        (6 categories x 2; released
-                                              //        by the dtor, populated
-                                              //        outside this TU -- FLAG)
+    CFrameBuffer*     mpThreadFrameBuffers[6][2]; // +0x0C  per-hardware-thread
+                                              //        ping-pong frame-buffer
+                                              //        pairs. Initialize creates
+                                              //        two per in-use thread
+                                              //        (XAudioCreateFrameBuffer at
+                                              //        `this + 0x0C + 8*thread +
+                                              //        4*slot`); CVoice::
+                                              //        ProcessEffect resolves the
+                                              //        out-of-place effect taps
+                                              //        from the current thread's
+                                              //        pair; released by the dtor.
     CEffectManager*   mpEffectManager;        // +0x3C  main effect manager
     CVoice*           mpDefaultOutputVoice;   // +0x40  mastering / default output
     XAUDIOPACKETCTX_  mListD;                 // +0x44  CActiveVoiceList head (12B)
