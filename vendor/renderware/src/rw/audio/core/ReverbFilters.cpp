@@ -7,9 +7,15 @@
 // DWARF exist.
 //   AllPassFilter::AllPassFilter      @0x82B6C3D8 -- store-for-store
 //   AllPassFilter::AllPassFilterApply @0x82B64640 -- store-for-store
+//   AllPassFilter::AllPassFilterReset -- ICF-folded empty thunk 0x82AD5078 (see below)
 //   AllPassFilter::SetGains           @0x82B64688 -- store-for-store
 //   AllPassFilterFunc                 @0x82B64560 -- recurrence, store-for-store
+//   CombFilterFunc                    @0x82B64C20 -- recurrence, store-for-store
 //   CombFilter::CombFilter            @0x82B6C6B0 -- store-for-store
+//   CombFilter::CombFilterApplyFunc   @0x82B64D00 -- store-for-store (disasm recovered
+//                                       from the XEX image via idat; the address had no
+//                                       export JSON -- dump in the workflow repo,
+//                                       scratchpad/waveE/ReverbModel1.rodata.txt)
 //   CombFilter::CombFilterResetFunc   @0x82B64D88 -- store-for-store
 //   CombFilter::SetGains              @0x82B64D98 -- store-for-store
 // See ReverbFilters.h for the byte-exact layout.
@@ -120,6 +126,19 @@ void *AllPassFilter::AllPassFilterApplyFunc(AllPassFilter *self, s32 count, s32 
 }
 
 // -------------------------------------------------------------------------------------
+// AllPassFilter::AllPassFilterResetFunc -- the all-pass reset the IFilter reset slot
+// carries. The X360 image installs the shared empty thunk 0x82AD5078 there
+// (ReverbModel1::Process @0x82B9F884..94): the original empty reset (the all-pass
+// section keeps no loop state to clear -- unlike the comb's mfState) was ICF-folded
+// onto that lone-`blr` thunk, exactly as the trivial ~TimerHandle teardown was. The
+// thunk returns r3 (self) unchanged, matching the family reset signature.
+// -------------------------------------------------------------------------------------
+AllPassFilter *AllPassFilter::AllPassFilterResetFunc(AllPassFilter *self)
+{
+    return self;
+}
+
+// -------------------------------------------------------------------------------------
 // AllPassFilter::SetGains @0x82B64688
 // -------------------------------------------------------------------------------------
 AllPassFilter *AllPassFilter::SetGains(AllPassFilter *self, f32 g1, f32 g2)
@@ -144,6 +163,81 @@ CombFilter *CombFilter::CombFilter_ctor(CombFilter *self)
     self->mfState = KF_ZERO;  // +0x20
     self->miField0C = 1;      // +0x0C (li r11,1)
     return self;
+}
+
+// -------------------------------------------------------------------------------------
+// CombFilterFunc @0x82B64C20 -- the feedback-comb recurrence the comb apply func calls.
+//
+// The kernel walks the four f32 streams index-parallel over `count` samples. In the asm
+// each stream is a constant byte delta off one walking pointer (subf then lfsx/stfsx);
+// element-index form is equivalent. `work` is read at [n] and [n+1] (the asm advances the
+// work pointer one slot before the loop and reads 0(r10) / -4(r10)). Per sample (fnmsubs
+// d,a,c,b == b - a*c; fmadds d,a,c,b == a*c + b):
+//
+//   out            = base[n] - state*g1 - work[n+1]*g2   ; the comb loop write
+//   accum[n]       = out
+//   feedforward[n] = (work[n]*g3 + work[n+1]) * g4        ; lowPass==0 (overwrite form)
+//   feedforward[n] += (work[n]*g3 + work[n+1]) * g4       ; lowPass!=0 (the comb bank's
+//                                                           sum-into-mix accumulate form)
+//   state          = accum[n]                              ; the asm reloads the stored word
+//
+// The two branches differ only by whether the feedforward store accumulates -- exactly
+// the asm's loc_82B64C94 vs fall-through split. Returns the final state (fmr f1, f0);
+// the caller latches it into CombFilter::mfState.
+// -------------------------------------------------------------------------------------
+f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
+                   f32 *base, f32 *work, f32 *accum, f32 *feedforward, s32 lowPass)
+{
+    if (lowPass)
+    {
+        for (s32 n = 0; n < count; ++n)
+        {
+            const f32 out = base[n] - (state * g1) - (work[n + 1] * g2); // fnmsubs pair
+            accum[n] = out;
+            feedforward[n] = ((work[n] * g3) + work[n + 1]) * g4
+                             + feedforward[n];                            // fmadds onto prior
+            state = accum[n];                                             // lfsx reload
+        }
+    }
+    else
+    {
+        for (s32 n = 0; n < count; ++n)
+        {
+            const f32 out = base[n] - (state * g1) - (work[n + 1] * g2); // fnmsubs pair
+            accum[n] = out;
+            feedforward[n] = ((work[n] * g3) + work[n + 1]) * g4;        // fmuls (overwrite)
+            state = accum[n];                                             // lfs reload
+        }
+    }
+    return state;
+}
+
+// -------------------------------------------------------------------------------------
+// CombFilter::CombFilterApplyFunc @0x82B64D00
+//   if (ctx->miInactive) memset(ctx->mpFeedforward, 0, count*sizeof(f32));
+//   else self->mfState = CombFilterFunc(count, g1..g4, mfState, ctx->mpBase,
+//                                       ctx->mpFeedback, ctx->mpAccum,
+//                                       ctx->mpFeedforward, lowPass = src);
+// (r3=self, r4=count, r5=src->lowPass, r7=ctx; the kernel's stack args are the caller's
+//  r8=ctx+0x10, r11=ctx+0x14, r5 stores. The address has no export JSON; the disasm was
+//  recovered from the XEX image via idat -- see the workflow repo,
+//  scratchpad/waveE/ReverbModel1.rodata.txt.)
+// -------------------------------------------------------------------------------------
+void *CombFilter::CombFilterApplyFunc(CombFilter *self, s32 count, s32 src,
+                                      f32 *extra, Context *ctx)
+{
+    (void)extra;
+    if (ctx->miInactive)
+        return std::memset(ctx->mpFeedforward, 0, static_cast<usize>(count) * 4);
+
+    self->mfState = CombFilterFunc(count, self->mfGain1, self->mfGain2,
+                                   self->mfGain3, self->mfGain4, self->mfState,
+                                   /*base a33 */ ctx->mpBase,
+                                   /*work     */ ctx->mpFeedback,
+                                   /*accum    */ ctx->mpAccum,
+                                   /*forward  */ ctx->mpFeedforward,
+                                   /*lowPass  */ src); // stfs f1 @ +0x20
+    return nullptr;
 }
 
 // -------------------------------------------------------------------------------------

@@ -13,24 +13,22 @@
 // re-sizes the delay lines; UpdateLatencyAndDecay derives the reverb latency the mixer must
 // pre-roll from the largest comb/all-pass delay and the loop gains (Schroeder RT60 form).
 //
-// THREE functions in this TU are left for a later pass and are only DECLARED here (bodies
-// omitted, not stubbed):
-//   * CalculateCombDelays  -- reads the undecoded rwaudio rodata delay-quantisation table
-//                             flt_82170638[1652] (not in the dossier); its exact values are
-//                             load-bearing, so the body is BLOCKED rather than guessed.
-//   * CalculateG1Values    -- reads the undecoded rwaudio rodata coefficient tables
-//                             flt_82170540[] / unk_82170564[] (not in the dossier); BLOCKED.
-//   * Process              -- the comb loop installs rw::audio::core::CombFilter::CombFilterApplyFunc
-//                             (@0x82B64D00) as each comb section's IFilter apply pointer. That
-//                             function is real but is neither in the X360 ledger nor in the
-//                             export set (no disassembly is available for it), so its body
-//                             cannot be homed faithfully and its pointer cannot be installed
-//                             without fabricating a stand-in -> BLOCKED. (The separate all-pass
-//                             reset "STUB" pointer is NOT the blocker: it resolves to the
-//                             image's shared empty thunk 0x82AD5078 -- a trivial no-op reset,
-//                             the same folded thunk the ~ReverbModel1 / Delay teardown uses.)
-// The bodied functions below reference the three only through their declarations, so this TU
-// compiles under the per-TU gate.
+// The former blockers on CalculateCombDelays / CalculateG1Values / Process were RESOLVED in
+// wave E and all three are now bodied below:
+//   * The rodata coefficient tables were recovered from the XEX image (idat big-endian
+//     dump; raw dump preserved in the workflow repo, scratchpad/waveE/): the comb delay
+//     quantisation table flt_82170638[1652] (all entries PRIME, 2..13999 -- the classic
+//     mutually-prime comb-delay trick), the G1 distance knots flt_82170540[9], and the
+//     per-rate G1 gain knot rows unk_82170564. They are homed as the named file-local
+//     static const arrays below, each citing its X360 address.
+//   * CombFilter::CombFilterApplyFunc (@0x82B64D00) turned out to be a thin dispatch onto
+//     the EXPORTED comb recurrence kernel rw::audio::core::CombFilterFunc (@0x82B64C20);
+//     both are now homed in ReverbFilters.{h,cpp} alongside their AllPassFilter twins, so
+//     Process can install the comb sections' IFilter apply/reset pointers exactly as
+//     Delay::Process installs the DelayFilter pair. (The separate all-pass reset "STUB"
+//     pointer resolves to the image's shared empty thunk 0x82AD5078 -- the ICF-folded
+//     empty AllPassFilter reset, homed as AllPassFilter::AllPassFilterResetFunc -- the
+//     same folded thunk the ~ReverbModel1 / Delay teardown uses.)
 //
 // ~ReverbModel1 (Dtor) is now bodied: its leading "STUB" teardown of the embedded TimerHandle
 // resolves to the same shared empty thunk 0x82AD5078 (trivial ~TimerHandle -- all POD members,
@@ -42,9 +40,11 @@
 #include "rw/audio/core/plugins/ReverbModel1.h"
 #include "rw/audio/core/PlugIn.h"        // rw::audio::core::System (mTimerManager @+0x60)
 #include "rw/audio/core/TimerManager.h"  // rw::audio::core::TimerManager::AddTimer
+#include "rw/audio/core/IFilter.h"       // rw::audio::core::IFilter (filter apply/reset install)
 
-#include <cmath>  // log10
-#include <new>    // placement new (DelayLine sub-object construction)
+#include <cmath>   // log10
+#include <cstring> // memcpy / memset (the X360 XMemCpy / XMemSet)
+#include <new>     // placement new (DelayLine sub-object construction)
 
 namespace rw
 {
@@ -72,6 +72,231 @@ static const f32 KF_ZERO = 0.0f;                 // flt_82001CC0
 static const f32 KF_INTERNAL_RATE = 48000.0f;    // flt_820AA808
 static const f32 KF_COMB_MIX = 0.16666667f;      // flt_8206C7DC (1/6 comb sum)
 static const f32 KF_DECAY_FLOOR = 0.366f;        // flt_8217F380 (G2 decay-time floor)
+
+// -------------------------------------------------------------------------------------
+// Recovered rodata (idat big-endian dump from BURNOUT_X360_ARTIST.XEX; raw dump kept in
+// the workflow repo, scratchpad/waveE/ReverbModel1.rodata.txt).
+// -------------------------------------------------------------------------------------
+
+// flt_8217F374 -- metres -> seconds: 1/344.8 (the neighbouring rodata word 0x82170530
+// holds the 344.8 m/s speed-of-sound constant this is the reciprocal of).
+static const f32 KF_DIST_TO_SECONDS = 0.0029002321f;
+// flt_82109EE4 == 1/48000 -- the delay rate-scale for above-internal-rate output.
+static const f32 KF_INV_INTERNAL_RATE = 0.000020833333f;
+// flt_82013F90 -- the damping floor bias over the largest comb G1.
+static const f32 KF_DAMPING_EPSILON = 0.001f;
+// flt_82170534 / flt_82170538 / flt_8217053C -- the G1 sample-rate band edges.
+static const f32 KF_G1_RATE_LO  = 10000.0f;
+static const f32 KF_G1_RATE_MID = 25000.0f;
+static const f32 KF_G1_RATE_HI  = 50000.0f;
+// flt_8217F378 == 1/15000 (the 10k..25k band span), flt_8217F37C == 1/25000 (25k..50k).
+static const f32 KF_G1_INV_LO_SPAN = 0.000066666667f;
+static const f32 KF_G1_INV_HI_SPAN = 0.000039999999f;
+
+// flt_82170540[9] -- the comb reflection-distance knots (metres, 0..100 in 12.5 steps)
+// the G1 interpolation walks; CalculateCombDistances clamps every distance to <= 100.
+static const f32 KF_G1_DISTANCE_KNOTS[9] = {
+    0.0f, 12.5f, 25.0f, 37.5f, 50.0f, 62.5f, 75.0f, 87.5f, 100.0f
+};
+
+// unk_82170564 -- the G1 gain knot rows, one row per band edge (row0 = 10 kHz,
+// row1 = 25 kHz, row2 = 50 kHz), 9 gain knots per distance knot. The on-image row
+// stride is 0x48 (18 f32): each of the first two rows carries its 9 gains followed by
+// a repeat of the 9 distance knots; the last row carries only its 9 gains (the
+// "ReverbModel1" descriptor strings begin at 0x82170618, ending the table). The
+// asm indexes rows at +0x48*band and the next row at +0x48 more, so the 18-float
+// stride (KI_G1_ROW_STRIDE) is load-bearing and the flat 45-entry image is kept.
+enum { KI_G1_ROW_STRIDE = 18 };
+static const f32 KF_G1_GAIN_ROWS[45] = {
+    // row 0 (10 kHz): gains, then the distance-knot echo
+    0.0f, 0.03f, 0.07f, 0.11f, 0.14f, 0.16f, 0.18f, 0.22f, 0.24f,
+    0.0f, 12.5f, 25.0f, 37.5f, 50.0f, 62.5f, 75.0f, 87.5f, 100.0f,
+    // row 1 (25 kHz): gains, then the distance-knot echo
+    0.0f, 0.12f, 0.23f, 0.3f, 0.35f, 0.4f, 0.43f, 0.46f, 0.5f,
+    0.0f, 12.5f, 25.0f, 37.5f, 50.0f, 62.5f, 75.0f, 87.5f, 100.0f,
+    // row 2 (50 kHz): gains only (the table ends here)
+    0.0f, 0.31f, 0.45f, 0.53f, 0.57f, 0.61f, 0.64f, 0.67f, 0.7f
+};
+
+// flt_82170638[1652] -- the comb delay quantisation table: the primes 2..13999, in
+// order (mutually-prime comb delays avoid coincident reflections). CalculateCombDelays
+// scans it monotonically (the index persists across the six ascending-distance
+// sections) and rounds each computed delay UP to the next prime strictly greater than
+// it. The table ends at 0x82172008 (the "ATTRIBUTE_SETREVERBTIME" string), observed in
+// the image; the asm's bound check is the matching index bound 1652 (0x674).
+enum { KI_COMB_DELAY_TABLE_COUNT = 1652 };
+static const f32 KF_COMB_DELAY_TABLE[KI_COMB_DELAY_TABLE_COUNT] = {
+    2.0f, 3.0f, 5.0f, 7.0f, 11.0f, 13.0f, 17.0f, 19.0f, 23.0f, 29.0f,
+    31.0f, 37.0f, 41.0f, 43.0f, 47.0f, 53.0f, 59.0f, 61.0f, 67.0f, 71.0f,
+    73.0f, 79.0f, 83.0f, 89.0f, 97.0f, 101.0f, 103.0f, 107.0f, 109.0f, 113.0f,
+    127.0f, 131.0f, 137.0f, 139.0f, 149.0f, 151.0f, 157.0f, 163.0f, 167.0f, 173.0f,
+    179.0f, 181.0f, 191.0f, 193.0f, 197.0f, 199.0f, 211.0f, 223.0f, 227.0f, 229.0f,
+    233.0f, 239.0f, 241.0f, 251.0f, 257.0f, 263.0f, 269.0f, 271.0f, 277.0f, 281.0f,
+    283.0f, 293.0f, 307.0f, 311.0f, 313.0f, 317.0f, 331.0f, 337.0f, 347.0f, 349.0f,
+    353.0f, 359.0f, 367.0f, 373.0f, 379.0f, 383.0f, 389.0f, 397.0f, 401.0f, 409.0f,
+    419.0f, 421.0f, 431.0f, 433.0f, 439.0f, 443.0f, 449.0f, 457.0f, 461.0f, 463.0f,
+    467.0f, 479.0f, 487.0f, 491.0f, 499.0f, 503.0f, 509.0f, 521.0f, 523.0f, 541.0f,
+    547.0f, 557.0f, 563.0f, 569.0f, 571.0f, 577.0f, 587.0f, 593.0f, 599.0f, 601.0f,
+    607.0f, 613.0f, 617.0f, 619.0f, 631.0f, 641.0f, 643.0f, 647.0f, 653.0f, 659.0f,
+    661.0f, 673.0f, 677.0f, 683.0f, 691.0f, 701.0f, 709.0f, 719.0f, 727.0f, 733.0f,
+    739.0f, 743.0f, 751.0f, 757.0f, 761.0f, 769.0f, 773.0f, 787.0f, 797.0f, 809.0f,
+    811.0f, 821.0f, 823.0f, 827.0f, 829.0f, 839.0f, 853.0f, 857.0f, 859.0f, 863.0f,
+    877.0f, 881.0f, 883.0f, 887.0f, 907.0f, 911.0f, 919.0f, 929.0f, 937.0f, 941.0f,
+    947.0f, 953.0f, 967.0f, 971.0f, 977.0f, 983.0f, 991.0f, 997.0f, 1009.0f, 1013.0f,
+    1019.0f, 1021.0f, 1031.0f, 1033.0f, 1039.0f, 1049.0f, 1051.0f, 1061.0f, 1063.0f, 1069.0f,
+    1087.0f, 1091.0f, 1093.0f, 1097.0f, 1103.0f, 1109.0f, 1117.0f, 1123.0f, 1129.0f, 1151.0f,
+    1153.0f, 1163.0f, 1171.0f, 1181.0f, 1187.0f, 1193.0f, 1201.0f, 1213.0f, 1217.0f, 1223.0f,
+    1229.0f, 1231.0f, 1237.0f, 1249.0f, 1259.0f, 1277.0f, 1279.0f, 1283.0f, 1289.0f, 1291.0f,
+    1297.0f, 1301.0f, 1303.0f, 1307.0f, 1319.0f, 1321.0f, 1327.0f, 1361.0f, 1367.0f, 1373.0f,
+    1381.0f, 1399.0f, 1409.0f, 1423.0f, 1427.0f, 1429.0f, 1433.0f, 1439.0f, 1447.0f, 1451.0f,
+    1453.0f, 1459.0f, 1471.0f, 1481.0f, 1483.0f, 1487.0f, 1489.0f, 1493.0f, 1499.0f, 1511.0f,
+    1523.0f, 1531.0f, 1543.0f, 1549.0f, 1553.0f, 1559.0f, 1567.0f, 1571.0f, 1579.0f, 1583.0f,
+    1597.0f, 1601.0f, 1607.0f, 1609.0f, 1613.0f, 1619.0f, 1621.0f, 1627.0f, 1637.0f, 1657.0f,
+    1663.0f, 1667.0f, 1669.0f, 1693.0f, 1697.0f, 1699.0f, 1709.0f, 1721.0f, 1723.0f, 1733.0f,
+    1741.0f, 1747.0f, 1753.0f, 1759.0f, 1777.0f, 1783.0f, 1787.0f, 1789.0f, 1801.0f, 1811.0f,
+    1823.0f, 1831.0f, 1847.0f, 1861.0f, 1867.0f, 1871.0f, 1873.0f, 1877.0f, 1879.0f, 1889.0f,
+    1901.0f, 1907.0f, 1913.0f, 1931.0f, 1933.0f, 1949.0f, 1951.0f, 1973.0f, 1979.0f, 1987.0f,
+    1993.0f, 1997.0f, 1999.0f, 2003.0f, 2011.0f, 2017.0f, 2027.0f, 2029.0f, 2039.0f, 2053.0f,
+    2063.0f, 2069.0f, 2081.0f, 2083.0f, 2087.0f, 2089.0f, 2099.0f, 2111.0f, 2113.0f, 2129.0f,
+    2131.0f, 2137.0f, 2141.0f, 2143.0f, 2153.0f, 2161.0f, 2179.0f, 2203.0f, 2207.0f, 2213.0f,
+    2221.0f, 2237.0f, 2239.0f, 2243.0f, 2251.0f, 2267.0f, 2269.0f, 2273.0f, 2281.0f, 2287.0f,
+    2293.0f, 2297.0f, 2309.0f, 2311.0f, 2333.0f, 2339.0f, 2341.0f, 2347.0f, 2351.0f, 2357.0f,
+    2371.0f, 2377.0f, 2381.0f, 2383.0f, 2389.0f, 2393.0f, 2399.0f, 2411.0f, 2417.0f, 2423.0f,
+    2437.0f, 2441.0f, 2447.0f, 2459.0f, 2467.0f, 2473.0f, 2477.0f, 2503.0f, 2521.0f, 2531.0f,
+    2539.0f, 2543.0f, 2549.0f, 2551.0f, 2557.0f, 2579.0f, 2591.0f, 2593.0f, 2609.0f, 2617.0f,
+    2621.0f, 2633.0f, 2647.0f, 2657.0f, 2659.0f, 2663.0f, 2671.0f, 2677.0f, 2683.0f, 2687.0f,
+    2689.0f, 2693.0f, 2699.0f, 2707.0f, 2711.0f, 2713.0f, 2719.0f, 2729.0f, 2731.0f, 2741.0f,
+    2749.0f, 2753.0f, 2767.0f, 2777.0f, 2789.0f, 2791.0f, 2797.0f, 2801.0f, 2803.0f, 2819.0f,
+    2833.0f, 2837.0f, 2843.0f, 2851.0f, 2857.0f, 2861.0f, 2879.0f, 2887.0f, 2897.0f, 2903.0f,
+    2909.0f, 2917.0f, 2927.0f, 2939.0f, 2953.0f, 2957.0f, 2963.0f, 2969.0f, 2971.0f, 2999.0f,
+    3001.0f, 3011.0f, 3019.0f, 3023.0f, 3037.0f, 3041.0f, 3049.0f, 3061.0f, 3067.0f, 3079.0f,
+    3083.0f, 3089.0f, 3109.0f, 3119.0f, 3121.0f, 3137.0f, 3163.0f, 3167.0f, 3169.0f, 3181.0f,
+    3187.0f, 3191.0f, 3203.0f, 3209.0f, 3217.0f, 3221.0f, 3229.0f, 3251.0f, 3253.0f, 3257.0f,
+    3259.0f, 3271.0f, 3299.0f, 3301.0f, 3307.0f, 3313.0f, 3319.0f, 3323.0f, 3329.0f, 3331.0f,
+    3343.0f, 3347.0f, 3359.0f, 3361.0f, 3371.0f, 3373.0f, 3389.0f, 3391.0f, 3407.0f, 3413.0f,
+    3433.0f, 3449.0f, 3457.0f, 3461.0f, 3463.0f, 3467.0f, 3469.0f, 3491.0f, 3499.0f, 3511.0f,
+    3517.0f, 3527.0f, 3529.0f, 3533.0f, 3539.0f, 3541.0f, 3547.0f, 3557.0f, 3559.0f, 3571.0f,
+    3581.0f, 3583.0f, 3593.0f, 3607.0f, 3613.0f, 3617.0f, 3623.0f, 3631.0f, 3637.0f, 3643.0f,
+    3659.0f, 3671.0f, 3673.0f, 3677.0f, 3691.0f, 3697.0f, 3701.0f, 3709.0f, 3719.0f, 3727.0f,
+    3733.0f, 3739.0f, 3761.0f, 3767.0f, 3769.0f, 3779.0f, 3793.0f, 3797.0f, 3803.0f, 3821.0f,
+    3823.0f, 3833.0f, 3847.0f, 3851.0f, 3853.0f, 3863.0f, 3877.0f, 3881.0f, 3889.0f, 3907.0f,
+    3911.0f, 3917.0f, 3919.0f, 3923.0f, 3929.0f, 3931.0f, 3943.0f, 3947.0f, 3967.0f, 3989.0f,
+    4001.0f, 4003.0f, 4007.0f, 4013.0f, 4019.0f, 4021.0f, 4027.0f, 4049.0f, 4051.0f, 4057.0f,
+    4073.0f, 4079.0f, 4091.0f, 4093.0f, 4099.0f, 4111.0f, 4127.0f, 4129.0f, 4133.0f, 4139.0f,
+    4153.0f, 4157.0f, 4159.0f, 4177.0f, 4201.0f, 4211.0f, 4217.0f, 4219.0f, 4229.0f, 4231.0f,
+    4241.0f, 4243.0f, 4253.0f, 4259.0f, 4261.0f, 4271.0f, 4273.0f, 4283.0f, 4289.0f, 4297.0f,
+    4327.0f, 4337.0f, 4339.0f, 4349.0f, 4357.0f, 4363.0f, 4373.0f, 4391.0f, 4397.0f, 4409.0f,
+    4421.0f, 4423.0f, 4441.0f, 4447.0f, 4451.0f, 4457.0f, 4463.0f, 4481.0f, 4483.0f, 4493.0f,
+    4507.0f, 4513.0f, 4517.0f, 4519.0f, 4523.0f, 4547.0f, 4549.0f, 4561.0f, 4567.0f, 4583.0f,
+    4591.0f, 4597.0f, 4603.0f, 4621.0f, 4637.0f, 4639.0f, 4643.0f, 4649.0f, 4651.0f, 4657.0f,
+    4663.0f, 4673.0f, 4679.0f, 4691.0f, 4703.0f, 4721.0f, 4723.0f, 4729.0f, 4733.0f, 4751.0f,
+    4759.0f, 4783.0f, 4787.0f, 4789.0f, 4793.0f, 4799.0f, 4801.0f, 4813.0f, 4817.0f, 4831.0f,
+    4861.0f, 4871.0f, 4877.0f, 4889.0f, 4903.0f, 4909.0f, 4919.0f, 4931.0f, 4933.0f, 4937.0f,
+    4943.0f, 4951.0f, 4957.0f, 4967.0f, 4969.0f, 4973.0f, 4987.0f, 4993.0f, 4999.0f, 5003.0f,
+    5009.0f, 5011.0f, 5021.0f, 5023.0f, 5039.0f, 5051.0f, 5059.0f, 5077.0f, 5081.0f, 5087.0f,
+    5099.0f, 5101.0f, 5107.0f, 5113.0f, 5119.0f, 5147.0f, 5153.0f, 5167.0f, 5171.0f, 5179.0f,
+    5189.0f, 5197.0f, 5209.0f, 5227.0f, 5231.0f, 5233.0f, 5237.0f, 5261.0f, 5273.0f, 5279.0f,
+    5281.0f, 5297.0f, 5303.0f, 5309.0f, 5323.0f, 5333.0f, 5347.0f, 5351.0f, 5381.0f, 5387.0f,
+    5393.0f, 5399.0f, 5407.0f, 5413.0f, 5417.0f, 5419.0f, 5431.0f, 5437.0f, 5441.0f, 5443.0f,
+    5449.0f, 5471.0f, 5477.0f, 5479.0f, 5483.0f, 5501.0f, 5503.0f, 5507.0f, 5519.0f, 5521.0f,
+    5527.0f, 5531.0f, 5557.0f, 5563.0f, 5569.0f, 5573.0f, 5581.0f, 5591.0f, 5623.0f, 5639.0f,
+    5641.0f, 5647.0f, 5651.0f, 5653.0f, 5657.0f, 5659.0f, 5669.0f, 5683.0f, 5689.0f, 5693.0f,
+    5701.0f, 5711.0f, 5717.0f, 5737.0f, 5741.0f, 5743.0f, 5749.0f, 5779.0f, 5783.0f, 5791.0f,
+    5801.0f, 5807.0f, 5813.0f, 5821.0f, 5827.0f, 5839.0f, 5843.0f, 5849.0f, 5851.0f, 5857.0f,
+    5861.0f, 5867.0f, 5869.0f, 5879.0f, 5881.0f, 5897.0f, 5903.0f, 5923.0f, 5927.0f, 5939.0f,
+    5953.0f, 5981.0f, 5987.0f, 6007.0f, 6011.0f, 6029.0f, 6037.0f, 6043.0f, 6047.0f, 6053.0f,
+    6067.0f, 6073.0f, 6079.0f, 6089.0f, 6091.0f, 6101.0f, 6113.0f, 6121.0f, 6131.0f, 6133.0f,
+    6143.0f, 6151.0f, 6163.0f, 6173.0f, 6197.0f, 6199.0f, 6203.0f, 6211.0f, 6217.0f, 6221.0f,
+    6229.0f, 6247.0f, 6257.0f, 6263.0f, 6269.0f, 6271.0f, 6277.0f, 6287.0f, 6299.0f, 6301.0f,
+    6311.0f, 6317.0f, 6323.0f, 6329.0f, 6337.0f, 6343.0f, 6353.0f, 6359.0f, 6361.0f, 6367.0f,
+    6373.0f, 6379.0f, 6389.0f, 6397.0f, 6421.0f, 6427.0f, 6449.0f, 6451.0f, 6469.0f, 6473.0f,
+    6481.0f, 6491.0f, 6521.0f, 6529.0f, 6547.0f, 6551.0f, 6553.0f, 6563.0f, 6569.0f, 6571.0f,
+    6577.0f, 6581.0f, 6599.0f, 6607.0f, 6619.0f, 6637.0f, 6653.0f, 6659.0f, 6661.0f, 6673.0f,
+    6679.0f, 6689.0f, 6691.0f, 6701.0f, 6703.0f, 6709.0f, 6719.0f, 6733.0f, 6737.0f, 6761.0f,
+    6763.0f, 6779.0f, 6781.0f, 6791.0f, 6793.0f, 6803.0f, 6823.0f, 6827.0f, 6829.0f, 6833.0f,
+    6841.0f, 6857.0f, 6863.0f, 6869.0f, 6871.0f, 6883.0f, 6899.0f, 6907.0f, 6911.0f, 6917.0f,
+    6947.0f, 6949.0f, 6959.0f, 6961.0f, 6967.0f, 6971.0f, 6977.0f, 6983.0f, 6991.0f, 6997.0f,
+    7001.0f, 7013.0f, 7019.0f, 7027.0f, 7039.0f, 7043.0f, 7057.0f, 7069.0f, 7079.0f, 7103.0f,
+    7109.0f, 7121.0f, 7127.0f, 7129.0f, 7151.0f, 7159.0f, 7177.0f, 7187.0f, 7193.0f, 7207.0f,
+    7211.0f, 7213.0f, 7219.0f, 7229.0f, 7237.0f, 7243.0f, 7247.0f, 7253.0f, 7283.0f, 7297.0f,
+    7307.0f, 7309.0f, 7321.0f, 7331.0f, 7333.0f, 7349.0f, 7351.0f, 7369.0f, 7393.0f, 7411.0f,
+    7417.0f, 7433.0f, 7451.0f, 7457.0f, 7459.0f, 7477.0f, 7481.0f, 7487.0f, 7489.0f, 7499.0f,
+    7507.0f, 7517.0f, 7523.0f, 7529.0f, 7537.0f, 7541.0f, 7547.0f, 7549.0f, 7559.0f, 7561.0f,
+    7573.0f, 7577.0f, 7583.0f, 7589.0f, 7591.0f, 7603.0f, 7607.0f, 7621.0f, 7639.0f, 7643.0f,
+    7649.0f, 7669.0f, 7673.0f, 7681.0f, 7687.0f, 7691.0f, 7699.0f, 7703.0f, 7717.0f, 7723.0f,
+    7727.0f, 7741.0f, 7753.0f, 7757.0f, 7759.0f, 7789.0f, 7793.0f, 7817.0f, 7823.0f, 7829.0f,
+    7841.0f, 7853.0f, 7867.0f, 7873.0f, 7877.0f, 7879.0f, 7883.0f, 7901.0f, 7907.0f, 7919.0f,
+    7927.0f, 7933.0f, 7937.0f, 7949.0f, 7951.0f, 7963.0f, 7993.0f, 8009.0f, 8011.0f, 8017.0f,
+    8039.0f, 8053.0f, 8059.0f, 8069.0f, 8081.0f, 8087.0f, 8089.0f, 8093.0f, 8101.0f, 8111.0f,
+    8117.0f, 8123.0f, 8147.0f, 8161.0f, 8167.0f, 8171.0f, 8179.0f, 8191.0f, 8209.0f, 8219.0f,
+    8221.0f, 8231.0f, 8233.0f, 8237.0f, 8243.0f, 8263.0f, 8269.0f, 8273.0f, 8287.0f, 8291.0f,
+    8293.0f, 8297.0f, 8311.0f, 8317.0f, 8329.0f, 8353.0f, 8363.0f, 8369.0f, 8377.0f, 8387.0f,
+    8389.0f, 8419.0f, 8423.0f, 8429.0f, 8431.0f, 8443.0f, 8447.0f, 8461.0f, 8467.0f, 8501.0f,
+    8513.0f, 8521.0f, 8527.0f, 8537.0f, 8539.0f, 8543.0f, 8563.0f, 8573.0f, 8581.0f, 8597.0f,
+    8599.0f, 8609.0f, 8623.0f, 8627.0f, 8629.0f, 8641.0f, 8647.0f, 8663.0f, 8669.0f, 8677.0f,
+    8681.0f, 8689.0f, 8693.0f, 8699.0f, 8707.0f, 8713.0f, 8719.0f, 8731.0f, 8737.0f, 8741.0f,
+    8747.0f, 8753.0f, 8761.0f, 8779.0f, 8783.0f, 8803.0f, 8807.0f, 8819.0f, 8821.0f, 8831.0f,
+    8837.0f, 8839.0f, 8849.0f, 8861.0f, 8863.0f, 8867.0f, 8887.0f, 8893.0f, 8923.0f, 8929.0f,
+    8933.0f, 8941.0f, 8951.0f, 8963.0f, 8969.0f, 8971.0f, 8999.0f, 9001.0f, 9007.0f, 9011.0f,
+    9013.0f, 9029.0f, 9041.0f, 9043.0f, 9049.0f, 9059.0f, 9067.0f, 9091.0f, 9103.0f, 9109.0f,
+    9127.0f, 9133.0f, 9137.0f, 9151.0f, 9157.0f, 9161.0f, 9173.0f, 9181.0f, 9187.0f, 9199.0f,
+    9203.0f, 9209.0f, 9221.0f, 9227.0f, 9239.0f, 9241.0f, 9257.0f, 9277.0f, 9281.0f, 9283.0f,
+    9293.0f, 9311.0f, 9319.0f, 9323.0f, 9337.0f, 9341.0f, 9343.0f, 9349.0f, 9371.0f, 9377.0f,
+    9391.0f, 9397.0f, 9403.0f, 9413.0f, 9419.0f, 9421.0f, 9431.0f, 9433.0f, 9437.0f, 9439.0f,
+    9461.0f, 9463.0f, 9467.0f, 9473.0f, 9479.0f, 9491.0f, 9497.0f, 9511.0f, 9521.0f, 9533.0f,
+    9539.0f, 9547.0f, 9551.0f, 9587.0f, 9601.0f, 9613.0f, 9619.0f, 9623.0f, 9629.0f, 9631.0f,
+    9643.0f, 9649.0f, 9661.0f, 9677.0f, 9679.0f, 9689.0f, 9697.0f, 9719.0f, 9721.0f, 9733.0f,
+    9739.0f, 9743.0f, 9749.0f, 9767.0f, 9769.0f, 9781.0f, 9787.0f, 9791.0f, 9803.0f, 9811.0f,
+    9817.0f, 9829.0f, 9833.0f, 9839.0f, 9851.0f, 9857.0f, 9859.0f, 9871.0f, 9883.0f, 9887.0f,
+    9901.0f, 9907.0f, 9923.0f, 9929.0f, 9931.0f, 9941.0f, 9949.0f, 9967.0f, 9973.0f, 10007.0f,
+    10009.0f, 10037.0f, 10039.0f, 10061.0f, 10067.0f, 10069.0f, 10079.0f, 10091.0f, 10093.0f, 10099.0f,
+    10103.0f, 10111.0f, 10133.0f, 10139.0f, 10141.0f, 10151.0f, 10159.0f, 10163.0f, 10169.0f, 10177.0f,
+    10181.0f, 10193.0f, 10211.0f, 10223.0f, 10243.0f, 10247.0f, 10253.0f, 10259.0f, 10267.0f, 10271.0f,
+    10273.0f, 10289.0f, 10301.0f, 10303.0f, 10313.0f, 10321.0f, 10331.0f, 10333.0f, 10337.0f, 10343.0f,
+    10357.0f, 10369.0f, 10391.0f, 10399.0f, 10427.0f, 10429.0f, 10433.0f, 10453.0f, 10457.0f, 10459.0f,
+    10463.0f, 10477.0f, 10487.0f, 10499.0f, 10501.0f, 10513.0f, 10529.0f, 10531.0f, 10559.0f, 10567.0f,
+    10589.0f, 10597.0f, 10601.0f, 10607.0f, 10613.0f, 10627.0f, 10631.0f, 10639.0f, 10651.0f, 10657.0f,
+    10663.0f, 10667.0f, 10687.0f, 10691.0f, 10709.0f, 10711.0f, 10723.0f, 10729.0f, 10733.0f, 10739.0f,
+    10753.0f, 10771.0f, 10781.0f, 10789.0f, 10799.0f, 10831.0f, 10837.0f, 10847.0f, 10853.0f, 10859.0f,
+    10861.0f, 10867.0f, 10883.0f, 10889.0f, 10891.0f, 10903.0f, 10909.0f, 10937.0f, 10939.0f, 10949.0f,
+    10957.0f, 10973.0f, 10979.0f, 10987.0f, 10993.0f, 11003.0f, 11027.0f, 11047.0f, 11057.0f, 11059.0f,
+    11069.0f, 11071.0f, 11083.0f, 11087.0f, 11093.0f, 11113.0f, 11117.0f, 11119.0f, 11131.0f, 11149.0f,
+    11159.0f, 11161.0f, 11171.0f, 11173.0f, 11177.0f, 11197.0f, 11213.0f, 11239.0f, 11243.0f, 11251.0f,
+    11257.0f, 11261.0f, 11273.0f, 11279.0f, 11287.0f, 11299.0f, 11311.0f, 11317.0f, 11321.0f, 11329.0f,
+    11351.0f, 11353.0f, 11369.0f, 11383.0f, 11393.0f, 11399.0f, 11411.0f, 11423.0f, 11437.0f, 11443.0f,
+    11447.0f, 11467.0f, 11471.0f, 11483.0f, 11489.0f, 11491.0f, 11497.0f, 11503.0f, 11519.0f, 11527.0f,
+    11549.0f, 11551.0f, 11579.0f, 11587.0f, 11593.0f, 11597.0f, 11617.0f, 11621.0f, 11633.0f, 11657.0f,
+    11677.0f, 11681.0f, 11689.0f, 11699.0f, 11701.0f, 11717.0f, 11719.0f, 11731.0f, 11743.0f, 11777.0f,
+    11779.0f, 11783.0f, 11789.0f, 11801.0f, 11807.0f, 11813.0f, 11821.0f, 11827.0f, 11831.0f, 11833.0f,
+    11839.0f, 11863.0f, 11867.0f, 11887.0f, 11897.0f, 11903.0f, 11909.0f, 11923.0f, 11927.0f, 11933.0f,
+    11939.0f, 11941.0f, 11953.0f, 11959.0f, 11969.0f, 11971.0f, 11981.0f, 11987.0f, 12007.0f, 12011.0f,
+    12037.0f, 12041.0f, 12043.0f, 12049.0f, 12071.0f, 12073.0f, 12097.0f, 12101.0f, 12107.0f, 12109.0f,
+    12113.0f, 12119.0f, 12143.0f, 12149.0f, 12157.0f, 12161.0f, 12163.0f, 12197.0f, 12203.0f, 12211.0f,
+    12227.0f, 12239.0f, 12241.0f, 12251.0f, 12253.0f, 12263.0f, 12269.0f, 12277.0f, 12281.0f, 12289.0f,
+    12301.0f, 12323.0f, 12329.0f, 12343.0f, 12347.0f, 12373.0f, 12377.0f, 12379.0f, 12391.0f, 12401.0f,
+    12409.0f, 12413.0f, 12421.0f, 12433.0f, 12437.0f, 12451.0f, 12457.0f, 12473.0f, 12479.0f, 12487.0f,
+    12491.0f, 12497.0f, 12503.0f, 12511.0f, 12517.0f, 12527.0f, 12539.0f, 12541.0f, 12547.0f, 12553.0f,
+    12569.0f, 12577.0f, 12583.0f, 12589.0f, 12601.0f, 12611.0f, 12613.0f, 12619.0f, 12637.0f, 12641.0f,
+    12647.0f, 12653.0f, 12659.0f, 12671.0f, 12689.0f, 12697.0f, 12703.0f, 12713.0f, 12721.0f, 12739.0f,
+    12743.0f, 12757.0f, 12763.0f, 12781.0f, 12791.0f, 12799.0f, 12809.0f, 12821.0f, 12823.0f, 12829.0f,
+    12841.0f, 12853.0f, 12889.0f, 12893.0f, 12899.0f, 12907.0f, 12911.0f, 12917.0f, 12919.0f, 12923.0f,
+    12941.0f, 12953.0f, 12959.0f, 12967.0f, 12973.0f, 12979.0f, 12983.0f, 13001.0f, 13003.0f, 13007.0f,
+    13009.0f, 13033.0f, 13037.0f, 13043.0f, 13049.0f, 13063.0f, 13093.0f, 13099.0f, 13103.0f, 13109.0f,
+    13121.0f, 13127.0f, 13147.0f, 13151.0f, 13159.0f, 13163.0f, 13171.0f, 13177.0f, 13183.0f, 13187.0f,
+    13217.0f, 13219.0f, 13229.0f, 13241.0f, 13249.0f, 13259.0f, 13267.0f, 13291.0f, 13297.0f, 13309.0f,
+    13313.0f, 13327.0f, 13331.0f, 13337.0f, 13339.0f, 13367.0f, 13381.0f, 13397.0f, 13399.0f, 13411.0f,
+    13417.0f, 13421.0f, 13441.0f, 13451.0f, 13457.0f, 13463.0f, 13469.0f, 13477.0f, 13487.0f, 13499.0f,
+    13513.0f, 13523.0f, 13537.0f, 13553.0f, 13567.0f, 13577.0f, 13591.0f, 13597.0f, 13613.0f, 13619.0f,
+    13627.0f, 13633.0f, 13649.0f, 13669.0f, 13679.0f, 13681.0f, 13687.0f, 13691.0f, 13693.0f, 13697.0f,
+    13709.0f, 13711.0f, 13721.0f, 13723.0f, 13729.0f, 13751.0f, 13757.0f, 13759.0f, 13763.0f, 13781.0f,
+    13789.0f, 13799.0f, 13807.0f, 13829.0f, 13831.0f, 13841.0f, 13859.0f, 13873.0f, 13877.0f, 13879.0f,
+    13883.0f, 13901.0f, 13903.0f, 13907.0f, 13913.0f, 13921.0f, 13931.0f, 13933.0f, 13963.0f, 13967.0f,
+    13997.0f, 13999.0f
+};
+
+// KI_REVERB_SCRATCH_SAMPLES -- Process reserves 768 samples (0xC00 bytes) off the System
+// object table's scratch cursor (word [3]) as every delay line's shared local buffer.
+enum { KI_REVERB_SCRATCH_SAMPLES = 768 };
 
 // -------------------------------------------------------------------------------------
 // GetSize @0x82B9ADA8 -- the plug-in instance footprint.
@@ -197,6 +422,170 @@ int ReverbModel1::CalculateCombDistances(ReverbModel1 *self, f32 *pRoomSize,
     const f32 d3 = (d1 + step) + step;           // v10
     pCombDistances[3] = d3;
     pCombDistances[4] = d3 + step;
+    return 1;
+}
+
+// -------------------------------------------------------------------------------------
+// CalculateCombDelays @0x82B9AEE0 -- quantise the six comb reflection distances into
+// integer delay lengths.
+//
+// Each distance is turned into a delay in samples (metres -> seconds -> samples) and then
+// rounded UP to the first entry of the prime table strictly greater than it. The table
+// index PERSISTS across the six sections (the distances are ascending, so the scan sweeps
+// the table once and every section lands on a DIFFERENT prime -- the mutually-prime comb
+// delays that keep the reflections from coinciding). Above the 48 kHz internal rate the
+// delays are computed at 48 kHz and then scaled by rate/48000.
+//
+// `self` is passed (r3) but unused by the body. Only pCombDelays[5] is pre-zeroed; when the
+// scan runs off the end of the table the section keeps whatever it already held (faithful --
+// the asm simply skips the store).
+// -------------------------------------------------------------------------------------
+int ReverbModel1::CalculateCombDelays(ReverbModel1 *self, f64 sampleRate,
+                                      const f32 *pCombDistances, s32 *pCombDelays)
+{
+    (void)self; // `this` is passed (r3) but unused by the body
+
+    pCombDelays[5] = 0; // stw r11(0), 0x14(r5) at entry -- the only pre-zeroed section
+
+    s32 tableIndex = 0; // r11 -- persists across the six sections
+    for (int i = 0; i < 6; ++i)
+    {
+        // Above 48 kHz the delay is computed at the internal rate and scaled afterwards.
+        f64 rate;      // f0
+        f32 rateScale; // f13
+        if (sampleRate > KF_INTERNAL_RATE)
+        {
+            rate = KF_INTERNAL_RATE;
+            rateScale = static_cast<f32>(sampleRate * KF_INV_INTERNAL_RATE);
+        }
+        else
+        {
+            rate = sampleRate;
+            rateScale = 1.0f;
+        }
+
+        const f32 delay = static_cast<f32>(rate * (pCombDistances[i] * KF_DIST_TO_SECONDS));
+
+        if (tableIndex < KI_COMB_DELAY_TABLE_COUNT)
+        {
+            // Walk to the first prime strictly greater than the computed delay; the bound is
+            // re-tested after every step, and an exhausted table skips the store.
+            while (tableIndex < KI_COMB_DELAY_TABLE_COUNT
+                   && KF_COMB_DELAY_TABLE[tableIndex] <= delay)
+            {
+                ++tableIndex;
+            }
+            if (tableIndex < KI_COMB_DELAY_TABLE_COUNT)
+                pCombDelays[i] = static_cast<s32>(KF_COMB_DELAY_TABLE[tableIndex++]); // fctiwz
+        }
+
+        if (rateScale > 1.0f)
+            pCombDelays[i] = static_cast<s32>(static_cast<f32>(pCombDelays[i]) * rateScale);
+    }
+    return 1;
+}
+
+// -------------------------------------------------------------------------------------
+// CalculateG1Values @0x82B9AFD0 -- the six comb decay gains.
+//
+// The gain knot rows are tabulated per sample-rate band (10 k / 25 k / 50 kHz); the rate is
+// clamped into its band and the two bracketing rows are blended into a nine-entry gain
+// frame. Each comb distance is then located between two distance knots and its gain read by
+// linear interpolation across that span.
+//
+// The blended frame is built as ONE contiguous 18-float stack frame -- the nine distance
+// knots followed by the nine blended gains -- and the asm's knot scan is UNGUARDED (it walks
+// forward until a knot is >= the distance and would read into the gain half if it ever ran
+// off the end). CalculateCombDistances clamps every distance to <= 100 == the last knot, so
+// the scan always stops inside the knot half; the adjacency is reproduced (a single array),
+// and NO bound check is added, exactly as the asm has none.
+//
+// Finally, if the damping attribute has moved since the last configure, it is floored just
+// above the largest comb gain and every comb section is reset / re-sized / re-primed, its
+// gain divided down by the (possibly just-floored) damping.
+// -------------------------------------------------------------------------------------
+int ReverbModel1::CalculateG1Values(ReverbModel1 *self, f32 *pCombG1, f64 sampleRate)
+{
+    // ---- band select: clamp the rate into its band and derive the blend fraction --------
+    f64 clamped; // f0 -- the rate clamped into the band being interpolated over
+    s32 band;    // r31 -- the lower gain row of the band
+    f32 edge;    // f12 / f13 -- the band's upper rate knot
+    f32 invSpan; // f0 -- the reciprocal of the band's rate span
+    if (sampleRate >= KF_G1_RATE_HI)
+    {
+        clamped = KF_G1_RATE_HI;
+        band    = 1;
+        edge    = KF_G1_RATE_HI;
+        invSpan = KF_G1_INV_HI_SPAN;
+    }
+    else if (sampleRate > KF_G1_RATE_MID)
+    {
+        clamped = sampleRate;
+        band    = 1;
+        edge    = KF_G1_RATE_HI;
+        invSpan = KF_G1_INV_HI_SPAN;
+    }
+    else
+    {
+        clamped = (sampleRate > KF_G1_RATE_LO) ? sampleRate : static_cast<f64>(KF_G1_RATE_LO);
+        band    = 0;
+        edge    = KF_G1_RATE_MID;
+        invSpan = KF_G1_INV_LO_SPAN;
+    }
+    const f32 frac = static_cast<f32>(edge - clamped) * invSpan; // f31 -- weight of the LOW row
+    const f32 w    = 1.0f - frac;                                // f29 -- weight of the HIGH row
+
+    // ---- build the interpolation frame: knots [0..8] then blended gains [9..17] ---------
+    // The two halves are ONE contiguous frame on the X360 stack (var_A0 .. var_A0+0x44) and
+    // that adjacency is what the unguarded scan below relies on -- keep them in one array.
+    f32 lTable[18];
+    lTable[0] = KF_ZERO;         // stfs flt_82001CC0
+    memset(&lTable[1], 0, 0x44); // XMemSet -- the asm's 68-byte clear (every word is
+                                 // overwritten by the loop below; reproduced as-is)
+
+    const f32 *pLowRow = &KF_G1_GAIN_ROWS[KI_G1_ROW_STRIDE * band]; // r10
+    for (int k = 0; k < 9; ++k)
+    {
+        lTable[k]     = KF_G1_DISTANCE_KNOTS[k];
+        lTable[9 + k] = pLowRow[KI_G1_ROW_STRIDE + k] * w + pLowRow[k] * frac; // fmadds
+    }
+
+    // ---- per-section interpolation ------------------------------------------------------
+    const f32 invStep = 1.0f / (lTable[1] - lTable[0]); // fdivs (== 1/12.5)
+    for (int i = 0; i < 6; ++i)
+    {
+        const f32 dist = self->mfCombDistances[i];
+
+        // Walk to the first knot at or above the distance (unguarded, as in the asm).
+        s32  idx   = 0;    // r11
+        bool found = false; // r6
+        do
+        {
+            ++idx;
+            if (dist <= lTable[idx])
+                found = true;
+        } while (!found);
+
+        const f32 t = (lTable[idx] - dist) * invStep;
+        pCombG1[i] = lTable[9 + idx] * (1.0f - t) + lTable[8 + idx] * t;
+    }
+
+    // ---- damping epilogue ---------------------------------------------------------------
+    if (self->mfDamping != self->mfLastDamping)
+    {
+        // Floor the damping just above the largest comb gain so the loop stays stable.
+        const f32 dampingFloor = pCombG1[5] + KF_DAMPING_EPSILON;
+        if (self->mfDamping < dampingFloor)
+            self->mfDamping = dampingFloor;
+
+        for (int i = 0; i < 6; ++i)
+        {
+            CombFilter::CombFilterResetFunc(&self->mComb[i]);
+            self->mCombDelay[i].Resize(self->miCombDelays[i] + 3); // return ignored (asm)
+            self->mCombDelay[i].Reset(self->miCombDelays[i] + 1);
+            pCombG1[i] = pCombG1[i] / self->mfDamping; // damping re-read every iteration
+        }
+    }
     return 1;
 }
 
@@ -418,6 +807,133 @@ int ReverbModel1::ReleaseEvent(ReverbModel1 *self)
         System::RemoveTimer(off_83271928, &self->mTimer);
 
     return 0;
+}
+
+// -------------------------------------------------------------------------------------
+// Process @0x82B9F7D0 -- process one frame through the reverb network.
+//
+// Every call re-installs the comb / all-pass sections' IFilter apply+reset dispatch funcs and
+// hands each section to its delay line together with a shared 768-sample scratch buffer
+// carved off the System object table's scratch cursor (word [3]; restored at the tail) --
+// exactly the Delay::Process idiom.
+//
+// While the reverb time is positive the six comb sections are run over the frame (the first
+// overwrites the destination, the other five accumulate into it), the context's src/dst slots
+// are ping-ponged, and the summed comb output is coloured by the all-pass ladder, whose
+// per-mode shape also duplicates the result across the output channels. The slots are then
+// swapped BACK (the pair is a net no-op, but both swaps are real stores and are reproduced).
+// When the reverb time has fallen to zero the frame is silenced instead.
+// -------------------------------------------------------------------------------------
+int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
+{
+    // The frame's channel-buffer descriptors, latched at entry (r25 / r24).
+    AudioChannelBuffer *pSrc = ctx->mpSrcBuffer;
+    AudioChannelBuffer *pDst = ctx->mpDstBuffer;
+
+    // Reserve the shared 768-sample scratch region off the System object table's scratch
+    // cursor (word [3]); the cursor is restored at the tail.
+    System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
+    f32 **ppScratchTable = reinterpret_cast<f32 **>(pSystem->mpObjectTable);
+    f32 *pScratchTop = ppScratchTable[3];                        // r21 (saved to restore)
+    f32 *pLocalBuffer = pScratchTop - KI_REVERB_SCRATCH_SAMPLES; // r21 - 0xC00 bytes
+    ppScratchTable[3] = pLocalBuffer;
+
+    // Install the comb sections' dispatch funcs through the IFilter view their delay lines
+    // call (the leading two slots of each section ARE the apply/reset function pointers).
+    for (int i = 0; i < 6; ++i)
+    {
+        IFilter *pCombInterface = reinterpret_cast<IFilter *>(&self->mComb[i]);
+        pCombInterface->mpApplyFunc =
+            reinterpret_cast<IFilterApplyFunc>(&CombFilter::CombFilterApplyFunc); // stw @ +0x00
+        pCombInterface->mpResetFunc =
+            reinterpret_cast<IFilterResetFunc>(&CombFilter::CombFilterResetFunc); // stw @ +0x04
+        self->mCombDelay[i].SetFilter(pCombInterface);
+        self->mCombDelay[i].SetLocalBuffer(pLocalBuffer, KI_REVERB_SCRATCH_SAMPLES);
+    }
+
+    // Same for the live all-pass sections (the count is re-read every iteration, as in the asm).
+    for (int i = 0; i < self->mbAllPassCount; ++i)
+    {
+        IFilter *pAllPassInterface = reinterpret_cast<IFilter *>(&self->mAllPass[i]);
+        pAllPassInterface->mpApplyFunc =
+            reinterpret_cast<IFilterApplyFunc>(&AllPassFilter::AllPassFilterApplyFunc);
+        pAllPassInterface->mpResetFunc =
+            reinterpret_cast<IFilterResetFunc>(&AllPassFilter::AllPassFilterResetFunc);
+        self->mAllPassDelay[i].SetFilter(pAllPassInterface);
+        self->mAllPassDelay[i].SetLocalBuffer(pLocalBuffer, KI_REVERB_SCRATCH_SAMPLES);
+    }
+
+    if (self->mfDecayTime > KF_ZERO)
+    {
+        // Comb bank: section 0 overwrites the destination, the other five accumulate (src=1).
+        self->mCombDelay[0].ApplyFilter(256, pSrc, pDst, 0);
+        for (int i = 1; i < 6; ++i)
+            self->mCombDelay[i].ApplyFilter(256, pSrc, pDst, 1);
+
+        // Ping-pong the context slots: the comb output becomes the all-pass input.
+        AudioChannelBuffer *pOldSrc = ctx->mpSrcBuffer; // r31
+        AudioChannelBuffer *pOldDst = ctx->mpDstBuffer; // r29
+        ctx->mpDstBuffer = pOldSrc;
+        ctx->mpSrcBuffer = pOldDst;
+
+        // All-pass ladder: input = pOldDst (the comb sum), output = pOldSrc. Each memcpy
+        // duplicates the freshly written channel 0 of pOldSrc into another channel
+        // (channel k lives at mpSamples + muStride * k; 0x400 bytes == the 256-sample frame).
+        const u8 mode = self->mBase.mbChannelCount;
+        if (mode == 1)
+        {
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+        }
+        else if (mode == 2)
+        {
+            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+        }
+        else if (mode == 4)
+        {
+            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 3,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 3 <- channel 0
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 2,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 2 <- channel 0
+        }
+        else
+        {
+            self->mAllPassDelay[2].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 2,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 2 <- channel 0
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 4,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 4 <- channel 0
+            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 3,
+                   pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 3 <- channel 0
+            memset(pOldSrc->mpSamples + pOldSrc->muStride * 5,
+                   0, 0x400);                  // XMemSet -- channel 5 silenced
+        }
+
+        // Swap the slots back (loc_82B9FB0C) -- the pair is a net no-op but both are real
+        // stores, so both are reproduced.
+        AudioChannelBuffer *pSwap = ctx->mpSrcBuffer;
+        ctx->mpSrcBuffer = ctx->mpDstBuffer;
+        ctx->mpDstBuffer = pSwap;
+    }
+    else
+    {
+        // Reverb time has fallen to zero: silence every channel of the frame's src buffer.
+        for (u32 channel = 0; channel < self->mBase.mbChannelCount; ++channel)
+            memset(pSrc->mpSamples + pSrc->muStride * channel, 0, 0x400); // XMemSet
+    }
+
+    ppScratchTable[3] = pScratchTop; // restore the scratch cursor
+    return 1;
 }
 
 // -------------------------------------------------------------------------------------

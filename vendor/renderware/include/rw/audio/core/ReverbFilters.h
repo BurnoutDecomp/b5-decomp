@@ -44,6 +44,25 @@ void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32 *base, f32 *work,
                        f32 *feedforwardA, f32 *feedforwardB, s32 lowPass);
 
 // -------------------------------------------------------------------------------------
+// The feedback-comb processing kernel CombFilter::CombFilterApplyFunc dispatches
+// (@0x82B64C20, exported). Like AllPassFilterFunc it has its own X360 address but no
+// standalone TU, so it is homed here alongside its only caller family. Per sample:
+//   accum[n]       = base[n] - state*g1 - work[n+1]*g2      (the comb loop write)
+//   feedforward[n] = (work[n]*g3 + work[n+1]) * g4          (the damped output tap;
+//                                                            += accumulating when
+//                                                            lowPass != 0 -- the comb
+//                                                            bank's sum-into-mix form)
+//   state          = accum[n]
+// and the final `state` is returned (the caller latches it into CombFilter::mfState).
+// The X360 signature is (count r3, g1..g4 f1..f4, state f5, base r9, work r10, then
+// accum / feedforward / lowPass on the stack); the Hex-Rays a7..a32 padding ints are
+// dead register/stack noise and are omitted, exactly as AllPassFilterFunc omits its
+// dead a4/a5.
+// -------------------------------------------------------------------------------------
+f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
+                   f32 *base, f32 *work, f32 *accum, f32 *feedforward, s32 lowPass);
+
+// -------------------------------------------------------------------------------------
 // AllPassFilter -- one all-pass reverb section.
 //
 // FLAG (rwaudio PDB reconcile -- DIVERGE, layout kept): the ProStreet-08 X360 PDB names
@@ -91,6 +110,11 @@ public:
     static AllPassFilter *AllPassFilter_ctor(AllPassFilter *self); // @0x82B6C3D8
     static void *AllPassFilterApplyFunc(AllPassFilter *self, s32 count, s32 src,
                                         f32 *extra, Context *ctx); // @0x82B64640
+    // The all-pass reset installed in the IFilter reset slot. The X360 image installs the
+    // shared empty thunk 0x82AD5078 there (ReverbModel1::Process @0x82B9F884..94): the
+    // original empty reset was ICF-folded onto that lone-`blr` thunk (exactly as the
+    // trivial ~TimerHandle was), so the reconstructed reset is explicit and empty.
+    static AllPassFilter *AllPassFilterResetFunc(AllPassFilter *self); // ICF-folded -> 0x82AD5078
     static AllPassFilter *SetGains(AllPassFilter *self, f32 g1, f32 g2); // @0x82B64688
 
     s32 miField00; // +0x00
@@ -125,7 +149,7 @@ public:
 // names recorded above for when an IFilter base is introduced.
 //
 // Layout grounded in CombFilter::CombFilter @0x82B6C6B0, SetGains
-// @0x82B64D98, CombFilterResetFunc @0x82B64D88:
+// @0x82B64D98, CombFilterResetFunc @0x82B64D88, CombFilterApplyFunc @0x82B64D00:
 //   +0x00  miField00  (int,  init 0)
 //   +0x04  miField04  (int,  init 0)
 //   +0x08  miMode     (int,  init 2; tap/length descriptor)
@@ -141,7 +165,14 @@ public:
 class CombFilter
 {
 public:
+    // The per-tap context the comb apply func is handed is byte-identical to the all-pass
+    // one (base / feedback / inactive-flag / accum / feedforward) -- same idiom as
+    // DelayFilter's `typedef DelayFilterContext Context`.
+    typedef AllPassFilter::Context Context;
+
     static CombFilter *CombFilter_ctor(CombFilter *self);          // @0x82B6C6B0
+    static void *CombFilterApplyFunc(CombFilter *self, s32 count, s32 src,
+                                     f32 *extra, Context *ctx);    // @0x82B64D00
     static CombFilter *CombFilterResetFunc(CombFilter *self);      // @0x82B64D88
     static CombFilter *SetGains(CombFilter *self, f32 g1, f32 g2,
                                 f32 g3, f32 g4);                   // @0x82B64D98
