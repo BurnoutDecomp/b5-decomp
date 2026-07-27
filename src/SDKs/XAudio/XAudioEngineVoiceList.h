@@ -45,6 +45,12 @@ void  KfLowerIrql(KIRQL auNewIrql);
 // here as the platform current-thread pointer. Supplied by the platform layer.
 void* KeGetCurrentThread(void);
 
+// Current hardware-thread (processor) index, 0..5. The X360 asm reads the KPCR
+// byte directly (`lbz 0x10C(r13)` -- CVoice::ProcessEffect, the CEngine
+// processing paths); modelled by the documented Xbox current-processor accessor.
+// FLAG: source is the KPCR (r13) in the binary. Supplied by the platform layer.
+u32 KeGetCurrentProcessorNumber(void);
+
 // ---------------------------------------------------------------------------
 // The XAudio module-shared RECURSIVE spin-lock (rodata @ 0x83222C28). One global
 // lock guards the engine's voice-list swaps and the CEngine spinlock-protected

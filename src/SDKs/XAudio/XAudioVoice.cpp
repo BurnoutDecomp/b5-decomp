@@ -13,15 +13,16 @@
 // Get/SetEffectParam, ProcessEffects, and the class `operator delete` (the free
 // arm of the scalar deleting destructor).
 //
-// Still BLOCKED (bodies deferred; declarations in the header):
-//   - Process                : dispatches this class's OWN vtable slots 15/18/21,
-//                              whose order is not attested (phantom-slot fabrication).
-//   - ProcessEffect          : reads the per-hw-thread index from the r13 KPCR and
-//                              indexes an un-recovered gpEngine sub-table.
-//   - Start/Stop/OnStart/OnStopVoice : Xbox kernel spinlock/IRQL primitives + the
-//                              un-recovered module lock/state globals.
-//   - Initialize / GetObjectAdditionalSize : the source-init descriptor's interior
-//                              channel sub-byte + un-recovered frame-buffer descriptors.
+// WAVE D UNBLOCK: the CVoice vtable slot order is now RECOVERED from the rodata
+// (off_821B5770; see the header banner + scratchpad/waveD/CVoice.spec.md), the
+// module recursive spin-lock is the committed gXAudioModuleLock
+// (XAudioEngineVoiceList.h), the per-hw-thread index accessor is declared there
+// (KeGetCurrentProcessorNumber), the gpEngine sub-table at +0x0C is the
+// per-thread frame-buffer pair array (CEngine::mpThreadFrameBuffers), and the
+// init-descriptor / effect-table shapes are homed in the header (SVoiceInit /
+// SVoiceEffectTable). The formerly-blocked bodies (Start/Stop/OnStartVoice/
+// OnStopVoice/Process/ProcessEffect/Initialize/GetObjectAdditionalSize) are
+// implemented in the wave-D partfiles (XAudioVoice_part_*.cpp).
 // ===========================================================================
 
 namespace XAUDIO
@@ -63,11 +64,11 @@ s32 CVoice::GetVoiceContext(void** apContext)
 }
 
 // @ 0x82C2FC88:
-//   copies the two format words at +0x34 / +0x38 out, returns 0.
+//   copies the two format words at +0x34 / +0x38 out, returns 0. (The two word
+//   moves are expressed as the struct copy they implement.)
 s32 CVoice::GetVoiceFormat(SVoiceFormat* apFormat)
 {
-    apFormat->muField0 = mFormat.muField0;
-    apFormat->muField1 = mFormat.muField1;
+    *apFormat = mFormat;
     return 0;
 }
 
@@ -76,8 +77,7 @@ s32 CVoice::GetVoiceFormat(SVoiceFormat* apFormat)
 //   the source-level setter returns void.)
 void CVoice::SetVoiceFormat(const SVoiceFormat* apFormat)
 {
-    mFormat.muField0 = apFormat->muField0;
-    mFormat.muField1 = apFormat->muField1;
+    mFormat = *apFormat;
 }
 
 // @ 0x82C30828:
@@ -141,11 +141,11 @@ CVoice::CVoice(void* apAllocator, u8 auVoiceType)
     }
     muVoiceType = auVoiceType;
 
-    // Both list heads are circular sentinels linked to themselves.
-    mpListANext = &mpListANext;
-    mpListAPrev = &mpListANext;
-    mpListBNext = &mpListBNext;
-    mpListBPrev = &mpListBNext;
+    // Both list links are circular sentinels linked to themselves.
+    mListA.mpNext = &mListA;
+    mListA.mpPrev = &mListA;
+    mListB.mpNext = &mListB;
+    mListB.mpPrev = &mListB;
 
     mpReserved28 = nullptr;
 }
@@ -238,7 +238,7 @@ s32 CVoice::SetEffectParam(u8 auIndex, s32 aParam0, s32 aParam1, s32 aParam2)
 // @ 0x82C32E60:
 //   run ProcessEffect over each effect in order, stopping on the first negative
 //   HRESULT (the loop tests the running result before each dispatch).
-s32 CVoice::ProcessEffects(int* apInOut)
+s32 CVoice::ProcessEffects(CFrameBuffer** apInOut)
 {
     s32 result = 0;
     if (muNumEffects)
