@@ -80,6 +80,52 @@ void BridgeEntityModulesToOutput_PrePhysics(
     lpOutputBuffer->SetTriggerEntityOutputInterface(lpTriggerOutput_PrePhysics->GetOutputInterface());
 }
 
+// ----------------------------------------------------------------------------
+// BridgeEntityModulesToOutput_PostPhysics  @ 0x827AEEB0
+//
+// The post-physics output fan-in. THE STREAMER LEG IS THE FIRST TRANSFER: the
+// world-entity post-physics output's staged GameData resource requests are
+// appended into the world update-output's request interface --
+//     v12 = WorldEntityIO::OutputBuffer_PostPhysics::GetResourceRequestInterface(a6);
+//     VariableEventQueue<4096,16>::Append<4096,16>(
+//         UpdateOutputBuffer::GetResourceRequestResourceInterface(a2), v12);
+// -- which LoadingScriptedState::UpdateWorldModule then forwards into the
+// GameData input (BridgeWorldToResource @0x823E5300), i.e. this is how a TRK_UNIT
+// load request raised by the streamer in PreSceneUpdate leaves the world module.
+//
+// PARTIAL SLICE (FLAG): the console body continues with the traffic/race-car/prop
+// legs (traffic resource requests under the miUT_* monitor, the traffic scene-result
+// and game-event appends, BridgeRaceCarEntityInfoToOutput_PostPhysics, the prop VFX/
+// physical/update-notification queues and the crash-network output). Every one of
+// those SOURCE modules is itself a documented inert boot gate on this build, so
+// dropping their transfers is the consistent observable; they land with their
+// modules. The four X360 null tripwires (:74-:77) are reproduced.
+// ----------------------------------------------------------------------------
+void BridgeEntityModulesToOutput_PostPhysics(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutput_PostPhysics,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutput_PostPhysics,
+    const BrnWorld::PropEntityIO::OutputBuffer_PostPhysics* lpPropOutput_PostPhysics,
+    const BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutput_PostPhysics)
+{
+    (void)lpWorldModule;
+    (void)lpRaceCarOutput_PostPhysics;
+    (void)lpPropOutput_PostPhysics;
+
+    CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");                                   // :74
+    CGS_ASSERT(lpTrafficOutput_PostPhysics != 0, "lpTrafficOutputBuffer_PostPhysics != NULL");  // :75
+    CGS_ASSERT(lpRaceCarOutput_PostPhysics != 0, "lpRaceCarOutputBuffer_PostPhysics != NULL");  // :76
+    CGS_ASSERT(lpPropOutput_PostPhysics != 0, "lpPropOutputBuffer_PostPhysics != NULL");        // :77
+
+    // The world-entity (streamer) resource-request flush.
+    if (lpWorldEntityOutput_PostPhysics != 0)
+    {
+        lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
+            lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
+    }
+}
+
 
 // ----------------------------------------------------------------------------
 // BridgeWorldResourceRequestsToOutput_Prepare  @ 0x827ADA28
@@ -133,14 +179,35 @@ void BridgeAIModuleToOutput(
     CGS_ASSERT( lpWorldOutput != 0, "lpWorldOutput != NULL" );
     CGS_ASSERT( lpAIOutputBuffer != 0, "lpAIOutputBuffer != NULL" );
 
-    lpWorldOutput->AppendResourceRequestInterface(
-        lpAIOutputBuffer->GetAIResourceRequestInterface() );
-    lpWorldOutput->AppendRouteResponseQueue(
-        lpAIOutputBuffer->GetRouteResponseQueue() );
-    lpWorldOutput->SetAICarOutputInterface(
-        lpAIOutputBuffer->GetAICarOutputInterfaceConst() );
-    lpWorldOutput->AppendGameEventQueue(
-        lpAIOutputBuffer->GetGameEventQueueConst() );
+    // [FLAG PC boot gate] BrnAI::AIModuleIO::OutputBuffer is still an opaque image on
+    // this build and its four const getters are documented inert gates that return NULL;
+    // every one of the four world-side Append/Set entry points below dereferences its
+    // argument unguarded. Skip each transfer while its source getter is gated -- delete
+    // the guards when the AI output buffer's members land.
+    const BrnResource::GameDataIO::RequestInterface<4096>* lpAIRequests =
+        lpAIOutputBuffer->GetAIResourceRequestInterface();
+    if ( lpAIRequests != 0 )
+    {
+        lpWorldOutput->AppendResourceRequestInterface( lpAIRequests );
+    }
+    const BrnWorldIO::UpdateOutputBuffer::RouteResponseQueue* lpRouteResponses =
+        lpAIOutputBuffer->GetRouteResponseQueue();
+    if ( lpRouteResponses != 0 )
+    {
+        lpWorldOutput->AppendRouteResponseQueue( lpRouteResponses );
+    }
+    const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutput =
+        lpAIOutputBuffer->GetAICarOutputInterfaceConst();
+    if ( lpAICarOutput != 0 )
+    {
+        lpWorldOutput->SetAICarOutputInterface( lpAICarOutput );
+    }
+    const BrnWorldIO::UpdateOutputBuffer::GameEventQueue* lpAIGameEvents =
+        lpAIOutputBuffer->GetGameEventQueueConst();
+    if ( lpAIGameEvents != 0 )
+    {
+        lpWorldOutput->AppendGameEventQueue( lpAIGameEvents );
+    }
 }
 
 // ----------------------------------------------------------------------------

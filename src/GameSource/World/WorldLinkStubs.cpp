@@ -222,10 +222,20 @@ void BrnAI::AIModule::Construct()
 {
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnAI::AIModule::Destruct()
 {
-    CGS_ASSERT(false, "AIModule::Destruct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "AIModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -245,41 +255,91 @@ bool BrnAI::AIModule::Prepare(class BrnResource::GameDataIO::AllocatorList *,str
     return true;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 bool BrnAI::AIModule::Release()
 {
-    CGS_ASSERT(false, "AIModule::Release: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "AIModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return false;
 }
 
 // -------------------------------------------------------------------------
 // BrnAI::AIModuleIO::OutputBuffer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 struct BrnAI::AIModuleIO::AICarOutputInterface const * BrnAI::AIModuleIO::OutputBuffer::GetAICarOutputInterfaceConst() const
 {
-    CGS_ASSERT(false, "GetAICarOutputInterfaceConst: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetAICarOutputInterfaceConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnAI::AIModuleIO::OutputBuffer::GetAIResourceRequestInterface() const
 {
-    CGS_ASSERT(false, "GetAIResourceRequestInterface: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetAIResourceRequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 class CgsModule::VariableEventQueue<1536,16> const * BrnAI::AIModuleIO::OutputBuffer::GetGameEventQueueConst() const
 {
-    CGS_ASSERT(false, "GetGameEventQueueConst: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetGameEventQueueConst: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> const * BrnAI::AIModuleIO::OutputBuffer::GetRouteResponseQueue() const
 {
-    CGS_ASSERT(false, "GetRouteResponseQueue: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetRouteResponseQueue: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
@@ -301,25 +361,55 @@ class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> co
 // -------------------------------------------------------------------------
 // BrnDirector::HookNameStringWrapper
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnDirector::HookNameStringWrapper::Set(char const *)
 {
-    CGS_ASSERT(false, "HookNameStringWrapper::Set: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "HookNameStringWrapper: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnGame::DispatchThreadInputBuffer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnGame::DispatchThreadInputBuffer::SetCameraViewProjection(struct rw::math::vpu::Matrix44 const &)
 {
-    CGS_ASSERT(false, "DispatchThreadInputBuffer::SetCameraViewProjection: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DispatchThreadInputBuffer: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnGame::DispatchThreadInputBuffer::SetEnvMapFaceRendered(int,bool)
 {
-    CGS_ASSERT(false, "DispatchThreadInputBuffer::SetEnvMapFaceRendered: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DispatchThreadInputBuffer: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -355,10 +445,20 @@ int BrnMassive::BrnMassive::Construct()
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 int BrnMassive::BrnMassive::Destruct()
 {
-    CGS_ASSERT(false, "BrnMassive::Destruct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "BrnMassive: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
@@ -383,9 +483,19 @@ MassiveAdClient3::CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber()
 // LINK STUB (world-module mount 2026-07-26): pulled by the scalar deleting dtor in
 // the emitted vtable; never invoked (pool slots are by-value members, never
 // heap-deleted).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void MassiveAdClient3::CMassiveAdObjectSubscriber::operator delete(void *)
 {
-    CGS_ASSERT(false, "CMassiveAdObjectSubscriber::operator delete: link stub (world-module mount) -- MassiveAd heap not linked");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "CMassiveAdObjectSubscriber: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -475,75 +585,165 @@ void BrnPhysics::Vehicle::VehicleManager::ReadSurfaceProperties()
 // -------------------------------------------------------------------------
 // BrnReplays::ReplayIO::RequestInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnReplays::ReplayIO::RequestInterface::Append(struct BrnReplays::ReplayIO::RequestInterface const *)
 {
-    CGS_ASSERT(false, "RequestInterface::Append: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnSound::Module::Io::SoundWorldLoadEvent
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnSound::Module::Io::SoundWorldLoadEvent::Construct(enum BrnSound::Module::Io::SoundWorldLoadEvent::eLoadEvent,unsigned short)
 {
-    CGS_ASSERT(false, "SoundWorldLoadEvent::Construct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SoundWorldLoadEvent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 class CgsModule::VariableEventQueue<32768,16> * BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch::GetSceneResultQueue()
 {
-    CGS_ASSERT(false, "InputBuffer_Dispatch::GetSceneResultQueue: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InputBuffer_Dispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::Construct()
 {
-    CGS_ASSERT(false, "InputBuffer_PreDispatch::Construct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetCameraPosition(struct rw::math::vpu::Vector3)
 {
-    CGS_ASSERT(false, "InputBuffer_PreDispatch::SetCameraPosition: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch::SetVisibleEntities(class Array<class CgsSceneManager::EntityId,650> const &)
 {
-    CGS_ASSERT(false, "InputBuffer_PreDispatch::SetVisibleEntities: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch::Construct()
 {
-    CGS_ASSERT(false, "OutputBuffer_PreDispatch::Construct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "OutputBuffer_PreDispatch: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 struct BrnResource::GameDataIO::RequestInterface<4096> const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(false, "GetResourceRequestInterface: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetResourceRequestInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 struct BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::SceneInputInterface const * BrnTraffic::BrnTrafficIO::OutputBuffer_Prepare::GetSceneInputInterface() const
 {
-    CGS_ASSERT(false, "GetSceneInputInterface: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetSceneInputInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
@@ -558,40 +758,100 @@ void BrnTraffic::TrafficEntityModule::Construct()
 {
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::TrafficEntityModule::Destruct()
 {
-    CGS_ASSERT(false, "TrafficEntityModule::Destruct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::TrafficEntityModule::EnterTearingDownState()
 {
-    CGS_ASSERT(false, "TrafficEntityModule::EnterTearingDownState: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::TrafficEntityModule::GenerateDispatchLists(class BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch *,int,int,int,struct BrnDirector::Camera::Camera const *)
 {
-    CGS_ASSERT(false, "TrafficEntityModule::GenerateDispatchLists: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::TrafficEntityModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene *,unsigned short)
 {
-    CGS_ASSERT(false, "TrafficEntityModule::PostSceneUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::TrafficEntityModule::PreDispatchUpdate(class BrnTraffic::BrnTrafficIO::InputBuffer_PreDispatch *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreDispatch *)
 {
-    CGS_ASSERT(false, "TrafficEntityModule::PreDispatchUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnTraffic::TrafficEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics *,unsigned short)
 {
-    CGS_ASSERT(false, "TrafficEntityModule::PrePhysicsUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -611,30 +871,60 @@ bool BrnTraffic::TrafficEntityModule::Prepare(class BrnTraffic::BrnTrafficIO::Ou
     return true;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 bool BrnTraffic::TrafficEntityModule::Release()
 {
-    CGS_ASSERT(false, "TrafficEntityModule::Release: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TrafficEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return false;
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 bool BrnWorld::EnvironmentSettings::ParseEnvironmentFile(float &,char (&)[4][256],float (&)[4],struct BrnEffects::BloomData &,struct BrnEffects::VignetteData &,char *,class BrnWorld::EnvironmentSettings::ScatteringData &,class BrnWorld::EnvironmentSettings::LightingData &,class BrnWorld::EnvironmentSettings::CloudsData &,char const *)
 {
-    CGS_ASSERT(false, "EnvironmentSettings::ParseEnvironmentFile: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return false;
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings::CloudsData
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::EnvironmentSettings::CloudsData::SetToBlend(class BrnWorld::EnvironmentSettings::CloudsData const &,float,class BrnWorld::EnvironmentSettings::CloudsData const &,float,class BrnWorld::EnvironmentSettings::CloudsData const &,float,class BrnWorld::EnvironmentSettings::CloudsData const &,float)
 {
-    CGS_ASSERT(false, "CloudsData::SetToBlend: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "CloudsData: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -662,15 +952,35 @@ void BrnWorld::EnvironmentSettings::DebugComponent::Construct(class BrnWorld::En
 // component is never Construct()ed/registered -- see the Construct trap above).
 
 // LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827C7760).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::EnvironmentSettings::DebugComponent::Update()
 {
-    CGS_ASSERT(false, "DebugComponent::Update: link stub (world-module mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827C79A0).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::EnvironmentSettings::DebugComponent::RenderHUD(struct CgsDev::Debug2DImmediateRender *)
 {
-    CGS_ASSERT(false, "DebugComponent::RenderHUD: link stub (world-module mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827B23E8).  (inert getter)
@@ -686,9 +996,19 @@ const char * BrnWorld::EnvironmentSettings::DebugComponent::GetPath() const
 }
 
 // LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827B2408).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
 {
-    CGS_ASSERT(false, "DebugComponent::OnActivate: link stub (world-module mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -711,10 +1031,20 @@ void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
 //     time-of-day bounds) -- the committed class model ends at +0x11E8 and
 //     needs a dedicated layout-growth pass first.
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 struct rw::math::vpu::Vector3 BrnWorld::EnvironmentSettings::EnvironmentManager::CalcKeyLightDirection() const
 {
-    CGS_ASSERT(false, "EnvironmentManager::CalcKeyLightDirection: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return rw::math::vpu::Vector3();
 }
 
@@ -726,22 +1056,52 @@ void BrnWorld::EnvironmentSettings::EnvironmentManager::Construct()
 {
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::EnvironmentSettings::EnvironmentManager::DisableJunkyardLightingSetup()
 {
-    CGS_ASSERT(false, "EnvironmentManager::DisableJunkyardLightingSetup: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::EnvironmentSettings::EnvironmentManager::EnableJunkyardLightingSetup()
 {
-    CGS_ASSERT(false, "EnvironmentManager::EnableJunkyardLightingSetup: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::EnvironmentSettings::EnvironmentManager::GenerateEffects(class BrnEffectsFrame *,class BrnEffectsFrame *,class BrnEffectsFrame *,class BrnEffectsFrame *)
 {
-    CGS_ASSERT(false, "EnvironmentManager::GenerateEffects: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -764,67 +1124,69 @@ bool BrnWorld::EnvironmentSettings::EnvironmentManager::Prepare(struct BrnWorldI
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings::Keyframe
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::EnvironmentSettings::Keyframe::Construct()
 {
-    CGS_ASSERT(false, "Keyframe::Construct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Keyframe: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings::LightingData
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::EnvironmentSettings::LightingData::SetToBlend(class BrnWorld::EnvironmentSettings::LightingData const &,float,class BrnWorld::EnvironmentSettings::LightingData const &,float,class BrnWorld::EnvironmentSettings::LightingData const &,float,class BrnWorld::EnvironmentSettings::LightingData const &,float)
 {
-    CGS_ASSERT(false, "LightingData::SetToBlend: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "LightingData: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::EnvironmentSettings::ScatteringData
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::EnvironmentSettings::ScatteringData::SetToBlend(class BrnWorld::EnvironmentSettings::ScatteringData const &,float,class BrnWorld::EnvironmentSettings::ScatteringData const &,float,class BrnWorld::EnvironmentSettings::ScatteringData const &,float,class BrnWorld::EnvironmentSettings::ScatteringData const &,float)
 {
-    CGS_ASSERT(false, "ScatteringData::SetToBlend: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "ScatteringData: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::InternalBaseStreamer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::InternalBaseStreamer::AddEntry(unsigned __int64,bool,unsigned __int64)
-{
-    CGS_ASSERT(false, "InternalBaseStreamer::AddEntry: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::InternalBaseStreamer::ClearTargetList()
-{
-    CGS_ASSERT(false, "InternalBaseStreamer::ClearTargetList: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via
-// WorldEntityModule::Construct -> WorldGraphicsStreamer::Construct ->
-// BaseStreamer<32>::Construct; quiet no-op -- the streamer stays raw, nothing
-// streams until the world Prepare is wired. Reconstruct from X360 first.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnWorld::InternalBaseStreamer::Construct(class BrnWorld::StreamerTargetEntry *,class BrnWorld::StreamerTargetEntry *,class BrnWorld::StreamerCurrentEntry *,int,int,enum BrnResource::EAssetSet,bool)
-{
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::InternalBaseStreamer::IsStreamComplete() const
-{
-    CGS_ASSERT(false, "IsStreamComplete: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::InternalBaseStreamer::Update()
-{
-    CGS_ASSERT(false, "InternalBaseStreamer::Update: link stub (world fleet mount) -- reconstruct from X360");
-}
+// (ALL FIVE stubs -- AddEntry / ClearTargetList / Construct / IsStreamComplete /
+//  Update -- RETIRED 2026-07-27. The whole streamer engine is now reconstructed
+//  in its DWARF home GameSource/World/BrnBaseStreamer.cpp from the X360 bodies
+//  (Construct 0x827C4A60, AddEntry 0x827C4B58, ClearTargetList 0x827B0B50,
+//  IsStreamComplete 0x827B0BE8, Update 0x827D5F50 + the Idle/Loading/Unloading
+//  legs and the potential-list/attempt helpers).)
 
 // -------------------------------------------------------------------------
 // BrnWorld::PVSDebugComponent
@@ -844,24 +1206,54 @@ void BrnWorld::PVSDebugComponent::Construct(class BrnWorld::WorldEntityModule *)
 }
 
 // LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x827CEAD8).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::PVSDebugComponent::RenderHUD(struct CgsDev::Debug2DImmediateRender *)
 {
-    CGS_ASSERT(false, "PVSDebugComponent::RenderHUD: link stub (world-module mount) -- link/reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PVSDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-module mount 2026-07-26): body not reconstructed yet (X360 @0x827B2178).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::PVSDebugComponent::OnActivate()
 {
-    CGS_ASSERT(false, "PVSDebugComponent::OnActivate: link stub (world-module mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PVSDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::PropEntityModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::PropEntityModule::CachePropGraphicsLists()
 {
-    CGS_ASSERT(false, "PropEntityModule::CachePropGraphicsLists: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
@@ -888,28 +1280,68 @@ void BrnWorld::PropEntityModule::ConstructPreScenePerfMonitors()
 {
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::PropEntityModule::Destruct()
 {
-    CGS_ASSERT(false, "PropEntityModule::Destruct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::PropEntityModule::GenerateDispatchLists(class BrnWorld::PropEntityIO::InputBuffer_Dispatch *,class Array<class CgsSceneManager::EntityId,5400> const &,struct rw::math::vpu::Matrix44 const &,struct rw::math::vpu::Vector3 const &,float,struct BrnWorld::ShaderLodInfo const *,int,int,int)
 {
-    CGS_ASSERT(false, "PropEntityModule::GenerateDispatchLists: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::PropEntityModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct BrnWorld::PropEntityIO::InputBuffer_PostScene *,struct BrnWorld::PropEntityIO::OutputBuffer_PostScene *,unsigned short)
 {
-    CGS_ASSERT(false, "PropEntityModule::PostSceneUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::PropEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::PropEntityIO::InputBuffer_PrePhysics *,class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics *,unsigned short)
 {
-    CGS_ASSERT(false, "PropEntityModule::PrePhysicsUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -929,10 +1361,20 @@ bool BrnWorld::PropEntityModule::Prepare(class BrnWorld::PropEntityIO::OutputBuf
     return true;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 bool BrnWorld::PropEntityModule::Release()
 {
-    CGS_ASSERT(false, "PropEntityModule::Release: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "PropEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return false;
 }
 
@@ -947,35 +1389,85 @@ void BrnWorld::RaceCarEntityModule::Construct()
 {
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::RaceCarEntityModule::Destruct()
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::Destruct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::RaceCarEntityModule::GenerateDispatchLists(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists *,class Array<class CgsSceneManager::EntityId,32> const &,struct rw::math::vpu::Vector4,struct rw::math::vpu::Vector4,struct rw::math::vpu::Vector3)
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::GenerateDispatchLists: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 bool BrnWorld::RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(enum EActiveRaceCarIndex,class BrnWorld::ActiveRaceCar const *)
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return false;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::RaceCarEntityModule::PostSceneUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene *,unsigned short)
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::PostSceneUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::RaceCarEntityModule::PrePhysicsUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics *,unsigned short)
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::PrePhysicsUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -995,64 +1487,60 @@ bool BrnWorld::RaceCarEntityModule::Prepare(struct CgsResource::ResourceHandle c
     return true;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 bool BrnWorld::RaceCarEntityModule::Release()
 {
-    CGS_ASSERT(false, "RaceCarEntityModule::Release: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return false;
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct BrnWorld::RaceCarEntityModuleIO::SceneResultQueue * BrnWorld::RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists::GetSceneResultQueue()
-{
-    CGS_ASSERT(false, "InputBuffer_GenerateDispatchLists::GetSceneResultQueue: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
 
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct BrnWorld::RaceCarEntityModuleIO::SceneResultQueue * BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::GetSceneResultQueue()
-{
-    CGS_ASSERT(false, "InputBuffer_PrePhysics::GetSceneResultQueue: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
 
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-struct BrnPhysics::Vehicle::RaceCarState const * BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::GetRaceCarState(enum EActiveRaceCarIndex) const
-{
-    CGS_ASSERT(false, "GetRaceCarState: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
+// (RCEntityActiveRaceCarOutputInterface::GetRaceCarState / IsPlayerCarActive /
+//  IsRaceCarActive stubs RETIRED 2026-07-27 -- real bodies now in the interface's
+//  own TU BrnRCEntityActiveRaceCarOutputInterface.cpp, recovered from X360
+//  0x82277B90 / 0x82277B10 (+ the ICF-folded const GetRaceCarState). The world
+//  loading drive calls IsPlayerCarActive every frame from
+//  WorldEntityModule::PreSceneUpdate, so the trap blocked the PVS query.)
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() const
-{
-    CGS_ASSERT(false, "IsPlayerCarActive: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(enum EActiveRaceCarIndex) const
-{
-    CGS_ASSERT(false, "IsRaceCarActive: link stub (world fleet mount) -- reconstruct from X360");
-    return false;
-}
 
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 enum EGlobalRaceCarIndex BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::GetPlayerGlobalRaceCarIndex() const
 {
-    CGS_ASSERT(false, "GetPlayerGlobalRaceCarIndex: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetPlayerGlobalRaceCarIndex: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return (EGlobalRaceCarIndex)0;
 }
 
@@ -1071,16 +1559,36 @@ enum EGlobalRaceCarIndex BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarO
 // -------------------------------------------------------------------------
 // BrnWorld::TriggerEntityModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::TriggerEntityModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PostScene *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene *,unsigned short)
 {
-    CGS_ASSERT(false, "TriggerEntityModule::PostSceneUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriggerEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::TriggerEntityModule::PrePhysicsUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PrePhysics *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PrePhysics *,unsigned short)
 {
-    CGS_ASSERT(false, "TriggerEntityModule::PrePhysicsUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriggerEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1102,15 +1610,35 @@ void BrnWorld::TriggerEntityModuleDebugComponent::Construct(class BrnWorld::Trig
 }
 
 // LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822DA1F0).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::TriggerEntityModuleDebugComponent::RenderWorld(struct CgsDev::Debug3DImmediateRender *)
 {
-    CGS_ASSERT(false, "TriggerEntityModuleDebugComponent::RenderWorld: link stub (world-module mount) -- link/reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriggerEntityModuleDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822C4368).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::TriggerEntityModuleDebugComponent::RenderHUD(struct CgsDev::Debug2DImmediateRender *)
 {
-    CGS_ASSERT(false, "TriggerEntityModuleDebugComponent::RenderHUD: link stub (world-module mount) -- link/reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriggerEntityModuleDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822A8FF8).  (inert getter)
@@ -1120,9 +1648,19 @@ const char * BrnWorld::TriggerEntityModuleDebugComponent::GetName() const
 }
 
 // LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x822A9018).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void BrnWorld::TriggerEntityModuleDebugComponent::OnActivate()
 {
-    CGS_ASSERT(false, "TriggerEntityModuleDebugComponent::OnActivate: link stub (world-module mount) -- link/reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriggerEntityModuleDebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1142,11 +1680,10 @@ void BrnWorld::WorldDebugComponent::Construct(class BrnWorld::WorldModule *)
 // BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists
 // -------------------------------------------------------------------------
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-class CgsModule::VariableEventQueue<32768,16> * BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists::GetSceneResultQueue()
-{
-    CGS_ASSERT(false, "InputBuffer_GenerateDispatchLists::GetSceneResultQueue: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
+// (BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists::GetSceneResultQueue
+// stub RETIRED 2026-07-27: the queue member is pinned by Construct @0x822D8BC8
+// (VariableEventQueue<32768,16>::Construct(this+8), shadow-map pointer at
+// this+0x8018 == 8 + 32784), so the accessor is a real inline in its own header.)
 
 // (BrnWorld::WorldEntityIO::OutputBuffer_Prepare::GetSceneInputInterface stub
 // RETIRED 2026-07-26: the real accessor now lives in its owning TU,
@@ -1155,43 +1692,28 @@ class CgsModule::VariableEventQueue<32768,16> * BrnWorld::WorldEntityIO::InputBu
 // -------------------------------------------------------------------------
 // BrnWorld::WorldEntityIO::StatusInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::WorldEntityIO::StatusInterface::SetAllStreamed(bool)
-{
-    CGS_ASSERT(false, "StatusInterface::SetAllStreamed: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::WorldEntityIO::StatusInterface::SetCollisionWorldInvalid(bool)
-{
-    CGS_ASSERT(false, "StatusInterface::SetCollisionWorldInvalid: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::WorldEntityIO::StatusInterface::SetCollisionWorldInvalidating(bool)
-{
-    CGS_ASSERT(false, "StatusInterface::SetCollisionWorldInvalidating: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::WorldEntityIO::StatusInterface::SetCollisionWorldValidating(bool)
-{
-    CGS_ASSERT(false, "StatusInterface::SetCollisionWorldValidating: link stub (world fleet mount) -- reconstruct from X360");
-}
-
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void BrnWorld::WorldEntityIO::StatusInterface::SetImmediateStreamed(bool)
-{
-    CGS_ASSERT(false, "StatusInterface::SetImmediateStreamed: link stub (world fleet mount) -- reconstruct from X360");
-}
+// (The five StatusInterface setter stubs RETIRED 2026-07-27: all twelve
+// StatusInterface methods are X360 HEADER-INLINES -- none has an out-of-line
+// symbol in the ARTIST export set -- so their real bodies now live in
+// BrnWorldEntityStatusInterface.h next to the flags they store. Keeping them as
+// asserting stubs would have trapped the world streamer's per-frame status
+// publish.)
 
 // -------------------------------------------------------------------------
 // BrnWorld::WorldEntityModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): the dispatch-list producer's Massive
+// impression feed. Same uncommitted third-party SDK as UpdateMassive above;
+// one-shot log + inert rather than a trap so the dispatch pass keeps running.
 void BrnWorld::WorldEntityModule::GenerateMassiveImpressionData(struct CgsGraphics::Instance *,struct rw::math::vpu::Vector3 const &)
 {
-    CGS_ASSERT(false, "WorldEntityModule::GenerateMassiveImpressionData: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldEntityModule::GenerateMassiveImpressionData: inert (Massive SDK uncommitted) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1211,37 +1733,88 @@ bool BrnWorld::WorldEntityModule::PrepareMassive(struct BrnWorld::WorldEntityIO:
     return true;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): REACHED every frame by
+// WorldEntityModule::PreSceneUpdate @0x82302A08 now that the world drive runs.
+// The Massive in-game-advertising SDK (BrnMassive / CMassiveAdObjectSubscriber)
+// is an UNCOMMITTED third-party subsystem -- its Prepare is already the inert
+// gate above -- so the per-frame impression update has nothing to drive.
+// One-shot log + inert (a trap here would block the sim on frame 1).
 void BrnWorld::WorldEntityModule::UpdateMassive(unsigned short)
 {
-    CGS_ASSERT(false, "WorldEntityModule::UpdateMassive: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldEntityModule::UpdateMassive: inert (Massive SDK uncommitted) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // BrnWorld::WorldModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::WorldModule::BridgeWorldModuleToEntityModules_Render(class BrnTraffic::BrnTrafficIO::InputBuffer_Dispatch *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists *,struct BrnWorld::WorldEntityIO::InputBuffer_GenerateDispatchLists *,class BrnWorld::PropEntityIO::InputBuffer_Dispatch *,struct BrnWorldIO::DispatchInputBuffer const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeWorldModuleToEntityModules_Render: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::WorldModule::CalculateVehicleLODs(struct rw::math::vpu::Vector3)
 {
-    CGS_ASSERT(false, "WorldModule::CalculateVehicleLODs: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::WorldModule::FilterFrustumTestResults(struct CgsModule::Event const *,class Array<class CgsSceneManager::EntityId,4500> *,class Array<class CgsSceneManager::EntityId,32> *,class Array<class CgsSceneManager::EntityId,650> *,class Array<class CgsSceneManager::EntityId,5400> *)
 {
-    CGS_ASSERT(false, "WorldModule::FilterFrustumTestResults: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::WorldModule::SetupShaderConstantsBeforeRendering(struct BrnShaderConstantsFrame *,float,float)
 {
-    CGS_ASSERT(false, "WorldModule::SetupShaderConstantsBeforeRendering: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1326,10 +1899,20 @@ void CgsDev::DebugInterface::SetOptions(int *,struct CgsDev::DebugUI::StringList
 // -------------------------------------------------------------------------
 // CgsDev::DebugRender
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsDev::DebugRender::DrawCircle(struct rw::math::vpu::Vector3,struct rw::math::vpu::Vector3,float,unsigned int)
 {
-    CGS_ASSERT(false, "DebugRender::DrawCircle: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DebugRender: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1355,16 +1938,36 @@ int CgsDev::PerfMonCpu::AddMonitor(char const * lpcName, int liColour, int liMin
 // -------------------------------------------------------------------------
 // CgsGeometric::Frustum
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsGeometric::Frustum::CalcVertices(struct rw::math::vpu::Vector4 *) const
 {
-    CGS_ASSERT(false, "Frustum::CalcVertices: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Frustum: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsGeometric::Frustum::SetFromRwFrustum(struct CgsGraphics::CameraRwFrustum const &)
 {
-    CGS_ASSERT(false, "Frustum::SetFromRwFrustum: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "Frustum: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1388,10 +1991,20 @@ void CgsGeometric::Frustum::SetFromRwFrustum(struct CgsGraphics::CameraRwFrustum
 // -------------------------------------------------------------------------
 // CgsGraphics::DispatchBin
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
 {
-    CGS_ASSERT(false, "DispatchBin::HandleMemoryOverflow: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DispatchBin: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1406,17 +2019,37 @@ void CgsGraphics::DispatchBin::HandleMemoryOverflow(unsigned int)
 // -------------------------------------------------------------------------
 // CgsGraphics::Model
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 unsigned int CgsGraphics::Model::GetNumLods() const
 {
-    CGS_ASSERT(false, "GetNumLods: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetNumLods: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 unsigned int CgsGraphics::Model::GetNumRenderables() const
 {
-    CGS_ASSERT(false, "GetNumRenderables: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetNumRenderables: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
@@ -1444,17 +2077,37 @@ bool CgsSceneManager::CachedTriangleList::Prepare(struct rw::IResourceAllocator 
 // -------------------------------------------------------------------------
 // CgsSceneManager::EntityManager
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 int CgsSceneManager::EntityManager::GetVolumeInstanceIndexByID(struct CgsSceneManager::VolumeInstanceId) const
 {
-    CGS_ASSERT(false, "GetVolumeInstanceIndexByID: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "GetVolumeInstanceIndexByID: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 struct CgsSceneManager::VolumeInstance * CgsSceneManager::EntityManager::GetVolumeInstance(int)
 {
-    CGS_ASSERT(false, "EntityManager::GetVolumeInstance: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EntityManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
@@ -1490,10 +2143,20 @@ bool CgsSceneManager::FineIntersectionTestModule::Prepare(class CgsSceneManager:
 // -------------------------------------------------------------------------
 // CgsSceneManager::OverlapGenerationModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::OverlapGenerationModule::GenerateOverlaps(void *,void const *)
 {
-    CGS_ASSERT(false, "OverlapGenerationModule::GenerateOverlaps: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
@@ -1533,37 +2196,87 @@ void CgsSceneManager::OverlapGenerationModule::Construct()
 }
 
 // LINK STUB (world-module mount 2026-07-26): committed body not linkable yet (X360 @0x828CB798).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 bool CgsSceneManager::OverlapGenerationModule::Release()
 {
-    CGS_ASSERT(false, "OverlapGenerationModule::Release: link stub (world-module mount) -- reconstruct/link from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return true;
 }
 
-// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::OverlapGenerationModule::Destruct()
 {
-    CGS_ASSERT(false, "OverlapGenerationModule::Destruct: link stub (world-module mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-module mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::OverlapGenerationModule::Update()
 {
-    CGS_ASSERT(false, "OverlapGenerationModule::Update: link stub (world-module mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "OverlapGenerationModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddEntity(class CgsSceneManager::EntityId,unsigned int,struct rw::math::vpu::Vector3,float)
 {
-    CGS_ASSERT(false, "InSceneUpdateInterface::AddEntity: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InSceneUpdateInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(class CgsSceneManager::EntityId,struct rw::math::vpu::Matrix44Affine const &)
 {
-    CGS_ASSERT(false, "InSceneUpdateInterface::AddVolumeInstance: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InSceneUpdateInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // BOOT-GATE (attribsys wave 2026-07-26): REACHED by WorldModule::Prepare's
@@ -1590,34 +2303,48 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Append(struct CgsS
 // -------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::InputBuffer_Query
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-void CgsSceneManager::SceneManagerIO::InputBuffer_Query::Construct()
-{
-    CGS_ASSERT(false, "InputBuffer_Query::Construct: link stub (world fleet mount) -- reconstruct from X360");
-}
+// (CgsSceneManager::SceneManagerIO::InputBuffer_Query::Construct stub RETIRED
+//  2026-07-27: the real (partial-slice) body now lives in CgsSceneManagerIO.h,
+//  matching the X360 0x828C7BC0 status + coarse-query-queue bring-up.)
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerIO::InputBuffer_Query::Destruct()
 {
-    CGS_ASSERT(false, "InputBuffer_Query::Destruct: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InputBuffer_Query: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 class CgsSceneManager::SceneManagerIO::InCoarseQueryQueue<16384> * CgsSceneManager::SceneManagerIO::InputBuffer_Query::GetInCoarseQueryQueue()
 {
-    CGS_ASSERT(false, "InputBuffer_Query::GetInCoarseQueryQueue: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "InputBuffer_Query: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return 0;
 }
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::OutputBuffer
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-class CgsModule::VariableEventQueue<32768,16> const * CgsSceneManager::SceneManagerIO::OutputBuffer::GetSceneQueryResultsQueue() const
-{
-    CGS_ASSERT(false, "GetSceneQueryResultsQueue: link stub (world fleet mount) -- reconstruct from X360");
-    return 0;
-}
+// (CgsSceneManager::SceneManagerIO::OutputBuffer::GetSceneQueryResultsQueue stub
+//  RETIRED 2026-07-27: real read-locked accessor now inline in CgsSceneManagerIO.h.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerModule -- ASSESSED, all seven left stubbed
@@ -1639,34 +2366,84 @@ class CgsModule::VariableEventQueue<32768,16> const * CgsSceneManager::SceneMana
 //     symbol third): 2-4KB event-queue merge pipelines over the overlap
 //     sub-module IO formats that are not homed yet.
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerModule::BridgeOverlapCullerToOutputBuffer(struct CgsSceneManager::SceneManagerIO::OutputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
 {
-    CGS_ASSERT(false, "SceneManagerModule::BridgeOverlapCullerToOutputBuffer: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerModule::BridgeOverlapGenerationToOutputBuffer(struct CgsSceneManager::SceneManagerIO::OutputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
 {
-    CGS_ASSERT(false, "SceneManagerModule::BridgeOverlapGenerationToOutputBuffer: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerModule::BridgeOverlapGenerationToOverlapCulling(struct CgsSceneManager::SceneManagerIO::OutputBuffer *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
 {
-    CGS_ASSERT(false, "SceneManagerModule::BridgeOverlapGenerationToOverlapCulling: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
 {
-    CGS_ASSERT(false, "SceneManagerModule::ExternalSceneQueriesUpdate: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::SceneManagerModule::ProcessFrustumTestJobRequests(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
 {
-    CGS_ASSERT(false, "SceneManagerModule::ProcessFrustumTestJobRequests: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // BOOT GATE -- SceneManagerModule::UpdateScene @0x828D4C28 (X360 vtbl+64).
@@ -1777,10 +2554,20 @@ bool CgsSceneManager::SpatialPartitionManager::Prepare(struct CgsSceneManager::S
 // -------------------------------------------------------------------------
 // CgsSceneManager::TriangleCacheManager
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void CgsSceneManager::TriangleCacheManager::EndUpdateTriangleCaches(void *,void *)
 {
-    CGS_ASSERT(false, "TriangleCacheManager::EndUpdateTriangleCaches: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "TriangleCacheManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
@@ -1828,133 +2615,333 @@ bool CgsSceneManager::VolumeManager::Prepare()
 // -------------------------------------------------------------------------
 // ShaderConstantTable
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Matrix44)
 {
-    CGS_ASSERT(false, "ShaderConstantTable::SetShaderConstantData: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Matrix44Affine)
 {
-    CGS_ASSERT(false, "ShaderConstantTable::SetShaderConstantData: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Vector3)
 {
-    CGS_ASSERT(false, "ShaderConstantTable::SetShaderConstantData: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // LINK STUB (destub wave 2026-07-26, referenced by ShadowMap::SetConstantsForEnvmap
 // @0x827C1AD0 -- the 16-byte overload with a live w lane): body not reconstructed yet
 // (X360 @0x822B32E8; needs UpdateShaderChangeTableAndGetConstantDestination @0x822A0A20).
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log -- reached on the per-frame world drive, where a trap stops the
+// simulation. The body is still NOT reconstructed; the fix is the real X360 body
+// in its own TU, not this gate.
 void ShaderConstantTable::SetShaderConstantData(unsigned int,struct rw::math::vpu::Vector4)
 {
-    CGS_ASSERT(false, "ShaderConstantTable::SetShaderConstantData: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "ShaderConstantTable: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // WorldModule
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeCrashModuleToPropModule_PostScene(void *,struct BrnWorld::PropEntityIO::InputBuffer_PostScene *,class BrnWorld::CrashModuleIO::OutputBuffer_PostScene const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeCrashModuleToPropModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeCrashModuleToRaceCarModule_PostScene(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene *,class BrnWorld::CrashModuleIO::OutputBuffer_PostScene const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeCrashModuleToRaceCarModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeCrashModuleToTrafficModule_PostScene(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,class BrnWorld::CrashModuleIO::OutputBuffer_PostScene const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeCrashModuleToTrafficModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgePropModuleToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,class BrnWorld::PropEntityIO::OutputBuffer_PrePhysics const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgePropModuleToTrafficModule_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeRaceCarEntityInfoToOutput_PrePhysics(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeRaceCarEntityInfoToOutput_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeRaceCarModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeRaceCarModuleToSceneModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeSceneContactsToPropModule_PrePhysics(void *,class BrnWorld::PropEntityIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeSceneContactsToPropModule_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeSceneContactsToRaceCarModule_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeSceneContactsToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeSceneContactsToTrafficModule_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics(void *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeTrafficModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeTrafficModuleToSceneModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // (BridgeTrafficToRaceCar_PrePhysics stub RETIRED 2026-07-27: the REAL body
 // @0x827A51F0 lives in its own home TU, Bridges/WorldBridgeEntityModulesToEntityModules.cpp,
 // which the world-drive wave mounts on the build list.)
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void WorldModule::BridgeTriggerModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene const *)
 {
-    CGS_ASSERT(false, "WorldModule::BridgeTriggerModuleToSceneModule_PostScene: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // (rw::BitTable::GetResourceDescriptor stub RETIRED 2026-07-26: the real body now
@@ -2014,29 +3001,59 @@ void * rw::collision::VolumeVolumeQuery::GetResourceDescriptor(void * lpScratch,
 // -------------------------------------------------------------------------
 // struct BrnPhysics::Deformation::WheelPhysicalStates & __ptr64 BrnPhysics::Deformation::WheelPhysicalStates::operator=(struct BrnPhysics::Deformation
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 struct BrnPhysics::Deformation::WheelPhysicalStates & BrnPhysics::Deformation::WheelPhysicalStates::operator=(struct BrnPhysics::Deformation::WheelPhysicalStates const &)
 {
-    CGS_ASSERT(false, "WheelPhysicalStates::operator=: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "WheelPhysicalStates: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
     return *this;
 }
 
 // -------------------------------------------------------------------------
 // void BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface const &)
 {
-    CGS_ASSERT(false, "RCEntityActiveRaceCarOutputInterface::operator=: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RCEntityActiveRaceCarOutputInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // -------------------------------------------------------------------------
 // void BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO
 // -------------------------------------------------------------------------
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
+// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
+// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
+// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
+// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
+// not this gate.
 void BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface const &)
 {
-    CGS_ASSERT(false, "RCEntityGlobalRaceCarOutputInterface::operator=: link stub (world fleet mount) -- reconstruct from X360");
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "RCEntityGlobalRaceCarOutputInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2356,21 +3373,9 @@ void WorldModule::BridgeTrafficEntityInfoToOutput_PreScene(void *,struct BrnWorl
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 the post-physics output fan-in -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeEntityModulesToOutput_PostPhysics(void *,struct BrnWorldIO::UpdateOutputBuffer *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics const *,class BrnWorld::PropEntityIO::OutputBuffer_PostPhysics const *,struct BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToOutput_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::BridgeEntityModulesToOutput_PostPhysics gate RETIRED 2026-07-27:
+//  the real streamer leg (X360 0x827AEEB0) now lives in its home TU
+//  Bridges/WorldBridgeEntityModulesToOutput.cpp.)
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
@@ -2994,11 +3999,16 @@ void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::Construct()
     CgsModule::IOBuffer::Construct();
 }
 
-// BOOT GATE: base bring-up only (see the block note above).
-void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
+// (BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::Construct gate RETIRED
+//  2026-07-27: the real partial slice now lives in BrnRaceCarEntityModuleIO.h from
+//  X360 0x822EA6F0 -- the base-only gate left mSceneResultQueue un-Constructed and
+//  the scene->race-car pre-physics bridge Appends into it every frame.)
+
+// (BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::GetSceneResultQueue and
+//  InputBuffer_GenerateDispatchLists::GetSceneResultQueue stubs RETIRED 2026-07-27:
+//  both classes carry the committed mSceneResultQueue member, so the accessors are
+//  real inlines in BrnRaceCarEntityModuleIO.h. The stubs returned NULL, which the
+//  scene->race-car bridge then dereferenced.)
 
 // BOOT GATE: base bring-up only (see the block note above).
 void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene::Construct()
@@ -3030,11 +4040,10 @@ void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene::Construct()
     CgsModule::IOBuffer::Construct();
 }
 
-// BOOT GATE: base bring-up only (see the block note above).
-void BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
+// (BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene::Construct gate RETIRED
+//  2026-07-27: the REAL body (X360 0x822EED90) already lived in the owning TU
+//  BrnTriggerEntityModuleIO.cpp, which is now on the build list -- together with the
+//  five sibling trigger-buffer Constructs recovered in the same pass.)
 
 
 // ---- the collision generator the frame carves -------------------------------

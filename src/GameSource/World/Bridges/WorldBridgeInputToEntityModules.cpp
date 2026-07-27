@@ -175,28 +175,26 @@ void BridgeInputToEntityModules(
         (luWorldModuleFlags & KU_WORLD_MODULE_FLAG_IN_HARD_STOP_CAMERA) != 0);
 
     // ---- trigger management (add + remove queues) -------------------------------------
-    // FLAG cross-home casts: the source payload is a BrnWorldIO slice and the trigger
-    // buffer exposes its member as opaque storage; both ARE the trigger module's
-    // TriggerManagementInputInterface (the X360 Appends the embedded
-    // VariableEventQueue<131072,16> then the InRemoveTriggerEvent queue @ +131088,
-    // reproduced by the aggregate's own Append).
-    BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface* lpTriggerManagementInput =
-        reinterpret_cast<BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
-            lpTriggerInput_PreScene->GetInputInterface());
-    lpTriggerManagementInput->Append(
-        *reinterpret_cast<const BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface*>(
-            lpWorldInput->GetTriggerManagementInputInterface()));
+    // Both sides are now the real BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface
+    // (the world input buffer's member and the trigger pre-scene buffer's member were both
+    // retyped onto it -- see their Construct notes), so the two cross-home reinterpret_casts
+    // this bridge used to need are gone. The X360 Appends the embedded
+    // VariableEventQueue<131072,16> then the InRemoveTriggerEvent queue @ +131088, which is
+    // exactly the aggregate's own Append.
+    lpTriggerInput_PreScene->GetInputInterface()->Append(
+        *lpWorldInput->GetTriggerManagementInputInterface());
 
     // ---- trigger query queue ------------------------------------------------------------
     lpTriggerInput_PostScene->GetQueryInputInterface()->Append(
         *lpWorldInput->GetTriggerQueryInputInterface());
 
     // ---- world entity request interface --------------------------------------------------
-    // FLAG cross-home cast: the source payload is a BrnWorldIO slice of the committed
-    // BrnWorld::WorldEntityIO::RequestInterface.
+    // The world input buffer's member is now the committed
+    // BrnWorld::WorldEntityIO::RequestInterface itself (X360 GetWorldEntityRequestI
+    // @0x823B4D48 returns this+320273 and Construct @0x827C9E90 zeroes exactly the two
+    // flag bytes there), so the cross-home cast is retired.
     lpWorldEntityInputBuffer_PreScene->AppendRequestInterface(
-        *reinterpret_cast<const BrnWorld::WorldEntityIO::RequestInterface*>(
-            lpWorldInput->GetWorldEntityRequestInterface()));
+        *lpWorldInput->GetWorldEntityRequestInterface());
 
     // ---- prop (game-action fan-out) --------------------------------------------------------
     // FLAG: the action payloads are read at raw offsets (the action records' own homes

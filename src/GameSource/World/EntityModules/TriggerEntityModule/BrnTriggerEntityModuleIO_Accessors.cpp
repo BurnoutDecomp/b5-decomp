@@ -51,7 +51,7 @@ namespace TriggerEntityModuleIO
 
     // X360 0x827A3270 (W, :119) -- mutable input-interface accessor; returns &mInputInterface
     // (this + 4).
-    InputBuffer_PreScene::InputInterfaceStorage*
+    InputBuffer_PreScene::InputInterface*
     InputBuffer_PreScene::GetInputInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

@@ -358,5 +358,54 @@ void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* /*lpR
     maCarsInTheRace.Append(lCachedCar);
 }
 
+// ============================================================================
+// X360 0x82277B90 -- IsPlayerCarActive. Asserts the player index is in range,
+// then reports false while no player index has been assigned (-1) and the
+// mbIsPlayerCarActive flag otherwise. Reached every frame by
+// WorldEntityModule::PreSceneUpdate @0x82302A08 (the PVS query picks the player
+// car's position when true, the simulated camera position when false), which is
+// why the world loading drive hits it before any car exists.
+// (Was a WorldLinkStubs assert trap.)
+// ============================================================================
+bool RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() const
+{
+    CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        return false;
+    }
+    return mbIsPlayerCarActive;
+}
+
+// ============================================================================
+// X360 0x82277B10 -- IsRaceCarActive. Bounds-asserts the index then returns bit 0
+// of the per-car flag halfword (asm: `addi r11,idx,0x13C0; slwi 1; lhzx` == the
+// maxRaceCarFlags[idx] element at +0x2780, `clrlwi r3,r11,31` == & 1).
+// (Was a WorldLinkStubs assert trap.)
+// ============================================================================
+bool RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return (maxRaceCarFlags[leActiveRaceCarIndex] & 1) != 0;
+}
+
+// ============================================================================
+// DWARF :220 -- the const per-index race-car state accessor (the sibling of the
+// committed non-const GetRaceCarStateMutable @0x8227D690, which returns
+// &maRaceCarStates[idx] after the same two range asserts; the const form was
+// ICF-folded on the console so it has no own export). Read by
+// WorldEntityModule::PreSceneUpdate for the player car's PVS position/velocity.
+// (Was a WorldLinkStubs assert trap.)
+// ============================================================================
+const RCEntityActiveRaceCarOutputInterface::RaceCarState*
+RCEntityActiveRaceCarOutputInterface::GetRaceCarState(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return &maRaceCarStates[leActiveRaceCarIndex];
+}
+
 }
 }

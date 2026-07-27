@@ -32,6 +32,99 @@ void UpdateInputBuffer::_AssertLayout()
     static_assert(offsetof(UpdateInputBuffer, mabCarSelectStatusValid)         == 74, "carSelectValid@74");
 }
 
+// ---- lifecycle -----------------------------------------------------------------
+
+// X360 0x827C9E90 tail seed: the eight-word block at the online-scoring interface + 32 is
+// written to -1. The interface interior is not named yet, so the seed is applied through the
+// payload by offset [FLAG: serialized-opaque payload, interior owned by its own TU].
+void OnlineScoringInterface::Construct()
+{
+    std::memset(maData, 0, sizeof(maData));
+    s32* lpiSlots = reinterpret_cast<s32*>(maData + 32);
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+        lpiSlots[liSlot] = -1;
+}
+
+// @ 0x827C9E90 -- construct the world's per-frame Update INPUT buffer. The X360 body is the
+// IOBuffer base status (`*this = 1` == eStatusConstructed) followed by the member-wise
+// Construct/Clear chain over the ~25 embedded interfaces and event queues, then the trailing
+// per-active-race-car clear loop over the eight leading arrays. Without it every embedded
+// VariableEventQueue stays un-Constructed and the first consumer (WorldModule::
+// HandleGameActions -> VariableEventQueue<13312,16>::GetFirstEvent) fires "Not Constructed".
+//
+// PARTIAL SLICE (FLAG) -- same shape as the sibling UpdateOutputBuffer::Construct: the members
+// whose committed types expose Construct/Clear run the REAL call; the payload slices whose
+// canonical interiors are not committed yet (VehicleInputInterface, TrafficNetworkInputInterface
+// and the scoring/debug-controller/timer PODs) run their local zero-fill stand-in, and the
+// leading zero-fill below covers every byte the X360 seeds to 0 inside them [marked deviation].
+// The zero-fill starts at the first member (offset 2, pinned by _AssertLayout) so the IOBuffer
+// base status/lock byte is never touched.
+void UpdateInputBuffer::Construct()
+{
+    std::memset(&mau16RaceCarColourIndex, 0,
+                sizeof(UpdateInputBuffer) - offsetof(UpdateInputBuffer, mau16RaceCarColourIndex));
+
+    CgsModule::IOBuffer::Construct();                       // X360 *this = 1
+
+    // -- the member chain, in the X360 call order (console offsets cited) --
+    mVehicleInputInterface.Construct();                     // +96      VehicleInputInterface
+    mVehicleDriverInputInterface.Construct();               // +142272  VehicleDriverInputInterface
+    miPlayerRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID; // +147568  = -1
+    mGameActionQueue.Construct();                           // +147572  VEQ<13312,16>
+    mTimerStatusInterface.Clear();                          // +160900  TimerStatusInterface::Clear
+    mTakedownEventQueue.Construct();                        // +160952  TakedownEvent<8>
+    // +161288 VEQ<131072,16>::Construct and +292376 InRemoveTriggerEvent<256>::Construct are
+    // the committed aggregate's own two embedded queues (see the typedef note in the header).
+    mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();
+    mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();
+    mTriggerQueryInputInterface.Construct();                // +293412  VEQ<4096,16>
+    // +297524: the X360 stores the literal 3 == the "no dirty trick" EPaybackType sentinel
+    // (the same value BrnGameState::PaybackManager::KE_NO_DIRTY_TRICK carries).
+    meActivePaybackType      = static_cast<BrnNetwork::EPaybackType>(3);
+    meActivePaybackAggressor = E_ACTIVE_RACE_CAR_INDEX_INVALID;  // +297528 = -1
+    mInWorldEventQueue.Construct();                         // +297532  VEQ<4096,16>
+    mTrafficNetworkInterface.Construct();                   // +301644  ActivateHull<8> + mbDiverged
+    mCrashNetworkInterface.Construct();                     // +301760  CrashIO::NetworkInputInterface
+    mPlayerVehicleControls.Clear();                         // +317264  13 f32 + 7 bytes = 0
+    mDebugController.Clear();                               // +317324  DebugController::Clear
+    mRaceCarRaceDistanceInterface.Clear();                  // +317496  RaceCarRaceDistanceInterface::Clear
+    mScoringInterface.Clear();                              // +317536  memset(.., 0, 2736)
+    mbControllerActive = false;                             // +320272
+    // +320273/+320274 == the two RequestInterface flags (covered by the member's own ctor and
+    // the zero-fill; named here to keep the X360 store order visible).
+    mWorldEntityRequestInterface.mbInvalidateCollisionWorld = false;
+    mWorldEntityRequestInterface.mbValidateCollisionWorld   = false;
+    // +320276 the replay status: flag word, the six reel head bytes, the two current-reel
+    // indices (-1) and the trailing debug alpha.
+    mReplayStatusInterface.mxStatusFlags = 0;
+    for (s32 liReel = 0; liReel < 6; ++liReel)
+        mReplayStatusInterface.maReels[liReel].macName[0] = '\0';
+    mReplayStatusInterface.miCurrentRecordReel   = -1;      // +321824
+    mReplayStatusInterface.miCurrentPlaybackReel = -1;      // +321828
+    mReplayStatusInterface.mfDebugHudAlpha       = 0.0f;    // +321832
+    mAudioCarDataLoadedQueue.Construct();                   // +321840  AudioCarDataLoadedEvent<16>
+    mRaceRouteRequestQueue.Construct();                     // +322240  RaceRouteRequest<1>
+    mOnlineScoringInterface.Construct();                    // +322384  (+32 block seeded to -1)
+
+    // -- the trailing per-active-race-car clear loop (X360 0x827CA094..0x827CA0E4). The
+    //    increment runs through the range-guarded EActiveRaceCarIndex operator++ (its
+    //    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" assert is the one baked at
+    //    BurnoutConstants.h:39 in the X360 body).
+    for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leIndex++)
+    {
+        mau16RaceCarColourIndex[leIndex]         = 0;
+        mau16RaceCarPaintFinishIndex[leIndex]    = 0;
+        mabRaceCarColourIndexValid[leIndex]      = false;
+        mabRaceCarPaintFinishIndexValid[leIndex] = false;
+        mabLostContactThisFrame[leIndex]         = false;
+        mabRegainedContactThisFrame[leIndex]     = false;
+        mabCarSelectStatus[leIndex]              = false;
+        mabCarSelectStatusValid[leIndex]         = false;
+    }
+}
+
 // ---- per-active-race-car colour / paint / contact / select (store-only) -----
 // These X360 bodies bounds-assert the index then store into the leading arrays;
 // they take no lock (the producing module fills them while write-locked, but the

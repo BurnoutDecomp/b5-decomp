@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (overflow diagnostic)
 
 // CgsModule::IOBufferStack - a LIFO bump allocator over a caller-supplied block. Modules push
 // their per-frame IO buffers with CreateIOBuffer<T> and pop them (reverse order) with
@@ -41,11 +42,26 @@ namespace CgsModule
         muNumAllocated = 0;
     }
 
-    void* IOBufferStack::Alloc(u32 luSize, const char*)
+    void* IOBufferStack::Alloc(u32 luSize, const char* lpcDebugName)
     {
         u32 luAligned = (muAllocated + (muAlignment - 1)) & ~(muAlignment - 1);
         if (!mpData || luAligned + luSize > muSize)
+        {
+            // A silent null here surfaces much later as "mxStatusFlags.IsBitSet(
+            // eStatusConstructed)" inside the first Lock on the buffer that never got
+            // allocated, so name the overflow at the point it happens. One-shot.
+            static bool s_bLoggedOverflow = false;
+            if (!s_bLoggedOverflow)
+            {
+                s_bLoggedOverflow = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint << "[IOBufferStack] OVERFLOW allocating '"
+                        << (lpcDebugName ? lpcDebugName : "?") << "' size " << static_cast<s32>(luSize)
+                        << " (used " << static_cast<s32>(muAllocated)
+                        << " of " << static_cast<s32>(muSize) << ")\n";
+            }
             return 0;
+        }
         void* lpResult = mpData + luAligned;
         muAllocated = luAligned + luSize;
         if (muAllocated > muMaxAllocated)

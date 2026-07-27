@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Resource/SharedIO/BrnAssetIds.h"          // BrnResource::EAssetSet
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h" // BrnResource::GameDataIO::RequestInterface<N>
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<N,ALIGN>
+#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"       // CgsContainers::RingBuffer<s32>
 
 // The load/unload completion events appear only as pointer parameters of the
 // pure-virtual notification hooks below, so a forward declaration is sufficient.
@@ -94,23 +96,6 @@ private:
     friend class InternalBaseStreamer;
 };
 
-// FLAG: minimal stand-in for the un-homed CgsModule::EventReceiverQueue<N,M>
-// generic. The committed CgsModule::BaseEventReceiverQueue is the non-templated
-// base, but the templated EventReceiverQueue<N,M> is not yet reconstructed in
-// its own home. Modelled by NAME so InternalBaseStreamer's member shape is
-// coherent; IsEntryReady does not touch it. Replace with the committed generic
-// when it lands -- do NOT treat this size as X360 fact.
-namespace detail
-{
-    template <s32 N, s32 M = 16>
-    struct EventReceiverQueuePlaceholder
-    {
-        // DWARF (BrnBaseStreamer.h:239) shows EventReceiverQueue<2048,16>; only
-        // its presence (not byte size) is load-bearing for this TU.
-        u8 mStorage[N + 16];
-    };
-}
-
 // BrnBaseStreamer.h:114 (DWARF). The non-templated streamer engine. Polymorphic:
 // the Query/On* hooks are pure-virtual and supplied by each concrete streamer
 // (e.g. WorldGraphicsStreamer).
@@ -156,8 +141,11 @@ public:
     };
 
     // BrnBaseStreamer.h:238/239 (DWARF): RequestInterface<2048> / EventReceiverQueue<2048,16>.
+    // The receiver queue is the REAL committed generic: Construct @0x827C4A60 sets
+    // miCapacity=2048 (+0x10 of the member), miAlignment=16 (+0x14) and mpBuffer =
+    // member+0x18, then Clear() -- exactly CgsModule::EventReceiverQueue<2048,16>::Construct.
     typedef BrnResource::GameDataIO::RequestInterface<2048>      StreamerGDRequestInterface;
-    typedef detail::EventReceiverQueuePlaceholder<2048, 16>      StreamerGDReceiverQueue;
+    typedef CgsModule::EventReceiverQueue<2048, 16>              StreamerGDReceiverQueue;
 
     virtual ~InternalBaseStreamer() {}
 
@@ -183,12 +171,19 @@ public:
     bool IsStreamComplete() const;
 
 protected:
+    // BrnBaseStreamer.h:201 (DWARF, 9 params) -- X360 0x827C4A60. The parameter set was
+    // previously modelled without the pending-entry storage and the slot-pool flag; both are
+    // pinned by the console call (WorldGraphicsStreamer::Construct @0x827CA388 passes
+    // this+0x1078/0x1378/0x1678 for the three arrays, this+0x1978 for the pending-entry
+    // storage, 32, pool 3, false, asset-set 0, true).
     void Construct(
         StreamerTargetEntry*  lpTargetEntryList,
         StreamerTargetEntry*  lpTargetBuffer,
         StreamerCurrentEntry* lpCurrentEntryList,
+        s32*                  lpPendingEntries,
         s32                   liStreamListLength,
         s32                   liPoolId,
+        bool                  lbSlotPoolSystem,
         BrnResource::EAssetSet leAssetSet,
         bool                  lbAllowFailure );
 
@@ -199,6 +194,10 @@ protected:
     virtual void OnLoadComplete( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent, s32 liListIndex )      = 0;
     virtual void OnUnloadComplete( const BrnResource::GameDataIO::UnloadGameDataResponse* lpEvent, s32 liListIndex ) = 0;
     virtual void OnLoadFail( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent, s32 liListIndex ) {}
+    // BrnBaseStreamer.h:225 (DWARF) -- vtable slot 7. "May this pending entry's unload be
+    // issued this frame?"; the X360 WorldGraphicsStreamer vtable (0x820D0F20) leaves the slot
+    // pointing at the ICF-folded `return true` body (0x82C296C8), i.e. the base default.
+    virtual bool OnAttemptUnload( s32 liListIndex ) { return true; }
 
     // BrnBaseStreamer.h:390/391 (DWARF / ground-truth source). The exact target
     // of WorldGraphicsStreamer::IsListLoaded (asm @ 0x827B0D00 tail-call). X360
@@ -221,6 +220,9 @@ private:
     s32                        miPoolId;              // BrnBaseStreamer.h:245
     BrnResource::EAssetSet     meAssetSet;            // BrnBaseStreamer.h:246
     bool                       mbAllowFailure;        // BrnBaseStreamer.h:247
+    bool                       mbLoadHasFailed;       // BrnBaseStreamer.h:248 (X360 +0x105D)
+    CgsContainers::RingBuffer<s32> mPendingEntryQueue; // BrnBaseStreamer.h:249 (X360 +0x1060)
+    bool                       mbSlotPoolSystem;      // BrnBaseStreamer.h:250 (X360 +0x1074)
 
     // Private helpers (declared for home completeness; not bodied by this TU).
     void ClearCurrentList();
@@ -231,6 +233,11 @@ private:
     s32  FindInCurrentList( CgsID lId ) const;
     s32  FindInCurrentList( CgsID lId, u64 luUserId ) const;
     EStreamMode UpdateIdle();
+    // DE-INLINED HELPER (not a DWARF member): the X360 open-codes this LoadGameDataEvent
+    // build three times inside UpdateLoading @0x827D41E8 (the two request-stage posts and
+    // the pipelined one in the DONE stage). Factored here so the three call sites stay
+    // store-for-store identical.
+    void PostLoadRequest( s32 liListIndex );
     s32  AttemptLoad();
     s32  AttemptUnload();
     bool UpdateLoading();
@@ -243,14 +250,18 @@ template <int ListLength>
 class BaseStreamer : public InternalBaseStreamer
 {
 protected:
-    void Construct( s32 liPoolId, BrnResource::EAssetSet leAssetSet, bool lbAllowFailure )
+    // BrnBaseStreamer.h:425 (DWARF, 4 params).
+    void Construct( s32 liPoolId, bool lbSlotPoolSystem,
+                    BrnResource::EAssetSet leAssetSet, bool lbAllowFailure )
     {
         InternalBaseStreamer::Construct(
             maStreamerTargetEntries,
             maStreamerTargetBuffer,
             maStreamerCurrentEntries,
+            maPendingEntries,
             ListLength,
             liPoolId,
+            lbSlotPoolSystem,
             leAssetSet,
             lbAllowFailure );
     }
@@ -259,6 +270,7 @@ private:
     StreamerTargetEntry  maStreamerTargetEntries[ListLength];  // BrnBaseStreamer.h:309
     StreamerTargetEntry  maStreamerTargetBuffer[ListLength];   // BrnBaseStreamer.h:310
     StreamerCurrentEntry maStreamerCurrentEntries[ListLength]; // BrnBaseStreamer.h:311
+    s32                  maPendingEntries[ListLength];         // BrnBaseStreamer.h:312
 };
 
 // NOTE: WorldGraphicsStreamer's real home is BrnWorldGraphicsStreamer.h (it

@@ -26,6 +26,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                    // CgsModule::IOBuffer
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::VariableEventQueue
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"  // InSceneUpdateInterface
+#include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface
 
 namespace BrnWorld
 {
@@ -68,30 +69,37 @@ namespace TriggerEntityModuleIO
     //   base  CgsModule::IOBuffer       (1-byte status; +1..+3 pad)
     //   +4    InputInterface mInputInterface   (trigger-management input aggregate) :~118
     //
-    // FLAG (foreign type): mInputInterface is the trigger-management input aggregate whose own
-    // home (BrnTriggerEntityModuleInputInterface.h) lands elsewhere; it is modelled as
-    // correctly-positioned opaque storage so the single X360-pinned return offset (this + 4) is
-    // exact. Adopt the named aggregate additively when its home lands.
+    // mInputInterface IS the trigger-management input aggregate (its home,
+    // BrnTriggerEntityModuleInputInterface.h, is now committed). InputBuffer_PreScene::Construct
+    // @0x822EED48 proves it byte-for-byte:
+    //     *this = 1;
+    //     VariableEventQueue<131072,16>::Construct(this + 4);
+    //     InRemoveTriggerEvent_256_::Construct(this + 4 + 131088);
+    // i.e. the aggregate's own two embedded queues at its own two offsets, based at this+4.
+    // (Was `struct InputInterfaceStorage { unsigned char maBytes[1]; }` -- 1 byte of storage
+    // that every consumer reinterpret_cast to the 131 KB aggregate and appended into.)
     class InputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
-        // Opaque foreign-type storage (see FLAG above): first byte at this + 4.
-        struct InputInterfaceStorage { unsigned char maBytes[1]; };
+        typedef TriggerManagementInputInterface InputInterface;   // DWARF :~118
+
+        // X360 0x822EED48 -- IOBuffer status + the aggregate's two embedded queues.
+        void Construct();
 
         // X360 0x827A3270: write-lock handle, returns &mInputInterface (this + 4). Body committed
         // in BrnTriggerEntityModuleIO_Accessors.cpp.
-        InputInterfaceStorage* GetInputInterface();
+        InputInterface* GetInputInterface();
         // X360 0x822BCFE0: read-lock const overload, returns &mInputInterface (this + 4). Body in
         // BrnTriggerEntityModuleIO_QueueAccessors.cpp.
-        const InputInterfaceStorage* GetInputInterface() const;
+        const InputInterface* GetInputInterface() const;
 
         static void _AssertLayout();
 
     private:
         // The IOBuffer base is a single status byte; the X360 places mInputInterface at this+4,
-        // so pad bytes +1..+3 explicitly (the 1-byte storage would otherwise pack at +1).
-        u8                    maStatusPad[3];      // +1..+3 (force +4)
-        InputInterfaceStorage mInputInterface;     // +4
+        // so pad bytes +1..+3 explicitly.
+        u8             maStatusPad[3];      // +1..+3 (force +4)
+        InputInterface mInputInterface;     // +4
     };
 
     // ========================================================================
@@ -117,6 +125,8 @@ namespace TriggerEntityModuleIO
         // non-const 0x827A3120 write-lock); bodies in BrnTriggerEntityModuleIO_QueueAccessors.cpp.
         const TriggerQueryQueue* GetQueryInputInterface() const;
         TriggerQueryQueue*       GetQueryInputInterface();
+        // X360 0x822DA168: *this = 1 then VariableEventQueue<4096,16>::Construct(this+4).
+        void Construct();
     private:
         TriggerQueryQueue mQueryInputInterface;
     };
@@ -127,6 +137,8 @@ namespace TriggerEntityModuleIO
     public:
         const SceneFineQueryQueue* GetSceneFineQueryQueue() const { return &mSceneFineQueryQueue; }
         SceneFineQueryQueue*       GetSceneFineQueryQueue()       { return &mSceneFineQueryQueue; }
+        // X360 0x822DA180: *this = 1 then VariableEventQueue<2048,16>::Construct(this+4).
+        void Construct();
     private:
         SceneFineQueryQueue mSceneFineQueryQueue;
     };
@@ -139,6 +151,8 @@ namespace TriggerEntityModuleIO
         // body in BrnTriggerEntityModuleIO_QueueAccessors.cpp. The non-const stays inline.
         const SceneResultQueue* GetSceneResultQueue() const;
         SceneResultQueue*       GetSceneResultQueue()       { return &mSceneResultQueue; }
+        // X360 0x822DA198: *this = 1 then VariableEventQueue<32768,16>::Construct(this+4).
+        void Construct();
     private:
         SceneResultQueue mSceneResultQueue;
     };
@@ -151,6 +165,9 @@ namespace TriggerEntityModuleIO
         // non-const 0x822BD1D8 write-lock); bodies in BrnTriggerEntityModuleIO_QueueAccessors.cpp.
         const TriggerEntityModuleOutputInterface* GetOutputInterface() const;
         TriggerEntityModuleOutputInterface*       GetOutputInterface();
+        // X360 0x822DA1B0: *this = 1, VariableEventQueue<1024,16>::Construct(this+4) then
+        // ::Clear on the same queue.
+        void Construct();
     private:
         TriggerEntityModuleOutputInterface mOutputInterface;
     };

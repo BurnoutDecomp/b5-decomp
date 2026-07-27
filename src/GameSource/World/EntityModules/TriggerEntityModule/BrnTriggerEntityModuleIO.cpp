@@ -31,5 +31,46 @@ namespace TriggerEntityModuleIO
         IOBuffer::Construct();
         mSceneInputInterface.Construct();
     }
+
+    // X360 0x822EED48 -- the pre-scene INPUT buffer: the IOBuffer status byte then the
+    // trigger-management aggregate's two embedded queues (the add queue at this+4 and the
+    // remove queue at this+4+131088). Without it the aggregate's queues stay un-Constructed
+    // and the first BridgeInputToEntityModules Append fires "Not Constructed".
+    void InputBuffer_PreScene::Construct()
+    {
+        IOBuffer::Construct();
+        mInputInterface.GetAddTriggerEventQueue().Construct();
+        mInputInterface.GetRemoveTriggerEventQueue().Construct();
+    }
+
+    // X360 0x822DA168 -- post-scene INPUT: status byte + the trigger-query queue (this+4).
+    void InputBuffer_PostScene::Construct()
+    {
+        IOBuffer::Construct();
+        mQueryInputInterface.Construct();
+    }
+
+    // X360 0x822DA180 -- post-scene OUTPUT: status byte + the fine-line-test queue (this+4).
+    void OutputBuffer_PostScene::Construct()
+    {
+        IOBuffer::Construct();
+        mSceneFineQueryQueue.Construct();
+    }
+
+    // X360 0x822DA198 -- pre-physics INPUT: status byte + the scene-result queue (this+4).
+    void InputBuffer_PrePhysics::Construct()
+    {
+        IOBuffer::Construct();
+        mSceneResultQueue.Construct();
+    }
+
+    // X360 0x822DA1B0 -- pre-physics OUTPUT: status byte, the overlap output queue Construct
+    // then its Clear (the X360 emits both calls back to back).
+    void OutputBuffer_PrePhysics::Construct()
+    {
+        IOBuffer::Construct();
+        mOutputInterface.Construct();
+        mOutputInterface.Clear();
+    }
 }
 }

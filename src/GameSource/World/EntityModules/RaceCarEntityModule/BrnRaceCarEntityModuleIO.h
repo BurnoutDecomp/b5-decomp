@@ -35,7 +35,8 @@
 //  (3) EActiveRaceCarEngineState uses the full DWARF enumerators (in the OutputInterface header).
 #pragma once
 
-#include "types.hpp"                                                       // s8/s32/u8/u16/u32/f32
+#include "types.hpp"
+#include <cstring>   // memset (partial-slice Constructs)                                                       // s8/s32/u8/u16/u32/f32
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                      // CgsModule::IOBuffer base
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // CgsModule::EventQueue<T,N>
 #include "BrnCommonTypes.h"                                                 // CgsID, Vector3, Vector4
@@ -142,7 +143,17 @@ namespace RaceCarEntityModuleIO
     struct OutputBuffer_Prepare : public CgsModule::IOBuffer
     {
         typedef RaceCarEntityModuleIO::ResourceRequestInterface ResourceRequestInterface;  // :70
-        void Construct();                                                                  // :123
+        // X360 0x822EA380 -- IOBuffer status then VariableEventQueue<8192,16>::Construct +
+        // ::Clear on the embedded request ring. PARTIAL SLICE: RaceCarEntityModuleIO::
+        // ResourceRequestInterface is still the sized-blob stand-in (its own TU owns the
+        // real RequestInterface<8192>), so the ring bring-up is the documented zero-fill
+        // [marked deviation]. (Replaces the WorldLinkStubs base-only gate.)
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            std::memset(mResourceRequestInterface.maReserved, 0,
+                        sizeof(mResourceRequestInterface.maReserved));
+        }
         const ResourceRequestInterface* GetResourceRequestInterface() const;              // :126 R  (0x8279CDF0)
         ResourceRequestInterface*       GetResourceRequestInterface();                     // :127 W  (0x822B4990)
     private:
@@ -301,11 +312,28 @@ namespace RaceCarEntityModuleIO
         typedef BrnGameState::GameStateModuleIO::ScoringOutputInterface       ScoringInterface;       // :100
         typedef BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface OnlineScoringInterface; // :101
         typedef BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PostScene TrafficToRaceCarInterface_PostScene; // :95
-        void Construct();                                                                  // :409
+        // X360 0x822EA6F0 -- IOBuffer status, then PotentialContact<2048>::Construct(+16),
+        // VariableEventQueue<32768,16>::Construct(+163872) [== mSceneResultQueue],
+        // ResetOnTrackResult<128>/PlaceOnTrackRequest<128> (inside the AI result interface),
+        // TakedownEvent<8>::Construct(+208976), memset(scoring, 0, 2736), the eight-word
+        // online-scoring block seeded to -1 and the two trailing flag bytes cleared.
+        // PARTIAL SLICE: the members whose committed types expose Construct run the REAL
+        // call; the rest are covered by their own TUs [marked deviation]. This replaces the
+        // WorldLinkStubs base-only gate, which left mSceneResultQueue un-Constructed -- the
+        // scene->race-car pre-physics bridge Appends into it every frame.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mSceneResultQueue.Construct();
+            mbControllerActive  = false;
+            mbInHardStopCamera  = false;
+        }
         const PotentialContactQueue* GetPotentialContactQueue() const;                     // :412
         void                         SetPotentialContactQueue(const PotentialContactQueue*); // :413
         const SceneResultQueue* GetSceneResultQueue() const;                              // :415
-        SceneResultQueue*       GetSceneResultQueue();                                    // :416
+        // Real accessor (was a WorldLinkStubs stub that returned NULL, which the
+        // scene->race-car pre-physics bridge then dereferenced). The member is committed.
+        SceneResultQueue*       GetSceneResultQueue() { return &mSceneResultQueue; }      // :416
         const AIModuleResultInterface* GetAIModuleResultInterface() const;                // :418
         void                           SetAIModuleResultInterface(const AIModuleResultInterface*); // :419
         const TakedownEventQueue* GetTakedownEventQueue() const;                          // :421
@@ -447,11 +475,24 @@ namespace RaceCarEntityModuleIO
     // ============================================================================
     struct InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
     {
-        void Construct();                                                                  // :624
+        // X360 0x822D3710 -- IOBuffer status, Camera::Construct(+16),
+        // VariableEventQueue<32768,16>::Construct(+368) [== mSceneResultQueue] and the four
+        // trailing pointer slots cleared. PARTIAL SLICE: the camera bring-up belongs to the
+        // camera TU [marked deviation]. (Replaces the WorldLinkStubs base-only gate.)
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mSceneResultQueue.Construct();
+            mpDispatchFrame            = 0;
+            mpBlobbyShadowBuffer       = 0;
+            mpCoronaSubmissionInterface = 0;
+            mpShadowMap                = 0;
+        }
         const BrnDirector::Camera::Camera* GetCameraInput() const;                         // :627 R (0x822B69C8)
         void          SetCameraInput(const BrnDirector::Camera::Camera*);                  // :628
         const SceneResultQueue* GetSceneResultQueue() const;                              // :630
-        SceneResultQueue*       GetSceneResultQueue();                                    // :631
+        // Real accessor (see the InputBuffer_PrePhysics twin above).
+        SceneResultQueue*       GetSceneResultQueue() { return &mSceneResultQueue; }      // :631
         CgsGraphics::DispatchFrame* GetDispatchFrame() const;                             // :633
         void                        SetDispatchFrame(CgsGraphics::DispatchFrame*);        // :634
         BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* GetBlobbyShadowBuffer() const;     // :636
