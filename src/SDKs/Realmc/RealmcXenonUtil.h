@@ -24,13 +24,10 @@
 // displacement names (semantic parity by named members, not byte offsets); the
 // interior gaps the helpers never touch are reserved with explicit padding.
 //
-// NOT reconstructed here (blocked):
-//   RealmcIface::XenonUtil::CardResultToCardStatus @ 0x82B53AD8 -- a jump-table
-//   dispatch (`byte_82148638[a1]` selects one of the fall-through code
-//   fragments). The 16-byte offset table `byte_82148638` is not present in the
-//   dossier, so the mapping from card-result code -> card-status code cannot be
-//   recovered without guessing the table; reconstructing it would misroute
-//   status codes at runtime. Left for when the rodata bytes are attested.
+// CardResultToCardStatus @ 0x82B53AD8 is a jump-table dispatch; its 16-byte
+// offset table `byte_82148638` was recovered from the IDA database (dump:
+// scratchpad/waveD/XenonUtil.spec.md in the workflow repo), so the switch is
+// rodata-attested, not guessed.
 // ===========================================================================
 
 #include "types.hpp"
@@ -121,6 +118,14 @@ public:
     // @ 0x82B53A18 -- 0 if the device *lpuDeviceId names is present (XContentGetDeviceState
     //                 succeeds), 2 if the id is 0 or the device is gone.
     static int CardExists(const u32* lpuDeviceId);
+
+    // @ 0x82B53AD8 -- map an internal card RESULT code (the values above) to the
+    //                 public card STATUS code the worker tasks report. A 16-entry
+    //                 byte jump table (byte_82148638, rodata-attested); results 2/14
+    //                 consult State::mbDeviceMounted (asm reads 0xB0(r4) -- the
+    //                 State* second argument Hex-Rays' one-arg prototype hides;
+    //                 every caller does `lwz r4, 0x10(r31)` before the call).
+    static int CardResultToCardStatus(u32 luResult, const State* lpState);
 
     // @ 0x82B53460 -- 0 if a user is signed in (dwUserIndex valid and XUserGetSigninState
     //                 non-zero), else 13; stashes the code in State::miResult.
