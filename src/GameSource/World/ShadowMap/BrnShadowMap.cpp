@@ -7,8 +7,9 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"           // CgsDev::DebugUI::StringList (type options)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"    // ShaderConstantTable (SetConstantsForEnvmap)
 
-#include <cmath>     // std::sqrt (ComputeTSMMatrix -- vrsqrtefp + 2x NR de-optimised exact)
-#include <cstring>   // memcpy (the 128-byte frustum copy at 0x827C1274)
+#include <algorithm> // std::sort (ComputeOptimalViewVolume's candidate-plane ordering)
+#include <cmath>     // std::sqrt/sin/cos (the vrsqrtefp + 2x NR chains, de-optimised exact)
+#include <cstring>   // memcpy (the 128-byte frustum copies)
 
 // ============================================================================
 // GameSource/Unity/../World/ShadowMap/BrnShadowMap.cpp
@@ -1345,49 +1346,894 @@ namespace BrnWorld
     }
 
     // ========================================================================
-    // FLAG assert-trap bodies (shadow-camera wave 2026-07-27) -- the three
-    // remaining VMX pipelines of this TU. Each is documented in the header;
-    // the full recovered analysis (entry structure, member roles, shared BSS,
-    // callee sets, emulator tooling) is in the session vmx_wave_log.md so the
-    // next wave can pick them up without re-deriving.
+    // Bounding-box shadow wave (2026-07-27b): ComputeBoundingBoxMatrix
+    // @0x827D91B0 and ComputeOptimalViewVolume @0x827D8980, the two heavy VMX
+    // passes the E_SHADOWMAP_TYPE_BOUNDINGBOX cascades run.
     //
-    // Reachability with the shipping defaults: KA_SHADOWMAPTYPE is un-dumped
-    // rodata carried as ORTHO, which routes CalculateShadowMapCameras through
-    // GetCgsFrustumParallel -- none of these traps is on that path; they arm
-    // only when a map is switched to TSM/BOUNDINGBOX (debug menu or the real
-    // rodata values once recovered) or the per-map DebugRender toggle is set.
+    // Every local/parameter/constant name below is the DecFIGS DWARF ground
+    // truth (references/DecFIGS/dwarfdump/GameSource/World/ShadowMap/
+    // BrnShadowMap.cpp:1230-1540 and :1600-1790); the arithmetic is decoded
+    // from the raw X360 instruction stream and was matched lane-for-lane
+    // against a numeric emulation of it (session log shadowvmx_wave_log.md --
+    // worst observed relative delta on the produced mBestFitMatrix ~3e-8, on
+    // the candidate planes ~5e-8).
     // ========================================================================
 
-    // @0x827D91B0 (~1450 instructions). Recovered entry structure: gated on
-    // mbUpdateTsmCamera it snapshots the cascade's mViewProjection/mView into
-    // maTsmBBInfo[i].mWorldToLight/mWorldToLightView, clones lrCamera into
-    // maTsmBBInfo[i].mCamera and clamps its near/far to the TSM sub-frustum
-    // range; then GetFrustumPerspective -> mSubFrustum.SetFromRwFrustum ->
-    // CalcVertices, transforms the 8 verts into light space and runs the
-    // extent/optimal-view-volume reduction that fills mBestFitMatrix and the
-    // shared constant-matrix BSS (unk_8300F5C0/F630/F980 block).
-    void ShadowMap::ComputeBoundingBoxMatrix(u32 /*luIndex*/, CgsGraphics::Camera& /*lrCamera*/)
+    // ------------------------------------------------------------------------
+    // BrnShadowMap.cpp:330 (DWARF). One candidate plane of the optimal shadow
+    // view volume plus the score std::sort orders the candidate set by. 32
+    // bytes (the X360 record stride, and the `srawi 5` element size every
+    // std::_Sort/_Median/_Unguarded_partition instantiation divides by).
+    // ------------------------------------------------------------------------
+    struct CandidateViewVolumePlane
     {
-        CGS_ASSERT(false,
-                   "ShadowMap::ComputeBoundingBoxMatrix: FLAG -- VMX pass @0x827D91B0 not yet "
-                   "faithfully decoded (see BrnShadowMap.h + vmx_wave_log.md); reachable only for "
-                   "E_SHADOWMAP_TYPE_BOUNDINGBOX maps");
+        Vector3Plus mPlane;   // BrnShadowMap.cpp:339 -- {normal, D}, dot3(N,p) == D inside
+        VecFloat    mScore;   // BrnShadowMap.cpp:340 -- sort key (broadcast lane)
+
+        // BrnShadowMap.cpp:334. The X360 predicate (inlined into
+        // _Unguarded_partition @0x827CEED8) is the ALL-LANES `vcmpgtfp.` of the
+        // two score vectors -- CR6[0], i.e. every lane of the other score must
+        // be greater. The scores are broadcast lanes, so this is the scalar
+        // compare in vector clothing; spelled per-lane to keep the semantics.
+        bool operator<(const CandidateViewVolumePlane& lrOther) const
+        {
+            return lrOther.mScore.x > mScore.x && lrOther.mScore.y > mScore.y
+                && lrOther.mScore.z > mScore.z && lrOther.mScore.w > mScore.w;
+        }
+    };
+
+    // BrnShadowMap.cpp:1187 (DWARF). The per-slot bounding-box debug blob
+    // (unk_8300EA70, 768-byte stride) ComputeBoundingBoxMatrix fills and the
+    // declaration-only DebugRender consumes.
+    struct BoundingBoxDebugRenderInfo
+    {
+        Vector4               maFrustumPoints[8];    // +0x000 (:1189) world sub-frustum verts
+        CgsGeometric::Frustum mCameraFrustum;        // +0x080 (:1190) memcpy of mSubFrustum
+        Vector4               maBoxPointsWorld[4];   // +0x100 (:1191) corners/w -> light-to-world
+        Vector4               maBoxPointsSquare[4];  // +0x140 (:1192) corners through the selected stage
+        Vector4               mCentreLineStart;      // +0x180 (:1193)
+        Vector4               mCentreLineEnd;        // +0x190 (:1194)
+        Matrix44              mLightToWorld;         // +0x1A0 (:1195) Inverse(mWorldToLight)
+        Vector4               mSideLineStart[2];     // +0x1E0 (:1196)
+        Vector4               mSideLineEnd[2];       // +0x200 (:1197)
+        Vector4               mBaseLineStart[2];     // +0x220 (:1198)
+        Vector4               mBaseLineEnd[2];       // +0x240 (:1199)
+        VecFloat              mZOffset;              // +0x260 (:1200)
+        f32                   mfAspectRatio;         // +0x270 (:1201)
+        u8                    maPad274[12];          // +0x274 pad to the 0x280 frustum
+        CgsGeometric::Frustum mLightFrustum;         // +0x280 (:1202) memcpy of maFrustum[i]
+    };
+    static_assert(sizeof(BoundingBoxDebugRenderInfo) == 768,
+                  "BoundingBoxDebugRenderInfo must be 768 bytes (X360 stride)");
+
+    // BrnShadowMap.cpp:1203 (DWARF) -- unk_8300EA70.
+    BoundingBoxDebugRenderInfo gBoundingBoxDebugRenderInfo[KU_NUM_SHADOW_MAPS];
+
+    // BrnShadowMap.cpp:1219 (DWARF) -- unk_8300F630. DERIVED 0.25: the only use
+    // is scaling the two four-vertex face sums into the near/far face centres
+    // (the same quarter-average ComputeTSMMatrix spells with flt_82004EF4).
+    // (The value is in fact unobservable -- it cancels in the Normalize that
+    // immediately follows -- so 0.25 is the semantic, not a fitted, choice.)
+    const VecFloat K_1_OVER_4 = { 0.25f, 0.25f, 0.25f, 0.25f };
+
+    // BrnShadowMap.cpp:78/79 (DWARF) -- unk_8300F980 / unk_8300F5C0, the two
+    // terms of the ideal-aspect-ratio area penalty. DERIVED from the names and
+    // the clamp arithmetic the X360 emits, `t = clamp01((err - 1 - A) * B)`:
+    // A == 0.25 and B == 1/0.75 make the penalty ramp exactly from t == 0 at an
+    // aspect error of 1.25 to t == 1 at an aspect error of 2.0 -- i.e. B is
+    // literally "one over (2.0 - 1.25)", which is what the DWARF name spells.
+    const VecFloat K_VECFLOAT_ZEROPOINTTWOFIVE            = { 0.25f, 0.25f, 0.25f, 0.25f };
+    const VecFloat K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE = { 1.0f / 0.75f, 1.0f / 0.75f,
+                                                              1.0f / 0.75f, 1.0f / 0.75f };
+
+    // BrnShadowMap.cpp:1589-1592 (DWARF) -- unk_8300F990 / unk_8300E9A0 /
+    // unk_8300E9D0 / unk_8300F460.
+    //
+    // FLAG (values not in this dossier -- IDA exports carry no data): K_VERY_SMALL
+    //   must be STRICTLY POSITIVE. Both endpoints of every candidate edge plane
+    //   evaluate to exactly zero distance in exact arithmetic, so with a zero
+    //   tolerance float rounding puts them on both sides and the accept test
+    //   rejects all twelve candidates (verified: 0/12 accepted at eps == 0 in the
+    //   numeric emulation). Carried as a millimetre in world units.
+    // FLAG (K_LOW_PRIORITY / K_HIGH_PRIORITY): values un-dumped. The X360 scores
+    //   the first four (near-face) edge planes from one of them and the remaining
+    //   eight from the other; which symbol binds to which branch is NOT pinned by
+    //   the dossier. Both are carried at the same (zero) value, which makes the
+    //   binding inert and keeps every edge plane ahead of the opposing frustum
+    //   planes (whose score is 2 - NdotL, i.e. > 2) in the ascending sort -- the
+    //   ordering the algorithm plainly intends.
+    const VecFloat K_VERY_SMALL       = {  0.001f,  0.001f,  0.001f,  0.001f }; // FLAG: value not recovered
+    const VecFloat K_MINUS_VERY_SMALL = { -0.001f, -0.001f, -0.001f, -0.001f }; // == -K_VERY_SMALL
+    const VecFloat K_LOW_PRIORITY     = { 0.0f, 0.0f, 0.0f, 0.0f };             // FLAG: value not recovered
+    const VecFloat K_HIGH_PRIORITY    = { 0.0f, 0.0f, 0.0f, 0.0f };             // FLAG: value not recovered
+
+    // BrnShadowMap.cpp:256 (DWARF `const CgsGeometric::Frustum::Vertices[24]`).
+    // The twelve (start, end) vertex-index pairs of the sub-frustum's edge list.
+    // RECOVERED from the fully unrolled gather the X360 emits at
+    // 0x827D89E8..0x827D8B78 (each pair is a pinned lvx offset into the two
+    // point arrays), NOT guessed: the near face walks 0-1-3-2, the far face
+    // 4-5-7-6, then the four connecting edges. NOTE the last pair is {2, 7} and
+    // not the {2, 6} a clean box would use -- that is what the shipping table
+    // holds (the unrolled load re-uses the vertex-7 register for both edge 10
+    // and edge 11), reproduced verbatim.
+    // (Typed u32 here: the DWARF element type is a CgsGeometric::Frustum::Vertices
+    // enum whose home header is outside this TU's ownership.)
+    const u32 KA_FRUSTUM_VERT_LINE_INDICES[24] =
+    {
+        0, 1,   1, 3,   3, 2,   2, 0,      // near face loop
+        4, 5,   5, 7,   7, 6,   6, 4,      // far face loop
+        0, 4,   1, 5,   3, 7,   2, 7,      // the connecting edges (last pair per the shipping table)
+    };
+
+    namespace
+    {
+        // --------------------------------------------------------------------
+        // The rw::math::vpu shapes these two bodies are built from. Same
+        // convention as the MultRow/MultMatrix pair above: row-vector maths, the
+        // vrefp/vrsqrtefp + 2x Newton-Raphson chains de-optimised to exact.
+        // --------------------------------------------------------------------
+
+        // rw::math::vpu::TransformPoint(Vector3, Matrix44) -- affine seed from row 3.
+        Vector4 TransformPoint(const Vector4& lrPoint, const Matrix44& lrMatrix)
+        {
+            const f32* lapRows[4] = { &lrMatrix.xAxis.x, &lrMatrix.yAxis.x,
+                                      &lrMatrix.zAxis.x, &lrMatrix.wAxis.x };
+            const f32 lafLanes[3] = { lrPoint.x, lrPoint.y, lrPoint.z };
+            Vector4 lvOut;
+            f32* lpfOut = &lvOut.x;
+            for (int liLane = 0; liLane < 4; ++liLane)
+            {
+                lpfOut[liLane] = lapRows[3][liLane];
+            }
+            for (int liRow = 0; liRow < 3; ++liRow)
+            {
+                for (int liLane = 0; liLane < 4; ++liLane)
+                {
+                    lpfOut[liLane] += lafLanes[liRow] * lapRows[liRow][liLane];
+                }
+            }
+            return lvOut;
+        }
+
+        // rw::math::vpu::TransformVector(Vector3, Matrix44Affine) -- no translation.
+        Vector4 TransformVector(const Vector4& lrVector, const Matrix44Affine& lrMatrix)
+        {
+            const f32* lapRows[3] = { &lrMatrix.xAxis.x, &lrMatrix.yAxis.x, &lrMatrix.zAxis.x };
+            const f32 lafLanes[3] = { lrVector.x, lrVector.y, lrVector.z };
+            Vector4 lvOut; lvOut.SetZero();
+            f32* lpfOut = &lvOut.x;
+            for (int liRow = 0; liRow < 3; ++liRow)
+            {
+                for (int liLane = 0; liLane < 4; ++liLane)
+                {
+                    lpfOut[liLane] += lafLanes[liRow] * lapRows[liRow][liLane];
+                }
+            }
+            return lvOut;
+        }
+
+        // rw::math::vpu::Normalize(Vector3) -- vmsum3fp + vrsqrtefp + 2x NR.
+        Vector4 Normalize3(const Vector4& lrVector)
+        {
+            const f32 lfLenSq = lrVector.x * lrVector.x + lrVector.y * lrVector.y
+                              + lrVector.z * lrVector.z;
+            const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
+            return Vector4{ lrVector.x * lfInvLen, lrVector.y * lfInvLen,
+                            lrVector.z * lfInvLen, lrVector.w * lfInvLen };
+        }
+
+        // rw::math::vpu::Magnitude(Vector4) -- vmsum4fp + rsqrt NR, with the
+        // vcmpeqfp/vsel guard that returns exactly 0 for a zero-length input.
+        f32 Magnitude4(const Vector4& lrVector)
+        {
+            const f32 lfLenSq = lrVector.x * lrVector.x + lrVector.y * lrVector.y
+                              + lrVector.z * lrVector.z + lrVector.w * lrVector.w;
+            return (lfLenSq == 0.0f) ? 0.0f : lfLenSq * (1.0f / std::sqrt(lfLenSq));
+        }
+
+        f32 Dot3(const Vector4& lrA, const Vector4& lrB)
+        {
+            return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+        }
+
+        // rw::math::vpu::Cross(Vector3, Vector3) -- the vpermwi128-0x63 (y,z,x)
+        // rotate pair the X360 emits.
+        Vector4 Cross3(const Vector4& lrA, const Vector4& lrB)
+        {
+            return Vector4{ lrA.y * lrB.z - lrA.z * lrB.y,
+                            lrA.z * lrB.x - lrA.x * lrB.z,
+                            lrA.x * lrB.y - lrA.y * lrB.x,
+                            0.0f };
+        }
+
+        // BrnShadowMap.cpp:356 (DWARF `BrnWorld::_LineIntersection2d`). The XY
+        // intersection of the line through lrLine0Start with direction lrLine0Vec
+        // and the line through lrLine1Start with direction lrLine1Vec, returned as
+        // the point on line 0 (z kept from line 0's start, w forced to 1 by the
+        // vrlimi128 mask=1 insert). The reciprocal is the vrefp + 2x NR chain,
+        // de-optimised exact.
+        Vector4 _LineIntersection2d(const Vector4& lrLine0Start, const Vector4& lrLine0Vec,
+                                    const Vector4& lrLine1Start, const Vector4& lrLine1Vec)
+        {
+            const f32 lfDenom = lrLine1Vec.y * lrLine0Vec.x - lrLine1Vec.x * lrLine0Vec.y;
+            const f32 lfNumer = lrLine1Vec.x * (lrLine0Start.y - lrLine1Start.y)
+                              - lrLine1Vec.y * (lrLine0Start.x - lrLine1Start.x);
+            const f32 lfS = lfNumer / lfDenom;
+
+            Vector4 lvOut;
+            lvOut.x = lrLine0Start.x + lrLine0Vec.x * lfS;
+            lvOut.y = lrLine0Start.y + lrLine0Vec.y * lfS;
+            lvOut.z = lrLine0Start.z + lrLine0Vec.z * lfS;
+            lvOut.w = 1.0f;
+            return lvOut;
+        }
     }
 
-    // @0x827D8980 (~520 instructions): the candidate-view-volume solve --
-    // walks the 6 source planes (GetPlaneByIndex), builds
-    // BrnWorld::CandidateViewVolumePlane records, std::_Sorts them, and
-    // intersects the winning silhouette set into lrOutFrustum.
-    void ShadowMap::ComputeOptimalViewVolume(const CgsGeometric::Frustum& /*lrFrustum*/,
-                                             Matrix44Affine /*lm44WorldToLight*/,
-                                             CgsGeometric::Frustum& /*lrOutFrustum*/,
-                                             const rw::math::vpu::Vector3* /*lpArg4*/,
-                                             const rw::math::vpu::Vector3* /*lpArg5*/)
+    // ========================================================================
+    // BrnWorld::ShadowMap::ComputeBoundingBoxMatrix @0x827D91B0
+    //
+    // Fit the tightest oriented 2D box (in the cascade's post-projective light
+    // plane) around the map's clamped sub-frustum, and turn that box into the
+    // mBestFitMatrix post-projection CalculateShadowMapCameras multiplies the
+    // cascade projection by. Pipeline:
+    //
+    //   1. gated on mbUpdateTsmCamera: snapshot the cascade camera's
+    //      mViewProjection -> mWorldToLight and its mView -> mWorldToLightView,
+    //      clone lCamera into the slot's TSM camera and clamp its near/far into
+    //      [mfNearClip, mfFarClip] (the two fsel max/min + projection rebuilds).
+    //   2. GetFrustumPerspective -> mSubFrustum.SetFromRwFrustum -> CalcVertices
+    //      -> the 8 world-space sub-frustum corners.
+    //   3. Each corner through mWorldToLight; keep the full projective point in
+    //      lFrustumPointsLightSpace3d and the flattened (x, y, 0) point in
+    //      lFrustumPointsLightSpace -- the whole solve runs in that 2D plane.
+    //   4. Near/far face centres (quarter sums), their normalised difference,
+    //      and its 2D perpendicular = the seed "base line" direction.
+    //   5. KU_NUM_BOUNDING_BOX_ITERATIONS rotations of that direction about Z:
+    //      per rotation take the min/max support points along the side vector
+    //      (they carry the base and top lines) and along the negated base vector
+    //      (they carry the two side lines), and keep the rotation whose
+    //      width x height area is smallest (optionally weighted towards
+    //      mfIdealAspectRatio).
+    //   6. Intersect the four lines -> laBestBoxPoints (top-left, top-right,
+    //      base-right, base-left); optionally cycle them by one so the long edge
+    //      is the base (mbPreferShortAndFatProjection).
+    //   7. Compose lTransformT1 (centre -> origin) * lTransformR (base edge ->
+    //      +X) * lTransformS2 (corner 0 -> (1,1)) into mBestFitMatrix, then
+    //      mirror X when mbInvertCullMode.
+    //   8. Invert mWorldToLightView into mLightToWorldView and hand the whole
+    //      thing to ComputeOptimalViewVolume, which writes the cascade's culling
+    //      frustum.
+    //   9. gated on mbUpdateDebugRender: fill gBoundingBoxDebugRenderInfo.
+    // ========================================================================
+    void ShadowMap::ComputeBoundingBoxMatrix(u32 luMapIndex, CgsGraphics::Camera& lCamera)
     {
-        CGS_ASSERT(false,
-                   "ShadowMap::ComputeOptimalViewVolume: FLAG -- VMX pass @0x827D8980 not yet "
-                   "faithfully decoded (see BrnShadowMap.h + vmx_wave_log.md); reachable only "
-                   "through ComputeBoundingBoxMatrix");
+        TsmBBInfo& lTsmBBInfo = maTsmBBInfo[luMapIndex];              // BrnShadowMap.cpp:1230
+
+        // ---- 1. TSM camera refresh (0x827D91F4..0x827D9290, gated) ----------
+        if (mbUpdateTsmCamera)                                       // lbz 0x1502(this)
+        {
+            lTsmBBInfo.mWorldToLight = maCgsShadowMapCamera[luMapIndex].mViewProjection;
+            {   // the four lvx/stvx rows of the cascade view matrix
+                const Matrix44& lrView = maCgsShadowMapCamera[luMapIndex].mView;
+                lTsmBBInfo.mWorldToLightView.xAxis =
+                    Vector3{ lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
+                lTsmBBInfo.mWorldToLightView.yAxis =
+                    Vector3{ lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
+                lTsmBBInfo.mWorldToLightView.zAxis =
+                    Vector3{ lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
+                lTsmBBInfo.mWorldToLightView.wAxis =
+                    Vector3{ lrView.wAxis.x, lrView.wAxis.y, lrView.wAxis.z, lrView.wAxis.w };
+            }
+
+            lCamera.Clone(&lTsmBBInfo.mCamera);
+
+            {   // near = max(mfNearClip, cloned near) -- fsel @0x827D926C
+                f32& lrfCamNear = lTsmBBInfo.mCamera.maProjectionScalars[7];
+                lrfCamNear = (lTsmBBInfo.mfNearClip - lrfCamNear >= 0.0f) ? lTsmBBInfo.mfNearClip
+                                                                          : lrfCamNear;
+                lTsmBBInfo.mCamera.UpdatePerspectiveProjectionMatrix();
+            }
+            {   // far = min(cloned far, mfFarClip) -- fsel @0x827D9288
+                f32& lrfCamFar = lTsmBBInfo.mCamera.maProjectionScalars[8];
+                lrfCamFar = (lTsmBBInfo.mfFarClip - lrfCamFar >= 0.0f) ? lrfCamFar
+                                                                       : lTsmBBInfo.mfFarClip;
+                lTsmBBInfo.mCamera.UpdatePerspectiveProjectionMatrix();
+            }
+        }
+
+        // ---- 2. sub-frustum -> 8 world corners (0x827D9294..0x827D92BC) -----
+        const Matrix44& lWorldToLight = lTsmBBInfo.mWorldToLight;    // BrnShadowMap.cpp:1246
+        CgsGraphics::CameraRwFrustum lRwFrustum;                     // BrnShadowMap.cpp:1248
+        Vector4 lFrustumPoints[8];                                   // BrnShadowMap.cpp:1259
+        lTsmBBInfo.mCamera.GetFrustumPerspective(lRwFrustum, false);
+        lTsmBBInfo.mSubFrustum.SetFromRwFrustum(lRwFrustum);
+        lTsmBBInfo.mSubFrustum.CalcVertices(lFrustumPoints);
+
+        // ---- 3. into the 2D light plane (0x827D92C0..0x827D940C) ------------
+        // The flattened point keeps only (x, y): the perm+vrlimi pair the X360
+        // emits writes lane 2 as zero and leaves lane 3 unread by every consumer.
+        Vector4 lFrustumPointsLightSpace3d[8];                       // BrnShadowMap.cpp:1263
+        Vector4 lFrustumPointsLightSpace[8];                         // BrnShadowMap.cpp:1264
+        for (u32 luI = 0; luI < 8; ++luI)                            // BrnShadowMap.cpp:1265
+        {
+            lFrustumPointsLightSpace3d[luI] = TransformPoint(lFrustumPoints[luI], lWorldToLight);
+            lFrustumPointsLightSpace[luI]   = Vector4{ lFrustumPointsLightSpace3d[luI].x,
+                                                       lFrustumPointsLightSpace3d[luI].y,
+                                                       0.0f, 0.0f };
+        }
+
+        // ---- 4. centre line + the seed base direction (0x827D9410..0x827D9548)
+        Vector4 lCentreLineStart;                                    // BrnShadowMap.cpp:1278
+        Vector4 lCentreLineEnd;                                      // BrnShadowMap.cpp:1284
+        {
+            Vector4 lvNear = lFrustumPointsLightSpace[0];
+            Vector4 lvFar  = lFrustumPointsLightSpace[4];
+            for (u32 luI = 1; luI < 4; ++luI)
+            {
+                lvNear.x += lFrustumPointsLightSpace[luI].x;
+                lvNear.y += lFrustumPointsLightSpace[luI].y;
+                lvNear.z += lFrustumPointsLightSpace[luI].z;
+                lvNear.w += lFrustumPointsLightSpace[luI].w;
+                lvFar.x  += lFrustumPointsLightSpace[luI + 4].x;
+                lvFar.y  += lFrustumPointsLightSpace[luI + 4].y;
+                lvFar.z  += lFrustumPointsLightSpace[luI + 4].z;
+                lvFar.w  += lFrustumPointsLightSpace[luI + 4].w;
+            }
+            lCentreLineStart = Vector4{ lvNear.x * K_1_OVER_4.x, lvNear.y * K_1_OVER_4.y,
+                                        lvNear.z * K_1_OVER_4.z, lvNear.w * K_1_OVER_4.w };
+            lCentreLineEnd   = Vector4{ lvFar.x * K_1_OVER_4.x, lvFar.y * K_1_OVER_4.y,
+                                        lvFar.z * K_1_OVER_4.z, lvFar.w * K_1_OVER_4.w };
+        }
+        const Vector4 lCentreLineVec = Normalize3(Vector4{                   // :1291
+            lCentreLineEnd.x - lCentreLineStart.x, lCentreLineEnd.y - lCentreLineStart.y,
+            lCentreLineEnd.z - lCentreLineStart.z, lCentreLineEnd.w - lCentreLineStart.w });
+        const Vector4 lOriginalBaseLineVec{ lCentreLineVec.y, -lCentreLineVec.x, 0.0f, 0.0f }; // :1305
+
+        // ---- 5. the rotation search (0x827D95C4..0x827DA004) ----------------
+        // FLAG (dword_82F30E64 / flt_82004F64 -- values not in this dossier):
+        //   KU_NUM_BOUNDING_BOX_ITERATIONS must be >= 1, otherwise the corner
+        //   solve below runs on the zero-initialised support points and divides
+        //   by zero. Carried at 1 (evaluate the un-rotated fit only), the
+        //   minimal value that reproduces the algorithm; the sweep in degrees is
+        //   then unobservable (only rotation 0 is visited) and is carried as the
+        //   quarter turn that covers every distinct box orientation.
+        static u32 KU_NUM_BOUNDING_BOX_ITERATIONS = 1;                        // :1307 FLAG
+        static const f32 KF_BOUNDING_BOX_SWEEP_DEGREES = 90.0f;               // FLAG
+
+        Vector4 laBestBoxPoints[4];                                            // :1296
+        Vector4 lBestBoxBaseLineStart;      lBestBoxBaseLineStart.SetZero();   // :1297
+        Vector4 lBestBoxTopLineStart;       lBestBoxTopLineStart.SetZero();    // :1298
+        Vector4 lBestBoxSideLineRightVec;   lBestBoxSideLineRightVec.SetZero();// :1299
+        Vector4 lBestBoxSideLineRightStart; lBestBoxSideLineRightStart.SetZero();//:1300
+        Vector4 lBestBoxSideLineLeftVec;    lBestBoxSideLineLeftVec.SetZero(); // :1301
+        Vector4 lBestBoxSideLineLeftStart;  lBestBoxSideLineLeftStart.SetZero();//:1302
+        Vector4 lBaseLineVec;               lBaseLineVec.SetZero();            // :1306
+        f32 lSmallestArea = 0.0f;                                              // :1304
+
+        const f32 lRotateStep = (KF_BOUNDING_BOX_SWEEP_DEGREES * 0.017453292f)  // flt_820CA158
+                              / static_cast<f32>(KU_NUM_BOUNDING_BOX_ITERATIONS); // :1308
+        f32 lRotation = 0.0f;                                                  // :1309
+        const f32 lIdealAspectRatio = mfIdealAspectRatio;                      // :1311
+
+        for (u32 luIteration = 0; luIteration < KU_NUM_BOUNDING_BOX_ITERATIONS; ++luIteration) // :1314
+        {
+            // FLAG (PC-platform leaf: the X360 inlines the XNAMath XMVectorSinCos
+            // minimax polynomial pair; its coefficient tables unk_82000BD0..
+            // unk_82000C60 are un-dumped rodata, so the pair is lowered to libm --
+            // same treatment as the ICEMath.cpp tan/atan precedent). The 2x2 block
+            // is the standard rotation about Z.
+            const f32 lfCos = std::cos(lRotation);
+            const f32 lfSin = std::sin(lRotation);
+            Matrix44Affine lRotationAroundZMatrix;                             // :1310
+            lRotationAroundZMatrix.xAxis = Vector3{  lfCos, lfSin, 0.0f, 0.0f };
+            lRotationAroundZMatrix.yAxis = Vector3{ -lfSin, lfCos, 0.0f, 0.0f };
+            lRotationAroundZMatrix.zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
+            lRotationAroundZMatrix.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+            const Vector4 lvBase = TransformVector(lOriginalBaseLineVec, lRotationAroundZMatrix);
+            const Vector4 lvSide{ -lvBase.y, lvBase.x, 0.0f, 0.0f };
+
+            // support points along the side vector -> the base / top lines
+            f32 lfSideMin = Dot3(lvSide, lFrustumPointsLightSpace[0]);
+            f32 lfSideMax = lfSideMin;
+            Vector4 lvBaseStart = lFrustumPointsLightSpace[0];
+            Vector4 lvTopStart  = lFrustumPointsLightSpace[0];
+            for (u32 luI = 1; luI < 8; ++luI)
+            {
+                const f32 lfDot = Dot3(lvSide, lFrustumPointsLightSpace[luI]);
+                if (lfSideMin > lfDot)                          // vcmpgtfp.
+                {
+                    lfSideMin = lfDot; lvBaseStart = lFrustumPointsLightSpace[luI];
+                }
+                if (lfDot > lfSideMax)
+                {
+                    lfSideMax = lfDot; lvTopStart = lFrustumPointsLightSpace[luI];
+                }
+            }
+            const f32 lHeight = lfSideMax - lfSideMin;
+
+            // support points along the negated base vector -> the two side lines.
+            // (Both side lines take the SAME direction vector -- the X360 keeps
+            // two copies of it, matching the two named locals.)
+            const Vector4 lvSideLineVec{ -lvSide.x, -lvSide.y, -lvSide.z, -lvSide.w };
+            const Vector4 lvNegBase{ -lvBase.x, -lvBase.y, -lvBase.z, 0.0f };
+            f32 lfBaseMax = Dot3(lvNegBase, lFrustumPointsLightSpace[0]);
+            f32 lfBaseMin = lfBaseMax;
+            u32 luMaxIndex = 0;
+            u32 luMinIndex = 0;
+            for (u32 luI = 1; luI < 8; ++luI)                   // the if/else-if chain the asm emits
+            {
+                const f32 lfDot = Dot3(lvNegBase, lFrustumPointsLightSpace[luI]);
+                if (lfDot > lfBaseMax)
+                {
+                    lfBaseMax = lfDot; luMaxIndex = luI;
+                }
+                else if (lfBaseMin > lfDot)
+                {
+                    lfBaseMin = lfDot; luMinIndex = luI;
+                }
+            }
+            const f32 lWidth = lfBaseMax - lfBaseMin;
+
+            f32 lfArea = lHeight * lWidth;
+            if (mbOptimiseForIdealAspectRatio)                  // lbz 0x1505(this)
+            {
+                const f32 lfRatio = ((lWidth > lHeight) ? lWidth : lHeight)
+                                  / ((lWidth > lHeight) ? lHeight : lWidth);
+                const f32 lfHi = (lfRatio > lIdealAspectRatio) ? lfRatio : lIdealAspectRatio;
+                const f32 lfLo = (lfRatio > lIdealAspectRatio) ? lIdealAspectRatio : lfRatio;
+                f32 lfWeight = std::fabs(lfHi / lfLo) - 1.0f
+                             - K_VECFLOAT_ZEROPOINTTWOFIVE.x;
+                lfWeight *= K_VECFLOAT_ONE_OVER_ZEROPOINTSEVENFIVE.x;
+                lfWeight = (lfWeight > 0.0f) ? lfWeight : 0.0f;  // vmaxfp 0
+                lfWeight = (lfWeight > 1.0f) ? 1.0f : lfWeight;  // vminfp 1
+                lfArea *= 1.0f + lfWeight;
+            }
+
+            if (luIteration == 0 || lSmallestArea > lfArea)
+            {
+                lSmallestArea             = lfArea;
+                lBaseLineVec              = lvBase;
+                lBestBoxTopLineStart      = lvTopStart;
+                lBestBoxBaseLineStart     = lvBaseStart;
+                lBestBoxSideLineRightStart = lFrustumPointsLightSpace[luMaxIndex];
+                lBestBoxSideLineLeftStart  = lFrustumPointsLightSpace[luMinIndex];
+                lBestBoxSideLineRightVec   = lvSideLineVec;
+                lBestBoxSideLineLeftVec    = lvSideLineVec;
+            }
+            lRotation += lRotateStep;
+        }
+
+        // ---- 6. the four box corners (0x827DA008..0x827D9CB0) ---------------
+        laBestBoxPoints[0] = _LineIntersection2d(lBestBoxTopLineStart,  lBaseLineVec,
+                                                 lBestBoxSideLineLeftStart,  lBestBoxSideLineLeftVec);
+        laBestBoxPoints[1] = _LineIntersection2d(lBestBoxTopLineStart,  lBaseLineVec,
+                                                 lBestBoxSideLineRightStart, lBestBoxSideLineRightVec);
+        laBestBoxPoints[2] = _LineIntersection2d(lBestBoxBaseLineStart, lBaseLineVec,
+                                                 lBestBoxSideLineRightStart, lBestBoxSideLineRightVec);
+        laBestBoxPoints[3] = _LineIntersection2d(lBestBoxBaseLineStart, lBaseLineVec,
+                                                 lBestBoxSideLineLeftStart,  lBestBoxSideLineLeftVec);
+
+        const f32 lHeight = Magnitude4(Vector4{                                // :1436
+            laBestBoxPoints[0].x - laBestBoxPoints[1].x, laBestBoxPoints[0].y - laBestBoxPoints[1].y,
+            laBestBoxPoints[0].z - laBestBoxPoints[1].z, laBestBoxPoints[0].w - laBestBoxPoints[1].w });
+        const f32 lWidth = Magnitude4(Vector4{                                 // :1437
+            laBestBoxPoints[0].x - laBestBoxPoints[3].x, laBestBoxPoints[0].y - laBestBoxPoints[3].y,
+            laBestBoxPoints[0].z - laBestBoxPoints[3].z, laBestBoxPoints[0].w - laBestBoxPoints[3].w });
+
+        if (mbPreferShortAndFatProjection && lWidth > lHeight)                 // lbz 0x1503(this)
+        {
+            const Vector4 lvFirst = laBestBoxPoints[0];        // cycle the quad by one
+            laBestBoxPoints[0] = laBestBoxPoints[1];
+            laBestBoxPoints[1] = laBestBoxPoints[2];
+            laBestBoxPoints[2] = laBestBoxPoints[3];
+            laBestBoxPoints[3] = lvFirst;
+        }
+
+        // ---- 7. the best-fit transform (0x827D9CB4..0x827DA10C) -------------
+        // FLAG (byte_82F30E60 -- value not in this dossier): with sbCentreBox the
+        //   box is centred on its own centroid (the quad maps onto [-1,1]^2);
+        //   without it the base edge's midpoint becomes the origin (the quad maps
+        //   onto x in [-1,1], y in [0,1]). Carried false -- the base-edge origin
+        //   is the trapezoidal-shadow convention this projection feeds.
+        static const bool sbCentreBox = false;                                  // :1463 FLAG
+        Vector4 lvCentre;
+        if (sbCentreBox)
+        {
+            const f32 lfQuarter = 0.25f;                       // flt_82003F40 (centroid of 4)
+            lvCentre.x = (laBestBoxPoints[0].x + laBestBoxPoints[1].x
+                        + laBestBoxPoints[2].x + laBestBoxPoints[3].x) * lfQuarter;
+            lvCentre.y = (laBestBoxPoints[0].y + laBestBoxPoints[1].y
+                        + laBestBoxPoints[2].y + laBestBoxPoints[3].y) * lfQuarter;
+        }
+        else
+        {
+            const f32 lfHalf = 0.5f;                           // flt_82001DA0
+            lvCentre.x = (laBestBoxPoints[2].x + laBestBoxPoints[3].x) * lfHalf;
+            lvCentre.y = (laBestBoxPoints[2].y + laBestBoxPoints[3].y) * lfHalf;
+        }
+        lvCentre.z = 0.0f; lvCentre.w = 0.0f;
+
+        const Vector4 lVecU = Normalize3(Vector4{                              // :1460
+            laBestBoxPoints[2].x - laBestBoxPoints[3].x, laBestBoxPoints[2].y - laBestBoxPoints[3].y,
+            laBestBoxPoints[2].z - laBestBoxPoints[3].z, laBestBoxPoints[2].w - laBestBoxPoints[3].w });
+
+        Matrix44 lTransformT1;                                                 // :1472
+        lTransformT1.xAxis = Vector4{ 1.0f, 0.0f, 0.0f, 0.0f };
+        lTransformT1.yAxis = Vector4{ 0.0f, 1.0f, 0.0f, 0.0f };
+        lTransformT1.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
+        lTransformT1.wAxis = Vector4{ -lvCentre.x, -lvCentre.y, 0.0f, 1.0f };
+
+        // FLAG (flt_82F30E50 / flt_82F30E40 -- the two static coefficient rows
+        //   are un-dumped .data). DERIVED, not guessed: the composed transform
+        //   must map the fitted quad onto the axis-aligned unit box, and only
+        //   XMult == {1,0,0,1} / YMult == {0,-1,1,0} does so -- i.e. lTransformR
+        //   is the rotation that carries lVecU onto +X. Checked against the
+        //   numeric emulation of the X360 stream over randomised quads: the two
+        //   alternative sign/transpose fillings put the mapped corners at
+        //   arbitrary positions (up to 65 units off the unit box) while this one
+        //   lands them exactly on (+-1, 1) / (+-1, 0) -- and on (+-1, +-1) with
+        //   sbCentreBox.
+        static const f32 XMult[4] = { 1.0f, 0.0f, 0.0f, 1.0f };                // :1482 FLAG
+        static const f32 YMult[4] = { 0.0f, -1.0f, 1.0f, 0.0f };               // :1483 FLAG
+
+        Matrix44 lTransformR;                                                  // :1485
+        lTransformR.xAxis = Vector4{ lVecU.x * XMult[0] + lVecU.y * YMult[0],
+                                     lVecU.x * XMult[1] + lVecU.y * YMult[1], 0.0f, 0.0f };
+        lTransformR.yAxis = Vector4{ lVecU.x * XMult[2] + lVecU.y * YMult[2],
+                                     lVecU.x * XMult[3] + lVecU.y * YMult[3], 0.0f, 0.0f };
+        lTransformR.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
+        lTransformR.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+        const Matrix44 lTransformT1xR = MultMatrix(lTransformT1, lTransformR); // :1492
+        const Vector4  lvCorner       = MultRow(laBestBoxPoints[0], lTransformT1xR);
+
+        Matrix44 lTransformS2;                                                 // :1496
+        lTransformS2.xAxis = Vector4{ 1.0f / lvCorner.x, 0.0f, 0.0f, 0.0f };
+        lTransformS2.yAxis = Vector4{ 0.0f, 1.0f / lvCorner.y, 0.0f, 0.0f };
+        lTransformS2.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
+        lTransformS2.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+        lTsmBBInfo.mBestFitMatrix = MultMatrix(lTransformT1xR, lTransformS2);
+
+        if (lTsmBBInfo.mbInvertCullMode)                                       // lbz 0x240(tsm)
+        {
+            Matrix44 lMirrorX;
+            lMirrorX.xAxis = Vector4{ -1.0f, 0.0f, 0.0f, 0.0f };
+            lMirrorX.yAxis = Vector4{ 0.0f, 1.0f, 0.0f, 0.0f };
+            lMirrorX.zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
+            lMirrorX.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+            lTsmBBInfo.mBestFitMatrix = MultMatrix(lTsmBBInfo.mBestFitMatrix, lMirrorX);
+        }
+
+        // ---- 8. light-view inverse + the view-volume solve (0x827DA1F4..) ---
+        // The inlined affine inverse: the three adjugate crosses (vpermwi128
+        // 0x63 rotates) transposed into rows and scaled by 1/det (vrefp + 2x NR),
+        // then the translation row = -wAxis through that basis.
+        {
+            const Matrix44Affine& lrView = lTsmBBInfo.mWorldToLightView;
+            const Vector4 lvX{ lrView.xAxis.x, lrView.xAxis.y, lrView.xAxis.z, lrView.xAxis.w };
+            const Vector4 lvY{ lrView.yAxis.x, lrView.yAxis.y, lrView.yAxis.z, lrView.yAxis.w };
+            const Vector4 lvZ{ lrView.zAxis.x, lrView.zAxis.y, lrView.zAxis.z, lrView.zAxis.w };
+            const Vector4 lvCrossYZ = Cross3(lvY, lvZ);
+            const Vector4 lvCrossXY = Cross3(lvX, lvY);
+            const Vector4 lvCrossZX = Cross3(lvZ, lvX);
+            const f32     lfInvDet  = 1.0f / Dot3(lvX, lvCrossYZ);
+
+            Matrix44Affine& lrInv = lTsmBBInfo.mLightToWorldView;
+            lrInv.xAxis = Vector3{ lvCrossYZ.x * lfInvDet, lvCrossZX.x * lfInvDet,
+                                   lvCrossXY.x * lfInvDet, lvCrossZX.x * lfInvDet };
+            lrInv.yAxis = Vector3{ lvCrossYZ.y * lfInvDet, lvCrossZX.y * lfInvDet,
+                                   lvCrossXY.y * lfInvDet, lvCrossZX.y * lfInvDet };
+            lrInv.zAxis = Vector3{ lvCrossYZ.z * lfInvDet, lvCrossZX.z * lfInvDet,
+                                   lvCrossXY.z * lfInvDet, lvCrossZX.z * lfInvDet };
+            // translation = -mWorldToLightView.wAxis through the inverse basis
+            const f32* lpfNegPos = &lrView.wAxis.x;
+            const f32* lapInvRows[3] = { &lrInv.xAxis.x, &lrInv.yAxis.x, &lrInv.zAxis.x };
+            f32* lpfOut = &lrInv.wAxis.x;
+            for (int liLane = 0; liLane < 4; ++liLane)
+            {
+                lpfOut[liLane] = -lpfNegPos[0] * lapInvRows[0][liLane]
+                               - lpfNegPos[1] * lapInvRows[1][liLane]
+                               - lpfNegPos[2] * lapInvRows[2][liLane];
+            }
+        }
+
+        ComputeOptimalViewVolume(lTsmBBInfo.mSubFrustum, lTsmBBInfo.mLightToWorldView,
+                                 maFrustum[luMapIndex], lFrustumPoints, lFrustumPointsLightSpace);
+
+        // ---- 9. debug stage-matrix table + blob fill (0x827DA2F8..0x827DA80C)
+        Matrix44 lIdentity; lIdentity.SetIdentity();                           // :1523
+        const Matrix44 lTestMatrixRxT1 = MultMatrix(lTransformR, lTransformT1); // :1524
+        const Matrix44* lpMatrices[6] =                                        // :1525
+        {
+            &lIdentity, &lTransformT1, &lTransformT1xR,
+            &lTsmBBInfo.mBestFitMatrix, &lTransformR, &lTestMatrixRxT1,
+        };
+
+        if (mbUpdateDebugRender)                                               // lbz 0x1501(this)
+        {
+            // FLAG (dword_82F30E3C -- value not in this dossier): selects which
+            //   composition stage the debug quad is mapped through. 0 (identity)
+            //   is the inert default, same treatment as ComputeTSMMatrix's
+            //   siTsmDebugMatrixStage.
+            static s32 siBoxMatrixIndex = 0;                                   // :1534 FLAG
+
+            Vector4 lvDeterminant;
+            const Matrix44 lLightToWorld =                                     // :1538
+                rw::math::vpu::Inverse(lWorldToLight, lvDeterminant);
+            const Vector4 lZOffset{ 0.0f, 0.0f, lFrustumPointsLightSpace3d[0].z, 0.0f }; // :1539
+            BoundingBoxDebugRenderInfo& lDebugInfo = gBoundingBoxDebugRenderInfo[luMapIndex]; // :1540
+
+            std::memcpy(&lDebugInfo.mLightFrustum, &maFrustum[luMapIndex],
+                        sizeof(CgsGeometric::Frustum));
+            std::memcpy(&lDebugInfo.mCameraFrustum, &lTsmBBInfo.mSubFrustum,
+                        sizeof(CgsGeometric::Frustum));
+
+            for (u32 luI = 0; luI < 4; ++luI)
+            {
+                const Vector4& lrCorner = laBestBoxPoints[luI];
+                const f32 lfInvW = 1.0f / lrCorner.w;
+                lDebugInfo.maBoxPointsWorld[luI] = TransformPoint(
+                    Vector4{ lrCorner.x * lfInvW, lrCorner.y * lfInvW,
+                             lrCorner.z * lfInvW, lrCorner.w * lfInvW }, lLightToWorld);
+
+                const Vector4 lvStage = MultRow(lrCorner, *lpMatrices[siBoxMatrixIndex]);
+                const f32 lfInvStageW = 1.0f / lvStage.w;
+                lDebugInfo.maBoxPointsSquare[luI] = TransformPoint(
+                    Vector4{ lvStage.x * lfInvStageW, lvStage.y * lfInvStageW,
+                             lvStage.z * lfInvStageW, lvStage.w * lfInvStageW }, lLightToWorld);
+            }
+
+            // The side / base line pairs, each a light-space point offset by the
+            // stored line vector, mapped back to world.
+            const Vector4 laLinePoints[8] =
+            {
+                Vector4{ lBestBoxSideLineLeftStart.x + lBestBoxSideLineLeftVec.x,
+                         lBestBoxSideLineLeftStart.y + lBestBoxSideLineLeftVec.y,
+                         lZOffset.z, 0.0f },
+                Vector4{ lBestBoxSideLineLeftStart.x, lBestBoxSideLineLeftStart.y, lZOffset.z, 0.0f },
+                Vector4{ lBestBoxSideLineRightStart.x + lBestBoxSideLineRightVec.x,
+                         lBestBoxSideLineRightStart.y + lBestBoxSideLineRightVec.y,
+                         lZOffset.z, 0.0f },
+                Vector4{ lBestBoxSideLineRightStart.x, lBestBoxSideLineRightStart.y, lZOffset.z, 0.0f },
+                // the base-parallel pair: slot 0 is the TOP line, slot 1 the BASE line
+                Vector4{ lBestBoxTopLineStart.x, lBestBoxTopLineStart.y, lZOffset.z, 0.0f },
+                Vector4{ lBestBoxTopLineStart.x + lBaseLineVec.x,
+                         lBestBoxTopLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f },
+                Vector4{ lBestBoxBaseLineStart.x, lBestBoxBaseLineStart.y, lZOffset.z, 0.0f },
+                Vector4{ lBestBoxBaseLineStart.x + lBaseLineVec.x,
+                         lBestBoxBaseLineStart.y + lBaseLineVec.y, lZOffset.z, 0.0f },
+            };
+            lDebugInfo.mSideLineEnd[0]   = TransformPoint(laLinePoints[0], lLightToWorld);
+            lDebugInfo.mSideLineStart[0] = TransformPoint(laLinePoints[1], lLightToWorld);
+            lDebugInfo.mSideLineEnd[1]   = TransformPoint(laLinePoints[2], lLightToWorld);
+            lDebugInfo.mSideLineStart[1] = TransformPoint(laLinePoints[3], lLightToWorld);
+            lDebugInfo.mBaseLineStart[0] = TransformPoint(laLinePoints[4], lLightToWorld);
+            lDebugInfo.mBaseLineEnd[0]   = TransformPoint(laLinePoints[5], lLightToWorld);
+            lDebugInfo.mBaseLineStart[1] = TransformPoint(laLinePoints[6], lLightToWorld);
+            lDebugInfo.mBaseLineEnd[1]   = TransformPoint(laLinePoints[7], lLightToWorld);
+
+            lDebugInfo.mZOffset = VecFloat{ lZOffset.z, lZOffset.z, lZOffset.z, lZOffset.z };
+
+            for (u32 luI = 0; luI < 8; ++luI)
+            {
+                lDebugInfo.maFrustumPoints[luI] = lFrustumPoints[luI];
+            }
+            lDebugInfo.mLightToWorld = lLightToWorld;
+            // NOTE: mCentreLineStart / mCentreLineEnd (+0x180 / +0x190) are the
+            // only two fields this body never writes -- there is no store to
+            // them anywhere in @0x827D91B0, so they keep whatever the previous
+            // frame (or ComputeTSMMatrix's sibling blob) left there. Reproduced
+            // by omission rather than by inventing a fill.
+
+            lDebugInfo.mfAspectRatio = ((lHeight - lWidth >= 0.0f) ? lHeight : lWidth)
+                                     / ((lHeight - lWidth >= 0.0f) ? lWidth : lHeight);
+        }
+    }
+
+    // ========================================================================
+    // BrnWorld::ShadowMap::ComputeOptimalViewVolume @0x827D8980
+    //
+    // Build the cascade's culling frustum as the tightest convex volume that
+    // still contains every shadow receiver of lCameraFrustum, seen from the
+    // light. Candidates, in the priority order the sort keeps:
+    //
+    //   1. sbAddLinePlanes: for each of the twelve sub-frustum edges, the plane
+    //      through that edge containing the light direction (its light-space
+    //      normal is cross(+Z, edge)). Accept only the supporting ones -- the
+    //      whole point set must lie on ONE side (negating the plane when that
+    //      side is the back one); a plane that cuts the set, or that every point
+    //      is coplanar with, is dropped.
+    //   2. sbAddOpposingPlanes: every source-frustum plane facing away from the
+    //      light (NdotL < 0), scored 2 - NdotL so they sort behind the edges.
+    //   3. sbAddNearClipPlane: the light's own near plane, scored 0.
+    //   4. sbSortPlanes -> std::sort, then the first Min(count, 8) survive.
+    //   5. sbClearPlanes: pad any unused slot with a never-culling plane.
+    // ========================================================================
+    void ShadowMap::ComputeOptimalViewVolume(const CgsGeometric::Frustum& lCameraFrustum,
+                                             const Matrix44Affine& lLightToWorld,
+                                             CgsGeometric::Frustum& lViewVolumeOut,
+                                             const Vector4* laFrustumPoints,
+                                             const Vector4* laFrustumPointsLightSpace)
+    {
+        // FLAG (byte_82F30E39/38/37/36/35 -- values not in this dossier). All
+        //   five are carried TRUE: they are the algorithm's own stage switches,
+        //   and with them false the function emits no candidate at all and then
+        //   writes one plane straight out of the uninitialised candidate array,
+        //   so the shipping defaults cannot be false.
+        static const bool sbAddLinePlanes     = true;                 // :1610 FLAG
+        static const bool sbAddOpposingPlanes = true;                 // :1708 FLAG
+        static const bool sbAddNearClipPlane  = true;                 // :1729 FLAG
+        static const bool sbSortPlanes        = true;                 // :1745 FLAG
+        static const bool sbClearPlanes       = true;                 // :1754 FLAG
+
+        CandidateViewVolumePlane laCandidatePlanes[32];               // :1604
+        u32 luNumCandidatePlanes = 0;                                 // :1605
+
+        // ---- 1. the twelve edge planes (0x827D89E8..0x827D8DF4) -------------
+        if (sbAddLinePlanes)
+        {
+            Vector4 lLineStartLight[12];                              // :1614
+            Vector4 lLineEndLight[12];                                // :1615
+            Vector4 lLineStartWorld[12];                              // :1616
+            for (u32 luI = 0; luI < 12; ++luI)                        // :1618
+            {
+                const u32 luStart = KA_FRUSTUM_VERT_LINE_INDICES[2 * luI];
+                const u32 luEnd   = KA_FRUSTUM_VERT_LINE_INDICES[2 * luI + 1];
+                lLineStartLight[luI] = laFrustumPointsLightSpace[luStart];
+                lLineEndLight[luI]   = laFrustumPointsLightSpace[luEnd];
+                lLineStartWorld[luI] = laFrustumPoints[luStart];
+            }
+
+            Vector3Plus laPlanes[12];                                 // :1627
+            for (u32 luI = 0; luI < 12; ++luI)                        // :1628
+            {
+                const Vector4 lLineVec{ lLineEndLight[luI].x - lLineStartLight[luI].x,   // :1630
+                                        lLineEndLight[luI].y - lLineStartLight[luI].y,
+                                        lLineEndLight[luI].z - lLineStartLight[luI].z,
+                                        lLineEndLight[luI].w - lLineStartLight[luI].w };
+                const Vector4 lLineVecNormalised = Normalize3(lLineVec);                 // :1631
+                // the light points down +Z in light space
+                const Vector4 lPlaneNormalLight = Cross3(Vector4{ 0.0f, 0.0f, 1.0f, 0.0f },
+                                                         lLineVecNormalised);            // :1632
+                const Vector4 lPlaneNormalWorld = TransformVector(lPlaneNormalLight,
+                                                                  lLightToWorld);        // :1636
+                laPlanes[luI].SetVector3(Vector3{ lPlaneNormalWorld.x, lPlaneNormalWorld.y,
+                                                  lPlaneNormalWorld.z, 0.0f });
+                laPlanes[luI].SetPlus(Dot3(lPlaneNormalWorld, lLineStartWorld[luI]));
+            }
+
+            for (u32 luI = 0; luI < 12; ++luI)                        // :1644
+            {
+                bool lbPointsBehind  = false;                         // :1646
+                bool lbPointsInFront = false;                         // :1647
+                Vector3Plus& lPlane  = laPlanes[luI];                 // :1648
+                const Vector4 lPlaneVec4{ lPlane.x, lPlane.y, lPlane.z, lPlane.w };  // :1649
+
+                f32 laDistances[8];                                   // :1652
+                for (u32 luJ = 0; luJ < 8; ++luJ)
+                {
+                    laDistances[luJ] = Dot3(lPlaneVec4, laFrustumPoints[luJ]) - lPlane.w;
+                }
+                f32 lMinDist = laDistances[0];                        // :1662
+                f32 lMaxDist = laDistances[0];                        // :1670
+                for (u32 luJ = 1; luJ < 8; ++luJ)
+                {
+                    lMinDist = (laDistances[luJ] < lMinDist) ? laDistances[luJ] : lMinDist;
+                    lMaxDist = (laDistances[luJ] > lMaxDist) ? laDistances[luJ] : lMaxDist;
+                }
+                lbPointsInFront = lMaxDist > K_VERY_SMALL.x;
+                lbPointsBehind  = K_MINUS_VERY_SMALL.x > lMinDist;
+
+                if (lbPointsBehind)
+                {
+                    if (lbPointsInFront)
+                    {
+                        continue;      // the plane cuts the volume -- not a supporting plane
+                    }
+                    // flip it so the whole set is in front (the vxor sign-bit
+                    // negation, written back through the laPlanes reference)
+                    lPlane.x = -lPlane.x; lPlane.y = -lPlane.y;
+                    lPlane.z = -lPlane.z; lPlane.w = -lPlane.w;
+                }
+                else if (!lbPointsInFront)
+                {
+                    continue;          // degenerate -- every point is on the plane
+                }
+
+                laCandidatePlanes[luNumCandidatePlanes].mPlane = lPlane;
+                laCandidatePlanes[luNumCandidatePlanes].mScore =
+                    (luI < 4) ? K_LOW_PRIORITY : K_HIGH_PRIORITY;
+                ++luNumCandidatePlanes;
+            }
+        }
+
+        // ---- 2. the light vector + the opposing source planes ---------------
+        const Vector4 lLightVector = TransformVector(Vector4{ 0.0f, 0.0f, 1.0f, 0.0f },
+                                                     lLightToWorld);           // :1707
+        if (sbAddOpposingPlanes)
+        {
+            for (u32 luI = 0; luI < 6; ++luI)                                  // :1712
+            {
+                const rw::collision::Plane lPlane = lCameraFrustum.GetPlaneByIndex(luI); // :1715
+                const f32 lNDotL = Dot3(Vector4{ lPlane.x, lPlane.y, lPlane.z, lPlane.w },
+                                        lLightVector);                         // :1716
+                if (0.0f > lNDotL)
+                {
+                    laCandidatePlanes[luNumCandidatePlanes].mPlane =
+                        Vector3Plus{ lPlane.x, lPlane.y, lPlane.z, lPlane.w };
+                    const f32 lfScore = 2.0f - lNDotL;    // vspltisw 2 + vcfsx
+                    laCandidatePlanes[luNumCandidatePlanes].mScore =
+                        VecFloat{ lfScore, lfScore, lfScore, lfScore };
+                    ++luNumCandidatePlanes;
+                }
+            }
+        }
+
+        // ---- 3. the light's own near clip plane (0x827D8EC0..0x827D8F14) ----
+        if (sbAddNearClipPlane)
+        {
+            Vector3Plus& lNearPlane = laCandidatePlanes[luNumCandidatePlanes].mPlane; // :1732
+            const Vector4 lLightPosWorldSpace{ lLightToWorld.wAxis.x, lLightToWorld.wAxis.y,
+                                               lLightToWorld.wAxis.z, lLightToWorld.wAxis.w }; // :1735
+            const f32 lNearClip = mfShadowMapNearPlane;                        // :1736
+            lNearPlane.SetVector3(Vector3{ lLightVector.x, lLightVector.y, lLightVector.z, 0.0f });
+            lNearPlane.SetPlus(Dot3(lLightPosWorldSpace, lLightVector) + lNearClip);
+            laCandidatePlanes[luNumCandidatePlanes].mScore = VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f };
+            ++luNumCandidatePlanes;
+        }
+
+        // ---- 4. sort + truncate to the frustum's plane budget ---------------
+        if (sbSortPlanes)                                                      // :1745
+        {
+            std::sort(laCandidatePlanes, laCandidatePlanes + luNumCandidatePlanes);
+        }
+        u32 luNumPlanes = CgsNumeric::Min(luNumCandidatePlanes, 8u);           // :1750
+
+        // ---- 5. pad the unused slots (0x827D8F9C..0x827D9174) ---------------
+        // The eight never-culling defaults, built once (the X360 dword_8300FD40
+        // guard word is exactly the C++ function-local-static init guard).
+        static const Vector3Plus saClearPlanes[8] =                            // :1755
+        {
+            {  0.0f,  1.0f,  0.0f, -1000000.0f },
+            {  0.0f, -1.0f,  0.0f, -1000000.0f },
+            {  1.0f,  0.0f,  0.0f, -1000000.0f },
+            { -1.0f,  0.0f,  0.0f, -1000000.0f },
+            {  0.0f,  0.0f,  1.0f, -1000000.0f },
+            {  0.0f,  0.0f, -1.0f, -1000000.0f },
+            {  0.0f,  1.0f,  0.0f, -1000000.0f },
+            {  0.0f, -1.0f,  0.0f, -1000000.0f },
+        };
+
+        u32 luNumPlanesOut = luNumPlanes;
+        if (sbClearPlanes)
+        {
+            for (u32 luI = luNumPlanes; luI < 8; ++luI)                        // :1768
+            {
+                laCandidatePlanes[luI].mPlane = saClearPlanes[luI];
+            }
+            luNumPlanesOut = 8;
+        }
+        else if (luNumPlanes == 0)
+        {
+            luNumPlanesOut = 1;
+        }
+
+        // Repeat the last accepted plane over the remaining slots. (Inert with
+        // sbClearPlanes set -- luNumPlanesOut is already 8 -- but it is what the
+        // X360 emits, so it is reproduced rather than dropped.)
+        for (u32 luI = luNumPlanesOut; luI < 8; ++luI)
+        {
+            laCandidatePlanes[luI].mPlane = laCandidatePlanes[luNumPlanesOut - 1].mPlane;
+        }
+
+        for (u32 luI = 0; luI < luNumPlanesOut; ++luI)                         // :1789
+        {
+            const Vector3Plus& lrPlane = laCandidatePlanes[luI].mPlane;
+            lViewVolumeOut.SetPlaneByIndex(luI, rw::collision::Plane(
+                Vector4{ lrPlane.x, lrPlane.y, lrPlane.z, lrPlane.w }));
+        }
     }
 
     // @0x827C1BB8 (~1650 pseudocode lines): the immediate-mode debug renderer

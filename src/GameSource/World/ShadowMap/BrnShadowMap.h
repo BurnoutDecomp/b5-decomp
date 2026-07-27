@@ -198,29 +198,44 @@ namespace BrnWorld
         bool              CameraMatrixNeedsUpdate(Matrix44Affine lm44Matrix, u32 luIndex);    // BrnShadowMap.h:201
         void              ComputeTSMMatrix(u32 luIndex, CgsGraphics::Camera& lrCamera);       // BrnShadowMap.h:206
 
-        // BrnShadowMap.h:211, X360 0x827D91B0. Compute the axis-aligned-bounding-box shadow
-        // map's camera + projection for a given map slot (clamped sub-frustum -> light-space
-        // extent reduction -> ortho fit; fills the shared per-map constant matrices
-        // SetConstants uploads).
-        // FLAG (assert-trap body in the .cpp, 2026-07-27): the ~1450-instruction VMX pipeline
-        //   (plus its ComputeOptimalViewVolume callee) resisted this wave's faithful-decode
-        //   budget -- see the .cpp trap comment for the full recovered entry structure and
-        //   the session log (vmx_wave_log.md) for the analysis. Reached only for maps
-        //   configured E_SHADOWMAP_TYPE_BOUNDINGBOX (the KA_SHADOWMAPTYPE rodata is un-dumped
-        //   and carried as ORTHO, which routes GetCgsFrustumParallel instead).
-        void ComputeBoundingBoxMatrix(u32 luIndex, CgsGraphics::Camera& lrCamera);
+        // BrnShadowMap.h:211, X360 0x827D91B0. Compute the bounding-box shadow map's
+        // best-fit post-projection for a given map slot: clamp the slot's sub-frustum,
+        // flatten its eight corners into the cascade's post-projective light plane, fit
+        // the minimum-area oriented 2D box around them (an optional rotation search
+        // weighted by mfIdealAspectRatio), and turn that box into
+        // maTsmBBInfo[luMapIndex].mBestFitMatrix. Also inverts the cascade view matrix
+        // into mLightToWorldView and drives ComputeOptimalViewVolume for the culling
+        // frustum. RECONSTRUCTED in the .cpp (bounding-box shadow wave 2026-07-27b);
+        // every local/constant name is the DecFIGS DWARF ground truth.
+        // Reached for maps configured E_SHADOWMAP_TYPE_BOUNDINGBOX (the KA_SHADOWMAPTYPE
+        // rodata is un-dumped and carried as ORTHO, but the dynamic-far-clip gate in
+        // CalculateShadowMapCameras tests maShadowMapTypes[0] == BOUNDINGBOX, so this is
+        // a real runtime path once that table is recovered).
+        void ComputeBoundingBoxMatrix(u32 luMapIndex, CgsGraphics::Camera& lCamera);
 
         BrnWorld::ShadowMapType GetShadowMapType(u32 luIndex);                                // BrnShadowMap.h:215
 
         // BrnShadowMap.h:223, X360 0x827D8980. Compute the optimal (minimal) view volume
-        // enclosing the render frustum from the light's point of view.
-        // FLAG (assert-trap body in the .cpp, 2026-07-27): a large candidate-plane /
-        //   view-volume-intersection VMX pipeline (CandidateViewVolumePlane std::_Sort,
-        //   GetPlaneByIndex walks, silhouette-edge intersection) -- resisted this wave's
-        //   faithful-decode budget; only reachable through ComputeBoundingBoxMatrix.
-        void ComputeOptimalViewVolume(const CgsGeometric::Frustum& lrFrustum, Matrix44Affine lm44WorldToLight,
-                                       CgsGeometric::Frustum& lrOutFrustum,
-                                       const rw::math::vpu::Vector3* lpArg4, const rw::math::vpu::Vector3* lpArg5);
+        // enclosing the render frustum from the light's point of view: the supporting
+        // edge planes of the sub-frustum silhouette, the source planes facing away from
+        // the light, and the light's own near plane, ranked by score and truncated to the
+        // frustum's eight plane slots. RECONSTRUCTED in the .cpp (2026-07-27b).
+        //
+        // RECONCILE (DWARF BrnShadowMap.cpp:1600 parameter names): the matrix argument is
+        // the LIGHT-TO-WORLD view matrix (`lLightToWorld` -- the caller passes
+        // maTsmBBInfo[i].mLightToWorldView), not a world-to-light one as the earlier
+        // placeholder decl spelled it; it is taken by const reference (the definition-site
+        // DWARF and the X360 r5 pointer argument agree). The two point arrays are the
+        // world-space and flattened light-space sub-frustum corners.
+        // RECONCILE (element type): the DWARF spells both arrays `const
+        // rw::math::vpu::Vector3 *`; they are produced by CgsGeometric::Frustum::
+        // CalcVertices, whose repo out-param is Vector4* -- the same 16-byte lane, and only
+        // lanes 0..2 are read. Kept as Vector4* so the call needs no cast or copy.
+        void ComputeOptimalViewVolume(const CgsGeometric::Frustum& lCameraFrustum,
+                                      const Matrix44Affine& lLightToWorld,
+                                      CgsGeometric::Frustum& lViewVolumeOut,
+                                      const Vector4* laFrustumPoints,
+                                      const Vector4* laFrustumPointsLightSpace);
 
     private:
         // ---- data (BrnShadowMap.h:226+ DWARF) ------------------------------------------
