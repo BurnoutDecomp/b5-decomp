@@ -1,5 +1,6 @@
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameSource/Network/Parameters/BrnNetworkPlayerParams.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"        // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"                 // CgsID, CgsIDCompress/UnCompress, KI_CGSID_STRING_LEN
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT
 #include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"  // CgsSystem::EFrameRate
@@ -13,114 +14,109 @@
 //   BrnNetwork::PlayerParamsBase::GetPattern     @ 0x825841B8
 //   BrnNetwork::PlayerParamsBase::Prepare        @ 0x8258A818
 //   BrnNetwork::PlayerParamsBase::PreparePattern @ 0x82584148
+//   BrnNetwork::PlayerParamsBase::GetFreeBurnCarID    @ 0x82541D50
+//   BrnNetwork::PlayerParamsBase::GetPlayerTeam       @ 0x82541BA0
+//   BrnNetwork::PlayerParamsBase::SetConsoleFrameRate @ 0x82541C38
+//   BrnNetwork::PlayerParamsBase::SetFreeBurnCarID    @ 0x82541CF0
 //
-// PlayerParamsBase wraps a 28-byte network-replicated payload living at byte offset
-// 132 of the object. GetData/GetDataSize/GetPattern expose the payload, its size, and
-// the (lazily built) serialisation pattern string. PreparePattern builds that pattern
-// once into a shared static buffer: "%dsbbblll" formatted with a per-subclass field
-// count obtained through the virtual at vtable slot 2. Prepare resets the payload's
-// bookkeeping fields after the platform server-params prepare succeeds.
-
-// Platform server-interface params (other TU); declared for the compile-only gate.
-namespace CgsNetwork
-{
-    struct ServerInterfacePlayerParamsX360
-    {
-        static int Prepare();
-    };
-}
+// PlayerParamsBase implements the ServerInterfaceStructureInterface pattern/data
+// virtuals over the 28-byte replicated lobby payload mData (X360 object +0x84 --
+// immediately after the ServerInterfacePlayerParamsX360 base; see the header).
+// PreparePattern builds the shared serialisation pattern once into the class
+// static macPattern; Prepare chains to the platform prepare then resets the
+// payload's bookkeeping fields.
 
 namespace BrnNetwork
 {
-    namespace
+    // X360 byte_82FB7150 (buffer) / byte_82FB7164 (build-once guard) -- the guard
+    // byte sits 0x14 after the buffer, confirming the DWARF macPattern[20] length.
+    char PlayerParamsBase::macPattern[20];
+    bool PlayerParamsBase::mbPatternPrepared = false;
+
+    // The wire record must stay the 28 bytes GetDataSize advertises (13+1+1+1 packs
+    // to 16, then three naturally-aligned 32-bit words) -- pointer-invariant, so it
+    // holds on the x64 host exactly as on X360.
+    static_assert(sizeof(PlayerParamsBase::CLobbyPlayerParamsData) == 28,
+                  "CLobbyPlayerParamsData is the 28-byte wire record GetDataSize advertises");
+
+    // DWARF declares both; every X360 construction/destruction is inlined (only the
+    // vptr stores survive), so the out-of-line bodies are empty. Defining them here
+    // anchors PlayerParamsBase's vtable to this TU (StructureInterface convention).
+    PlayerParamsBase::PlayerParamsBase()
     {
-        // Static serialisation-pattern buffer (X360 byte_82FB7150) and its
-        // build-once guard (byte_82FB7164).
-        char gaPatternBuffer[13];
-        bool gbPatternBuilt = false;
     }
 
-    // Replicated lobby payload (BrnNetworkPlayerParams.h:159). 28-byte on-disk record
-    // (GetDataSize()==28) living at object offset 132 (+0x84).
-    struct CLobbyPlayerParamsData
+    PlayerParamsBase::~PlayerParamsBase()
     {
-        static const s32 KX_IS_READY   = 1;   // h:160
-        static const s32 KX_IS_PLAYING = 2;   // h:161
-        static const s32 KX_IS_50HZ    = 4;   // h:162
-        static const s32 KX_HAS_FEVER  = 8;   // h:163
-        static const s32 KX_DEVELOPER  = 16;  // h:164
+    }
 
-        char macCarId[13];          // +0   (obj +132) h:169
-        s8   mi8PlayerTeam;         // +13  (obj +145) h:170
-        s8   mxFlags;               // +14  (obj +146) h:171
-        s8   mi8PlayerColourIndex;  // +15  (obj +147) h:172
-        s32  mMarkedPlayer;         // +16  (obj +148) h:173
-        s32  miRank;                // +20  (obj +152) h:174
-        u32  muCarColourIndex;      // +24  (obj +156) h:175
-    };
-
-    class PlayerParamsBase
+    // PreparePattern @ 0x82584148 -- build the shared pattern string once.
+    //   The destination size comes from the virtual GetPatternLength() (vtable slot
+    //   +0x08; the X360 default body @ 0x82876410 returns 20 == sizeof(macPattern)),
+    //   and the %d field width is the 13-char car-id string: the formatted pattern
+    //   "13sbbblll" describes CLobbyPlayerParamsData exactly (13-char string, three
+    //   bytes, three longs).
+    void PlayerParamsBase::PreparePattern()
     {
-    public:
-        void* GetData()      { return &mData; }        // object offset 132 (+0x84)
-        int   GetDataSize()  { return 28; }
-        void* GetPattern()   { return gaPatternBuffer; }
-
-        int  Prepare();
-        void* PreparePattern();
-
-        // Replicated-payload accessors (this batch). Signatures are DWARF-authoritative
-        // (BrnNetworkPlayerParams.h): GetFreeBurnCarID(CgsID*) returns VOID; GetPlayerTeam()
-        // returns EPlayerTeam; SetConsoleFrameRate takes CgsSystem::EFrameRate; SetFreeBurnCarID
-        // takes CgsID (replaces the earlier declared-only int overload).
-        void                                         GetFreeBurnCarID(CgsID* lpCarId);   // @ 0x82541D50 (h:348) VOID
-        BrnGameState::GameStateModuleIO::EPlayerTeam GetPlayerTeam() const;              // @ 0x82541BA0 (h:194)
-        void                                         SetConsoleFrameRate(CgsSystem::EFrameRate leFrameRate); // @ 0x82541C38
-        void                                         SetFreeBurnCarID(CgsID liId);       // @ 0x82541CF0 (h:339)
-
-    private:
-        // Base + prior members are not modelled here; the replicated payload lands at object
-        // offset 132 (+0x84). Prepare()'s byte-granular pokes target this region by raw offset
-        // off `this` (the established pattern for this un-DWARFed serialised block); the
-        // accessors reach named sub-fields.
-        u8  mPad0[132];                 // +0x00 .. +0x83
-        CLobbyPlayerParamsData mData;   // object offset 132 (+0x84)
-    };
-
-    void* PlayerParamsBase::PreparePattern()
-    {
-        if (!gbPatternBuilt)
+        if (!mbPatternPrepared)
         {
-            gbPatternBuilt = true;
-
-            // Virtual call at vtable slot 2 -> per-subclass leading field count.
-            typedef int (*PatternCountFn)(void*);
-            void** lpVtable = *reinterpret_cast<void***>(this);
-            int liCount = reinterpret_cast<PatternCountFn>(lpVtable[2])(this);
-
-            CgsCore::SPrintf(gaPatternBuffer, sizeof(gaPatternBuffer), "%dsbbblll", liCount);
+            mbPatternPrepared = true;
+            CgsCore::SPrintf(macPattern, static_cast<u32>(GetPatternLength()),
+                             "%dsbbblll", KI_CGSID_STRING_LEN);
         }
-        return this;
     }
 
-    int PlayerParamsBase::Prepare()
+    // Prepare @ 0x8258A818 -- platform server-params prepare must succeed first,
+    // then build the pattern and reset the payload's bookkeeping fields.
+    bool PlayerParamsBase::Prepare()
     {
-        // Platform server-params prepare must succeed first.
         if (!CgsNetwork::ServerInterfacePlayerParamsX360::Prepare())
-            return 0;
+            return false;
 
         PreparePattern();
 
-        u8* lpThis = reinterpret_cast<u8*>(this);
-        u8 luFlags = lpThis[146] & 0xF8;   // preserve high 5 bits
-        lpThis[145] = 0;
-        lpThis[152] = 0;
-        lpThis[148] = 0xFF;                // -1
-        lpThis[146] = luFlags;
-        lpThis[158] = 0;
-        lpThis[147] = 0xFF;                // -1
+        // X360 @ 0x8258A85C..0x8258A88C, by named field:
+        //   stb 0  -> +0x91   mi8PlayerTeam = 0
+        //   stw 0  -> +0x98   miRank = 0                       (full word)
+        //   stw -1 -> +0x94   mMarkedPlayer = -1               (full word)
+        //   stb    -> +0x92   mxFlags &= ~(READY|PLAYING|50HZ) (clrrwi ..,3 == clear bits 0..2)
+        //   sth 0  -> +0x9E   muCarColourIndex &= KU_HIGH_BITS_MASK (the BE low half-word)
+        //   stb -1 -> +0x93   mi8PlayerColourIndex = -1
+        mData.mi8PlayerTeam = 0;
+        mData.miRank        = 0;
+        mData.mMarkedPlayer = -1;
+        mData.mxFlags       = static_cast<s8>(mData.mxFlags
+                                              & ~(CLobbyPlayerParamsData::KX_IS_READY
+                                                | CLobbyPlayerParamsData::KX_IS_PLAYING
+                                                | CLobbyPlayerParamsData::KX_IS_50HZ));
+        mData.muCarColourIndex &= CLobbyPlayerParamsData::KU_HIGH_BITS_MASK;
+        mData.mi8PlayerColourIndex = -1;
         SetFreeBurnCarID(0);
-        return 1;
+        return true;
+    }
+
+    // GetPattern @ 0x825841B8 -- expose the shared static pattern string.
+    const char* PlayerParamsBase::GetPattern() const
+    {
+        return macPattern;
+    }
+
+    // GetDataSize @ 0x825841C8 -- the 28-byte wire size of the payload.
+    u32 PlayerParamsBase::GetDataSize() const
+    {
+        return static_cast<u32>(sizeof(CLobbyPlayerParamsData));
+    }
+
+    // GetData @ 0x825841D0 -- the payload itself (the const overload is
+    // COMDAT-folded onto the same X360 body).
+    void* PlayerParamsBase::GetData()
+    {
+        return &mData;
+    }
+
+    const void* PlayerParamsBase::GetData() const
+    {
+        return &mData;
     }
 
     // GetFreeBurnCarID @ 0x82541D50 -- read the stored car-id string, translate the

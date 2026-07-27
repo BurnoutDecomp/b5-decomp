@@ -43,8 +43,11 @@ namespace CgsNetwork
         // CgsServerInterfaceStructureInterface.h:50
         virtual const char* GetPattern() const = 0;
 
-        // CgsServerInterfaceStructureInterface.cpp:41
-        virtual s32 GetPatternLength() const = 0;
+        // CgsServerInterfaceStructureInterface.cpp:41 -- NOT pure: the DWARF homes a
+        // real default body in the .cpp, and the X360 vtable off_8207C88C carries a
+        // genuine target in this slot (0x82876410, a COMDAT-folded `return 20`)
+        // while every other accessor slot is __purecall. Default body in the .cpp.
+        virtual s32 GetPatternLength() const;
 
         // CgsServerInterfaceStructureInterface.h:56
         virtual u32 GetDataSize() const = 0;
