@@ -5,8 +5,7 @@
 // package (XContent*) management, the device-selector UI (XShowDeviceSelectorUI /
 // XNotifyGetNext) and Win32 file I/O. No leak source / no DWARF: SHAPE and
 // BODIES both come from the X360 pseudocode + asm. See RealmcXenonUtil.h for the
-// class/State layout and the list of the (blocked) functions not reconstructed
-// here.
+// class/State layout.
 //
 // Result codes materialised by the asm and reproduced verbatim (no attested enum
 // to name them):
@@ -87,6 +86,41 @@ int XenonUtil::CardExists(const u32* lpuDeviceId)
     if (XContentGetDeviceState(luDeviceId, nullptr) == 0)
         return 0;
     return 2;
+}
+
+// ---------------------------------------------------------------------------
+// CardResultToCardStatus @ 0x82B53AD8 -- map an internal card RESULT code to
+// the public card STATUS the worker tasks report. The X360 compiles this as a
+// 16-entry byte jump table (byte_82148638 @ 0x82148638, rodata-attested:
+// 00 40 08 40 40 40 20 28 28 30 40 00 30 38 08 40; +off from loc_82B53B08:
+// 0x00=ret 0, 0x08=mbDeviceMounted?8:7, 0x20=ret 4, 0x28=ret 2, 0x30=ret 3,
+// 0x38=ret 5, 0x40=ret 1). The State* second argument is real even though the
+// pseudocode drops it: the 0x08 fragment reads 0xB0(r4) and every caller loads
+// r4 from [task+0x10] before the call.
+// ---------------------------------------------------------------------------
+int XenonUtil::CardResultToCardStatus(u32 luResult, const State* lpState)
+{
+    switch (luResult)
+    {
+        case 0:                              // ok
+        case 11:
+            return 0;
+        case 2:                              // card removed / not present
+        case 14:                             // cancelled
+            return lpState->mbDeviceMounted ? 8 : 7;
+        case 6:
+            return 4;
+        case 7:                              // wrong device
+        case 8:                              // generic I/O error
+            return 2;
+        case 9:                              // not enough space
+        case 12:
+            return 3;
+        case 13:                             // not signed in
+            return 5;
+        default:                             // 1/3/4/5/10/15 and anything > 15
+            return 1;
+    }
 }
 
 // ---------------------------------------------------------------------------
