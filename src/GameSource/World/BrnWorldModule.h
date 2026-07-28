@@ -262,6 +262,13 @@ namespace BrnWorld
         // DELETE the whole entry when DoDispatch + the frustum query are real.
         void GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame );
 
+        // NOT an X360 function either. Publishes the neutral lighting / atmosphere /
+        // shadow-cascade engine constants the world's REAL vertex+pixel programs read,
+        // because none of the console producers (environment manager, sky dome, shadow
+        // map) is live on this build. See the banner on the definition for how each value
+        // is derived from what the shaders do with it. DELETE with the entry above.
+        void PublishWorldShadingConstantsBringUp();
+
         // @0x827DADF8 -- stage this frame's frustum-test queries for the scene
         // manager: the main camera frustum, the six environment-map face frusta
         // (alternating halves under the 30Hz env-map policy) and the three shadow

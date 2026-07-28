@@ -4,12 +4,14 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstantHashTable.h"  // CgsGraphics::ShaderConstantHashTable::FixUp
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"  // CgsResource::GetLoadBase
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the FixUp body
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
+#include <cstring>               // strstr (PostFixUp's profile classification)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::ShaderTechniqueResourceType::GetTypeID        @ 0x827E9C28
 //   CgsResource::ShaderTechniqueResourceType::GetImportPointer @ 0x827E9D00
 //   CgsResource::ShaderTechniqueResourceType::FixUp            @ 0x827EEB30
-//   CgsResource::ShaderTechniqueResourceType::PostFixUp        @ 0x827EEBF0  (DEFERRED - see note at end)
+//   CgsResource::ShaderTechniqueResourceType::PostFixUp        @ 0x827EEBF0
 //
 // GetTypeID returns the shader-technique registry id (50). GetImportPointer publishes the
 // two embedded shader-program imports (vertex @ offset 0, pixel @ offset 4) for the
@@ -125,21 +127,124 @@ namespace CgsResource
         *reinterpret_cast<u32*>(lpBlob + 148) += luDelta;
     }
 
-    // --- PostFixUp @ 0x827EEBF0  (DEFERRED - declared only) ---------------------------
-    // Intentionally NOT bodied here. PostFixUp is a ~150-line shader-profile-classification
-    // routine: it strstr-scans the technique name (blob word 37) against an 8-entry rodata
-    // string table (off_82F30F78, the shader-profile names) in a stride-2 loop, writes a
-    // profile code from the parallel rodata table (dword_82F30F7C) back into the name head,
-    // then runs a block of WORLD / INSTANCING_MATRIX_ARRAY / WORLD_VIEW_PROJECTION
-    // first-constant validation that fires CgsContainers::BasePriorityQueue-backed assert
-    // log messages. It also calls an un-recovered helper sub_827ED8D0(u32*, int) four times
-    // (at blob words 7/11/20/24, semantics unknown).
+    // --- the shader-PROFILE classification table (X360 off_82F30F78) ------------------
+    // Eight {const char* substring, u32 profileCode} records, 8-byte stride, scanned by
+    // PostFixUp with strstr against the technique NAME; the matching record's code (the
+    // parallel word, X360 dword_82F30F7C) is stamped as an ASCII digit into the name's first
+    // byte, and record 7's code (dword_82F30FB4) is also the no-match DEFAULT.
     //
-    // Both rodata tables (off_82F30F78's 8 profile-name strings and dword_82F30F7C's codes)
-    // are NOT present in the repo exports (un-recoverable rodata), and sub_827ED8D0 is
-    // unidentified, so a faithful body cannot be reconstructed without fabrication. Deferred.
-    // A declared-but-undefined virtual compiles fine under the per-TU `cl /c` gate (which does
-    // not link or instantiate this class), so leaving it bodyless does not break the gate.
+    // UN-ATTESTED CONTENTS (same situation, and the same remedy, as
+    // CgsMaterialResourceType.cpp's KapcMaterialSamplerTypeNames): these are .rodata, and the
+    // repo's IDA exports carry no data section. A full-corpus sweep of the 30084 exported
+    // functions finds exactly ONE reference to the table -- this function -- so no other
+    // disassembly recovers the strings either. IDA's own operand comment on the table head
+    // attests record 0's string ("Vehicle_Opaque_PaintGloss_Textured"); records 1..7 and every
+    // code word are unrecovered and are left as the neutral {no-match, code 0} identity.
+    //
+    // BEHAVIOURAL IMPACT of the placeholder: the profile digit's only consumer is
+    // MaterialTechniqueResourceType::PostFixUp, which stores it as the technique's
+    // mu16ShaderProfile (+0x10) -- one of the four u16 SORT-KEY fields
+    // (CgsDispatcherCommands.h MaterialTechniqueView). A constant profile makes profile
+    // ordering a no-op inside a dispatch list; it cannot change what is drawn or how it is
+    // shaded. DELETE the placeholder when the ARTIST .rodata is recovered.
+    struct ShaderProfileClassification
+    {
+        const char* mpcNameSubstring;
+        uint32_t    muProfileCode;
+    };
+    static const uint32_t KU_SHADER_PROFILE_COUNT = 8;
+    static const ShaderProfileClassification KaShaderProfiles[KU_SHADER_PROFILE_COUNT] =
+    {
+        { "Vehicle_Opaque_PaintGloss_Textured", 0u },   // record 0: string attested, code not
+        { 0, 0u }, { 0, 0u }, { 0, 0u }, { 0, 0u }, { 0, 0u }, { 0, 0u },
+        { 0, 0u },                                     // record 7: its code is also the default
+    };
+
+    // --- PostFixUp @ 0x827EEBF0 -------------------------------------------------------
+    // Second-stage fix-up of a streamed shader technique, run once per technique after FixUp
+    // has relocated it and after the resource loader has resolved its two program imports.
+    //
+    //  1. Bind each of the four EXTERNAL constant blocks to the program that consumes it --
+    //     the object/global VERTEX pair (blob +0x1C / +0x2C) against the vertex program at
+    //     blob word 0, the object/global PIXEL pair (+0x50 / +0x60) against the pixel program
+    //     at blob word 1 -- through ShaderConstantsExternal::FixUp(const ProgramBuffer*)
+    //     (X360 sub_827ED8D0). Each stage is skipped when its program pointer is null.
+    //  2. Classify the technique by name against the profile table above and stamp the code as
+    //     an ASCII digit ('0' + code) into the first byte of the technique name (blob word 37 /
+    //     byte offset 148). Yes, the console really does overwrite the name's first character:
+    //     MaterialTechniqueResourceType::PostFixUp reads it straight back as
+    //     `*(u8*)name - '0'`.
+    //  3. Validate the vertex OBJECT block's leading constant. After step 1's hoist pass the
+    //     first entry must be the WORLD matrix (table slot 0) or INSTANCING_MATRIX_ARRAY (slot
+    //     6); WORLD_VIEW_PROJECTION (slot 4) anywhere in the block is unsupported. Both are
+    //     warnings on the console (FireAssert with a streamed message), reproduced as
+    //     CGS_ASSERTs with the console's wording.
+    //
+    // Raw-offset access on lpResource is the DOCUMENTED serialised-blob exception; every slot
+    // is a console u32 (see the FixUp banner above). The rw::Resource argument is unused by the
+    // X360 body.
+    void ShaderTechniqueResourceType::PostFixUp(void* lpResource, const rw::Resource& /*lrResource*/) const
+    {
+        u8* const lpBlob = static_cast<u8*>(lpResource);
+
+        // The two program imports (slot 0 = vertex, slot 1 = pixel), as resolved by the loader.
+        const renderengine::ProgramBuffer* const lpVertexProgram =
+            reinterpret_cast<const renderengine::ProgramBuffer*>(
+                static_cast<uintptr_t>(*reinterpret_cast<u32*>(lpBlob + 0)));
+        const renderengine::ProgramBuffer* const lpPixelProgram =
+            reinterpret_cast<const renderengine::ProgramBuffer*>(
+                static_cast<uintptr_t>(*reinterpret_cast<u32*>(lpBlob + 4)));
+
+        if (lpVertexProgram != 0)
+        {
+            reinterpret_cast<ShaderConstantsExternal*>(lpBlob + 0x1C)->FixUp(lpVertexProgram);
+            reinterpret_cast<ShaderConstantsExternal*>(lpBlob + 0x2C)->FixUp(lpVertexProgram);
+        }
+        if (lpPixelProgram != 0)
+        {
+            reinterpret_cast<ShaderConstantsExternal*>(lpBlob + 0x50)->FixUp(lpPixelProgram);
+            reinterpret_cast<ShaderConstantsExternal*>(lpBlob + 0x60)->FixUp(lpPixelProgram);
+        }
+
+        // ---- shader-profile classification + name-head stamp --------------------------
+        char* const lpcName = reinterpret_cast<char*>(
+            static_cast<uintptr_t>(*reinterpret_cast<u32*>(lpBlob + 148)));
+
+        uint32_t luProfileCode = KaShaderProfiles[KU_SHADER_PROFILE_COUNT - 1].muProfileCode;
+        for (uint32_t luProfile = 0; luProfile < KU_SHADER_PROFILE_COUNT; ++luProfile)
+        {
+            const char* const lpcSubstring = KaShaderProfiles[luProfile].mpcNameSubstring;
+            if (lpcSubstring != 0 && std::strstr(lpcName, lpcSubstring) != 0)
+            {
+                luProfileCode = KaShaderProfiles[luProfile].muProfileCode;
+                break;
+            }
+        }
+        *lpcName = static_cast<char>(luProfileCode + '0');
+
+        // ---- first-constant validation on the vertex OBJECT block (+0x1C) -------------
+        const u32  luNumObjectConstants = *reinterpret_cast<u32*>(lpBlob + 0x1C);
+        const u32* lpaObjectIndices     = reinterpret_cast<const u32*>(
+            static_cast<uintptr_t>(*reinterpret_cast<u32*>(lpBlob + 0x20)));
+
+        const bool lbFirstIsInstancing = (luNumObjectConstants >= 1u && lpaObjectIndices[0] == 6u);
+        const bool lbFirstIsWorld      = (luNumObjectConstants >= 1u && lpaObjectIndices[0] == 0u);
+
+        bool lbHasWorldViewProjection = false;
+        for (u32 luConstant = 0; luConstant < luNumObjectConstants; ++luConstant)
+        {
+            if (lpaObjectIndices[luConstant] == 4u)
+            {
+                lbHasWorldViewProjection = true;
+            }
+        }
+
+        CGS_ASSERT(lbFirstIsInstancing || lbFirstIsWorld,
+                   "Warning: shader technique does not have WORLD or INSTANCING_MATRIX_ARRAY"
+                   " (required) as first constant");
+        CGS_ASSERT(!lbHasWorldViewProjection,
+                   "Warning: shader technique has WORLD_VIEW_PROJECTION (unsupported) as first constant");
+    }
 
     // --- GetConstantHashTableSerialisedResourceDescriptorSize @ 0x827E9D38 ------------
     // Size of the serialised constant-hash-table sub-block. The hash table's word @ +8 is the

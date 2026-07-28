@@ -37,7 +37,7 @@ public:
     ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override; // @0x827F7A68
     void     GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const override;
     void     FixUp(void* lpResource, const rw::Resource& lrResource) const override;
-    void     PostFixUp(void* lpResource, const rw::Resource& lrResource) const override; // DEFERRED - declared only
+    void     PostFixUp(void* lpResource, const rw::Resource& lrResource) const override; // @0x827EEBF0
 
     // Non-virtual per-sub-block serialised-size helpers used by GetSerialisedResourceDescriptor.
     // The Internal/External sizers are not part of this batch (declared only; bodied in their own wave).

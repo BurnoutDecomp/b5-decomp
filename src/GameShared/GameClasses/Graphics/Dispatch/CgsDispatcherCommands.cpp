@@ -1027,6 +1027,11 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/
                 lpTechnique, lpAssembly, reinterpret_cast<void* const*>(lppConstScratch), false);
         }
 
+        // Per-mesh: the technique's OBJECT-scope external constant blocks (the X360 runs
+        // these on every mesh, right after the technique-change block).
+        shadow::Device::SetMeshObjectConstantsPC(
+            lpTechnique, reinterpret_cast<void* const*>(lppConstScratch), false);
+
         // [PC bring-up shim] the per-object WVP carried in the command
         // (payload qwords 1..4) feeds the fallback-shader transform.
         shadow::Device::SetObjectTransformPC(reinterpret_cast<const f32*>(&lpPacket[8]));

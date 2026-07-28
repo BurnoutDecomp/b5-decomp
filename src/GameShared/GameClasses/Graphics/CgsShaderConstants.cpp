@@ -1,5 +1,9 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetSize / SetNumEntries)
+// renderengine::ProgramBufferData / ProgramVariableHandle / ProgramBuffer::GetVariableHandleByName
+// -- the program-side half of ShaderConstantsExternal::FixUp(const ProgramBuffer*).
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags
 
 // CgsShaderConstants.cpp - functions of the CGS shader-constant subsystem:
 //   * ShaderConstantsExternal::FixUp / HasShaderConstant  (on-disk External block)
@@ -38,6 +42,12 @@
 // GetValue/GetConstant/Dispatch*ShaderConstants) must use the same view when they land -- do
 // NOT read the host-width members on a streamed block.
 // ============================================================================================
+// The single global runtime table (X360 `mShaderConstantTable` @ 0x830113D0, inside namespace
+// CgsGraphics). Its storage currently lives in GameSource/World/WorldLinkStubs.cpp; every
+// consumer (BrnRendererModule / BrnWorldModule / BrnShadowMap / CgsDispatcherCommands)
+// declares it exactly like this.
+namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
+
 namespace
 {
     // Console word layout of ShaderConstantsInternal (5 words).
@@ -116,6 +126,205 @@ u32 ShaderConstantsExternal::FixUp(u8* lpBaseData)
     }
 
     return 0;
+}
+
+// =============================================================================================
+// ShaderConstantsExternal::FixUp(const ProgramBuffer*)   X360 @ 0x827ED8D0 (sub_827ED8D0)
+// DWARF home: CgsShaderConstants.h:810; the two assert sites below are CgsShaderConstants.cpp
+// :1022 and :1036, which is what homes the body in this TU.
+//
+// The SECOND-STAGE fix-up of a streamed External constant block, run by
+// CgsResource::ShaderTechniqueResourceType::PostFixUp once for each of the technique's four
+// External blocks (vertex object @+28 / vertex global @+44 against the technique's VERTEX
+// program, pixel object @+80 / pixel global @+96 against its PIXEL program). Three passes:
+//
+//  1. BIND. For every constant instance, look its NAME up in the global runtime
+//     ShaderConstantTable (linear scan of mapConstantNames over mu8NumUsedConstants) and then
+//     ask the program buffer for that name's register handle. On success the block's word-1
+//     array -- serialised as "instance data", used by a ShaderTechnique as the CONSTANT-INDEX
+//     array the dispatch walker reads (CgsDispatcherCommands AddShaderTechniqueConstantsToDispatchBin
+//     / ShaderConstantsExternal_GatherFromContext) -- receives the table slot index, and the
+//     handle's register COUNT is overridden with the table entry's declared array size in
+//     quadwords whenever that entry is an array (mu8NumEntries > 1). That override is what makes
+//     an array constant upload all of its registers: fxc/the Xenon compiler report only the
+//     registers the shader actually READS (e.g. ShadowMap_WorldToLight comes back as 11 of its
+//     12 registers), and the engine must push the whole declared array.
+//     The running total of bound registers is the return value.
+//  2. COMPACT. Drop every instance whose name slot is null, moving the survivors (name, index,
+//     4-byte handle) down over them, and store the surviving count back into word 0.
+//  3. HOIST. Move the instance bound to table slot 6 (InstancingMatrixArray) to position 0, then
+//     the instance bound to table slot 0 (world) to position 0 -- the "WORLD or
+//     INSTANCING_MATRIX_ARRAY must be the first constant" contract that
+//     ShaderTechniqueResourceType::PostFixUp validates right after this runs.
+//
+// SERIALISED-BLOCK SEAM (see the banner at the top of this TU): the block is console word
+// layout, so the walk goes through SerialisedExternal, and the handle array is the measured
+// 4-byte renderengine::ProgramVariableHandle stride (FORMAT_MAP.md section 3).
+//
+// The declared parameter type is the DWARF's `const ProgramBuffer*`; renderengine::ProgramBuffer
+// is a static-only class whose instance IS the ProgramBufferData image, which is what the X360
+// hands straight to GetVariableHandleByName -- reinterpreted once here, named for clarity.
+// =============================================================================================
+u32 ShaderConstantsExternal::FixUp(const renderengine::ProgramBuffer* lpVertexProgramBuffer)
+{
+    SerialisedExternal* const lpBlock = reinterpret_cast<SerialisedExternal*>(this);
+    const renderengine::ProgramBufferData* const lpProgramData =
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgramBuffer);
+
+    u32* const lpaNames   = SlotArray(lpBlock->muNames);
+    u32* const lpaIndices = SlotArray(lpBlock->muConstantsInstanceData);
+    renderengine::ProgramVariableHandle* const lpaHandles =
+        reinterpret_cast<renderengine::ProgramVariableHandle*>(
+            static_cast<uintptr_t>(lpBlock->muProgramStateHandles));
+
+    ShaderConstantTable& lrTable = CgsGraphics::mShaderConstantTable;
+
+    // ---- pass 1: bind each named constant to a table slot + a program register --------------
+    u32 luNumRegisters = 0;
+    for (u32 luConstant = 0; luConstant < lpBlock->muNumConstantsInstances; ++luConstant)
+    {
+        bool lbBound = false;
+
+        if (lrTable.mu8NumUsedConstants != 0)
+        {
+            u32  luIndex   = 0;
+            bool lbMatched = false;
+            while (luIndex < lrTable.mu8NumUsedConstants)
+            {
+                const char* const lpcOwnName = SlotString(lpaNames[luConstant]);
+                if (lpcOwnName != 0)
+                {
+                    CGS_ASSERT(luIndex < lrTable.mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+
+                    // Inline strcmp, X360 order: walk the TABLE name and stop on its terminator.
+                    const char* lpcTableName = lrTable.mapConstantNames[luIndex];
+                    const char* lpcOwn       = lpcOwnName;
+                    int liDiff;
+                    do
+                    {
+                        liDiff = static_cast<u8>(*lpcTableName) - static_cast<u8>(*lpcOwn);
+                        if (*lpcTableName == 0)
+                        {
+                            break;
+                        }
+                        ++lpcTableName;
+                        ++lpcOwn;
+                    }
+                    while (liDiff == 0);
+
+                    if (liDiff == 0)
+                    {
+                        lbMatched = true;
+                        break;
+                    }
+                }
+                ++luIndex;
+            }
+
+            if (lbMatched)
+            {
+                CGS_ASSERT(luIndex < lrTable.mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+                if (renderengine::ProgramBuffer::GetVariableHandleByName(
+                        lpProgramData,
+                        reinterpret_cast<const u8*>(lrTable.mapConstantNames[luIndex]),
+                        &lpaHandles[luConstant]) != 0)
+                {
+                    u32 luRegisterCount = lpaHandles[luConstant].mu8RegisterCount;
+
+                    const ShaderConstantTableElement& lrElement = lrTable.maConstants[luIndex];
+                    if (lrElement.mu8NumEntries > 1u)
+                    {
+                        luRegisterCount = static_cast<u32>(lrElement.mu8SizeInBytes
+                                                           * lrElement.mu8NumEntries) >> 4;
+                        lpaHandles[luConstant].mu8RegisterCount = static_cast<u8>(luRegisterCount);
+                    }
+
+                    lbBound = true;
+                    lpaIndices[luConstant] = luIndex;
+                    luNumRegisters += luRegisterCount;
+                }
+            }
+        }
+
+        if (!lbBound)
+        {
+            // X360 CgsShaderConstants.cpp:1022 streams "Missing shader constant from table " +
+            // name + "\n" into the assert buffer and FIRES. It cannot fire on the console: the
+            // shipped microcode was compiled from the same .fx the technique was authored from,
+            // so every constant a technique lists exists in its program's variable table.
+            //
+            // FLAG PC-platform leaf (DATA gap, not an engine deviation): the PC program buffers
+            // are RE-COMPILED by tools/assets/shaders/convert_shaders_bundle.py from the TUB
+            // HLSL, and two groups of constants are absent from that source:
+            //   * InstancingMatrixArray / InstancingIndexArray on the 19 `*_Instanced`
+            //     techniques -- the TUB `_Instanced.fx` files are the Remastered port, whose
+            //     instancing was reworked; they never mention either constant. Harmless today:
+            //     instanced world draws are asserted off upstream (WorldEntityModule
+            //     "Instancing not supported") and DispatchAllMeshes traps on them.
+            //   * whatever fallback_world.fx does not declare, for the two techniques with no
+            //     TUB source at all (CarStudio / Godray).
+            // A fired assert here would be a false alarm on every boot, so this is a quiet log.
+            // DELETE (restore the console assert) when the PC shader set is compiled from
+            // sources that declare the full constant list.
+            const char* const lpcName = SlotString(lpaNames[luConstant]);
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "Missing shader constant from table "
+                    << (lpcName != 0 ? lpcName : "<NULLSTRING>")
+                    << " [FLAG PC data gap: constant absent from the recompiled program]\n";
+            }
+        }
+    }
+
+    // ---- pass 2: compact out the null-named instances ---------------------------------------
+    u32 luWrite = 0;
+    for (u32 luConstant = 0; luConstant < lpBlock->muNumConstantsInstances; ++luConstant)
+    {
+        if (lpaNames[luConstant] == 0)
+        {
+            // X360 CgsShaderConstants.cpp:1036 -- same streamed form as above.
+            CGS_ASSERT(false, "NULL shader constant name <NULLSTRING>\n");
+            continue;
+        }
+
+        lpaNames[luWrite]   = lpaNames[luConstant];
+        lpaIndices[luWrite] = lpaIndices[luConstant];
+        lpaHandles[luWrite] = lpaHandles[luConstant];
+        ++luWrite;
+    }
+    lpBlock->muNumConstantsInstances = luWrite;
+
+    // ---- pass 3: hoist InstancingMatrixArray (slot 6), then world (slot 0), to position 0 ----
+    // (Two independent searches, each a no-op when its slot is absent or already first.)
+    for (u32 luPass = 0; luPass < 2u; ++luPass)
+    {
+        const u32 luWantedSlot = (luPass == 0) ? 6u : 0u;
+
+        u32 luFound = 0;
+        while (luFound < lpBlock->muNumConstantsInstances && lpaIndices[luFound] != luWantedSlot)
+        {
+            ++luFound;
+        }
+        if (luFound == 0 || luFound >= lpBlock->muNumConstantsInstances)
+        {
+            continue;
+        }
+
+        const u32 luName  = lpaNames[0];
+        lpaNames[0]       = lpaNames[luFound];
+        lpaNames[luFound] = luName;
+
+        const u32 luIdx     = lpaIndices[0];
+        lpaIndices[0]       = lpaIndices[luFound];
+        lpaIndices[luFound] = luIdx;
+
+        const renderengine::ProgramVariableHandle lHandle = lpaHandles[0];
+        lpaHandles[0]       = lpaHandles[luFound];
+        lpaHandles[luFound] = lHandle;
+    }
+
+    return luNumRegisters;
 }
 
 // CgsShaderConstants.cpp:1274
