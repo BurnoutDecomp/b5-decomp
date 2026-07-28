@@ -141,6 +141,86 @@ Vector3 EntityManager::SetVolumeInstanceTransform(const VolumeInstanceId& lrVolu
     return lPositionDelta;
 }
 
+// ===========================================================================
+// EntityManager::AddEntity @ 0x828C6090
+//
+// Pop a slot out of mEntityPool, stamp the entity record ({ mUserID = the public
+// id, mu16NumVolumeInstances = 0, miFirstVolumeInstance = -1 } -- the X360 store
+// order is id / count / first), then publish the slot in the id->index table by
+// filling the shared hash element at the SAME index (element stride 12 on the X360:
+// `12 * (index + 69024) + this`, i.e. &maEntityIdHashElements[index], key then value)
+// and inserting it. Returns the slot index, or 0xFFFF when the pool is exhausted.
+// ===========================================================================
+u16 EntityManager::AddEntity(EntityId lEntityId)
+{
+    const s32 liIndex = mEntityPool.AllocateObject();
+
+    CGS_ASSERT(liIndex < KI_MAX_NUM_ENTITIES,
+               "Out of bounds index coming back from EntityPool.AllocateObject: ");
+
+    if (liIndex == -1)
+    {
+        CGS_ASSERT(false, "Failed to allocate entity ");
+        return 0xFFFF;
+    }
+
+    SceneManagerEntity& lrEntity = mEntityPool[liIndex];
+    lrEntity.mUserID                = lEntityId;
+    lrEntity.mu16NumVolumeInstances = 0;
+    lrEntity.miFirstVolumeInstance  = -1;
+
+    maEntityIdHashElements[liIndex].Set(lEntityId, static_cast<u16>(liIndex));
+    mEntityIdToIndex.Insert(&maEntityIdHashElements[liIndex]);
+
+    return static_cast<u16>(liIndex);
+}
+
+// ===========================================================================
+// EntityManager::RemoveEntity @ 0x828CD6F8
+//
+// Drop the slot's id->index entry (keyed on the record's own mUserID) and hand the
+// slot back to the pool.
+// ===========================================================================
+void EntityManager::RemoveEntity(u16 lu16Index)
+{
+    if (!mEntityPool.IsObjectAllocated(lu16Index))
+    {
+        CGS_ASSERT(false, "mEntityPool.IsObjectAllocated( (int32_t)lu16Index )");
+        return;
+    }
+
+    mEntityIdToIndex.Remove(mEntityPool[lu16Index].mUserID);
+    mEntityPool.FreeObject(lu16Index);
+}
+
+// The index -> id lookup (see the header): the X360 reads the first word of
+// mEntityPool[index] through a truncated-name accessor.
+EntityId EntityManager::GetEntityIdByIndex(u16 lu16Index) const
+{
+    CGS_ASSERT(static_cast<s32>(lu16Index) < KI_MAX_NUM_ENTITIES,
+               "lu16Index < KI_MAX_NUM_ENTITIES");
+    return mEntityPool[lu16Index].mUserID;
+}
+
+bool EntityManager::IsEntityIndexAllocated(u16 lu16Index) const
+{
+    return static_cast<s32>(lu16Index) < KI_MAX_NUM_ENTITIES
+        && mEntityPool.IsObjectAllocated(lu16Index);
+}
+
+// The id -> index lookup (the twin of GetVolumeInstanceIndexByID @0x828CD4B8 on the
+// other table): hash the id to its bucket and walk the ascending chain.
+s32 EntityManager::GetEntityIndexByID(EntityId lEntityId) const
+{
+    const CgsContainers::IndexedHashTable<EntityId, u16, 541>::Element* lpElement =
+        mEntityIdToIndex.Get(lEntityId);
+    if (lpElement == 0)
+    {
+        return -1;
+    }
+    return static_cast<s32>(lpElement->GetValue());
+}
+
 // @ 0x828BA088
 VolumeInstance* EntityManager::SetVolumePadding(s32 liIndex, Vector3 lPadding)
 {

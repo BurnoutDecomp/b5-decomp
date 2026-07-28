@@ -58,6 +58,30 @@ namespace CgsSceneManager
         // @ 0x828C5FC8 (this TU) -- clear both pools and both id->index tables.
         bool Prepare();
 
+        // @ 0x828C6090 -- register a new entity: pop a pool slot, stamp the public id
+        // (and the empty volume-instance chain) into it, publish the slot in the
+        // id->index table, and return the slot index. Returns 0xFFFF when the pool is
+        // full. The returned index is what every downstream broad-phase structure
+        // (SpatialPartition, CoarseQueryResultBuffer) keys on.
+        u16 AddEntity(EntityId lEntityId);
+
+        // @ 0x828CD6F8 -- retire a slot: drop its id->index entry and free the slot.
+        void RemoveEntity(u16 lu16Index);
+
+        // The index -> public-id lookup SceneManagerModule::ProcessFrustumTestJobResults
+        // @0x828C7838 uses to turn a coarse-query result index back into an EntityId
+        // (the X360 truncated accessor `CgsSceneManager::Scen(&mEntityManager, index)`
+        // hands back &mEntityPool[index], whose first word is mUserID). Named here.
+        EntityId GetEntityIdByIndex(u16 lu16Index) const;
+
+        // Slot-liveness probe (the same mEntityPool.IsObjectAllocated the X360 asserts
+        // on before touching a slot); named so callers do not reach into the pool.
+        bool IsEntityIndexAllocated(u16 lu16Index) const;
+
+        // The id -> index lookup through mEntityIdToIndex (the twin of
+        // GetVolumeInstanceIndexByID @0x828CD4B8 on the other table); -1 when absent.
+        s32 GetEntityIndexByID(EntityId lEntityId) const;
+
         // @ 0x828CD4B8 -- map a VolumeInstanceId to its pool index (-1 if absent).
         s32  GetVolumeInstanceIndexByID(VolumeInstanceId lVolumeInstanceId) const;
 

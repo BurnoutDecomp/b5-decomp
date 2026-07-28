@@ -273,11 +273,17 @@ namespace BrnWorld
         // manager: the main camera frustum, the six environment-map face frusta
         // (alternating halves under the 30Hz env-map policy) and the three shadow
         // cascades, then hand them to the frustum-test job system.
+        // SIGNATURE RECONCILED 2026-07-28 (culling wave): six args, with the dispatch
+        // OUTPUT buffer and the update set BY POINTER -- BrnGameModule::DoDispatch
+        // @0x823DC458 clears bit 7 in place (`updateSet &= ~0x80`) when the game-data
+        // output reports live streaming, and both this producer and GenerateDispatchLists
+        // read that same word.
         void GenerateFrustumQueries(
             CgsModule::IOBufferStack* lpInputBufferStack,
             CgsModule::IOBufferStack* lpOutputBufferStack,
             const BrnWorldIO::DispatchInputBuffer* lpDispatchInputBuffer,
-            BrnUpdateSet lUpdateSet );
+            BrnWorldIO::DispatchOutputBuffer* lpDispatchOutputBuffer,
+            const BrnUpdateSet* lpUpdateSet );
 
         // @0x827BD1F0 (DWARF :398) -- the per-frame PRE-SCENE entity-module
         // spine: race car pre-scene, the race-car -> traffic staging (+ the

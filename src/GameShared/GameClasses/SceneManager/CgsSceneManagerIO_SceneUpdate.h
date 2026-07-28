@@ -160,10 +160,22 @@ namespace SceneManagerIO
         void SetVolumeInstanceCullingGroup(VolumeInstanceId lVolumeInstanceId, s32 liCullingGroupId); // @0x822B1A98
         void AddVolumeInstanceForCaching(VolumeInstanceId lVolumeInstanceId, s32 leCacheOptions);     // @0x8270DA10
 
-        // ADDITIVE GROW (FLAG -- declared-only, body owned by InSceneUpdateInterface's own
-        // TU): the whole-interface merge the physics->scene world bridge drives
-        // (WorldModule::BridgePhysicsSceneUpdateToScene @0x827ABA40 tail-calls it).
+        // @ 0x827A9340 -- the whole-interface merge every entity-module -> scene bridge
+        // drives (BridgeEntityModulesToSceneModule_PreScene @0x827AB490,
+        // BridgePhysicsSceneUpdateToScene @0x827ABA40, ...): append all 25 embedded
+        // queues from lrOther onto this one. The X360 tail-returns the pointer; the
+        // committed void signature is load-bearing (existing callers) and the returned
+        // register is an artifact of the tail branch, so this stays void.
         void Append(const InSceneUpdateInterface& lrOther);
+
+        // Read accessors for the four ENTITY queues the scene manager's
+        // BridgeInputSceneUpdateInterfaceToSubModules @0x828D1F88 drains (the X360 walks
+        // each queue's base + length inline; named here so the consumer never reaches a
+        // queue by offset).
+        const CgsModule::EventQueue<InEventAddEntity, 5120>&        GetAddEntityQueue() const       { return mAddEntityQueue; }
+        const CgsModule::EventQueue<InEventRemoveEntity, 10000>&    GetRemoveEntityQueue() const    { return mRemoveEntityQueue; }
+        const CgsModule::EventQueue<InEventSetEntityPosition, 1024>& GetUpdatePositionQueue() const { return mUpdatePositionQueue; }
+        const CgsModule::EventQueue<InEventSetEntityRadius, 512>&   GetSetEntityRadiusQueue() const { return mSetEntityRadiusQueue; }
 
         // ---- Embedded fixed-capacity input queues (ascending X360-offset / DWARF order) ----
         // Capacities are the committed EventQueue_*_N explicit-instantiation TUs; element

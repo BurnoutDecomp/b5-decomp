@@ -108,6 +108,16 @@ namespace CgsModule
         // lSource's events and advances miLength. Returns true.
         bool Append(const BaseEventQueue<T>& lSource)
         {
+            // An EMPTY source contributes nothing, so bail before reading its buffer
+            // pointer: the whole-aggregate merges (InSceneUpdateInterface::Append walks
+            // all 25 queues) routinely see a source queue whose owning IO buffer never
+            // ran Construct, and GetQueueStartPointer's tripwire would fire on every one
+            // of them for a copy of zero bytes.
+            if (lSource.miLength == 0)
+            {
+                return true;
+            }
+
             CGS_ASSERT(mpEvents != nullptr, "mpEvents != NULL");                          // CgsBaseEventQueue.h:413
             CGS_ASSERT(lSource.miLength + miLength <= miMaxLength, "Base event queue overflow"); // :414
 

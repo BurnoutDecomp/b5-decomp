@@ -247,6 +247,17 @@ namespace CgsSceneManager
         void BridgeOverlapGenerationToOutputBuffer(SceneManagerIO::OutputBuffer* lpSceneOutput,
                                                    SceneManagerIO::OutputBuffer* lpGenerationOutput);
 
+        // @ 0x828D1F88 -- fan the scene input's InSceneUpdateInterface out into the
+        // sub-modules: allocate / retire entity-manager slots for the add + remove
+        // queues, re-emit the position / radius updates, and drive the collision-volume
+        // legs. Only the ENTITY legs (the ones the broad-phase needs) are reconstructed;
+        // see the body's SCOPE note.
+        void BridgeInputSceneUpdateInterfaceToSubModules(
+            OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput,
+            SpatialPartitionIO::InputBuffer_Update* lpSpatialPartitionInput,
+            SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+            bool lbPrepare);
+
     private:
         // ---- members (DWARF order; offsets pinned to the X360 asm in comments) ----
         SceneQueryId maFrustumTestJobQueryIds[KU_MAX_FRUSTUM_TEST_JOB_QUERIES];  // X360 +0x228

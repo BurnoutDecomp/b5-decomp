@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::CameraRwFrustum (SetFromRwFrustum source)
 
 // ============================================================================
 // CgsGeometric::Frustum -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -169,6 +170,61 @@ namespace CgsGeometric
         LaneSet(maSwizzledPlanes[luBatch + 1], luLane, lPlaneVector.y);   // Ny
         LaneSet(maSwizzledPlanes[luBatch + 2], luLane, lPlaneVector.z);   // Nz
         LaneSet(maSwizzledPlanes[luBatch + 3], luLane, lPlaneVector.w);   // signed offset
+    }
+
+    // ------------------------------------------------------------------------
+    // SetFromRwFrustum @ 0x82839FA8
+    //
+    // Transpose the SIX world-space camera planes (CameraRwFrustum, each stored
+    // [Nx, Ny, Nz, D] with `dot3(N, p) == D` and N pointing INTO the view volume)
+    // into the EIGHT swizzled SoA lanes this class stores.
+    //
+    // The X360 does the AoS->SoA transpose with eight `vperm` control vectors
+    // loaded from rodata (unk_82CDA3F0, unk_82CDADB0/C0/D0/E0/F0, unk_82CDB430/450);
+    // the exports carry no data section, so those masks cannot be read back.
+    // They are NOT needed: the lane MEANING is pinned exactly, from both readers of
+    // the stored form --
+    //   * GetPlaneByIndex / SetPlaneByIndex @0x8274EFE8 / @0x827BAA48 read/write
+    //     component c of plane p at maSwizzledPlanes[(p >= 4 ? 4 : 0) + c] lane (p & 3);
+    //   * IsSphereInFrustum @0x828AF020 and LooseOctree::FrustumTestEntities
+    //     @0x828B1CA0 both evaluate
+    //         d = S0*cx + S1*cy + S2*cz - S3   (lanes = planes 0..3)
+    //         d = S4*cx + S5*cy + S6*cz - S7   (lanes = planes 4..7)
+    //     and reject when any lane's d exceeds the sphere radius,
+    // and from VectorToPlane @0x82840DB0, which recovers a plane by NEGATING the
+    // stored lane. So the stored lane is -(plane): S = -N, and the reject test
+    // `-dot3(N,c) + D > r` is exactly `dot3(N,c) - D < -r`, i.e. "the sphere is
+    // entirely on the outside half-space" for an inward-pointing N -- which is what
+    // the camera writers produce. Whichever intra-batch lane a plane lands in is
+    // unobservable (every lane must pass), so the natural identity mapping is used.
+    //
+    // The two spare lanes (the frustum has 6 planes, the SoA batch holds 8) are
+    // zeroed: a zero plane gives d == 0, and 0 > r is false for any r >= 0, so a
+    // pad lane can never reject. That is the only value that keeps the 8-lane batch
+    // equivalent to the 6-plane frustum, so it is forced rather than guessed.
+    // ------------------------------------------------------------------------
+    void Frustum::SetFromRwFrustum(const CgsGraphics::CameraRwFrustum& lrRw)
+    {
+        for (u32 luLane = 0; luLane < 4; ++luLane)
+        {
+            // Batch 0 -- planes 0..3 (near / far / left / right).
+            const Vector4& lrPlaneA = lrRw.maPlanes[luLane];
+            LaneSet(maSwizzledPlanes[0], luLane, -lrPlaneA.x);
+            LaneSet(maSwizzledPlanes[1], luLane, -lrPlaneA.y);
+            LaneSet(maSwizzledPlanes[2], luLane, -lrPlaneA.z);
+            LaneSet(maSwizzledPlanes[3], luLane, -lrPlaneA.w);
+
+            // Batch 1 -- planes 4..5 (top / bottom); lanes 2 and 3 are the pad.
+            const bool lbReal = (luLane < 2);
+            const f32  lfNx = lbReal ? -lrRw.maPlanes[4 + luLane].x : 0.0f;
+            const f32  lfNy = lbReal ? -lrRw.maPlanes[4 + luLane].y : 0.0f;
+            const f32  lfNz = lbReal ? -lrRw.maPlanes[4 + luLane].z : 0.0f;
+            const f32  lfD  = lbReal ? -lrRw.maPlanes[4 + luLane].w : 0.0f;
+            LaneSet(maSwizzledPlanes[4], luLane, lfNx);
+            LaneSet(maSwizzledPlanes[5], luLane, lfNy);
+            LaneSet(maSwizzledPlanes[6], luLane, lfNz);
+            LaneSet(maSwizzledPlanes[7], luLane, lfD);
+        }
     }
 
     // ------------------------------------------------------------------------

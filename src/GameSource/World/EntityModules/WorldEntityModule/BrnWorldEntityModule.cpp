@@ -1839,78 +1839,13 @@ WorldEntityModule::GenerateDispatchLists(
 }
 
 // =============================================================================
-// [FLAG PC bring-up] GenerateDispatchListsFromStreamer -- NOT an X360 function.
-//
-// The real feed above consumes the scene manager's frustum-test result. On this
-// build SceneManagerModule::UpdateScene / InSceneUpdateInterface::Append are inert
-// gates, so no world entity is ever registered and the visible list is always
-// empty. This walks the streamer's loaded instance lists directly -- exactly the
-// instances OnWorldGraphicsLoadComplete would have registered -- and dispatches each
-// through the REAL RenderInstance. No culling beyond the instance's own
-// mfMaxDrawDistanceSq (the frustum test is what is missing).
-// DELETE when the scene manager's frustum query is live.
+// (GenerateDispatchListsFromStreamer DELETED 2026-07-29, culling wave: the real
+//  frustum-test path is live -- the scene manager registers every streamed
+//  instance, LooseOctree::StartFrustumTestJobs answers the camera query and
+//  WorldModule::FilterFrustumTestResults hands the visible ids to
+//  GenerateDispatchLists above. The streamer-walking stand-in that fed the real
+//  feed while the scene manager was an inert gate has no callers left.)
 // =============================================================================
-void
-WorldEntityModule::GenerateDispatchListsFromStreamer(
-    CgsGraphics::DispatchFrame* lpDispatchFrame,
-    const ShaderLodInfo* lpShaderLodInfo,
-    Vector3::InParam lCameraPosition,
-    f32 lfDrawDistanceScale,
-    s32 liList,
-    s32 liSortLayer,
-    s32 liSortKey,
-    s32 liPreZList )
-{
-    if ( lpDispatchFrame == 0 || lpShaderLodInfo == 0 )
-    {
-        return;
-    }
-
-    // Same pre-Z list byte the real GenerateDispatchLists computes (@0x822D5B3C).
-    const u8 lu8PreZList = ( liPreZList > 0 ) ? static_cast<u8>( liPreZList ) : 0xFFu;
-
-    const f32 lfInvScaleSq = 1.0f / ( lfDrawDistanceScale * lfDrawDistanceScale );
-
-    for ( s32 liSlot = 0; liSlot < WorldGraphicsStreamer::KI_MAX_INSTANCE_LISTS; liSlot++ )
-    {
-        if ( !mWorldGraphicsStreamer.IsListLoaded( liSlot ) )
-        {
-            continue;
-        }
-
-        CgsGraphics::InstanceList* lpList = mWorldGraphicsStreamer.GetInstanceList( liSlot );
-        if ( lpList == 0 )
-        {
-            continue;
-        }
-
-        siCurrentTrackUnitIndex = liSlot;
-
-        // [0, muNumInstances) are the real entries; the tail is the backdrop
-        // stand-in set the world module swaps in for unloaded neighbours.
-        for ( u32 luInstance = 0; luInstance < lpList->muNumInstances; luInstance++ )
-        {
-            CgsGraphics::Instance* lpInstance = lpList->GetInstance( luInstance );
-            if ( lpInstance == 0 || lpInstance->mpModel == 0 )
-            {
-                continue;
-            }
-
-            const f32 lfScaledDistanceSq =
-                rw::math::vpu::MagnitudeSquared( lCameraPosition - lpInstance->mTransform.Pos() )
-                * lfInvScaleSq;
-
-            if ( lfScaledDistanceSq > lpInstance->mfMaxDrawDistanceSq )
-            {
-                continue;
-            }
-
-            RenderInstance( lpInstance, false, lCameraPosition, lfScaledDistanceSq,
-                            liList, liSortLayer, liSortKey, lu8PreZList,
-                            lpDispatchFrame, lpShaderLodInfo );
-        }
-    }
-}
 
 // [FLAG PC bring-up] centre + radius of every loaded world instance (see the header).
 bool
@@ -1989,6 +1924,7 @@ WorldEntityModule::GetLoadedWorldBounds( Vector3* lpCentreOut, f32* lpfRadiusOut
     *lpfRadiusOut = ( lfMaxDistSq > 0.0f ) ? sqrtf( lfMaxDistSq ) : 1.0f;
     return true;
 }
+
 
 // =============================================================================
 // GenerateDispatchListsForEnvironmentMap  @ 0x822D7298  (cpp:1328)

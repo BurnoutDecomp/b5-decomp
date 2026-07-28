@@ -24,19 +24,16 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer (base)
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManagerIO.h"  // SpatialPartitionIO::OutputBuffer (real home)
 
 namespace CgsSceneManager
 {
 
-namespace SpatialPartitionIO
-{
-    // The coarse-query result buffer the loose-octree frustum jobs fill. Carries the
-    // CoarseQueryResultBuffer<16384> the SceneManagerModule reads job results out of.
-    struct alignas(16) OutputBuffer : public CgsModule::IOBuffer
-    {
-        u8 maReserved[65536];   // stand-in (real home: SpatialPartitionManagerIO TU)
-    };
-}
+// (SpatialPartitionIO::OutputBuffer's 65536-byte stand-in RETIRED 2026-07-28, culling
+//  wave: the REAL definition -- the query-result VEQ plus the named
+//  CoarseQueryResultBuffer<16384> at +0x5014 -- now lives in its own home,
+//  SpatialPartitionModule/CgsSpatialPartitionManagerIO.h, included at the top of
+//  this header so every consumer keeps seeing the type by name.)
 
 namespace OverlapCullingIO
 {

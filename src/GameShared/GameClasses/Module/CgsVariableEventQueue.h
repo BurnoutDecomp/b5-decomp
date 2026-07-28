@@ -71,6 +71,7 @@ namespace CgsModule
         bool AddEvent(const Event* lpEvent, s32 liType, s32 liSize);
         bool AddEventSafe(const Event* lpEvent, s32 liType, s32 liSize);
 
+
         // ADDITIVE GROW (FLAG): typed event-size convenience overload. The X360 emits
         // this as a distinct templated member of VariableEventQueue<BUFSIZE,ALIGN>
         // (mangled ??$AddEvent@V<EventT>...@?$VariableEventQueue@$0BAAA@$0BA@@CgsModule@@):

@@ -51,18 +51,20 @@ namespace CgsSceneManager
     // its layout (volume budgets / world bounds) is owned by the SpatialPartition TUs.
     struct SpatialPartitionConstructParams
     {
-        // GROWN 2026-07-24 (WorldModule::Prepare @0x827D53B0 stages the full block:
-        // {type 1, levels 3, origin (0,0,0), 11000.0, 0.3, 32, 10}; the field NAMES
-        // past meType are inferred from the values' roles -- FLAG, refine on the
-        // spatial-partition TU's DWARF).
-        ESpatialPartitionType meType;        // +0x00 (X360 stages 1)
-        s32                   miNumLevels;   //        (X360 stages 3)
-        Vector3               mOrigin;       //        (X360 stages {0,0,0})
-        f32                   mfWorldExtent; //        (X360 stages 11000.0f)
-        f32                   mfLooseness;   //        (X360 stages 0.30000001f)
-        s32                   miMaxEntries;  //        (X360 stages 32)
-        s32                   miMaxDepth;    //        (X360 stages 10)
-        s32                   miPad;         //        (X360 stages 0)
+        // RECONCILED 2026-07-28 against LooseOctree::Construct @0x828C99D8, which reads
+        // the block field by field (params +0x04 -> muDepth, +0x10 -> mCentrePos,
+        // +0x20 -> mfBaseSize, +0x24 -> mfLooseness, +0x28 -> the adaptive split
+        // threshold, +0x2C -> the adaptive max depth). WorldModule::Prepare @0x827D53B0
+        // stages {type 1, depth 3, centre (0,0,0), 11000.0, 0.3, 32, 10}; the values are
+        // unchanged, only the NAMES (which were inferred) are now attested.
+        ESpatialPartitionType meType;      // +0x00 (X360 stages 1 == LOOSE_OCTREE)
+        u32   muDepth;                     // +0x04 (3) -- static tree LEVELS
+        Vector3 mCentrePos;                // +0x10 ({0,0,0}) -- the root node's centre
+        f32   mfBaseSize;                  // +0x20 (11000.0f) -- the root's FULL size
+        f32   mfLooseness;                 // +0x24 (0.3f) -- max admissible entity
+                                           //   DIAMETER as a fraction of a node's size
+        u32   muAdaptiveNodeSplitThreshold;// +0x28 (32)
+        u32   muAdaptiveMaxDepth;          // +0x2C (10)
     };
 
     class SpatialPartitionManager
@@ -100,6 +102,15 @@ namespace CgsSceneManager
         // @ 0x828AA860 -- staged release of the active partition (Release then Destruct on
         // failure), resetting the prepare stage when done. Returns success.
         bool Release();
+
+        // @ 0x828C9948 -- the per-frame scene update: read-lock the input buffer, drain
+        // its update queue into the partition, then run the partition's own Update.
+        void UpdateScene(SpatialPartitionIO::InputBuffer_Update* lpInputBuffer);
+
+        // The active partition (SceneManagerModule's frustum-test entry points call it
+        // as a concrete LooseOctree*, exactly as the X360 does through module+0x280).
+        SpatialPartition*       GetSpatialPartition()       { return mpSpatialPartition; }
+        const SpatialPartition* GetSpatialPartition() const { return mpSpatialPartition; }
 
     private:
         // @ 0x828BAE50 -- drain the inbound update queue (Add/Remove/SetPosition/SetRadius
