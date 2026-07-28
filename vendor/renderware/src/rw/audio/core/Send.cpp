@@ -52,7 +52,12 @@ enum { KI_MIXER_FRAME_SIZE = 256 };
 // -------------------------------------------------------------------------------------
 int Send::GetSize()
 {
-    return 104;
+    // X360-LITERAL TRAP: the console immediate is this object's CONSOLE footprint, but
+    // GetSize is the plug-in factory's allocation stride -- it allocates GetSize() bytes and
+    // constructs the object into them. On the host the object is larger (widened vptr and
+    // pointers), so returning the console value under-allocates and corrupts what follows.
+    // Return host sizeof; the console immediate stays in the comment above.
+    return static_cast<int>(sizeof(Send));   // X360: li r3, 0x68
 }
 
 // -------------------------------------------------------------------------------------
@@ -112,12 +117,12 @@ int Send::CreateInstance(Send* self)
 // (The X360 passes DisconnectImmediate a2/a3 through to ReChannelGainWrite's dead r5 slot;
 // both are unused, so the reconstruction takes only `self`.)
 // -------------------------------------------------------------------------------------
-int Send::DisconnectImmediate(Send* self)
+SubMixConnector* Send::DisconnectImmediate(Send* self)
 {
     const u32 luNumSubMixChannels = self->mSubMixConnector.mNumSubMixChannels; // lbz +0x40
 
     if (!luNumSubMixChannels)
-        return reinterpret_cast<int>(
+        return (
             SubMixConnector::Disconnect(&self->mSubMixConnector, 0)); // r3=self+0x30, r4=0
 
     // Remap the send's per-input-channel gains (mDeClickValue) into a SubMix-channel
@@ -142,13 +147,13 @@ int Send::DisconnectImmediate(Send* self)
     for (int li = 0; li < 6; ++li)
         self->mDeClickValue[li] = 0.0f; // zero 6 dwords at +0x44
 
-    return reinterpret_cast<int>(lpResult);
+    return lpResult;
 }
 
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82BA3EF8 -- b DisconnectImmediate (tail call; `self` passes through).
 // -------------------------------------------------------------------------------------
-int Send::ReleaseEvent(Send* self)
+SubMixConnector* Send::ReleaseEvent(Send* self)
 {
     return DisconnectImmediate(self);
 }
@@ -277,23 +282,38 @@ int Send::ConnectByPointerHandler(void* cmd)
 //       if (link == (void*)0x2C) break;           // empty-list sentinel == address 0x2C
 //       if (strcmp(node + 0x4C, cmd + 0xC) == 0) { ...link connector into node... }
 //   }
-//   return *(cmd+8)
+//   return *(cmd+8)                              // == the record's own muRecordSize
 //
-// This is intentionally left undefined because it cannot be faithfully reconstructed from
-// this TU alone WITHOUT fabricating un-groundable state:
-//   1. off_8327EE68 (registry list head) and dword_8327EE00 (search iterator cursor) are
-//      un-homed FOREIGN statics owned by a SubMix-registry TU not present here; the write
-//      to dword_8327EE00 each iteration is a real side-effect I cannot restore to its
-//      owning symbol.
-//   2. The walk is an X360-offset-specific intrusive-list idiom: node = link - 0x2C, the
-//      empty-list sentinel is the literal address 0x2C, and the name is compared at
-//      node+0x4C -- none of which survive the host pointer widening. Reproducing them
-//      needs SubMix's registry list-link and name members, which are NOT modelled (the
-//      committed SubMix in SubMixConnector.h only reaches the connector fields), and
-//      cannot be grounded from this function's asm without guessing the registry's home
-//      layout. A wrong link offset / name position is worse than an honest gap.
+// The registry's SHAPE is no longer a guess -- it is now grounded in the two SubMix
+// functions that own it (both still un-reconstructed; there is no SubMix.cpp):
+//   SubMix::CreateInstanceHandler @0x82B9C380 pushes onto the list:
+//     node = self+0x2C ; node->mpNext(+0x2C) = off_8327EE68 ; node->mppPrev(+0x30) = 0
+//     if (off_8327EE68) off_8327EE68->mppPrev = node ; off_8327EE68 = node
+//     self->mbRegistered(+0x8C) = 1 ; return 8
+//   SubMix::ReleaseEvent @0x82BA0C18 unlinks it (guarded by mbRegistered):
+//     if (node == off_8327EE68) off_8327EE68 = node->mpNext
+//     if (node->mppPrev) *node->mppPrev = node->mpNext
+//     if (node->mpNext) node->mpNext->mppPrev = node->mppPrev
+// So off_8327EE68 is the head of an intrusive DOUBLY-linked list whose node sits at
+// SubMix+0x2C (mpNext at +0x2C, mppPrev at +0x30 -- the same ListDNode idiom as
+// SubMixConnector), the loop's `link == 0x2C` test is just `link - 0x2C == NULL` (an
+// owner-is-null break), and the compared name lives at SubMix+0x4C.
+//
+// It is nevertheless still left undefined, because bodying it here would require work
+// OUTSIDE this TU that cannot be faked:
+//   1. off_8327EE68 (list head) and dword_8327EE00 (the per-iteration cursor this
+//      function writes but nothing else in the export reads) are statics OWNED by the
+//      SubMix TU above. There is no SubMix.cpp to define them, so defining them here
+//      would fork a global away from its home -- and merely declaring them `extern`
+//      would pass the compile-only gate while leaving an unresolvable link symbol.
+//   2. SubMix's registry-link (+0x2C/+0x30), mbRegistered (+0x8C) and name (+0x4C)
+//      members are not modelled: the committed SubMix in SubMixConnector.h keeps
+//      +0x2C..+0x33 opaque and declares mafChannelGain spanning +0x34..+0x8C, which
+//      OVERLAPS the name at +0x4C. (Disconnect only ever indexes that array over
+//      [0, mbNumChannels) i.e. +0x34..+0x4B, so the array is merely over-declared --
+//      but narrowing it is a change to SubMixConnector.h, not to this file.)
 // EventEvent still faithfully stores &Send::ConnectByNameHandler into the name-path
-// command; only the handler body is deferred until the SubMix registry is homed.
+// command; only the handler body is deferred until SubMix gets a home TU.
 // -------------------------------------------------------------------------------------
 
 // -------------------------------------------------------------------------------------

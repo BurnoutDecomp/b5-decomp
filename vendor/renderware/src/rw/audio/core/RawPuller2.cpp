@@ -5,15 +5,17 @@
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm
 // is authoritative. No reference source and no DecFIGS DWARF exist for this type.
 //
-// The RawPuller2 instance fields are modelled by name in RawPuller2.h. Two foreign
-// aggregates this TU only touches through fixed byte offsets are kept opaque and
-// addressed raw (the documented opaque-foreign-field precedent):
-//   * the System command ring  (base @ +0x20, byte cursor @ +0x10B8)  -- EventEvent
-//   * the per-Process output node (a2; fields at byte offsets 0x3000C..0x3002C) -- Process
-// Each store WIDTH below (stw / stfs / stb / std) is reproduced from the asm.
+// The RawPuller2 instance fields are modelled by name in RawPuller2.h. The System command
+// ring (base @ +0x20, byte cursor @ +0x10B8) is reached through the committed System home
+// in PlugIn.h; the per-Process node the asm walks at byte offsets 0x3000C..0x3002C is the
+// shared rw::audio::core::AudioProcessContext (homed in Iir2Filters.h), so it is addressed
+// by NAMED MEMBER -- Send::Process reads mpSrcBuffer at the same +0x3000C, and Rechannel /
+// SinePlayer / the Iir2 shapes read the same slots. Each store WIDTH below
+// (stw / stfs / stb) is reproduced from the asm.
 // =====================================================================================
 
 #include "rw/audio/core/RawPuller2.h"
+#include "rw/audio/core/Iir2Filters.h" // AudioProcessContext / AudioChannelBuffer homes
 
 #include <cstring> // memcpy (the X360 XMemCpy)
 
@@ -55,7 +57,12 @@ int RawPuller2::CreateInstance(int self)
 // -------------------------------------------------------------------------------------
 int RawPuller2::GetSize()
 {
-    return 56;
+    // X360-LITERAL TRAP: the console immediate is this object's CONSOLE footprint, but
+    // GetSize is the plug-in factory's allocation stride -- it allocates GetSize() bytes and
+    // constructs the object into them. On the host the object is larger (widened vptr and
+    // pointers), so returning the console value under-allocates and corrupts what follows.
+    // Return host sizeof; the console immediate stays in the comment above.
+    return static_cast<int>(sizeof(RawPuller2));   // X360: li r3, 0x38
 }
 
 // -------------------------------------------------------------------------------------
@@ -203,8 +210,13 @@ int RawPuller2::PreProcess(int self, int /*a2*/, int /*a3*/, int a4)
 //   }
 //   return 0;
 //
-// The output node (a2) and the per-channel destination buffer node are foreign rwaudio
-// aggregates this TU only reads at the documented byte offsets, so they are addressed raw.
+// The node the asm reaches at a2+0x3000C..0x3002C is the shared AudioProcessContext and the
+// per-channel buffer node is AudioChannelBuffer (base @+0x04, halfword stride @+0x0E), both
+// homed in Iir2Filters.h -- so both are addressed by named member rather than by the console
+// byte offsets. THIS IS LOAD-BEARING, not cosmetic: on the host the widened pointers push
+// mpSrcBuffer/mpDstBuffer past their console offsets (mdStreamTime's 8-byte alignment alone
+// moves mpSrcBuffer from +0x3000C to +0x30010), and the earlier raw-offset form additionally
+// read/rewrote those two buffer POINTERS as u32, truncating them on x64.
 // `scratch` is the 8327A600 mix-scratch staging buffer (file-static here). XMemCpy == memcpy.
 // -------------------------------------------------------------------------------------
 namespace
@@ -213,27 +225,6 @@ namespace
     // Sized to the engine's max pull block (frames * channels * 4); a generous fixed
     // staging window matching the asm's 4-byte-per-sample stride.
     char skScratchBuffer[64 * 1024];
-
-    // Per-channel destination buffer node read out of the output graph: base ptr @ +4,
-    // 16-bit channel stride @ +0xE (the asm `lwz r9,4(r28)` / `lhz r10,0xE(r28)`).
-    struct OutputChannelNode
-    {
-        char* mpReserved0; // +0x00
-        char* mpBase;      // +0x04 -- channel-0 sample base
-        char  mGap08[0xE - 0x08];
-        u16   mu16Stride;  // +0x0E -- inter-channel stride in samples
-    };
-
-    // Output-node field byte offsets (a2 + N).
-    enum
-    {
-        KU_OUT_BUF_A   = 0x3000C, // 196620
-        KU_OUT_BUF_B   = 0x30010, // 196624
-        KU_OUT_REQUEST = 0x30020, // 196640 -- requested frame count
-        KU_OUT_RATE    = 0x30024, // 196644 -- pull rate
-        KU_OUT_PEEK     = 0x30028, // 196648 -- the f32 handed to the callback
-        KU_OUT_CHANNELS = 0x3002C  // 196652 -- channel count (byte)
-    };
 }
 
 int RawPuller2::Process(int self, int a2)
@@ -242,37 +233,43 @@ int RawPuller2::Process(int self, int a2)
     if (!lpSelf->mpPullCallback)
         return 0;
 
-    char* lpOut = reinterpret_cast<char*>(a2);
-    const char lbNumChannels = lpSelf->mPlayNumChannels; // v4 = *(self+0x35)
+    AudioProcessContext* lpCtx = reinterpret_cast<AudioProcessContext*>(a2);
+    // lbz 0x35(r31) -- an UNSIGNED byte load; it is both the published channel count and the
+    // unsigned bound of the scatter loop (cmplw r30, r29).
+    const u8 lbNumChannels = static_cast<u8>(lpSelf->mPlayNumChannels); // v4 = *(self+0x35)
 
     if (lpSelf->mFormatChanged)
     {
-        *reinterpret_cast<char*>(lpOut + KU_OUT_CHANNELS) = lbNumChannels; // stb
-        *reinterpret_cast<u32*>(lpOut + KU_OUT_REQUEST) = 0;               // stw
-        *reinterpret_cast<f32*>(lpOut + KU_OUT_RATE) = lpSelf->mPlaySampleRate;     // stfs
-        lpSelf->mFormatChanged = 0;
+        lpCtx->mbChannelCount = lbNumChannels;               // stbx  -> +0x3002C
+        lpCtx->mNumSamples = 0;                              // stwx  -> +0x30020
+        lpCtx->mfSampleRate = lpSelf->mPlaySampleRate;        // stfsx -> +0x30024
+        lpSelf->mFormatChanged = 0;                          // stb 0, 0x34
         return 1;
     }
 
-    const f32 lfPeek = *reinterpret_cast<f32*>(lpOut + KU_OUT_PEEK);       // v6
-    const u32 luBufB = *reinterpret_cast<u32*>(lpOut + KU_OUT_BUF_B);      // v7 (0x30010)
-    const u32 luBufA = *reinterpret_cast<u32*>(lpOut + KU_OUT_BUF_A);      // v8 (0x3000C)
+    const f32 lfResampleGain = lpCtx->mfResampleGain;        // lfsx  <- +0x30028 (v6 -> f1)
+    AudioChannelBuffer* lpOldDst = lpCtx->mpDstBuffer;       // v7 <- +0x30010
+    AudioChannelBuffer* lpOldSrc = lpCtx->mpSrcBuffer;       // v8 <- +0x3000C
 
-    *reinterpret_cast<char*>(lpOut + KU_OUT_CHANNELS) = lbNumChannels;     // stb
-    *reinterpret_cast<u32*>(lpOut + KU_OUT_BUF_A) = luBufB;                // swap
-    *reinterpret_cast<u32*>(lpOut + KU_OUT_BUF_B) = luBufA;                // swap
-    *reinterpret_cast<u32*>(lpOut + KU_OUT_REQUEST) = lpSelf->mSamplesRequested; // stw
-    *reinterpret_cast<f32*>(lpOut + KU_OUT_RATE) = lpSelf->mPlaySampleRate;         // stfs
+    lpCtx->mbChannelCount = lbNumChannels;                   // stbx  -> +0x3002C
+    lpCtx->mpSrcBuffer = lpOldDst;                           // ping-pong: +0x3000C <- old dst
+    lpCtx->mpDstBuffer = lpOldSrc;                           // ping-pong: +0x30010 <- old src
+    lpCtx->mNumSamples = static_cast<u32>(lpSelf->mSamplesRequested); // stwx -> +0x30020
+    lpCtx->mfSampleRate = lpSelf->mPlaySampleRate;           // stfsx -> +0x30024
 
-    // r3 = muFrameCount, r4 = scratch, r6 = mpContext, f1 = lfPeek (the X360 bctrl regs).
-    if (lpSelf->mpPullCallback(lpSelf->mSamplesRequested, skScratchBuffer, lpSelf->mpContext, lfPeek))
+    // r3 = mSamplesRequested, r4 = scratch, f1 = lfResampleGain, r6 = mpContext. r5 is never
+    // loaded: the float consumes the third parameter slot in an FPR and skips its GPR.
+    if (lpSelf->mpPullCallback(static_cast<u32>(lpSelf->mSamplesRequested), skScratchBuffer,
+                               lfResampleGain, lpSelf->mpContext))
     {
-        const OutputChannelNode* lpNode =
-            *reinterpret_cast<OutputChannelNode* const*>(lpOut + KU_OUT_BUF_A); // v9 = *v5
-        const u32 luFrames = lpSelf->mSamplesRequested;
-        for (u32 lu = 0; lu < static_cast<u32>(static_cast<unsigned char>(lbNumChannels)); ++lu)
+        // r28 = *r30, and r30 still addresses the +0x3000C slot -- i.e. the buffer that was
+        // just swapped IN as the source slot is the scatter destination.
+        const AudioChannelBuffer* lpOutBuffer = lpCtx->mpSrcBuffer;
+        const u32 luFrames = static_cast<u32>(lpSelf->mSamplesRequested);
+        for (u32 lu = 0; lu < lbNumChannels; ++lu)
         {
-            char* lpDst = lpNode->mpBase + 4u * lpNode->mu16Stride * lu;
+            // asm: 4 * lhz(0xE) * i + lwz(4)  ==  mpSamples + muStride * i on an f32*.
+            f32* lpDst = lpOutBuffer->mpSamples + static_cast<u32>(lpOutBuffer->muStride) * lu;
             const char* lpSrc = skScratchBuffer + 4u * luFrames * lu;
             std::memcpy(lpDst, lpSrc, 4u * luFrames);
         }

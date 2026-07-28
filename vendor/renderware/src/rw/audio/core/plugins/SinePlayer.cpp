@@ -69,7 +69,13 @@ int SinePlayer::CreateInstance(SinePlayer *self)
 // ---------------------------------------------------------------------------
 int SinePlayer::GetSize()
 {
-    return 72; // li r3, 0x48 -- X360 instance footprint, not host sizeof(SinePlayer)
+    // X360-LITERAL TRAP: the console immediate is this object's CONSOLE footprint, but
+    // GetSize is the plug-in factory's allocation stride -- it allocates GetSize() bytes and
+    // constructs the object into them. On the host the object is larger (widened vptr and
+    // pointers), so returning the console value under-allocates and corrupts what follows.
+    // Return host sizeof; the console immediate stays in the comment above.
+    return static_cast<int>(sizeof(SinePlayer));   // X360: li r3, 0x48
+// li r3, 0x48 -- X360 instance footprint, not host sizeof(SinePlayer)
 }
 
 // ---------------------------------------------------------------------------
