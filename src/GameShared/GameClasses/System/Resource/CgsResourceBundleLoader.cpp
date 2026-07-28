@@ -82,10 +82,80 @@ namespace CgsResource
             return -1;
         }
 
+        // ---- pass 0: the dependency check == CgsResource::AllocatePoolModuleState::
+        // CheckListDependencies @0x828FF228. For every bundle entry, look the id up through
+        // the pool AND its dependency pools (FindResourceWithDependencies(id, &pool, true,
+        // status mask 3, &slot)); when it is ALREADY RESIDENT the console does NOT create a
+        // second entry -- it bumps the owning pool's ref count for that slot
+        // (`*(pool+240)[slot] = count > 0 ? count + 1 : 1`) and clears the per-entry create
+        // flag, so CreateResourceList skips it. Only the misses are created.
+        //
+        // This is load-bearing, not an optimisation: neighbouring track units share a large
+        // fraction of their resources by id (TRK_UNIT33 and TRK_UNIT15 share 546 of 1243),
+        // so the 25-zone PVS working set is 26423 bundle entries but only 6059 UNIQUE
+        // resources. Creating one entry per bundle entry overflowed pool 3's 8500-resource /
+        // 8500-node budget after seven units AND made BundleLoader::UnloadBundle free a
+        // duplicate that another resident unit was still pointing at.
+        //
+        // The X360 also reports a "Hash conflict" when a resident resource's per-memtype size
+        // differs from the bundle entry's; reproduced as a one-shot log.
+        u8* lpu8Create = static_cast<u8*>(malloc(luEntryCount != 0 ? luEntryCount : 1));
+        if (lpu8Create == 0)
+        {
+            free(lpiSlots);
+            free(lpcBundle);
+            return -1;
+        }
+        s32 liShared = 0;
+        for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
+        {
+            BundleV2::ResourceEntry& lrEntry = lpEntries[luIndex];
+
+            Pool* lpFoundPool  = 0;
+            s32   liFoundIndex = -1;
+            Entry* lpFound = lpPool->FindResourceWithDependencies(lrEntry.mResourceId, &lpFoundPool,
+                                                                 true, 3, &liFoundIndex);
+            if (lpFound == 0 || lpFoundPool == 0 || liFoundIndex < 0)
+            {
+                lpu8Create[luIndex] = 1;
+                continue;
+            }
+
+            // Resident: reference it and skip the create (X360 clamps the stored count to
+            // at least 1 -- `v23 = v22 > 0 ? v22 + 1 : 1`).
+            if (lpFoundPool->GetEntryRefCount(liFoundIndex) > 0)
+                lpFoundPool->IncEntryRefCount(liFoundIndex);
+            else
+                lpFoundPool->SetEntryRefCount(liFoundIndex, 1);
+
+            for (u32 luMemType = 0; luMemType < BundleV2::E_MEMTYPE_NUMTYPES; ++luMemType)
+            {
+                if (lpFound->mResourceDescriptor.m_baseResourceDescriptors[luMemType].m_size
+                        != lrEntry.GetUncompressedSize(luMemType)
+                    && (CgsDev::Message::gxMessageFilterFlags & 1))
+                {
+                    static bool sbLoggedConflict = false;
+                    if (!sbLoggedConflict)
+                    {
+                        sbLoggedConflict = true;
+                        *CgsDev::Log::gpDebugPrint << "Hash conflict - resource in '" << lpcFileName
+                                                   << "' conlicts\n";
+                    }
+                }
+            }
+
+            lpu8Create[luIndex] = 0;
+            lpiSlots[luIndex]   = -1;   // not created here -- the fixup passes must skip it
+            ++liShared;
+        }
+
         // ---- pass 1: create + allocate + copy each resource ---------------------------
         s32 liLoaded = 0;
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
+            if (lpu8Create[luIndex] == 0)
+                continue;
+
             BundleV2::ResourceEntry& lrEntry = lpEntries[luIndex];
 
             NewResource lNewResource;
@@ -188,6 +258,12 @@ namespace CgsResource
             lpPool->SetEntryStatus(liSlot, 2);
         }
 
+        if (liShared != 0 && (CgsDev::Message::gxMessageFilterFlags & 1))
+            *CgsDev::Log::gpDebugPrint << "[stream]   '" << lpcFileName << "': " << liShared
+                                       << " of " << static_cast<s32>(luEntryCount)
+                                       << " already resident (referenced, not duplicated)\n";
+
+        free(lpu8Create);
         free(lpiSlots);
         free(lpcBundle);
         return liLoaded;
@@ -224,10 +300,13 @@ namespace CgsResource
         for (u32 luIndex = 0; luIndex < luEntryCount; ++luIndex)
         {
             // find the resource by id (any in-use status; ignore the ref-count gate), then release a ref.
-            // Ids are stored raw/untagged (see LoadBundle) and looked up in the same form.
+            // Ids are stored raw/untagged (see LoadBundle) and looked up in the same form. The search
+            // spans the dependency pools exactly as LoadBundle's CheckListDependencies pass does, so
+            // every reference that pass took is given back to the pool that owns it.
             ID lId = lpEntries[luIndex].mResourceId;
-            const s32 liSlot = lpPool->FindResourceIndex(lId, true, 0xFF);
-            if (liSlot >= 0 && lpPool->RemoveReference(static_cast<u32>(liSlot)))
+            Pool*     lpFoundPool = 0;
+            const s32 liSlot = lpPool->FindResourceIndexWithDependencies(lId, &lpFoundPool, true, 0xFF);
+            if (liSlot >= 0 && lpFoundPool != 0 && lpFoundPool->RemoveReference(static_cast<u32>(liSlot)))
                 ++liUnloaded;
         }
 
