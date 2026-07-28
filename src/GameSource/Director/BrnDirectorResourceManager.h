@@ -17,6 +17,10 @@ namespace BrnDirector
 class ICEWrapper;
 class DirectorResourceManager;
 
+// The director output buffer the real Prepare takes (its request interfaces live there).
+// Forward-declared: this header only passes the pointer through.
+namespace DirectorIO { struct OutputBuffer; }
+
 class ICEResourceMgr : public ICE::IResourceManager
 {
 public:
@@ -49,6 +53,17 @@ public:
     inline void Construct() {}
 
     bool Prepare(ICEWrapper* lpHACKIceWrapper);
+
+    // ADDITIVE (director wave): the REAL X360 signature, recovered from the only call site.
+    // DirectorModule::Prepare @0x822712D8 stage 2 calls
+    //     BrnDirector::DirectorResourceManager::Prepare(this+584, a2, this+2896)
+    // == Prepare( &mDirectorResourceManager, <the director OUTPUT buffer>, <the ICE wrapper> ).
+    // The manager pumps its own staged resource requests (GetICEList / GetVehicleList, the
+    // AttribSys vault registration, then the cameradefaults + the five crash/jump shotgroup
+    // banks) through the GameData + AttribSys request interfaces published in that output
+    // buffer, which is why it needs it; body @0x8225CA08 (own TU, declaration-only here).
+    // The pre-existing single-argument overload above is kept untouched.
+    bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, ICEWrapper* lpHACKIceWrapper);
 
     inline ICE::ICETakeData* GetKeyAnim( int64_t liKeyAnimID) const
     {

@@ -3,11 +3,15 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsModuleSingleBuffered.h"        // CgsModule::ModuleSingleBuffered base
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"                    // CgsGraphics::Camera (mCgsCamera)
 #include "GameSource/Director/BrnDirectorICEWrapper.h"                    // BrnDirector::ICEWrapper (DirectorResourceManager needs the full type)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h" // BrnDirector::DebugComponent (mDebugComponent, real committed type)
+#include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h"    // BrnDirector::DirectorInputOutput (the per-frame IO bundle)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 #include "GameSource/Director/BrnDirectorResourceManager.h"               // BrnDirector::DirectorResourceManager (mDirectorResourceManager)
 #include "GameSource/Director/BrnMainDirector.h"                          // BrnDirector::MainDirector (mMainDirector)
 #include "GameSource/Director/Camera/Camera.h"                            // BrnDirector::Camera::Camera (mCamera)
+#include "GameSource/Director/Utils/BrnDirectorWorldMap.h"                // BrnDirector::WorldMap (mWorldMap)
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"                   // BrnReplays::BaseSerialiser (mDirectorSerialiser)
 
 // ============================================================================
@@ -125,31 +129,55 @@ public:
     // (BODIED) -- both callees are landed.
     void Destruct();
 
-    // ---- staged Prepare / per-frame Update spine (DECLARATION-ONLY + FLAGGED) -------
-    // All four remaining recovered functions reach un-landed callees (MainDirector::
-    // Prepare/Update/PreSceneQueryUpdate are themselves declaration-only in
-    // BrnMainDirector.h; DirectorResourceManager::Prepare's body isn't linked yet,
-    // BrnDirector::WorldMap has no homed type at all, BrnReplays::DirectorSerialiser /
-    // BrnDirector::ReplayDirector / BrnDirector::InertiaController /
-    // BrnDirector::KeyAnimShakeController are all [todo]) -- per AGENTS.md the rules
-    // forbid bodying a function whose callee graph isn't resolved. Declaration-only,
-    // matching the sibling DebugComponent TU's convention for its own blocked functions.
+    // ---- staged Prepare / per-frame Update spine (RECONSTRUCTED, director wave) -----
+    //
+    // The five entry points below are now BODIED (DirectorModule/BrnDirectorModule.cpp).
+    // The earlier "BrnDirector::WorldMap has no homed type at all" note is SUPERSEDED:
+    // WorldMap has a real home (Utils/BrnDirectorWorldMap.h/.cpp) and its LoadData
+    // @0x8225F5A0 landed with this wave, as did BrnDirector::InertiaController::Update
+    // @0x8221ECD0. What is still gated inside them is the REPLAY leg only
+    // (BrnReplays::DirectorSerialiser and ReplayDirector::Update / ::PreSceneQueryUpdate
+    // remain un-homed). Every gate is QUIET (never a trap on a per-frame path) and carries
+    // its X360 address plus a DELETE-when note in the .cpp.
+    //
+    // ARGUMENT SHAPE. The IO buffers arrive as separate parameters, exactly as the X360
+    // module framework passes them; each entry point then bundles four of them (plus the
+    // module's own resource manager and world map) into the stack-local
+    // DirectorInputOutput that every director sub-update consumes.
 
-    // X360 0x822712D8 (recovered; not executed in goal trace). Staged PREPARE state
-    // machine (register debug component, base Prepare, resource-manager Prepare,
-    // WorldMap::LoadData, MainDirector::Prepare). BLOCKED: WorldMap has no homed type.
-    bool Prepare(s32 liIOArg, s32 liUnused);
+    // X360 0x822712D8. Staged PREPARE state machine: register the debug component, base
+    // Prepare, DirectorResourceManager::Prepare, WorldMap::LoadData, MainDirector::Prepare.
+    // Write-locks the output buffer for the whole call. BODIED.
+    bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg);
 
-    // X360 0x82275300 (recovered; not executed in goal trace). Per-frame Update spine
-    // (ProcessSceneQueryResults, MainDirector::Update / ReplayDirector::Update,
-    // replay-serialiser bookkeeping, CgsGraphics::Camera::operator=). BLOCKED:
-    // ReplayDirector / BrnReplays::DirectorSerialiser are not homed.
-    s32 Update(s32 liIOArg1, s32 liIOArg2, s32* lpIOArg3, s32 liIOArg4, s32* lpIOArg5, s32 liIOArg6);
+    // X360 0x8225C768. Pre-scene-query update: latch the replay flag, Clear the per-frame
+    // scene-query post office, then run MainDirector::PreSceneQueryUpdate (live leg) or
+    // ReplayDirector::PreSceneQueryUpdate (replay leg -- GATED). BODIED.
+    s32 PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
+                            const DirectorIO::InputBuffer* lpInputBuffer,
+                            DirectorIO::OutputBuffer* lpOutputBuffer,
+                            DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer,
+                            bool lbIsReplaying);
 
-    // X360 0x8225C768 (recovered; not executed in goal trace). Pre-scene-query update
-    // (SceneQueryInterface::Clear, MainDirector::PreSceneQueryUpdate /
-    // ReplayDirector::PreSceneQueryUpdate). BLOCKED: same un-homed dependents as Update.
-    s32 PreSceneQueryUpdate(s32 liIOArg1, s32 liIOArg2, s32 liIOArg3, s32 liIOArg4, s32 liIOArg5, s32 liIOArg6);
+    // X360 0x82275300. The per-frame Update spine: drain the scene-query results, run
+    // MainDirector::Update (live leg) or ReplayDirector::Update (replay leg -- GATED), copy
+    // the produced graphics camera into the module's own, then the replay-serialiser
+    // bookkeeping + serialiser registration. BODIED.
+    s32 Update(s32 liUnusedA, s32 liUnusedB,
+               const DirectorIO::InputBuffer* lpInputBuffer,
+               DirectorIO::OutputBuffer* lpOutputBuffer,
+               const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer,
+               DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer);
+
+    // X360 0x82250DD0. Post-GUI update: run MainDirector::PostGuiUpdate when not replaying,
+    // then latch the input buffer's post-GUI car index. BODIED.
+    s32 PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
+                      const DirectorIO::InputBuffer* lpInputBuffer,
+                      DirectorIO::OutputBuffer* lpOutputBuffer);
+
+    // X360 0x82239278. Drain the scene-query RESULTS queue the scene manager published and
+    // deliver each result to the post office that minted its query id. BODIED.
+    void ProcessSceneQueryResults(const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer);
 
 private:
     // ====================================================================
@@ -195,16 +223,51 @@ private:
     // (stub) DirectorResourceManager::Construct().
     DirectorResourceManager mDirectorResourceManager;
 
-    u8 mPad_0x8A8[0xB00 - 0x8A8];                           // +0x8A8..+0xAFF (console gap:
-    // ShotSelector / CrashAnalyser / CameraFinaliser / the 6 SceneQueryInterface post-
-    // office members / WorldMap / AllVehicleData, plus a handful of scattered words
-    // Construct zeroes inside this span that are not attributable to a specific
-    // DWARF-named/homed member -- none of the touched material here has a real homed
-    // type to declare by name, so it is not modelled individually. NOTE: Construct's
-    // asm also calls two behavioural helpers whose target sub-objects live in this span
-    // -- CgsModule::BaseEventReceiverQueue::Clear(this+0x908) and a CgsArray-style
-    // Clear helper (sub_8221CC98, this+0x9A4) -- these are real side effects, not just
-    // zero-stores, and are NOT reproduced here (same "no real homed type yet" reason).)
+    // ================= the +0x8A8..+0xAFF span, NOW RESOLVED (director wave) ==========
+    // This whole span used to be one opaque `mPad_0x8A8[0xB00-0x8A8]`. The three per-frame
+    // entry points (Prepare / PreSceneQueryUpdate / Update / PostGuiUpdate) resolve every
+    // byte of it, and the sizes cross-check EXACTLY end to end -- see each member.
+
+    // this+0x8A8 (2216). BrnDirector::WorldMap -- the director's queryable world map (safe
+    // camera positions, lane topology, traffic/trigger/AI-section resources). Attested by
+    // `WorldMap::LoadData(a1 + 2216, ...)` in Prepare @0x822712D8 and by slot 3 of the
+    // DirectorInputOutput bundle in all three per-frame entry points. Real committed type.
+    //
+    // CROSS-CHECK: WorldMap's own CONSOLE span is 0xFC bytes (mpTrafficData @+0, +0x20,
+    // +0x40 -- the three 32-byte ResourcePtrs -- mReceiverQueue @+0x60 = 24 base + 128
+    // buffer, meLoadingState @+0xF8). 0x8A8 + 0xFC == 0x9A4, i.e. it ends EXACTLY where the
+    // first scene-query post office begins. Independently corroborated by Construct's
+    // inlined queue init at this+0x908 (== WorldMap +0x60: buffer ptr <- this+0x920,
+    // capacity 128 @+0x10, alignment 16 @+0x14 -- the committed BaseEventReceiverQueue
+    // field order, exactly).
+    WorldMap mWorldMap;
+
+    // this+0x9A4 .. +0xAFF: the SIX scene-query "post office" hand-off objects, one per
+    // query kind. Each mints the SceneQueryId for its query kind and receives the matching
+    // result back. Their ELEMENT TYPES are not recovered (the X360 delivery helpers are
+    // IDA-truncated to e.g. `OutEventLineTestNearestResult_40_::`), so each is modelled as
+    // correctly-SIZED opaque storage carrying its recovered role -- HONEST PLACEHOLDER, in
+    // the BrnDirectorModuleIO.h house style. Their addresses (and only their addresses) are
+    // what the module publishes into the per-frame BrnDirector::SceneQueryInterface.
+    //
+    // Sizes are next-minus-this. Every one of them is triple-attested:
+    //   * the slot ORDER + clear-field offsets in SceneQueryInterface::Clear @0x8221CD38,
+    //   * the per-result routing in ProcessSceneQueryResults @0x82239278,
+    //   * and the ctor/Construct sentinel stores, each of which lands on the LAST word of
+    //     its post office (+0x28 for the 44-byte ones, +0xA0 for the 164-byte one, +0x04
+    //     for the 8-byte one) -- i.e. the "current query id" field. That the six sentinels
+    //     (0x9CC / 0xA70 / 0xA9C / 0xAC8 / 0xAD0 / 0xAFC) fall exactly on those six words
+    //     is what pins the whole partition.
+    u8 mSceneQueryPostBoxA[0x9D0 - 0x9A4];   // +0x9A4 ( 44) result type 1; Clear -> sub_8221CC98
+    u8 mPostBoxLineTestNearest[0xA74 - 0x9D0];   // +0x9D0 (164) result type 2; Clear zeroes +0xA0
+    u8 mPostBoxLineTestFastDoubleSided[0xAA0 - 0xA74]; // +0xA74 ( 44) result type 3; Clear zeroes +0x28
+    u8 mPostBoxSphereTestFast[0xACC - 0xAA0];    // +0xAA0 ( 44) result type 4; Clear zeroes +0x28
+    u8 mPostBoxVolumeTestFine[0xAD4 - 0xACC];    // +0xACC (  8) result type 6; Clear zeroes +0x04
+    u8 mPostBoxVolumeTestDeepest[0xB00 - 0xAD4]; // +0xAD4 ( 44) result type 5; Clear zeroes +0x28
+    // ⚠️ NOTE the type-5/type-6 CROSSOVER: SceneQueryInterface::Clear walks the post offices
+    // in DECLARATION order (…, VolumeTestFine @0xACC, VolumeTestDeepest @0xAD4) but
+    // ProcessSceneQueryResults routes result type 5 to 0xAD4 and type 6 to 0xACC -- i.e. the
+    // two are swapped relative to slot order. Reproduced verbatim; do not "fix" it.
 
     // this+0xB00 (2816). BrnDirector::MainDirector::Construct(&mDirectorResourceManager,
     // lfTime) / ::Destruct() / ::Release() -- the top-level cinematic camera director.
@@ -215,26 +278,46 @@ private:
     // store (inside MainDirector's own opaque storage) is not reproduced here.
     MainDirector mMainDirector;
 
-    u8 mPad_0x35F50[0x36380 - 0x35F50];                     // CONSOLE +0x35F50..+0x3637F --
-    // the Arbitrator / MomentController / BehaviourManager / Random / mLastCamera /
-    // rotation controllers span; none of these are touched by Construct/Destruct/Release.
+    u8 mPad_0x35F50[0x36380 - 0x35F50];                     // CONSOLE +0x35F50..+0x3637F.
+    // ⚠️ THIS IS THE ReplayDirector REGION. The (separate) DirectorModule C++ ctor
+    // placement-builds BrnDirector::ReplayDirector at exactly +0x35F50, and the replay leg
+    // of Update / PreSceneQueryUpdate calls `ReplayDirector::{Update,PreSceneQueryUpdate}
+    // (this + 221008)` == this+0x35F50, reading its own CgsGraphics::Camera back out at
+    // this+221712 == +0x36190 (ReplayDirector +0x240).
+    //
+    // It is deliberately NOT declared as a named `ReplayDirector mReplayDirector;` member
+    // here, because two attested facts CONFLICT and neither is safe to prefer:
+    //   * Camera::Construct(this + 222080) in DirectorModule::Construct @0x8225C590 pins
+    //     mCamera at +0x36380, i.e. only 0x430 bytes after the ReplayDirector base, yet
+    //   * BrnReplayDirector.h records that the ReplayDirector ctor reaches fields out to
+    //     its own +0x2788.
+    // Declaring the member at 0x35F50 would silently pick one. Left as reserved storage +
+    // documented until the ReplayDirector layout is recovered; the replay leg is gated
+    // anyway (see the .cpp). Nothing in this span is touched by Construct/Destruct/Release.
 
     // this+0x36380 (222080). BrnDirector::Camera::Camera::Construct() -- the module's
     // active/current camera. Real committed type (Camera.h/.cpp).
     Camera::Camera mCamera;
 
-    u8 mPad_0x36380_tail[0x38924 - 0x36380];                // CONSOLE tail after the Camera span
+    u8 mPad_0x36380_tail[0x38920 - 0x36380];                // CONSOLE tail after the Camera span
     // -- CameraDebugInfo / debug-toggle bytes / DebugLog + 3x DebugPrinter / GameState /
     // VehicleTracker / EffectInterface -- untouched by Construct/Destruct/Release.
 
-    // this+0x38924 (231716): one zeroed byte Construct stores just ahead of the replay
-    // serialiser (asm: this+0x35F50+0x29D4, i.e. this+0x36380 region's own +0x29D4 from
-    // the r11 base used by that store -- see the .cpp for the exact asm derivation). Not
-    // a DWARF-named/confidently-typed member (candidates per role are
-    // mbShowDebugCameraNames / mbDebugAssertNoIllegalSlomo, but DWARF's declared relative
-    // order places both of those BEFORE mCamera, which contradicts this offset being
-    // AFTER mCamera -- so neither name is asserted here).
-    u8 mZeroedByte_0x38924;                                  // +0x38924
+    // this+0x38920 (231712). RECOVERED by PostGuiUpdate @0x82250DD0, whose last act is
+    //   `v10 = lpInputBuffer[7854];  if ( v10 > -1 )  *(this + 231712) = v10;`
+    // i.e. latch the input buffer's word at ITS +0x7AB8 whenever it is not the -1 "none"
+    // sentinel. The source word sits in the input buffer's index/flag tail just past
+    // mePlayerCarIndex (@0x7AA8) -- inside the committed InputBuffer's mIndexTailBlock, so
+    // the producer-side NAME is not recovered. Modelled by its role.
+    // FLAG: name inferred from the role (a latched, "sticky" post-GUI car index), not DWARF.
+    s32 miPostGuiCarIndexLatch;                              // +0x38920
+
+    // this+0x38924 (231716). Construct zeroes it; PreSceneQueryUpdate @0x8225C768 SETS IT
+    // TO 1 on the frame the replay flag transitions false->true (together with clearing
+    // +0x38B01). So it is the "a replay just started" edge latch that the replay leg
+    // consumes. Zero-store attested by Construct, the =1 store by PreSceneQueryUpdate.
+    // FLAG: name inferred from that role; the trimmed DWARF does not name it.
+    u8 mbReplayStartedThisFrame;                             // +0x38924
 
     u8 mPad_0x38925[0x38930 - 0x38925];                      // +0x38925..+0x3892F (untouched)
 
@@ -253,14 +336,30 @@ private:
     // than folded into BaseSerialiser itself.
     u8 mDirectorSerialiserExtra_0x3898C;                     // +0x3898C
 
-    u8 mPad_0x3898D[0x38B00 - 0x3898D];                      // +0x3898D..+0x38AFF (untouched)
+    u8 mPad_0x3898D[0x38990 - 0x3898D];                      // +0x3898D..+0x3898F (untouched)
 
-    // this+0x38B00 / +0x38B01 (232192 / 232193): two adjoining zeroed bytes right before
-    // the perf-monitor handles. Not confidently attributable to a specific DWARF bool
-    // (many `bool mbXxx` candidates exist in the DWARF list but none is asm-proven at
-    // this exact pair of offsets).
-    u8 mZeroedByte_0x38B00;                                  // +0x38B00
-    u8 mZeroedByte_0x38B01;                                  // +0x38B01
+    // this+0x38990 (231824). THE MODULE'S PUBLISHED GRAPHICS CAMERA. Update @0x82275300's
+    // one unconditional camera act is
+    //   CgsGraphics::Camera::operator=(this + 231824, <the director that ran this frame>)
+    // taking MainDirector's own graphics camera (module +0x354D0 == MainDirector +0x349D0)
+    // on the live leg, or the ReplayDirector's (module +0x36190) on the replay leg.
+    //
+    // CROSS-CHECK: CgsGraphics::Camera self-asserts sizeof == 0x170, and 0x38990 + 0x170 ==
+    // 0x38B00 -- it ends EXACTLY on the replay flag pair below. That the recovered offset
+    // and the committed type's own size close the gap to the byte is the attestation that
+    // this member IS a CgsGraphics::Camera.
+    CgsGraphics::Camera mCgsCamera;                          // +0x38990
+
+    // this+0x38B00 / +0x38B01 (232192 / 232193). Both zeroed by Construct; both RECOVERED by
+    // PreSceneQueryUpdate @0x8225C768 + Update @0x82275300:
+    //   +0x38B00 is written with the incoming "is replaying" argument every
+    //            PreSceneQueryUpdate, and is the branch key BOTH Update and PostGuiUpdate
+    //            read to choose the live (MainDirector) vs replay (ReplayDirector) leg.
+    //   +0x38B01 is cleared on the false->true replay edge and set when the director
+    //            serialiser is in E_MODE_RESTORING (7).
+    // FLAG: names inferred from those roles; the trimmed DWARF does not name either.
+    bool mbIsReplaying;                                      // +0x38B00
+    bool mbReplayRestoring;                                  // +0x38B01
 
     u8 mPad_0x38B02[0x38B04 - 0x38B02];                      // +0x38B02..+0x38B03 (untouched)
 

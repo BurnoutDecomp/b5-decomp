@@ -86,6 +86,9 @@ namespace BrnDirector
 // pointer here; the .cpp includes BrnDirectorResourceManager.h for GetKeyAnim.
 class DirectorResourceManager;
 
+// The director output buffer Prepare threads through (its request interfaces live there).
+namespace DirectorIO { struct OutputBuffer; }
+
 // ----------------------------------------------------------------------------
 // ICEPlayingMovie -- the snapshot GetCurrentMovie returns: the playing take's id, its
 // normalised playback position, and whether a take is actually playing.
@@ -111,6 +114,16 @@ public:
 
     // Tear down the runtime: destruct the ICE manager, then destruct the base heap.
     void Destruct();
+
+    // ADDITIVE (director wave), declaration-only. MainDirector::Prepare @0x8224FB38 stage 2
+    // calls `ICEWrapper::Prepare(this+80, a2, a3, a4)` == Prepare( <the director OUTPUT
+    // buffer>, <the s32 prepare arg MainDirector was handed>, <the module's
+    // DirectorResourceManager> ), and will not advance until it returns true -- the wrapper
+    // pumps its own staged ICE-resource acquisition through the request interfaces published
+    // in that output buffer. Declared here so the staged Prepare chain has a name to call;
+    // the body lands with this wrapper's own TU.
+    bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
+                 const DirectorResourceManager* lpResourceManager);
 
     // Turn the in-game ICE editor ON for the given source take. Disables the debug
     // console for the editing session, clears any active movie playback, then drives

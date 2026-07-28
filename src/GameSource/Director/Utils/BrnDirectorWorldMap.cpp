@@ -42,6 +42,72 @@ namespace BrnDirector
     // plain nearest-safe query (X360 flt_82001C98 == 1.0, vcmpgtfp vs |lDisplacement|^2).
     static const f32      KF_MIN_DISPLACEMENT_SQ = 1.0f;
 
+    // -------------------------------------------------------------------------
+    // LoadData @0x8225F5A0  -- ⚠️ DOCUMENTED QUIET GATE (director wave).
+    //
+    // DirectorModule::Prepare @0x822712D8 pumps this once per prepare tick at its stage 3
+    // and will not advance to MainDirector::Prepare until it returns true. The X360 body is
+    // a 7-state machine over meLoadingState (a1[62] == +0xF8 in the export, which is exactly
+    // this class's meLoadingState -- the offsets in the export are WORD indices, so a1[62] is
+    // byte 248):
+    //
+    //   0 TRIGGERS_NOT_REQUESTED : build a 24-byte GetGameData-family request on the stack
+    //       { mpReceiverQueue = &mReceiverQueue, miEventId = 1, miPoolId = 5,
+    //         mId = CgsResource::ID::HashString("TriggerData") | 0x5'00000000 }
+    //       and VariableEventQueue<512,16>::AddEvent(lpRequestInterface, &ev, /*type*/4,
+    //       /*size*/24); -> state 1; return false.
+    //   1 LOADING_TRIGGERS       : if the receiver queue is empty return false. Otherwise walk
+    //       every queued event, CgsResource::BaseResourcePtr::CreateFromHandle(&mpTriggerData,
+    //       &ev->mHandle), then Clear the queue; -> state 2, fall through.
+    //   2 TRAFFIC_NOT_REQUESTED  : RequestInterface<512>::LoadTrafficLanes(&mReceiverQueue,
+    //       /*eventId*/1, /*poolId*/5); -> state 3, fall through.
+    //   3 LOADING_TRAFFIC        : assert GetLength() < 1 unless exactly 1; on the single
+    //       response assert its resource id == 55 and its event id == KI_DATA_ACQUIRE_REQUEST
+    //       (1), then CreateFromHandle(&mpTrafficData, &ev->mHandle); -> state 6(!), Clear.
+    //       [the state-6 store here is the asm's, then it immediately falls into the AI leg]
+    //   4 AI_DATA_ACQUIRE_NOT_STARTED : Clear; RequestInterface<512>::GetAILanes(
+    //       &mReceiverQueue, 1, 5); -> state 5, fall through.
+    //   5 AI_DATA_ACQUIRE_REQUESTED   : if the queue is empty return false; assert lpEvent !=
+    //       NULL and its event id == 1, then CreateFromHandle(&mpAISectionData, &ev->mHandle);
+    //       -> state 6, fall through.
+    //   6 LOADED                 : return true.
+    //   default                  : assert "unhandled case" (line 190); return false.
+    //
+    // WHY GATED. Every stage above rides one shape this reconstruction cannot yet assert: the
+    // GameData request/response RECORD layout. The X360 builds the stage-0 request with
+    //     +0x00 = &mReceiverQueue, +0x04 = eventId, +0x08 = poolId, +0x10 = the 64-bit id
+    // and pushes it with size 24 -- whereas the committed
+    // BrnResource::GameDataIO::GameDataEvent (GameSource/Resource/SharedIO/BrnGameDataEvents.h)
+    // models the first two fields the OTHER WAY ROUND (miEventId@0x00, mpReceiverQueue@0x04)
+    // and its GameDataAssetEvent is 32 bytes, not 24. Reconciling that is a GameDataEvents
+    // question, not a WorldMap one, and BrnGameDataEvents.h is outside this wave's ownership
+    // -- writing the request against a guessed record shape would push malformed events into
+    // the live resource queue. The two committed builders this function also needs
+    // (RequestInterface<512>::LoadTrafficLanes @0x82256288 / ::GetAILanes @0x822563C0) DO
+    // exist and are ready.
+    //
+    // GATE BEHAVIOUR (deliberately non-lying, non-trapping):
+    //   * returns TRUE so DirectorModule::Prepare completes and the director comes up, and
+    //   * leaves meLoadingState UNTOUCHED at its constructed value -- it does NOT claim
+    //     E_LOADING_STATE_LOADED. So GetTrafficData()'s own LOADED gate keeps returning null,
+    //     which is the truthful "the director has no world map data yet" answer, and every
+    //     WorldMap consumer (PositionFinder / BehaviourRoadRunner / the crash-nav states) sees
+    //     that instead of a fabricated resource. All of those consumers currently sit behind
+    //     the gated MainDirector::Update middle, so none of them runs this wave.
+    //
+    // DELETE-WHEN: delete this gate and transcribe the state machine above verbatim once the
+    // GameData request/response record layout is settled -- i.e. once
+    // BrnGameDataEvents.h's GameDataEvent field order is reconciled against the X360
+    // (queue@0x00 / eventId@0x04 / poolId@0x08 / id@0x10, record size 24) and a
+    // GetTriggerData request builder exists on RequestInterface<N> alongside the committed
+    // LoadTrafficLanes / GetAILanes.
+    // -------------------------------------------------------------------------
+    bool WorldMap::LoadData(void* lpRequestInterface)
+    {
+        (void)lpRequestInterface;
+        return true;
+    }
+
     // BrnDirectorWorldMap.h:82 / body @0x8221CE98.
     // Sample the lane rungs of the traffic hull containing lPosition and return the rung
     // point closest to lPosition in squared distance (no direction bias -- the plain sibling

@@ -28,9 +28,35 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer
+#include "GameSource/Director/Utils/BrnSceneQueryInterface.h"      // BrnDirector::SceneQueryInterface (the per-frame post office)
 
 namespace BrnDirector
 {
+
+// ----------------------------------------------------------------------------
+// Shared helper: stage the per-frame scene-query post office.
+//
+// All three per-frame entry points build a BrnDirector::SceneQueryInterface on their own
+// stack, point slot 0 at the SceneManager producer published in the scene-query OUTPUT
+// buffer, fill (or deliberately NULL) the six post-office slots, and Clear() it before
+// handing it to the director. The three differ ONLY in which slots they populate --
+// reproduced exactly, per entry point, at each call site below.
+//
+// The cast: DirectorIO::SceneQueryOutputBuffer::GetSceneQueryInterface() returns the
+// address of its published member typed as the deliberately-opaque
+// BrnDirector::DirectorIO::SceneQueryInterface forward-decl (see
+// BrnDirectorModuleIOSceneQuery.h); BrnDirector::SceneQueryInterface's slot 0 is typed at
+// the real producer, CgsSceneManager::SceneManagerIO::SceneQueryInterface. Same address,
+// two names for it -- the reinterpret is the seam that header documents.
+// ----------------------------------------------------------------------------
+static inline CgsSceneManager::SceneManagerIO::SceneQueryInterface* lpProducerOf(
+        DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer)
+{
+    return reinterpret_cast<CgsSceneManager::SceneManagerIO::SceneQueryInterface*>(
+               lpSceneQueryOutputBuffer->GetSceneQueryInterface());
+}
 
 // ----------------------------------------------------------------------------
 // Construct  @ 0x8225C590  (EXECUTED in goal trace)
@@ -147,6 +173,464 @@ void DirectorModule::Destruct()
 {
     mMainDirector.Destruct();
     CgsModule::ModuleSingleBuffered::Destruct();
+}
+
+// ============================================================================
+//  THE PER-FRAME SPINE  (reconstructed in the director wave)
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// Prepare  @ 0x822712D8
+//
+// The staged PREPARE state machine. The output buffer is write-locked for the WHOLE call
+// (both the success and the failure exits unlock it). The stage word (mePrepareStage)
+// selects the entry case and the cases fall through, so one call can advance several
+// stages when each sub-Prepare completes immediately:
+//
+//   0 -> register the module's debug component ("Camera" in the debug menu)
+//   1 -> CgsModule::ModuleSingleBuffered::Prepare (the base's own staged init)
+//   2 -> DirectorResourceManager::Prepare (its ICE/attrib vault + shot-group banks)
+//   3 -> WorldMap::LoadData              (trigger + traffic-lane + AI-lane resources)
+//   4 -> MainDirector::Prepare           (dev tools, ICE wrapper, behaviour manager)
+//   5 -> done: clear the release stage, unlock, report success
+//
+// Any sub-Prepare returning false leaves the stage word where it is and reports false --
+// the module framework simply calls Prepare again next tick and it resumes from there.
+// An out-of-range stage asserts (BrnDirectorModule.cpp:140) and reports failure.
+//
+// NOTE ON THE STAGE VALUES. The asm stores the literals 1..5; the DWARF EPrepareStage
+// enumerators (START/RESOURCES/ICE/WORLDMAP/MANAGER/...) only line up with this build's
+// use in the middle of the range (stage 3 really is the WORLDMAP step, stage 4 really is
+// the MANAGER step), and this build's TERMINAL stage is 5, not E_PREPARESTAGE_DONE (8).
+// The asm literals are kept, exactly as the committed Release does for its own terminal
+// value -- faithful to the binary rather than "corrected" to the enumerator.
+//
+// The two extra arguments the X360 threads through (a2 = the output buffer, a3 = a plain
+// s32 forwarded untouched into MainDirector::Prepare) are named for what they are.
+// ----------------------------------------------------------------------------
+bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg)
+{
+    lpOutputBuffer->LockForWrite();
+
+    switch (mePrepareStage)
+    {
+    case 0:
+        // this+552 == &mDebugComponent.
+        mDebugComponent.Register();
+        // fall through
+    case 1:
+        mePrepareStage = static_cast<EPrepareStage>(1);
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            break;
+        // fall through
+    case 2:
+        mePrepareStage = static_cast<EPrepareStage>(2);
+        // asm: DirectorResourceManager::Prepare(this+584, a2, this+2896). this+2896 ==
+        // this+0xB50 == mMainDirector's own +0x50 -- the embedded ICE wrapper (the
+        // "HACK ice wrapper" the manager's own declared signature already names).
+        if (!mDirectorResourceManager.Prepare(lpOutputBuffer, &mMainDirector.GetICEWrapper()))
+            break;
+        // fall through
+    case 3:
+        mePrepareStage = static_cast<EPrepareStage>(3);
+        // asm: WorldMap::LoadData(this+2216, OutputBuffer::GetResour(a2)) -- the world map
+        // pumps its resource requests through the GameData request interface published in
+        // the director's output buffer. (LoadData is currently a documented quiet gate --
+        // see BrnDirectorWorldMap.cpp.)
+        if (!mWorldMap.LoadData(lpOutputBuffer->GetResour()))
+            break;
+        // fall through
+    case 4:
+        mePrepareStage = static_cast<EPrepareStage>(4);
+        if (!mMainDirector.Prepare(lpOutputBuffer, liPrepareArg, &mDirectorResourceManager))
+            break;
+        // fall through
+    case 5:
+        mePrepareStage = static_cast<EPrepareStage>(5);
+        meReleaseStage = static_cast<EReleaseStage>(0);
+        lpOutputBuffer->UnlockForWrite();
+        return true;
+
+    default:
+        CGS_ASSERT(false, "Invalid Stage\n");
+        break;
+    }
+
+    lpOutputBuffer->UnlockForWrite();
+    return false;
+}
+
+// ----------------------------------------------------------------------------
+// ProcessSceneQueryResults  @ 0x82239278   -- ⚠️ DOCUMENTED QUIET GATE
+//
+// Drain the scene-query RESULTS queue the SceneManager published back into the director's
+// scene-query INPUT buffer, and hand each result to the post office that minted its query
+// id. The X360 body is a plain VariableEventQueue<4032,16> walk
+// (GetFirstEvent / GetNextEvent) with a 6-way switch on the RESULT TYPE:
+//
+//   type 1 -> post office @this+2468 (+0x9A4)   (delivery helper IDA-truncated to `__`)
+//   type 2 -> post office @this+2512 (+0x9D0)   OutEventLineTestNearestResult<40>
+//   type 3 -> post office @this+2676 (+0xA74)   OutEventLineTestFastDoubleSidedResult<..>
+//   type 4 -> post office @this+2720 (+0xAA0)   OutEventSphereTestFastResult<10>
+//   type 5 -> post office @this+2772 (+0xAD4)   OutEventVolumeTestDeepestResult<10>
+//   type 6 -> post office @this+2764 (+0xACC)   OutEventVolumeTestFineResult<1>
+//   default -> assert "Unhandled result type" (BrnDirectorModule.cpp:537)
+// (note types 5 and 6 land on the post offices in the OPPOSITE order to their declaration
+//  -- see the header; that crossover is the binary's, not a transcription slip.)
+//
+// WHY GATED: every one of the six delivery calls is an IDA-TRUNCATED symbol
+// (`CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult_40_::` and siblings) --
+// the member NAME is cut off mid-token, so neither the function nor its signature is
+// recovered, and type 1's helper has no recovered name at all. Guessing six cross-module
+// entry points would be fabrication. The post offices themselves are correctly sized and
+// staged (see the header), and BrnDirector::SceneQueryInterface::Clear -- which resets them
+// each frame -- is already real, so nothing goes stale while this is gated.
+//
+// CONSEQUENCE WHILE GATED: results the SceneManager returns are not delivered, so any
+// director query (camera collision line tests, the visibility/geometry predictors) reports
+// "no result" rather than a wrong one. The director's camera path does not depend on a
+// query answer to produce a camera -- it degrades, it does not break -- and no query is
+// issued at all until the MainDirector middle is un-gated.
+//
+// DELETE-WHEN: delete this gate and transcribe the 6-way switch once the six
+// SceneManagerIO OutEvent*Result post-office delivery functions have recovered names +
+// signatures (headless IDA 9.3 on artist_copy.i64 will de-truncate them; they are members
+// of the OutEvent*Result queue templates already homed under
+// GameShared/GameClasses/SceneManager/).
+// ----------------------------------------------------------------------------
+void DirectorModule::ProcessSceneQueryResults(
+        const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer)
+{
+    (void)lpSceneQueryInputBuffer;
+}
+
+// ----------------------------------------------------------------------------
+// PreSceneQueryUpdate  @ 0x8225C768
+//
+// The first of the director's two per-frame passes: it runs BEFORE the scene query, so the
+// director's cameras can ISSUE the queries whose answers Update will consume. Perf-monitored
+// as "Pre SQ Update".
+//
+// Locks: the input buffer for read, the output buffer and the scene-query output buffer for
+// write; all three released in reverse order at the end.
+//
+// Body:
+//   1. latch the incoming "is replaying" flag into mbIsReplaying, taking the
+//      false->true EDGE to clear mbReplayRestoring and raise mbReplayStartedThisFrame;
+//   2. (GATED) the director-serialiser mode bookkeeping -- see the gate note below;
+//   3. build the per-frame scene-query post office with ALL SIX post offices live (this is
+//      the pass that may issue queries) and Clear() it;
+//   4. bundle the DirectorInputOutput and run the live director
+//      (MainDirector::PreSceneQueryUpdate) or, while replaying, the replay director (GATED).
+//
+// The 7th X360 argument arrives as a bool in a register (`extrwi r11,r9,8,16; clrlwi r10,
+// r11,31` -- the decompiler widens it to __int16 and takes HIBYTE; the value is masked to
+// one bit either way, so it is a bool).
+// ----------------------------------------------------------------------------
+s32 DirectorModule::PreSceneQueryUpdate(s32 liUnusedA, s32 liUnusedB,
+                                        const DirectorIO::InputBuffer* lpInputBuffer,
+                                        DirectorIO::OutputBuffer* lpOutputBuffer,
+                                        DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer,
+                                        bool lbIsReplaying)
+{
+    // FLAG: the X360 takes these two arguments and never reads them (the module framework
+    // passes the same six-argument shape to every module entry point).
+    (void)liUnusedA;
+    (void)liUnusedB;
+
+    CgsDev::PerfMonCpu::StartMonitor(miPerfCount_PreSQUpdate);
+
+    lpInputBuffer->LockForRead();
+    lpOutputBuffer->LockForWrite();
+    lpSceneQueryOutputBuffer->LockForWrite();
+
+    // ---- 1. the replay-flag latch + its rising edge --------------------------------
+    if (lbIsReplaying != mbIsReplaying && lbIsReplaying)
+    {
+        mbReplayRestoring        = false;   // this+232193
+        mbReplayStartedThisFrame = 1;       // this+231716
+    }
+    mbIsReplaying = lbIsReplaying;          // this+232192
+
+    // ---- 2. ⚠️ QUIET GATE: the director-serialiser mode bookkeeping ------------------
+    // The X360 then reads the director serialiser's mode word and stamps two of its flags:
+    //     if ( mDirectorSerialiser.GetMode() == E_MODE_RESTORING /*7*/ )
+    //     {
+    //         mbReplayRestoring                  = true;   // this+232193
+    //         mDirectorSerialiser.mbDataRestored = true;   // this+231817 == serialiser +0x59
+    //     }
+    //     else if ( mode == E_MODE_RECORDING_PREPARING /*1*/ || mode == E_MODE_PLAYING_PREPARING /*4*/ )
+    //     {
+    //         mDirectorSerialiser.mbDataReady    = true;   // this+231816 == serialiser +0x58
+    //     }
+    // (The two byte offsets land EXACTLY on BrnReplays::BaseSerialiser's committed
+    //  mbDataReady @+0x58 / mbDataRestored @+0x59 -- that coincidence is the attestation
+    //  that mDirectorSerialiser is at this+0x38930 and that these are its fields.)
+    //
+    // GATED because both fields are `protected` on BrnReplays::BaseSerialiser and there is no
+    // public setter; adding one means editing GameSource/Replays/BrnReplayBaseSerialiser.h,
+    // which is outside this wave's ownership. The exact additive change is written into the
+    // wave log for the conductor. Reaching around the class to poke +0x58/+0x59 by offset is
+    // precisely the raw-offset-into-another-class's-storage pattern this TU was rewritten to
+    // remove, so it is not done here.
+    //
+    // CONSEQUENCE WHILE GATED: only the replay-record/restore handshake is affected, and the
+    // whole replay leg is gated anyway (step 4). The live camera path is untouched.
+    //
+    // DELETE-WHEN: delete this gate once BrnReplays::BaseSerialiser exposes
+    // SetDataReady(bool) / SetDataRestored(bool) (or DirectorSerialiser is homed).
+
+    // ---- 3. the per-frame scene-query post office ----------------------------------
+    // This pass populates ALL SIX post offices: it is the one that may MINT query ids.
+    SceneQueryInterface lSceneQuery;
+    lSceneQuery.mpSceneQueryInterface          = lpProducerOf(lpSceneQueryOutputBuffer);
+    lSceneQuery.mpPostOffice04                 = mSceneQueryPostBoxA;                 // +0x9A4
+    lSceneQuery.mpPostOffice08                 = mPostBoxLineTestNearest;             // +0x9D0
+    lSceneQuery.mpPostOffice0C                 = mPostBoxLineTestFastDoubleSided;     // +0xA74
+    lSceneQuery.mpPostOffice10                 = mPostBoxSphereTestFast;              // +0xAA0
+    lSceneQuery.mpPostOffice14                 = mPostBoxVolumeTestFine;              // +0xACC
+    lSceneQuery.mpVolumeTestDeepestPostOffice  = mPostBoxVolumeTestDeepest;           // +0xAD4
+    lSceneQuery.Clear();
+
+    // ---- 4. hand off to whichever director is driving ------------------------------
+    DirectorInputOutput lIO;
+    lIO.mpInputBuffer         = lpInputBuffer;
+    lIO.mpOutputBuffer        = lpOutputBuffer;
+    lIO.mpResourceManager     = &mDirectorResourceManager;   // this+584
+    lIO.mpWorldMap            = &mWorldMap;                  // this+2216
+    lIO.mpSceneQueryInterface = &lSceneQuery;
+
+    if (mbIsReplaying)
+    {
+        // ⚠️ QUIET GATE -- the REPLAY leg. The X360 runs, when the serialiser mode is
+        // E_MODE_PLAYING_PREPARING (4), E_MODE_PLAYING (5) or E_MODE_PLAYING_STALLED (6):
+        //     mDirectorSerialiser.mbDataReady = true;
+        //     BrnReplays::DirectorSerialiser::Read(&mDirectorSerialiser);            // @0x82650340
+        //     ReplayDirector::PreSceneQueryUpdate(                                   // @0x8225BD28
+        //         this + 221008 /* +0x35F50 */,
+        //         BrnReplays::DirectorSerialiser::GetStaticLayout(&mDirectorSerialiser), // @0x821F5C58
+        //         &lIO );
+        // GATED because BrnReplays::DirectorSerialiser is un-homed (only the base
+        // BaseSerialiser is committed -- GetStaticLayout/Read/Write are the derived type's)
+        // and BrnDirector::ReplayDirector::PreSceneQueryUpdate is itself declaration-only
+        // (BrnReplayDirector.h documents why: an unmodelled layout plus a VMX pipeline).
+        // CONSEQUENCE: replay playback drives no camera. Free drive / all live gameplay is
+        // unaffected -- mbIsReplaying is false for every one of those frames.
+        // DELETE-WHEN: BrnReplays::DirectorSerialiser gets a home AND
+        // ReplayDirector::PreSceneQueryUpdate is bodied.
+    }
+    else
+    {
+        mMainDirector.PreSceneQueryUpdate(&lIO);   // this+2816
+    }
+
+    lpSceneQueryOutputBuffer->UnlockForWrite();
+    lpOutputBuffer->UnlockForWrite();
+    lpInputBuffer->UnlockForRead();
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfCount_PreSQUpdate);
+
+    // The X360 returns StopMonitor's r3; the committed CgsDev::PerfMonCpu::StopMonitor is
+    // void, and no caller reads this return, so 0 is returned. FLAG: return value not
+    // reproduced (the callee's own signature differs).
+    return 0;
+}
+
+// ----------------------------------------------------------------------------
+// Update  @ 0x82275300
+//
+// The director's main per-frame pass, run AFTER the scene query. Perf-monitored as
+// "Main Update". This is the function that ends with a camera in the output buffer.
+//
+// Locks: input + scene-query input for read, output + scene-query output for write.
+//
+// Body:
+//   1. drain the scene-query results into the post offices (ProcessSceneQueryResults);
+//   2. build the per-frame post office with slot 0 (the producer) ONLY -- this pass does
+//      NOT mint queries, so the six post-office slots are deliberately NULLED (the X360
+//      memsets them) and Clear() therefore does nothing;
+//   3. run MainDirector::Update (live) or ReplayDirector::Update (replay -- GATED). BOTH
+//      legs publish their camera into the output buffer themselves (SetCameraOutput +
+//      SetCgsCamera are called from exactly those two functions and nowhere else);
+//   4. copy whichever director ran into the module's own published graphics camera
+//      (mCgsCamera = <that director's CgsGraphics::Camera>);
+//   5. the replay RECORD leg + serialiser registration (GATED).
+// ----------------------------------------------------------------------------
+s32 DirectorModule::Update(s32 liUnusedA, s32 liUnusedB,
+                           const DirectorIO::InputBuffer* lpInputBuffer,
+                           DirectorIO::OutputBuffer* lpOutputBuffer,
+                           const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer,
+                           DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutputBuffer)
+{
+    // FLAG: taken and never read by the X360 body (see PreSceneQueryUpdate).
+    (void)liUnusedA;
+    (void)liUnusedB;
+
+    CgsDev::PerfMonCpu::StartMonitor(miPerfCount_MainUpdate);
+
+    lpInputBuffer->LockForRead();
+    lpSceneQueryInputBuffer->LockForRead();
+    lpOutputBuffer->LockForWrite();
+    lpSceneQueryOutputBuffer->LockForWrite();
+
+    // ---- 1. deliver last frame's scene-query answers -------------------------------
+    ProcessSceneQueryResults(lpSceneQueryInputBuffer);
+
+    // ---- 2. the post office, PRODUCER SLOT ONLY ------------------------------------
+    // asm: v29[0] = SceneQueryOutputB(a7); memset(&v29[1], 0, 24);  -- the six post-office
+    // slots are explicitly zeroed on this pass (unlike PreSceneQueryUpdate), so the
+    // subsequent Clear() is a no-op. Reproduced verbatim: this pass consumes answers, it
+    // does not issue queries.
+    SceneQueryInterface lSceneQuery;
+    lSceneQuery.mpSceneQueryInterface         = lpProducerOf(lpSceneQueryOutputBuffer);
+    lSceneQuery.mpPostOffice04                = 0;
+    lSceneQuery.mpPostOffice08                = 0;
+    lSceneQuery.mpPostOffice0C                = 0;
+    lSceneQuery.mpPostOffice10                = 0;
+    lSceneQuery.mpPostOffice14                = 0;
+    lSceneQuery.mpVolumeTestDeepestPostOffice = 0;
+    lSceneQuery.Clear();
+
+    DirectorInputOutput lIO;
+    lIO.mpInputBuffer         = lpInputBuffer;
+    lIO.mpOutputBuffer        = lpOutputBuffer;
+    lIO.mpResourceManager     = &mDirectorResourceManager;
+    lIO.mpWorldMap            = &mWorldMap;
+    lIO.mpSceneQueryInterface = &lSceneQuery;
+
+    // ---- 3./4. run the driving director, then latch its graphics camera -------------
+    if (!mbIsReplaying)
+    {
+        mMainDirector.Update(&lIO);
+
+        // asm: CgsGraphics::Camera::operator=(this + 231824, this + 218320). this+218320 ==
+        // mMainDirector's own +0x349D0 graphics camera -- the one MainDirector::Update just
+        // filled from the finalised director camera via Camera::CopyToCgsCamera.
+        mCgsCamera = mMainDirector.GetCgsCamera();
+    }
+    else
+    {
+        // ⚠️ QUIET GATE -- the REPLAY leg. The X360 runs, for serialiser modes 4/5/6:
+        //     ReplayDirector::Update( this + 221008,                                  // @0x8225C298
+        //                             DirectorSerialiser::GetStaticLayout(&mDirectorSerialiser),
+        //                             &lIO );
+        //     mCgsCamera = *(CgsGraphics::Camera*)(this + 221712);   // ReplayDirector +0x240
+        // Same blockers as the PreSceneQueryUpdate replay gate (un-homed DirectorSerialiser;
+        // ReplayDirector::Update declaration-only). Note the module's graphics camera is left
+        // UNCHANGED here rather than being fed a fabricated one -- so a replay frame simply
+        // re-presents the previous camera instead of a wrong one.
+        // DELETE-WHEN: as the PreSceneQueryUpdate replay gate.
+    }
+
+    // ---- 5. ⚠️ QUIET GATE: the replay RECORD leg + serialiser registration ----------
+    // For serialiser modes E_MODE_RECORDING_PREPARING (1) / E_MODE_RECORDING (2) /
+    // E_MODE_RECORDING_STALLED (3) the X360 snapshots the frame into the serialiser's static
+    // layout and writes the record:
+    //     Camera::Camera::Construct( DirectorSerialiser::GetStaticLayout(&mDirectorSerialiser) );
+    //     Camera::Camera::operator=( GetStaticLayout(...), this + 211472 );
+    //     *(u64*)(GetStaticLayout(...) + 352) = *(u64*)(this + 204736);
+    //     *(u32*)(GetStaticLayout(...) + 360) = *(u32*)(this + 208508);   // + 364/368 from
+    //     *(u32*)(GetStaticLayout(...) + 372) = *(f32*)(this + 211408);   //   208512/208516
+    //     DirectorSerialiser::Write( &mDirectorSerialiser );              // @0x82650438
+    // and then, UNCONDITIONALLY:
+    //     ReplayIO::RequestInterface::RegisterSerialiser(                 // @0x821F34A0
+    //         lpOutputBuffer->GetReplayRequestI(), &mDirectorSerialiser );
+    // and finally a dev tripwire:
+    //     CGS_ASSERT( !lpSceneQueryOutputBuffer->GetSceneQueryInterface()->HasData(),
+    //                 "!lpSceneQueryOutput->GetSceneQueryInterface()->HasData()" );  // :387
+    //
+    // GATED for three separate reasons, none of them fixable inside this wave:
+    //   * DirectorSerialiser::GetStaticLayout / ::Write are the UN-HOMED derived serialiser's;
+    //   * every source offset above (this+204736 / +208508.. / +211408 / +211472) lands inside
+    //     the un-modelled +0x36380..+0x38920 tail (CameraDebugInfo / GameState / VehicleTracker),
+    //     so there is no named member to read them through;
+    //   * CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData @0x82204E48 has no
+    //     declaration on the committed SceneManager header (its own header says the body lives
+    //     in CgsSceneManagerModuleIO.cpp), and that header is outside this wave's ownership.
+    // CONSEQUENCE: no replay recording, and the director's serialiser is not registered with
+    // the replay subsystem. Neither affects the live camera. The dropped assert is a dev
+    // tripwire only.
+    // DELETE-WHEN: DirectorSerialiser is homed, the +0x36380 tail members are recovered, and
+    // SceneQueryInterface::HasData is declared on the SceneManager header.
+
+    lpInputBuffer->UnlockForRead();
+    lpSceneQueryInputBuffer->UnlockForRead();
+    lpOutputBuffer->UnlockForWrite();
+    lpSceneQueryOutputBuffer->UnlockForWrite();
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfCount_MainUpdate);
+    return 0;   // see the return-value FLAG on PreSceneQueryUpdate
+}
+
+// ----------------------------------------------------------------------------
+// PostGuiUpdate  @ 0x82250DD0
+//
+// The director's third and last per-frame pass, run after the GUI has updated (so camera
+// work that must observe this frame's GUI state -- the shortcut menu, the crash-nav and
+// colour-calibration overlays -- happens here). Perf-monitored as "Post Gui Update".
+//
+// Locks the input buffer for read and the output buffer for write. Runs
+// MainDirector::PostGuiUpdate only when NOT replaying, then latches the input buffer's
+// post-GUI car index.
+//
+// NOTE: on this pass the X360 builds the scene-query post office with EVERY slot null --
+// including slot 0, the producer (the asm reuses the already-zero replay-flag register for
+// all seven stores). So the whole post office is inert here and Clear() is a no-op; this
+// pass cannot issue or receive queries. Reproduced verbatim.
+// ----------------------------------------------------------------------------
+s32 DirectorModule::PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
+                                  const DirectorIO::InputBuffer* lpInputBuffer,
+                                  DirectorIO::OutputBuffer* lpOutputBuffer)
+{
+    // FLAG: taken and never read by the X360 body (see PreSceneQueryUpdate).
+    (void)liUnusedA;
+    (void)liUnusedB;
+
+    CgsDev::PerfMonCpu::StartMonitor(miPerfCount_PostGuiUpdate);
+
+    lpInputBuffer->LockForRead();
+    lpOutputBuffer->LockForWrite();
+
+    if (!mbIsReplaying)
+    {
+        SceneQueryInterface lSceneQuery;
+        lSceneQuery.mpSceneQueryInterface         = 0;   // even slot 0 -- see the note above
+        lSceneQuery.mpPostOffice04                = 0;
+        lSceneQuery.mpPostOffice08                = 0;
+        lSceneQuery.mpPostOffice0C                = 0;
+        lSceneQuery.mpPostOffice10                = 0;
+        lSceneQuery.mpPostOffice14                = 0;
+        lSceneQuery.mpVolumeTestDeepestPostOffice = 0;
+        lSceneQuery.Clear();
+
+        DirectorInputOutput lIO;
+        lIO.mpInputBuffer         = lpInputBuffer;
+        lIO.mpOutputBuffer        = lpOutputBuffer;
+        lIO.mpResourceManager     = &mDirectorResourceManager;
+        lIO.mpWorldMap            = &mWorldMap;
+        lIO.mpSceneQueryInterface = &lSceneQuery;
+
+        mMainDirector.PostGuiUpdate(&lIO);
+    }
+
+    // ⚠️ QUIET GATE (one store): the X360 finishes with
+    //     s32 liIndex = *(s32*)((u8*)lpInputBuffer + 0x7AB8);   // a4[7854]
+    //     if ( liIndex > -1 )  miPostGuiCarIndexLatch = liIndex;
+    // i.e. a sticky latch of an input-buffer car index that is only updated when it is not
+    // the -1 "none" sentinel. GATED because that source word sits inside the committed
+    // DirectorIO::InputBuffer's `mIndexTailBlock` opaque span (BrnDirectorModuleIO.h) -- it
+    // has no recovered producer-side name and therefore no accessor, and reading it by raw
+    // offset through another class's opaque storage is exactly the pattern this TU avoids.
+    // CONSEQUENCE: miPostGuiCarIndexLatch stays at its constructed value. Nothing this wave
+    // reconstructs reads it (its consumers live in the gated MainDirector middle).
+    // DELETE-WHEN: the InputBuffer index/flag tail @0x7AA8..0x7AC1 is named and given
+    // accessors on BrnDirectorModuleIO.h (a Director-owned header -- cheap follow-up).
+
+    lpOutputBuffer->UnlockForWrite();
+    lpInputBuffer->UnlockForRead();
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfCount_PostGuiUpdate);
+    return 0;   // see the return-value FLAG on PreSceneQueryUpdate
 }
 
 }

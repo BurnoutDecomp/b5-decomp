@@ -76,6 +76,18 @@ namespace BrnDirector
             E_LOADING_STATE_LOADED                 = 6,
         };
 
+        // BrnDirectorWorldMap.cpp:131/135/144/172/176/190 (the assert lines the X360 bakes).
+        // X360 @0x8225F5A0. The staged LOAD state machine DirectorModule::Prepare @0x822712D8
+        // pumps once per stage until it returns true: request the TriggerData resource, bind it
+        // from the acquire response, request + bind the traffic lanes, then the AI lane data.
+        // lpRequestInterface is the GameData request interface reached from the director's
+        // OUTPUT buffer (`OutputBuffer::GetResour()`), and every request/response rides this
+        // object's own mReceiverQueue.
+        //
+        // ⚠️ CURRENTLY A DOCUMENTED QUIET GATE -- see the body in BrnDirectorWorldMap.cpp for
+        // the full transcribed state machine, why it is gated, and the DELETE-when note.
+        bool LoadData(void* lpRequestInterface);
+
         // -- BrnDirectorWorldMap.h:87 (this batch) ----------------------------
         // Nearest lane point to lPosition that also lies in the direction of
         // lDisplacement (Dot(lDisplacement, prospective - lPosition) > 0). X360

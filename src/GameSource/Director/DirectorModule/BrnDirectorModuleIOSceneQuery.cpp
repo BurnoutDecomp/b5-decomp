@@ -1,5 +1,6 @@
 #include "types.hpp"
 
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // the two buffer decls (promoted out of this TU)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"     // CgsModule::IOBuffer base (read/write lock-state queries)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h" // CgsModule::IOHelper<T> (inline ctor/dtor)
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
@@ -30,23 +31,9 @@ namespace BrnDirector
 {
 namespace DirectorIO
 {
-    // DWARF member types; forward-declared -- only their address (@+4) is used here.
-    struct SceneQueryInterface;                            // CgsSceneManager::SceneManagerIO type (committed home)
-    template <int N> struct OutSceneQueryResultsQueue;     // committed home; N == 4032
-
-    struct SceneQueryOutputBuffer : public CgsModule::IOBuffer
-    {
-        // DWARF: mSceneQueryInterface (type SceneQueryInterface) @+4.
-        const SceneQueryInterface* GetSceneQueryInterface() const;  // fn6, this+4, read-lock
-        SceneQueryInterface*       GetSceneQueryInterface();        // fn7, this+4, write-lock
-    };
-
-    struct SceneQueryInputBuffer : public CgsModule::IOBuffer
-    {
-        // DWARF: mResultsQueue (type OutSceneQueryResultsQueue<4032>) @+4.
-        OutSceneQueryResultsQueue<4032>* GetResultsQueue();         // fn5, this+4, write-lock
-        const OutSceneQueryResultsQueue<4032>* GetResultsQueue() const; // this+4, read-lock (X360 0x82206BA8)
-    };
+    // (The two buffer declarations that used to live here now sit in the sibling header
+    // BrnDirectorModuleIOSceneQuery.h -- promoted verbatim so DirectorModule's per-frame
+    // entry points can name them in their signatures. Nothing else changed.)
 
     // ---- SceneQueryOutputBuffer::GetSceneQueryInterface (read/write) -------------------------
 
