@@ -64,6 +64,14 @@ namespace BrnGui
         // IsRouteInfoAvailable().
         double GetRouteDistance();
 
+        // @ 0x824FA0A8 - drop the current route/tracker state. Declared-only here; the body
+        // belongs to the BrnGuiTracker TU. Called by
+        // OnlineGameRoomPlayerInfo::HandleGuiCacheEvent's showtime-completion arm via
+        // mpGuiCache->GetGuiTracker()->ClearTracker(). It is a real side effect with a real
+        // X360 body, so it must be called by name rather than stood in with a no-op shim
+        // (BrnInGame.cpp carries such a shim, TrackerClearTracker -- that debt should shrink).
+        void ClearTracker();
+
     private:
         // ---- recovered layout (guest 32-bit offsets) -----------------------------------
         u8  maHeadReserved[0x03];        // +0x00..+0x02  vtable + early head

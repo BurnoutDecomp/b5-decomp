@@ -20,11 +20,16 @@
 #include "types.hpp"
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"  // base
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuItem.h"         // embedded row
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                        // BrnGui::GuiFlow (AppendExpectedAptComponent selector; complete enum needed to pass by value)
 
 namespace CgsGui { struct StateInterface; }
 
 namespace BrnGui
 {
+    // The apt-component cache (BrnGuiCache.h). Pointer-only in AppendExpectedAptComponent
+    // below, so a forward declaration is enough -- same as BrnMenuToggle.h does.
+    class GuiCache;
+
     struct MenuComponent : public SelectableGroup
     {
         static const s32 KI_MAX_MENU_ITEMS = 16;   // GetSelectable's fixed index bound
@@ -62,9 +67,13 @@ namespace BrnGui
         // @0x824E4DE8 -- move the highlight to the previous row (not quiet).
         bool HighlightPrevious();
 
-        // (@0x824E2DE0 MenuComponent::AppendExpectedAptComponent deferred: it registers each row's
-        // apt name with the loading-screen cache, but GuiCache::AppendExpectedAptComponent is not
-        // yet bodied and it is not on the title-menu path -- reconstruct with that TU.)
+        // @0x824E2DE0 -- register each row's apt name with the loading-screen cache. The old
+        // "deferred" note here is STALE: GuiCache::AppendExpectedAptComponent(GuiFlow, const
+        // char*) has since landed (BrnGuiCache.h:231) and BrnTableRow.cpp:193/203 already calls
+        // it. Declared-only here; the body belongs to the MenuComponent TU. Callers include
+        // OnlineGameRoomPlayerInfo::SetExpectedLobbyComponents (@0x82484F14 / @0x82484F28) and
+        // SetExpectedPauseComponents (@0x82485048).
+        void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache);
 
         MenuItem maItems[KI_MAX_MENU_ITEMS];   // +0x238 (16 rows, 0xE8 stride)
         s32      miNumMenuItems;               // +0x10B8 (rows created by Construct)

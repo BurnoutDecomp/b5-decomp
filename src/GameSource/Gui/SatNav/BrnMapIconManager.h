@@ -32,7 +32,8 @@
 
 namespace BrnGui
 {
-    class GuiCache;   // embedded by pointer (mpGuiCache); declared in BrnGuiCache.h
+    class GuiCache;                  // embedded by pointer (mpGuiCache); declared in BrnGuiCache.h
+    struct OnlineGameRoomPlayerInfo; // friend (writes meIconSizeMode; see the friend note below)
 
     class MapIconManager
     {
@@ -90,6 +91,12 @@ namespace BrnGui
         const GuiEventUpdateSatNav::SatNavIconInfo* GetDriveThroughOrJunkyardAtIndex(s32 liIndex) const;
 
     private:
+        // The online game-room screen's Update stores meIconSizeMode directly (the X360
+        // inlines the raw stwx at 0x824B1418; no DWARF accessor row) -- friendship, not
+        // a fabricated setter, is the honest exposure (wave-H keystone; same rule as
+        // GuiCache's consumer friends).
+        friend struct OnlineGameRoomPlayerInfo;
+
         // @ 0x824F7B60 -- count the rival icons in the sat-nav info set (network rivals,
         // marked men and ordinary rivals).
         s32 GetNumRivalIcons() const;
@@ -122,5 +129,10 @@ namespace BrnGui
 
         GuiCache*           mpGuiCache;                // X360 +0xA9F8 (drive-through list + player team lookups)
         OwnerId             mOwnerId;                  // X360 +0xAA00 (reset to invalid on release)
+        // ADDITIVE GROW (OnlineGameRoomPlayerInfo keystone, wave H): the icon size mode
+        // (DWARF h:458, the member right after mOwnerId). X360 +0xAA04 -- the game-room
+        // screen's Update stores E_ICONSIZE_LARGE (stwx 1, iconmgr+0xAA04 @0x824B1418)
+        // once the map cursor first snaps to the local player.
+        IconSizeMode        meIconSizeMode;            // X360 +0xAA04
     };
 }

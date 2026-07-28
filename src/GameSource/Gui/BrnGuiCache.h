@@ -40,6 +40,8 @@ namespace BrnGui
     struct HudMessageController;
     struct HudMessageDirector;
     struct MapIconManager;
+    class  GuiTracker;             // GetGuiTracker return (pointer only; home GameSource/Gui/SatNav/BrnGuiTracker.h)
+    struct OnlineGameRoomPlayerInfo; // friend of GuiCache (reads its wave-H-carved members by name)
     // Defined later in this header (minimal-slice records returned by GetPresetEvent /
     // the inlined event-display helpers).
     struct PresetEvent;
@@ -416,6 +418,12 @@ namespace BrnGui
 
         const FreeburnChallengeManager* GetFreeburnChallengeManager() const; // X360 @0x8240F168
 
+        // ADDITIVE GROW (OnlineGameRoomPlayerInfo keystone, wave H): the sat-nav GUI
+        // tracker pointer @X360 +0x4054. The screen's HandleGuiCacheEvent asserts
+        // "mpGuiCache->GetGuiTracker()" then ClearTracker()s it (@0x824A3F60 region);
+        // BrnInGame.cpp's tracker boundary records the same +0x4054 identification.
+        GuiTracker* GetGuiTracker() const                        { return mpGuiTracker; }
+
         // ADDITIVE GROW (PlayerPositionSingle::RenderValue @0x82421F78, which inlines all
         // three): the game-mode word, the active road rule, and the skills-manager pointer
         // (DWARF accessors h:981 GetGameMode / h:1290 GetActiveRoadRule / h:1362
@@ -583,6 +591,14 @@ namespace BrnGui
         // surface -- is the honest exposure. (HudMessageAnalyzer wave-C keystone.)
         friend struct HudMessageAnalyzer;
 
+        // Same exposure rule for the online game-room screen (wave-H keystone): the
+        // X360 inlines its raw loads/stores of the freeburn gate bytes (+0x4B57..5A),
+        // the disconnect/invite bytes (+0x4B40/+0x4B4E/+0x4B4F/+0x4B53), the params
+        // mirror (+0xA800..+0xA9DF memcpy target + field reads), the lobby mirror rows
+        // (+0xB640), the host byte (+0xB864) and the world-camera vector (+0x4AE0) --
+        // no DWARF accessor rows exist for these.
+        friend struct OnlineGameRoomPlayerInfo;
+
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
         //  reserved with explicit padding (AGENTS.md "LAYOUT RECOVERY WITH
@@ -601,7 +617,14 @@ namespace BrnGui
         // (X360: the GuiCache::EnsureResource* forwarders @0x824FEB50/58 are
         // `addi r3,r3,8` + tail-branch into the helper; the ctor's -1 store at +0x0ED8
         // is the helper's own CgsArray sentinel). Widens on x64; access by name.
-        StateLoadingHelper mStateLoadingHelper;          // +0x0008
+        StateLoadingHelper mStateLoadingHelper;          // +0x0008 (spans ..+0x4053 on X360)
+        // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the sat-nav GUI
+        // tracker pointer. X360 +0x4054 (16468) -- the "mpGuiCache->GetGuiTracker()"
+        // assert + GuiTracker::ClearTracker(*(cache+0x4054)) in the screen's
+        // HandleGuiCacheEvent @0x824A3F60 region. One X360 word (+0x4058) stays
+        // unclaimed between this and mpProfile.
+        GuiTracker*               mpGuiTracker;          // +0x4054 (16468)
+        u8  mPad_4058[4];                                // +0x4058..+0x405B (unclaimed word)
         BrnProgression::Profile*  mpProfile;             // +0x405C (16476) OdometerComponent::Construct @0x82415088 (mpGuiCache+0x405C); DetermineCarUnlockPending source
         MapIconManager*           mpMapIconManager;      // +0x4060 (16480) SetMapIconManager @0x824EC3C8 (v3[4120]=a2)
         WorldDataController*      mpWorldDataController;  // +0x4064 (16484)
@@ -673,7 +696,15 @@ namespace BrnGui
         bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
         bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption
         bool mbOnlineStartPending;                       // +0x4B53 (19283) SelectOnlineMenuOption (cleared)
-        u8   mPad_4B54[0x1C];                            // +0x4B54..+0x4B6F
+        u8   mPad_4B54[3];                               // +0x4B54..+0x4B56
+        // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the free-burn
+        // input gate bytes the game-room screen reads (lbz, X360-attested widths).
+        // FLAG: consumer-named -- producer-side semantics unrecovered.
+        bool mbFreeBurnMenuLocked;                       // +0x4B57 (19287) blocks pause/map entry from freeburn (HandleControllerInputFreeBurnSubState)
+        u8   mPad_4B58[1];                               // +0x4B58
+        bool mbFreeBurnInputDisabled;                    // +0x4B59 (19289) gates ALL freeburn controller handling
+        bool mbOnlineEventCompleted;                     // +0x4B5A (19290) set when the online event ends; HandleGuiCacheEvent consumes it (ClearTracker + "TO_ST_POST" when meGameModeType==16), then clears it
+        u8   mPad_4B5B[0x15];                            // +0x4B5B..+0x4B6F
         // ADDITIVE CARVE (BrnCarSelectMain wave G): which car-select flow is running.
         // DWARF h:1687 `BrnGameState::GameStateModuleIO::ECarSelectType meCarSelectType`;
         // the member NAME is baked into the X360 assert string "meCarSelectType >
@@ -776,13 +807,32 @@ namespace BrnGui
         u8  mPad_A7E4[24];                               // +0xA7E4..+0xA7FB
         // ---- online game-mode-options (round-indexed) ----
         s32 miOnlineRoundIndex;                          // +0xA7FC (43004) GetOnlineRoundIndex (GetOnlineLandmarkIndex @0x8240FB50), < KU_MAX_ONLINE_ROUNDS_IN_MODE
+        // The +0xA800 span is the cached GuiEventNetworkGameParams PAYLOAD MIRROR:
+        // OnlineGameRoomPlayerInfo::HandleGameParamsChangedEvent @0x824A52F8 memcpy's
+        // the whole 480-byte params payload to cache+0xA800, so +0xA800..+0xA9DF has
+        // exactly the GuiEventNetworkGameParams field layout (maEvents[10] stride 44,
+        // then the scalar tail -- see GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h).
         u8  maOnlineGameModeOptionsStorage[10 * 44];     // +0xA800 (43008) GetOnlineGameModeOptions[] (stride 44, 10 rounds; GetOnlineLandmarkIndex indexes 44*round+43008)
-        u8  mPad_A9B8[16];                               // +0xA9B8..+0xA9C7
+        // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the params-mirror
+        // scalar tail, named per the GuiEventNetworkGameParams DWARF field row.
+        s32 meOnlineGameMode;                            // +0xA9B8 (43448) GsmIO::EGameModeType (params.meGameMode; 15/16 == IsOnlineFreeBurnLobby)
+        s32 meOnlinePreviousGameMode;                    // +0xA9BC (43452) params.mePreviousGameMode
+        s32 meOnlineSecurity;                            // +0xA9C0 (43456) BrnNetwork::EBrnGameSecurity (params.meSecurity; 0 public / 1 private / 2 closed)
+        s32 meOnlineBoostType;                           // +0xA9C4 (43460) params.meBoostType
         // ADDITIVE GROW (BrnCarSelectOnlineEnd TU): the online-host-game state word (== 1 when the
-        // local client is the online host). Carved from the former mPad_A004[3124] WITHOUT shifting
-        // any following member. FLAG: consumer-named (no standalone DWARF for this member).
-        s32 miOnlineHostGameState;                       // +0xA9C8 (43464)
-        u8  mPad_A9CC[100];                              // +0xA9CC..+0xAA2F
+        // local client is the online host). FLAG: consumer-named -- structurally this word is the
+        // params mirror's meVehicleChoice slot (see the carve above); MERGE RECONCILE PENDING with
+        // that TU when it is next touched (same discipline as the +0x4B4F dual claim).
+        s32 miOnlineHostGameState;                       // +0xA9C8 (43464) (params.meVehicleChoice slot)
+        s32 miOnlineTimeLimit;                           // +0xA9CC (43468) params.miTimeLimit
+        s32 miOnlineNumRounds;                           // +0xA9D0 (43472) params.miNumRounds (the game-room route/round scroll bound)
+        s32 miOnlineVehicleClass;                        // +0xA9D4 (43476) params.miVehicleClass
+        s32 miOnlineNumRunnerCrashes;                    // +0xA9D8 (43480) params.miNumRunnerCrashes
+        bool mbOnlineInfiniteBoost;                      // +0xA9DC (43484) params.mbInfiniteBoost
+        bool mbOnlineTrafficOn;                          // +0xA9DD (43485) params.mbTrafficOn
+        bool mbOnlineTrafficCheckingOn;                  // +0xA9DE (43486) params.mbTrafficCheckingOn
+        bool mbOnlineRanked;                             // +0xA9DF (43487) params.mbRanked (lbzx @0x8248C184; gates the security pause option + world-rank display)
+        u8  mPad_A9E0[80];                               // +0xA9E0..+0xAA2F
         // ctor field-inits a stride-56 SoA of 8 lanes (one per ARCI): int@+0, float@+4 each
         // (ctor @0x827E05B8 writes +43568..+43964). FLAG: only the +0/+4 words are attested
         // (the 48-byte tail is reserved); semantic of the pair is unrecovered.
@@ -807,7 +857,16 @@ namespace BrnGui
         // BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData (GetOnlinePlayerInfo @0x8240F890
         // -> 312*idx+44160). ctor field-inits each lane's +0x60(int)/+0x64(float).
         u8  maPlayerInfo[8][312];                        // +0xAC80 (44160) InGamePlayerStatusData maPlayerInfo[8] (stride 312)
-        u8  mPad_B640[456];                              // +0xB640..+0xB807
+        // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the cached lobby
+        // player-status mirror (the event-244 payload copied in). Byte storage for the
+        // 56-byte BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData stride (home:
+        // GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h;
+        // kept opaque here for the same include-clash reason as maPlayerInfo above).
+        // Row fields the game-room screen reads: mPlayerID @row+16, meReadyStatus
+        // @row+20, mePlayerTeam @row+24, meGameConnectionType @row+28,
+        // meVoipConnectionType @row+32, mbLocalPlayer @row+48.
+        u8  maLobbyPlayerInfo[8][56];                    // +0xB640 (46656) LobbyPlayerStatusData maLobbyPlayerInfo[8] (stride 56)
+        u8  mPad_B800[8];                                // +0xB800..+0xB807 (unclaimed; the live count the screen loops with is muNumActivePlayers @+0xAC74)
         s32 maCurrentPlayerTeam[8];                      // +0xB808 (47112) GetCurrentOnlinePlayerTeam @0x8240F910 (4*(idx+11778)+this; GsmIO::EPlayerTeam)
         u8  mPad_B828[36];                               // +0xB828..+0xB84B
         bool maOnlinePlayerDisconnected[8];              // +0xB84C (47180) GetOnlinePlayerDisconnected @0x8240F988
@@ -823,7 +882,12 @@ namespace BrnGui
         // here and typed only inside BrnGuiCache.cpp (which static_asserts the real
         // OptionsDataProfile fits this reservation). Widens on x64; access by name. The 20-byte
         // lead-in (+0xB864..+0xB877) holds un-modelled sat-nav/landmark words.
-        u8 mPad_B864[20];                                // +0xB864..+0xB877
+        // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the "local player
+        // is the online host" byte (lbzx cache+0xB864 across the screen: host leave
+        // question / host pause options / kick option / change-options entry). FLAG:
+        // consumer-named (no standalone DWARF for this byte).
+        bool mbIsOnlineHost;                             // +0xB864 (47204)
+        u8 mPad_B865[19];                                // +0xB865..+0xB877
         u8 mOptionsDataProfileStorage[0x8000];           // +0xB878 (X360 object: 0x7370 bytes)
         // ---- mPreRaceData: fly-by pre-event messages (GetPreEventInfo @0x824827D8) ----
         u8  maPreEventInfoStorage[3][580];               // +0x12F0C (77580) PreEventInfo maPreEventInfo[3] (stride 580)

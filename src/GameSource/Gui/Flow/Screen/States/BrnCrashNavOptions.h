@@ -23,8 +23,9 @@ namespace BrnGui
     // with the profile TU.
     struct OptionsDataProfile;
 
-    class MenuToggleGroup;                              // pointer-only (own home)
-    template <s32 TI_SIZE> class MenuToggleGroupVarSize; // pointer-only (own home)
+    class MenuToggleGroup;                               // pointer-only (own home)
+    template <s32 TI_SIZE> struct MenuToggleGroupVarSize; // pointer-only (own home:
+                                                          // BrnMenuToggleGroup.h, struct tag)
 
     // -----------------------------------------------------------------------------
     // The GuiEvent records CrashNavOptionsData::OutputEvents pushes onto the state's
@@ -130,6 +131,11 @@ namespace BrnGui
         //  underlying s32 pending the network-IO enum home.)
         void SetCameraUserOptions(s32 leCameraUserOption);
 
+        // OnlineGameRoomPlayerInfo::UpdateSoundSettings @0x8249AD00 reads meMusicVolume and
+        // meSFXVolume directly (lwzx r11,r31,0x155C0 / 0x155C4 == mCrashNavOptionsData+8/+12),
+        // so it needs access to the private field set rather than a raw offset cast.
+        friend struct OnlineGameRoomPlayerInfo;
+
     private:
         // DWARF :228-:236 -- the field set, verbatim. (meCameraUserOption's real type
         // is BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions; kept as its s32
@@ -180,34 +186,13 @@ namespace BrnGui
     };
 
     // ------------------------------------------------------------------------
-    // FLAG: foreign screen state -- OnlineGameRoomPlayerInfo's own home is its
-    // screen-state TU; ONLY ShowSettingsOptions is homed here (this header is the
-    // symbol's DWARF primary file). Minimal slice: the three members the inline
-    // touches, by name (X360: mOptionsData @+87480, mpGuiCache @+87516,
-    // mOptionsComponent @+55584); never instantiated from this slice.
+    // OnlineGameRoomPlayerInfo::ShowSettingsOptions @0x82485140 -- this header TU
+    // owns the symbol, but the class's REAL home landed (wave H):
+    // GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h, which keeps
+    // the inline body verbatim on the real members (mCrashNavOptionsData @+87480 /
+    // mpGuiCache @+87516 / mSettingToggle @+55584). The former file-local "slice"
+    // class that lived here is retired -- it was flagged "adopt the real member
+    // when the home lands", and defining the class in both headers would be an ODR
+    // fork now that the real home exists.
     // ------------------------------------------------------------------------
-    class OnlineGameRoomPlayerInfo
-    {
-    public:
-        // @0x82485140 (this TU) -- refresh the options model from the profile and
-        // bind it onto the 4-slot toggle group.
-        void ShowSettingsOptions()
-        {
-            mOptionsData.SetFromProfile(mpGuiCache->GetOptionsDataProfile());
-            mOptionsData.SetUpComponent<4>(mpOptionsComponentSlice());
-        }
-
-    private:
-        // The 4-slot toggle group lives BY VALUE @+55584 in the real state; its type
-        // is incomplete here (own home), so the slice keeps opaque storage and hands
-        // out the typed address (FLAG: adopt the real member when the home lands).
-        MenuToggleGroupVarSize<4>* mpOptionsComponentSlice()
-        {
-            return reinterpret_cast<MenuToggleGroupVarSize<4>*>(maOptionsComponentStorage);
-        }
-
-        u8                  maOptionsComponentStorage[1];   // X360 +55584 (opaque; see FLAG)
-        CrashNavOptionsData mOptionsData;                    // X360 +87480
-        GuiCache*           mpGuiCache;                      // X360 +87516
-    };
 }
