@@ -46,17 +46,44 @@ namespace core
 // returns true (low byte) when it produced the requested frames into the scratch buffer.
 typedef int (*RawPuller2FillFn)(u32 luFrameCount, void* lpDst, void* lpContext, f32 lfArg);
 
+class RawPuller2; // fwd -- the ring records carry the RawPuller2 instance
+
+// The 4-word play event payload EventEvent receives and copies into the ring record
+// (event words 0..3 -> command words 2..5 on the X360). Words 0/1 are floats (PlayHandler
+// reads them with lfs; word 0 is fctidz-truncated to the byte channel count); words 2/3
+// are the callback context and the fill callback. On the host the pointer words widen,
+// so the payload is typed.
+struct RawPuller2PlayEvent
+{
+    f32              mfNumChannels; // event word 0 -- channel count (float-carried)
+    f32              mfSampleRate;  // event word 1 -- pull rate
+    void            *mpContext;     // event word 2 -- callback context/userdata
+    RawPuller2FillFn mpCallback;    // event word 3 -- the PCM fill callback
+};
+
 // A queued Play command pushed into the System command ring by EventEvent (24 bytes /
-// 6 words): handler / puller / then the 4-word play event payload (callback, context,
-// rate, frame-count). The matching Stop command is 8 bytes (handler / puller).
+// 6 words on the X360): handler / puller / then the 4-word play event payload.
+// RECORD-STRIDE RULE (X360-literal trap): the producer's cursor advance and the handler's
+// return are BOTH this record's size, and on the host that is
+// sizeof(RawPuller2PlayCommand) (40 on x64 -- four pointers widened), never the console
+// literal 24. The ring consumer (System::ExecuteCommands) calls the leading field through
+// int (*)(void *), so the handler slot carries exactly that type.
 struct RawPuller2PlayCommand
 {
-    int (*mpHandler)(int);  // +0x00 -- &RawPuller2::PlayHandler
-    int   mTarget;          // +0x04 -- the RawPuller2 instance
-    u32   mPayload0;        // +0x08 -- play event word 0
-    u32   mPayload1;        // +0x0C -- play event word 1
-    u32   mPayload2;        // +0x10 -- play event word 2
-    u32   mPayload3;        // +0x14 -- play event word 3
+    int (*mpHandler)(void *);       // +0x00 (X360) -- &RawPuller2::PlayHandler
+    RawPuller2      *mpTarget;      // +0x04 (X360) -- the RawPuller2 instance
+    f32              mfNumChannels; // +0x08 (X360) -- play event word 0 (float channels)
+    f32              mfSampleRate;  // +0x0C (X360) -- play event word 1 (pull rate)
+    void            *mpContext;     // +0x10 (X360) -- play event word 2 (context)
+    RawPuller2FillFn mpCallback;    // +0x14 (X360) -- play event word 3 (fill callback)
+};
+
+// The matching queued Stop command (8 bytes / 2 words on the X360): handler / puller.
+// Host size = sizeof(RawPuller2StopCommand) (16 on x64), same stride rule as above.
+struct RawPuller2StopCommand
+{
+    int (*mpHandler)(void *); // +0x00 (X360) -- &RawPuller2::StopHandler
+    RawPuller2 *mpTarget;     // +0x04 (X360) -- the RawPuller2 instance
 };
 
 class RawPuller2
@@ -71,13 +98,18 @@ public:
     // sizeof(RawPuller2) == 56. X360 @0x82B97348.
     static int GetSize();
 
-    // Queue a Play (a2 != 0 is actually Stop in the asm's branch sense -- see body) or
-    // Stop command into the owning System's deferred-command ring. X360 @0x82B9F358.
-    static int EventEvent(int self, int bStop, u32* lpEvent);
+    // Queue a Play (bStop == 0) or Stop (bStop != 0) command into the owning System's
+    // deferred-command ring. pEvent is the 4-word play event payload (typed host-side --
+    // see RawPuller2PlayEvent; unused on the Stop path). Returns self (the X360 r3
+    // passthrough). X360 @0x82B9F358.
+    static RawPuller2 *EventEvent(RawPuller2 *self, int bStop, const RawPuller2PlayEvent *pEvent);
 
-    // Deferred command handlers replayed off the ring. X360 @0x82B9A540 / @0x82B9A5B0.
-    static int PlayHandler(int lpCommand);   // returns 24 (the Play command size)
-    static int StopHandler(int lpCommand);   // returns 8  (the Stop command size)
+    // Deferred command handlers replayed off the ring (the consumer calls each through
+    // int (*)(void *) with the record's own address). Each returns its record's byte size
+    // -- host sizeof(RawPuller2PlayCommand) / sizeof(RawPuller2StopCommand) (X360: 24 / 8).
+    // X360 @0x82B9A540 / @0x82B9A5B0.
+    static int PlayHandler(void *cmd);
+    static int StopHandler(void *cmd);
 
     // Per-frame setup + render. PreProcess stows the requested frame count; Process pulls
     // the callback and copies the produced channels into the output node. X360

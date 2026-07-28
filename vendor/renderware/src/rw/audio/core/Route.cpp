@@ -17,7 +17,6 @@ namespace audio
 {
 namespace core
 {
-
 // off_8217F524 -- the Route (derived) vtable. Modelled as a single file-static sentinel
 // slot; CreateInstance stores its address and this TU never dispatches through it.
 static void* skRouteVTableSlot = 0;
@@ -84,22 +83,31 @@ char** Route::GetPlugInDescRunTime()
 //   slot[0] = ConnectByPointerHandler ; slot[1] = result
 //   slot[2..5] = a3[0..3]                      ; the 4-word connect event payload
 // -------------------------------------------------------------------------------------
-int Route::EventEvent(int result, int /*a2*/, u32* a3)
+Route* Route::EventEvent(Route* self, int /*a2*/, const RouteConnectEvent* pEvent)
 {
-    System* lpSystem = reinterpret_cast<Route*>(result)->mpSystem; // v3 = *(result+4)
+    System* lpSystem = self->mpSystem;                             // v3 = *(result+4)
     char* lpRingBase = lpSystem->mpDeferredRingBase;               // *(v3+0x20)
 
     u32 luCursor = lpSystem->muDeferredRingCursor;                 // *(v3+0x10B8)
-    u32* lpCmd = reinterpret_cast<u32*>(lpRingBase + luCursor);
-    lpSystem->muDeferredRingCursor = luCursor + 24;               // advance by 0x18
+    RouteConnectCommand* lpCmd =
+        reinterpret_cast<RouteConnectCommand*>(lpRingBase + luCursor);
+    // RECORD STRIDE (X360-literal trap): the asm's `addi r9,r9,0x18` IS the console
+    // sizeof(RouteConnectCommand) ({int(*)(void*), Route*, SubMix*, f32 x3} = 4+4+4+4+4+4).
+    // On the host the three widened pointers make the same record 40 bytes, and
+    // ExecuteCommands advances the ring by the handler's return -- ConnectByPointerHandler
+    // below likewise returns sizeof(RouteConnectCommand) -- so the enqueue stride must be
+    // the HOST sizeof, never the literal 24. The cursor is advanced before the fields are
+    // written, exactly as the asm orders the stores.
+    lpSystem->muDeferredRingCursor =
+        luCursor + static_cast<u32>(sizeof(RouteConnectCommand)); // X360: addi r9,r9,0x18 @0x82BA3DE0
 
-    lpCmd[0] = reinterpret_cast<u32>(reinterpret_cast<void*>(&Route::ConnectByPointerHandler));
-    lpCmd[1] = static_cast<u32>(result);
-    lpCmd[2] = a3[0];
-    lpCmd[3] = a3[1];
-    lpCmd[4] = a3[2];
-    lpCmd[5] = a3[3];
-    return result;
+    lpCmd->mpHandler = &Route::ConnectByPointerHandler; // cmd[0]
+    lpCmd->mpTarget = self;                             // cmd[1]
+    lpCmd->mpSubMix = pEvent->mpSubMix;                 // cmd[2] = event word 0
+    lpCmd->mfGain0 = pEvent->mfGain0;                   // cmd[3] = event word 1
+    lpCmd->mfGain1 = pEvent->mfGain1;                   // cmd[4] = event word 2
+    lpCmd->mfGain2 = pEvent->mfGain2;                   // cmd[5] = event word 3
+    return self;
 }
 
 // -------------------------------------------------------------------------------------
@@ -146,10 +154,10 @@ int Route::ReleaseEvent(int a1)
 // connector address there directly, so the reconstruction writes &v4's storage by taking
 // the connector's own address (the value the asm stores is v4, i.e. &mConnector).
 // -------------------------------------------------------------------------------------
-int Route::ConnectByPointerHandler(int a1)
+int Route::ConnectByPointerHandler(void* cmd)
 {
-    RouteConnectCommand* lpCmd = reinterpret_cast<RouteConnectCommand*>(a1);
-    Route* lpRoute = reinterpret_cast<Route*>(lpCmd->mTarget); // v6/r6 = *(a1+4)
+    RouteConnectCommand* lpCmd = static_cast<RouteConnectCommand*>(cmd);
+    Route* lpRoute = lpCmd->mpTarget; // v6/r6 = *(a1+4)
 
     SubMixConnector* lpConn =
         SubMixConnector::Disconnect(&lpRoute->mSubMixConnector, lpRoute->mDeClickValue); // v4 = r3
@@ -157,7 +165,7 @@ int Route::ConnectByPointerHandler(int a1)
     for (int li = 0; li < 6; ++li)
         lpRoute->mDeClickValue[li] = 0.0f; // zero 6 dwords at route+0x38
 
-    SubMix* lpSubMix = reinterpret_cast<SubMix*>(lpCmd->mSubMix); // v6 = *(a1+8)
+    SubMix* lpSubMix = lpCmd->mpSubMix; // v6 = *(a1+8)
     if (lpSubMix)
     {
         lpConn->mpSubMix = lpSubMix;                                   // stw 0xC(v4)
@@ -171,14 +179,17 @@ int Route::ConnectByPointerHandler(int a1)
             lpHead->mppPrev = reinterpret_cast<SubMixConnector**>(lpConn); // stw v4, 4(head)
         lpSubMix->mpConnectorHead = lpConn;                            // stw v4, 0x28(v6)
 
-        const f32 lfGain0 = *reinterpret_cast<const f32*>(&lpCmd->mGain0); // lfs 0xC(a1)
-        const f32 lfGain1 = *reinterpret_cast<const f32*>(&lpCmd->mGain1); // lfs 0x10(a1)
-        const f32 lfGain2 = *reinterpret_cast<const f32*>(&lpCmd->mGain2); // lfs 0x14(a1)
+        const f32 lfGain0 = lpCmd->mfGain0; // lfs 0xC(a1)
+        const f32 lfGain1 = lpCmd->mfGain1; // lfs 0x10(a1)
+        const f32 lfGain2 = lpCmd->mfGain2; // lfs 0x14(a1)
         lpRoute->mSourceStartChannel = static_cast<u8>(static_cast<long long>(lfGain0)); // stb 0x50
         lpRoute->mTargetStartChannel = static_cast<u8>(static_cast<long long>(lfGain1)); // stb 0x51
         lpRoute->mNumChannels        = static_cast<u8>(static_cast<long long>(lfGain2)); // stb 0x52
     }
-    return 24;
+    // RECORD STRIDE (X360-literal trap): the asm's `li r3,0x18` is the console
+    // sizeof(RouteConnectCommand); it must stay identical to the producer's advance in
+    // EventEvent above, so both sides use the HOST sizeof (40 on x64).
+    return static_cast<int>(sizeof(RouteConnectCommand)); // X360: li r3,0x18 @0x82B9FBEC
 }
 
 // -------------------------------------------------------------------------------------

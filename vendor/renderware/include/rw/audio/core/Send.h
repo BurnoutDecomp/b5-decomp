@@ -47,16 +47,40 @@ namespace audio
 namespace core
 {
 
+class Send; // fwd -- the ring records carry the Send instance
+
 // A queued pointer-connect command pushed into the System command ring by EventEvent when
-// the connect event carries a SubMix pointer (12 bytes / 3 words): handler / send /
-// target SubMix. ConnectByPointerHandler reads the Send from word 1 (cmd+4) and the
-// target SubMix from word 2 (cmd+8). Grounded in EventEvent @0x82BA3F00 (pointer path) and
+// the connect event carries a SubMix pointer (12 bytes / 3 words on the X360): handler /
+// send / target SubMix. ConnectByPointerHandler reads the Send from X360 cmd+4 and the
+// target SubMix from X360 cmd+8. Grounded in EventEvent @0x82BA3F00 (pointer path) and
 // ConnectByPointerHandler @0x82B9FEF8.
+// RECORD-STRIDE RULE (X360-literal trap): the producer's cursor advance and the handler's
+// return are BOTH this record's size, and on the host that is
+// sizeof(SendConnectByPointerCommand) (24 on x64 -- three pointers widened), never the
+// console literal 12. The ring consumer (System::ExecuteCommands) calls the leading field
+// through int (*)(void *), so the handler slot carries exactly that type.
 struct SendConnectByPointerCommand
 {
-    int (*mpHandler)(int); // +0x00 -- &Send::ConnectByPointerHandler
-    int   mTarget;         // +0x04 -- the Send instance
-    u32   mSubMix;         // +0x08 -- target SubMix* (connect event word 0)
+    int (*mpHandler)(void *); // +0x00 (X360) -- &Send::ConnectByPointerHandler
+    Send   *mpTarget;         // +0x04 (X360) -- the Send instance
+    SubMix *mpSubMix;         // +0x08 (X360) -- target SubMix (connect event word 0)
+};
+
+// The variable-length name-connect command EventEvent queues when the connect event
+// carries a SubMix NAME instead of a pointer: a fixed header (handler / send / the
+// record's own byte size) then the NUL-terminated name copied inline. The X360 record is
+// (strlen + 16) & ~3 bytes (12-byte header + name + NUL, rounded up to its 4-byte pointer
+// align); the host analogue is offsetof(SendConnectByNameCommand, maName) + strlen + 1
+// rounded up to 8 so the next record's leading handler pointer stays aligned, and
+// muRecordSize stores THAT host size (ConnectByNameHandler returns it as the ring
+// advance). Grounded in EventEvent @0x82BA3F00 (name path, `clrrwi r8,r8,2` + the
+// `v10[2] = size` store) and ConnectByNameHandler @0x82B9FF80 (returns *(cmd+8)).
+struct SendConnectByNameCommand
+{
+    int (*mpHandler)(void *); // +0x00 (X360) -- &Send::ConnectByNameHandler
+    Send *mpTarget;           // +0x04 (X360) -- the Send instance
+    u32   muRecordSize;       // +0x08 (X360) -- this record's byte size (the ring advance)
+    char  maName[1];          // +0x0C (X360) -- the NUL-terminated target SubMix name
 };
 
 class Send
@@ -89,11 +113,12 @@ public:
     // two dead trailing GPR args at the call sites; they are unused here.)
     static int DisconnectImmediate(Send* self);
 
-    // Deferred pointer-connect handler replayed off the ring: disconnect the embedded
+    // Deferred pointer-connect handler replayed off the ring (the consumer calls it
+    // through int (*)(void *) with the record's own address): disconnect the embedded
     // connector, clear the gain array, then -- if the command carries a target SubMix --
-    // link the connector into that SubMix's connector list. Returns 12 (the command size).
-    // X360 @0x82B9FEF8.
-    static int ConnectByPointerHandler(int cmd);
+    // link the connector into that SubMix's connector list. Returns the record's byte size
+    // -- host sizeof(SendConnectByPointerCommand) (X360: 12). @0x82B9FEF8.
+    static int ConnectByPointerHandler(void *cmd);
 
     // BLOCKED -- deferred name-connect handler @0x82B9FF80. Declared (the X360 ledger
     // attests it and EventEvent stores its address) but its BODY is intentionally not
@@ -102,14 +127,17 @@ public:
     // specific intrusive-list idiom (node = link - 0x2C, empty-list sentinel == address
     // 0x2C, name compared at node+0x4C). Faithful reconstruction on the host needs the
     // registry's home type and its SubMix name/list-link members, none of which are
-    // groundable from this TU's asm alone. See Send.cpp.
-    static int ConnectByNameHandler(int cmd);
+    // groundable from this TU's asm alone. When bodied it returns the queued record's
+    // muRecordSize (the ring advance). See Send.cpp.
+    static int ConnectByNameHandler(void *cmd);
 
     // Queue a connect command into the owning System's deferred-command ring. When
-    // `useName` is zero the command is the 12-byte pointer form (ConnectByPointerHandler,
+    // `useName` is zero the command is the fixed pointer form (ConnectByPointerHandler,
     // payload[0] = SubMix*); otherwise it is the variable-length name form
-    // (ConnectByNameHandler, payload[0] = name string). X360 @0x82BA3F00. Returns `self`.
-    static int EventEvent(int self, int useName, u32* payload);
+    // (ConnectByNameHandler, payload[0] = the NUL-terminated name string). The connect
+    // event's word 0 is a pointer either way, so the payload is a host-width pointer
+    // array. X360 @0x82BA3F00. Returns `self` (the X360 r3 passthrough).
+    static Send *EventEvent(Send *self, int useName, void *const *payload);
 
     // Release: tail-call to DisconnectImmediate (fold the send's gains back into the
     // SubMix and unlink). X360 @0x82BA3EF8 (b DisconnectImmediate).

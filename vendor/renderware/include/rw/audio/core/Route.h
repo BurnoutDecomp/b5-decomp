@@ -43,18 +43,37 @@ namespace audio
 namespace core
 {
 
+class Route; // fwd -- RouteConnectCommand carries the Route instance
+
+// The 4-word connect event payload EventEvent receives and copies into the ring record
+// (event words 0..3 -> command words 2..5 on the X360). Word 0 is the target SubMix
+// pointer; words 1..3 are floats ConnectByPointerHandler truncates (fctidz) to the three
+// per-channel byte gains. On the host the pointer word widens, so the payload is typed.
+struct RouteConnectEvent
+{
+    SubMix *mpSubMix; // event word 0 -- target SubMix (null == disconnect only)
+    f32     mfGain0;  // event word 1 -- source start channel (float-carried)
+    f32     mfGain1;  // event word 2 -- target start channel (float-carried)
+    f32     mfGain2;  // event word 3 -- channel count (float-carried)
+};
+
 // A queued connect command pushed into the System command ring by EventEvent (24 bytes /
-// 6 words): handler / route / then the 4-word connect event payload. ConnectByPointerHandler
-// reads the target SubMix from word 0 (cmd+8) and three connect gains as floats from words
-// 1..3 (cmd+0xC / +0x10 / +0x14).
+// 6 words on the X360): handler / route / then the 4-word connect event payload.
+// ConnectByPointerHandler reads the target SubMix from X360 cmd+8 and three connect gains
+// as floats from X360 cmd+0xC / +0x10 / +0x14.
+// RECORD-STRIDE RULE (X360-literal trap): the producer's cursor advance and the handler's
+// return are BOTH this record's size, and on the host that is sizeof(RouteConnectCommand)
+// (40 on x64 -- the handler/Route/SubMix pointers widened), never the console literal 24.
+// The ring consumer (System::ExecuteCommands) calls the leading field through
+// int (*)(void *), so the handler slot carries exactly that type.
 struct RouteConnectCommand
 {
-    int (*mpHandler)(int); // +0x00 -- &Route::ConnectByPointerHandler
-    int   mTarget;         // +0x04 -- the Route instance
-    u32   mSubMix;         // +0x08 -- target SubMix* (event word 0)
-    u32   mGain0;          // +0x0C -- connect gain 0 (float bits)
-    u32   mGain1;          // +0x10 -- connect gain 1 (float bits)
-    u32   mGain2;          // +0x14 -- connect gain 2 (float bits)
+    int (*mpHandler)(void *); // +0x00 (X360) -- &Route::ConnectByPointerHandler
+    Route  *mpTarget;         // +0x04 (X360) -- the Route instance
+    SubMix *mpSubMix;         // +0x08 (X360) -- target SubMix (connect event word 0)
+    f32     mfGain0;          // +0x0C (X360) -- connect gain 0
+    f32     mfGain1;          // +0x10 (X360) -- connect gain 1
+    f32     mfGain2;          // +0x14 (X360) -- connect gain 2
 };
 
 class Route
@@ -75,18 +94,20 @@ public:
     static char** GetPlugInDescRunTime();
 
     // Queue a connect command (ConnectByPointerHandler) into the owning System's
-    // deferred-command ring. X360 @0x82BA3DC8. a3 is the 4-word connect event payload.
-    static int EventEvent(int result, int a2, u32* a3);
+    // deferred-command ring. X360 @0x82BA3DC8. pEvent is the 4-word connect event payload
+    // (typed host-side -- see RouteConnectEvent). Returns self (the X360 r3 passthrough).
+    static Route *EventEvent(Route *self, int a2, const RouteConnectEvent *pEvent);
 
     // Release: disconnect the embedded connector (folding its gains back into the
     // SubMix) and clear the foldback gain array. X360 @0x82BA3D88.
     static int ReleaseEvent(int a1);
 
-    // Deferred connect handler replayed off the ring: disconnect the embedded connector,
+    // Deferred connect handler replayed off the ring (the consumer calls it through
+    // int (*)(void *) with the record's own address): disconnect the embedded connector,
     // clear the gain array, then -- if the command carries a target SubMix -- link the
     // connector into that SubMix's connector list and store the three byte gains. Returns
-    // 24 (the command size). X360 @0x82B9FB38.
-    static int ConnectByPointerHandler(int a1);
+    // the record's byte size -- host sizeof(RouteConnectCommand) (X360: 24). @0x82B9FB38.
+    static int ConnectByPointerHandler(void *cmd);
 
     // Scalar-deleting destructor: reset the vtable to the PlugIn base (off_820AA810) and,
     // for the deleting variant, operator delete. X360 @0x82BA1D10.

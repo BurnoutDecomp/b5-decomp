@@ -70,9 +70,12 @@ class Profiler;           // System::mpProfiler (+0x34); defined in Profiler.h
 typedef bool (*SystemMutexIsLockedHook)();
 typedef void (*SystemMutexHook)();
 // Physical (non-cached) memory allocator hooks (@+0x18/+0x1C). PhysicalAlloc lazily seeds
-// them to the Xbox defaults. The alloc hook is called with four words (only the first three
-// are consumed by the default); the free hook with the block pointer.
-typedef void *(*PhysicalAllocHook)(u32 size, u32 align, u32 protect, u32 unused);
+// them to the Xbox defaults. The alloc hook is called with four arguments (only the first
+// three are consumed by the default); the free hook with the block pointer. The fourth
+// argument was a 32-bit word on the console, but the call sites ride a debug-name string
+// through it (EaXmaDec::AllocateResources @0x82B8F580 passes "XMA input buffers" /
+// "XMA output buffers"), so on the x64 host it must stay pointer-wide.
+typedef void *(*PhysicalAllocHook)(u32 size, u32 align, u32 protect, const char *pName);
 typedef void (*PhysicalFreeHook)(void *block);
 
 // -------------------------------------------------------------------------------------
@@ -322,12 +325,13 @@ public:
     // Xbox physical-memory default hooks (installed lazily by PhysicalAlloc). @0x82B6BE88 /
     // @0x82B6BE98. DefaultPhysicalAlloc forwards to XPhysicalAlloc(size, MAXULONG_PTR, align,
     // protect); DefaultPhysicalFree tail-calls XPhysicalFree(block).
-    static void *DefaultPhysicalAlloc(u32 size, u32 align, u32 protect, u32 unused);
+    static void *DefaultPhysicalAlloc(u32 size, u32 align, u32 protect, const char *pName);
     static void DefaultPhysicalFree(void *block);
 
     // Allocate/free through the physical hooks (@+0x18/+0x1C), seeding them to the defaults
     // on first use. @0x82B6DCD8 / @0x82B6BE70.
-    static void *PhysicalAlloc(System *self, u32 size, u32 align, u32 protect, u32 unused);
+    static void *PhysicalAlloc(System *self, u32 size, u32 align, u32 protect,
+                               const char *pName);
     static void PhysicalFree(System *self, void *block);
 
     // Take / release the command-execution mutex (@+0x48; distinct from the +0x4C system

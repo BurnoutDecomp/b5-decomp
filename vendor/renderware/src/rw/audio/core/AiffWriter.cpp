@@ -25,6 +25,7 @@
 
 #include <cstdio>  // std::fopen / fwrite / fseek / fclose / FILE
 #include <cstring> // std::memcpy / std::memset
+#include <cstddef> // offsetof -- the start record's header size on the host
 
 namespace rw
 {
@@ -66,19 +67,37 @@ enum { KI_AIFF_SCRATCH_BYTES = 3072, KI_AIFF_BLOCK_SAMPLES = 256 };
 void AiffWriter_DestructTimerHandle(TimerHandle *handle);
 
 // The deferred-command ring records EventEvent posts. The "start" record is variable length
-// (a 12-byte header + the NUL-terminated path, rounded up to a 4-byte boundary); the "stop"
-// record is a fixed 8-byte header. Grounded in EventEvent @0x82BA5448 and read back by
-// StartHandler / StopHandler.
-//   +0x00  mpfnHandler   (StartHandler / StopHandler)
+// (a header + the NUL-terminated path, rounded up so the next record stays aligned); the
+// "stop" record is a fixed header-only record. Grounded in EventEvent @0x82BA5448 and read
+// back by StartHandler / StopHandler.
+//
+// RECORD STRIDE (X360-literal trap): every cursor advance and handler return below is the
+// record's OWN size. The console immediates (the start path's `(strlen + 16) & ~3` and the
+// stop path's `addi r10,r10,8` @0x82BA54E4 / `li r3,8` @0x82BA215C) are the 32-bit sizes of
+// these same structs; on the host the handler/writer pointers widen to 8 bytes, so the sizes
+// are taken from sizeof/offsetof and the console values are kept only as comments.
+//
+// Start record (X360 12-byte header + path; host offsetof(maPath) == 20):
+//   +0x00  mpfnHandler   (StartHandler)
 //   +0x04  mpWriter      (the AiffWriter this)
-//   +0x08  muRecordSize  (start records only -- the rounded record byte size)
-//   +0x0C  maPath[]      (start records only -- the NUL-terminated output path)
+//   +0x08  muRecordSize  (the rounded record byte size, returned by StartHandler)
+//   +0x0C  maPath[]      (the NUL-terminated output path)
 struct AiffCommandRecord
 {
     int (*mpfnHandler)(void *);
     AiffWriter *mpWriter;
     u32         muRecordSize;
     char        maPath[1];
+};
+
+// Stop record (X360 sizeof 8; host 16) -- header only. StopHandler reads just mpWriter and
+// returns this record's size as the ring advance.
+//   +0x00  mpfnHandler   (StopHandler)
+//   +0x04  mpWriter      (the AiffWriter this)
+struct AiffStopCommandRecord
+{
+    int (*mpfnHandler)(void *);
+    AiffWriter *mpWriter;
 };
 
 // -------------------------------------------------------------------------------------
@@ -162,24 +181,31 @@ AiffWriter *AiffWriter::EventEvent(AiffWriter *self, int a2, char **pName)
 
     if (a2)
     {
-        // Stop record: fixed 8-byte header (handler + writer only).
+        // Stop record: header only (handler + writer).
         u32 cursor = sys->muDeferredRingCursor;                 // *(v3+4280)
-        AiffCommandRecord *rec =
-            reinterpret_cast<AiffCommandRecord *>(sys->mpDeferredRingBase + cursor);
-        sys->muDeferredRingCursor = cursor + 8;
+        AiffStopCommandRecord *rec =
+            reinterpret_cast<AiffStopCommandRecord *>(sys->mpDeferredRingBase + cursor);
+        sys->muDeferredRingCursor =
+            cursor + static_cast<u32>(sizeof(AiffStopCommandRecord)); // X360: +8 @0x82BA54E4
         rec->mpfnHandler = &AiffWriter::StopHandler;
         rec->mpWriter    = self;
     }
     else
     {
-        // Start record: 12-byte header + the NUL-terminated path, rounded up to 4 bytes.
+        // Start record: header + the NUL-terminated path, rounded up so the next record's
+        // leading handler pointer stays aligned.
         const char *name = *pName; // v4 = *a3
 
         u32 nameLen = 0;
         while (name[nameLen])
             ++nameLen; // strlen via the asm's byte walk
 
-        const u32 recordSize = (nameLen + 16) & 0xFFFFFFFCu; // (strlen + 16) & ~3
+        // X360: `(strlen + 16) & ~3` (addi 0x10 @0x82BA5488 / clrrwi 2 @0x82BA548C) == a
+        // 12-byte header + NUL, 4-aligned for the console's 4-byte pointers. On the host the
+        // header is offsetof(maPath) and the align is 8. muRecordSize therefore carries the
+        // HOST size, which StartHandler returns unchanged as the ring advance.
+        const u32 recordSize =
+            (static_cast<u32>(offsetof(AiffCommandRecord, maPath)) + nameLen + 1 + 7) & ~7u;
 
         u32 cursor = sys->muDeferredRingCursor;                 // *(v3+4280)
         AiffCommandRecord *rec =
@@ -358,14 +384,15 @@ int AiffWriter::StartHandler(void *pCommandRecord)
 // -------------------------------------------------------------------------------------
 // StopHandler @0x82BA1EC0 -- deferred "stop recording" ring handler. Seeks back to the file
 // start and rewrites the AIFF header now that the final sizes are known, then closes the
-// file and unregisters the pump timer. Returns 8 (the record's byte size).
+// file and unregisters the pump timer. Returns the stop record's byte size (the ring
+// advance) -- host sizeof(AiffStopCommandRecord); X360: li r3, 8 @0x82BA215C.
 //
 // The 82-byte header is FORM(8) + "AIFF"(4) + COMM(8+18) + INST(8+20) + SSND(8+8). All size
 // / count fields are big-endian (the asm builds them MSB-first).
 // -------------------------------------------------------------------------------------
 int AiffWriter::StopHandler(void *pCommandRecord)
 {
-    AiffCommandRecord *record = static_cast<AiffCommandRecord *>(pCommandRecord);
+    AiffStopCommandRecord *record = static_cast<AiffStopCommandRecord *>(pCommandRecord);
     AiffWriter *self = record->mpWriter; // v1 = *(a1+4)
 
     std::FILE *file = self->mpFile; // v2 = *(v1+60)
@@ -442,7 +469,7 @@ int AiffWriter::StopHandler(void *pCommandRecord)
         }
     }
 
-    return 8;
+    return static_cast<int>(sizeof(AiffStopCommandRecord)); // X360: li r3, 8 @0x82BA215C
 }
 
 // -------------------------------------------------------------------------------------
@@ -452,11 +479,12 @@ int AiffWriter::StopHandler(void *pCommandRecord)
 //   result = StopHandler(rec);
 //   if (self->mpBuf) return System::Free(self->mpSystem, self->mpBuf, 0);
 //   return result;
-// (StopHandler reads only the record's mpWriter slot, so an 8-byte stack record suffices.)
+// (StopHandler reads only the record's mpWriter slot, so a header-only stop record on the
+// stack suffices -- the X360 reserves exactly its 8 bytes, the host struct is 16.)
 // -------------------------------------------------------------------------------------
 int AiffWriter::ReleaseEvent(AiffWriter *self)
 {
-    AiffCommandRecord rec;
+    AiffStopCommandRecord rec;
     rec.mpfnHandler = nullptr;
     rec.mpWriter    = self;    // v5 = a1  (StopHandler reads *(rec+4))
 
