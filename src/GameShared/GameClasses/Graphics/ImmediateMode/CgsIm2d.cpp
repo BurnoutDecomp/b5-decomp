@@ -50,6 +50,22 @@ namespace
     const f32 KF_LOGICAL_WIDTH  = 1280.0f;
     const f32 KF_LOGICAL_HEIGHT = 720.0f;
 
+    // FLAG PC-platform leaf: select the D3D9 FIXED-FUNCTION pipeline for this batch.
+    // On the console EVERY Im2d batch binds its own vertex + pixel PROGRAMS (the
+    // ImRenderer::SetProgram slot / the render buffer's mi8CurrentProgram), so the 2D
+    // tail can never inherit the world pass' shaders. This backend draws the same
+    // batches through the fixed-function pipeline instead -- and in D3D9 that is NOT
+    // the absence of a bind: while a programmable vertex/pixel shader is still bound
+    // the runtime ignores SetFVF and the whole texture-stage cascade and runs the
+    // bound programs. Selecting fixed function is therefore the exact PC counterpart
+    // of the console's per-batch program bind, and it is what stops a world
+    // technique's programs from transforming and shading every 2D quad behind it.
+    void SelectFixedFunctionPipeline(IDirect3DDevice9* lpDevice)
+    {
+        lpDevice->SetVertexShader(nullptr);
+        lpDevice->SetPixelShader(nullptr);
+    }
+
     // The text path submits whole-line triangle strips (6 verts/glyph); size the reserve/submit
     // scratch well above the font's KU_MAX_VERTICES (1536) so a long line never overflows.
     const u32 KU_RENDER_BUFFER_MAX = 2048;
@@ -119,6 +135,7 @@ namespace CgsGraphics
         {
             return;
         }
+        SelectFixedFunctionPipeline(lpDevice);
         lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
         lpDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
         lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
@@ -207,6 +224,10 @@ namespace CgsGraphics
             saBatch[i].v = lpVertices[i].mv2Tex0UV.y;
         }
 
+        // SetFVF only takes effect on the fixed-function pipeline, so the two belong
+        // together on every draw (see SelectFixedFunctionPipeline): batches reach here
+        // through paths that do not all open with BeginRendering.
+        SelectFixedFunctionPipeline(lpDevice);
         lpDevice->SetFVF(KU_SCREEN_FVF);
         // The loading screen submits 4-vertex quads as triangle strips.
         lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luCount - 2u, saBatch, sizeof(D3DScreenVertex));
@@ -252,6 +273,7 @@ namespace CgsGraphics
             saBatch[i].v = lpVertices[i].mv2Tex0UV.y;
         }
 
+        SelectFixedFunctionPipeline(lpDevice);   // pairs with SetFVF (see Render above)
         lpDevice->SetFVF(KU_SCREEN_FVF);
         // One triangle strip per line: the font's glyph quads are joined by degenerate connectors.
         lpDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, luVertexCount - 2u, saBatch, sizeof(D3DScreenVertex));

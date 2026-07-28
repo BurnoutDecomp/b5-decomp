@@ -176,12 +176,16 @@ void EngineUpdate()
             gGameModule.OnStartOfUpdateFrame();
             gGameModule.OnCompletionOfVsyncWait();
             gGameModule.UpdateThread();
-            // The render feed (X360 BrnGameModule::DoDispatch @0x823DC458) writes the
-            // game-side dispatch lists for THIS update frame, so it has to run after the
-            // world update and BEFORE OnEndOfUpdateFrame's GDL swap publishes the frame
-            // to the render side. On the console the same ordering is enforced by the
-            // dispatch thread's handshake.
-            gGameModule.DoDispatch();
+            // NOTE: the render feed (X360 BrnGameModule::DoDispatch @0x823DC458) is NOT
+            // driven from here. Its only console caller is MainGameFlowStateInGame::Render
+            // @0x823E79B8, i.e. the active main-flow state's Render slot, which
+            // BrnGameModule::GameMain already runs once per frame from inside UpdateThread()
+            // above -- so it is reached exactly in the IN_GAME state and nowhere else. That
+            // still satisfies the ordering the GDL ring needs (the lists are written after
+            // the world update and before OnEndOfUpdateFrame's swap publishes the frame to
+            // the render side). Calling it here as well drove the world producer through the
+            // boot logos, the legal screens, the title and the menus, where the console
+            // renders no world at all.
             gGameModule.OnEndOfUpdateFrame();
             gGameModule.DispatchThread();
         }

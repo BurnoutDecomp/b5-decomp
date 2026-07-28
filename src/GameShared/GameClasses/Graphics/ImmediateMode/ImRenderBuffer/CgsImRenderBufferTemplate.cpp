@@ -785,6 +785,15 @@ namespace CgsGraphics
         // BeginRendering's D3D state prologue (matches CgsIm2d.cpp's ImRenderer::BeginRendering):
         // no lighting, no depth, no cull, alpha-blend over the framebuffer, bilinear filtering, and
         // the colour stage modulating the bound texture by the vertex colour.
+        //
+        // FLAG PC-platform leaf: the console dispatch prologue BINDS this buffer's 2D vertex +
+        // pixel programs (mi8CurrentProgram, and its "masked" sibling inside a mask block). This
+        // backend runs the fixed-function pipeline instead, and in D3D9 that has to be selected
+        // explicitly -- while a programmable shader is still bound (a preceding world pass leaves
+        // its last technique's pair bound) the runtime ignores SetFVF and every texture-stage
+        // state below and shades the whole Apt/GUI frame with those programs.
+        lpDevice->SetVertexShader(nullptr);
+        lpDevice->SetPixelShader(nullptr);
         lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
         lpDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
         lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
