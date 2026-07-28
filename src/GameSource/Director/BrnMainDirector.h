@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include <cstddef>   // offsetof
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"   // CgsGraphics::Camera (the embedded +0x349D0 camera)
 
 // ============================================================================
 // GameSource/Director/BrnMainDirector.h
@@ -52,6 +53,8 @@ namespace BrnDirector
 {
     class ICEWrapper;
     class Arbitrator;
+    struct DirectorInputOutput;   // GameSource/Director/DirectorModule/BrnDirectorInputOutput.h
+    namespace DirectorIO { struct OutputBuffer; }   // the director output buffer Prepare threads through
 
     class MainDirector
     {
@@ -103,23 +106,47 @@ namespace BrnDirector
         // BehaviourManager, the MomentParameterBank and the Arbitrator, seed the camera-shake
         // RNG slots, and Clear the GameState.
         //
-        // DECLARATION-ONLY + FLAG: the body constructs / indexes the NOT-HOMED BehaviourManager
-        //   and AllVehicleData aggregates and runs a multi-stage VMX + LCG camera-shake-seed
-        //   pipeline (vspltisw128 / the 1284865837-multiplier LCG poking 4 float slots). The
-        //   reconstruction rules forbid paraphrasing that VMX/LCG pipeline to scalar and forbid
-        //   raw-offset-poking the un-homed BehaviourManager. Declaration-only until those TUs land.
+        // RECONSTRUCTED (director wave) for the staged-init words + BOTH CAMERAS -- notably
+        // Camera::Camera::Construct on mLastCamera (+0x32F10), without which Update would
+        // publish uninitialised storage on the first frame. The rest is a documented quiet
+        // gate: the body also constructs / indexes the NOT-HOMED BehaviourManager,
+        // AllVehicleData, DirectorDevTools, MomentParameterBank, KeyAnimShakeController,
+        // ShotSelector, GameState and DebugPrinter aggregates and runs a multi-stage VMX + LCG
+        // camera-shake-seed pipeline (vspltisw128 / the 1284865837-multiplier LCG poking 4
+        // float slots), which the rules forbid paraphrasing to scalar. See the .cpp banner --
+        // it also records why ICEWrapper::Construct and Arbitrator::Construct are held back
+        // for a HOST-SIZE reason rather than a homing one.
         void Construct(const class DirectorResourceManager* lpResourceManager, f32 lfTime);
 
         // X360 0x8224FB38. Staged Prepare state machine (the per-stage init the boot loop
-        // pumps): register the dev-tools GameTalk handler, Prepare the ICE wrapper, Prepare
-        // the behaviour manager, seed the 20-entry behaviour-helper index table, then mark
-        // the runtime ready (stage word -> 0). Returns true once the last stage completes.
+        // pumps): tear the collision generator down, register the dev-tools GameTalk handler,
+        // Prepare the ICE wrapper, Prepare the behaviour manager, seed the 20-entry
+        // behaviour-helper index table, then mark the runtime ready (stage word -> 0).
+        // Returns true once the last stage completes. RECONSTRUCTED in the .cpp with its two
+        // un-homed stages (GameTalk registration, BehaviourManager) individually gated.
         //
-        // DECLARATION-ONLY + FLAG: the PREPARE/BEHAVIOUR_MANAGER stages call the NOT-HOMED
-        //   BehaviourManager::Prepare and seed the un-homed behaviour-helper index table by
-        //   raw offset, and pull in the EA::GameTalk handler-registration API (no reconstructed
-        //   home). Declaration-only until the BehaviourManager / GameTalk TUs land.
-        bool Prepare(s32 liArg1, s32 liArg2, s32 liArg3);
+        // Signature recovered from the only call site, DirectorModule::Prepare @0x822712D8:
+        //     MainDirector::Prepare( this+2816, <director OUTPUT buffer>, <s32 forwarded>,
+        //                            <the module's DirectorResourceManager> )
+        // -- the last two are handed straight on to ICEWrapper::Prepare.
+        bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
+                     const class DirectorResourceManager* lpResourceManager);
+
+        // ADDITIVE (director wave). The embedded CgsGraphics::Camera at CONSOLE +0x349D0 --
+        // the camera MainDirector::Update fills (via Camera::Camera::CopyToCgsCamera) and
+        // publishes with DirectorIO::OutputBuffer::SetCgsCamera, and which
+        // DirectorModule::Update then copies into the module's own mCgsCamera
+        // (`CgsGraphics::Camera::operator=(module+231824, module+218320)` -- module+218320 is
+        // exactly this+0x349D0). Exposed by NAME so DirectorModule never reaches into this
+        // class's opaque storage by offset. Body in the .cpp (an attested-offset typed view,
+        // the same idiom as GetICEWrapper / GetArbitrator above).
+        //
+        // NOTE the offset does double duty and that is the binary's doing, not a slip: the
+        // same region is torn down through CgsCollision::BaseCollisionGenerator::Destruct by
+        // Destruct/Prepare (see KU_OFF_COLLISION_GENERATOR) -- the graphics camera and the
+        // collision generator are one embedded aggregate on this build.
+        CgsGraphics::Camera&       GetCgsCamera();
+        const CgsGraphics::Camera& GetCgsCamera() const;
 
         // X360 0x82236EB0. Staged Release state machine: walk the release stages, tearing the
         // collision generator down on the first stage and clearing the stage counter on the
@@ -144,17 +171,24 @@ namespace BrnDirector
         // DECLARATION-ONLY + FLAG: the spine is a deep VMX-dominated dispatch over the
         //   NOT-HOMED behaviour-manager / camera-effect aggregates and the decl-only sub-updates
         //   below; the rules forbid paraphrasing it. Declaration-only.
-        void Update(const class DirectorInputOutput* lpIO);
+        void Update(const DirectorInputOutput* lpIO);
 
         // X360 0x8225BA00. Pre-scene-query update: fill in the shared info, process the input
-        // queue, then run the pre-scene camera-behaviour pass. Calls ProcessInputQueue and
-        // UpdateCameraBehavioursPreScene.
-        // DECLARATION-ONLY + FLAG (behaviour-manager-dependent + VMX shared-info build).
-        void PreSceneQueryUpdate(const class DirectorInputOutput* lpIO);
+        // queue, then run the pre-scene camera-behaviour pass. RECONSTRUCTED in the .cpp down
+        // to (and including) its whole-body player-car guard; the guarded steps are a
+        // documented quiet gate -- see the .cpp banner.
+        void PreSceneQueryUpdate(const DirectorInputOutput* lpIO);
 
-        // X360 0x82236F88. Post-GUI update.
-        // DECLARATION-ONLY + FLAG (behaviour-manager / camera-effect dependent).
-        void PostGuiUpdate(const class DirectorInputOutput* lpIO);
+        // X360 0x82236F88. Post-GUI update. Reconstructed in the .cpp as a DOCUMENTED QUIET
+        // GATE (un-homed EffectInterface + the un-named GameState latch region).
+        void PostGuiUpdate(const DirectorInputOutput* lpIO);
+
+        // The shared "is there a live player car this frame" predicate both Update and
+        // PreSceneQueryUpdate open with (the X360 inlines the same sequence into both): the
+        // input buffer's player-car index, overridden by this director's own forced-camera-car
+        // index when that one is a used race car, then tested against the used-race-car mask.
+        // De-inlined to one named helper so neither body re-derives it. Body in the .cpp.
+        bool IsPlayerCarLive(const DirectorInputOutput* lpIO) const;
 
         // ---- Update sub-steps (all DECLARATION-ONLY + FLAGGED) -------------------------
 
@@ -163,28 +197,28 @@ namespace BrnDirector
         // DECLARATION-ONLY + FLAG: builds the ~0x60-byte shared-info from raw member offsets and
         //   calls the committed-but-DECLARATION-ONLY Arbitrator::Update (its body is itself
         //   declaration-only in BrnDirectorArbitrator.h until the camera/effect TUs land).
-        void UpdateArbitrator(const class DirectorInputOutput* lpIO, bool lbCycleCamera,
+        void UpdateArbitrator(const DirectorInputOutput* lpIO, bool lbCycleCamera,
                               bool lbCycleCameraHeld);
 
         // X360 0x82238FC0. Advance the embedded ICE wrapper for this frame.
         // DECLARATION-ONLY + FLAG (ICE wrapper Update cone + per-frame reference-space build).
-        void UpdateICE(const class DirectorInputOutput* lpIO);
+        void UpdateICE(const DirectorInputOutput* lpIO);
 
         // X360 0x82250268. Pump the moment controller.
         // DECLARATION-ONLY + FLAG (moment-controller / behaviour-manager dependent).
-        void UpdateMoments(const class DirectorInputOutput* lpIO, s32 liArg);
+        void UpdateMoments(const DirectorInputOutput* lpIO, s32 liArg);
 
         // X360 0x8221AFD0. Pull the per-frame camera-behaviour parameters out of the AttribSys
         // (camerabumperbehaviour / cameraexternalbehaviour) and Set them on the gameplay
         // behaviours.
         // DECLARATION-ONLY + FLAG: depends on the [todo] Attrib::Gen generated behaviour
         //   parameter types and raw-offset-pokes the un-homed behaviour-parameter aggregates.
-        void UpdateAttribSys(const class DirectorInputOutput* lpIO);
+        void UpdateAttribSys(const DirectorInputOutput* lpIO);
 
         // X360 0x82255318 / 0x8224FD30. The pre/post-scene camera-behaviour passes.
         // DECLARATION-ONLY + FLAG (behaviour-manager-dependent; VMX-dominated).
-        void UpdateCameraBehavioursPreScene(const class DirectorInputOutput* lpIO, s32 liArg);
-        void UpdateCameraBehavioursPostScene(const class DirectorInputOutput* lpIO, s32 liArg);
+        void UpdateCameraBehavioursPreScene(const DirectorInputOutput* lpIO, s32 liArg);
+        void UpdateCameraBehavioursPostScene(const DirectorInputOutput* lpIO, s32 liArg);
 
         // X360 0x822372F8. Drain the director input event queue and apply each action to the
         // GameState snapshot (intro/flyby/drive-thru/take-down/mode actions).
@@ -194,7 +228,7 @@ namespace BrnDirector
 
         // X360 0x8221A6B0. Apply the per-frame new-vehicle events to the AllVehicleData tracker.
         // DECLARATION-ONLY + FLAG (AllVehicleData-dependent; not homed).
-        void ProcessNewVehicleEvents(const class DirectorInputOutput* lpIO);
+        void ProcessNewVehicleEvents(const DirectorInputOutput* lpIO);
 
         // X360 0x8221B0B0. Handle a "prepare for mode" director action.
         // DECLARATION-ONLY + FLAG (GameState action region + behaviour-manager dependent).
@@ -215,7 +249,7 @@ namespace BrnDirector
         // DECLARATION-ONLY + FLAG: copies via a VMX move and selects the near-clip from the
         //   un-dumped rodata floats flt_82CDA55C / flt_82CDA560 (VALUES not recovered) -- the
         //   same un-recovered near-clip constants the committed Camera.h FLAGS.
-        void UpdateDebugInfo(const class DirectorInputOutput* lpIO);
+        void UpdateDebugInfo(const DirectorInputOutput* lpIO);
 
         // X360 0x82208FC8. Drive the debug printers.
         // DECLARATION-ONLY + FLAG (debug-printer / behaviour-manager dependent).
