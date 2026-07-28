@@ -30,79 +30,33 @@ namespace CgsSceneManager
 {
 namespace
 {
-    // -----------------------------------------------------------------------
-    // Virtual dispatch through the SpatialPartition base vtable by slot. The shared
-    // SpatialPartition header declares only AddEntityToGraph as a virtual, so the base
-    // vtable is not modelled slot-for-slot there; these bodies index the runtime vtable at
-    // the DWARF-attested slots (matching the X360 asm byte offsets, slot*4):
-    //   slot  0 (+0x00) Construct(ConstructParams*, IResourceAllocator*)
-    //   slot  1 (+0x04) Destruct()
-    //   slot  2 (+0x08) Prepare()                 -> bool
-    //   slot  3 (+0x0C) Release()                 -> bool
-    //   slot 11 (+0x2C) SetEntityPosition(id, pos)
-    //   slot 12 (+0x30) SetEntityRadius(id, radius)
-    //   slot 15 (+0x3C) RemoveEntityFromGraph(id)
-    // -----------------------------------------------------------------------
-    template <typename Pfn>
-    inline Pfn PartitionVFn(const SpatialPartition* lpPartition, unsigned luSlot)
-    {
-        Pfn const* lpVTable = *reinterpret_cast<Pfn const* const*>(lpPartition);
-        return lpVTable[luSlot];
-    }
+    // (The raw vtable-SLOT dispatch helpers this TU used are RETIRED 2026-07-28:
+    //  CgsSpatialPartition.h now declares the partition's virtuals by name --
+    //  Construct/Destruct/Prepare/Release @ slots 0..3, Update @ 10,
+    //  SetEntityPosition/SetEntityRadius @ 11/12, AddEntityToGraph/
+    //  RemoveEntityFromGraph @ 14/15 -- so the bodies below dispatch through the
+    //  language. Indexing a hand-built slot table was only ever correct while the
+    //  base had no modelled vtable, and it cannot be on the x64 target.)
 
-    inline void PartitionConstruct(SpatialPartition* lpP,
-                                   SpatialPartitionConstructParams* lpParams,
-                                   rw::IResourceAllocator* lpAllocator)
-    {
-        typedef void (*Pfn)(SpatialPartition*, SpatialPartitionConstructParams*, rw::IResourceAllocator*);
-        PartitionVFn<Pfn>(lpP, 0)(lpP, lpParams, lpAllocator);
-    }
+    // (the inbound update-queue record type ids + payload records now live in their
+    //  IO home, CgsSpatialPartitionManagerIO.h, beside the buffer that carries them)
+}
 
-    inline void PartitionDestruct(SpatialPartition* lpP)
-    {
-        typedef void (*Pfn)(SpatialPartition*);
-        PartitionVFn<Pfn>(lpP, 1)(lpP);
-    }
-
-    inline bool PartitionPrepare(SpatialPartition* lpP)
-    {
-        typedef bool (*Pfn)(SpatialPartition*);
-        return PartitionVFn<Pfn>(lpP, 2)(lpP);
-    }
-
-    inline bool PartitionRelease(SpatialPartition* lpP)
-    {
-        typedef bool (*Pfn)(SpatialPartition*);
-        return PartitionVFn<Pfn>(lpP, 3)(lpP);
-    }
-
-    inline void PartitionSetEntityPosition(SpatialPartition* lpP, u16 lu16Id, Vector3 lPosition)
-    {
-        typedef void (*Pfn)(SpatialPartition*, u16, Vector3);
-        PartitionVFn<Pfn>(lpP, 11)(lpP, lu16Id, lPosition);
-    }
-
-    inline void PartitionSetEntityRadius(SpatialPartition* lpP, u16 lu16Id, f32 lfRadius)
-    {
-        typedef void (*Pfn)(SpatialPartition*, u16, f32);
-        PartitionVFn<Pfn>(lpP, 12)(lpP, lu16Id, lfRadius);
-    }
-
-    inline void PartitionRemoveEntityFromGraph(SpatialPartition* lpP, u16 lu16Id)
-    {
-        typedef void (*Pfn)(SpatialPartition*, u16);
-        PartitionVFn<Pfn>(lpP, 15)(lpP, lu16Id);
-    }
-
-    // Inbound update-queue record type ids (the switch keys returned by the VEQ; the
-    // producer InputBuffer_Update stages one of these per Add/Remove/SetPosition/SetRadius).
-    enum ESpatialPartitionUpdateEventType
-    {
-        E_SPATIAL_PARTITION_UPDATE_ADD_ENTITY          = 0,
-        E_SPATIAL_PARTITION_UPDATE_REMOVE_ENTITY       = 1,
-        E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_POSITION = 2,
-        E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_RADIUS   = 3,
-    };
+// ===========================================================================
+// SpatialPartitionManager::Construct
+//
+// Park the staged handshake and the (not yet carved) partition. The X360 body is the
+// compiler-emitted member init the SceneManagerModule's Construct cascade runs; the
+// partition itself is created lazily by Prepare out of the scene resource allocator.
+// ===========================================================================
+void SpatialPartitionManager::Construct()
+{
+    mePrepareStage         = E_SCENE_GRAPH_PREPARE_START;
+    meReleaseStage         = E_SCENE_GRAPH_RELEASE_START;
+    miTextX                = 0;
+    miTextY                = 0;
+    mpSpatialPartition     = NULL;
+    meSpatialPartitionType = E_SPATIAL_PARTITION_TYPE_LOOSE_OCTREE;
 }
 
 // ===========================================================================
@@ -153,12 +107,14 @@ bool SpatialPartitionManager::Prepare(SpatialPartitionConstructParams* lpConstru
                 }
 
                 CGS_ASSERT(mpSpatialPartition != NULL, "mpSpatialPartition != NULL");
-                PartitionConstruct(mpSpatialPartition, lpConstructParams, lpSceneAllocator);
+                if (mpSpatialPartition == NULL)
+                    return false;
+                mpSpatialPartition->Construct(lpConstructParams, lpSceneAllocator);
             }
             mePrepareStage++;   // -> SCENE_GRAPH
             // fall through
         case E_SCENE_GRAPH_PREPARE_SCENE_GRAPH:
-            if (PartitionPrepare(mpSpatialPartition))
+            if (mpSpatialPartition != NULL && mpSpatialPartition->Prepare())
             {
                 mePrepareStage++;   // -> DONE
                 meReleaseStage = E_SCENE_GRAPH_RELEASE_START;
@@ -189,9 +145,14 @@ bool SpatialPartitionManager::Release()
             meReleaseStage++;   // -> SCENE_GRAPH
             // fall through
         case E_SCENE_GRAPH_RELEASE_SCENE_GRAPH:
-            if (!PartitionRelease(mpSpatialPartition))
+            if (mpSpatialPartition == NULL)
             {
-                PartitionDestruct(mpSpatialPartition);
+                meReleaseStage++;   // nothing to release
+                break;
+            }
+            if (!mpSpatialPartition->Release())
+            {
+                mpSpatialPartition->Destruct();
                 return false;
             }
             meReleaseStage++;   // -> MANAGER
@@ -226,43 +187,47 @@ void SpatialPartitionManager::ProcessUpdateQueue(const SpatialPartitionIO::Input
     CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
 
     SpatialPartition* lpPartition = mpSpatialPartition;
+    if (lpPartition == NULL)
+    {
+        return;
+    }
 
     const CgsModule::Event* lpEvent = NULL;
     s32 liSize = 0;
     s32 liId = lpInputBuffer->GetSpatialPartitionUpdateQueue()->GetFirstEvent(&lpEvent, &liSize);
     while (liId >= 0)
     {
-        const u8* lpBytes = reinterpret_cast<const u8*>(lpEvent);
         switch (liId)
         {
-            case E_SPATIAL_PARTITION_UPDATE_ADD_ENTITY:
+            case SpatialPartitionIO::E_SPATIAL_PARTITION_UPDATE_ADD_ENTITY:
             {
-                Vector3 lPosition   = *reinterpret_cast<const Vector3*>(lpBytes + 0x00);
-                u16     lu16Id      = *reinterpret_cast<const u16*>(lpBytes + 0x10);
-                u32     lxTypeFlags = *reinterpret_cast<const u32*>(lpBytes + 0x14);
-                f32     lfRadius    = *reinterpret_cast<const f32*>(lpBytes + 0x18);
-                lpPartition->AddEntity(lu16Id, lxTypeFlags, lPosition, lfRadius);
+                const SpatialPartitionIO::InEventAddEntity& lrEvent =
+                    *static_cast<const SpatialPartitionIO::InEventAddEntity*>(lpEvent);
+                lpPartition->AddEntity(lrEvent.mu16EntityId, lrEvent.mx32TypeFlags,
+                                       lrEvent.mPosition, lrEvent.mfRadius);
                 break;
             }
-            case E_SPATIAL_PARTITION_UPDATE_REMOVE_ENTITY:
+            case SpatialPartitionIO::E_SPATIAL_PARTITION_UPDATE_REMOVE_ENTITY:
             {
-                u16 lu16Id = *reinterpret_cast<const u16*>(lpBytes + 0x00);
-                PartitionRemoveEntityFromGraph(lpPartition, lu16Id);
-                CGS_ASSERT(lu16Id < SpatialPartition::KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+                const SpatialPartitionIO::InEventRemoveEntity& lrEvent =
+                    *static_cast<const SpatialPartitionIO::InEventRemoveEntity*>(lpEvent);
+                lpPartition->RemoveEntityFromGraph(lrEvent.mu16EntityId);
+                CGS_ASSERT(lrEvent.mu16EntityId < SpatialPartition::KI_MAX_NUM_ENTITIES,
+                           "lu16Index < KI_MAX_NUM_ENTITIES");
                 break;
             }
-            case E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_POSITION:
+            case SpatialPartitionIO::E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_POSITION:
             {
-                Vector3 lPosition = *reinterpret_cast<const Vector3*>(lpBytes + 0x00);
-                u16     lu16Id    = *reinterpret_cast<const u16*>(lpBytes + 0x10);
-                PartitionSetEntityPosition(lpPartition, lu16Id, lPosition);
+                const SpatialPartitionIO::InEventSetEntityPosition& lrEvent =
+                    *static_cast<const SpatialPartitionIO::InEventSetEntityPosition*>(lpEvent);
+                lpPartition->SetEntityPosition(lrEvent.mu16EntityId, lrEvent.mPosition);
                 break;
             }
-            case E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_RADIUS:
+            case SpatialPartitionIO::E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_RADIUS:
             {
-                u16 lu16Id   = *reinterpret_cast<const u16*>(lpBytes + 0x00);
-                f32 lfRadius = *reinterpret_cast<const f32*>(lpBytes + 0x04);
-                PartitionSetEntityRadius(lpPartition, lu16Id, lfRadius);
+                const SpatialPartitionIO::InEventSetEntityRadius& lrEvent =
+                    *static_cast<const SpatialPartitionIO::InEventSetEntityRadius*>(lpEvent);
+                lpPartition->SetEntityRadius(lrEvent.mu16EntityId, lrEvent.mfRadius);
                 break;
             }
             default:
@@ -271,5 +236,31 @@ void SpatialPartitionManager::ProcessUpdateQueue(const SpatialPartitionIO::Input
         }
         liId = lpInputBuffer->GetSpatialPartitionUpdateQueue()->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
+}
+
+// ===========================================================================
+// SpatialPartitionManager::UpdateScene @ 0x828C9948
+//
+//   assert(lpInputBuffer != NULL);
+//   IOBuffer::LockForRead(lpInputBuffer);
+//   ProcessUpdateQueue(lpInputBuffer);
+//   mpSpatialPartition->Update();          // vtable slot 10 (asm `(**(a1+16) + 40)`)
+//   IOBuffer::UnlockForRead(lpInputBuffer);
+// ===========================================================================
+void SpatialPartitionManager::UpdateScene(SpatialPartitionIO::InputBuffer_Update* lpInputBuffer)
+{
+    CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
+    if (lpInputBuffer == NULL)
+    {
+        return;
+    }
+
+    lpInputBuffer->LockForRead();
+    ProcessUpdateQueue(lpInputBuffer);
+    if (mpSpatialPartition != NULL)
+    {
+        mpSpatialPartition->Update();
+    }
+    lpInputBuffer->UnlockForRead();
 }
 }

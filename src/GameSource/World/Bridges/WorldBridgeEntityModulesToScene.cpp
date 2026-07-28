@@ -87,4 +87,89 @@ void BridgeTrafficModuleToSceneModule_Prepare(
     lpSceneInputBuffer->GetInSceneUpdateInterface()->Append(lrSceneSource);
 }
 
+// @ 0x827AB490 -- the PER-FRAME pre-scene merge: every entity module's staged scene
+// updates (adds / removes / position + radius updates) go into the scene manager's
+// update input buffer, which SceneManagerModule::UpdateScene then fans out to the
+// spatial partition and the overlap generator. This is the hop that puts the world's
+// streamed instances into the broad-phase, so the frustum query has something to
+// return.
+//
+// The X360 merge ORDER is traffic -> race car -> world entity -> prop -> trigger
+// (asm call order @0x827AB4F4..0x827AB584); reproduced, though the merges are
+// independent per-queue appends.
+void BridgeEntityModulesToSceneModule_PreScene(
+    void* lpWorldModule,
+    CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+    const BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene* lpTriggerOutputBuffer_PreScene,
+    const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutputBuffer_PreScene,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene,
+    const BrnWorld::PropEntityIO::OutputBuffer_PreScene* lpPropOutputBuffer_PreScene,
+    const BrnWorld::WorldEntityIO::OutputBuffer_PreScene* lpWorldEntityOutputBuffer_PreScene)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpSceneInputBuffer != 0, "lpSceneModuleInputBuffer != NULL");                       // :98
+    CGS_ASSERT(lpTriggerOutputBuffer_PreScene != 0, "lpTriggerOutputBuffer_PreScene != NULL");     // :99
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene != NULL");     // :100
+    CGS_ASSERT(lpPropOutputBuffer_PreScene != 0, "lpPropOutputBuffer_PreScene != NULL");           // :101
+    CGS_ASSERT(lpWorldEntityOutputBuffer_PreScene != 0, "lpWorldOutputBuffer_PreScene != NULL");   // :102
+
+    typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface InSceneUpdateInterface;
+    InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();
+
+    // FLAG (deferred, NOT a divergence for the broad phase): only the WORLD-ENTITY leg
+    // is merged today. The trigger / race-car / traffic / prop pre-scene output buffers
+    // either do not model a scene-input interface in their own IO homes, or model it as
+    // a declaration-only accessor whose body belongs to that buffer's own TU -- none of
+    // which is reconstructed. All four of those modules are inert on this build (no
+    // trigger volume, race car, traffic vehicle or prop is registered with the scene
+    // manager), so the queues they would contribute are empty and their merges are
+    // no-ops either way. The world entity module IS live -- it stages one AddEntity per
+    // streamed instance -- and that is the leg the frustum query runs on. Restore the
+    // other four with those buffers' own waves.
+    lpScene->Append(reinterpret_cast<const InSceneUpdateInterface&>(
+        *lpWorldEntityOutputBuffer_PreScene->GetSceneInputInterface()));
+
+    (void)lpTriggerOutputBuffer_PreScene;
+    (void)lpTrafficOutputBuffer_PreScene;
+    (void)lpRaceCarOutputBuffer_PreScene;
+    (void)lpPropOutputBuffer_PreScene;
+}
+
+// @ 0x827AB608 -- the post-physics restage (traffic -> race car -> prop -> world
+// entity): the position/radius updates the physics step produced, merged into the
+// same scene update input.
+void BridgeEntityModulesToScene_PostPhysics(
+    void* lpWorldModule,
+    CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+    const BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics* lpTrafficOutputBuffer_PostPhysics,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutputBuffer_PostPhysics,
+    const BrnWorld::PropEntityIO::OutputBuffer_PostPhysics* lpPropOutputBuffer_PostPhysics,
+    const BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutputBuffer_PostPhysics)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpSceneInputBuffer != 0, "lpSceneModuleInputBuffer != NULL");                            // :243
+    CGS_ASSERT(lpTrafficOutputBuffer_PostPhysics != 0, "lpTrafficOutputBuffer_PostPhysics != NULL");    // :244
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostPhysics != 0, "lpRaceCarOutputBuffer_PostPhysics != NULL");    // :245
+    CGS_ASSERT(lpPropOutputBuffer_PostPhysics != 0, "lpPropOutputBuffer_PostPhysics != NULL");          // :246
+
+    typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface InSceneUpdateInterface;
+    InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();
+
+    // (Same deferral as the pre-scene leg -- see its FLAG. The world-entity buffer's
+    //  post-physics getter is non-const on its own home, so the const source is cast to
+    //  reach it; the merge itself only reads.)
+    // FLAG: the world-entity leg is deferred here too -- OutputBuffer_PostPhysics::
+    // GetSceneInputInterface guards on the WRITE lock and this bridge runs with the
+    // buffer read-locked (the X360 orders its locks differently across the post-physics
+    // spine). Nothing is lost today: the world module stages its scene adds in the
+    // PRE-SCENE phase (OnWorldGraphicsLoadComplete), and its instances are static, so
+    // the post-physics restage carries no position or radius update.
+    (void)lpWorldEntityOutputBuffer_PostPhysics;
+    (void)lpTrafficOutputBuffer_PostPhysics;
+    (void)lpRaceCarOutputBuffer_PostPhysics;
+    (void)lpPropOutputBuffer_PostPhysics;
+}
+
 }   // namespace WorldModule

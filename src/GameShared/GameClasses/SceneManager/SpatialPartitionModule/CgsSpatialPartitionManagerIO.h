@@ -41,11 +41,63 @@
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer base + lock-state queries
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<BUFSIZE,ALIGN>
+#ifdef GetFreeSpace
+#undef GetFreeSpace
+#endif
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsCoarseQueryResultBuffer.h" // CoarseQueryResultBuffer<16384>
 
 namespace CgsSceneManager
 {
 namespace SpatialPartitionIO
 {
+    // ------------------------------------------------------------------------
+    // The four inbound update-queue RECORDS (the variable-event-queue payloads
+    // SpatialPartitionManager::ProcessUpdateQueue @0x828BAE50 switches on). Their
+    // field offsets are the producer's stores, read back by the drain:
+    //   ADD    : the bounding-sphere CENTRE in the leading 16-byte vmx lane, then
+    //            the entity index / type-flag mask / radius scalars;
+    //   REMOVE : the entity index alone;
+    //   SETPOS : the leading vmx lane + the entity index;
+    //   SETRAD : the entity index + the radius.
+    // Record type ids are the queue's switch keys (see ESpatialPartitionUpdateEvent).
+    // ------------------------------------------------------------------------
+    enum ESpatialPartitionUpdateEvent
+    {
+        E_SPATIAL_PARTITION_UPDATE_ADD_ENTITY          = 0,
+        E_SPATIAL_PARTITION_UPDATE_REMOVE_ENTITY       = 1,
+        E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_POSITION = 2,
+        E_SPATIAL_PARTITION_UPDATE_SET_ENTITY_RADIUS   = 3,
+    };
+
+    struct alignas(16) InEventAddEntity : public CgsModule::Event
+    {
+        Vector3 mPosition;      // +0x00 (16-byte vmx lane)
+        u16     mu16EntityId;   // +0x10
+        u16     mu16Pad12;      // +0x12
+        u32     mx32TypeFlags;  // +0x14
+        f32     mfRadius;       // +0x18
+    };
+
+    struct InEventRemoveEntity : public CgsModule::Event
+    {
+        u16 mu16EntityId;       // +0x00
+        u16 mu16Pad02;          // +0x02
+    };
+
+    struct alignas(16) InEventSetEntityPosition : public CgsModule::Event
+    {
+        Vector3 mPosition;      // +0x00 (16-byte vmx lane)
+        u16     mu16EntityId;   // +0x10
+        u16     mu16Pad12;      // +0x12
+    };
+
+    struct InEventSetEntityRadius : public CgsModule::Event
+    {
+        u16 mu16EntityId;       // +0x00
+        u16 mu16Pad02;          // +0x02
+        f32 mfRadius;           // +0x04
+    };
+
     // CgsSpatialPartitionManagerIO.h:149 (DWARF) -- inbound spatial-partition update payload buffer.
     // A producer write-locks it and fills the update queue (AddEntity / RemoveEntity /
     // SetEntityPosition / SetEntityRadius); the partition module read-locks it and consumes them.
@@ -79,15 +131,21 @@ namespace SpatialPartitionIO
         // CgsSpatialPartitionManagerIO.h:118 (DWARF): the query-result queue is a 20480-byte, 16-aligned VEQ.
         typedef CgsModule::VariableEventQueue<20480, 16> OutQueryResultsQueue;
 
-        // FLAG: foreign type (see file header). Honest size 32920 (X360); its +20500 offset is
-        // fully pinned by the preceding queue, so its internal layout is owned by the real home.
-        struct CoarseQueryResultBufferDefault
-        {
-            unsigned char maBytes[32920];
-        };
+        // ADOPTED 2026-07-28 (culling wave): the real home landed, so the member is the
+        // named CgsSceneManager::CoarseQueryResultBuffer<16384> the DWARF declares
+        // (honest size 32920 on the console, unchanged here). The old opaque stand-in
+        // typedef is kept as an alias so existing spellings still resolve.
+        typedef CgsSceneManager::CoarseQueryResultBuffer<16384> CoarseQueryResultBufferDefault;
 
-        // Lifecycle (DWARF-attested) -- DECLARE-ONLY.
-        void Construct();
+        // Lifecycle (DWARF-attested). The X360 CreateIOBuffer<T> stack template runs
+        // T::Construct after the alloc: raise the IOBuffer status base, bring up the
+        // query-result ring and clear the coarse-result buffer's counters.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mQueryResultQueue.Construct();
+            mCoarseResultBuffer.Construct();
+        }
         void Destruct();
 
         // Accessors (DWARF :218/:219/:221/:222). GetCoarseResultBuffer() (non-const, X360

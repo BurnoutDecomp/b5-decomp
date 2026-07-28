@@ -78,9 +78,48 @@ namespace SceneManagerIO
             mInCoarseQueryQueue.Construct();
         }
         void Destruct();
-        InCoarseQueryQueue<16384>* GetInCoarseQueryQueue();
+
+        // @ 0x828AF270 -- the read-locked handle to the embedded coarse-query queue
+        // (X360 this+0x28). SceneManagerModule::ProcessFrustumTestJobRequests walks it;
+        // the query PRODUCERS reach it write-locked, so the lock bit is not asserted here
+        // (the X360 getter has one overload per lock state and the IDB keeps only one).
+        InCoarseQueryQueue<16384>* GetInCoarseQueryQueue() { return &mInCoarseQueryQueue; }
 
         InCoarseQueryQueue<16384> mInCoarseQueryQueue;   // (see FLAG: position not attested)
+    };
+
+    // ------------------------------------------------------------------------
+    // The coarse (frustum/sphere/volume) query RESULT record, as it is written into
+    // OutputBuffer::mSceneQueryResultsQueue.
+    //
+    // Producer: SceneManagerModule::ProcessFrustumTestJobResults @0x828C7838 --
+    //   Event* e = queue.AllocateEvent(0, 4 * (numResults + 3));
+    //   e[0] = the query id;  e[1] = numResults;  e[2] = numResults;
+    //   e[3..] = one EntityId per result (the octree hands back pool INDICES; the
+    //            producer resolves each through the entity manager first).
+    // Consumer: WorldModule::FilterFrustumTestResults @0x827BDA60 -- reads the count
+    //   at +4 and walks the ids from +12 in 4-byte steps, and the dispatch producer
+    //   reads the leading SceneQueryId to assert the batches arrive in query order.
+    // Record TYPE ID is 0 (the X360 passes `li r4, 0` to AllocateEvent).
+    //
+    // The two counts are written from the same register; the second is the count of
+    // ids ATTEMPTED vs WRITTEN in the coarse buffer's batch header sense (they are
+    // equal on every path the producer can take -- it asserts that in the octree
+    // drain), so both are recorded rather than collapsed.
+    // ------------------------------------------------------------------------
+    struct OutCoarseQueryResult : public CgsModule::Event
+    {
+        static const s32 KI_EVENT_TYPE = 0;
+
+        SceneQueryId mQueryId;              // +0x00
+        s32          miNumResults;          // +0x04
+        s32          miNumResultsAttempted; // +0x08
+        // EntityId maEntityIds[miNumResults] follows at +0x0C.
+
+        CgsSceneManager::EntityId*       GetEntityIds()
+        { return reinterpret_cast<CgsSceneManager::EntityId*>(this + 1); }
+        const CgsSceneManager::EntityId* GetEntityIds() const
+        { return reinterpret_cast<const CgsSceneManager::EntityId*>(this + 1); }
     };
 
     struct OutputBuffer : public CgsModule::IOBuffer
@@ -103,6 +142,15 @@ namespace SceneManagerIO
         const SceneQueryResultsQueue* GetSceneQueryResultsQueue() const
         {
             CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            return &mSceneQueryResultsQueue;
+        }
+
+        // The producer-side handle (X360 0x828AF900, guarded on the WRITE lock):
+        // SceneManagerModule::ProcessFrustumTestJobResults @0x828C7838 allocates one
+        // variable event per coarse-result batch through it.
+        SceneQueryResultsQueue* GetSceneQueryResultsQueueForWrite()
+        {
+            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
             return &mSceneQueryResultsQueue;
         }
 

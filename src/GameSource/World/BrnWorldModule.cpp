@@ -28,6 +28,7 @@
 //              they are recorded here with their X360 address + the exact reason they are
 //              blocked, to be bodied once their sub-module/IO deps are homed.
 // ============================================================================
+#include <ctime>   // [DIAG culling wave] clock() for the producer-fps readout
 #include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
@@ -705,14 +706,13 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
 
             // The world spatial partition (X360 literal block).
             CgsSceneManager::SpatialPartitionConstructParams lParams;
-            lParams.meType        = static_cast<CgsSceneManager::ESpatialPartitionType>( 1 );
-            lParams.miNumLevels   = 3;
-            lParams.mOrigin.SetZero();
-            lParams.mfWorldExtent = 11000.0f;
-            lParams.mfLooseness   = 0.30000001f;
-            lParams.miMaxEntries  = 32;
-            lParams.miMaxDepth    = 10;
-            lParams.miPad         = 0;
+            lParams.meType     = static_cast<CgsSceneManager::ESpatialPartitionType>( 1 );
+            lParams.muDepth    = 3;
+            lParams.mCentrePos.SetZero();
+            lParams.mfBaseSize = 11000.0f;
+            lParams.mfLooseness = 0.30000001f;
+            lParams.muAdaptiveNodeSplitThreshold = 32;
+            lParams.muAdaptiveMaxDepth           = 10;
 
             // [FLAG PC boot gate] GameDataModule::CreateAllocators (0x8266DD00) is still an
             // inert stand-in, so the allocator registry cannot serve the scene (49) /
@@ -2901,6 +2901,90 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 }
 
 // ============================================================================
+// FilterFrustumTestResults  @ 0x827BDA60
+//
+// Split one coarse-query RESULT record (SceneManagerIO::OutCoarseQueryResult:
+// { SceneQueryId, numResults, numResultsAttempted, EntityId ids[] }) into the four
+// per-owner id arrays the modules' GenerateDispatchLists consume. All four arrays
+// are cleared first (the X360 stores 0 straight into each array's count word), then
+// every id is dispatched on its OWNER byte:
+//     1, 0x21 -> race car (32)      2 -> traffic (650)
+//     3, 0x22 -> prop (5400)        5 -> WORLD (4500)
+// Any other owner is dropped. Each append is guarded by the array's own capacity --
+// the X360 compares the live count against the capacity and SKIPS the append when
+// full rather than growing (a full array silently stops collecting).
+// (The X360 reads the owner as the first byte of the big-endian 4-byte id; on the
+// host that is EntityId::GetOwner(), the id's top 8 bits -- same value.)
+// ============================================================================
+void
+WorldModule::FilterFrustumTestResults(
+    const CgsModule::Event* lpFrustumTestResult,
+    Array<CgsSceneManager::EntityId, 4500u>* lpWorldIds,
+    Array<CgsSceneManager::EntityId, 32u>* lpRaceCarIds,
+    Array<CgsSceneManager::EntityId, 650u>* lpTrafficIds,
+    Array<CgsSceneManager::EntityId, 5400u>* lpPropIds )
+{
+    const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* lpResult =
+        static_cast< const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* >(
+            lpFrustumTestResult );
+
+    const s32 liNumResults = lpResult->miNumResults;
+
+    lpWorldIds->Clear();
+    lpRaceCarIds->Clear();
+    lpTrafficIds->Clear();
+    lpPropIds->Clear();
+
+    if ( liNumResults <= 0 )
+    {
+        return;
+    }
+
+    const CgsSceneManager::EntityId* lpIds = lpResult->GetEntityIds();
+
+    for ( s32 liResult = 0; liResult < liNumResults; liResult++ )
+    {
+        const CgsSceneManager::EntityId lEntityId = lpIds[ liResult ];
+
+        switch ( lEntityId.GetOwner() )
+        {
+            case 1:
+            case 0x21:
+                if ( lpRaceCarIds->GetLength() < 32u )
+                {
+                    lpRaceCarIds->Append( lEntityId );
+                }
+                break;
+
+            case 2:
+                if ( lpTrafficIds->GetLength() < 650u )
+                {
+                    lpTrafficIds->Append( lEntityId );
+                }
+                break;
+
+            case 3:
+            case 0x22:
+                if ( lpPropIds->GetLength() < 5400u )
+                {
+                    lpPropIds->Append( lEntityId );
+                }
+                break;
+
+            case 5:
+                if ( lpWorldIds->GetLength() < 4500u )
+                {
+                    lpWorldIds->Append( lEntityId );
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+}
+
+// ============================================================================
 // GenerateFrustumQueries  @ 0x827DADF8
 //
 // Runs only when the update set selects frustum testing (bit 7). Stages this
@@ -2917,9 +3001,15 @@ WorldModule::GenerateFrustumQueries(
     CgsModule::IOBufferStack* lpInputBufferStack,
     CgsModule::IOBufferStack* lpOutputBufferStack,
     const BrnWorldIO::DispatchInputBuffer* lpDispatchInputBuffer,
-    BrnUpdateSet lUpdateSet )
+    BrnWorldIO::DispatchOutputBuffer* /*lpDispatchOutputBuffer*/,
+    const BrnUpdateSet* lpUpdateSet )
 {
-    // Frustum testing is selected by update-set bit 7.
+    // Frustum testing is selected by update-set bit 7. (SIGNATURE RECONCILED
+    // 2026-07-28: the X360 passes six args -- the dispatch OUTPUT buffer and the update
+    // set BY POINTER, `&updateSet`, because BrnGameModule::DoDispatch @0x823DC458 clears
+    // bit 7 in place when the streamer reports live streaming and both producers read the
+    // same word. The old 4-arg by-value form could not see that clear.)
+    const BrnUpdateSet lUpdateSet = *lpUpdateSet;
     if ( ( lUpdateSet & 0x80 ) == 0 )
     {
         return;
@@ -3829,6 +3919,46 @@ WorldModule::PublishWorldShadingConstantsBringUp()
 // DELETE the whole function (and its DoDispatch call) once DoDispatch and the scene
 // manager's frustum query are real.
 // =============================================================================
+namespace
+{
+    // The three vector helpers CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8
+    // uses to build its six world-space planes, reproduced here so the bring-up camera
+    // can hand the scene manager a frustum built by exactly the same construction.
+    // A plane is stored [Nx, Ny, Nz, D] with `dot3(N, p) == D` and N pointing INTO the
+    // view volume -- the form CgsGeometric::Frustum::SetFromRwFrustum consumes.
+    inline Vector3 Sub3( const Vector3& lrA, const Vector3& lrB )
+    {
+        Vector3 lResult = { lrA.x - lrB.x, lrA.y - lrB.y, lrA.z - lrB.z, 0.0f };
+        return lResult;
+    }
+
+    inline Vector3 NormalizedCross3( const Vector3& lrA, const Vector3& lrB )
+    {
+        Vector3 lResult = { lrA.y * lrB.z - lrA.z * lrB.y,
+                            lrA.z * lrB.x - lrA.x * lrB.z,
+                            lrA.x * lrB.y - lrA.y * lrB.x, 0.0f };
+        const f32 lfLen = sqrtf( lResult.x * lResult.x + lResult.y * lResult.y
+                                 + lResult.z * lResult.z );
+        if ( lfLen > 0.0001f )
+        {
+            lResult.x /= lfLen;
+            lResult.y /= lfLen;
+            lResult.z /= lfLen;
+        }
+        return lResult;
+    }
+
+    inline void StoreBringUpFrustumPlane( Vector4& lrOut, const Vector3& lrNormal,
+                                          const Vector3& lrPointOnPlane )
+    {
+        lrOut.x = lrNormal.x;
+        lrOut.y = lrNormal.y;
+        lrOut.z = lrNormal.z;
+        lrOut.w = lrNormal.x * lrPointOnPlane.x + lrNormal.y * lrPointOnPlane.y
+                + lrNormal.z * lrPointOnPlane.z;
+    }
+}
+
 void
 WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame )
 {
@@ -4112,23 +4242,211 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
 
     PublishWorldShadingConstantsBringUp();
 
-    mWorldEntityModule.GenerateDispatchListsFromStreamer(
-        lpDispatchFrame, &mShaderLodInfo, lEye, 1.0f,
-        KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
-        KI_WORLD_PREZ_LIST );
-
+    // ======================================================================
+    // THE REAL DISPATCH FEED. Everything below here is the console path:
+    //   InCoarseQueryQueue::FrustumTestVp   (stage the camera query)
+    //     -> SceneManagerModule::ProcessFrustumTestJobRequests   @0x828C7628
+    //     -> LooseOctree::AddJobFrustumTest / StartFrustumTestJobs
+    //     -> SceneManagerModule::ProcessFrustumTestJobResults    @0x828C7838
+    //     -> WorldModule::FilterFrustumTestResults               @0x827BDA60
+    //     -> WorldEntityModule::GenerateDispatchLists            @0x822D5AB0
+    // (the streamer-walking stand-in GenerateDispatchListsFromStreamer is DELETED).
+    //
+    // [FLAG PC bring-up] What is still the stand-in is only the CAMERA and the IO
+    // BUFFER SET: on the console BrnGameModule::DoDispatch @0x823DC458 creates the
+    // world-dispatch / renderer / effects buffer pairs on the dispatch stacks, takes
+    // the camera from the director module's output and runs
+    // WorldModule::GenerateFrustumQueries + ::GenerateDispatchLists over the whole
+    // module set. The director publishes no camera on this build and DoDispatch has no
+    // buffer stacks, so the four buffers this leg needs are file statics and the camera
+    // is the tour camera above. DELETE this block with the rest of the function once
+    // DoDispatch is real.
+    // ======================================================================
     {
-        static bool sbLogged = false;
-        if ( !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
+        // The frame's frustum, built with the SAME plane construction
+        // CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8 uses (four corner rays
+        // dir +/- tanH*right +/- tanV*up, near/far corners, then the six planes as
+        // [N, dot3(N, pointOnPlane)] with N pointing INTO the volume), fed by this
+        // camera's own basis so the query frustum and the drawn projection cannot drift.
+        const f32 lfTanV = 1.0f / lfCotHalfFov;
+        const f32 lfTanH = lfTanV * lfAspect;
+
+        static const f32 KAF_CORNER_SIGNS[ 4 ][ 2 ] =
+            { { 1.0f, 1.0f }, { -1.0f, 1.0f }, { -1.0f, -1.0f }, { 1.0f, -1.0f } };
+
+        Vector3 laNear[ 4 ];
+        Vector3 laFar[ 4 ];
+        for ( int liCorner = 0; liCorner < 4; ++liCorner )
         {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[FLAG PC bring-up] world dispatch producer live: centre ("
-                << lCentre.x << ", " << lCentre.y << ", " << lCentre.z
-                << ") radius " << lfRadius << " -- object list "
-                << static_cast< s32 >( KI_WORLD_OPAQUE_LIST ) << " count "
-                << static_cast< s32 >( lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() )
-                << "\n";
+            const f32 lfS = KAF_CORNER_SIGNS[ liCorner ][ 0 ] * lfTanH;
+            const f32 lfT = KAF_CORNER_SIGNS[ liCorner ][ 1 ] * lfTanV;
+            const Vector3 lRay = {
+                lForward.x + lfS * lRight.x + lfT * lUp.x,
+                lForward.y + lfS * lRight.y + lfT * lUp.y,
+                lForward.z + lfS * lRight.z + lfT * lUp.z, 0.0f };
+            laNear[ liCorner ].x = lEye.x + lfNear * lRay.x;
+            laNear[ liCorner ].y = lEye.y + lfNear * lRay.y;
+            laNear[ liCorner ].z = lEye.z + lfNear * lRay.z;
+            laNear[ liCorner ].w = 0.0f;
+            laFar[ liCorner ].x  = lEye.x + lfFar * lRay.x;
+            laFar[ liCorner ].y  = lEye.y + lfFar * lRay.y;
+            laFar[ liCorner ].z  = lEye.z + lfFar * lRay.z;
+            laFar[ liCorner ].w  = 0.0f;
+        }
+
+        CgsGraphics::CameraRwFrustum lRwFrustum;
+        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 0 ], lForward, laNear[ 0 ] );   // near
+        {
+            const Vector3 lNegDir = { -lForward.x, -lForward.y, -lForward.z, 0.0f };
+            StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 1 ], lNegDir, laFar[ 0 ] );  // far
+        }
+        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 2 ],
+            NormalizedCross3( Sub3( laNear[ 1 ], laFar[ 1 ] ), Sub3( laFar[ 2 ], laFar[ 1 ] ) ), laNear[ 1 ] );
+        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 3 ],
+            NormalizedCross3( Sub3( laNear[ 3 ], laFar[ 3 ] ), Sub3( laFar[ 0 ], laFar[ 3 ] ) ), laNear[ 3 ] );
+        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 4 ],
+            NormalizedCross3( Sub3( laNear[ 0 ], laFar[ 0 ] ), Sub3( laFar[ 1 ], laFar[ 0 ] ) ), laNear[ 0 ] );
+        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 5 ],
+            NormalizedCross3( Sub3( laNear[ 2 ], laFar[ 2 ] ), Sub3( laFar[ 3 ], laFar[ 2 ] ) ), laNear[ 2 ] );
+
+        // [FLAG PC bring-up] ORIENT the six planes so every normal points INTO the view
+        // volume, which is the convention CgsGeometric::Frustum::SetFromRwFrustum (and
+        // through it every culling test) consumes. The plane CONSTRUCTION above is the
+        // console's, but its inward-ness depends on the handedness of the camera basis
+        // GetFrustumPerspective is handed, and this stand-in camera builds its basis by
+        // hand rather than through CgsGraphics::Camera -- so four of the six come out
+        // reversed and the query rejects the whole city. The frustum's mid-axis point is
+        // strictly interior, so testing each plane against it and flipping the ones it
+        // fails is exact, and it drops out entirely when the director camera lands and
+        // Camera::GetFrustumPerspective produces the planes.
+        {
+            const f32 lfMidDepth = 0.5f * ( lfNear + lfFar );
+            const Vector3 lInterior = { lEye.x + lForward.x * lfMidDepth,
+                                        lEye.y + lForward.y * lfMidDepth,
+                                        lEye.z + lForward.z * lfMidDepth, 0.0f };
+            for ( int liPlane = 0; liPlane < 6; ++liPlane )
+            {
+                Vector4& lrPlane = lRwFrustum.maPlanes[ liPlane ];
+                const f32 lfSigned = lrPlane.x * lInterior.x + lrPlane.y * lInterior.y
+                                   + lrPlane.z * lInterior.z - lrPlane.w;
+                if ( lfSigned < 0.0f )
+                {
+                    lrPlane.x = -lrPlane.x;
+                    lrPlane.y = -lrPlane.y;
+                    lrPlane.z = -lrPlane.z;
+                    lrPlane.w = -lrPlane.w;
+                }
+            }
+        }
+
+        CgsGeometric::Frustum lFrustum;
+        lFrustum.SetFromRwFrustum( lRwFrustum );
+
+        // The four IO buffers the query round trip needs (see the FLAG above).
+        static CgsSceneManager::SceneManagerIO::InputBuffer_Query  sQueryInput;
+        static CgsSceneManager::SceneManagerIO::OutputBuffer       sQueryOutput;
+        static WorldEntityIO::InputBuffer_GenerateDispatchLists    sWorldDispatchInput;
+        static FilteredEntityData                                  sFilteredEntityData;
+        static bool sbBuffersConstructed = false;
+        if ( !sbBuffersConstructed )
+        {
+            sbBuffersConstructed = true;
+            sWorldDispatchInput.Construct();
+            sFilteredEntityData.Construct();
+        }
+        sQueryInput.Construct();
+        sQueryOutput.Construct();
+
+        // ---- stage the main camera query (the same event WorldModule::
+        //      GenerateFrustumQueries @0x827DADF8 emits for FrustumQuery_MainView) ----
+        sQueryInput.LockForWrite();
+        {
+            u32 luEntityTypeFlags = mbForceOnlyBackdrops ? 0u : 1024u;
+            if ( mbRenderBackdrops )
+            {
+                luEntityTypeFlags |= 0x1000u;
+            }
+            sQueryInput.GetInCoarseQueryQueue()->FrustumTestVp(
+                KA_FRUSTUM_QUERY_IDS[ 0 ], luEntityTypeFlags,
+                lFrustum.maSwizzledPlanes, lViewProjection, 0u );
+        }
+        sQueryInput.UnlockForWrite();
+
+        mSceneModule.ProcessFrustumTestJobRequests( 0, 0, &sQueryInput, &sQueryOutput );
+        mSceneModule.ProcessFrustumTestJobResults( 0, 0, &sQueryInput, &sQueryOutput );
+
+        // ---- filter the result into the per-owner id lists ----
+        sQueryOutput.LockForRead();
+        const CgsSceneManager::SceneManagerIO::OutputBuffer::SceneQueryResultsQueue* lpResultsQueue =
+            sQueryOutput.GetSceneQueryResultsQueue();
+
+        const CgsModule::Event* lpFrustumTestResult = 0;
+        s32 liResultSize = 0;
+        const s32 liResultType = lpResultsQueue->GetFirstEvent( &lpFrustumTestResult, &liResultSize );
+
+        if ( liResultType >= 0 && lpFrustumTestResult != 0 )
+        {
+            FilterFrustumTestResults( lpFrustumTestResult,
+                                      &sFilteredEntityData.maWorldEntityIds,
+                                      &sFilteredEntityData.maRaceCarEntityIds,
+                                      &sFilteredEntityData.maTrafficEntityIds,
+                                      &sFilteredEntityData.maPropEntityIds );
+
+            sWorldDispatchInput.LockForWrite();
+            sWorldDispatchInput.GetSceneResultQueue()->Clear();
+            sWorldDispatchInput.GetSceneResultQueue()->AddEvent(
+                lpFrustumTestResult, liResultType, liResultSize );
+            sWorldDispatchInput.SetDispatchFrame( lpDispatchFrame );
+            // The consumer dereferences the shadow map unconditionally (it decides the
+            // z-only shadow pass from it), so it has to be published even when the
+            // shadow pass is off -- the console stages it through
+            // BridgeWorldModuleToEntityModules_Render.
+            sWorldDispatchInput.SetShadowMap( &mShadowMap );
+            sWorldDispatchInput.UnlockForWrite();
+
+            mWorldEntityModule.GenerateDispatchLists(
+                &sWorldDispatchInput, sFilteredEntityData.maWorldEntityIds,
+                lViewProjection, lEye, lForward, 1.0f, &mShaderLodInfo,
+                KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
+                KI_WORLD_PREZ_LIST, false );
+        }
+        sQueryOutput.UnlockForRead();
+
+        {
+            // [DIAG culling wave] per-N-frame visibility tally.
+            static s32 siDiagFrame = 0;
+            static clock_t slDiagStart = 0;
+            if ( siDiagFrame == 0 ) { slDiagStart = clock(); }
+            if ( ( siDiagFrame++ % 120 ) == 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                const f32 lfElapsed =
+                    static_cast< f32 >( clock() - slDiagStart ) / static_cast< f32 >( CLOCKS_PER_SEC );
+                *CgsDev::Log::gpDebugPrint
+                    << "[culling-diag] frame " << siDiagFrame
+                    << " t=" << lfElapsed
+                    << " producerFps=" << ( lfElapsed > 0.01f ? ( siDiagFrame / lfElapsed ) : 0.0f )
+                    << " eye=(" << lEye.x << "," << lEye.y << "," << lEye.z
+                    << ") visibleWorld="
+                    << static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() )
+                    << " list11=" << static_cast< s32 >(
+                           lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() )
+                    << "\n";
+            }
+
+            static bool sbLogged = false;
+            if ( !sbLogged && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLogged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[culling] real frustum producer live: centre ("
+                    << lCentre.x << ", " << lCentre.y << ", " << lCentre.z
+                    << ") radius " << lfRadius << " -- visible world entities "
+                    << static_cast< s32 >( sFilteredEntityData.maWorldEntityIds.GetLength() )
+                    << ", object list " << static_cast< s32 >( KI_WORLD_OPAQUE_LIST )
+                    << " count "
+                    << static_cast< s32 >( lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() )
+                    << "\n";
+            }
         }
     }
 }

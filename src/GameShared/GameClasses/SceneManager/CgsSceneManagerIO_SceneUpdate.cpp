@@ -278,6 +278,59 @@ namespace SceneManagerIO
         mRemoveAllEntitiesQueue.Construct();
     }
 
+    // ----- Add an entity to the scene, FULL producer signature (X360 0x822B11F8) -----
+    // The 3-arg slice above predates the vmx lane being decoded; this is the real
+    // producer the world/prop/traffic entity modules call. The bounding-sphere CENTRE is
+    // the caller's v1 vmx argument (`stvx128 v1` at event +0x00), then the id / entity-type
+    // flag / radius scalars at +0x10 / +0x14 / +0x18.
+    void InSceneUpdateInterface::AddEntity(CgsSceneManager::EntityId lEntityId, u32 luEntityTypeFlag,
+                                           Vector3 lCentre, f32 lfBoundingRadius)
+    {
+        InEventAddEntity lEvent;
+        lEvent.mTransformLane = lCentre;                         // stvx128 v1 @+0x00
+        lEvent.mEntityId      = lEntityId;                       // stw a2 @+0x10
+        lEvent.miField14      = static_cast<s32>(luEntityTypeFlag); // stw a3 @+0x14
+        lEvent.mfField18      = lfBoundingRadius;                // stfs a4 @+0x18
+
+        CGS_ASSERT(mAddEntityQueue.GetLength() < mAddEntityQueue.GetMaxLength(),
+                   "SceneManager.mAddEntityQueue too small, increase value in SceneManagerConstants.h");
+        mAddEntityQueue.AddEvent(lEvent);
+    }
+
+    // ----- Merge another interface's staged events onto this one (X360 0x827A9340) -----
+    // The whole-interface merge the entity-module -> scene bridges run once per phase:
+    // each of the 25 embedded queues appends the matching source queue
+    // (BaseEventQueue<T>::Append -- a block copy onto the tail plus the length bump).
+    // Order is irrelevant (the queues are independent); the list mirrors Clear's.
+    void InSceneUpdateInterface::Append(const InSceneUpdateInterface& lrSource)
+    {
+        mUpdatePositionQueue.Append(lrSource.mUpdatePositionQueue);
+        mSetVolumeInstanceTransformQueue.Append(lrSource.mSetVolumeInstanceTransformQueue);
+        mAddEntityQueue.Append(lrSource.mAddEntityQueue);
+        mAddDynamicVolumeQueue.Append(lrSource.mAddDynamicVolumeQueue);
+        mAddForCollisionQueue.Append(lrSource.mAddForCollisionQueue);
+        mAddVolumeInstanceQueue.Append(lrSource.mAddVolumeInstanceQueue);
+        mForceNoPaddingQueue.Append(lrSource.mForceNoPaddingQueue);
+        mRemoveEntityQueue.Append(lrSource.mRemoveEntityQueue);
+        mRemoveForCollisionQueue.Append(lrSource.mRemoveForCollisionQueue);
+        mRemoveVolumeQueue.Append(lrSource.mRemoveVolumeQueue);
+        mRemoveVolumeInstanceQueue.Append(lrSource.mRemoveVolumeInstanceQueue);
+        mReplaceDynamicVolumeQueue.Append(lrSource.mReplaceDynamicVolumeQueue);
+        mSetCullingGroupPairQueue.Append(lrSource.mSetCullingGroupPairQueue);
+        mClearCullingTableQueue.Append(lrSource.mClearCullingTableQueue);
+        mSetEntityRadiusQueue.Append(lrSource.mSetEntityRadiusQueue);
+        mSetPaddingQueue.Append(lrSource.mSetPaddingQueue);
+        mAddVolumeInstanceForCachingQueue.Append(lrSource.mAddVolumeInstanceForCachingQueue);
+        mClearEntityPaddingQueue.Append(lrSource.mClearEntityPaddingQueue);
+        mSetVolumeInstanceCullingGroupQueue.Append(lrSource.mSetVolumeInstanceCullingGroupQueue);
+        mAddToCacheQueue.Append(lrSource.mAddToCacheQueue);
+        mUpdateCachedPositionQueue.Append(lrSource.mUpdateCachedPositionQueue);
+        mRemoveFromCacheQueue.Append(lrSource.mRemoveFromCacheQueue);
+        mAddPolySoupListQueue.Append(lrSource.mAddPolySoupListQueue);
+        mClearPolySoupListsQueue.Append(lrSource.mClearPolySoupListsQueue);
+        mRemoveAllEntitiesQueue.Append(lrSource.mRemoveAllEntitiesQueue);
+    }
+
     // ----- Reset every embedded queue's live count (X360 0x822B10C8) -----
     // The X360 inlines a `stw 0, miLength(queue)` for each of the 25 embedded queues (the 25
     // zeroed offsets == Construct's 25 queue bases + 8). Each maps to the queue's own Clear()

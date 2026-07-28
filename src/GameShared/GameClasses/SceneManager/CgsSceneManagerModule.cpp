@@ -27,7 +27,11 @@
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModule.h"  // OverlapGenerationIO::InputBuffer / InAddBodyEvent (AddBody)
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG culling wave] CgsDev::Log::gpDebugPrint
 #include "rw/rwcore_structs.h"   // rw::IResourceAllocator / rw::Resource / rw::ResourceDescriptor
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                                    // SceneManagerIO::InputBuffer_Update / OutputBuffer / OutCoarseQueryResult
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManagerIO.h"  // SpatialPartitionIO::InputBuffer_Update / OutputBuffer
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsLooseOctree.h" // LooseOctree (the frustum-test entry points)
 
 // ---------------------------------------------------------------------------
 // rw::collision::Volume::InitializeVTable -- the X360 Construct lazily fills the
@@ -503,6 +507,294 @@ void SceneManagerModule::UpdateContactGeneration(CgsModule::IOBufferStack* lpInp
 }
 
 // ===========================================================================
+// SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules @ 0x828D1F88
+//
+// The scene input's InSceneUpdateInterface is a batch of 25 producer queues; this fans
+// them out into the sub-modules. The X360 body walks every queue; the ENTITY legs -- the
+// ones the broad-phase runs on -- are reconstructed here:
+//
+//   mRemoveEntityQueue  -> RemoveEntityFromGraph(index) + EntityManager::RemoveEntity
+//   mAddEntityQueue     -> index = EntityManager::AddEntity(id);
+//                          SpatialPartition::AllocEntity(index, typeFlags, centre, radius)
+//                          then the virtual AddEntityToGraph(index)   [vtable +0x38]
+//   mUpdatePositionQueue-> SetEntityPosition(index, position)          [vtable +0x2C]
+//   mSetEntityRadiusQueue->SetEntityRadius(index, radius)              [vtable +0x30]
+//
+// Note the X360 calls the partition DIRECTLY (module+0x280) for the add leg rather than
+// routing it through the spatial-partition update queue -- reproduced.
+//
+// SCOPE NOTE: the volume / culling-group / triangle-cache / poly-soup legs (the other 21
+// queues) are the VolumeManager + TriangleCache collaborators' territory and are not
+// reconstructed here; they feed no part of the frustum path. Their producers are already
+// live, so the events simply stay queued and are dropped with the frame's buffer -- the
+// same observable those managers' own gates already have.
+// ===========================================================================
+void SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(
+    OverlapGenerationIO::InputBuffer* /*lpOverlapGenerationInput*/,
+    SpatialPartitionIO::InputBuffer_Update* /*lpSpatialPartitionInput*/,
+    SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+    bool /*lbPrepare*/)
+{
+    CGS_ASSERT(lpSceneInputBuffer != NULL, "lpSceneInputBuffer != NULL");
+    if (lpSceneInputBuffer == NULL)
+    {
+        return;
+    }
+
+    SceneManagerIO::InSceneUpdateInterface* lpScene =
+        lpSceneInputBuffer->GetInSceneUpdateInterface();
+    SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();
+    if (lpPartition == NULL)
+    {
+        return;
+    }
+
+    // ---- removes first (the X360 order: a slot has to be free before the adds run) ----
+    {
+        const CgsModule::EventQueue<SceneManagerIO::InEventRemoveEntity, 10000>& lrQueue =
+            lpScene->GetRemoveEntityQueue();
+        const s32 liCount = lrQueue.GetLength();
+        for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
+        {
+            const SceneManagerIO::InEventRemoveEntity& lrEvent = lrQueue.GetEvent(liEvent);
+            const s32 liIndex = mEntityManager.GetEntityIndexByID(lrEvent.mEntityId);
+            if (liIndex < 0)
+            {
+                continue;   // never registered (or already retired)
+            }
+            lpPartition->RemoveEntityFromGraph(static_cast<u16>(liIndex));
+            mEntityManager.RemoveEntity(static_cast<u16>(liIndex));
+        }
+    }
+
+    // ---- adds ----
+    {
+        const CgsModule::EventQueue<SceneManagerIO::InEventAddEntity, 5120>& lrQueue =
+            lpScene->GetAddEntityQueue();
+        const s32 liCount = lrQueue.GetLength();
+        for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
+        {
+            const SceneManagerIO::InEventAddEntity& lrEvent = lrQueue.GetEvent(liEvent);
+
+            const u16 lu16Index = mEntityManager.AddEntity(lrEvent.mEntityId);
+            CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES, "Out of bounds entity index from entity ");
+            if (lu16Index >= KI_MAX_NUM_ENTITIES)
+            {
+                continue;
+            }
+
+            SpatialPartitionEntityLink* lpNewEntity =
+                lpPartition->AllocEntity(lu16Index,
+                                         static_cast<u32>(lrEvent.miField14),
+                                         lrEvent.mTransformLane,
+                                         lrEvent.mfField18);
+            if (lpNewEntity == NULL)
+            {
+                CGS_ASSERT(false, "lpNewEntity != NULL");
+                continue;
+            }
+            lpPartition->AddEntityToGraph(lu16Index);
+        }
+
+        // [DIAG culling wave] running tally of everything the broad phase has taken on.
+        if (liCount > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siTotalAdded = 0;
+            siTotalAdded += liCount;
+            *CgsDev::Log::gpDebugPrint << "[culling-diag] scene AddEntity batch " << liCount
+                                       << " (total " << siTotalAdded << ")\n";
+        }
+    }
+
+    // ---- position updates ----
+    {
+        const CgsModule::EventQueue<SceneManagerIO::InEventSetEntityPosition, 1024>& lrQueue =
+            lpScene->GetUpdatePositionQueue();
+        const s32 liCount = lrQueue.GetLength();
+        for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
+        {
+            const SceneManagerIO::InEventSetEntityPosition& lrEvent = lrQueue.GetEvent(liEvent);
+            const s32 liIndex = mEntityManager.GetEntityIndexByID(EntityId(lrEvent.mEntityId));
+            if (liIndex >= 0)
+            {
+                lpPartition->SetEntityPosition(static_cast<u16>(liIndex), lrEvent.mPosition);
+            }
+        }
+    }
+
+    // ---- radius updates ----
+    {
+        const CgsModule::EventQueue<SceneManagerIO::InEventSetEntityRadius, 512>& lrQueue =
+            lpScene->GetSetEntityRadiusQueue();
+        const s32 liCount = lrQueue.GetLength();
+        for (s32 liEvent = 0; liEvent < liCount; ++liEvent)
+        {
+            const SceneManagerIO::InEventSetEntityRadius& lrEvent = lrQueue.GetEvent(liEvent);
+            const s32 liIndex = mEntityManager.GetEntityIndexByID(lrEvent.mEntityId);
+            if (liIndex >= 0)
+            {
+                lpPartition->SetEntityRadius(static_cast<u16>(liIndex), lrEvent.mfRadius);
+            }
+        }
+    }
+}
+
+// ===========================================================================
+// SceneManagerModule::UpdateScene @ 0x828D4C28  (X360 vtbl+64)
+//
+//   1. StartMonitor(the UpdateScene CPU monitor);
+//   2. four null tripwires;
+//   3. CreateIOBuffer<SpatialPartitionIO::InputBuffer_Update>("SpatialPartition") and
+//      <OverlapGenerationIO::InputBuffer>("OverlapGeneration") on the INPUT stack,
+//      <SpatialPartitionIO::OutputBuffer> + <OverlapGenerationIO::OutputBuffer> on the
+//      OUTPUT stack;
+//   4. read-lock the scene input, write-lock both sub-module inputs, and fan the scene
+//      input's update interface out through BridgeInputSceneUpdateInterfaceToSubModules,
+//      then unlock in reverse;
+//   5. SpatialPartitionManager::UpdateScene(spIn) -- drain the queue into the octree and
+//      run its per-frame bounds update;
+//   6. the overlap generator's own update;
+//   7. write-lock the scene output and publish &mTriangleCacheManager on it;
+//   8. destroy the four buffers; StopMonitor.
+//
+// FLAG: steps 3/6 are trimmed here. The bridge above applies the entity legs DIRECTLY to
+// the partition (as the X360's own add leg does) rather than restaging them through a
+// SpatialPartitionIO::InputBuffer_Update, so that buffer -- a 135 KB VEQ pushed on the
+// input stack every frame -- is not created; and the overlap generator is a documented
+// inert gate whose input buffer would only be filled by the volume legs the bridge does
+// not reconstruct. The triangle-cache publish (step 7) has no committed consumer.
+// ===========================================================================
+bool SceneManagerModule::UpdateScene(CgsModule::IOBufferStack* lpInputBufferStack,
+                                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                                     SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer,
+                                     SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+                                     bool lbPrepare)
+{
+    ScopedPerfMon lUpdateScene(siUpdateScenePerfMon);
+
+    CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");
+    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
+    CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");
+    CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");
+
+    if (lpSceneInputBuffer == NULL)
+    {
+        return true;
+    }
+
+    // NOTE the WRITE lock: InputBuffer_Update::GetInSceneUpdateInterface @0x825BD8C0
+    // guards on the write bit (bit 3, "Not locked for writing\n"), because on the console
+    // this buffer reaches UpdateScene still owned by the producer side. Read-locking it
+    // here trips that tripwire on the first frame.
+    lpSceneInputBuffer->LockForWrite();
+    BridgeInputSceneUpdateInterfaceToSubModules(NULL, NULL, lpSceneInputBuffer, lbPrepare);
+    lpSceneInputBuffer->UnlockForWrite();
+
+    // The partition's own per-frame pass (re-derive the loose bounds of every branch the
+    // adds/removes flagged). The X360 reaches it through SpatialPartitionManager::
+    // UpdateScene, which read-locks the (unused here) spatial-partition input first.
+    SpatialPartition* lpPartition = mSpatialPartitionManager.GetSpatialPartition();
+    if (lpPartition != NULL)
+    {
+        lpPartition->Update();
+    }
+
+    return true;
+}
+
+// ===========================================================================
+// SceneManagerModule::ProcessFrustumTestJobRequests @ 0x828C7628
+//
+// Walk the frame's staged coarse-query events and hand each one to the octree's job
+// system, then kick the jobs:
+//   for each event in the query input's InCoarseQueryQueue:
+//       assert(id == E_IN_EVENT_FRUSTUM_TEST_VP);
+//       maFrustumTestJobQueryIds[queryIndex] = event->mQueryId;      // event +0xC0
+//       assert(KA_FRUSTUM_QUERY_JOB_INDEX is non-decreasing);
+//       LooseOctree::AddJobFrustumTest(event->mx32EntityTypeFlags,   // event +0xC4
+//                                      &event->maFrustumPlanes,      // event +0x40
+//                                      &event->mViewProjection,      // event +0x00
+//                                      KA_FRUSTUM_QUERY_JOB_INDEX[queryIndex]);
+//   LooseOctree::StartFrustumTestJobs();
+//
+// The per-query id array is what ProcessFrustumTestJobResults stamps each result batch
+// with, so the batches come back in submission order.
+//
+// FLAG: KA_FRUSTUM_QUERY_JOB_INDEX (X360 unk_82F33E48) is a static table with no writer,
+// and the exports carry no data section, so its contents cannot be read back. Its ONE
+// attested property is the assert right beside it -- it is non-decreasing -- and that is
+// also the only property the results depend on: WaitForFrustumTestJobResults drains jobs
+// in index order and each job's queries in submission order, so a non-decreasing map is
+// exactly the condition for the result batches to come back in query order. The map below
+// spreads the queries evenly over the four jobs (which also keeps each job inside its
+// KU_JOB_RESULT_BUFFER_SIZE run pool); any other non-decreasing map produces the same
+// result stream.
+// ===========================================================================
+void SceneManagerModule::ProcessFrustumTestJobRequests(CgsModule::IOBufferStack* lpInputBufferStack,
+                                                       CgsModule::IOBufferStack* lpOutputBufferStack,
+                                                       SceneManagerIO::InputBuffer_Query* lpQueryInput,
+                                                       SceneManagerIO::OutputBuffer* lpQueryOutput)
+{
+    ScopedPerfMon lProcessSceneQueries(siProcessSceneQueriesPerfMon);
+
+    // (The two buffer-stack tripwires the X360 fires here are omitted while the
+    //  bring-up dispatch producer is the caller: it has no stacks -- see the
+    //  FLAG in ProcessFrustumTestJobResults -- and neither entry point uses them
+    //  on this path. Restore them with BrnGameModule::DoDispatch.)
+    CGS_ASSERT(lpQueryInput != NULL,        "lpSceneInputBuffer != NULL");
+    CGS_ASSERT(lpQueryOutput != NULL,       "lpSceneOutputBuffer != NULL");
+    (void)lpInputBufferStack;
+    (void)lpOutputBufferStack;
+
+    ScopedPerfMon lCoarse(siProcessCoarseQueriesPerfMon);
+
+    LooseOctree* lpOctree =
+        static_cast<LooseOctree*>(mSpatialPartitionManager.GetSpatialPartition());
+    if (lpQueryInput == NULL || lpOctree == NULL)
+    {
+        return;
+    }
+
+    lpQueryInput->LockForRead();
+
+    const SceneManagerIO::InCoarseQueryQueue<16384>* lpQueue = lpQueryInput->GetInCoarseQueryQueue();
+
+    const CgsModule::Event* lpEvent = NULL;
+    s32 liSize = 0;
+    s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    u32 luQueryIndex = 0;
+    while (liId >= 0)
+    {
+        CGS_ASSERT(liId == SceneManagerIO::E_IN_EVENT_FRUSTUM_TEST_VP,
+                   "liId == SceneManagerIO::E_IN_EVENT_FRUSTUM_TEST_VP");
+
+        if (luQueryIndex >= KU_MAX_FRUSTUM_TEST_JOB_QUERIES)
+        {
+            break;
+        }
+
+        const SceneManagerIO::InEventFrustumTestVp* lpQuery =
+            static_cast<const SceneManagerIO::InEventFrustumTestVp*>(lpEvent);
+
+        maFrustumTestJobQueryIds[luQueryIndex] = lpQuery->mQueryId;
+
+        lpOctree->AddJobFrustumTest(
+            lpQuery->mx32EntityTypeFlags,
+            reinterpret_cast<const CgsGeometric::Frustum*>(lpQuery->maFrustumPlanes),
+            &lpQuery->mViewProjection,
+            (luQueryIndex * KU_NUM_FRUSTUM_TEST_JOBS) / KU_MAX_FRUSTUM_TEST_JOB_QUERIES);
+
+        liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        ++luQueryIndex;
+    }
+
+    lpQueryInput->UnlockForRead();
+
+    lpOctree->StartFrustumTestJobs();
+}
+
+// ===========================================================================
 // SceneManagerModule::ProcessFrustumTestJobResults @ 0x828C7838
 //
 // Drain the loose-octree frustum-test job results into the scene output event queue.
@@ -524,12 +816,23 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
 {
     ScopedPerfMon lProcessSceneQueries(siProcessSceneQueriesPerfMon);
 
-    CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");
-    CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");
+    // (see ProcessFrustumTestJobRequests on the two omitted stack tripwires)
     CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");
     CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");
+    (void)lpInputBufferStack;
 
     ScopedPerfMon lCoarse(siProcessCoarseQueriesPerfMon);
+
+    if (lpSceneInputBuffer == NULL || lpSceneOutputBuffer == NULL)
+    {
+        return;
+    }
+
+    // The X360 opens with the W+R helper sub_823B6FE0(sceneOut, sceneIn): the scene
+    // OUTPUT is write-locked (the results ring is about to be filled) and the scene INPUT
+    // read-locked; the tail unlocks both.
+    reinterpret_cast<CgsModule::IOBuffer*>(lpSceneOutputBuffer)->LockForWrite();
+    reinterpret_cast<CgsModule::IOBuffer*>(lpSceneInputBuffer)->LockForRead();
 
     CgsModule::IOBufferStack* lpOutStack = lpOutputBufferStack;
 
@@ -537,21 +840,93 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
     // pushed on the output stack; the SceneManagerModule reads the resolved entity ids
     // out and re-emits them into the scene output event queue.
     SpatialPartitionIO::OutputBuffer* lpResultBuffer = nullptr;
-    lpOutStack->CreateIOBuffer(&lpResultBuffer, "SpacialPartition");
+    if (lpOutStack != nullptr)
+    {
+        lpOutStack->CreateIOBuffer(&lpResultBuffer, "SpacialPartition");
+    }
+    else
+    {
+        // [FLAG PC bring-up] the bring-up dispatch producer has no IO buffer stacks (the
+        // console's BrnGameModule::DoDispatch @0x823DC458 creates them; that spine is not
+        // live yet), so the coarse-result buffer -- a 53 KB frame-local on the console --
+        // is a file static here. Retire with the bring-up producer.
+        static SpatialPartitionIO::OutputBuffer sStandInResultBuffer;
+        static bool sbStandInConstructed = false;
+        if (!sbStandInConstructed)
+        {
+            sbStandInConstructed = true;
+            sStandInResultBuffer.Construct();
+        }
+        lpResultBuffer = &sStandInResultBuffer;
+    }
+    if (lpResultBuffer == nullptr)
+    {
+        return;
+    }
 
     reinterpret_cast<CgsModule::IOBuffer*>(lpResultBuffer)->LockForWrite();
 
-    // The X360 here waits for the loose octree's outstanding frustum-test jobs
-    // (mSpatialPartitionManager's active partition), then for every coarse-result batch
-    // the jobs produced, allocates a variable event in the scene output event queue and
-    // copies the resolved entity ids out (asserting each index < KI_MAX_NUM_ENTITIES and
-    // each id != K_INVALID_ENTITY_ID). That per-batch drain reads through the
-    // SpatialPartition coarse-result-buffer + EntityManager accessors whose X360 names
-    // are truncated in the IDB (LooseOctree::WaitForFrustumTestJobResults,
-    // CoarseQueryResultBuffer<16384>::GetBatchByOffset, EntityManager id resolution) and
-    // the scene VariableEventQueue<32768,16>. Those callees' full homes are the
-    // SpatialPartition / Entity / Module-event-queue TUs (see SCOPE NOTE); the buffer
-    // lock/create/destroy plumbing the SceneManagerModule owns is reconstructed here.
+    CoarseQueryResultBuffer<16384>* lpResults = lpResultBuffer->GetCoarseResultBuffer();
+    lpResults->Construct();
+
+    LooseOctree* lpOctree =
+        static_cast<LooseOctree*>(mSpatialPartitionManager.GetSpatialPartition());
+    if (lpOctree != NULL)
+    {
+        lpOctree->WaitForFrustumTestJobResults(lpResults);
+    }
+
+    // One scene-output event per coarse-result BATCH, stamped with that query's id (the
+    // batches come back in submission order, so batch i belongs to query i):
+    //   Event* e = queue.AllocateEvent(0, 4 * (numResults + 3));
+    //   e[0] = query id; e[1] = e[2] = numResults; e[3..] = one EntityId per result
+    // (the octree hands back pool INDICES, so each is resolved through the entity
+    // manager on the way out).
+    {
+        u32 luOffset      = 0;
+        u32 luNumResults  = 0;
+        const u32 luNumBatches = lpResults->GetNumBatches();
+
+        for (u32 luBatch = 0; luBatch < luNumBatches; ++luBatch)
+        {
+            const SceneQueryId lQueryId = maFrustumTestJobQueryIds[
+                (luBatch < KU_MAX_FRUSTUM_TEST_JOB_QUERIES) ? luBatch : 0];
+
+            const u16* lpu16Results =
+                lpResults->GetBatchByOffset(luOffset, &luOffset, &luNumResults);
+            CGS_ASSERT(lpu16Results != NULL, "lpu16Results != NULL");
+            if (lpu16Results == NULL)
+            {
+                break;
+            }
+
+            SceneManagerIO::OutCoarseQueryResult* lpEvent =
+                static_cast<SceneManagerIO::OutCoarseQueryResult*>(
+                    lpSceneOutputBuffer->GetSceneQueryResultsQueueForWrite()->AllocateEventSafe(
+                        SceneManagerIO::OutCoarseQueryResult::KI_EVENT_TYPE,
+                        static_cast<s32>(4 * (luNumResults + 3))));
+            if (lpEvent == NULL)
+            {
+                break;   // the results ring is full for this frame
+            }
+
+            lpEvent->mQueryId              = lQueryId;
+            lpEvent->miNumResults          = static_cast<s32>(luNumResults);
+            lpEvent->miNumResultsAttempted = static_cast<s32>(luNumResults);
+
+            EntityId* lpIds = lpEvent->GetEntityIds();
+            for (u32 luResult = 0; luResult < luNumResults; ++luResult)
+            {
+                const u16 lu16Index = lpu16Results[luResult];
+                CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+
+                const EntityId lId = mEntityManager.GetEntityIdByIndex(lu16Index);
+                CGS_ASSERT(lId != K_INVALID_ENTITY_ID, "lID != K_INVALID_ENTITY_ID");
+
+                lpIds[luResult] = lId;
+            }
+        }
+    }
 
     reinterpret_cast<CgsModule::IOBuffer*>(lpResultBuffer)->UnlockForWrite();
 
@@ -560,7 +935,10 @@ void SceneManagerModule::ProcessFrustumTestJobResults(CgsModule::IOBufferStack* 
     reinterpret_cast<CgsModule::IOBuffer*>(lpSceneInputBuffer)->UnlockForRead();
     reinterpret_cast<CgsModule::IOBuffer*>(lpSceneOutputBuffer)->UnlockForWrite();
 
-    lpOutStack->DestroyIOBuffer(&lpResultBuffer);
+    if (lpOutStack != nullptr)
+    {
+        lpOutStack->DestroyIOBuffer(&lpResultBuffer);
+    }
 }
 
 // ===========================================================================

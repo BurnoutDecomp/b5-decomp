@@ -76,6 +76,49 @@ namespace CgsSceneManager
     // ledger TU is a thin explicit instantiation). X360 addresses per method.
     // ------------------------------------------------------------------------
 
+    // Construct / Clear / Destruct -- the counter reset (the backing array is inline, so
+    // there is nothing to allocate or release). Every consumer opens a frame by
+    // Construct'ing a freshly stack-pushed buffer.
+    template <u32 KU_MaxResults>
+    void CoarseQueryResultBuffer<KU_MaxResults>::Construct()
+    {
+        Clear();
+    }
+
+    template <u32 KU_MaxResults>
+    void CoarseQueryResultBuffer<KU_MaxResults>::Destruct()
+    {
+    }
+
+    template <u32 KU_MaxResults>
+    void CoarseQueryResultBuffer<KU_MaxResults>::Clear()
+    {
+        miTotalNumResults              = 0;
+        miTotalBufferSize              = 0;
+        miCurrentResultsStartPosition  = 0;
+        miNumResultsAttemptedThisBatch = 0;
+        muNumBatches                   = 0;
+        mbInABatch                     = false;
+    }
+
+    template <u32 KU_MaxResults>
+    s32 CoarseQueryResultBuffer<KU_MaxResults>::GetFreeSpace() const
+    {
+        return static_cast<s32>(KU_MaxResults) - miTotalBufferSize;
+    }
+
+    template <u32 KU_MaxResults>
+    s32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumResultsAttempted() const
+    {
+        return miNumResultsAttemptedThisBatch;
+    }
+
+    template <u32 KU_MaxResults>
+    u32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumBatches() const
+    {
+        return muNumBatches;
+    }
+
     // X360 0x828AD8E0. &mau16Buffer[miCurrentResultsStartPosition] (non-const).
     template <u32 KU_MaxResults>
     u16* CoarseQueryResultBuffer<KU_MaxResults>::GetResultsBatch()

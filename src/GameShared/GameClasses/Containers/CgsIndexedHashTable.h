@@ -133,6 +133,16 @@ namespace CgsContainers
             }
         }
 
+        // Look a key up. Returns the stored element, or null when absent (DWARF h:296;
+        // the shape GetVolumeInstanceIndexByID @0x828CD4B8 uses on the sibling table).
+        const Element* Get(TKey lKey) const
+        {
+            Bin*  lpBin  = 0;
+            Node* lpNode = const_cast<IndexedHashTable*>(this)->GetInternal(lKey, &lpBin);
+            // Element and Node are layout-identical (an Element IS its single list node).
+            return reinterpret_cast<const Element*>(lpNode);
+        }
+
         // Remove the element with the given key from its bucket.
         void Remove(TKey lKey)
         {
@@ -151,8 +161,33 @@ namespace CgsContainers
 
     private:
         // Locate the node holding lKey and hand back its owning bucket (DWARF h:317).
-        // External to this TU on the X360; declared here so Remove compiles.
-        Node* GetInternal(TKey lKey, Bin** lppBin);
+        // The X360 emits it out-of-line per instantiation; the body is the bucket walk
+        // Insert's ordering contract implies -- hash the key to its bin, then walk the
+        // ASCENDING chain, stopping early once a key exceeds the target (the bucket is
+        // kept sorted by Insert, so no match can follow). Defined here so Remove links.
+        Node* GetInternal(TKey lKey, Bin** lppBin)
+        {
+            Bin& lrBin = maBins[static_cast<u32>(KeyBits(lKey) % BINS)];
+            if (lppBin != 0)
+            {
+                *lppBin = &lrBin;
+            }
+
+            const u64 lTarget = KeyBits(lKey);
+            for (Node* lpWalk = lrBin.GetHead(); lpWalk != 0; lpWalk = lrBin.GetNext(lpWalk))
+            {
+                const u64 lWalkKey = KeyBits(lpWalk->GetData()->mKey);
+                if (lWalkKey == lTarget)
+                {
+                    return lpWalk;
+                }
+                if (lWalkKey > lTarget)
+                {
+                    break;
+                }
+            }
+            return 0;
+        }
 
         Bin  maBins[BINS];    // +0x00       h:202 (BINS * 12 bytes on X360)
         bool mbInitialised;   // +BINS*12    h:205 (the stb 1 after Clear's bucket loop)

@@ -1790,16 +1790,10 @@ void BrnWorld::WorldModule::CalculateVehicleLODs(struct rw::math::vpu::Vector3)
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void BrnWorld::WorldModule::FilterFrustumTestResults(struct CgsModule::Event const *,class Array<class CgsSceneManager::EntityId,4500> *,class Array<class CgsSceneManager::EntityId,32> *,class Array<class CgsSceneManager::EntityId,650> *,class Array<class CgsSceneManager::EntityId,5400> *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::FilterFrustumTestResults stub RETIRED 2026-07-28, culling wave:
+//  the real body @0x827BDA60 now lives in BrnWorldModule.cpp beside its two
+//  callers. It is the split of one coarse-query result record into the four
+//  per-owner id arrays every module's GenerateDispatchLists consumes.)
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -1954,21 +1948,13 @@ void CgsGeometric::Frustum::CalcVertices(struct rw::math::vpu::Vector4 *) const
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void CgsGeometric::Frustum::SetFromRwFrustum(struct CgsGraphics::CameraRwFrustum const &)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "Frustum: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (CgsGeometric::Frustum::SetFromRwFrustum stub RETIRED 2026-07-28, culling wave:
+//  the real body @0x82839FA8 now lives in its X360 home
+//  GameShared/GameClasses/Geometric/Primitives/CgsFrustum.cpp. The rodata vperm
+//  masks the X360 transposes with are unrecoverable from the exports, but the lane
+//  MEANING is pinned exactly by the two readers of the stored form
+//  (IsSphereInFrustum @0x828AF020 / LooseOctree::FrustumTestEntities @0x828B1CA0)
+//  plus VectorToPlane's whole-vector negate -- see the body's banner.)
 
 // -------------------------------------------------------------------------
 // CgsGraphics::Camera -- DESTUBBED (2026-07-26 wave): Construct (both overloads,
@@ -2225,16 +2211,11 @@ void CgsSceneManager::OverlapGenerationModule::Update()
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddEntity(class CgsSceneManager::EntityId,unsigned int,struct rw::math::vpu::Vector3,float)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InSceneUpdateInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (InSceneUpdateInterface::AddEntity(EntityId,u32,Vector3,f32) stub RETIRED
+//  2026-07-28, culling wave: the real 4-arg producer @0x822B11F8 -- the one that
+//  carries the bounding-sphere CENTRE in the vmx lane -- now lives beside its
+//  3-arg sibling in CgsSceneManagerIO_SceneUpdate.cpp. It is the entry point of
+//  the whole broad-phase registration chain, so it can no longer be inert.)
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -2252,22 +2233,11 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
     }
 }
 
-// BOOT-GATE (attribsys wave 2026-07-26): REACHED by WorldModule::Prepare's
-// WORLDENTITY fail path (merge the world-entity buffer's staged scene adds into
-// the live scene input). Quiet one-shot log + drop -- the scene managers the
-// merged events would feed are themselves gated inert, so the drop is the
-// consistent observable. Reconstruct the 25-queue whole-interface Append from
-// the X360 alongside SceneManagerModule::Update.
-void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::Append(struct CgsSceneManager::SceneManagerIO::InSceneUpdateInterface const &)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InSceneUpdateInterface::Append: inert [FLAG PC boot gate]\n";
-    }
-}
+// (InSceneUpdateInterface::Append stub RETIRED 2026-07-28, culling wave: the real
+//  25-queue whole-interface merge @0x827A9340 now lives in
+//  CgsSceneManagerIO_SceneUpdate.cpp. It is the hop that carries the entity
+//  modules' staged scene adds into the scene manager's update input, so the drop
+//  is no longer the consistent observable -- the broad-phase now holds data.)
 
 // (InSceneUpdateInterface::SetCullingGroupPair stub RETIRED 2026-07-26: the real
 // producer @0x822B1B60 now lives in CgsSceneManagerIO_SceneUpdate.cpp, alongside
@@ -2296,22 +2266,11 @@ void CgsSceneManager::SceneManagerIO::InputBuffer_Query::Destruct()
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-class CgsSceneManager::SceneManagerIO::InCoarseQueryQueue<16384> * CgsSceneManager::SceneManagerIO::InputBuffer_Query::GetInCoarseQueryQueue()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "InputBuffer_Query: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return 0;
-}
+// (InputBuffer_Query::GetInCoarseQueryQueue gate RETIRED 2026-07-29, culling wave:
+//  it returned NULL, so the first real frustum query null-dereferenced it. The member
+//  mInCoarseQueryQueue IS committed (CgsSceneManagerIO.h) and Construct already brings
+//  it up, so the real accessor is now inline beside it -- X360 0x828AF270 returns
+//  this+0x28.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::OutputBuffer
@@ -2403,68 +2362,16 @@ void CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate()
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void CgsSceneManager::SceneManagerModule::ProcessFrustumTestJobRequests(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (CgsSceneManager::SceneManagerModule::ProcessFrustumTestJobRequests gate RETIRED
+//  2026-07-28, culling wave: the real body @0x828C7628 now lives in
+//  CgsSceneManagerModule.cpp -- it stages every frame's coarse frustum queries into
+//  the octree's job data blocks and kicks them.)
 
-// BOOT GATE -- SceneManagerModule::UpdateScene @0x828D4C28 (X360 vtbl+64).
-// RENAMED 2026-07-27 (world-drive wave) from the placeholder "Update"; the X360
-// symbol literally named SceneManagerModule::Update @0x827E1F28 is the assert
-// "Don't use this function. Use UpdateScene(), UpdateSceneQueries() and
-// UpdateContactGeneration() instead" (CgsSceneManagerModule.h:276).
-//
-// The X360 shell, step for step (CgsSceneManagerModule.cpp:728..):
-//   1. StartMonitor(the module's UpdateScene CPU monitor, dword_82F33EC8);
-//   2. four null tripwires (:728 lpInputBufferStack, :729 lpOutputBufferStack,
-//      :730 lpSceneInputBuffer, :731 lpSceneOutputBuffer);
-//   3. CreateIOBuffer<SpatialPartitionIO::InputBuffer_Update>  ("SpatialPartition")
-//      and <OverlapGenerationIO::InputBuffer> ("OverlapGeneration") on the INPUT
-//      stack; <SpatialPartitionIO::OutputBuffer> + <OverlapGenerationIO::OutputBuffer>
-//      on the OUTPUT stack;
-//   4. read-lock the scene input, write-lock both sub-module inputs, and fan the
-//      scene input's update interface out through
-//      SceneManagerModule::BridgeInputSceneUpdateInterfaceToSubModules(ogIn, spIn,
-//      sceneIn, lbPrepare), then unlock in reverse;
-//   5. SpatialPartitionManager::UpdateScene(&mSpatialPartitionManager, spIn) --
-//      i.e. drain the add/remove/set-position/set-radius queue into the octree;
-//   6. (*(vtbl(mOverlapGenerator) + 68))(&mOverlapGenerator, ogIn) -- the overlap
-//      generator's own update;
-//   7. write-lock the scene output and publish &mTriangleCacheManager on it
-//      (the "lpTriangleCacheManager != NULL" tripwire, CgsSceneManagerModuleIO.h:1268);
-//   8. destroy the four buffers; StopMonitor.
-//
-// WHY INERT IS FAITHFUL HERE: steps 5-7 are pure transfers into sub-modules that
-// hold NO DATA on the PC build -- the spatial partition's octree and the overlap
-// generator are both boot-gated (their Prepare never allocates), and the scene
-// input's update interface is empty because every entity-module -> scene bridge
-// feeding it is itself gated. With no entities registered, the X360 shell's
-// observable effect reduces to the triangle-cache-manager pointer publish, which
-// no committed consumer reads yet. Reconstruct steps 3-7 for real when the
-// SpatialPartition/OverlapGeneration IO buffers + BridgeInputSceneUpdateInterface-
-// ToSubModules land, and DELETE this gate.
-bool CgsSceneManager::SceneManagerModule::UpdateScene(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct CgsSceneManager::SceneManagerIO::OutputBuffer *,bool)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SceneManagerModule::UpdateScene: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// (CgsSceneManager::SceneManagerModule::UpdateScene gate RETIRED 2026-07-28,
+//  culling wave: the real body now lives in CgsSceneManagerModule.cpp -- it fans
+//  the scene input's InSceneUpdateInterface out through
+//  BridgeInputSceneUpdateInterfaceToSubModules @0x828D1F88 (entity legs) and runs
+//  the partition's own per-frame bounds pass.)
 
 // BOOT GATE -- SceneManagerModule::ProcessSceneQueries @0x828D57D0 (X360 vtbl+68).
 // RENAMED 2026-07-27 from the placeholder "UpdateQueries", and SOFTENED from a
@@ -2498,31 +2405,14 @@ void CgsSceneManager::SceneManagerModule::ProcessSceneQueries(struct CgsModule::
 // -------------------------------------------------------------------------
 // CgsSceneManager::SpatialPartitionManager
 // -------------------------------------------------------------------------
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot via the real
-// SceneManagerModule::Construct @0x828D09A0 sub-manager cascade; quiet no-op
-// (see AIModule::Construct). Reconstruct from X360 before wiring Prepare.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void CgsSceneManager::SpatialPartitionManager::Construct()
-{
-}
+// (CgsSceneManager::SpatialPartitionManager::Construct gate RETIRED 2026-07-28,
+//  culling wave: the real body now lives in CgsSpatialPartitionManager.cpp with
+//  the rest of the manager, and that TU is on the exe source list.)
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool CgsSceneManager::SpatialPartitionManager::Prepare(struct CgsSceneManager::SpatialPartitionConstructParams *,struct rw::IResourceAllocator *)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare chain
-    // (SceneManagerModule::Prepare / the world stage machine). One-shot log +
-    // report success so the scripted load advances; the sub-manager stays
-    // inert (zero-initialised storage) and its consumers keep their traps.
-    // Reconstruct from X360 (SpatialPartition/LooseOctree cluster).
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "SpatialPartitionManager::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// (CgsSceneManager::SpatialPartitionManager::Prepare gate RETIRED 2026-07-28,
+//  culling wave: the real staged handshake @0x828CFFA8 now carves + Constructs +
+//  Prepares the LooseOctree out of the scene resource allocator, so the broad
+//  phase really holds the world.)
 
 // -------------------------------------------------------------------------
 // CgsSceneManager::TriangleCacheManager
@@ -3358,37 +3248,15 @@ void WorldModule::BridgeCrashModuleToOutput(void *,struct BrnWorldIO::UpdateOutp
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AB490 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeEntityModulesToSceneModule_PreScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,class BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene const *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *,class BrnWorld::PropEntityIO::OutputBuffer_PreScene const *,struct BrnWorld::WorldEntityIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToSceneModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::BridgeEntityModulesToSceneModule_PreScene gate RETIRED 2026-07-28,
+//  culling wave: the real body @0x827AB490 now lives in its X360 home TU
+//  GameSource/World/Bridges/WorldBridgeEntityModulesToScene.cpp. It is the hop
+//  that carries every entity module's staged scene adds into the scene manager's
+//  update input, so the broad-phase now holds the streamed world.)
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827AB608 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeEntityModulesToScene_PostPhysics(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Update *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostPhysics const *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics const *,class BrnWorld::PropEntityIO::OutputBuffer_PostPhysics const *,struct BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeEntityModulesToScene_PostPhysics: inert [FLAG PC boot gate]\n";
-    }
-}
+// (WorldModule::BridgeEntityModulesToScene_PostPhysics gate RETIRED 2026-07-28,
+//  culling wave: the real body @0x827AB608 now lives in its X360 home TU
+//  GameSource/World/Bridges/WorldBridgeEntityModulesToScene.cpp.)
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
