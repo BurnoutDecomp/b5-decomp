@@ -44,7 +44,14 @@ namespace core
 // The fill callback the puller drives each Process. Register setup at the X360 bctrl
 // (@0x82B9A6B4): r3 = muFrameCount, r4 = scratch dst, r6 = mpContext, f1 = the peek float;
 // returns true (low byte) when it produced the requested frames into the scratch buffer.
-typedef int (*RawPuller2FillFn)(u32 luFrameCount, void* lpDst, void* lpContext, f32 lfArg);
+// PPC ABI: a float argument travels in an FPR and its GPR slot is SKIPPED. The bctrl
+// setup @0x82B9A6A4..0x82B9A6B4 loads r3 (frames), r4 (dst) and r6 (context) but never
+// r5 -- r5 still holds leftover data -- and passes the gain in f1. An argument in r6
+// with r5 unset can only mean an intervening float, so the third parameter is the gain
+// and the fourth is the context. The ProStreet08 rwaudio PDB agrees:
+// bool(*)(int, float*, float, void*). (An earlier note here read register NUMBERS as
+// parameter POSITIONS and had the last two swapped.)
+typedef int (*RawPuller2FillFn)(u32 luFrameCount, void* lpDst, f32 lfArg, void* lpContext);
 
 class RawPuller2; // fwd -- the ring records carry the RawPuller2 instance
 
@@ -121,7 +128,7 @@ public:
     // (sizeof=56, field order matches). Member names below are the authoritative PDB names;
     // the X360 ARTIST "+0xNN" offset comments are retained. The PlugIn base body (+0x08..0x23)
     // is left opaque here -- PlugIn is reconciled in its own header. Note: the PDB declares the
-    // callback as `bool(*)(int, float*, float, void*)`; the typedef arg ORDER below
+    // callback as `bool(*)(int, float*, float, void*)`, which the typedef below now matches
     // (frames, dst, context, arg) is kept ASM-correct per the bctrl reg setup, so the .cpp call
     // order is unchanged.
     void*            mpVTable;          // +0x00

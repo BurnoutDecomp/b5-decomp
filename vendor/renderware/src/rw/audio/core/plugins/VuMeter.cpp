@@ -73,7 +73,13 @@ struct VuMeterResetCommand
 // -------------------------------------------------------------------------------------
 int VuMeter::GetSize()
 {
-    return 336; // 0x150
+    // X360-LITERAL TRAP: the console immediate is this object's CONSOLE footprint, but
+    // GetSize is the plug-in factory's allocation stride -- it allocates GetSize() bytes and
+    // constructs the object into them. On the host the object is larger (widened vptr and
+    // pointers), so returning the console value under-allocates and corrupts what follows.
+    // Return host sizeof; the console immediate stays in the comment above.
+    return static_cast<int>(sizeof(VuMeter));   // X360: li r3, 0x150
+// 0x150
 }
 
 // -------------------------------------------------------------------------------------

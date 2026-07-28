@@ -111,7 +111,10 @@ public:
     // gains into a SubMix-channel foldback array (ReChannelGainWrite) and fold them back on
     // Disconnect; then clear the foldback gain array. X360 @0x82B9FE38. (The X360 passes
     // two dead trailing GPR args at the call sites; they are unused here.)
-    static int DisconnectImmediate(Send* self);
+    // Returns the SubMixConnector the disconnect yielded (asm @0x82B9FE38 returns it in r3).
+    // Typed as the real pointer: an int return forced a lossy reinterpret_cast<int> at the
+    // definition, discarding the top 32 bits of a host pointer (MSVC C4311).
+    static SubMixConnector* DisconnectImmediate(Send* self);
 
     // Deferred pointer-connect handler replayed off the ring (the consumer calls it
     // through int (*)(void *) with the record's own address): disconnect the embedded
@@ -141,7 +144,7 @@ public:
 
     // Release: tail-call to DisconnectImmediate (fold the send's gains back into the
     // SubMix and unlink). X360 @0x82BA3EF8 (b DisconnectImmediate).
-    static int ReleaseEvent(Send* self);
+    static SubMixConnector* ReleaseEvent(Send* self);
 
     // Scalar-deleting destructor: reset the vtable to the PlugIn base (off_820AA810) and,
     // for the deleting variant, operator delete. X360 @0x82BA1D58.
