@@ -108,12 +108,17 @@ struct AudioFormat
 // The audio Process context passed to every PlugIn::Process (IDA's `a2`). The filters
 // touch three deep fields (dword indices 49155 / 49156 / 49158, i.e. byte 0x3000C /
 // 0x30010 / 0x30018):
+//   +0x30000  mdStreamTime  (f64 frame-start stream time in seconds; SinePlayer::Process
+//                             @0x82B9B948 adds sampleIndex/sampleRate and gates each output
+//                             sample against the plug-in's start time.)
 //   +0x3000C  mpSrcBuffer   (the "0" channel-buffer pointer slot; swapped with dst)
 //   +0x30010  mpDstBuffer   (the "1" channel-buffer pointer slot)
 //   +0x30018  mpFormat      (-> +0x0C = sample rate)
 //   +0x30020  mNumSamples   (the frame's active sample count; 0 == a silent frame. Read by
 //                             Rechannel::Process @0x82B9A728 as both a has-work guard and
 //                             the sample count it forwards to ReChannelGainWrite.)
+//   +0x30024  mfSampleRate  (f32; the active output sample rate. SinePlayer::Process
+//                             publishes mpFormat->mfSampleRate here for downstream stages.)
 //   +0x30028  mfResampleGain (a downstream gain the Resample stage scales by its clamped
 //                             ratio -- see Resample::PreProcess @0x82B9AC10)
 //   +0x3002C  mbChannelCount (the channel count of the currently-active src buffer;
@@ -124,14 +129,16 @@ struct AudioFormat
 // -------------------------------------------------------------------------------------
 struct AudioProcessContext
 {
-    char                mBody[0x3000C];                 // +0x00 .. +0x3000B -- opaque graph buffers
+    char                mBody[0x30000];                 // +0x00 .. +0x2FFFF -- opaque graph buffers
+    f64                 mdStreamTime;                   // +0x30000 -- frame-start stream time (s)
+    char                mPad30008[0x3000C - 0x30008];   // +0x30008 .. +0x3000B
     AudioChannelBuffer *mpSrcBuffer;                    // +0x3000C
     AudioChannelBuffer *mpDstBuffer;                    // +0x30010
     char                mPad30014[0x30018 - 0x30014];   // +0x30014
     AudioFormat        *mpFormat;                       // +0x30018
     char                mPad3001C[0x30020 - 0x3001C];   // +0x3001C .. +0x3001F
     u32                 mNumSamples;                    // +0x30020 -- active frame sample count
-    char                mPad30024[0x30028 - 0x30024];   // +0x30024 .. +0x30027
+    f32                 mfSampleRate;                   // +0x30024 -- active output sample rate (Hz)
     f32                 mfResampleGain;                 // +0x30028 -- Resample-scaled gain
     u8                  mbChannelCount;                 // +0x3002C -- active src-buffer channel count
 };

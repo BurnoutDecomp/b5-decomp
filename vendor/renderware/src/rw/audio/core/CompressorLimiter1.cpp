@@ -79,7 +79,8 @@ CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 
 // follow-up once the VMX128 lane math is decoded; this stub keeps the type's layout/ABI
 // linkable in the meantime and never claims a fabricated result.
 // -------------------------------------------------------------------------------------
-int CompressorLimiter1::Process(CompressorLimiter1 * /*self*/)
+int CompressorLimiter1::Process(CompressorLimiter1 * /*self*/,
+                                AudioProcessContext * /*ctx*/, u8 /*channelCount*/)
 {
     // Unrecoverable VMX128 hand-asm: not reconstructed (keystone). No fabricated math.
     return 0;
