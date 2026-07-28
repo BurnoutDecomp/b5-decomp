@@ -31,6 +31,7 @@
 #include "pc/gcm/renderengine/VertexDescriptor.h" // renderengine::D3DVertexDeclaration (opaque)
 #include "pc/gcm/renderengine/IndexBuffer.h"      // renderengine::IndexBuffer  (Xbox2CheckPhysicalMemoryFlags leaf)
 #include "pc/gcm/renderengine/VertexBuffer.h"     // renderengine::VertexBuffer (Xbox2CheckPhysicalMemoryFlags leaf)
+#include "pc/gcm/renderengine/texture.h"          // renderengine::Texture::mpD3DTexture (world sampler bind)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsXboxConditionalRenderShims.h" // the predicated-draw externs homed at the bottom of this TU
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -126,6 +127,11 @@ namespace
     {
         IDirect3DVertexDeclaration9* mpDeclaration;
         u32                          muStride;
+        // Whether the declaration exposes D3DDECLUSAGE_TEXCOORD index 0. A vs_3_0
+        // shader that reads an input the declaration does not supply makes the draw
+        // call FAIL on D3D9, so the textured fallback variant may only be bound for
+        // meshes whose declaration has it.
+        bool                         mbHasTexcoord0;
     };
     std::unordered_map<const void*, Vd32Cached> sVdCache;
 
@@ -178,6 +184,15 @@ namespace
         virtual SIZE_T  __stdcall GetBufferSize() = 0;
     };
 
+    // TWO variants. The UNTEXTURED pair is the original bring-up shader (flat
+    // screen-space-derivative shading, POSITION only). The TEXTURED pair adds a
+    // TEXCOORD0 input and samples the material's diffuse texture at s0.
+    //
+    // They cannot be merged: a vs_3_0 shader that declares TEXCOORD0 makes the draw
+    // call fail outright on any mesh whose vertex declaration has no TEXCOORD0
+    // element (D3D9 rejects the draw rather than feeding zeroes). So the pair is
+    // chosen PER MESH, once its declaration is known -- see
+    // WorldFallbackShader_SelectForMesh, called from shadow::Device::SetMeshBuffersPC.
     const char* KPC_FALLBACK_VS =
         "float4 gWvp0 : register(c0);\n"
         "float4 gWvp1 : register(c1);\n"
@@ -198,9 +213,84 @@ namespace
         "  return float4(l * 0.62, l * 0.66, l * 0.72, 1.0);\n"
         "}\n";
 
+    const char* KPC_FALLBACK_TEX_VS =
+        "float4 gWvp0 : register(c0);\n"
+        "float4 gWvp1 : register(c1);\n"
+        "float4 gWvp2 : register(c2);\n"
+        "float4 gWvp3 : register(c3);\n"
+        "struct VsOut { float4 hpos : POSITION; float3 opos : TEXCOORD0; float2 uv : TEXCOORD1; };\n"
+        "VsOut main(float4 pos : POSITION, float2 uv : TEXCOORD0) {\n"
+        "  VsOut o;\n"
+        "  o.hpos = pos.x * gWvp0 + pos.y * gWvp1 + pos.z * gWvp2 + gWvp3;\n"
+        "  o.opos = pos.xyz;\n"
+        "  o.uv = uv;\n"
+        "  return o;\n"
+        "}\n";
+
+    // The texel MODULATES the flat term rather than replacing it (0.35 floor + 1.3 gain):
+    // a mesh can never disappear because its diffuse sampled black, which keeps the flat
+    // bring-up's "the geometry is all there" property while showing real texture detail.
+    const char* KPC_FALLBACK_TEX_PS =
+        "sampler2D gDiffuse : register(s0);\n"
+        "float4 main(float3 opos : TEXCOORD0, float2 uv : TEXCOORD1) : COLOR {\n"
+        "  float3 n = normalize(cross(ddx(opos), ddy(opos)));\n"
+        "  float l = 0.35 + 0.65 * saturate(abs(n.y) * 0.7 + (abs(n.x) + abs(n.z)) * 0.25);\n"
+        "  float3 flat3 = float3(l * 0.62, l * 0.66, l * 0.72);\n"
+        "  float3 texel = tex2D(gDiffuse, uv).rgb;\n"
+        "  return float4(flat3 * (0.35 + 1.3 * texel), 1.0);\n"
+        "}\n";
+
+    // [DIAG, env-gated like BRN_WORLD_ONLY] BRN_WORLD_UVDEBUG=1 swaps the textured
+    // pixel shader for one that paints the interpolated TEXCOORD0 (red = u, green = v),
+    // which separates "the vertex declaration/UV lane is wrong" from "the sampled
+    // texture has no content".
+    const char* KPC_FALLBACK_UVDEBUG_PS =
+        "float4 main(float3 opos : TEXCOORD0, float2 uv : TEXCOORD1) : COLOR {\n"
+        "  return float4(frac(uv.x), frac(uv.y), 0.25, 1.0);\n"
+        "}\n";
+
+    IDirect3DPixelShader9*  spFallbackUvDebugPs = nullptr;
     IDirect3DVertexShader9* spFallbackVs = nullptr;
     IDirect3DPixelShader9*  spFallbackPs = nullptr;
+    IDirect3DVertexShader9* spFallbackTexVs = nullptr;
+    IDirect3DPixelShader9*  spFallbackTexPs = nullptr;
     bool                    sbFallbackCompileFailed = false;
+    // Set by WorldMaterialSamplers_Bind for the current technique, consumed by
+    // WorldFallbackShader_SelectForMesh once the mesh declaration is known.
+    bool                    sbMaterialTextureBound = false;
+    // Set by WorldVd32_GetDeclaration for the mesh currently being bound.
+    bool                    sbLastDeclHasTexcoord0 = false;
+
+    D3DCompileProc GetD3DCompile()
+    {
+        HMODULE lhCompiler = ::LoadLibraryA("d3dcompiler_47.dll");
+        if (lhCompiler == nullptr)
+            lhCompiler = ::LoadLibraryA("d3dcompiler_43.dll");
+        return lhCompiler
+            ? reinterpret_cast<D3DCompileProc>(::GetProcAddress(lhCompiler, "D3DCompile"))
+            : nullptr;
+    }
+
+    void CompileOne(IDirect3DDevice9* lpDevice, D3DCompileProc lpfnCompile,
+                    const char* lpcSource, const char* lpcName, bool lbPixel,
+                    IDirect3DVertexShader9** lppVs, IDirect3DPixelShader9** lppPs)
+    {
+        ID3DBlobLite* lpCode = nullptr;
+        ID3DBlobLite* lpErrors = nullptr;
+        const HRESULT lhr = lpfnCompile(lpcSource, std::strlen(lpcSource), lpcName,
+                                        nullptr, nullptr, "main", lbPixel ? "ps_3_0" : "vs_3_0", 0, 0,
+                                        reinterpret_cast<void**>(&lpCode),
+                                        reinterpret_cast<void**>(&lpErrors));
+        if (SUCCEEDED(lhr) && lpCode != nullptr)
+        {
+            if (lbPixel)
+                lpDevice->CreatePixelShader(static_cast<const DWORD*>(lpCode->GetBufferPointer()), lppPs);
+            else
+                lpDevice->CreateVertexShader(static_cast<const DWORD*>(lpCode->GetBufferPointer()), lppVs);
+            lpCode->Release();
+        }
+        if (lpErrors != nullptr) lpErrors->Release();
+    }
 
     bool CompileFallbackShaders(IDirect3DDevice9* lpDevice)
     {
@@ -209,12 +299,7 @@ namespace
         if (sbFallbackCompileFailed)
             return false;
 
-        HMODULE lhCompiler = ::LoadLibraryA("d3dcompiler_47.dll");
-        if (lhCompiler == nullptr)
-            lhCompiler = ::LoadLibraryA("d3dcompiler_43.dll");
-        D3DCompileProc lpfnCompile = lhCompiler
-            ? reinterpret_cast<D3DCompileProc>(::GetProcAddress(lhCompiler, "D3DCompile"))
-            : nullptr;
+        D3DCompileProc lpfnCompile = GetD3DCompile();
         if (lpfnCompile == nullptr)
         {
             sbFallbackCompileFailed = true;
@@ -222,30 +307,16 @@ namespace
             return false;
         }
 
-        ID3DBlobLite* lpCode = nullptr;
-        ID3DBlobLite* lpErrors = nullptr;
-        HRESULT lhr = lpfnCompile(KPC_FALLBACK_VS, std::strlen(KPC_FALLBACK_VS), "world_fallback_vs",
-                                  nullptr, nullptr, "main", "vs_3_0", 0, 0,
-                                  reinterpret_cast<void**>(&lpCode),
-                                  reinterpret_cast<void**>(&lpErrors));
-        if (SUCCEEDED(lhr) && lpCode != nullptr)
-        {
-            lpDevice->CreateVertexShader(static_cast<const DWORD*>(lpCode->GetBufferPointer()), &spFallbackVs);
-            lpCode->Release();
-        }
-        if (lpErrors != nullptr) lpErrors->Release();
-
-        lpCode = nullptr; lpErrors = nullptr;
-        lhr = lpfnCompile(KPC_FALLBACK_PS, std::strlen(KPC_FALLBACK_PS), "world_fallback_ps",
-                          nullptr, nullptr, "main", "ps_3_0", 0, 0,
-                          reinterpret_cast<void**>(&lpCode),
-                          reinterpret_cast<void**>(&lpErrors));
-        if (SUCCEEDED(lhr) && lpCode != nullptr)
-        {
-            lpDevice->CreatePixelShader(static_cast<const DWORD*>(lpCode->GetBufferPointer()), &spFallbackPs);
-            lpCode->Release();
-        }
-        if (lpErrors != nullptr) lpErrors->Release();
+        CompileOne(lpDevice, lpfnCompile, KPC_FALLBACK_VS, "world_fallback_vs", false,
+                   &spFallbackVs, nullptr);
+        CompileOne(lpDevice, lpfnCompile, KPC_FALLBACK_PS, "world_fallback_ps", true,
+                   nullptr, &spFallbackPs);
+        CompileOne(lpDevice, lpfnCompile, KPC_FALLBACK_TEX_VS, "world_fallback_tex_vs", false,
+                   &spFallbackTexVs, nullptr);
+        CompileOne(lpDevice, lpfnCompile, KPC_FALLBACK_TEX_PS, "world_fallback_tex_ps", true,
+                   nullptr, &spFallbackTexPs);
+        CompileOne(lpDevice, lpfnCompile, KPC_FALLBACK_UVDEBUG_PS, "world_fallback_uvdebug_ps", true,
+                   nullptr, &spFallbackUvDebugPs);
 
         if (spFallbackVs == nullptr || spFallbackPs == nullptr)
         {
@@ -253,6 +324,10 @@ namespace
             LogOnce("d3dcf", "[WorldFallback] fallback shader compile/create FAILED - world draws skipped\n");
             return false;
         }
+        if (spFallbackTexVs == nullptr || spFallbackTexPs == nullptr)
+            LogOnce("d3dct", "[WorldFallback] TEXTURED fallback variant unavailable - flat shading only\n");
+        else
+            LogOnce("d3dcs2", "[WorldFallback] fallback world shaders compiled: flat + TEXTURED (BRING-UP SHIM)\n");
         LogOnce("d3dcs", "[WorldFallback] fallback world shader compiled + bound (BRING-UP SHIM)\n");
         return true;
     }
@@ -316,9 +391,134 @@ namespace renderengine
             lpDevice->SetVertexShaderConstantF(0, lpWvpRows16, 4);
     }
 
+    // [PC bring-up shim] Bind a material's own sampler textures.
+    //
+    // This is the DATA half of the X360 technique bind (DispatchAllMeshes @0x827F2718, the
+    // `lpaInternalSamplers` loop at CgsDispatcherCommands.cpp:2332-2336). Offsets are
+    // asm-attested and cross-checked against the converted world data:
+    //
+    //   MaterialAssembly (the serialised Material blob, console 32-bit layout)
+    //     +0x09  s8   mi8NumSamplers            (MaterialResourceType::FixUp reads this byte)
+    //     +0x0C  u32  mpaInternalSamplers       (rebased by that FixUp)
+    //   InternalSampler (20-byte stride; the FixUp rebases +0x00 and writes +0x0C)
+    //     +0x00  u32  name char*
+    //     +0x04  u32  name hash
+    //     +0x08  u16  sampler unit              (X360 `sub_8227D158(state, *(v295+8))`)
+    //     +0x0A  u16  scope                     (assert == E_TEXTURE_SCOPE_MATERIAL, i.e. 0)
+    //     +0x0C  s32  sampler type index
+    //     +0x10  u32  TextureState*             (bundle IMPORT)
+    //   TextureState  +0x20  u32 mpRaster       (bundle IMPORT; renderengine::Texture*)
+    //   Texture       +0x00  IDirect3DBaseTexture9* mpD3DTexture
+    //
+    // DIVERGENCE (flagged): the X360 binds only the samplers the TECHNIQUE names, through its
+    // byte index list at MaterialTechnique+0x24 (count at +0x22). In the converted data those
+    // index bytes sit in the same serialiser-fill region as the per-stage binding lists (both
+    // are runtime-populated scratch, 0x44 filler on disc), so an index read there is not
+    // trustworthy yet. Until MaterialResourceType::PostFixUpShaderConstants' companion sampler
+    // pass is reconstructed, bind EVERY material-scope sampler at its own unit -- a superset of
+    // the technique's selection, correct for the single-diffuse world materials and harmless
+    // for the rest. Returns true when at least one texture was bound.
+    //
+    // The TextureState raster slot is read as a u32 (not through the host-width
+    // renderengine::TextureState::mpRaster): this is the STREAMED blob, whose +0x24 word is
+    // serialiser filler, so an 8-byte read there splices. Bug class (b).
+    bool WorldMaterialSamplers_Bind(const void* lpMaterialAssembly)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr || lpMaterialAssembly == nullptr)
+        {
+            sbMaterialTextureBound = false;
+            return false;
+        }
+
+        sbMaterialTextureBound = false;
+        const u8* const lpBlob = static_cast<const u8*>(lpMaterialAssembly);
+        const s32 liNumSamplers = static_cast<s32>(*reinterpret_cast<const s8*>(lpBlob + 0x09));
+        u32 luSamplersSlot;
+        std::memcpy(&luSamplersSlot, lpBlob + 0x0C, 4);
+        if (liNumSamplers <= 0 || luSamplersSlot == 0)
+            return false;
+
+        const u8* const lpSamplers = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luSamplersSlot));
+        bool lbBoundAny = false;
+        for (s32 liIndex = 0; liIndex < liNumSamplers; ++liIndex)
+        {
+            const u8* const lpSampler = lpSamplers + 20 * liIndex;
+            u16 lu16Unit, lu16Scope;
+            u32 luStateSlot;
+            std::memcpy(&lu16Unit,    lpSampler + 0x08, 2);
+            std::memcpy(&lu16Scope,   lpSampler + 0x0A, 2);
+            std::memcpy(&luStateSlot, lpSampler + 0x10, 4);
+            if (lu16Scope != 0 || luStateSlot == 0 || lu16Unit >= 16u)
+                continue;
+
+            const u8* const lpState = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luStateSlot));
+            u32 luRasterSlot;
+            std::memcpy(&luRasterSlot, lpState + 0x20, 4);
+            if (luRasterSlot == 0 || luRasterSlot == 0xFFFFFFFFu)
+                continue;
+
+            const Texture* const lpTexture =
+                reinterpret_cast<const Texture*>(static_cast<uintptr_t>(luRasterSlot));
+            IDirect3DBaseTexture9* const lpD3DTexture = lpTexture->mpD3DTexture;
+            if (lpD3DTexture == nullptr)
+                continue;
+
+            {
+                // [DIAG one-shot] first successful world sampler bind.
+                static bool sbDiag = false;
+                if (!sbDiag)
+                {
+                    sbDiag = true;
+                    char lacMsg[256];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[WorldSamplers] n=%d unit=%u state=%08x raster=%08x d3d=%p decl_uv=%d\n",
+                                  (int)liNumSamplers, (unsigned)lu16Unit, luStateSlot, luRasterSlot,
+                                  (void*)lpD3DTexture, (int)sbLastDeclHasTexcoord0);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+            lpDevice->SetTexture(lu16Unit, lpD3DTexture);
+            // FLAG PC-platform leaf: the real sampler descriptor comes from the TextureState's
+            // 32-byte sampler block (renderengine::SamplerState); until that unpack lands, the
+            // world's standard trilinear/wrap set stands.
+            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+            // FLAG PC-platform leaf / OPEN DATA SEAM: mip filtering is OFF (top mip only).
+            // renderengine::Texture::Create uploads the mip chain assuming it is TIGHTLY
+            // PACKED in the graphics-local block, but the converted world textures carry 8
+            // mips and their small levels come out wrong (the console chain is per-mip
+            // aligned, not tight), so any minified sample -- i.e. almost every world pixel
+            // from a distance -- read black. Mip 0 is correct, so sampling it directly is
+            // right until the packed-vs-aligned mip layout is settled in the porter/Create.
+            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+
+            // [PC bring-up shim] The fallback pixel shader has a single sampler (s0), so the
+            // FIRST material-scope texture is also mirrored onto unit 0 -- otherwise a material
+            // whose diffuse sits on a higher unit would sample whatever was left bound there.
+            // Drops out with the real per-technique shaders, which use the true unit numbers.
+            if (!lbBoundAny && lu16Unit != 0)
+            {
+                lpDevice->SetTexture(0, lpD3DTexture);
+                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+                lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+                lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+                lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+            }
+            lbBoundAny = true;
+        }
+
+        sbMaterialTextureBound = lbBoundAny;
+        return lbBoundAny;
+    }
+
     void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride)
     {
         *lpuStride = 0;
+        sbLastDeclHasTexcoord0 = false;
         if (lpVdImage == nullptr)
             return nullptr;
 
@@ -326,10 +526,11 @@ namespace renderengine
         if (lIt != sVdCache.end())
         {
             *lpuStride = lIt->second.muStride;
+            sbLastDeclHasTexcoord0 = lIt->second.mbHasTexcoord0;
             return lIt->second.mpDeclaration;
         }
 
-        Vd32Cached lEntry = { nullptr, 0 };
+        Vd32Cached lEntry = { nullptr, 0, false };
         const u8* lpImage = static_cast<const u8*>(lpVdImage);
         u16 lu16NumElements;
         std::memcpy(&lu16NumElements, lpImage + 0x08, 2);
@@ -339,14 +540,27 @@ namespace renderengine
         u32 luMaxEnd = 0;
         for (u32 lu = 0; lbOk && lu < lu16NumElements; ++lu)
         {
+            // Element record (16 bytes): +0 u16 stream, +2 u16 offset, +4 u32 Xenon type,
+            // then THREE BYTES +8 method / +9 usage / +10 usageIndex (+11 pad), +0xC u32 flag.
+            // The byte triple is attested twice: tools/assets/bundles/world_type_transcode.py
+            // plan_vertexdescriptor ("+8 u8[4] method/usage/usageIndex bytes") and this TU's own
+            // D3DDevice_CreateVertexDeclaration, which reads the 12-byte Xenon form's
+            // lpIn[6]/[7]/[8] as method/usage/usageIndex right after the 4-byte type.
+            //
+            // This used to read a u16 usage at +8 and a u16 usageIndex at +10. On a
+            // little-endian image the u16 at +8 is {method, usage} and the cast to BYTE kept
+            // the METHOD -- i.e. every element came out as usage 0 (D3DDECLUSAGE_POSITION)
+            // with the usage index in the wrong lane. The world drew (POSITION0 was correct by
+            // accident) but no TEXCOORD/NORMAL/COLOR element ever reached the declaration, so
+            // no shader could sample a texture. Bug class (c).
             const u8* lpElem = lpImage + 0x10 + 16 * lu;
-            u16 lu16Stream, lu16Offset, lu16Usage, lu16UsageIndex;
+            u16 lu16Stream, lu16Offset;
             u32 luXenonType;
-            std::memcpy(&lu16Stream,     lpElem + 0, 2);
-            std::memcpy(&lu16Offset,     lpElem + 2, 2);
-            std::memcpy(&luXenonType,    lpElem + 4, 4);
-            std::memcpy(&lu16Usage,      lpElem + 8, 2);
-            std::memcpy(&lu16UsageIndex, lpElem + 10, 2);
+            std::memcpy(&lu16Stream,  lpElem + 0, 2);
+            std::memcpy(&lu16Offset,  lpElem + 2, 2);
+            std::memcpy(&luXenonType, lpElem + 4, 4);
+            const u8 lu8Usage      = lpElem[9];
+            const u8 lu8UsageIndex = lpElem[10];
 
             u8 lu8Type;
             if (lu16Stream != 0 || !MapXenonDeclType(luXenonType, &lu8Type))
@@ -357,9 +571,14 @@ namespace renderengine
             laElements[lu].Stream     = 0;
             laElements[lu].Offset     = lu16Offset;
             laElements[lu].Type       = lu8Type;
+            // The +8 byte is the record's METHOD lane, but every world element observed uses
+            // the plain (DEFAULT) method and D3D9 rejects a whole declaration on an
+            // out-of-range method; keep DEFAULT and take only usage/usageIndex from the image.
             laElements[lu].Method     = D3DDECLMETHOD_DEFAULT;
-            laElements[lu].Usage      = static_cast<BYTE>(lu16Usage);
-            laElements[lu].UsageIndex = static_cast<BYTE>(lu16UsageIndex);
+            laElements[lu].Usage      = lu8Usage;
+            laElements[lu].UsageIndex = lu8UsageIndex;
+            if (lu8Usage == D3DDECLUSAGE_TEXCOORD && lu8UsageIndex == 0)
+                lEntry.mbHasTexcoord0 = true;
             if (static_cast<u32>(lu16Offset) + 16u > luMaxEnd)
                 luMaxEnd = lu16Offset + 16u;
         }
@@ -375,16 +594,70 @@ namespace renderengine
 
             IDirect3DDevice9* lpDevice = Dev();
             if (lpDevice != nullptr)
-                lpDevice->CreateVertexDeclaration(laElements, &lEntry.mpDeclaration);
+            {
+                const HRESULT lhr =
+                    lpDevice->CreateVertexDeclaration(laElements, &lEntry.mpDeclaration);
+                if (FAILED(lhr) || lEntry.mpDeclaration == nullptr)
+                {
+                    lEntry.mpDeclaration  = nullptr;
+                    lEntry.mbHasTexcoord0 = false;
+                    LogOnce("vdfail",
+                            "[WorldVd32] CreateVertexDeclaration FAILED for a world descriptor"
+                            " - that mesh cannot draw\n");
+                }
+            }
         }
         else
         {
             LogOnce("vd32", "[WorldVd32] unsupported vertex-descriptor image (multi-stream/unknown type) - decl skipped\n");
         }
 
+        if (!lbOk)
+            lEntry.mbHasTexcoord0 = false;
+        {
+            // [DIAG one-shot] first vertex declaration built for a world mesh.
+            static bool sbDiagVd = false;
+            if (!sbDiagVd)
+            {
+                sbDiagVd = true;
+                char lacMsg[256];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[WorldVd32] ok=%d elems=%u stride=%u uv0=%d\n",
+                              (int)lbOk, (unsigned)lu16NumElements, lEntry.muStride,
+                              (int)lEntry.mbHasTexcoord0);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
         sVdCache[lpVdImage] = lEntry;
         *lpuStride = lEntry.muStride;
+        sbLastDeclHasTexcoord0 = lEntry.mbHasTexcoord0;
         return lEntry.mpDeclaration;
+    }
+
+    // [PC bring-up shim] Choose the fallback pair for the mesh just bound: the
+    // TEXTURED variant only when the material bound a texture AND this mesh's
+    // declaration actually supplies TEXCOORD0 (see Vd32Cached::mbHasTexcoord0).
+    void WorldFallbackShader_SelectForMesh()
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr || !CompileFallbackShaders(lpDevice))
+            return;
+
+        const bool lbTextured = sbMaterialTextureBound && sbLastDeclHasTexcoord0
+                             && spFallbackTexVs != nullptr && spFallbackTexPs != nullptr;
+        if (lbTextured)
+        {
+            LogOnce("wtex", "[WorldFallback] TEXTURED world draws live (material samplers bound)\n");
+            lpDevice->SetVertexShader(spFallbackTexVs);
+            static const bool sbUvDebug = (::GetEnvironmentVariableA("BRN_WORLD_UVDEBUG", nullptr, 0) != 0);
+            lpDevice->SetPixelShader((sbUvDebug && spFallbackUvDebugPs != nullptr)
+                                     ? spFallbackUvDebugPs : spFallbackTexPs);
+        }
+        else
+        {
+            lpDevice->SetVertexShader(spFallbackVs);
+            lpDevice->SetPixelShader(spFallbackPs);
+        }
     }
 
     void WorldDraw_SetIndexSource(const void* lpIndexBufferHeader)

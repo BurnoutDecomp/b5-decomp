@@ -82,7 +82,15 @@ namespace CgsResource
     // After the sub-block FixUps, the technique's sampler table is rebased: word @ +144 is the
     // sampler count, word @ +140 is the sampler-array pointer (rebased by the load base), and
     // each 8-byte sampler entry's leading word is itself a pointer that is rebased; finally
-    // word @ +148 (the sampler-state-block pointer) is rebased.
+    // word @ +148 is rebased -- that word is the technique NAME pointer (`mpacName` on
+    // burnout.wiki; GetSerialisedResourceDescriptor @0x827F7A68 strlens it), not a
+    // sampler-state block (correction from tools/assets/shaders/FORMAT_MAP.md section 2).
+    //
+    // Every offset here is a CONSOLE 32-bit word offset and every slot a u32 -- the platform-4
+    // conversion keeps the console layout byteswapped (FORMAT_MAP.md section 2), so the nested
+    // FixUps below must read u32 slots too. They do: ShaderConstants{Internal,External}::FixUp
+    // and ShaderConstantHashTable::FixUp each walk their own serialised word view rather than
+    // their host-width members (see those TUs' banners).
     //
     // Raw-offset access on lpResource is the DOCUMENTED exception (serialised rw blob).
     void ShaderTechniqueResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
@@ -143,16 +151,21 @@ namespace CgsResource
     uint32_t ShaderTechniqueResourceType::GetConstantHashTableSerialisedResourceDescriptorSize(
         const CgsGraphics::ShaderConstantHashTable* lpHashTable) const
     {
-        const u8* const lpBlock = reinterpret_cast<const u8*>(lpHashTable);
-        u32 luCount = *reinterpret_cast<const u32*>(lpBlock + 8);
+        // SERIALISED-BLOB walk: the hash table is three u32 slots (+0 keys, +4 names, +8 count)
+        // -- the same console word view CgsShaderConstantHashTable.cpp's banner documents, NOT
+        // the host-width members. The name ARRAY is therefore also u32 slots.
+        const u32* const lpaWords = reinterpret_cast<const u32*>(lpHashTable);
+        u32 luCount = lpaWords[2];                                    // serialised blob: count @+8
         const u32 luBase  = 4u * luCount;   // X360 r6 (returned base term)
         u32       luTotal = 4u * luCount;   // X360 r8 (running total, seeded identically)
         if (luCount)
         {
-            const char* const* lppNames = *reinterpret_cast<const char* const* const*>(lpBlock + 4);
+            const u32* lpaNames =
+                reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpaWords[1]));  // serialised blob: names @+4
             do
             {
-                const char* lpName = *lppNames++;
+                const char* lpName =
+                    reinterpret_cast<const char*>(static_cast<uintptr_t>(*lpaNames++));
                 const char* lpScan = lpName;
                 while (*lpScan++)
                     ;

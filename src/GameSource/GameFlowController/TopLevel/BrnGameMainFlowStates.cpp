@@ -238,17 +238,21 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
 // X360 spine (the per-module input/sound/network/gamestate/GUI drives + RenderGUI) already
 // runs through BrnGameModule::GameMain's inline hookup on the PC -- running it here too
 // would double-drive those modules, so it is [deferred] to the module-scheduler move.
-void LoadingScriptedState::Update()
+// The per-frame GameData IO pair. [PC placement] the X360 keeps these as game-module
+// members (gm+10055440 / +10055444) created by the update spine each frame; the PC reuses
+// one constructed-once pair (the precedent is GameDataModule::Update's own static
+// ResourceIO input). Published through BrnGameMainFlowController::GetScriptedLoadGameData*
+// because BrnGameModule::GamePrepare @0x823EFBD0 brackets the SAME pair on the X360.
+namespace
 {
-    // The per-frame GameData IO pair. [PC placement] the X360 keeps these as game-module
-    // members (+2513860/+2513861) created by the update spine each frame; the PC reuses
-    // one constructed-once static pair (the precedent is GameDataModule::Update's own
-    // static ResourceIO input).
-    static BrnResource::GameDataIO::InputBuffer  s_GameDataInput;
-    static BrnResource::GameDataIO::OutputBuffer s_GameDataOutput;
-    static bool s_bIOConstructed = false;
-    if (!s_bIOConstructed)
+    BrnResource::GameDataIO::InputBuffer  s_GameDataInput;
+    BrnResource::GameDataIO::OutputBuffer s_GameDataOutput;
+    bool                                  s_bIOConstructed = false;
+
+    void EnsureScriptedLoadGameDataIO()
     {
+        if (s_bIOConstructed)
+            return;
         s_bIOConstructed = true;
         // The IOBuffer base status must be raised before any lock (LockForWrite asserts
         // eStatusConstructed). GameDataIO's own lifecycle members are still the deferred
@@ -265,6 +269,26 @@ void LoadingScriptedState::Update()
         s_GameDataOutput.Construct();   // the member-clearing OutputBuffer::Construct
         s_GameDataOutput.UnlockForWrite();
     }
+}
+
+namespace BrnGameMainFlowController
+{
+    BrnResource::GameDataIO::InputBuffer* GetScriptedLoadGameDataInput()
+    {
+        EnsureScriptedLoadGameDataIO();
+        return &s_GameDataInput;
+    }
+
+    BrnResource::GameDataIO::OutputBuffer* GetScriptedLoadGameDataOutput()
+    {
+        EnsureScriptedLoadGameDataIO();
+        return &s_GameDataOutput;
+    }
+}
+
+void LoadingScriptedState::Update()
+{
+    EnsureScriptedLoadGameDataIO();
 
     if (gBrnScriptedLoadStage != 8)
     {

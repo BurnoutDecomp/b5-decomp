@@ -1024,7 +1024,7 @@ s32 DispatchList::DispatchAllMeshes(DispatchPacketInterpreter* /*lpInterpreter*/
         {
             spLastTechnique = lpTechnique;
             shadow::Device::SetMeshTechniquePC(
-                lpTechnique, reinterpret_cast<void* const*>(lppConstScratch), false);
+                lpTechnique, lpAssembly, reinterpret_cast<void* const*>(lppConstScratch), false);
         }
 
         // [PC bring-up shim] the per-object WVP carried in the command

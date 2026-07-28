@@ -13,8 +13,13 @@ namespace CgsGraphics
 // load-time base offset (FixDown is its inverse, run before re-saving). GetName
 // resolves a constant hash to its debug name via a hybrid binary/linear search
 // over the sorted keys. Reconstructed from the DecFIGS DWARF
-// (CgsShaderConstantHashTable.{h,cpp}) and the X360 pseudocode; layout is
-// console-faithful (32-bit X360 pointers -> members at offsets 0/4/8).
+// (CgsShaderConstantHashTable.{h,cpp}) and the X360 pseudocode.
+//
+// The members below are the DWARF (host-width) shape kept for semantic parity by
+// NAME. The SERIALISED form -- the only form the engine ever sees, since the
+// table is a 12-byte window inside a streamed ShaderTechnique image -- is three
+// u32 slots at +0/+4/+8; every method here walks that view instead of these
+// members. See the .cpp banner.
 struct ShaderConstantHashTable
 {
 public:
@@ -26,18 +31,26 @@ public:
     // file-relative offsets by subtracting the base. Header-inline helper for
     // compileability (this TU owns only FixUp/GetName); no separate ledger body
     // exists for it in the trace, so this is a reconstructed inverse, not a
-    // transcribed body. The per-name fix-down MUST run while mppcNames is still
-    // a valid pointer, so walk the name array first, then de-relocate the two
-    // array pointers last (the mirror image of FixUp's order).
+    // transcribed body. The per-name fix-down MUST run while the name array is
+    // still a valid pointer, so walk the name array first, then de-relocate the
+    // two array pointers last (the mirror image of FixUp's order).
+    //
+    // SERIALISED-BLOCK SEAM: like FixUp/GetName (see the .cpp banner) this walks
+    // the CONSOLE word layout -- three u32 slots at +0/+4/+8 -- because the table
+    // is a window inside a streamed resource image on every platform, not a
+    // host-width C++ object.
     void FixDown(u8* lpBaseData)
     {
-        const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
-        for (u32 luI = 0; luI < muSize; ++luI)
+        u32* const lpaWords = reinterpret_cast<u32*>(this);
+        const u32 luDelta = static_cast<u32>(reinterpret_cast<uintptr_t>(lpBaseData));
+        u32* const lpaNames =
+            reinterpret_cast<u32*>(static_cast<uintptr_t>(lpaWords[1]));
+        for (u32 luI = 0; luI < lpaWords[2]; ++luI)
         {
-            mppcNames[luI] = reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(mppcNames[luI]) - luBase);
+            lpaNames[luI] -= luDelta;
         }
-        mppcNames = reinterpret_cast<char**>(reinterpret_cast<uintptr_t>(mppcNames) - luBase);
-        mpuHashKeys = reinterpret_cast<u32*>(reinterpret_cast<uintptr_t>(mpuHashKeys) - luBase);
+        lpaWords[1] -= luDelta;
+        lpaWords[0] -= luDelta;
     }
 
     // CgsShaderConstantHashTable.h:56

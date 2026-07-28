@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"
 #include "rw/rwcore_structs.h"               // rw::Resource, rw::BaseResourceDescriptors<5>
 #include "pc/gcm/renderengine/texture.h"     // renderengine::Texture (the runtime resource)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdio>
 
 // CgsResource::RwRasterResourceType -- the texture/raster resource-type handler (id 0).
 // Bodies follow the X360 ARTIST handler; the descriptor path is a faithful port, the fixup
@@ -73,6 +75,35 @@ namespace CgsResource
         renderengine::Texture::Parameters lParameters;
         renderengine::Texture::GetParameters(lpTexture, &lParameters);
         const void* lpPixelData = lrResource.m_baseResources[2];
+        {
+            // [DIAG] raster realisations: does the pixel block arrive? Log the first few
+            // (the GUI/font set) and then the first few with a MISSING pixel block, which is
+            // what an empty (black) world texture would look like.
+            static int siDiag = 0;
+            static int siNullDiag = 0;
+            static int siTotal = 0;
+            static int siNullTotal = 0;
+            ++siTotal;
+            if (lpPixelData == 0)
+                ++siNullTotal;
+            const bool lbLog = (siDiag < 4) || (lpPixelData == 0 && siNullDiag < 4)
+                            || (siTotal % 400) == 0;
+            if (lbLog)
+            {
+                ++siDiag;
+                if (lpPixelData == 0)
+                    ++siNullDiag;
+                char lacMsg[192];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[RwRaster] #%d/%d (null %d) fmt=%d %ux%u mips=%u sys=%u pixels=%p res0=%p res2=%p\n",
+                              siTotal, siNullTotal, siNullTotal, (int)lParameters.miFormat,
+                              (unsigned)lParameters.muWidth, (unsigned)lParameters.muHeight,
+                              (unsigned)lParameters.muNumLevels,
+                              (unsigned)lParameters.muSysMem, lpPixelData,
+                              lrResource.m_baseResources[0], lrResource.m_baseResources[2]);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
         renderengine::Texture::Create(lpTexture, &lParameters, lpPixelData);
     }
 
