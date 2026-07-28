@@ -98,7 +98,14 @@ namespace shadow
 
         // Bind the technique's render-state triple (blend / depth-stencil / rasteriser
         // objects reached through the technique's +0x04 MaterialState slot).
-        static void SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique);
+        //
+        // lbZOnly selects the DEPTH-ONLY variant the Z-only interpreter uses
+        // (DrawRenderableMeshZOnly::Interpret @0x827F5AC8): the console binds the same
+        // depth-stencil and rasteriser objects out of the technique's MaterialState but
+        // replaces the BLEND object with one of two engine-wide Z-only blend states
+        // (dword_83010F8C / dword_83010F90, selected by the technique's alpha-test flag).
+        static void SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
+                                              bool lbZOnly);
 
         // [PC leaf] The PER-MESH half of the same inlined X360 block: the technique's two
         // OBJECT-scope external constant blocks (ShaderTechnique +0x1C vertex, +0x50 pixel),
@@ -176,5 +183,12 @@ namespace shadow
         static void* mpLastBlendState;
         static void* mpLastDepthStencilState;
         static void* mpLastRasterizerState;
+        // FLAG PC-platform leaf: the console's blend compare is against two DIFFERENT
+        // objects (the material's own state for the colour passes, an engine-wide Z-only
+        // state for the depth-only pass), so the object pointer alone identifies the
+        // binding. The PC leaf derives the Z-only blend from the material's own state
+        // (see SetMaterialRenderStatesPC), so the same pointer can stand for two
+        // different bindings and the cache has to remember which one it was.
+        static bool  mbLastBlendZOnly;
     };
 }

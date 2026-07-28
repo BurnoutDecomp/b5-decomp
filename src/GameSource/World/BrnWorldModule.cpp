@@ -4003,7 +4003,8 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
 
     mWorldEntityModule.GenerateDispatchListsFromStreamer(
         lpDispatchFrame, &mShaderLodInfo, lEye, 1.0f,
-        KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY );
+        KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
+        KI_WORLD_PREZ_LIST );
 
     {
         static bool sbLogged = false;

@@ -243,7 +243,8 @@ public:
         f32 lfDrawDistanceScale,
         s32 liList,
         s32 liSortLayer,
-        s32 liSortKey );
+        s32 liSortKey,
+        s32 liPreZList );
 
     // [FLAG PC bring-up] the position the PVS query streamed around this frame --
     // the only world-space anchor available while the director/camera modules are
@@ -273,6 +274,11 @@ public:
 
     // DWARF cpp:134 -- the shared per-instance dispatch path (inlined by the
     // X360 into both GenerateDispatchLists loops; de-inlined here).
+    // lu8PreZList is the DrawRenderableDispatchThreadInfo::mu8PreZList byte the camera
+    // pass stamps into every DRAWRENDERABLE trailer -- 255 == "no pre-Z re-emit".
+    // GenerateDispatchLists computes it once from its liPreZList argument
+    // (@0x822D5AB0 prologue: `var_270 = 0xFF; if (liPreZList > 0) var_270 = liPreZList`)
+    // and the shadow loop overrides it with a literal 0xFF (@0x822D64B0).
     void RenderInstance(
         CgsGraphics::Instance* lpInstance,
         bool lbShadow,
@@ -281,6 +287,7 @@ public:
         s32 liList,
         s32 liSortLayer,
         s32 liSortKey,
+        u8 lu8PreZList,
         CgsGraphics::DispatchFrame* lpDispatchFrame,
         const ShaderLodInfo* lpShaderLodInfo );
 

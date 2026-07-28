@@ -1553,6 +1553,7 @@ WorldEntityModule::RenderInstance(
     s32 liList,
     s32 liSortLayer,
     s32 liSortKey,
+    u8 lu8PreZList,
     CgsGraphics::DispatchFrame* lpDispatchFrame,
     const ShaderLodInfo* lpShaderLodInfo )
 {
@@ -1648,9 +1649,15 @@ WorldEntityModule::RenderInstance(
     const bool lbFirstInList = ( lpDispatchList->GetCount() & 0x7F ) == 0;
 
     // Argument values pinned from the X360 asm at both call sites (@0x822D64D0
-    // shadow / @0x822D7054 camera): exclude byte 1 always; the shadow pass sends
-    // list byte 1 + preZ true + thread byte 0xFF + trailing zeroes, the camera
-    // pass sends the technique in the list byte, preZ false, then {0, 1, 0, 0}.
+    // shadow / @0x822D7054 camera). The four STACK arguments (AddToBin reads them
+    // from its arg_57 / arg_5F / arg_64 / arg_6F slots @0x827FA21C..0x827FA230 and
+    // stores them into the trailer as mu8PreZList / mu8PreZTechniqueIndex /
+    // mi8InstanceCount / mu8ExcludeMeshBits) are:
+    //   shadow  @0x822D64B0..0x822D64CC : preZList = 0xFF (literal), preZTechnique 0,
+    //                                     instanceCount 0, excludeBits 0
+    //   camera  @0x822D7010..0x822D7040 : preZList = the computed byte (see
+    //                                     lu8PreZList), preZTechnique = 1 (li r6, 1),
+    //                                     instanceCount 0, excludeBits 0
     lpDispatchFrame->GetBin().BeginPacket();
     if ( lbShadow )
     {
@@ -1672,7 +1679,7 @@ WorldEntityModule::RenderInstance(
         CgsGraphics::DrawRenderable::AddToBin(
             lpRenderable, lpDispatchFrame, lbFirstInList,
             static_cast<s8>( liSortLayer ), static_cast<s8>( luTechnique ),
-            1, static_cast<u8>( liSortKey ), false, 0, 1, 0, 0 );
+            1, static_cast<u8>( liSortKey ), false, lu8PreZList, 1, 0, 0 );
     }
 
     lpDispatchList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );
@@ -1744,6 +1751,10 @@ WorldEntityModule::GenerateDispatchLists(
 
     CGS_ASSERT( liPreZList < 256, "liPreZList < 256" );
 
+    // @0x822D5B3C: the pre-Z list byte every camera-pass DRAWRENDERABLE trailer carries.
+    // 255 (= "no pre-Z re-emit") unless the caller asked for a positive list id.
+    const u8 lu8PreZList = ( liPreZList > 0 ) ? static_cast<u8>( liPreZList ) : 0xFFu;
+
     // (The X360 also opens/unlinks a small dev performance-marker stack node around
     // this body -- the miGenerateDispatchListsPM instrumentation; dev-only, omitted.)
     lpInputBuffer->LockForRead();
@@ -1786,8 +1797,10 @@ WorldEntityModule::GenerateDispatchLists(
                 continue;
             }
 
+            // The shadow loop's own AddToBin sends a literal 0xFF pre-Z byte.
             RenderInstance( lpInstance, true, lCameraPosition, lfScaledDistanceSq,
-                            liList, liSortLayer, liSortKey, lpDispatchFrame, lpShaderLodInfo );
+                            liList, liSortLayer, liSortKey, 0xFFu,
+                            lpDispatchFrame, lpShaderLodInfo );
         }
     }
     else
@@ -1817,7 +1830,8 @@ WorldEntityModule::GenerateDispatchLists(
             }
 
             RenderInstance( lpInstance, false, lCameraPosition, lfScaledDistanceSq,
-                            liList, liSortLayer, liSortKey, lpDispatchFrame, lpShaderLodInfo );
+                            liList, liSortLayer, liSortKey, lu8PreZList,
+                            lpDispatchFrame, lpShaderLodInfo );
         }
     }
 
@@ -1844,12 +1858,16 @@ WorldEntityModule::GenerateDispatchListsFromStreamer(
     f32 lfDrawDistanceScale,
     s32 liList,
     s32 liSortLayer,
-    s32 liSortKey )
+    s32 liSortKey,
+    s32 liPreZList )
 {
     if ( lpDispatchFrame == 0 || lpShaderLodInfo == 0 )
     {
         return;
     }
+
+    // Same pre-Z list byte the real GenerateDispatchLists computes (@0x822D5B3C).
+    const u8 lu8PreZList = ( liPreZList > 0 ) ? static_cast<u8>( liPreZList ) : 0xFFu;
 
     const f32 lfInvScaleSq = 1.0f / ( lfDrawDistanceScale * lfDrawDistanceScale );
 
@@ -1888,7 +1906,8 @@ WorldEntityModule::GenerateDispatchListsFromStreamer(
             }
 
             RenderInstance( lpInstance, false, lCameraPosition, lfScaledDistanceSq,
-                            liList, liSortLayer, liSortKey, lpDispatchFrame, lpShaderLodInfo );
+                            liList, liSortLayer, liSortKey, lu8PreZList,
+                            lpDispatchFrame, lpShaderLodInfo );
         }
     }
 }

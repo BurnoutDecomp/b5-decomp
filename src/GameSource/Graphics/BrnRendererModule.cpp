@@ -362,7 +362,7 @@ void BrnRendererModule::SortDispatchLists(CgsGraphics::DispatchFrame* lpMeshFram
 //   shadow cascades (lists 0,2,1,3,4)  -> gated OFF on PC (Z-only interpreter
 //     + shadow-map render manager still under reconstruction)
 //   env-map faces (lists 5..10)        -> gated OFF on PC (env-map targets)
-//   pre-Z (list 21)                    -> gated OFF on PC (Z-only interpreter)
+//   pre-Z (list 21)         -> DispatchAllMeshesZOnly (mbRenderPreZ)
 //   CARS OPAQUE  (list 19)  -> DispatchAllMeshes
 //   WORLD OPAQUE (list 11)  -> DispatchAllMeshes
 //   sky                     -> gated OFF on PC (SkyDomeManager not constructed)
@@ -388,8 +388,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     std::memset(&lContext, 0, sizeof(lContext));
     lContext.ResetShadowing();
     lContext.miListIdBase       = 0;
-    lContext.mbPreZEnabled      = false;   // FLAG [PC gate]: real value = mbRenderPreZ once the
-                                           // Z-only interpreter is reconstructed
+    lContext.mbPreZEnabled      = mbRenderPreZ;
     lContext.mbPreZAlphaEnabled = mbRenderPreZAlpha;
     const f32 lfPreZDistance = mbPreZNearOnly ? mfPreZDistanceThreshold : 100000.0f;
     for (u32 luLane = 0; luLane < 4; ++luLane)
@@ -401,6 +400,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     SortDispatchLists(&mSingleBufferedDispatchFrame);
 
     // Pass stats (X360 60-frame averages; the raw totals feed the debug HUD).
+    const u32 luPreZ             = mSingleBufferedDispatchFrame.GetList(21)->GetCount();
     const u32 luCarOpaque        = mSingleBufferedDispatchFrame.GetList(19)->GetCount();
     const u32 luWorldOpaque      = mSingleBufferedDispatchFrame.GetList(11)->GetCount();
     const u32 luWorldTransparent = mSingleBufferedDispatchFrame.GetList(15)->GetCount();
@@ -438,6 +438,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         }
     }
 
+    const bool lbPreZWork   = (mbRenderPreZ && luPreZ != 0);
     const bool lbOpaqueWork = (mbRenderCarsOpaque && luCarOpaque != 0)
                            || (mbRenderWorldOpaque && luWorldOpaque != 0);
     const bool lbTransparentWork = (mbRenderWorldTransparent && luWorldTransparent != 0)
@@ -453,6 +454,16 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     // (boot, menus, every frame before the streamer delivers geometry) the whole
     // block leaves the device state untouched, so the 2D/GUI tail below sees
     // exactly the state it saw before this pass existed.
+    // PRE-Z (X360 Render @0x8240BFA8: right after BeginRenderAntiAliased, gated on
+    // mbRenderPreZ, mesh list 21 walked with DispatchAllMeshesZOnly). The list is fed
+    // by DrawRenderable::Interpret's pre-Z re-emit, which only runs when the object
+    // context carries mbPreZEnabled and the producer stamped a pre-Z list id.
+    if (lbPreZWork)
+    {
+        renderengine::Device::SetWorldPassDefaultStates(false);
+        mSingleBufferedDispatchFrame.GetList(21)->DispatchAllMeshesZOnly(mpInterpreter, &lContext);
+    }
+
     if (lbOpaqueWork)
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
@@ -486,7 +497,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
 
     // Back to the opaque default before the 2D overlay tail (the Im2d path re-sets
     // its own states, so this only matters for the frames a world pass ran).
-    if (lbOpaqueWork || lbTransparentWork)
+    if (lbPreZWork || lbOpaqueWork || lbTransparentWork)
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
     }
