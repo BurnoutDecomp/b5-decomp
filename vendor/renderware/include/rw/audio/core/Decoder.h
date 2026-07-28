@@ -88,6 +88,20 @@ struct DecoderBuffer
 class Decoder
 {
 public:
+    // --- virtuals, in X360 vtable-slot order ---------------------------------------
+    // The X360 Decoder vtable (off_8214B1CC, .rdata) is two slots:
+    //   [0] @+0x00 -> 0x82AD5078, the image's shared empty thunk (a lone `blr`): the
+    //       base "feed more input" callback has an empty body the linker ICF-folded
+    //       onto that thunk (same fold Delay.cpp documents for trivial destructors).
+    //   [1] @+0x04 -> the `vector deleting destructor' @0x82B678D8.
+    // The EaXmaDec override vtable (off_8215A928) confirms the slot meaning:
+    //   { [0] EaXmaDec::FeedEvent @0x82B96140, [1] EaXmaDec deleting dtor @0x82B93ED0 }.
+    // FeedEvent is therefore declared BEFORE the destructor so the host vtable keeps the
+    // console slot order. The base body is genuinely empty in the binary (bare `blr`),
+    // and void -- it neither computes nor returns anything; EaXmaDec overrides it with
+    // its Service tail-call.
+    virtual void FeedEvent() {}
+
     virtual ~Decoder();
 
     // @0x82691528 -- run the teardown callback, free the owned block, free `this`.
@@ -108,8 +122,10 @@ public:
     // @0x826914D0 -- samples still owed by request `ucIndex`, or 0 if that slot is empty.
     s32 GetSamplesRemaining(u8 ucIndex);
 
-private:
-    // Base of the inline request ring: `this` + muRequestQueueOffset.
+protected:
+    // Base of the inline request ring: `this` + muRequestQueueOffset. Protected: codec
+    // subclasses index the ring directly in the binary (EaXmaDec::DecodeEvent @0x82B96380
+    // computes `this + muRequestQueueOffset + 0x14 * mucRequestDecodeIndex` itself).
     DecoderRequest *RequestQueue()
     {
         return reinterpret_cast<DecoderRequest *>(
