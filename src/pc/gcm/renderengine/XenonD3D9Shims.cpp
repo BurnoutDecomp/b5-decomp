@@ -516,6 +516,24 @@ namespace renderengine
         lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
                                  D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN
                                  | D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
+        // The rest of the material-owned state a technique can drive but nothing after the
+        // pass puts back. Same reasoning as the colour-write reset above: SetMaterialRenderStatesPC
+        // binds all of these off the technique's MaterialState triple, while the 2D/GUI tail's
+        // fixed-function prologues only re-set lighting/depth/cull/blend-factor/scissor. A world
+        // pass that ended on a stencil-write technique, a wireframe raster state, a subtract
+        // blend op or a separate-alpha blend would otherwise carry it straight into the overlay.
+        lpDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+        lpDevice->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+        lpDevice->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+        lpDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+        // And the PROGRAMS. The walk leaves the last technique's vertex/pixel pair bound
+        // (WorldPrograms_Bind / WorldFallbackShader_Bind above are the only SetVertex/PixelShader
+        // callers in the build), and D3D9 keeps a bound shader until it is explicitly cleared --
+        // it does not fall back to fixed function just because a later draw sets an FVF. The
+        // 2D tail draws through the fixed-function pipeline, so the pass boundary hands the
+        // device back with no programs bound, exactly as it found it.
+        lpDevice->SetVertexShader(nullptr);
+        lpDevice->SetPixelShader(nullptr);
     }
 
     // ---- world-pass leaf hooks (declared in shadowingdevice.cpp) -----------

@@ -3902,7 +3902,34 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     {
         sbPathLatched = true;
         sPathOrigin   = lCentre;
-        sfPathRadius  = lfRadius;
+
+        // [FLAG PC bring-up] The tour has to stay INSIDE the resident footprint, because
+        // the fly-through publishes its EYE as the PVS query position (see lPvsPosition
+        // below) -- an eye outside the city drops the ground-plane zone lookup off the map
+        // and the streamer unloads the world the camera is supposed to be touring.
+        // The orbit below breathes between 1.1x and 2.6x this value, so it must be a
+        // FRACTION of the resident-world radius, not the radius itself.
+        //
+        // This only became visible once the producer stopped running outside the in-game
+        // state: it used to latch on the boot loading screen with two track units resident
+        // (a small radius, so 1.1-2.6x of it still landed inside the city), and now latches
+        // at in-game entry with the whole PVS working set resident. Scaling it makes the
+        // framing independent of how much the streamer happens to have delivered when the
+        // producer's first frame runs.
+        const f32 KF_TOUR_RADIUS_FRACTION = 0.25f;
+        sfPathRadius  = lfRadius * KF_TOUR_RADIUS_FRACTION;
+        if ( sfPathRadius < 1.0f )
+        {
+            sfPathRadius = 1.0f;
+        }
+
+        if ( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[FLAG PC bring-up] establishing camera latched: centre=("
+                << lCentre.x << "," << lCentre.y << "," << lCentre.z
+                << ") worldRadius=" << lfRadius << " tourRadius=" << sfPathRadius << "\n";
+        }
     }
 
     Vector3 lEye;
