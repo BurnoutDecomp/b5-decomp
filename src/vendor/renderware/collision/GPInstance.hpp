@@ -247,6 +247,26 @@ struct GPCylinder : public GPInstance
                              u32 auNumDirs, Interval* lapIntervals);
 };
 
+// The GP triangle image (canonical rwccore.h:1229: no extra data members --
+// the three vertices alias mPos (+0x00), mFaceNormals[1] (+0x20) and
+// mFaceNormals[2] (+0x30); mFaceNormals[0] (+0x10) is the unit face normal
+// with mNumFaceNormals == 1; mEdgeDirections[0..2] (+0x40/+0x50/+0x60) are the
+// three edge directions and mDimensions (+0x70) carries the three edge lengths
+// in lanes x/y/z. The vertex aliases are the same the committed
+// AABBoxBuilder::CreateFromTriangle and TriangleVolume trade in).
+struct GPTriangle : public GPInstance
+{
+    // @ 0x82BBA158 -- VolumeMethods +0xA4 (GetMaximumFeatureFn).
+    static void GetMaximumFeature(const GPInstance* lpThis, RwBool abCcw,
+                                  const Vec4& arDir, Feature& arFeature);
+    // @ 0x82BBA6A0 -- VolumeMethods +0xA8 (GetIntervalFn).
+    static void GetInterval(const GPInstance* lpThis,
+                            const Vec4& arDir, Interval& arInterval);
+    // @ 0x82BBA6E0 -- VolumeMethods +0xAC (GetIntervalsFn).
+    static void GetIntervals(const GPInstance* lpThis, const Vec4* lapDirs,
+                             u32 auNumDirs, Interval* lapIntervals);
+};
+
 // ---------------------------------------------------------------------------
 // rw::collision::PrimitivePairIntersectResult -- one narrow-phase result slot
 // (DWARF primitivepairquery.h:47; canonical rwccore.h:2957). Console stride
