@@ -31,6 +31,10 @@ namespace audio
 namespace core
 {
 
+// The per-block audio process context passed to Process (defined in Iir2Filters.h). Only a
+// pointer is needed here, so forward-declare it to avoid the include cascade.
+struct AudioProcessContext;
+
 // -------------------------------------------------------------------------------------
 // CompressorLimiter1
 //
@@ -76,7 +80,11 @@ public:
     // with vlogefp/vexptefp/vctsxs/vrfiz/vsel lane ops; its DSP semantics are NOT
     // recoverable store-for-store as portable C++ from the Hex-Rays transliteration.
     // Declared here for the layout/ABI; intentionally NOT bodied (see CompressorLimiter1.cpp).
-    static int Process(CompressorLimiter1 *self);
+    //
+    // ABI corrected 3-arg (was Process(self) placeholder) from the asm-attested call sites in
+    // Compressor1::Process @0x82B9DA8C and Limiter1::Process: r3=self, r4=the audio process
+    // context, r5=the base channel count (lbz 0x21). The keystone body still ignores them.
+    static int Process(CompressorLimiter1 *self, AudioProcessContext *ctx, u8 channelCount);
 
     History mChannelHistory[6];  // +0x00..+0x2F (48 bytes)
     f32 mThresholdOn;            // +0x30
