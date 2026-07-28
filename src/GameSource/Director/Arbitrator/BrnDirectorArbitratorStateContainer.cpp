@@ -39,6 +39,27 @@ namespace BrnDirector
         return mpCurrentState;
     }
 
+    // The state registered for a given EState index. The X360 reaches a sibling state either
+    // through this table (`container + 0x35A0 + 4*index`) or by its fixed interior offset when
+    // the index is a compile-time constant -- e.g. ArbStateAttractMode::Update's hand-off reads
+    // `container + 0x1890` for ROAMING, which is table slot 1's pointee. Both spellings resolve
+    // to the same object; the table form is the one modelled here.
+    ArbitratorState* ArbitratorStateContainer::GetState(EState leState) const
+    {
+        CGS_ASSERT(leState >= 0 && leState < E_NUM_STATES, "leState < E_NUM_STATES");
+        CGS_ASSERT(mArrayOfStatePointers[leState] != 0, "mArrayOfStatePointers[leState] != NULL");
+        return mArrayOfStatePointers[leState];
+    }
+
+    // Make the given EState the active state. The X360 spells it as the +0x35A0 table load
+    // followed by the +0x35CC store (e.g. Arbitrator::Update's PRE_NORMAL case does exactly
+    // `*(container + 0x35CC) = *(container + 0x35A4)`, i.e. SetCurrentState(E_STATE_ROAMING);
+    // ArbStateAttractMode::Update does the same on its roaming hand-off).
+    void ArbitratorStateContainer::SetCurrentState(EState leState)
+    {
+        mpCurrentState = GetState(leState);
+    }
+
     void ArbitratorStateContainer::ConstructAll()
     {
         mSharedPlaylists.Construct();

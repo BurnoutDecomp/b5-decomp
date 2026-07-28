@@ -6,203 +6,342 @@
 // asserts quote is "..\..\..\GameSource\Director/BrnMainDirector.cpp", so this file
 // mirrors it.
 //
-// BODIED here (faithfully reconstructed from the X360 asm; they touch only the attested
-// stage scalars / list heads and committed-destructor calls):
-//   * MainDirector()  -- ctor: in-place build the owned sub-objects + seed the -1 sentinels
-//   * Release()       -- the staged RELEASE state machine
-//   * Destruct()      -- null the four bookkeeping list heads + destruct collision-gen + ICE
-//   * GetICEWrapper() / GetArbitrator() -- the committed-sub-object accessors
+// ⚠️ LAYOUT: this TU was rewritten by the BehaviourManager wave together with its header.
+// MainDirector is NO LONGER a console-sized opaque buffer addressed at CONSOLE byte offsets
+// through a char* view -- that model could not host x64-width sub-objects (see the header's
+// LAYOUT MODEL banner) and is what forced the previous wave to hold ICEWrapper::Construct
+// and Arbitrator::Construct back. Every field is now a NAMED member; the `+0xNNNNN` console
+// offsets quoted throughout are PROVENANCE for the member's identity, never an index.
 //
-// DECLARATION-ONLY + FLAGGED (in the header): the remaining 16 functions -- the Construct
-// VMX/LCG seed pipeline, the Update spine and its sub-updates (UpdateArbitrator / UpdateICE /
-// UpdateMoments / UpdateAttribSys / UpdateCameraBehaviours* / UpdateDebug* / ProcessInputQueue /
-// ProcessNewVehicleEvents / HandlePrepareForModeAction / CalcTrafficLightSpace /
-// DebugDisplayCurrentCamera / PreSceneQueryUpdate / PostGuiUpdate / Prepare). Each indexes the
-// NOT-HOMED BehaviourManager / AllVehicleData / GameState-action aggregates, paraphrases a VMX
-// pipeline, depends on un-dumped rodata, or calls a declaration-only sibling -- the rules forbid
-// bodying any of those. They are documented + declared in BrnMainDirector.h and resolve to their
-// real bodies when the dependent TUs land.
+// BODIED here (faithfully reconstructed from the X360 asm):
+//   * MainDirector()  -- ctor
+//   * Construct()     -- the runtime build, incl. the BehaviourManager + Arbitrator that the
+//                        previous wave had to hold back
+//   * Prepare()       -- the staged PREPARE machine, incl. the BehaviourManager stage
+//   * Release()       -- the staged RELEASE machine
+//   * Destruct()      -- the four pool resets + the collision-generator / ICE teardown
+//   * GetLivePlayerCarIndex() -- the shared player-car predicate both entry points inline
+//   * PreSceneQueryUpdate()   -- the whole-body guard (its guarded steps stay gated)
+//   * Update()        -- the prologue, the no-player path, the arbitrator leg of the
+//                        gameplay middle, and the whole publish tail
+//   * UpdateArbitrator() + BuildArbStateSharedInfo() -- the per-frame arbitrator context
 //
-// LAYOUT NOTE: MainDirector is modelled as a sized opaque buffer (see BrnMainDirector.h). The
-// bodied functions address their fields at the X360-attested CONSOLE byte offsets through a
-// char*/typed view of `this` -- the established convention in the committed BrnDirectorModule.cpp.
+// DECLARATION-ONLY + FLAGGED (in the header): UpdateICE / UpdateMoments / UpdateAttribSys /
+// UpdateCameraBehaviours* / UpdateDebug* / ProcessInputQueue / ProcessNewVehicleEvents /
+// HandlePrepareForModeAction / CalcTrafficLightSpace / DebugDisplayCurrentCamera /
+// PostGuiUpdate. Each indexes a NOT-HOMED aggregate, paraphrases a VMX pipeline, or depends
+// on un-dumped rodata.
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
 
-#include "GameSource/Director/BrnDirectorICEWrapper.h"   // BrnDirector::ICEWrapper (embedded sub-object: Destruct)
-#include "GameSource/Director/Arbitrator/BrnDirectorArbitrator.h" // BrnDirector::Arbitrator (embedded sub-object accessor)
-#include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h" // BrnDirector::DirectorInputOutput (the per-frame bundle)
-#include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"    // DirectorIO::InputBuffer (GetPlayerCarIndex / GetUsedRaceCars)
-#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer (SetCgsCamera / SetCameraOutput)
-#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h" // BrnDirector::DebugComponent (UpdatePanoramaScreenshots)
-#include "GameSource/Director/Camera/Camera.h"           // BrnDirector::Camera::Camera (the frame camera)
-#include "GameSource/Director/Camera/BrnCameraFinaliser.h" // BrnDirector::CameraFinaliser (the embedded +0x12480 finaliser)
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h" // BrnDirector::DirectorInputOutput
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"    // DirectorIO::InputBuffer
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h" // BrnDirector::DebugComponent
+#include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h" // ArbStateSharedInfo
+#include "GameSource/Director/BrnDirectorResourceManager.h"            // BrnDirector::DirectorResourceManager
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatus
+#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 
-namespace BrnDirector
-{
-    // ------------------------------------------------------------------------
-    // External sub-object types this TU only references by call (their full homes are
-    // separate TUs; the per-TU `cl /c` gate compiles against these minimal externals and the
-    // real symbols resolve at link time -- the BrnDirectorModule.cpp convention).
-    // ------------------------------------------------------------------------
-
-    // FLAG: CgsSceneManager::CgsCollision::BaseCollisionGenerator has no reconstructed home
-    //   layout yet (the committed CgsSceneManagerModule.h forward-declares it only). Destruct /
-    //   Release call its Destruct() on the embedded CgsGraphics::Camera / collision-generator
-    //   object; declared here as a minimal external with just that member so the call compiles.
-    //   Replace with the real home when the collision-generator TU lands.
-}
-
+// FLAG: CgsSceneManager::CgsCollision::BaseCollisionGenerator has no reconstructed home
+//   layout yet (the committed CgsSceneManagerModule.h forward-declares it only). Destruct /
+//   Release / Prepare call its Destruct() on the embedded CgsGraphics::Camera / collision-
+//   generator object; declared here as a minimal external with just that member so the call
+//   compiles. Replace with the real home when the collision-generator TU lands.
 namespace CgsSceneManager { namespace CgsCollision {
     struct BaseCollisionGenerator { void Destruct(); };
 } }
 
 namespace BrnDirector
 {
-    // ICETake, ArbitratorStateContainer, BehaviourManager and CarScoreData are the owned
-    // sub-objects the ctor builds in place. Their construction is performed at their attested
-    // regions via these minimal external constructors (placement-new), exactly as
-    // BrnDirectorModule.cpp builds its owned sub-objects. FLAG: minimal externals -- the real
-    // constructors live in each type's own TU.
-    namespace ICE_External { struct ICETake { ICETake(); }; }
-    struct ICEWrapperBuild           { ICEWrapperBuild(); };          // -> ICEWrapper() at +0x50
-    struct ArbitratorStateContainerB { ArbitratorStateContainerB(); }; // -> at +0x12DB4 region
-    struct BehaviourManagerBuild     { BehaviourManagerBuild(); };    // -> at +0x1CB10 region
-    struct CarScoreDataBuild         { CarScoreDataBuild(); };        // -> at +0x33760 region
-
-    // ------------------------------------------------------------------------
-    // small typed-view helpers (the BrnDirectorModule.cpp idiom: address the attested
-    // CONSOLE offsets through a char* view of `this`; never a host-layout cast).
-    // ------------------------------------------------------------------------
-    static inline char* lpByteView(MainDirector* lpThis)
+    namespace
     {
-        return reinterpret_cast<char*>(lpThis);
-    }
-    static inline s32& lrStageWord(MainDirector* lpThis)
-    {
-        return *reinterpret_cast<s32*>(lpByteView(lpThis) + MainDirector::KU_OFF_STAGE);
-    }
-    static inline s32& lrStageCounter(MainDirector* lpThis)
-    {
-        return *reinterpret_cast<s32*>(lpByteView(lpThis) + MainDirector::KU_OFF_STAGE_COUNTER);
-    }
-
-    // ------------------------------------------------------------------------
-    // GetICEWrapper / GetArbitrator -- the embedded committed sub-objects, reached at their
-    // attested CONSOLE regions (parity by name; the offset is provenance).
-    // ------------------------------------------------------------------------
-    ICEWrapper& MainDirector::GetICEWrapper()
-    {
-        return *reinterpret_cast<ICEWrapper*>(lpByteView(this) + KU_OFF_ICE_WRAPPER);
-    }
-
-    Arbitrator& MainDirector::GetArbitrator()
-    {
-        // The embedded Arbitrator region (CONSOLE +0x12DC0: the ctor builds the state container
-        // at +0x12DC0+0x310 and seeds the arbitrator vtables there -- BrnDirectorArbitrator.h).
-        return *reinterpret_cast<Arbitrator*>(lpByteView(this) + 0x12DC0);
+        // The collision-generator view of an embedded aggregate. Takes a NAMED member's
+        // address (never an offset into this class's storage) -- the X360 tears the embedded
+        // CgsGraphics::Camera down through BaseCollisionGenerator::Destruct because on this
+        // build they are one object.
+        inline CgsSceneManager::CgsCollision::BaseCollisionGenerator* lpAsCollisionGenerator(void* lpObject)
+        {
+            return reinterpret_cast<CgsSceneManager::CgsCollision::BaseCollisionGenerator*>(lpObject);
+        }
     }
 
     // ------------------------------------------------------------------------
     // MainDirector (ctor)  @ X360 0x827E4AB8  (EXECUTED in goal trace)
     //
-    // Build the owned sub-objects in place and seed the -1 sentinel index fields the asm
-    // stores. The asm sequence (provenance):
-    //   ICEWrapper()                    at +0x50
-    //   word -1 -> +0x122B8/+0x12384/+0x12450   (three -1 sentinel indices, r11=+0x121F0)
-    //   ICETake()                       at +0x124F0
-    //   word -1 -> +0x12DB4                      (r10=+0x12DB4)
-    //   ArbitratorStateContainer()      at +0x130D0   (arbitrator region +0x12DC0 + 0x310)
-    //   ...embedded arbitrator special-state vtable installs at +0x3910/+0x41A0/+0x4340 of the
-    //      arbitrator region (NOT reproduced here; they belong to the embedded Arbitrator)
-    //   BehaviourManager()              at +0x1CB10   (r3 = +0x1CB10)
-    //   word -1 -> +0x34974                      (r9, stwx)
-    //   CarScoreData()                  at +0x33760
-    //   word -1 -> +0x34DC0                      (0x250 off r11=+0x34B70)
-    //   a 16-entry table of -1 from +0x34DF8 (stride 0x2C)   -- the per-rival index table
-    //   word -1 -> +0x35090 (0x2C0 off r8=+0x34DD0) / +0x353A8 (0x838 off r11=+0x34B70)
+    // The X360 sequence is: construct the owned sub-objects in place (ICEWrapper @+0x50,
+    // ICETake @+0x124F0, ArbitratorStateContainer @+0x130D0 == arbitrator +0x310,
+    // BehaviourManager @+0x1CB10, CarScoreData @+0x33B50), then seed the -1 sentinel index
+    // fields (+0x122B8, +0x12384, +0x12450, +0x12DB4, +0x34974, +0x34DC0, a 16-entry
+    // stride-0x2C table from +0x34DF8, +0x35090, +0x353A8).
     //
-    // BODIED FAITHFULLY for the parts that touch only the attested sentinel fields + the owned
-    // sub-object placement-builds. The owned sub-objects are constructed via minimal external
-    // builders (placement-new at their attested regions) -- the BrnDirectorModule.cpp pattern.
+    // With the sub-objects now declared as NAMED MEMBERS, every one of those in-place builds
+    // is performed by the members' own constructors -- the placement-new list the previous
+    // (opaque-buffer) model needed is gone, and with it the host-size overrun risk.
     //
-    // FLAG: the embedded BehaviourManager and the arbitrator special-state vtable installs are
-    //   un-homed; the BehaviourManager build is performed by its external builder (its real ctor
-    //   resolves at link), and the per-rival -1 index table is seeded by attested offset/stride.
-    //   The vtable-pointer installs the asm makes into the arbitrator region are NOT reproduced
-    //   here (they belong to the embedded Arbitrator's own construction, performed in its region).
+    // ⚠️ THE -1 SENTINEL SEEDS ARE A DOCUMENTED QUIET GATE. Each one lands inside a region
+    // whose type is still un-homed (the ICE-wrapper tail / the shot-selector block / the
+    // arbitrator-region head / the per-rival score table inside maModeActionAndDebugBlock),
+    // so there is no named field to write. Under the previous model they were raw stores into
+    // a console-addressed buffer; writing them now would mean re-introducing exactly the
+    // offset arithmetic this rewrite removed, and into regions whose host contents differ.
+    // CONSEQUENCE: those index fields start at 0 rather than -1. Every one is consumed by an
+    // un-homed aggregate that is itself gated, so nothing reconstructed reads them today.
+    // DELETE-WHEN: each owning type is homed -- then the sentinel becomes that type's own
+    // constructor's business, which is where the console puts it too (the compiler inlined
+    // the sub-object ctors into this one).
     // ------------------------------------------------------------------------
     MainDirector::MainDirector()
+        : mpDebugComponent(0)
+        , miMomentBucketFreeCount(0)
+        , muMomentBucketOccupancy(0)
+        , miForcedCameraCarIndex(-1)
+        , miStageCounter(0)
+        , miStage(0)
+        , mfConstructTime(0.0)
     {
-        char* lpBase = lpByteView(this);
+        // Owned sub-objects: mICEWrapper / mCameraFinaliser / mArbitrator /
+        // mBehaviourManager / mLastCamera / mCgsCamera run their own constructors.
+        // ⚠️ GATE: the -1 sentinel seeds (see the banner).
+    }
 
-        // Owned sub-objects, built in place at their attested regions.
-        new (reinterpret_cast<void*>(lpBase + KU_OFF_ICE_WRAPPER)) ICEWrapperBuild();      // +0x50
-        new (reinterpret_cast<void*>(lpBase + 0x124F0))           ICE_External::ICETake(); // +0x124F0
-        new (reinterpret_cast<void*>(lpBase + 0x130D0))           ArbitratorStateContainerB(); // +0x130D0
-        new (reinterpret_cast<void*>(lpBase + 0x1CB10))           BehaviourManagerBuild();  // +0x1CB10
-        new (reinterpret_cast<void*>(lpBase + 0x33B50))           CarScoreDataBuild();      // +0x33B50 (asm: addis r3,r30,3 -> +0x30000, addi r3,r3,0x3B50)
+    // ------------------------------------------------------------------------
+    // Construct  @ 0x8225B448   (EXECUTED in goal trace)
+    //
+    // The X360 call/store sequence, in order:
+    //
+    //     mStage         = 5;                                   // +0x35424
+    //     mfConstructTime = lfTime;                             // +0x35428 (double)
+    //     mStageCounter  = 0;                                   // +0x35420
+    //     DirectorDevTools::Construct( this, this, lpResourceManager );
+    //     <CgsGraphics::Camera ctor>( this + 0x349D0 );          // sub_827F94E8
+    //     CgsGraphics::Camera::SetFovHorizontal( this + 0x349D0, ... );
+    //     CgsGraphics::Camera::UpdatePerspectiveProjectionMatrix( this + 0x349D0 );
+    //     Camera::Camera::Construct( &mLastCamera );             // +0x32F10
+    //     AllVehicleData::Construct( this + 0x12C80 );
+    //     <five flag bytes cleared around +0x34974 .. +0x349C9>
+    //     Camera::BehaviourManager::Construct( &mBehaviourManager );          // +0x1CB10
+    //     CGS_ASSERT( lpResourceManager != NULL );               // BrnBehaviourManager.h:168
+    //     *(this + 208588) = lpResourceManager;                  // == manager +91068
+    //     <the moment-bucket pool occupancy word (+0x1CAB8) cleared>
+    //     MomentParameterBank::Construct( this + 0x1CAC0 );
+    //     Arbitrator::Construct( &mArbitrator );                 // +0x12DC0
+    //     <the VMX + 1284865837-multiplier LCG camera-shake seed pipeline into +0x32EE0..>
+    //     KeyAnimShakeController::Construct( this + 0x124D0, lpResourceManager );
+    //     ShotSelector::Construct( this + 0x121F0, lpResourceManager );
+    //     ICEWrapper::Construct( &mICEWrapper );                 // +0x50
+    //     GameState::Clear( this + 0x337E0 );
+    //     DebugPrinter::Construct( this + 0x337B0 / +0x33768 / +0x3378C );
+    //     <the flag/latch tail seeds +0x3542F .. +0x3543F, and +0x33100 = -1>
+    //
+    // ⭐ `*(this + 208588) = lpResourceManager` IS NOT A MainDirector FIELD. 117520 + 91068 ==
+    // 208588: it is `mBehaviourManager.mpDirectorResourceManager`, which is exactly why the
+    // guard immediately before it quotes **BrnBehaviourManager.h:168**. The previous wave had
+    // it as an un-named raw store; it is now the named setter.
+    //
+    // ⭐ THE TWO HELD-BACK BUILDS ARE NOW REAL. `Camera::BehaviourManager::Construct` and
+    // `Arbitrator::Construct` were held back by the previous wave for a HOST-SIZE reason (the
+    // host types are wider than their console placement windows inside the old opaque
+    // buffer). Both are named members now, so there is no window to overrun and both run.
+    // `ICEWrapper::Construct` runs for the same reason.
+    //
+    // ⚠️ STILL DOCUMENTED QUIET GATES -- every one is an un-homed aggregate, not a size issue:
+    //   * DirectorDevTools::Construct -- un-homed (maDirectorDevTools). CONSEQUENCE: the
+    //     GameTalk "Camera" dev-tools commands have no handler state. Nothing in the game path
+    //     uses them.
+    //   * AllVehicleData::Construct + the five flag bytes -- un-homed (maAllVehicleData).
+    //     CONSEQUENCE: the per-frame vehicle tracker starts zeroed; the arbitrator states that
+    //     read it are the gameplay ones, not the attract/flyby path.
+    //   * MomentParameterBank::Construct -- un-homed (maMomentParameterBank). CONSEQUENCE: no
+    //     moment can be parameterised; UpdateMoments is itself declaration-only.
+    //   * the camera-shake LCG seed pipeline (+0x32EE0..) -- a multi-stage VMX + 1284865837
+    //     multiplier LCG the reconstruction rules forbid paraphrasing to scalar, writing into
+    //     the un-homed maRandom region. CONSEQUENCE: the shake RNG table starts zeroed.
+    //   * KeyAnimShakeController::Construct / ShotSelector::Construct -- un-homed.
+    //   * GameState::Clear + the three DebugPrinter::Constructs + the flag/latch tail seeds --
+    //     un-homed regions (maGameState / maDebugPrinter* / maStateFlagTail).
+    //     ⚠️ CONSEQUENCE WORTH KNOWING: the GameState block is what tells the arbitrator to
+    //     enter attract mode, and DebugPrinter is what the arbitrator states print through.
+    //     Both are handed to ArbStateSharedInfo as zeroed storage today.
+    //   DELETE-WHEN: per sub-object, as each type is homed -- then swap that member's opaque
+    //   span in the header for the real type and un-gate its line here.
+    //
+    // The SetFovHorizontal call the asm makes right after the camera ctor is deliberately not
+    // reproduced: its FOV argument is an UNINITIALISED fp register in the decompilation (a
+    // Hex-Rays artefact of the PPC fp calling convention), i.e. NOT recovered, and
+    // CgsGraphics::Camera::Construct already seeds the default FOV through the same setter.
+    // ------------------------------------------------------------------------
+    void MainDirector::Construct(const DirectorResourceManager* lpResourceManager, f32 lfTime)
+    {
+        miStage         = 5;
+        mfConstructTime = static_cast<f64>(lfTime);
+        miStageCounter  = 0;
 
-        // -1 sentinel index fields (asm word stores, offsets read straight from the asm).
-        *reinterpret_cast<s32*>(lpBase + 0x122B8) = -1;   // stw r31,0xC8(r11=+0x121F0)
-        *reinterpret_cast<s32*>(lpBase + 0x12384) = -1;   // stw r31,0x194(r11)
-        *reinterpret_cast<s32*>(lpBase + 0x12450) = -1;   // stw r31,0x260(r11)
-        *reinterpret_cast<s32*>(lpBase + 0x12DB4) = -1;   // stwx r31,r30,(r10=+0x12DB4)
-        *reinterpret_cast<s32*>(lpBase + 0x34974) = -1;   // stwx r31,r30,(r9=+0x34974)
-        *reinterpret_cast<s32*>(lpBase + 0x34DC0) = -1;   // stw r31,0x250(r11=+0x34B70)
+        // ⚠️ GATE: DirectorDevTools::Construct( this, this, lpResourceManager );
 
-        // The 16-entry per-rival index table seeded to -1: first store at +0x34DF8 (r9 = r8+0x28,
-        // r8 = +0x34DD0), stride 0x2C bytes, 16 iterations (the asm's r10 = 0xF..-1 down-count).
-        char* lpTable = lpBase + 0x34DF8;
-        for (s32 liEntry = 15; liEntry >= 0; --liEntry)
+        // The published graphics camera (+0x349D0).
+        mCgsCamera.Construct();
+        mCgsCamera.UpdatePerspectiveProjectionMatrix();
+
+        // mLastCamera (+0x32F10) -- the carried-over frame camera Update reads and writes.
+        // Without this the director would publish RAW UNINITIALISED STORAGE on frame 1 and
+        // ValidateTransformWithDebugInfo would assert on the NaNs.
+        mLastCamera.Construct();
+
+        // ⚠️ GATE: AllVehicleData::Construct( maAllVehicleData ) + the five flag bytes.
+
+        // ⭐ REAL (was held back for host size): the camera-behaviour manager.
+        mBehaviourManager.Construct();
+
+        CGS_ASSERT(lpResourceManager != 0, "lpDirectorResourceManager != NULL");
+        mBehaviourManager.SetDirectorResourceManager(lpResourceManager);
+
+        // The moment-bucket pool's occupancy word (+0x1CAB8), cleared before the bank build.
+        muMomentBucketOccupancy = 0;
+
+        // ⚠️ GATE: MomentParameterBank::Construct( maMomentParameterBank );
+
+        // ⭐ REAL (was held back for host size): the camera arbitrator -- and with it the
+        // 11-state container, the shared-camera container and the three special-cam states
+        // (crash-nav / ATTRACT MODE / render-metrics).
+        mArbitrator.Construct();
+
+        // ⚠️ GATE: the VMX/LCG camera-shake seed pipeline into maRandom.
+        // ⚠️ GATE: KeyAnimShakeController::Construct / ShotSelector::Construct.
+
+        // ⭐ REAL (was held back for host size): the ICE wrapper.
+        mICEWrapper.Construct();
+
+        // ⚠️ GATE: GameState::Clear / the three DebugPrinter::Constructs.
+
+        // The forced-camera-car override starts at the -1 "none" sentinel (+0x33100).
+        miForcedCameraCarIndex = -1;
+
+        // ⚠️ GATE: the flag/latch tail seeds (+0x3542F..+0x3543F) into maStateFlagTail.
+    }
+
+    // ------------------------------------------------------------------------
+    // Prepare  @ 0x8224FB38
+    //
+    // The staged PREPARE state machine DirectorModule::Prepare pumps at its own stage 4. The
+    // stage word selects the entry case; the cases fall through, so one call advances as far
+    // as it can:
+    //
+    //   0 -> tear the collision generator down, then register the dev-tools GameTalk message
+    //        handler under the name "Camera", and zero the dev-tools head word
+    //   1 -> zero the frame counter (+0x121A0-ish, inside the shot block)
+    //   2 -> ICEWrapper::Prepare
+    //   4 -> Camera::BehaviourManager::Prepare
+    //   5 -> seed the moment-bucket pool free queue (19..0 descending) + count 20, and clear
+    //        its occupancy word (+0x1CAB8)
+    //   6 -> (empty)
+    //   7 -> done: clear the stage counter, report success
+    // (there is deliberately NO case 3 in the X360 jump table -- reproduced.)
+    //
+    // Any sub-Prepare returning false reports false without advancing; the framework retries.
+    // An out-of-range stage asserts (BrnMainDirector.cpp:224).
+    //
+    // ⭐ STAGE 4 IS NOW REAL. It was the wave-1 "THE blocker" gate on the (mistaken) grounds
+    // that BehaviourManager had no layout; the layout has been committed since d5612215 and
+    // BehaviourManager::Prepare @0x8223DBE0 is now bodied, so the three behaviour pools get
+    // their free queues and the manager is genuinely ready to allocate behaviours.
+    //
+    // ⭐ STAGE 5 IS NOW REAL TOO, and it is NOT a behaviour-manager table. +117344/+117424/
+    // +117432 sit BEFORE MomentParameterBank (+117440) and nowhere near the manager (+117520):
+    // the 20-entry descending seed + count + head is a pool free-queue refill, i.e. the
+    // moment-bucket pool's. Written through this class's three named fields.
+    //
+    // ⚠️ ONE DOCUMENTED QUIET GATE REMAINS: stage 0's GameTalk registration --
+    //   EA::GameTalk::GameTalkManager has no reconstructed home. CONSEQUENCE: the "Camera"
+    //   dev-tools commands (Start/StopRenderMetrics, the ICE editor hooks) are not reachable
+    //   from GameTalk. Nothing in the game path uses them.
+    //   DELETE-WHEN: the GameTalk manager is homed.
+    // ------------------------------------------------------------------------
+    bool MainDirector::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
+                               const DirectorResourceManager* lpResourceManager)
+    {
+        switch (miStage)
         {
-            *reinterpret_cast<s32*>(lpTable) = -1;
-            lpTable += 0x2C;
+        case 0:
+            lpAsCollisionGenerator(&mCgsCamera)->Destruct();
+            // ⚠️ GATE: EA::GameTalk::GameTalkManager::GetInstance()->RegisterMessageHandler(
+            //              BrnDirector::DirectorDevTools::GameTalkMsgHandler, "Camera" );
+            //   -- un-homed GameTalk API (see the banner). The `*this = 0` dev-tools head
+            //   store that follows it belongs to the same un-homed object.
+            // fall through
+        case 1:
+            miStage = 1;
+            // ⚠️ GATE: the frame counter inside maShotAndAnalysisBlock (console +0x121A0).
+            // fall through
+        case 2:
+            miStage = 2;
+            // The wrapper pumps its own ICE resource acquisition through the director output
+            // buffer, forwarding the prepare arg and the module's resource manager.
+            if (!mICEWrapper.Prepare(lpOutputBuffer, liPrepareArg, lpResourceManager))
+                return false;
+            // fall through
+        case 4:
+            miStage = 4;
+            if (!mBehaviourManager.Prepare())
+                return false;
+            // fall through
+        case 5:
+        {
+            miStage = 5;
+            muMomentBucketOccupancy = 0;
+            for (s32 liSlot = 19; liSlot >= 0; --liSlot)
+            {
+                maMomentBucketFreeQueue[19 - liSlot] = liSlot;
+            }
+            miMomentBucketFreeCount = 20;
+            // fall through
         }
+        case 6:
+            miStage = 6;
+            // fall through
+        case 7:
+            miStage = 7;
+            miStageCounter = 0;
+            return true;
 
-        *reinterpret_cast<s32*>(lpBase + 0x35090) = -1;   // stw r31,0x2C0(r8=+0x34DD0)
-        *reinterpret_cast<s32*>(lpBase + 0x353A8) = -1;   // stw r31,0x838(r11=+0x34B70)
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n");
+            return false;
+        }
     }
 
     // ------------------------------------------------------------------------
     // Release  @ X360 0x82236EB0
     //
-    // The staged RELEASE state machine. The stage word (CONSOLE +0x35424) selects the case;
-    // each case advances it and the cases fall through (1->2->3->5). On the first (stage 0)
-    // it destructs the collision generator; on the last (stage 5) it clears the stage counter
-    // (+0x35420 -> 0) and reports completion. An out-of-range stage asserts and reports failure.
-    //
+    // The staged RELEASE state machine. The stage word selects the case; each case advances
+    // it and the cases fall through (1->2->3->5). On the first (stage 0) it destructs the
+    // object at the ICE-wrapper region; on the last (stage 5) it clears the stage counter and
+    // reports completion. An out-of-range stage asserts and reports failure.
     // (The asm "case 4" is the default branch -- there is no case 4 in the jump table.)
-    // Faithful to the asm: NO added control flow; the fall-through chain matches the jump table.
     // ------------------------------------------------------------------------
     bool MainDirector::Release()
     {
-        s32& lrStage = lrStageWord(this);
-
-        switch (lrStage)
+        switch (miStage)
         {
         case 0:
-            // Release case-0 tears down the object at the ICE-wrapper region (CONSOLE +0x50):
-            // asm 0x82236F0C `addi r3,r30,0x50` -> BaseCollisionGenerator::Destruct(this+0x50).
-            // (The FULL Destruct() below tears down the collision generator at +0x349D0; these
-            //  are different call sites and must not be conflated.)
-            reinterpret_cast<CgsSceneManager::CgsCollision::BaseCollisionGenerator*>(
-                lpByteView(this) + KU_OFF_ICE_WRAPPER)->Destruct();
+            // asm 0x82236F0C `addi r3,r30,0x50` -> BaseCollisionGenerator::Destruct(this+0x50),
+            // i.e. the ICE-wrapper region. (Destruct() below targets the +0x349D0 graphics
+            // camera instead; these are different call sites and must not be conflated.)
+            lpAsCollisionGenerator(&mICEWrapper)->Destruct();
             // fall through
         case 1:
-            lrStage = 1;
+            miStage = 1;
             // fall through
         case 2:
-            lrStage = 2;
+            miStage = 2;
             // fall through
         case 3:
-            lrStage = 3;
+            miStage = 3;
             // fall through
         case 5:
-            lrStage = 5;
-            lrStageCounter(this) = 0;
+            miStage = 5;
+            miStageCounter = 0;
             return true;
 
         default:
@@ -214,333 +353,39 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     // Destruct  @ X360 0x8224FCC0
     //
-    // Null the four per-frame bookkeeping list heads (64-bit zero stores), destruct the embedded
-    // CgsGraphics::Camera / collision-generator object, then destruct the embedded ICE wrapper.
-    // Faithful to the asm store-for-store.
+    // The X360 body stores a 64-bit zero into four words, destructs the embedded
+    // CgsGraphics::Camera / collision generator, then destructs the embedded ICE wrapper.
+    //
+    // ⭐ THE FOUR WORDS ARE POOL OCCUPANCY WORDS, not "list heads" as the previous wave
+    // recorded them. Cross-checked against BehaviourManager::Prepare @0x8223DBE0's per-pool
+    // free-queue layout:
+    //     +0x1CAB8 (117432)  the moment-bucket pool's occupancy word
+    //     +0x24848 (149576) == manager +32056  mLargeBehaviourPool's occupancy
+    //     +0x2C5B8 (181688) == manager +64168  mSmallBehaviourPool's occupancy
+    //     +0x2F038 (192568) == manager +75048  mBehaviourHelperPool's occupancy
+    // So Destruct is "reset the four pools", and all four are now named operations.
     // ------------------------------------------------------------------------
     void MainDirector::Destruct()
     {
-        char* lpBase = lpByteView(this);
+        muMomentBucketOccupancy = 0;      // the moment-bucket pool
+        mBehaviourManager.Destruct();     // the manager's three pools
 
-        // Four list/tree heads nulled (the asm stores a 64-bit zero into each).
-        *reinterpret_cast<u64*>(lpBase + KU_OFF_LISTHEAD_A) = 0;   // +0x1CAF8
-        *reinterpret_cast<u64*>(lpBase + KU_OFF_LISTHEAD_B) = 0;   // +0x24808
-        *reinterpret_cast<u64*>(lpBase + KU_OFF_LISTHEAD_C) = 0;   // +0x2C638
-        *reinterpret_cast<u64*>(lpBase + KU_OFF_LISTHEAD_D) = 0;   // +0x2F038
-
-        // Destruct the embedded collision generator (CONSOLE +0x349D0).
-        reinterpret_cast<CgsSceneManager::CgsCollision::BaseCollisionGenerator*>(
-            lpBase + KU_OFF_COLLISION_GENERATOR)->Destruct();
-
-        // Destruct the embedded ICE wrapper (CONSOLE +0x50).
-        GetICEWrapper().Destruct();
-    }
-
-    // ========================================================================
-    //  THE PER-FRAME DIRECTOR SPINE  (reconstructed in the director wave)
-    //
-    //  ADDITIONAL ATTESTED CONSOLE OFFSETS used below (all read straight off the X360
-    //  bodies; provenance only -- every one is reached through a NAMED helper here, never
-    //  poked inline):
-    //    +0x00040 (64)      &DebugComponent  -- the module's debug component back-pointer
-    //                       (DirectorModule::Construct @0x8225C590 stores `this+552` into
-    //                        module+2880 == MainDirector+0x40)
-    //    +0x12480 (74880)   CameraFinaliser  (CameraFinaliser::Update call site)
-    //    +0x32F10 (208656)  mLastCamera      (Camera::operator= both ways: the no-player
-    //                       early-out reads it, the tail writes it back)
-    //    +0x337E0 (210912)  the camera-state block CameraFinaliser::Update takes
-    //    +0x33140 (209152)  the "forced camera car" override index
-    //    +0x349D0 (215504)  the published CgsGraphics::Camera (== GetCgsCamera)
-    //    +0x35420/+0x35424  the staged-init counter / stage word (KU_OFF_STAGE*)
-    // ========================================================================
-
-    // ------------------------------------------------------------------------
-    // GetCgsCamera -- the embedded CgsGraphics::Camera at CONSOLE +0x349D0.
-    //
-    // MainDirector::Update fills it (Camera::Camera::CopyToCgsCamera) and publishes it
-    // (OutputBuffer::SetCgsCamera); DirectorModule::Update then copies it into the module's
-    // own mCgsCamera. Exposed by name so no caller reaches into this class's storage.
-    // ------------------------------------------------------------------------
-    CgsGraphics::Camera& MainDirector::GetCgsCamera()
-    {
-        return *reinterpret_cast<CgsGraphics::Camera*>(lpByteView(this) + KU_OFF_COLLISION_GENERATOR);
-    }
-
-    const CgsGraphics::Camera& MainDirector::GetCgsCamera() const
-    {
-        return *reinterpret_cast<const CgsGraphics::Camera*>(
-                   reinterpret_cast<const char*>(this) + KU_OFF_COLLISION_GENERATOR);
-    }
-
-    namespace
-    {
-        // Attested CONSOLE offsets of the three further sub-objects this TU's per-frame
-        // bodies reach. Kept file-local (they are this TU's provenance, not API).
-        enum : u32
-        {
-            KU_OFF_DEBUG_COMPONENT_PTR = 0x00040,   // MainDirector +0x40  -> DebugComponent*
-            KU_OFF_CAMERA_FINALISER    = 0x12480,   // MainDirector +0x12480
-            KU_OFF_LAST_CAMERA         = 0x32F10,   // MainDirector +0x32F10
-            KU_OFF_FORCED_CAMERA_CAR   = 0x33140,   // MainDirector +0x33140
-            KU_OFF_CAMERA_STATE_BLOCK  = 0x337E0,   // MainDirector +0x337E0
-        };
-    }
-
-    // The frame camera the director carries over between frames (the arbitrator's result,
-    // finalised). Reached by name; see the offset table above.
-    static inline Camera::Camera& lrLastCamera(MainDirector* lpThis)
-    {
-        return *reinterpret_cast<Camera::Camera*>(
-                   reinterpret_cast<char*>(lpThis) + KU_OFF_LAST_CAMERA);
-    }
-
-    static inline CameraFinaliser& lrCameraFinaliser(MainDirector* lpThis)
-    {
-        return *reinterpret_cast<CameraFinaliser*>(
-                   reinterpret_cast<char*>(lpThis) + KU_OFF_CAMERA_FINALISER);
+        lpAsCollisionGenerator(&mCgsCamera)->Destruct();
+        mICEWrapper.Destruct();
     }
 
     // ------------------------------------------------------------------------
-    // Construct  @ 0x8225B448   (EXECUTED in goal trace)
+    // GetLivePlayerCarIndex -- the shared "which player car is live this frame" resolution.
     //
-    // Build the director runtime. The X360 call/store sequence, in order:
+    // Both Update @0x82274070 and PreSceneQueryUpdate @0x8225BA00 open with the SAME sequence
+    // (the X360 emits it twice, inlined):
     //
-    //     mStage        = 5;                        // +0x35424
-    //     mConstructTime = lfTime;                  // +0x35428 (double)
-    //     mStageCounter = 0;                        // +0x35420
-    //     DirectorDevTools::Construct( this, this, lpResourceManager );
-    //     <CgsGraphics::Camera ctor>( this + 215504 );        // sub_827F94E8, +0x349D0
-    //     CgsGraphics::Camera::SetFovHorizontal( this + 215504, ... );
-    //     CgsGraphics::Camera::UpdatePerspectiveProjectionMatrix( this + 215504 );
-    //     Camera::Camera::Construct( this + 208656 );         // mLastCamera, +0x32F10
-    //     AllVehicleData::Construct( this + 76928 );
-    //     <five flag bytes cleared around +215412..+215497>
-    //     Camera::BehaviourManager::Construct( this + 117520 );
-    //     CGS_ASSERT( lpResourceManager != NULL );            // BrnBehaviourManager.h:168
-    //     *(this + 208588) = lpResourceManager;               // the manager back-pointer
-    //     MomentParameterBank::Construct( this + 117440 );
-    //     Arbitrator::Construct( this + 77248 );              // == GetArbitrator(), +0x12DC0
-    //     <the VMX + 1284865837-multiplier LCG camera-shake seed pipeline>
-    //     KeyAnimShakeController::Construct( this + 74960, lpResourceManager );
-    //     ShotSelector::Construct( this + 74224, lpResourceManager );
-    //     ICEWrapper::Construct( this + 80 );
-    //     GameState::Clear( this + 210912 );
-    //     DebugPrinter::Construct( this + 210864 / +210792 / +210828 );
-    //
-    // BODIED HERE: the three staged-init words and BOTH CAMERAS. That subset is deliberately
-    // chosen and it is the one this wave depends on:
-    //   * `Camera::Camera::Construct(this + 208656)` builds mLastCamera -- the camera Update's
-    //     no-player path copies into the frame camera and then publishes. Without it the
-    //     director would publish RAW UNINITIALISED STORAGE on frame 1 and
-    //     ValidateTransformWithDebugInfo would assert on the NaNs (and a dev assert stops the
-    //     sim). Leaving Construct declaration-only while bodying Update would have been a
-    //     latent crash, not a gap.
-    //   * the CgsGraphics::Camera at +0x349D0 is the one GetCgsCamera names and SetCgsCamera
-    //     publishes. Its committed Construct() already sets the default FOV and calls
-    //     SetFovHorizontal internally, so the explicit SetFovHorizontal the asm makes right
-    //     after is redundant here -- and its FOV argument is an UNINITIALISED fp register in
-    //     the decompilation (a Hex-Rays artefact of the PPC fp calling convention), i.e. NOT
-    //     recovered, so calling it with a guessed value would be strictly worse than relying
-    //     on Construct's own default. FLAG: that one call is not reproduced.
-    //
-    // ⚠️ EVERYTHING ELSE IS A DOCUMENTED QUIET GATE, for the reasons the header already
-    // records: DirectorDevTools / AllVehicleData / Camera::BehaviourManager /
-    // MomentParameterBank / KeyAnimShakeController / ShotSelector / GameState / DebugPrinter
-    // have no homed layouts at their attested offsets, and the camera-shake seed is a VMX+LCG
-    // pipeline the reconstruction rules forbid paraphrasing to scalar.
-    //
-    // ⚠️ TWO SUB-OBJECT BUILDS ARE HELD BACK FOR A DIFFERENT, SHARPER REASON -- read this
-    // before un-gating them. MainDirector is an OPAQUE 0x35450-byte buffer and the sub-objects
-    // are placed at their CONSOLE offsets, but the HOST types are WIDER (their embedded
-    // pointers widen 4->8). For most of them that is harmless because the neighbouring space
-    // is unused. It is NOT harmless for these two:
-    //   * ICEWrapper::Construct( this + 0x50 ) -- the console ICEWrapper runs to ~+0x1210C,
-    //     and this TU now places the CameraFinaliser at +0x12480. The host ICEWrapper is
-    //     wider; if it grows past 0x12430 bytes it will run INTO the finaliser and silently
-    //     corrupt the inertia controller. Console-safe, host-unproven.
-    //   * Arbitrator::Construct( this + 0x12DC0 ) -- console span 0x12DC0..0x172C8; the host
-    //     Arbitrator (embedded states, handles and Cameras all widen) has no proven size.
-    // Both are held until those two host sizes are pinned. Consequence: no arbitrator, hence
-    // no arbitrator STATE, hence no ArbStateAttractMode -- which is exactly the gate the DJ
-    // flyby sits behind, together with the BehaviourManager one.
-    //
-    // DELETE-WHEN: per sub-object, as each type is homed; for the two above, additionally once
-    // `sizeof` on the host is measured against the console placement window (a static_assert
-    // in this TU is the natural way to hold that invariant once the types exist).
-    // ------------------------------------------------------------------------
-    void MainDirector::Construct(const DirectorResourceManager* lpResourceManager, f32 lfTime)
-    {
-        CGS_ASSERT(lpResourceManager != 0, "lpDirectorResourceManager != NULL");
-
-        lrStageWord(this)    = 5;   // +0x35424
-        lrStageCounter(this) = 0;   // +0x35420
-
-        *reinterpret_cast<f64*>(lpByteView(this) + KU_OFF_CONSTRUCT_TIME) =
-            static_cast<f64>(lfTime);   // +0x35428 (the asm stores the incoming double)
-
-        // The published graphics camera (+0x349D0). Construct() seeds the default
-        // FOV/aspect/clip planes and the identity view; then rebuild the projection exactly as
-        // the asm does. (See the SetFovHorizontal FLAG in the banner.)
-        GetCgsCamera().Construct();
-        GetCgsCamera().UpdatePerspectiveProjectionMatrix();
-
-        // mLastCamera (+0x32F10) -- the carried-over frame camera Update reads and writes.
-        lrLastCamera(this).Construct();
-
-        // Everything else: gated (see the banner).
-    }
-
-    // ------------------------------------------------------------------------
-    // Prepare  @ 0x8224FB38
-    //
-    // The staged PREPARE state machine DirectorModule::Prepare pumps at its own stage 4.
-    // The stage word (KU_OFF_STAGE, CONSOLE +0x35424) selects the entry case; the cases fall
-    // through, so one call advances as far as it can:
-    //
-    //   0 -> tear the collision generator down, then register the dev-tools GameTalk message
-    //        handler under the name "Camera", and zero the head word
-    //   1 -> zero the frame counter (+0x12454)
-    //   2 -> ICEWrapper::Prepare
-    //   4 -> Camera::BehaviourManager::Prepare
-    //   5 -> seed the 20-entry behaviour-helper index table (19..0 descending) + set its
-    //        count to 20, and clear the +0x1CAB8 list head
-    //   6 -> (empty)
-    //   7 -> done: clear the stage counter, report success
-    // (there is deliberately NO case 3 in the X360 jump table -- reproduced.)
-    //
-    // Any sub-Prepare returning false reports false without advancing; the framework retries.
-    // An out-of-range stage asserts (BrnMainDirector.cpp:224).
-    //
-    // ⚠️ TWO STAGES ARE DOCUMENTED QUIET GATES (each is skipped, not trapped, and the machine
-    // still advances so the director comes up):
-    //   * stage 0's GameTalk registration -- EA::GameTalk::GameTalkManager has no
-    //     reconstructed home. Consequence: the "Camera" dev-tools commands
-    //     (Start/StopRenderMetrics, the ICE editor hooks) are not reachable from GameTalk.
-    //     Nothing in the game path uses them. DELETE-WHEN: the GameTalk manager is homed.
-    //   * stage 4/5's Camera::BehaviourManager::Prepare + the 20-entry helper index table --
-    //     BrnBehaviourManager.h is forward-decl-only, so the type has no layout and the table
-    //     has no named member. This is THE blocker for the whole camera-behaviour system
-    //     (see MainDirector::Update). Consequence: no camera behaviour can be allocated, so
-    //     the director publishes its carried-over camera rather than a behaviour-driven one.
-    //     DELETE-WHEN: BrnDirector::Camera::BehaviourManager gets a real layout + Prepare.
-    //
-    // The collision-generator teardown in stage 0 IS reproduced (its callee is committed) --
-    // note it targets CONSOLE +0x349D0, the same region GetCgsCamera names, exactly as
-    // Destruct() does.
-    // ------------------------------------------------------------------------
-    bool MainDirector::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
-                               const DirectorResourceManager* lpResourceManager)
-    {
-        s32& lrStage = lrStageWord(this);
-
-        switch (lrStage)
-        {
-        case 0:
-            reinterpret_cast<CgsSceneManager::CgsCollision::BaseCollisionGenerator*>(
-                lpByteView(this) + KU_OFF_COLLISION_GENERATOR)->Destruct();
-            // ⚠️ GATE: EA::GameTalk::GameTalkManager::GetInstance()->RegisterMessageHandler(
-            //              BrnDirector::DirectorDevTools::GameTalkMsgHandler, "Camera" );
-            //   -- un-homed GameTalk API (see the banner).
-            // fall through
-        case 1:
-            lrStage = 1;
-            // fall through
-        case 2:
-            lrStage = 2;
-            // asm: ICEWrapper::Prepare(this+80, a2, a3, a4) -- the wrapper pumps its own ICE
-            // resource acquisition through the director output buffer, forwarding the
-            // prepare arg and the module's resource manager.
-            if (!GetICEWrapper().Prepare(lpOutputBuffer, liPrepareArg, lpResourceManager))
-                return false;
-            // fall through
-        case 4:
-            lrStage = 4;
-            // ⚠️ GATE: Camera::BehaviourManager::Prepare(this + 117520) -- un-homed (banner).
-            // fall through
-        case 5:
-            lrStage = 5;
-            // ⚠️ GATE: seed the behaviour-helper index table at this+117344 with 19..0 and
-            //   set this+117424 = 20; clear the list head at this+117432. All inside the
-            //   un-homed BehaviourManager aggregate (banner).
-            // fall through
-        case 6:
-            lrStage = 6;
-            // fall through
-        case 7:
-            lrStage = 7;
-            lrStageCounter(this) = 0;
-            return true;
-
-        default:
-            CGS_ASSERT(false, "Invalid Stage\n");
-            return false;
-        }
-    }
-
-    // ------------------------------------------------------------------------
-    // PreSceneQueryUpdate  @ 0x8225BA00
-    //
-    // The pre-scene-query pass. Its ENTIRE body is guarded by one condition, and that guard
-    // is reproduced here faithfully: the director only does pre-query work when there is a
-    // LIVE PLAYER CAR -- i.e. when the effective car index is not -1 AND its bit is set in
-    // the input buffer's used-race-car mask. The effective index is the input buffer's
-    // player-car index, overridden by the director's own "forced camera car" index
-    // (CONSOLE +0x33140) whenever that override is >= 0 and itself a used race car.
-    //
-    // Inside that guard the X360 runs, in order:
-    //     AllVehicleData::Update( ..., usedRaceCars, vehicleInfoArray, playerIndex, contacts, ... )
-    //     MainDirector::ProcessInputQueue( this, lpIO )
-    //     if ( !lpIO->mpInputBuffer[+31432] )   // sim not paused
-    //     {
-    //         <forced camera car> = playerIndex;
-    //         VehicleTracker::Update( this+211424, this+210912, input, playerIndex, this+218167 );
-    //     }
-    //     CrashAnalyser::Update( this+74844, input, this+210912, playerIndex );
-    //     Camera::BehaviourManager::ReleaseBehaviours( this+117520 );
-    //     if ( this[+218160] )  this[+211173] = 0;
-    //     MainDirector::UpdateCameraBehavioursPreScene( this, lpIO, playerIndex );
-    // and it also clears the "ICE just finished" latch at the very top
-    // (`if (this[+218173]) this[+218172] = 0;`).
-    //
-    // ⚠️ THE GUARDED BODY IS A DOCUMENTED QUIET GATE. Every one of those seven steps lands on
-    // a not-yet-homed aggregate: AllVehicleData / VehicleTracker / CrashAnalyser are reached
-    // at raw offsets inside the opaque MainDirector storage with no named members;
-    // Camera::BehaviourManager has no layout; ProcessInputQueue and
-    // UpdateCameraBehavioursPreScene are themselves declaration-only for the same reason.
-    //
-    // WHY BODY THE GUARD AT ALL: because the guard is the part that decides whether ANYTHING
-    // happens, and on the current PC bring-up it is FALSE every frame (there is no player
-    // vehicle, so the input buffer's player-car index is the -1 "none" sentinel and the
-    // used-race-car mask is empty). So this reconstruction is behaviourally EXACT today --
-    // the console does nothing here either -- and it becomes partial, not wrong, the moment a
-    // player car exists.
-    //
-    // DELETE-WHEN: AllVehicleData / VehicleTracker / CrashAnalyser / BehaviourManager are
-    // homed and ProcessInputQueue + UpdateCameraBehavioursPreScene are bodied.
-    // ------------------------------------------------------------------------
-    void MainDirector::PreSceneQueryUpdate(const DirectorInputOutput* lpIO)
-    {
-        // The "ICE sequence just finished" latch (asm: if (this[+218173]) this[+218172] = 0).
-        // GATED with the rest of the un-named tail; see the banner.
-
-        if (!IsPlayerCarLive(lpIO))
-            return;
-
-        // ⚠️ GATE -- the seven guarded steps above.
-    }
-
-    // ------------------------------------------------------------------------
-    // IsPlayerCarLive -- the shared "is there a live player car this frame" predicate.
-    //
-    // Both Update @0x82274070 and PreSceneQueryUpdate @0x8225BA00 open with the SAME
-    // sequence (the X360 emits it twice, inlined):
-    //
-    //     index = lpInputBuffer->GetPlayerCarIndex();
-    //     forced = *(s32*)(this + 0x33140);
+    //     index  = lpInputBuffer->GetPlayerCarIndex();
+    //     forced = miForcedCameraCarIndex;                       // +0x33100
     //     if ( forced > -1 && lpInputBuffer->GetUsedRaceCars()->IsBitSet(forced) )
-    //         index = forced;                         // the director's camera-car override wins
-    //     if ( index == -1 )  return false;
-    //     return lpInputBuffer->GetUsedRaceCars()->IsBitSet(index);
+    //         index = forced;                                    // the override wins
+    //     if ( index == -1 )  return -1;
+    //     return lpInputBuffer->GetUsedRaceCars()->IsBitSet(index) ? index : -1;
     //
     // (the CgsBitArray.h:203 "invalid index : N < 8" assert both call sites bake is the
     //  BitArray bounds check inlined -- CGS_ASSERT carries it here.)
@@ -548,33 +393,229 @@ namespace BrnDirector
     // ⚠️ NOTE ON THE BIT TEST. The X360 emits it as
     //     ((1 << (index & 0x3F)) & ((1 << (index & 0x3F)) >> 32)) != 0
     // which is a Hex-Rays artefact of the 64-bit `rldicl`/`and` pair the PPC uses to test one
-    // bit of the 64-bit BitArray<8> word -- it is NOT a literal shift-by-32 of a shifted 1.
+    // bit of the 64-bit BitArray<8> word -- NOT a literal shift-by-32 of a shifted 1.
     // Reproduced as the committed BitArray query it actually is, which is what the DWARF
     // member type (CgsContainers::BitArray<8u> mUsedRaceCars) says it must be.
+    //
+    // The X360 keeps this index and threads it into UpdateCameraBehavioursPostScene /
+    // UpdateMoments / UpdateICE / UpdateArbitrator, so the de-inlined helper returns it.
     // ------------------------------------------------------------------------
-    bool MainDirector::IsPlayerCarLive(const DirectorInputOutput* lpIO) const
+    s32 MainDirector::GetLivePlayerCarIndex(const DirectorInputOutput* lpIO) const
     {
         const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
 
         s32 liIndex = static_cast<s32>(lpInput->GetPlayerCarIndex());
 
-        const s32 liForced = *reinterpret_cast<const s32*>(
-            reinterpret_cast<const char*>(this) + KU_OFF_FORCED_CAMERA_CAR);
-
         const CgsContainers::BitArray<8u>* lpUsedRaceCars = lpInput->GetUsedRaceCars();
 
-        if (liForced > -1)
+        if (miForcedCameraCarIndex > -1)
         {
-            CGS_ASSERT(liForced < 8, "invalid index");
-            if (liForced < 8 && lpUsedRaceCars->IsBitSet(static_cast<u32>(liForced)))
-                liIndex = liForced;
+            CGS_ASSERT(miForcedCameraCarIndex < 8, "invalid index");
+            if (miForcedCameraCarIndex < 8 &&
+                lpUsedRaceCars->IsBitSet(static_cast<u32>(miForcedCameraCarIndex)))
+            {
+                liIndex = miForcedCameraCarIndex;
+            }
         }
 
         if (liIndex == -1)
-            return false;
+            return -1;
 
         CGS_ASSERT(liIndex < 8, "invalid index");
-        return liIndex < 8 && lpUsedRaceCars->IsBitSet(static_cast<u32>(liIndex));
+        if (liIndex < 8 && lpUsedRaceCars->IsBitSet(static_cast<u32>(liIndex)))
+            return liIndex;
+
+        return -1;
+    }
+
+    // ------------------------------------------------------------------------
+    // BuildArbStateSharedInfo -- the per-frame arbitrator context.
+    //
+    // De-inlined out of UpdateArbitrator @0x82271120, which builds this record directly onto
+    // the stack frame it then hands to Arbitrator::Update. Every slot is asm-attested; the
+    // console offsets in the trailing comments are the X360 stack offsets of the record
+    // (sp+0x50 is the record base), matched against the committed ArbStateSharedInfo layout
+    // recovered from the DecFIGS DWARF.
+    //
+    // TWO SLOTS ARE DELIBERATELY LEFT NULL because the X360 leaves them for the callee:
+    // Arbitrator::Update's own prologue writes `mpSharedCameraContainer` (+0x00) and
+    // `mpStateContainer` (+0x14) before dispatching. Zeroing them here is what the console's
+    // uninitialised stack slots amount to, and the callee overwrites both unconditionally.
+    //
+    // ⚠️ ONE SLOT IS A DOCUMENTED QUIET GATE: `mpNamedParameters` (+0x1C) comes from
+    // MainDirector +192592 == mBehaviourManager +75072, i.e. 16 bytes INTO the manager's
+    // `mBehaviourParameterBank`, which is a FLAGGED opaque sub-object with no homed layout.
+    // Passing a pointer into un-modelled storage would be a fabrication, so it is null.
+    // CONSEQUENCE: an arbitrator state that reads named camera parameters gets null. None of
+    // the states on the attract/flyby path does (Arbitrator::Update never touches +0x1C).
+    // DELETE-WHEN: BehaviourParameterBank is homed.
+    //
+    // ⚠️ THE UN-HOMED REGION POINTERS. mpDebugPrinter / mpDebugLog / mpMomentController /
+    // mpGameState / mpRandom / mpEffectInterface / mpAllVehicleData / mpPlayerTracker and the
+    // two rotation controllers are handed on as their declared pointer types over this
+    // class's NAMED opaque regions. That is honest storage of the right size in the right
+    // order -- not an offset poke -- and each becomes a plain `&mMember` when its type lands.
+    // ------------------------------------------------------------------------
+    void MainDirector::BuildArbStateSharedInfo(const DirectorInputOutput* lpIO,
+                                               s32 liPlayerCarIndex,
+                                               ArbStateSharedInfo& lrSharedInfo) const
+    {
+        const DirectorIO::InputBuffer* lpInput  = lpIO->mpInputBuffer;
+        DirectorIO::OutputBuffer*      lpOutput = lpIO->mpOutputBuffer;
+
+        // The two timesteps. X360: `timer[+8] * timer[+4]` and `timer[+32] * timer[+28]`.
+        // The accessor hands back the CgsSystem::TimerStatusInterface, whose committed layout
+        // is `TimerStatus mGameTimerStatus @+0; TimerStatus mSimTimerStatus @+24;` and whose
+        // TimerStatus is `miFrameCount@+0, mfBaseTimeStep@+4, mfTimeStepMultiplier@+8`. So
+        // +8*+4 IS the GAME timer's GetCurrentTimeStep() (the same reach the committed
+        // CameraFinaliser::Update makes) and +32*+28 is the SIM timer's.
+        const CgsSystem::TimerStatus* lpGameTimerStatus =
+            reinterpret_cast<const CgsSystem::TimerStatus*>(lpInput->GetTimerStatusInterface());
+
+        f32 lfTimestep = lpGameTimerStatus->GetCurrentTimeStep();
+
+        // ⚠️ QUIET GATE: mfSimTimestep. The sim timer sits at TimerStatusInterface +24, and
+        //   `CgsSystem::TimerStatusInterface::GetSimTimerStatus()` is DECLARATION-ONLY in the
+        //   committed CgsTimerStatusInterface.h -- a GameShared header this wave does not own.
+        //   Reaching +24 by hand would be a raw offset into a foreign type (bug class (c)), so
+        //   the slot is published as 0 instead of a fabricated value.
+        //   CONSEQUENCE: an arbitrator state that scales by the SIM timestep would see 0. None
+        //   on the live path does -- Arbitrator::Update reads only mfTimestep (+0x5C), and no
+        //   committed state reads +0x60.
+        //   DELETE-WHEN: the one-line body `{ return &mSimTimerStatus; }` is given to
+        //   TimerStatusInterface::GetSimTimerStatus (recipe in the wave log's PART 4), then
+        //   this becomes `…GetSimTimerStatus()->GetCurrentTimeStep()`.
+        f32 lfSimTimestep = 0.0f;
+
+        // ⚠️ GATE: `if ( maStateFlagTail[+0x3543C] ) { lfTimestep = 0; lfSimTimestep = 0; }`
+        //   -- the ICE-owns-the-frame latch lives in the un-homed flag tail. CONSEQUENCE: the
+        //   arbitrator keeps advancing its timers during an ICE take instead of freezing them.
+        //   DELETE-WHEN: the MainDirector flag tail is named.
+
+        const BrnDirector::Camera::VehicleInfo* lpRaceCars = lpInput->GetRaceCarInfo();
+        const BrnDirector::Camera::VehicleInfo* lpPlayerCar =
+            (liPlayerCarIndex >= 0) ? (lpRaceCars + liPlayerCarIndex) : 0;
+
+        lrSharedInfo.mpSharedCameraContainer = 0;                                   // +0x00 (callee-filled)
+        lrSharedInfo.mpDebugPrinter          = reinterpret_cast<DebugPrinter*>(
+                                                  const_cast<u8*>(maDebugPrinterMain));         // +0x04
+        lrSharedInfo.mpDebugLog              = reinterpret_cast<DebugLog*>(
+                                                  const_cast<u8*>(maDebugLog));                 // +0x08
+        lrSharedInfo.mpICEWrapper            = const_cast<ICEWrapper*>(&mICEWrapper);           // +0x0C
+        lrSharedInfo.mpOutputInterface       = reinterpret_cast<DirectorOutputInterface*>(
+                                                  lpOutput->GetDirectorOutputIn());             // +0x10
+        lrSharedInfo.mpStateContainer        = 0;                                   // +0x14 (callee-filled)
+        lrSharedInfo.mpBehaviourManager      = const_cast<Camera::BehaviourManager*>(
+                                                  &mBehaviourManager);                          // +0x18
+        lrSharedInfo.mpNamedParameters       = 0;                                   // +0x1C ⚠️ GATE
+        lrSharedInfo.mpMomentController      = reinterpret_cast<MomentController*>(
+                                                  const_cast<u8*>(maMomentController));         // +0x20
+        lrSharedInfo.mpGameState             = reinterpret_cast<GameState*>(
+                                                  const_cast<u8*>(maGameState));                // +0x24
+        lrSharedInfo.mpRandom                = reinterpret_cast<Random*>(
+                                                  const_cast<u8*>(maRandom));                   // +0x28
+        lrSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                       // +0x2C
+        lrSharedInfo.mpEffectInterface       = reinterpret_cast<const EffectInterface*>(
+                                                  maEffectInterface);                           // +0x30
+        lrSharedInfo.mpPlayerCrashInfo       = reinterpret_cast<const PlayerCrashInfo*>(
+                                                  lpInput->GetPlayerCrashInfo());               // +0x34
+        lrSharedInfo.mpAllVehicleData        = reinterpret_cast<const AllVehicleData*>(
+                                                  maAllVehicleData);                            // +0x38
+        lrSharedInfo.mpPlayerTracker         = reinterpret_cast<const VehicleTracker*>(
+                                                  maVehicleTracker);                            // +0x3C
+        lrSharedInfo.mpControllerInfo        = reinterpret_cast<const ControllerInfo*>(
+                                                  lpInput->GetControll());                      // +0x40
+        lrSharedInfo.mpRaceCars              = reinterpret_cast<const VehicleInfo*>(lpRaceCars); // +0x44
+        lrSharedInfo.mpPlayerCar             = reinterpret_cast<const VehicleInfo*>(lpPlayerCar);// +0x48
+        // X360: mpPlayerCar + 496 -- RaceCarState::mTransform, reached by name.
+        lrSharedInfo.mpPlayerCarTransform    = lpPlayerCar ? &lpPlayerCar->mRaceCarState.mTransform
+                                                           : 0;                                 // +0x4C
+        lrSharedInfo.mePlayerActiveRaceCarIndex = liPlayerCarIndex;                             // +0x50
+        lrSharedInfo.mpRotationController    = reinterpret_cast<const Camera2DRotationController*>(
+                                                  maRotationController);                        // +0x54
+        lrSharedInfo.mpSphericalRotationController =
+            reinterpret_cast<const CameraSphericalRotationController*>(
+                maSphericalRotationController);                                                 // +0x58
+        lrSharedInfo.mfTimestep              = lfTimestep;                                      // +0x5C
+        lrSharedInfo.mfSimTimestep           = lfSimTimestep;                                   // +0x60
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateArbitrator  @ 0x82271120
+    //
+    // Build this frame's ArbStateSharedInfo (above) and drive the arbitrator with it. The
+    // X360 tail is:
+    //
+    //     Arbitrator::Update( this + 77248,                       // == &mArbitrator
+    //                         lpInputBuffer[+0x7AC8],             // mbSimPaused
+    //                         lrCameraInOut,                      // the frame camera
+    //                         lSharedInfo,
+    //                         controller[+3],                     // cycle-camera
+    //                         controller[+2] );                   // cycle-camera-held
+    //
+    // The two control bytes are read straight off the committed ControlInput block the input
+    // buffer publishes (GetControll()); the X360 fetches the block twice because it re-issues
+    // the accessor, not because they come from different places.
+    // ------------------------------------------------------------------------
+    void MainDirector::UpdateArbitrator(const DirectorInputOutput* lpIO,
+                                        Camera::Camera& lrCameraInOut,
+                                        s32 liPlayerCarIndex)
+    {
+        const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
+
+        ArbStateSharedInfo lSharedInfo;
+        BuildArbStateSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo);
+
+        const DirectorIO::ControlInput* lpControl = lpInput->GetControll();
+
+        mArbitrator.Update(lpInput->IsSimPaused(), lrCameraInOut, lSharedInfo,
+                           lpControl->IsCycleCameraPressed(),
+                           lpControl->IsCycleCameraHeld());
+    }
+
+    // ------------------------------------------------------------------------
+    // PreSceneQueryUpdate  @ 0x8225BA00
+    //
+    // The pre-scene-query pass. Its ENTIRE body is guarded by one condition, reproduced here
+    // faithfully: the director only does pre-query work when there is a LIVE PLAYER CAR.
+    //
+    // Inside that guard the X360 runs, in order:
+    //     AllVehicleData::Update( ..., usedRaceCars, vehicleInfoArray, playerIndex, contacts )
+    //     MainDirector::ProcessInputQueue( this, lpIO )
+    //     if ( !lpInputBuffer->IsSimPaused() )
+    //     {
+    //         miForcedCameraCarIndex = playerIndex;
+    //         VehicleTracker::Update( maVehicleTracker, maGameState, input, playerIndex, ... )
+    //     }
+    //     CrashAnalyser::Update( maShotAndAnalysisBlock+..., input, maGameState, playerIndex )
+    //     Camera::BehaviourManager::ReleaseBehaviours( &mBehaviourManager )
+    //     if ( <flag> )  <clear a GameState latch>
+    //     MainDirector::UpdateCameraBehavioursPreScene( this, lpIO, playerIndex )
+    // and it also clears the "ICE just finished" latch at the very top.
+    //
+    // ⚠️ THE GUARDED BODY IS A DOCUMENTED QUIET GATE. AllVehicleData / VehicleTracker /
+    // CrashAnalyser / GameState are named opaque regions with no interiors; ProcessInputQueue,
+    // UpdateCameraBehavioursPreScene and BehaviourManager::ReleaseBehaviours are themselves
+    // declaration-only (the last because its per-slot work drives the un-homed Behaviour
+    // vtable).
+    //
+    // WHY BODY THE GUARD AT ALL: it is the part that decides whether ANYTHING happens, and on
+    // the current PC bring-up it is FALSE every frame (no player vehicle, so the input
+    // buffer's player-car index is the -1 sentinel and the used-race-car mask is empty). So
+    // this reconstruction is behaviourally EXACT today and becomes partial, never wrong, the
+    // moment a player car exists.
+    //
+    // DELETE-WHEN: AllVehicleData / VehicleTracker / CrashAnalyser / GameState are homed and
+    // ProcessInputQueue + UpdateCameraBehavioursPreScene are bodied.
+    // ------------------------------------------------------------------------
+    void MainDirector::PreSceneQueryUpdate(const DirectorInputOutput* lpIO)
+    {
+        // ⚠️ GATE: the "ICE sequence just finished" latch clear (maStateFlagTail).
+
+        if (GetLivePlayerCarIndex(lpIO) == -1)
+            return;
+
+        // ⚠️ GATE -- the seven guarded steps above.
     }
 
     // ------------------------------------------------------------------------
@@ -583,109 +624,110 @@ namespace BrnDirector
     // Shape of the X360 body (935 lines of pseudocode; the structure is what matters):
     //
     //     Camera::Camera lCamera;  lCamera.Construct();          // line 191, a STACK camera
-    //     <the IsPlayerCarLive prologue>                         // lines 190-247
-    //     if ( !live )   lCamera = mLastCamera;                  // LABEL_100, line 250
-    //     else           <the ~570-line gameplay middle>         // lines 252-823
-    //     <two small bookkeeping stores>                         // lines 824-834
-    //     CameraFinaliser::Update( &mCameraFinaliser, input,
-    //                              this+0x337E0, resourceMgr, &lCamera );   // line 835
-    //     <slomo clamp + assert>                                 // lines 836-848
-    //     mLastCamera = lCamera;                                 // line 851  <-- carry over
-    //     <flag bookkeeping>                                     // lines 852-865
-    //     DebugComponent::UpdatePanoramaScreenshots( *(this+64), &lCamera );  // line 866
-    //     lCamera.ValidateTransformWithDebugInfo();              // line 867
-    //     lCamera.CopyToCgsCamera( &GetCgsCamera() );            // line 868
-    //     output->SetCgsCamera( GetCgsCamera() );                // line 869  <-- PUBLISH
-    //     output->SetCameraOutput( lCamera );                    // line 870  <-- PUBLISH
-    //     TimerRequests::SetTimestepMultiplier( ... );           // lines 871-875
+    //     <the live-player-car prologue>                          // lines 190-247
+    //     if ( !live )   lCamera = mLastCamera;                    // LABEL_100, line 250
+    //     else
+    //     {
+    //         UpdateDebugPrinters();                              // line 258
+    //         <one debug byte -> the output buffer>               // line 259
+    //         DebugLog::Print / DebugLog::Update                  // lines 260-265
+    //         UpdateCameraBehavioursPostScene( lpIO, playerIdx );  // line 266
+    //         UpdateMoments( lpIO, playerIdx );                    // line 267
+    //         if ( !<ICE-owns-frame latch> ) UpdateICE( ... );     // lines 268-269
+    //         ⭐ UpdateArbitrator( lpIO, lCamera, playerIdx );      // line 270
+    //         <~550 lines of VMX AllVehicleData debug-render, the camera-interpolation
+    //          controller, the effect-hook registration and the world-map safe-position
+    //          work>                                              // lines 271-823
+    //     }
+    //     <two small bookkeeping stores>                          // lines 824-834
+    //     CameraFinaliser::Update( &mCameraFinaliser, input, maGameState, resourceMgr,
+    //                              &lCamera );                    // line 835
+    //     <slomo clamp + assert>                                  // lines 836-848
+    //     mLastCamera = lCamera;                                  // line 851  <-- carry over
+    //     DebugComponent::UpdatePanoramaScreenshots( mpDebugComponent, &lCamera );  // line 866
+    //     lCamera.ValidateTransformWithDebugInfo();               // line 867
+    //     lCamera.CopyToCgsCamera( &mCgsCamera );                 // line 868
+    //     output->SetCgsCamera( mCgsCamera );                     // line 869  <-- PUBLISH
+    //     output->SetCameraOutput( lCamera );                     // line 870  <-- PUBLISH
+    //     TimerRequests::SetTimestepMultiplier( ... );            // lines 871-875
     //     UpdateDebugInfo / DebugDisplayCurrentCamera /
-    //     BehaviourManager::PrepareBehaviours / UpdateAttribSys  // lines 876-879
-    //     <debug flag printers + latches>                        // lines 880-924
+    //     BehaviourManager::PrepareBehaviours / UpdateAttribSys   // lines 876-879
+    //     <debug flag printers + latches>                         // lines 880-924
     //
-    // EVERYTHING OUTSIDE THE `else` BRANCH IS RECONSTRUCTED HERE. That is deliberate and it
-    // is the whole point of this wave: SetCameraOutput / SetCgsCamera have exactly TWO
-    // callers in the entire binary -- this function and ReplayDirector::Update -- so this
-    // tail IS the director's camera publish, and with it bodied the module produces a real
-    // camera into the output buffer every frame.
+    // ⭐ THE ARBITRATOR LEG OF THE MIDDLE IS NOW REAL. `UpdateArbitrator` at line 270 is the
+    // single call that lets a director camera MOVE: it runs the arbitrator's outer state
+    // machine, which runs whichever arbitrator state owns the frame (including
+    // ArbStateAttractMode -- the DJ fly-by's path) and copies that state's camera into the
+    // frame camera. The previous wave gated the whole middle on the belief that
+    // BehaviourManager had no layout; it does, so the leg is transcribed.
     //
-    // ⚠️ THE `else` BRANCH (lines 252-823) IS A DOCUMENTED QUIET GATE. It is the gameplay
-    // middle: UpdateDebugPrinters, UpdateCameraBehavioursPostScene, UpdateMoments, UpdateICE,
-    // UpdateArbitrator (@0x82271120 -> Arbitrator::Update @0x8226ADA0 -> the 12 arbitrator
-    // states, including ArbStateAttractMode and ArbStateDriveThru), then ~550 lines of
-    // VMX-dominated AllVehicleData / behaviour-parameter work. Every one of those routes
-    // through BrnDirector::Camera::BehaviourManager, whose header is forward-decl-only, so
-    // there is no layout to index and no behaviour to allocate; Arbitrator::Update is itself
-    // declaration-only for exactly the same reason (see BrnDirectorArbitrator.h, which lists
-    // the ~15 un-attested camera/effect entry points its body would have to fabricate).
-    // Paraphrasing 550 lines of VMX to scalar is forbidden by the reconstruction rules
-    // regardless.
+    // ⚠️ WHAT IS STILL GATED INSIDE THE MIDDLE (each a documented quiet gate, none of which
+    // touches the camera the arbitrator just produced):
+    //   * UpdateDebugPrinters / DebugLog::Print / DebugLog::Update -- DebugPrinter and
+    //     DebugLog are un-homed named regions.
+    //   * UpdateCameraBehavioursPostScene / UpdateMoments / UpdateICE -- all three are
+    //     declaration-only (BehaviourManager::UpdateAllBehaviours @0x82251960 is a VMX
+    //     attitude-band pipeline the rules forbid paraphrasing; the moment controller and the
+    //     ICE take are un-homed).
+    //     ⚠️ ORDERING NOTE: the console runs those three BEFORE UpdateArbitrator, so the
+    //     arbitrator sees last frame's behaviour output rather than this frame's. That is a
+    //     one-frame staleness in the behaviour-driven camera, not a wrong camera.
+    //   * lines 271-823 -- ~550 lines of VMX AllVehicleData debug-render work, the camera
+    //     interpolation controller, the effect-hook registration cascade and the world-map
+    //     safe-position search. All reach un-homed aggregates and/or VMX pipelines.
+    //   * the tail after the publish (lines 871-924): the requested time-step multiplier, the
+    //     debug-info/overlay passes, BehaviourManager::PrepareBehaviours and UpdateAttribSys.
+    //     None of them alters the published camera -- the two publish calls are already done.
     //
-    // WHAT THAT MEANS BEHAVIOURALLY -- and why the gate is honest rather than a stub:
-    //   * TODAY (PC bring-up, no player vehicle) the guard is FALSE every frame, so the
-    //     console itself takes the `lCamera = mLastCamera` path. This reconstruction is
-    //     therefore EXACT right now: a stable, finalised, inertia-smoothed camera is
-    //     published into the output buffer each frame, which is precisely what the console
-    //     does with no live player car.
-    //   * ONCE A PLAYER CAR EXISTS the gate makes the camera hold its last value instead of
-    //     tracking the car -- degraded, but still a valid camera on a valid path. It never
-    //     traps and never publishes garbage.
-    //
-    // DELETE-WHEN: delete this gate and transcribe lines 252-823 once
-    // BrnDirector::Camera::BehaviourManager has a real layout (that single type unblocks
-    // UpdateArbitrator -> Arbitrator::Update -> ArbStateAttractMode/ArbStateDriveThru, which
-    // is the path the DJ flyby intro runs on).
+    // DELETE-WHEN: per item above, as each aggregate is homed.
     // ------------------------------------------------------------------------
     void MainDirector::Update(const DirectorInputOutput* lpIO)
     {
-        // The frame camera is a STACK local on the console too (v211) -- it is built fresh
-        // every frame and only reaches the director's storage through mLastCamera below.
+        // The frame camera is a STACK local on the console too (v211) -- built fresh every
+        // frame, reaching the director's storage only through mLastCamera below.
         Camera::Camera lCamera;
         lCamera.Construct();
 
-        if (!IsPlayerCarLive(lpIO))
+        const s32 liPlayerCarIndex = GetLivePlayerCarIndex(lpIO);
+
+        if (liPlayerCarIndex == -1)
         {
             // LABEL_100 -- carry last frame's finalised camera forward.
-            lCamera = lrLastCamera(this);
+            lCamera = mLastCamera;
         }
         else
         {
-            // ⚠️ GATE -- the gameplay middle (lines 252-823). See the banner.
-            lCamera = lrLastCamera(this);
+            // ⚠️ GATE: UpdateDebugPrinters / the debug byte / DebugLog::Print+Update.
+            // ⚠️ GATE: UpdateCameraBehavioursPostScene( lpIO, liPlayerCarIndex );
+            // ⚠️ GATE: UpdateMoments( lpIO, liPlayerCarIndex );
+            // ⚠️ GATE: if ( !<ICE-owns-frame latch> ) UpdateICE( lpIO, liPlayerCarIndex );
+
+            // ⭐ The arbitrator picks and runs the state that owns this frame's camera.
+            UpdateArbitrator(lpIO, lCamera, liPlayerCarIndex);
+
+            // ⚠️ GATE: the ~550-line VMX / effect-hook / world-map remainder (lines 271-823).
         }
 
         // Finalise: camera inertia + shake (the CameraFinaliser owns the InertiaController).
-        lrCameraFinaliser(this).Update(lpIO->mpInputBuffer,
-                                       reinterpret_cast<char*>(this) + KU_OFF_CAMERA_STATE_BLOCK,
-                                       lpIO->mpResourceManager,
-                                       &lCamera);
+        mCameraFinaliser.Update(lpIO->mpInputBuffer, maGameState, lpIO->mpResourceManager,
+                                &lCamera);
 
         // Carry the finalised camera into the next frame.
-        lrLastCamera(this) = lCamera;
+        mLastCamera = lCamera;
 
-        // The debug component's panorama-screenshot pass gets the finished camera. The
-        // pointer is the back-reference DirectorModule::Construct planted at this+0x40.
-        DebugComponent* lpDebugComponent = *reinterpret_cast<DebugComponent**>(
-            lpByteView(this) + KU_OFF_DEBUG_COMPONENT_PTR);
-        if (lpDebugComponent != 0)
-            lpDebugComponent->UpdatePanoramaScreenshots(&lCamera);
+        // The debug component's panorama-screenshot pass gets the finished camera.
+        if (mpDebugComponent != 0)
+            mpDebugComponent->UpdatePanoramaScreenshots(&lCamera);
 
         // Validate (asserts on NaN / unreasonable position), then convert to the graphics
         // camera and publish BOTH forms into the director output buffer.
         lCamera.ValidateTransformWithDebugInfo();
-        lCamera.CopyToCgsCamera(&GetCgsCamera());
+        lCamera.CopyToCgsCamera(&mCgsCamera);
 
-        lpIO->mpOutputBuffer->SetCgsCamera(GetCgsCamera());
+        lpIO->mpOutputBuffer->SetCgsCamera(mCgsCamera);
         lpIO->mpOutputBuffer->SetCameraOutput(lCamera);
 
-        // ⚠️ GATE (the tail after the publish, lines 871-924): the requested time-step
-        //   multiplier (CgsSystem::TimerRequests::SetTimestepMultiplier on the output
-        //   buffer's timer-request interface, fed by the slomo factor computed inside the
-        //   gated middle), UpdateDebugInfo / DebugDisplayCurrentCamera (both
-        //   declaration-only, and UpdateDebugInfo additionally depends on the un-recovered
-        //   near-clip rodata Camera.h already FLAGS), BehaviourManager::PrepareBehaviours +
-        //   UpdateAttribSys (BehaviourManager, as above), and the camera-state debug flag
-        //   printers. None of them alters the published camera -- the two publish calls
-        //   above are already done. DELETE-WHEN: as the middle gate.
+        // ⚠️ GATE: the post-publish tail (lines 871-924) -- see the banner.
     }
 
     // ------------------------------------------------------------------------
@@ -700,20 +742,17 @@ namespace BrnDirector
     //     if ( input->HasGotColourCalibrationShownEvent() )   <set the colour-cal latch>
     //     if ( input->HasGotColourCalibrationHiddenEvent() )  <clear it>
     //     if ( input->HasGotShortcutMenuEvent() )
-    //         this[+211171] = input->GetShortcutMenuState();
+    //         <GameState shortcut-menu state> = input->GetShortcutMenuState();
     //     if ( input->HasGotHookEnumeration() )
-    //         EffectInterface::Update( this+212112, *input->GetHookEnumeration(),
-    //                                  input->GetHookEnumeration()+4, this+218166 );
+    //         EffectInterface::Update( maEffectInterface, *input->GetHookEnumeration(), ... )
     //     ... ( the mode/action tail )
-    //     MainDirector::HandlePrepareForModeAction( this, this+215872, lpIO );
+    //     MainDirector::HandlePrepareForModeAction( this, maModeActionAndDebugBlock, lpIO )
     //
-    // Note every INPUT-side accessor it needs is already committed on
-    // DirectorIO::InputBuffer -- the blockers are all on the MainDirector side:
-    //   * the four GUI latches and the shortcut-menu state land at raw offsets inside the
-    //     un-modelled GameState region (this+0x338xx) with no named members;
-    //   * BrnDirector::EffectInterface has no reconstructed home;
-    //   * MainDirector::HandlePrepareForModeAction is itself declaration-only (it dispatches
-    //     over the same un-homed GameState action region).
+    // Every INPUT-side accessor it needs is already committed on DirectorIO::InputBuffer --
+    // the blockers are all on the MainDirector side: the four GUI latches and the
+    // shortcut-menu state land inside the un-homed maGameState region, BrnDirector::
+    // EffectInterface has no reconstructed home, and HandlePrepareForModeAction is itself
+    // declaration-only (it dispatches over the same un-homed action region).
     //
     // CONSEQUENCE WHILE GATED: the director does not learn that the crash-nav / colour-
     // calibration / shortcut-menu overlays opened or closed, and fires no GUI-driven camera

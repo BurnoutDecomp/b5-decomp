@@ -61,6 +61,22 @@ namespace DirectorIO
 {
     struct ControlInput
     {
+        // ---- ADDITIVE (MainDirector::UpdateArbitrator @0x82271120 / Arbitrator::Update
+        //      @0x8226ADA0) --------------------------------------------------------------
+        // Three camera-control bytes the director reads out of this block. X360-attested as
+        // byte loads at control-block +2 / +3 / +4:
+        //   * UpdateArbitrator passes controller[3] as Arbitrator::Update's lbCycleCamera and
+        //     controller[2] as its lbCycleCameraHeld (the "tap to cycle / hold for slow-mo"
+        //     pair UpdateCameraCycleControl consumes);
+        //   * Arbitrator::Update's NORMAL case stores controller[4] straight into
+        //     SharedCameraContainer::mbLookbackOverride.
+        // Exposed as named queries so those two TUs never index this block by offset.
+        // FLAG: the member NAMES are inferred from those roles (the trimmed DWARF does not
+        //   name the control block's interior); the byte OFFSETS are asm-attested.
+        bool IsCycleCameraPressed() const { return maPad[3] != 0; }   // +0x03
+        bool IsCycleCameraHeld() const    { return maPad[2] != 0; }   // +0x02
+        bool IsLookbackHeld() const       { return maPad[4] != 0; }   // +0x04
+
         u8 maPad[48];
         BrnDirector::Camera::Utils::DebugController mDebugController;
     };
@@ -84,6 +100,25 @@ namespace DirectorIO
         bool                                               GetShortcutMenuState() const;
         const ControlInput*                                GetControll() const;
         ControlInput*                                      GetControll();
+
+        // ---- ADDITIVE (MainDirector::UpdateArbitrator @0x82271120) ------------------------
+        // The base of the published per-active-car VehicleInfo array (@0x0990). The X360
+        // reaches it through the de-inlined accessor sub_82207040 and then indexes it as
+        // `1264 * playerCarIndex + base` to fill ArbStateSharedInfo::mpRaceCars /
+        // ::mpPlayerCar. Named here so no caller re-derives the stride.
+        const BrnDirector::Camera::VehicleInfo*            GetRaceCarInfo() const;
+
+        // The player's crash-analysis record (ArbStateSharedInfo::mpPlayerCrashInfo; the X360
+        // fills that slot with `lpInputBuffer + 30944` == @0x78E0). It lands INSIDE the
+        // honest-opaque contacts span, so the address is taken off that named member.
+        // FLAG: BrnDirector::PlayerCrashInfo has no reconstructed home -- returned as void*,
+        // and the DWARF slot name is the only evidence for the role.
+        const void*                                        GetPlayerCrashInfo() const;
+
+        // The simulation-paused flag (@0x7AC8, the second byte of the mid-flag block).
+        // MainDirector::UpdateArbitrator passes it to Arbitrator::Update as lbPaused, and
+        // MainDirector::Update's gameplay middle tests it too.
+        bool                                               IsSimPaused() const;
 
         bool HasGotHookEnumeration() const;
         bool HasGotShortcutMenuEvent() const;

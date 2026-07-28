@@ -137,7 +137,10 @@ BehaviourRig::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 void
 BehaviourRig::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
-    BrnDirector::Camera::Utils::Tweaker::Construct(lrTweaker);
+    // X360: `Tweaker::Construct(a2)`. Now that the real Utils::Tweaker home is in use (the
+    // minimal slice this header used to fork is retired -- see BehaviourRig.h), that call is
+    // the committed MEMBER Construct with this == a2.
+    lrTweaker.Construct();
 
     CGS_ASSERT(mpParameters != nullptr, "mpParameters");
 

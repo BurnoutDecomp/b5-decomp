@@ -31,6 +31,9 @@
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"    // GeometryCollisionPredictor (embedded carve)
 #include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h" // Utils::VehicleCollisionPredictor (embedded carve)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"     // AABBox, VersionNumber
+#include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h" // Utils::Tweaker (the REAL home;
+                                                              //   this header's old minimal
+                                                              //   slice is retired -- see below)
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"       // Looker + Random typedef
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"  // PositionLag
 #include "GameSource/Director/Utils/BrnVehicleRef.h"          // BrnDirector::VehicleRef (base)
@@ -242,20 +245,18 @@ private:
 };
 
 // ============================================================================
-// FLAG: minimal slice of the camera dev-tools tweaker.
-//   SetupTweaker tail-calls Tweaker::Construct(lrTweaker), so only that static
-//   is modelled. The real home is BrnCameraTweaker.h (not yet reconstructed).
+// The camera dev-tools tweaker: DE-FORKED (BehaviourManager wave).
+//   This header used to carry a minimal `class Tweaker { static Tweaker* Construct(Tweaker&);
+//   u8 maReserved[0x800]; }` slice with the note "the real home is BrnCameraTweaker.h (not
+//   yet reconstructed)". That home EXISTS now -- Utils/BrnCameraTweaker.h, with the real
+//   DWARF layout (the 3x9 AxisMapping table, the pressed/released mapping tables and
+//   mbHideInstructions @+0xA5C) and the same X360 Construct @0x821F8588 as a MEMBER
+//   (`void Construct()` -- the console's `Tweaker::Construct(a2)` is that member with
+//   this == a2). Keeping both definitions made every TU that pulled BehaviourRig.h AND
+//   BrnCameraTweaker.h (e.g. BrnBehaviourGyroCam.h, and through it BrnBehaviourManager.cpp)
+//   fail with C2011 on BrnDirector::Camera::Utils::Tweaker.
+//   The slice is retired; the real home is included at the top of this file instead.
 // ============================================================================
-class Tweaker
-{
-public:
-    // Build the tweaker binding table. Called as BehaviourRig::SetupTweaker's
-    // first act (@0x821F9870: result = BrnDirector::Camera::Utils::Tweaker::Construct(a2)).
-    static Tweaker* Construct(Tweaker& lrTweaker);
-
-    // FLAG: raw storage (size inferred from AxisMapping[3][9] + mapping tables).
-    u8 maReserved[0x800];
-};
 
 } // namespace Utils
 

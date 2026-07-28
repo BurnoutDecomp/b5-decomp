@@ -14,10 +14,16 @@
 // SCOPE (re-verified wave; the ledger's per-TU function list is a stale raw-offset snapshot --
 // see the committed member names above for ground truth):
 //   FAITHFULLY BODIED (operate purely on the homed manager members + committed APIs):
+//     * BehaviourManager::Construct                            @0x82251778  (BehaviourManager
+//         wave -- two documented quiet gates for the two FLAGGED opaque sub-objects it seeds)
+//     * BehaviourManager::Prepare                              @0x8223DBE0  (BehaviourManager
+//         wave -- the three pool free-queue refills + the handbrake timer; NO gate)
+//     * BehaviourManager::Destruct                             (folded into MainDirector::
+//         Destruct @0x8224FCC0 on the console -- the three pool occupancy clears)
 //     * BehaviourManager::CheckNoBehavioursAreAllocatedByState  @0x822201B0
 //     * BehaviourManager::IsBehaviourWaitingToPrepare           @0x82208170  (pure BitArray<28>
-//         book-keeping query -- see the field-pick FLAG on its body: name-matched, not yet
-//         independently byte-offset cross-checked against a second asm site)
+//         book-keeping query; the field pick is now byte-attested by a second asm site --
+//         NewBehaviour<> @0x822580F8 -- see the note on its body)
 //
 //   DECLARATION-ONLY + FLAGGED (each reaches an un-homed opaque interior, an un-homed
 //   template family, or a multi-stage VMX pipeline -- bodying any of these would require
@@ -121,6 +127,136 @@ namespace BrnDirector
 {
 namespace Camera
 {
+    // ========================================================================
+    // BehaviourManager::Construct  @0x82251778
+    //
+    // Stand the manager up. The X360 store order (each store cross-checked against the
+    // committed member map -- see the table in <scratchpad>/behaviourmanager_wave_log.md):
+    //
+    //   mpDirectorResourceManager = 0                       (manager +91068)
+    //   BehaviourParameterBank::Construct( this + 75056 )    -- ⚠️ GATE, see below
+    //   <one zero store per pool occupancy word>             (+32056 / +64168 / +75048)
+    //   mBehaviourHelperIndexArray.Clear()                   (+91064, the length word)
+    //   <the responder / rotation-controller block seeds>    (+88172..+88288) -- ⚠️ GATE
+    //   mBehaviourNeedsPreparingFlags.UnSetAll()             (+84656)
+    //   mBehaviourNeedsReleasingFlags.UnSetAll()             (+84664)
+    //   mBehaviourUsedByHandleFlags.UnSetAll()               (+84680)
+    //   mBehaviourUpdateDuringPauseFlags.UnSetAll()          (+84672)
+    //   mfLastHandbrakeTime      = FLT_MAX                   (+91072)
+    //   mbDebugDisplayAllCameras = false                     (+91076)
+    //   mBehaviourRefCounts.Clear();  28x Append(0)          (+84688, length @+84800)
+    //   mDebugBehaviourRefCountLimits.Clear();
+    //     memcpy( +88056, +84688, 116 )                      -- i.e. limits = refCounts
+    //   mDebugBehaviourRefCountIndexLog.Clear(); 28x Append(<empty Array<BHI,28>>)  (+84804)
+    //
+    // Each of the three "one zero store per pool" writes lands EXACTLY on that pool's
+    // ObjectPool occupancy word (`freeQueue + N*4 + 4`), with no free-queue refill and no
+    // count store -- which is CgsContainers::ObjectPool::Construct()'s documented shape
+    // (the free queue is refilled by Prepare below). Reached through the named
+    // AbstractPool::Construct / ObjectPool::Construct so nothing pokes the queue by offset.
+    //
+    // ⚠️ TWO DOCUMENTED QUIET GATES (both land inside members this header models as FLAGGED
+    // opaque sub-objects, whose interiors are deliberately never fabricated):
+    //   * `BehaviourParameterBank::Construct(this + 75056)` -- `mBehaviourParameterBank` is
+    //     `OpaqueSub<0>`; the bank's own layout is un-homed. CONSEQUENCE: the per-named-
+    //     behaviour parameter bank is not initialised, so `GetBehaviourParameterBank()` has
+    //     nothing to hand out and `SharedCameraContainer::Prepare` cannot bind the gameplay
+    //     behaviours to their parameter blocks. DELETE-WHEN: BehaviourParameterBank is homed
+    //     (BrnBehaviourParameterBank.h exists but carries no layout for this sub-object yet).
+    //   * the +88172..+88288 seeds (a float time accumulator, the 0.4 / 0.1 / 0.125 responder
+    //     constants and three flag bytes) land inside `mTempCameraBoostResponder` /
+    //     `mSpeedResponder` / `mRotationController` / `mSphericalRotationController`, all
+    //     `OpaqueSub<>`. CONSEQUENCE: the camera boost/speed responders and the two rotation
+    //     controllers start at whatever the default-init left; nothing on the arbitrator path
+    //     reads them (they are consumed by the gameplay camera BEHAVIOURS, which are
+    //     themselves not driven yet). DELETE-WHEN: those four Camera sub-types are homed.
+    // ========================================================================
+    void BehaviourManager::Construct()
+    {
+        mpDirectorResourceManager = 0;                       // +91068
+
+        // ⚠️ GATE: BehaviourParameterBank::Construct( &mBehaviourParameterBank );
+
+        // The three pools: occupancy cleared only (the free queues are refilled by Prepare).
+        mLargeBehaviourPool.Construct();                     // occupancy @+32056
+        mSmallBehaviourPool.Construct();                     // occupancy @+64168
+        mBehaviourHelperPool.Construct();                    // occupancy @+75048
+
+        mBehaviourHelperIndexArray.Clear();                  // length word @+91064
+
+        // ⚠️ GATE: the responder / rotation-controller seeds (+88172..+88288).
+
+        mBehaviourNeedsPreparingFlags.UnSetAll();            // +84656
+        mBehaviourNeedsReleasingFlags.UnSetAll();            // +84664
+        mBehaviourUsedByHandleFlags.UnSetAll();              // +84680
+        mBehaviourUpdateDuringPauseFlags.UnSetAll();         // +84672
+
+        mfLastHandbrakeTime      = 3.4028235e38f;            // +91072 (FLT_MAX)
+        mbDebugDisplayAllCameras = false;                    // +91076
+
+        // Every ref count present and zero (the X360 Append-grows the array to full length
+        // rather than using SetFullCount, so the length word ends at 28).
+        mBehaviourRefCounts.Clear();                         // length word @+84800
+        for (s32 liSlot = 0; liSlot < 28; ++liSlot)
+        {
+            mBehaviourRefCounts.Append(0);
+        }
+
+        // `memcpy(this + 88056, this + 84688, 116)` -- both are Array<s32,28> (112 bytes of
+        // elements + the 4-byte length word), so this is the whole-array copy.
+        mDebugBehaviourRefCountLimits.Clear();               // length word @+88168
+        mDebugBehaviourRefCountLimits = mBehaviourRefCounts;
+
+        // 28 empty per-behaviour ref-count audit logs.
+        mDebugBehaviourRefCountIndexLog.Clear();             // length word @+88052
+        {
+            Array<BehaviourHelperIndex, 28u> lEmptyLog;
+            lEmptyLog.Clear();
+            for (s32 liSlot = 0; liSlot < 28; ++liSlot)
+            {
+                mDebugBehaviourRefCountIndexLog.Append(lEmptyLog);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::Prepare  @0x8223DBE0
+    //
+    // Refill the three pools' free queues and reset the handbrake timer. The X360 body is
+    // three copies of one idiom -- per pool: zero the occupancy word, walk the free queue
+    // writing N-1 down to 0 front-to-back, then store the count N -- which is exactly
+    // `CgsContainers::ObjectPool<T,N,TIndex>::Clear()`. Reproduced through the named pool
+    // operation for all three (large 8 slots @+32016, small 20 @+64080, helper 28 @+74928),
+    // in the X360's order, then `mfLastHandbrakeTime = FLT_MAX` (+91072). Always returns true.
+    //
+    // FULLY RECONSTRUCTED -- no gate. (`MainDirector::Prepare`'s stage 4 calls this.)
+    // ------------------------------------------------------------------------
+    bool BehaviourManager::Prepare()
+    {
+        mLargeBehaviourPool.Prepare();      // free queue @+32016, count @+32048
+        mSmallBehaviourPool.Prepare();      // free queue @+64080, count @+64160
+        mBehaviourHelperPool.Clear();       // free queue @+74928, count @+75040
+
+        mfLastHandbrakeTime = 3.4028235e38f;   // +91072 (FLT_MAX)
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::Destruct
+    //
+    // The X360 folds this into MainDirector::Destruct @0x8224FCC0, which stores a 64-bit zero
+    // over each of the manager's three pool occupancy words (director +0x24848 / +0x2C5B8 /
+    // +0x2F038 == manager +32056 / +64168 / +75048 -- see the wave log's cross-check). That is
+    // the per-pool "clear occupancy" op, i.e. AbstractPool/ObjectPool::Construct(). Named here
+    // so MainDirector::Destruct never reaches the manager's interior by offset.
+    // ------------------------------------------------------------------------
+    void BehaviourManager::Destruct()
+    {
+        mLargeBehaviourPool.Destruct();
+        mSmallBehaviourPool.Destruct();
+        mBehaviourHelperPool.Construct();   // occupancy-only clear (ObjectPool::Construct)
+    }
+
     // ------------------------------------------------------------------------
     // BehaviourManager::CheckNoBehavioursAreAllocatedByState  @0x822201B0
     //
@@ -187,17 +323,17 @@ namespace Camera
     // BitArray<28>::IsBitSet bit-test (single 64-bit field since 28 < 64) at console offset
     // 0x14AB0 relative to `this`.
     //
-    // FLAG (semantic, not byte-offset-proven, field pick): the asm gives a single cross-check
-    // point, not enough alone to disambiguate WHICH of the four packed BitArray<28> members
-    // (mBehaviourNeedsPreparingFlags / mBehaviourNeedsReleasingFlags /
-    // mBehaviourUpdateDuringPauseFlags / mBehaviourUsedByHandleFlags) offset 0x14AB0 lands on --
-    // no other committed function reads that offset independently yet. mBehaviourNeedsPreparingFlags
-    // is picked on the strength of the name match (function "IsBehaviourWaitingToPrepare" <->
-    // member "NeedsPreparing") the same way CheckNoBehavioursAreAllocatedByState above matches
-    // mBehaviourUsedByHandleFlags by name; re-verify against a second independent asm cross-check
-    // (e.g. whichever function turns out to SET this flag) before treating the field choice as
-    // fully pinned. The rich dynamic message the X360 streams for the bounds assert is reduced to
-    // a plain CGS_ASSERT string per the project's asserts rule.
+    // FIELD PICK -- CONFIRMED (the earlier FLAG here is closed). Offset 0x14AB0 (== manager
+    // +84656) was previously only name-matched, because this function was the single asm site
+    // that read it. The second, INDEPENDENT site is now in hand:
+    // `NewBehaviour<BehaviourRoadRunner>` @0x822580F8 asserts, against the very same
+    // `8*(lHelperID>>6 + 10582) + this + 4` address, with the member NAME in the assert text:
+    //     "!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)"   (BrnBehaviourManager.h:786)
+    // and its two siblings pin +84664 ("!mBehaviourNeedsReleasingFlags…", :787) and +84680
+    // ("!mBehaviourUsedByHandleFlags…", :788) the same way -- which also confirms the committed
+    // DWARF declaration ORDER of all four BitArray<28> sets. mBehaviourNeedsPreparingFlags is
+    // therefore byte-attested here, not inferred. The rich dynamic message the X360 streams for
+    // the bounds assert is reduced to a plain CGS_ASSERT string per the project's asserts rule.
     // ------------------------------------------------------------------------
     bool BehaviourManager::IsBehaviourWaitingToPrepare(u32 luAllocationKey) const
     {
@@ -209,6 +345,61 @@ namespace Camera
                    "invalid index : luAllocationKey < capacity");
 
         return mBehaviourNeedsPreparingFlags.IsBitSet(luAllocationKey);
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::SetBehaviourUsedByHandle    @0x82219188
+    // BehaviourManager::UnSetBehaviourUsedByHandle  @0x822194B0
+    //
+    // The manager-side "a handle is holding this behaviour" book-keeping. Both are pure
+    // homed-member work over mBehaviourUsedByHandleFlags (+84680), mBehaviourNeedsReleasingFlags
+    // (+84664), mBehaviourRefCounts (+84688) and the helper pool's occupancy -- no Behaviour
+    // interior is touched, so both are fully reconstructible.
+    //
+    // Every assert below is the X360's own, with its recovered text and its
+    // BrnBehaviourManager.h line number; the rich dynamic bounds messages the console streams
+    // through gpcMessageBuffer are reduced to plain CGS_ASSERT strings per the project's
+    // asserts rule. All are non-gating on the console (execution falls through EndAssert), so
+    // they are modelled as CGS_ASSERT rather than early-outs -- matching the asm's control flow.
+    //
+    // ⭐ The one piece of real logic is UnSet's tail: releasing the last HANDLE hold on a
+    // behaviour whose reference count has already reached zero is what QUEUES it for release
+    // (mBehaviourNeedsReleasingFlags), i.e. this is where a behaviour becomes garbage. The
+    // committed arbitrator states (e.g. ArbStateAttractMode::Release) already inline the
+    // handle-side half of this pair, so this body is what makes their teardown real.
+    // ------------------------------------------------------------------------
+    void BehaviourManager::SetBehaviourUsedByHandle(u32 luAllocationKey)
+    {
+        const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
+
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)");      // :928
+        CGS_ASSERT(mBehaviourRefCounts[luAllocationKey] == 0,
+                   "mBehaviourRefCounts[lBehaviourHelperIndex] == 0");                    // :929
+        CGS_ASSERT(!mBehaviourNeedsReleasingFlags.IsBitSet(luAllocationKey),
+                   "mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false"); // :930
+        CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
+                   "mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false");   // :931
+
+        mBehaviourUsedByHandleFlags.SetBit(luAllocationKey);
+    }
+
+    void BehaviourManager::UnSetBehaviourUsedByHandle(u32 luAllocationKey)
+    {
+        const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
+
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)");      // :942
+        CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
+                   "mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true");    // :943
+
+        mBehaviourUsedByHandleFlags.UnSetBit(luAllocationKey);
+
+        // No references left either -> queue the behaviour for release.
+        if (mBehaviourRefCounts[luAllocationKey] == 0)
+        {
+            mBehaviourNeedsReleasingFlags.SetBit(luAllocationKey);
+        }
     }
 
     // ========================================================================

@@ -59,13 +59,12 @@
 //     but the currently-committed BrnDirectorResourceManager.h version of that method is
 //     `inline void Construct() {}` (a stub) -- the queue-init side effect is not
 //     reproduced. That gap belongs to the resource-manager TU.
-//   * Construct stores &mDebugComponent into a word at this+0xB40 -- inside
-//     MainDirector's own placement region (MainDirector spans this+0xB00..+0x35F50,
-//     confirmed by BrnMainDirector.h's own static_assert(sizeof(MainDirector)==0x35450)
-//     placement-window pin), i.e. MainDirector's own +0x40. MainDirector is modelled as
-//     an opaque sized buffer in BrnMainDirector.h with no exposed field for this; raw-
-//     poking into ANOTHER class's opaque storage from this TU would repeat exactly the
-//     violation this reconstruction is fixing. Left unreproduced and flagged in the .cpp.
+//   * Construct stores &mDebugComponent into a word at this+0xB40 -- MainDirector's own
+//     CONSOLE +0x40 (the module places MainDirector at +0xB00). ⭐ RESOLVED (BehaviourManager
+//     wave): MainDirector is no longer a console-sized opaque buffer -- it is a named-member
+//     class -- and it now exposes `MainDirector::SetDebugComponent(DebugComponent*)`.
+//     Construct should call `mMainDirector.SetDebugComponent(&mDebugComponent);`
+//     (see the wave log's PART 4 step 2.5). The .cpp still has it unreproduced + flagged.
 //
 // NOTE: a SEPARATE, already-landed TU (GameSource/Director/BrnDirectorModule.cpp, the
 // real `DirectorModule::DirectorModule()` constructor) defines its OWN small,
@@ -271,11 +270,15 @@ private:
 
     // this+0xB00 (2816). BrnDirector::MainDirector::Construct(&mDirectorResourceManager,
     // lfTime) / ::Destruct() / ::Release() -- the top-level cinematic camera director.
-    // Real committed type (BrnMainDirector.h/.cpp); MainDirector's own static_assert
-    // pins it at exactly 0x35450 CONSOLE bytes (the DirectorModule placement window
-    // this+0xB00 .. this+0x35F50), which is the evidence mCamera below sits at CONSOLE
-    // +0x36380 overall. See the header-level FLAG above: the this+0xB40 back-pointer
-    // store (inside MainDirector's own opaque storage) is not reproduced here.
+    // Real committed type (BrnMainDirector.h/.cpp). Its CONSOLE placement window is
+    // this+0xB00 .. this+0x35F50 (0x35450 bytes), which is the evidence mCamera below sits at
+    // CONSOLE +0x36380 overall.
+    // ⚠️ NOTE (BehaviourManager wave): MainDirector no longer ASSERTS that console size --
+    // it was rewritten from a console-sized opaque buffer into a named-member class with
+    // host-native sub-object sizes (the console windows cannot host x64-width types; see that
+    // header's LAYOUT MODEL banner). So sizeof(MainDirector) != 0x35450 here and the padding
+    // below re-flows. Nothing depends on the absolute value: every member of this class is
+    // named, and the console offsets quoted throughout are provenance only.
     MainDirector mMainDirector;
 
     u8 mPad_0x35F50[0x36380 - 0x35F50];                     // CONSOLE +0x35F50..+0x3637F.
