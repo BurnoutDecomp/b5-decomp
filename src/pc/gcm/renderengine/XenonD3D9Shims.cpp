@@ -40,6 +40,7 @@
 #include <cstring>
 #include <cstdio>
 #include <unordered_map>
+#include <vector>
 
 // The renderengine D3D device singleton alias the fast-path callers name
 // (X360 off_83271608 dereferenced). Defined here; refreshed from
@@ -116,6 +117,62 @@ namespace
     const IndexBufferHeader32*  spIndexSource  = nullptr;
     const VertexBufferHeader32* spVertexSource = nullptr;
     u32                          suVertexStride = 0;
+
+    // ---- Xenos primitive reset ----------------------------------------------
+    // The technique's rasteriser state (renderengine::RasterizerState
+    // muPrimitiveResetEnable / muPrimitiveResetIndex, pushed by the X360 applier
+    // @0x827E8690 through D3DDevice_SetRenderState_PrimitiveReset{Enable,Index}).
+    // shadow::Device::SetMeshTechniquePC republishes it on every technique change.
+    bool spResetEnabled = false;
+    u32  suResetIndex   = 0xFFFFu;
+
+    // FLAG PC-platform leaf: PRIMITIVE RESET HAS NO DIRECT3D 9 EQUIVALENT.
+    // The Xenos restarts a strip -- and its winding parity -- at every index equal
+    // to the reset index (PA_SU_SC_MODE_CNTL MULTI_PRIM_IB_ENA, bit 21). The world's
+    // meshes are all D3DPT_TRIANGLESTRIP and every world material state enables the
+    // reset with index 0xFFFF; feeding those markers to D3D9 as ordinary indices
+    // drew a fan of garbage triangles anchored on vertex 65535 -- one black fan per
+    // vertex buffer, radiating across the city. Primitive restart only arrives with
+    // D3D10, so the strip runs are expanded here into an equivalent TRIANGLELIST:
+    // identical triangles, identical winding, no marker ever reaching the device.
+    //
+    // No cache: the expansion is one linear pass over an index run that
+    // DrawIndexedPrimitiveUP is about to copy wholesale anyway, and a cache keyed on
+    // the run address would go stale when a track unit is streamed out and another
+    // is loaded over it.
+    std::vector<u8> sResetScratch;
+
+    template <typename T>
+    UINT ExpandStripRunsToList(const T* lpIndices, u32 luCount, T ltReset,
+                               std::vector<u8>& lrScratch)
+    {
+        lrScratch.clear();
+        UINT luTriangles = 0;
+        u32  luRunStart  = 0;
+        for (u32 lu = 0; lu <= luCount; ++lu)
+        {
+            if (lu != luCount && lpIndices[lu] != ltReset)
+                continue;
+            // [luRunStart, lu) is one strip run.
+            for (u32 lv = luRunStart; lv + 2u < lu; ++lv)
+            {
+                const T lt0 = lpIndices[lv];
+                const T lt1 = lpIndices[lv + 1];
+                const T lt2 = lpIndices[lv + 2];
+                if (lt0 == lt1 || lt1 == lt2 || lt0 == lt2)
+                    continue;               // degenerate stitch triangle
+                // A strip's odd triangles are wound the other way round; emitting
+                // them as list triangles has to swap the first two indices back.
+                const bool lbOdd = (((lv - luRunStart) & 1u) != 0u);
+                const T laTriangle[3] = { lbOdd ? lt1 : lt0, lbOdd ? lt0 : lt1, lt2 };
+                const u8* const lpBytes = reinterpret_cast<const u8*>(laTriangle);
+                lrScratch.insert(lrScratch.end(), lpBytes, lpBytes + sizeof(laTriangle));
+                ++luTriangles;
+            }
+            luRunStart = lu + 1u;
+        }
+        return luTriangles;
+    }
 
     // ---- vertex-declaration cache over 32-bit VertexDescriptor images -------
     // On-disk image (attested by tools/assets/bundles/renderable_transcode.py
@@ -433,9 +490,11 @@ namespace
 
 namespace renderengine
 {
-    // [PC bring-up] renderengine::Device::SetWorldPassDefaultStates -- the
-    // per-pass default render states the world bring-up runs on until the
-    // MaterialState/state-group path lands (declared in device.h).
+    // [PC bring-up] renderengine::Device::SetWorldPassDefaultStates -- the state a world
+    // pass starts from (declared in device.h). Every state a MATERIAL owns is now bound per
+    // technique from its own MaterialState triple (shadow::Device::SetMaterialRenderStatesPC),
+    // so this only has to leave the device in a sane state for anything drawn before the
+    // first technique bind, and to switch off the fixed-function lighting D3D9 defaults on.
     void Device::SetWorldPassDefaultStates(bool lbTransparentPass)
     {
         IDirect3DDevice9* lpDevice = Dev();
@@ -447,8 +506,6 @@ namespace renderengine
         lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, lbTransparentPass ? TRUE : FALSE);
         lpDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
         lpDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-        lpDevice->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);   // FLAG: real cull mode comes
-                                                                  // from the rasterizer state group
         lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
         lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
@@ -536,19 +593,6 @@ namespace renderengine
     // blend-state object, whose packed Xenos register fields are not decoded yet
     // (renderengine::BlendStateParameters muState4..muState17). The 1-bit-alpha world
     // techniques all cut out at the texture's mid-point, so >= 128 stands in until then.
-    void WorldShader_SetAlphaTest(bool lbEnabled)
-    {
-        IDirect3DDevice9* lpDevice = Dev();
-        if (lpDevice == nullptr)
-            return;
-        lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, lbEnabled ? TRUE : FALSE);
-        if (lbEnabled)
-        {
-            lpDevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
-            lpDevice->SetRenderState(D3DRS_ALPHAREF, 128);
-        }
-    }
-
     // One shader-constant upload: luNumRegisters float4s from lpData at register luRegister.
     // (X360: a direct write into the Xenos ALU-constant window through the command buffer;
     // the D3D9 equivalent is Set{Vertex,Pixel}ShaderConstantF.)
@@ -930,6 +974,13 @@ namespace renderengine
         suVertexStride = luStride;
     }
 
+    // The technique's primitive-reset render state, republished on every technique change.
+    void WorldDraw_SetPrimitiveReset(bool lbEnabled, u32 luResetIndex)
+    {
+        spResetEnabled = lbEnabled;
+        suResetIndex   = luResetIndex;
+    }
+
     void WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                              u32 luStartIndex, u32 luIndexCount)
     {
@@ -962,6 +1013,39 @@ namespace renderengine
         const u8* lpIndices  = static_cast<const u8*>(lpIndexData) + luStartIndex * luIndexSize;
         const u8* lpVertices = static_cast<const u8*>(lpVertexData) + luBaseVertexIndex * suVertexStride;
         const UINT luNumVertices = spVertexSource->muSize / suVertexStride;
+
+        // FLAG PC-platform leaf: honour the rasteriser state's primitive reset by
+        // expanding the strip runs into a triangle list (see ExpandStripRunsToList).
+        if (spResetEnabled && lePrim == D3DPT_TRIANGLESTRIP)
+        {
+            const UINT luTriangles =
+                lb32Bit
+                    ? ExpandStripRunsToList<u32>(reinterpret_cast<const u32*>(lpIndices),
+                                                 luIndexCount, suResetIndex, sResetScratch)
+                    : ExpandStripRunsToList<u16>(reinterpret_cast<const u16*>(lpIndices),
+                                                 luIndexCount, static_cast<u16>(suResetIndex),
+                                                 sResetScratch);
+            {
+                // [DIAG one-shot] the first mesh whose strips were re-cut.
+                static bool sbDiag = false;
+                if (!sbDiag)
+                {
+                    sbDiag = true;
+                    char lacMsg[192];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[WorldDraw] primitive reset honoured: %u strip indices"
+                                  " -> %u list triangles (reset index 0x%X)\n",
+                                  (unsigned)luIndexCount, (unsigned)luTriangles,
+                                  (unsigned)suResetIndex);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+            if (luTriangles == 0)
+                return;
+            lePrim      = D3DPT_TRIANGLELIST;
+            luPrimCount = luTriangles;
+            lpIndices   = &sResetScratch[0];
+        }
 
         lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
                                          lpIndices,
@@ -1121,24 +1205,177 @@ void* SetSamplerStateLowLevel(void* lpState, u32 /*luSamplerId*/, bool /*lbWasUn
 }
 
 // ---- packed render-state fast-sets ------------------------------------------
-// The Xenon values are packed GPU register words; a faithful translation waits
-// on the state-object (MaterialState) reconstruction. The alpha-test trio maps
-// 1:1 (Xenon uses the D3D9 D3DCMPFUNC values); the rest are FLAGGED no-ops --
-// the world bring-up runs on per-pass default states set by the renderer.
+// Each Xenon fast-set pokes ONE field of a Xenos GPU register shadow, and the
+// ARTIST image carries every one of those thunks, so the encodings below are
+// read straight off them rather than guessed:
 //
-// FLAG PC-platform leaf: D3DDevice_SetBlendState takes a Xenos packed blend
-// register word (RB_BLENDCONTROL) with no D3D9 counterpart -- PC blending is
-// eight separate D3DRS_* render states. Decoding that word needs the
-// MaterialState porter (still open, see the world data-seam wave), so it stays
-// inert here rather than guessing a bit layout; the renderer's per-pass
-// SetWorldPassDefaultStates supplies opaque/transparent blending meanwhile.
-void D3DDevice_SetBlendState(IDirect3DDevice9*, u32, u32) {}
+//   _ZFunc      @0x82939870   (16*Value) & 0x70      RB_DEPTHCONTROL ZFUNC
+//   _AlphaFunc  @0x82939328   Value & 7              RB_COLORCONTROL ALPHA_FUNC
+//   _StencilFunc@0x82939A48   (Value<<8) & 0x700     RB_DEPTHCONTROL STENCILFUNC
+//   _StencilFail@0x82939AD8   (Value<<11) & 0x3800   RB_DEPTHCONTROL STENCILFAIL
+//   _CullMode   @0x82938978   Value & 7              PA_SU_SC_MODE_CNTL [2:0]
+//   _FillMode   @0x82938A08   (8*Value) & 0x7F8      PA_SU_SC_MODE_CNTL POLY_MODE
+//   _AlphaRef   @0x82939258   Value * (1/255)        RB_ALPHA_REF (0..255 in)
+//   _PrimitiveResetEnable @0x8293BB68  (Value<<21) & 0x200000
+//
+// EVERY comparison/stencil-op field is the GPU's own ZERO-based enumeration
+// (NEVER=0..ALWAYS=7, KEEP=0..DECR_WRAP=7) while PC Direct3D 9's D3DCMPFUNC and
+// D3DSTENCILOP are ONE-based -- so these leaves add 1. Forwarding the raw value
+// INVERTED every comparison (the world's AlphaFunc 4 = GREATER would arrive as
+// D3DCMP_LESSEQUAL). Bug class (c).
+namespace
+{
+    // Xenos 0-based comparison function -> D3DCMPFUNC (1-based).
+    inline DWORD XenonCompareToD3D9(u32 luValue)
+    {
+        return static_cast<DWORD>((luValue & 7u) + 1u);
+    }
+
+    // Xenos 0-based stencil op -> D3DSTENCILOP. The two enumerations run in the
+    // same order (KEEP, ZERO, REPLACE, INCR-clamp, DECR-clamp, INVERT, INCR-wrap,
+    // DECR-wrap), so the PC value is again the Xenos value plus one.
+    inline DWORD XenonStencilOpToD3D9(u32 luValue)
+    {
+        return static_cast<DWORD>((luValue & 7u) + 1u);
+    }
+
+    // PA_SU_SC_MODE_CNTL [2:0] = { CULL_FRONT (bit 0), CULL_BACK (bit 1),
+    // FACE (bit 2) }, and the Xbox 360 D3DCULL enumerators are exactly that
+    // field: NONE = 0, then the two single-bit values in the same order the PC
+    // enum uses them (NONE, CW, CCW). That fixes the FACE default: with FACE = 0
+    // the CLOCKWISE winding is the front face, so bit 0 (cull front) is
+    // D3DCULL_CW == 1 and bit 1 (cull back) is D3DCULL_CCW == 2.
+    //
+    // Measured on the world, which carries only 0 (none) and 2: reading value 2
+    // the other way round -- as "cull the clockwise triangles" -- erased almost
+    // every surface in the city (scratch/GEO_B_state), while this reading leaves
+    // it solid with the interiors gone (scratch/GEO_C_cull).
+    inline DWORD XenonCullToD3D9(u32 luValue)
+    {
+        const bool lbCullFront = (luValue & 1u) != 0;
+        const bool lbCullBack  = (luValue & 2u) != 0;
+        const bool lbCwIsFront = (luValue & 4u) == 0;
+        if (lbCullFront == lbCullBack)
+            return D3DCULL_NONE;      // neither, or both (nothing would draw anyway)
+        const bool lbCullClockwise = lbCullFront ? lbCwIsFront : !lbCwIsFront;
+        return lbCullClockwise ? D3DCULL_CW : D3DCULL_CCW;
+    }
+
+    // POLY_MODE 0 (the only value the world carries) is the hardware's "no
+    // polygon-mode override" == solid fill.
+    inline DWORD XenonFillToD3D9(u32 luValue)
+    {
+        switch (luValue & 3u)
+        {
+        case 1:  return D3DFILL_WIREFRAME;   // POLY_MODE = dual mode, line
+        case 2:  return D3DFILL_POINT;
+        default: return D3DFILL_SOLID;
+        }
+    }
+
+    // RB_BLENDCONTROL blend-factor field -> D3DBLEND.
+    DWORD XenonBlendFactorToD3D9(u32 luValue)
+    {
+        switch (luValue)
+        {
+        case 0:  return D3DBLEND_ZERO;
+        case 1:  return D3DBLEND_ONE;
+        case 4:  return D3DBLEND_SRCCOLOR;
+        case 5:  return D3DBLEND_INVSRCCOLOR;
+        case 6:  return D3DBLEND_SRCALPHA;
+        case 7:  return D3DBLEND_INVSRCALPHA;
+        case 8:  return D3DBLEND_DESTALPHA;
+        case 9:  return D3DBLEND_INVDESTALPHA;
+        case 10: return D3DBLEND_DESTCOLOR;
+        case 11: return D3DBLEND_INVDESTCOLOR;
+        case 12: return D3DBLEND_SRCALPHASAT;
+        case 13: return D3DBLEND_BLENDFACTOR;
+        case 14: return D3DBLEND_INVBLENDFACTOR;
+        default:
+            LogOnce("blendfactor",
+                    "[XenonD3D9] unmapped Xenos blend factor - treated as ONE\n");
+            return D3DBLEND_ONE;
+        }
+    }
+
+    // RB_BLENDCONTROL COMB_FCN field -> D3DBLENDOP.
+    DWORD XenonBlendOpToD3D9(u32 luValue)
+    {
+        switch (luValue & 7u)
+        {
+        case 0:  return D3DBLENDOP_ADD;            // DST_PLUS_SRC
+        case 1:  return D3DBLENDOP_SUBTRACT;       // SRC_MINUS_DST
+        case 2:  return D3DBLENDOP_MIN;
+        case 3:  return D3DBLENDOP_MAX;
+        case 4:  return D3DBLENDOP_REVSUBTRACT;    // DST_MINUS_SRC
+        default: return D3DBLENDOP_ADD;
+        }
+    }
+}
+
+// D3DDevice_SetBlendState @0x8293DA80 stores its argument VERBATIM into the
+// device's per-render-target RB_BLENDCONTROL shadow, so the argument IS that
+// Xenos register:
+//   COLOR_SRCBLEND  [4:0]   COLOR_COMB_FCN  [7:5]   COLOR_DESTBLEND [12:8]
+//   ALPHA_SRCBLEND [20:16]  ALPHA_COMB_FCN [23:21]  ALPHA_DESTBLEND [28:24]
+// The world's material states carry exactly two values and both corroborate the
+// split: 0x00010001 = ONE/ZERO/add on both channels (opaque -- 9 of the 11
+// sampled states) and 0x07060706 = SRC_ALPHA/INV_SRC_ALPHA/add (the standard
+// alpha blend). Direct3D 9 has no packed form, so the fields become the separate
+// D3DRS_SRCBLEND/DESTBLEND/BLENDOP + separate-alpha trio, and
+// D3DRS_ALPHABLENDENABLE is DERIVED: a ONE/ZERO/add blend is exactly "no
+// blending", which is how the console expresses an opaque material.
+//
+// FLAG PC-platform leaf: PC D3D9 has ONE blend state for all render targets
+// (independent per-RT blending arrives with D3D10), so render targets 1..3 are
+// accepted and dropped; the world only ever differs on target 0.
+void D3DDevice_SetBlendState(IDirect3DDevice9*, u32 luRenderTargetIndex, u32 luBlendState)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice == nullptr || luRenderTargetIndex != 0)
+        return;
+
+    const u32 luColourSrc  =  luBlendState        & 0x1Fu;
+    const u32 luColourOp   = (luBlendState >>  5) & 0x07u;
+    const u32 luColourDst  = (luBlendState >>  8) & 0x1Fu;
+    const u32 luAlphaSrc   = (luBlendState >> 16) & 0x1Fu;
+    const u32 luAlphaOp    = (luBlendState >> 21) & 0x07u;
+    const u32 luAlphaDst   = (luBlendState >> 24) & 0x1Fu;
+
+    const bool lbColourOpaque = (luColourSrc == 1u && luColourDst == 0u && luColourOp == 0u);
+    const bool lbAlphaOpaque  = (luAlphaSrc  == 1u && luAlphaDst  == 0u && luAlphaOp  == 0u);
+    const bool lbBlend = !(lbColourOpaque && lbAlphaOpaque);
+
+    lpDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, lbBlend ? TRUE : FALSE);
+    if (!lbBlend)
+        return;
+
+    lpDevice->SetRenderState(D3DRS_SRCBLEND,  XenonBlendFactorToD3D9(luColourSrc));
+    lpDevice->SetRenderState(D3DRS_DESTBLEND, XenonBlendFactorToD3D9(luColourDst));
+    lpDevice->SetRenderState(D3DRS_BLENDOP,   XenonBlendOpToD3D9(luColourOp));
+
+    const bool lbSeparate = (luAlphaSrc != luColourSrc)
+                         || (luAlphaDst != luColourDst)
+                         || (luAlphaOp  != luColourOp);
+    lpDevice->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, lbSeparate ? TRUE : FALSE);
+    if (lbSeparate)
+    {
+        lpDevice->SetRenderState(D3DRS_SRCBLENDALPHA,  XenonBlendFactorToD3D9(luAlphaSrc));
+        lpDevice->SetRenderState(D3DRS_DESTBLENDALPHA, XenonBlendFactorToD3D9(luAlphaDst));
+        lpDevice->SetRenderState(D3DRS_BLENDOPALPHA,   XenonBlendOpToD3D9(luAlphaOp));
+    }
+}
+
 void D3DDevice_SetRenderState_ColorWriteEnable(IDirect3DDevice9*, u32 luValue)
 {
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
         lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE, luValue);
 }
+// FLAG PC-platform leaf: render targets 1..3. The world pass has a single colour
+// target, and D3D9's D3DRS_COLORWRITEENABLE1..3 only apply with multiple render
+// targets bound, so these are accepted and dropped rather than mis-applied to
+// target 0.
 void D3DDevice_SetRenderState_ColorWriteEnable1(IDirect3DDevice9*, u32) {}
 void D3DDevice_SetRenderState_ColorWriteEnable2(IDirect3DDevice9*, u32) {}
 void D3DDevice_SetRenderState_ColorWriteEnable3(IDirect3DDevice9*, u32) {}
@@ -1148,8 +1385,17 @@ void D3DDevice_SetRenderState_BlendFactor(IDirect3DDevice9*, u32 luValue)
     if (lpDevice != nullptr)
         lpDevice->SetRenderState(D3DRS_BLENDFACTOR, luValue);
 }
+// Alpha-to-mask is the Xenos' own MSAA coverage feature (RB_COLORCONTROL
+// ALPHA_TO_MASK_ENABLE + a 4x2-bit dither offset word). D3D9's nearest relative
+// is the vendor-specific ATOC hack; the world pass runs unmultisampled, where
+// alpha-to-mask is a no-op on the console too.
+// FLAG PC-platform leaf: Xenos MSAA alpha-to-mask, no D3D9 counterpart.
 void D3DDevice_SetRenderState_AlphaToMaskEnable(IDirect3DDevice9*, u32) {}
+// FLAG PC-platform leaf: Xenos MSAA alpha-to-mask, no D3D9 counterpart.
 void D3DDevice_SetRenderState_AlphaToMaskOffsets(IDirect3DDevice9*, u32) {}
+// FLAG PC-platform leaf: high-precision blending selects the Xenos' 10.10.10.2 /
+// FP16 blend path per render target. The PC back buffer's format already fixes
+// the blend precision, so there is nothing to select.
 void D3DDevice_SetRenderState_HighPrecisionBlendEnable(IDirect3DDevice9*, u32) {}
 void D3DDevice_SetRenderState_HighPrecisionBlendEnable1(IDirect3DDevice9*, u32) {}
 void D3DDevice_SetRenderState_HighPrecisionBlendEnable2(IDirect3DDevice9*, u32) {}
@@ -1162,6 +1408,8 @@ void D3DDevice_SetRenderState_AlphaTestEnable(IDirect3DDevice9*, u32 luValue)
 }
 void D3DDevice_SetRenderState_AlphaRef(IDirect3DDevice9*, u32 luValue)
 {
+    // The Xenon thunk converts to a 0..1 float (Value * 1/255), i.e. the incoming
+    // word is already the 0..255 reference D3DRS_ALPHAREF wants.
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
         lpDevice->SetRenderState(D3DRS_ALPHAREF, luValue);
@@ -1170,8 +1418,177 @@ void D3DDevice_SetRenderState_AlphaFunc(IDirect3DDevice9*, u32 luValue)
 {
     IDirect3DDevice9* lpDevice = Dev();
     if (lpDevice != nullptr)
-        lpDevice->SetRenderState(D3DRS_ALPHAFUNC, luValue);
+        lpDevice->SetRenderState(D3DRS_ALPHAFUNC, XenonCompareToD3D9(luValue));
 }
+
+// ---- the depth/stencil half (X360 applier @0x827E8150) ----------------------
+void D3DDevice_SetRenderState_ZEnable(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_ZENABLE, luValue != 0 ? D3DZB_TRUE : D3DZB_FALSE);
+}
+void D3DDevice_SetRenderState_ZWriteEnable(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_ZWRITEENABLE, luValue != 0);
+}
+void D3DDevice_SetRenderState_ZFunc(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_ZFUNC, XenonCompareToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_StencilEnable(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILENABLE, luValue != 0);
+}
+void D3DDevice_SetRenderState_TwoSidedStencilMode(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, luValue != 0);
+}
+void D3DDevice_SetRenderState_StencilFunc(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILFUNC, XenonCompareToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_StencilFail(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILFAIL, XenonStencilOpToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_StencilZFail(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILZFAIL, XenonStencilOpToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_StencilPass(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILPASS, XenonStencilOpToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_CCWStencilFunc(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_CCW_STENCILFUNC, XenonCompareToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_CCWStencilFail(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_CCW_STENCILFAIL, XenonStencilOpToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_CCWStencilZFail(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_CCW_STENCILZFAIL, XenonStencilOpToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_CCWStencilPass(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_CCW_STENCILPASS, XenonStencilOpToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_StencilRef(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILREF, luValue);
+}
+void D3DDevice_SetRenderState_StencilMask(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILMASK, luValue);
+}
+void D3DDevice_SetRenderState_StencilWriteMask(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_STENCILWRITEMASK, luValue);
+}
+// FLAG PC-platform leaf: the Xenos keeps a SECOND (counter-clockwise) stencil
+// reference/mask/write-mask; PC D3D9 shares one set between both faces, so these
+// three are accepted and dropped. The world data carries the same values in both
+// sets, so nothing is lost there.
+void D3DDevice_SetRenderState_CCWStencilRef(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_CCWStencilMask(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_CCWStencilWriteMask(IDirect3DDevice9*, u32) {}
+// FLAG PC-platform leaf: hierarchical stencil is Xenos-only (the coarse
+// HiZ/HiStencil unit in EDRAM). It is a pure culling accelerator -- disabling it
+// changes speed, never pixels.
+void D3DDevice_SetRenderState_HiStencilEnable(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HiStencilWriteEnable(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HiStencilFunc(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HiStencilRef(IDirect3DDevice9*, u32) {}
+
+// ---- the rasteriser half (X360 applier @0x827E8690) -------------------------
+void D3DDevice_SetRenderState_CullMode(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_CULLMODE, XenonCullToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_FillMode(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_FILLMODE, XenonFillToD3D9(luValue));
+}
+void D3DDevice_SetRenderState_ScissorTestEnable(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, luValue != 0);
+}
+void D3DDevice_SetRenderState_DepthBias(IDirect3DDevice9*, u32 luFloatAsDword)
+{
+    // Both sides take the float's bit pattern in a DWORD.
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_DEPTHBIAS, luFloatAsDword);
+}
+void D3DDevice_SetRenderState_SlopeScaleDepthBias(IDirect3DDevice9*, u32 luFloatAsDword)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_SLOPESCALEDEPTHBIAS, luFloatAsDword);
+}
+void D3DDevice_SetRenderState_MultiSampleAntiAlias(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, luValue != 0);
+}
+void D3DDevice_SetRenderState_MultiSampleMask(IDirect3DDevice9*, u32 luValue)
+{
+    IDirect3DDevice9* lpDevice = Dev();
+    if (lpDevice != nullptr)
+        lpDevice->SetRenderState(D3DRS_MULTISAMPLEMASK, luValue);
+}
+// FLAG PC-platform leaf: ViewportEnable selects whether the Xenos applies the
+// viewport transform in the vertex pipe (the console can emit pre-transformed
+// clip coordinates); the D3D9 runtime always applies it. HalfPixelOffset selects
+// the Xenos' pixel-centre convention -- on PC that offset is a shader-side
+// concern, and the converted world programs already carry the PC convention.
+void D3DDevice_SetRenderState_ViewportEnable(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_HalfPixelOffset(IDirect3DDevice9*, u32) {}
+// Primitive reset has no D3D9 equivalent at all; the world draw path re-cuts the
+// strip runs itself instead (see WorldDraw_IndexedUP / ExpandStripRunsToList).
+// These two exist so the rasteriser applier stays a faithful 1:1 port.
+void D3DDevice_SetRenderState_PrimitiveResetEnable(IDirect3DDevice9*, u32) {}
+void D3DDevice_SetRenderState_PrimitiveResetIndex(IDirect3DDevice9*, u32) {}
 
 // The Xenos shader GPR split and the ring present-interval fast-set have no PC
 // equivalent (the D3D9 runtime owns both); inert by design, not placeholders.
