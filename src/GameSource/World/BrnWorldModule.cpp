@@ -28,6 +28,7 @@
 //              they are recorded here with their X360 address + the exact reason they are
 //              blocked, to be bodied once their sub-module/IO deps are homed.
 // ============================================================================
+#include <cstdlib>                                                // getenv/atof (the BRN_WORLD_CAMDIST bring-up diagnostic)
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"   // CgsGraphics::ShaderConstantTable
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // BrnShaderConstantsFrame
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"
@@ -3766,10 +3767,30 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
 
     // Eye: pulled back and up from the centroid along -Z, looking at the centroid.
     // (Burnout world space is Y-up -- the PVS query is a ground-plane XZ lookup.)
+    //
+    // [DIAG] BRN_WORLD_CAMDIST scales the pull-back so a capture can inspect the
+    // surfaces close up instead of the whole-city establishing shot (every world
+    // texel is minified to its smallest mip from the default distance, which hides
+    // exactly the texture defects this camera exists to expose). Read once.
+    static f32 sfCamDist = -1.0f;
+    if ( sfCamDist < 0.0f )
+    {
+        sfCamDist = 1.0f;
+        const char* lpcEnv = std::getenv( "BRN_WORLD_CAMDIST" );
+        if ( lpcEnv != 0 )
+        {
+            const f32 lfValue = static_cast<f32>( atof( lpcEnv ) );
+            if ( lfValue > 0.0001f )
+            {
+                sfCamDist = lfValue;
+            }
+        }
+    }
+
     Vector3 lEye;
     lEye.x = lCentre.x;
-    lEye.y = lCentre.y + lfRadius * 0.45f;
-    lEye.z = lCentre.z - lfRadius * 1.15f;
+    lEye.y = lCentre.y + lfRadius * 0.45f * sfCamDist;
+    lEye.z = lCentre.z - lfRadius * 1.15f * sfCamDist;
     lEye.w = 0.0f;
 
     Vector3 lForward;

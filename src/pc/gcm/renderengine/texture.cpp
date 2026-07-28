@@ -246,18 +246,50 @@ namespace renderengine
             return;  // created empty (the data pipeline supplies pixels later)
         }
 
-        // Upload each mip: the loader stores the chain tightly packed in graphics-local memory.
-        // Copy whole mips (managed power-of-two textures lock at the tight pitch); a row-by-row
-        // path can refine this once the bundle pixel layout is finalised by the data pipeline.
+        // Upload each mip: the loader stores the chain TIGHTLY PACKED in graphics-local memory
+        // (the serialised pixel block the bundle carries; tools/assets/bundles/x360_tex.py
+        // produces exactly that from the console's tiled + packed-mip-tail layout). Copy row by
+        // row against the locked pitch rather than whole-mip: a managed surface is free to hand
+        // back a padded pitch, which for the small mips of a compressed chain does not equal the
+        // tight one.
         const u8* lpSource = static_cast<const u8*>(lpPixelData);
+        const u32 luBytesPerBlock = lFormatBytesPerBlock(lpParams->miFormat);
         u32 luW = lpParams->muWidth, luH = lpParams->muHeight;
         for (UINT luLevel = 0u; luLevel < luLevels; ++luLevel)
         {
             const u32 luMipBytes = GetPixelDataSize(lpParams->miFormat, luW, luH, 1u, 1u);
+            // Rows of the SOURCE image: block rows for a compressed format, pixel rows otherwise.
+            u32 luRowBytes, luNumRows;
+            if (luBytesPerBlock != 0u)
+            {
+                luRowBytes = ((luW + 3u) / 4u) * luBytesPerBlock;
+                luNumRows = (luH + 3u) / 4u;
+            }
+            else
+            {
+                luNumRows = luH;
+                luRowBytes = (luNumRows != 0u) ? (luMipBytes / luNumRows) : luMipBytes;
+            }
+            if (luRowBytes == 0u) luRowBytes = luMipBytes;
+            if (luNumRows == 0u) luNumRows = 1u;
+
             D3DLOCKED_RECT lLockedRect;
             if (SUCCEEDED(lpD3DTexture->LockRect(luLevel, &lLockedRect, nullptr, 0)))
             {
-                memcpy(lLockedRect.pBits, lpSource, luMipBytes);
+                u8* lpDest = static_cast<u8*>(lLockedRect.pBits);
+                const u32 luDestPitch = static_cast<u32>(lLockedRect.Pitch);
+                if (luDestPitch == luRowBytes)
+                {
+                    memcpy(lpDest, lpSource, luMipBytes);
+                }
+                else
+                {
+                    for (u32 luRow = 0u; luRow < luNumRows; ++luRow)
+                    {
+                        memcpy(lpDest + luRow * luDestPitch, lpSource + luRow * luRowBytes,
+                               luRowBytes);
+                    }
+                }
                 lpD3DTexture->UnlockRect(luLevel);
             }
             lpSource += luMipBytes;
