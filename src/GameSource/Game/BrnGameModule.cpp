@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount::SetupFailFlagMask (interim bridge in Construct)
+#include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
@@ -41,6 +42,7 @@ namespace BrnGame
         , mbStalled(false)
         , mbRequestDoStepFrame(false)
         , mbRequestDoPlayFrame(false)
+        , meGamePrepareStage(E_GAMEPREPARESTAGE_START)
         , meGameUpdateStage(E_GAMEUPDATESTAGE_PREPARE)
         , miNumSimFramesRequired(0)
         , mfDebugUpdateDeltaSeconds(0.0f)
@@ -58,6 +60,7 @@ namespace BrnGame
         , mpGuiModelOutputBuffer(0)
         , mpGuiOutputBuffer(0)
         , mpDirectorOutputBuffer(0)
+        , mbGamePrepareReceiverQueueConstructed(false)
         , miInputModuleState(0)
         , miPlayer0ControllerPort(0)
         , miSecondaryControllerPort(0)
@@ -628,15 +631,131 @@ namespace BrnGame
     // @ BrnGameModule.cpp:1580 (X360 0x823EFBD0) - one-time per-game-instance prepare: under the
     // GameData IO buffer locks, a resumable stage machine that (1) queues LoadBundle requests for
     // "shaders.bndl", "GlobalTextureDictionary.bin" and "Language\\Fonts\\Default.font" through
-    // the GameData input's RequestInterface<32768>, (2) waits for the 3 loads + acquires the
-    // "gamedb://...blobbyshadow.TextureConfig2d" resource, then (3) runs the per-module game
-    // prepares. [gated] the whole body rides the GameData request/bundle-streaming path (the
-    // module's file IO + bank/pool population, still the allocator gate) and the game-module IO
-    // buffer members -- none in this layout yet. Returns done so UpdateThread advances; the
-    // loading-screen renderer loads its own assets meanwhile.
+    // the GameData input's RequestInterface<32768>, (2) waits for the 3 loads then posts the six
+    // global-texture acquires, (3) waits for those and hands them to
+    // BrnRendererModule::PrepareAgain, then (4) runs the GameState module's game-prepare.
+    //
+    // X360 stage-machine shape (switch on gm+10094164, reproduced exactly):
+    //   case 0/1: stage=1; LoadBundle(&q, 2, 10, "shaders.bndl", true)
+    //                      LoadBundle(&q, 1, 10, "GlobalTextureDictionary.bin", false)
+    //                      LoadBundle(&q, 0,  0, "Language\\Fonts\\Default.font", false)   ->fall
+    //   case 2:   stage=2; if (q.GetLength() < 3) return not-done;
+    //                      q.Clear(); post the 6 acquire events (ids 0..5)                 ->fall
+    //   case 3:   stage=3; if (q.GetLength() < 5) return not-done;
+    //                      walk the queue (event type 4) -> the 5 texture pointers + the
+    //                      font handle (id 5: Font::CreateTextureState + SetDebugFont);
+    //                      assert each; BrnRendererModule::PrepareAgain(...); q.Clear()    ->fall
+    //   case 4:   stage=4; GameStateModule game-prepare (vtable +64) on a scratch
+    //                      GameStateModuleIO::OutputBuffer; done -> return true
+    //   not-done tail (LABEL_36): create the RendererIO pair, BrnRendererModule::Update,
+    //                      latch the reusable loading-screen allocator, publish
+    //                      IsStalled/IsDiskError onto the dispatch input, CheckDiskError.
+    //
+    // RECONSTRUCTED HERE: stages 0/1/2 -- the bundle loads and their completion wait. This is
+    // the stage that brings SHADERS.BNDL online, which is what lets every streamed world
+    // Material resolve its ShaderTechnique / ShaderProgramBuffer imports instead of falling
+    // back to the bring-up shader.
+    //
+    // [gated] stages 3 and 4:
+    //   * stage 3's five "gamedb://burnout5/Playground/GlobalTextures/..." acquires feed
+    //     BrnRendererModule::PrepareAgain (blobby shadow, the two cloud textures, the corona
+    //     atlas, the glass fracture) -- PrepareAgain is not reconstructed and none of its four
+    //     consumers (blobby-shadow manager, sky dome, corona manager, damage FX) is live.
+    //   * the id-5 "default" font acquire lands the debug font; the PC already brings that up
+    //     from DispatchThread via CgsDev::LoadAndSetDebugFont (which owns the same
+    //     Font::CreateTextureState + DebugManager::SetDebugFont pair).
+    //   * stage 4's GameStateModule game-prepare rides the GameState module placeholder.
+    // DELETE the gate when PrepareAgain + the GameState game-prepare land.
+    //
+    // FLAG PC-platform leaf: the X360 services the GameData module on its own resource-update
+    // thread (IThreadClass::ResourceUpdateThread) while this stage machine blocks the update
+    // thread, and BrnGameModule::Prepare has already prepared the GameDataModule by the time
+    // UpdateThread first runs. The single-threaded PC host has neither: GameDataModule::Prepare
+    // is driven from the loading flow (which only runs once GamePrepare has returned done) and
+    // nothing else pumps GameDataModule::Update. So this body drives BOTH inline -- the module
+    // prepare first, then one Update pump per wait frame. Both are the module's own resumable
+    // machines, so the flow's later GameDataModule::Prepare call still finds it done.
     bool BrnGameModule::GamePrepare()
     {
-        return true;
+        // The X360 pair is gm+10055440 / gm+10055444 (see the accessors' note).
+        BrnResource::GameDataIO::InputBuffer*  lpGameDataInput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+        BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+
+        if (!mbGamePrepareReceiverQueueConstructed)
+        {
+            mbGamePrepareReceiverQueueConstructed = true;
+            mGamePrepareReceiverQueue.Construct();
+        }
+
+        // FLAG PC-platform leaf (see above): stand in for the X360's already-completed
+        // module prepare + its concurrent resource thread.
+        if (!mGameDataModule.Prepare(0, 0))
+            return false;
+
+        lpGameDataInput->LockForWrite();
+        lpGameDataOutput->LockForRead();
+
+        bool lbDone = false;
+        switch (meGamePrepareStage)
+        {
+        case E_GAMEPREPARESTAGE_START:
+        case E_GAMEPREPARESTAGE_LOADBUNDLES:
+        {
+            meGamePrepareStage = E_GAMEPREPARESTAGE_LOADBUNDLES;
+
+            // The three one-time bundle loads, in the X360's order/arguments. Pool 10 is
+            // the game-wide "permanent" pool (GameDataModule's pool table); the font goes
+            // to pool 0. Only shaders.bndl sets mbUseHDCache.
+            lpGameDataInput->GetRequestInterface()->LoadBundle(
+                &mGamePrepareReceiverQueue, 2, 10, "shaders.bndl", true);
+            lpGameDataInput->GetRequestInterface()->LoadBundle(
+                &mGamePrepareReceiverQueue, 1, 10, "GlobalTextureDictionary.bin", false);
+            lpGameDataInput->GetRequestInterface()->LoadBundle(
+                &mGamePrepareReceiverQueue, 0, 0, "Language\\Fonts\\Default.font", false);
+        }
+        // fall through
+
+        case E_GAMEPREPARESTAGE_WAITBUNDLES:
+        {
+            meGamePrepareStage = E_GAMEPREPARESTAGE_WAITBUNDLES;
+
+            if (mGamePrepareReceiverQueue.GetLength() < 3)
+                break;
+
+            mGamePrepareReceiverQueue.Clear();
+        }
+        // fall through
+
+        case E_GAMEPREPARESTAGE_WAITACQUIRES:
+        case E_GAMEPREPARESTAGE_GAMESTATE:
+        {
+            // [gated] stages 3 + 4 -- see the note above.
+            meGamePrepareStage = E_GAMEPREPARESTAGE_GAMESTATE;
+            lbDone = true;
+            break;
+        }
+
+        default:
+        {
+            CGS_ASSERT(false, "Got into an unknown state");   // X360 BrnGameModule.cpp:1807
+            break;
+        }
+        }
+
+        lpGameDataOutput->UnlockForRead();
+        lpGameDataInput->UnlockForWrite();
+
+        if (!lbDone)
+        {
+            // FLAG PC-platform leaf (see above): the X360's not-done tail runs the renderer
+            // update + disk-error publication; on PC the piece this stage machine cannot do
+            // without is the GameData pump that services the requests it just queued.
+            mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
+        }
+
+        return lbDone;
     }
 
     // @ BrnGameModule.cpp:2650 (X360 0x823F03C8) - teardown counterpart of GamePrepare: under the

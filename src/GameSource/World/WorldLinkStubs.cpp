@@ -4160,7 +4160,28 @@ void WorldModule::BridgeCrashModuleToPhysicsModule(void *,class BrnPhysics::Phys
 void CgsResource::ShaderTechniqueResourceType::PostFixUp(void* /*lpResource*/,
                                                          const rw::Resource& /*lrResource*/) const
 {
-    CGS_ASSERT(false, "ShaderTechniqueResourceType::PostFixUp @0x827EEBF0: documented deferral -- reconstruct");
+    // BOOT GATE (textures/shaders wave 2026-07-28): REACHED -- the converted
+    // SHADERS.BNDL is staged and BrnGameModule::GamePrepare really loads it, so
+    // this runs once per streamed ShaderTechnique (110 of them). A trap here blocks
+    // the load outright. Quiet one-shot log instead; the technique still FixUps
+    // (relocation is complete), it just skips PostFixUp's two passes:
+    //   * the 4 ShaderConstantsExternal::PostFixUp calls (X360 sub_827ED8D0,
+    //     CgsShaderConstants.cpp:1022/1036) that bind each external constant to the
+    //     engine constant table + its ProgramVariableHandle and compact the block;
+    //   * the shader-profile strstr classification (off_82F30F78/dword_82F30F7C) and
+    //     its two first-constant validation warnings.
+    // DELETE when ShaderConstantsExternal::PostFixUp is reconstructed in
+    // CgsShaderConstants.cpp and PostFixUp is bodied in its home TU
+    // (CgsShaderTechniqueResourceType.cpp).
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint
+                << "ShaderTechniqueResourceType::PostFixUp @0x827EEBF0: inert -- external constant"
+                   " binding + profile classification skipped [FLAG PC boot gate]\n";
+    }
 }
 
 uint32_t CgsResource::ShaderTechniqueResourceType::GetShaderConstantExternalSerialisedResourceDescriptorSize(

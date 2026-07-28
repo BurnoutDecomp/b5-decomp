@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the unresolved-import boot gate
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h" // renderengine::BlendState::GetParameters
+#include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"          // ShaderConstantsExternal::HasShaderConstant
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::MaterialTechniqueResourceType::FixDown          @ 0x828A8740
@@ -18,28 +20,26 @@
 // InstancingMatrixArray shader constant is present), and caches three content hashes
 // plus the shader's parameter count.
 
-namespace renderengine
-{
-    class BlendState
-    {
-    public:
-        // Fills the caller's parameter block (a 48-byte descriptor followed by the
-        // per-channel enable flags) for the given blend state.
-        static void* GetParameters(void* pBlendState, void* pParams);
-    };
-    void* BlendState::GetParameters(void*, void*) { __debugbreak(); return nullptr; }
-}
-
-namespace ShaderConstantsExternal
-{
-    bool HasShaderConstant(const void* pShader, const char* pName);
-    bool HasShaderConstant(const void*, const char*) { __debugbreak(); return false; }
-}
-
+// The four helpers PostFixUp calls all have REAL committed homes; this TU used to carry
+// local `__debugbreak()` placeholders for them because nothing ever reached PostFixUp
+// while SHADERS.BNDL was unstaged (every technique's shader import came back null and the
+// boot gate below returned early). With the converted SHADERS.BNDL staged and
+// BrnGameModule::GamePrepare really loading it, PostFixUp runs for real -- so the
+// placeholders are gone and the real bodies are used:
+//   renderengine::BlendState::GetParameters               @0x82B60A50
+//       SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.cpp
+//   ::ShaderConstantsExternal::HasShaderConstant
+//       GameShared/GameClasses/Graphics/CgsShaderConstants.cpp (serialised-block view --
+//       exactly what this call site hands it: a block inside a streamed technique blob)
+//   CgsContainers::CgsHash16::CalculateHash / CgsHash12::CalculateHash
+//       GameShared/GameClasses/Containers/CgsHash16.cpp / CgsHash12.cpp (no header exists
+//       for either; declared here against their definitions, as their other callers do).
 namespace CgsContainers
 {
-    namespace CgsHash16 { u32 CalculateHash(const void* pData, int liLen); u32 CalculateHash(const void*, int) { __debugbreak(); return 0; } }
-    namespace CgsHash12 { u32 CalculateHash(const void* pData, int liLen); u32 CalculateHash(const void*, int) { __debugbreak(); return 0; } }
+    // Return types differ between the two homes (CgsHash16.cpp returns int, CgsHash12.cpp
+    // returns unsigned int); both are the same 32-bit CRC accumulator.
+    namespace CgsHash16 { int CalculateHash(char* a1, int a2); }
+    namespace CgsHash12 { unsigned int CalculateHash(char* a1, int a2); }
 }
 
 namespace CgsResource
@@ -118,21 +118,55 @@ namespace CgsResource
 
     void MaterialTechniqueResourceType::PostFixUp(void* lpResource, const rw::Resource&) const
     {
-        // SEAM (platform-4 flip-type blob): all technique/material-state/shader slots are
-        // 32-bit u32 slots, indexed with u32 stride — NOT host-pointer stride. The previous
-        // void** indexing read pMaterial[1] at byte +8; the serialised material-state slot
-        // is the u32 @+4 (X360 lwz 4(r3)). Same for pMaterial[0] (shader, u32 @+0) and
-        // pMaterial[5] (context hash source, u32 @+20). Slot values become host pointers
-        // via PointerFromU32.
-        u32* lpuMaterial = static_cast<u32*>(lpResource);
+        // ============================================================================
+        // SERIALISED MATERIAL-TECHNIQUE BLOB -- the field map is ASM-ATTESTED (0x828A7EC8).
+        //
+        // Hex-Rays prints this function's `a2` as `int **`, so its `*(a2 + 4/5/6/7/8)`
+        // read as byte offsets 16/20/24/28/32. THE ASM SAYS OTHERWISE: every one of those
+        // accesses is a HALFWORD at half that offset --
+        //     lhz/sth  8(r31)   flags        (|= 1 alpha blend, |= 8 alpha test, |= 0x10 instancing)
+        //     sth      0xA(r31) CgsHash12(vertex program slot)
+        //     sth      0xC(r31) CgsHash12(pixel program slot)
+        //     sth      0xE(r31) CgsHash16(the u32 @ +0x14)
+        //     sth     0x10(r31) shader-profile digit
+        //     lwz     0x14(r31) the CgsHash16 source word
+        // and only mpShader/mpMaterialState (lwz 0/4) and the hash source are 32-bit.
+        //
+        // The doubled mapping was ACTIVELY DESTRUCTIVE: byte +24 and +28 are the technique's
+        // two per-stage BINDING LIST pointers (relocated by FixUp @+24/+28/+36, consumed by
+        // MaterialResourceType::PostFixUpShaderConstants @0x828A77E8 as `*(v7+24)` /
+        // `*(v7+28)`), so writing the two CgsHash12 results there overwrote both with
+        // 16-bit hashes -- the observed crash was a store through `lpTech+0x18 == 0x1F4`.
+        // Bug class (c): a field read/written at the wrong byte offset.
+        // ============================================================================
+        struct SerialisedMaterialTechnique
+        {
+            u32 muShader;              // +0x00  ShaderTechnique*   (import)
+            u32 muMaterialState;       // +0x04  MaterialState*     (import)
+            u16 mu16Flags;             // +0x08
+            u16 mu16VertexShaderHash;  // +0x0A
+            u16 mu16PixelShaderHash;   // +0x0C
+            u16 mu16MaterialStateHash; // +0x0E
+            u16 mu16ShaderProfile;     // +0x10
+            u16 mu16Pad12;             // +0x12
+            u32 muHashSource;          // +0x14
+            u32 muVertexBindingList;   // +0x18  relocated by FixUp
+            u32 muPixelBindingList;    // +0x1C  relocated by FixUp
+            u8  mu8VertexConstantCount;// +0x20  written by MaterialResourceType::PostFixUpShaderConstants
+            u8  mu8PixelConstantCount; // +0x21
+            u16 mu16Pad22;             // +0x22
+            u32 muSamplerBindingList;  // +0x24  relocated by FixUp (the third slot, X360 +36)
+        };
 
-        // [FLAG PC boot gate] mpShader (u32 slot @+0) and mpMaterialState (@+4) are cross-bundle
-        // IMPORTS. SHADERS.BNDL is not staged on this build (every technique is routed through
-        // the renderer's fallback shader), so CgsResource::Pool::ResolveImportForEntry writes a
-        // NULL there and this console-faithful walk -- which never sees a null on hardware --
-        // dereferences it. Report once and leave the technique's derived flags/hashes at their
-        // serialised values. DELETE when SHADERS.BNDL is staged.
-        if (lpuMaterial[0] == 0 || lpuMaterial[1] == 0)
+        SerialisedMaterialTechnique* const lpTechnique =
+            static_cast<SerialisedMaterialTechnique*>(lpResource);
+
+        // [FLAG PC boot gate] mpShader and mpMaterialState are cross-bundle IMPORTS out of
+        // SHADERS.BNDL. That bundle IS staged now, so this normally resolves; the gate stays
+        // for the world bundles whose technique imports still come back null (the console
+        // never sees a null here and would dereference it). DELETE when every world bundle
+        // resolves its shader imports.
+        if (lpTechnique->muShader == 0 || lpTechnique->muMaterialState == 0)
         {
             static bool sbLoggedUnresolved = false;
             if (!sbLoggedUnresolved && (CgsDev::Message::gxMessageFilterFlags & 1))
@@ -140,67 +174,102 @@ namespace CgsResource
                 sbLoggedUnresolved = true;
                 *CgsDev::Log::gpDebugPrint
                     << "MaterialTechniqueResourceType::PostFixUp: shader/material-state import"
-                       " unresolved (SHADERS.BNDL not staged) -- technique left as serialised"
-                       " [FLAG PC boot gate]\n";
+                       " unresolved -- technique left as serialised [FLAG PC boot gate]\n";
             }
             return;
         }
 
-        CGS_ASSERT(lpuMaterial[1] != 0, "lpMaterial->mpMaterialState");         // u32 slot @+4
-        const u32* lpuMaterialState = PointerFromU32<const u32>(lpuMaterial[1]);
+        CGS_ASSERT(lpTechnique->muMaterialState != 0, "lpMaterial->mpMaterialState");
+        const u32* lpuMaterialState = PointerFromU32<const u32>(lpTechnique->muMaterialState);
         CGS_ASSERT(lpuMaterialState[0] != 0, "lpMaterial->mpMaterialState->mpBlendState"); // u32 slot @+0
         if (lpuMaterialState[0] == 0)
         {
             return;   // same gate: the blend state never arrived
         }
 
-        // Blend-state default parameter block (0x07070706 RGBA write masks etc.),
-        // populated in place by GetParameters; the trailing bytes are the per-stage
-        // enable flags read back below.
-        struct BlendParams
-        {
-            u32 mauDword[12];
-            u8  mabEnable[8];
-        } lParams = {};
-        lParams.mauDword[0] = 0x07060706u; // 117835526
-        lParams.mauDword[1] = 0x07060706u;
-        lParams.mauDword[2] = 0x07060706u;
-        lParams.mauDword[3] = 0x07060706u;
-        lParams.mauDword[4] = 7;
-        lParams.mauDword[5] = 15;
-        lParams.mauDword[6] = 15;
-        lParams.mauDword[7] = 15;
-        lParams.mauDword[8] = 15;
-        lParams.mauDword[9] = 135;
-        lParams.mauDword[10] = 0;
-        lParams.mauDword[11] = static_cast<u32>(-1);
+        // The X360 seeds the 56-byte stack parameter block with the engine's blend defaults
+        // (v12[0..11] + the seven trailing flag bytes) before calling GetParameters. Every
+        // one of those fields is overwritten by GetParameters, so the seed only matters for
+        // faithfulness; reproduced verbatim in the X360's store order.
+        renderengine::BlendStateParameters lParams;
+        lParams.maBlendFactor[0] = 117835526u;   // v12[0]
+        lParams.maBlendFactor[1] = 117835526u;   // v12[1]
+        lParams.maBlendFactor[2] = 117835526u;   // v12[2]
+        lParams.maBlendFactor[3] = 117835526u;   // v12[3]
+        lParams.muState4  = 15u;                 // v12[5]
+        lParams.muState5  = 15u;                 // v12[6]
+        lParams.muState6  = 15u;                 // v12[7]
+        lParams.muState7  = 15u;                 // v12[8]
+        lParams.muState15 = 7u;                  // v12[4]
+        lParams.muState8  = 135u;                // v12[9]
+        lParams.muState9  = static_cast<u32>(-1);// v12[11]
+        lParams.mbHasCustomBlendFactors = 0;     // v13
+        lParams.mbState10 = 0;                   // v14
+        lParams.mbState11 = 0;                   // v15
+        lParams.mbState12 = 0;                   // v16
+        lParams.mbState13 = 0;                   // v17
+        lParams.mbState14 = 0;                   // v18
+        lParams.muState17 = 0u;                  // v12[10]
+        lParams.mbState16 = 0;                   // v19
 
-        renderengine::BlendState::GetParameters(PointerFromU32<void>(lpuMaterialState[0]), &lParams);
+        renderengine::BlendState::GetParameters(
+            PointerFromU32<const renderengine::BlendMaterialState>(lpuMaterialState[0]), &lParams);
 
-        u32* lpuFlags = lpuMaterial + 4;   // u32 slot @+16 (unchanged: already u32 stride)
-        if (lParams.mabEnable[0])
-            *lpuFlags |= 1u;       // alpha blend
-        if (lParams.mabEnable[6])
-            *lpuFlags |= 8u;       // alpha test
+        // X360 v13 == params byte +48, v19 == params byte +54 (the first and last of the
+        // seven trailing flag bytes) -- BlendStateParameters' mbHasCustomBlendFactors and
+        // mbState16 by the committed names. The flag word is the HALFWORD @+8
+        // (lhz/ori/sth 8(r31)).
+        if (lParams.mbHasCustomBlendFactors)
+            lpTechnique->mu16Flags |= 1u;       // alpha blend
+        if (lParams.mbState16)
+            lpTechnique->mu16Flags |= 8u;       // alpha test
 
-        // SEAM: shader pointer = u32 slot @+0 (was pMaterial[0], which read the u64 @+0);
-        // the shader blob itself is likewise walked with u32 stride (slots 0/1/7/11/37).
-        u32*   lpuShader   = PointerFromU32<u32>(lpuMaterial[0]);
-        u32    luVtxShader = lpuShader[0];
-        u32    luPixShader = lpuShader[1];
+        // The shader technique blob is walked with u32 stride (slots 0/1/7/11/37 == bytes
+        // 0/4/0x1C/0x2C/0x94 -- the asm's `addi r3, r11, 0x1C` / `0x2C` / `lwz 0x94(r11)`).
+        u32*      lpuShader   = PointerFromU32<u32>(lpTechnique->muShader);
+        const u32 luVtxShader = lpuShader[0];
+        const u32 luPixShader = lpuShader[1];
+        // Bytes +0x1C and +0x2C are the technique's two vertex-stage ShaderConstantsExternal
+        // sub-blocks -- an interior VIEW of the streamed blob, not a stored pointer, so this
+        // is a placement cast (HasShaderConstant walks the serialised word layout, matching
+        // this blob).
+        const ::ShaderConstantsExternal* const lpObjectVsBlock =
+            reinterpret_cast<const ::ShaderConstantsExternal*>(lpuShader + 7);
+        const ::ShaderConstantsExternal* const lpGlobalVsBlock =
+            reinterpret_cast<const ::ShaderConstantsExternal*>(lpuShader + 11);
         if (luVtxShader
-            && (ShaderConstantsExternal::HasShaderConstant(lpuShader + 7, "InstancingMatrixArray")
-             || ShaderConstantsExternal::HasShaderConstant(lpuShader + 11, "InstancingMatrixArray")))
+            && (lpObjectVsBlock->HasShaderConstant("InstancingMatrixArray")
+             || lpGlobalVsBlock->HasShaderConstant("InstancingMatrixArray")))
         {
-            *lpuFlags |= 0x10u;    // hardware instancing
+            lpTechnique->mu16Flags |= 0x10u;    // hardware instancing
         }
 
-        // SEAM: context hash source = u32 slot @+20 (was pMaterial[5] = byte +40 on x64).
-        u32 luContextHash = lpuMaterial[5];
-        lpuMaterial[7] = CgsContainers::CgsHash16::CalculateHash(&luContextHash, 4);
-        lpuMaterial[5] = CgsContainers::CgsHash12::CalculateHash(&luVtxShader, 4);
-        u32 luResult = CgsContainers::CgsHash12::CalculateHash(&luPixShader, 4);
-        lpuMaterial[6] = luResult;
-        lpuMaterial[8] = lpuShader[37] - 48;
+        // The three cached hashes, in the X360's call order (lwz 0x14 -> CgsHash16 -> sth 0xE,
+        // CgsHash12(vertex) -> sth 0xA, CgsHash12(pixel) -> sth 0xC). All three results are
+        // stored as HALFWORDS.
+        u32 luHashSource = lpTechnique->muHashSource;
+        u32 luVtxSource  = luVtxShader;
+        u32 luPixSource  = luPixShader;
+        lpTechnique->mu16MaterialStateHash = static_cast<u16>(CgsContainers::CgsHash16::CalculateHash(
+            reinterpret_cast<char*>(&luHashSource), 4));
+        lpTechnique->mu16VertexShaderHash = static_cast<u16>(CgsContainers::CgsHash12::CalculateHash(
+            reinterpret_cast<char*>(&luVtxSource), 4));
+        lpTechnique->mu16PixelShaderHash = static_cast<u16>(CgsContainers::CgsHash12::CalculateHash(
+            reinterpret_cast<char*>(&luPixSource), 4));
+
+        // X360 tail: `lwz r11,0(r31); lwz r11,0x94(r11); lbz r11,0(r11); extsb; addis +1;
+        // addi -0x30; sth r11,0x10(r31)` -- load the shader technique's NAME pointer
+        // (blob byte +0x94 == +148), DEREFERENCE its first byte, sign-extend, subtract 48.
+        // (The addis +0x10000 is discarded by the halfword store.) The stored value is the
+        // technique's shader-PROFILE digit, which ShaderTechniqueResourceType::PostFixUp
+        // @0x827EEBF0 stamps into that first byte during its strstr classification.
+        // [FLAG PC boot gate] that classification pass is still inert (see the WorldLinkStubs
+        // gate), so this reads the un-stamped first character of the technique name. Correct
+        // by construction the moment ShaderTechnique PostFixUp lands; no consumer of the
+        // profile field is reconstructed yet.
+        const char* const lpcTechniqueName = PointerFromU32<const char>(lpuShader[37]);
+        lpTechnique->mu16ShaderProfile = lpcTechniqueName
+            ? static_cast<u16>(static_cast<s8>(*lpcTechniqueName) - 48)
+            : static_cast<u16>(0);
     }
 }

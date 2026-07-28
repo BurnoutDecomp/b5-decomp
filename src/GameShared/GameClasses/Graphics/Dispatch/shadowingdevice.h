@@ -82,7 +82,12 @@ namespace shadow
         // On the bring-up path (converted SHADERS bundle not yet loaded / constant
         // dispatch not yet reconstructed) this binds the FLAGGED fallback world
         // shader and per-pass default states instead -- see shadowingdevice.cpp.
+        // lpMaterialAssembly is the walk's MaterialAssembly (the serialised Material blob
+        // the technique came out of) -- the X360 reaches the same object through the
+        // register it already holds; the PC seam takes it explicitly because the sampler
+        // table (+0x0C) lives on the assembly, not the technique.
         static void SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
+                                       const void* lpMaterialAssembly,
                                        void* const* lppConstScratch, bool lbZOnly);
 
         // [PC bring-up shim] Upload the per-object world-view-projection carried in

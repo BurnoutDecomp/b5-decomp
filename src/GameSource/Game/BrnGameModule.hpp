@@ -185,6 +185,20 @@ namespace BrnGame
             E_GAMEUPDATESTAGE_RELEASE = 2,
         };
 
+        // h:456 - the resumable GamePrepare() stage machine (X360 gm+10094164). The
+        // stage VALUES are the X360 switch labels of 0x823EFBD0: 0/1 queue the three
+        // one-time LoadBundle requests, 2 waits for all three completions and posts the
+        // six global-texture acquires, 3 waits for those and runs
+        // BrnRendererModule::PrepareAgain, 4 runs the GameState module's game-prepare.
+        enum EGamePrepareStage
+        {
+            E_GAMEPREPARESTAGE_START        = 0,
+            E_GAMEPREPARESTAGE_LOADBUNDLES  = 1,
+            E_GAMEPREPARESTAGE_WAITBUNDLES  = 2,
+            E_GAMEPREPARESTAGE_WAITACQUIRES = 3,
+            E_GAMEPREPARESTAGE_GAMESTATE    = 4,
+        };
+
         enum EReleaseStage   // h:210 - the resumable Release() stage machine
         {
             E_RELEASESTAGE_START = 0,
@@ -496,7 +510,8 @@ namespace BrnGame
         bool mbRequestDoPlayFrame;                                   // h:414
         // [h:415-453: streaming flags, input-bind state, gui-flow, prepare stages - omitted]
         EReleaseStage    meReleaseStage;                             // h:455 (Release() stage machine)
-        // [h:456-457: meGamePrepareStage, meGameReleaseStage - omitted]
+        EGamePrepareStage meGamePrepareStage;                        // h:456 (X360 gm+10094164)
+        // [h:457: meGameReleaseStage - omitted]
         EGameUpdateStage meGameUpdateStage;                          // h:458
         s32 miNumSimFramesRequired;                                  // h:459
         BrnGameMainFlowController::GameMainFlowController mMainFlowStateMachine; // h:462
@@ -527,6 +542,14 @@ namespace BrnGame
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
         // reads it (BrnRendererModule::Render's per-frame AddCommand forward).
         BrnGame::DispatchThreadInputBufferManager mDispatchThreadInputBufferManager; // h:531
+        // The GamePrepare response queue (X360 gm+10094268; its miCount is the
+        // gm+10094276 the stage machine tests and its miStartOffset the gm+10094280
+        // the event walk adds to the base). The X360 capacity is not recoverable from
+        // the pseudocode -- GamePrepare receives at most 3 LoadBundleResponses plus the
+        // 6 acquire responses, so the same <1024,16> instantiation WorldModule uses
+        // covers it with headroom.
+        CgsModule::EventReceiverQueue<1024, 16> mGamePrepareReceiverQueue;
+        bool mbGamePrepareReceiverQueueConstructed;
         // [remaining members - omitted]
 
         // ---- controller-bridge inputs (real names; off-path absolute offsets noted) -------------

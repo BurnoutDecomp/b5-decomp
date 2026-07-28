@@ -70,6 +70,12 @@ namespace renderengine
     bool WorldFallbackShader_Bind();
     // Upload the row-vector WVP (4x float4) for the fallback shader.
     void WorldFallbackShader_SetWvp(const f32* lpWvpRows16);
+    // Bind a material's own sampler textures (the DATA half of the X360 technique bind --
+    // DispatchAllMeshes' lpaInternalSamplers loop). Returns true when a texture was bound.
+    bool WorldMaterialSamplers_Bind(const void* lpMaterialAssembly);
+    // Pick the fallback pair (flat vs textured) for the mesh whose declaration was just
+    // resolved -- see the note on Vd32Cached::mbHasTexcoord0 in the shim TU.
+    void WorldFallbackShader_SelectForMesh();
     // Resolve + cache a D3D9 vertex declaration and the stream-0 stride from the 32-bit
     // serialised VertexDescriptor image the converted world data carries.
     void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride);
@@ -554,19 +560,28 @@ namespace shadow
     // [PC leaf] Technique-change bind. The X360 path (DispatchAllMeshes
     // @0x827F2718) binds the technique's render-state triple through the
     // shadowed low-level setters, the vertex/pixel Xenos programs through
-    // SetVertexProgram/SetPixelProgram, and gathers the technique constants
-    // into the GPU constant memory. The PC bring-up substitutes:
+    // SetVertexProgram/SetPixelProgram, gathers the technique constants into the
+    // GPU constant memory, and finally binds the material's samplers. The PC
+    // bring-up substitutes:
     //   * states: NOT bound from data yet (the MaterialState porter + the
     //     x64 state-object seam are still open) -- the per-pass defaults set by
     //     the renderer stand; FLAG [PC bring-up].
-    //   * programs/constants: the FLAGGED fallback world shader (the converted
-    //     SHADERS bundle exists -- tools/assets/shaders/out/SHADERS_PC.BNDL --
-    //     but its load/PostFixUp path and the constant dispatch are not wired;
-    //     until then every technique draws through the fallback).
+    //   * programs/constants: the FLAGGED fallback world shader. SHADERS.BNDL is
+    //     now STAGED AND LOADED (BrnGameModule::GamePrepare), so the technique's
+    //     real vertex/pixel ProgramBuffers resolve -- but binding them requires the
+    //     engine-constant dispatch, which needs ShaderConstantsExternal::PostFixUp
+    //     (X360 sub_827ED8D0, still inert). Binding real programs without their
+    //     constants would draw nothing at all, so the fallback keeps the transform
+    //     until that lands. DELETE-when: the constant dispatch is live.
+    //   * SAMPLERS: REAL as of the textures wave -- the material's own
+    //     TextureState/raster chain is bound to its sampler units, and the fallback
+    //     pixel shader samples s0. This is what puts the world's textures on screen.
     void Device::SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* /*lpTechnique*/,
+                                    const void* lpMaterialAssembly,
                                     void* const* /*lppConstScratch*/, bool /*lbZOnly*/)
     {
         renderengine::WorldFallbackShader_Bind();
+        renderengine::WorldMaterialSamplers_Bind(lpMaterialAssembly);
     }
 
     // [PC bring-up shim] Per-object WVP for the fallback shader.
@@ -595,6 +610,11 @@ namespace shadow
 
         renderengine::WorldDraw_SetIndexSource(lppBuffers[0]);
         renderengine::WorldDraw_SetVertexSource(luNumVb != 0 ? lppBuffers[1] : 0, luStride);
+
+        // [PC bring-up shim] The fallback pair can only be chosen once this mesh's
+        // declaration is known (a vs_3_0 input the declaration does not supply makes the
+        // draw fail on D3D9), so the technique bind above leaves the choice to here.
+        renderengine::WorldFallbackShader_SelectForMesh();
     }
 
     // [PC leaf] Issue the indexed draw from the mesh's DrawIndexedParameters

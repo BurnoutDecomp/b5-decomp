@@ -35,6 +35,23 @@ namespace rw { namespace core { struct GeneralResourceAllocator; } }
 // here; the helper bodies include the real home, GameSource/Resource/BrnGameDataModuleIO.h).
 namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct OutputBuffer; } }
 
+namespace BrnGameMainFlowController
+{
+    // The GameData IO pair the scripted-load spine brackets every frame.
+    //
+    // [PC placement] the X360 keeps this pair as GAME-MODULE members (gm+10055440 =
+    // the input, gm+10055444 = the output; BrnGameModule::GamePrepare @0x823EFBD0 opens
+    // with LockForWrite(gm+10055440) / LockForRead(gm+10055444) and the scripted-load
+    // spine @0x823F22D8 brackets the same pair). The PC host owns one constructed-once
+    // pair here instead. GamePrepare needs the SAME pair -- its LoadBundle requests have
+    // to reach the one GameDataModule pump -- so it is published through these accessors
+    // rather than duplicated. Both accessors bring the pair up on first use (the
+    // construction has to be idempotent because GamePrepare runs on the update thread
+    // BEFORE the first flow-state Update of the boot frame).
+    BrnResource::GameDataIO::InputBuffer*  GetScriptedLoadGameDataInput();
+    BrnResource::GameDataIO::OutputBuffer* GetScriptedLoadGameDataOutput();
+}
+
 // --- base -------------------------------------------------------------------------------
 struct MainGameFlowState
 {
