@@ -45,12 +45,20 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent (base)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                       // BrnGui::GuiFlow (AppendExpectedAptComponent)
+
+// The state in-queue the Update surface drains (pointer-only; same modelling note as
+// CgsGuiState.h -- InputBuffer is the global event-queue NAMESPACE).
+namespace InputBuffer { class GuiEventQueue; }
 
 namespace BrnGui
 {
     // MapManager's real out-of-line ctor is called on the sub-object embedded inside
     // mMainMapComponent (declaration-only here; body links from BrnMapManager.cpp).
     class MapManager;
+
+    class  GuiCache;                    // tail member / AppendExpectedAptComponent arg (pointer only)
+    struct GuiEventNetworkGameParams;   // SetInfo arg (pointer only; home GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h)
 
     // GuiNetworkRouteInfo : public CgsGui::GuiComponent (DWARF BrnGuiNetworkRouteInfo.h:56).
     // X360 `this` spans through +0x20E0 (the last ctor write is the mEvent vtable slot); the
@@ -82,10 +90,35 @@ namespace BrnGui
             E_OPTION_COMPONENT_COUNT            = 9,
         };
 
+        // The apt component count the loaded gate compares against (DWARF
+        // BrnGuiNetworkRouteInfo.h KI_NUM_COMPONENTS_TO_LOAD == 11; the X360 keeps it
+        // in .data @0x8204C7A0 and the game-room screen loads it from there).
+        static const s32 KI_NUM_COMPONENTS_TO_LOAD = 11;
+
         // @0x82511568 -- default constructor. Installs the component vtable, brings up the
         // nine option-group animators + heading/value text fields and the main map component
         // (running the embedded MapManager ctor), then installs the game-mode event vtable.
         GuiNetworkRouteInfo();
+
+        // ---- surface the composing screen states drive (DWARF rows; bodies are their
+        //      own ledger TUs -- declarations only, wave-H keystone) -------------------
+        // DWARF h:118 Construct(const char*, GuiEventRenderMainMap::EMapType,
+        // StateInterface*, const char*); the map-type enum's home header is not pulled
+        // in -- underlying s32 per this header's boundary convention.
+        void Construct(const char* lpacName, s32 leMapType,
+                       CgsGui::StateInterface* lpStateInterface, const char* lpacSatNavIconBaseName);
+        void Destruct();                                          // DWARF :62
+        void SetState(EState leState);                            // DWARF :81
+        // DWARF :115 SetInfo(int32_t, const GuiEventNetworkGameParams*): the round
+        // index + the params payload to render (fwd-declared; home
+        // GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h).
+        void SetInfo(s32 liRoundIndex, const GuiEventNetworkGameParams* lpGameParams);
+        void Update(InputBuffer::GuiEventQueue* lpInGuiEventQueue); // DWARF :112
+        void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache); // DWARF :89
+
+        // DWARF :109 -- the loaded gate the game-room screen inlines
+        // (miNumComponentsLoaded == KI_NUM_COMPONENTS_TO_LOAD).
+        bool IsComponentLoaded() const { return miNumComponentsLoaded == KI_NUM_COMPONENTS_TO_LOAD; }
 
     private:
         // ---- ctor-touched sub-object offsets (X360 byte offsets, from ctor @0x82511568) ----
@@ -99,9 +132,26 @@ namespace BrnGui
         static const int KI_MAP_MANAGER        = 0x1ADC;  // MapManager sub-object (MainMap +0x8C)
         static const int KI_EVENT              = 0x20E0;  // mEvent vtable slot
 
-        // Backing storage for the (not-yet-named) embedded sub-objects. Sized to cover every
-        // ctor-touched location; access is by X360 byte offset through a char* view of `this`.
-        // The base sub-object occupies 0x00..0x8B; own members begin at KI_ANIMATOR_BASE.
-        u8 maStorage[0x20E4 - 0x8C];  // 0x8C .. 0x20E3
+        // Backing storage for the (not-yet-named) embedded sub-objects. Sized to cover the
+        // ctor-touched span AND the mEvent record tail (X360 0x20E0..0x219B, 0xBC bytes --
+        // the named tail above starts at +0x219C); access is by X360 byte offset through a
+        // char* view of `this`. The base sub-object occupies 0x00..0x8B; own members begin
+        // at KI_ANIMATOR_BASE. (Wave-H keystone: grown from 0x20E4 so the DWARF tail
+        // members could land as NAMED members after it.)
+        u8 maStorage[0x219C - 0x8C];  // 0x8C .. 0x219B
+
+    public:
+        // ---- named tail members (DWARF order mpGuiCache..mbShowingMap; X360 offsets
+        //      +0x219C..+0x21AD, pinned by the game-room screen's raw accesses:
+        //      miNumComponentsLoaded @+0x21A0 is stored/compared at abs +84304 of the
+        //      OGRPI object whose mRouteInfoDisplay sits at +75696; X360
+        //      sizeof(GuiNetworkRouteInfo) == 0x21B0/8624). PUBLIC: the X360 game-room
+        //      screen writes miNumComponentsLoaded directly (no setter row in DWARF).
+        GuiCache* mpGuiCache;              // +0x219C (8604)
+        s32       miNumComponentsLoaded;   // +0x21A0 (8608) == KI_NUM_COMPONENTS_TO_LOAD once loaded
+        s32       meSelectedCounty;        // +0x21A4 (8612) BrnWorld::ECounty (underlying s32)
+        EState    meState;                 // +0x21A8 (8616)
+        bool      mbReceivedInfo;          // +0x21AC (8620)
+        bool      mbShowingMap;            // +0x21AD (8621)
     };
 }

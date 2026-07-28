@@ -74,6 +74,13 @@ namespace BrnGui
         // MenuToggleGroupVarSize<N>::Unloaded.
         void Unloaded();
 
+        // Per-frame tick. Reached through the component vtable's slot 5, e.g. the
+        // OnlineGameRoomPlayerInfo E_SUBSTATE_CHALLENGES arm @0x824B1318 does
+        // `lwz r11,0(mChallengeToggle); lwz r11,0x14(r11); bctrl`. The header comment above
+        // already lists Update among the members other MenuToggle TUs own; it was simply
+        // missing from this declaration block.
+        void Update();
+
         // ----- recovered layout (member-by-name; reserved head carries the unrecovered base) -----
         u8               maHeadReserved[0x0C];   // +0x00..+0x0B (GuiComponent base head)
         u8               muFlags;                // +0x0C (dirty flags; HighlightNext/Prev |= 0x10)
