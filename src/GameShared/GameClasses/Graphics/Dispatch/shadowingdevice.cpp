@@ -220,6 +220,7 @@ namespace shadow
     void* Device::mpLastBlendState = nullptr;
     void* Device::mpLastDepthStencilState = nullptr;
     void* Device::mpLastRasterizerState = nullptr;
+    bool  Device::mbLastBlendZOnly = false;
 
     bool Device::Initialize()
     {
@@ -718,6 +719,7 @@ namespace shadow
         mpLastBlendState        = nullptr;
         mpLastDepthStencilState = nullptr;
         mpLastRasterizerState   = nullptr;
+        mbLastBlendZOnly        = false;
     }
 
     // =====================================================================================
@@ -857,7 +859,8 @@ namespace shadow
     // skip a re-bind it needed to make. Each applier is therefore always called on its
     // FULL-SET branch (the console's lbWasUnset == true path), which is identical in effect,
     // only chattier.
-    void Device::SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique)
+    void Device::SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
+                                           bool lbZOnly)
     {
         const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
         if (lpTech == 0)
@@ -885,20 +888,24 @@ namespace shadow
         }
 
         {
-            // [DIAG one-shot x8] the distinct state triples the world walk actually binds.
-            static const void* sapSeen[8] = {};
+            // [DIAG one-shot x16] the distinct state triples the world walk actually binds,
+            // tagged with the pass that bound them (Z = the depth-only pre-pass / shadow walk).
+            static const void* sapSeen[16] = {};
+            static bool sabSeenZOnly[16] = {};
             static u32 suSeen = 0;
-            bool lbNew = (suSeen < 8u);
+            bool lbNew = (suSeen < 16u);
             for (u32 lu = 0; lu < suSeen && lbNew; ++lu)
-                if (sapSeen[lu] == lpMaterialState) lbNew = false;
+                if (sapSeen[lu] == lpMaterialState && sabSeenZOnly[lu] == lbZOnly) lbNew = false;
             if (lbNew && (CgsDev::Message::gxMessageFilterFlags & 1))
             {
+                sabSeenZOnly[suSeen] = lbZOnly;
                 sapSeen[suSeen++] = lpMaterialState;
                 const renderengine::BlendMaterialState* lpB = lpMaterialState->mpBlendState;
                 const renderengine::DepthStencilState*  lpD = lpMaterialState->mpDepthStencilState;
                 const renderengine::RasterizerState*    lpR = lpMaterialState->mpRasterizerState;
                 *CgsDev::Log::gpDebugPrint
-                    << "[WorldState] ms=" << lpMaterialState
+                    << "[WorldState] pass=" << (lbZOnly ? "PREZ" : "COLOUR")
+                    << " ms=" << lpMaterialState
                     << " blend0=" << (lpB ? lpB->maState[0] : 0u)
                     << " cwe=" << (lpB ? lpB->maState[4] : 0u)
                     << " atest=" << (lpB ? lpB->maState[16] : 0u)
@@ -919,10 +926,44 @@ namespace shadow
             mpLastDepthStencilState = lpMaterialState->mpDepthStencilState;
             Xbox2SetDepthStencilStateLowLevelShadowed(mpLastDepthStencilState, true);
         }
-        if (lpMaterialState->mpBlendState != mpLastBlendState)
+        if (lpMaterialState->mpBlendState != mpLastBlendState || mbLastBlendZOnly != lbZOnly)
         {
             mpLastBlendState = lpMaterialState->mpBlendState;
-            Xbox2SetStateLowLevelShadowed(mpLastBlendState, true);
+            mbLastBlendZOnly = lbZOnly;
+            if (!lbZOnly)
+            {
+                Xbox2SetStateLowLevelShadowed(mpLastBlendState, true);
+            }
+            else if (mpLastBlendState != 0)
+            {
+                // FLAG PC-platform leaf. THE CONSOLE'S Z-ONLY BLEND STATE IS AN ENGINE
+                // GLOBAL, NOT THE MATERIAL'S: DrawRenderableMeshZOnly::Interpret
+                // @0x827F5AC8 binds `(techniqueFlags >> 3) & 1 ? dword_83010F90
+                // : dword_83010F8C` (sub_82276A68 == this same applier) while taking the
+                // depth-stencil and rasteriser objects out of the technique's own
+                // MaterialState. Those two globals are DATA -- the IDA exports carry no
+                // data section, and the only other reference to either in all 30084
+                // exported functions is BrnRendererModule::BeginQuarterResBuffer
+                // @0x82408C38, which reads dword_83010F8C the same way. Their contents
+                // are therefore unattested.
+                //
+                // What they must be is not: a depth-only pass writes no colour, and the
+                // choice is made on the alpha-test flag alone. So the leaf takes the
+                // technique's OWN blend state -- which for a real pre-Z technique variant
+                // already carries ColorWriteEnable == 0 (5 of the 11 MaterialStates in the
+                // shipped world data are exactly that) and the material's own alpha func /
+                // ref -- and forces the four ColorWriteEnable words to 0. That makes the
+                // pass depth-only even for a mesh whose assembly has no separate pre-Z
+                // technique (the pre-Z technique index is clamped to numVertexDescriptors-1,
+                // so such a mesh re-uses its COLOUR technique here).
+                renderengine::BlendMaterialState lZOnlyBlend =
+                    *static_cast<const renderengine::BlendMaterialState*>(mpLastBlendState);
+                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE]  = 0u;
+                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE1] = 0u;
+                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE2] = 0u;
+                lZOnlyBlend.maState[renderengine::BlendMaterialState::E_WORD_COLOUR_WRITE_ENABLE3] = 0u;
+                Xbox2SetStateLowLevelShadowed(&lZOnlyBlend, true);
+            }
         }
         if (!mbRasteriserStateLocked && lpMaterialState->mpRasterizerState != mpLastRasterizerState)
         {
@@ -952,7 +993,7 @@ namespace shadow
         }
 
         // ---- render states -------------------------------------------------------------
-        SetMaterialRenderStatesPC(lpTechnique);
+        SetMaterialRenderStatesPC(lpTechnique, lbZOnly);
 
         // ---- programs ------------------------------------------------------------------
         // The program payload is ProgramBufferData + 0x14 (VertexProgramState::
@@ -1027,7 +1068,17 @@ namespace shadow
         // table. Only the samplers this technique actually names are bound -- unlike the
         // bring-up path, which binds every material-scope sampler because the fallback
         // pixel shader only has s0.
-        BindTechniqueSamplers(lpTech, lpAssembly);
+        //
+        // The Z-only interpreter binds the pixel side ONLY for an alpha-tested technique
+        // (@0x827F5AC8: `if ((flags >> 3) & 1) { SetPixelProgram(ps); <these samplers> }
+        // else SetPixelProgram(0)`) -- a depth-only draw of an opaque surface needs no
+        // texture at all. Same gate here; the pixel PROGRAM itself stays bound because
+        // D3D9 has no null-pixel-shader path alongside a vs_3_0 (FLAG PC-platform leaf,
+        // and harmless: the pass writes no colour).
+        if (!lbZOnly || ((lpTechnique->mu16Flags >> 3) & 1u) != 0u)
+        {
+            BindTechniqueSamplers(lpTech, lpAssembly);
+        }
     }
 
     // [PC leaf] The PER-MESH half of the same inlined X360 block: the technique's two

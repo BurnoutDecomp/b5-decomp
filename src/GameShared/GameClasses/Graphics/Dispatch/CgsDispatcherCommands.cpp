@@ -1098,14 +1098,88 @@ void* ObjectToMeshJob_ExecuteImplementation(void* lpJobScratch, const u32* lpInp
 
 // =============================================================================
 // DrawRenderableMeshZOnly::Interpret @ 0x827F5AC8 -- the depth-only GPU path
-// (shadow cascades / pre-Z). ~3K lines of Xenos state programming; its PC
-// callers are all gated off (shadow + pre-Z switches), so it stays a loud trap
-// until the shadow-map pass is brought up.
+// (the pre-Z pass and the shadow cascades).
+//
+// Same shape as the per-record body DispatchAllMeshes inlines, with the three
+// differences the asm spells out:
+//
+//  1. STATES. The console reads the technique's MaterialState and binds its
+//     DEPTH-STENCIL (+0x04) and RASTERISER (+0x08) objects exactly as the colour
+//     walk does, but the BLEND object comes from one of two engine-wide Z-only
+//     states -- `(technique->mu16Flags >> 3) & 1 ? dword_83010F90 :
+//     dword_83010F8C` -- instead of the material's own. See the FLAG in
+//     shadow::Device::SetMaterialRenderStatesPC for how the PC leaf reproduces
+//     the two globals (whose contents no export attests).
+//  2. PIXEL SIDE. Only an ALPHA-TESTED technique binds a pixel program and the
+//     technique's samplers; otherwise the console binds `SetPixelProgram(0)` and
+//     no textures at all. Neither pixel constant block runs -- which is exactly
+//     why AddShaderTechniqueConstantsToDispatchBin skips the pixel blocks for a
+//     z-only command, so the scratch table here is [A][B] rather than [A][C][B][D].
+//  3. CACHE. The technique-change compare is against the companion cache word
+//     (dword_83010FA8), not the colour walk's dword_83010FA4, so a pre-Z pass and
+//     a colour pass over the same technique do not shadow each other's binds.
+//
+// The record decode, the technique clamp, the mesh bind and the draw are
+// identical to the colour walk's.
 // =============================================================================
-void DrawRenderableMeshZOnly::Interpret(DispatchCommand* /*lpCommand*/, DispatchFrame* /*lpFrame*/,
+void DrawRenderableMeshZOnly::Interpret(DispatchCommand* lpCommand, DispatchFrame* /*lpFrame*/,
                                         void* /*lpUserData*/, f32 /*lfTime*/)
 {
-    CGS_ASSERT(false, "DrawRenderableMeshZOnly::Interpret not yet reconstructed (GPU command stream)");
+    u32* const lpPacket = reinterpret_cast<u32*>(lpCommand);
+    CGS_ASSERT(CommandIdOf(lpPacket[0]) == DispatchCommand::E_DRAWRENDERABLEMESHZONLY,
+               "lpCommand->GetCommandID() == DRAWRENDERABLEMESHZONLY");
+
+    RenderableMesh* lpMesh =
+        reinterpret_cast<RenderableMesh*>(ReadCommandPointer(&lpPacket[2]));
+    const u32 luWord1      = lpPacket[1];
+    const u8  lu8Technique = static_cast<u8>(luWord1 & 0xFFu);
+    const u8  lu8Instances = static_cast<u8>((luWord1 >> 8) & 0xFFu);
+
+    const MaterialAssembly* lpAssembly = lpMesh->mpMaterialAssembly;
+
+    // [FLAG PC boot gate] the same unresolved-Material guard DrawRenderable::Interpret
+    // carries: a mesh whose Material import lives in a bundle the pool refused keeps a
+    // null assembly, and the console's unguarded read would be an access violation here.
+    if (lpAssembly == 0 || lpAssembly->GetLength() == 0)
+        return;
+
+    CGS_ASSERT(lpMesh->mu8NumVertexDescriptors == lpAssembly->GetLength(),
+               "lpMesh->GetNumVertexDescriptors() == lpMesh->mpMaterialAssembly->GetLength()");
+
+    u32 luTechnique = lu8Technique;
+    const u32 luLen = lpAssembly->GetLength();
+    if (luLen - 1u < luTechnique) luTechnique = luLen - 1u;
+    CGS_ASSERT(luTechnique < luLen, "Material technique index out of range.");
+
+    const MaterialTechniqueView* lpTechnique =
+        reinterpret_cast<const MaterialTechniqueView*>(lpAssembly->GetMaterial(luTechnique));
+    CGS_ASSERT(lpTechnique != 0, "lpMaterial");
+
+    Vector4** lppConstScratch =
+        reinterpret_cast<Vector4**>(ReadCommandPointer(&lpPacket[4]));
+
+    if (reinterpret_cast<uintptr_t>(lpTechnique) != suLastTechniqueAux)
+    {
+        suLastTechniqueAux = reinterpret_cast<uintptr_t>(lpTechnique);
+        shadow::Device::SetMeshTechniquePC(
+            lpTechnique, lpAssembly, reinterpret_cast<void* const*>(lppConstScratch), true);
+    }
+
+    shadow::Device::SetMeshObjectConstantsPC(
+        lpTechnique, reinterpret_cast<void* const*>(lppConstScratch), true);
+
+    // [PC bring-up shim] the per-object WVP carried in the command (payload qwords 1..4).
+    shadow::Device::SetObjectTransformPC(reinterpret_cast<const f32*>(&lpPacket[8]));
+
+    shadow::Device::SetMeshBuffersPC(lpMesh, luTechnique);
+    if (lu8Instances > 1u && lpMesh->mu8InstanceCount > 1u)
+    {
+        CGS_ASSERT(false, "DrawInstancedIndexedPrimitive_Custom not yet reconstructed on PC");
+    }
+    else
+    {
+        shadow::Device::DrawIndexedMeshPC(lpMesh);
+    }
 }
 
 } // namespace CgsGraphics

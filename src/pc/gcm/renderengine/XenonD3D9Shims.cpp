@@ -509,6 +509,13 @@ namespace renderengine
         lpDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
         lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
         lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+        // Colour writes ON. A world pass' own techniques override this from their
+        // MaterialState -- and the Z pre-pass deliberately drives it to 0 -- so the
+        // pass-boundary reset has to put it back, otherwise a frame whose last world
+        // work was the depth-only pass would swallow the whole 2D/GUI tail.
+        lpDevice->SetRenderState(D3DRS_COLORWRITEENABLE,
+                                 D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN
+                                 | D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
     }
 
     // ---- world-pass leaf hooks (declared in shadowingdevice.cpp) -----------
