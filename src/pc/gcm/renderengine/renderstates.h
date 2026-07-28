@@ -63,14 +63,42 @@ public:
     static ResourceDescriptor5* GetResourceDescriptor(ResourceDescriptor5* lpDescriptor, const Parameters* lpParameters);
     static DepthStencilState* Initialize(DepthStencilState** ppState, const Parameters* lpParameters);
 
-private:
     // The 0x60-byte object the X360 GetResourceDescriptor (0x82B636F8) sizes ({0x60, 4} entry-0
     // qword) and the serialised world MaterialState blob embeds: the 17 marshalled state words,
     // then the six Parameters flag bytes stw-widened to words (the BlendState::Initialize
     // 0x82B627C8 lbz->stw sibling pattern), then the initialised word Initialize sets to 1.
-    u32 maState[17];       // +0x00 the 17 marshalled state words
-    u32 mauFlagWords[6];   // +0x44 mbDepthTestEnable.. widened to u32 lanes
-    u32 muInitialised;     // +0x5C 1 once Initialize has run
+    //
+    // Every word's meaning is attested by the X360 depth/stencil half of the dispatch state
+    // triple (@0x827E8150), which pushes each one through its own D3DDevice_SetRenderState_*
+    // fast-set. Note that the comparison words carry the XENOS D3DCMPFUNC encoding, which is the
+    // GPU's own 3-bit function field and is ZERO-based (NEVER=0 .. ALWAYS=7) -- attested by
+    // D3DDevice_SetRenderState_ZFunc @0x82939870 packing `(16*Value) & 0x70` into RB_DEPTHCONTROL
+    // and D3DDevice_SetRenderState_AlphaFunc @0x82939328 packing `Value & 7`. PC Direct3D 9's
+    // D3DCMPFUNC is ONE-based, so a PC leaf that forwards one of these has to add 1.
+    u32 muZFunc;                   // +0x00 -> ZFunc
+    u32 muStencilFail;             // +0x04 -> StencilFail
+    u32 muStencilZFail;            // +0x08 -> StencilZFail
+    u32 muStencilPass;             // +0x0C -> StencilPass
+    u32 muStencilFunc;             // +0x10 -> StencilFunc
+    u32 muCcwStencilFail;          // +0x14 -> CCWStencilFail
+    u32 muCcwStencilZFail;         // +0x18 -> CCWStencilZFail
+    u32 muCcwStencilPass;          // +0x1C -> CCWStencilPass
+    u32 muCcwStencilFunc;          // +0x20 -> CCWStencilFunc
+    u32 muHiStencilFunc;           // +0x24 -> HiStencilFunc
+    u32 muStencilRef;              // +0x28 -> StencilRef
+    u32 muStencilMask;             // +0x2C -> StencilMask
+    u32 muStencilWriteMask;        // +0x30 -> StencilWriteMask
+    u32 muCcwStencilRef;           // +0x34 -> CCWStencilRef
+    u32 muCcwStencilMask;          // +0x38 -> CCWStencilMask
+    u32 muCcwStencilWriteMask;     // +0x3C -> CCWStencilWriteMask
+    u32 muHiStencilRef;            // +0x40 -> HiStencilRef
+    u32 muZEnable;                 // +0x44 -> ZEnable          (Parameters::mbDepthTestEnable)
+    u32 muZWriteEnable;            // +0x48 -> ZWriteEnable      (Parameters::mbDepthWriteEnable)
+    u32 muStencilEnable;           // +0x4C -> StencilEnable
+    u32 muTwoSidedStencilMode;     // +0x50 -> TwoSidedStencilMode
+    u32 muHiStencilEnable;         // +0x54 -> HiStencilEnable
+    u32 muHiStencilWriteEnable;    // +0x58 -> HiStencilWriteEnable
+    u32 muInitialised;             // +0x5C 1 once Initialize has run
 };
 
 class Texture;  // the imported raster's runtime type (texture.h)
@@ -192,8 +220,24 @@ public:
     static RasterizerState* Initialize(RasterizerState** ppState, const Parameters* lpParameters);
     RasterizerState* Initialize(const Parameters* lpParameters);
 
-private:
-    u32 maState[13];
+    // The 13-word marshalled block. Every word's meaning is attested by the X360 rasteriser
+    // half of the dispatch state triple (@0x827E8690), which pushes each one through its own
+    // D3DDevice_SetRenderState_* fast-set in this order -- so these are names for words that
+    // were previously an opaque maState[13].
+    u32 muFillMode;                // +0x00 -> D3DDevice_SetRenderState_FillMode
+    u32 muCullMode;                // +0x04 -> CullMode
+    u32 muDepthBias;               // +0x08 -> DepthBias
+    u32 muSlopeScaleDepthBias;     // +0x0C -> SlopeScaleDepthBias
+    u32 muMultiSampleMask;         // +0x10 -> MultiSampleMask
+    u32 muScissorTestEnable;       // +0x14 -> ScissorTestEnable
+    u32 muMultiSampleAntiAlias;    // +0x18 -> MultiSampleAntiAlias
+    u32 muUnused1C;                // +0x1C  (word 7: the applier never reads it)
+    u32 muViewportEnable;          // +0x20 -> ViewportEnable
+    u32 muHalfPixelOffset;         // +0x24 -> HalfPixelOffset
+    u32 muPrimitiveResetEnable;    // +0x28 -> PrimitiveResetEnable (the word MaterialState::
+                                   //          FixDown @0x828A8A80 marks)
+    u32 muPrimitiveResetIndex;     // +0x2C -> PrimitiveResetIndex (bound only when enabled)
+    u32 muInitialised;             // +0x30  1 once Initialize has run
 };
 
 class MeshHelper

@@ -10,6 +10,8 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"        // RenderableMesh (mesh-dispatch seam)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // MaterialTechniqueView
 #include "pc/gcm/renderengine/Device.h"
+#include "pc/gcm/renderengine/renderstates.h"                              // MaterialState / DepthStencilState / RasterizerState
+#include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"    // BlendMaterialState
 
 struct IDirect3DDevice9;
 
@@ -51,6 +53,44 @@ extern "C"
     void D3DDevice_SetRenderState_AlphaTestEnable(IDirect3DDevice9* lpDevice, u32 luValue);
     void D3DDevice_SetRenderState_AlphaRef(IDirect3DDevice9* lpDevice, u32 luValue);
     void D3DDevice_SetRenderState_AlphaFunc(IDirect3DDevice9* lpDevice, u32 luValue);
+
+    // The depth/stencil half (X360 applier @0x827E8150).
+    void D3DDevice_SetRenderState_ZEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_ZWriteEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_ZFunc(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_TwoSidedStencilMode(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilFunc(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilFail(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilZFail(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilPass(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_CCWStencilFunc(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_CCWStencilFail(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_CCWStencilZFail(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_CCWStencilPass(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilRef(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilMask(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_StencilWriteMask(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_CCWStencilRef(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_CCWStencilMask(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_CCWStencilWriteMask(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_HiStencilEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_HiStencilWriteEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_HiStencilFunc(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_HiStencilRef(IDirect3DDevice9* lpDevice, u32 luValue);
+
+    // The rasteriser half (X360 applier @0x827E8690).
+    void D3DDevice_SetRenderState_CullMode(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_FillMode(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_ScissorTestEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_DepthBias(IDirect3DDevice9* lpDevice, u32 luFloatAsDword);
+    void D3DDevice_SetRenderState_SlopeScaleDepthBias(IDirect3DDevice9* lpDevice, u32 luFloatAsDword);
+    void D3DDevice_SetRenderState_MultiSampleAntiAlias(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_MultiSampleMask(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_ViewportEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_HalfPixelOffset(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_PrimitiveResetEnable(IDirect3DDevice9* lpDevice, u32 luValue);
+    void D3DDevice_SetRenderState_PrimitiveResetIndex(IDirect3DDevice9* lpDevice, u32 luValue);
 }
 
 // The D3D "current vertex program state" global (X360 dword_832716C8): the last vertex program
@@ -94,13 +134,14 @@ namespace renderengine
     void  WorldShaderConstants_Set(bool lbPixel, u32 luRegister, const void* lpData, u32 luNumRegisters);
     // Bind one texture + the world sampler set at a D3D sampler unit.
     bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster);
-    // Per-technique alpha test (from the technique's own mu16Flags bit 3).
-    void  WorldShader_SetAlphaTest(bool lbEnabled);
     // The draw stash the D3DDevice_* shims fill (index/vertex source for the UP draw path).
     void  WorldDraw_SetIndexSource(const void* lpIndexBufferHeader);
     void  WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride);
     void  WorldDraw_IndexedUP(u32 luPrimTypeXenon, u32 luBaseVertexIndex,
                               u32 luStartIndex, u32 luIndexCount);
+    // The rasteriser state's Xenos primitive reset. D3D9 has no such feature, so the shim
+    // re-cuts the strip runs at the marker instead -- see the note in XenonD3D9Shims.cpp.
+    void  WorldDraw_SetPrimitiveReset(bool lbEnabled, u32 luResetIndex);
 }
 
 namespace
@@ -170,6 +211,15 @@ namespace shadow
     bool Device::mbRasteriserStateLocked = false;
 
     u32 Device::mauLowLevelStateShadow[18] = {};
+    // The X360 depth/stencil lock window (mbDepthStencilStateLocked, the sibling of
+    // mbRasteriserStateLocked that DispatchAllMeshes tests before binding the depth state).
+    // Nothing in the reconstructed set opens that window yet, so it reads false throughout.
+    bool Device::mbDepthStencilStateLocked = false;
+    // The three state OBJECTS the dispatch last bound (X360 v64[5] / v64[54] / v64[55] in
+    // DispatchAllMeshes) -- the pointer compare that decides whether an applier runs at all.
+    void* Device::mpLastBlendState = nullptr;
+    void* Device::mpLastDepthStencilState = nullptr;
+    void* Device::mpLastRasterizerState = nullptr;
 
     bool Device::Initialize()
     {
@@ -561,17 +611,113 @@ namespace shadow
         return lpState;
     }
 
+    // @0x827E8150: the DEPTH/STENCIL twin of Xbox2SetStateLowLevelShadowed. Same shape --
+    // the 24-word marshalled DepthStencilState object in, each word pushed through its own
+    // D3DDevice_SetRenderState_* fast-set. The force-stencil-write window (byte_83010906)
+    // overrides six of the words on its way through, exactly as the console does.
+    void* Device::Xbox2SetDepthStencilStateLowLevelShadowed(void* lpState, bool /*lbWasUnset*/)
+    {
+        const renderengine::DepthStencilState* const lpDs =
+            static_cast<const renderengine::DepthStencilState*>(lpState);
+        IDirect3DDevice9* const lpDevice = gpD3DDevice;
+        if (lpDs == 0)
+            return lpState;
+
+        u32 luStencilEnable  = lpDs->muStencilEnable;
+        u32 luTwoSided       = lpDs->muTwoSidedStencilMode;
+        u32 luStencilFunc    = lpDs->muStencilFunc;
+        u32 luStencilWriteMask = lpDs->muStencilWriteMask;
+        u32 luStencilRef     = lpDs->muStencilRef;
+        u32 luStencilPass    = lpDs->muStencilPass;
+        u32 luStencilZFail   = lpDs->muStencilZFail;
+        if (mbForceStencilWrite)
+        {
+            luStencilEnable    = 1u;
+            luTwoSided         = 0u;
+            luStencilFunc      = renderengine::DepthStencilState::E_FUNCTION_ALWAYS;
+            luStencilWriteMask = 0xFFFFFFFFu;
+            luStencilRef       = muStencilValueToWrite;
+            luStencilPass      = 2u;   // REPLACE, in the Xenos' zero-based stencil-op set
+            luStencilZFail     = 0u;   // KEEP
+        }
+
+        D3DDevice_SetRenderState_ZEnable(lpDevice, lpDs->muZEnable);
+        D3DDevice_SetRenderState_ZWriteEnable(lpDevice, lpDs->muZWriteEnable);
+        D3DDevice_SetRenderState_ZFunc(lpDevice, lpDs->muZFunc);
+        D3DDevice_SetRenderState_StencilEnable(lpDevice, luStencilEnable);
+        D3DDevice_SetRenderState_TwoSidedStencilMode(lpDevice, luTwoSided);
+        D3DDevice_SetRenderState_StencilFunc(lpDevice, luStencilFunc);
+        D3DDevice_SetRenderState_StencilFail(lpDevice, lpDs->muStencilFail);
+        D3DDevice_SetRenderState_StencilZFail(lpDevice, luStencilZFail);
+        D3DDevice_SetRenderState_StencilPass(lpDevice, luStencilPass);
+        D3DDevice_SetRenderState_CCWStencilFunc(lpDevice, lpDs->muCcwStencilFunc);
+        D3DDevice_SetRenderState_CCWStencilFail(lpDevice, lpDs->muCcwStencilFail);
+        D3DDevice_SetRenderState_CCWStencilZFail(lpDevice, lpDs->muCcwStencilZFail);
+        D3DDevice_SetRenderState_CCWStencilPass(lpDevice, lpDs->muCcwStencilPass);
+        D3DDevice_SetRenderState_StencilRef(lpDevice, luStencilRef);
+        D3DDevice_SetRenderState_StencilMask(lpDevice, lpDs->muStencilMask);
+        D3DDevice_SetRenderState_StencilWriteMask(lpDevice, luStencilWriteMask);
+        D3DDevice_SetRenderState_CCWStencilRef(lpDevice, lpDs->muCcwStencilRef);
+        D3DDevice_SetRenderState_CCWStencilMask(lpDevice, lpDs->muCcwStencilMask);
+        D3DDevice_SetRenderState_CCWStencilWriteMask(lpDevice, lpDs->muCcwStencilWriteMask);
+        D3DDevice_SetRenderState_HiStencilEnable(lpDevice, lpDs->muHiStencilEnable);
+        D3DDevice_SetRenderState_HiStencilWriteEnable(lpDevice, lpDs->muHiStencilWriteEnable);
+        D3DDevice_SetRenderState_HiStencilFunc(lpDevice, lpDs->muHiStencilFunc);
+        D3DDevice_SetRenderState_HiStencilRef(lpDevice, lpDs->muHiStencilRef);
+        return lpState;
+    }
+
+    // @0x827E8690: the RASTERISER twin. Thirteen words, eleven fast-sets (word 7 is never
+    // read and word 12 is the initialised flag); the reset index is only pushed when the
+    // reset is enabled.
+    void* Device::Xbox2SetRasterizerStateLowLevelShadowed(void* lpState, bool /*lbWasUnset*/)
+    {
+        const renderengine::RasterizerState* const lpRs =
+            static_cast<const renderengine::RasterizerState*>(lpState);
+        IDirect3DDevice9* const lpDevice = gpD3DDevice;
+        if (lpRs == 0)
+            return lpState;
+
+        D3DDevice_SetRenderState_CullMode(lpDevice, lpRs->muCullMode);
+        D3DDevice_SetRenderState_FillMode(lpDevice, lpRs->muFillMode);
+        D3DDevice_SetRenderState_ScissorTestEnable(lpDevice, lpRs->muScissorTestEnable);
+        D3DDevice_SetRenderState_SlopeScaleDepthBias(lpDevice, lpRs->muSlopeScaleDepthBias);
+        D3DDevice_SetRenderState_DepthBias(lpDevice, lpRs->muDepthBias);
+        D3DDevice_SetRenderState_MultiSampleAntiAlias(lpDevice, lpRs->muMultiSampleAntiAlias);
+        D3DDevice_SetRenderState_MultiSampleMask(lpDevice, lpRs->muMultiSampleMask);
+        D3DDevice_SetRenderState_ViewportEnable(lpDevice, lpRs->muViewportEnable);
+        D3DDevice_SetRenderState_HalfPixelOffset(lpDevice, lpRs->muHalfPixelOffset);
+        D3DDevice_SetRenderState_PrimitiveResetEnable(lpDevice, lpRs->muPrimitiveResetEnable);
+        if (lpRs->muPrimitiveResetEnable)
+            D3DDevice_SetRenderState_PrimitiveResetIndex(lpDevice, lpRs->muPrimitiveResetIndex);
+
+        // FLAG PC-platform leaf: primitive reset is a Xenos index-assembler feature with no
+        // Direct3D 9 counterpart, so the world draw path re-cuts the strip runs itself. This
+        // is where its two words reach that path.
+        renderengine::WorldDraw_SetPrimitiveReset(lpRs->muPrimitiveResetEnable != 0,
+                                                  lpRs->muPrimitiveResetIndex);
+        return lpState;
+    }
+
     // ============================================================================
     // The mesh-dispatch flush seam (DispatchList::DispatchAllMeshes).
     // ============================================================================
 
     // X360 walk prologue: dword_8301095C = 0 (vertex program shadow) and
-    // dword_83010960 = -1 (pixel program shadow).
+    // dword_83010960 = -1 (pixel program shadow). The three bound-state-object slots the
+    // walk compares against (DispatchAllMeshes v64[5] / v64[54] / v64[55]) live on the
+    // per-dispatch context, so they are per-walk too and are cleared alongside -- which is
+    // also what keeps the state triple correct on PC across a pass whose defaults
+    // (renderengine::Device::SetWorldPassDefaultStates) wrote the same render states from
+    // outside this seam.
     void Device::ResetProgramShadows()
     {
         mpVertexProgramShadow = nullptr;
         mpPixelProgramShadow  = reinterpret_cast<const renderengine::ProgramBufferData*>(
             static_cast<uintptr_t>(~0u));
+        mpLastBlendState        = nullptr;
+        mpLastDepthStencilState = nullptr;
+        mpLastRasterizerState   = nullptr;
     }
 
     // =====================================================================================
@@ -697,6 +843,94 @@ namespace shadow
         }
     }
 
+    // The technique's render-state TRIPLE. The X360 reaches
+    // MaterialState { mpBlendState, mpDepthStencilState, mpRasterizerState } through the
+    // technique's +0x04 slot (CgsDispatcherCommands.cpp:2268..2270 assert all three) and
+    // pushes each object through its own shadowed applier when the OBJECT POINTER differs
+    // from the one the dispatch state last bound.
+    //
+    // FLAG PC-platform leaf, one deliberate divergence: the console's appliers have an
+    // incremental branch that re-binds only the words whose shadowed value changed. That is
+    // safe there because nothing else touches the D3D state between draws; on the PC
+    // bring-up the per-pass defaults, the immediate-mode 2D renderer and the fallback shader
+    // path all write render states outside this seam, so a per-word shadow would go stale and
+    // skip a re-bind it needed to make. Each applier is therefore always called on its
+    // FULL-SET branch (the console's lbWasUnset == true path), which is identical in effect,
+    // only chattier.
+    void Device::SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique)
+    {
+        const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
+        if (lpTech == 0)
+            return;
+
+        u32 luMaterialStateSlot;
+        std::memcpy(&luMaterialStateSlot, lpTech + 0x04, 4);
+        renderengine::MaterialState* const lpMaterialState =
+            reinterpret_cast<renderengine::MaterialState*>(
+                static_cast<uintptr_t>(luMaterialStateSlot));
+        if (lpMaterialState == 0)
+        {
+            // The console asserts this (the technique's material-state import always
+            // resolves); on the bring-up an unresolved world bundle can still reach here, in
+            // which case the previous technique's states stand. Quiet one-shot, never a trap.
+            static bool sbLogged = false;
+            if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sbLogged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "SetMaterialRenderStatesPC: technique has no material state -- the"
+                       " previous technique's render states stand [FLAG PC bring-up]\n";
+            }
+            return;
+        }
+
+        {
+            // [DIAG one-shot x8] the distinct state triples the world walk actually binds.
+            static const void* sapSeen[8] = {};
+            static u32 suSeen = 0;
+            bool lbNew = (suSeen < 8u);
+            for (u32 lu = 0; lu < suSeen && lbNew; ++lu)
+                if (sapSeen[lu] == lpMaterialState) lbNew = false;
+            if (lbNew && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sapSeen[suSeen++] = lpMaterialState;
+                const renderengine::BlendMaterialState* lpB = lpMaterialState->mpBlendState;
+                const renderengine::DepthStencilState*  lpD = lpMaterialState->mpDepthStencilState;
+                const renderengine::RasterizerState*    lpR = lpMaterialState->mpRasterizerState;
+                *CgsDev::Log::gpDebugPrint
+                    << "[WorldState] ms=" << lpMaterialState
+                    << " blend0=" << (lpB ? lpB->maState[0] : 0u)
+                    << " cwe=" << (lpB ? lpB->maState[4] : 0u)
+                    << " atest=" << (lpB ? lpB->maState[16] : 0u)
+                    << " afunc=" << (lpB ? lpB->maState[15] : 0u)
+                    << " aref=" << (lpB ? lpB->maState[17] : 0u)
+                    << " zfunc=" << (lpD ? lpD->muZFunc : 0u)
+                    << " zen=" << (lpD ? lpD->muZEnable : 0u)
+                    << " zwr=" << (lpD ? lpD->muZWriteEnable : 0u)
+                    << " cull=" << (lpR ? lpR->muCullMode : 0u)
+                    << " fill=" << (lpR ? lpR->muFillMode : 0u)
+                    << " reset=" << (lpR ? lpR->muPrimitiveResetEnable : 0u)
+                    << "\n";
+            }
+        }
+
+        if (!mbDepthStencilStateLocked && lpMaterialState->mpDepthStencilState != mpLastDepthStencilState)
+        {
+            mpLastDepthStencilState = lpMaterialState->mpDepthStencilState;
+            Xbox2SetDepthStencilStateLowLevelShadowed(mpLastDepthStencilState, true);
+        }
+        if (lpMaterialState->mpBlendState != mpLastBlendState)
+        {
+            mpLastBlendState = lpMaterialState->mpBlendState;
+            Xbox2SetStateLowLevelShadowed(mpLastBlendState, true);
+        }
+        if (!mbRasteriserStateLocked && lpMaterialState->mpRasterizerState != mpLastRasterizerState)
+        {
+            mpLastRasterizerState = lpMaterialState->mpRasterizerState;
+            Xbox2SetRasterizerStateLowLevelShadowed(mpLastRasterizerState, true);
+        }
+    }
+
     void Device::SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
                                     const void* lpMaterialAssembly,
                                     void* const* lppConstScratch, bool lbZOnly)
@@ -718,23 +952,7 @@ namespace shadow
         }
 
         // ---- render states -------------------------------------------------------------
-        // FLAG PC bring-up: the X360 binds the technique's render-state TRIPLE (blend /
-        // depth-stencil / rasteriser objects at technique+0x04) through the shadowed
-        // low-level setters. Those objects are packed Xenos GPU register blocks whose field
-        // semantics are not recovered (renderengine::BlendStateParameters' members are still
-        // muState4..muState17), so the triple stays unbound and the renderer's per-pass
-        // defaults stand -- with ONE exception taken from data that IS attested:
-        // MaterialTechniqueResourceType::PostFixUp derives the technique's mu16Flags from the
-        // real BlendState (bit 0 = alpha blend, bit 3 = alpha test, bit 4 = hw instancing), so
-        // alpha TEST can be driven per technique. Without it every 1-bit-alpha technique
-        // (foliage, fences, cruciform billboards) draws its cut-out texels opaque black.
-        // DELETE when the state triple is unpacked.
-        if (lpTech != 0)
-        {
-            u16 lu16Flags;
-            std::memcpy(&lu16Flags, lpTech + 0x08, 2);
-            renderengine::WorldShader_SetAlphaTest((lu16Flags & 8u) != 0);
-        }
+        SetMaterialRenderStatesPC(lpTechnique);
 
         // ---- programs ------------------------------------------------------------------
         // The program payload is ProgramBufferData + 0x14 (VertexProgramState::

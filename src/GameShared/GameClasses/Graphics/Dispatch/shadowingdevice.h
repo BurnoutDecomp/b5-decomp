@@ -72,6 +72,12 @@ namespace shadow
         // pointer (X360 r3 passthrough). Body is the X360 shadow device's low-level setter.
         static void* Xbox2SetStateLowLevelShadowed(void* lpState, bool lbWasUnset);
 
+        // The depth/stencil and rasteriser twins of the setter above (X360 @0x827E8150 and
+        // @0x827E8690): the other two thirds of the render-state triple DispatchAllMeshes
+        // binds on every technique change.
+        static void* Xbox2SetDepthStencilStateLowLevelShadowed(void* lpState, bool lbWasUnset);
+        static void* Xbox2SetRasterizerStateLowLevelShadowed(void* lpState, bool lbWasUnset);
+
         // ---- The mesh-dispatch flush seam (DispatchList::DispatchAllMeshes) ----
         // The X360 walk resets the program shadows inline at each walk start
         // (dword_8301095C = 0 / dword_83010960 = -1); reproduced as this named reset.
@@ -89,6 +95,10 @@ namespace shadow
         static void SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
                                        const void* lpMaterialAssembly,
                                        void* const* lppConstScratch, bool lbZOnly);
+
+        // Bind the technique's render-state triple (blend / depth-stencil / rasteriser
+        // objects reached through the technique's +0x04 MaterialState slot).
+        static void SetMaterialRenderStatesPC(const CgsGraphics::MaterialTechniqueView* lpTechnique);
 
         // [PC leaf] The PER-MESH half of the same inlined X360 block: the technique's two
         // OBJECT-scope external constant blocks (ShaderTechnique +0x1C vertex, +0x50 pixel),
@@ -156,5 +166,15 @@ namespace shadow
         // 18 contiguous dwords mirroring the D3D render-state block Xbox2SetStateLowLevelShadowed
         // pushes; modelled as a named array so the setter compares & stores by index.
         static u32 mauLowLevelStateShadow[18];    // dword_83010730 .. dword_83010774
+
+        // The depth/stencil lock window DispatchAllMeshes tests alongside
+        // mbRasteriserStateLocked (its own Lock/Unlock pair is not reconstructed yet).
+        static bool mbDepthStencilStateLocked;
+
+        // --- The three state OBJECTS the mesh dispatch last bound (X360 DispatchAllMeshes
+        // v64[5] / v64[54] / v64[55]): the pointer compare that gates each applier.
+        static void* mpLastBlendState;
+        static void* mpLastDepthStencilState;
+        static void* mpLastRasterizerState;
     };
 }
