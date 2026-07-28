@@ -90,6 +90,13 @@ namespace shadow
                                        const void* lpMaterialAssembly,
                                        void* const* lppConstScratch, bool lbZOnly);
 
+        // [PC leaf] The PER-MESH half of the same inlined X360 block: the technique's two
+        // OBJECT-scope external constant blocks (ShaderTechnique +0x1C vertex, +0x50 pixel),
+        // whose sources are the head of the same scratch table. Called for every mesh, right
+        // after the technique bind, exactly where the X360 body runs them.
+        static void SetMeshObjectConstantsPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
+                                             void* const* lppConstScratch, bool lbZOnly);
+
         // [PC bring-up shim] Upload the per-object world-view-projection carried in
         // the PC mesh command (see CgsDispatcherCommands.cpp header note).
         static void SetObjectTransformPC(const f32* lpWvpRows16);
@@ -104,6 +111,11 @@ namespace shadow
         static void DrawIndexedMeshPC(const RenderableMesh* lpMesh);
 
     private:
+        // [PC leaf] Bind the samplers the TECHNIQUE names: technique+0x22 binding count,
+        // +0x24 index list (built by MaterialResourceType::PostFixUp) into the material
+        // assembly's own 20-byte sampler array at +0x0C.
+        static void BindTechniqueSamplers(const u8* lpTechnique, const u8* lpMaterialAssembly);
+
         // The X360 build keeps the live vertex-program binding as a small static
         // slot (5 dwords @ dword_83011118) whose first entry points at the real
         // state object (@ unk_83010920); InitializeNoBindX360 dereferences the

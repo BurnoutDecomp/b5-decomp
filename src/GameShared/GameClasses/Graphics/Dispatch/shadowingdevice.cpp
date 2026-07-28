@@ -3,7 +3,10 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <cstring>                                                          // memcpy (serialised-slot reads)
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // the quiet one-shot gates
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"        // RenderableMesh (mesh-dispatch seam)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // MaterialTechniqueView
 #include "pc/gcm/renderengine/Device.h"
@@ -79,6 +82,20 @@ namespace renderengine
     // Resolve + cache a D3D9 vertex declaration and the stream-0 stride from the 32-bit
     // serialised VertexDescriptor image the converted world data carries.
     void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride);
+    // ---- the REAL per-technique shader path ----
+    // Create-once + bind the technique's two D3D9 programs (each argument is a
+    // ProgramBufferData + 0x14 payload). False = nothing bound, keep the fallback.
+    bool  WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload);
+    // Forget the real programs (the fallback pair owns the device again).
+    void  WorldShader_ClearRealPrograms();
+    // Whether the last technique bind left the real programs on the device.
+    bool  WorldShader_RealProgramsBound();
+    // Upload luNumRegisters float4s at shader-constant register luRegister.
+    void  WorldShaderConstants_Set(bool lbPixel, u32 luRegister, const void* lpData, u32 luNumRegisters);
+    // Bind one texture + the world sampler set at a D3D sampler unit.
+    bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster);
+    // Per-technique alpha test (from the technique's own mu16Flags bit 3).
+    void  WorldShader_SetAlphaTest(bool lbEnabled);
     // The draw stash the D3DDevice_* shims fill (index/vertex source for the UP draw path).
     void  WorldDraw_SetIndexSource(const void* lpIndexBufferHeader);
     void  WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride);
@@ -557,31 +574,343 @@ namespace shadow
             static_cast<uintptr_t>(~0u));
     }
 
-    // [PC leaf] Technique-change bind. The X360 path (DispatchAllMeshes
-    // @0x827F2718) binds the technique's render-state triple through the
-    // shadowed low-level setters, the vertex/pixel Xenos programs through
-    // SetVertexProgram/SetPixelProgram, gathers the technique constants into the
-    // GPU constant memory, and finally binds the material's samplers. The PC
-    // bring-up substitutes:
-    //   * states: NOT bound from data yet (the MaterialState porter + the
-    //     x64 state-object seam are still open) -- the per-pass defaults set by
-    //     the renderer stand; FLAG [PC bring-up].
-    //   * programs/constants: the FLAGGED fallback world shader. SHADERS.BNDL is
-    //     now STAGED AND LOADED (BrnGameModule::GamePrepare), so the technique's
-    //     real vertex/pixel ProgramBuffers resolve -- but binding them requires the
-    //     engine-constant dispatch, which needs ShaderConstantsExternal::PostFixUp
-    //     (X360 sub_827ED8D0, still inert). Binding real programs without their
-    //     constants would draw nothing at all, so the fallback keeps the transform
-    //     until that lands. DELETE-when: the constant dispatch is live.
-    //   * SAMPLERS: REAL as of the textures wave -- the material's own
-    //     TextureState/raster chain is bound to its sampler units, and the fallback
-    //     pixel shader samples s0. This is what puts the world's textures on screen.
-    void Device::SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* /*lpTechnique*/,
-                                    const void* lpMaterialAssembly,
-                                    void* const* /*lppConstScratch*/, bool /*lbZOnly*/)
+    // =====================================================================================
+    // The technique bind, as the X360 inlines it into DispatchList::DispatchAllMeshes
+    // @0x827F2718. It is split in two on PC because the console body is one giant inlined
+    // block: SetMeshTechniquePC is the ON-TECHNIQUE-CHANGE half, SetMeshObjectConstantsPC
+    // (below) the PER-MESH half. Order and content follow the asm exactly:
+    //
+    //   technique change:  state triple
+    //                      vertex program   -> if it CHANGED: external block B (ST+0x2C)
+    //                      internal vertex constants (technique+0x18 list, +0x20 count)
+    //                      pixel program    -> if it CHANGED: external block D (ST+0x60)
+    //                      internal pixel constants (technique+0x1C list, +0x21 count)
+    //                      technique samplers (technique+0x22 count, +0x24 index list)
+    //   per mesh:          external block A (ST+0x1C), external block C (ST+0x50)
+    //
+    // The scratch pointer table the constants come from was gathered at AddToBin time by
+    // AddShaderTechniqueConstantsToDispatchBin in the order [A][C][B][D].
+    //
+    // FLAG PC-platform leaf, three items:
+    //   * the Xenos direct constant-memory writes become Set{Vertex,Pixel}ShaderConstantF;
+    //   * the render-state TRIPLE is still not bound from data (the MaterialState porter +
+    //     the x64 state-object seam are open) -- the renderer's per-pass defaults stand;
+    //   * the shadow-compare fast path (skip a constant whose source pointer already sits in
+    //     maConstants[slot].maShaderState[stage].mpLatestCopyInPushBuffer) is not modelled:
+    //     every listed constant is uploaded. That is the console's "shader changed" branch,
+    //     i.e. always correct, only redundant.
+    // =====================================================================================
+    namespace
     {
-        renderengine::WorldFallbackShader_Bind();
-        renderengine::WorldMaterialSamplers_Bind(lpMaterialAssembly);
+        // Quiet one-shot gates (never traps) for the two per-draw conditions the console
+        // cannot reach.
+        void LogUnsetShaderConstantOnce()
+        {
+            static bool sbLogged = false;
+            if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sbLogged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "lpShaderConstantsToApply is NULL. This is probably due to an external"
+                       " constant not getting set -- constant skipped [FLAG PC bring-up:"
+                       " the world producer does not publish the whole engine constant set]\n";
+            }
+        }
+
+        void LogFallbackTechniqueOnce()
+        {
+            static bool sbLogged = false;
+            if (!sbLogged && (CgsDev::Message::gxMessageFilterFlags & 1))
+            {
+                sbLogged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "SetMeshTechniquePC: no usable technique programs -- the flagged bring-up"
+                       " fallback shader drew this technique [FLAG PC bring-up]\n";
+            }
+        }
+
+        // A streamed ShaderConstantsExternal block: {count, indices*, names*, handles*}.
+        // The handle is the measured 4-byte renderengine::ProgramVariableHandle
+        // (FORMAT_MAP.md section 3): [0] register index, [1] data type, [2] shader type,
+        // [3] register count.
+        void DispatchExternalBlock(const u32* lpBlock, void* const* lppSources, bool lbPixel)
+        {
+            const u32 luCount = lpBlock[0];
+            if (luCount == 0 || lppSources == 0)
+                return;
+            const u8* const lpaHandles =
+                reinterpret_cast<const u8*>(static_cast<uintptr_t>(lpBlock[3]));
+            if (lpaHandles == 0)
+                return;
+
+            for (u32 luConstant = 0; luConstant < luCount; ++luConstant)
+            {
+                const void* const lpSource = lppSources[luConstant];
+                const u8* const   lpHandle = lpaHandles + 4 * luConstant;
+                if (lpSource == 0 || lpHandle[3] == 0)
+                {
+                    // X360 CgsShaderConstants.cpp:394 asserts here ("lpShaderConstantsToApply is
+                    // NULL. This is probably due to an external constant not getting set").
+                    // On PC the bring-up producer publishes only the constants it can compute,
+                    // so an unset engine constant is expected; skipping leaves the register at
+                    // whatever the previous draw put there. Quiet one-shot, never a trap.
+                    LogUnsetShaderConstantOnce();
+                    continue;
+                }
+                renderengine::WorldShaderConstants_Set(lbPixel, lpHandle[0], lpSource, lpHandle[3]);
+            }
+        }
+
+        // The material's per-stage ShaderConstantsInternal block {count, sizes*, data*,
+        // hashes*, handles*} driven through the TECHNIQUE's binding list, whose 4-byte
+        // entries MaterialResourceType::PostFixUpShaderConstants filled in:
+        // [0..1] u16 register index, [2] index into the material block, [3] register count.
+        void DispatchInternalBlock(const u8* lpBindingList, u32 luCount,
+                                   const u32* lpMaterialBlock, bool lbPixel)
+        {
+            if (luCount == 0 || lpBindingList == 0 || lpMaterialBlock == 0)
+                return;
+            const u32* const lpaData =
+                reinterpret_cast<const u32*>(static_cast<uintptr_t>(lpMaterialBlock[2]));
+            if (lpaData == 0)
+                return;
+
+            for (u32 luConstant = 0; luConstant < luCount; ++luConstant)
+            {
+                const u8* const lpEntry = lpBindingList + 4 * luConstant;
+                u16 lu16Register;
+                std::memcpy(&lu16Register, lpEntry, 2);
+                const u32 luBlockIndex   = lpEntry[2];
+                const u32 luNumRegisters = lpEntry[3];
+                if (luNumRegisters == 0 || luBlockIndex >= lpMaterialBlock[0])
+                    continue;
+
+                const void* const lpSource =
+                    reinterpret_cast<const void*>(static_cast<uintptr_t>(lpaData[luBlockIndex]));
+                if (lpSource == 0)
+                {
+                    LogUnsetShaderConstantOnce();
+                    continue;
+                }
+                renderengine::WorldShaderConstants_Set(lbPixel, lu16Register, lpSource, luNumRegisters);
+            }
+        }
+    }
+
+    void Device::SetMeshTechniquePC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
+                                    const void* lpMaterialAssembly,
+                                    void* const* lppConstScratch, bool lbZOnly)
+    {
+        const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
+        const u32 luShaderTechnique = (lpTech != 0) ? *reinterpret_cast<const u32*>(lpTech) : 0u;
+        const u8* const lpST =
+            reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
+
+        const renderengine::ProgramBufferData* lpVertexProgram = 0;
+        const renderengine::ProgramBufferData* lpPixelProgram  = 0;
+        if (lpST != 0)
+        {
+            // X360 asserts both (CgsDispatcherCommands.cpp:2257 / :2258).
+            lpVertexProgram = reinterpret_cast<const renderengine::ProgramBufferData*>(
+                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpST + 0)));   // serialised blob
+            lpPixelProgram = reinterpret_cast<const renderengine::ProgramBufferData*>(
+                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpST + 4)));   // serialised blob
+        }
+
+        // ---- render states -------------------------------------------------------------
+        // FLAG PC bring-up: the X360 binds the technique's render-state TRIPLE (blend /
+        // depth-stencil / rasteriser objects at technique+0x04) through the shadowed
+        // low-level setters. Those objects are packed Xenos GPU register blocks whose field
+        // semantics are not recovered (renderengine::BlendStateParameters' members are still
+        // muState4..muState17), so the triple stays unbound and the renderer's per-pass
+        // defaults stand -- with ONE exception taken from data that IS attested:
+        // MaterialTechniqueResourceType::PostFixUp derives the technique's mu16Flags from the
+        // real BlendState (bit 0 = alpha blend, bit 3 = alpha test, bit 4 = hw instancing), so
+        // alpha TEST can be driven per technique. Without it every 1-bit-alpha technique
+        // (foliage, fences, cruciform billboards) draws its cut-out texels opaque black.
+        // DELETE when the state triple is unpacked.
+        if (lpTech != 0)
+        {
+            u16 lu16Flags;
+            std::memcpy(&lu16Flags, lpTech + 0x08, 2);
+            renderengine::WorldShader_SetAlphaTest((lu16Flags & 8u) != 0);
+        }
+
+        // ---- programs ------------------------------------------------------------------
+        // The program payload is ProgramBufferData + 0x14 (VertexProgramState::
+        // GetD3DVertexShader / SetPixelProgram use the same expression).
+        bool lbRealBound = false;
+        if (lpVertexProgram != 0 && lpPixelProgram != 0)
+        {
+            lbRealBound = renderengine::WorldPrograms_Bind(
+                reinterpret_cast<const u8*>(lpVertexProgram) + 0x14,
+                reinterpret_cast<const u8*>(lpPixelProgram) + 0x14);
+        }
+        const bool lbVertexProgramChanged = SetVertexProgram(lpVertexProgram);
+        const bool lbPixelProgramChanged  = SetPixelProgram(lpPixelProgram);
+
+        if (!lbRealBound)
+        {
+            // FLAG PC bring-up: no usable technique programs (SHADERS.BNDL absent, an
+            // unresolved import, or a payload that is not D3D9 bytecode) -> the documented
+            // last-resort fallback shader. DELETE-when: every technique resolves.
+            renderengine::WorldShader_ClearRealPrograms();
+            renderengine::WorldFallbackShader_Bind();
+            renderengine::WorldMaterialSamplers_Bind(lpMaterialAssembly);
+            LogFallbackTechniqueOnce();
+            return;
+        }
+
+        // ---- the technique's GLOBAL constant blocks + the material's internal ones ------
+        const u32* const lpBlockA = reinterpret_cast<const u32*>(lpST + 0x1C);
+        const u32* const lpBlockB = reinterpret_cast<const u32*>(lpST + 0x2C);
+        const u32* const lpBlockC = reinterpret_cast<const u32*>(lpST + 0x50);
+        const u32* const lpBlockD = reinterpret_cast<const u32*>(lpST + 0x60);
+
+        // Scratch order [A][C][B][D]; the pixel halves are absent on the z-only walk.
+        void* const* lppB = lppConstScratch + lpBlockA[0] + (lbZOnly ? 0u : lpBlockC[0]);
+        void* const* lppD = lppB + lpBlockB[0];
+
+        if (lbVertexProgramChanged && lppConstScratch != 0)
+        {
+            DispatchExternalBlock(lpBlockB, lppB, false);
+        }
+
+        const u8* const lpAssembly = static_cast<const u8*>(lpMaterialAssembly);
+        if (lpAssembly != 0)
+        {
+            const u8* const lpVertexList = reinterpret_cast<const u8*>(
+                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpTech + 0x18)));      // serialised blob
+            const u32* const lpVertexBlock = reinterpret_cast<const u32*>(
+                static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpAssembly + 0x10)));  // serialised blob
+            DispatchInternalBlock(lpVertexList, lpTech[0x20], lpVertexBlock, false);
+        }
+
+        if (!lbZOnly)
+        {
+            if (lbPixelProgramChanged && lppConstScratch != 0)
+            {
+                DispatchExternalBlock(lpBlockD, lppD, true);
+            }
+            if (lpAssembly != 0)
+            {
+                const u8* const lpPixelList = reinterpret_cast<const u8*>(
+                    static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpTech + 0x1C)));      // serialised blob
+                const u32* const lpPixelBlock = reinterpret_cast<const u32*>(
+                    static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpAssembly + 0x14)));  // serialised blob
+                DispatchInternalBlock(lpPixelList, lpTech[0x21], lpPixelBlock, true);
+            }
+        }
+
+        // ---- samplers ------------------------------------------------------------------
+        // X360: `for i < technique[0x22]: sampler = &materialSamplers[20 * indexList[i]]`,
+        // where the index list (technique+0x24) was built by MaterialResourceType::PostFixUp
+        // by matching each material sampler's id against the SHADER TECHNIQUE's own sampler
+        // table. Only the samplers this technique actually names are bound -- unlike the
+        // bring-up path, which binds every material-scope sampler because the fallback
+        // pixel shader only has s0.
+        BindTechniqueSamplers(lpTech, lpAssembly);
+    }
+
+    // [PC leaf] The PER-MESH half of the same inlined X360 block: the technique's two
+    // OBJECT-scope external constant blocks (the world matrix and whatever else is per
+    // draw). Their sources are the head of the scratch table, [A] then [C].
+    void Device::SetMeshObjectConstantsPC(const CgsGraphics::MaterialTechniqueView* lpTechnique,
+                                          void* const* lppConstScratch, bool lbZOnly)
+    {
+        if (!renderengine::WorldShader_RealProgramsBound())
+            return;
+        const u8* const lpTech = reinterpret_cast<const u8*>(lpTechnique);
+        const u32 luShaderTechnique = (lpTech != 0) ? *reinterpret_cast<const u32*>(lpTech) : 0u;
+        if (luShaderTechnique == 0 || lppConstScratch == 0)
+            return;
+        const u8* const lpST =
+            reinterpret_cast<const u8*>(static_cast<uintptr_t>(luShaderTechnique));
+
+        const u32* const lpBlockA = reinterpret_cast<const u32*>(lpST + 0x1C);
+        const u32* const lpBlockC = reinterpret_cast<const u32*>(lpST + 0x50);
+
+        DispatchExternalBlock(lpBlockA, lppConstScratch, false);
+        if (!lbZOnly)
+        {
+            DispatchExternalBlock(lpBlockC, lppConstScratch + lpBlockA[0], true);
+        }
+    }
+
+    // The technique's sampler selection (see SetMeshTechniquePC's tail).
+    void Device::BindTechniqueSamplers(const u8* lpTech, const u8* lpAssembly)
+    {
+        if (lpTech == 0 || lpAssembly == 0)
+            return;
+        const u32 luNumBindings = lpTech[0x22];
+        const u8* const lpIndexList = reinterpret_cast<const u8*>(
+            static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpTech + 0x24)));      // serialised blob
+        const s32 liNumSamplers =
+            static_cast<s32>(*reinterpret_cast<const s8*>(lpAssembly + 0x09));          // serialised blob
+        const u8* const lpSamplers = reinterpret_cast<const u8*>(
+            static_cast<uintptr_t>(*reinterpret_cast<const u32*>(lpAssembly + 0x0C)));  // serialised blob
+        if (luNumBindings == 0 || lpIndexList == 0 || liNumSamplers <= 0 || lpSamplers == 0)
+            return;
+
+        // [DIAG] one-shot tally over the first 4096 sampler bindings: how many resolve all the
+        // way to a live D3D texture, and where the rest stop.
+        static u32 suSeen = 0u, suBound = 0u, suNoState = 0u, suNoRaster = 0u, suNoTexture = 0u;
+
+        for (u32 luBinding = 0; luBinding < luNumBindings; ++luBinding)
+        {
+            const u32 luSamplerIndex = lpIndexList[luBinding];
+            if (luSamplerIndex >= static_cast<u32>(liNumSamplers))
+                continue;
+            const u8* const lpSampler = lpSamplers + 20 * luSamplerIndex;
+
+            u16 lu16Unit;
+            u32 luStateSlot;
+            std::memcpy(&lu16Unit,    lpSampler + 0x08, 2);
+            std::memcpy(&luStateSlot, lpSampler + 0x10, 4);
+
+            const bool lbTally = (suSeen < 4096u);
+            if (lbTally) ++suSeen;
+
+            if (luStateSlot == 0)
+            {
+                if (lbTally) ++suNoState;
+                continue;
+            }
+            // TextureState +0x20 -> renderengine::Texture* (both console u32 slots).
+            const u8* const lpState = reinterpret_cast<const u8*>(static_cast<uintptr_t>(luStateSlot));
+            u32 luRasterSlot;
+            std::memcpy(&luRasterSlot, lpState + 0x20, 4);
+            if (luRasterSlot == 0 || luRasterSlot == 0xFFFFFFFFu)
+            {
+                if (lbTally) ++suNoRaster;
+                continue;
+            }
+
+            if (renderengine::WorldShader_BindTextureUnit(
+                    lu16Unit, reinterpret_cast<const void*>(static_cast<uintptr_t>(luRasterSlot))))
+            {
+                if (lbTally) ++suBound;
+            }
+            else if (lbTally)
+            {
+                ++suNoTexture;
+            }
+        }
+
+        if (suSeen >= 4096u && suSeen != 0xFFFFFFFFu)
+        {
+            const u32 luSeen = suSeen;
+            suSeen = 0xFFFFFFFFu;   // report once
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[WorldSamplers] technique sampler tally: bound=" << suBound
+                    << " no-TextureState=" << suNoState
+                    << " TextureState-with-null-raster=" << suNoRaster
+                    << " raster-with-no-D3D-texture=" << suNoTexture
+                    << " of " << luSeen << "\n";
+            }
+        }
     }
 
     // [PC bring-up shim] Per-object WVP for the fallback shader.

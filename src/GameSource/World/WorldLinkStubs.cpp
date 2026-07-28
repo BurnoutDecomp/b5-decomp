@@ -4148,42 +4148,18 @@ void WorldModule::BridgeCrashModuleToPhysicsModule(void *,class BrnPhysics::Phys
 }
 
 // ---------------------------------------------------------------------------
-// CgsResource::ShaderTechniqueResourceType -- the two members its own TU
-// documents as DEFERRED (declared, deliberately not bodied there):
-//   PostFixUp @0x827EEBF0 -- the ~150-line shader-profile classification pass.
+// CgsResource::ShaderTechniqueResourceType -- the one member its own TU still
+// documents as DEFERRED:
 //   GetShaderConstantExternalSerialisedResourceDescriptorSize -- its private
-//   descriptor-size helper.
-// The type is now REGISTERED (world-render resource types, 2026-07-27), so the
-// vtable is emitted and the linker needs both symbols. Marked link stubs until
-// that TU's deferral is lifted.
+//   descriptor-size helper (serialiser path only; no runtime caller).
+// The type is REGISTERED (world-render resource types, 2026-07-27), so the
+// vtable is emitted and the linker needs the symbol.
+//
+// PostFixUp @0x827EEBF0's gate is GONE (shading wave 2026-07-28): the function is
+// reconstructed in its home TU CgsShaderTechniqueResourceType.cpp, on top of the
+// now-real ShaderConstantsExternal::FixUp(const ProgramBuffer*) (X360 sub_827ED8D0)
+// in CgsShaderConstants.cpp.
 // ---------------------------------------------------------------------------
-void CgsResource::ShaderTechniqueResourceType::PostFixUp(void* /*lpResource*/,
-                                                         const rw::Resource& /*lrResource*/) const
-{
-    // BOOT GATE (textures/shaders wave 2026-07-28): REACHED -- the converted
-    // SHADERS.BNDL is staged and BrnGameModule::GamePrepare really loads it, so
-    // this runs once per streamed ShaderTechnique (110 of them). A trap here blocks
-    // the load outright. Quiet one-shot log instead; the technique still FixUps
-    // (relocation is complete), it just skips PostFixUp's two passes:
-    //   * the 4 ShaderConstantsExternal::PostFixUp calls (X360 sub_827ED8D0,
-    //     CgsShaderConstants.cpp:1022/1036) that bind each external constant to the
-    //     engine constant table + its ProgramVariableHandle and compact the block;
-    //   * the shader-profile strstr classification (off_82F30F78/dword_82F30F7C) and
-    //     its two first-constant validation warnings.
-    // DELETE when ShaderConstantsExternal::PostFixUp is reconstructed in
-    // CgsShaderConstants.cpp and PostFixUp is bodied in its home TU
-    // (CgsShaderTechniqueResourceType.cpp).
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint
-                << "ShaderTechniqueResourceType::PostFixUp @0x827EEBF0: inert -- external constant"
-                   " binding + profile classification skipped [FLAG PC boot gate]\n";
-    }
-}
-
 uint32_t CgsResource::ShaderTechniqueResourceType::GetShaderConstantExternalSerialisedResourceDescriptorSize(
     const ShaderConstantsExternal* /*lpBlock*/) const
 {

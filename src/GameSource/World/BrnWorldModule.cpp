@@ -3725,6 +3725,90 @@ WorldModule::GenerateShadowMapDispatchLists(
 
 
 // =============================================================================
+// [FLAG PC bring-up] PublishWorldShadingConstantsBringUp -- NOT an X360 function.
+//
+// The world's real vertex/pixel programs (SHADERS.BNDL) read a fixed set of engine
+// constants that the console publishes from the lighting / environment / shadow-map
+// modules: BrnEnvironmentManager feeds the key light + the two irradiance quadrics,
+// BrnSkyDomeManager the scattering + fog, BrnShadowMap the cascade matrices and their
+// two constant vectors. None of those producers is live on this build, so every one of
+// those constants would arrive NULL and the technique would draw with whatever was left
+// in the register file.
+//
+// This publishes a NEUTRAL, DOCUMENTED set derived from what the shaders do with each
+// constant (D:\Reverse\nushaders\Reference\TUB\...\Include\{Irradiance,Fog,Shadow}.fxh):
+//
+//   IrradianceQuadricA/B  ComputeIrradianceFast = saturate(A[0].xyz + linear(N) +
+//                         quadratic(N)); rows 1..3 / B rows 0..2 zeroed leaves a flat
+//                         ambient term, which is the correct "no irradiance probe" value.
+//   KeyLight*             the sun. Direction is the direction the light TRAVELS (the
+//                         shaders use -KeyLightDirection as the vector towards it).
+//   ScattCoeffs           CalculateScattering = pow(saturate(d*x - y), z) * w, so w = 0
+//                         is exactly "no fog"; FogColourPlusWhiteLevel is then unused by
+//                         the lerp but still has to be published (it is dispatched).
+//   ShadowMap_Constants/2 CalcShadowFactor*CSM ends in
+//                         ApplyFade(factor, fade) = factor*fade + 1 - fade with
+//                         fade = saturate(Constants.w - eyeZ * Constants2.w). Zeroing both
+//                         .w gives fade = 0 and therefore a shadow factor of EXACTLY 1.0
+//                         whatever the (unbound) shadow-map sampler returns -- the
+//                         data-driven "shadows off" configuration, not a shader edit.
+//   ShadowMap_WorldToLight the three cascade matrices; identity while there is no shadow
+//                         pass (their result is multiplied out by the fade above).
+//
+// DELETE together with GenerateDispatchListsBringUp when the environment / sky / shadow
+// modules publish these for real.
+// =============================================================================
+void
+WorldModule::PublishWorldShadingConstantsBringUp()
+{
+    ::ShaderConstantTable& lrTable = CgsGraphics::mShaderConstantTable;
+
+    // --- ambient irradiance (a flat sky-lit term; the higher-order rows stay zero) ----
+    Matrix44 lQuadricA;
+    lQuadricA.xAxis = Vector4{ 0.34f, 0.37f, 0.44f, 0.0f };   // irradiance_1 (constant term)
+    lQuadricA.yAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lQuadricA.zAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lQuadricA.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    Matrix44 lQuadricB;
+    lQuadricB.xAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lQuadricB.yAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lQuadricB.zAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lQuadricB.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lrTable.SetShaderConstantData( 18, lQuadricA );
+    lrTable.SetShaderConstantData( 19, lQuadricB );
+
+    // --- the key light (direction of travel: high sun, slightly behind the camera) -----
+    const Vector4 lKeyLightDirection{ 0.406f, -0.812f, 0.419f, 0.0f };
+    lrTable.SetShaderConstantData( 10, lKeyLightDirection );
+    lrTable.SetShaderConstantData(  9, Vector4{ 0.95f, 0.91f, 0.82f, 1.0f } );   // KeyLightColour
+    lrTable.SetShaderConstantData( 11, Vector4{ 0.95f, 0.91f, 0.82f, 1.0f } );   // KeyLightSpecularColour
+    lrTable.SetShaderConstantData( 12, Vector4{ 0.95f, 0.91f, 0.82f, 1.0f } );   // KeyLightClampedColour
+
+    // --- atmosphere: scattering off, fog colour published for the techniques that read it
+    lrTable.SetShaderConstantData( 27, Vector4{ 0.0f, 0.0f, 1.0f, 0.0f } );      // ScattCoeffs
+    lrTable.SetShaderConstantData( 28, Vector4{ 0.62f, 0.70f, 0.80f, 1.0f } );   // FogColourPlusWhiteLevel
+    lrTable.SetShaderConstantData( 33, Vector4{ 0.62f, 0.70f, 0.80f, 1.0f } );   // SkyReflectionColour
+    lrTable.SetShaderConstantData( 29, Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } );      // HDRConstants
+
+    // --- shadow cascades: fade = 0 -> shadow factor exactly 1 (see the banner) ---------
+    Matrix44 laWorldToLight[3];
+    for ( int liCascade = 0; liCascade < 3; ++liCascade )
+    {
+        laWorldToLight[liCascade].xAxis = Vector4{ 1.0f, 0.0f, 0.0f, 0.0f };
+        laWorldToLight[liCascade].yAxis = Vector4{ 0.0f, 1.0f, 0.0f, 0.0f };
+        laWorldToLight[liCascade].zAxis = Vector4{ 0.0f, 0.0f, 1.0f, 0.0f };
+        laWorldToLight[liCascade].wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 1.0f };
+    }
+    lrTable.SetShaderConstantArrayData( 14, laWorldToLight );
+    lrTable.SetShaderConstantData( 15, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );      // ShadowMap_Constants
+    lrTable.SetShaderConstantData( 16, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );      // ShadowMap_Constants2
+    lrTable.SetShaderConstantData( 17, Vector4{ 0.0f, 1.0f, 0.0f, 0.0f } );      // ShadowMap_ObjectCsmSelect
+
+    // --- misc ---------------------------------------------------------------------------
+    lrTable.SetShaderConstantData( 13, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );      // Time
+}
+
+// =============================================================================
 // [FLAG PC bring-up] GenerateDispatchListsBringUp -- NOT an X360 function.
 //
 // The console producer chain is BrnGameModule::DoDispatch @0x823DC458 ->
@@ -3884,7 +3968,38 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     mShaderLodInfo.Update();
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, lEye );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 3, lViewProjection );
-    CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lViewProjection );
+
+    // ViewProjectionModified (34) is NOT the view-projection: the shaders consume it as
+    //     hpos.x = dot(worldPos4, VPM[0]);  hpos.y = dot(worldPos4, VPM[1]);
+    //     z2     = dot(worldPos4, VPM[2]);
+    //     hpos.z = z2 * VPM[3].x + VPM[3].y;   hpos.w = z2 * VPM[3].z + VPM[3].w;
+    // (Include/Transform.fxh TransformWorldToProjection; GetViewSpaceDepthFromWorldPosition
+    // returns that same z2, i.e. VPM row 2 is the VIEW-DEPTH row, which is what makes fog and
+    // the depth encode cheap). So rows 0/1/2 are COLUMNS 0/1/3 of the row-vector
+    // view-projection and row 3 is the {zScale, zBias, wScale, wBias} remap that turns the
+    // view depth back into clip z/w.
+    //
+    // [FLAG PC bring-up] The console builds this in CgsGraphics::Camera::
+    // GetViewProjectionMatrixModified @0x827EC858 (VMX, not reconstructed). Derived here from
+    // the shader contract above for the establishing camera; DELETE with the rest of
+    // GenerateDispatchListsBringUp when the real camera + Camera::GetViewProjectionMatrixModified
+    // land.
+    {
+        const f32 lfZScale = lfFar / ( lfFar - lfNear );
+        const f32 lfZBias  = -lfNear * lfFar / ( lfFar - lfNear );
+
+        Matrix44 lViewProjectionModified;
+        lViewProjectionModified.xAxis = Vector4{ lViewProjection.xAxis.x, lViewProjection.yAxis.x,
+                                                 lViewProjection.zAxis.x, lViewProjection.wAxis.x };
+        lViewProjectionModified.yAxis = Vector4{ lViewProjection.xAxis.y, lViewProjection.yAxis.y,
+                                                 lViewProjection.zAxis.y, lViewProjection.wAxis.y };
+        lViewProjectionModified.zAxis = Vector4{ lViewProjection.xAxis.w, lViewProjection.yAxis.w,
+                                                 lViewProjection.zAxis.w, lViewProjection.wAxis.w };
+        lViewProjectionModified.wAxis = Vector4{ lfZScale, lfZBias, 1.0f, 0.0f };
+        CgsGraphics::mShaderConstantTable.SetShaderConstantData( 34, lViewProjectionModified );
+    }
+
+    PublishWorldShadingConstantsBringUp();
 
     mWorldEntityModule.GenerateDispatchListsFromStreamer(
         lpDispatchFrame, &mShaderLodInfo, lEye, 1.0f,

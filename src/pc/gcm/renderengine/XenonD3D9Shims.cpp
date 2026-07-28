@@ -123,15 +123,28 @@ namespace
     // numElements @+0x08; numElements x 16B elements {u16 stream, u16 offset,
     // u32 Xenon GPU type dword, u16 usage, u16 usageIndex, u32 1}; then one
     // stride byte per element.
+    // A vs_3_0 shader that reads an input the declaration does not supply makes the
+    // draw call FAIL SILENTLY on D3D9, so every shader/declaration pair has to be
+    // checked before it is used. Both sides are reduced to the same 64-bit set:
+    // bit (usage * 4 + min(usageIndex, 3)) for usage < 16.
+    inline u64 DeclUsageBit(u32 luUsage, u32 luUsageIndex)
+    {
+        if (luUsage >= 16u)
+            return 0;
+        if (luUsageIndex > 3u)
+            luUsageIndex = 3u;
+        return 1ull << (luUsage * 4u + luUsageIndex);
+    }
+
     struct Vd32Cached
     {
         IDirect3DVertexDeclaration9* mpDeclaration;
         u32                          muStride;
-        // Whether the declaration exposes D3DDECLUSAGE_TEXCOORD index 0. A vs_3_0
-        // shader that reads an input the declaration does not supply makes the draw
-        // call FAIL on D3D9, so the textured fallback variant may only be bound for
-        // meshes whose declaration has it.
+        // Whether the declaration exposes D3DDECLUSAGE_TEXCOORD index 0 (the fallback
+        // textured variant's only extra input).
         bool                         mbHasTexcoord0;
+        // Every {usage, usageIndex} the declaration supplies, as the bit set above.
+        u64                          muUsageMask;
     };
     std::unordered_map<const void*, Vd32Cached> sVdCache;
 
@@ -193,11 +206,16 @@ namespace
     // element (D3D9 rejects the draw rather than feeding zeroes). So the pair is
     // chosen PER MESH, once its declaration is known -- see
     // WorldFallbackShader_SelectForMesh, called from shadow::Device::SetMeshBuffersPC.
+    // The fallback WVP lives at c240..c243, NOT c0..c3: a mesh can fall back inside a
+    // technique whose REAL programs are otherwise driving the walk (see
+    // WorldFallbackShader_SelectForMesh), and the real world vertex shaders use the low
+    // registers (ShadowMap_WorldToLight lands on c0 in several of them). c240+ is past
+    // everything the converted set declares, so the two paths cannot clobber each other.
     const char* KPC_FALLBACK_VS =
-        "float4 gWvp0 : register(c0);\n"
-        "float4 gWvp1 : register(c1);\n"
-        "float4 gWvp2 : register(c2);\n"
-        "float4 gWvp3 : register(c3);\n"
+        "float4 gWvp0 : register(c240);\n"
+        "float4 gWvp1 : register(c241);\n"
+        "float4 gWvp2 : register(c242);\n"
+        "float4 gWvp3 : register(c243);\n"
         "struct VsOut { float4 hpos : POSITION; float3 opos : TEXCOORD0; };\n"
         "VsOut main(float4 pos : POSITION) {\n"
         "  VsOut o;\n"
@@ -214,10 +232,10 @@ namespace
         "}\n";
 
     const char* KPC_FALLBACK_TEX_VS =
-        "float4 gWvp0 : register(c0);\n"
-        "float4 gWvp1 : register(c1);\n"
-        "float4 gWvp2 : register(c2);\n"
-        "float4 gWvp3 : register(c3);\n"
+        "float4 gWvp0 : register(c240);\n"
+        "float4 gWvp1 : register(c241);\n"
+        "float4 gWvp2 : register(c242);\n"
+        "float4 gWvp3 : register(c243);\n"
         "struct VsOut { float4 hpos : POSITION; float3 opos : TEXCOORD0; float2 uv : TEXCOORD1; };\n"
         "VsOut main(float4 pos : POSITION, float2 uv : TEXCOORD0) {\n"
         "  VsOut o;\n"
@@ -262,6 +280,7 @@ namespace
     bool                    sbMaterialTextureBound = false;
     // Set by WorldVd32_GetDeclaration for the mesh currently being bound.
     bool                    sbLastDeclHasTexcoord0 = false;
+    u64                     suLastDeclUsageMask = 0;
 
     D3DCompileProc GetD3DCompile()
     {
@@ -349,6 +368,67 @@ namespace
         return (luToken & 0xFFFF0000u) == (lbPixel ? 0xFFFF0000u : 0xFFFE0000u)
             && (luToken & 0x0000FF00u) <= 0x0300u;
     }
+
+    // ---- the REAL per-technique shader path ---------------------------------
+    // Which {usage, usageIndex} inputs a compiled vs_3_0 program actually reads, taken
+    // from its own `dcl` instructions: opcode D3DSIO_DCL (0x1F) followed by a
+    // declaration token (usage in bits 0..4, usage index in bits 16..19) and a
+    // destination-parameter token whose register type (bits 28..30 high | 11..12 low)
+    // is D3DSPR_INPUT (1). Cached per shader image.
+    std::unordered_map<const void*, u64> sVsInputMaskCache;
+
+    u64 VertexShaderInputMask(const void* lpShader)
+    {
+        std::unordered_map<const void*, u64>::iterator lIt = sVsInputMaskCache.find(lpShader);
+        if (lIt != sVsInputMaskCache.end())
+            return lIt->second;
+
+        u64 luMask = 0;
+        const u32* lpToken = static_cast<const u32*>(lpShader);
+        u32 luWord = 1;                        // [0] is the version token
+        for (u32 luGuard = 0; luGuard < 65536u; ++luGuard)
+        {
+            const u32 luInstruction = lpToken[luWord];
+            if (luInstruction == 0x0000FFFFu)   // D3DSIO_END
+                break;
+            const u32 luOpcode = luInstruction & 0x0000FFFFu;
+            u32 luLength;
+            if (luOpcode == 0x0000FFFEu)        // comment block (CTAB lives here)
+                luLength = (luInstruction >> 16) & 0x7FFFu;
+            else
+                luLength = (luInstruction >> 24) & 0x0Fu;
+
+            if (luOpcode == 0x1Fu && luLength >= 2u)
+            {
+                const u32 luDeclaration = lpToken[luWord + 1];
+                const u32 luDestination = lpToken[luWord + 2];
+                const u32 luRegisterType = ((luDestination >> 28) & 0x07u)
+                                         | ((luDestination >> 8) & 0x18u);
+                if (luRegisterType == 1u)       // D3DSPR_INPUT
+                {
+                    luMask |= DeclUsageBit(luDeclaration & 0x1Fu,
+                                           (luDeclaration >> 16) & 0x0Fu);
+                }
+            }
+            luWord += luLength + 1u;
+        }
+
+        sVsInputMaskCache[lpShader] = luMask;
+        return luMask;
+    }
+
+    // The fallback shader's WVP register base (see the KPC_FALLBACK_VS note).
+    const u32 KU_FALLBACK_WVP_REGISTER = 240u;
+
+    // The technique's real programs, as chosen by the last SetMeshTechniquePC.
+    IDirect3DVertexShader9* spRealVs = nullptr;
+    IDirect3DPixelShader9*  spRealPs = nullptr;
+    u64         suRealVsInputMask = 0;
+    bool        sbRealProgramsBound = false;
+    // The most recent per-object WVP (the fallback shader's c0..c3). Kept so a mesh that
+    // has to drop back to the fallback can restore it after a real-constant upload.
+    f32         safLastWvp[16] = { 0 };
+    bool        sbHaveLastWvp = false;
 }
 
 namespace renderengine
@@ -388,9 +468,133 @@ namespace renderengine
 
     void WorldFallbackShader_SetWvp(const f32* lpWvpRows16)
     {
+        std::memcpy(safLastWvp, lpWvpRows16, sizeof(safLastWvp));
+        sbHaveLastWvp = true;
         IDirect3DDevice9* lpDevice = Dev();
         if (lpDevice != nullptr)
-            lpDevice->SetVertexShaderConstantF(0, lpWvpRows16, 4);
+            lpDevice->SetVertexShaderConstantF(KU_FALLBACK_WVP_REGISTER, lpWvpRows16, 4);
+    }
+
+    // ---- the REAL per-technique program path (PC leaf) ----------------------
+    // The X360 binds the technique's two microcode programs through
+    // shadow::Device::SetVertexProgram / SetPixelProgram (which push the Xenos shader
+    // headers straight into the command buffer). On PC the same two payloads --
+    // ProgramBufferData + 0x14, which the converter fills with plain D3D9 SM3 bytecode
+    // (FORMAT_MAP.md section 5) -- become IDirect3DVertex/PixelShader9 objects created
+    // once per image and cached by payload address.
+    //
+    // Returns false (leaving nothing bound) when either payload is not D3D9 bytecode or
+    // the object cannot be created; the caller then keeps the flagged fallback pair.
+    bool WorldPrograms_Bind(const void* lpVertexPayload, const void* lpPixelPayload)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        sbRealProgramsBound = false;
+        if (lpDevice == nullptr || lpVertexPayload == nullptr || lpPixelPayload == nullptr)
+            return false;
+        if (!LooksLikeD3D9Bytecode(lpVertexPayload, false) || !LooksLikeD3D9Bytecode(lpPixelPayload, true))
+        {
+            LogOnce("realbc", "[WorldShader] technique program is not D3D9 bytecode - fallback kept\n");
+            return false;
+        }
+
+        IDirect3DVertexShader9*& lrpVs = sVsCache[lpVertexPayload];
+        if (lrpVs == nullptr)
+            lpDevice->CreateVertexShader(static_cast<const DWORD*>(lpVertexPayload), &lrpVs);
+        IDirect3DPixelShader9*& lrpPs = sPsCache[lpPixelPayload];
+        if (lrpPs == nullptr)
+            lpDevice->CreatePixelShader(static_cast<const DWORD*>(lpPixelPayload), &lrpPs);
+        if (lrpVs == nullptr || lrpPs == nullptr)
+        {
+            LogOnce("realcr", "[WorldShader] Create{Vertex,Pixel}Shader FAILED for a technique - fallback kept\n");
+            return false;
+        }
+
+        lpDevice->SetVertexShader(lrpVs);
+        lpDevice->SetPixelShader(lrpPs);
+        spRealVs            = lrpVs;
+        spRealPs            = lrpPs;
+        suRealVsInputMask   = VertexShaderInputMask(lpVertexPayload);
+        sbRealProgramsBound = true;
+        LogOnce("realok", "[WorldShader] REAL per-technique programs bound (SHADERS.BNDL)\n");
+        return true;
+    }
+
+    void WorldShader_ClearRealPrograms()
+    {
+        sbRealProgramsBound = false;
+        spRealVs            = nullptr;
+        spRealPs            = nullptr;
+        suRealVsInputMask   = 0;
+    }
+
+    bool WorldShader_RealProgramsBound()
+    {
+        return sbRealProgramsBound;
+    }
+
+    // FLAG PC bring-up: the alpha-test REFERENCE and comparison belong to the technique's
+    // blend-state object, whose packed Xenos register fields are not decoded yet
+    // (renderengine::BlendStateParameters muState4..muState17). The 1-bit-alpha world
+    // techniques all cut out at the texture's mid-point, so >= 128 stands in until then.
+    void WorldShader_SetAlphaTest(bool lbEnabled)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr)
+            return;
+        lpDevice->SetRenderState(D3DRS_ALPHATESTENABLE, lbEnabled ? TRUE : FALSE);
+        if (lbEnabled)
+        {
+            lpDevice->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATEREQUAL);
+            lpDevice->SetRenderState(D3DRS_ALPHAREF, 128);
+        }
+    }
+
+    // One shader-constant upload: luNumRegisters float4s from lpData at register luRegister.
+    // (X360: a direct write into the Xenos ALU-constant window through the command buffer;
+    // the D3D9 equivalent is Set{Vertex,Pixel}ShaderConstantF.)
+    void WorldShaderConstants_Set(bool lbPixel, u32 luRegister, const void* lpData, u32 luNumRegisters)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr || lpData == nullptr || luNumRegisters == 0)
+            return;
+        // D3D9 SM3 exposes 224 float constants to the vertex stage and 224 to the pixel
+        // stage; a request past the end is rejected wholesale, so clamp and report once.
+        const u32 luLimit = lbPixel ? 224u : 256u;
+        if (luRegister >= luLimit)
+        {
+            LogOnce("creghi", "[WorldShader] constant register out of range for D3D9 - skipped\n");
+            return;
+        }
+        if (luRegister + luNumRegisters > luLimit)
+            luNumRegisters = luLimit - luRegister;
+
+        if (lbPixel)
+            lpDevice->SetPixelShaderConstantF(luRegister, static_cast<const float*>(lpData), luNumRegisters);
+        else
+            lpDevice->SetVertexShaderConstantF(luRegister, static_cast<const float*>(lpData), luNumRegisters);
+    }
+
+    // Bind one texture + the world's standard sampler set at a D3D sampler unit.
+    bool WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster)
+    {
+        IDirect3DDevice9* lpDevice = Dev();
+        if (lpDevice == nullptr || lpRaster == nullptr || luUnit >= 16u)
+            return false;
+        const Texture* const lpTexture = static_cast<const Texture*>(lpRaster);
+        IDirect3DBaseTexture9* const lpD3DTexture = lpTexture->mpD3DTexture;
+        if (lpD3DTexture == nullptr)
+            return false;
+
+        lpDevice->SetTexture(luUnit, lpD3DTexture);
+        // FLAG PC-platform leaf: the real sampler descriptor comes from the TextureState's
+        // 32-byte sampler block (renderengine::SamplerState); until that unpack lands, the
+        // world's standard trilinear/wrap set stands.
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+        return true;
     }
 
     // [PC bring-up shim] Bind a material's own sampler textures.
@@ -493,8 +697,9 @@ namespace renderengine
             // [PC bring-up shim] The fallback pixel shader has a single sampler (s0), so the
             // FIRST material-scope texture is also mirrored onto unit 0 -- otherwise a material
             // whose diffuse sits on a higher unit would sample whatever was left bound there.
-            // Drops out with the real per-technique shaders, which use the true unit numbers.
-            if (!lbBoundAny && lu16Unit != 0)
+            // Skipped once the real per-technique programs are bound: those use the true unit
+            // numbers, and clobbering s0 would break a technique whose s0 is something else.
+            if (!lbBoundAny && lu16Unit != 0 && !sbRealProgramsBound)
             {
                 lpDevice->SetTexture(0, lpD3DTexture);
                 lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
@@ -514,6 +719,7 @@ namespace renderengine
     {
         *lpuStride = 0;
         sbLastDeclHasTexcoord0 = false;
+        suLastDeclUsageMask    = 0;
         if (lpVdImage == nullptr)
             return nullptr;
 
@@ -522,10 +728,11 @@ namespace renderengine
         {
             *lpuStride = lIt->second.muStride;
             sbLastDeclHasTexcoord0 = lIt->second.mbHasTexcoord0;
+            suLastDeclUsageMask    = lIt->second.muUsageMask;
             return lIt->second.mpDeclaration;
         }
 
-        Vd32Cached lEntry = { nullptr, 0, false };
+        Vd32Cached lEntry = { nullptr, 0, false, 0 };
         const u8* lpImage = static_cast<const u8*>(lpVdImage);
         u16 lu16NumElements;
         std::memcpy(&lu16NumElements, lpImage + 0x08, 2);
@@ -574,6 +781,7 @@ namespace renderengine
             laElements[lu].UsageIndex = lu8UsageIndex;
             if (lu8Usage == D3DDECLUSAGE_TEXCOORD && lu8UsageIndex == 0)
                 lEntry.mbHasTexcoord0 = true;
+            lEntry.muUsageMask |= DeclUsageBit(lu8Usage, lu8UsageIndex);
             if (static_cast<u32>(lu16Offset) + 16u > luMaxEnd)
                 luMaxEnd = lu16Offset + 16u;
         }
@@ -608,7 +816,10 @@ namespace renderengine
         }
 
         if (!lbOk)
+        {
             lEntry.mbHasTexcoord0 = false;
+            lEntry.muUsageMask    = 0;
+        }
         {
             // [DIAG one-shot] first vertex declaration built for a world mesh.
             static bool sbDiagVd = false;
@@ -626,6 +837,7 @@ namespace renderengine
         sVdCache[lpVdImage] = lEntry;
         *lpuStride = lEntry.muStride;
         sbLastDeclHasTexcoord0 = lEntry.mbHasTexcoord0;
+        suLastDeclUsageMask    = lEntry.muUsageMask;
         return lEntry.mpDeclaration;
     }
 
@@ -635,33 +847,63 @@ namespace renderengine
     void WorldFallbackShader_SelectForMesh()
     {
         IDirect3DDevice9* lpDevice = Dev();
-        if (lpDevice == nullptr || !CompileFallbackShaders(lpDevice))
+        if (lpDevice == nullptr)
             return;
 
-        const bool lbTextured = sbMaterialTextureBound && sbLastDeclHasTexcoord0
-                             && spFallbackTexVs != nullptr && spFallbackTexPs != nullptr;
+        // The technique's REAL programs are bound and this mesh's declaration supplies every
+        // input the vertex program declares -> nothing to choose, keep them.
+        // (A vs_3_0 input the declaration lacks makes the D3D9 draw fail silently, so a mesh
+        // that cannot feed the real shader has to drop back to the flagged fallback pair --
+        // which then needs its own c0..c3 WVP restored, because the technique's constants
+        // have just been uploaded over those registers.)
+        const bool lbRealUsable = sbRealProgramsBound
+                               && (suRealVsInputMask & ~suLastDeclUsageMask) == 0;
         {
-            // [DIAG] one-shot tally of which fallback pair the world meshes take, and why
-            // the untextured ones do. Printed after the first 4096 selections so a single
-            // line covers a whole frame's worth of the world list.
-            static u32 suSeen = 0u, suTex = 0u, suNoTexture = 0u, suNoUv = 0u;
+            // [DIAG] one-shot tally of what the world meshes drew with. Printed after the
+            // first 4096 selections so a single line covers a whole frame's worth of the list.
+            static u32 suSeen = 0u, suReal = 0u, suRealBadDecl = 0u,
+                       suTex = 0u, suNoTexture = 0u, suNoUv = 0u;
             if (suSeen < 4096u)
             {
                 ++suSeen;
-                if (lbTextured)          ++suTex;
+                if (lbRealUsable)                 ++suReal;
+                else if (sbRealProgramsBound)     ++suRealBadDecl;
+                else if (sbMaterialTextureBound && sbLastDeclHasTexcoord0) ++suTex;
                 else if (!sbMaterialTextureBound) ++suNoTexture;
-                else if (!sbLastDeclHasTexcoord0) ++suNoUv;
+                else                              ++suNoUv;
                 if (suSeen == 4096u)
                 {
-                    char lac[192];
+                    char lac[256];
                     std::snprintf(lac, sizeof(lac),
-                        "[WorldFallback] mesh shader tally: textured=%u flat(no material "
-                        "texture)=%u flat(decl has no TEXCOORD0)=%u of %u\n",
-                        suTex, suNoTexture, suNoUv, suSeen);
+                        "[WorldShader] mesh shader tally: REAL=%u real-but-decl-short=%u "
+                        "fallback textured=%u fallback flat(no material texture)=%u "
+                        "fallback flat(no TEXCOORD0)=%u of %u\n",
+                        suReal, suRealBadDecl, suTex, suNoTexture, suNoUv, suSeen);
                     CgsDev::Log::WriteToLog(lac);
                 }
             }
         }
+        if (lbRealUsable)
+        {
+            LogOnce("realdraw", "[WorldShader] REAL technique shaders are drawing the world\n");
+            // Re-assert: an earlier mesh of this same technique may have swapped in the
+            // fallback pair.
+            lpDevice->SetVertexShader(spRealVs);
+            lpDevice->SetPixelShader(spRealPs);
+            return;
+        }
+        if (sbRealProgramsBound)
+        {
+            LogOnce("realdecl",
+                    "[WorldShader] mesh declaration lacks an input the technique's vertex program"
+                    " declares - flagged fallback used for it\n");
+        }
+
+        if (!CompileFallbackShaders(lpDevice))
+            return;
+
+        const bool lbTextured = sbMaterialTextureBound && sbLastDeclHasTexcoord0
+                             && spFallbackTexVs != nullptr && spFallbackTexPs != nullptr;
         if (lbTextured)
         {
             LogOnce("wtex", "[WorldFallback] TEXTURED world draws live (material samplers bound)\n");
