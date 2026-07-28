@@ -37,6 +37,7 @@
 #include "GameSource/Director/Camera/BrnCameraEffects.h"  // BrnDirector::Camera::CameraEffects (by value)
 #include "GameSource/Director/Camera/BrnDepthOfField.h"   // BrnDirector::Camera::DepthOfField (by value)
 #include "GameSource/Director/Camera/BrnCameraState.h"    // BrnDirector::Camera::CameraState (by value)
+#include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount (aliases the state head)
 #include <cstddef>                                        // offsetof
 
 namespace Attrib { struct RefSpec; }
@@ -199,6 +200,15 @@ namespace BrnDirector
             const rw::math::vpu::Matrix44Affine& GetTransform() const;
             void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform);
 
+            // ADDITIVE (the Behaviour base + BehaviourHelper::Update): the per-camera flag
+            // state and the validity account that overlays its head set (see the union
+            // below). The X360 reaches both with `addi rN, camera, 0x138`; named accessors so
+            // the behaviour layer never forms that address itself.
+            CameraState&           GetState()           { return mState; }
+            const CameraState&     GetState() const     { return mState; }
+            ValidityAccount&       GetValidityAccount() { return mValidityAccount; }
+            const ValidityAccount& GetValidityAccount() const { return mValidityAccount; }
+
             // The per-frame effects block (DWARF-named accessor: the PS3 hint for
             // PerlinShakeController::Update calls Camera::GetEffects() then
             // CameraEffects::GetShakeAmplitude()).
@@ -226,6 +236,14 @@ namespace BrnDirector
             union
             {
                 CameraState mState;                          // +0x138 (0x18)
+                // ADDITIVE ALIAS (Behaviour::Fail @0x822063E8 / ::SetCantSwitchFromMeNow
+                // @0x82206388 / BehaviourHelper::Update @0x82220688): every one of those
+                // reaches the camera's VALIDITY ACCOUNT with `addi r3, camera, 0x138` --
+                // i.e. the account IS the CameraState HEAD set. `ValidityAccount` holds one
+                // BitArray<32> (8 bytes), exactly overlaying `CameraState::mHeadFlags`.
+                // Named as a union member (the same pattern the mState_uFlags alias below
+                // already uses) so no consumer casts or offsets to reach it.
+                ValidityAccount mValidityAccount;            // +0x138 (== mState.mHeadFlags)
                 struct
                 {
                     u8  maStateHead[0x08];                   // +0x138 (CameraState head)

@@ -261,8 +261,10 @@ namespace BrnDirector
 
             Camera::Behaviour* lpBehaviour = sub_821FCDA8(&mDriveThruBehaviourHandle);
 
-            // "flag C" (Camera::Behaviour +0xC; see Behaviour.cpp) gates the hand-off.
-            if (!lpBehaviour->GetBaseFlagC())
+            // Camera::Behaviour +0x0C gates the hand-off. That byte is the base's
+            // mbCanSwitchFromMeNow (the retired IceAnim fork called it "flag C"), so the
+            // drive-thru hand-off is literally "wait until the director may cut away from me".
+            if (!lpBehaviour->CanSwitchFromMeNow())
             {
                 break;
             }

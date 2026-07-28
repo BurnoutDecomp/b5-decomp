@@ -50,11 +50,28 @@ public:
     bool Prepare(IAbstractPoolFreeObject* lpFreeObjectInterface, void* lpObject,
                  s32 liIndex, s32 liSize);
 
-    // Remaining handle API (declared-only in this slice; bodies live with the pool work).
-    bool        Release();
-    void*       Get();
-    const void* Get() const;
-    s32         GetSize() const;
+    // Hand the slot back to the owning pool. X360-attested from
+    // BehaviourManager::ReleaseBehaviours @0x8221FDE8, which inlines it as
+    //     freeIface = handle.mpFreeObjectInterface;  (*(*freeIface))(freeIface, handle.miIndex)
+    // -- i.e. a virtual FreeObject on the owning pool with the slot index. (The console's
+    // interface has FreeObject in vtable slot 0, so it has no virtual destructor there; the
+    // host interface keeps one, which shifts the slot but not the semantics.) The console
+    // does NOT clear the handle afterwards, so neither does this.
+    bool Release()
+    {
+        if (mpFreeObjectInterface != 0)
+        {
+            mpFreeObjectInterface->FreeObject(miIndex);
+        }
+        return true;
+    }
+
+    // The pooled object / slot size. The X360 reads both as plain field loads at every call
+    // site (`lwz r3, 0(handle)` / `lwz rN, 0xC(handle)`); named here so no consumer does.
+    void*       Get()             { return mpObject; }
+    const void* Get() const       { return mpObject; }
+    s32         GetSize() const   { return miSize; }
+
     bool        operator==(const AbstractPoolVoidHandle& lrOther) const;
 
 protected:

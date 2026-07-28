@@ -402,6 +402,332 @@ namespace Camera
         }
     }
 
+
+    // ========================================================================
+    // ⭐ THE BEHAVIOUR-HELPER SPINE -- the four functions that turn a pooled Camera::Behaviour
+    // into a per-frame camera. Every one of them dispatches the Behaviour base's vtable, which
+    // is why none of them could be written before Camera::Behaviour was homed.
+    // ========================================================================
+
+    // ------------------------------------------------------------------------
+    // BehaviourHelper::Prepare @0x82255F48 -- take ownership of a freshly-allocated pool slot.
+    //
+    // asm:  li  r10,0; stw r10,0x170(r31); stw r10,0x174(r31)   : both debug owners cleared
+    //       lwz/stw x4 from the by-value handle arg into 0x00..0x0C : the four-word handle copy
+    //       clrlwi r3,r10,0                                     : r3 = handle word0 == the object
+    //       lwz r11,0(r3); lwz r11,0(r11); mtctr; bctrl         : VIRTUAL SLOT 0 -> Construct()
+    //       addi r3,r31,0x10; bl Camera::Construct              : the slot's own camera
+    //       li  r3,1                                            : always true
+    // ------------------------------------------------------------------------
+    bool BehaviourManager::BehaviourHelper::Prepare(AbstractPoolVoidHandle lHandle)
+    {
+        mpDebugArbitratorStateOwner = 0;    // stw 0, 0x170
+        mpDebugMomentOwner          = 0;    // stw 0, 0x174
+
+        mBehaviourPoolHandle = lHandle;     // the four-word copy into +0x00..+0x0C
+
+        // The pooled object's OWN vtable, slot 0 -- Behaviour::Construct.
+        GetBehaviour()->Construct();
+
+        mCamera.Construct();                // Camera::Construct(this + 0x10)
+        return true;
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHelper::Update @0x82220688 -- run one frame of the behaviour it owns.
+    //
+    // asm:  lwz r11,0(r31); stw r11,0x60(r31)      : camera.mpDebugInfoBehaviour = behaviour
+    //                                                (helper +0x60 == mCamera +0x50)
+    //       lbz byte_82FAA5EC; assert                : "sbFailFlagMaskSet"
+    //                                                  (BrnCameraValidityAccount.h:193)
+    //       ld 0x148(r31); and qword_82FAA5D0; std   : camera.mValidityAccount &= sFailFlagMask
+    //                                                (helper +0x148 == mCamera +0x138)
+    //       lbz r10,9(behaviour) -> stb r10,0xB      : mbCanSwitchToMeNow = !mbHasFailed
+    //       li r11,1;             stb r11,0xC        : mbCanSwitchFromMeNow = true
+    //                                                  == the two stores Behaviour::PreUpdate is
+    //       lwz r11,8(vt); bctrl                     : VIRTUAL SLOT 2 -> Update(mCamera, info)
+    // The return value is the behaviour's own.
+    // ------------------------------------------------------------------------
+    bool BehaviourManager::BehaviourHelper::Update(const BehaviourSharedInfo& lrSharedInfo)
+    {
+        Behaviour* const lpBehaviour = GetBehaviour();
+
+        // The camera records which behaviour produced it (Camera::ValidateTransformWithDebugInfo
+        // names it in its assert text).
+        mCamera.mpDebugInfoBehaviour = lpBehaviour;
+
+        // Rebuild this frame's "can the director cut to/from me" verdict from scratch, keeping
+        // only the latched failure bits.
+        mCamera.GetValidityAccount().MaskToFailFlags();
+
+        lpBehaviour->PreUpdate();
+
+        return lpBehaviour->Update(mCamera, lrSharedInfo);
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHelper::PostCollisionUpdate -- the collision-pass twin of Update, dispatched by
+    // BehaviourManager::PostCollisionUpdateAllBehaviours @0x8221F870.
+    // FLAG: SHAPE-attested only. The console body is inlined into its caller, so the exact
+    //   prologue (whether it repeats Update's camera/account bookkeeping) is not separately
+    //   pinned; the vtable dispatch and the (camera, info) argument pair are, from the
+    //   Behaviour vtable's slot 3 and from every concrete override's signature.
+    //   DELETE-WHEN: PostCollisionUpdateAllBehaviours @0x8221F870 is walked.
+    // ------------------------------------------------------------------------
+    bool BehaviourManager::BehaviourHelper::PostCollisionUpdate(const BehaviourSharedInfo& lrSharedInfo)
+    {
+        return GetBehaviour()->PostCollisionUpdate(mCamera, lrSharedInfo);
+    }
+
+    void BehaviourManager::BehaviourHelper::SetDebugArbitratorStateOwner(const ArbitratorState* lpOwner)
+    {
+        mpDebugArbitratorStateOwner = lpOwner;   // helper +0x170
+    }
+
+    void BehaviourManager::BehaviourHelper::SetMomentOwner(const Moment* lpOwner)
+    {
+        mpDebugMomentOwner = lpOwner;            // helper +0x174
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourControllerLockInterface::Construct / SetBehaviourHelperIndex -- the two-word
+    // block PrepareBehaviours / ReleaseBehaviours build on their own stack and re-stamp before
+    // each dispatch (X360: `v43[1] = manager` once, `v43[0] = lHelperIndex` per behaviour).
+    // ------------------------------------------------------------------------
+    void BehaviourControllerLockInterface::Construct(BehaviourManager* lpManager)
+    {
+        mCurrentBehaviourHelper = BehaviourHelperIndex(-1);
+        mpBehaviourManager      = lpManager;
+    }
+
+    void BehaviourControllerLockInterface::SetBehaviourHelperIndex(BehaviourHelperIndex lHelper)
+    {
+        mCurrentBehaviourHelper = lHelper;
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::PrepareBehaviours @0x8221EE08 -- give every behaviour queued since the
+    // last pass its first Prepare.
+    //
+    // X360 shape:
+    //     if (!mBehaviourNeedsPreparingFlags.IsAnyBitSet()) return;   // the leading bit scan
+    //     assert(lpBehaviourController != NULL);                      // h:825
+    //     BehaviourControllerLockInterface lLock; lLock.Construct(this);
+    //     BehaviourSharedPrepareReleaseInfo lInfo = { &lLock, lpResourceManager };
+    //     for (i = first set bit; i != -1; i = next set bit)
+    //     {
+    //         lLock.SetBehaviourHelperIndex(i);
+    //         assert( mBehaviourHelperPool[i].Get().Prepare(lSharedInfo) );   // .cpp:162
+    //         mBehaviourNeedsPreparingFlags.UnSetBit(i);
+    //     }
+    // The `.Get().Prepare(...)` in that assert text is the VIRTUAL SLOT 1 dispatch
+    // (`(*(**v14 + 4))(*v14, v44)`).
+    //
+    // DE-OPT NOTE: the console advances with GetNextNonZeroBit from the just-cleared index;
+    // because every visited bit is cleared in the same iteration, re-scanning from the first
+    // set bit is behaviourally identical and needs no index bookkeeping.
+    //
+    // ⭐ This is the function that lets ArbStateAttractMode leave E_STATE_PREPARING: the state
+    // polls IsBehaviourWaitingToPrepare (== this bit) every frame, and MainDirector::Update
+    // calls PrepareBehaviours unconditionally at the end of the frame.
+    // ------------------------------------------------------------------------
+    void BehaviourManager::PrepareBehaviours(const DirectorResourceManager* lpResourceManager)
+    {
+        if (mBehaviourNeedsPreparingFlags.GetFirstNonZeroBit() < 0)
+        {
+            return;   // nothing queued -- the console's leading bit scan
+        }
+
+        BehaviourControllerLockInterface lLockInterface;
+        lLockInterface.Construct(this);
+
+        BehaviourSharedPrepareReleaseInfo lSharedInfo;
+        lSharedInfo.mpInterpolateLockInterface = &lLockInterface;
+        lSharedInfo.mpDirectorResourceManager  = lpResourceManager;
+
+        for (s32 liHelper = mBehaviourNeedsPreparingFlags.GetFirstNonZeroBit();
+             liHelper >= 0;
+             liHelper = mBehaviourNeedsPreparingFlags.GetFirstNonZeroBit())
+        {
+            const BehaviourHelperIndex lHelper(liHelper);
+
+            lLockInterface.SetBehaviourHelperIndex(lHelper);
+
+            const bool lbPrepared = mBehaviourHelperPool[lHelper].GetBehaviour()->Prepare(lSharedInfo);
+            CGS_ASSERT(lbPrepared,
+                       "mBehaviourHelperPool[lBehaviourHelperIndex].Get().Prepare(lSharedInfo)"); // .cpp:162
+            (void)lbPrepared;
+
+            mBehaviourNeedsPreparingFlags.UnSetBit(static_cast<u32>(liHelper));
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::ReleaseBehaviours @0x8221FDE8 -- hand every behaviour queued for
+    // release back to its pool.
+    //
+    // X360 shape (same leading bit scan / lock-interface build as PrepareBehaviours, over
+    // mBehaviourNeedsReleasingFlags at manager +84664):
+    //     lrHelper = mBehaviourHelperPool[i];
+    //     (*(**lrHelper + 16))(*lrHelper, &lInfo);      : VIRTUAL SLOT 4 -> Release(info)
+    //     freeIface = lrHelper.mBehaviourPoolHandle.mpFreeObjectInterface;
+    //     lrHelper.mpDebugArbitratorStateOwner = 0;     : helper +0x170
+    //     lrHelper.mpDebugMomentOwner          = 0;     : helper +0x174
+    //     (*(*freeIface))(freeIface, handle.miIndex);   : the behaviour's own pool slot freed
+    //     mBehaviourHelperPool.FreeObject(i);
+    //     mBehaviourHelperIndexArray.EraseInstancesOf(i);
+    //     mBehaviourNeedsReleasingFlags.UnSetBit(i);
+    // ------------------------------------------------------------------------
+    void BehaviourManager::ReleaseBehaviours()
+    {
+        if (mBehaviourNeedsReleasingFlags.GetFirstNonZeroBit() < 0)
+        {
+            return;
+        }
+
+        BehaviourControllerLockInterface lLockInterface;
+        lLockInterface.Construct(this);
+
+        BehaviourSharedPrepareReleaseInfo lSharedInfo;
+        lSharedInfo.mpInterpolateLockInterface = &lLockInterface;
+        lSharedInfo.mpDirectorResourceManager  = mpDirectorResourceManager;
+
+        for (s32 liHelper = mBehaviourNeedsReleasingFlags.GetFirstNonZeroBit();
+             liHelper >= 0;
+             liHelper = mBehaviourNeedsReleasingFlags.GetFirstNonZeroBit())
+        {
+            const BehaviourHelperIndex lHelper(liHelper);
+
+            BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelper];
+
+            lLockInterface.SetBehaviourHelperIndex(lHelper);
+
+            lrHelper.GetBehaviour()->Release(lSharedInfo);
+
+            lrHelper.SetDebugArbitratorStateOwner(0);
+            lrHelper.SetMomentOwner(0);
+
+            // Hand the BEHAVIOUR's slot back to whichever AbstractPool served it...
+            lrHelper.GetPoolHandle().Release();
+            // ...and the HELPER's slot back to the helper pool.
+            mBehaviourHelperPool.FreeObject(lHelper);
+
+            mBehaviourHelperIndexArray.EraseInstancesOf(lHelper);
+
+            mBehaviourNeedsReleasingFlags.UnSetBit(static_cast<u32>(liHelper));
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::UpdateAllBehaviours @0x82251960 -- run every live behaviour for one
+    // frame. This is the call that makes a director camera MOVE.
+    //
+    // X360 body, in order:
+    //   (1) the temp-FOV-boost responder + the two rotation controllers  -- ⚠️ GATED, see below
+    //   (2) mfLastHandbrakeTime bookkeeping -> lrSharedInfo.mfLastHandbrakeTime   -- REAL
+    //   (3) for i in [0, mBehaviourHelperIndexArray.GetLength()):                 -- REAL
+    //           lHelper = mBehaviourHelperIndexArray[i];
+    //           assert(!mBehaviourNeedsPreparingFlags.IsBitSet(lHelper));   // .cpp:270
+    //           if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(lHelper))
+    //               mBehaviourHelperPool[lHelper].Update(lrSharedInfo);
+    //           <per-behaviour debug printer / ValidityAccount::Print block>       -- ⚠️ GATED
+    //   (4) the attached Tweaker's Update/Render                                   -- ⚠️ GATED
+    //
+    // ⚠️ QUIET GATE (1): the leading block is a genuine VMX lane pipeline over the manager's
+    //   un-homed responder region (manager +88176/+88180) plus
+    //   Camera2DRotationController::Update and CameraSphericalRotationController::Update, and
+    //   it ends in `lrSharedInfo.mfTempFOVBoostAmount = Utils::SineLerp(...)`. Both controllers
+    //   are named opaque sub-objects in this class (see the header FLAG) and the block reaches
+    //   AllVehicleData::GetPlayer + a Vector3<8> ring buffer. Paraphrasing it scalar-wise is
+    //   exactly what the project rules forbid.
+    //   CONSEQUENCE: mfTempFOVBoostAmount / mfSpeedRatio stay at whatever the caller seeded
+    //   (0 today) and the 2D / spherical rotation controllers do not advance -- i.e. no
+    //   speed-based FOV boost and no player-driven camera orbit. Behaviours that do not read
+    //   those fields (the road-runner fly-by among them) are unaffected.
+    //   DELETE-WHEN: the two rotation controllers + the responder region are homed.
+    //
+    // ⚠️ QUIET GATE (3-debug) and (4): the per-behaviour debug print block (GetDebugFullName /
+    //   ValidityAccount::Print / DebugPrinter::ActualPrint, all gated on
+    //   mbDebugDisplayAllCameras) and the tweaker Update/Render tail. Neither touches a camera.
+    //   DELETE-WHEN: DebugPrinter's print surface and the tweaker are wired.
+    // ------------------------------------------------------------------------
+    void BehaviourManager::UpdateAllBehaviours(bool lbPaused, BehaviourSharedInfo& lrSharedInfo,
+                                               const ControllerInfo& lrControllerInfo, bool lbArg,
+                                               DebugPrinter& lrDebugPrinter)
+    {
+        (void)lrControllerInfo;
+        (void)lbArg;
+        (void)lrDebugPrinter;
+
+        // ⚠️ GATE (1): the responder / rotation-controller VMX prologue (see the banner).
+
+        // (2) The handbrake timestamp the behaviours read out of the shared info. The X360
+        //     resets it on the controller's handbrake byte and otherwise accumulates the
+        //     no-slomo world timestep, saturating at FLT_MAX (the "never" sentinel
+        //     Construct/Prepare seed).
+        //     ⚠️ GATE: the controller's handbrake byte lives in the un-homed ControllerInfo
+        //     (console +9); without it the reset never fires. The accumulate half is real.
+        //     DELETE-WHEN: Camera::ControllerInfo is homed.
+        if (mfLastHandbrakeTime < 3.4028235e38f)
+        {
+            mfLastHandbrakeTime += lrSharedInfo.mTimestep.Get(BrnDirector::Timestep::E_WORLD_NO_SLOMO);
+        }
+        lrSharedInfo.mfLastHandbrakeTime = mfLastHandbrakeTime;
+
+        // (3) Every live behaviour, in helper-index-array order.
+        const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
+        for (u32 luEntry = 0; luEntry < luNumBehaviours; ++luEntry)
+        {
+            const BehaviourHelperIndex lHelper = mBehaviourHelperIndexArray[luEntry];
+            const u32 luHelper = static_cast<u32>(static_cast<s32>(lHelper));
+
+            CGS_ASSERT(!mBehaviourNeedsPreparingFlags.IsBitSet(luHelper),
+                       "!mBehaviourNeedsPreparingFlags.IsBitSet(luCurrentHelperIndex)");  // .cpp:270
+
+            if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(luHelper))
+            {
+                mBehaviourHelperPool[lHelper].Update(lrSharedInfo);
+            }
+
+            // ⚠️ GATE (3-debug): the per-behaviour debug readout (see the banner).
+        }
+
+        // ⚠️ GATE (4): the attached tweaker's Update/Render tail (see the banner).
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::SetBehaviourUpdatesDuringPause @0x82208390 -- whether a behaviour keeps
+    // ticking while the game is paused (the flag UpdateAllBehaviours' loop consults).
+    // ------------------------------------------------------------------------
+    void BehaviourManager::SetBehaviourUpdatesDuringPause(BehaviourHelperIndex lHelper,
+                                                          bool lbUpdatesDuringPause)
+    {
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lHelper),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)");
+
+        const u32 luHelper = static_cast<u32>(static_cast<s32>(lHelper));
+        if (lbUpdatesDuringPause)
+        {
+            mBehaviourUpdateDuringPauseFlags.SetBit(luHelper);
+        }
+        else
+        {
+            mBehaviourUpdateDuringPauseFlags.UnSetBit(luHelper);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::GetCameraFromBehaviour -- the camera a live behaviour produced, by
+    // helper index (the manager-side twin of BehaviourHandle::GetProducedCamera).
+    // ------------------------------------------------------------------------
+    const Camera& BehaviourManager::GetCameraFromBehaviour(BehaviourHelperIndex lHelper) const
+    {
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lHelper),
+                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)");
+
+        return mBehaviourHelperPool[lHelper].GetCamera();
+    }
+
     // ========================================================================
     // AllocateBehaviour<TBehaviour> explicit instantiations (X360 @0x82263370 &c.)
     //
@@ -432,5 +758,20 @@ namespace Camera
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRoadRunner>();
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRotateAboutVehicle>();
     template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourSpirallingDeathcam>();
+
+    // ========================================================================
+    // NewBehaviour<TBehaviour> explicit instantiation (X360 @0x822580F8 &c.)
+    //
+    // Only the road-runner is emitted here: it is the one behaviour on the live attract-mode
+    // path, and it is the one whose class has been re-based onto the canonical
+    // Camera::Behaviour (see BrnBehaviourRoadRunner.h). The other ~34 behaviour slices still
+    // model their base head as an opaque `void* mpVTable`, so pooling them and dispatching
+    // Behaviour's vtable through the helper would be a static_cast onto a type that is not
+    // (yet) a Behaviour. They are re-based one at a time; until then their NewBehaviour<>
+    // call sites keep binding the generic DECLARATION-ONLY overload, exactly as before.
+    // ========================================================================
+    template void BehaviourManager::NewBehaviour<BehaviourRoadRunner>(
+        BehaviourHandle<BehaviourRoadRunner>& lrHandle, void* lpOwningState,
+        const void* lpOwner, s32 liRefLimit);
 }
 } // namespace BrnDirector

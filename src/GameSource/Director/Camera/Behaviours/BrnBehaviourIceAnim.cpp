@@ -134,13 +134,9 @@ static bool IsLookAtVehicleSpace(s32 liSpace)
 // ============================================================================
 void BehaviourIceAnim::Construct()
 {
-    // --- base flag/state block ---
-    mbHasPreparedCamera = false;
-    mbFailed = false;
-    mbBaseFlagA = false;
-    mbMotionBlurGate = false;
-    mbBaseFlagC = false;
-    miBaseResetWord = 0;
+    // --- base flag/state block: the six stores ARE the inlined Behaviour::Construct
+    //     (see Behaviour.cpp); named base call now that the base has a home. ---
+    Behaviour::Construct();
     mpCurrentTakeData = 0;
 
     // --- the four behaviour-mode flags + the take guid / source block ---
@@ -303,7 +299,7 @@ bool BehaviourIceAnim::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
     }
 
     mpCurrentTakeData = reinterpret_cast<u8*>(lpTakeData) + 0xC;
-    mbHasPreparedCamera = false;
+    mbIsPrepared = false;
     return true;
 }
 
@@ -329,16 +325,17 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
 
     if (!mPrimaryVehicleRef.IsValid(lpWorld) || !mSecondaryVehicleRef.IsValid(lpWorld))
     {
-        // Neither anchor resolves -> flag "give up following" and clear the follow state.
-        lrInfo.RequestNoFollow();
-        mbMotionBlurGate = false;
-        mbBaseFlagC = true;
-        mbFailed = true;
+        // Neither anchor resolves -> give up following. The X360 block here (account
+        // SetFlag(11) on camera +0x138, `camera+0x140 &= ~2`, then the three base flag
+        // stores) is the INLINED Behaviour::Fail @0x822063E8 -- expressed as the named base
+        // call now that the base has a home. Reason 11 is the fork's own `+312 |= 0x800`
+        // (bit 11) written as the flag index.
+        Fail(lrCamera, 11);
         return true;
     }
 
     if (lrSharedInfo.ShouldRePrepareController()
-        && !mKeyAnimController.Prepare(lrSharedInfo.GetDirectorResourceManager(), miAnimGuid))
+        && !mKeyAnimController.Prepare(*lrSharedInfo.GetDirectorResourceManager(), miAnimGuid))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
@@ -347,15 +344,18 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         CgsDev::Assert::EndAssert();
     }
 
-    lrInfo.RequestFollow();
-    mbBaseFlagA = true;
+    // The fork's `RequestFollow()` is the camera-state write `camera+0x140 |= 2` -- the
+    // exact bit Behaviour::Fail clears. Expressed through CameraState's named ClearFlag/
+    // SetFlag pair so no offset is poked (see the FLAG on the flag id in Behaviour.cpp).
+    lrCamera.GetState().SetFlag(1u, true);
+    mbTweakerAttached = true;      // +0x0A -- see the FLAG in BrnBehaviourIceAnim.h
 
     // The reference-space rows the controller reads, taken from the shared info.
     void* lpSpaceArgs = lrSharedInfo.GetSpaceArgs();
 
     // Heading-space look-at: build it for the secondary (look-at) vehicle, then SLerp the
     // behaviour's stored heading-space transform towards it on the first prepared frame.
-    if (!mbHasPreparedCamera)
+    if (!mbIsPrepared)
     {
         mSecondaryVehicleRef.Get(lpWorld);
         mLastCamera.mTransform = Utils::CreateLookAt(lpSpaceArgs);
@@ -376,10 +376,10 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
 
     // Seed the behaviour's stored camera from the shared camera the first time only
     // (Camera::operator=(mLastCamera, lrCamera): dst = mLastCamera, src = lrCamera).
-    if (!mbHasPreparedCamera)
+    if (!mbIsPrepared)
     {
         IceAnimCameraOps::CopyTransformFrom(mLastCamera, lrCamera);
-        mbHasPreparedCamera = true;
+        mbIsPrepared = true;
     }
 
     // --- Pick the eye space ---
@@ -422,7 +422,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         IceAnimCameraOps::SetFOV(lrCamera, IceAnimCameraOps::GetFOV(mLastCamera));
 
         const rw::math::vpu::Vector3& lLookPos = mKeyAnimController.GetLookPos();
-        const f32 lfTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_TYPE_DEFAULT);
+        const f32 lfTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_WORLD);
         mBystanderRef.Get(lpWorld);
         IceAnimCameraOps::RunLooker(lrCamera, mLooker, lLookPos, lfTimeStep);
     }
@@ -433,7 +433,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
 
     if (liLookSpace == 11)
     {
-        const f32 lfShakeTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_TYPE_DEFAULT);
+        const f32 lfShakeTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_WORLD);
         IceAnimCameraOps::RunShake(lrCamera, mShake, lfShakeTimeStep);
     }
 
@@ -447,12 +447,15 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         {
             // Request the see-through flag on the camera and clear the motion-blur gate.
             IceAnimCameraOps::RequestSeeThrough(lrCamera);
-            mbMotionBlurGate = false;
+            mbCanSwitchToMeNow = false;
         }
     }
 
-    if (!HasFinishedOrFailed() && !mbFailed)
-        SetCantSwitchFromMeNow(lrSharedInfo.GetInfoPointer(), 29);
+    // SetCantSwitchFromMeNow's first argument is the CAMERA (the account it stamps lives at
+    // camera +0x138) -- the retired fork threaded the shared info there by mistake. Reason 29
+    // sits inside the account's attested no-cut-from band [27,31).
+    if (!HasFinishedOrFailed() && !HasFailed())
+        SetCantSwitchFromMeNow(lrCamera, 29);
 
     // --- Debug visibility readout ---
     void* lpDebugSink = lrSharedInfo.GetDebugSink();
@@ -525,7 +528,7 @@ bool BehaviourIceAnim::HasFinishedOrFailed() const
 {
     if (mKeyAnimController.HasFinished())
         return true;
-    if (mbFailed)
+    if (HasFailed())
         return true;
     return false;
 }

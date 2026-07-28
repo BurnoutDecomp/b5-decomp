@@ -2,43 +2,75 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_ROAD_RUNNER_H
 
 #include "types.hpp"
-#include "rw/math/vpu/types.h"                        // rw::math::vpu::Matrix44Affine / Vector3
-#include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (the mbPrepared guards)
+#include "rw/math/vpu/types.h"                                     // Matrix44Affine / Vector3
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT (the mbPrepared guards)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // THE Behaviour base
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"           // Utils::TransitionSmoother (mHeight)
+#include "GameSource/Director/Utils/BrnDirectorWorldMap.h"          // WorldMap::LanePosition (the truck's lane)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h
 //
-// BrnDirector::Camera::TrafficLaneTruck -- the "road runner" behaviour's truck: a small helper
-// that carries a world-space transform plus its local angular / linear velocities, prepared once
-// per shot and then sampled by BehaviourRoadRunner::Update. HOME for the TrafficLaneTruck slice
-// this TU bodies (the three by-value sample accessors).
+// BrnDirector::Camera::BehaviourRoadRunner -- THE DJ FLY-BY CAMERA. The attract-mode
+// arbitrator state allocates exactly one of these and copies the camera it produces every
+// frame; ArbStateRoaming / ArbStateCrashNav drive it too.
 //
-// Also the HOME for a minimal slice of BrnDirector::Camera::BehaviourRoadRunner -- the "road
-// runner"/picture-paradise fly-by camera behaviour itself. The crash-nav arbitrator state
-// (BrnArbStateCrashNav) drives it through its handle each frame, so the named accessors it
-// touches are modelled here BY NAME at their asm-attested offsets (see the slice below). The
-// full behaviour (Construct/Prepare/Update + the rest of the rig) and its Behaviour base land
-// with their own TUs.
+// It is a "road runner": a virtual truck (TrafficLaneTruck) drives itself along the world's
+// traffic-lane graph, and the camera rides it -- offset up by a smoothed height and sideways
+// by a fixed 2.25, banked by the truck's yaw rate, optionally slerped toward an "interesting
+// point" fixation, and finally shaken. Nothing else moves the camera.
 //
-// ----------------------------------------------------------------------------
-// All three accessors are by-value getters: the X360 passes the sret (output) slot in r3 and
-// `this` in r4 (the lvx128 loads come from r4 / r30; the stvx128 stores go to r3 / r31). Each
-// first asserts the truck has been prepared (!!mbPrepared) before sampling:
-//   GetTransform            @0x821F53D8  copies the 64-byte transform (4x 16-byte rows @+0x20)
-//   GetLocalAngularVelocity @0x821F5470  copies the 16-byte angular velocity (@+0x60)
-//   GetLinearVelocity       @0x821F54E0  copies the 16-byte linear velocity  (@+0x70)
-// The truck's full prepare/step logic lands with the road-runner behaviour TU; this header models
-// only the slice the accessors need, BY NAME, at their asm-attested offsets.
-// ----------------------------------------------------------------------------
+// ⭐ RE-BASED (2026-07-29): this class used to be a raw-offset SLICE with a `void* mpVTable`
+// head and four reserved byte spans; it now derives from the canonical
+// BrnDirector::Camera::Behaviour and carries the DWARF member list by name. That is what lets
+// BehaviourManager::NewBehaviour<BehaviourRoadRunner> allocate it, BehaviourHelper::Prepare
+// dispatch its Construct, and PrepareBehaviours dispatch its Prepare.
+//
+// LAYOUT AUTHORITY: the DECFIGS DWARF (BrnBehaviourRoadRunner.h:146, members :230..:280) plus
+// the X360 Construct @0x8222BCE0 / Prepare @0x8220F748 / Update @0x82247E98 asm. The base
+// occupies +0x00..+0x13, so mpParameters lands at +0x14 -- which Construct's last store
+// (`*(this + 20) = 0`) pins exactly. Every other console offset quoted below is a store or
+// load in one of those three bodies. x64: parity is BY NAMED MEMBER (pointers widen).
+//
+// ⭐ THREE "un-recovered" crash-nav accessors are now IDENTIFIED (they were modelled as
+// anonymous lanes in the retired slice, at offsets that this layout resolves):
+//     +0x08  "mbDontSmoothNextSample"  == the BASE mbIsPrepared    -> SetNotPrepared()
+//     +0x09  "mbHasFinished"           == the BASE mbHasFailed     -> HasFailed()
+//     +0xA0  "mfReverseLaneA"          == mTrafficLaneTruck.mfSpeed
+//     +0x294 "mfReverseLaneB"          == mfDesiredSpeed
+//     +0x29C "mfReverseLaneC"          == mfDirection
+// -- i.e. the crash-nav "turnabout" is `SetNotPrepared(); Reverse();`, and Reverse (DWARF
+// BrnBehaviourRoadRunner.h:331) negates the direction, the desired speed and the truck's live
+// speed. The fly-by turns round and re-Prepares its lane. That is a real recovery, not a rename.
+// ============================================================================
 
 namespace BrnDirector
 {
 namespace Camera
 {
 
+// ----------------------------------------------------------------------------
+// TrafficLaneTruck -- the virtual vehicle the road-runner camera rides. It walks the
+// WorldMap's traffic-lane graph and publishes a world transform plus its velocities.
+//
+// Layout: DWARF (BrnBehaviourRoadRunner.h:124..:133) + the X360 accessors' load offsets. All
+// members are size-stable (no pointers), so the offsets hold on the host too and the .cpp
+// still pins them with offsetof.
+// ----------------------------------------------------------------------------
 class TrafficLaneTruck
 {
 public:
+    // Seed the truck from the lane nearest a world point. @0x82247A08:
+    //     WorldMap::GetLanePositionNearestPoint(&mLanePosition, lrWorldMap, lPoint);
+    //     if (!mLanePosition.mbValid) return false;                 // lbz 0x1E; li r3,0
+    //     ... CalcTransformFromLanePosition ... mbPrepared = true;
+    // DECLARATION-ONLY (see the FLAG in the .cpp): the lane walk needs the WorldMap's traffic
+    // data, which is not loaded yet.
+    bool Prepare(const BrnDirector::WorldMap& lrWorldMap, rw::math::vpu::Vector3 lPoint);
+
+    // Advance along the lane graph by mfSpeed * dt (@0x82247AC0). DECLARATION-ONLY.
+    void Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTimeStep, void* lpRandom);
+
     // Return (by value) the truck's world-space transform. Asserts the truck is prepared.
     // @0x821F53D8: four 16-byte aligned rows copied from +0x20 (lvx128 stride 16) into the sret.
     rw::math::vpu::Matrix44Affine GetTransform() const;
@@ -51,106 +83,182 @@ public:
     // @0x821F54E0: a single 16-byte aligned vector copied from +0x70 into the sret.
     rw::math::vpu::Vector3 GetLinearVelocity() const;
 
-    // FLAG: only the members the accessors read are modelled, at their asm-attested offsets; the
-    //   rest of the truck rig (prepare/step working state) lands with the road-runner behaviour TU.
-    //   Reserved spans place each sampled member at its attested offset. Members are public so the
-    //   file-scope offsetof pins in the .cpp can verify them (all size-stable here -- no pointers
-    //   intervene, so the layout is exact).
-    u8                            maReserved00[0x20];          // +0x00 .. +0x1F  truck head (not modelled)
-    rw::math::vpu::Matrix44Affine mTransform;                  // +0x20  world-space transform (64B)
-    rw::math::vpu::Vector3        mLocalAngularVelocity;       // +0x60  local angular velocity (16B)
-    rw::math::vpu::Vector3        mLinearVelocity;             // +0x70  linear velocity (16B)
-    u8                            maReserved80[0x8C - 0x80];   // +0x80 .. +0x8B  (state not modelled)
-    u8                            mbPrepared;                  // +0x8C  set once the truck is prepared
+    f32  GetSpeed() const { return mfSpeed; }
+    void SetSpeed(f32 lfSpeed) { mfSpeed = lfSpeed; }
+
+    // Public so the .cpp's offsetof pins can verify them (all size-stable -- no pointers
+    // intervene, so the layout is exact on the host too).
+
+    // +0x00 (0x20) the lane the truck is walking. Its `mbValid` byte sits at +0x1E -- the
+    // console asserts on it by name ("lpPositionInOut->mbValid") in every lane-walk entry
+    // point, and Construct's `*(this + 62) = 0` clears exactly that byte.
+    BrnDirector::WorldMap::LanePosition mLanePosition;              // :124  +0x00
+
+    rw::math::vpu::Matrix44Affine       mTransform;                 // :125  +0x20  (64B)
+    rw::math::vpu::Vector3              mLocalAngularVelocity;      // :126  +0x60
+    rw::math::vpu::Vector3              mLinearVelocity;            // :127  +0x70
+
+    f32                                 mfSpeed;                    // :129  +0x80
+    f32                                 mfTransformBlendAmount;     // :130  +0x84
+    f32                                 mfBlendDistance;            // :131  +0x88
+    bool                                mbPrepared;                 // :133  +0x8C
 };
 
-// The director camera the behaviour produces each frame (its base Behaviour's output camera).
-// Forward-declared so the produced-camera accessor below can name it; consumers that copy the
-// produced camera #include Camera.h themselves.
-struct Camera;
+// ----------------------------------------------------------------------------
+// The two scene-query post boxes the road runner uses. FLAG: neither
+// `LineTestNearestPostBox` nor `LineTestFinePostBox` exists as a named type anywhere in the
+// tree -- the generic BrnDirector::PostBox<T> (Utils/BrnPostBox.h) is instantiated for the
+// line-test result events, but the DWARF names these two aliases and the road runner embeds
+// them BY VALUE. Their console sizes are pinned by the gaps between the members either side
+// (nearest: +0xB0 -> +0x100 == 0x50; fine: +0x150 -> +0x158 == 8). Modelled as named, sized
+// sub-objects until the post-box aliases are homed; the .cpp NEVER reaches inside one.
+// DELETE-WHEN: Utils/BrnPostBox.h grows the two aliases.
+// ----------------------------------------------------------------------------
+struct LineTestNearestPostBox { u8 maOpaque[0x50]; };   // FLAG: size console-pinned, interior un-homed
+struct LineTestFinePostBox    { u8 maOpaque[0x08]; };   // FLAG: size console-pinned, interior un-homed
 
 // ----------------------------------------------------------------------------
-// BrnDirector::Camera::BehaviourRoadRunner -- minimal slice (FLAG: no full reconstructed home
-// yet; the full behaviour rig lands with its own TU). HOME here only for the named accessors the
-// crash-nav arbitrator state drives on the live behaviour each frame; the members below are the
-// ONLY ones those accessors touch, modelled at their asm-attested offsets (pinned from
-// BrnArbStateCrashNav::Update @0x8226DC98). Reserved byte spans place each member exactly.
-//   * mbDontSmoothNextSample (+0x08): cleared on a turnabout so the next sample is not smoothed.
-//   * mbHasFinished          (+0x09): the behaviour's "finished playing" flag.
-//   * mfReverseLaneA         (+0xA0): a velocity/heading lane the turnabout negates.
-//   * mfReverseLaneB         (+0x294) / mfReverseLaneC (+0x29C): the other two negated lanes.
-//   * mbShouldFadeBlackIn    (+0x2B4): selects the "Black_In_BW" vs "Black_Out_BW" fade.
-// The produced camera is reached via the handle helper (the same camera the behaviour writes
-// each frame); modelled BY NAME as GetProducedCamera(). All accessors are DECLARATION-ONLY here
-// except the trivial flag/turnabout pokes, which the crash-nav .cpp drives by name.
+// BrnDirector::Camera::BehaviourRoadRunner
 // ----------------------------------------------------------------------------
-class BehaviourRoadRunner
+class BehaviourRoadRunner : public Behaviour
 {
 public:
+    // DWARF BrnBehaviourRoadRunner.h:150. NOTE the console's own enumerator VALUES -- the
+    // "count" enumerator sits at 1, in the middle of the range. Reproduced verbatim.
+    enum EMode
+    {
+        E_MODE_LOW_SLOW       = 0,
+        E_MODE_COUNT          = 1,
+        E_MODE_HIGH_SLOW      = 2,
+        E_MODE_LOW_FAST       = 3,
+        E_MODE_VERY_HIGH_SLOW = 4
+    };
+
     // ------------------------------------------------------------------------
-    // The "road runner" parameter block. HOME here because the ledger nests it under this behaviour
-    // (BrnDirector::Camera::BehaviourRoadRunner::Parameters) and the camera-tunings bank saves it
-    // through TextFileWriteSerialiser::Serialise<Parameters> @0x82214E78.
+    // The "road runner" parameter block (DWARF BrnBehaviourRoadRunner.h:296, deriving
+    // Behaviour::Parameters).
     //
-    // FLAG: the text-serialise field-walk for this block is ATTESTED EMPTY. The X360 instantiation
-    //   @0x82214E78 emits only the section-header label line + recursion-depth accounting; it
-    //   discards the parameter-block register (mr r5,r4 overwrites the params ptr before FormatName)
-    //   and makes NO `bl` to any inner Parameters::Serialise field walker -- the compiler inlined
-    //   the inner visitor to nothing because it serialises zero fields to text. The visitor below is
-    //   therefore an empty (zero-field) walk, faithful to the attested asm; NO field offsets are
-    //   fabricated. The full parameter layout lands with the behaviour rig TU.
+    // FLAG: the text-serialise field-walk for this block is ATTESTED EMPTY. The X360
+    //   instantiation @0x82214E78 emits only the section-header label line + recursion-depth
+    //   accounting; it discards the parameter-block register (mr r5,r4 overwrites the params
+    //   ptr before FormatName) and makes NO `bl` to any inner Parameters::Serialise field
+    //   walker -- the compiler inlined the inner visitor to nothing because it serialises zero
+    //   fields to text. The visitor below is therefore an empty (zero-field) walk, faithful to
+    //   the attested asm; NO field offsets are fabricated. Corroborating: Update @0x82247E98
+    //   NEVER dereferences mpParameters -- every tunable it uses is a .data global -- so the
+    //   block's field set is genuinely unexercised on the live path.
     // ------------------------------------------------------------------------
-    class Parameters
+    class Parameters : public Behaviour::Parameters
     {
     public:
         // X360 visitor: `void Serialise<S>(S&)` for the camera-tunings serialiser S. Attested
-        // EMPTY for the text writer (see the class FLAG): walks zero fields. Templated inline so
-        // TextFileWriteSerialiser::Serialise<Parameters>'s odr-use inlines it away, matching the
-        // degenerate instantiation asm (no inner field-walk call).
+        // EMPTY for the text writer (see the class FLAG): walks zero fields.
         template<class TSerialiser> void Serialise(TSerialiser& /*lrSerialiser*/) {}
+
+        void Construct();   // BrnBehaviourRoadRunner.h:300
     };
 
-    // The camera this behaviour produced this frame (the X360 reaches it through the handle
-    // helper sub_821FDC58, which resolves the behaviour's produced camera). The crash-nav state
-    // copies it into its own mCamera. DECLARATION-ONLY (body lands with the full behaviour TU).
-    const Camera& GetProducedCamera() const;
+    // ---- Behaviour overrides (vtable order -- see Behaviour.h) ---------------
+    void        Construct() override;                                                    // @0x8222BCE0
+    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // @0x8220F748
+    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;     // @0x82247E98
+    bool        PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override; // @0x8220F850
+    const Behaviour::Parameters* GetParameters() const override;                          // :1172
+    void        SetParameters(const Behaviour::Parameters* lpParameters) override;        // :1185
+    void        SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // :1200
+    const char* GetName() const override;                                                 // @0x821FB130
 
-    // The behaviour's "finished" flag (lbz +0x09). Crash-nav keeps copying the behaviour camera
-    // while !HasFinished().
-    bool HasFinished() const { return mbHasFinished != 0; }
+    // ---- public API (DWARF BrnBehaviourRoadRunner.h) -------------------------
+    void Reset();                                    // :162 (declaration-only)
+    void Reverse();                                  // :331
+    void SetParameters(const Parameters* lpParameters);  // :312
 
-    // Whether the fade this take wants is the black-IN variant (lbz +0x2B4). Crash-nav requests
-    // "Black_In_BW" when set, "Black_Out_BW" otherwise.
-    bool ShouldFadeBlackIn() const { return mbShouldFadeBlackIn != 0; }
+    bool HasJustStartedColliding() const { return mbIsColliding && !mbWasCollidingLastFrame; }   // :209
+    bool HasJustStoppedColliding() const { return !mbIsColliding && mbWasCollidingLastFrame; }   // :213
+    bool IsColliding() const            { return mbIsColliding; }                                // :217
+    void SetFixationsAllowed(bool lbAllowed) { mbFixationsAllowed = lbAllowed; }                 // :222
 
-    // Turnabout (X360 ACTIVE_TURNABOUT case, asm @0x8226DF7C): clear the "don't smooth the next
-    // sample" gate (stb 0, +0x08), then negate the three reverse lanes so the fly-by reverses its
-    // travel direction.
-    void ClearSmoothingForNextSample() { mbDontSmoothNextSample = 0; }      // stb 0, +0x08
-    void ReverseTravelDirection()
-    {
-        // asm: fmuls each by -1.0 (flt_820037C8 == -1.0) and store back. Order matches the asm
-        // (loads +0x29C/+0x294/+0xA0, stores +0x29C then +0x294 then +0xA0).
-        mfReverseLaneC = mfReverseLaneC * -1.0f;   // +0x29C
-        mfReverseLaneB = mfReverseLaneB * -1.0f;   // +0x294
-        mfReverseLaneA = mfReverseLaneA * -1.0f;   // +0xA0
-    }
+    // ---- the crash-nav call surface, now expressed through the recovered members -----------
+    // (BrnArbStateCrashNav drives the fly-by through these; see the ⭐ note in the file banner
+    // for how each maps onto the real member the console touches.)
+
+    // The behaviour is done with this take. X360 `lbz +0x09` == the BASE failed flag.
+    bool HasFinished() const { return HasFailed(); }
+
+    // Whether the fade this take wants is the black-IN variant. X360 `lbz +0x2B4`, which this
+    // layout resolves to mbIsColliding.
+    // FLAG: the ROLE mapping (a fade-direction selector vs "the fly-by is currently colliding")
+    //   is not proven -- only the OFFSET is. The crash-nav state asks for "Black_In_BW" when
+    //   the byte is set, and "the fly-by just hit something" is a plausible trigger for that.
+    //   DELETE-WHEN: BrnArbStateCrashNav::Update @0x8226DC98 is re-walked against this layout.
+    bool ShouldFadeBlackIn() const { return mbIsColliding; }
+
+    // Crash-nav "turnabout" (X360 ACTIVE_TURNABOUT case, asm @0x8226DF7C): drop the prepared
+    // gate so Update re-seeds the truck's lane next frame, then reverse the travel direction.
+    void ClearSmoothingForNextSample() { SetNotPrepared(); }   // stb 0, +0x08 == mbIsPrepared
+    void ReverseTravelDirection()      { Reverse(); }
 
 private:
-    // FLAG: only the members the crash-nav accessors touch are modelled, at their asm-attested
-    //   offsets; the rest of the road-runner rig lands with the full behaviour TU. The vtable/base
-    //   head occupies +0x00.
-    void* mpVTable;                              // +0x00   behaviour vtable (opaque base head)
-    u8    mbDontSmoothNextSample;                // +0x08   cleared on a turnabout
-    u8    mbHasFinished;                         // +0x09   "finished playing" flag
-    u8    maReserved0A[0xA0 - 0x0A];             // +0x0A .. +0x9F (rig members not modelled)
-    f32   mfReverseLaneA;                        // +0xA0   negated on turnabout
-    u8    maReservedA4[0x294 - 0xA4];            // +0xA4 .. +0x293 (rig members not modelled)
-    f32   mfReverseLaneB;                        // +0x294  negated on turnabout
-    u8    maReserved298[0x29C - 0x298];          // +0x298 .. +0x29B (rig member not modelled)
-    f32   mfReverseLaneC;                        // +0x29C  negated on turnabout
-    u8    maReserved2A0[0x2B4 - 0x2A0];          // +0x2A0 .. +0x2B3 (rig members not modelled)
-    u8    mbShouldFadeBlackIn;                   // +0x2B4  fade-direction selector
+    void PickNewMode();                               // :1113 (declaration-only)
+
+    // ===== LAYOUT (DWARF :230..:280; console offsets are provenance) =====
+    const Parameters*              mpParameters;                    // :230  +0x014
+    TrafficLaneTruck               mTrafficLaneTruck;               // :232  +0x020
+    LineTestNearestPostBox         mTopLeftBottomRight;             // :234  +0x0B0
+    LineTestNearestPostBox         mTopRightBottomLeft;             // :235  +0x100
+    LineTestFinePostBox            mLineTestFineA;                  // :237  +0x150
+    LineTestFinePostBox            mLineTestFineB;                  // :238  +0x158
+
+    rw::math::vpu::Vector3         mFixationPoint;                  // :240  +0x160
+    rw::math::vpu::Vector3         mDebugFixationHalfExtents;       // :241  +0x170
+    rw::math::vpu::Matrix44Affine  mDebugFixationTransform;         // :242  +0x180
+    rw::math::vpu::Matrix44Affine  mWorldToFixation;                // :243  +0x1C0
+    rw::math::vpu::Matrix44Affine  mLastShakeTransform;             // :245  +0x200
+
+    // FLAG (opaque, console-sized): Utils::CameraShake and its Parameters are homed -- but
+    //   only inside BehaviourRig.h, which also carries a private CollisionPolicy fork that
+    //   collides with BrnBehaviourIceAnim.h's in any TU pulling both (a PRE-EXISTING defect;
+    //   BrnBehaviourManager.cpp is exactly such a TU). Including BehaviourRig.h here would
+    //   propagate that collision to every road-runner consumer. Modelled as named sub-objects
+    //   at their console-pinned sizes (shake 0x10, params 0x10) until CameraShake gets a home
+    //   of its own; the .cpp NEVER reaches inside either.
+    //   DELETE-WHEN: Utils::CameraShake moves to Camera/Utils/BrnCameraShake.h.
+    struct OpaqueShake       { u8 maOpaque[0x10]; };
+    struct OpaqueShakeParams { u8 maOpaque[0x10]; };
+    OpaqueShake                    mShake;                          // :247  +0x240
+    OpaqueShakeParams              mShakeParams;                    // :248  +0x250
+
+    f32                            mfFixationAmount;                // :250  +0x260
+    f32                            mfFixationBlendTimeReciprocal;   // :251  +0x264
+    f32                            mfFixationStartDistance;         // :252  +0x268
+    f32                            mfFixationEndDistance;           // :253  +0x26C
+    f32                            mfFixationOccludedTime;          // :254  +0x270
+
+    f32                            mfCurrentModeTime;               // :256  +0x274
+    f32                            mfCurrentModeDuration;           // :257  +0x278
+
+    Utils::TransitionSmoother      mHeight;                         // :259  +0x27C
+
+    f32                            mfDesiredSpeed;                  // :261  +0x294
+    f32                            mfSpeedBlendAmount;              // :262  +0x298
+    f32                            mfDirection;                     // :263  +0x29C
+
+    f32                            mfDesiredBankingScale;           // :265  +0x2A0
+    f32                            mfBankingScale;                  // :266  +0x2A4
+    f32                            mfBankingScaleBlendAmount;       // :267  +0x2A8
+
+    f32                            mfTimeSinceLastCollisionStarted; // :269  +0x2AC
+    f32                            mfTimeSinceLastCollision;        // :270  +0x2B0
+    bool                           mbIsColliding;                   // :271  +0x2B4
+    bool                           mbWasCollidingLastFrame;         // :272  +0x2B5
+
+    EMode                          meMode;                          // :274  +0x2B8
+
+    bool                           mbFixationsAllowed;              // :276  +0x2BC
+    bool                           mbOccluded;                      // :277  +0x2BD
+    bool                           mbHasFixation;                   // :278  +0x2BE
+    bool                           mbStartingFixation;              // :279  +0x2BF
+    bool                           mbFixationIsValid;               // :280  +0x2C0
 };
 
 } // namespace Camera

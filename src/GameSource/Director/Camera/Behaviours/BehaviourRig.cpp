@@ -85,13 +85,12 @@ BehaviourRig::GetName() const
 void
 BehaviourRig::Construct()
 {
-    meTimestepType         = BrnDirector::Timestep::E_TIMESTEP_INVALID;
-    mbIsPrepared           = false;
-    mbHasFailed            = false;
-    mbTweakerAttached      = false;
-    mbCanSwitchToMeNow     = false;
-    mbCanSwitchFromMeNow   = false;
-    mpcDebugParametersName = nullptr;
+    // The six base-field stores the X360 opens with ARE the (inlined) base Construct --
+    // see Behaviour.cpp. Expressed as the named base call now that the base has a home.
+    // (NOTE: the console stores 0 into meTimestepType, i.e. E_WORLD under the canonical
+    // Timestep::EType; the retired local fork mis-modelled that value as its own
+    // E_TIMESTEP_INVALID == 0, which BehaviourRig::Update's assert below would reject.)
+    Behaviour::Construct();
 
     mRandom = Utils::Random();
 
@@ -244,7 +243,10 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 
         if (!mbSnap || mbLooking == mbLookingLast)
         {
-            const VecFloat lvTimestep = VecFloat{ lfTimestep, 0.0f, 0.0f, 0.0f };
+            // ::VecFloat -- the global BrnCommonTypes alias for rw::math::vpu::Vector4.
+            // (BrnDirector::VecFloat, the Timestep header's own broadcast-register type, is
+            // now visible here and would otherwise win name lookup inside namespace BrnDirector.)
+            const ::VecFloat lvTimestep = ::VecFloat{ lfTimestep, 0.0f, 0.0f, 0.0f };
             mLooker.BrnDirector::Camera::Utils::Looker::Update(
                 lvTimestep,
                 mRandom,

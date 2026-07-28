@@ -9,6 +9,10 @@
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"         // CgsContainers::ObjectPool<T,N,TIndex>
 #include "GameSource/Director/Utils/BrnAbstractPool.h"               // BrnDirector::AbstractPool<>, AbstractPoolVoidHandle
 #include "GameSource/Director/Camera/Camera.h"                       // BrnDirector::Camera::Camera (mCamera, by value)
+#include "GameSource/Director/Camera/BrnCameraValidityAccount.h"     // ValidityAccount (per-frame mask reset)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"         // Camera::Behaviour -- the pooled objects'
+                                                                     //   BASE: every helper dispatch goes
+                                                                     //   through its vtable
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourManager.h
@@ -65,7 +69,10 @@ class ArbitratorState;                 // CheckNoBehavioursAreAllocatedByState /
 class Moment;                          // BehaviourHelper debug owner
 class DirectorResourceManager;         // Prepare/Set/GetDirectorResourceManager
 struct DebugPrinter;                   // Update/SceneQuery debug printer arg
-struct BehaviourSharedInfo;            // UpdateAllBehaviours / PostCollisionUpdate arg
+// (BehaviourSharedInfo / BehaviourSharedPrepareReleaseInfo now come from the canonical
+//  Camera/Behaviours/Behaviour.h included above -- they live in BrnDirector::Camera, not
+//  BrnDirector, so the old BrnDirector-scope forward declaration here was a DIFFERENT
+//  type that could never have bound to the real one.)
 struct ControllerInfo;                 // UpdateAllBehaviours arg
 struct CollisionPolicySharedInfo;      // GenerateSceneQueries / ProcessSceneQueryResults arg
 
@@ -150,117 +157,10 @@ namespace Camera
         const Camera& GetCamera() const;
     };
 
-    // ------------------------------------------------------------------------
-    // BehaviourHandle<TBehaviour> -- a typed handle to a behaviour owned by a
-    // BehaviourManager. Five-word layout pinned from the X360 BehaviourHandle::Prepare
-    // @0x8224AFF0 / ::Release @0x8222DD00 asm: mbAllocated(+0x00), muAllocationKey(+0x04),
-    // muHelperIndex(+0x08), mpManager(+0x0C), mpBehaviour(+0x10). The arbitrator/moment
-    // states inline-duplicate this same five-word layout as their own nested types
-    // (BrnArbStateRankUp.h etc.); those nested copies are distinct types, left untouched.
-    // FLAG: the +0x08 helper word's exact role is not fully recovered (opaque lookup helper).
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    class BehaviourHandle
-    {
-    public:
-        BehaviourHandle()
-            : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
-              mpManager(0), mpBehaviour(0) {}
-
-        bool IsAllocated() const { return mbAllocated; }
-        BehaviourManager* GetManager() const { return mpManager; }
-        TBehaviour* GetBehaviour() const { return mpBehaviour; }
-
-        // Allocate this handle onto a freshly-reserved behaviour. X360-attested
-        // (BehaviourHandle::Prepare @0x8224AFF0). Always returns true. Body out-of-line below
-        // (needs BehaviourManager complete).
-        bool Prepare(u32 luAllocationKey, u32 luHelperIndex, BehaviourManager* lpManager);
-
-        // Drop the manager-side hold and clear the handle. X360-attested
-        // (BehaviourHandle::Release @0x8222DD00). Always returns true. Body out-of-line below.
-        bool Release();
-
-        // Is the behaviour this handle owns still queued for its first Prepare. X360-attested:
-        // every BehaviourHandle<TBehaviour>::IsWaitingToPrepare() instantiation is byte-identical
-        //   BrnDirector::Camera::BehaviourGyroCam   @0x82212510
-        //   BrnDirector::Camera::BehaviourIceAnim   @0x822128A0
-        //   BrnDirector::Camera::BehaviourInterpo   @0x82212150
-        //   BrnDirector::Camera::BehaviourLooseAt   @0x82212A68
-        //   BrnDirector::Camera::BehaviourRoadRun   @0x82212AC8
-        //   BrnDirector::Camera::BehaviourRotateA   @0x82212B98
-        // (the truncated symbols collapse the per-behaviour-type instantiations of this one
-        // template member). Asserts the handle is allocated, then forwards the handle's
-        // allocation key to the manager. Body out-of-line below (needs BehaviourManager complete).
-        bool IsWaitingToPrepare() const;
-
-        // The boolean negation of IsWaitingToPrepare() -- "has the behaviour finished waiting and
-        // is it ready to Prepare". X360-attested BrnDirector::Camera::BehaviourAfterto @0x8222D0E8
-        // (the `IsBehaviourWaitingToPrepare(...) == 0` tail). Body out-of-line below.
-        bool IsReadyToPrepare() const;
-
-        // ADDITIVE GROW (BrnArbStateTakedown.cpp): the camera this handle's live behaviour
-        // produced this frame. X360-attested: every one of the several de-inlined
-        // `sub_821FCxxx`/`sub_821FDxxx` accessors this project's arbitrator states call
-        // (e.g. @0x821FCD40, @0x821FCEE0, @0x821FD450, @0x821FD780) is byte-identical --
-        // assert IsAllocated(), then resolve the manager pool slot through
-        // GetBehaviourSlotFromHandle<TBehaviour>(muHelperIndex, muAllocationKey) and return the
-        // Camera embedded 16 bytes (console) into that slot (BehaviourHelper::mCamera, the
-        // member right after the type-erased pool handle -- see BehaviourHelper below). Modelled
-        // here by reusing BehaviourHelper's own accessor via the resolved slot pointer, so the
-        // 16-byte offset is never poked directly. Body out-of-line below (needs BehaviourManager
-        // complete).
-        const Camera& GetProducedCamera() const;
-
-        void Clear()
-        {
-            mbAllocated     = false;
-            muAllocationKey = 0;
-            muHelperIndex   = 0;
-            mpManager       = 0;
-            mpBehaviour     = 0;
-        }
-
-        // ADDITIVE GROW (SharedCameraContainer::GetGameplayCameraHelperIndex @0x82219718):
-        // the manager-facing BehaviourHelperIndex this handle passes to the manager's
-        // BehaviourHelperIndex-taking APIs. X360-attested: the de-inlined per-type accessors
-        // (sub_822122F0 / sub_822124A0) assert the handle is allocated then return its +0x04
-        // word -- the same word the committed call sites hand to SetBehaviourUpdatesDuringPause
-        // / IsBehaviourWaitingToPrepare (see the key-vs-index naming FLAG on those manager
-        // members: the DWARF types this word as a BehaviourHelperIndex).
-        BehaviourHelperIndex GetBehaviourHelperIndex() const
-        {
-            CGS_ASSERT(mbAllocated, "IsAllocated()");
-            return BehaviourHelperIndex(static_cast<s32>(muAllocationKey));
-        }
-
-        // ADDITIVE GROW (SharedCameraContainer::Prepare @0x82263D50): whether the owned
-        // behaviour keeps updating while the game is paused. X360-attested handle-level
-        // wrapper (BrnBehaviourManager.h:676): assert the handle is allocated ("IsAllocated()",
-        // line 676), then forward the handle's +0x04 word to the manager's
-        // SetBehaviourUpdatesDuringPause. Body out-of-line below (needs BehaviourManager
-        // complete).
-        void SetUpdatesDuringPause(bool lbUpdatesDuringPause);
-
-        // ADDITIVE GROW (the BehaviourHandle<BehaviourRig> instantiation TU): attach /
-        // detach the manager's authoring tweaker to the behaviour this handle owns.
-        // X360-attested handle-level wrappers (BrnBehaviourManager.h:623 / :633 --
-        // BehaviourHandle<BehaviourRig>::AttachTweaker @0x82212608, DetachTweaker
-        // @0x82212668): assert allocated, then forward the +0x04 word to the manager.
-        // The X360 calls the manager's AttachTweaker out-of-line but INLINES
-        // DetachTweaker's internals (the mTweakerHelper current-index compare @+0x158E4
-        // + lock-byte clear @+0x158E0 + helper-pool (+0xFAB0) slot flag-byte clear at
-        // slot +0xA) -- expressed here as the declared manager call. Bodies out-of-line
-        // below (need BehaviourManager complete).
-        void AttachTweaker();
-        void DetachTweaker();
-
-    private:
-        bool              mbAllocated;     // +0x00  owns a behaviour
-        u32               muAllocationKey; // +0x04  manager-side allocation key
-        u32               muHelperIndex;   // +0x08  behaviour-lookup helper (FLAG: role not recovered)
-        BehaviourManager* mpManager;       // +0x0C  owning manager
-        TBehaviour*       mpBehaviour;     // +0x10  resolved behaviour
-    };
+    // BehaviourHandle<TBehaviour> is DEFINED below BehaviourManager (it names the manager's
+    // nested HelperPool / BehaviourHelper by value). Forward-declared here so the manager's
+    // own signatures can take it by reference.
+    template <typename TBehaviour> class BehaviourHandle;
 
     // ------------------------------------------------------------------------
     // BehaviourManager -- the owner of all live camera behaviours and the per-state
@@ -289,6 +189,19 @@ namespace Camera
             const ArbitratorState*        GetDebugArbitratorStateOwner() const { return mpDebugArbitratorStateOwner; }
             const Moment*                 GetDebugMomentOwner() const { return mpDebugMomentOwner; }
             const Camera&                 GetCamera() const { return mCamera; }
+            Camera&                       GetCamera()       { return mCamera; }
+
+            // The pooled behaviour this slot owns. X360: every dispatch site loads the
+            // helper's FIRST word (`lwz r3, 0(helper)`) -- that word is
+            // mBehaviourPoolHandle.mpObject, the AbstractPool slot the behaviour was
+            // constructed into. Named so no consumer reads the helper head as a pointer.
+            Behaviour*                    GetBehaviour()       { return static_cast<Behaviour*>(mBehaviourPoolHandle.Get()); }
+            const Behaviour*              GetBehaviour() const { return static_cast<const Behaviour*>(mBehaviourPoolHandle.Get()); }
+
+            // The type-erased pool handle itself (ReleaseBehaviours hands the slot back
+            // through it).
+            AbstractPoolVoidHandle&       GetPoolHandle()      { return mBehaviourPoolHandle; }
+
             s32                           GetBehaviourSize() const;
             const char*                   GetDebugFullName(char lacFullNameOut[64]) const;
 
@@ -298,6 +211,14 @@ namespace Camera
             const ArbitratorState* mpDebugArbitratorStateOwner;   // debug: owning arbitrator state
             const Moment*          mpDebugMomentOwner;            // debug: owning moment
         };
+
+        // The 28-slot live-behaviour pool type. Named because a BehaviourHandle stores a
+        // POINTER to its owning manager's pool (see BehaviourHandle::mpHelperPool).
+        typedef CgsContainers::ObjectPool<BehaviourHelper, 28, BehaviourHelperIndex> HelperPool;
+
+        // The number of behaviour slots (the bound every BitArray<28> / Array<...,28> and
+        // every CgsBitArray.h:203 index assert in this class uses).
+        enum { KI_MAX_BEHAVIOURS = 28 };
 
         // The single attached camera-tweaker slot (DWARF BrnBehaviourManager.h:353..:356).
         // FLAG: mTweaker is the committed BrnDirector::Camera::Utils::Tweaker (BrnCameraTweaker.h),
@@ -394,11 +315,12 @@ namespace Camera
         void SetBehaviourUpdatesDuringPause(BehaviourHandle<BehaviourInterpolate>& lrHandle,
                                             bool lbUpdatesDuringPause);
 
-        // Resolve the manager-pool slot a handle's (helper word, allocation key) names. Static
-        // lookup (the X360 passes the helper word as the first arg, NOT a manager `this`).
-        // DECLARATION-ONLY. FLAG: the helper word's role is not fully recovered.
-        template <typename TBehaviour>
-        static TBehaviour** GetBehaviourSlotFromHandle(u32 luHelperIndex, u32 luAllocationKey);
+        // RETIRED (2026-07-29): `GetBehaviourSlotFromHandle<T>(u32, u32) -> T**` used to sit
+        // here as a declaration-only stand-in for a resolution nobody could write. It is now
+        // BehaviourHandle::GetHelper() + BehaviourHelper::GetBehaviour(): the console's
+        // `BrnDirec(handle[+8], handle[+4])` is an ObjectPool::operator[] on the manager's
+        // helper pool, and the `T**` was the helper's FIRST WORD taken by address -- i.e.
+        // mBehaviourPoolHandle.mpObject. No pointer-to-pointer fiction is needed.
 
         // Reserve a slot for a fresh TBehaviour from the size-appropriate behaviour pool and
         // hand back the four-word type-erased pool handle. X360-attested template family
@@ -422,6 +344,16 @@ namespace Camera
         // const void* so both shapes bind to the one X360 symbol family.)
         template <typename TBehaviour, typename THandle>
         void NewBehaviour(THandle& lrHandle, void* lpOwningState, const void* lpOwner, s32 liArgB);
+
+        // ⭐ THE BODIED OVERLOAD (X360 BehaviourManager::NewBehaviour<TBehaviour> --
+        // @0x822580F8 for BehaviourRoadRunner and its 15 byte-identical siblings). Selected by
+        // overload resolution whenever the handle is the SHARED BehaviourHandle<TBehaviour>
+        // above; the generic THandle form (declaration-only, unchanged) still binds the
+        // arbitrator states' own nested five-word handle copies, so nothing regresses.
+        // Body out-of-line below, where BehaviourHelper / the pools are complete.
+        template <typename TBehaviour>
+        void NewBehaviour(BehaviourHandle<TBehaviour>& lrHandle, void* lpOwningState,
+                          const void* lpOwner, s32 liRefLimit);
 
         // ADDITIVE GROW (BrnArbStateDriveThru::Prepare @0x8226E938): the ATTRIBUTE-TAKING
         // overload of NewBehaviour<TBehaviour>. X360-attested distinct calling convention from
@@ -458,7 +390,7 @@ namespace Camera
         BrnDirector::AbstractPool<100u, 20u, rw::math::vpu::Vector4> mSmallBehaviourPool;  // :323
 
         // +console 0xFAB0 (64176)  the live-behaviour helper pool (DWARF :324).
-        CgsContainers::ObjectPool<BehaviourHelper, 28, BehaviourHelperIndex> mBehaviourHelperPool; // :324
+        HelperPool mBehaviourHelperPool;                                                   // :324
 
         // FLAG opaque: the per-named-behaviour parameter bank (DWARF :325). Un-homed heavy
         // cascade; modelled as a named opaque sub-object.
@@ -500,6 +432,135 @@ namespace Camera
         // Out-of-line template body access.
         template <typename> friend class BehaviourHandle;
         friend void _BehaviourManagerAssertLayout();
+    };
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle<TBehaviour> -- a typed handle to a behaviour owned by a
+    // BehaviourManager. Five-word layout pinned from the X360 BehaviourHandle::Prepare
+    // @0x8224AFF0 / ::Release @0x8222DD00 asm: mbAllocated(+0x00), muAllocationKey(+0x04),
+    // mpHelperPool(+0x08), mpManager(+0x0C), mpBehaviour(+0x10). The arbitrator/moment
+    // states inline-duplicate this same five-word layout as their own nested types
+    // (BrnArbStateRankUp.h etc.); those nested copies are distinct types, left untouched.
+    //
+    // ⭐ THE +0x08 WORD IS NOW IDENTIFIED, and it was BUG CLASS (a) -- a 4-byte serialized
+    // slot holding a POINTER. NewBehaviour<BehaviourRoadRunner> @0x822580F8 calls the
+    // handle's Prepare as
+    //     Prepare(r4 = lHelperID, r5 = manager + 64176, r6 = manager)
+    // where `manager + 64176` is &mBehaviourHelperPool, and every later resolution is
+    //     BrnDirec( handle[+0x08], handle[+0x04] )   == mBehaviourHelperPool[lHelperID]
+    // i.e. an ObjectPool::operator[] with the pool taken from the handle. So +0x04 is the
+    // BehaviourHelperIndex (the manager APIs' "allocation key" IS the helper index) and
+    // +0x08 is the owning pool POINTER. Modelled as a real typed pointer here -- on x64 a
+    // u32 would have truncated it.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    class BehaviourHandle
+    {
+    public:
+        BehaviourHandle()
+            : mbAllocated(false), muAllocationKey(0), mpHelperPool(0),
+              mpManager(0), mpBehaviour(0) {}
+
+        bool IsAllocated() const { return mbAllocated; }
+        BehaviourManager* GetManager() const { return mpManager; }
+        TBehaviour* GetBehaviour() const { return mpBehaviour; }
+
+        // Allocate this handle onto a freshly-reserved behaviour. X360-attested
+        // (BehaviourHandle::Prepare @0x8224AFF0). Always returns true. Body out-of-line below
+        // (needs BehaviourManager complete).
+        bool Prepare(BehaviourHelperIndex lHelperIndex,
+                     BehaviourManager::HelperPool* lpHelperPool,
+                     BehaviourManager* lpManager);
+
+        // The pool slot this handle names. X360 `BrnDirec(handle[+8], handle[+4])`.
+        BehaviourManager::BehaviourHelper& GetHelper() const;
+
+        // Drop the manager-side hold and clear the handle. X360-attested
+        // (BehaviourHandle::Release @0x8222DD00). Always returns true. Body out-of-line below.
+        bool Release();
+
+        // Is the behaviour this handle owns still queued for its first Prepare. X360-attested:
+        // every BehaviourHandle<TBehaviour>::IsWaitingToPrepare() instantiation is byte-identical
+        //   BrnDirector::Camera::BehaviourGyroCam   @0x82212510
+        //   BrnDirector::Camera::BehaviourIceAnim   @0x822128A0
+        //   BrnDirector::Camera::BehaviourInterpo   @0x82212150
+        //   BrnDirector::Camera::BehaviourLooseAt   @0x82212A68
+        //   BrnDirector::Camera::BehaviourRoadRun   @0x82212AC8
+        //   BrnDirector::Camera::BehaviourRotateA   @0x82212B98
+        // (the truncated symbols collapse the per-behaviour-type instantiations of this one
+        // template member). Asserts the handle is allocated, then forwards the handle's
+        // allocation key to the manager. Body out-of-line below (needs BehaviourManager complete).
+        bool IsWaitingToPrepare() const;
+
+        // The boolean negation of IsWaitingToPrepare() -- "has the behaviour finished waiting and
+        // is it ready to Prepare". X360-attested BrnDirector::Camera::BehaviourAfterto @0x8222D0E8
+        // (the `IsBehaviourWaitingToPrepare(...) == 0` tail). Body out-of-line below.
+        bool IsReadyToPrepare() const;
+
+        // ADDITIVE GROW (BrnArbStateTakedown.cpp): the camera this handle's live behaviour
+        // produced this frame. X360-attested: every one of the several de-inlined
+        // `sub_821FCxxx`/`sub_821FDxxx` accessors this project's arbitrator states call
+        // (e.g. @0x821FCD40, @0x821FCEE0, @0x821FD450, @0x821FD780) is byte-identical --
+        // assert IsAllocated(), then resolve the manager pool slot through
+        // GetBehaviourSlotFromHandle<TBehaviour>(muHelperIndex, muAllocationKey) and return the
+        // Camera embedded 16 bytes (console) into that slot (BehaviourHelper::mCamera, the
+        // member right after the type-erased pool handle -- see BehaviourHelper below). Modelled
+        // here by reusing BehaviourHelper's own accessor via the resolved slot pointer, so the
+        // 16-byte offset is never poked directly. Body out-of-line below (needs BehaviourManager
+        // complete).
+        const Camera& GetProducedCamera() const;
+
+        void Clear()
+        {
+            mbAllocated     = false;
+            muAllocationKey = 0;
+            mpHelperPool    = 0;
+            mpManager       = 0;
+            mpBehaviour     = 0;
+        }
+
+        // ADDITIVE GROW (SharedCameraContainer::GetGameplayCameraHelperIndex @0x82219718):
+        // the manager-facing BehaviourHelperIndex this handle passes to the manager's
+        // BehaviourHelperIndex-taking APIs. X360-attested: the de-inlined per-type accessors
+        // (sub_822122F0 / sub_822124A0) assert the handle is allocated then return its +0x04
+        // word -- the same word the committed call sites hand to SetBehaviourUpdatesDuringPause
+        // / IsBehaviourWaitingToPrepare (see the key-vs-index naming FLAG on those manager
+        // members: the DWARF types this word as a BehaviourHelperIndex).
+        BehaviourHelperIndex GetBehaviourHelperIndex() const
+        {
+            CGS_ASSERT(mbAllocated, "IsAllocated()");
+            return BehaviourHelperIndex(static_cast<s32>(muAllocationKey));
+        }
+
+        // ADDITIVE GROW (SharedCameraContainer::Prepare @0x82263D50): whether the owned
+        // behaviour keeps updating while the game is paused. X360-attested handle-level
+        // wrapper (BrnBehaviourManager.h:676): assert the handle is allocated ("IsAllocated()",
+        // line 676), then forward the handle's +0x04 word to the manager's
+        // SetBehaviourUpdatesDuringPause. Body out-of-line below (needs BehaviourManager
+        // complete).
+        void SetUpdatesDuringPause(bool lbUpdatesDuringPause);
+
+        // ADDITIVE GROW (the BehaviourHandle<BehaviourRig> instantiation TU): attach /
+        // detach the manager's authoring tweaker to the behaviour this handle owns.
+        // X360-attested handle-level wrappers (BrnBehaviourManager.h:623 / :633 --
+        // BehaviourHandle<BehaviourRig>::AttachTweaker @0x82212608, DetachTweaker
+        // @0x82212668): assert allocated, then forward the +0x04 word to the manager.
+        // The X360 calls the manager's AttachTweaker out-of-line but INLINES
+        // DetachTweaker's internals (the mTweakerHelper current-index compare @+0x158E4
+        // + lock-byte clear @+0x158E0 + helper-pool (+0xFAB0) slot flag-byte clear at
+        // slot +0xA) -- expressed here as the declared manager call. Bodies out-of-line
+        // below (need BehaviourManager complete).
+        void AttachTweaker();
+        void DetachTweaker();
+
+    private:
+        bool                          mbAllocated;     // +0x00  owns a behaviour
+        u32                           muAllocationKey; // +0x04  the BehaviourHelperIndex
+        BehaviourManager::HelperPool* mpHelperPool;    // +0x08  the owning manager's helper pool
+        BehaviourManager*             mpManager;       // +0x0C  owning manager
+        TBehaviour*                   mpBehaviour;     // +0x10  resolved behaviour
+
+        friend class BehaviourManager;
     };
 
     // ------------------------------------------------------------------------
@@ -565,24 +626,115 @@ namespace Camera
     };
 
     // ------------------------------------------------------------------------
+    // ⭐ BehaviourManager::NewBehaviour<TBehaviour> @0x822580F8 -- allocate a fresh behaviour
+    // into lrHandle and hand it to the pool helper that will drive it.
+    //
+    // This is the function the whole director camera stack was waiting on: it is the ONLY
+    // path by which a Camera::Behaviour ever comes into existence, and it could not be
+    // written until the Behaviour base was homed, because it dispatches that base's vtable
+    // (through BehaviourHelper::Prepare) and stores the two owners into the helper interior.
+    //
+    // X360 shape (line numbers are this header's own, quoted by the console's asserts):
+    //     lHelperID = mBehaviourHelperPool.AllocateObject();
+    //     assert(lHelperID >= 0);                                              // :782
+    //     assert(liRefLimit >= 0);                                             // :784
+    //     assert(!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID));          // :786
+    //     assert(!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID));            // :788
+    //     assert(mBehaviourRefCounts[lHelperID] == 0);                         // :789
+    //     mBehaviourNeedsPreparingFlags.SetBit(lHelperID);                     // manager +84656
+    //     mBehaviourUpdateDuringPauseFlags.UnSetBit(lHelperID);                // manager +84672
+    //     mBehaviourHelperIndexArray.Append(lHelperID);                        // manager +90952
+    //     mDebugBehaviourRefCountLimits[lHelperID] = liRefLimit;               // manager +88056
+    //     mDebugBehaviourRefCountIndexLog[lHelperID].Clear();                  // count word +112
+    //     lrHelper = mBehaviourHelperPool[lHelperID];
+    //     assert(lrHelper.Prepare(AllocateBehaviour<BehaviourClass>()));       // :810
+    //     lrHandle.Prepare(lHelperID, &mBehaviourHelperPool, this);
+    //     assert(lrHandle.IsAllocated());                                      // :654
+    //     lrHandle.GetHelper().mpDebugArbitratorStateOwner = lpOwningState;    // helper +0x170
+    //     assert(lrHandle.IsAllocated());                                      // :665
+    //     lrHandle.GetHelper().mpDebugMomentOwner          = lpOwner;          // helper +0x174
+    //
+    // The two trailing stores go through a RE-RESOLUTION of the helper from the handle in the
+    // console (`BrnDirec(*(a2+8), *(a2+4))`), which is what identified the handle's +0x08 word
+    // as the pool pointer. Reproduced with the same shape (GetHelper()) rather than reusing
+    // the local reference, so the dependency stays visible.
+    //
+    // NOTE: the third argument is typed `void*` by the declaration above because the console
+    // symbol is shared between the arbitrator states (which pass `this`, an ArbitratorState*)
+    // and the moments (which pass 0 there and the Moment* in the fourth slot).
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline void BehaviourManager::NewBehaviour(BehaviourHandle<TBehaviour>& lrHandle,
+                                               void* lpOwningState, const void* lpOwner,
+                                               s32 liRefLimit)
+    {
+        const BehaviourHelperIndex lHelperID = mBehaviourHelperPool.AllocateObject();
+
+        CGS_ASSERT(static_cast<s32>(lHelperID) >= 0, "lHelperID >= 0");                 // :782
+        CGS_ASSERT(liRefLimit >= 0, "liRefLimit >= 0");                                 // :784
+        CGS_ASSERT(!mBehaviourNeedsPreparingFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)");               // :786
+        CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(static_cast<u32>(lHelperID)),
+                   "!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID)");                 // :788
+        CGS_ASSERT(mBehaviourRefCounts[static_cast<u32>(lHelperID)] == 0,
+                   "mBehaviourRefCounts[lHelperID] == 0");                              // :789
+
+        mBehaviourNeedsPreparingFlags.SetBit(static_cast<u32>(lHelperID));
+        mBehaviourUpdateDuringPauseFlags.UnSetBit(static_cast<u32>(lHelperID));
+
+        mBehaviourHelperIndexArray.Append(lHelperID);
+
+        mDebugBehaviourRefCountLimits[static_cast<u32>(lHelperID)]   = liRefLimit;
+        mDebugBehaviourRefCountIndexLog[static_cast<u32>(lHelperID)].Clear();
+
+        BehaviourHelper& lrHelper = mBehaviourHelperPool[lHelperID];
+        const bool lbHelperPrepared = lrHelper.Prepare(AllocateBehaviour<TBehaviour>());
+        CGS_ASSERT(lbHelperPrepared,
+                   "lrHelper.Prepare(AllocateBehaviour<BehaviourClass>())");            // :810
+        (void)lbHelperPrepared;
+
+        lrHandle.Prepare(lHelperID, &mBehaviourHelperPool, this);
+
+        CGS_ASSERT(lrHandle.IsAllocated(), "IsAllocated()");                            // :654
+        lrHandle.GetHelper().SetDebugArbitratorStateOwner(
+            static_cast<const ArbitratorState*>(lpOwningState));
+
+        CGS_ASSERT(lrHandle.IsAllocated(), "IsAllocated()");                            // :665
+        lrHandle.GetHelper().SetMomentOwner(static_cast<const Moment*>(lpOwner));
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHandle::GetHelper -- the pool slot this handle names. X360
+    // `BrnDirec(handle[+0x08], handle[+0x04])` == ObjectPool::operator[] on the manager's
+    // helper pool with the handle's helper index.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline BehaviourManager::BehaviourHelper& BehaviourHandle<TBehaviour>::GetHelper() const
+    {
+        CGS_ASSERT(mbAllocated, "IsAllocated()");
+        return (*mpHelperPool)[BehaviourHelperIndex(static_cast<s32>(muAllocationKey))];
+    }
+
+    // ------------------------------------------------------------------------
     // BehaviourHandle::Prepare @0x8224AFF0 -- bind this handle onto a freshly-reserved
     // behaviour. Defined out-of-line here, where BehaviourManager is complete.
     // ------------------------------------------------------------------------
     template <typename TBehaviour>
-    inline bool BehaviourHandle<TBehaviour>::Prepare(u32 luAllocationKey, u32 luHelperIndex,
+    inline bool BehaviourHandle<TBehaviour>::Prepare(BehaviourHelperIndex lHelperIndex,
+                                                     BehaviourManager::HelperPool* lpHelperPool,
                                                      BehaviourManager* lpManager)
     {
         if (mbAllocated)
         {
             mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
-            muHelperIndex = 0;
+            mpHelperPool  = 0;
             mpManager     = 0;
             mpBehaviour   = 0;
             mbAllocated   = false;
         }
 
-        muAllocationKey = luAllocationKey;
-        muHelperIndex   = luHelperIndex;
+        muAllocationKey = static_cast<u32>(static_cast<s32>(lHelperIndex));
+        mpHelperPool    = lpHelperPool;
         mpManager       = lpManager;
         mbAllocated     = true;
 
@@ -590,8 +742,13 @@ namespace Camera
 
         CGS_ASSERT(mbAllocated, "IsAllocated()");
 
-        mpBehaviour =
-            *BehaviourManager::GetBehaviourSlotFromHandle<TBehaviour>(muHelperIndex, muAllocationKey);
+        // The console's `mpBehaviour = *GetBehaviourSlotFromHandle<T>(pool, index)` -- the
+        // dereference is the helper's FIRST word, i.e. the pooled object. Taken from the
+        // type-erased pool handle (a plain `void*` on both sides) rather than through the
+        // helper's Behaviour* accessor, because most behaviour classes have not been re-based
+        // onto the canonical Camera::Behaviour yet (see the NewBehaviour<> instantiation note
+        // in the .cpp) and a Behaviour* -> TBehaviour* downcast would not compile for them.
+        mpBehaviour = static_cast<TBehaviour*>(GetHelper().GetPoolHandle().Get());
         return true;
     }
 
@@ -604,7 +761,7 @@ namespace Camera
         if (mbAllocated)
         {
             mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
-            muHelperIndex = 0;
+            mpHelperPool  = 0;
             mpManager     = 0;
             mpBehaviour   = 0;
             mbAllocated   = false;
@@ -674,18 +831,23 @@ namespace Camera
         return mpManager->IsBehaviourWaitingToPrepare(muAllocationKey) == false;
     }
 
-    // BehaviourHandle::GetProducedCamera declaration (see the class body above): DECLARATION-
-    // ONLY, no out-of-line definition here. X360-attested (e.g. @0x821FCD40 / @0x821FCEE0 /
-    // @0x821FD450 / @0x821FD780) to assert IsAllocated() then resolve the manager pool slot this
-    // handle names and return the Camera embedded 16 bytes (console) into it
-    // (BehaviourHelper::mCamera, right after the type-erased pool handle). Reconstructing the
-    // body faithfully needs GetBehaviourSlotFromHandle<TBehaviour>'s own pointer arithmetic back
-    // to its owning BehaviourHelper slot, and GetBehaviourSlotFromHandle is ITSELF declaration-
-    // only (its real body -- how the (helper index, allocation key) pair resolves into the pool
-    // -- lands with the BehaviourManager TU); deriving GetProducedCamera's body without it would
-    // mean fabricating that resolution rather than reusing a named one. Left declaration-only;
-    // BrnArbStateTakedown.cpp (the first consumer) only needs the declaration to compile against
-    // under the per-TU cl /c gate.
+    // ------------------------------------------------------------------------
+    // GetProducedCamera -- BODIED (was declaration-only). X360-attested
+    // (@0x821FCD40 / @0x821FCEE0 / @0x821FD450 / @0x821FD780, all byte-identical): assert
+    // IsAllocated(), resolve the manager pool slot the handle names, and return the Camera
+    // embedded 16 bytes (console) into it -- BehaviourHelper::mCamera, the member right after
+    // the type-erased pool handle. The resolution that used to be missing is GetHelper()
+    // above; nothing is fabricated any more.
+    // This is the accessor every arbitrator state uses to copy its behaviour's camera into
+    // its own each frame (`lrCamera = mHandle.GetProducedCamera()`), i.e. the last link
+    // between a live behaviour and the published director camera.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    inline const Camera& BehaviourHandle<TBehaviour>::GetProducedCamera() const
+    {
+        CGS_ASSERT(mbAllocated, "IsAllocated()");
+        return GetHelper().GetCamera();
+    }
 
     // ------------------------------------------------------------------------
     // _BehaviourManagerAssertLayout -- NEVER CALLED. Pins the DWARF member ordering. The DWARF

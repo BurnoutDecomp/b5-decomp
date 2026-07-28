@@ -123,7 +123,13 @@ namespace BrnDirector
     const Camera::Camera& ArbStateCrashNav::BehaviourHandle<TBehaviour>::GetProducedCamera() const
     {
         CGS_ASSERT(mbAllocated, "IsAllocated()");
-        return mpBehaviour->GetProducedCamera();
+        // RE-POINTED (2026-07-29): a behaviour does NOT own a camera -- its owning
+        // BehaviourManager::BehaviourHelper does (helper +0x10). The manager-side accessor
+        // resolves the helper by index, which is the same slot the console's sub_821FDC58
+        // helper reaches. (This state still carries its own nested five-word handle copy, so it
+        // goes through the manager rather than the shared handle's GetHelper().)
+        return mpManager->GetCameraFromBehaviour(
+            Camera::BehaviourHelperIndex(static_cast<s32>(muAllocationKey)));
     }
 
     // ------------------------------------------------------------------------
