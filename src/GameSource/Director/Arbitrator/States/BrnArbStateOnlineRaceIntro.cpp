@@ -43,10 +43,16 @@ namespace BrnDirector
         // (X360 li r3, 0x18 -> Attrib::DefaultDataArea(0x18)). Same as the sibling states.
         const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
 
-        // The two trailing selectors the BehaviourManager::NewBehaviour<TBehaviour> allocation
-        // request carries (X360 li r6,0 / li r7,1). Same as the sibling arbitrator states.
-        const s32 KI_NEW_BEHAVIOUR_ARG_A = 0;
-        const s32 KI_NEW_BEHAVIOUR_ARG_B = 1;
+        // The two trailing arguments the BehaviourManager::NewBehaviour<TBehaviour> allocation
+        // request carries (X360 li r6,0 / li r7,1). RETYPED 2026-07-29: r6 is NewBehaviour's
+        // OWNER slot -- a `const void*` (the arbitrator states pass null there; the moments pass
+        // their Moment*) -- and r7 is the s32 reference LIMIT. Declaring the owner as `const s32`
+        // meant the call matched no overload at all: a `const s32` variable is not an integer
+        // LITERAL, so it is not a null-pointer constant and will not convert to `const void*`.
+        // (That is the Step-0 defect the previous wave recorded as "one of the two call sites'
+        // arg lists is wrong" -- it was the TYPE, not the count.)
+        const void* const KPC_NEW_BEHAVIOUR_OWNER   = 0;
+        const s32         KI_NEW_BEHAVIOUR_REFLIMIT = 1;
 
         // CalculateStateTimes constants (asm-attested rodata: flt_82003F40 / flt_82001CC0 /
         // flt_82001D9C / flt_82001C98).
@@ -256,7 +262,7 @@ namespace BrnDirector
         // Allocate the rival "show" behaviour into the handle at the current cursor.
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
             maRivalBehaviourHandle[muRivalMovieOffset], this,
-            KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+            KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
         maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()
             ->SetForceMotionBlurEverything(true);   // +0xE2B = 1
@@ -301,7 +307,7 @@ namespace BrnDirector
                                                     const Camera::Camera& lrToCamera)
     {
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
-            mInterpolator, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+            mInterpolator, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
         Camera::BehaviourInterpolate* lpInterpolator = mInterpolator.GetBehaviour();
 
@@ -382,7 +388,7 @@ namespace BrnDirector
 
                         // Allocate + configure the player "show" behaviour (shot index 1).
                         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                            mPlayerBehaviourHandle, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                            mPlayerBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
                         mPlayerBehaviourHandle.GetBehaviour()->SetUseCollisionPolicy(true);   // +0xE28 = 1
                         mPlayerBehaviourHandle.GetBehaviour()->ClearBaseFirstFrameGate();     // +0x28 = 0
@@ -503,7 +509,7 @@ namespace BrnDirector
             {
                 // Last rival: interpolate back to the player "show".
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                    mPlayerBehaviourHandle, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                    mPlayerBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
                 const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
                     lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
@@ -611,7 +617,7 @@ namespace BrnDirector
                     lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                    mLightsBehaviourHandle, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                    mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
                 mLightsBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
                 const void* lpShotData =
@@ -643,7 +649,7 @@ namespace BrnDirector
                     lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                    mLightsBehaviourHandle, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                    mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
                 mLightsBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
                 const void* lpShotData =

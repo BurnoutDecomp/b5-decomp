@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                                       // Vector3, Matrix44Affine
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"          // BrnPhysics::Vehicle::RaceCarState (committed home)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"                        // BrnDirector::Camera::AABBox (THE home; the local copy is retired)
 
 // ============================================================================
 // GameSource/Director/Camera/Camera/SharedIO/BrnPlayerInfo.h
@@ -41,18 +42,12 @@ namespace BrnDirector
 {
 namespace Camera
 {
-    // Axis-aligned bounding box storage. The engine's real AABBox is
-    // rw::collision::AABBoxTemplate<Matrix44Affine, Vector3, ...> (SDKs/EATech
-    // cmn/rw/collision/aabbox.h) -- two Vector3 min/max corners, 32 bytes. That full
-    // RenderWare collision template is not yet reconstructed in a vendor home; this TU
-    // only needs the 32-byte min/max storage that VehicleInfo embeds, so model exactly
-    // that here. (HONEST: a storage-only stand-in for the EATech AABBox; grow/replace
-    // with the real vendor home when that template is reconstructed.)
-    struct alignas(16) AABBox
-    {
-        Vector3 mMin;   // aabbox.h: m_min
-        Vector3 mMax;   // aabbox.h: m_max
-    };
+    // RETIRED (2026-07-29): this header used to carry its own byte-identical copy of the
+    // BrnDirector::Camera::AABBox storage stand-in, whose own comment already noted the
+    // duplicate in Camera/Utils/CameraUtils.h. Keeping both meant any TU that reached this
+    // header AND the camera utils died with C2011 -- which is exactly what happened the
+    // moment the canonical Behaviour.h started embedding VehicleInfo by value. One home now
+    // (CameraUtils.h, included above); the definition itself is unchanged.
 
     // Per-frame vehicle info published to the director's camera. See file header for the
     // full layout / provenance.

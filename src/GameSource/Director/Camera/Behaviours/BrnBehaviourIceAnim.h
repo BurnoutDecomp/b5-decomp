@@ -8,6 +8,11 @@
 #include "SDKs/Packages/ICE/ICEData.hpp"                     // ICE::ICETake / ICE::ICETakeData (controller take + take data)
 #include "SharedClasses/DataLists/ICEList.h"                 // BrnResource::ICEList::GetICETakeDataFromGuid
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"  // Attrib::Gen::iceanim (the real/canonical home)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h" // THE canonical Behaviour base +
+                                                             //   BehaviourSharedInfo /
+                                                             //   BehaviourSharedPrepareReleaseInfo
+                                                             //   (this header's forks retired)
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"   // BrnDirector::Timestep (real home)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h
@@ -181,15 +186,10 @@ public:
     const Attrib::Gen::shotgroup& GetDriveThruTireShopShots() const;
 };
 
-// FLAG: minimal slice of the per-frame timestep source the Update body samples. No
-//   reconstructed home yet -- modelled with exactly the named accessor Update uses
-//   (Get(eType) returns the scaled frame delta). Replace with its real home when the
-//   Timestep TU lands; the accessor NAME is stable.
-struct Timestep
-{
-    enum EType { E_TYPE_DEFAULT = 0 };
-    f32 Get(EType leType) const;
-};
+// RETIRED (2026-07-29): the minimal `struct Timestep` fork that used to sit here (whose only
+// enumerator was E_TYPE_DEFAULT = 0) is gone -- the real home is
+// GameSource/Director/Utils/BrnDirectorTimestep.h, included above. Its index 0 is E_WORLD,
+// which is the flavour the console reads here (`lfs f0, mafTimestep[0]`).
 
 namespace Camera
 {
@@ -202,67 +202,31 @@ namespace Camera
 //   are stable. Pointer/handle-only types are forward-declared.
 // ----------------------------------------------------------------------------
 
-// The base of all camera behaviours: a vtable plus a shared flag/state block. The shared
-// fields below are the ones this behaviour's bodies read or write through `this`; the rest
-// of the base block is an opaque reserved span. Construct/Update/Prepare touch these by
-// name. FLAG: minimal slice -- the real base layout lands with the Behaviour TU.
-class Behaviour
-{
-public:
-    // The reference to one anchor vehicle (eye / look / bystander) a behaviour keeps. The
-    // bodies query validity and resolve it to a live vehicle each frame. FLAG: minimal
-    // slice -- the real type lands with the Behaviour TU; offsets here are nominal.
-    class VehicleRef
-    {
-    public:
-        // True when this reference currently resolves against the given world.
-        bool IsValid(const void* lpWorld) const;
-        // Resolve to the live vehicle (Update reads its transform rows from the result).
-        void* Get(const void* lpWorld) const;
-
-        u8 maReserved[0x10];   // +0x00  nominal (the ref is 16 bytes wide)
-    };
-
-    // Mark "the director cannot switch away from me this frame" with the given reason id.
-    // (Body homed in Behaviour.cpp.)
-    void SetCantSwitchFromMeNow(void* lpInfo, s32 liReason);
-
-    // Give up: record the failure reason in the info's validity account, raise the failed
-    // flags on this behaviour and drop the "follow" request bit on the info. The Update of
-    // every concrete behaviour calls it when its anchor stops resolving. (Body in
-    // Behaviour.cpp.)
-    void Fail(void* lpInfo, s32 liReason);
-
-    // ADDITIVE GROW (BrnArbStateDriveThru::Update @0x82235DB0): a public read of the shared
-    // "flag C" byte (+0x0C -- see mbBaseFlagC below / Behaviour.cpp's SetCantSwitchFromMeNow /
-    // Fail, which both write it). X360: `lbz r11, 0xC(r3)` on the live Behaviour* an unnamed
-    // handle-resolution helper (sub_821FCDA8, owning TU not yet identified) hands back; the
-    // drive-thru state gates its hand-off-to-roaming transition on this byte. FLAG: the exact
-    // semantic role of mbBaseFlagC (beyond "written true by Fail / cleared by
-    // SetCantSwitchFromMeNow") is not fully recovered; exposed as a named read so the consumer
-    // never pokes the base by offset.
-    bool GetBaseFlagC() const { return mbBaseFlagC; }
-
-protected:
-    // The shared head of the base block. The named flags below land inside it.
-    void* mpVTable;            // +0x00  behaviour vtable
-
-    // +0x04 reset by Construct.
-    s32  miBaseResetWord;      // +0x04
-
-    // +0x08..+0x0C: the shared boolean state the bodies read/write by name.
-    bool mbHasPreparedCamera;  // +0x08  set once the produced camera has been seeded
-    bool mbFailed;             // +0x09  set when the behaviour gave up (HasFinishedOrFailed)
-    bool mbBaseFlagA;          // +0x0A  set by Update's setup
-    bool mbMotionBlurGate;     // +0x0B  motion-blur enable gate (Update toggles it)
-    bool mbBaseFlagC;          // +0x0C
-
-    // +0x0D..+0x0F: padding to the next named member.
-    u8   maBasePad0[3];        // +0x0D
-
-    // +0x10: the take-data pointer Prepare / ChangeMovie bind (lpTakeData + 0xC).
-    void* mpCurrentTakeData;   // +0x10
-};
+// RETIRED (2026-07-29): the `class Behaviour` fork that used to sit here is gone; the base
+// now comes from GameSource/Director/Camera/Behaviours/Behaviour.h (included above). The
+// fork's field names map onto the DWARF base names BY CONSOLE OFFSET, which both models
+// agree on:
+//     mbHasPreparedCamera (+0x08) -> mbIsPrepared
+//     mbFailed            (+0x09) -> mbHasFailed
+//     mbBaseFlagA         (+0x0A) -> mbTweakerAttached      <-- see the FLAG below
+//     mbMotionBlurGate    (+0x0B) -> mbCanSwitchToMeNow
+//     mbBaseFlagC         (+0x0C) -> mbCanSwitchFromMeNow
+//     miBaseResetWord     (+0x04) -> meTimestepType
+//     mpCurrentTakeData   (+0x10) -> (see mpCurrentTakeData below)
+// Two of those renames turn previously-opaque writes into recognisable base operations:
+// the fork's Update failure block (`RequestNoFollow(); mbMotionBlurGate = false;
+// mbBaseFlagC = true; mbFailed = true;`) is EXACTLY the inlined Behaviour::Fail
+// @0x822063E8, and `SetCantSwitchFromMeNow(..., 29)` lands inside the account's attested
+// no-cut-from band [27,31) -- independent confirmation of both the base layout and the
+// ValidityAccount bounds.
+//
+// FLAG (+0x0A): the DWARF names that byte `mbTweakerAttached`, yet this behaviour's Update
+//   raises it every normal frame, which does not read like "a dev tweaker is attached". One
+//   of the two is off: either the reconstructed IceAnim store targets the wrong byte, or the
+//   base name is. The RENAME is by offset (which is not in doubt); the SEMANTIC question is
+//   recorded here rather than silently resolved.
+//   DELETE-WHEN: BehaviourIceAnim::Update's asm is re-walked against the base layout.
+// ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
 // The two collision policies the behaviour exposes. GetCollisionPolicy hands back a
@@ -402,40 +366,17 @@ public:
 namespace BrnDirector { namespace Camera {
 
 // ----------------------------------------------------------------------------
-// FLAG: minimal slices of the two Behaviour information blocks this behaviour's virtuals
-//   consume. No reconstructed home yet (the Behaviour shared-info TU owns them); each is
-//   modelled with exactly the named accessors the bodies read. The Update body also OR-/
-//   AND-sets two camera-request flag words on the info block (the +312 / +320 flag
-//   words); those are expressed as the named request helpers below. Replace with the real
-//   homes when the Behaviour shared-info TU lands; the accessor NAMES are stable.
-// ----------------------------------------------------------------------------
-
-// The prepare/release info Prepare consumes (carries the resource manager).
-struct BehaviourSharedPrepareReleaseInfo
-{
-    const DirectorResourceManager* GetDirectorResourceManager() const;
-};
-
-// The per-frame info Update consumes (world, spaces, timestep, resource manager, the
-// produced-camera request flags, the debug sink).
-struct BehaviourSharedInfo
-{
-    const void*              GetWorld() const;             // +1468  the world the refs resolve against
-    bool                     ShouldRePrepareController() const; // +1517 re-prepare gate
-    const DirectorResourceManager& GetDirectorResourceManager() const; // +1448
-    void*                    GetSpaceArgs() const;         // +1280..  the look-at build args
-    const void*              GetSourceSpaces() const;      // +1508  source reference spaces
-    void*                    GetInfoPointer() const;       // the info block itself (controller arg)
-    const BrnDirector::Timestep& GetTimestep() const;      // +1360  per-frame timestep source
-    void*                    GetDebugSink() const;         // +1488  debug-print sink
-    const void*              GetEyeTarget() const;         // +592   eye target (visibility test)
-    const void*              GetLookTarget() const;        // +1280  look target (visibility test)
-
-    // The two produced-camera request flags the Update body raises:
-    //   "give up following" (the early-out path) and "follow" (the normal path).
-    void RequestNoFollow();   // sets +312 |= 0x800, +320 &= ~2
-    void RequestFollow();     // sets +320 |= 2
-};
+// RETIRED (2026-07-29): the `BehaviourSharedPrepareReleaseInfo` / `BehaviourSharedInfo`
+// forks that used to sit here now come from the canonical Behaviour.h (included above).
+// Every accessor name this behaviour calls is carried forward there, each resolving to the
+// DWARF member the fork's own offset comment pinned (e.g. GetWorld -> mpAllVehicleData
+// @+1468, ShouldRePrepareController -> mbIceDataBeingEdited @+1517, GetSourceSpaces ->
+// mpCameraSpaceHandler @+1508, GetDebugSink -> mpDebugPrinter @+1488).
+// The fork's `RequestFollow` / `RequestNoFollow` did NOT move: their console reaches
+// (`+312 |= 0x800` and `+320 &= ~2`) are camera-state writes at Camera +0x138 / +0x140, not
+// shared-info writes -- the same pair Behaviour::Fail performs. The two call sites in the
+// .cpp now go through the Camera, which is what the console does.
+// ============================================================================
 
 // ============================================================================
 // BehaviourIceAnim -- the ICE-anim camera behaviour itself.
@@ -484,15 +425,11 @@ public:
     // True once the controller has finished playing or the behaviour has failed.
     bool HasFinishedOrFailed() const;
 
-    // GROWN for MomentStationaryCrash::Update @0x82272EA8 (the moment polls its
-    // candidate through the Behaviour-base head bytes): the DWARF base names for
-    // +0x09 / +0x0B. NOTE: the +0x0B byte the slice models as mbMotionBlurGate IS
-    // the base's mbCanSwitchToMeNow (Behaviour.h DWARF); the behaviour raising it
-    // from Update is it signalling readiness -- the member keeps the slice name
-    // pending its own-TU reconcile.
-    bool HasFailed() const          { return mbFailed; }
-    bool CanSwitchToMeNow() const   { return mbMotionBlurGate; }
-    bool CanSwitchFromMeNow() const { return mbBaseFlagC; }   // +0x0C == the base mbCanSwitchFromMeNow (DWARF base name; MomentPlayerStunt's release gate)
+    // RETIRED (2026-07-29): these three re-declarations of HasFailed / CanSwitchToMeNow /
+    // CanSwitchFromMeNow existed only because this header carried its own Behaviour fork with
+    // its own names for +0x09 / +0x0B / +0x0C. The canonical base declares all three, so the
+    // consumers (MomentStationaryCrash::Update @0x82272EA8, MomentPlayerStunt's release gate)
+    // now reach the base's versions unchanged.
 
     // The camera this behaviour produced this frame (mLastCamera). The arbitrator states
     // copy it into their own mCamera while the behaviour is driving (the X360 reaches it
@@ -636,6 +573,19 @@ private:
     bool                             mbUseAttachedToCarCollisionPolicy;
     bool                             mbForceHeadingSpaceToBeLooseHeadingSpace;
     bool                             mbForceMotionBlurEverything;
+
+    // The live take-data pointer Prepare / ChangeMovie bind (`lpTakeData + 0xC`).
+    // FLAG (home): the console keeps this in the BASE's +0x10 slot, which the DWARF names
+    //   `Behaviour::mpcDebugParametersName` (a `const char*`). The two readings are
+    //   reconcilable -- `lpTakeData + 0xC` is plausibly the take's NAME string, i.e. the
+    //   console line is `SetDebugParametersName(takeData->mpcName)` -- but that is NOT
+    //   proven, and aliasing a `const char*` base field with a take-data pointer would be a
+    //   guess with teeth. It is therefore given a NAMED member of its own here (the x64 gate
+    //   is semantic parity by named member, so the extra word costs nothing), and the base
+    //   field is left alone.
+    //   DELETE-WHEN: the ICE take record's +0xC field is typed (if it is the name string,
+    //   fold this into SetDebugParametersName / GetDebugParametersName and drop the member).
+    void*                            mpCurrentTakeData;
 };
 
 } } // namespace BrnDirector::Camera

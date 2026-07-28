@@ -699,6 +699,28 @@ namespace BrnDirector
         {
             // ⚠️ GATE: UpdateDebugPrinters / the debug byte / DebugLog::Print+Update.
             // ⚠️ GATE: UpdateCameraBehavioursPostScene( lpIO, liPlayerCarIndex );
+            //   @0x8224FD30. THIS IS THE ONE REMAINING CALL BETWEEN A PREPARED BEHAVIOUR AND A
+            //   MOVING CAMERA: it builds the ~1540-byte Camera::BehaviourSharedInfo on its own
+            //   stack and hands it to BehaviourManager::UpdateAllBehaviours (which IS bodied now
+            //   -- see BrnBehaviourManager.cpp). It stays gated because building that block
+            //   means filling members this reconstruction cannot yet source honestly:
+            //     * mPlayerInfo (a whole VehicleInfo copied out of mAllVehicleData, itself an
+            //       un-homed named region of MainDirector) -- and handing behaviours a
+            //       zero-filled one would be worse than not calling them at all;
+            //     * mpEffectInterface / mpDebugLog / mpDebugPrinter / mpSceneQueryInterface /
+            //       mpPlayerTracker / mpCameraSpaceHandler -- all pointers into MainDirector
+            //       sub-objects that are still opaque regions;
+            //     * mCarModifier / mCameraModifier / mfSpeedRatio / mfCrashTimeRemaining, which
+            //       come out of the ~500-line VMX prologue of that function.
+            //   The MEMBER MAP is now recovered though (see Camera/Behaviours/Behaviour.h: every
+            //   console offset the two consumers touch -- +1360 mTimestep, +1424 mCarModifier,
+            //   +1440 mUsedRaceCars, +1448 mpDirectorResourceManager ... +1520 mCameraModifier,
+            //   +1536/+1537 the two trailing bools -- lands on the DWARF member its order
+            //   predicts), so this is now a filling-in job, not a decoding one.
+            //   CONSEQUENCE: no behaviour's Update runs, so every behaviour-produced camera
+            //   holds whatever BehaviourHelper::Prepare constructed.
+            //   DELETE-WHEN: AllVehicleData / VehicleTracker / DebugPrinter / DebugLog /
+            //   EffectInterface are real members of MainDirector rather than opaque regions.
             // ⚠️ GATE: UpdateMoments( lpIO, liPlayerCarIndex );
             // ⚠️ GATE: if ( !<ICE-owns-frame latch> ) UpdateICE( lpIO, liPlayerCarIndex );
 
@@ -727,7 +749,18 @@ namespace BrnDirector
         lpIO->mpOutputBuffer->SetCgsCamera(mCgsCamera);
         lpIO->mpOutputBuffer->SetCameraOutput(lCamera);
 
-        // ⚠️ GATE: the post-publish tail (lines 871-924) -- see the banner.
+        // ⭐ X360 line 878 -- BehaviourManager::PrepareBehaviours(&mBehaviourManager,
+        // lpIO->mpResourceManager). UNCONDITIONAL (outside the live-player-car branch above),
+        // and it runs AFTER the publish, so a behaviour allocated during this frame's
+        // arbitrator pass gets its first Prepare before the next frame reads it.
+        //
+        // This one call is what makes the attract state's poll terminate: NewBehaviour<> raises
+        // the manager's "needs preparing" bit, ArbStateAttractMode::Prepare returns false while
+        // it is set, and THIS is the only thing that clears it (by dispatching the behaviour's
+        // own Prepare). Without it the fly-by state would poll for ever.
+        mBehaviourManager.PrepareBehaviours(lpIO->mpResourceManager);
+
+        // ⚠️ GATE: the rest of the post-publish tail (lines 871-877 / 879-924) -- see the banner.
     }
 
     // ------------------------------------------------------------------------

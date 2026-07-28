@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (handle IsAllocated check)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState / ArbStateSharedInfo
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"              // Camera::BehaviourHandle<> (the SHARED handle)
 
 // ============================================================================
 // GameSource/Director/Arbitrator/States/BrnArbStateAttractMode.h
@@ -70,56 +71,20 @@ namespace BrnDirector
         // that decides whether the fly-by goes live this frame.
 
     private:
-        // ---- a typed handle to a camera behaviour owned by the BehaviourManager ----------
-        // Released in Release() via BehaviourManager::UnSetBehaviourUsedByHandle(mpManager,
-        // muAllocationKey). 0x14-byte block (5 words) pinned from the Construct/Release/Update
-        // asm: mbAllocated(+0x00), muAllocationKey(+0x04), a behaviour-lookup helper word(+0x08),
-        // mpManager(+0x0C), mpBehaviour(+0x10). Mirrors ArbStateRoaming::BehaviourHandle /
-        // ArbStateCrashNav::BehaviourHandle (each state keeps its own nested copy of this same
-        // five-word layout; the shared BrnBehaviourManager.h BehaviourHandle<T> is a distinct
-        // type, left untouched).
-        // FLAG: the +0x08 word's exact role is not fully recovered (never read in this TU;
-        // modelled as an opaque behaviour-lookup helper index, as in the sibling states).
-        template <typename TBehaviour>
-        struct BehaviourHandle
-        {
-            BehaviourHandle()
-                : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
-                  mpManager(0), mpBehaviour(0) {}
-
-            bool IsAllocated() const { return mbAllocated; }
-
-            // ADDITIVE (ArbStateAttractMode::Prepare @0x8225B220): is the behaviour this
-            // handle owns still queued for its first Prepare. X360-attested -- Prepare's tail
-            // is `return BehaviourHandle<BehaviourRoadRunner>::IsWaitingToPrepare(&mRoadRunnerCam)
-            // == 0`, i.e. the same manager query the shared BrnBehaviourManager.h
-            // BehaviourHandle<> forwards (BrnBehaviourManager.h:517). Defined out-of-line in
-            // the .cpp, where BehaviourManager is complete.
-            bool IsWaitingToPrepare() const;
-            bool IsReadyToPrepare() const { return !IsWaitingToPrepare(); }
-
-            // The live behaviour this handle owns (only valid while IsAllocated()).
-            TBehaviour* GetBehaviour() const
-            {
-                CGS_ASSERT(mbAllocated, "IsAllocated()");
-                return mpBehaviour;
-            }
-
-            // The camera the live behaviour produced this frame. The X360 reaches it through the
-            // handle helper sub_821FDC58 (unattested body); modelled BY NAME as the behaviour's
-            // produced camera, same as ArbStateCrashNav::BehaviourHandle::GetProducedCamera().
-            // Defined out-of-line in the .cpp where BehaviourRoadRunner is complete.
-            const Camera::Camera& GetProducedCamera() const;
-
-            bool                      mbAllocated;     // +0x00
-            u32                       muAllocationKey; // +0x04
-            u32                       muHelperIndex;   // +0x08  FLAG: role not recovered (lookup helper)
-            Camera::BehaviourManager* mpManager;       // +0x0C
-            TBehaviour*               mpBehaviour;     // +0x10
-        };
+        // ⭐ RETIRED (2026-07-29): this state used to carry its OWN nested five-word
+        // BehaviourHandle<> copy. It now uses the SHARED
+        // BrnDirector::Camera::BehaviourHandle<TBehaviour> -- which is what the console has:
+        // the X360 symbol is
+        //     ??$NewBehaviour@VBehaviourRoadRunner@...@BehaviourManager@...QAAXAAV?$BehaviourHandle
+        // i.e. ONE template instantiated per behaviour type, not a per-state duplicate. Using
+        // the shared handle is therefore MORE faithful, and it is what lets the bodied
+        // BehaviourManager::NewBehaviour<> overload bind here (the generic THandle overload
+        // stays declaration-only for the states that still carry nested copies).
+        // The shared handle brings IsWaitingToPrepare / IsReadyToPrepare / GetProducedCamera /
+        // Release with it, all now bodied -- so this header no longer declares any of them.
 
         // ---- members, DWARF order; X360 offsets in comments ------------------------------
-        BehaviourHandle<Camera::BehaviourRoadRunner> mRoadRunnerCam;  // X360 +0x180
+        Camera::BehaviourHandle<Camera::BehaviourRoadRunner> mRoadRunnerCam;  // X360 +0x180
         EState                                       meState;         // X360 +0x194
     };
 }

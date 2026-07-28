@@ -25,11 +25,14 @@ namespace Camera
 {
 
 // Out-of-line anchor: exercises exactly the three exported members.
+// (Prepare's second argument is now the owning manager's HELPER POOL -- the +0x08 word was
+// identified as a pool pointer, not an index; see BrnBehaviourManager.h.)
 void BehaviourRigHandle_Anchor(BehaviourHandle<BehaviourRig>& lrHandle,
-                               u32 luAllocationKey, u32 luHelperIndex,
+                               BehaviourHelperIndex lHelperIndex,
+                               BehaviourManager::HelperPool* lpHelperPool,
                                BehaviourManager* lpManager)
 {
-    lrHandle.Prepare(luAllocationKey, luHelperIndex, lpManager);
+    lrHandle.Prepare(lHelperIndex, lpHelperPool, lpManager);
     lrHandle.AttachTweaker();
     lrHandle.DetachTweaker();
 }

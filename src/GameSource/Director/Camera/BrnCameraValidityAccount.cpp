@@ -46,5 +46,37 @@ void ValidityAccount::SetFlag(s32 leFlag)
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
+// Inlined in BehaviourHelper::Update @0x82220688 (see the header). The console does the
+// whole thing as one 64-bit AND against qword_82FAA5D0; expressed here as the named
+// per-bit clear so the u64 field is never reached directly.
+void ValidityAccount::MaskToFailFlags()
+{
+    CGS_ASSERT(sbFailFlagMaskSet, "sbFailFlagMaskSet");   // h:193
+
+    for (u32 luFlag = 0; luFlag < 32u; ++luFlag)
+    {
+        if (!sFailFlagMask.IsBitSet(luFlag))
+        {
+            mFailedFlags.UnSetBit(luFlag);
+        }
+    }
+}
+
+// @ 0x82204148 -- the no-cut-FROM twin of SetFlag. Same shape: range-check the reason
+// against [E_FIRST_NOCUTFROM_FLAG, E_END_NOCUTFROM_FLAG) (asm `cmpwi 0x1B` / `cmpwi 0x1F`,
+// assert text at BrnCameraValidityAccount.h:245), then raise its bit in the same u64 set
+// (the X360 inlines the BitArray 64-bit-field SetBit exactly as SetFlag does, with the
+// streamed CgsBitArray.h index guard folded static per convention).
+// Identified from its single caller, Behaviour::SetCantSwitchFromMeNow @0x82206388, which
+// hands it `camera + 0x138` -- this account.
+void ValidityAccount::SetNoCutFromFlag(s32 leFlag)
+{
+    CGS_ASSERT(leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG,
+               "leFlag >= E_FIRST_NOCUTFROM_FLAG && leFlag < E_END_NOCUTFROM_FLAG");  // h:245
+    CGS_ASSERT(static_cast<u32>(leFlag) < 32u,
+               "Index < Number of bits");   // CgsBitArray.h:222 (streamed on the X360)
+    mFailedFlags.SetBit(static_cast<u32>(leFlag));
+}
+
 }
 }

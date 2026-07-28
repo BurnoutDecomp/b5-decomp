@@ -37,6 +37,12 @@
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"       // Looker + Random typedef
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"  // PositionLag
 #include "GameSource/Director/Utils/BrnVehicleRef.h"          // BrnDirector::VehicleRef (base)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"  // THE canonical Behaviour base +
+                                                              //   BehaviourSharedInfo /
+                                                              //   BehaviourSharedPrepareReleaseInfo
+                                                              //   (this header's old forks retired)
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"    // BrnDirector::Timestep (the REAL home;
+                                                              //   the old local fork is retired)
 #include "GameSource/Physics/PhysicsUtilities/Spring1D.h"     // BrnPhysics::Spring1D
 
 namespace BrnDirector { class WorldMap; }   // GameSource/Director/Utils/BrnDirectorWorldMap.h (minimal slice)
@@ -45,21 +51,20 @@ namespace BrnDirector { class WorldMap; }   // GameSource/Director/Utils/BrnDire
 namespace BrnDirector
 {
 
-// FLAG: minimal Timestep stub (the full Timestep TU is not yet recovered). The Rig
-//   behaviour reads a timestep scalar from the SharedInfo by type index. The E_TYPE_*
-//   enumerators are from the DWARF; the assert in Update references "E_TIMESTEP_COUNT".
-struct Timestep
-{
-    enum EType { E_TIMESTEP_INVALID = 0, E_TYPE_DEFAULT = 1, E_TIMESTEP_COUNT = 3 };
-    f32 Get(EType leType) const;
-};
+// RETIRED (2026-07-29): the minimal `struct Timestep` fork that used to sit here (with its
+// own EType whose E_TIMESTEP_INVALID was 0) is gone. The real home is
+// GameSource/Director/Utils/BrnDirectorTimestep.h, included above -- its EType is
+// { E_TIMESTEP_INVALID = -1, E_WORLD, E_WORLD_NO_SLOMO, E_GAME, E_TIMESTEP_COUNT }. The fork
+// was self-inconsistent: BehaviourRig::Construct set the type to its INVALID (0) while
+// BehaviourRig::Update asserts the type is > E_TIMESTEP_INVALID. The console stores 0 there
+// (== E_WORLD under the real enum), which the canonical enum makes consistent.
 
 namespace Camera
 {
 
-// Forward decls for types used only as pointer/reference parameters.
-struct BehaviourSharedInfo;
-struct BehaviourSharedPrepareReleaseInfo;
+// BehaviourSharedInfo / BehaviourSharedPrepareReleaseInfo now come from the canonical
+// Behaviour.h (included above); the forward decls + the two forked definitions this header
+// used to carry are retired.
 
 // ============================================================================
 // FLAG: minimal slice of the abstract collision-policy interface.
@@ -261,96 +266,16 @@ private:
 } // namespace Utils
 
 // ============================================================================
-// FLAG: minimal slices of the shared-info blocks consumed by BehaviourRig's virtuals.
+// RETIRED (2026-07-29): this header used to carry PRIVATE forks of
+//   * BehaviourSharedPrepareReleaseInfo (an empty struct),
+//   * BehaviourSharedInfo (3 declaration-only accessors), and
+//   * class Behaviour (the base slice, with the DWARF member names but no real home).
+// All three now live in GameSource/Director/Camera/Behaviours/Behaviour.h, which is included
+// at the top of this file. The accessor names BehaviourRig.cpp calls (GetWorld / GetTimestep
+// / GetWorldMap) are carried forward verbatim by the canonical BehaviourSharedInfo, each
+// resolving to the DWARF member the fork's own offset comment pinned. Behaviour::VehicleRig's
+// nested VehicleRef and Behaviour::Parameters moved with it.
 // ============================================================================
-
-// The prepare/release info (Prepare arg2). The rig's Prepare does not call any
-// accessor on it; the type is needed only for the virtual override signature.
-struct BehaviourSharedPrepareReleaseInfo
-{
-};
-
-// The per-frame shared info (Update arg2). The rig reads the "world" pointer for
-// VehicleRef::Get resolution and timestep values via raw offsets in the pseudo;
-// modelled here by a minimal accessor the callee-shaped reconstruction uses.
-struct BehaviourSharedInfo
-{
-    // @pseudo +1468: the "world" context for BrnDirector::VehicleRef::Get.
-    const void* GetWorld() const;
-
-    // @pseudo +352*4+timestep*4: per-frame delta seconds indexed by timestep type.
-    f32 GetTimestep(BrnDirector::Timestep::EType leType) const;
-
-    // ADDITIVE GROW (PositionFinder::Update @0x8223FD3C, which loads the map pointer
-    // at sharedInfo+0x5DC and hands it to the WorldMap safe-position query).
-    const ::BrnDirector::WorldMap* GetWorldMap() const;
-};
-
-// ============================================================================
-// FLAG: minimal slice of the Behaviour base class. Only the members BehaviourRig's
-//   six functions read/write through `this` are named here. Replace with the
-//   Behaviour TU's canonical home when it lands; member NAMES are stable.
-//   DWARF Behaviour.h:167: vtable + meTimestepType + 5 bools + mpcDebugParametersName.
-// ============================================================================
-class Behaviour
-{
-public:
-    // FLAG: nested VehicleRef extends BrnDirector::VehicleRef with BehaviourSharedInfo
-    //   resolution. Inherits the base's four fields (meType/miRaceCarIndex/muRef/mbSet,
-    //   asm-retyped by the VehicleRef class TU); adds no data members.
-    class VehicleRef : public BrnDirector::VehicleRef
-    {
-    public:
-        bool IsValid() const;
-        const Matrix44Affine& GetTransform(const BehaviourSharedInfo& lrInfo) const;
-    };
-
-    // FLAG: nested Parameters (DWARF Behaviour.h:265). Only the base Construct is called
-    //   by BehaviourRig::Parameters::Construct.
-    class Parameters
-    {
-    public:
-        void Construct();
-        u32         mType;         // +0x00 the behaviour-type tag
-        const char* mpcDebugName;  // +0x04
-    };
-
-    virtual ~Behaviour() {}
-    virtual void Construct();
-    virtual bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo);
-    virtual bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo);
-    virtual bool PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo);
-    virtual void Release(const BehaviourSharedPrepareReleaseInfo& lrInfo);
-    virtual CollisionPolicy* GetCollisionPolicy();
-    virtual void SetupTweaker(Utils::Tweaker& lrTweaker);
-    virtual const char* GetName() const;
-
-    // GROWN for MomentHardStop::Update @0x82271438 (the moment reads its two
-    // candidates through the type-erased Behaviour base): the failed flag, the
-    // two switch gates, and the debug parameters name (+0x09/+0x0B/+0x0C/+0x10).
-    bool HasFailed() const          { return mbHasFailed; }
-    bool CanSwitchToMeNow() const   { return mbCanSwitchToMeNow; }
-    bool CanSwitchFromMeNow() const { return mbCanSwitchFromMeNow; }
-    const char* GetDebugParametersName() const { return mpcDebugParametersName; }
-
-    // Timestep type selector (DWARF Behaviour.h:334).
-    BrnDirector::Timestep::EType GetTimestepType() const { return meTimestepType; }
-    void SetTimestepType(BrnDirector::Timestep::EType leType) { meTimestepType = leType; }
-
-protected:
-    // DWARF Behaviour.h:334..343 (after vtable).
-    BrnDirector::Timestep::EType meTimestepType;  // +0x04
-    bool                         mbIsPrepared;    // +0x08
-    bool                         mbHasFailed;     // +0x09
-    bool                         mbTweakerAttached; // +0x0A
-    bool                         mbCanSwitchToMeNow;   // +0x0B
-    bool                         mbCanSwitchFromMeNow;  // +0x0C
-    const char*                  mpcDebugParametersName; // +0x10
-
-    void SetPrepared()    { mbIsPrepared = true; }
-    void SetNotPrepared() { mbIsPrepared = false; }
-    bool IsPrepared()     { return mbIsPrepared != 0; }
-};
 
 // ============================================================================
 // BehaviourRig -- the "rig" camera behaviour.
@@ -441,9 +366,9 @@ private:
 inline void
 BehaviourRig::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->mType == 2u, "lpParameters->GetType() == eBehaviourRig");
+    CGS_ASSERT(lpParameters->GetType() == 2u, "lpParameters->GetType() == eBehaviourRig");
     mpParameters = lpParameters;
-    mbIsPrepared = false;
+    SetNotPrepared();
 }
 
 } // namespace Camera

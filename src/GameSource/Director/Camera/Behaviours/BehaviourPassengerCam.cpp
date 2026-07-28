@@ -21,13 +21,10 @@ namespace Camera
 // debug-name +0x10, prepared byte +8; mpParameters is NOT touched).
 void BehaviourPassengerCam::Construct()
 {
-    mbHasFailed             = false;                        // stb 9
-    mbTweakerAttached       = false;                        // stb 0xA
-    mbCanSwitchToMeNow      = false;                        // stb 0xB
-    mbCanSwitchFromMeNow    = false;                        // stb 0xC
-    meTimestepType          = BrnDirector::Timestep::E_TIMESTEP_INVALID;   // stw 4
-    mpcDebugParametersName  = 0;                            // stw 0x10
-    mbIsPrepared            = false;                        // stb 8
+    // stb 9 / 0xA / 0xB / 0xC + stw 4 + stw 0x10 + stb 8 -- the seven stores ARE the
+    // inlined Behaviour::Construct (see Behaviour.cpp). Named base call now that the base
+    // has a home. (stw 4 stores 0 == E_WORLD under the canonical Timestep::EType.)
+    Behaviour::Construct();
 }
 
 // @ 0x821F9E70 -- assert the parameter block was adopted, then report success;

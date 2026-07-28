@@ -42,10 +42,16 @@ namespace BrnDirector
         // (X360 li r3, 0x18 -> Attrib::DefaultDataArea(0x18)). Same as the race-intro state.
         const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
 
-        // The two trailing selectors the BehaviourManager::NewBehaviour<BehaviourIceAnim>
-        // allocation request carries (X360 li r6,0 / li r7,1). Same as the race-intro state.
-        const s32 KI_NEW_BEHAVIOUR_ARG_A = 0;
-        const s32 KI_NEW_BEHAVIOUR_ARG_B = 1;
+        // The two trailing arguments the BehaviourManager::NewBehaviour<TBehaviour> allocation
+        // request carries (X360 li r6,0 / li r7,1). RETYPED 2026-07-29: r6 is NewBehaviour's
+        // OWNER slot -- a `const void*` (the arbitrator states pass null there; the moments pass
+        // their Moment*) -- and r7 is the s32 reference LIMIT. Declaring the owner as `const s32`
+        // meant the call matched no overload at all: a `const s32` variable is not an integer
+        // LITERAL, so it is not a null-pointer constant and will not convert to `const void*`.
+        // (That is the Step-0 defect the previous wave recorded as "one of the two call sites'
+        // arg lists is wrong" -- it was the TYPE, not the count.)
+        const void* const KPC_NEW_BEHAVIOUR_OWNER   = 0;
+        const s32         KI_NEW_BEHAVIOUR_REFLIMIT = 1;
 
         // The dirty-flag bit Update raises on the state's camera while the rank-up behaviour is
         // driving it (X360 mCamera.mState_uFlags |= 2). Same as the race-intro state.
@@ -130,7 +136,7 @@ namespace BrnDirector
 
             // Allocate the ICE-anim behaviour into the handle.
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-                mIceCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
+                mIceCam, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
             // Load the first rival's shot (index miRival == 0).
             const void* lpShotData = lrRankUpShots.GetShotListData(miRival);
