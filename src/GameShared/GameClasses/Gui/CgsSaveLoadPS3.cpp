@@ -16,10 +16,13 @@
 //   Autosave -- composed from the exported siblings' bind-handler + SetMetadata setup) plus
 //   their host-side helpers (SaveFileExists, CaptureStoredDataView, GetMugshotBufferSizeBytes).
 //
-// The RealmcIface memory-card SDK callees (record ctors + the MemcardInterface
-// implementation) are the console storage backend; they are bodied file-locally as FLAG'd
-// PC-platform boundary leaves (zeroed records / an inert no-op interface) so the console-
-// shaped write path stays safe -- see the anonymous namespace below. The REAL PC storage
+// The RealmcIface memory-card SDK is the console storage backend. Its RECORD types are the
+// real homed ones (SDKs/Realmc/RealmcDataBuffer.h, RealmcLoadEntryInfo.h,
+// RealmcIfaceSaveCheckParams.h, RealmcTitleInfo.h) -- never console-width byte blobs, which
+// would truncate the host pointers those records carry. Only the pieces with no reconstructed
+// home (the MemcardInterface implementation, GameInfo, SaveInfo) stay file-local as FLAG'd
+// PC-platform boundary leaves so the console-shaped write path stays safe -- see the
+// anonymous namespace below. The REAL PC storage
 // is the CgsSaveLoadPC profile container (GameShared/GameClasses/Gui/PC/CgsSaveLoadPC.cpp):
 // the 3-arg Save/Autosave write it and LoadHandleConfirmLoad's confirm arm reads it back,
 // so the profile image genuinely persists across runs.
@@ -31,6 +34,12 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log (storage-edge diagnostics)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h" // CgsMemory::LinearMalloc (Prepare mugshot buffer)
+
+// The homed Realmc SDK record types Save() builds (never console-width byte blobs).
+#include "SDKs/Realmc/RealmcDataBuffer.h"            // RealmcIface::DataBuffer
+#include "SDKs/Realmc/RealmcLoadEntryInfo.h"         // RealmcIface::LoadEntryInfo
+#include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"  // RealmcIface::SaveCheckParams
+#include "SDKs/Realmc/RealmcTitleInfo.h"             // RealmcIface::TitleInfo
 
 #include <cstddef>   // offsetof (layout pins)
 #include <cstring>   // strncpy, memset
@@ -114,48 +123,12 @@ namespace
         return &gNoOpMemcardInterface;
     }
 
-    // FLAG PC-platform leaf: RealmcIface::SaveCheckParams ctor (16-byte stack record) -- zero it;
-    // it is only ever handed to the no-op CheckSave.
-    void* RealmcSaveCheckParams_Construct(void* lpParams, int /*liA*/, int /*liB*/)
-    {
-        std::memset(lpParams, 0, 16);
-        return lpParams;
-    }
-
-    // FLAG PC-platform leaf: RealmcIface::SaveCheckParams dtor -- nothing to release on PC.
-    void RealmcSaveCheckParams_Destruct(void* /*lpParams*/)
-    {
-    }
-
-    // FLAG PC-platform leaf: RealmcIface::LoadEntryInfo::LoadEntryInfo (48-byte record) -- zero it.
-    void RealmcLoadEntryInfo_Construct(void* lpEntry)
-    {
-        std::memset(lpEntry, 0, 48);
-    }
-
-    // FLAG PC-platform leaf: RealmcIface::LoadEntryInfo::operator= -- byte-copy the 48-byte
-    // record (the real X360 operator= @0x82B51A78 is a memberwise record copy).
-    void RealmcLoadEntryInfo_Assign(void* lpDest, const void* lpSrc)
-    {
-        std::memcpy(lpDest, lpSrc, 48);
-    }
-
-    // FLAG PC-platform leaf: RealmcIface::TitleInfo::Empty (X360 @0x82B51B88 returns the SDK's
-    // static empty record) -- return a static zeroed record; only the no-op WriteSave sees it.
-    void* RealmcTitleInfo_Empty()
-    {
-        static u8 saEmptyTitleInfo[64] = { 0 };
-        return saEmptyTitleInfo;
-    }
-
-    // FLAG PC-platform leaf: the 48-byte entry-record builder (X360 sub_82B51A08 packs
-    // name/id/size words into a RealmcIface entry record) -- zero the record; it is only ever
-    // assigned into entries consumed by the no-op WriteSave/ReadSave.
-    void RealmcBuildEntryRecord(void* lpRecord, const void* /*lpName*/,
-                                const void* /*lpA*/, const void* /*lpB*/)
-    {
-        std::memset(lpRecord, 0, 48);
-    }
+    // (The SaveCheckParams / LoadEntryInfo / TitleInfo / entry-record stand-ins that used to
+    // live here were console-width byte-blob forks -- 16- and 48-byte arrays -- of types that
+    // have real homes under SDKs/Realmc. They are gone: Save() now builds the genuine
+    // RealmcIface::SaveCheckParams / LoadEntryInfo / DataBuffer / TitleInfo objects, matching
+    // the committed sibling CgsSaveLoadX360_wB_03/_wB_04 partfiles, so no host pointer is
+    // squeezed into a console-width word.)
 
     // The save/load locale-string callback the memory-card interface is given.
     void* gpfnLocaleGetStrCallback = nullptr;   // CgsGui::SaveLoadSystem::LocaleGetStrCallback
@@ -219,7 +192,7 @@ namespace CgsGui
         mpMessageDisplay        = lpMessageDisplay;          // +0x134
         mpMemcardInterface      = nullptr;                   // +0x184 (stw r11,0x184)
         mpActiveMessageDisplay  = nullptr;                   // +0x130 (stw r11,0x130)
-        muField194              = 0;                         // +0x194 (stw r11,0x194)
+        mpSystemUserProfile     = nullptr;                   // +0x194 (stw r11,0x194)
         mMessageDisplayOptionFunc.muFunc  = 0;               // +0x198 (std r10,0x198 zeroes the pair)
         mMessageDisplayOptionFunc.muDelta = 0;               // +0x19C
         mField128               = 0;                         // +0x128 (std r9,0x128)
@@ -231,7 +204,7 @@ namespace CgsGui
         mbSilentMode            = false;                     // +0x181 (stb r11=0,0x181)
         mbField183              = false;                     // +0x183 (stb r11=0,0x183)
         mbAsyncOpState          = 0;                         // +0x224 (stb r11=0,0x224)
-        mField24C               = 0;                         // +0x24C (stb r11=0,0x24C)
+        mbAutosaveIconVisible   = false;                     // +0x24C (stb r11=0,0x24C)
 
         // Host-width stored-data view (see the header note): empty until a task starter
         // captures it.
@@ -418,43 +391,52 @@ namespace CgsGui
 
     // X360 0x82856040. Write the save: build two load-entry records (the title save + the mugshot
     // blob), then hand them to the memory-card interface and pump Update.
+    //
+    // The three SDK record types are the HOMED ones (SDKs/Realmc/...), never console-width
+    // blobs: the X360 stack slots are 0x30 bytes for a LoadEntryInfo, 8 for a SaveCheckParams
+    // and 8 for a DataBuffer only because console pointers are 4 bytes. Every one of those
+    // records carries a real pointer (LoadEntryInfo::mpData, DataBuffer::mpData), so a
+    // console-sized byte array would drop the high half of each host pointer -- which is
+    // exactly what the mugshot entry did (it packed mpMugshotBufferData into a u32 word, so the
+    // card write pointed at a truncated buffer address). Sizes come from the host types.
     void SaveLoadSystem::Save()
     {
-        u8 laEntries[2][48];
-        for (int liIndex = 1; liIndex >= 0; --liIndex)
+        // X360: `r29 = &v21; r30 = 1; do { LoadEntryInfo::LoadEntryInfo(r29); r29 += sizeof; }
+        // while (--r30 >= 0);` -- two default-constructed entries in ascending address order.
+        RealmcIface::LoadEntryInfo laEntries[2];
+
+        // Pre-flight check: CheckSave(0, SaveCheckParams(0, NULL)); the X360's explicit
+        // ~SaveCheckParams right after the call is the scope-end dtor of the stack object.
         {
-            RealmcLoadEntryInfo_Construct(laEntries[liIndex]);
+            RealmcIface::SaveCheckParams lCheckParams(0, nullptr);
+            mpMemcardInterface->CheckSave(0, &lCheckParams);
         }
 
-        // Pre-flight check: CheckSave(0, SaveCheckParams).
-        u8 laCheckParams[16];
-        void* lpCheckParams = RealmcSaveCheckParams_Construct(laCheckParams, 0, 0);
-        mpMemcardInterface->CheckSave(0, lpCheckParams);
-        RealmcSaveCheckParams_Destruct(laCheckParams);
+        // Entry 0: the title save. Name = macTitle (this+0x1E0), first pair = {0,0}, second pair
+        // = the metadata's stored-data view. The X360 reads that pair as the two words
+        // +0x200/+0x204 (muSaveDataSizeKb/muGameDataSizeKb) -- on the 32-bit console those ARE
+        // the SaveLoadMetadata::mStoredData { pointer, size } pair, so on the host the pair is
+        // taken from mStoredDataView, its full-width capture (see the header note).
+        RealmcIface::DataBuffer lZeroPair;                      // {0, 0} (default ctor)
+        RealmcIface::DataBuffer lTitlePair;
+        lTitlePair.mpData = mStoredDataView.mpData;             // X360 +0x200
+        lTitlePair.muSize = static_cast<u32>(mStoredDataView.miSize);   // X360 +0x204
+        laEntries[0] = RealmcIface::LoadEntryInfo(macTitle, &lZeroPair, &lTitlePair);
 
-        // Entry 0: the title save (name = macTitle, sizes = the cached metadata sizes).
-        u32 laTitleA[2] = { 0, 0 };
-        u32 laTitleSizes[2] = { muSaveDataSizeKb, muGameDataSizeKb };
-        u8  laTitleRecord[48];
-        RealmcBuildEntryRecord(laTitleRecord, macTitle, laTitleA, laTitleSizes);
-        RealmcLoadEntryInfo_Assign(laEntries[0], laTitleRecord);
+        // Entry 1: the mugshot blob ("Mugshots", buffer + total byte size) -- the same record
+        // CreateRealmcMugshotLoadEntryInfo @0x828523D0 builds.
+        RealmcIface::DataBuffer lMugPair;
+        lMugPair.mpData = mpMugshotBufferData;                  // X360 +0x220 (a real pointer)
+        lMugPair.muSize = static_cast<u32>(miExtraFilesSizeBytes) *
+                          static_cast<u32>(miNumberOfMugshotsPerType) *
+                          static_cast<u32>(miNumberOfMugshotTypes);
+        laEntries[1] = RealmcIface::LoadEntryInfo("Mugshots", &lZeroPair, &lMugPair);
 
-        // Entry 1: the mugshot blob ("Mugshots", buffer + total byte size).
-        u32 laMugA[2] = { 0, 0 };
-        const u32 luMugBytes = static_cast<u32>(miExtraFilesSizeBytes) *
-                               static_cast<u32>(miNumberOfMugshotsPerType) *
-                               static_cast<u32>(miNumberOfMugshotTypes);
-        u32 laMugSizes[2];
-        laMugSizes[0] = reinterpret_cast<u32>(mpMugshotBufferData);
-        laMugSizes[1] = luMugBytes;
-        u8  laMugRecord[48];
-        RealmcBuildEntryRecord(laMugRecord, "Mugshots", laMugA, laMugSizes);
-        RealmcLoadEntryInfo_Assign(laEntries[1], laMugRecord);
-
-        void* lpTitleInfo = RealmcTitleInfo_Empty();
+        // TitleInfo::Empty() is fetched before the save-info is built, matching the X360 order.
+        RealmcIface::TitleInfo& lTitleInfo = RealmcIface::TitleInfo::Empty();
         u8    lSaveInfo;
         void* lpSaveInfo = CreateRealmcSaveInfoPC(&lSaveInfo, this);
-        mpMemcardInterface->WriteSave(lpSaveInfo, 2, laEntries[0], 0, lpTitleInfo);
+        mpMemcardInterface->WriteSave(lpSaveInfo, 2, laEntries, 0, &lTitleInfo);
 
         Update();
     }
@@ -600,36 +582,45 @@ namespace CgsGui
 
     // X360 0x8284CA78. Show a message and route the user's choice through HandleMemcardOption.
     // Params (from the ASM register dance): lpcMessage = a2, luNumberOfOptions = a3,
-    // lpacOptions = a4. The X360 forwards (handler, this-4, a2, a4, a3) -- a3/a4 swapped on the
+    // lpacOptions = a4. The X360 forwards (display, handler, a2, a4, a3) -- a3/a4 swapped on the
     // way out -- which lands as MessageDisplay::ShowMessage(handler, message, options, count).
+    //
+    // This body is ENTERED WITH THE +4 SUB-OBJECT (r3 == real this + 4; see the convention note
+    // in CgsSaveLoadX360.h), so every displacement below is real-4:
+    //   lwz r3,0x130(r11)  -> real +0x134 == mpMessageDisplay (NOT mpActiveMessageDisplay)
+    //   addi r4,r11,-4     -> the real `this`, i.e. the option handler
+    //   std r10,0x194(r11) -> real +0x198 == mMessageDisplayOptionFunc { func, delta }
+    // Load @0x82859B70 and BootupShowAutosaveWarning @0x828599A0 emit the same three stores
+    // INLINE with the real this as 0x134 / `mr r4,r31` / 0x198, and BootupCheckDone @0x82859A38
+    // -- a proven +4 body -- emits the identical 0x130 / -4 / 0x194 triple.
     void SaveLoadSystem::ShowMessage(const char* lpcMessage, u32 luNumberOfOptions,
                                      const char** lpacOptions)
     {
-        // Pending option handler = &HandleMemcardOption. The X360 ShowMessage `std r10,0x194`
-        // writes the func into the +0x194 word and zeroes the next word (+0x198) -- which aliases
-        // mMessageDisplayOptionFunc.muFunc. Reproduce that aliasing store exactly (no guard).
-        muField194 =
-            static_cast<u32>(reinterpret_cast<uintptr_t>(&SaveLoadSystem_HandleMemcardOption));
-        mMessageDisplayOptionFunc.muFunc = 0;   // +0x198, zeroed by the same 8-byte store
+        // Pending option handler = &HandleMemcardOption, stored as the 8-byte member-fn pointer
+        // { func, delta = 0 } (`stw 0,var+4; stw func,var; ld; std ...,0x194` == real +0x198) --
+        // the very pair HandleOption null-checks and dispatches. muFunc is full-width on x64 (see
+        // the header note): the >4GB trampoline address must not be truncated.
+        mMessageDisplayOptionFunc.muFunc =
+            reinterpret_cast<uintptr_t>(&SaveLoadSystem_HandleMemcardOption);
+        mMessageDisplayOptionFunc.muDelta = 0;
 
-        // The OptionHandler passed is `this - 4` (the engine offsets to the option-handler
-        // sub-object embedded just before the active-display pointer); the active display's
-        // ShowMessage is invoked as ShowMessage(handler, message, options, count) -- so the
-        // a3/a4 swap means options=lpacOptions and count=luNumberOfOptions.
-        // The OptionHandler passed is `this` adjusted to the embedded OptionHandler sub-object.
-        // static_cast performs the correct base-offset adjustment on x64 (the X360's fixed `-4`
-        // pointer fixup does not survive the wider vptr / different base offsets).
+        // The OptionHandler passed is `this` adjusted to the embedded OptionHandler sub-object
+        // (the X360's `addi r4,r11,-4` walks the +4 sub-object back to the real object).
+        // static_cast performs the equivalent base-offset adjustment on x64.
         MessageDisplay::OptionHandler* lpHandler = static_cast<MessageDisplay::OptionHandler*>(this);
-        mpActiveMessageDisplay->ShowMessage(lpHandler, lpcMessage, lpacOptions, luNumberOfOptions);
+        mpMessageDisplay->ShowMessage(lpHandler, lpcMessage, lpacOptions, luNumberOfOptions);
     }
 
     // X360 0x8284CA18. Toggle the autosave icon only when the desired visibility differs from the
-    // cached state.
+    // cached state. Also entered with the +4 sub-object, so `lwz r3,0x130` is mpMessageDisplay
+    // (real +0x134 -- the display BootupShowAutosaveWarning/BootupStart dispatch the same icon
+    // slot +0x0C on) and `lbz/stb 0x248` is mbAutosaveIconVisible at real +0x24C (the byte
+    // Construct zeroes).
     void SaveLoadSystem::ShowAutosaveIcon(bool lbVisible)
     {
         if (lbVisible != mbAutosaveIconVisible)
         {
-            mpActiveMessageDisplay->ShowAutosaveIcon(lbVisible);
+            mpMessageDisplay->ShowAutosaveIcon(lbVisible);
             mbAutosaveIconVisible = !mbAutosaveIconVisible;   // X360: cntlzw/extrwi == (x == 0)
         }
     }

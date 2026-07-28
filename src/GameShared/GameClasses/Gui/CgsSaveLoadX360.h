@@ -113,23 +113,41 @@ namespace CgsGui
     // (Thread/SaveDataSystem/sys_memory_container_t) that does NOT match these X360 offsets, so it
     // is used for names/intent only, never as offset authority.
     //
-    // NOTE on the 0x194/0x198/0x19C region (three distinct words; the X360 stores prove the
-    // split):
-    //   +0x194  a single word. ShowMessage's 8-byte `std r10,0x194` writes the option-handler
-    //           func into this word AND zeroes the next word (+0x198). Prepare's
-    //           `stw r27,0x194` stores the SystemUserProfile pointer here. These two uses alias
-    //           the same word by design (one is overwritten by the other at runtime), so the
-    //           word is modelled once (mField194) and aliased with mpSystemUserProfile.
+    // NOTE on the X360 "+4 sub-object" calling convention (load-bearing when reading the ASM
+    // displacements quoted throughout this header). SaveLoadSystem carries a second vtable at
+    // X360 this+0x04 (proven by the `vector deleting destructor'`adjustor{4}'` thunk
+    // @0x827DDED0, `addi r3,r3,-4`, and by Prepare handing `this+4` to the memory-card
+    // CreateInstance). Members reached through that sub-object are ENTERED with r3 == real
+    // this + 4, so their raw displacements are (real offset - 4):
+    //   ShowMessage @0x8284CA78, ShowAutosaveIcon @0x8284CA18, ClearMessage @0x8284CAD8,
+    //   BootupCheckDone, LoadDone, SetAutosaveDone, CardRemoved.
+    // Everything else (Construct/Prepare/Load/HandleOption/BootupShowAutosaveWarning/SignIn/
+    // the option handlers/the Create* helpers) is entered with the real this.
+    // BootupCheckDone @0x82859A38 proves the split inside ONE body: it reads the prompt display
+    // as `lwz r3,0x130(r11)` (shifted) but, after `addi r31,r11,-4`, reads the RESULT handler as
+    // `lwz r3,0x130(r31)` (real) -- the same 0x130 literal naming two different members. LoadDone
+    // @0x82855FE0 does the same with `lwz r3,0x12C(r3)` vs `lwz r3,0x130(r31)`.
+    // The ±4 is ABI mechanics, not source structure: every member below is written as a plain
+    // member function using the NAMED members, never `this ± 4` arithmetic.
+    //
+    // NOTE on the 0x194/0x198/0x19C region (the X360 stores prove the split):
+    //   +0x194  the SystemUserProfile pointer. Construct zeroes it (`stw r11,0x194`), Prepare
+    //           stores it (`stw r27,0x194`) and SignIn reads it (`lwz r30,0x194(r31)` -> the
+    //           +0x1C mbSignedIn flag byte) -- all three with the REAL this, so all three name
+    //           this same word. It is a plain pointer member; nothing else writes it.
     //   +0x198  the ACTIVE member-function-pointer's FUNC word, and +0x19C its this-DELTA word
     //           (mMessageDisplayOptionFunc). Construct/Load/BootupShowAutosaveWarning write the
     //           pair via `std ...,0x198` ({func@+0x198, delta@+0x19C}); HandleOption null-checks
-    //           and dispatches ONLY through this pair (`lwz r11,0x198`).
-    // ShowMessage's +0x194 store's second word and this +0x198 func word alias the same address
-    // by design -- ShowMessage zeroing +0x198 while writing +0x194 is the binary's actual
-    // behaviour, reproduced here (no extra guard).
-    // The X360 SaveLoadSystem carries an embedded MessageDisplay::OptionHandler sub-object (the
-    // engine offsets to it as `this - 4` when passing itself as the prompt's option handler);
-    // HandleOption is its override. Model that as a real base so the OptionHandler pointer the
+    //           and dispatches ONLY through this pair (`lwz r11,0x198`), and ShowMessage /
+    //           ClearMessage reach the SAME pair as `0x194(shifted this)`.
+    // The X360 SaveLoadSystem carries an embedded MessageDisplay::OptionHandler sub-object;
+    // HandleOption is its override, and HandleOption @0x8284C730 runs on the REAL this (0x134 /
+    // 0x198 displacements), so on the console that sub-object sits at offset 0 -- the object
+    // address itself is what every ShowMessage call site hands the display as the option
+    // handler (`mr r4,r31` inline, `addi r4,r11,-4` from the +4 sub-object: the same pointer).
+    // Base ORDER below is a host choice, not the console's; every conversion goes through
+    // static_cast so the host adjustment is whatever this declaration implies.
+    // Model it as a real base so the OptionHandler pointer the
     // manager dispatches through (ProfileManager::HandleMessageChoice -> mpOptionHandler->
     // HandleOption) resolves to SaveLoadSystem::HandleOption via a proper vtable rather than a
     // reinterpret_cast onto the ContentInformationFileInterface vtable (which mis-dispatched to
@@ -242,15 +260,31 @@ namespace CgsGui
         // strings into the fixed buffers (asserting each fits) and cache the two size fields.
         void SetMetadata(const void* lpMetadata, const void* lpSaveInfo);
 
-        // X360 0x8284CA78. Show a yes/no/etc. message, routing the user's choice back through
-        // HandleMemcardOption. The X360 forwards (handler, this-4, a2, a4, a3) -- the a3/a4
-        // arguments are swapped on the way out -- and MessageDisplay::ShowMessage's true order is
+        // X360 0x8284CA78. Arm HandleMemcardOption as the pending option handler, then show a
+        // yes/no/etc. message through mpMessageDisplay, routing the user's choice back through
+        // HandleOption -> HandleMemcardOption.
+        //
+        // ENTERED WITH THE +4 SUB-OBJECT (see the convention note above), so its raw
+        // displacements are real-4. Its three tie-points are the -4 image of the SAME sequence
+        // Load @0x82859B70 and BootupShowAutosaveWarning @0x828599A0 emit INLINE with the real
+        // this, which is what pins them:
+        //     ShowMessage          Load / BootupShowAutosaveWarning     real member
+        //     lwz r3,0x130(r11)    lwz r3,0x134(r31)                    mpMessageDisplay
+        //     addi r4,r11,-4       mr  r4,r31                           the option handler (this)
+        //     std r10,0x194(r11)   std r11,0x198(r31)                   mMessageDisplayOptionFunc
+        // (BootupCheckDone, a proven +4 body, emits the identical 0x130/-4/0x194 triple inline.)
+        //
+        // The X360 forwards (display, handler, a2, a4, a3) -- the a3/a4 arguments are swapped on
+        // the way out -- and MessageDisplay::ShowMessage's true order is
         // (handler, message, options, count). So this method's own params are
         // (message=a2, count=a3, options=a4); the forward reproduces the swap.
         void ShowMessage(const char* lpcMessage, u32 luNumberOfOptions, const char** lpacOptions);
 
         // X360 0x8284CA18. Toggle the autosave icon (only when its desired visibility differs
-        // from the cached state).
+        // from the cached state). ENTERED WITH THE +4 SUB-OBJECT, so `lwz r3,0x130` is
+        // mpMessageDisplay (real +0x134 -- the display BootupShowAutosaveWarning/BootupStart
+        // dispatch the same icon slot +0x0C on) and `lbz/stb 0x248` is the cached flag at real
+        // +0x24C (the byte Construct zeroes; real +0x248 is written by nothing in the build).
         void ShowAutosaveIcon(bool lbVisible);
 
         // X360 0x8284C730. The MessageDisplay::OptionHandler entry point: hide the prompt and
@@ -460,15 +494,11 @@ namespace CgsGui
         void*  mpContentInfoVptr;                 // +0x18C ContentInformation vptr (provider)
         CgsMemory::HeapMalloc* mpHeapMalloc;      // +0x190 (Prepare arg)
 
-        // +0x194 : a single word, used two ways at different times (they alias the same address
-        //          on purpose -- see the region note above). ShowMessage stores the
-        //          HandleMemcardOption func word here (and its 8-byte store zeroes +0x198);
-        //          Prepare stores the SystemUserProfile pointer here.
-        union
-        {
-            u32 muField194;                       // +0x194 (ShowMessage's func word)
-            SystemUserProfile* mpSystemUserProfile; // +0x194 (Prepare)
-        };
+        // +0x194 : the SystemUserProfile pointer (Construct zeroes it, Prepare stores it, SignIn
+        // reads it -- see the region note above). A single 32-bit word on the console; a full
+        // 8-byte pointer on the x64 host, so Construct clears it as a pointer (`= nullptr`), NOT
+        // through a u32 alias (that would leave the high half uninitialised).
+        SystemUserProfile* mpSystemUserProfile;   // +0x194
         // X360 +0x198 / +0x19C: the ACTIVE pending-option member-function pointer { code-ptr,
         // this-delta }. Construct/Load/BootupShowAutosaveWarning store it; HandleOption null-checks
         // and dispatches through it. muFunc is WIDENED to a full 64-bit pointer for the PC x64
@@ -500,9 +530,11 @@ namespace CgsGui
         u8     mbAsyncOpState;                    // +0x224 overlapped-op state (1 == in flight)
         u8     mPad225[0x228 - 0x225];            // +0x225 .. +0x227
         u8     maOverlapped[0x248 - 0x228];       // +0x228 X360 XOVERLAPPED (XGetOverlappedResult)
-        bool   mbAutosaveIconVisible;             // +0x248 cached autosave-icon visibility
-        u8     mPad249[0x24C - 0x249];            // +0x249 .. +0x24B
-        u8     mField24C;                         // +0x24C (Construct zeroes)
+        u8     mPad248[0x24C - 0x248];            // +0x248 .. +0x24B (no store in the build)
+        // +0x24C : the cached autosave-icon visibility. ShowAutosaveIcon @0x8284CA18 is entered
+        // with the +4 sub-object, so its `lbz/stb 0x248` names THIS byte -- which is exactly the
+        // byte Construct zeroes (`stb r11,0x24C`, the only other reference to it in the build).
+        bool   mbAutosaveIconVisible;             // +0x24C
 
         // ADDITIVE GROW (PC storage wave): the host-width capture of the metadata's
         // stored-data view. The X360 SetMetadata caches the metadata's +0x30/+0x34 words
