@@ -53,6 +53,82 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
+    // BehaviourHandle::IsWaitingToPrepare -- forward the handle's allocation key to the
+    // owning manager (BrnBehaviourManager.h:517). Same body as the shared
+    // BrnBehaviourManager.h BehaviourHandle<>'s; defined here for this state's own nested
+    // handle type, where BehaviourManager is complete.
+    // ------------------------------------------------------------------------
+    template <typename TBehaviour>
+    bool ArbStateAttractMode::BehaviourHandle<TBehaviour>::IsWaitingToPrepare() const
+    {
+        CGS_ASSERT(mbAllocated, "mbIsAllocated");
+        return mpManager->IsBehaviourWaitingToPrepare(muAllocationKey);
+    }
+
+    // ------------------------------------------------------------------------
+    // Prepare @0x8225B220 -- bring the fly-by up, and report whether it is ready to drive.
+    //
+    //     if ( meState == E_STATE_ACTIVE || meState == E_STATE_CHANGING_TO_ROAMING )
+    //         return true;                                   // already up
+    //     const bool lbWasAllocated = mRoadRunnerCam.mbAllocated;
+    //     meState = E_STATE_PREPARING;
+    //     if ( !lbWasAllocated )
+    //         lrSharedInfo.mpBehaviourManager->NewBehaviour<BehaviourRoadRunner>(
+    //             mRoadRunnerCam, this, 0, 1 );              // owner = this state, refLimit 1
+    //     return !mRoadRunnerCam.IsWaitingToPrepare();
+    //
+    // The X360 reads mbAllocated BEFORE writing meState and allocates only when the handle is
+    // empty, so a repeated Prepare is idempotent -- it just re-asks the manager whether the
+    // behaviour has finished its first Prepare yet. That polling shape is why
+    // Arbitrator::Update's CHANGING_TO_ATTRACT_MODE case can call this every frame.
+    //
+    // ⚠️ ONE DOCUMENTED QUIET GATE -- and it is THE remaining wall for the DJ fly-by:
+    //   BehaviourManager::NewBehaviour<> @0x82267418 is declaration-only. Not for want of the
+    //   manager's layout (that is fully homed and its book-keeping half -- the four BitArray<28>
+    //   sets, the ref-count tables, the helper-index array, AllocateBehaviour<T> -- is all
+    //   reconstructed), but because it must call BehaviourHelper::Prepare @0x82255F48, which
+    //   dispatches a VIRTUAL through the pooled object's own vtable, i.e. the un-homed
+    //   BrnDirector::Camera::Behaviour base; and it then stores the owning state / owner into
+    //   that same un-homed interior at behaviour +0x170 / +0x174. Writing either would mean
+    //   fabricating the Behaviour base.
+    //   CONSEQUENCE, stated plainly: the road-runner behaviour is never allocated, so the
+    //   handle stays unallocated, so this returns FALSE every frame and the state stays in
+    //   E_STATE_PREPARING. The arbitrator therefore keeps calling Update (which does nothing in
+    //   PREPARING) and the fly-by camera does not move. Everything ABOVE this line is live: the
+    //   arbitrator reaches CHANGING_TO_ATTRACT_MODE, this state is real and embedded, the
+    //   manager is constructed and Prepared with all three pools armed.
+    //   DELETE-WHEN: BrnDirector::Camera::Behaviour is homed (base layout + vtable) and
+    //   BehaviourHelper::Prepare + BehaviourManager::NewBehaviour<> are bodied. That single
+    //   type is now the whole remaining distance to a moving flyby camera.
+    //
+    // The `IsWaitingToPrepare()` tail is NOT reproduced while the allocation is gated: it
+    // asserts the handle is allocated, and firing that tripwire every frame on a per-frame
+    // path is exactly what the project's "never a trap on a per-frame path" rule forbids.
+    // Returning false is also what the console would return here -- with no behaviour, the
+    // fly-by is not ready.
+    // ------------------------------------------------------------------------
+    bool ArbStateAttractMode::Prepare(ArbStateSharedInfo& lrSharedInfo)
+    {
+        if (meState == E_STATE_ACTIVE || meState == E_STATE_CHANGING_TO_ROAMING)
+            return true;
+
+        const bool lbWasAllocated = mRoadRunnerCam.IsAllocated();
+
+        meState = E_STATE_PREPARING;   // +0x194 = 1
+
+        if (!lbWasAllocated)
+        {
+            // ⚠️ GATE (see the banner):
+            //   lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourRoadRunner>(
+            //       mRoadRunnerCam, this, 0, 1 );
+            (void)lrSharedInfo;
+            return false;
+        }
+
+        return mRoadRunnerCam.IsReadyToPrepare();
+    }
+
+    // ------------------------------------------------------------------------
     // GetName @0x821F6700
     // ------------------------------------------------------------------------
     const char* ArbStateAttractMode::GetName() const

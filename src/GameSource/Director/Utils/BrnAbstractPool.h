@@ -88,10 +88,19 @@ public:
     // to hold the largest moment/behaviour the pool serves).
     typedef unit_type Bucket[units_in_bucket];
 
-    void Construct() { /* ObjectPool occupancy/free-queue init -- no field read by NewMoment */ }
-    bool Prepare()   { return true; }
+    // Lifecycle. X360-attested from the two owners that inline the pool init:
+    //   * BehaviourManager::Construct @0x82251778 -- ONE zero store per pool, landing on the
+    //     underlying ObjectPool's occupancy word (manager +32056 / +64168 / +75048, each
+    //     exactly `freeQueue + N*4 + 4` for its pool) and NOTHING else. That is
+    //     ObjectPool::Construct()'s documented shape (occupancy only, no free-queue refill).
+    //   * BehaviourManager::Prepare @0x8223DBE0 -- per pool: zero the same occupancy word,
+    //     refill the free queue DESCENDING (N-1 .. 0 stored front-to-back), then store the
+    //     count N. That is exactly ObjectPool::Clear().
+    // Forwarded to the named ObjectPool operations so no owner reaches the queue by offset.
+    void Construct() { mObjectPool.Construct(); }
+    bool Prepare()   { mObjectPool.Clear(); return true; }
     bool Release()   { return true; }
-    void Destruct()  { }
+    void Destruct()  { mObjectPool.Construct(); }   // the owner's Destruct clears occupancy only
 
     bool IsObjectAllocated(IndexType liIndex) { return mObjectPool.IsObjectAllocated(liIndex); }
 

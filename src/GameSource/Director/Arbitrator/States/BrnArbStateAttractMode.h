@@ -55,13 +55,19 @@ namespace BrnDirector
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
         void        Construct() override;                              // @0x8225B1C8
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x8225B220
         void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x822361F0
         bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x82236320
         const char* GetName() const override;                          // @0x821F6700
 
-        // Prepare() / Destruct() are NOT in this TU's X360 function set (Prepare is reached as a
-        // virtual call -- (*(*this+4))(this, info) -- from case 1 of Update, so its body lives in
-        // another driver TU; the base declaration is kept, no override added here).
+        // Destruct() is NOT in this TU's X360 function set; the base declaration is kept, no
+        // override added here.
+        //
+        // Prepare @0x8225B220 was previously recorded as "not in this TU's function set"
+        // because Update reaches it as the virtual `(*(*this+4))(this, info)`. It IS in the
+        // export set under its own symbol and is overridden here -- Arbitrator::Update's
+        // CHANGING_TO_ATTRACT_MODE case calls it directly, and its return value is the gate
+        // that decides whether the fly-by goes live this frame.
 
     private:
         // ---- a typed handle to a camera behaviour owned by the BehaviourManager ----------
@@ -82,6 +88,15 @@ namespace BrnDirector
                   mpManager(0), mpBehaviour(0) {}
 
             bool IsAllocated() const { return mbAllocated; }
+
+            // ADDITIVE (ArbStateAttractMode::Prepare @0x8225B220): is the behaviour this
+            // handle owns still queued for its first Prepare. X360-attested -- Prepare's tail
+            // is `return BehaviourHandle<BehaviourRoadRunner>::IsWaitingToPrepare(&mRoadRunnerCam)
+            // == 0`, i.e. the same manager query the shared BrnBehaviourManager.h
+            // BehaviourHandle<> forwards (BrnBehaviourManager.h:517). Defined out-of-line in
+            // the .cpp, where BehaviourManager is complete.
+            bool IsWaitingToPrepare() const;
+            bool IsReadyToPrepare() const { return !IsWaitingToPrepare(); }
 
             // The live behaviour this handle owns (only valid while IsAllocated()).
             TBehaviour* GetBehaviour() const

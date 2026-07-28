@@ -6,6 +6,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"      // ArbitratorState / ArbStateSharedInfo
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer (mStateContainer by value)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.h"      // BrnDirector::ArbStateCrashNav (real layout, by value)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateAttractMode.h"   // BrnDirector::ArbStateAttractMode (real layout, by value)
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"            // BrnDirector::SharedCameraContainer (by value)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                    // BrnDirector::Camera::BehaviourHandle<> / BehaviourManager / BehaviourHelperIndex
 
@@ -34,12 +35,18 @@
 // on the x64 host the embedded states / handles / Camera widen, so absolute offsets shift --
 // the member ROLES are what is reproduced.
 //
-// FLAG: ArbStateAttractMode / ArbStateRenderMetrics / ArbStateTestbed have no reconstructed
-//   home TU yet -- declared here as minimal ArbitratorState subclasses (same convention the
-//   container uses for its not-yet-homed states) purely so the Arbitrator can embed them by
-//   value and dispatch their virtual Construct() / Update() / Release(). GROW each into its
-//   real layout (additively) when its own TU lands; this TU never touches their per-state
-//   members by name.
+// ⭐ DE-FORKED (BehaviourManager wave): ArbStateAttractMode now uses its REAL home
+//   (States/BrnArbStateAttractMode.h, #included above) instead of the empty placeholder this
+//   header used to declare. That placeholder is why the DJ-flyby path could not run even in
+//   principle: the arbitrator embedded a state with no members and no overrides, so
+//   `mArbStateAttractMode.Update(...)` bound the ArbitratorState base and the road-runner
+//   fly-by camera did not exist. The two placeholders that remain (below) are NOT on that path.
+//
+// FLAG: ArbStateRenderMetrics / ArbStateTestbed still have no reconstructed home TU --
+//   declared here as minimal ArbitratorState subclasses (same convention the container uses
+//   for its not-yet-homed states) purely so the Arbitrator can embed them by value and
+//   dispatch their virtual Construct() / Update() / Release(). GROW each into its real layout
+//   (additively) when its own TU lands; this TU never touches their per-state members by name.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -68,7 +75,6 @@ namespace BrnDirector
     // their virtuals. The real layouts / overrides land with each state's own TU.
     // FLAG: minimal placeholder homes (by-name parity; this TU touches no per-state member).
     class ArbStateTestbed      : public ArbitratorState {};
-    class ArbStateAttractMode  : public ArbitratorState {};
     class ArbStateRenderMetrics: public ArbitratorState {};
 
     class Arbitrator
@@ -100,22 +106,26 @@ namespace BrnDirector
         // EState, copying its produced camera into lrCameraInOut and driving the
         // pause / slow-down / jump / black-fade post-FX. (BrnDirectorArbitrator.h:67)
         //
-        // DECLARATION-ONLY + FLAG: the body is the outer state machine (X360 @0x8226ADA0). It
-        //   dispatches across a deep, NOT-YET-HOMED camera/effect API surface --
-        //   SharedCameraContainer::{SetUsingGameplayExternal,SetLookbackOverride,
-        //   GetGameplayExternal,GetGameplayCamera}, Camera::Camera::operator= (the take copy),
-        //   Camera::{EnsureEffectIsStopped}, CameraEffects::{SetStart/StopHookNameString,
-        //   SetSimTimeScale,SetRequestedPostFX,ClearStart/StopHookNameString},
-        //   DepthOfField::SetBlurriness, DirectorOutputInterface::SetPauseRequest,
-        //   BehaviourManager::NewBehaviour<>, HookNameStringWrapper::Set,
-        //   BehaviourGameplayExternal::SnapToCar, the BehaviourIceAnim final-elite seed, and the
-        //   gameplay-external collision-policy resets -- none of which have reconstructed homes /
-        //   attested signatures yet. Writing the body would require FABRICATING that entire API
-        //   (signatures + the per-camera-flag offset->name mappings the trimmed DWARF omits),
-        //   which the reconstruction rules forbid. Left declaration-only until those camera /
-        //   effect / behaviour-manager TUs land; the dispatch structure is documented in the .cpp.
+        // ⭐ RECONSTRUCTED (BehaviourManager wave). The previous FLAG here claimed the body
+        //   needed a "NOT-YET-HOMED camera/effect API surface" that would have to be
+        //   fabricated. Re-checked against the committed headers, most of that surface IS
+        //   homed and NAMED: every per-camera flag the asm pokes resolves through
+        //   CameraEffects (mStartHookNameString @+0x00, mStopHookNameString @+0x21,
+        //   mfStartHookNameBlendAmount @+0x80, muRequestedPostFxId @+0x7C, mfSimTimeScale
+        //   @+0x9C, mbHasStart/StopHookNameString @+0xB7/+0xB8), DepthOfField::mfBlurriness
+        //   (@+0x10) and Camera::mState_uFlags (@+0x140) -- e.g. the asm's `camera + 232` IS
+        //   mEffects.mfStartHookNameBlendAmount and `camera + 320` IS mState_uFlags.
+        //   The body is in the .cpp; what genuinely could not be reached is documented there
+        //   as individually-consequenced quiet gates (the un-homed GameState trigger bytes and
+        //   the BehaviourManager::NewBehaviour<> allocation path).
         void Update(bool lbPaused, Camera::Camera& lrCameraInOut,
                     ArbStateSharedInfo& lrSharedInfo, bool lbCycleCamera, bool lbCycleCameraHeld);
+
+        // The shared ATTRACT_MODE body (the X360's LABEL_45 inside Update @0x8226ADA0, reached
+        // from BOTH the CHANGING_TO_ATTRACT_MODE success arm and the ATTRACT_MODE case).
+        // De-inlined to one named helper so the two entry points do not duplicate it.
+        void UpdateAttractMode(Camera::Camera& lrCameraInOut, ArbStateSharedInfo& lrSharedInfo,
+                               bool lbCycleCamera, bool lbCycleCameraHeld);
 
         // X360 (no asm in this TU's function set -- DWARF variable hints only). Tear the
         // arbitrator down. (BrnDirectorArbitrator.h:70) DECLARATION-ONLY.
@@ -141,6 +151,15 @@ namespace BrnDirector
         // (X360 arbitrator +0x44FE / +0x44FF) directly.
         void SetDoRenderMetrics(bool lbDoRenderMetrics) { mbDoRenderMetrics = lbDoRenderMetrics; }
         void SetRenderMetricsArg(u8 luArg)              { muRenderMetricsArg = luArg; }
+
+        // ADDITIVE (BehaviourManager wave): the ATTRACT-MODE request flag -- the single input
+        // that moves the outer state machine onto the DJ fly-by path. Update's NORMAL case
+        // reads it (`if (mbDoAttractMode) meState = E_STATE_CHANGING_TO_ATTRACT_MODE;`) and its
+        // ATTRACT_MODE case leaves that path the moment it clears. Exposed by name so whichever
+        // TU owns the front-end idle timer can drive it without poking arbitrator +0x44FD.
+        void SetDoAttractMode(bool lbDoAttractMode) { mbDoAttractMode = lbDoAttractMode; }
+        bool GetDoAttractMode() const               { return mbDoAttractMode; }
+        EState GetState() const                     { return meState; }
 
     private:
         // The currently-driving "normal" gameplay camera (the container's selected state's

@@ -73,6 +73,37 @@ namespace DirectorIO
         return mControllerInfo;
     }
 
+    // ---- ADDITIVE (MainDirector::UpdateArbitrator @0x82271120) ------------------------------
+
+    // The X360 de-inlined accessor (sub_82207040) whose result UpdateArbitrator indexes as
+    // `1264 * playerCarIndex + base` -- i.e. the published VehicleInfo array at @0x0990.
+    const BrnDirector::Camera::VehicleInfo* InputBuffer::GetRaceCarInfo() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mRaceCarInfo;
+    }
+
+    // ArbStateSharedInfo::mpPlayerCrashInfo == lpInputBuffer + 30944 (@0x78E0), which lands
+    // 0xE28 into the honest-opaque contacts span. Addressed off that NAMED member -- this
+    // type owns the offset, so no caller has to.
+    // FLAG: BrnDirector::PlayerCrashInfo is un-homed; the DWARF slot name is the only
+    //   evidence for the role, and the payload is not interpreted here.
+    const void* InputBuffer::GetPlayerCrashInfo() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mContacts[0x78E0 - 0x6AB8];
+    }
+
+    // @0x7AC8 -- the second byte of the mid-flag block (which spans 0x7AC7..0x7ACD:
+    // mbWorldWantsDebugControllerFocus @0x7AC7, mbSimPaused @0x7AC8, ...). Read by
+    // MainDirector::UpdateArbitrator (as Arbitrator::Update's lbPaused) and by the gameplay
+    // middle of MainDirector::Update.
+    bool InputBuffer::IsSimPaused() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mMidFlagBlock[0x7AC8 - 0x7AC7] != 0;
+    }
+
     const void* InputBuffer::GetTimerStatusInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
