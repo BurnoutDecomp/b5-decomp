@@ -403,6 +403,16 @@ public:
         return *reinterpret_cast<const CgsID*>(maMessages[0].maHead);
     }
 
+    // @0x82472A18 -- append one message param: SPrintf ("%s", cap 63 + forced NUL @+0x4B)
+    // lpcParam into the next free record's text, store luId at its +0x08 id slot, bump
+    // miNumMessages. Asserts miNumMessages < 2 ("Not enough free params in the Overlay
+    // (<n>/2).", streamed) and lpcParam != NULL. Returns the SPrintf result (r3). ADDITIVE
+    // GROW (BrnCarSelectMain wave G: HandleLaunchedEvent @0x824C8FBC / the sibling
+    // HandleLaunchingEvent @0x824C915C call it). Declaration-only: the body's ledger TU is
+    // elsewhere (identity primary_file mis-attributes it to CgsStrStream.h) and no
+    // definition exists in the tree yet -- see the wave-G spec.
+    s32 AddMessageParam(u32 luId, const char* lpcParam);
+
     // @0x824EB948 -- copy message param liIndex into lOut. Asserts liIndex < miNumMessages
     // ("Index isn't used in Overlay.") and liIndex >= 0 ("Index isn't valid."). Returns the
     // SPrintf result (the X360 returns r3 from CgsCore::SPrintf).

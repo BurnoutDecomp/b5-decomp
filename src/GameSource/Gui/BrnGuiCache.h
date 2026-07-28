@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsID.h"     // CgsID (u64) -- mPursuedCarID / mShutdownCarID
+#include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT (GetCurrentCarSelectType inline)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"   // BrnGui::GuiFlow (AppendExpectedAptComponent selector)
 #include "GameSource/BurnoutConstants.h"          // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT
 #include "BrnCommonTypes.h"                        // Vector3 / Vector4 (event-position / camera accessors)
@@ -441,6 +442,33 @@ namespace BrnGui
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
 
+        // ADDITIVE GROW (BrnCarSelectMain wave G). The car-select flow surface. All three were
+        // header-inlines on the X360 (no out-of-line bodies exist in the image); their bodies
+        // are attested by the CarSelectMain call-site inlines cited on the members below.
+
+        // DWARF h:1301 GetCurrentCarSelectType. The assert (string + BrnGuiCache.h:4378 line
+        // baked into the X360 image) fires when no car-select flow is active; raw s32 return
+        // per this header's enum convention (values: GsmIO::ECarSelectType,
+        // BrnGameStateSharedIO.h).
+        s32 GetCurrentCarSelectType() const
+        {
+            CGS_ASSERT(meCarSelectType > 0, "meCarSelectType > GsmIO::E_CAR_SELECT_TYPE_NONE");
+            return meCarSelectType;
+        }
+
+        // DWARF h:1425 SetDoDisconnectPopup(const CgsModule::Event*). Latch the error word the
+        // disconnect popup shows: the event's leading word, or 0 when no event rode along. The
+        // whole X360 body is the CarSelectMain event-44 inline @0x824D76C0 (positional read of
+        // an external event blob -- its layout is fixed by the producer, not a C++ class here).
+        void SetDoDisconnectPopup(const CgsModule::Event* lpDisconnectEvent)
+        {
+            meLastDisconnectedError =
+                lpDisconnectEvent ? *reinterpret_cast<const s32*>(lpDisconnectEvent) : 0;
+        }
+
+        // DWARF h:1666 (member); the CarSelectMain event-93 ENTER_GAME gate reads it.
+        bool IsStartingGameDueToPlayerJoin() const { return mbIsStartingGameDueToPlayerJoin; }
+
         // ADDITIVE GROW (BrnOdometerComponent TU). The odometer HUD caches the player profile
         // and reads the running offline distance off the cache. Both are inlined far-member
         // reads at the X360 call site (OdometerComponent::Construct @0x82415088 loads the
@@ -606,7 +634,18 @@ namespace BrnGui
         // only when it holds 1 or 3, treat -1 as invalid). FLAG: consumer-named -- the
         // enum home is unrecovered (values observed: -1 / 1 / 3).
         s32  miGameFlowState;                             // +0x4B30 (19248)
-        u8   mPad_4B34[0x16];                             // +0x4B34..+0x4B49
+        u8   mPad_4B34[0xC];                              // +0x4B34..+0x4B3F
+        // ADDITIVE CARVE (BrnCarSelectMain wave G): the last server-interface error word the
+        // disconnect popup shows. DWARF h:1657 `CgsNetwork::EServerInterfaceError
+        // meLastDisconnectedError` (order fit: right after miConsecutiveLosses in the DWARF
+        // member run that lands this cluster); X360-attested by CarSelectMain::
+        // ProcesssIncomingEvents' event-44 inline @0x824D769C (stw mpGuiCache+0x4B40 --
+        // the DWARF SetDoDisconnectPopup(const CgsModule::Event*) body) and read by
+        // InGame::Update's cache latch (BrnInGame.cpp CacheTakeLastDisconnectedError
+        // boundary, which this member replaces when that TU is next touched). Raw s32 per
+        // this boundary header's enum convention (see GetCurrentGameModeType).
+        s32  meLastDisconnectedError;                     // +0x4B40 (19264) 0 == none
+        u8   mPad_4B44[6];                                // +0x4B44..+0x4B49
         bool mbInEventColouringGate;                     // +0x4B4A (19274) RoadRuleComponent::ShouldUseInEventColouring gate byte
         u8   mPad_4B4B[1];                                // +0x4B4B
         // ADDITIVE GROW (BrnOnlinePlay TU): the online-play main-menu invite / online-start flag
@@ -615,7 +654,14 @@ namespace BrnGui
         // from the OnlinePlay consumer; FLAG: consumer-named (no standalone DWARF for these bytes).
         bool mbOnlineStartInProgress;                    // +0x4B4C (19276) HandleControllerInputMainMenu confirm gate
         bool mbInviteInProgress;                         // +0x4B4D (19277) HandleGuiCacheEvent source
-        u8   mPad_4B4E[1];                                // +0x4B4E
+        // ADDITIVE CARVE (BrnCarSelectMain wave G): "this game start was driven by a
+        // drop-in player join" gate. DWARF h:1666 mbIsStartingGameDueToPlayerJoin (the
+        // bool run mbIsPreparingForInvite(h:1665)/THIS/mbIsPerformInviteReceived(h:1667)
+        // brackets this byte; BrnInGame.cpp's CacheIsStartingGameDueToPlayerJoin boundary
+        // comment records the same X360 +0x4B4E identification). X360-attested by
+        // CarSelectMain::ProcesssIncomingEvents' event-93 gate @0x824D7784 (lbz
+        // mpGuiCache+0x4B4E: blocks the ENTER_GAME state event while set).
+        bool mbIsStartingGameDueToPlayerJoin;            // +0x4B4E (19278)
         bool mbPerformingInvite;                         // +0x4B4F (19279) HandleGuiCacheEvent source
         // MERGE RECONCILE PENDING: the loading-screen-visible byte (DecFIGS h:
         // IsLoadingScreenVisible; the accessor + BootProfile::OnLeave read it) was carved
@@ -627,7 +673,17 @@ namespace BrnGui
         bool mbOnlineMatchRanked;                        // +0x4B51 (19281) SelectOnlineMenuOption
         bool mbOnlineMatchUnranked;                      // +0x4B52 (19282) SelectOnlineMenuOption
         bool mbOnlineStartPending;                       // +0x4B53 (19283) SelectOnlineMenuOption (cleared)
-        u8   mPad_4B54[33];                              // +0x4B54..+0x4B74
+        u8   mPad_4B54[0x1C];                            // +0x4B54..+0x4B6F
+        // ADDITIVE CARVE (BrnCarSelectMain wave G): which car-select flow is running.
+        // DWARF h:1687 `BrnGameState::GameStateModuleIO::ECarSelectType meCarSelectType`;
+        // the member NAME is baked into the X360 assert string "meCarSelectType >
+        // GsmIO::E_CAR_SELECT_TYPE_NONE" (BrnGuiCache.h:4378) fired by the inlined
+        // GetCurrentCarSelectType() in CarSelectMain::OnEnter @0x824C8B34 /
+        // ExitCarSelection @0x824C8CF4 (both: lwz mpGuiCache+0x4B70). Raw s32 per this
+        // boundary header's enum convention; the value home is
+        // BrnGameState::GameStateModuleIO::ECarSelectType (BrnGameStateSharedIO.h).
+        s32  meCarSelectType;                            // +0x4B70 (19312)
+        u8   mPad_4B74[1];                               // +0x4B74
         // ADDITIVE GROW (BrnGuiCache DetermineCarUnlockPending @0x824EC678): the two car-unlock
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
         bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains

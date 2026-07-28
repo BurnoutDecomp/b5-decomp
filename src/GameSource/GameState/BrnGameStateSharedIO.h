@@ -56,6 +56,22 @@ namespace BrnGameState
             E_MODE_COUNT                   = 17,
         };
 
+        // ADDITIVE GROW (BrnCarSelectMain wave G): which flavour of car-select flow is
+        // running. DWARF BrnGameStateSharedIO.h:177; X360-attested by the CarSelectMain
+        // consumers -- the GuiCache::GetCurrentCarSelectType() assert string
+        // "meCarSelectType > GsmIO::E_CAR_SELECT_TYPE_NONE" (BrnGuiCache.h:4378, inlined
+        // @0x824C8B34 / @0x824C8CF4) and ExitCarSelection's `== 1` (JUNKYARD) branch
+        // @0x824C8D30. (BrnGuiCache.h keeps its meCarSelectType/GetCurrentCarSelectType
+        // surface as raw s32 per its boundary-header convention -- see
+        // GetCurrentGameModeType there; consumers include this header for the values.)
+        enum ECarSelectType
+        {
+            E_CAR_SELECT_TYPE_NONE               = 0,
+            E_CAR_SELECT_TYPE_JUNKYARD           = 1,
+            E_CAR_SELECT_TYPE_ONLINE_EVENT_START = 2,
+            E_CAR_SELECT_TYPE_COUNT              = 3,
+        };
+
         // ADDITIVE GROW (BrnMugshotManager TU): the photo/"mugshot" image-type enum. DWARF
         // BrnGameStateSharedIO.h:529 (== BrnGameStateImageManagerBase.h:1153). The MugshotManager
         // stores E_IMAGE_TYPE_COUNT (6) as the cleared meCaptureMugshotType / meShowMugshotType and
