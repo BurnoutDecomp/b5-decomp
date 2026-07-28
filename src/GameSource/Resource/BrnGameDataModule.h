@@ -174,6 +174,9 @@ namespace BrnResource
         void ProcessGetWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                         const GameDataIO::GameDataAssetEvent* lpEvent,
                                         s32 liEventId, s32 liSlotIndex);               // 0x826705D0
+        void ProcessUnloadWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                           const GameDataIO::GameDataAssetEvent* lpEvent,
+                                           s32 liEventId, s32 liSlotIndex);            // 0x82671160
         void ProcessLoadPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                    const GameDataIO::GameDataAssetEvent* lpEvent,
                                    s32 liEventId, s32 liSlotIndex);                    // 0x8266F9C0

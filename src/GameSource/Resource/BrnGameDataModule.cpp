@@ -1422,17 +1422,74 @@ namespace BrnResource
         }
     }
 
-    // @ 0x826733F8 -- dispatch an UnloadGameDataEvent. DEFERRED with the unload handler
-    // family: the X360 stages E_UNLOADING then routes exactly like the load dispatcher
-    // (VEH_ -> UnloadVehicle 40 @0x82672DE0, TVEH -> 41 @0x82670BE0, GD__/AI__ -> 42
-    // @0x82670E40, GD__/LANE -> 43, TRK_/UNIT -> 44 @0x82671160, TRK_/COLL -> 45
-    // @0x826712A0, TRK_/PVS_ -> 46 @0x82671420, WHE_ -> 47 @0x82670AA0, PRP_/INST -> 48
-    // @0x82670F50; unknown ids assert "Invalid id\n" / "Invalid game data id: ").
-    void GameDataModule::ProcessUnloadGameDataEvent(CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
-                                                    const GameDataIO::GameDataAssetEvent* /*lpEvent*/,
-                                                    s32 /*liSlotIndex*/)
+    // @ 0x826733F8 -- dispatch an UnloadGameDataEvent by the uncompressed prefix of its
+    // CgsID, exactly like the load/get dispatchers. The X360 switches on the packed 4-char
+    // dwords of the uncompressed id (v14/v15/v16 == chunks 0/1/2); the memcmp prefix
+    // compares below test the same bytes in the same order, host-endian-safely:
+    //   VEH_ -> UnloadVehicle 40 @0x82672DE0        WHE_      -> UnloadWheel 47 @0x82670AA0
+    //   TVEH -> UnloadTrafficVehicle 41 @0x82670BE0 GD__/LANE -> UnloadTrafficLanes 43
+    //   GD__/AI__ -> UnloadAILanes 42 @0x82670E40   TRK_/UNIT -> UnloadWorldUnit 44 @0x82671160
+    //   TRK_/COLL -> UnloadWorldCollision 45 @0x826712A0
+    //   TRK_/PVS_ -> UnloadPVS 46 @0x82671420       PRP_/INST -> UnloadPropInstances 48 @0x82670F50
+    // (NOTE the TRK_ sub-key is "PVS_" here and in the GET dispatcher, but "ZONE" in the
+    // LOAD dispatcher -- reproduced verbatim.) The slot is staged E_UNLOADING before the
+    // routing, matching `*GameDataEventSlot = 2`.
+    void GameDataModule::ProcessUnloadGameDataEvent(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                    const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                    s32 liSlotIndex)
     {
-        *CgsDev::Log::gpDebugPrint << "[GameData] ProcessUnloadGameDataEvent DEFERRED\n";
+        char lacName[KI_CGSID_STRING_LEN];
+        CgsIDUnCompress(lpEvent->mId, lacName);
+
+        GameDataEventSlot* lpSlot = GetGameDataEventSlot(lpEvent, liSlotIndex);
+        if (lpSlot == 0)
+            return;   // [marked deviation] full-pool guard (see GetGameDataEventSlot)
+        const s32 liIndex = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
+        lpSlot->meStage = GameDataEventSlot::E_UNLOADING;
+
+        if (memcmp(lacName, "VEH_", 4) == 0)
+        {
+            DeferredGameDataRequest("UnloadVehicle (0x82672DE0, id 40)", lpSlot);
+        }
+        else if (memcmp(lacName, "WHE_", 4) == 0)
+        {
+            DeferredGameDataRequest("UnloadWheel (0x82670AA0, id 47)", lpSlot);
+        }
+        else if (memcmp(lacName, "TVEH", 4) == 0)
+        {
+            DeferredGameDataRequest("UnloadTrafficVehicle (0x82670BE0, id 41)", lpSlot);
+        }
+        else if (memcmp(lacName, "GD__", 4) == 0)
+        {
+            if (memcmp(lacName + 8, "LANE", 4) == 0)
+                DeferredGameDataRequest("UnloadTrafficLanes (id 43)", lpSlot);
+            else if (memcmp(lacName + 4, "AI__", 4) == 0)
+                DeferredGameDataRequest("UnloadAILanes (0x82670E40, id 42)", lpSlot);
+            else
+                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3003
+        }
+        else if (memcmp(lacName, "PRP_", 4) == 0)
+        {
+            if (memcmp(lacName + 4, "INST", 4) == 0)
+                DeferredGameDataRequest("UnloadPropInstances (0x82670F50, id 48)", lpSlot);
+            else
+                CGS_ASSERT(false, "Invalid game data id: ");   // X360 streams the id (line 3014)
+        }
+        else if (memcmp(lacName, "TRK_", 4) == 0)
+        {
+            if (memcmp(lacName + 4, "UNIT", 4) == 0)
+                ProcessUnloadWorldUnitRequest(lpResourceInput, lpEvent, 44, liIndex);
+            else if (memcmp(lacName + 4, "COLL", 4) == 0)
+                DeferredGameDataRequest("UnloadWorldCollision (0x826712A0, id 45)", lpSlot);
+            else if (memcmp(lacName + 4, "PVS_", 4) == 0)
+                DeferredGameDataRequest("UnloadPVS (0x82671420, id 46)", lpSlot);
+            else
+                CGS_ASSERT(false, "Invalid id\n");   // X360 line 3033
+        }
+        else
+        {
+            CGS_ASSERT(false, "Invalid id\n");   // X360 line 3038
+        }
     }
 
     // @ 0x826717A8 / @ 0x82671530 -- swap the collision world in/out. DEFERRED with the
@@ -1488,6 +1545,54 @@ namespace BrnResource
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x82671160 -- service an UNLOAD world-unit request: post the UnloadBundle for the
+    // unit's per-asset-set bundle ("<TRK_UNITn>_<GR|PH|SO|DA|AT>.bndl"). The reply lands on
+    // mReceiverQueue as a type-3 UnloadBundleResponse and ProcessInternalUnloadResponse then
+    // posts the id-44 completion back to the world graphics streamer's receiver queue, which
+    // frees its current-list slot. This is the streamer's UNLOAD leg, the mirror of
+    // ProcessLoadWorldUnitRequest @0x8266F5C8 (same body shape as ProcessUnloadWheelRequest
+    // @0x82670AA0 / ProcessUnloadPVSRequest @0x82671420: response id staged first, the name
+    // formatted, then ONE type-3 UnloadBundleRequest into the resource queue).
+    void GameDataModule::ProcessUnloadWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                       const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                       s32 liEventId, s32 liSlotIndex)
+    {
+        // X360 store order: the response id is staged FIRST (before the name work).
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacResourceName[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacResourceName);
+
+        // X360: `if (event->meType) assert` -- the streamer always asks for asset set 0.
+        // The suffix lookup runs on meType regardless (the assert is a non-gating tripwire).
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS,
+                   "Invalid asset type for track units\n");   // X360 line 5337
+
+        const u32 luAssetSet = static_cast<u32>(lpEvent->meType);
+        const char* lpcSuffix =
+            (luAssetSet < (sizeof(KAPC_ASSET_SET_SUFFIXES) / sizeof(KAPC_ASSET_SET_SUFFIXES[0])))
+                ? KAPC_ASSET_SET_SUFFIXES[luAssetSet]
+                : KAPC_ASSET_SET_SUFFIXES[0];
+
+        char lacFileName[208];
+        CgsCore::SPrintf(lacFileName, 128, KPC_TRACK_UNIT_FILE_FORMAT, lacResourceName, lpcSuffix);
+
+        // The X360 144-byte type-3 record: {mpUser = &mReceiverQueue, miEventId = the slot
+        // index, filename, mbLiveUpdateReplace = false, miPoolId = the request's pool}.
+        // UnloadBundleRequest adds no payload of its own over BundleLoaderEvent.
+        CgsResource::Events::UnloadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(lacFileName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            3 /*UnloadBundle*/, static_cast<s32>(sizeof(lRequest)));
     }
 
     // @ 0x826705D0 -- service a GET world-unit request: acquire the unit's "<name>_list"

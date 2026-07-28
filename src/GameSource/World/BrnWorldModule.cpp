@@ -3871,16 +3871,99 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         }
     }
 
+    // [FLAG PC bring-up] BRN_WORLD_CAMSPEED (default 1.0, 0 == the static establishing
+    // shot) drives the FLY-THROUGH stand-in: the console's camera comes from the director
+    // module, and until that subsystem lands nothing moves -- which also means the world
+    // streamer's PVS query point never moves, so its working set can never roll. The path
+    // is a circle in the world XZ plane around the FIRST framing the streamer delivered
+    // (latched once: the live bounds move as the working set rolls, and feeding those back
+    // into the camera would make it chase its own tail). DELETE with the rest of this
+    // function when the director camera lands.
+    static f32 sfCamSpeed = -1.0f;
+    if ( sfCamSpeed < 0.0f )
+    {
+        sfCamSpeed = 1.0f;
+        const char* lpcSpeedEnv = std::getenv( "BRN_WORLD_CAMSPEED" );
+        if ( lpcSpeedEnv != 0 )
+        {
+            const f32 lfValue = static_cast<f32>( atof( lpcSpeedEnv ) );
+            if ( lfValue >= 0.0f )
+            {
+                sfCamSpeed = lfValue;
+            }
+        }
+    }
+
+    static bool    sbPathLatched = false;
+    static Vector3 sPathOrigin;
+    static f32     sfPathRadius = 1.0f;
+    static f32     sfPathAngle  = 0.0f;
+    if ( !sbPathLatched )
+    {
+        sbPathLatched = true;
+        sPathOrigin   = lCentre;
+        sfPathRadius  = lfRadius;
+    }
+
     Vector3 lEye;
-    lEye.x = lCentre.x;
-    lEye.y = lCentre.y + lfRadius * 0.45f * sfCamDist;
-    lEye.z = lCentre.z - lfRadius * 1.15f * sfCamDist;
-    lEye.w = 0.0f;
+    Vector3 lLookAt = sPathOrigin;
+    // The point published as the PVS query position. For the fly-through that IS the eye
+    // (it travels through the city, which is what the console's camera position does); for
+    // the FROZEN establishing shot the eye is deliberately pulled far back and up OUT of the
+    // city footprint, and publishing it would drop the ground-plane zone lookup off the map
+    // and unload everything -- so the frozen shot publishes the point it is framing.
+    Vector3 lPvsPosition;
+
+    if ( sfCamSpeed > 0.0f )
+    {
+        // One lap per ~40 s of dispatch frames at speed 1 (the dispatch spine runs once
+        // per rendered frame; a fixed per-frame step keeps a capture reproducible).
+        sfPathAngle += 0.0052f * sfCamSpeed;
+
+        // The orbit radius itself breathes between 1.1x and 2.6x the latched framing over
+        // four laps, so the tour sweeps a whole annulus of the city instead of retracing
+        // one ring (a fixed ring converges after one lap: every point on it shares the same
+        // PVS neighbourhood, so the working set stops rolling).
+        const f32 lfOrbit = sfPathRadius
+                          * ( 1.10f + 1.50f * ( 0.5f - 0.5f * cosf( sfPathAngle * 0.25f ) ) );
+        lEye.x = sPathOrigin.x + lfOrbit * cosf( sfPathAngle );
+        lEye.y = sPathOrigin.y + sfPathRadius * 0.30f * sfCamDist;
+        lEye.z = sPathOrigin.z + lfOrbit * sinf( sfPathAngle );
+        lEye.w = 0.0f;
+
+        // Look along the tangent and slightly down -- a drive-through framing, so the
+        // geometry the streamer is bringing in ahead of the camera is what fills the view.
+        lLookAt.x = lEye.x - lfOrbit * 0.75f * sinf( sfPathAngle );
+        lLookAt.y = sPathOrigin.y - sfPathRadius * 0.10f;
+        lLookAt.z = lEye.z + lfOrbit * 0.75f * cosf( sfPathAngle );
+        lLookAt.w = 0.0f;
+
+        lPvsPosition = lEye;
+    }
+    else
+    {
+        // The static establishing shot, framed on the LATCHED first framing (using the live
+        // bounds here would close a feedback loop: the bounds follow the working set, the
+        // working set follows the camera, and the camera would chase its own tail).
+        lEye.x = sPathOrigin.x;
+        lEye.y = sPathOrigin.y + sfPathRadius * 0.45f * sfCamDist;
+        lEye.z = sPathOrigin.z - sfPathRadius * 1.15f * sfCamDist;
+        lEye.w = 0.0f;
+
+        lPvsPosition = sPathOrigin;
+    }
+
+    // [FLAG PC bring-up] The console latches the frame camera into mLastCameraInput inside
+    // the real WorldModule::GenerateDispatchLists (`mLastCameraInput = *lpCameraInput`);
+    // WorldModule::Update then feeds mLastCameraInput.GetPosition() to
+    // WorldEntityModule::PreSceneUpdate as the PVS query point. Reproduce exactly that
+    // latch for the stand-in camera so the streamer's working set follows the view.
+    mLastCameraInput.mTransform.Pos() = lPvsPosition;
 
     Vector3 lForward;
-    lForward.x = lCentre.x - lEye.x;
-    lForward.y = lCentre.y - lEye.y;
-    lForward.z = lCentre.z - lEye.z;
+    lForward.x = lLookAt.x - lEye.x;
+    lForward.y = lLookAt.y - lEye.y;
+    lForward.z = lLookAt.z - lEye.z;
     lForward.w = 0.0f;
     {
         const f32 lfLen = sqrtf( lForward.x * lForward.x + lForward.y * lForward.y
@@ -3890,6 +3973,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         lForward.y *= lfInv;
         lForward.z *= lfInv;
     }
+    mLastCameraInput.mTransform.At() = lForward;   // the camera's view-direction row (+0x20)
 
     // Right = normalize(cross(worldUp, forward)); Up = cross(forward, right).
     Vector3 lRight;
