@@ -5,16 +5,14 @@
 //   HandleControllerInput @0x824B5410, UpdateGuiCache @0x824B54A8, SetupCar @0x824B5548,
 //   SetupCarNameComponent @0x824C0EB0, TriggerSetupCar @0x824C8E08.
 //
-// NOT IN SCOPE (left for a later wave -- each needs an input this packet does not attest):
-//   * OnEnter/OnLeave/ExitCarSelection post several opaque GUI out-queue events whose
-//     header words are built with overlapping stack stores + the un-recovered
-//     maiEventToObserve[21] (dword_82065E80) observed-event id table.
-//   * HandleLaunchedEvent/HandleLeftGameEvent index the un-recovered launch-failed /
-//     kick-reason overlay-name rodata tables (off_82F26C94 / off_82F26774) -- guessing
-//     those dispatch strings would mis-route at runtime.
-//   * Update/ProcesssIncomingEvents/GetResourcesToLoadForCarSelect drive virtual self-calls
-//     by vtable slot (+0x24/+0x28/+0x30/+0x34/+0x38/+0x60) whose name mapping is not
-//     groundable here, plus far GuiCache members not on the committed cache API.
+// The remaining 8 functions (OnEnter @0x824C8920, OnLeave @0x824C8B78, Update @0x824DC9C0,
+// ProcesssIncomingEvents @0x824D73D8, ExitCarSelection @0x824C8CB8, HandleLaunchedEvent
+// @0x824C8EF0, HandleLeftGameEvent @0x824C91C8, GetResourcesToLoadForCarSelect @0x824B56C0)
+// live in the wave-G partfiles BrnCarSelectMain_wG_01..03.cpp alongside this file. Their
+// former blockers were resolved in wave G: the maiEventToObserve[21] / overlay-string rodata
+// was dumped from the image (values in _wG_01), the vtable slot map was recovered from the
+// dispatch displacements (see the header banner), and the far GuiCache members were carved
+// as named members (BrnGuiCache.h +0x4B40/+0x4B4E/+0x4B70).
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectMain.h"
@@ -95,7 +93,10 @@ namespace BrnGui
     }
 
     // ---- UpdateGuiCache @ 0x824B54A8 ----------------------------------------------
-    void CarSelectMain::UpdateGuiCache(const CgsModule::Event* lpCacheEvent)
+    // The trailing event-id s32 is the DWARF declaration shape (cpp:544); the dispatcher
+    // (ProcesssIncomingEvents, event 64) passes it like the other handlers and this body
+    // ignores it.
+    void CarSelectMain::UpdateGuiCache(const CgsModule::Event* lpCacheEvent, s32 /*liEventType*/)
     {
         // The cache-ready GUI event carries the acquired GuiCache pointer as its leading word.
         // External event blob: its layout is fixed by the event, not a reconstructable C++ class,
@@ -112,9 +113,11 @@ namespace BrnGui
     }
 
     // ---- SetupCar @ 0x824B5548 ----------------------------------------------------
-    void CarSelectMain::SetupCar(const CarSetupInfo& lrSetupInfo)
+    // POINTER param per the DWARF declaration (cpp:577) -- CarSelectVehicle overloads it
+    // with (const CarSetupInfo*, bool) as a distinct new virtual, pinning the base shape.
+    void CarSelectMain::SetupCar(const CarSetupInfo* lpSetupInfo)
     {
-        mDesiredSetupInfo = lrSetupInfo;   // copies mCarId + mbSelectable (X360 two-qword store)
+        mDesiredSetupInfo = *lpSetupInfo;  // copies mCarId + mbSelectable (X360 two-qword store)
 
         CGS_ASSERT(mDesiredSetupInfo.mbSelectable, "mDesiredSetupInfo.mbSelectable");   // cpp:600
 

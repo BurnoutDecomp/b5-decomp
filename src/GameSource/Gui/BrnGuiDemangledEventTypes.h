@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
+#include "GameShared/GameClasses/Core/CgsID.h"        // CgsID (GuiPlayerInfoResponse::mCarId)
 
 // ============================================================================
 // b5-decomp/src/GameSource/Gui/BrnGuiDemangledEventTypes.h
@@ -219,7 +220,17 @@ namespace BrnGui
     struct GuiPlayerEliminatedEvent { u8 maData[4]; s32 GetEventType() const { return 450; } };  // id 450 size 4 (raw; size not GuiEvent-shaped)
     struct GuiPlayerEngineEvent { u8 maData[4]; s32 GetEventType() const { return 379; } };  // id 379 size 4 (raw; size not GuiEvent-shaped)
     struct GuiPlayerInShortcutEvent { u8 maData[1]; s32 GetEventType() const { return 380; } };  // id 380 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiPlayerInfoResponse : public CgsGui::GuiEvent<406> { u8 maPayload[52]; };  // id 406 size 64 (12B GuiEvent header + opaque payload)
+    // id 406 size 64 (12B GuiEvent header + payload). PARTIAL LAYOUT RECOVERY
+    // (BrnCarSelectMain wave G): the CarSelectMain event-406 consumer @0x824D7A24 reads the
+    // responding player's car id as the qword at event+0x20 (ld r11, 0x20(event)) -- named
+    // mCarId here; the surrounding payload bytes stay opaque. On x64 the 12B GuiEvent header
+    // + 20B maPayload0 land mCarId at the same +0x20 with no inserted padding (align 8).
+    struct GuiPlayerInfoResponse : public CgsGui::GuiEvent<406>
+    {
+        u8    maPayload0[20];   // +0x0C..+0x1F (opaque)
+        CgsID mCarId;           // +0x20 (the player's current car id)
+        u8    maPayload1[24];   // +0x28..+0x3F (opaque)
+    };
     struct GuiPlayerRaceCarIdEvent { u8 maData[8]; s32 GetEventType() const { return 376; } };  // id 376 size 8 (raw; size not GuiEvent-shaped)
     struct GuiPowerParkResult { u8 maData[8]; s32 GetEventType() const { return 404; } };  // id 404 size 8 (raw; size not GuiEvent-shaped)
     struct GuiPursuitScoreUpdate { u8 maData[4]; s32 GetEventType() const { return 432; } };  // id 432 size 4 (raw; size not GuiEvent-shaped)
