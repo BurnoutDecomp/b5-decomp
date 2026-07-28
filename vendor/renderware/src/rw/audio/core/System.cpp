@@ -237,9 +237,11 @@ System *System::CreateInstance(EA::Allocator::ICoreAllocator *allocator, u32 com
 
 // -------------------------------------------------------------------------------------
 // DefaultPhysicalAlloc @0x82B6BE88 -- XPhysicalAlloc(size, MAXULONG_PTR, align, protect).
-// (The fourth parameter is passed by the call site but unused by the default.)
+// (The fourth parameter -- the caller's debug-name string, e.g. EaXmaDec's "XMA input
+// buffers" -- is passed by the call site but unused by the default. Pointer-wide on the
+// host; the console carried it in a 32-bit word.)
 // -------------------------------------------------------------------------------------
-void *System::DefaultPhysicalAlloc(u32 size, u32 align, u32 protect, u32 /*unused*/)
+void *System::DefaultPhysicalAlloc(u32 size, u32 align, u32 protect, const char * /*pName*/)
 {
     return XPhysicalAlloc(size, 0xFFFFFFFFUL, align, protect);
 }
@@ -255,14 +257,15 @@ void System::DefaultPhysicalFree(void *block)
 // -------------------------------------------------------------------------------------
 // PhysicalAlloc @0x82B6DCD8 -- lazily seed the physical hooks, then allocate through them.
 // -------------------------------------------------------------------------------------
-void *System::PhysicalAlloc(System *self, u32 size, u32 align, u32 protect, u32 unused)
+void *System::PhysicalAlloc(System *self, u32 size, u32 align, u32 protect,
+                            const char *pName)
 {
     if (!self->mpfnPhysicalAlloc)
     {
         self->mpfnPhysicalAlloc = &DefaultPhysicalAlloc;
         self->mpfnPhysicalFree = &DefaultPhysicalFree;
     }
-    return self->mpfnPhysicalAlloc(size, align, protect, unused);
+    return self->mpfnPhysicalAlloc(size, align, protect, pName);
 }
 
 // -------------------------------------------------------------------------------------

@@ -9,6 +9,8 @@
 
 #include "rw/audio/core/PlugIn.h"
 
+#include <cstddef>   // offsetof (host record layout -- see InfoFromLink)
+
 namespace rw
 {
 namespace audio
@@ -28,19 +30,40 @@ struct PlugInDescRunTimeLink
 
 static PlugInDescRunTime *InfoFromLink(void *link)
 {
-    // link points at PlugInDescRunTime::mpNext (+0x24); recover the owning record.
-    return reinterpret_cast<PlugInDescRunTime *>(reinterpret_cast<char *>(link) - 0x24);
+    // link points at PlugInDescRunTime::mpNext; recover the owning record.
+    //
+    // X360-LITERAL TRAP: the asm subtracts the console immediate 0x24
+    // (addi r3,r11,-0x24 @0x82B6A914 in GetPlugInHandle and addi r3,r10,-0x24
+    // @0x82B6A94C in RegisterPlugInRunTime), which is the CONSOLE
+    // offsetof(PlugInDescRunTime, mpNext). It does NOT survive the host layout:
+    // mHeader[0x24] is 36 bytes and mpNext is a pointer, so MSVC x64 pads the
+    // member to offset 40 (0x28). Subtracting the console 0x24 from a link slot
+    // at base+40 yields base+4 -- every field access through the result was off
+    // by four bytes. Use the host offsetof so the two stay in step.
+    return reinterpret_cast<PlugInDescRunTime *>(
+        reinterpret_cast<char *>(link) - offsetof(PlugInDescRunTime, mpNext));
 }
 
 // -------------------------------------------------------------------------------------
 // PlugInRegistry::CreateInstance @0x82B6DBC0
-// Allocates a 24-byte, 16-aligned registry via System::New2<PlugInRegistry> and
-// zero-initialises its list state.
+// Allocates a 16-aligned registry via System::New2<PlugInRegistry> and zero-initialises
+// its list state.
+//
+// ALLOCATION SIZE (X360-literal trap): the asm passes the size EXPLICITLY --
+// `li r6, 0x18` @0x82B6DBD8 -- and 0x18 (24) IS the console sizeof(PlugInRegistry)
+// (three 4-byte pointers + u32 + int + char). On the host those three pointers widen to
+// 8 bytes and sizeof(PlugInRegistry) is 40, so the console immediate under-allocates by
+// 16 bytes: the mpSystem store below (host +0x18..+0x1F) and mCurrentRegistryIndex (host
+// +0x20, the byte RegisterPlugInRunTime post-increments) both land past the block.
+// New2 falls back to sizeof(T) only when the size argument is 0 (PlugIn.h:490), so the
+// non-zero console 24 must be replaced by the host expression rather than by 0 -- that
+// also preserves the asm's explicit-size call shape.
 // -------------------------------------------------------------------------------------
 PlugInRegistry *PlugInRegistry::CreateInstance(System *system)
 {
     PlugInRegistry *self = 0;
-    System::New2<PlugInRegistry>(system, &self, 0, 24, 16, 0);
+    // X360: li r6,0x18 -- console sizeof(PlugInRegistry) == 24; host sizeof == 40.
+    System::New2<PlugInRegistry>(system, &self, 0, static_cast<unsigned>(sizeof(PlugInRegistry)), 16, 0);
     if (self)
     {
         self->mpSystem = system; // stw r31 -> 0x10

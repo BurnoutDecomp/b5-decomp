@@ -21,6 +21,8 @@
 #include "rw/audio/core/PlugIn.h"      // rw::audio::core::System (deferred-command ring)
 #include "rw/audio/core/MixKernels.h"  // ReChannelGainWrite / ReChannelGainMix / ...RampMix
 
+#include <cstddef> // offsetof -- the name-command record's header size on the host
+
 namespace rw
 {
 namespace audio
@@ -233,15 +235,18 @@ int Send::Process(Send* self, AudioProcessContext* ctx, char resetRamp)
 // NOTE the head back-link: the asm `stw r11,4(r9)` writes the connector pointer into the
 // old head's mppPrev slot, matching Route::ConnectByPointerHandler. (Unlike Route, Send
 // stores no trailing byte-gain triple and returns 12, not 24.)
+// RECORD STRIDE (X360-literal trap): the returned value IS the ring advance for this
+// record, i.e. the console sizeof(SendConnectByPointerCommand) -- on the host that is the
+// host sizeof (24: three widened pointers), never the console literal 12.
 // -------------------------------------------------------------------------------------
-int Send::ConnectByPointerHandler(int cmd)
+int Send::ConnectByPointerHandler(void* cmd)
 {
-    SendConnectByPointerCommand* lpCmd = reinterpret_cast<SendConnectByPointerCommand*>(cmd);
-    Send* lpSend = reinterpret_cast<Send*>(lpCmd->mTarget); // send = *(cmd+4)
+    SendConnectByPointerCommand* lpCmd = static_cast<SendConnectByPointerCommand*>(cmd);
+    Send* lpSend = lpCmd->mpTarget; // send = *(cmd+4)
 
     DisconnectImmediate(lpSend);
 
-    SubMix* lpSubMix = reinterpret_cast<SubMix*>(lpCmd->mSubMix); // subMix = *(cmd+8)
+    SubMix* lpSubMix = lpCmd->mpSubMix; // subMix = *(cmd+8)
     if (lpSubMix)
     {
         SubMixConnector* lpConn = &lpSend->mSubMixConnector; // conn = send+0x30
@@ -256,7 +261,7 @@ int Send::ConnectByPointerHandler(int cmd)
             lpHead->mppPrev = reinterpret_cast<SubMixConnector**>(lpConn); // stw conn, 4(head)
         lpSubMix->mpConnectorHead = lpConn;                            // stw conn, 0x28(subMix)
     }
-    return 12;
+    return static_cast<int>(sizeof(SendConnectByPointerCommand)); // X360: li r3, 0xC @0x82B9FF64
 }
 
 // -------------------------------------------------------------------------------------
@@ -306,33 +311,43 @@ int Send::ConnectByPointerHandler(int cmd)
 //       cmd[0] = &ConnectByPointerHandler ; cmd[1] = self ; cmd[2] = payload[0]  (SubMix*)
 //   }
 //   return self
+//
+// RECORD STRIDE (X360-literal trap): both cursor advances are the record's OWN size, so
+// they are host sizeof/offsetof expressions here -- the console immediates (`addi r9,r9,0xC`
+// @0x82BA3F20 and the `(len + 16) & ~3` sequence @0x82BA3F74-7C) are the 32-bit sizes and
+// would under-advance the ring once the handler/target pointers widen to 8 bytes.
 // -------------------------------------------------------------------------------------
-int Send::EventEvent(int self, int useName, u32* payload)
+Send* Send::EventEvent(Send* self, int useName, void* const* payload)
 {
-    System* lpSystem = reinterpret_cast<System*>(reinterpret_cast<Send*>(self)->mBase.mpSystem); // *(self+4)
+    System* lpSystem = static_cast<System*>(self->mBase.mpSystem); // *(self+4)
     char* lpRingBase = lpSystem->mpDeferredRingBase;   // *(sys+0x20)
     u32 luCursor = lpSystem->muDeferredRingCursor;     // *(sys+0x10B8)
 
     if (useName)
     {
         // strlen of the queued name (payload[0] points at the source string).
-        const char* lpName = reinterpret_cast<const char*>(payload[0]);
+        const char* lpName = static_cast<const char*>(payload[0]);
         u32 luLen = 0;
         while (lpName[luLen])
             ++luLen;
 
-        // 12-byte header (handler / send / size) + name + NUL, rounded up to 4 bytes.
-        const u32 luSize = (luLen + 16) & ~3u;
+        // The record's own byte size: header + name + NUL, rounded up so the NEXT record's
+        // leading handler pointer stays aligned. X360: `(len + 16) & ~3` (@0x82BA3F74 addi
+        // 0x10 / @0x82BA3F7C clrrwi 2) == a 12-byte header + NUL, 4-aligned for the console's
+        // 4-byte pointers; the host header is offsetof(maName) and the align is 8.
+        const u32 luSize =
+            (static_cast<u32>(offsetof(SendConnectByNameCommand, maName)) + luLen + 1 + 7) & ~7u;
 
-        u32* lpCmd = reinterpret_cast<u32*>(lpRingBase + luCursor);
+        SendConnectByNameCommand* lpCmd =
+            reinterpret_cast<SendConnectByNameCommand*>(lpRingBase + luCursor);
         lpSystem->muDeferredRingCursor = luCursor + luSize;
 
-        lpCmd[0] = reinterpret_cast<u32>(reinterpret_cast<void*>(&Send::ConnectByNameHandler));
-        lpCmd[1] = static_cast<u32>(self);
-        lpCmd[2] = luSize;
+        lpCmd->mpHandler = &Send::ConnectByNameHandler; // cmd[0]
+        lpCmd->mpTarget = self;                         // cmd[1]
+        lpCmd->muRecordSize = luSize;                   // cmd[2]
 
-        char* lpDst = reinterpret_cast<char*>(lpCmd) + 12; // cmd + 0xC
-        const char* lpSrc = reinterpret_cast<const char*>(payload[0]);
+        char* lpDst = lpCmd->maName; // cmd + 0xC (X360)
+        const char* lpSrc = lpName;
         char lch;
         do
         {
@@ -342,12 +357,14 @@ int Send::EventEvent(int self, int useName, u32* payload)
     }
     else
     {
-        u32* lpCmd = reinterpret_cast<u32*>(lpRingBase + luCursor);
-        lpSystem->muDeferredRingCursor = luCursor + 12;
+        SendConnectByPointerCommand* lpCmd =
+            reinterpret_cast<SendConnectByPointerCommand*>(lpRingBase + luCursor);
+        lpSystem->muDeferredRingCursor =
+            luCursor + static_cast<u32>(sizeof(SendConnectByPointerCommand)); // X360: +0xC
 
-        lpCmd[0] = reinterpret_cast<u32>(reinterpret_cast<void*>(&Send::ConnectByPointerHandler));
-        lpCmd[1] = static_cast<u32>(self);
-        lpCmd[2] = payload[0]; // target SubMix pointer (connect event word 0)
+        lpCmd->mpHandler = &Send::ConnectByPointerHandler; // cmd[0]
+        lpCmd->mpTarget = self;                            // cmd[1]
+        lpCmd->mpSubMix = static_cast<SubMix*>(payload[0]); // cmd[2] -- connect event word 0
     }
     return self;
 }
