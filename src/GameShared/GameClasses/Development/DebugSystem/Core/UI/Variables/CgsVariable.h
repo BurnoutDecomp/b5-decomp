@@ -69,8 +69,8 @@ namespace CgsDev
             Variant&    GetValue();
             const char* GetName() const;
             void        GetDisplayString(char* lpcBuffer);
-            void        GetValueAsString(char* lpcBuffer, int liBufferLen);
-            void        SetValueFromString(const char* lpcString);
+            void        GetValueAsString(char* lpcValue, int liLength);
+            void        SetValueFromString(const char* lpcValue);
             f32         GetValueAsFloat() const;
             f32         GetMinAsFloat(f32 lfDefault) const;
             f32         GetMaxAsFloat(f32 lfDefault) const;
