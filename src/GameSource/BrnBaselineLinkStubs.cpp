@@ -34,6 +34,10 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                      // BrnPhysics::Vehicle::RaceCarState
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"          // InGamePlayerStatusInterface (+ NetworkPlayerStats / LiveRevengeRelationship)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"                // DebugUI deferred accessors (see the block at the end)
+#include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                  // Palette / Variant
+#include "SDKs/Realmc/RealmcLoadEntryInfo.h"                                                  // LoadEntryInfo (3-arg ctor stub)
+#include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"                                           // SaveCheckParams (ctor/dtor stubs)
 
 namespace CgsResource
 {
@@ -300,3 +304,90 @@ extern "C" u32 XUserReadProfileSettings(u32 /*luTitleId*/, u32 /*luUserIndex*/,
                                         u32 /*luNumSettingIds*/, unsigned long* /*lpaSettingIds*/,
                                         unsigned long* /*lpcbResults*/, void* /*lpResults*/,
                                         void* /*lpOverlapped*/) { return 87u; /* ERROR_INVALID_PARAMETER */ }
+
+// ===========================================================================
+// DebugUI deferred accessors (2026-07-28).
+//
+// CgsWindow.cpp and CgsVariable.cpp were bodied against four DebugUI members that
+// CgsDebugUI.h/CgsTypes.h declare but no TU defines yet -- CgsDebugUI.h says so at
+// its head ("the deferred-member accessors ... are declared but defined in" the
+// unreconstructed manager TU) and CgsTypes.cpp repeats it for Variant. Both callers
+// are in the exe source list, so the link needs definitions.
+//
+// The debug UI is never constructed on this boot (DebugManager's UI is inert), so
+// none of these runs; each returns the value that makes its caller take the
+// no-debug-UI branch. DELETE the whole block when the real DebugUI manager /
+// Variant conversion TUs land -- the definitions must never coexist.
+// ===========================================================================
+namespace CgsDev
+{
+    namespace DebugUI
+    {
+        // No window is ever active while the UI is inert, so Window::IsActiveWindow
+        // is false for every window.
+        const Window* DebugUI::GetActiveWindow() const { return 0; }
+
+        // Window::Prepare uses this only to place an unpositioned window; the origin
+        // is the neutral answer with no cascade state to read.
+        void DebugUI::GetCascadePosition(const Window* /*lpWindow*/, f32& lrfX, f32& lrfY)
+        {
+            lrfX = 0.0f;
+            lrfY = 0.0f;
+        }
+
+        // Window::GetPalette forwards straight to this; a zeroed palette keeps every
+        // colour lookup in range for a UI that never draws.
+        const Palette& DebugUI::GetPalette() const
+        {
+            static const Palette lsEmpty = Palette();
+            return lsEmpty;
+        }
+
+        // Variable::SetValueFromString feeds this; leaving the variant untouched
+        // means a console "set" is ignored rather than writing a parsed-from-nothing
+        // value into a live game variable.
+        void Variant::ConvertFromString(const char* /*lpcString*/) {}
+    }
+}
+
+// ===========================================================================
+// RealmcIface record members whose owning TUs are not in the link (2026-07-28).
+//
+// CgsSaveLoadPS3.cpp's SaveLoadSystem::Save now builds real Realmc records.
+// RealmcLoadEntryInfo.cpp and RealmcTitleInfo.cpp are in the exe source list and
+// supply the rest, but:
+//   * LoadEntryInfo's three-argument ctor (X360 0x82B51A08) is declared in
+//     RealmcLoadEntryInfo.h and not yet reconstructed;
+//   * SaveCheckParams' ctor/dtor (0x82B51E38 / 0x82B51F88) ARE reconstructed, in
+//     RealmcIfaceSaveCheckParams.cpp, but that TU calls RealmcCore::AllocateMem /
+//     FreeMemSize / RealmcCopySaveReq, and RealmcCore.cpp drags the whole vendor
+//     Message / RefCount / Response / RealmcString closure into the link.
+// Save() is never reached on this boot (the PC profile backend is CgsSaveLoadPC and
+// nothing writes a card save during a world drive). DELETE these three when the
+// Realmc core closure is added to the source list.
+// ===========================================================================
+namespace RealmcIface
+{
+    // Empty record: the same zeroed state the default ctor leaves, so a caller that
+    // built one of these hands the interface a no-entry request rather than garbage.
+    LoadEntryInfo::LoadEntryInfo(const char* /*pName*/, const DataBuffer* /*pA*/,
+                                 const DataBuffer* /*pB*/)
+        : maTrailing(), mpData(0), muDataSize(0)
+    {
+        for (unsigned lu = 0u; lu < sizeof(maHead); ++lu)
+        {
+            maHead[lu] = 0u;
+        }
+    }
+
+    // Zero slots: the dtor's own "nothing allocated" case, and the value that makes
+    // every consumer loop over the request array run zero iterations.
+    SaveCheckParams::SaveCheckParams(s32 /*nCount*/, SaveReq* const* /*paSources*/)
+        : mCount(0), mppReqs(0)
+    {
+    }
+
+    SaveCheckParams::~SaveCheckParams()
+    {
+    }
+}

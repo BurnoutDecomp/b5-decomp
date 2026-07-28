@@ -227,17 +227,19 @@ namespace
         "  return o;\n"
         "}\n";
 
-    // The texel MODULATES the flat term rather than replacing it (0.35 floor + 1.3 gain):
-    // a mesh can never disappear because its diffuse sampled black, which keeps the flat
-    // bring-up's "the geometry is all there" property while showing real texture detail.
+    // The diffuse texel is the BASE COLOUR, modulated by the same screen-space-derivative
+    // face term the flat variant uses. (Until 2026-07-28 the texel only modulated the flat
+    // term through a 0.35 floor + 1.3 gain, so that a mesh could never disappear on a black
+    // diffuse -- worth it while the pixel payload was suspect, but it lifts blacks and blows
+    // out highlights, which now hides the real texture. The floor moved onto the LIGHTING
+    // term instead: nothing goes fully black, and the albedo reads true.)
     const char* KPC_FALLBACK_TEX_PS =
         "sampler2D gDiffuse : register(s0);\n"
         "float4 main(float3 opos : TEXCOORD0, float2 uv : TEXCOORD1) : COLOR {\n"
         "  float3 n = normalize(cross(ddx(opos), ddy(opos)));\n"
-        "  float l = 0.35 + 0.65 * saturate(abs(n.y) * 0.7 + (abs(n.x) + abs(n.z)) * 0.25);\n"
-        "  float3 flat3 = float3(l * 0.62, l * 0.66, l * 0.72);\n"
+        "  float l = 0.45 + 0.55 * saturate(abs(n.y) * 0.7 + (abs(n.x) + abs(n.z)) * 0.25);\n"
         "  float3 texel = tex2D(gDiffuse, uv).rgb;\n"
-        "  return float4(flat3 * (0.35 + 1.3 * texel), 1.0);\n"
+        "  return float4(texel * l, 1.0);\n"
         "}\n";
 
     // [DIAG, env-gated like BRN_WORLD_ONLY] BRN_WORLD_UVDEBUG=1 swaps the textured
@@ -486,14 +488,7 @@ namespace renderengine
             lpDevice->SetSamplerState(lu16Unit, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
             lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
             lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-            // FLAG PC-platform leaf / OPEN DATA SEAM: mip filtering is OFF (top mip only).
-            // renderengine::Texture::Create uploads the mip chain assuming it is TIGHTLY
-            // PACKED in the graphics-local block, but the converted world textures carry 8
-            // mips and their small levels come out wrong (the console chain is per-mip
-            // aligned, not tight), so any minified sample -- i.e. almost every world pixel
-            // from a distance -- read black. Mip 0 is correct, so sampling it directly is
-            // right until the packed-vs-aligned mip layout is settled in the porter/Create.
-            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
 
             // [PC bring-up shim] The fallback pixel shader has a single sampler (s0), so the
             // FIRST material-scope texture is also mirrored onto unit 0 -- otherwise a material
@@ -506,7 +501,7 @@ namespace renderengine
                 lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
                 lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
                 lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-                lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+                lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
             }
             lbBoundAny = true;
         }
@@ -645,6 +640,28 @@ namespace renderengine
 
         const bool lbTextured = sbMaterialTextureBound && sbLastDeclHasTexcoord0
                              && spFallbackTexVs != nullptr && spFallbackTexPs != nullptr;
+        {
+            // [DIAG] one-shot tally of which fallback pair the world meshes take, and why
+            // the untextured ones do. Printed after the first 4096 selections so a single
+            // line covers a whole frame's worth of the world list.
+            static u32 suSeen = 0u, suTex = 0u, suNoTexture = 0u, suNoUv = 0u;
+            if (suSeen < 4096u)
+            {
+                ++suSeen;
+                if (lbTextured)          ++suTex;
+                else if (!sbMaterialTextureBound) ++suNoTexture;
+                else if (!sbLastDeclHasTexcoord0) ++suNoUv;
+                if (suSeen == 4096u)
+                {
+                    char lac[192];
+                    std::snprintf(lac, sizeof(lac),
+                        "[WorldFallback] mesh shader tally: textured=%u flat(no material "
+                        "texture)=%u flat(decl has no TEXCOORD0)=%u of %u\n",
+                        suTex, suNoTexture, suNoUv, suSeen);
+                    CgsDev::Log::WriteToLog(lac);
+                }
+            }
+        }
         if (lbTextured)
         {
             LogOnce("wtex", "[WorldFallback] TEXTURED world draws live (material samplers bound)\n");
