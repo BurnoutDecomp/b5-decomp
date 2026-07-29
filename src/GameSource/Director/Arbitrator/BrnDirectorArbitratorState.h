@@ -32,7 +32,11 @@ namespace BrnDirector
     // dereferences one (GameState, AllVehicleData, the state container, the behaviour
     // manager), the consumer #includes the real header itself.
     struct SharedCameraContainer;
-    class  DebugPrinter;
+    // ⚠️ CLASS-KEY: `struct`, matching the real home (BrnDirectorModuleDebugPrinter.h:40) and
+    // every other forward declaration. MSVC mangles the class-key into the symbol, so a `class`
+    // here made MainDirector's TU reference ?...AEAVDebugPrinter... while the BehaviourManager
+    // TU defined ?...AEAUDebugPrinter... -- two distinct symbols, one unresolved external.
+    struct DebugPrinter;
     class  DebugLog;
     class  ICEWrapper;
     struct DirectorOutputInterface;

@@ -49,7 +49,13 @@
 namespace BrnDirector
 {
 
-class DebugPrinter;                 // dev print sink (threaded only)
+// ⚠️ CLASS-KEY: `struct`, matching the real home (BrnDirectorModuleDebugPrinter.h:40) and
+// every other forward declaration (Behaviour.h:92, BrnBehaviourManager.h:71,
+// BrnCameraTweaker.h:38). It used to be `class` here, and MSVC mangles the class-key into the
+// symbol: any TU that saw THIS header first emitted `AEAVDebugPrinter` while the
+// BehaviourManager TU emitted `AEAUDebugPrinter`, so BehaviourManager::UpdateAllBehaviours
+// came up unresolved at link (the same fork class the renderer wave hit on rw::IResourceAllocator).
+struct DebugPrinter;                // dev print sink (threaded only)
 class AllVehicleData;               // the per-frame all-vehicle data (GetPlayer source)
 class VehicleTracker;               // a vehicle's per-frame tracker (velocity journal owner)
 class VehicleRef;                   // a resolved race-car handle (Get/IsValid source)

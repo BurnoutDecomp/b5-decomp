@@ -960,10 +960,48 @@ namespace BrnGame
         mRenderModule.EndOfFrame();
     }
 
-    // @ BrnGameModule.cpp:1533 - resource-update worker-thread body (streams resources while the
-    // sim runs). Not driven on the single-threaded boot path; minimal until the threading core.
+    // @ 0x823BC9B8 (BrnGameModule.cpp:1533) - the resource-update worker-thread body. The X360
+    // body is three statements:
+    //
+    //     mbResourceUpdateBusy = ( (*(*(this + 6243520) + 68))(   // GameDataModule::Update
+    //                                  this + 6243520,
+    //                                  *(this + 10053832),        // mpUpdateInputBufferStack
+    //                                  *(this + 10053836),        // mpUpdateOutputBufferStack
+    //                                  *(this + 10053840),        // the GameData INPUT buffer
+    //                                  *(this + 10053844) )       // the GameData OUTPUT buffer
+    //                            == 1 );
+    //     CheckDiskError( this, *(this + 10053844) );
+    //
+    // (the thread's `this` is the game module + 1600 -- hence the `a1 - 1600` in the
+    // CheckDiskError call and the 1600-byte-shifted member offsets; add it back and the four
+    // arguments are exactly gm+10055432/36/40/44, i.e. the two update IO buffer stacks and THE
+    // SAME GameData input/output pair BrnGameModule::Prepare stage 3 created and every
+    // LoadXxxModule / GamePrepare / LoadingScriptedState brackets. There is no second pair and
+    // no hand-off: the console synchronises the two threads purely with the IOBuffer
+    // read/write locks.)
+    //
+    // ⭐ THIS IS THE PUMP. Nothing else services the GameData request queue: the requests every
+    // module stages into the input buffer are drained, dispatched and answered here. The X360
+    // runs it continuously on its own thread from BrnGameModule::Prepare onwards, which is why
+    // a module's Prepare can stage a request at boot loading stage 3 and see the reply a frame
+    // later.
+    //
+    // FLAG PC-platform leaf: the single-threaded PC host has no resource thread, so GameMain
+    // calls this once per simulation sub-step, right after the flow state's Update (i.e. after
+    // this sub-step's requests are staged and their IO locks released). Same work, same
+    // buffers, same order -- serialised instead of concurrent.
+    //
+    // [deferred] CheckDiskError: the console's dirty-disc watch reads the GameData output's
+    // filesystem-status interface, which is not reconstructed (the output buffer's status
+    // member is a documented deferral in BrnGameDataModuleIO.h).
     void BrnGameModule::ResourceUpdateThread(Mutex* /*lpMutex*/)
     {
+        BrnResource::GameDataIO::InputBuffer*  lpGameDataInput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+        BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+
+        mGameDataModule.Update(lpGameDataInput, lpGameDataOutput);
     }
 
     // @ BrnGameModule.cpp:1221 - the render/dispatch thread body. The threaded D3D
@@ -1061,6 +1099,14 @@ namespace BrnGame
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
                 }
+                // ---- the RESOURCE tick (FLAG PC placement: the console's own thread) -------
+                // The X360 runs BrnGameModule::ResourceUpdateThread @0x823BC9B8 concurrently
+                // with this loop; the single-threaded host serialises it here, immediately
+                // after the flow state has staged this sub-step's requests and released the
+                // GameData IO locks. Without it NOTHING drains the GameData request queue
+                // outside GamePrepare, and any module Prepare that waits on a resource reply
+                // (DirectorModule stage 3 = WorldMap::LoadData) wedges the loading flow.
+                ResourceUpdateThread(0);
                 // ---- the DIRECTOR's pre-GUI passes (X360 module-scheduler order) ----------
                 // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
                 // mpDirectorOutputBuffer, which stays alive through this frame's Render.
@@ -1177,10 +1223,10 @@ namespace BrnGame
         // alloc; the generic PC template placement-news only. This was harmless while
         // DirectorIO::OutputBuffer was an EMPTY ODR stub with no lock state; now that the real
         // 1828-byte buffer is here, every DirectorModule pass locks it and the lock asserts
-        // eStatusConstructed (CgsIOBuffer.cpp:27/36). Raise the base status here, exactly as
-        // the GUI input buffer above does.
+        // eStatusConstructed (CgsIOBuffer.cpp:27/36). OutputBuffer::Construct raises the base
+        // status AND Constructs the embedded RequestInterface<512> queue.
         if (mpDirectorOutputBuffer != 0)
-            mpDirectorOutputBuffer->CgsModule::IOBuffer::Construct();
+            mpDirectorOutputBuffer->Construct();
     }
 
     // @ BrnGameModule.cpp:2515 - free this sub-step's static GUI/director IO buffers (reverse

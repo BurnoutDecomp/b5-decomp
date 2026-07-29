@@ -45,6 +45,20 @@ namespace BrnDirector
     class WorldMap
     {
     public:
+        // BrnDirectorWorldMap.cpp -- WorldMap::Construct, which the X360 INLINES into
+        // BrnDirector::DirectorModule::Construct @0x8225C590 (the WorldMap sits at
+        // module+2216 and the four stores below land at module+2312/2328/2332/2464):
+        //     *(this + 0x60 + 16) = 128;            // mReceiverQueue.miCapacity
+        //     *(this + 0x60 + 20) = 16;             // mReceiverQueue.miAlignment
+        //     *(this + 0x60 +  0) = this + 0x60+24; // mReceiverQueue.mpBuffer
+        //     BaseEventReceiverQueue::Clear(this + 0x60);
+        //     *(this + 0xF8)      = 0;              // meLoadingState = TRIGGERS_NOT_REQUESTED
+        // i.e. EventReceiverQueue<128,16>::Construct() plus the loading-state reset. Both
+        // are load-bearing: an unconstructed receiver queue has miAlignment == 0, and the
+        // first response the streaming module posts into it divides by that
+        // (BaseEventReceiverQueue::AddEvent's `(liSize + 8) % miAlignment`).
+        void Construct();
+
         // -- BrnDirectorWorldMap.h:70 nested result record --------------------
         // The lane point nearest a query point. Byte layout pinned by the X360
         // stores in GetLanePositionNearestPointWithDisplacement @0x8221D078:
@@ -84,19 +98,11 @@ namespace BrnDirector
         // from the acquire response, request + bind the traffic lanes, then the AI lane data.
         // lpRequestInterface is the GameData request interface reached from the director's
         // OUTPUT buffer (`OutputBuffer::GetResour()`), and every request/response rides this
-        // object's own mReceiverQueue.
-        //
-        // ⚠️ CURRENTLY A DOCUMENTED QUIET GATE -- see the body in BrnDirectorWorldMap.cpp for
-        // the full transcribed state machine, why it is gated, and the DELETE-when note.
-        bool LoadData(void* lpRequestInterface);
-
-    private:
-        // The staged state machine proper. LoadData wraps it in the PC request-staging
-        // bracket (see the FLAG PC-platform leaf note in BrnDirectorWorldMap.cpp): the
-        // console stages into the director output buffer's own RequestInterface<512> and
-        // the loading spine bridges it, where the PC stages straight onto the scripted-load
-        // GameData input the spine already pumps.
-        bool LoadDataStep(BrnResource::GameDataIO::RequestInterface<32768>* lpRequests);
+        // object's own mReceiverQueue. LoadingScriptedState::LoadDirectorModule @0x823E74C0
+        // bridges that interface into the frame's GameData input buffer
+        // (InputBuffer::AppendRequestInterface<512>) on every tick that Prepare reports
+        // "still preparing", which is what carries these requests to the streaming module.
+        bool LoadData(BrnResource::GameDataIO::RequestInterface<512>* lpRequestInterface);
 
     public:
 

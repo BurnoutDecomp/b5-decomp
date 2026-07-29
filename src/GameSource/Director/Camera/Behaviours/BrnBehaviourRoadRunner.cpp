@@ -19,6 +19,16 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"
 #include <cstddef>   // offsetof
 
+// The lane graph the truck walks (TrafficLaneTruck::Prepare / CalcTransformFromLanePosition).
+// BrnTrafficSection.h MUST precede BrnTrafficHull.h: it sets BRNTRAFFIC_SECTION_DEFINED so the
+// real 48-byte Section wins over Hull.h's placeholder (the same ordering BrnDirectorWorldMap.cpp
+// documents).
+#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"   // BrnTraffic::TrafficData::GetHull
+#include "SharedClasses/Traffic/BrnTrafficSection.h"            // BrnTraffic::Section::CalcDirectionAtParameter
+#include "SharedClasses/Traffic/BrnTrafficHull.h"               // BrnTraffic::Hull::GetSection / mpaRungs
+#include "rw/math/vpu/vector3_operation.h"                      // operator+ (lane point + direction)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the lane-seated diagnostic
+
 namespace BrnDirector
 {
 namespace Camera
@@ -31,6 +41,112 @@ static_assert(offsetof(TrafficLaneTruck, mLocalAngularVelocity) == 0x60, "angula
 static_assert(offsetof(TrafficLaneTruck, mLinearVelocity)       == 0x70, "linear velocity @ +0x70");
 static_assert(offsetof(TrafficLaneTruck, mfSpeed)               == 0x80, "speed @ +0x80");
 static_assert(offsetof(TrafficLaneTruck, mbPrepared)            == 0x8C, "mbPrepared @ +0x8C");
+
+// ----------------------------------------------------------------------------
+// TrafficLaneTruck::CalcTransformFromLanePosition @0x8222A640
+//
+// Build the truck's world transform from its current lane position: sample the lane's forward
+// direction at the current (section, rung, parameter) and make a look-at frame from the lane
+// point toward point + direction.
+//
+//   assert(worldMap.meLoadingState == E_LOADING_STATE_LOADED)   // BrnDirectorWorldMap.h:93
+//   hull    = trafficData->mpapHulls[mLanePosition.muHullIndex] // *(4*(this+24) + *(td+12))
+//   section = Hull::GetSection(hull, mLanePosition.muSection)   // *(this+28)
+//   section->CalcDirectionAtParameter(hull->mpaRungs /*hull+20*/,
+//                                     broadcast(mLanePosition.mfParamAlongSection /*this+20*/),
+//                                     mLanePosition.muRung /*this+29*/, lDirection)
+//   mTransform /*this+32*/ = Utils::CreateLookAt(mLanePosition.mPosition,
+//                                                mLanePosition.mPosition + lDirection)
+//     (the vaddfp of v1 = *this+0 and v0 = lDirection feeds CreateLookAt's second vector arg;
+//      its 4-row sret is then copied row-by-row into this+0x20..0x50)
+// ----------------------------------------------------------------------------
+void TrafficLaneTruck::CalcTransformFromLanePosition(const BrnDirector::WorldMap& lrWorldMap)
+{
+    const BrnTraffic::TrafficData* lpTrafficData = lrWorldMap.GetTrafficData();
+    const BrnTraffic::Hull*        lpHull        = lpTrafficData->GetHull(mLanePosition.muHullIndex);
+    const BrnTraffic::Section*     lpSection     = lpHull->GetSection(mLanePosition.muSection);
+
+    // ::VecFloat -- the GLOBAL broadcast-lane type BrnTraffic::Section takes. Unqualified
+    // `VecFloat` in this namespace would bind to BrnDirector::VecFloat (the Timestep register),
+    // which is a different type.
+    const f32        lfParam = mLanePosition.mfParamAlongSection;
+    const ::VecFloat lParam  = { lfParam, lfParam, lfParam, lfParam };
+
+    rw::math::vpu::Vector3 lDirection;
+    lpSection->CalcDirectionAtParameter(lpHull->mpaRungs, lParam, mLanePosition.muRung, lDirection);
+
+    // ⚠️ ONE DOCUMENTED QUIET GATE -- the look-at build:
+    //     mTransform = Utils::CreateLookAt(mLanePosition.mPosition,
+    //                                      mLanePosition.mPosition + lDirection);
+    // BrnDirector::Camera::Utils::CreateLookAt @0x8220C4F8 is DECLARATION-ONLY in this tree
+    // (CameraUtils.h declares both overloads; CameraUtils.cpp bodies neither). Its console body
+    // is a ~400-instruction VMX pipeline -- two IsValid lane checks, a vrsqrtefp +
+    // Newton-Raphson normalise of the eye->target vector with a degenerate-direction fallback,
+    // then the cross-product basis assembly -- and the project rules forbid paraphrasing that
+    // scalar-wise. Writing a hand-rolled basis here would silently install a WRONG camera
+    // orientation, which is worse than none.
+    // CONSEQUENCE: mTransform keeps whatever Construct left; every reader of it
+    // (TrafficLaneTruck::GetTransform and the camera placement) lives inside
+    // BehaviourRoadRunner::Update's still-gated prepared leg, so nothing consumes it this wave.
+    // DELETE-WHEN: Utils::CreateLookAt is bodied.
+    //
+    // [diagnostic, one-shot] the lane sample itself is REAL and is the end-to-end proof that
+    // the ported lane graph walks: hull -> section -> rung table -> a lane tangent.
+    {
+        static bool sbLogged = false;
+        if (!sbLogged)
+        {
+            sbLogged = true;
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[RoadRunner] lane seated: hull=" << (s32)mLanePosition.muHullIndex
+                    << " section=" << (s32)mLanePosition.muSection
+                    << " rung=" << (s32)mLanePosition.muRung
+                    << " pos=(" << mLanePosition.mPosition.x << "," << mLanePosition.mPosition.y
+                    << "," << mLanePosition.mPosition.z << ")"
+                    << " dir=(" << lDirection.x << "," << lDirection.y << "," << lDirection.z << ")\n";
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficLaneTruck::Prepare @0x82247A08 -- seat the truck on the lane nearest lPoint.
+//
+//   mLanePosition = worldMap.GetLanePositionNearestPoint(lPoint);   // 4 QWORD copies (32B)
+//   if (!mLanePosition.mbValid /*this+30*/) return false;           // li r3,0
+//   CalcTransformFromLanePosition(worldMap);
+//   mLocalAngularVelocity /*this+96*/  = 0;      // stvx128 v0 (vspltisw 0)
+//   mLinearVelocity       /*this+112*/ = 0;      // stvx128 v0
+//   mfSpeed               /*this+128*/ = 20.0f;
+//   mfBlendDistance       /*this+136*/ = 20.0f;
+//   mfTransformBlendAmount/*this+132*/ = 0.1f;
+//   mbPrepared            /*this+140*/ = true;
+//   return true;
+//
+// ⭐ THIS IS THE FUNCTION THE WHOLE LANE-DATA CAMPAIGN WAS FOR. Its one gate is
+// mLanePosition.mbValid, which GetLanePositionNearestPoint only raises when the world map's
+// TrafficData is really loaded -- which it now is (WorldMap::LoadData is live).
+// ----------------------------------------------------------------------------
+bool TrafficLaneTruck::Prepare(const BrnDirector::WorldMap& lrWorldMap,
+                               rw::math::vpu::Vector3 lPoint)
+{
+    mLanePosition = lrWorldMap.GetLanePositionNearestPoint(lPoint);
+
+    if (!mLanePosition.mbValid)
+        return false;
+
+    CalcTransformFromLanePosition(lrWorldMap);
+
+    mLocalAngularVelocity  = rw::math::vpu::Vector3();
+    mLinearVelocity        = rw::math::vpu::Vector3();
+    mfSpeed                = 20.0f;
+    mfBlendDistance        = 20.0f;
+    mfTransformBlendAmount = 0.1f;
+    mbPrepared             = true;
+    return true;
+}
 
 // ----------------------------------------------------------------------------
 // TrafficLaneTruck::GetTransform @0x821F53D8
@@ -242,15 +358,37 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     if (!IsPrepared())
     {
         // The console hands the truck the world map and a Vector3 taken from the shared info at
-        // +0x280 (inside mPlayerInfo -- the subject the fly-by seeds its lane from; that
-        // member's interior is not mapped yet, see Behaviour.h). Both are gated, and the call
-        // fails with no traffic data either way, so the fail branch is taken directly.
-        (void)lrInfo;
-        Fail(lrCamera, 6);                             // bl Behaviour::Fail(this, camera, 6)
-        return true;
+        // +0x280 -- inside mPlayerInfo, i.e. the PLAYER CAR'S POSITION: the fly-by seats itself
+        // on the lane nearest the subject it is about to fly over.
+        //
+        // ⚠️ FLAG PC seed point: mPlayerInfo's interior is not mapped (Behaviour.h models it as
+        // a named opaque sub-object because embedding VehicleInfo drags in a pre-existing
+        // SuspensionSpring ODR fork), so the seed point cannot be sourced from it yet. The
+        // world map's own lane search is fed the ORIGIN instead, which
+        // GetLanePositionNearestPoint answers with the lane nearest the city origin -- a real
+        // lane on a real road, just not the one under the player.
+        // DELETE-WHEN: mPlayerInfo becomes a real VehicleInfo (the SuspensionSpring fork is
+        // reconciled), then pass lrInfo.mPlayerInfo's position.
+        const BrnDirector::WorldMap* lpWorldMap = lrInfo.GetWorldMap();
+        const rw::math::vpu::Vector3 lSeedPoint = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+        if (lpWorldMap == 0 || !mTrafficLaneTruck.Prepare(*lpWorldMap, lSeedPoint))
+        {
+            Fail(lrCamera, 6);                         // bl Behaviour::Fail(this, camera, 6)
+            return true;
+        }
+
+        // <first-frame mode seed> -- ⚠️ GATE: it reads the authored Parameters block through
+        // mpParameters, which the attract state never sets (NewBehaviour's 3rd argument is 0).
+        SetPrepared();
     }
 
-    // ⚠️ GATE: the ~280-line prepared body (see the banner).
+    // ⚠️ GATE: the ~280-line prepared body -- the two diagonal near-clip line tests, the
+    // collision timers, the height smoother, TrafficLaneTruck::Update (which needs
+    // MoveAlongTrafficLaneForwards @0x8222A728 / Backwards @0x8222B100, ~17 KB of VMX
+    // pseudocode each), the camera placement (truck transform + up*height + right*2.25,
+    // SetFOV(95)), the banking-roll VMX sin/cos pipeline, the fixation SLerp and the shake
+    // concat. See the banner.
     return true;                                       // every console exit is `li r3, 1`
 }
 

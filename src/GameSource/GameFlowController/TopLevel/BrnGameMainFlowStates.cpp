@@ -1,5 +1,4 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
-#include <cstdlib>   // getenv (BRN_LANE_PUMP diagnostic gate)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -82,15 +81,6 @@ void LoadingScriptedState::FinishLoading() {}
 // ELoadingStateStage enum: 1 sound-again, 2 effects, 3 gamestate2, 4 GUI second prepare,
 // 5 world module, 6 sound world-loaded cue -> 8, 7 world collision, 8 done).
 s32 gBrnScriptedLoadStage = 0;
-
-// ⚠️ LANE-REQUEST PUMP GATE (2026-07-29 lane-data wave). Env BRN_LANE_PUMP=1 turns on the
-// inline GameDataModule pump in the E_LOADINGSTAGE_DIRECTORMODULE leg (see the FLAG PC
-// placement note there). It is OFF by default because the module is not yet safe to pump at
-// that point in boot -- see the DELETE-WHEN note. Read once at first use.
-bool gbBrnLaneRequestPumpEnabled = []() {
-    const char* lpcEnv = std::getenv("BRN_LANE_PUMP");
-    return lpcEnv != 0 && lpcEnv[0] == '1';
-}();
 
 namespace
 {
@@ -242,20 +232,43 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
     lpUpdateInputStack->DestroyIOBuffer(&lpWorldInput);
 }
 
-// X360: LoadDirectorModule -- the E_LOADINGSTAGE_DIRECTORMODULE leg of InitialLoadingScreen's
-// stage machine, in the same shape as LoadSoundModule above: create the module's IO buffer on
-// the update stack, run ONE tick of its staged Prepare, destroy the buffer, report done.
+// @ 0x823E74C0 -- LoadDirectorModule, the E_LOADINGSTAGE_DIRECTORMODULE leg of
+// InitialLoadingScreen's stage machine, in the same shape as LoadSoundModule/LoadWorldModule.
+// The X360 body, statement for statement:
+//   * CreateIOBuffer<DirectorIO::OutputBuffer>(gm->mpUpdateOutputBufferStack, &lpDirectorOut,
+//     "Director")
+//   * prepared = gm->mDirectorModule.Prepare(lpDirectorOut,
+//                    lpGameDataOutputBuffer->GetAllocatorList())              (vtable +68)
+//   * still preparing: LockForRead(lpDirectorOut);
+//        VariableEventQueue<32768,16>::Append<512,16>( <the GameData input's AttribSys queue>,
+//                                                      <the director output's @0x510 queue> );
+//        InputBuffer::AppendRequestInterface<512>(lpGameDataInputBuffer,
+//                                                 lpDirectorOut->Get());
+//        UnlockForRead(lpDirectorOut);
+//   * destroy the buffer and return `prepared`.
+//
+// ⭐ THIS IS THE PER-FRAME GAMEDATA IO BRACKET the lane load was blocked on. The requests
+// WorldMap::LoadData stages onto the director output's RequestInterface<512> during
+// DirectorModule::Prepare's stage 3 leave through the AppendRequestInterface<512> below and
+// are serviced by the resource pump (BrnGameModule's per-frame GameDataModule::Update tick,
+// the console's ResourceUpdateThread @0x823BC9B8). Without it the state machine waited for a
+// reply that could never arrive and the loading flow wedged at stage 3.
 //
 // DirectorModule::Prepare @0x822712D8 is a 6-stage machine (register the debug component ->
 // base ModuleSingleBuffered::Prepare -> DirectorResourceManager::Prepare -> WorldMap::LoadData
 // -> MainDirector::Prepare -> done); it write-locks the output buffer for the whole call and
 // returns true only at the last stage, so the caller pumps it until it does.
 //
-// [FLAG PC placement] the X360 threads the frame's GameData IO through every LoadXxxModule so
-// the director's resource requests reach the streamer; that bracket is not reconstructed here
-// (same deferral as LoadSoundModule), and the two Prepare stages that would use it
-// (DirectorResourceManager::Prepare, WorldMap::LoadData) are themselves documented gates.
-bool LoadingScriptedState::LoadDirectorModule()
+// [deferred] the AttribSys queue append. The X360's first append moves the director output's
+// @0x510 VariableEventQueue<512,16> into the GameData input's AttribSys request queue (+0x8014
+// -- the same destination LoadWorldModule's own AttribSys append uses). That member is still
+// modelled as part of the committed mTimerRequestInterface byte span (see the FINDING in
+// BrnDirectorModuleIOOutputBuffer.hpp); the director issues no vault requests on the
+// reconstructed path, so the append lands when that member is re-homed. The
+// AppendRequestInterface<512> -- the half the lane load rides -- is REAL.
+bool LoadingScriptedState::LoadDirectorModule(
+    BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+    const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
 {
     BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
@@ -264,11 +277,37 @@ bool LoadingScriptedState::LoadDirectorModule()
     lpUpdateOutputStack->CreateIOBuffer(&lpDirectorOutput, "Director");
     // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc; the
     // generic PC template placement-news only (same restoration as LoadWorldModule).
-    lpDirectorOutput->CgsModule::IOBuffer::Construct();
+    // OutputBuffer::Construct also brings up the embedded RequestInterface<512> queue, which
+    // WorldMap::LoadData stages onto.
+    lpDirectorOutput->Construct();
 
-    // liPrepareArg: the X360 passes the module's own prepare argument through; 0 is the
-    // value MainDirector::Prepare reads as "no replay restore".
+    // The X360 reads the allocator list out of the GameData OUTPUT buffer (read-locked by the
+    // caller) and passes it as DirectorModule::Prepare's second argument, which
+    // MainDirector::Prepare forwards straight to ICEWrapper::Prepare. The committed
+    // DirectorModule::Prepare signature still types that argument as the plain s32 the older
+    // recon named `liPrepareArg`; see the FLAG below.
+    const BrnResource::GameDataIO::AllocatorList* lpAllocatorList =
+        lpGameDataOutputBuffer ? lpGameDataOutputBuffer->GetAllocatorList() : 0;
+
+    // FLAG signature debt: DirectorModule::Prepare's 2nd parameter IS the allocator list
+    // (X360 0x823E74C0 `lwz r9,0x44(vtable); r5 = GetAllocatorList(...)`), not an s32 replay
+    // token. Its only consumer -- ICEWrapper::Prepare -- is a DirectorLinkStubs no-op, so the
+    // value is currently unused either way; retype the whole chain
+    // (DirectorModule::Prepare -> MainDirector::Prepare -> ICEWrapper::Prepare) when the ICE
+    // wrapper is bodied.
+    (void)lpAllocatorList;
     const bool lbPrepared = lpGameModule->GetDirectorModule().Prepare(lpDirectorOutput, 0);
+
+    if (!lbPrepared && lpGameDataInputBuffer != 0)
+    {
+        // Still preparing: forward the module's staged resource requests into the GameData
+        // input. The X360 brackets this with the source READ lock only -- the destination
+        // write lock is held by the caller (InitialLoadingScreen::Update opens the frame with
+        // LockForWrite on the GameData input) for the whole stage switch.
+        lpDirectorOutput->LockForRead();
+        lpGameDataInputBuffer->AppendRequestInterface<512>(*lpDirectorOutput->Get());
+        lpDirectorOutput->UnlockForRead();
+    }
 
     lpUpdateOutputStack->DestroyIOBuffer(&lpDirectorOutput);
     return lbPrepared;
@@ -429,12 +468,11 @@ void LoadingScriptedState::Update()
             UpdateWorldModule(&s_GameDataInput);
         }
 
-        // Pump the GameData streaming module with this frame's staged requests. [PC
-        // placement] the X360 pumps GameDataModule::Update on the resource-update thread
-        // while the spine runs; the single-threaded PC host runs it inline here. The pump
-        // drains the input queue, services the world requests, routes the internal
-        // completions (ProcessInternal*Response) and republishes the allocator list.
-        BrnGame::GetMainGameDataModule()->Update(&s_GameDataInput, &s_GameDataOutput);
+        // The GameData pump used to run here. It has MOVED to the frame level -- the game
+        // module's per-frame resource tick (BrnGameModule::ResourceUpdateThread, the console's
+        // IThreadClass::ResourceUpdateThread @0x823BC9B8) -- so that EVERY flow state's staged
+        // requests are serviced, not just this spine's. The X360's scripted-load spine
+        // @0x823F22D8 does not pump the module either: the resource thread does, concurrently.
     }
     // stage 8 (DONE): the X360 runs the full module cascade (BrnGameModule::DoUpdate);
     // the PC host loop owns the module drive -- see DoUpdate's PC-platform note.
@@ -563,6 +601,18 @@ namespace
 // hookup. The per-stage LoadXxxModule bodies are also [stubs] (interim dwell) until reconstructed.
 void MainGameFlowStateInitialLoadingScreen::Update()
 {
+    // ⭐ THE PER-FRAME GAMEDATA IO BRACKET (X360 @0x823EF688, its first statements).
+    // The console opens this Update by reading the game module's GameData buffer pair
+    // (gm+10055440 input / gm+10055444 output -- the SAME pair GamePrepare and the scripted
+    // spine bracket), taking the input's WRITE lock and the output's READ lock, and holding
+    // both across the whole stage switch. Every LoadXxxModule is then threaded with the pair:
+    // that is how a module's staged resource requests reach the streaming pump while the boot
+    // loading screen is up. Reproduced exactly here.
+    BrnResource::GameDataIO::InputBuffer*  lpGameDataInput =
+        BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+    BrnResource::GameDataIO::OutputBuffer* lpGameDataOutput =
+        BrnGameMainFlowController::GetScriptedLoadGameDataOutput();
+
     // X360 @0x823EF688: the state re-posts the show command onto the dispatch write buffer
     // every update tick (the one-shot slot is wiped by each end-of-frame swap).
     GetDispatchWriteBuffer()->ShowLoadingScreen();
@@ -576,6 +626,9 @@ void MainGameFlowStateInitialLoadingScreen::Update()
             CgsDev::DebugManager::ThreadSafeRelease(lpDebug);
         }
     }
+
+    lpGameDataInput->LockForWrite();
+    lpGameDataOutput->LockForRead();
 
     switch (meLoadingScreenStage)
     {
@@ -627,8 +680,11 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         }
         break;
     case E_LOADINGSTAGE_DIRECTORMODULE:
-        // X360: LoadDirectorModule -- REAL (2026-07-29, DJ fly-by campaign). Was an interim
-        // timed dwell while the DirectorModule was an ODR stub.
+        // X360 0x823E74C0: LoadDirectorModule -- REAL, and now threaded with this frame's
+        // GameData IO pair (2026-07-29). DirectorModule::Prepare's stage 3 is
+        // WorldMap::LoadData, whose TriggerData / traffic-lane / AI-lane requests ride the
+        // director OUTPUT buffer; LoadDirectorModule appends them into the GameData input on
+        // every not-yet-prepared tick, and the resource pump services them.
         {
             static bool s_bLoggedDirectorLoad = false;
             if (!s_bLoggedDirectorLoad)
@@ -638,42 +694,17 @@ void MainGameFlowStateInitialLoadingScreen::Update()
                     *CgsDev::Log::gpDebugPrint
                         << "InitialLoadingScreen: loading stage 3 (DirectorModule) -- real load\n";
             }
-            const bool lbDirectorPrepared = LoadDirectorModule();
-
-            // [FLAG PC placement] PUMP THE GAMEDATA MODULE FOR THE DIRECTOR'S LANE REQUESTS.
-            //
-            // DirectorModule::Prepare's stage 3 is WorldMap::LoadData, which requests
-            // TriggerData / the traffic lanes / the AI lanes and will not advance until each
-            // reply lands. On the X360 those requests ride the director OUTPUT buffer and the
-            // frame's GameData IO bracket -- which every LoadXxxModule is threaded with --
-            // carries them to the streaming module. On the PC that bracket does not exist yet
-            // and LoadingScriptedState::Update (which owns the pump) only starts running from
-            // the Marketing screen onwards, i.e. AFTER this stage. Without a pump here the
-            // requests are staged and never serviced, LoadData never sees a reply, and the
-            // whole loading flow wedges at stage 3.
-            //
-            // So pump the module inline for exactly as long as this stage runs -- the same
-            // single-threaded PC placement LoadingScriptedState::Update already uses for its
-            // own per-frame pump. DELETE-WHEN: the per-frame GameData IO bracket lands and is
-            // threaded through LoadDirectorModule like the X360 does.
-            if (gbBrnLaneRequestPumpEnabled)
-            {
-                BrnGame::GetMainGameDataModule()->Update(
-                    BrnGameMainFlowController::GetScriptedLoadGameDataInput(),
-                    BrnGameMainFlowController::GetScriptedLoadGameDataOutput());
-            }
-
-            if (lbDirectorPrepared)
+            if (LoadDirectorModule(lpGameDataInput, lpGameDataOutput))
                 AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
         }
         break;
     case E_LOADINGSTAGE_SOUND_MODULE:
         // X360: LoadSoundModule (0x823E75A8) -- the real per-frame load: create the Root sound IO
         // buffer pair on the update IO stacks, drive RootSoundModule::Prepare (vtable+64) until it
-        // reports prepared, forwarding its resource requests meanwhile, then advance. [follow-on]
-        // the X360 Update threads this frame's GameData input/output buffers into every
-        // LoadXxxModule (the per-frame GameData IO bracket at the top of the real Update body);
-        // that bracket isn't reconstructed yet, so the args are null (see LoadSoundModule).
+        // reports prepared, forwarding its resource requests meanwhile, then advance. Now threaded
+        // with this frame's GameData IO pair, exactly as the X360 threads every LoadXxxModule
+        // (the request forward inside LoadSoundModule is still gated on the RootOutputBuffer's
+        // request interfaces -- see that body).
         {
             static bool s_bLoggedSoundLoad = false;
             if (!s_bLoggedSoundLoad)
@@ -682,7 +713,7 @@ void MainGameFlowStateInitialLoadingScreen::Update()
                 if (CgsDev::Message::gxMessageFilterFlags & 1)
                     *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: loading stage 4 (SoundModule) -- real load\n";
             }
-            if (LoadSoundModule(0, 0))
+            if (LoadSoundModule(lpGameDataInput, lpGameDataOutput))
                 AdvanceLoadingStage(E_LOADINGSTAGE_NETWORK);
         }
         break;
@@ -703,19 +734,25 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         AdvanceLoadingStage(E_LOADINGSTAGE_REPLAYS);
         break;
     case E_LOADINGSTAGE_REPLAYS:
-        // [X360 ARTIST divergence] Not a Replays load -- this is where the X360 prepares the
-        // GameDataModule (case 8: GameDataModule::Prepare via vtable+64). Now WIRED: drive the real
-        // GameDataModule::Prepare each frame until it reports ready (its resumable stage machine
-        // brings up the resource module tree -- base + ResourceModule::Prepare chaining Memory/Pool/
-        // Bundle/FileSystem). The bank/pool/allocator creation inside Prepare is still stubbed
-        // (reports success) until step 5a/5b; bundle streaming + file I/O remain a later phase.
+        // ⚠️ CORRECTED 2026-07-29. This case's old note claimed the X360 prepares the
+        // GameDataModule here. It does NOT: the asm is
+        // `(*(*(gm+0x8BD300) + 0x40))(gm+0x8BD300, GetAllocatorList(gameDataOutput))`, and
+        // gm+0x8BD300 is the REPLAYS module (the only other functions that touch that offset
+        // are BrnGameModule::Construct/Destruct/GameRelease and DoUpdate_Replays{Pre,Post}Sim).
+        // So stage 8 really is a Replays prepare taking just the allocator list.
+        // The GameDataModule is prepared MUCH earlier on the console -- BrnGameModule::Prepare
+        // @0x823DB848 stage 3 pumps `(*(gm[1561280]+64))(gm+6245120, inStack, outStack,
+        // gameDataInput, gameDataOutput)` until it returns true, before the flow controller
+        // exists -- and BrnGameModule::GamePrepare already reproduces that on the PC (it drives
+        // mGameDataModule.Prepare to completion before GameMain runs). Keeping the call here is
+        // therefore harmless (the module's own resumable machine reports done immediately) and
+        // it is the Replays prepare that is [deferred].
         if (!g_bLoggedGameDataPrepare)
         {
             g_bLoggedGameDataPrepare = true;
             if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: preparing GameDataModule (case 8)\n";
+                *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: stage 8 (Replays prepare [deferred])\n";
         }
-        // Prepare the game's one GameDataModule (already Construct'd by BrnGameModule::Construct).
         if (BrnGame::GetMainGameDataModule()->Prepare(0, 0))
             AdvanceLoadingStage(E_LOADINGSTAGE_DONE);
         break;
@@ -737,6 +774,13 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         }
         break;
     }
+
+    // Close the frame's GameData IO bracket (X360 @0x823EF688's tail: UnlockForWrite(input),
+    // UnlockForRead(output), then the GUI IO buffer teardown). The resource pump takes its own
+    // locks, so it can only run once these are released -- see BrnGameModule's per-frame
+    // resource tick.
+    lpGameDataOutput->UnlockForRead();
+    lpGameDataInput->UnlockForWrite();
 }
 
 // Advance to the next load stage + log it (the X360 stages are visible in BrnGame.log so the real

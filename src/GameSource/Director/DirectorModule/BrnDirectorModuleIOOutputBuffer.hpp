@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"          // CgsModule::IOBuffer base + read/write lock-state queries
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"          // CgsGraphics::Camera (committed, sizeof 0x170, pointer-free)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (committed; pointer members widen on x64)
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // GameDataIO::RequestInterface<512> (mResourceInterface)
 
 // BrnDirector::DirectorIO::OutputBuffer -- the Director module's per-frame OUTPUT payload buffer,
 // the write-side sibling of BrnDirector::DirectorIO::InputBuffer (BrnDirectorModuleIO.h). Like
@@ -20,9 +21,21 @@
 //     mCgsCamera                @0x0010 (16)     SetCgsCamera:     CgsGraphics::Camera::operator= (this+16)
 //     mCameraOutput             @0x0180 (384)    SetCameraOutput:  BrnDirector::Camera::Camera::operator= (this+384)
 //     mResourceInterface        @0x02E0 (736)    Get (read) / GetResour (write)
+//                                                 == GameDataIO::RequestInterface<512> (GROWN)
 //     mDirectorOutputInterface  @0x04F0 (1264)   GetDirectorOu (read) / GetDirectorOutputIn (write)
 //     mTimerRequestInterface    @0x0500 (1280)   GetTimerRequestIn (read) / GetTimerRequestInterfac (write)
 //                                                 + a sub-interface 16 bytes in @0x0510 (see below)
+//
+// ⭐ 2026-07-29 FINDING about the +0x510 sub-interface. LoadDirectorModule @0x823E74C0 feeds
+// the @0x510 read-getter (0x823B24A0) straight into
+// `VariableEventQueue<32768,16>::Append<512,16>` on the GameData input's queue at +0x8014 --
+// which is the GameData input's ATTRIBSYS request queue (the same destination
+// LoadWorldModule's AttribSys append uses). So @0x510 is a VariableEventQueue<512,16> holding
+// ATTRIBSYS VAULT requests, not a timer sub-record; "GetTimerRequestSubInterface" is a
+// mis-naming inherited from the truncated IDA symbol. NOT renamed/re-homed in this wave: the
+// director issues no vault requests on the reconstructed path, and re-homing it would re-lay
+// the committed mTimerRequestInterface span. Rename it together with the append when the
+// director's AttribSys leg lands.
 //     mDirectorInterface        @0x0720 (1824)   GetDir (read)
 //     mReplayRequestInterface   @0x0724 (1828)   GetReplayRe (read) / GetReplayRequestI (write)
 //
@@ -58,8 +71,18 @@ namespace DirectorIO
 {
     struct OutputBuffer : public CgsModule::IOBuffer
     {
+        // The X360 CreateIOBuffer<OutputBuffer> instantiation runs Construct after the stack
+        // alloc: the IOBuffer base status plus the embedded request queue's own Construct
+        // (a VariableEventQueue asserts "Not Constructed" on its first AddEvent otherwise).
+        // The generic PC CreateIOBuffer<T> template only placement-news, so every creation
+        // site calls this explicitly -- same restoration as the GUI input buffer's Construct.
+        void Construct();
+
         // --- read-lock-asserted getters (return &member) ---
-        u8*       Get();                        // -> mResourceInterface        @0x02E0
+        // X360 0x823B33B0 -> mResourceInterface @0x02E0. The consumer is
+        // LoadDirectorModule's InputBuffer::AppendRequestInterface<512>, whose parameter is
+        // `const RequestInterface<512>&` -- hence the const return.
+        const BrnResource::GameDataIO::RequestInterface<512>* Get();
         u8*       GetDir();                     // -> mDirectorInterface        @0x0720
         u8*       GetDirectorOu();              // -> mDirectorOutputInterface  @0x04F0
         u8*       GetReplayRe();                // -> mReplayRequestInterface   @0x0724
@@ -69,7 +92,10 @@ namespace DirectorIO
         u8*       GetTimerRequestSubInterface();     // -> mTimerRequestInterface+0x10 (this+0x510)
 
         // --- write-lock-asserted getters (return &member) ---
-        u8*       GetResour();                  // -> mResourceInterface        @0x02E0
+        // X360 0x822077A0 -> mResourceInterface @0x02E0. This is the interface
+        // DirectorModule::Prepare hands to WorldMap::LoadData, which stages the trigger /
+        // traffic-lane / AI-lane requests onto it.
+        BrnResource::GameDataIO::RequestInterface<512>* GetResour();
         u8*       GetDirectorOutputIn();        // -> mDirectorOutputInterface  @0x04F0
         u8*       GetReplayRequestI();          // -> mReplayRequestInterface   @0x0724
         u8*       GetTimerRequestInterfac();    // -> mTimerRequestInterface    @0x0500
@@ -105,7 +131,16 @@ namespace DirectorIO
         // offsets (next-minus-this). Correct console layout; not host-byte-pinnable behind the
         // widening camera above. Grow each into its real type additively when its home is
         // reconstructed.
-        u8  mResourceInterface[0x04F0 - 0x02E0];                 // @0x02E0 (console)
+        // @0x02E0 (console): GROWN to its REAL type (2026-07-29, DJ fly-by campaign).
+        // Attested by LoadingScriptedState::LoadDirectorModule @0x823E74C0, which feeds this
+        // exact member to BrnResource::GameDataIO::InputBuffer::AppendRequestInterface<512>
+        // (mangled ??$AppendRequestInterface@$0CAA@...), and by WorldMap::LoadData
+        // @0x8225F5A0, which calls VariableEventQueue<512,16>::AddEvent and
+        // RequestInterface<512>::LoadTrafficLanes/GetAILanes on it. Its console stride is
+        // 0x4F0-0x2E0 == 528 == 512 + the 16-byte VariableEventQueue header, and the host
+        // stride is the same (the queue is byte storage plus three s32 -- no pointer member),
+        // so growing it does NOT move mDirectorOutputInterface or anything after it.
+        BrnResource::GameDataIO::RequestInterface<512> mResourceInterface;   // @0x02E0 (console)
         u8  mDirectorOutputInterface[0x0500 - 0x04F0];           // @0x04F0 (console)
         u8  mTimerRequestInterface[0x0720 - 0x0500];             // @0x0500 (console) (+0x10 sub-iface)
         u8  mDirectorInterface[0x0724 - 0x0720];                 // @0x0720 (console) 4-byte word
