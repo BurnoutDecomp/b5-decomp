@@ -75,23 +75,14 @@ void TrafficLaneTruck::CalcTransformFromLanePosition(const BrnDirector::WorldMap
     rw::math::vpu::Vector3 lDirection;
     lpSection->CalcDirectionAtParameter(lpHull->mpaRungs, lParam, mLanePosition.muRung, lDirection);
 
-    // ⚠️ ONE DOCUMENTED QUIET GATE -- the look-at build:
-    //     mTransform = Utils::CreateLookAt(mLanePosition.mPosition,
-    //                                      mLanePosition.mPosition + lDirection);
-    // BrnDirector::Camera::Utils::CreateLookAt @0x8220C4F8 is DECLARATION-ONLY in this tree
-    // (CameraUtils.h declares both overloads; CameraUtils.cpp bodies neither). Its console body
-    // is a ~400-instruction VMX pipeline -- two IsValid lane checks, a vrsqrtefp +
-    // Newton-Raphson normalise of the eye->target vector with a degenerate-direction fallback,
-    // then the cross-product basis assembly -- and the project rules forbid paraphrasing that
-    // scalar-wise. Writing a hand-rolled basis here would silently install a WRONG camera
-    // orientation, which is worse than none.
-    // CONSEQUENCE: mTransform keeps whatever Construct left; every reader of it
-    // (TrafficLaneTruck::GetTransform and the camera placement) lives inside
-    // BehaviourRoadRunner::Update's still-gated prepared leg, so nothing consumes it this wave.
-    // DELETE-WHEN: Utils::CreateLookAt is bodied.
-    //
-    // [diagnostic, one-shot] the lane sample itself is REAL and is the end-to-end proof that
-    // the ported lane graph walks: hull -> section -> rung table -> a lane tangent.
+    // The look-at build (asm 0x8222A6CC..0x8222A70C): v1 = *this+0 == mLanePosition.mPosition,
+    // v0 = the sampled lane direction, `vaddfp v2, v1, v0` makes the target, and the four rows
+    // of CreateLookAt's sret are copied into this+0x20..0x50.
+    mTransform = Utils::CreateLookAt(mLanePosition.mPosition,
+                                     rw::math::vpu::Add(mLanePosition.mPosition, lDirection));
+
+    // [diagnostic, one-shot] the lane sample is REAL and is the end-to-end proof that the
+    // ported lane graph walks: hull -> section -> rung table -> a lane tangent -> a frame.
     {
         static bool sbLogged = false;
         if (!sbLogged)
@@ -105,7 +96,11 @@ void TrafficLaneTruck::CalcTransformFromLanePosition(const BrnDirector::WorldMap
                     << " rung=" << (s32)mLanePosition.muRung
                     << " pos=(" << mLanePosition.mPosition.x << "," << mLanePosition.mPosition.y
                     << "," << mLanePosition.mPosition.z << ")"
-                    << " dir=(" << lDirection.x << "," << lDirection.y << "," << lDirection.z << ")\n";
+                    << " dir=(" << lDirection.x << "," << lDirection.y << "," << lDirection.z << ")"
+                    << " frameX=(" << mTransform.xAxis.x << "," << mTransform.xAxis.y
+                    << "," << mTransform.xAxis.z << ")"
+                    << " frameY=(" << mTransform.yAxis.x << "," << mTransform.yAxis.y
+                    << "," << mTransform.yAxis.z << ")\n";
             }
         }
     }

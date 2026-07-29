@@ -19,14 +19,21 @@
 //   GetFOVDegsFromZoom        @0x821F2490
 //   GetPitchAboutPointRads    @0x82205A60
 //
+// Bodied here (2 ledger functions, class:BrnDirector::Camera::Utils -- the look-at basis
+// builder, both overloads; see the KV_AXIS_* block below for the rodata attestation):
+//   CreateLookAt(Vector3, Vector3)          @0x8220C4F8   (CameraUtils.cpp:704)
+//   CreateLookAt(Vector3, Vector3, Vector3) @0x8220C960   (CameraUtils.cpp:767)
+//
 // DECLARATION-ONLY + FLAGGED (declared in CameraUtils.h, bodies not reconstructed --
 // each is an inline VMX minimax / corner lattice / permute over UNATTESTED raw rodata
-// coefficient or basis constants; bodying them store-for-store would fabricate those
+// coefficient constants; bodying them store-for-store would fabricate those
 // tables, so they are left unbodied per the no-fabrication rule):
 //   ApplyPitchAboutPointRads          @0x822183E0  (Sin/Cos minimax, rodata 82000BD0..82000C60)
 //   CalcNearClipCorners               @0x821F25B8  (XMVectorTan + VMX corner lattice)
 //   CreateAdjustedLookAt              @0x82221EB8  (vrefp128 + vperm128 mask unk_82CDA350)
-//   FindNonParallelNormalisedVectorTo @0x822171B0  (basis constant unk_82181510 unattested)
+//   FindNonParallelNormalisedVectorTo @0x822171B0  (the SECOND of its two returned constants
+//                                                   is still unattested; unk_82181510 is now
+//                                                   pinned -- see KV_AXIS_Y below)
 //   GetFOVDegsToFitObjectToScreenArea @0x8220C398  (VMX rsqrt/reciprocal Newton-refine + vsel)
 //   GetFOVDegsToFitObjectToScreenSize @0x8220C258  (two vrefp128 Newton-refine reciprocals)
 
@@ -54,6 +61,29 @@ namespace
 
     // pi/2 -- GetPitchAboutPointRads returns (pi/2 - acos(dir.y)) == asin(dir.y).
     const f32 KF_HALF_PI = 1.5707964f;
+
+    // ---- the identity-basis rodata block, DUMPED from the shipped image -----------------
+    // Headless IDA 9.3 over BURNOUT_X360_ARTIST.XEX read 0x82181500..0x8218153F as four
+    // consecutive 16-byte rows; only the first carries a symbol, and the other three are the
+    // `unk_8218151x` sentinels several TUs in this tree still describe as "unattested":
+    //
+    //   0x82181500  rw::math::vpu::detail::gIVector   3F800000 00000000 00000000 00000000  {1,0,0,0}
+    //   0x82181510  unk_82181510                      00000000 3F800000 00000000 00000000  {0,1,0,0}
+    //   0x82181520  unk_82181520                      00000000 00000000 3F800000 00000000  {0,0,1,0}
+    //   0x82181530  unk_82181530                      00000000 00000000 00000000 3F800000  {0,0,0,1}
+    //
+    // CreateLookAt reads exactly two of them: unk_82181510 lands where the three-argument
+    // overload takes its explicit lUpVector (so it IS the default up axis), and unk_82181520
+    // is the Z axis substituted when the eye->target direction is degenerate.
+    const Vector3 KV_AXIS_X = { 1.0f, 0.0f, 0.0f, 0.0f };   // gIVector      @0x82181500
+    const Vector3 KV_AXIS_Y = { 0.0f, 1.0f, 0.0f, 0.0f };   // unk_82181510  @0x82181510
+    const Vector3 KV_AXIS_Z = { 0.0f, 0.0f, 1.0f, 0.0f };   // unk_82181520  @0x82181520
+
+    // The tolerance every rw::math::vpu IsZero in this family is called with: the shipped
+    // splat source flt_82001770 == 0x34000000 == 2^-23 == FLT_EPSILON. (The vendor header's
+    // own default parameter is a looser 1e-6 placeholder, so the calls below pass this
+    // explicitly rather than silently widening the degenerate band by ten times.)
+    const f32 KF_VPU_EPSILON = 1.1920929e-07f;
 } // namespace
 
 // @ 0x821F22A0 -- CameraUtils.h:157/:160 range tripwires (both non-gating; the
@@ -149,6 +179,143 @@ f32 GetPitchAboutPointRads(Vector3 lCentre, Vector3 lPoint)
 
     const Vector3 lDir = rw::math::vpu::Normalize(lCentreToPoint);
     return KF_HALF_PI - std::acos(lDir.y);
+}
+
+// ----------------------------------------------------------------------------------------
+// @ 0x8220C4F8 -- CameraUtils.cpp:704. Build the world look-at frame for an eye looking at a
+// target, using the world up axis. THE single gate inside
+// TrafficLaneTruck::CalcTransformFromLanePosition, and the basis builder ~30 director call
+// sites share (xrefs_to lists BehaviourRig / BehaviourDebugFlyWorld / BehaviourGyroCam /
+// TrafficLaneTruck::Update + MoveAlongTrafficLane{Forwards,Backwards} / ArbStatePostEvent /
+// RaceCarEntityModule::SpawnRaceCar ...).
+//
+// The console body is one straight-line VMX pipeline; it is transcribed here operation for
+// operation from the raw instruction stream, not from the fused pseudocode:
+//
+//   v123 = lEyePosition (v1)      v127 = lTargetPosition (v2)      r28 = the sret pointer
+//   0x8220C51C..0x8220C5A4  IsValid(lEyePosition)      -- 3x vspltw128+vcmpeqfp. (x==x NaN test)
+//   0x8220C5A8..0x8220C628  IsValid(lTargetPosition)
+//   0x8220C630  vsubfp128 v13, v127, v123              -- lDirection = target - eye
+//   0x8220C648..0x8220C674  IsZero(lDirection, flt_82001770)
+//                             vandc against vslw128(-1,-1)==0x80000000  == per-lane fabs;
+//                             vrlimi128 v11,v0,1,1 copies lane x into lane w so the w lane
+//                             cannot poison the vcmpgtfp. "none set" (CR6 bit 2) test;
+//                           -> if none of |x|,|y|,|z| exceeds the tolerance, jump to the
+//                              fallback at 0x8220C720.
+//   0x8220C678..0x8220C6B8  vmsum3fp128 dot3 + vrsqrtefp + TWO Newton-Raphson refinements
+//                             (vnmsubfp t = 1 - d*e^2 ; vmaddfp e' = e + 0.5*e*t), then
+//                             vmulfp128 v127 = lDirection * e''      == Normalize(lDirection)
+//   0x8220C6BC..0x8220C71C  IsValid(the normalised Z) -- and if it is NOT valid, fall through
+//                             into the SAME fallback (this overload substitutes silently; the
+//                             three-argument one below asserts instead).
+//   0x8220C720  v127 = unk_82181520 == {0,0,1,0}
+//   0x8220C72C..0x8220C750  lXaxis = Cross(unk_82181510 /*{0,1,0,0}*/, lZaxis)
+//                             the SDK permute form: yzx(a*yzx(b) - yzx(a)*b).
+//   0x8220C754..0x8220C7B0  IsZero -> gIVector {1,0,0,0}, else the same rsqrt+2NR Normalize.
+//   0x8220C82C  assert IsValid(lXaxis)                                        (:741)
+//   0x8220C848..0x8220C860  lYaxis = Cross(lZaxis, lXaxis)  -- NOT normalised: Z and X are
+//                             already orthonormal, so their cross is unit by construction.
+//   0x8220C8C8  assert IsValid(lYaxis)                                        (:745)
+//   0x8220C914  assert !IsZero(lYaxis)                                        (:746)
+//   0x8220C934..0x8220C94C  stvx128 rows: [+0x00]=lXaxis [+0x10]=lYaxis [+0x20]=lZaxis
+//                                         [+0x30]=lEyePosition
+//
+// FLAG (PC-platform, numeric): the console's reciprocal square root is a vrsqrtefp estimate
+// refined by exactly two Newton-Raphson steps; the vendor Normalize this calls is the
+// de-optimised exact 1/sqrt (the standing convention of vendor/renderware/include/rw/math/vpu/
+// vector3_operation.h). The result is a touch TIGHTER than the console's, never looser.
+// FLAG: Cross() clears the w lane, where the console leaves the permute residue there; every
+// consumer reads xyz only (the affine rows are direction rows).
+Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition)
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(lEyePosition), "IsValid(lEyePosition)");
+    CGS_ASSERT(rw::math::vpu::IsValid(lTargetPosition), "IsValid(lTargetPosition)");
+
+    const Vector3 lDirection = rw::math::vpu::Subtract(lTargetPosition, lEyePosition);
+
+    Vector3 lZaxis = KV_AXIS_Z;
+    if (!rw::math::vpu::IsZero(lDirection, KF_VPU_EPSILON))
+    {
+        const Vector3 lNormalisedDirection = rw::math::vpu::Normalize(lDirection);
+        if (rw::math::vpu::IsValid(lNormalisedDirection))
+            lZaxis = lNormalisedDirection;
+    }
+
+    Vector3 lXaxis = rw::math::vpu::Cross(KV_AXIS_Y, lZaxis);
+    if (rw::math::vpu::IsZero(lXaxis, KF_VPU_EPSILON))
+        lXaxis = KV_AXIS_X;
+    else
+        lXaxis = rw::math::vpu::Normalize(lXaxis);
+
+    CGS_ASSERT(rw::math::vpu::IsValid(lXaxis), "IsValid(lXaxis)");
+
+    const Vector3 lYaxis = rw::math::vpu::Cross(lZaxis, lXaxis);
+
+    CGS_ASSERT(rw::math::vpu::IsValid(lYaxis), "IsValid(lYaxis)");
+    CGS_ASSERT(!rw::math::vpu::IsZero(lYaxis, KF_VPU_EPSILON), "!IsZero(lYaxis)");
+
+    Matrix44Affine lLookAt;
+    lLookAt.xAxis = lXaxis;
+    lLookAt.yAxis = lYaxis;
+    lLookAt.zAxis = lZaxis;
+    lLookAt.wAxis = lEyePosition;
+    return lLookAt;
+}
+
+// ----------------------------------------------------------------------------------------
+// @ 0x8220C960 -- CameraUtils.cpp:767. The same builder with an explicit up axis (the exported
+// symbol is `sub_8220C960`; it is this overload, pinned by its assert line numbers 0x30B/0x319/
+// 0x31D == 779/793/797 and by the fact that its v3 argument occupies exactly the slot the
+// two-argument form fills with unk_82181510).
+//
+//   v122 = lEyePosition (v1)   v2 = lTargetPosition   v123 = lUpVector (v3)   r25 = sret
+//   0x8220C990  vsubfp128 v127, v2, v122            -- lDirection = target - eye
+//   0x8220C998..0x8220C9C0  IsZero(lDirection) -> the unk_82181520 fallback at 0x8220CA08
+//   0x8220C9C4..0x8220CA00  the rsqrt + 2x Newton-Raphson Normalize -> v126 = lZaxis
+//   0x8220CA14..0x8220CAFC  assert IsValid(lZaxis) -- and unlike the two-argument overload
+//                             there is NO silent substitution here: the failure path builds a
+//                             CgsDev message stream, appends the PRE-normalised direction
+//                             (`sub_82203F70` with v1 = v127) and fires at line :779.
+//   0x8220CB00..0x8220CB24  lXaxis = Cross(lUpVector, lZaxis)
+//   0x8220CB28..0x8220CB94  IsZero -> gIVector, else Normalize
+//   0x8220CC00  assert IsValid(lXaxis)                                        (:793)
+//   0x8220CC1C..0x8220CC3C  lYaxis = Cross(lZaxis, lXaxis)
+//   0x8220CC64  assert !IsZero(lYaxis)                                        (:797)
+//   0x8220CC84..0x8220CC9C  rows [+0x00]=lXaxis [+0x10]=lYaxis [+0x20]=lZaxis [+0x30]=eye
+//
+// (this overload does NOT re-check IsValid(lYaxis) -- only !IsZero.)
+// FLAG: the :779 assert's console text is streamed ("Invalid Z Axis after normalisation,
+// pre-normalised: " followed by the pre-normalise direction). CGS_ASSERT takes a plain literal,
+// so the streamed vector is dropped from the message; the predicate is unchanged.
+Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition, Vector3 lUpVector)
+{
+    const Vector3 lDirection = rw::math::vpu::Subtract(lTargetPosition, lEyePosition);
+
+    Vector3 lZaxis = KV_AXIS_Z;
+    if (!rw::math::vpu::IsZero(lDirection, KF_VPU_EPSILON))
+        lZaxis = rw::math::vpu::Normalize(lDirection);
+
+    CGS_ASSERT(rw::math::vpu::IsValid(lZaxis),
+               "Invalid Z Axis after normalisation, pre-normalised: ");
+
+    Vector3 lXaxis = rw::math::vpu::Cross(lUpVector, lZaxis);
+    if (rw::math::vpu::IsZero(lXaxis, KF_VPU_EPSILON))
+        lXaxis = KV_AXIS_X;
+    else
+        lXaxis = rw::math::vpu::Normalize(lXaxis);
+
+    CGS_ASSERT(rw::math::vpu::IsValid(lXaxis), "IsValid(lXaxis)");
+
+    const Vector3 lYaxis = rw::math::vpu::Cross(lZaxis, lXaxis);
+
+    CGS_ASSERT(!rw::math::vpu::IsZero(lYaxis, KF_VPU_EPSILON), "!IsZero(lYaxis)");
+
+    Matrix44Affine lLookAt;
+    lLookAt.xAxis = lXaxis;
+    lLookAt.yAxis = lYaxis;
+    lLookAt.zAxis = lZaxis;
+    lLookAt.wAxis = lEyePosition;
+    return lLookAt;
 }
 
 }
