@@ -3,6 +3,8 @@
 #include "GameSource/World/AI/BrnAIPortal.h"                 // BrnAI::Portal (20-byte stride; GetPortal return)
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT + Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetPortal miss message)
+#include "GameSource/World/AI/BrnAIBoundaryLine.h"           // BrnAI::BoundaryLine (mpaNoGoLines target)
+#include <cstdint>                                           // uintptr_t (relocation arithmetic)
 
 // BrnAI::AISection member bodies.
 //
@@ -35,6 +37,102 @@ namespace BrnAI
     // conventional "treat as parallel only when the cross product is effectively zero"
     // epsilon; the real constant must be read from rodata @0x820A36A0 to be byte-faithful.
     static const f32 KF_INTERSECTION_EPSILON = 1.17549435e-38f;   // PLACEHOLDER (rodata @0x820A36A0 unread)
+
+    // GetMiddle averages the four corners: 1 / KI_AI_SECTION_EDGES.
+    static const f32 KF_CORNER_MEAN_SCALE = 0.25f;
+
+    // ------------------------------------------------------------------------------
+    // AISection::FixUp @0x8267D8C8 / AISection::FixDown @0x8267D978 -- load-time
+    // pointer relocation of the section's three slots.
+    //
+    // The asm shape (FixUp; FixDown is the mirror with -= and the pointer write AFTER the
+    // inner loop):
+    //
+    //     if (mpaPortals) {
+    //         mpaPortals += base;
+    //         for (j = 0; j < mu8NumPortals; ++j) mpaPortals[j].FixUp(base);   // inlined
+    //     }
+    //     if (mpaNoGoLines) mpaNoGoLines += base;
+    //     mpaCorners += base;                       // UNCONDITIONAL -- no null guard
+    //
+    // The asymmetry is the console's, not a transcription slip: only mpaCorners is rebased
+    // without a guard. Every AI section in the shipped AI.DAT has a corner block, so the
+    // guardless slot is safe; keeping the difference preserves parity with the console
+    // (and with FixDown, which is guardless on the same slot).
+    // ------------------------------------------------------------------------------
+    void AISection::FixUp(const void* lpBaseData)
+    {
+        const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+
+        if (mpaPortals != nullptr)
+        {
+            mpaPortals = reinterpret_cast<Portal*>(
+                reinterpret_cast<uintptr_t>(mpaPortals) + luBase);
+
+            for (u32 luPortal = 0; luPortal < mu8NumPortals; ++luPortal)
+            {
+                mpaPortals[luPortal].FixUp(lpBaseData);
+            }
+        }
+
+        if (mpaNoGoLines != nullptr)
+        {
+            mpaNoGoLines = reinterpret_cast<BoundaryLine*>(
+                reinterpret_cast<uintptr_t>(mpaNoGoLines) + luBase);
+        }
+
+        mpaCorners = reinterpret_cast<Vector2*>(
+            reinterpret_cast<uintptr_t>(mpaCorners) + luBase);
+    }
+
+    void AISection::FixDown(const void* lpBaseData)
+    {
+        const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+
+        if (mpaPortals != nullptr)
+        {
+            for (u32 luPortal = 0; luPortal < mu8NumPortals; ++luPortal)
+            {
+                mpaPortals[luPortal].FixDown(lpBaseData);
+            }
+
+            mpaPortals = reinterpret_cast<Portal*>(
+                reinterpret_cast<uintptr_t>(mpaPortals) - luBase);
+        }
+
+        if (mpaNoGoLines != nullptr)
+        {
+            mpaNoGoLines = reinterpret_cast<BoundaryLine*>(
+                reinterpret_cast<uintptr_t>(mpaNoGoLines) - luBase);
+        }
+
+        mpaCorners = reinterpret_cast<Vector2*>(
+            reinterpret_cast<uintptr_t>(mpaCorners) - luBase);
+    }
+
+    // 0x826771D0 -- the section's representative point: the mean of the four corner
+    // positions in the ground plane, lifted to the height of portal 0.
+    //
+    // asm: the four corner X lanes are read at mpaCorners +0x00/+0x08/+0x10/+0x18 and the
+    // four Z lanes at +0x04/+0x0C/+0x14/+0x1C -- i.e. an 8-BYTE corner stride, which is
+    // what pins BrnAI::Vector2 as the packed 2-float type rather than the 16-byte SIMD
+    // alias. The two sums are multiplied by 0.25 (the rodata quarter splat) and the Y lane
+    // is taken verbatim from GetPortal(0)->GetPositionY(), so a section with no portals
+    // fires GetPortal's own bounds assert -- reproduced by calling through GetPortal.
+    Vector3 AISection::GetMiddle() const
+    {
+        const f32 lfSumX = mpaCorners[0].x + mpaCorners[1].x
+                         + mpaCorners[2].x + mpaCorners[3].x;
+        const f32 lfSumZ = mpaCorners[0].y + mpaCorners[1].y
+                         + mpaCorners[2].y + mpaCorners[3].y;
+
+        Vector3 lMiddle;
+        lMiddle.x = lfSumX * KF_CORNER_MEAN_SCALE;
+        lMiddle.y = GetPortal(0)->GetPositionY();
+        lMiddle.z = lfSumZ * KF_CORNER_MEAN_SCALE;
+        lMiddle.w = 0.0f;
+        return lMiddle;
+    }
 
     bool AISection::IsUnsuitableForResetOnTrackLink() const
     {

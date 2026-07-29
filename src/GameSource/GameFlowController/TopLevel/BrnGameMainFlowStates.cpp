@@ -1,4 +1,5 @@
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
+#include <cstdlib>   // getenv (BRN_LANE_PUMP diagnostic gate)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // gpMainGameFlowController, SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -81,6 +82,15 @@ void LoadingScriptedState::FinishLoading() {}
 // ELoadingStateStage enum: 1 sound-again, 2 effects, 3 gamestate2, 4 GUI second prepare,
 // 5 world module, 6 sound world-loaded cue -> 8, 7 world collision, 8 done).
 s32 gBrnScriptedLoadStage = 0;
+
+// ⚠️ LANE-REQUEST PUMP GATE (2026-07-29 lane-data wave). Env BRN_LANE_PUMP=1 turns on the
+// inline GameDataModule pump in the E_LOADINGSTAGE_DIRECTORMODULE leg (see the FLAG PC
+// placement note there). It is OFF by default because the module is not yet safe to pump at
+// that point in boot -- see the DELETE-WHEN note. Read once at first use.
+bool gbBrnLaneRequestPumpEnabled = []() {
+    const char* lpcEnv = std::getenv("BRN_LANE_PUMP");
+    return lpcEnv != 0 && lpcEnv[0] == '1';
+}();
 
 namespace
 {
@@ -628,7 +638,32 @@ void MainGameFlowStateInitialLoadingScreen::Update()
                     *CgsDev::Log::gpDebugPrint
                         << "InitialLoadingScreen: loading stage 3 (DirectorModule) -- real load\n";
             }
-            if (LoadDirectorModule())
+            const bool lbDirectorPrepared = LoadDirectorModule();
+
+            // [FLAG PC placement] PUMP THE GAMEDATA MODULE FOR THE DIRECTOR'S LANE REQUESTS.
+            //
+            // DirectorModule::Prepare's stage 3 is WorldMap::LoadData, which requests
+            // TriggerData / the traffic lanes / the AI lanes and will not advance until each
+            // reply lands. On the X360 those requests ride the director OUTPUT buffer and the
+            // frame's GameData IO bracket -- which every LoadXxxModule is threaded with --
+            // carries them to the streaming module. On the PC that bracket does not exist yet
+            // and LoadingScriptedState::Update (which owns the pump) only starts running from
+            // the Marketing screen onwards, i.e. AFTER this stage. Without a pump here the
+            // requests are staged and never serviced, LoadData never sees a reply, and the
+            // whole loading flow wedges at stage 3.
+            //
+            // So pump the module inline for exactly as long as this stage runs -- the same
+            // single-threaded PC placement LoadingScriptedState::Update already uses for its
+            // own per-frame pump. DELETE-WHEN: the per-frame GameData IO bracket lands and is
+            // threaded through LoadDirectorModule like the X360 does.
+            if (gbBrnLaneRequestPumpEnabled)
+            {
+                BrnGame::GetMainGameDataModule()->Update(
+                    BrnGameMainFlowController::GetScriptedLoadGameDataInput(),
+                    BrnGameMainFlowController::GetScriptedLoadGameDataOutput());
+            }
+
+            if (lbDirectorPrepared)
                 AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
         }
         break;

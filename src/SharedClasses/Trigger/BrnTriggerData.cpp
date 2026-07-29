@@ -115,9 +115,60 @@ BrnTrigger::TriggerData::FindLandmark( CgsID lId ) const
     return mpLandmarks;
 }
 
+
+// -----------------------------------------------------------------------------
+// RELOCATION VIEWS (FixUp / FixDown).
+//
+// Landmark / SignatureStunt / Killzone keep their pointer members private in their own
+// owning headers, so the relocation loops reach them through these local views -- the same
+// idiom the committed BrnProgression::ProgressionData::FixDown uses.
+//
+// ⚠️ THESE ARE HOST OFFSETS, NOT CONSOLE OFFSETS. The lane-data port widens every
+// serialised pointer slot to 64 bits, so Landmark grew 52 -> 64 bytes (mpaStartingGrids
+// 0x2C -> 0x30), SignatureStunt 24 -> 32 (mppStuntElements 0x10, count 0x14 -> 0x18) and
+// Killzone 16 -> 32 (mppTriggers 0x00, count 0x04 -> 0x08; mpRegionIds 0x08 -> 0x10, count
+// 0x0C -> 0x18). Leaving the old console offsets here would have walked every one of these
+// records at the wrong stride against the widened TRIGGERS.DAT -- bug class (c). The sizeof
+// asserts below are the contract with tools/assets/bundles/lane_transcode.py's emitter.
+// -----------------------------------------------------------------------------
+namespace
+{
+    struct LandmarkRelocationView
+    {
+        u8        _0[0x30];          // TriggerRegion subobject (44 B) + pad to the pointer
+        uintptr_t mpaStartingGrids;  // host +0x30 (console +0x2C)
+        s8        miStartingGridCount;
+        u8        muDesignIndex;
+        u8        muDistrict;
+        u8        mu8Flags;
+        u8        _pad[4];
+    };
+    static_assert(sizeof(LandmarkRelocationView) == 0x40, "Landmark host stride");
+
+    struct SignatureStuntRelocationView
+    {
+        u8        _0[0x10];             // CgsID mId (8) + int64 miCamera (8)
+        uintptr_t mppStuntElements;     // host +0x10
+        s32       miStuntElementCount;  // host +0x18 (console +0x14)
+        s32       _pad;
+    };
+    static_assert(sizeof(SignatureStuntRelocationView) == 0x20, "SignatureStunt host stride");
+
+    struct KillzoneRelocationView
+    {
+        uintptr_t mppTriggers;      // host +0x00
+        s32       miTriggerCount;   // host +0x08 (console +0x04)
+        s32       _pad0;
+        uintptr_t mpRegionIds;      // host +0x10 (console +0x08)
+        s32       miRegionIdCount;  // host +0x18 (console +0x0C)
+        s32       _pad1;
+    };
+    static_assert(sizeof(KillzoneRelocationView) == 0x20, "Killzone host stride");
+}
+
 // X360 0x8267F800. Load-time pointer relocation "fix DOWN": converts every stored pointer from
 // an absolute load address back to a serialised file offset by SUBTRACTING the load-base delta
-// (liDelta). It is the exact inverse of FixUp. The X360 inlined every per-element FixDown into
+// (luDelta). It is the exact inverse of FixUp. The X360 inlined every per-element FixDown into
 // this routine (xrefs_from shows no element-FixDown calls), so the inner rebasing is open-coded
 // here over the element arrays, matching the console shape.
 //
@@ -128,32 +179,21 @@ BrnTrigger::TriggerData::FindLandmark( CgsID lId ) const
 // (each TriggerRegion* entry); finally the nine top-level array base pointers.
 //
 // Pointer relocation is intrinsically address arithmetic, so each rebased pointer is handled via
-// reinterpret_cast<uintptr_t>(p) - liDelta -- the established BrnProgressionData::FixDown idiom.
+// reinterpret_cast<uintptr_t>(p) - luDelta -- the established BrnProgressionData::FixDown idiom.
 // Killzone/SignatureStunt internal pointers are private to their owning types, so they are reached
 // through local relocation views laid out to those types' authoritative (DWARF) member offsets.
-int
-BrnTrigger::TriggerData::FixDown( int liDelta )
+uintptr_t
+BrnTrigger::TriggerData::FixDown( uintptr_t luDelta )
 {
-    // ---- Landmarks: rebase each landmark's starting-grid pointer (offset 0x2C in the 52B record).
-    struct LandmarkRelocationView
-    {
-        u8        _0[0x2C];        // TriggerRegion subobject (BoxRegion + id + region index + type/pad)
-        uintptr_t mpaStartingGrids;// 0x2C
-    };
+    // ---- Landmarks: rebase each landmark's starting-grid pointer.
     LandmarkRelocationView* lpLandmarks = reinterpret_cast<LandmarkRelocationView*>( mpLandmarks );
     for ( int liLandmarkIndex = 0; liLandmarkIndex < miLandmarkCount; ++liLandmarkIndex )
     {
         CGS_ASSERT( liLandmarkIndex < miLandmarkCount, "liLandmarkIndex < miLandmarkCount" );
-        lpLandmarks[liLandmarkIndex].mpaStartingGrids -= liDelta;
+        lpLandmarks[liLandmarkIndex].mpaStartingGrids -= luDelta;
     }
 
     // ---- Signature stunts: rebase the stunt-element array and every element pointer in it.
-    struct SignatureStuntRelocationView
-    {
-        u8        _0[0x10];        // CgsID mId (8) + int64 miCamera (8)
-        uintptr_t mppStuntElements;// 0x10
-        s32       miStuntElementCount; // 0x14   (24-byte record)
-    };
     SignatureStuntRelocationView* lpSignatureStunts =
         reinterpret_cast<SignatureStuntRelocationView*>( mpSignatureStunts );
     for ( int liSignatureStuntIndex = 0; liSignatureStuntIndex < miSignatureStuntCount; ++liSignatureStuntIndex )
@@ -162,8 +202,8 @@ BrnTrigger::TriggerData::FixDown( int liDelta )
         SignatureStuntRelocationView& lrStunt = lpSignatureStunts[liSignatureStuntIndex];
         uintptr_t* lpElements = reinterpret_cast<uintptr_t*>( lrStunt.mppStuntElements );
         for ( int liElementIndex = 0; liElementIndex < lrStunt.miStuntElementCount; ++liElementIndex )
-            lpElements[liElementIndex] -= liDelta;
-        lrStunt.mppStuntElements -= liDelta;
+            lpElements[liElementIndex] -= luDelta;
+        lrStunt.mppStuntElements -= luDelta;
     }
 
     // ---- Generic regions: bounds-checked count walk only (no relocatable inner pointers here).
@@ -173,13 +213,6 @@ BrnTrigger::TriggerData::FixDown( int liDelta )
     }
 
     // ---- Killzones: rebase the trigger array, every trigger pointer in it, and the region-id array.
-    struct KillzoneRelocationView
-    {
-        uintptr_t mppTriggers;    // 0x00
-        s32       miTriggerCount; // 0x04
-        uintptr_t mpRegionIds;    // 0x08
-        s32       miRegionIdCount;// 0x0C   (16-byte record)
-    };
     KillzoneRelocationView* lpKillzones = reinterpret_cast<KillzoneRelocationView*>( mpKillzones );
     for ( int liKillzoneIndex = 0; liKillzoneIndex < miKillzoneCount; ++liKillzoneIndex )
     {
@@ -187,9 +220,9 @@ BrnTrigger::TriggerData::FixDown( int liDelta )
         KillzoneRelocationView& lrKillzone = lpKillzones[liKillzoneIndex];
         uintptr_t* lpTriggers = reinterpret_cast<uintptr_t*>( lrKillzone.mppTriggers );
         for ( int liTriggerIndex = 0; liTriggerIndex < lrKillzone.miTriggerCount; ++liTriggerIndex )
-            lpTriggers[liTriggerIndex] -= liDelta;
-        lrKillzone.mppTriggers -= liDelta;
-        lrKillzone.mpRegionIds -= liDelta;
+            lpTriggers[liTriggerIndex] -= luDelta;
+        lrKillzone.mppTriggers -= luDelta;
+        lrKillzone.mpRegionIds -= luDelta;
     }
 
     // ---- Blackspots / VFX-box regions / roaming locations / spawn locations: count walks only.
@@ -214,25 +247,25 @@ BrnTrigger::TriggerData::FixDown( int liDelta )
     {
         uintptr_t* lpRegions = reinterpret_cast<uintptr_t*>( mppRegions );
         for ( int liRegionIndex = 0; liRegionIndex < miRegionCount; ++liRegionIndex )
-            lpRegions[liRegionIndex] -= liDelta;
+            lpRegions[liRegionIndex] -= luDelta;
     }
 
     // ---- Nine top-level array base pointers (reached by name).
-    mpLandmarks        = reinterpret_cast<Landmark*>( reinterpret_cast<uintptr_t>( mpLandmarks ) - liDelta );
-    mpSignatureStunts  = reinterpret_cast<SignatureStunt*>( reinterpret_cast<uintptr_t>( mpSignatureStunts ) - liDelta );
-    mpGenericRegions   = reinterpret_cast<GenericRegion*>( reinterpret_cast<uintptr_t>( mpGenericRegions ) - liDelta );
-    mpKillzones        = reinterpret_cast<Killzone*>( reinterpret_cast<uintptr_t>( mpKillzones ) - liDelta );
-    mpBlackspots       = reinterpret_cast<Blackspot*>( reinterpret_cast<uintptr_t>( mpBlackspots ) - liDelta );
-    mpVFXBoxRegions    = reinterpret_cast<VFXBoxRegion*>( reinterpret_cast<uintptr_t>( mpVFXBoxRegions ) - liDelta );
-    mpRoamingLocations = reinterpret_cast<RoamingLocation*>( reinterpret_cast<uintptr_t>( mpRoamingLocations ) - liDelta );
-    mpSpawnLocations   = reinterpret_cast<SpawnLocation*>( reinterpret_cast<uintptr_t>( mpSpawnLocations ) - liDelta );
-    mppRegions         = reinterpret_cast<TriggerRegion**>( reinterpret_cast<uintptr_t>( mppRegions ) - liDelta );
+    mpLandmarks        = reinterpret_cast<Landmark*>( reinterpret_cast<uintptr_t>( mpLandmarks ) - luDelta );
+    mpSignatureStunts  = reinterpret_cast<SignatureStunt*>( reinterpret_cast<uintptr_t>( mpSignatureStunts ) - luDelta );
+    mpGenericRegions   = reinterpret_cast<GenericRegion*>( reinterpret_cast<uintptr_t>( mpGenericRegions ) - luDelta );
+    mpKillzones        = reinterpret_cast<Killzone*>( reinterpret_cast<uintptr_t>( mpKillzones ) - luDelta );
+    mpBlackspots       = reinterpret_cast<Blackspot*>( reinterpret_cast<uintptr_t>( mpBlackspots ) - luDelta );
+    mpVFXBoxRegions    = reinterpret_cast<VFXBoxRegion*>( reinterpret_cast<uintptr_t>( mpVFXBoxRegions ) - luDelta );
+    mpRoamingLocations = reinterpret_cast<RoamingLocation*>( reinterpret_cast<uintptr_t>( mpRoamingLocations ) - luDelta );
+    mpSpawnLocations   = reinterpret_cast<SpawnLocation*>( reinterpret_cast<uintptr_t>( mpSpawnLocations ) - luDelta );
+    mppRegions         = reinterpret_cast<TriggerRegion**>( reinterpret_cast<uintptr_t>( mppRegions ) - luDelta );
 
-    return liDelta;
+    return luDelta;
 }
 
 // X360 0x8267FC08. Load-time pointer relocation "fix UP": converts every stored pointer from a
-// serialised file offset to its absolute load address by ADDING the load-base delta (liDelta).
+// serialised file offset to its absolute load address by ADDING the load-base delta (luDelta).
 // It is the exact inverse of FixDown.
 //
 // Version guard: the routine first asserts miVersionNumber == KI_VERSION_NUMBER (34). The X360
@@ -244,8 +277,8 @@ BrnTrigger::TriggerData::FixDown( int liDelta )
 // The X360 rebases the nine top-level array base pointers FIRST (before walking the arrays), so
 // the per-element loops below dereference already-fixed-up bases. Inner per-element rebasing is
 // open-coded over relocation views, same as FixDown.
-int
-BrnTrigger::TriggerData::FixUp( int liDelta )
+uintptr_t
+BrnTrigger::TriggerData::FixUp( uintptr_t luDelta )
 {
     if ( miVersionNumber != KI_VERSION_NUMBER )
     {
@@ -262,46 +295,35 @@ BrnTrigger::TriggerData::FixUp( int liDelta )
     }
 
     // ---- Nine top-level array base pointers FIRST (X360 fixes the bases before walking arrays).
-    mpLandmarks        = reinterpret_cast<Landmark*>( reinterpret_cast<uintptr_t>( mpLandmarks ) + liDelta );
-    mpSignatureStunts  = reinterpret_cast<SignatureStunt*>( reinterpret_cast<uintptr_t>( mpSignatureStunts ) + liDelta );
-    mpGenericRegions   = reinterpret_cast<GenericRegion*>( reinterpret_cast<uintptr_t>( mpGenericRegions ) + liDelta );
-    mpKillzones        = reinterpret_cast<Killzone*>( reinterpret_cast<uintptr_t>( mpKillzones ) + liDelta );
-    mpBlackspots       = reinterpret_cast<Blackspot*>( reinterpret_cast<uintptr_t>( mpBlackspots ) + liDelta );
-    mpVFXBoxRegions    = reinterpret_cast<VFXBoxRegion*>( reinterpret_cast<uintptr_t>( mpVFXBoxRegions ) + liDelta );
-    mpRoamingLocations = reinterpret_cast<RoamingLocation*>( reinterpret_cast<uintptr_t>( mpRoamingLocations ) + liDelta );
-    mpSpawnLocations   = reinterpret_cast<SpawnLocation*>( reinterpret_cast<uintptr_t>( mpSpawnLocations ) + liDelta );
-    mppRegions         = reinterpret_cast<TriggerRegion**>( reinterpret_cast<uintptr_t>( mppRegions ) + liDelta );
+    mpLandmarks        = reinterpret_cast<Landmark*>( reinterpret_cast<uintptr_t>( mpLandmarks ) + luDelta );
+    mpSignatureStunts  = reinterpret_cast<SignatureStunt*>( reinterpret_cast<uintptr_t>( mpSignatureStunts ) + luDelta );
+    mpGenericRegions   = reinterpret_cast<GenericRegion*>( reinterpret_cast<uintptr_t>( mpGenericRegions ) + luDelta );
+    mpKillzones        = reinterpret_cast<Killzone*>( reinterpret_cast<uintptr_t>( mpKillzones ) + luDelta );
+    mpBlackspots       = reinterpret_cast<Blackspot*>( reinterpret_cast<uintptr_t>( mpBlackspots ) + luDelta );
+    mpVFXBoxRegions    = reinterpret_cast<VFXBoxRegion*>( reinterpret_cast<uintptr_t>( mpVFXBoxRegions ) + luDelta );
+    mpRoamingLocations = reinterpret_cast<RoamingLocation*>( reinterpret_cast<uintptr_t>( mpRoamingLocations ) + luDelta );
+    mpSpawnLocations   = reinterpret_cast<SpawnLocation*>( reinterpret_cast<uintptr_t>( mpSpawnLocations ) + luDelta );
+    mppRegions         = reinterpret_cast<TriggerRegion**>( reinterpret_cast<uintptr_t>( mppRegions ) + luDelta );
 
-    // ---- Landmarks: rebase each landmark's starting-grid pointer (offset 0x2C in the 52B record).
-    struct LandmarkRelocationView
-    {
-        u8        _0[0x2C];
-        uintptr_t mpaStartingGrids;// 0x2C
-    };
+    // ---- Landmarks: rebase each landmark's starting-grid pointer.
     LandmarkRelocationView* lpLandmarks = reinterpret_cast<LandmarkRelocationView*>( mpLandmarks );
     for ( int liLandmarkIndex = 0; liLandmarkIndex < miLandmarkCount; ++liLandmarkIndex )
     {
         CGS_ASSERT( liLandmarkIndex < miLandmarkCount, "liLandmarkIndex < miLandmarkCount" );
-        lpLandmarks[liLandmarkIndex].mpaStartingGrids += liDelta;
+        lpLandmarks[liLandmarkIndex].mpaStartingGrids += luDelta;
     }
 
     // ---- Signature stunts: rebase the stunt-element array, then every element pointer in it.
-    struct SignatureStuntRelocationView
-    {
-        u8        _0[0x10];
-        uintptr_t mppStuntElements;// 0x10
-        s32       miStuntElementCount; // 0x14
-    };
     SignatureStuntRelocationView* lpSignatureStunts =
         reinterpret_cast<SignatureStuntRelocationView*>( mpSignatureStunts );
     for ( int liSignatureStuntIndex = 0; liSignatureStuntIndex < miSignatureStuntCount; ++liSignatureStuntIndex )
     {
         CGS_ASSERT( liSignatureStuntIndex < miSignatureStuntCount, "liSignatureStuntIndex < miSignatureStuntCount" );
         SignatureStuntRelocationView& lrStunt = lpSignatureStunts[liSignatureStuntIndex];
-        lrStunt.mppStuntElements += liDelta;
+        lrStunt.mppStuntElements += luDelta;
         uintptr_t* lpElements = reinterpret_cast<uintptr_t*>( lrStunt.mppStuntElements );
         for ( int liElementIndex = 0; liElementIndex < lrStunt.miStuntElementCount; ++liElementIndex )
-            lpElements[liElementIndex] += liDelta;
+            lpElements[liElementIndex] += luDelta;
     }
 
     // ---- Generic regions: bounds-checked count walk only.
@@ -311,23 +333,16 @@ BrnTrigger::TriggerData::FixUp( int liDelta )
     }
 
     // ---- Killzones: rebase the trigger array + region-id array, then every trigger pointer.
-    struct KillzoneRelocationView
-    {
-        uintptr_t mppTriggers;    // 0x00
-        s32       miTriggerCount; // 0x04
-        uintptr_t mpRegionIds;    // 0x08
-        s32       miRegionIdCount;// 0x0C
-    };
     KillzoneRelocationView* lpKillzones = reinterpret_cast<KillzoneRelocationView*>( mpKillzones );
     for ( int liKillzoneIndex = 0; liKillzoneIndex < miKillzoneCount; ++liKillzoneIndex )
     {
         CGS_ASSERT( liKillzoneIndex < miKillzoneCount, "liKillzoneIndex < miKillzoneCount" );
         KillzoneRelocationView& lrKillzone = lpKillzones[liKillzoneIndex];
-        lrKillzone.mppTriggers += liDelta;
-        lrKillzone.mpRegionIds += liDelta;
+        lrKillzone.mppTriggers += luDelta;
+        lrKillzone.mpRegionIds += luDelta;
         uintptr_t* lpTriggers = reinterpret_cast<uintptr_t*>( lrKillzone.mppTriggers );
         for ( int liTriggerIndex = 0; liTriggerIndex < lrKillzone.miTriggerCount; ++liTriggerIndex )
-            lpTriggers[liTriggerIndex] += liDelta;
+            lpTriggers[liTriggerIndex] += luDelta;
     }
 
     // ---- Blackspots / roaming locations / spawn locations / VFX-box regions: count walks only.
@@ -353,8 +368,8 @@ BrnTrigger::TriggerData::FixUp( int liDelta )
     {
         uintptr_t* lpRegions = reinterpret_cast<uintptr_t*>( mppRegions );
         for ( int liRegionIndex = 0; liRegionIndex < miRegionCount; ++liRegionIndex )
-            lpRegions[liRegionIndex] += liDelta;
+            lpRegions[liRegionIndex] += luDelta;
     }
 
-    return liDelta;
+    return luDelta;
 }

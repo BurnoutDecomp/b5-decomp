@@ -57,6 +57,13 @@ namespace BrnTraffic
         //   return mpaHullPvs[luIndex];   (20-byte stride)
         const Set<u16, 8>& GetHullPvs(u32 luIndex) const;
 
+        // BrnTrafficPvs.h:85 / :90 -- load-time pointer relocation. X360 @0x827623E8 /
+        // @0x827624A0: exactly ONE pointer slot (mpaHullPvs), plus the `this` 16-byte
+        // alignment guard (BrnTrafficPvs.cpp:45) and a debug walk of every cell's Set
+        // asserting it was Constructed. Called from TrafficData::FixUp / FixDown.
+        void FixUp(const void* lpBaseData);
+        void FixDown(const void* lpBaseData);
+
     private:
         Vector3        mGridMin;        // :104  +0x00
         Vector3        mCellSize;       // :105  +0x10

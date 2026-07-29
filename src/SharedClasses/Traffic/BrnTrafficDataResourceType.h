@@ -2,72 +2,87 @@
 #define BRN_TRAFFIC_DATA_RESOURCE_TYPE_H
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
-#include "SharedClasses/Traffic/BrnTrafficKillZone.h"    // KillZoneRegion (6-byte region element)
-#include "SharedClasses/Traffic/BrnTrafficVehicleType.h" // VehicleTypeData (8-byte type element)
-#include "SharedClasses/Traffic/BrnTrafficVehicleTraits.h"// VehicleTraits (16-byte traits element)
+#include "BrnCommonTypes.h"                                // Vector4
+#include "SharedClasses/Traffic/BrnTrafficKillZone.h"      // KillZone, KillZoneRegion
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"   // VehicleTypeData, VehicleTypeUpdateData
+#include "SharedClasses/Traffic/BrnTrafficVehicleTraits.h" // VehicleTraits
+#include "SharedClasses/Traffic/BrnTrafficVehicleAsset.h"  // VehicleAsset
+#include "SharedClasses/Traffic/BrnTrafficLightCollection.h" // TrafficLightCollection (by value)
+#include <cstddef>                                         // offsetof
 
 namespace BrnTraffic
 {
-// Forward decl: TrafficData::GetHull hands out a Hull only by pointer (its real layout lives in
-// the committed owning header SharedClasses/Traffic/BrnTrafficHull.h, which BrnTrafficData.cpp
-// #includes to body the accessor). A pointer-only use needs no layout here.
+// Forward decls: TrafficData hands these out only by pointer, and their real layouts live
+// in their own owning headers (BrnTrafficHull.h / BrnTrafficPvs.h / BrnTrafficFlowType.h),
+// which the .cpp files that dereference the results #include.
 struct Hull;
+class  Pvs;
+struct FlowType;
 
+// =============================================================================
+// BrnTraffic::TrafficData -- the serialised lane graph ("BaseTraffic", resource type
+// 65538, shipped in B5TRAFFIC.BNDL). DWARF home BrnTrafficData.h:54.
+//
+// SERIALISED FORM / RELOCATION (X360-attested, 2026-07-29 lane-data wave):
+//   Every pointer member below is stored on disc as a BYTE OFFSET from the start of
+//   this header, and CgsResource::Pool::FixUpEntry @0x828EB860 turns them into real
+//   pointers by calling vtable slot 4 -- TrafficDataResourceType::FixUp @0x82763E70, an
+//   8-byte thunk (`mr r3,r4; b 0x827637D8`) that hands TrafficData::FixUp the resource
+//   block as BOTH this and the relocation base.
+//   ⚠️ That thunk is ABSENT from .ida-exports/ because it has no .pdata unwind record,
+//   so IDA never promoted it to a function -- which is the whole reason this type looked
+//   like it "had no FixUp" and why TrafficData::FixUp @0x827637D8 looks xref-less (it is
+//   reached only through the vtable). It is a real, registered virtual: the vtable at
+//   0x820A1520 holds {GetTypeID 0x82752560, GetSerialisedResourceDescriptor 0x82760660,
+//   DeSerialise, FixDown 0x82763E68, FixUp 0x82763E70, ...}.
+//
+// x64 PORT: the shipped data is transcoded to platform 4 with WIDENED 64-bit pointer
+// slots by tools/assets/bundles/lane_transcode.py, so every member below is a REAL host
+// pointer -- no Ptr32<T>, no PointerFromU32. The static_asserts at the bottom pin the
+// host offsets that transcoder writes; they and the porter's own CONSOLE_PIN table are
+// the two ends of the same contract.
+// =============================================================================
 struct TrafficData
 {
-    // ADDITIVE GROW for GetSerialisedResourceDescriptor @ 0x82760660: the X360 reads
-    // the serialised byte-size word at +4 (`lwz r11, 4(r30)`) — the total size of the
-    // traffic-data block — and asserts it is non-zero ("Uninitialised Traffic Data
-    // resource"). The +0 word is read by the type's FixDown path (forwarded to
-    // TrafficData::FixDown) but its meaning is not part of this slice.
-    // FLAG: muReserved0 (+0) is an opaque serialised header word (DEFERRED); the DWARF
-    //       (BrnTrafficData.h:56/59) splits this +0..+3 region into muDataVersion (u8 @+0)
-    //       and muNumHulls (u16 @+2). Kept as muReserved0 here to preserve the committed
-    //       field's offset/identity (non-additive to re-split); only the +4 size word is
-    //       X360-attested by this resource-type slice.
-    u32 muReserved0;   // +0  opaque serialised header word (DEFERRED; == muDataVersion+muNumHulls)
-    u32 muSizeInBytes; // +4  serialised total byte size (asm `*(a3+4)`)
+    // KU_DATA_VERSION -- TrafficData::FixUp asserts muDataVersion == 44
+    // (BrnTrafficData.cpp:65). The shipped B5TRAFFIC.BNDL payload reads 44.
+    static const u8 KU_DATA_VERSION = 44;
 
-    // ===== ADDITIVE GROW for the runtime TrafficData getters (own TU) =====
-    // X360-authoritative runtime layout from the asm of the three getters bodied in this
-    // slice (GetKillZoneRegions @ 0x82705D08, GetVehicleTraitsForVehicleType @ 0x82705DF0,
-    // GetNumPaintColours @ 0x82705F58) cross-checked against the DWARF (BrnTrafficData.h:54).
-    // ALL fields below sit past +4, so this is purely additive over the two committed words.
-    //
-    // NOTE: the byte offsets in the comments are the X360 (32-bit, 4-byte-pointer) offsets the
-    // asm reads. On the PC host pointers are 8 bytes so the absolute offsets differ -- the
-    // getters access every field BY NAME, so the compiler resolves the host offsets. Do NOT
-    // pin absolute offsets across the pointer members.
-    void* mpPvs;                  // DWARF :62  X360 +0x08  BrnTraffic::Pvs*        (opaque here)
-    void* mpapHulls;              // DWARF :63  X360 +0x0C  BrnTraffic::Hull**       (opaque here)
-    void* mpapFlowTypes;          // DWARF :65  X360 +0x10  BrnTraffic::FlowType**   (opaque here)
-    u16   muNumFlowTypes;         // DWARF :67  X360 +0x14
-    u16   muNumVehicleTypes;      // DWARF :68  X360 +0x16  (asm `lhz 0x16` bound, GetVehicleTraits)
-    u8    muNumVehicleAssets;     // DWARF :69  X360 +0x18
-    u8    muNumVehicleTraits;     // DWARF :70  X360 +0x19  (asm `lbz 0x19` bound, GetVehicleTraits)
-    u16   muNumKillZones;         // DWARF :72  X360 +0x1A
-    u16   muNumKillZoneRegions;   // DWARF :73  X360 +0x1C  (asm `lhz 0x1C` bound, GetKillZoneRegions)
-    u64*  mpaKillZoneIds;         // DWARF :76  X360 +0x20  TrafficData::KillZoneId(u64)*
-    void* mpaKillZones;           // DWARF :77  X360 +0x24  KillZone*                (opaque here)
-    KillZoneRegion*  mpaKillZoneRegions;   // DWARF :78  X360 +0x28  (asm `lwz 0x28` region table)
-    VehicleTypeData* mpaVehicleTypes;      // DWARF :80  X360 +0x2C  (asm `lwz 0x2C` type table, stride 8)
-    void* mpaVehicleTypesUpdate;  // DWARF :81  X360 +0x30  VehicleTypeUpdateData*   (opaque here)
-    void* mpaVehicleAssets;       // DWARF :82  X360 +0x34  BrnTraffic::VehicleAsset*(opaque here)
-    VehicleTraits*   mpaVehicleTraits;     // DWARF :83  X360 +0x38  (asm `lwz 0x38` traits table, stride 16)
+    u8  muDataVersion;            // +0x00 (:56)
+    u16 muNumHulls;               // +0x02 (:59)
+    u32 muSizeInBytes;            // +0x04 (:60)  total serialised byte size
 
-    // DWARF :85  mTrafficLights (TrafficLightCollection). The X360 places it from +0x3C to
-    // +0x168 (== 0x12C == 300 bytes) so that muNumPaintColours lands at +0x168. Its interior is
-    // not part of this slice -> kept as an opaque sized buffer sized to the X360-attested span.
-    // FLAG: mTrafficLightsOpaque is a DEFERRED opaque sub-aggregate (TrafficLightCollection);
-    //       only its X360 footprint (300 bytes) is attested, not its members.
-    u8    mTrafficLightsOpaque[300];       // DWARF :85  X360 +0x3C..+0x168
+    Pvs*       mpPvs;             // (:62)  X360 +0x08  the hull lookup grid
+    Hull**     mpapHulls;         // (:63)  X360 +0x0C  muNumHulls entries
+    FlowType** mpapFlowTypes;     // (:65)  X360 +0x10  muNumFlowTypes entries
 
-    u8    muNumPaintColours;      // DWARF :87  X360 +0x168 (asm `lbz 0x168`, GetNumPaintColours)
-    void* mpaPaintColours;        // DWARF :89  X360 +0x16C Vector4*                 (opaque here)
+    u16 muNumFlowTypes;           // (:67)  X360 +0x14
+    u16 muNumVehicleTypes;        // (:68)  X360 +0x16
+    u8  muNumVehicleAssets;       // (:69)  X360 +0x18
+    u8  muNumVehicleTraits;       // (:70)  X360 +0x19
+    u16 muNumKillZones;           // (:72)  X360 +0x1A
+    u16 muNumKillZoneRegions;     // (:73)  X360 +0x1C
 
-    int FixDown();
+    typedef u64 KillZoneId;                             // BrnTrafficKillZone.h:37
+    KillZoneId*            mpaKillZoneIds;              // (:76)  X360 +0x20
+    KillZone*              mpaKillZones;                // (:77)  X360 +0x24
+    KillZoneRegion*        mpaKillZoneRegions;          // (:78)  X360 +0x28
+    VehicleTypeData*       mpaVehicleTypes;             // (:80)  X360 +0x2C
+    VehicleTypeUpdateData* mpaVehicleTypesUpdate;       // (:81)  X360 +0x30 (16-aligned)
+    VehicleAsset*          mpaVehicleAssets;            // (:82)  X360 +0x34
+    VehicleTraits*         mpaVehicleTraits;            // (:83)  X360 +0x38
 
-    // Runtime getters bodied in BrnTrafficData.cpp (this slice). X360 entry points:
+    TrafficLightCollection mTrafficLights;              // (:85)  X360 +0x3C..+0x168
+
+    u8       muNumPaintColours;   // (:87)  X360 +0x168
+    Vector4* mpaPaintColours;     // (:89)  X360 +0x16C (16-aligned)
+
+    // Load-time pointer relocation (X360 @0x827637D8 / @0x82763CB8). The base is the
+    // resource block itself; the DWARF signature is `void FixUp(const void*)` (:95/:100).
+    void FixUp(const void* lpBaseData);
+    void FixDown(const void* lpBaseData);
+
+    // Runtime getters bodied in BrnTrafficData.cpp. X360 entry points:
     //   GetKillZoneRegions             @ 0x82705D08  (DWARF :111)
     //   GetVehicleTraitsForVehicleType @ 0x82705DF0  (DWARF :116)
     //   GetNumPaintColours             @ 0x82705F58  (DWARF :126)
@@ -75,13 +90,25 @@ struct TrafficData
     const VehicleTraits*  GetVehicleTraitsForVehicleType(u32 luVehicleType) const;
     s32                   GetNumPaintColours() const;
 
-    // Thin hull-array accessor over the already-present mpapHulls (BrnTraffic::Hull**, X360 +0x0C).
-    // Returns the luHull'th per-hull traffic-graph block. The X360 reaches it inline as
-    // `mpapHulls[luHull]` (e.g. OnlineStuntRunMode::GetBestStartGridID @0x82331708 reads
-    // `*(*(GetMemoryStructure()+0xC) + 4*luHull)`); de-inlined to this named accessor. Bodied in
-    // BrnTrafficData.cpp (which #includes BrnTrafficHull.h for the Hull layout).
+    // Thin hull-array accessor over mpapHulls. The X360 reaches it inline as
+    // `mpapHulls[luHull]` (e.g. OnlineStuntRunMode::GetBestStartGridID @0x82331708);
+    // de-inlined here and bodied in BrnTrafficData.cpp.
     const Hull* GetHull(u32 luHull) const;
 };
+
+// ---- host layout contract with tools/assets/bundles/lane_transcode.py ---------------
+static_assert(offsetof(TrafficData, muSizeInBytes)         == 0x004, "TrafficData::muSizeInBytes");
+static_assert(offsetof(TrafficData, mpPvs)                 == 0x008, "TrafficData::mpPvs");
+static_assert(offsetof(TrafficData, mpapHulls)             == 0x010, "TrafficData::mpapHulls");
+static_assert(offsetof(TrafficData, mpapFlowTypes)         == 0x018, "TrafficData::mpapFlowTypes");
+static_assert(offsetof(TrafficData, muNumFlowTypes)        == 0x020, "TrafficData::muNumFlowTypes");
+static_assert(offsetof(TrafficData, muNumKillZoneRegions)  == 0x028, "TrafficData::muNumKillZoneRegions");
+static_assert(offsetof(TrafficData, mpaKillZoneIds)        == 0x030, "TrafficData::mpaKillZoneIds");
+static_assert(offsetof(TrafficData, mpaVehicleTraits)      == 0x060, "TrafficData::mpaVehicleTraits");
+static_assert(offsetof(TrafficData, mTrafficLights)        == 0x068, "TrafficData::mTrafficLights");
+static_assert(offsetof(TrafficData, muNumPaintColours)     == 0x1B8, "TrafficData::muNumPaintColours");
+static_assert(offsetof(TrafficData, mpaPaintColours)       == 0x1C0, "TrafficData::mpaPaintColours");
+static_assert(sizeof(TrafficData) == 0x1C8, "TrafficData host sizeof");
 
 class TrafficDataResourceType : public CgsResource::Type
 {
@@ -89,6 +116,7 @@ public:
     uint32_t                        GetTypeID() const override;
     CgsResource::ResourceDescriptor GetSerialisedResourceDescriptor(const void* lpResource) const override;
     void                            FixDown(void* lpResource, const rw::Resource& lrResource) const override;
+    void                            FixUp(void* lpResource, const rw::Resource& lrResource) const override;
 };
 }
 

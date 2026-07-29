@@ -37,6 +37,8 @@ namespace BrnTraffic { struct TrafficData; }
 namespace BrnTraffic { struct Hull; }        // WalkLaneLeft takes a (const Hull*)
 namespace BrnTrigger { struct TriggerData; }
 namespace BrnAI      { struct AISectionsData; }
+// LoadDataStep's request-interface parameter (by pointer only).
+namespace BrnResource { namespace GameDataIO { template <s32 N> struct RequestInterface; } }
 
 namespace BrnDirector
 {
@@ -87,6 +89,16 @@ namespace BrnDirector
         // ⚠️ CURRENTLY A DOCUMENTED QUIET GATE -- see the body in BrnDirectorWorldMap.cpp for
         // the full transcribed state machine, why it is gated, and the DELETE-when note.
         bool LoadData(void* lpRequestInterface);
+
+    private:
+        // The staged state machine proper. LoadData wraps it in the PC request-staging
+        // bracket (see the FLAG PC-platform leaf note in BrnDirectorWorldMap.cpp): the
+        // console stages into the director output buffer's own RequestInterface<512> and
+        // the loading spine bridges it, where the PC stages straight onto the scripted-load
+        // GameData input the spine already pumps.
+        bool LoadDataStep(BrnResource::GameDataIO::RequestInterface<32768>* lpRequests);
+
+    public:
 
         // -- BrnDirectorWorldMap.h:87 (this batch) ----------------------------
         // Nearest lane point to lPosition that also lies in the direction of

@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3 (rw::math::vpu::Vector3), CgsID
+#include <cstdint>            // uintptr_t (relocation delta)
+#include <cstddef>            // offsetof (host layout static_asserts)
 #include "SharedClasses/Trigger/BrnKillzone.h"   // complete BrnTrigger::Killzone (GetKillzone 16B stride)
 
 // Owning header for BrnTrigger::TriggerData — the track-trigger resource payload.
@@ -34,11 +36,15 @@
 // the BrnTriggerData TU); everything OfflineGameMode needs is inline below.
 //
 // FixUp/FixDown CONTRACT: the PS3 DWARF declares these as `void FixUp(MemoryResource)`. The X360
-// ARTIST binary (0x8267FC08 / 0x8267F800) instead takes the load-base DELTA as a plain int and
-// returns it, and the committed BrnTrigger::TriggerResourceType.cpp forwarder calls them as
-// `FixUp(static_cast<int>(CgsResource::GetLoadBase(...)))`. The X360 is authoritative, so they
-// are modeled as `int FixUp(int)/int FixDown(int)` — the same int-delta contract already used by
-// the committed BrnProgression::ProgressionData::FixUp/FixDown.
+// ARTIST binary (0x8267FC08 / 0x8267F800) takes the load-base DELTA in a register and returns it,
+// and TriggerResourceType::FixUp @0x826800D8 (`mr r3,r4; lwz r4,0(r5); b ...`) supplies the
+// rw::Resource's segment-0 base.
+//
+// ⚠️ WIDENED 2026-07-29 (lane-data port). These were modelled as `int FixUp(int)`, which is only
+// correct while pointers are 32 bits: on the x64 host `static_cast<int>(GetLoadBase(...))` throws
+// away the top half of the allocation address, so every rebased pointer would land in the wrong
+// 4 GB — bug class (a). The delta is now uintptr_t end to end, fed by GetLoadBase64. The
+// serialised slots themselves are 64 bits wide too (tools/assets/bundles/lane_transcode.py).
 
 namespace BrnTrigger
 {
@@ -112,11 +118,11 @@ struct TriggerData
     const Landmark*        FindLandmarkByDesignIndex(uint8_t luDesignIndex) const;
     uint32_t GetSize() const { return muSize; }
 
-    // X360 0x8267F800 / 0x8267FC08. Load-time pointer relocation. liDelta is the load-base; FixUp
-    // ADDS it (offset -> absolute address), FixDown SUBTRACTS it (absolute -> offset). int-delta
-    // contract (see header note); the committed TriggerResourceType.cpp forwarder calls these.
-    int FixDown(int liDelta);
-    int FixUp(int liDelta);
+    // X360 0x8267F800 / 0x8267FC08. Load-time pointer relocation. luDelta is the load base; FixUp
+    // ADDS it (offset -> absolute address), FixDown SUBTRACTS it (absolute -> offset). See the
+    // widening note in the header comment above.
+    uintptr_t FixDown(uintptr_t luDelta);
+    uintptr_t FixUp(uintptr_t luDelta);
 
 private:
     // Full X360 layout (DWARF order). Trailing members past miLandmarkCount were absent from the
@@ -145,7 +151,25 @@ private:
     int32_t          miSpawnLocationCount;    // 0x70
     TriggerRegion**  mppRegions;              // 0x74
     int32_t          miRegionCount;           // 0x78
+
+    // ---- host layout contract with tools/assets/bundles/lane_transcode.py -------------
+    // The offsets in the member comments above are the CONSOLE (4-byte pointer) ones; on
+    // the host every pointer widens and the counts that follow shift with it. These pins
+    // are the other end of the transcoder's CONSOLE_PIN table for TriggerData. Declared
+    // in-class because the members are private (the project's _AssertIoLayout idiom).
+    static void _AssertLayout()
+    {
+        static_assert(offsetof(TriggerData, mPlayerStartPosition) == 0x10, "TriggerData::mPlayerStartPosition");
+        static_assert(offsetof(TriggerData, mpLandmarks)          == 0x30, "TriggerData::mpLandmarks");
+        static_assert(offsetof(TriggerData, miLandmarkCount)      == 0x38, "TriggerData::miLandmarkCount");
+        static_assert(offsetof(TriggerData, mpSignatureStunts)    == 0x40, "TriggerData::mpSignatureStunts");
+        static_assert(offsetof(TriggerData, mpKillzones)          == 0x60, "TriggerData::mpKillzones");
+        static_assert(offsetof(TriggerData, mppRegions)           == 0xB0, "TriggerData::mppRegions");
+        static_assert(offsetof(TriggerData, miRegionCount)        == 0xB8, "TriggerData::miRegionCount");
+        static_assert(sizeof(TriggerData) == 0xC0, "TriggerData host sizeof");
+    }
 };
+
 }
 
 #endif

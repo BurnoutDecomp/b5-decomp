@@ -2,15 +2,14 @@
 #define BRN_TRIGGER_RESOURCE_TYPE_H
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
+// ⚠️ This header used to carry its OWN two-method `struct BrnTrigger::TriggerData` stub --
+// an ODR fork of the real one in BrnTriggerData.h. It silently kept the pre-widening
+// `int FixUp(int)` signature alive, so the forwarders below linked against a function that
+// no longer exists once the delta became uintptr_t. Include the real owning header instead.
+#include "SharedClasses/Trigger/BrnTriggerData.h"   // BrnTrigger::TriggerData (the one true layout)
 
 namespace BrnTrigger
 {
-struct TriggerData
-{
-    int FixUp(int liDelta);
-    int FixDown(int liDelta);
-};
-
 class TriggerResourceType : public CgsResource::Type
 {
 public:

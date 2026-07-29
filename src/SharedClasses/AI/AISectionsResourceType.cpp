@@ -23,27 +23,47 @@ namespace BrnAI
         return KU_AI_SECTIONS_RESOURCE_TYPE_ID;
     }
 
+    // @0x8267F4A0 / @0x8267DB28. Both thunks hand AISectionsData the resource's segment-0
+    // base -- FixDown dereferences the rw::Resource in the thunk itself, FixUp forwards the
+    // reference and lets the body do the `lwz r29, 0(r4)`. Same value either way.
+    //
+    // ⚠️ WIDENED: these used to narrow the base through `static_cast<int>(GetLoadBase(...))`,
+    // which truncates a 64-bit host allocation to its low 32 bits (bug class (a)) -- and the
+    // lane data now carries 64-bit slots. GetLoadBase64 is the full-width read.
     void AISectionsResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        static_cast<AISectionsData*>(lpResource)->FixDown(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+        static_cast<AISectionsData*>(lpResource)->FixDown(
+            reinterpret_cast<const void*>(CgsResource::GetLoadBase64(lrResource)));
     }
 
     void AISectionsResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
-        static_cast<AISectionsData*>(lpResource)->FixUp(static_cast<int>(CgsResource::GetLoadBase(lrResource)));
+        static_cast<AISectionsData*>(lpResource)->FixUp(
+            reinterpret_cast<const void*>(CgsResource::GetLoadBase64(lrResource)));
     }
 
+    // @0x8267AE88. Byte-for-byte the same shape as
+    // TrafficDataResourceType::GetSerialisedResourceDescriptor @0x82760660: ONE block whose
+    // size is the payload's own muSizeInBytes word (read at the console's +0x3C) with a
+    // 16-byte alignment, and four unused {0, 1} blocks.
+    //
+    // ⚠️ FIXED: the previous transcription had size and alignment SWAPPED on entry 0 (it
+    // asked for a 16-BYTE block aligned to muSizeInBytes) and filled entries 1..4 with
+    // {muSizeInBytes, 1} instead of {0, 1} -- which would have made the pool allocate a
+    // 16-byte block for a 3 MB resource and then four more copies of it.
     CgsResource::ResourceDescriptor AISectionsResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const
     {
-        u32 luCount = static_cast<const AISectionsData*>(lpResource)->GetSizeInBytes();
+        const u32 luSizeInBytes = static_cast<const AISectionsData*>(lpResource)->GetSizeInBytes();
+
+        CGS_ASSERT(luSizeInBytes != 0u, "Uninitialised AI Sections resource");
 
         CgsResource::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size      = 16;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = luCount;
+        lDescriptor.m_baseResourceDescriptors[0].m_size      = luSizeInBytes;
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10u;
         for (int li = 1; li < 5; ++li)
         {
-            lDescriptor.m_baseResourceDescriptors[li].m_size      = luCount;
-            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1;
+            lDescriptor.m_baseResourceDescriptors[li].m_size      = 0u;
+            lDescriptor.m_baseResourceDescriptors[li].m_alignment = 1u;
         }
         return lDescriptor;
     }

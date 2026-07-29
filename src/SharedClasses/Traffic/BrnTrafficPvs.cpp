@@ -9,6 +9,7 @@
 // =============================================================================
 
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"
+#include <cstdint>   // uintptr_t (relocation arithmetic)
 
 namespace BrnTraffic
 {
@@ -57,6 +58,47 @@ const Set<u16, 8>& Pvs::GetHullPvs(u32 luIndex) const
     CGS_ASSERT(luIndex < muNumCells, "luIndex < muNumCells");
 
     return mpaHullPvs[luIndex];
+}
+
+// -----------------------------------------------------------------------------
+// Pvs::FixUp @0x827623E8 / Pvs::FixDown @0x827624A0 -- load-time pointer relocation.
+//
+// The grid holds exactly ONE serialised pointer (mpaHullPvs). The console guards that
+// `this` is 16-byte aligned (BrnTrafficPvs.cpp:45 -- the three leading Vector3 lanes are
+// loaded with aligned VMX loads), then rebases the slot, then walks every cell asserting
+// its Set was Constructed (CgsSet.h:430 on the FixUp side, :453 on the FixDown side).
+// FixDown runs the walk BEFORE un-rebasing, since the walk dereferences the pointer.
+// -----------------------------------------------------------------------------
+void Pvs::FixUp(const void* lpBaseData)
+{
+    CGS_ASSERT((reinterpret_cast<uintptr_t>(this) & 0xFu) == 0u, "Pvs is not 16-byte aligned");
+
+    mpaHullPvs = reinterpret_cast<Set<u16, 8>*>(
+        reinterpret_cast<uintptr_t>(mpaHullPvs) + reinterpret_cast<uintptr_t>(lpBaseData));
+
+    for (u32 luCell = 0; luCell < muNumCells; ++luCell)
+    {
+        // NOTE the local typedef: `Set<u16, 8>` inside a macro argument would split on its
+        // comma, so the set type is named once here (CgsSet's own asserts do the same).
+        typedef Set<u16, 8> HullPvsSet;
+        CGS_ASSERT(mpaHullPvs[luCell].GetLength() != HullPvsSet::KU_INVALID,
+                   "Set used before Construct/Clear was called");
+    }
+}
+
+void Pvs::FixDown(const void* lpBaseData)
+{
+    for (u32 luCell = 0; luCell < muNumCells; ++luCell)
+    {
+        // NOTE the local typedef: `Set<u16, 8>` inside a macro argument would split on its
+        // comma, so the set type is named once here (CgsSet's own asserts do the same).
+        typedef Set<u16, 8> HullPvsSet;
+        CGS_ASSERT(mpaHullPvs[luCell].GetLength() != HullPvsSet::KU_INVALID,
+                   "Set used before Construct/Clear was called");
+    }
+
+    mpaHullPvs = reinterpret_cast<Set<u16, 8>*>(
+        reinterpret_cast<uintptr_t>(mpaHullPvs) - reinterpret_cast<uintptr_t>(lpBaseData));
 }
 
 }
