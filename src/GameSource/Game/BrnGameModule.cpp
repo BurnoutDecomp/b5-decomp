@@ -771,6 +771,51 @@ namespace BrnGame
     // Restore the real body when DoDispatch's IO set + the frustum query are live.
     int BrnGameModule::DoDispatch()
     {
+        // ---- stage the DIRECTOR's published camera for the world ------------------------
+        // The console does this through the renderer/world dispatch IO buffer set:
+        // DoDispatch fills RendererIO::InputBuffer's camera from the director output,
+        // BridgeRendererToWorld @0x823CDD20 hands it on, and the real
+        // WorldModule::GenerateDispatchLists latches it (`mLastCameraInput = *lpCameraInput`).
+        // None of those four buffers is created on this build, so the camera is handed over
+        // directly to the world module's bring-up producer instead.
+        //
+        // ⚠️ THE ORIGIN GUARD IS LOAD-BEARING, not defensive dressing. Until the director's
+        // arbitrator reaches a behaviour that actually places a camera, the published camera
+        // is Camera::Construct's default -- identity basis at (0,0,0). The world streamer
+        // takes the published eye as its PVS query point, and (0,0,0) is off the ground-plane
+        // zone map, so publishing it unloads every resident track unit and the city goes
+        // black. This campaign has hit that four times. So: only route a camera that is
+        // somewhere real.
+        // DELETE-WHEN: DoDispatch's IO buffer set is real (then this whole staging goes with
+        // GenerateDispatchListsBringUp).
+        if (mpDirectorOutputBuffer != 0)
+        {
+            mpDirectorOutputBuffer->LockForRead();
+            const BrnDirector::Camera::Camera* lpCamera = mpDirectorOutputBuffer->GetCameraOutput();
+            if (lpCamera != 0)
+            {
+                const rw::math::vpu::Matrix44Affine& lrXform = lpCamera->GetTransform();
+                const f32 lfDistSq = lrXform.wAxis.x * lrXform.wAxis.x
+                                   + lrXform.wAxis.y * lrXform.wAxis.y
+                                   + lrXform.wAxis.z * lrXform.wAxis.z;
+                if (lfDistSq > 1.0f)
+                {
+                    mWorldModule.SetBringUpCameraOverride(lrXform, lpCamera->GetFOV());
+
+                    static bool sbLoggedHandover = false;
+                    if (!sbLoggedHandover && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        sbLoggedHandover = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[FLAG PC bring-up] world camera HANDED OVER to the director: eye ("
+                            << lrXform.wAxis.x << ", " << lrXform.wAxis.y << ", "
+                            << lrXform.wAxis.z << ") fov " << lpCamera->GetFOV() << "\n";
+                    }
+                }
+            }
+            mpDirectorOutputBuffer->UnlockForRead();
+        }
+
         CgsGraphics::DispatchFrame* lpDispatchFrame = mRenderModule.GetDispatchFrameForWrite();
         if (lpDispatchFrame != 0)
         {

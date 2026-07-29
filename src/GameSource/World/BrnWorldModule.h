@@ -262,6 +262,20 @@ namespace BrnWorld
         // DELETE the whole entry when DoDispatch + the frustum query are real.
         void GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame );
 
+        // [FLAG PC bring-up] Hand the bring-up producer above the REAL director camera for
+        // this frame, so it frames the world from the fly-by's viewpoint instead of its own
+        // orbiting stand-in and publishes the fly-by's EYE as the PVS query point. The
+        // console has no such entry: there the director camera reaches the world through
+        // DoDispatch's renderer/world IO buffer set (RendererIO::InputBuffer's camera ->
+        // BridgeRendererToWorld -> the real GenerateDispatchLists' `mLastCameraInput =
+        // *lpCameraInput`), and none of those four buffers exists on this build.
+        // The override lasts ONE dispatch frame: the producer consumes and clears it, so a
+        // frame in which the director publishes nothing falls back to the tour camera
+        // rather than freezing on a stale viewpoint.
+        // DELETE with GenerateDispatchListsBringUp itself.
+        void SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
+                                       f32 lfFOVDegrees );
+
         // NOT an X360 function either. Publishes the neutral lighting / atmosphere /
         // shadow-cascade engine constants the world's REAL vertex+pixel programs read,
         // because none of the console producers (environment manager, sky dome, shadow
@@ -559,6 +573,12 @@ namespace BrnWorld
         Vector4                    mPlayerCarPosition; // (+6175680)
         // The last director camera the dispatch pass consumed (X360 +6167744;
         // GenerateDispatchLists copies the frame camera into it each dispatch).
+        // [FLAG PC bring-up] the one-frame director-camera override (see
+        // SetBringUpCameraOverride). DELETE with GenerateDispatchListsBringUp.
+        rw::math::vpu::Matrix44Affine mBringUpCameraOverride;
+        f32                           mfBringUpCameraOverrideFOV;
+        bool                          mbBringUpCameraOverrideValid;
+
         BrnDirector::Camera::Camera mLastCameraInput;
 
         // DWARF :336 (X360 +6175760): the world shader-LOD policy block --
