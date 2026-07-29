@@ -3919,45 +3919,8 @@ WorldModule::PublishWorldShadingConstantsBringUp()
 // DELETE the whole function (and its DoDispatch call) once DoDispatch and the scene
 // manager's frustum query are real.
 // =============================================================================
-namespace
-{
-    // The three vector helpers CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8
-    // uses to build its six world-space planes, reproduced here so the bring-up camera
-    // can hand the scene manager a frustum built by exactly the same construction.
-    // A plane is stored [Nx, Ny, Nz, D] with `dot3(N, p) == D` and N pointing INTO the
-    // view volume -- the form CgsGeometric::Frustum::SetFromRwFrustum consumes.
-    inline Vector3 Sub3( const Vector3& lrA, const Vector3& lrB )
-    {
-        Vector3 lResult = { lrA.x - lrB.x, lrA.y - lrB.y, lrA.z - lrB.z, 0.0f };
-        return lResult;
-    }
-
-    inline Vector3 NormalizedCross3( const Vector3& lrA, const Vector3& lrB )
-    {
-        Vector3 lResult = { lrA.y * lrB.z - lrA.z * lrB.y,
-                            lrA.z * lrB.x - lrA.x * lrB.z,
-                            lrA.x * lrB.y - lrA.y * lrB.x, 0.0f };
-        const f32 lfLen = sqrtf( lResult.x * lResult.x + lResult.y * lResult.y
-                                 + lResult.z * lResult.z );
-        if ( lfLen > 0.0001f )
-        {
-            lResult.x /= lfLen;
-            lResult.y /= lfLen;
-            lResult.z /= lfLen;
-        }
-        return lResult;
-    }
-
-    inline void StoreBringUpFrustumPlane( Vector4& lrOut, const Vector3& lrNormal,
-                                          const Vector3& lrPointOnPlane )
-    {
-        lrOut.x = lrNormal.x;
-        lrOut.y = lrNormal.y;
-        lrOut.z = lrNormal.z;
-        lrOut.w = lrNormal.x * lrPointOnPlane.x + lrNormal.y * lrPointOnPlane.y
-                + lrNormal.z * lrPointOnPlane.z;
-    }
-}
+// (The three plane-building vector helpers that used to live here are gone: the frustum
+// is now produced by the real CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8.)
 
 void
 WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame )
@@ -4132,76 +4095,75 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     }
     mLastCameraInput.mTransform.At() = lForward;   // the camera's view-direction row (+0x20)
 
-    // Right = normalize(cross(worldUp, forward)); Up = cross(forward, right).
-    Vector3 lRight;
-    lRight.x =  lForward.z;
-    lRight.y =  0.0f;
-    lRight.z = -lForward.x;
-    lRight.w =  0.0f;
-    {
-        const f32 lfLen = sqrtf( lRight.x * lRight.x + lRight.z * lRight.z );
-        if ( lfLen > 0.0001f )
-        {
-            lRight.x /= lfLen;
-            lRight.z /= lfLen;
-        }
-        else
-        {
-            lRight.x = 1.0f;
-            lRight.z = 0.0f;
-        }
-    }
-    Vector3 lUp;
-    lUp.x = lForward.y * lRight.z - lForward.z * lRight.y;
-    lUp.y = lForward.z * lRight.x - lForward.x * lRight.z;
-    lUp.z = lForward.x * lRight.y - lForward.y * lRight.x;
-    lUp.w = 0.0f;
-
-    // View matrix, ROW-VECTOR convention (the whole dispatch path is row-vector:
-    // DrawRenderable::Interpret computes WVP = world * viewProjection and the draw
-    // leaf evaluates hpos = pos.x*row0 + pos.y*row1 + pos.z*row2 + row3).
-    Matrix44 lView;
-    lView.xAxis = Vector4{ lRight.x, lUp.x, lForward.x, 0.0f };
-    lView.yAxis = Vector4{ lRight.y, lUp.y, lForward.y, 0.0f };
-    lView.zAxis = Vector4{ lRight.z, lUp.z, lForward.z, 0.0f };
-    lView.wAxis = Vector4{
-        -( lRight.x   * lEye.x + lRight.y   * lEye.y + lRight.z   * lEye.z ),
-        -( lUp.x      * lEye.x + lUp.y      * lEye.y + lUp.z      * lEye.z ),
-        -( lForward.x * lEye.x + lForward.y * lEye.y + lForward.z * lEye.z ),
-        1.0f };
-
-    // Perspective projection (left-handed, D3D depth 0..1), 60 degrees vertical.
+    // ---- the projection scalars (needed before the camera is framed) --------
+    // 60 degrees VERTICAL; the horizontal fov the camera caches is derived from it
+    // and the display aspect (tanHalfH == aspect * tanHalfV).
     const f32 lfAspect = ( renderengine::gDisplayHeight > 0 )
         ? ( static_cast< f32 >( renderengine::gDisplayWidth )
             / static_cast< f32 >( renderengine::gDisplayHeight ) )
         : ( 16.0f / 9.0f );
     const f32 lfNear = 0.5f;
     const f32 lfFar  = ( lfRadius * 4.0f > 4000.0f ) ? ( lfRadius * 4.0f ) : 4000.0f;
-    const f32 lfCotHalfFov = 1.0f / tanf( 0.5f * 1.0471976f );   // 60 degrees
+    const f32 lfCotHalfFov = 1.0f / tanf( 0.5f * 1.0471976f );   // 60 degrees vertical
 
-    Matrix44 lProjection;
-    lProjection.xAxis = Vector4{ lfCotHalfFov / lfAspect, 0.0f, 0.0f, 0.0f };
-    lProjection.yAxis = Vector4{ 0.0f, lfCotHalfFov, 0.0f, 0.0f };
-    lProjection.zAxis = Vector4{ 0.0f, 0.0f, lfFar / ( lfFar - lfNear ), 1.0f };
-    lProjection.wAxis = Vector4{ 0.0f, 0.0f, -lfNear * lfFar / ( lfFar - lfNear ), 0.0f };
-
-    Matrix44 lViewProjection;
+    // ---- the view basis: built by the ENGINE'S OWN LookAt -------------------
+    // CgsGraphics::Camera::LookAt @0x827F9510 is the AUTHORITY on this engine's camera
+    // handedness, and it is not the textbook D3DXMatrixLookAtLH recipe. Transcribed from
+    // the asm (fmsub stream @0x827F95A8..0x827F95BC and @0x827F95F0..0x827F9608) its basis
+    // columns are
+    //     column0 = normalize( cross( dir, up ) )        <-- NOT cross( up, dir )
+    //     column1 = normalize( cross( column0, dir ) )
+    //     column2 = dir
+    // i.e. the screen-x axis is the NEGATIVE of a D3DXMatrixLookAtLH "right" vector, so the
+    // engine's view matrix has a NEGATIVE 3x3 determinant by construction and the whole
+    // world -- geometry winding, material cull modes, the frustum-plane construction in
+    // Camera::GetFrustumPerspective -- is authored against that convention.
+    //
+    // This stand-in used to build the basis by hand as right = cross( worldUp, forward ),
+    // the opposite handedness. That is a MIRROR: the rendered city came out flipped
+    // left-for-right, which in turn inverted every triangle's screen-space winding (so the
+    // material CullMode had to be read backwards to keep the city solid) and reversed four
+    // of the six frustum planes (so they needed an orientation fix-up pass). Both of those
+    // compensations are removed with this change.
+    //
+    // Route the stand-in through the real function so the convention cannot drift again.
+    static CgsGraphics::Camera sBringUpCamera;
+    sBringUpCamera.Release();                                   // the @0x827F94E8 defaults reset
+    sBringUpCamera.maProjectionScalars[ 6 ] = lfAspect;         // m_aspectRatio
+    sBringUpCamera.SetFovHorizontal( 2.0f * atanf( lfAspect / lfCotHalfFov ) );
+    sBringUpCamera.maProjectionScalars[ 7 ] = lfNear;           // m_nearClipPlane
+    sBringUpCamera.maProjectionScalars[ 8 ] = lfFar;            // m_farClipPlane
     {
-        const Vector4* lapV[ 4 ] = { &lView.xAxis, &lView.yAxis, &lView.zAxis, &lView.wAxis };
-        const Vector4* lapP[ 4 ] = { &lProjection.xAxis, &lProjection.yAxis,
-                                     &lProjection.zAxis, &lProjection.wAxis };
-        Vector4* lapO[ 4 ] = { &lViewProjection.xAxis, &lViewProjection.yAxis,
-                               &lViewProjection.zAxis, &lViewProjection.wAxis };
-        for ( int liRow = 0; liRow < 4; liRow++ )
-        {
-            const Vector4& lrV = *lapV[ liRow ];
-            Vector4&       lrO = *lapO[ liRow ];
-            lrO.x = lrV.x * lapP[0]->x + lrV.y * lapP[1]->x + lrV.z * lapP[2]->x + lrV.w * lapP[3]->x;
-            lrO.y = lrV.x * lapP[0]->y + lrV.y * lapP[1]->y + lrV.z * lapP[2]->y + lrV.w * lapP[3]->y;
-            lrO.z = lrV.x * lapP[0]->z + lrV.y * lapP[1]->z + lrV.z * lapP[2]->z + lrV.w * lapP[3]->z;
-            lrO.w = lrV.x * lapP[0]->w + lrV.y * lapP[1]->w + lrV.z * lapP[2]->w + lrV.w * lapP[3]->w;
-        }
+        const Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+        sBringUpCamera.LookAt( lEye, lWorldUp, lLookAt );        // fills mView (+ the f64 basis)
     }
+
+    // Perspective projection (left-handed, D3D depth 0..1), 60 degrees vertical.
+    // [FLAG PC-platform leaf] The console's own UpdatePerspectiveProjectionMatrix
+    // @0x827EC778 emits the RenderWare/OpenGL depth mapping (z' in [-1,1]:
+    // [2][2] = (n+f)/(f-n), [3][2] = -2nf/(f-n)) -- the Xenos can be put in OGL clip
+    // space, D3D9 on PC cannot. Only the DEPTH row deviates; x/y are the console's own
+    // cot-half-fov scalars, so the frustum built from this camera and the matrix drawn
+    // with here describe the same view volume.
+    //
+    // It is installed ON the camera so the REAL combiner
+    // CgsGraphics::Camera::UpdateViewProjectionMatrix @0x827E7030 produces the
+    // view-projection. That matters: it is an AFFINE Mult -- the view's fourth COLUMN is
+    // the implicit (0,0,0,1), which is why LookAt leaves the w LANE of every view row
+    // zero -- so the projection's translation row is added to row 3 unconditionally. A
+    // plain 4x4 multiply over these rows would instead scale that row by the stored w
+    // lane (0), which loses the -n*f/(f-n) depth bias from the view-projection.
+    sBringUpCamera.mProjection.xAxis = Vector4{ lfCotHalfFov / lfAspect, 0.0f, 0.0f, 0.0f };
+    sBringUpCamera.mProjection.yAxis = Vector4{ 0.0f, lfCotHalfFov, 0.0f, 0.0f };
+    sBringUpCamera.mProjection.zAxis = Vector4{ 0.0f, 0.0f, lfFar / ( lfFar - lfNear ), 1.0f };
+    sBringUpCamera.mProjection.wAxis = Vector4{ 0.0f, 0.0f,
+                                                -lfNear * lfFar / ( lfFar - lfNear ), 0.0f };
+    sBringUpCamera.UpdateViewProjectionMatrix();
+
+    // ROW-VECTOR convention throughout the dispatch path (DrawRenderable::Interpret
+    // computes WVP = world * viewProjection and the draw leaf evaluates
+    // hpos = pos.x*row0 + pos.y*row1 + pos.z*row2 + row3).
+    const Matrix44& lViewProjection = sBringUpCamera.GetViewProjectionMatrix();
 
     // ---- the camera shader constants the dispatch interpreter reads back -----
     // (the same three ids WorldModule::GenerateDispatchLists publishes: 8 = view
@@ -4263,81 +4225,23 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // DoDispatch is real.
     // ======================================================================
     {
-        // The frame's frustum, built with the SAME plane construction
-        // CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8 uses (four corner rays
-        // dir +/- tanH*right +/- tanV*up, near/far corners, then the six planes as
-        // [N, dot3(N, pointOnPlane)] with N pointing INTO the volume), fed by this
-        // camera's own basis so the query frustum and the drawn projection cannot drift.
-        const f32 lfTanV = 1.0f / lfCotHalfFov;
-        const f32 lfTanH = lfTanV * lfAspect;
-
-        static const f32 KAF_CORNER_SIGNS[ 4 ][ 2 ] =
-            { { 1.0f, 1.0f }, { -1.0f, 1.0f }, { -1.0f, -1.0f }, { 1.0f, -1.0f } };
-
-        Vector3 laNear[ 4 ];
-        Vector3 laFar[ 4 ];
-        for ( int liCorner = 0; liCorner < 4; ++liCorner )
-        {
-            const f32 lfS = KAF_CORNER_SIGNS[ liCorner ][ 0 ] * lfTanH;
-            const f32 lfT = KAF_CORNER_SIGNS[ liCorner ][ 1 ] * lfTanV;
-            const Vector3 lRay = {
-                lForward.x + lfS * lRight.x + lfT * lUp.x,
-                lForward.y + lfS * lRight.y + lfT * lUp.y,
-                lForward.z + lfS * lRight.z + lfT * lUp.z, 0.0f };
-            laNear[ liCorner ].x = lEye.x + lfNear * lRay.x;
-            laNear[ liCorner ].y = lEye.y + lfNear * lRay.y;
-            laNear[ liCorner ].z = lEye.z + lfNear * lRay.z;
-            laNear[ liCorner ].w = 0.0f;
-            laFar[ liCorner ].x  = lEye.x + lfFar * lRay.x;
-            laFar[ liCorner ].y  = lEye.y + lfFar * lRay.y;
-            laFar[ liCorner ].z  = lEye.z + lfFar * lRay.z;
-            laFar[ liCorner ].w  = 0.0f;
-        }
-
+        // The frame's frustum, produced by the REAL console writer
+        // CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8 over the camera framed
+        // above (it reads only mView and the cached tan-half-fov / near / far scalars,
+        // never mProjection, so the PC depth deviation in the drawn projection cannot
+        // reach it). Its six planes come out [N, dot3(N, pointOnPlane)] with N pointing
+        // INTO the view volume -- the convention CgsGeometric::Frustum::SetFromRwFrustum
+        // and every culling test downstream consume.
+        //
+        // This used to be a hand-rolled copy of the same construction followed by an
+        // orientation fix-up pass that flipped whichever planes came out reversed. That
+        // pass existed only because the stand-in built its camera basis with the OPPOSITE
+        // handedness to CgsGraphics::Camera::LookAt (see the banner above): the mirrored
+        // basis reverses the left/right/top/bottom cross products. With the basis now
+        // coming from the engine, the console writer's planes are inward by construction
+        // and both the copy and the fix-up are gone.
         CgsGraphics::CameraRwFrustum lRwFrustum;
-        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 0 ], lForward, laNear[ 0 ] );   // near
-        {
-            const Vector3 lNegDir = { -lForward.x, -lForward.y, -lForward.z, 0.0f };
-            StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 1 ], lNegDir, laFar[ 0 ] );  // far
-        }
-        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 2 ],
-            NormalizedCross3( Sub3( laNear[ 1 ], laFar[ 1 ] ), Sub3( laFar[ 2 ], laFar[ 1 ] ) ), laNear[ 1 ] );
-        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 3 ],
-            NormalizedCross3( Sub3( laNear[ 3 ], laFar[ 3 ] ), Sub3( laFar[ 0 ], laFar[ 3 ] ) ), laNear[ 3 ] );
-        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 4 ],
-            NormalizedCross3( Sub3( laNear[ 0 ], laFar[ 0 ] ), Sub3( laFar[ 1 ], laFar[ 0 ] ) ), laNear[ 0 ] );
-        StoreBringUpFrustumPlane( lRwFrustum.maPlanes[ 5 ],
-            NormalizedCross3( Sub3( laNear[ 2 ], laFar[ 2 ] ), Sub3( laFar[ 3 ], laFar[ 2 ] ) ), laNear[ 2 ] );
-
-        // [FLAG PC bring-up] ORIENT the six planes so every normal points INTO the view
-        // volume, which is the convention CgsGeometric::Frustum::SetFromRwFrustum (and
-        // through it every culling test) consumes. The plane CONSTRUCTION above is the
-        // console's, but its inward-ness depends on the handedness of the camera basis
-        // GetFrustumPerspective is handed, and this stand-in camera builds its basis by
-        // hand rather than through CgsGraphics::Camera -- so four of the six come out
-        // reversed and the query rejects the whole city. The frustum's mid-axis point is
-        // strictly interior, so testing each plane against it and flipping the ones it
-        // fails is exact, and it drops out entirely when the director camera lands and
-        // Camera::GetFrustumPerspective produces the planes.
-        {
-            const f32 lfMidDepth = 0.5f * ( lfNear + lfFar );
-            const Vector3 lInterior = { lEye.x + lForward.x * lfMidDepth,
-                                        lEye.y + lForward.y * lfMidDepth,
-                                        lEye.z + lForward.z * lfMidDepth, 0.0f };
-            for ( int liPlane = 0; liPlane < 6; ++liPlane )
-            {
-                Vector4& lrPlane = lRwFrustum.maPlanes[ liPlane ];
-                const f32 lfSigned = lrPlane.x * lInterior.x + lrPlane.y * lInterior.y
-                                   + lrPlane.z * lInterior.z - lrPlane.w;
-                if ( lfSigned < 0.0f )
-                {
-                    lrPlane.x = -lrPlane.x;
-                    lrPlane.y = -lrPlane.y;
-                    lrPlane.z = -lrPlane.z;
-                    lrPlane.w = -lrPlane.w;
-                }
-            }
-        }
+        sBringUpCamera.GetFrustumPerspective( lRwFrustum, false );
 
         CgsGeometric::Frustum lFrustum;
         lFrustum.SetFromRwFrustum( lRwFrustum );

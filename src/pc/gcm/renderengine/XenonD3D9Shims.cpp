@@ -1265,25 +1265,32 @@ namespace
     }
 
     // PA_SU_SC_MODE_CNTL [2:0] = { CULL_FRONT (bit 0), CULL_BACK (bit 1),
-    // FACE (bit 2) }, and the Xbox 360 D3DCULL enumerators are exactly that
-    // field: NONE = 0, then the two single-bit values in the same order the PC
-    // enum uses them (NONE, CW, CCW). That fixes the FACE default: with FACE = 0
-    // the CLOCKWISE winding is the front face, so bit 0 (cull front) is
-    // D3DCULL_CW == 1 and bit 1 (cull back) is D3DCULL_CCW == 2.
+    // FACE (bit 2) }, straight from the register the X360 setter packs
+    // (_CullMode @0x82938978 stores `Value & 7` verbatim), so the Xbox 360
+    // D3DCULL enumerators ARE that field: NONE = 0, cull-front = 1, cull-back = 2.
     //
-    // Measured on the world, which carries only 0 (none) and 2: reading value 2
-    // the other way round -- as "cull the clockwise triangles" -- erased almost
-    // every surface in the city (scratch/GEO_B_state), while this reading leaves
-    // it solid with the interiors gone (scratch/GEO_C_cull).
+    // FACE selects which winding is the FRONT face, and the hardware definition is
+    // FACE = 0 -> COUNTER-CLOCKWISE is front facing (1 -> clockwise). So with the
+    // world's FACE = 0: bit 0 (cull front) culls CCW == D3DCULL_CCW, and bit 1
+    // (cull back) culls CW == D3DCULL_CW -- the world's CullMode = 2 is D3DCULL_CW.
+    //
+    // HISTORY (mirror wave, 2026-07-29): this used to read FACE = 0 as "clockwise is
+    // front", i.e. the exact opposite, because measuring it that way was the only
+    // reading that kept the city solid. That measurement was taken through a MIRRORED
+    // camera (the world bring-up producer built its view basis with the opposite
+    // handedness to CgsGraphics::Camera::LookAt), and a mirror inverts every
+    // triangle's screen-space winding -- so the compensating reading looked correct.
+    // With the camera basis fixed in BrnWorldModule the register-accurate reading is
+    // the one that leaves the city solid, and the inverted one erases it.
     inline DWORD XenonCullToD3D9(u32 luValue)
     {
-        const bool lbCullFront = (luValue & 1u) != 0;
-        const bool lbCullBack  = (luValue & 2u) != 0;
-        const bool lbCwIsFront = (luValue & 4u) == 0;
+        const bool lbCullFront  = (luValue & 1u) != 0;
+        const bool lbCullBack   = (luValue & 2u) != 0;
+        const bool lbCcwIsFront = (luValue & 4u) == 0;   // FACE
         if (lbCullFront == lbCullBack)
             return D3DCULL_NONE;      // neither, or both (nothing would draw anyway)
-        const bool lbCullClockwise = lbCullFront ? lbCwIsFront : !lbCwIsFront;
-        return lbCullClockwise ? D3DCULL_CW : D3DCULL_CCW;
+        const bool lbCullCounterClockwise = lbCullFront ? lbCcwIsFront : !lbCcwIsFront;
+        return lbCullCounterClockwise ? D3DCULL_CCW : D3DCULL_CW;
     }
 
     // POLY_MODE 0 (the only value the world carries) is the hardware's "no
