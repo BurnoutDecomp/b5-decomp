@@ -314,6 +314,11 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     mePrepareStage = eWorldPrepareStart;
     meReleaseStage = eWorldReleaseDone;
 
+    // [FLAG PC bring-up] the director-camera override starts empty (see the header).
+    mbBringUpCameraOverrideValid = false;
+    mfBringUpCameraOverrideFOV   = 0.0f;
+    mBringUpCameraOverride.SetIdentity();
+
     {
         using namespace CgsDev;
 
@@ -3922,6 +3927,17 @@ WorldModule::PublishWorldShadingConstantsBringUp()
 // (The three plane-building vector helpers that used to live here are gone: the frustum
 // is now produced by the real CgsGraphics::Camera::GetFrustumPerspective @0x827F0AD8.)
 
+// [FLAG PC bring-up] see the header. Staged by BrnGameModule::DoDispatch from the director
+// module's published camera; consumed (and cleared) by the next GenerateDispatchListsBringUp.
+void
+WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
+                                       f32 lfFOVDegrees )
+{
+    mBringUpCameraOverride       = lrTransform;
+    mfBringUpCameraOverrideFOV   = lfFOVDegrees;
+    mbBringUpCameraOverrideValid = true;
+}
+
 void
 WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame )
 {
@@ -3929,6 +3945,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     {
         return;
     }
+
+    // Consume this frame's director-camera override (one frame only -- see the header).
+    const bool                          lbUseDirectorCamera = mbBringUpCameraOverrideValid;
+    const rw::math::vpu::Matrix44Affine lDirectorTransform  = mBringUpCameraOverride;
+    const f32                           lfDirectorFOVDegs   = mfBringUpCameraOverrideFOV;
+    mbBringUpCameraOverrideValid = false;
 
     // ---- frame an establishing camera on the loaded world -------------------
     Vector3 lCentre;
@@ -4034,7 +4056,22 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // and unload everything -- so the frozen shot publishes the point it is framing.
     Vector3 lPvsPosition;
 
-    if ( sfCamSpeed > 0.0f )
+    if ( lbUseDirectorCamera )
+    {
+        // ⭐ THE DIRECTOR CAMERA. Its transform rows are the fly-by's own basis: wAxis is the
+        // eye and zAxis is the unit forward the road runner's look-at built, so the framing is
+        // eye -> eye + forward and the PVS query point is the eye itself -- exactly what the
+        // console's WorldModule::Update feeds WorldEntityModule::PreSceneUpdate
+        // (mLastCameraInput.GetPosition()).
+        lEye        = lDirectorTransform.wAxis;
+        lEye.w      = 0.0f;
+        lLookAt.x   = lEye.x + lDirectorTransform.zAxis.x;
+        lLookAt.y   = lEye.y + lDirectorTransform.zAxis.y;
+        lLookAt.z   = lEye.z + lDirectorTransform.zAxis.z;
+        lLookAt.w   = 0.0f;
+        lPvsPosition = lEye;
+    }
+    else if ( sfCamSpeed > 0.0f )
     {
         // One lap per ~40 s of dispatch frames at speed 1 (the dispatch spine runs once
         // per rendered frame; a fixed per-frame step keeps a capture reproducible).
@@ -4104,7 +4141,17 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         : ( 16.0f / 9.0f );
     const f32 lfNear = 0.5f;
     const f32 lfFar  = ( lfRadius * 4.0f > 4000.0f ) ? ( lfRadius * 4.0f ) : 4000.0f;
-    const f32 lfCotHalfFov = 1.0f / tanf( 0.5f * 1.0471976f );   // 60 degrees vertical
+    // 60 degrees vertical for the stand-in tour; when the director drives, its own FOV
+    // (BehaviourRoadRunner::Update's SetFOV(95)) is the horizontal one, so the vertical it
+    // implies is 2*atan( tan(fovH/2) / aspect ).
+    const f32 KF_DEGS_TO_RADS = 0.017453292f;
+    f32 lfVerticalFov = 1.0471976f;
+    if ( lbUseDirectorCamera && lfDirectorFOVDegs > 1.0f && lfDirectorFOVDegs < 179.0f )
+    {
+        const f32 lfHalfH = 0.5f * lfDirectorFOVDegs * KF_DEGS_TO_RADS;
+        lfVerticalFov = 2.0f * atanf( tanf( lfHalfH ) / lfAspect );
+    }
+    const f32 lfCotHalfFov = 1.0f / tanf( 0.5f * lfVerticalFov );
 
     // ---- the view basis: built by the ENGINE'S OWN LookAt -------------------
     // CgsGraphics::Camera::LookAt @0x827F9510 is the AUTHORITY on this engine's camera
