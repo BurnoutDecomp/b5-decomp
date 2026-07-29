@@ -2,7 +2,11 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"   // Utils::CameraShake::Parameters (embedded @+0x00 of Parameters)
+// CameraShake (+ ::Parameters) now comes from its CANONICAL home -- the DWARF's own
+// BrnCameraShake.h -- instead of the copy that used to live inside Behaviours/BehaviourRig.h.
+// That is exactly what this file's FLAG below asked for, and it drops a heavy behaviour
+// header (and its whole rig cascade) off this TU's include graph.
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"       // Utils::CameraShake::Parameters
 
 // BrnDirector::Camera::Utils::CameraImpactEffect - the impact-driven camera-shake
 // wrapper (an impact-magnitude accumulator feeding an embedded CameraShake).

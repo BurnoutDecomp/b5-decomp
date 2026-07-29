@@ -762,16 +762,26 @@ namespace Camera
     // ========================================================================
     // NewBehaviour<TBehaviour> explicit instantiation (X360 @0x822580F8 &c.)
     //
-    // Only the road-runner is emitted here: it is the one behaviour on the live attract-mode
-    // path, and it is the one whose class has been re-based onto the canonical
-    // Camera::Behaviour (see BrnBehaviourRoadRunner.h). The other ~34 behaviour slices still
-    // model their base head as an opaque `void* mpVTable`, so pooling them and dispatching
-    // Behaviour's vtable through the helper would be a static_cast onto a type that is not
-    // (yet) a Behaviour. They are re-based one at a time; until then their NewBehaviour<>
-    // call sites keep binding the generic DECLARATION-ONLY overload, exactly as before.
+    // Emitted here for the behaviours that HAVE been re-based onto the canonical
+    // Camera::Behaviour: the road-runner (the attract-mode fly-by camera) and, since
+    // 2026-07-29, the two SHARED GAMEPLAY cameras SharedCameraContainer::Prepare allocates
+    // (BehaviourGameplayBumper / BehaviourGameplayExternal -- see their headers' RE-BASED
+    // banners; those two are what Arbitrator::Update's very first state needs, and their old
+    // `void* mpVTable` fork is what made BehaviourHelper::Prepare's slot-0 dispatch fault on
+    // a null vptr). The remaining ~32 behaviour slices still model their base head as an
+    // opaque `void* mpVTable`, so pooling them and dispatching Behaviour's vtable through the
+    // helper would be a static_cast onto a type that is not (yet) a Behaviour. They are
+    // re-based one at a time; until then their NewBehaviour<> call sites keep binding the
+    // generic DECLARATION-ONLY overload, exactly as before.
     // ========================================================================
     template void BehaviourManager::NewBehaviour<BehaviourRoadRunner>(
         BehaviourHandle<BehaviourRoadRunner>& lrHandle, void* lpOwningState,
+        const void* lpOwner, s32 liRefLimit);
+    template void BehaviourManager::NewBehaviour<BehaviourGameplayBumper>(
+        BehaviourHandle<BehaviourGameplayBumper>& lrHandle, void* lpOwningState,
+        const void* lpOwner, s32 liRefLimit);
+    template void BehaviourManager::NewBehaviour<BehaviourGameplayExternal>(
+        BehaviourHandle<BehaviourGameplayExternal>& lrHandle, void* lpOwningState,
         const void* lpOwner, s32 liRefLimit);
 }
 } // namespace BrnDirector

@@ -65,6 +65,9 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugOrbitPlayer.h"
 
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"                       // group E
+#include "GameSource/Director/Camera/Utils/BrnCameraSphericalRotationController.h" // group E
+
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
 #include "SharedClasses/Traffic/BrnTrafficSection.h"
@@ -497,4 +500,40 @@ namespace BrnTrigger
         lResult.SetIdentity();
         return lResult;
     }
+}
+
+// ============================================================================
+// GROUP E (NEW 2026-07-29, with the two shared gameplay cameras' RE-BASE) -- the two embedded
+// sub-object Constructs BehaviourGameplayExternal::Construct / ::Prepare call by name.
+//
+// Both are DECLARED in their own canonical homes and have no TU yet. They are stubbed rather
+// than bodied because neither shape is attested: the console INLINES
+// CameraSphericalRotationController::Construct into each owner (so there is no standalone
+// body to read, and its tail lands inside an un-mapped SmoothMover), and
+// CameraShakeICEController::Construct is a real call whose body was not dumped.
+//
+// SAFE TODAY, and provably so: the manager's pools construct every behaviour with
+// `new (slot) T()` (BrnAbstractPool.h:148) -- value-initialisation, which zero-initialises the
+// whole object before the ctor runs -- so both sub-objects start zeroed regardless. Nothing
+// reads either one: BehaviourGameplayExternal::Update is not transcribed, and
+// MainDirector::UpdateCameraBehavioursPostScene (the only path that would dispatch it) is
+// gated. The CALL SHAPE is what matters here; keeping it means the day these land, the
+// behaviour is already correct.
+// DELETE-WHEN: BrnCameraSphericalRotationController.cpp / BrnCameraShake.cpp land.
+// ============================================================================
+namespace BrnDirector
+{
+namespace Camera
+{
+namespace Utils
+{
+    void CameraSphericalRotationController::Construct()
+    {
+    }
+
+    void CameraShakeICEController::Construct()
+    {
+    }
+}
+}
 }

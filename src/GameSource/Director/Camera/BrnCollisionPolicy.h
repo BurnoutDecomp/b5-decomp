@@ -77,10 +77,23 @@ private:
     //     +0x210            mfDesiredHeight     (stfs f31, 0x210)
     //     +0x211 .. +0x24A  rig members not modelled here
     //     +0x24B            mbHaveDesiredHeight (stb 1, 0x24B)
+    //     +0x24C .. +0x24F  rig members not modelled here  <- see the SIZE note below
+    //
+    // ⭐ SIZE 0x250, GROWN 2026-07-29 (was 0x24C, which was 4 bytes short -- the old tail
+    // simply stopped at the last member this header names). Pinned from
+    // BehaviourGameplayExternal, which embeds one of these at +0x50 and whose next member
+    // (mAirShake) the asm puts at +0x2A0: 0x50 + 0x250 == 0x2A0 exactly. Two further console
+    // stores land inside the new tail and nowhere else -- Construct @0x82224A18's *(beh+668)
+    // and *(beh+669) (policy +0x24C/+0x24D) and Prepare @0x82240738's *(beh+670) (policy
+    // +0x24E) -- and that last one is the "+0x29E" the committed
+    // SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish note quotes as an
+    // unidentified behaviour-relative flag. It is a COLLISION-POLICY field, not a
+    // behaviour field. The IceAnim fork's independent slice agrees on 0x250.
     u8  maReserved000[0x210];                 // +0x000 .. +0x20F  rig members not modelled here
     f32 mfDesiredHeight;                      // +0x210            desired camera height (stored)
     u8  maReserved214[0x24B - 0x214];         // +0x214 .. +0x24A  rig members not modelled here
     u8  mbHaveDesiredHeight;                  // +0x24B            desired-height override active flag
+    u8  maReserved24C[0x250 - 0x24C];         // +0x24C .. +0x24F  rig members not modelled here
 };
 
 // ----------------------------------------------------------------------------
