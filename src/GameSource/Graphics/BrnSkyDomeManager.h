@@ -13,9 +13,15 @@
 
 namespace rw { class IResourceAllocator; namespace math { namespace fpu {
     template<class T> struct Vector3Template; } } }
-namespace BrnGraphics { class Im3dSkyDome; enum EEnvironmentMapFace; }
-class Texture;
-class BrnShaderConstantsFrame;
+namespace BrnGraphics { class Im3dSkyDome; }
+namespace renderengine { class Texture; }
+struct BrnShaderConstantsFrame;
+
+// The env-map face selector. The real enum is BrnGraphics::EEnvironmentMapFace
+// (GameSource/World/EnvironmentMap/BrnEnvironmentMap.h); this header only needs the
+// parameter type, and an opaque enum declaration is not portable, so the face is taken
+// through the complete type via that header.
+#include "GameSource/World/EnvironmentMap/BrnEnvironmentMap.h"   // BrnGraphics::EEnvironmentMapFace
 
 // BrnSkyDomeManager.h:43
 class BrnSkyDomeManager
@@ -24,9 +30,13 @@ public:
     void Construct();                                                   // BrnSkyDomeManager.h:47
     bool Prepare(BrnGraphics::Im3dSkyDome*, rw::IResourceAllocator*);   // BrnSkyDomeManager.h:52
     bool Release(rw::IResourceAllocator*);                             // BrnSkyDomeManager.h:56
-    void Render(BrnGraphics::Im3dSkyDome*, const Texture*, const Texture*, const BrnShaderConstantsFrame*); // :63
+    // The two texture parameters are renderengine::Texture (the DecFIGS mangled signature
+    // spells PKN12renderengine7TextureE); they are the cloud layer-0 density + lighting maps.
+    void Render(BrnGraphics::Im3dSkyDome*, const renderengine::Texture*,
+                const renderengine::Texture*, const BrnShaderConstantsFrame*);                  // :63
     void RenderToEnvironmentMap(BrnGraphics::EEnvironmentMapFace, BrnGraphics::Im3dSkyDome*,
-                                const Texture*, const Texture*, const BrnShaderConstantsFrame*);            // :71
+                                const renderengine::Texture*, const renderengine::Texture*,
+                                const BrnShaderConstantsFrame*);                                // :71
 
 private:
     // BrnSkyDomeManager.h:78

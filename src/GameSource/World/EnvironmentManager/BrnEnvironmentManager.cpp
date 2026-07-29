@@ -1,8 +1,65 @@
 #include "GameSource/World/EnvironmentManager/BrnEnvironmentManager.h"
 #include "GameSource/World/EnvironmentSettings/BrnEnvironmentSettings.h"  // ParseEnvironmentFile
+#include "SharedClasses/World/BrnEnvironmentUtil.h"                       // ComputeKeyLightDirection
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include <cstring>   // memset
+#include <cmath>     // sqrtf
+#include <cstring>   // memset / memcpy
+
+namespace
+{
+    // ---- X360 rodata, all dumped from BURNOUT_X360_ARTIST.XEX with headless IDA 9.3 --------
+    // The times are SECONDS OF DAY and the sun-rig angles are DEGREES, which is what makes
+    // these readable: 46800 = 13:00, 64800 = 18:00, 28800..61200 = 08:00..17:00,
+    // 32400..57600 = 09:00..16:00.
+    const f32 KF_DEF_SEASON_BLEND_DELTA        = 0.019999999f;   // flt_82005574
+    const f32 KF_DEF_TIME_OF_DAY               = 46800.0f;       // flt_820CA580  (13:00)
+    const f32 KF_DEF_TIME_OF_DAY_DELTA         = 54.0f;          // flt_820CA584
+    const f32 KF_DEF_CLOUD_DELTA               = 15.0f;          // flt_820047C4
+    const f32 KF_SUN_RIG_ROTATION              = 45.0f;          // flt_820CA58C  (degrees)
+    const f32 KF_SUN_TILT_AT_HORIZON           = 20.0f;          // flt_820CA5A8  (degrees)
+    const f32 KF_SUN_TILT_AT_MIDDAY            = 50.0f;          // flt_820138DC  (degrees)
+    const f32 KF_DEF_TIME_OF_DAY_UPPER_BOUND   = 61200.0f;       // flt_820CAB98  (17:00)
+    const f32 KF_DEF_TIME_OF_DAY_LOWER_BOUND   = 28800.0f;       // flt_820CC768  (08:00)
+    const f32 KF_SUN_ELEV_TOD_LOWER_BOUND      = 32400.0f;       // flt_8201C214  (09:00)
+    const f32 KF_SUN_ELEV_TOD_UPPER_BOUND      = 57600.0f;       // flt_820CC764  (16:00)
+    const f32 KF_DEF_WHITE_LEVEL               = 0.5f;           // flt_82001DA0
+    const f32 KF_JUNKYARD_TIME_OF_DAY_SECONDS  = 64800.0f;       // flt_82F307F0  (18:00)
+    const f32 KF_JUNKYARD_NEAREST_DISTANCE_SENTINEL = 100000.0f; // flt_820080E8
+
+    // CalcKeyLightDirection's time-of-day -> elevation-angle mapping.
+    const f32 KF_SUN_ELEVATION_ZERO_SECONDS    = 23400.0f;       // flt_820CAA7C  (06:30)
+    const f32 KF_RADIANS_PER_SECOND_OF_DAY     = 7.2722054e-5f;  // flt_820CAA78  (2*pi / 86400)
+
+    // ---- Construct's inlined CgsNumeric::Random seeding -----------------------------------
+    const u64 KU_RANDOM_SEED       = 0x1AD0891BC87CD8C9ull;
+    const u64 KU_RANDOM_MULTIPLIER = 0x5851F42D4C957F2Dull;
+    const u32 KU_RANDOM_RING_SIZE  = 8u;
+
+    // ---- Construct's event-receiver queue geometry ----------------------------------------
+    const u32 KU_RECEIVER_QUEUE_CAPACITY = 1024u;
+    const u32 KU_RECEIVER_QUEUE_STRIDE   = 16u;
+
+    // ---- stage-machine terminal values Construct writes -----------------------------------
+    const s32 E_STREAMOUT_DONE          = 7;
+    const s32 E_SETUPSEASONSBLEND_DONE  = 4;
+
+    // K_DEFAULT_JUNKYARD_KEY_LIGHT_DIRECTION (X360 unk_8300F410). This is MUTABLE .data, not
+    // rodata -- its bytes are zero in the image and its real initial value is written by a
+    // static-init TU outside this wave. EnableJunkyardLightingSetup seeds the override with it
+    // and then immediately overwrites it from the nearest loaded junkyard setup, so it only
+    // matters when no setups are loaded.
+    // FLAG PC-platform leaf: static-init initialiser for this .data global not reconstructed.
+    Vector3 GetDefaultJunkyardKeyLightDirection()
+    {
+        Vector3 lDirection;
+        lDirection.x = 0.0f;
+        lDirection.y = 0.0f;
+        lDirection.z = 0.0f;
+        lDirection.w = 0.0f;
+        return lDirection;
+    }
+}
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnWorld::EnvironmentSettings::EnvironmentManager::UpdateFromTool             @ 0x827B0DA8
@@ -21,28 +78,28 @@ namespace EnvironmentSettings
 {
 
 // @ 0x827B0DA8. Tool-driven blend/pause transition.
-//   miBlendState >= 3  -> already in a blocking op: on unpause (lbPause == false) restore
+//   meBlendMode >= 3  -> already in a blocking op: on unpause (lbPause == false) restore
 //                         the saved state (asserting the state really is the reserved 3),
 //                         and report the blocking state (true).
-//   miBlendState <  3  -> on pause (lbPause == true) stash the current state, enter the
+//   meBlendMode <  3  -> on pause (lbPause == true) stash the current state, enter the
 //                         reserved blocking state 3, and reset the tool-update frame gate;
 //                         report not-blocking (false).
 bool EnvironmentManager::UpdateFromTool(bool lbPause)
 {
-    if (miBlendState >= 3)
+    if (meBlendMode >= 3)
     {
         if (!lbPause)
         {
-            CGS_ASSERT(miBlendState == 3, "Tyring to unpause a blocking op");
-            miBlendState = miSavedBlendState;
+            CGS_ASSERT(meBlendMode == 3, "Tyring to unpause a blocking op");
+            meBlendMode = meBlendModePaused;
         }
         return true;
     }
 
     if (lbPause)
     {
-        miSavedBlendState        = miBlendState;
-        miBlendState             = 3;
+        meBlendModePaused        = meBlendMode;
+        meBlendMode             = 3;
         miToolUpdateFrameCounter = 0;
     }
     return false;
@@ -53,9 +110,13 @@ void EnvironmentManager::DiscardCurrSeason()
 {
     CGS_ASSERT(meStreamInStage == E_STREAMIN_DONE, "meStreamInStage == E_STREAMIN_DONE");
 
-    const u32 luDiscardSeason = muDiscardSeason;
-    muCurrSeasonRef = 0;
-    mbCurrSeason    = static_cast<u8>(luDiscardSeason);
+    // Rewind the stream-OUT stage machine to START and point it at the season that is
+    // being discarded. (0x444/0x448 were previously mis-named muCurrSeasonRef /
+    // mbCurrSeason; Construct writes E_STREAMOUT_DONE into 0x444, which is what
+    // identifies the pair -- see the header banner.)
+    const s32 liCurrSeason = miCurrSeason;
+    meStreamOutStage  = 0;
+    muStreamOutTarget = static_cast<u8>(liCurrSeason);
 }
 
 // @ 0x827C30E8. An out-of-line copy of CgsResource::ResourcePtr<T>::GetMemoryResource()
@@ -119,7 +180,7 @@ bool EnvironmentManager::SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame)
         char  lacName[256];
         memset(lacColourCubes, 0, sizeof(lacColourCubes));
 
-        ParseEnvironmentFile(mfCurrTimeOfDay,
+        ParseEnvironmentFile(mfTimeOfDay,
                              lacColourCubes,
                              lafColourCubeWeights,
                              lKeyframe.mBloom,
@@ -153,6 +214,204 @@ void EnvironmentManager::BeginRelease()
 {
     mePrepareStage = 0;   // back to E_..PREPARE_START
     meReleaseStage = 1;   // RELEASING
+}
+
+// =============================================================================================
+// SKY WAVE (2026-07-29): the defaults + key-light + junkyard-override slice.
+//
+//   Construct                    @ 0x827CA408
+//   CalcKeyLightDirection        @ 0x827B0638
+//   EnableJunkyardLightingSetup  @ 0x827B0F98
+//   DisableJunkyardLightingSetup @ 0x827B10E8
+//
+// All four were quiet no-op gates in WorldLinkStubs.cpp that FIRE at runtime. Every constant
+// below was dumped out of the ARTIST image with headless IDA 9.3 -- none is guessed. Their
+// values are all readable as times of day and degrees, which is a good independent check:
+//   default time of day 46800 s = 13:00, junkyard 64800 s = 18:00, the time-of-day bounds
+//   28800..61200 s = 08:00..17:00, and the sun-elevation clamp 32400..57600 s = 09:00..16:00.
+// =============================================================================================
+
+// @ 0x827CA408. Seed every default. The X360 also registers five CgsDev debug variables at
+// the end ("Override season", "Season to use", "Keyframe to use", "HDR white level",
+// "Bloom luminance scale", under the "Environment" group) through a stack DebugInterface.
+// FLAG PC-platform leaf: the CgsDev::DebugInterface registration surface is not reconstructed, so
+// the debug-variable registrations are omitted; every field they bind is still seeded below.
+void EnvironmentManager::Construct()
+{
+    // The module event-receiver queue: 1024 entries of 16 bytes, pointed at the embedded
+    // storage, then cleared.
+    mpReceiverQueueBuffer   = &maReceiverQueueStorage[0];
+    muReceiverQueueCapacity = KU_RECEIVER_QUEUE_CAPACITY;
+    muReceiverQueueStride   = KU_RECEIVER_QUEUE_STRIDE;
+    memset(maReceiverQueueStorage, 0, sizeof(maReceiverQueueStorage));
+
+    // CgsNumeric::Random, inlined: seed the 64-bit LCG state and prime the 8-entry float ring.
+    // The generator is x = x * 0x5851F42D4C957F2D + 1 and each draw is the [1,2) float built
+    // by or-ing the top 23 bits of the high word under an exponent of 0 (1.0f | (hi >> 9)).
+    {
+        u64 luState = KU_RANDOM_SEED;
+        f32* const lpafRing = reinterpret_cast<f32*>(&maRandom[0]);
+        for (u32 luIndex = 0; luIndex < KU_RANDOM_RING_SIZE; ++luIndex)
+        {
+            luState = (luState * KU_RANDOM_MULTIPLIER) + 1u;
+            const u32 luBits = 0x3F800000u | (static_cast<u32>(luState >> 32) >> 9);
+            f32 lfDraw;
+            memcpy(&lfDraw, &luBits, sizeof(lfDraw));
+            lpafRing[luIndex & (KU_RANDOM_RING_SIZE - 1)] = lfDraw;
+        }
+        // The u64 state and the ring index follow the eight floats (+0x20 / +0x28).
+        memcpy(&maRandom[0x20], &luState, sizeof(luState));
+        const u32 luRingIndex = KU_RANDOM_RING_SIZE & (KU_RANDOM_RING_SIZE - 1);
+        memcpy(&maRandom[0x28], &luRingIndex, sizeof(luRingIndex));
+    }
+
+    mePrepareStage    = 0;
+    meReleaseStage    = 1;
+
+    meStreamOutStage  = E_STREAMOUT_DONE;
+    muStreamOutTarget = 0;
+    meStreamInStage   = E_STREAMIN_DONE;
+    muStreamInTarget  = 0;
+
+    maiSeasons[0]           = -1;
+    maiSeasons[1]           = 0;
+    miSeasonCurrentlyPlaying = 0;
+    miCurrSeason            = 0;
+    mfSeasonBlend           = 0.0f;
+    mfSeasonBlendDelta      = KF_DEF_SEASON_BLEND_DELTA;
+    maiLocations[0]         = 0;
+    maiLocations[1]         = 0;
+    miCurrLocation          = 0;
+    mfLocationBlend         = 1.0f;
+    meBlendMode             = 0;
+
+    mfTimeOfDay              = KF_DEF_TIME_OF_DAY;
+    mfTimeOfDayDelta         = KF_DEF_TIME_OF_DAY_DELTA;
+    mfCloudDelta             = KF_DEF_CLOUD_DELTA;
+    mfSunRigRotation         = KF_SUN_RIG_ROTATION;
+    mfSunTiltAtHorizon       = KF_SUN_TILT_AT_HORIZON;
+    mfSunTiltAtMidday        = KF_SUN_TILT_AT_MIDDAY;
+    meSetupSeasonsBlendStage = E_SETUPSEASONSBLEND_DONE;
+
+    // BlendFrame::Construct, inlined as a 4-iteration loop.
+    for (int liIndex = 0; liIndex < 4; ++liIndex)
+    {
+        mBlendFrame.mapKeyframes[liIndex] = 0;
+        mBlendFrame.mafWeights[liIndex]   = 0.0f;
+    }
+
+    mScattering.Construct();
+    mLighting.Construct();
+    mClouds.Construct();
+
+    mfCloudDistanceCurve   = 1.0f;
+    mbSetScattColsFromSky  = false;
+    mbSetIrradianceFromSky = false;
+
+    mbUseDefaultEffects     = false;
+    mbOverrideSeason        = false;
+    miOverrideCurrentSeason = 1;
+    miOverrideNextSeason    = 1;
+    miOverrideKeyframe      = 1;
+
+    mfTimeOfDayUpperBound = KF_DEF_TIME_OF_DAY_UPPER_BOUND;
+    mfTimeOfDayLowerBound = KF_DEF_TIME_OF_DAY_LOWER_BOUND;
+    mfSunElevTodLBound    = KF_SUN_ELEV_TOD_LOWER_BOUND;
+    mfSunElevTodUBound    = KF_SUN_ELEV_TOD_UPPER_BOUND;
+
+    mbJunkyardLightingSetup     = false;
+    mbOverrideKeyLightDirection = false;
+    mfWhiteLevel                = KF_DEF_WHITE_LEVEL;
+
+    mCloud0Disp.x = 0.0f;
+    mCloud0Disp.y = 0.0f;
+    mCloud0Disp.z = 0.0f;
+    mCloud0Disp.w = 0.0f;
+}
+
+// @ 0x827B0638. The world-space key-light (sun) direction for this frame.
+//
+// When the junkyard override is active the stored direction is returned verbatim; otherwise
+// the time of day is first CLAMPED into the sun-elevation window (09:00..16:00) so the sun
+// never sits too low, then mapped to an elevation angle by (t - 23400s) * 2*pi/86400 -- i.e.
+// seconds of day measured in radians with zero at 06:30 -- and handed to
+// EnvironmentSettings::ComputeKeyLightDirection along with the sun rig's three tuning angles.
+Vector3 EnvironmentManager::CalcKeyLightDirection() const
+{
+    if (mbOverrideKeyLightDirection)
+    {
+        return mOverrideKeyLightDirection;
+    }
+
+    // fsel-pair clamp: min against the upper bound first, then max against the lower bound.
+    f32 lfClampedTimeOfDay = mfTimeOfDay;
+    if (lfClampedTimeOfDay > mfSunElevTodUBound)
+    {
+        lfClampedTimeOfDay = mfSunElevTodUBound;
+    }
+    if (lfClampedTimeOfDay < mfSunElevTodLBound)
+    {
+        lfClampedTimeOfDay = mfSunElevTodLBound;
+    }
+
+    const f32 lfKeyLightElevation =
+        (lfClampedTimeOfDay - KF_SUN_ELEVATION_ZERO_SECONDS) * KF_RADIANS_PER_SECOND_OF_DAY;
+
+    return ComputeKeyLightDirection(lfKeyLightElevation,
+                                    mfSunRigRotation,
+                                    mfSunTiltAtHorizon,
+                                    mfSunTiltAtMidday);
+}
+
+// @ 0x827B0F98. Enter the junkyard's fixed lighting: pin the time of day to 18:00, force the
+// key-light direction, and pick the direction from whichever loaded junkyard setup is nearest
+// to the camera.
+void EnvironmentManager::EnableJunkyardLightingSetup()
+{
+    CGS_ASSERT(!mbJunkyardLightingSetup, "!mbJunkyardLightingSetup");
+
+    mfTimeBeforeEnteringJunkyard = mfTimeOfDay;
+
+    f32 lfNearestDistance = KF_JUNKYARD_NEAREST_DISTANCE_SENTINEL;
+
+    mbJunkyardLightingSetup     = true;
+    mbOverrideKeyLightDirection = true;
+    mfTimeOfDayUpperBound       = KF_JUNKYARD_TIME_OF_DAY_SECONDS;
+    SetTimeOfDay_Seconds(KF_JUNKYARD_TIME_OF_DAY_SECONDS);
+    mOverrideKeyLightDirection  = GetDefaultJunkyardKeyLightDirection();
+
+    for (u32 luIndex = 0; luIndex < muNumJunkyardLightingSetupsLoaded; ++luIndex)
+    {
+        const JunkyardLighting& lrSetup = maJunkyardLighting[luIndex];
+
+        // Magnitude(camera - setupPosition). The X360 does vmsum3fp128 + vrsqrtefp with two
+        // Newton-Raphson refinements and a vsel that maps a zero-length difference to 0
+        // rather than NaN; lowered here to the equivalent scalar length.
+        const f32 lfDeltaX = mCurrentCameraPosition.x - lrSetup.mJunkyardPosition.x;
+        const f32 lfDeltaY = mCurrentCameraPosition.y - lrSetup.mJunkyardPosition.y;
+        const f32 lfDeltaZ = mCurrentCameraPosition.z - lrSetup.mJunkyardPosition.z;
+        const f32 lfDistanceSquared =
+            (lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY) + (lfDeltaZ * lfDeltaZ);
+        const f32 lfDistance = (lfDistanceSquared == 0.0f) ? 0.0f : sqrtf(lfDistanceSquared);
+
+        if (lfNearestDistance > lfDistance)
+        {
+            lfNearestDistance          = lfDistance;
+            mOverrideKeyLightDirection = lrSetup.mKeyLightDirection;
+        }
+    }
+}
+
+// @ 0x827B10E8. Leave the junkyard: restore the saved time of day and the default upper bound,
+// and drop both overrides.
+void EnvironmentManager::DisableJunkyardLightingSetup()
+{
+    CGS_ASSERT(mbJunkyardLightingSetup, "mbJunkyardLightingSetup");
+
+    SetTimeOfDay_Seconds(mfTimeBeforeEnteringJunkyard);
+    mfTimeOfDayUpperBound       = KF_DEF_TIME_OF_DAY_UPPER_BOUND;
+    mbJunkyardLightingSetup     = false;
+    mbOverrideKeyLightDirection = false;
 }
 
 }
