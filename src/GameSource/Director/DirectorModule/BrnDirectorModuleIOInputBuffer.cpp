@@ -33,6 +33,7 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, maVehicleInfoArray)   == 0x3238, "maVehicleInfoArray @0x3238");
         static_assert(offsetof(InputBuffer, mControllerInfo)      == 0x3260, "mControllerInfo @0x3260");
         static_assert(offsetof(InputBuffer, mTimerInterface)      == 0x6750, "mTimerInterface @0x6750");
+        static_assert(sizeof(CgsSystem::TimerStatusInterface)     == 0x30,   "TimerStatusInterface fills the @0x6750 span exactly");
         static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
         static_assert(offsetof(InputBuffer, mContacts)            == 0x6AB8, "mContacts @0x6AB8");
         static_assert(offsetof(InputBuffer, mHookEnumeration)     == 0x7910, "mHookEnumeration @0x7910");
@@ -104,10 +105,18 @@ namespace DirectorIO
         return mMidFlagBlock[0x7AC8 - 0x7AC7] != 0;
     }
 
-    const void* InputBuffer::GetTimerStatusInterface() const
+    const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mTimerInterface;
+        return &mTimerInterface;
+    }
+
+    // X360 @0x823B27E8 -- the write-side overload (BrnGameModule::BridgeTimers takes the write
+    // lock, calls this, and copies the game module's 48-byte snapshot over it).
+    CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mTimerInterface;
     }
 
     const void* InputBuffer::GetVehicleInputInterface() const

@@ -56,8 +56,15 @@ void InertiaController::Update(Camera::Camera* lpCamera, f32 lfTimeStep)
         // Slerp last frame's actual transform toward the freshly-finalised one and
         // adopt the result (lfTimeStep feeds the vendor SLerp -- see header note).
         (void)lfTimeStep;
+        // RECONCILED 2026-07-29 with the corrected vendor signature: SLerp's 3rd argument is
+        // the blend AMOUNT by value (v1 on console) and its 4th is a Vector3* the callee WRITES
+        // with the remaining rotation angle. This call site had been transcribed against the
+        // old `const float* lpfAmount` mis-read. The angle out-slot is unread here, exactly as
+        // in TrafficLaneTruck::Update (DWARF calls that local `lUnusedAngle`).
+        rw::math::vpu::Vector3 lUnusedAngle;
         const rw::math::vpu::Matrix44Affine lBlended =
-            rw::math::vpu::SLerp(mPreviousActualXform, lpCamera->GetTransform(), &lfBlendAmount);
+            rw::math::vpu::SLerp(mPreviousActualXform, lpCamera->GetTransform(),
+                                 lfBlendAmount, &lUnusedAngle);
 
         lpCamera->SetTransform(lBlended);
         mPreviousActualXform = lBlended;

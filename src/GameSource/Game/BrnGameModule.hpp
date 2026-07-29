@@ -12,6 +12,8 @@
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"// CgsDev::PerfMonCpu
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h" // CgsDev::DebugManager
 #include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"           // CgsSystem::FrameRateManager
+#include "GameShared/GameClasses/System/Timer/CgsTimer.h"               // CgsSystem::Timer (the game/sim pair, h:466-467)
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"// CgsSystem::TimerStatusInterface (h:468)
 #include "GameSource/Game/BrnGlobalCpuMonitors.h"                        // BrnGame::BrnCpuMonitors
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h" // GameMainFlowController + flow states
 #include "SharedClasses/BrnSharedConstants.h"                            // BrnUpdateSet
@@ -196,6 +198,17 @@ namespace BrnGame
         // the published camera survives into DoDispatch, which runs before it is destroyed.
         // lbPostGui selects the third pass; the first two run together on the pre-GUI call.
         void DoUpdate_Director(bool lbPostGui);
+
+        // @0x823BCFD0 -- tick the game and sim timers once per sim sub-step. The console
+        // first drains the game-state and director TimerRequests queues through
+        // TimerRequestInterface::ApplyToTimers; both producers are un-staged on this build,
+        // so only the two Timer::Update calls (the tail of the console body) are live here.
+        void UpdateTimers();
+
+        // @0x823BD150 -- snapshot the two timers into mTimerStatusInterface and copy the
+        // whole 48-byte interface into the director's input buffer under its write lock.
+        // This is what gives the camera behaviours a NON-ZERO frame timestep.
+        void BridgeTimers(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput);
 
         // The per-frame update IO stacks. The scripted module loads (LoadingScriptedState::
         // LoadXxxModule) create their per-frame module IO buffers on these, exactly as the
@@ -540,12 +553,19 @@ namespace BrnGame
         EGameUpdateStage meGameUpdateStage;                          // h:458
         s32 miNumSimFramesRequired;                                  // h:459
         BrnGameMainFlowController::GameMainFlowController mMainFlowStateMachine; // h:462
-        // [h:465-471: receiver queue, game/sim timers, timer interfaces - omitted]
-        // X360 reads two frame-timing fields in the timer-status region and multiplies them
-        // to form the debug-manager delta time; reconstructed as these two members until the
-        // Timer subsystem is reconstructed.
-        f32 mfDebugUpdateDeltaSeconds;
-        f32 mfDebugUpdateTimeScale;
+        // [h:465: receiver queue - omitted]
+        // ---- the game/sim timer pair + their published snapshot -------------------------
+        // X360 gm+10095316 / gm+10095344 / gm+10095372. Construct @0x823C9EA8 Clears the
+        // interface, Prepares BOTH timers with 1/refreshRate and sets each one running
+        // (`*(gm+10095340) = 1` / `*(gm+10095368) = 1` == Timer::mbRunning @+24); UpdateTimers
+        // @0x823BCFD0 ticks both once per sim sub-step; BridgeTimers @0x823BD150 snapshots
+        // them into the interface and copies all 48 bytes into the director input buffer.
+        // THIS PAIR IS THE FRAME TIMESTEP the whole camera/behaviour middle runs on
+        // (TimerStatus::GetCurrentTimeStep == Timer::mfRate * Timer::mfScaleCurrent).
+        CgsSystem::Timer                mGameTimer;                  // h:466  gm+10095316
+        CgsSystem::Timer                mSimTimer;                   // h:467  gm+10095344
+        CgsSystem::TimerStatusInterface mTimerStatusInterface;       // h:468  gm+10095372
+        // [h:469-471: the two TimerRequests + the request interface - omitted]
         CgsSystem::FrameRateManager      mFrameRateManager;          // h:472
         CgsSystem::EFrameRateManagerType meFrameRateManagerType;     // h:473
         // [h:474: frame-rate type request interface - omitted]

@@ -422,6 +422,23 @@ namespace BrnDirector
         return mpTrafficData.GetMemoryResource();
     }
 
+    // BrnDirectorWorldMap.h -- the two hull-array queries the lane walkers use. Both take the
+    // same LOADED assert the console re-emits at each inlined site (asm 0x8222AC50 fires it at
+    // BrnDirectorWorldMap.h:96 for the count query and :93 for the hull fetch).
+    const BrnTraffic::Hull* WorldMap::GetTrafficHullData(u32 luHull) const
+    {
+        CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
+                   "meLoadingState == E_LOADING_STATE_LOADED");
+        return mpTrafficData.GetMemoryResource()->GetHull(luHull);
+    }
+
+    u32 WorldMap::GetNumTrafficHulls() const
+    {
+        CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
+                   "meLoadingState == E_LOADING_STATE_LOADED");
+        return mpTrafficData.GetMemoryResource()->muNumHulls;
+    }
+
     // BrnDirectorWorldMap.h:121 / body @0x821F7800.
     // Follow left-lane neighbours across hull-section joins. Each hop rewrites the current
     // (section, rung, parameter) into the neighbour section's frame -- new = theirStartRung +

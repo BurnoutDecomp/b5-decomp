@@ -47,8 +47,6 @@ namespace BrnGame
         , meGamePrepareStage(E_GAMEPREPARESTAGE_START)
         , meGameUpdateStage(E_GAMEUPDATESTAGE_PREPARE)
         , miNumSimFramesRequired(0)
-        , mfDebugUpdateDeltaSeconds(0.0f)
-        , mfDebugUpdateTimeScale(0.0f)
         , meFrameRateManagerType(CgsSystem::E_FRAMERATEMANAGER_SINGLE)
         , mi8FrameRateMinSteps(1)
         , mi8FrameRateMaxSteps(1)
@@ -228,6 +226,27 @@ namespace BrnGame
         // Construct time (Device::Start's create lands later), so the atlas raster's FixUp would get a
         // null device and produce a textureless font. It is brought up from DispatchThread instead,
         // once the render path has the device live (see below).
+
+        // ---- X360 step 9 (the part that matters to every timed subsystem) -----------------
+        // Construct @0x823C9EA8, verbatim:
+        //     CgsSystem::TimerStatusInterface::Clear(gm + 10095372);
+        //     lfRate = 1.0 / <vsync refresh rate>;               // the 50/60 the step above checks
+        //     CgsSystem::Timer::Prepare(gm + 10095316, lfRate);  // the GAME timer
+        //     CgsSystem::Timer::Prepare(gm + 10095344, lfRate);  // the SIM timer
+        //     *(gm + 10095340) = 1;                              // gameTimer.mbRunning (+24)
+        //     *(gm + 10095368) = 1;                              // simTimer.mbRunning  (+24)
+        // FLAG (PC-platform leaf): the console reads the refresh rate out of the display mode
+        // it validated one step earlier (50 or 60, asserting anything else); this build has no
+        // reconstructed mode query, so it takes the 60Hz arm -- the same value the rest of the
+        // PC bring-up already assumes. Everything downstream reads the RATE, not the constant.
+        {
+            const f32 lfTimerRate = 1.0f / 60.0f;
+            mTimerStatusInterface.Clear();
+            mGameTimer.Prepare(lfTimerRate);
+            mSimTimer.Prepare(lfTimerRate);
+            mGameTimer.SetRunning(true);
+            mSimTimer.SetRunning(true);
+        }
 
         // X360 step 10: the main game flow controller (GameMainFlowController::Construct
         // @+10094180), then the PC boot enters the initial loading screen (OnEnter raises the
@@ -534,6 +553,66 @@ namespace BrnGame
     // of driving a fabricated one. That is the console's own no-player behaviour, and it is
     // why the published camera is currently STATIC.
     // ------------------------------------------------------------------------------------
+    // ------------------------------------------------------------------------------------
+    // UpdateTimers  @ 0x823BCFD0
+    //
+    // The console body is:
+    //     LockForRead(gameStateOut); LockForRead(directorOut);
+    //     TimerRequests::Append(gm+10095420, GameStateModuleIO::OutputBuffer::GetTimerR(...));
+    //     TimerRequests::Append(gm+10095428, ... + 8);
+    //     if ( !((GetTimerR(...)[2] >> 2) & 1) )      // the "director owns the timers" bit
+    //     {
+    //         lpIn = DirectorIO::OutputBuffer::GetTimerRequestIn(directorOut);
+    //         TimerRequests::Append(gm+10095420, lpIn);
+    //         TimerRequests::Append(gm+10095428, lpIn + 8);
+    //     }
+    //     UnlockForRead(directorOut); UnlockForRead(gameStateOut);
+    //     TimerRequestInterface::ApplyToTimers(gm+10095420, gm+10095316, gm+10095344);
+    //     CgsSystem::Timer::Update(gm+10095316);
+    //     CgsSystem::Timer::Update(gm+10095344);
+    //
+    // ⚠️ QUIET GATE (the request half): the two producers -- the GameState module's timer
+    // request block and DirectorIO::OutputBuffer::GetTimerRequestIn -- are BOTH un-staged on
+    // this build (the GameState module is a placeholder, and the director output's timer
+    // request interface is never written). Appending from unwritten sources would apply
+    // garbage pause/slomo scales to the timers, which is strictly worse than applying none:
+    // with no requests, ApplyToTimers is the identity (scale target stays 1.0) and the two
+    // Update calls below are the whole observable effect. So only the tail runs.
+    // DELETE-WHEN: the GameState module is real and the director stages its timer requests.
+    // ------------------------------------------------------------------------------------
+    void BrnGameModule::UpdateTimers()
+    {
+        mGameTimer.Update();
+        mSimTimer.Update();
+    }
+
+    // ------------------------------------------------------------------------------------
+    // BridgeTimers  @ 0x823BD150   -- ⭐ THE FRAME TIMESTEP PUBLISH
+    //
+    //     *(gm+10095424) = 1.0f;  *(gm+10095420) = 0;      // the game TimerRequests reset
+    //     *(gm+10095432) = 1.0f;  *(gm+10095428) = 0;      // the sim  TimerRequests reset
+    //     TimerStatusInterface::StoreTimers(gm+10095372, gm+10095316, gm+10095344);
+    //     LockForWrite(directorInput);
+    //       <48-byte copy of gm+10095372 into DirectorIO::InputBuffer::GetTimerStatusInterface()>
+    //     UnlockForWrite(directorInput);
+    //
+    // The two TimerRequests resets belong to the un-staged request half documented on
+    // UpdateTimers above (they clear the accumulators the Appends would have filled); with no
+    // producers there is nothing to clear, so they are gated with it. The StoreTimers snapshot
+    // and the copy into the director input are the live, load-bearing half: without them the
+    // director input's timer status stays at DoUpdate_Director's zero-fill, every
+    // TimerStatus::GetCurrentTimeStep() reads 0, and the whole camera-behaviour middle
+    // advances by `speed * 0` per frame.
+    // ------------------------------------------------------------------------------------
+    void BrnGameModule::BridgeTimers(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput)
+    {
+        mTimerStatusInterface.StoreTimers(&mGameTimer, &mSimTimer);
+
+        lpDirectorInput->LockForWrite();
+        *lpDirectorInput->GetTimerStatusInterface() = mTimerStatusInterface;
+        lpDirectorInput->UnlockForWrite();
+    }
+
     void BrnGameModule::DoUpdate_Director(bool lbPostGui)
     {
         if (mpDirectorOutputBuffer == 0)
@@ -567,6 +646,15 @@ namespace BrnGame
         // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc;
         // the generic PC template placement-news only (same restoration as LoadWorldModule).
         lpDirectorInput->CgsModule::IOBuffer::Construct();
+
+        // ⭐ THE FRAME TIMESTEP. The console's module scheduler runs BridgeTimers @0x823BD150
+        // over this exact pair (game module -> director input) before the director's passes;
+        // it is the ONLY producer of the director input's timer status, and every camera
+        // behaviour's per-frame advance is `<speed> * GetCurrentTimeStep()`. Staged on the
+        // pre-GUI call, matching the console's bridge order (the post-GUI pass consumes the
+        // same buffer contents).
+        if (!lbPostGui)
+            BridgeTimers(lpDirectorInput);
 
         // [FLAG PC bring-up, env-gated BRN_DIRECTOR_ATTRACT] Stage a live player car and raise
         // the attract-mode request, so the director's OWN state machine can be exercised before
@@ -648,6 +736,7 @@ namespace BrnGame
                         mDirectorModule.GetMainDirector().GetArbitrator();
                     *CgsDev::Log::gpDebugPrint
                         << "[director] f" << siTraceFrame
+                        << " dt " << (mSimTimer.GetRate() * mSimTimer.GetScaleCurrent())
                         << " arb " << static_cast<s32>(lrArbitrator.GetState())
                         << (lrArbitrator.GetDoAttractMode() ? " attract" : " -")
                         << " eye (" << lXform.wAxis.x << ", " << lXform.wAxis.y
@@ -1072,7 +1161,11 @@ namespace BrnGame
         // FLAG: ARTIST 0x823CB498 brackets DebugManager::Update with the monitor at
         // mCpuMonitors+0x48 (=miUT_DebugManager), not +0x4C (miUT_RenderAll). Fixed.
         PerfMonCpu::StartMonitor(mCpuMonitors.miUT_DebugManager);
-        mDebugManager.Update(mfDebugUpdateDeltaSeconds * mfDebugUpdateTimeScale);
+        // X360 0x823CB498 reads *(gm+10095356) * *(gm+10095360) here -- i.e. the SIM timer's
+        // mfRate * mfScaleCurrent (Timer +0xC and +0x10), which is exactly its current time
+        // step. Now that the timer pair is real this reads the real members; the
+        // mfDebugUpdate* stand-ins it used to read are retired.
+        mDebugManager.Update(mSimTimer.GetRate() * mSimTimer.GetScaleCurrent());
         UpdateRequestDoStepFrame();
         PerfMonCpu::StopMonitor(mCpuMonitors.miUT_DebugManager);
 
@@ -1107,6 +1200,10 @@ namespace BrnGame
                 // outside GamePrepare, and any module Prepare that waits on a resource reply
                 // (DirectorModule stage 3 = WorldMap::LoadData) wedges the loading flow.
                 ResourceUpdateThread(0);
+                // ---- the TIMER tick (X360 BrnGameModule::UpdateTimers @0x823BCFD0) --------
+                // Once per sim sub-step, before anything that reads a timestep. The console
+                // runs it from the same per-sub-step spine.
+                UpdateTimers();
                 // ---- the DIRECTOR's pre-GUI passes (X360 module-scheduler order) ----------
                 // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
                 // mpDirectorOutputBuffer, which stays alive through this frame's Render.

@@ -7,6 +7,12 @@
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // THE Behaviour base
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"           // Utils::TransitionSmoother (mHeight)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"          // WorldMap::LanePosition (the truck's lane)
+#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"        // BrnTraffic::Directions (the lane walkers' first arg)
+
+// The lane walkers take a `const BrnTraffic::Section&`; the .cpp includes the real home
+// (BrnTrafficSection.h) before this header's users need the layout, so a forward declaration
+// keeps the traffic headers out of every behaviour TU.
+namespace BrnTraffic { struct Section; }
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h
@@ -72,8 +78,48 @@ public:
     // point toward point + direction. ✅ BODIED 2026-07-29.
     void CalcTransformFromLanePosition(const BrnDirector::WorldMap& lrWorldMap);
 
-    // Advance along the lane graph by mfSpeed * dt (@0x82247AC0). DECLARATION-ONLY.
+    // ⭐ Advance along the lane graph by mfSpeed * dt (@0x82247AC0). ✅ BODIED 2026-07-29 --
+    // THIS IS THE MOTION. It walks the lane twice (once by the frame's distance, once by that
+    // plus a look-ahead blend distance), builds the look-at between the two points, slerps the
+    // truck's frame toward it and re-publishes the advanced lane position.
+    // DWARF signature (BrnBehaviourRoadRunner.cpp:93) takes a `Random*`; the console body
+    // never reads it (no r5 use anywhere in the 245-instruction stream), so it stays void*.
     void Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTimeStep, void* lpRandom);
+
+    // ---- the lane walkers (STATIC -- the console passes no `this`: `li r3, 1` puts the
+    // preferred DIRECTION in the first argument register) --------------------------------
+    // DWARF BrnBehaviourRoadRunner.cpp:515 / :273 / :392 / :159 / :205.
+
+    // @0x8222BC48 -- assert the position is valid, then dispatch on the sign of the distance:
+    // forwards for >= 0, backwards with the magnitude otherwise.
+    static void MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDirection,
+                                     const BrnDirector::WorldMap& lrWorldMap,
+                                     f32 lfDistToMove,
+                                     BrnDirector::WorldMap::LanePosition* lpPositionInOut,
+                                     rw::math::vpu::Matrix44Affine* lpTransformOut);
+
+    // @0x8222A728 / @0x8222B100 -- consume lfDistToMove segment by segment along the lane,
+    // taking a split whenever the section runs out, then sample the reached parameter.
+    static void MoveAlongTrafficLaneForwards(BrnTraffic::Directions lePreferredDirection,
+                                             const BrnDirector::WorldMap& lrWorldMap,
+                                             f32 lfDistToMove,
+                                             BrnDirector::WorldMap::LanePosition* lpPositionInOut,
+                                             rw::math::vpu::Matrix44Affine* lpTransformOut);
+    static void MoveAlongTrafficLaneBackwards(BrnTraffic::Directions lePreferredDirection,
+                                              const BrnDirector::WorldMap& lrWorldMap,
+                                              f32 lfDistToMove,
+                                              BrnDirector::WorldMap::LanePosition* lpPositionInOut,
+                                              rw::math::vpu::Matrix44Affine* lpTransformOut);
+
+    // @0x821FAE58 / @0x821FAF90 -- choose the section/hull to continue into at a lane split:
+    // the preferred direction if it exists, else 1, else 2, else 0; 0xFF/0xFFFF when the lane
+    // is a dead end.
+    static void PickSplitToTake(const BrnTraffic::Section& lrSection,
+                                BrnTraffic::Directions lePreferredDirection,
+                                u8* lpOutSection, u16* lpOutHull, u8* lpOutDirection);
+    static void PickSplitToTakeBackwards(const BrnTraffic::Section& lrSection,
+                                         BrnTraffic::Directions lePreferredDirection,
+                                         u8* lpOutSection, u16* lpOutHull, u8* lpOutDirection);
 
     // Return (by value) the truck's world-space transform. Asserts the truck is prepared.
     // @0x821F53D8: four 16-byte aligned rows copied from +0x20 (lvx128 stride 16) into the sret.

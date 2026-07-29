@@ -36,6 +36,18 @@ namespace CgsSystem
         // inlines the store to +0x14): retarget the tick-scale the accumulator
         // chases.
         void SetScaleTarget(f32 lfScaleTarget) { mfScaleTarget = lfScaleTarget; }
+
+        // ADDITIVE GROW (CgsSystem::TimerStatusInterface::StoreTimers @0x828D7518,
+        // which reads all five of these by raw offset off the Timer it snapshots:
+        // +0 miTicks, +4 miAccumTicks, +8 mfAccumulator, +0xC mfRate, +0x10
+        // mfScaleCurrent, +0x18 mbRunning). Named accessors so the snapshot reaches
+        // them BY NAME instead of reproducing the console's offset arithmetic.
+        int   GetTicks() const        { return miTicks; }
+        int   GetAccumTicks() const   { return miAccumTicks; }
+        float GetAccumulator() const  { return mfAccumulator; }
+        float GetRate() const         { return mfRate; }
+        float GetScaleCurrent() const { return mfScaleCurrent; }
+        bool  IsRunning() const       { return mbRunning != 0; }
     };
 }
 

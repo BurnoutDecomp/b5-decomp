@@ -186,6 +186,84 @@ namespace BrnTraffic
         lrDirection = rw::math::vpu::Normalize(lvDelta);
     }
 
+    // -------------------------------------------------------------------------
+    // BrnTraffic::Section::CalcTransformAtParameter  -> void
+    //
+    // Recovered from the console's TWO-function split:
+    //   sub_82219030   -- the LaneRung* overload (this signature). Asserts lpaGlobalRungs,
+    //                     resolves the global rung id with GetGlobalRungForSegment, COPIES the
+    //                     two 32-byte rungs onto its own stack (`ld`/`std` x4 each) and calls:
+    //   sub_82207998   -- the by-value overload that does the arithmetic.
+    // Only the outer symbol has callers, so the pair is joined here (a de-inlining split, not
+    // two semantics); the inner's own asserts are reproduced in place.
+    //
+    // ⭐ THE ARITHMETIC IS NOT A SPLINE. The inner body's assert literals say "DoSplineInterp
+    // gave us zero vector for " / "DoSplineInterp gave us invalid vector: " -- the shipped
+    // interpolation is straight linear, exactly the sampler CalcPositionAtParameter and
+    // CalcDirectionAtParameter above already implement. Walked op for op (r21 = &rungA,
+    // r20 = &rungB, v121 = the section-local fraction, v127 = 0.5, r18/r16/r17 = the outs):
+    //
+    //   0x82207BE4  v123 = rungA.maPoints[1] - rungA.maPoints[0]        spanA
+    //   0x82207BE8  v122 = rungB.maPoints[1] - rungB.maPoints[0]        spanB
+    //   0x82207BF4  vmaddcfp128 v123, 0.5, v123, A.p0                   midA
+    //   0x82207BF8  vmaddcfp128 v122, 0.5, v122, B.p0                   midB
+    //   0x82207BFC  v0  = LaneRung::GetRightVector(rungA)
+    //   0x82207C08  v13 = LaneRung::GetRightVector(rungB)
+    //   0x82207C3C  vmaddcfp128 v126, frac, (v13 - v0), v0              lerped right
+    //   0x82207C90  v122 = midB - midA
+    //   0x82207CA0  vmaddfp128 v123, v122, frac, v123                   POSITION  -> *out1 (r18)
+    //   0x82207CDC  v0 = v126 * rsqrt(|v126|^2)  (2 NR)                 RIGHT     -> *out3 (r17)
+    //   0x82207DA4  v0 = v122 * rsqrt(|v122|^2)  (2 NR)                 DIRECTION -> *out2 (r16)
+    //   0x82207F38  the direction is re-normalised once more after its validity asserts
+    //
+    // FLAG (VMX->portable): every rsqrt-estimate + two-Newton-Raphson refinement is the
+    // committed rw::math::vpu::Normalize (exact 1/sqrt) -- the same substitution the two
+    // samplers above already document. The second (idempotent) re-normalisation of the
+    // direction at 0x82207F38 collapses into the first.
+    // -------------------------------------------------------------------------
+    void Section::CalcTransformAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,
+                                           u32 luSegment, Vector3& lrPosition,
+                                           Vector3& lrDirection, Vector3& lrUp) const
+    {
+        CGS_ASSERT(lpaGlobalRungs != NULL, "lpaGlobalRungs != NULL");
+
+        const s32       liGlobalRung = GetGlobalRungForSegment(lfParam, luSegment);
+        const LaneRung& lrRungA      = lpaGlobalRungs[liGlobalRung];
+        const LaneRung& lrRungB      = lpaGlobalRungs[liGlobalRung + 1];
+
+        const f32 lfParamScalar = lfParam.x;
+        CGS_ASSERT(luSegment == static_cast<u32>(static_cast<s32>(lfParamScalar)),
+                   "Mismatched segment & param values: seg=");
+
+        const f32     lfFrac = lfParamScalar - std::floor(lfParamScalar);
+        const Vector3 lvFrac{ lfFrac, lfFrac, lfFrac, lfFrac };
+        const Vector3 lvHalf{ 0.5f, 0.5f, 0.5f, 0.5f };
+
+        const Vector3 lvSpanA = lrRungA.maPoints[1] - lrRungA.maPoints[0];
+        const Vector3 lvSpanB = lrRungB.maPoints[1] - lrRungB.maPoints[0];
+
+        const Vector3 lvMidA = rw::math::vpu::MultAdd(lvSpanA, lvHalf, lrRungA.maPoints[0]);
+        const Vector3 lvMidB = rw::math::vpu::MultAdd(lvSpanB, lvHalf, lrRungB.maPoints[0]);
+
+        const Vector3 lvRightA = lrRungA.GetRightVector();
+        const Vector3 lvRightB = lrRungB.GetRightVector();
+        const Vector3 lvRight  = rw::math::vpu::MultAdd(lvRightB - lvRightA, lvFrac, lvRightA);
+
+        CGS_ASSERT(!rw::math::vpu::IsZero(lvRight), "DoSplineInterp gave us zero vector for ");
+
+        const Vector3 lvDelta = lvMidB - lvMidA;
+
+        lrPosition = rw::math::vpu::MultAdd(lvDelta, lvFrac, lvMidA);
+        lrUp       = rw::math::vpu::Normalize(lvRight);
+
+        CGS_ASSERT(!rw::math::vpu::IsZero(lvDelta), "DoSplineInterp gave us zero vector for ");
+
+        lrDirection = rw::math::vpu::Normalize(lvDelta);
+
+        CGS_ASSERT(rw::math::vpu::IsValid(lrDirection),
+                   "DoSplineInterp gave us invalid vector: ");
+    }
+
     // BrnTraffic::Section::GetGlobalRungForSegment  @ 0x821F5068  -> int32_t
     // Map a section-local segment index to its whole-graph rung id: muRungOffset + luSegment.
     // The truncated parameter must agree with the segment, the segment must be in range, and

@@ -27,6 +27,9 @@
 #include "SharedClasses/Traffic/BrnTrafficSection.h"            // BrnTraffic::Section::CalcDirectionAtParameter
 #include "SharedClasses/Traffic/BrnTrafficHull.h"               // BrnTraffic::Hull::GetSection / mpaRungs
 #include "rw/math/vpu/vector3_operation.h"                      // operator+ (lane point + direction)
+#include "rw/math/vpu/matrix44affine_operation.h"               // SLerp / Mult / InverseOfMatrixWithOrthonormal3x3
+#include "rw/math/fpu/scalar_operation.h"                       // rw::math::fpu::IsZero (the timestep guard)
+#include <cmath>                                                // std::floor (the lane walkers)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the lane-seated diagnostic
 
 namespace BrnDirector
@@ -141,6 +144,538 @@ bool TrafficLaneTruck::Prepare(const BrnDirector::WorldMap& lrWorldMap,
     mfTransformBlendAmount = 0.1f;
     mbPrepared             = true;
     return true;
+}
+
+// ============================================================================
+// ⭐ THE LANE MOTION.  PickSplitToTake / MoveAlongTrafficLane{,Forwards,Backwards} /
+// TrafficLaneTruck::Update -- the chain that actually MOVES the fly-by camera.
+//
+// All four walkers are STATIC on the console: the first argument register holds the preferred
+// DIRECTION, not a `this` (asm 0x82247B98 `li r3, 1` right before the call). They take the
+// lane position and the transform as out-parameters instead of mutating members, which is why
+// Update can run two independent walks (one at the frame's distance, one further ahead) off
+// the same starting position.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// PickSplitToTake @0x821FAE58 -- which way to continue when a section runs out.
+//
+//   assert(lePreferredDirection < E_DIRECTIONS_COUNT)   (:161)
+//   assert(lpOutSection) (:162)  assert(lpOutHull) (:163)  assert(lpOutDirection) (:164)
+//   leDir = lePreferredDirection
+//   if (mauForwardSections[leDir] == 0xFF) { leDir = E_DIR_LEFT;
+//   if (mauForwardSections[leDir] == 0xFF) { leDir = E_DIR_RIGHT;
+//   if (mauForwardSections[leDir] == 0xFF) { leDir = E_DIR_STRAIGHT_ON;
+//   if (mauForwardSections[leDir] == 0xFF) { *lpOutSection = 0xFF; *lpOutHull = 0xFFFF; return; }}}}
+//   *lpOutSection   = mauForwardSections[leDir];
+//   *lpOutHull      = mauForwardHulls[leDir];       // asm `(leDir+4)*2` off the section base
+//   *lpOutDirection = leDir;
+//
+// The asm walks the fallbacks in the order 1, 2, 0 regardless of what was preferred (it
+// re-tests the preferred one if it happens to be 1 or 2 -- harmless, and reproduced).
+// ----------------------------------------------------------------------------
+void TrafficLaneTruck::PickSplitToTake(const BrnTraffic::Section& lrSection,
+                                       BrnTraffic::Directions lePreferredDirection,
+                                       u8* lpOutSection, u16* lpOutHull, u8* lpOutDirection)
+{
+    CGS_ASSERT(lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT,
+               "lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT");
+    CGS_ASSERT(lpOutSection != 0, "lpOutSection");
+    CGS_ASSERT(lpOutHull != 0, "lpOutHull");
+    CGS_ASSERT(lpOutDirection != 0, "lpOutDirection");
+
+    u32 luDirection = static_cast<u32>(lePreferredDirection);
+    if (lrSection.mauForwardSections[luDirection] == 0xFF)
+    {
+        luDirection = BrnTraffic::E_DIR_LEFT;
+        if (lrSection.mauForwardSections[luDirection] == 0xFF)
+        {
+            luDirection = BrnTraffic::E_DIR_RIGHT;
+            if (lrSection.mauForwardSections[luDirection] == 0xFF)
+            {
+                luDirection = BrnTraffic::E_DIR_STRAIGHT_ON;
+                if (lrSection.mauForwardSections[luDirection] == 0xFF)
+                {
+                    *lpOutSection = 0xFF;
+                    *lpOutHull    = 0xFFFF;
+                    return;
+                }
+            }
+        }
+    }
+
+    *lpOutSection   = lrSection.mauForwardSections[luDirection];
+    *lpOutHull      = lrSection.mauForwardHulls[luDirection];
+    *lpOutDirection = static_cast<u8>(luDirection);
+}
+
+// ----------------------------------------------------------------------------
+// PickSplitToTakeBackwards @0x821FAF90 -- the identical machine over the BACKWARD tables
+// (mauBackwardSections @+0x17 / mauBackwardHulls @+0x0E, the asm's `(leDir+7)*2`). Assert
+// lines :207/:208/:209/:210.
+// ----------------------------------------------------------------------------
+void TrafficLaneTruck::PickSplitToTakeBackwards(const BrnTraffic::Section& lrSection,
+                                                BrnTraffic::Directions lePreferredDirection,
+                                                u8* lpOutSection, u16* lpOutHull,
+                                                u8* lpOutDirection)
+{
+    CGS_ASSERT(lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT,
+               "lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT");
+    CGS_ASSERT(lpOutSection != 0, "lpOutSection");
+    CGS_ASSERT(lpOutHull != 0, "lpOutHull");
+    CGS_ASSERT(lpOutDirection != 0, "lpOutDirection");
+
+    u32 luDirection = static_cast<u32>(lePreferredDirection);
+    if (lrSection.mauBackwardSections[luDirection] == 0xFF)
+    {
+        luDirection = BrnTraffic::E_DIR_LEFT;
+        if (lrSection.mauBackwardSections[luDirection] == 0xFF)
+        {
+            luDirection = BrnTraffic::E_DIR_RIGHT;
+            if (lrSection.mauBackwardSections[luDirection] == 0xFF)
+            {
+                luDirection = BrnTraffic::E_DIR_STRAIGHT_ON;
+                if (lrSection.mauBackwardSections[luDirection] == 0xFF)
+                {
+                    *lpOutSection = 0xFF;
+                    *lpOutHull    = 0xFFFF;
+                    return;
+                }
+            }
+        }
+    }
+
+    *lpOutSection   = lrSection.mauBackwardSections[luDirection];
+    *lpOutHull      = lrSection.mauBackwardHulls[luDirection];
+    *lpOutDirection = static_cast<u8>(luDirection);
+}
+
+namespace
+{
+    // flt_82008984 == 0.99900001. The walkers never let the local parameter reach the far rung
+    // exactly; a segment is "used up" at 0.999 of the way across it. Dumped from the shipped
+    // image (headless IDA 9.3), not guessed.
+    const f32 KF_SEGMENT_END_PARAM = 0.99900001f;
+
+    // flt_82001CC0 == 0.0f -- the dispatch threshold in MoveAlongTrafficLane and the
+    // `lfDistToMove >= 0.0f` assert's comparand.
+    const f32 KF_ZERO = 0.0f;
+
+    // The 0xFF / 0xFFFF sentinels PickSplitToTake writes into a dead end.
+    const u8  KU_INVALID_SECTION = 0xFF;
+    const u16 KU_INVALID_HULL_ID = 0xFFFF;
+
+    // The lane walkers' shared "we ran off the end" exit (asm 0x8222B050 / 0x8222BB90):
+    // hand back an identity frame whose translation row is the lane position we started from,
+    // and invalidate the lane position so the caller stops walking it.
+    void EndOfLane(BrnDirector::WorldMap::LanePosition* lpPositionInOut,
+                   rw::math::vpu::Matrix44Affine* lpTransformOut)
+    {
+        lpTransformOut->SetIdentity();
+        lpTransformOut->wAxis = lpPositionInOut->mPosition;   // lvx128 r19 -> stvx128 r6+0x30
+        lpPositionInOut->mbValid = false;                      // stb r26, 0x1E(r19)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// MoveAlongTrafficLaneForwards @0x8222A728
+//
+// Consume lfDistToMove one lane segment at a time, taking a split whenever the section runs
+// out, then sample the reached parameter into lpTransformOut.
+//
+//   assert(lpPositionInOut->mbValid)                              (:275)
+//   lpHull   = lWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex)
+//   lpSection= lpHull->GetSection(lpPositionInOut->muSection)
+//   lfParamAlong  = lpPositionInOut->mfParamAlongSection          (lfs 0x14(r19))
+//   luCurrentRung = lpPositionInOut->muRung                       (lbz 0x1D(r19))
+//   lpaCumulativeLengths = lpHull->GetRungLengthsForSection(lpSection)
+//   lfSegmentLength = lpaCumulativeLengths[rung+1] - lpaCumulativeLengths[rung]
+//   luNumSegments   = lpSection->GetNumSegments()
+//   assert(lfDistToMove >= 0.0f)                                  (:286)
+//   for (;;) {
+//       assert(luCurrentRung == (u32)lfParamAlong)                (:290) "Current rung got out of sync: r=..., p=..."
+//       lfLocalParam = lfParamAlong - Floor(lfParamAlong)          (:293)  the two-fsel PPC floor
+//       lfRemainingInCurrentSegment = (0.999f - lfLocalParam) * lfSegmentLength   (:295)
+//       if (lfRemainingInCurrentSegment > lfDistToMove) break;
+//       lfDistToMove -= lfRemainingInCurrentSegment;
+//       ++luCurrentRung;
+//       lfParamAlong = Floor(lfParamAlong + 1.0f);
+//       assert(luCurrentRung == (u32)lfParamAlong)                (:328) "...out of sync(2)..."
+//       if (luCurrentRung >= luNumSegments) {                      (:333-:336)
+//           PickSplitToTake(*lpSection, lePreferredDirection, &luNewSection, &luNewHull, &luNewDirection);
+//           if (luNewSection == 0xFF || luNewHull == 0xFFFF) { <identity + invalidate>; return; }
+//           lfParamAlong = 0.0f; luCurrentRung = 0;
+//           lpPositionInOut->muSection = luNewSection;             (stb 0x1C)
+//           if (luNewHull != lpPositionInOut->muHullIndex) {       (stw 0x18)
+//               lpPositionInOut->muHullIndex = luNewHull;
+//               assert(luNewHull < lWorldMap.GetNumTrafficHulls())  (:360) "New hull is out of bounds:"
+//               lpHull = lWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
+//           }
+//           assert(luNewSection < lpHull->muNumSections)            (:365) "New section is out of bounds:"
+//           lpSection = lpHull->GetSection(luNewSection);
+//           lpaCumulativeLengths = lpHull->GetRungLengthsForSection(lpSection);
+//           luNumSegments = lpSection->GetNumSegments();
+//       }
+//       lfSegmentLength = lpaCumulativeLengths[rung+1] - lpaCumulativeLengths[rung];
+//   }
+//   lfLocalParamDelta = lfDistToMove / lfSegmentLength;            (:300)
+//   lfNewParam        = lfLocalParamDelta + lfParamAlong;          (:301)
+//   lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lfNewParam, luCurrentRung,
+//                                       lNewPosition, lNewAt, lNewRight);            (:303-:305)
+//   assert(lfNewParam < (f32)lpSection->GetNumSegments())          (:315)
+//   *lpTransformOut = Utils::CreateLookAt(lNewPosition, lNewPosition + lNewAt);
+//   assert(lfNewParam >= 0.0f)                                     (:375)
+//   lpPositionInOut->mfParamAlongSection = lfNewParam;             (stfs 0x14)
+//   lpPositionInOut->muRung              = (u8)lfNewParam;         (fctidz + stb 0x1D)
+//
+// NOTE (faithful, and load-bearing for the camera): the walker does NOT write
+// lpPositionInOut->mPosition. The reached point leaves through lpTransformOut's translation
+// row; mPosition stays at whatever seated the lane. Update below reads the transform, never
+// the stale mPosition.
+// FLAG (VMX->portable): the console open-codes floor() as the classic PPC two-fsel magic-
+// constant dance (dbl_82001CA0/CA8/CB0/CB8 == +/-2^52 and the 0/1 correction pair); that IS
+// rw::math::fpu::Floor<float>, which the DWARF names in this exact spot, so it is written as
+// std::floor.
+// ----------------------------------------------------------------------------
+void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
+        BrnTraffic::Directions lePreferredDirection,
+        const BrnDirector::WorldMap& lrWorldMap,
+        f32 lfDistToMove,
+        BrnDirector::WorldMap::LanePosition* lpPositionInOut,
+        rw::math::vpu::Matrix44Affine* lpTransformOut)
+{
+    CGS_ASSERT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid");
+
+    const BrnTraffic::Hull*    lpHull    = lrWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
+    const BrnTraffic::Section* lpSection = lpHull->GetSection(lpPositionInOut->muSection);
+
+    f32        lfParamAlong         = lpPositionInOut->mfParamAlongSection;
+    u32        luCurrentRung        = lpPositionInOut->muRung;
+    const f32* lpaCumulativeLengths = lpHull->GetRungLengthsForSection(lpSection);
+    f32        lfSegmentLength      = lpaCumulativeLengths[luCurrentRung + 1]
+                                    - lpaCumulativeLengths[luCurrentRung];
+    u32        luNumSegments        = lpSection->GetNumSegments();
+
+    CGS_ASSERT(lfDistToMove >= KF_ZERO, "lfDistToMove >= 0.0f");
+
+    for (;;)
+    {
+        CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s32>(lfParamAlong)),
+                   "Current rung got out of sync: r=");
+
+        const f32 lfLocalParam = lfParamAlong - std::floor(lfParamAlong);
+        const f32 lfRemainingInCurrentSegment =
+            (KF_SEGMENT_END_PARAM - lfLocalParam) * lfSegmentLength;
+
+        if (lfRemainingInCurrentSegment > lfDistToMove)
+            break;
+
+        lfDistToMove -= lfRemainingInCurrentSegment;
+        ++luCurrentRung;
+        lfParamAlong = std::floor(lfParamAlong + 1.0f);
+
+        CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s32>(lfParamAlong)),
+                   "Current rung got out of sync(2): r=");
+
+        if (luCurrentRung >= luNumSegments)
+        {
+            u8  luNewSection   = 0;
+            u16 luNewHull      = 0;
+            u8  luNewDirection = 0;
+            PickSplitToTake(*lpSection, lePreferredDirection,
+                            &luNewSection, &luNewHull, &luNewDirection);
+
+            if (luNewSection == KU_INVALID_SECTION || luNewHull == KU_INVALID_HULL_ID)
+            {
+                EndOfLane(lpPositionInOut, lpTransformOut);
+                return;
+            }
+
+            lfParamAlong  = KF_ZERO;
+            luCurrentRung = 0;
+            lpPositionInOut->muSection = luNewSection;
+
+            if (luNewHull != lpPositionInOut->muHullIndex)
+            {
+                lpPositionInOut->muHullIndex = luNewHull;
+                CGS_ASSERT(luNewHull < lrWorldMap.GetNumTrafficHulls(),
+                           "New hull is out of bounds:");
+                lpHull = lrWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
+            }
+
+            CGS_ASSERT(luNewSection < lpHull->muNumSections, "New section is out of bounds:");
+            lpSection            = lpHull->GetSection(luNewSection);
+            lpaCumulativeLengths = lpHull->GetRungLengthsForSection(lpSection);
+            luNumSegments        = lpSection->GetNumSegments();
+        }
+
+        lfSegmentLength = lpaCumulativeLengths[luCurrentRung + 1]
+                        - lpaCumulativeLengths[luCurrentRung];
+    }
+
+    const f32 lfLocalParamDelta = lfDistToMove / lfSegmentLength;
+    const f32 lfNewParam        = lfLocalParamDelta + lfParamAlong;
+
+    rw::math::vpu::Vector3 lNewPosition;
+    rw::math::vpu::Vector3 lNewAt;
+    rw::math::vpu::Vector3 lNewRight;
+    {
+        const ::VecFloat lParam = { lfNewParam, lfNewParam, lfNewParam, lfNewParam };
+        lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, luCurrentRung,
+                                            lNewPosition, lNewAt, lNewRight);
+    }
+
+    CGS_ASSERT(lfNewParam < static_cast<f32>(lpSection->GetNumSegments()),
+               "lfParamAlong < (float32_t) lpSection->GetNumSegments()");
+
+    *lpTransformOut = Utils::CreateLookAt(lNewPosition,
+                                          rw::math::vpu::Add(lNewPosition, lNewAt));
+
+    CGS_ASSERT(lfNewParam >= KF_ZERO, "lfParamAlong >= 0.0f");
+
+    lpPositionInOut->mfParamAlongSection = lfNewParam;
+    lpPositionInOut->muRung              = static_cast<u8>(static_cast<s64>(lfNewParam));
+}
+
+// ----------------------------------------------------------------------------
+// MoveAlongTrafficLaneBackwards @0x8222B100 -- the mirror walk. Same skeleton with three
+// sign flips, all read off the asm:
+//   * a segment is used up from its START, so the remaining distance is
+//     lfLocalParam * lfSegmentLength (no 0.999 term -- that is the forward end guard);
+//   * the rung DECREMENTS and the parameter floors DOWN one; running out is rung == 0
+//     (the `lbOffEnd` local DWARF names at :448), not rung >= numSegments;
+//   * the split comes from PickSplitToTakeBackwards and the walk resumes at the LAST segment
+//     of the new section, so the parameter restarts at numSegments - 1 rather than 0;
+//   * the sampled point looks BACKWARD: CreateLookAt(pos, pos - at) (DWARF's call list for
+//     this function names rw::math::vpu::operator- where the forward twin names operator+).
+// Assert lines :394 (mbValid), :409/:450 (the two out-of-sync messages), :476/:481 (the two
+// out-of-bounds messages), :434 / :494 (the parameter range pair).
+//
+// ⚠️ REACHABILITY: on this build the road runner's speed is positive and the frame timestep is
+// positive, so MoveAlongTrafficLane always dispatches FORWARDS. This arm is reconstructed for
+// completeness (BehaviourRoadRunner::Reverse negates the speed, which is what reaches it) but
+// it has NOT been exercised at runtime yet.
+// ----------------------------------------------------------------------------
+void TrafficLaneTruck::MoveAlongTrafficLaneBackwards(
+        BrnTraffic::Directions lePreferredDirection,
+        const BrnDirector::WorldMap& lrWorldMap,
+        f32 lfDistToMove,
+        BrnDirector::WorldMap::LanePosition* lpPositionInOut,
+        rw::math::vpu::Matrix44Affine* lpTransformOut)
+{
+    CGS_ASSERT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid");
+
+    const BrnTraffic::Hull*    lpHull    = lrWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
+    const BrnTraffic::Section* lpSection = lpHull->GetSection(lpPositionInOut->muSection);
+
+    f32        lfParamAlong         = lpPositionInOut->mfParamAlongSection;
+    u32        luCurrentRung        = lpPositionInOut->muRung;
+    const f32* lpaCumulativeLengths = lpHull->GetRungLengthsForSection(lpSection);
+    f32        lfSegmentLength      = lpaCumulativeLengths[luCurrentRung + 1]
+                                    - lpaCumulativeLengths[luCurrentRung];
+
+    CGS_ASSERT(lfDistToMove >= KF_ZERO, "lfDistToMove >= 0.0f");
+
+    for (;;)
+    {
+        CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s32>(lfParamAlong)),
+                   "Current rung got out of sync: r=");
+
+        const f32 lfLocalParam                = lfParamAlong - std::floor(lfParamAlong);
+        const f32 lfRemainingInCurrentSegment = lfLocalParam * lfSegmentLength;
+
+        if (lfRemainingInCurrentSegment > lfDistToMove)
+            break;
+
+        lfDistToMove -= lfRemainingInCurrentSegment;
+
+        const bool lbOffEnd = (luCurrentRung == 0);
+        if (lbOffEnd)
+        {
+            u8  luNewSection   = 0;
+            u16 luNewHull      = 0;
+            u8  luNewDirection = 0;
+            PickSplitToTakeBackwards(*lpSection, lePreferredDirection,
+                                     &luNewSection, &luNewHull, &luNewDirection);
+
+            if (luNewSection == KU_INVALID_SECTION || luNewHull == KU_INVALID_HULL_ID)
+            {
+                EndOfLane(lpPositionInOut, lpTransformOut);
+                return;
+            }
+
+            lpPositionInOut->muSection = luNewSection;
+
+            if (luNewHull != lpPositionInOut->muHullIndex)
+            {
+                lpPositionInOut->muHullIndex = luNewHull;
+                CGS_ASSERT(luNewHull < lrWorldMap.GetNumTrafficHulls(),
+                           "New hull is out of bounds:");
+                lpHull = lrWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
+            }
+
+            CGS_ASSERT(luNewSection < lpHull->muNumSections, "New section is out of bounds:");
+            lpSection            = lpHull->GetSection(luNewSection);
+            lpaCumulativeLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+            luCurrentRung = lpSection->GetNumSegments() - 1;
+            lfParamAlong  = static_cast<f32>(luCurrentRung) + 1.0f;
+        }
+        else
+        {
+            --luCurrentRung;
+            lfParamAlong = std::floor(lfParamAlong);
+        }
+
+        CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s32>(lfParamAlong - 1.0f)),
+                   "Current rung got out of sync(2): r=");
+
+        lfSegmentLength = lpaCumulativeLengths[luCurrentRung + 1]
+                        - lpaCumulativeLengths[luCurrentRung];
+    }
+
+    const f32 lfLocalParamDelta = lfDistToMove / lfSegmentLength;
+    const f32 lfNewParam        = lfParamAlong - lfLocalParamDelta;
+
+    rw::math::vpu::Vector3 lNewPosition;
+    rw::math::vpu::Vector3 lNewAt;
+    rw::math::vpu::Vector3 lNewRight;
+    {
+        const ::VecFloat lParam = { lfNewParam, lfNewParam, lfNewParam, lfNewParam };
+        lpSection->CalcTransformAtParameter(lpHull->mpaRungs, lParam, luCurrentRung,
+                                            lNewPosition, lNewAt, lNewRight);
+    }
+
+    CGS_ASSERT(lfNewParam < static_cast<f32>(lpSection->GetNumSegments()),
+               "lfParamAlong < (float32_t) lpSection->GetNumSegments()");
+
+    *lpTransformOut = Utils::CreateLookAt(lNewPosition,
+                                          rw::math::vpu::Subtract(lNewPosition, lNewAt));
+
+    CGS_ASSERT(lfNewParam >= KF_ZERO, "lfParamAlong >= 0.0f");
+
+    lpPositionInOut->mfParamAlongSection = lfNewParam;
+    lpPositionInOut->muRung              = static_cast<u8>(static_cast<s64>(lfNewParam));
+}
+
+// ----------------------------------------------------------------------------
+// MoveAlongTrafficLane @0x8222BC48 -- the dispatcher, four statements:
+//   assert(lpPositionInOut->mbValid)                               (:517)
+//   if (lfDistToMove >= 0.0f) MoveAlongTrafficLaneForwards (dir, map,  lfDistToMove, pos, xf);
+//   else                      MoveAlongTrafficLaneBackwards(dir, map, -lfDistToMove, pos, xf);
+// ----------------------------------------------------------------------------
+void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDirection,
+                                            const BrnDirector::WorldMap& lrWorldMap,
+                                            f32 lfDistToMove,
+                                            BrnDirector::WorldMap::LanePosition* lpPositionInOut,
+                                            rw::math::vpu::Matrix44Affine* lpTransformOut)
+{
+    CGS_ASSERT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid");
+
+    if (lfDistToMove >= KF_ZERO)
+        MoveAlongTrafficLaneForwards(lePreferredDirection, lrWorldMap, lfDistToMove,
+                                     lpPositionInOut, lpTransformOut);
+    else
+        MoveAlongTrafficLaneBackwards(lePreferredDirection, lrWorldMap, -lfDistToMove,
+                                      lpPositionInOut, lpTransformOut);
+}
+
+// ----------------------------------------------------------------------------
+// ⭐⭐ TrafficLaneTruck::Update @0x82247AC0 -- THE FRAME ADVANCE.
+//
+// DWARF (BrnBehaviourRoadRunner.cpp:93) gives every local by name; the console body is 245
+// instructions and reads statement for statement as:
+//
+//   assert(mbPrepared)                                             (:95)
+//   if (!mLanePosition.mbValid) return;
+//   lfDistToMove    = mfSpeed * lfTimestep;                        (:105)
+//   lfBlendDistance = (lfDistToMove < 0.0f) ? -mfBlendDistance : mfBlendDistance;   (:107)
+//   lLanePositionA = lLanePositionB = mLanePosition;               (:119/:120, 4 QWORD copies each)
+//   MoveAlongTrafficLane(E_DIR_LEFT, lWorldMap, lfDistToMove,                    &lLanePositionA, &lTransformA);
+//   MoveAlongTrafficLane(E_DIR_LEFT, lWorldMap, lfDistToMove + lfBlendDistance,  &lLanePositionB, &lTransformB);
+//   lNewTransform = SLerp(mTransform,                                             (:126)
+//                         Utils::CreateLookAt(lTransformA.GetW(), lTransformB.GetW()),
+//                         mfTransformBlendAmount, &lUnusedAngle);                (:125)
+//   if (!rw::math::fpu::IsZero(lfTimestep))
+//   {
+//       lFramesPerSec   = 1.0f / lfTimestep;                        (:130)
+//       mLinearVelocity = (lNewTransform.GetW() - mTransform.GetW()) * lFramesPerSec;
+//       lRelative       = Mult(lNewTransform, InverseOfMatrixWithOrthonormal3x3(mTransform));
+//       lNewAngularVelocity = EulerAnglesZXYFromMatrix44Affine(lRelative, 0, 0.01f)
+//                             * lFramesPerSec;                      (:135)
+//       mLocalAngularVelocity = Lerp(mLocalAngularVelocity, lNewAngularVelocity,
+//                                    mfTransformBlendAmount * 0.5f);
+//   }
+//   assert(IsValid(mLocalAngularVelocity))                          (:139)
+//   mTransform    = lNewTransform;
+//   mLanePosition = lLanePositionA;
+//
+// ⚠️ ORDERING IS LOAD-BEARING and easy to get wrong from the pseudocode: the slerped frame is
+// held in a STACK slot for the whole velocity block and only stored into mTransform at the
+// very end (asm 0x82247E4C..0x82247E58), so every `mTransform` read inside the block is the
+// PREVIOUS frame's -- which is exactly what makes the velocities finite differences. The two
+// direction arguments really are the literal `1` at 0x82247B98 / 0x82247BC0 == E_DIR_LEFT.
+// The constants: flt_82001C98 = 1.0f, flt_82001DA0 = 0.5f, flt_82002138 = 0.01f (the Euler
+// near-vertical epsilon, matching CameraUtils.h's default), flt_82001770 / flt_82002514 =
+// +/-2^-23 (the fpu IsZero pair). All dumped, none guessed.
+//
+// ⚠️ ONE DOCUMENTED QUIET GATE -- the angular half. Utils::EulerAnglesZXYFromMatrix44Affine
+// @0x82222180 is DECLARATION-ONLY in this tree, so lNewAngularVelocity cannot be computed
+// honestly and mLocalAngularVelocity is left as Prepare set it (zero). Its ONLY reader is
+// TrafficLaneTruck::GetLocalAngularVelocity, which the road-runner behaviour uses for the
+// camera BANK -- so the consequence is an unbanked fly-by, not a wrong position. The linear
+// half and the transform advance are both real.
+// DELETE-WHEN: EulerAnglesZXYFromMatrix44Affine is bodied.
+// ----------------------------------------------------------------------------
+void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTimestep,
+                              void* /*lpRandom*/)
+{
+    CGS_ASSERT(mbPrepared, "mbPrepared");
+
+    if (!mLanePosition.mbValid)
+        return;
+
+    const f32 lfDistToMove    = mfSpeed * lfTimestep;
+    const f32 lfBlendDistance = (lfDistToMove < KF_ZERO) ? -mfBlendDistance : mfBlendDistance;
+
+    rw::math::vpu::Matrix44Affine        lTransformA;
+    rw::math::vpu::Matrix44Affine        lTransformB;
+    BrnDirector::WorldMap::LanePosition  lLanePositionA = mLanePosition;
+    BrnDirector::WorldMap::LanePosition  lLanePositionB = mLanePosition;
+
+    MoveAlongTrafficLane(BrnTraffic::E_DIR_LEFT, lrWorldMap, lfDistToMove,
+                         &lLanePositionA, &lTransformA);
+    MoveAlongTrafficLane(BrnTraffic::E_DIR_LEFT, lrWorldMap, lfDistToMove + lfBlendDistance,
+                         &lLanePositionB, &lTransformB);
+
+    ::VecFloat lUnusedAngle = { 0.0f, 0.0f, 0.0f, 0.0f };
+    const rw::math::vpu::Matrix44Affine lNewTransform =
+        rw::math::vpu::SLerp(mTransform,
+                             Utils::CreateLookAt(lTransformA.wAxis, lTransformB.wAxis),
+                             mfTransformBlendAmount,
+                             reinterpret_cast<rw::math::vpu::Vector3*>(&lUnusedAngle));
+
+    if (!rw::math::fpu::IsZero(lfTimestep))
+    {
+        const f32 lfFramesPerSec = 1.0f / lfTimestep;
+
+        mLinearVelocity = rw::math::vpu::Mult(lNewTransform.wAxis - mTransform.wAxis,
+                                              lfFramesPerSec);
+
+        // ⚠️ the gate documented above: the relative rotation is built (it is pure named-member
+        // matrix algebra the vendor home already provides) but its Euler decomposition is not
+        // available, so the lerp into mLocalAngularVelocity cannot run.
+        //   lRelative           = Mult(lNewTransform, InverseOfMatrixWithOrthonormal3x3(mTransform));
+        //   lNewAngularVelocity = Utils::EulerAnglesZXYFromMatrix44Affine(lRelative, 0, 0.01f)
+        //                             * lfFramesPerSec;
+        //   mLocalAngularVelocity = Lerp(mLocalAngularVelocity, lNewAngularVelocity,
+        //                                mfTransformBlendAmount * 0.5f);
+    }
+
+    CGS_ASSERT(rw::math::vpu::IsValid(mLocalAngularVelocity), "IsValid(mLocalAngularVelocity)");
+
+    mTransform    = lNewTransform;
+    mLanePosition = lLanePositionA;
 }
 
 // ----------------------------------------------------------------------------
@@ -373,21 +908,116 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
             return true;
         }
 
-        // <first-frame mode seed> -- ⚠️ GATE: it reads the authored Parameters block through
-        // mpParameters, which the attract state never sets (NewBehaviour's 3rd argument is 0).
-        SetPrepared();
+        // The first-frame mode seed (inlined SetMode(E_MODE_LOW_SLOW) at 0x82248160..). Every
+        // value here is a .rdata literal, NOT a read through mpParameters -- Update never
+        // dereferences that pointer anywhere in its 4 KB body.
+        meMode                = E_MODE_LOW_SLOW;              // +0x2B8 = 0
+        mTrafficLaneTruck.SetSpeed(0.0f);                     // +0x0A0 (truck +0x80)
+        mfCurrentModeTime     = 0.0f;                         // +0x274
+        mbHasFixation         = false;                        // +0x2BE
+        mfCurrentModeDuration = 30.0f;                        // +0x278  flt_82004F5C
+        SetPrepared();                                        // stb 1, 8(this)
+        mHeight.SetTarget(4.0f);                              // +0x27C  flt_82004EF4
+        mfDesiredSpeed        = mfDirection * 3.0f;            // +0x294  flt_82004270
+        mfDesiredBankingScale = 0.15000001f;                   // +0x2A0  flt_82004E58
     }
 
-    // ⚠️ GATE: the ~280-line prepared body -- the two diagonal near-clip line tests, the
-    // collision timers, the height smoother, TrafficLaneTruck::Update (which needs
-    // MoveAlongTrafficLaneForwards @0x8222A728 / Backwards @0x8222B100, ~17 KB of VMX
-    // pseudocode each), the camera placement (truck transform + up*height + right*2.25,
-    // SetFOV(95)), the banking-roll VMX sin/cos pipeline, the fixation SLerp and the shake
-    // concat. See the banner.
-    return true;                                       // every console exit is `li r3, 1`
-}
+    const f32 lfTimestep = lrInfo.GetTimestep(GetTimestepType());
 
-// ============================================================================
+    // ---- the collision-timer block (asm 0x82247FC4..0x8224805C) ----------------------------
+    // ⚠️ QUIET GATE: `lbHit` comes from last frame's two near-clip diagonal line tests, and
+    // those live in the two LineTestNearestPostBox members whose INTERIORS are not homed (the
+    // .cpp is forbidden to reach inside one). With no probes issued, the console's own reading
+    // of an un-posted box is "no hit", so the timers below simply never trip and the fly-by
+    // never enters its collided speed. That is the conservative direction: the camera keeps its
+    // desired speed instead of dropping to the collision speed.
+    // DELETE-WHEN: Utils/BrnPostBox.h grows the two post-box aliases and the two
+    // SceneQueryInterface::LineTestNearest probes at the tail of this body can be issued.
+    mbWasCollidingLastFrame = mbIsColliding;
+
+    // 0x82248060: mfBankingScale += (mfDesiredBankingScale - mfBankingScale) * mfBankingScaleBlendAmount
+    mfBankingScale += (mfDesiredBankingScale - mfBankingScale) * mfBankingScaleBlendAmount;
+
+    // ⚠️ QUIET GATE (asm 0x82248098..0x82248108): the inlined
+    // Utils::TransitionSmoother::Update over mHeight -- a self-smoothed lerp whose live blend
+    // weight chases mfIdealLerpAmount through a `1 - 1/(|cur-tgt|*scale)` term. Its declared
+    // sibling TransitionSmoother::Update is DECLARATION-ONLY in CameraUtils.h, and the class's
+    // private members are not reachable from here. mHeight therefore holds the value
+    // Prepare's TransitionSmoother::Set seeded it with (4.0), which is also the target this
+    // frame sets -- so the height is right, it just does not ease.
+    // DELETE-WHEN: TransitionSmoother::Update is bodied.
+    const f32 lfHeight = 4.0f;
+
+    // 0x8224810C: the truck's speed for this frame. The collided arm needs the gated line-test
+    // block above, so the desired arm is the one the console takes here too.
+    mTrafficLaneTruck.SetSpeed(mfDesiredSpeed);
+
+    // ⭐⭐ THE ADVANCE. 0x82248130: TrafficLaneTruck::Update(worldMap, timestep, random).
+    mTrafficLaneTruck.Update(*lrInfo.GetWorldMap(), lfTimestep, lrInfo.GetRandom());
+
+    // ---- the camera placement (asm 0x82248178..0x82248290) ----------------------------------
+    //   lrCamera.mTransform = mTrafficLaneTruck.GetTransform();          4 lvx/stvx rows
+    //   pos += up * mHeight.Get() + right * 2.25                          two vmaddfp
+    //   lrCamera.SetFOV(95.0f)                                            flt_8200A030
+    // (flt_82009A74 == 2.25 -- the lateral offset that puts the camera beside the lane rather
+    //  than on it.)
+    {
+        rw::math::vpu::Matrix44Affine lCameraTransform = mTrafficLaneTruck.GetTransform();
+        lCameraTransform.wAxis = rw::math::vpu::MultAdd(
+            lCameraTransform.yAxis, rw::math::vpu::Vector3{ lfHeight, lfHeight, lfHeight, lfHeight },
+            lCameraTransform.wAxis);
+        lCameraTransform.wAxis = rw::math::vpu::MultAdd(
+            lCameraTransform.xAxis, rw::math::vpu::Vector3{ 2.25f, 2.25f, 2.25f, 2.25f },
+            lCameraTransform.wAxis);
+        lrCamera.SetTransform(lCameraTransform);
+    }
+    lrCamera.SetFOV(95.0f);
+
+    // [diagnostic] where the fly-by camera actually IS, once a second. This is the measurement
+    // the whole campaign is for -- it must CHANGE frame to frame.
+    {
+        static s32 siFlybyFrame = 0;
+        if ((siFlybyFrame % 60) == 0 && (CgsDev::Message::gxMessageFilterFlags & 1)
+            && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const rw::math::vpu::Matrix44Affine& lrX = lrCamera.GetTransform();
+            *CgsDev::Log::gpDebugPrint
+                << "[flyby] f" << siFlybyFrame << " dt " << lfTimestep
+                << " speed " << mTrafficLaneTruck.GetSpeed()
+                << " eye (" << lrX.wAxis.x << ", " << lrX.wAxis.y << ", " << lrX.wAxis.z << ")"
+                << " at (" << lrX.zAxis.x << ", " << lrX.zAxis.y << ", " << lrX.zAxis.z << ")\n";
+        }
+        ++siFlybyFrame;
+    }
+
+    // 0x8224844C: mfCurrentModeTime += <the raw frame dt at lrInfo+0x580>; on expiry the mode
+    // is re-seeded with the same five constants the first-frame block above wrote.
+    mfCurrentModeTime += lfTimestep;
+    if (mfCurrentModeTime > mfCurrentModeDuration)
+    {
+        meMode                = E_MODE_LOW_SLOW;
+        mfCurrentModeTime     = 0.0f;
+        mfCurrentModeDuration = 30.0f;
+        mHeight.SetTarget(4.0f);
+        mfDesiredSpeed        = mfDirection * 3.0f;
+        mfDesiredBankingScale = 0.15000001f;
+    }
+
+    // ⚠️ THE REMAINING GATES, each with what it costs:
+    //   * the BANKING roll (0x82248294..0x82248514) -- a genuine VMX sin/cos minimax lane
+    //     pipeline that rolls the finished transform about its own forward by
+    //     -angularVelocity.y * mfBankingScale. It needs mLocalAngularVelocity, which
+    //     TrafficLaneTruck::Update cannot fill yet (EulerAnglesZXYFromMatrix44Affine is
+    //     declaration-only), so the input would be zero and the roll the identity anyway.
+    //   * the FIXATION blend + acquisition -- needs Utils::SineLerp and
+    //     WorldMap::GetInterestingPointNear over mpTriggerData, which the director never loads
+    //     (TriggerQueryManager::Prepare @0x82398218 is a GameState-module TU).
+    //   * the two near-clip LineTestNearest probes -- need Utils::CalcNearClipCorners (itself
+    //     declaration-only) and the post-box interiors.
+    //   * the CameraShake concat -- Utils::CameraShake has no home outside BehaviourRig.h.
+    // None of them moves the camera; all four only refine an already-placed one.
+    return true;                                       // every console exit is `li r3, 1`
+}// ============================================================================
 // BehaviourRoadRunner::PostCollisionUpdate @0x8220F850 -- vtable slot 3. Drains the two fine
 // line-test post boxes, transforms each hit into the fixation's unit box through
 // mWorldToFixation and raises mbOccluded, then ages mfFixationOccludedTime and drops
