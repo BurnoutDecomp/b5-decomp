@@ -64,9 +64,13 @@ public:
     //     WorldMap::GetLanePositionNearestPoint(&mLanePosition, lrWorldMap, lPoint);
     //     if (!mLanePosition.mbValid) return false;                 // lbz 0x1E; li r3,0
     //     ... CalcTransformFromLanePosition ... mbPrepared = true;
-    // DECLARATION-ONLY (see the FLAG in the .cpp): the lane walk needs the WorldMap's traffic
-    // data, which is not loaded yet.
+    // ✅ BODIED 2026-07-29 (the lane graph loads now -- see BrnDirectorWorldMap.cpp).
     bool Prepare(const BrnDirector::WorldMap& lrWorldMap, rw::math::vpu::Vector3 lPoint);
+
+    // Rebuild mTransform from the current lane position (@0x8222A640): sample the lane's
+    // forward direction at (section, rung, parameter) and make a look-at frame from the lane
+    // point toward point + direction. ✅ BODIED 2026-07-29.
+    void CalcTransformFromLanePosition(const BrnDirector::WorldMap& lrWorldMap);
 
     // Advance along the lane graph by mfSpeed * dt (@0x82247AC0). DECLARATION-ONLY.
     void Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTimeStep, void* lpRandom);

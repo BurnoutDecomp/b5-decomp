@@ -377,14 +377,10 @@ namespace BrnTraffic
     // plausibly wrong.
     // DELETE-WHEN: transcribed into BrnTrafficSection.cpp beside their four landed siblings.
     // ------------------------------------------------------------------------
-    void Section::CalcDirectionAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,
-                                           u32 luSegment, Vector3& lrDirection) const
-    {
-        (void)lpaGlobalRungs;
-        (void)lfParam;
-        (void)luSegment;
-        lrDirection.SetZero();
-    }
+    // CalcDirectionAtParameter is GONE FROM HERE (2026-07-29): transcribed for real into
+    // SharedClasses/Traffic/BrnTrafficSection.cpp beside its landed siblings, from
+    // @0x821F4DB8. It was on the fly-by's own data path -- the road runner's lane frame -- and
+    // the stub's zeroed output is what made the first real lane seat report dir=(0,0,0).
 
     void Section::CalcTransformAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,
                                            u32 luSegment, Vector3& lrPosition,

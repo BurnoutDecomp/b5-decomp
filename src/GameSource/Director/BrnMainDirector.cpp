@@ -623,6 +623,115 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
+    // UpdateCameraBehavioursPostScene  @ 0x8224FD30
+    //
+    // ⭐ THE PASS THAT RUNS EVERY LIVE CAMERA BEHAVIOUR. It builds the ~1540-byte
+    // Camera::BehaviourSharedInfo on its own stack and ends in
+    //     BehaviourManager::PostCollisionUpdateAllBehaviours(&mBehaviourManager, <paused>,
+    //                                                        lSharedInfo, <controller>, 1,
+    //                                                        <debug printer>)
+    // (its sibling entry point UpdateCameraBehavioursPreScene @0x82255318 ends in
+    // UpdateAllBehaviours over the same block). Without this pass nothing ever dispatches a
+    // Behaviour::Update, so every behaviour-produced camera stays at whatever
+    // BehaviourHelper::Prepare constructed -- which is exactly why the fly-by camera could not
+    // move no matter what the arbitrator did.
+    //
+    // The X360 prologue, in order (all of it reproduced below except where FLAGged):
+    //   assert(input->GetTimerStatusInterface()->GetGameTimerStatus()->IsRunning())  // .cpp:1935
+    //   lfGame    = gameTimer[+8] * gameTimer[+4];
+    //   if (simTimer.mbRunning /*[+36]*/) { lfWorld = simTimer[+32] * simTimer[+28];
+    //                                       lfWorldNoSlomo = simTimer[+28]; }
+    //   else                              { lfWorld = 0; lfWorldNoSlomo = 0; }
+    //   if (<ICE owns the frame>) lfGame = lfWorld = lfWorldNoSlomo = 0;
+    //   <broadcast all three into the Timestep's VecFloat lanes>
+    //   mUsedRaceCars = *input->GetUsedRaceCars(); mpRaceCars = input->GetRaceCarInfo();
+    //   mePlayerCarIndex = liPlayerCarIndex; mpAllVehicleData = &mAllVehicleData; ...
+    //   BehaviourManager::ProcessSceneQueryResults(...);
+    //   <the ICE::CameraSpaceHandler build from the player + nearest race car>
+    //   Camera2DRotationController::Update / CameraSphericalRotationController::Update
+    //   <the ~90-line VMX copy of the two vehicle transforms into the shared info>
+    //
+    // ⚠️ WHAT IS FLAGGED HERE (each names WHY, and none of them can be sourced honestly yet):
+    //   * mPlayerInfo -- Behaviour.h models it as a named opaque sub-object (embedding the real
+    //     VehicleInfo drags in a pre-existing SuspensionSpring ODR fork). Left zeroed.
+    //   * mpAllVehicleData / mpPlayerTracker / mpEffectInterface / mpDebugLog / mpDebugPrinter /
+    //     mpCameraSpaceHandler -- MainDirector still models each as a NAMED OPAQUE REGION, so
+    //     there is no object of the declared type to point at. Left null (the fly-by path reads
+    //     none of them; the ones that would are themselves gated).
+    //   * mCarModifier / mCameraModifier / mfSpeedRatio / mfCrashTimeRemaining /
+    //     mfTempFOVBoostAmount -- products of the ~500-line VMX prologue. Left zeroed, which is
+    //     also what UpdateAllBehaviours' own (gated) responder prologue would leave them at.
+    //   * the two rotation-controller Updates and ProcessSceneQueryResults -- VMX pipelines /
+    //     un-homed controller interiors.
+    //   * the ControllerInfo and DebugPrinter arguments -- both are INCOMPLETE types in this
+    //     tree (declared, never defined), and the reconstructed UpdateAllBehaviours body casts
+    //     both to void without dereferencing. They are passed as references over a static
+    //     zeroed byte block rather than fabricating either layout.
+    // DELETE-WHEN: per item, as each aggregate is homed.
+    // ------------------------------------------------------------------------
+    void MainDirector::UpdateCameraBehavioursPostScene(const DirectorInputOutput* lpIO,
+                                                       s32 liPlayerCarIndex)
+    {
+        const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
+
+        const CgsSystem::TimerStatusInterface* lpTimerStatus =
+            reinterpret_cast<const CgsSystem::TimerStatusInterface*>(lpInput->GetTimerStatusInterface());
+
+        const CgsSystem::TimerStatus* lpGameTimer = lpTimerStatus->GetGameTimerStatus();
+        const CgsSystem::TimerStatus* lpSimTimer  = lpTimerStatus->GetSimTimerStatus();
+
+        // .cpp:1935 -- the console asserts the game timer is running. On this bring-up the
+        // director input buffer is not staged (DoUpdate_Director zeroes it), so it is not:
+        // firing a dev assert every frame would block the sim, so the condition is evaluated
+        // and reported, not trapped.
+        // DELETE-WHEN: the per-frame director input staging lands (BridgeTimers -> the
+        // director input's timer status interface).
+        const bool lbGameTimerRunning = lpGameTimer->IsRunning();
+        (void)lbGameTimerRunning;
+
+        const f32 lfGameTimestep = lpGameTimer->GetCurrentTimeStep();   // [+8] * [+4]
+
+        f32 lfWorldTimestep       = 0.0f;
+        f32 lfWorldNoSlomoTimestep = 0.0f;
+        if (lpSimTimer->IsRunning())                                    // [+36]
+        {
+            lfWorldTimestep        = lpSimTimer->GetCurrentTimeStep();  // [+32] * [+28]
+            lfWorldNoSlomoTimestep = lpSimTimer->GetBaseTimeStep();     // [+28]
+        }
+
+        // ⚠️ GATE: `if (maStateFlagTail[+0x35400]) { all three = 0; }` -- the ICE-owns-the-frame
+        // latch lives in the un-homed flag tail (same gate BuildArbStateSharedInfo documents).
+
+        Camera::BehaviourSharedInfo lSharedInfo = Camera::BehaviourSharedInfo();
+
+        lSharedInfo.mTimestep.Set(BrnDirector::VecFloat(lfGameTimestep),
+                                  BrnDirector::VecFloat(lfWorldTimestep),
+                                  BrnDirector::VecFloat(lfWorldNoSlomoTimestep),
+                                  lfGameTimestep, lfWorldTimestep, lfWorldNoSlomoTimestep);
+
+        lSharedInfo.mUsedRaceCars             = *lpInput->GetUsedRaceCars();
+        lSharedInfo.mpRaceCars                = lpInput->GetRaceCarInfo();
+        lSharedInfo.mePlayerCarIndex          = static_cast<EActiveRaceCarIndex>(liPlayerCarIndex);
+        lSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;
+        lSharedInfo.mpBehaviourManager        = &mBehaviourManager;
+        lSharedInfo.mpWorldMap                = lpIO->mpWorldMap;
+        lSharedInfo.mpSceneQueryInterface     = lpIO->mpSceneQueryInterface;
+        lSharedInfo.mpRandom                  = reinterpret_cast<CgsNumeric::Random*>(
+                                                    const_cast<u8*>(maRandom));
+
+        // ⚠️ FLAG (see the banner): the two incomplete-type reference arguments.
+        static u8 saOpaqueControllerInfo[64] = { 0 };
+        static u8 saOpaqueDebugPrinter[64]   = { 0 };
+
+        mBehaviourManager.UpdateAllBehaviours(
+            false,                                                        // lbPaused
+            lSharedInfo,
+            *reinterpret_cast<const ControllerInfo*>(saOpaqueControllerInfo),
+            true,                                                         // the console's `1`
+            *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
+    }
+
+    // ------------------------------------------------------------------------
     // Update  @ 0x82274070   -- THE FUNCTION THAT PUBLISHES THE CAMERA
     //
     // Shape of the X360 body (935 lines of pseudocode; the structure is what matters):
@@ -702,29 +811,12 @@ namespace BrnDirector
         else
         {
             // ⚠️ GATE: UpdateDebugPrinters / the debug byte / DebugLog::Print+Update.
-            // ⚠️ GATE: UpdateCameraBehavioursPostScene( lpIO, liPlayerCarIndex );
-            //   @0x8224FD30. THIS IS THE ONE REMAINING CALL BETWEEN A PREPARED BEHAVIOUR AND A
-            //   MOVING CAMERA: it builds the ~1540-byte Camera::BehaviourSharedInfo on its own
-            //   stack and hands it to BehaviourManager::UpdateAllBehaviours (which IS bodied now
-            //   -- see BrnBehaviourManager.cpp). It stays gated because building that block
-            //   means filling members this reconstruction cannot yet source honestly:
-            //     * mPlayerInfo (a whole VehicleInfo copied out of mAllVehicleData, itself an
-            //       un-homed named region of MainDirector) -- and handing behaviours a
-            //       zero-filled one would be worse than not calling them at all;
-            //     * mpEffectInterface / mpDebugLog / mpDebugPrinter / mpSceneQueryInterface /
-            //       mpPlayerTracker / mpCameraSpaceHandler -- all pointers into MainDirector
-            //       sub-objects that are still opaque regions;
-            //     * mCarModifier / mCameraModifier / mfSpeedRatio / mfCrashTimeRemaining, which
-            //       come out of the ~500-line VMX prologue of that function.
-            //   The MEMBER MAP is now recovered though (see Camera/Behaviours/Behaviour.h: every
-            //   console offset the two consumers touch -- +1360 mTimestep, +1424 mCarModifier,
-            //   +1440 mUsedRaceCars, +1448 mpDirectorResourceManager ... +1520 mCameraModifier,
-            //   +1536/+1537 the two trailing bools -- lands on the DWARF member its order
-            //   predicts), so this is now a filling-in job, not a decoding one.
-            //   CONSEQUENCE: no behaviour's Update runs, so every behaviour-produced camera
-            //   holds whatever BehaviourHelper::Prepare constructed.
-            //   DELETE-WHEN: AllVehicleData / VehicleTracker / DebugPrinter / DebugLog /
-            //   EffectInterface are real members of MainDirector rather than opaque regions.
+
+            // ⭐ @0x8224FD30 -- the pass that dispatches every live behaviour's Update. It is
+            // REAL now (partially: see the body's FLAG list), which is what lets
+            // BehaviourRoadRunner::Update run at all.
+            UpdateCameraBehavioursPostScene(lpIO, liPlayerCarIndex);
+
             // ⚠️ GATE: UpdateMoments( lpIO, liPlayerCarIndex );
             // ⚠️ GATE: if ( !<ICE-owns-frame latch> ) UpdateICE( lpIO, liPlayerCarIndex );
 

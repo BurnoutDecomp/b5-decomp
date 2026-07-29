@@ -84,6 +84,23 @@ namespace CgsSystem
         return mfBaseTimeStep * mfTimeStepMultiplier;
     }
 
+    // ---- the trivial member queries (2026-07-29) ------------------------------
+    // Each is a single named-member load -- the shape the X360 inlines everywhere it reads a
+    // timer status (e.g. MainDirector::UpdateCameraBehavioursPostScene @0x8224FD30 asserts
+    // `...GetGameTimerStatus()->IsRunning()` then reads `[+8] * [+4]` for the game step and
+    // `[+32] * [+28]` / `[+28]` for the sim pair -- i.e. the two sub-statuses at +0 and +24).
+    // Defined here so consumers reach them BY NAME instead of by raw offset into a foreign
+    // type; no other TU defines them (checked).
+    inline s32  TimerStatus::GetFrameCount() const         { return miFrameCount; }
+    inline f32  TimerStatus::GetBaseTimeStep() const       { return mfBaseTimeStep; }
+    inline f32  TimerStatus::GetTimeStepMultiplier() const { return mfTimeStepMultiplier; }
+    inline bool TimerStatus::IsRunning() const             { return mbRunning; }
+
+    inline const TimerStatus* TimerStatusInterface::GetGameTimerStatus() const { return &mGameTimerStatus; }
+    inline const TimerStatus* TimerStatusInterface::GetSimTimerStatus()  const { return &mSimTimerStatus; }
+    inline TimerStatus*       TimerStatusInterface::GetGameTimerStatus()       { return &mGameTimerStatus; }
+    inline TimerStatus*       TimerStatusInterface::GetSimTimerStatus()        { return &mSimTimerStatus; }
+
     // ---- TimerStatus::Clear (private) ----------------------------------------
     // Recovered from the X360 store pattern that TimerStatusInterface::Clear inlines
     // twice. Resets to: frame 0, zero base step, unity multiplier, stopped, zero time.

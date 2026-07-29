@@ -93,8 +93,17 @@ void DirectorModule::Construct(f32 lfTime)
     mDebugComponent.Construct(this);
 
     // FLAG: DirectorResourceManager::Construct() is currently a stub (see header FLAG);
-    // the X360's inlined event-queue init at this call site is not reproduced.
+    // the X360's inlined event-queue init at this call site (module+584/600/604 = its own
+    // EventReceiverQueue<512,16>) is not reproduced -- its Prepare is a DirectorLinkStubs
+    // no-op that never touches the queue.
     mDirectorResourceManager.Construct();
+
+    // The X360 also inlines WorldMap::Construct here (module+2312/2328/2332 = the world
+    // map's EventReceiverQueue<128,16>, module+2464 = meLoadingState). NOT optional: the
+    // lane requests LoadData issues name &mReceiverQueue as their reply address, and
+    // BaseEventReceiverQueue::AddEvent takes `(liSize + 8) % miAlignment` -- an
+    // unconstructed queue has miAlignment == 0 and the first reply divides by zero.
+    mWorldMap.Construct();
 
     mCamera.Construct();
 

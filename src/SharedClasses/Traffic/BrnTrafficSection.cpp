@@ -95,13 +95,95 @@ namespace BrnTraffic
         const Vector3 lvSpanA = lrRungA.maPoints[1] - lrRungA.maPoints[0];  // vsubfp v10
         const Vector3 lvSpanB = lrRungB.maPoints[1] - lrRungB.maPoints[0];  // vsubfp v9
 
-        // vmaddfp v13 = spanA * A.p0 + 0.5 ; vmaddfp v0 = spanB * B.p0 + 0.5
-        const Vector3 lvA = rw::math::vpu::MultAdd(lvSpanA, lrRungA.maPoints[0], lvHalf);
-        const Vector3 lvB = rw::math::vpu::MultAdd(lvSpanB, lrRungB.maPoints[0], lvHalf);
+        // ⚠️ OPERAND ROLES CORRECTED 2026-07-29 (bug class (c): a fused-multiply-add's operands
+        // read in the wrong roles). This body used to compute
+        //     lvA = MultAdd(spanA, A.p0, half)  ==  spanA * A.p0 + 0.5
+        //     lrResult = MultAdd(delta, lvA, frac) == (B-A) * A + frac
+        // -- i.e. it MULTIPLIED two positions and ADDED a constant, which is not a geometric
+        // operation at all, and it never used `frac` as an interpolation weight. Measured
+        // consequence on real shipped lane data: the first lane seat the fly-by took came back
+        // with position.y == 0.000000 exactly.
+        //
+        // The correct roles are pinned by the SIBLING CalcDirectionAtParameter @0x821F4DB8,
+        // which loads the SAME four points and computes the SAME two intermediates with the
+        // VMX128 `vmaddcfp128 vD, vA, vB` form (vD = vD*vA + vB) -- unambiguously
+        // `span * 0.5 + p0`, i.e. the rung MIDPOINT. So:
+        //     midpoint = span * 0.5 + p0                (vmaddfp: A=span, C=half,  B=p0)
+        //     result   = (midB - midA) * frac + midA    (vmaddfp: A=delta, C=frac, B=midA)
+        // Both are the standard midpoint + lerp the lane sampler must produce, and MultAdd's
+        // committed contract is MultAdd(a,b,c) == a*b + c.
+        const Vector3 lvA = rw::math::vpu::MultAdd(lvSpanA, lvHalf, lrRungA.maPoints[0]);
+        const Vector3 lvB = rw::math::vpu::MultAdd(lvSpanB, lvHalf, lrRungB.maPoints[0]);
 
-        // vsubfp v0 = B - A ; vmaddfp v0 = (B - A) * A + frac ; stvx128 -> lResult
+        // vsubfp v0 = B - A ; vmaddfp -> A + frac*(B - A) ; stvx128 -> lResult
         const Vector3 lvDelta = lvB - lvA;
-        lrResult = rw::math::vpu::MultAdd(lvDelta, lvA, lvFrac);
+        lrResult = rw::math::vpu::MultAdd(lvDelta, lvFrac, lvA);
+    }
+
+    // -------------------------------------------------------------------------
+    // BrnTraffic::Section::CalcDirectionAtParameter  @ 0x821F4DB8  -> void
+    //
+    // The lane's FORWARD direction across local segment luSegment: the normalised vector from
+    // the segment's first rung MIDPOINT to its second rung MIDPOINT. It does NOT interpolate by
+    // the fractional parameter -- the asm computes no frac at all; lfParam only feeds the
+    // "segment matches the truncated parameter" assert (the same one CalcPositionAtParameter
+    // fires at line 0x271).
+    //
+    // ASM walk-through (r22 = this, r21 = lpaGlobalRungs, r29 = luSegment, r20 = &lrDirection):
+    //   asserts: lpaGlobalRungs != NULL (:0x26F) / muNumRungs > 0 (:0x170) /
+    //            luSegment < GetNumSegments() (:0x270) / "Mismatched segment & param" (:0x271)
+    //   r11 = ((*(this+0) /*muRungOffset*/ + luSegment) << 5) + lpaGlobalRungs  -> &rungA
+    //   r10 = r11 + 0x20                                                       -> &rungB
+    //   v0  = rungA.maPoints[0]   v10 = rungA.maPoints[1]
+    //   v13 = rungB.maPoints[0]   v9  = rungB.maPoints[1]
+    //   v127 = vcsxwfp128(1,1) == 0.5
+    //   v125 = v10 - v0                       ; spanA
+    //   v124 = v9  - v13                      ; spanB
+    //   vmaddcfp128 v125, v127, v125, v0      ; v125 = v125*v127 + v0  == A midpoint
+    //   vmaddcfp128 v124, v127, v124, v13     ; v124 = v124*v127 + v13 == B midpoint
+    //   |v125 - v124| vs flt_82001740 -> assert "Zero length rung " (:0x278)
+    //   v13 = v124 - v125                     ; B midpoint - A midpoint
+    //   vrsqrtefp + 2 Newton-Raphson, vmulfp  ; Normalize(v13)
+    //   stvx128 -> lrDirection
+    //
+    // FLAG (VMX->portable): the rsqrt estimate + two Newton-Raphson refinement steps are the
+    //   committed rw::math::vpu::Normalize (exact 1/sqrt) -- numerically tighter than the
+    //   console estimate, the same substitution LaneRung::GetRightVector above documents.
+    // FLAG (IsZero epsilon): flt_82001740 is an un-valued .rdata float; rw::math::vpu::IsZero's
+    //   committed default supplies the small-epsilon test the vandc+vcmpgtfp pair computes.
+    //
+    // ⭐ THIS BODY IS WHAT PINNED A REAL BUG IN ITS SIBLING. CalcPositionAtParameter above used
+    //   to read the same fused-multiply-add's operands as `span * p0 + 0.5` (position times
+    //   position, plus a constant) and never used the fractional weight; the vmaddcfp128 form
+    //   here is unambiguously `span * 0.5 + p0` == the rung midpoint. The sibling is corrected
+    //   -- see its own note.
+    // -------------------------------------------------------------------------
+    void Section::CalcDirectionAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,
+                                           u32 luSegment, Vector3& lrDirection) const
+    {
+        CGS_ASSERT(lpaGlobalRungs != NULL, "lpaGlobalRungs != NULL");
+        CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
+        CGS_ASSERT(luSegment < GetNumSegments(), "luSegment < GetNumSegments()");
+        CGS_ASSERT(luSegment == static_cast<u32>(static_cast<s32>(lfParam.x)),
+                   "Mismatched segment & param values: seg=");
+
+        const Vector3 lvHalf{ 0.5f, 0.5f, 0.5f, 0.5f };
+
+        const LaneRung& lrRungA = lpaGlobalRungs[muRungOffset + luSegment];
+        const LaneRung& lrRungB = lpaGlobalRungs[muRungOffset + luSegment + 1];
+
+        const Vector3 lvSpanA = lrRungA.maPoints[1] - lrRungA.maPoints[0];   // vsubfp128 v125
+        const Vector3 lvSpanB = lrRungB.maPoints[1] - lrRungB.maPoints[0];   // vsubfp128 v124
+
+        // vmaddcfp128: vD = vD*vA + vB  -> the two rung midpoints.
+        const Vector3 lvMidA = rw::math::vpu::MultAdd(lvSpanA, lvHalf, lrRungA.maPoints[0]);
+        const Vector3 lvMidB = rw::math::vpu::MultAdd(lvSpanB, lvHalf, lrRungB.maPoints[0]);
+
+        const Vector3 lvDelta = lvMidB - lvMidA;                             // vsubfp128 v13
+
+        CGS_ASSERT(!rw::math::vpu::IsZero(lvMidA - lvMidB), "Zero length rung ");
+
+        lrDirection = rw::math::vpu::Normalize(lvDelta);
     }
 
     // BrnTraffic::Section::GetGlobalRungForSegment  @ 0x821F5068  -> int32_t

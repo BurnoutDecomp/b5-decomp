@@ -37,13 +37,27 @@ namespace DirectorIO
         static_assert(sizeof(CgsGraphics::Camera)                      == 0x0170, "CgsGraphics::Camera stride 0x170");
     }
 
+    // ---- Construct ---------------------------------------------------------------------------
+
+    // The X360 CreateIOBuffer<OutputBuffer> instantiation runs the buffer's Construct after the
+    // stack alloc. That is the IOBuffer base status flag PLUS the embedded request queue's own
+    // Construct -- a VariableEventQueue asserts "Not Constructed" on its first AddEvent, and the
+    // IO stack hands back RE-USED memory, so an un-Constructed queue would also inherit the
+    // previous tenant's write position. The generic PC CreateIOBuffer<T> only placement-news,
+    // so every creation site calls this explicitly.
+    void OutputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mResourceInterface.mRequestQueue.Construct();
+    }
+
     // ---- read-lock-asserted getters ---------------------------------------------------------
 
     // X360 0x823B33B0: return &mResourceInterface (this+0x2E0), read-lock asserted.
-    u8* OutputBuffer::Get()
+    const BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::Get()
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mResourceInterface;
+        return &mResourceInterface;
     }
 
     // X360 0x823B23F8: return &mDirectorInterface (this+0x720), read-lock asserted.
@@ -77,10 +91,10 @@ namespace DirectorIO
     // ---- write-lock-asserted getters --------------------------------------------------------
 
     // X360 0x822077A0: return &mResourceInterface (this+0x2E0). Tests the WRITE lock (bit 3).
-    u8* OutputBuffer::GetResour()
+    BrnResource::GameDataIO::RequestInterface<512>* OutputBuffer::GetResour()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return mResourceInterface;
+        return &mResourceInterface;
     }
 
     // X360 0x82207848: return &mDirectorOutputInterface (this+0x4F0). Tests the WRITE lock (bit 3).

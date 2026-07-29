@@ -52,17 +52,6 @@ namespace BrnGameMainFlowController
     BrnResource::GameDataIO::OutputBuffer* GetScriptedLoadGameDataOutput();
 }
 
-// ⚠️ LANE-REQUEST PUMP GATE (2026-07-29 lane-data wave). Defined in BrnGameMainFlowStates.cpp
-// (env BRN_LANE_PUMP=1). Two things read it, and they MUST agree:
-//   * the E_LOADINGSTAGE_DIRECTORMODULE leg, which pumps GameDataModule::Update inline so the
-//     director's lane requests are serviced at all, and
-//   * BrnDirector::WorldMap::LoadData, which only issues those requests when they can be
-//     serviced (otherwise it stages a request nothing answers and the loading flow wedges).
-// OFF by default: the module is not prepared at that point in boot and pumping it there
-// crashes. DELETE-WHEN: the per-frame GameData IO bracket is threaded through
-// LoadDirectorModule the way the X360 threads it through every LoadXxxModule.
-extern bool gbBrnLaneRequestPumpEnabled;
-
 // --- base -------------------------------------------------------------------------------
 struct MainGameFlowState
 {
@@ -124,11 +113,14 @@ protected:
     // per-frame LoadBundle requests (TRK / PVS / prop graphics) into the GameData pump.
     void UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer);
 
-    // X360: LoadDirectorModule -- the E_LOADINGSTAGE_DIRECTORMODULE leg. Creates this frame's
-    // director OUTPUT buffer on the update output stack, runs the module's staged
-    // DirectorModule::Prepare @0x822712D8 once, destroys the buffer, and returns whether the
-    // stage machine has finished. Same shape as LoadSoundModule/LoadWorldModule.
-    bool LoadDirectorModule();
+    // X360 0x823E74C0 -- the E_LOADINGSTAGE_DIRECTORMODULE leg. Creates this frame's director
+    // OUTPUT buffer on the update output stack, runs the module's staged
+    // DirectorModule::Prepare @0x822712D8 once with the GameData allocator list, and -- while
+    // it reports "still preparing" -- read-locks the output buffer and forwards its staged
+    // requests into the GameData input buffer (AppendRequestInterface<512>). Same shape as
+    // LoadSoundModule/LoadWorldModule.
+    bool LoadDirectorModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                            const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
     // The update set the loading spine drives the world with: ConstructUpdateSetFromFsm
     // @0x823BD420's base value 128 (frustum testing on; no in-game / boot-video / paused
