@@ -4,27 +4,43 @@
 
 // BrnGraphics::Im3dSkyDomeVertex - the vertex used by the immediate-mode 3D sky-dome renderer
 // (CgsGraphics::ImRenderer<BrnGraphics::Im3dSkyDomeVertex>, driven by BrnSkyDomeManager::Render /
-// RenderToEnvironmentMap). No DWARF / Feb-2007 source was recovered for this vertex; the layout
-// below is read straight from the two vertex-descriptor elements the X360 renderer Construct builds
-// (BURNOUT_X360_ARTIST.XEX @ 0x82404CF8):
+// RenderToEnvironmentMap).
 //
-//   element[0]: stream 0, type-word 0x2A23B9, usageIndex 1  -> a 12-byte position attribute @ off 0
-//   element[1]: stream 0, byte-offset 12, type-word 0x2C23A5, formatCode 5, usageIndex 6
-//               -> a 4-byte packed attribute @ off 12
+// Descriptor elements the X360 renderer Construct builds (BURNOUT_X360_ARTIST.XEX @ 0x82404CF8):
+//   element[0]: stream 0, byte-offset 0,  type-word 0x2A23B9  -> the ray direction   @ off 0
+//   element[1]: stream 0, byte-offset 12, type-word 0x2C23A5  -> the two distances   @ off 12
+// Both type-words are GENERIC -- BrnSunCorona::Construct stores the identical pair for a totally
+// different vertex format -- so they do not by themselves pin the second element's width.
 //
-// The element[1] byte-offset of 12 (the asm immediate stored at the element's +2 word) pins the
-// position attribute at 12 bytes (a Vector3), so the second attribute starts at +0x0C. Its exact
-// semantic (colour / packed direction) is not attested, so it is modelled as a 4-byte packed word.
-// The renderer template never dereferences the vertex type (Construct / AddProgram / SetProgram /
-// SetTransform / Begin/EndRendering are all vertex-agnostic); the struct exists so the instantiation
-// names a concrete vertex format whose size matches the descriptor (12 + 4 = 16 bytes).
+// The second element is a FLOAT2, which makes the vertex 20 bytes. Four independent sources agree,
+// and together they corrected the earlier 16-byte "packed u32" model of this struct (which would
+// have mis-strided every sky-dome vertex fetch):
+//   1. BrnSkyDomeManager::CreateGeometry @0x824076D8 sizes the vertex buffer at 20 * vertexCount
+//      and writes FIVE floats per vertex (see BrnSkyDomeManager.cpp).
+//   2. The DecFIGS DWARF (GameSource/Graphics/ImmediateMode/BrnSkyDomeVertex.h:41-44) names the
+//      two members `Vector3 mDirection` + `Vector2U_32 mDistances` -- 12 + 8 bytes.
+//   3. The Feb-2007 FillVertexDescriptorParameters sets element[1]'s format to VERTEXFORMAT_FLOAT2
+//      and its type to ELEMENTTYPE_TEX0, at offset sizeof(float3).
+//   4. The sky-dome vertex shader takes its input as
+//         float3 direction : POSITION;   float2 distanceAndLength : TEXCOORD0;
+//
+// The two distances are exactly what CreateGeometry computes per vertex: the ray-sphere distance
+// along the dome normal, and that normal's XZ-plane length -- hence the shader's "distanceAndLength".
 namespace BrnGraphics
 {
     struct Im3dSkyDomeVertex
     {
-        f32 mfPosX;        // +0x00  position attribute (descriptor element[0], 12 bytes @ off 0)
-        f32 mfPosY;        // +0x04
-        f32 mfPosZ;        // +0x08
-        u32 muPacked;      // +0x0C  packed attribute (descriptor element[1], byte-offset 12)
+        // element[0] @ +0x00 -- the outward ray direction for this dome vertex (a unit Vector3).
+        f32 mfDirectionX;          // +0x00
+        f32 mfDirectionY;          // +0x04
+        f32 mfDirectionZ;          // +0x08
+
+        // element[1] @ +0x0C -- {ray-sphere distance along the direction, the direction's XZ length}.
+        f32 mfRaySphereDistance;   // +0x0C
+        f32 mfXZLength;            // +0x10
     };
+
+    // The stride BrnSkyDomeManager::CreateGeometry allocates (20 * vertexCount).
+    static_assert(sizeof(Im3dSkyDomeVertex) == 20,
+                  "Im3dSkyDomeVertex is the 20-byte float3 + float2 sky-dome vertex");
 }

@@ -1,7 +1,12 @@
 #include "GameSource/Graphics/BrnSkyDomeManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+#include "BrnCommonTypes.h"                                          // Matrix44 / Vector3 / Vector3Plus / Vector4
+#include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // the per-frame sky/cloud constants
+#include "GameSource/Graphics/ImmediateMode/BrnIm3d.h"               // BrnGraphics::Im3dSkyDome
+#include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h" // shadow::Device
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"  // CgsResource::ResourceDescriptor
+#include "pc/gcm/renderengine/VertexDescriptor.h"                    // renderengine::VertexDescriptorData
 #include "pc/gcm/renderengine/Xbox2VertexBufferShims.h"              // D3DVertexBuffer_Lock/Unlock, Xbox2UnSet
 #include "rw/rwcore_structs.h"                                       // rw::IResourceAllocator, rw::Resource
 #include "rw/math/fpu/matrix33_operation.h"                          // Matrix33FromYRotationAngle, Mult
@@ -365,4 +370,416 @@ void BrnSkyDomeManager::CreateGeometry(
 
     renderengine::IndexBuffer::Unlock(
         reinterpret_cast<renderengine::IndexBufferHeader*>(*lppIndexBuffer), &lLockInfo);
+}
+
+// =============================================================================================
+// The draw path (added 2026-07-29).
+//
+//   BrnSkyDomeManager::Construct              -- PS3 DecFIGS @0x350588 (inlined on X360)
+//   BrnSkyDomeManager::Release                -- PS3 DecFIGS @0x350D6C (inlined on X360)
+//   BrnSkyDomeManager::Render                 -- X360 @0x82400238
+//   BrnSkyDomeManager::RenderToEnvironmentMap -- X360 @0x82400580
+//
+// Render and RenderToEnvironmentMap are the same routine over different buffers: Render draws
+// the dense main dome (22x45) with the frame's view-projection into the back buffer;
+// RenderToEnvironmentMap draws the coarse cube dome (5x10) with the env-map face's
+// view-projection. Every constant they push comes out of BrnShaderConstantsFrame; the two cloud
+// textures are the caller's layer-0 density + lighting maps, and BOTH must be non-null or the
+// whole draw is skipped (the X360's two leading null checks).
+//
+// Neither Construct nor Release survives as a standalone X360 symbol (the compiler inlined both
+// into the renderer module), so their bodies come from the DecFIGS Internal PS3 build, where the
+// same source line numbers are attested (BrnSkyDomeManager.cpp:35 / :93). Both are trivial and
+// member-for-member identical across the two platforms.
+// =============================================================================================
+
+// ---- the three shared immediate-mode render states the sky pass installs ----------------------
+// X360 .data slots off dword_83010F20: the sky binds a blend state, a rasteriser state and a
+// depth/stencil state through CgsGraphics::ImRendererBase::SetState's three overloads
+// (sub_82276A68 blend / sub_82276B38 rasteriser / sub_82276AD0 depth-stencil, each a shadow-cached
+// compare-then-apply). The MAIN pass and the ENV-MAP pass share the blend and rasteriser states
+// and differ only in the depth/stencil state.
+//
+// These are engine-wide state objects built by the Cgs*StateFactory modules; no project TU homes
+// them yet, so they are named externals exactly like gpBillboardDepthStencilState
+// (CgsBillboardRenderer.cpp) and gpLionParticleSamplerState (ParticleRender.cpp).
+
+// X360 dword_83010F38 -- the sky pass blend state (shared by both passes).
+extern void* gpSkyDomeBlendState;
+// X360 dword_83010F3C -- the cull-none rasteriser state (shared by both passes; the same object
+// CgsGuiViewModule.cpp names as the shared cull-none rasteriser).
+extern void* gpSkyDomeRasterizerState;
+// X360 dword_83010F4C -- the MAIN sky pass depth/stencil state.
+extern void* gpSkyDomeDepthStencilState;
+// X360 dword_83010F50 -- the ENV-MAP sky pass depth/stencil state (a different object).
+extern void* gpSkyDomeEnvMapDepthStencilState;
+
+// CgsGraphics::ImRendererBase::SetState's three state overloads (X360 sub_82276A68 /
+// sub_82276B38 / sub_82276AD0). Each compares against a module-static shadow and, on a change,
+// pushes the object through the matching shadow::Device::Xbox2Set*LowLevelShadowed. Declared as
+// the minimal external surface, mirroring BrnShadowMapRenderManager.cpp's
+// ImDeviceSetDepthStencilState.
+void ImDeviceSetBlendState(void* lpState);
+void ImDeviceSetRasterizerState(void* lpState);
+void ImDeviceSetDepthStencilState(void* lpState);
+
+// The renderengine D3D device singleton the fast-path binders drive (X360 off_83271608), and the
+// two Xenon D3DDevice_* thunks the sky draw binds through. Declared as the minimal extern surface,
+// matching MeshHelper.cpp / ParticleRender.cpp / shadowingdevice.cpp.
+struct IDirect3DDevice9;
+extern IDirect3DDevice9* gpD3DDevice;
+
+extern "C"
+{
+    void D3DDevice_SetIndices(IDirect3DDevice9* lpDevice, void* lpIndexData);
+    void D3DDevice_SetStreamSource(IDirect3DDevice9* lpDevice, u32 luStreamNumber,
+                                   const void* lpStreamData, u32 luOffsetInBytes,
+                                   u32 luStride, u32 luFlags);
+    void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* lpDevice, u32 lePrimitiveType,
+                                       u32 luBaseVertexIndex, u32 luStartIndex, u32 luIndexCount);
+}
+
+namespace
+{
+    // The X360 reads the vertex stride out of the bound vertex descriptor:
+    //     lwz  r11, 0x10(r29)   ; renderer->mpVertexDescriptor
+    //     lhz  r10, 8(r11)      ; muElementCount
+    //     addi r10, r10, 1
+    //     slwi r10, r10, 4      ; (count + 1) * 16
+    //     lbzx r7,  r10, r11    ; the stride byte
+    // i.e. the per-element stride table is packed immediately AFTER the used elements, at
+    // 0x10 * (elementCount + 1) -- exactly where renderengine::VertexDescriptor::Initialize
+    // writes it ("Per-stream stride table base = +0x10 * (count + 1) bytes into the object").
+    //
+    // FLAG: the committed renderengine::VertexDescriptorData models that table as a FIXED
+    // `u8 mauStreamStride[16]` at +0x110, which is only correct for a 16-element descriptor.
+    // Reading it by name here would give the wrong byte for the 2-element sky-dome format, so
+    // the stride is computed the way the asm does. (The same fixed-offset read in
+    // shadowingdevice.cpp is a separate, out-of-tree bug -- see the wave log.)
+    u32 GetVertexStreamStride(const renderengine::VertexDescriptorData* lpDescriptor)
+    {
+        if (lpDescriptor == nullptr)
+        {
+            return 0u;
+        }
+        const u8* const lpBytes = reinterpret_cast<const u8*>(lpDescriptor);
+        return lpBytes[0x10u * (static_cast<u32>(lpDescriptor->muElementCount) + 1u)];
+    }
+
+    // Build the sky shader's Vector4 "g_domeRanges" from the manager's two cached ray-sphere
+    // distances and the frame's cloud-distance curve:
+    //     x = mrZenithDistance
+    //     y = 1 / (mrHorizonDistance - mrZenithDistance)
+    //     z = the frame's cloud distance curve
+    //     w = 0
+    // (The X360 stores a constant into the y lane first -- flt_820473B4 == -13.0f in Render,
+    // 0.0f in RenderToEnvironmentMap -- and then overwrites it with the reciprocal. That is a
+    // dead store; only the final value is modelled.)
+    Vector4 MakeCloudDomeRanges(f32 lrZenithDistance, f32 lrHorizonDistance, f32 lfCloudDistanceCurve)
+    {
+        Vector4 lRanges;
+        lRanges.x = lrZenithDistance;
+        lRanges.y = 1.0f / (lrHorizonDistance - lrZenithDistance);
+        lRanges.z = lfCloudDistanceCurve;
+        lRanges.w = 0.0f;
+        return lRanges;
+    }
+
+    // Pack the view position and the sky scale into the shader's "ViewPositionAndSkyScale"
+    // (X360: three vspltw lane broadcasts of the position + one of the scale, merged through two
+    // vperm128 masks and a vsldoi128 -- the rw::math::vpu::Vector3Plus(x, y, z, w) constructor).
+    // Both masks were read out of the ARTIST database with headless IDA 9.3, so the packing is
+    // decoded rather than assumed:
+    //   unk_82CDA3C0 = 00010203 00010203 00010203 14151617  -> vperm(splat(x), splat(y)) = (x,x,x,y)
+    //   unk_82CDA400 = 08090A0B 1C1D1E1F 00010203 00010203  -> vperm(splat(z), splat(s)) = (z,s,z,z)
+    // then vsldoi128(...,8) takes words {2,3} of the first and {0,1} of the second = (x, y, z, s).
+    Vector3Plus MakeViewPositionAndSkyScale(const Vector3& lrViewPosition, f32 lfSkyScale)
+    {
+        Vector3Plus lPacked;
+        lPacked.x = lrViewPosition.x;
+        lPacked.y = lrViewPosition.y;
+        lPacked.z = lrViewPosition.z;
+        lPacked.w = lfSkyScale;
+        return lPacked;
+    }
+
+    // rw::math::vpu::Matrix44::SetIdentity (the X360 loads the four identity rows out of
+    // gIVector / unk_82181510 / unk_82181520 / unk_82181530).
+    Matrix44 MakeIdentityMatrix44()
+    {
+        Matrix44 lM;
+        lM.xAxis.x = 1.0f; lM.xAxis.y = 0.0f; lM.xAxis.z = 0.0f; lM.xAxis.w = 0.0f;
+        lM.yAxis.x = 0.0f; lM.yAxis.y = 1.0f; lM.yAxis.z = 0.0f; lM.yAxis.w = 0.0f;
+        lM.zAxis.x = 0.0f; lM.zAxis.y = 0.0f; lM.zAxis.z = 1.0f; lM.zAxis.w = 0.0f;
+        lM.wAxis.x = 0.0f; lM.wAxis.y = 0.0f; lM.wAxis.z = 0.0f; lM.wAxis.w = 1.0f;
+        return lM;
+    }
+
+    // Inlined rw::math::vpu::Mult(Vector4, Matrix44): one row of the combine (vspltw broadcast +
+    // vmaddfp chain). Mirrors BrnShadowMap.cpp's committed MultRow.
+    Vector4 MultRow(const Vector4& lrRow, const Matrix44& lrM)
+    {
+        const f32 lafLanes[4] = { lrRow.x, lrRow.y, lrRow.z, lrRow.w };
+        const Vector4* const lapRows[4] = { &lrM.xAxis, &lrM.yAxis, &lrM.zAxis, &lrM.wAxis };
+
+        Vector4 lvOut;
+        f32* const lpfOut = &lvOut.x;
+        lpfOut[0] = 0.0f; lpfOut[1] = 0.0f; lpfOut[2] = 0.0f; lpfOut[3] = 0.0f;
+        for (int liRow = 0; liRow < 4; ++liRow)
+        {
+            const f32* const lpfRow = &lapRows[liRow]->x;
+            for (int liLane = 0; liLane < 4; ++liLane)
+            {
+                lpfOut[liLane] += lafLanes[liRow] * lpfRow[liLane];
+            }
+        }
+        return lvOut;
+    }
+
+    // Inlined rw::math::vpu::Mult(Matrix44, Matrix44) -- the X360's sub_823FF1D0 body, which
+    // multiplies the world transform by the view-projection and hands the product to
+    // Im3dSkyDome::SetTransform.
+    Matrix44 MultMatrix(const Matrix44& lrA, const Matrix44& lrB)
+    {
+        Matrix44 lOut;
+        lOut.xAxis = MultRow(lrA.xAxis, lrB);
+        lOut.yAxis = MultRow(lrA.yAxis, lrB);
+        lOut.zAxis = MultRow(lrA.zAxis, lrB);
+        lOut.wAxis = MultRow(lrA.wAxis, lrB);
+        return lOut;
+    }
+
+    // The sky dome's world-space radius (X360 flt_820473B0, loaded into the w lane of
+    // ViewPositionAndSkyScale by both draw paths).
+    const f32 KF_SKY_SCALE = 9500.0f;
+
+    // The cloud dark/lite colours are pushed at DOUBLE their frame value
+    // (vspltisw v0,2 / vcfsx v0,v0,0 -> 2.0f, then vmulfp128 on both).
+    const f32 KF_CLOUD_COLOUR_SCALE = 2.0f;
+
+    // vmulfp128 of a whole 4-lane vector by a broadcast scalar.
+    Vector4 ScaleVector4(const Vector4& lrV, f32 lfScale)
+    {
+        Vector4 lOut;
+        lOut.x = lrV.x * lfScale;
+        lOut.y = lrV.y * lfScale;
+        lOut.z = lrV.z * lfScale;
+        lOut.w = lrV.w * lfScale;
+        return lOut;
+    }
+
+    // The X360's stream/index binding, byte-for-byte:
+    //     D3DDevice_SetStreamSource(dev, 0, vb, 0, 0,      1)   <- clears the previous binding
+    //     D3DDevice_SetStreamSource(dev, 0, vb, 0, stride, 1)   <- the descriptor's real stride
+    //     D3DDevice_SetIndices     (dev, ib)
+    // The doubled SetStreamSource is deliberate (the same idiom the Lion particle path uses at
+    // ParticleRender.cpp:90/117): the first call with a zero stride retires whatever format was
+    // bound, the second installs the sky-dome format.
+    void BindSkyDomeStreams(BrnGraphics::Im3dSkyDome* lpRenderer,
+                            renderengine::VertexBuffer* lpVertexBuffer,
+                            renderengine::IndexBuffer* lpIndexBuffer)
+    {
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, 0, 1);
+
+        const u32 luStride = GetVertexStreamStride(
+            reinterpret_cast<const renderengine::VertexDescriptorData*>(
+                lpRenderer->GetVertexDescriptorData()));
+        D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, luStride, 1);
+
+        D3DDevice_SetIndices(gpD3DDevice, lpIndexBuffer);
+    }
+
+    // The X360 draw: (PrimitiveType, BaseVertexIndex, StartIndex, IndexCount) read straight out of
+    // the pass's DrawIndexedParameters block. Note the committed field NAMES read the third and
+    // fourth words as muMinVertexIndex / muNumVertices; on this path they carry the start index
+    // and the index count (which is exactly what CreateGeometry writes into them).
+    void DrawSkyDome(const DrawIndexedParameters& lrParameters)
+    {
+        D3DDevice_DrawIndexedVertices(gpD3DDevice,
+                                      lrParameters.mePrimitiveType,
+                                      lrParameters.muBaseVertexIndex,
+                                      lrParameters.muMinVertexIndex,
+                                      lrParameters.muNumVertices);
+    }
+}
+
+// BrnSkyDomeManager::Construct  (PS3 DecFIGS 0x350588; inlined on X360)
+// Null the four buffer pointers and clear the two cached ray-sphere distances. The two
+// DrawIndexedParameters blocks are deliberately left alone -- CreateGeometry fills them.
+void BrnSkyDomeManager::Construct()
+{
+    mpMainVertexBuffer = nullptr;
+    mpMainIndexBuffer  = nullptr;
+    mpCubeVertexBuffer = nullptr;
+    mpCubeIndexBuffer  = nullptr;
+    mrHorizonDistance  = 0.0f;
+    mrZenithDistance   = 0.0f;
+}
+
+// BrnSkyDomeManager::Release  (PS3 DecFIGS 0x350D6C; inlined on X360)
+// Asserts the allocator and reports success. The dome's vertex/index buffers are NOT released
+// here -- the whole allocator block goes away with the renderer's resource arena.
+bool BrnSkyDomeManager::Release(rw::IResourceAllocator* lpAlloc)
+{
+    CGS_ASSERT(lpAlloc != NULL, "lpAlloc != NULL");
+    (void)lpAlloc;
+    return true;
+}
+
+// BrnSkyDomeManager::Render  X360 0x82400238
+// Draw the main sky dome for one frame.
+void BrnSkyDomeManager::Render(
+    BrnGraphics::Im3dSkyDome* lpRenderer,
+    const renderengine::Texture* lpLayer0Density,
+    const renderengine::Texture* lpLayer0Lighting,
+    const BrnShaderConstantsFrame* lpShaderConstants)
+{
+    // Both cloud textures must be resident; otherwise the whole pass is skipped.
+    if (lpLayer0Density == nullptr || lpLayer0Lighting == nullptr)
+    {
+        return;
+    }
+
+    const Matrix44 lViewProjectionMatrix = lpShaderConstants->GetViewProjectionMatrix();
+    const Vector3  lViewPosition         = lpShaderConstants->GetViewPosition();
+    const Vector3  lKeyLightDirection    = lpShaderConstants->GetKeyLightDirection();
+
+    const Vector4  lSky_TopColourDrk     = lpShaderConstants->GetTopColourDrk();
+    const Vector4  lSky_HorColourPow     = lpShaderConstants->GetHorColourPow();
+    const Vector4  lSky_SunColourPow     = lpShaderConstants->GetSunColourPow();
+    const Vector3  lSky_HorBleedSclPow   = lpShaderConstants->GetHorBleedSclPow();
+
+    const Vector4  lCloudDarkColour0     = lpShaderConstants->GetCloudDarkColour0();
+    const Vector4  lCloudLiteColour0     = lpShaderConstants->GetCloudLiteColour0();
+    const Vector4  lCloudTextureScaleAndOffsets0 =
+        lpShaderConstants->GetCloudTextureScaleAndOffsets0();
+
+    const Vector4  lCloudLayerDensity    = lpShaderConstants->GetCloudLayerDensity();
+    const Vector4  lCloudLayerInvFeather = lpShaderConstants->GetCloudLayerInvFeather();
+    const Vector4  lCloudLayerOpacity    = lpShaderConstants->GetCloudLayerOpacity();
+
+    const Vector4  lFogScattering        = lpShaderConstants->GetFogScattering();
+    const f32      lfCloudDistanceCurve  = lpShaderConstants->GetCloudDistanceCurve();
+
+    const Vector4 lCloudDomeRanges =
+        MakeCloudDomeRanges(mrZenithDistance, mrHorizonDistance, lfCloudDistanceCurve);
+    const Matrix44    lWorldTransform            = MakeIdentityMatrix44();
+    const Vector3Plus lViewPositionAndSkyScale   = MakeViewPositionAndSkyScale(lViewPosition,
+                                                                              KF_SKY_SCALE);
+
+    lpRenderer->BeginRendering();
+
+    // Bind the dome's stream twice, exactly as the X360 does: once with a zero stride to drop the
+    // previous binding, then with the descriptor's real stride.
+    BindSkyDomeStreams(lpRenderer, mpMainVertexBuffer, mpMainIndexBuffer);
+
+    ImDeviceSetBlendState(gpSkyDomeBlendState);
+    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
+    ImDeviceSetDepthStencilState(gpSkyDomeDepthStencilState);
+
+    const Matrix44 lWorldViewProjection = MultMatrix(lWorldTransform, lViewProjectionMatrix);
+    lpRenderer->SetTransform(&lWorldViewProjection);
+
+    lpRenderer->SetConstants(
+        lViewPositionAndSkyScale,
+        lKeyLightDirection,
+        lSky_TopColourDrk,
+        lSky_HorColourPow,
+        lSky_SunColourPow,
+        lSky_HorBleedSclPow,
+        lpLayer0Density,
+        lpLayer0Lighting,
+        lFogScattering,
+        ScaleVector4(lCloudDarkColour0, KF_CLOUD_COLOUR_SCALE),
+        ScaleVector4(lCloudLiteColour0, KF_CLOUD_COLOUR_SCALE),
+        lCloudDomeRanges,
+        lCloudTextureScaleAndOffsets0,
+        lCloudLayerDensity,
+        lCloudLayerInvFeather,
+        lCloudLayerOpacity);
+
+    shadow::Device::FlushVertexProgramState();
+    DrawSkyDome(mMainDrawParameters);
+
+    lpRenderer->EndRendering();
+    shadow::Device::ResetShadowing();
+}
+
+// BrnSkyDomeManager::RenderToEnvironmentMap  X360 0x82400580
+// Draw the coarse sky dome into one face of the environment map. Identical to Render except for
+// the face's view-projection / view position, the CUBE buffers + draw parameters, and the env-map
+// depth/stencil state.
+void BrnSkyDomeManager::RenderToEnvironmentMap(
+    BrnGraphics::EEnvironmentMapFace leFace,
+    BrnGraphics::Im3dSkyDome* lpRenderer,
+    const renderengine::Texture* lpLayer0Density,
+    const renderengine::Texture* lpLayer0Lighting,
+    const BrnShaderConstantsFrame* lpShaderConstants)
+{
+    if (lpLayer0Density == nullptr || lpLayer0Lighting == nullptr)
+    {
+        return;
+    }
+
+    const Matrix44 lViewProjectionMatrix = lpShaderConstants->GetEnvMapViewProjectionMatrix(leFace);
+    const Vector3  lViewPosition         = lpShaderConstants->GetEnvMapViewPosition();
+    const Vector3  lKeyLightDirection    = lpShaderConstants->GetKeyLightDirection();
+
+    const Vector4  lSky_TopColourDrk     = lpShaderConstants->GetTopColourDrk();
+    const Vector4  lSky_HorColourPow     = lpShaderConstants->GetHorColourPow();
+    const Vector4  lSky_SunColourPow     = lpShaderConstants->GetSunColourPow();
+    const Vector3  lSky_HorBleedSclPow   = lpShaderConstants->GetHorBleedSclPow();
+
+    const Vector4  lCloudDarkColour0     = lpShaderConstants->GetCloudDarkColour0();
+    const Vector4  lCloudLiteColour0     = lpShaderConstants->GetCloudLiteColour0();
+    const Vector4  lCloudTextureScaleAndOffsets0 =
+        lpShaderConstants->GetCloudTextureScaleAndOffsets0();
+
+    const Vector4  lCloudLayerDensity    = lpShaderConstants->GetCloudLayerDensity();
+    const Vector4  lCloudLayerInvFeather = lpShaderConstants->GetCloudLayerInvFeather();
+    const Vector4  lCloudLayerOpacity    = lpShaderConstants->GetCloudLayerOpacity();
+
+    const Vector4  lFogScattering        = lpShaderConstants->GetFogScattering();
+    const f32      lfCloudDistanceCurve  = lpShaderConstants->GetCloudDistanceCurve();
+
+    const Vector4 lCloudDomeRanges =
+        MakeCloudDomeRanges(mrZenithDistance, mrHorizonDistance, lfCloudDistanceCurve);
+    const Matrix44    lWorldTransform          = MakeIdentityMatrix44();
+    const Vector3Plus lViewPositionAndSkyScale = MakeViewPositionAndSkyScale(lViewPosition,
+                                                                            KF_SKY_SCALE);
+
+    lpRenderer->BeginRendering();
+
+    BindSkyDomeStreams(lpRenderer, mpCubeVertexBuffer, mpCubeIndexBuffer);
+
+    ImDeviceSetBlendState(gpSkyDomeBlendState);
+    ImDeviceSetRasterizerState(gpSkyDomeRasterizerState);
+    ImDeviceSetDepthStencilState(gpSkyDomeEnvMapDepthStencilState);
+
+    const Matrix44 lWorldViewProjection = MultMatrix(lWorldTransform, lViewProjectionMatrix);
+    lpRenderer->SetTransform(&lWorldViewProjection);
+
+    lpRenderer->SetConstants(
+        lViewPositionAndSkyScale,
+        lKeyLightDirection,
+        lSky_TopColourDrk,
+        lSky_HorColourPow,
+        lSky_SunColourPow,
+        lSky_HorBleedSclPow,
+        lpLayer0Density,
+        lpLayer0Lighting,
+        lFogScattering,
+        ScaleVector4(lCloudDarkColour0, KF_CLOUD_COLOUR_SCALE),
+        ScaleVector4(lCloudLiteColour0, KF_CLOUD_COLOUR_SCALE),
+        lCloudDomeRanges,
+        lCloudTextureScaleAndOffsets0,
+        lCloudLayerDensity,
+        lCloudLayerInvFeather,
+        lCloudLayerOpacity);
+
+    shadow::Device::FlushVertexProgramState();
+    DrawSkyDome(mCubeDrawParameters);
+
+    lpRenderer->EndRendering();
+    shadow::Device::ResetShadowing();
 }
