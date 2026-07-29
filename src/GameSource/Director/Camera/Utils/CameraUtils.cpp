@@ -4,7 +4,7 @@
 #include "rw/math/fpu/scalar_operation.h"            // Tan / IsZero
 #include "rw/math/vpu/vector3_operation.h"           // Subtract / Normalize / IsZero
 
-#include <cmath>   // std::atan / std::acos
+#include <cmath>   // std::atan / std::acos / std::asin / std::fabs / std::copysign
 
 // BrnDirector::Camera::Utils -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -23,6 +23,11 @@
 // builder, both overloads; see the KV_AXIS_* block below for the rodata attestation):
 //   CreateLookAt(Vector3, Vector3)          @0x8220C4F8   (CameraUtils.cpp:704)
 //   CreateLookAt(Vector3, Vector3, Vector3) @0x8220C960   (CameraUtils.cpp:767)
+//
+// Bodied here (1 ledger function, class:BrnDirector::Camera::Utils -- the Euler decomposition
+// that feeds the fly-by camera's BANK; see the block comment at its definition for the
+// branch-by-branch attestation):
+//   EulerAnglesZXYFromMatrix44Affine        @0x82222180   (CameraUtils.cpp:453)
 //
 // DECLARATION-ONLY + FLAGGED (declared in CameraUtils.h, bodies not reconstructed --
 // each is an inline VMX minimax / corner lattice / permute over UNATTESTED raw rodata
@@ -60,7 +65,19 @@ namespace
     const f32 KF_TAN_FLOOR = 1.0e-4f;
 
     // pi/2 -- GetPitchAboutPointRads returns (pi/2 - acos(dir.y)) == asin(dir.y).
+    // Also the near-vertical gate and the den==0 arm of the Euler decomposition below;
+    // DUMPED as flt_82001754 == 1.570796371 (and its negative flt_82005560).
     const f32 KF_HALF_PI = 1.5707964f;
+
+    // pi -- the den<0 arm of the Euler decomposition's atan2. DUMPED as
+    // flt_8200174C == 3.141592741.
+    const f32 KF_PI = 3.1415927f;
+
+    // The +/-1 clamp band EulerAnglesZXYFromMatrix44Affine puts every source row through.
+    // DUMPED as flt_820037C8 == -1 and flt_82001C98 == +1; the console's vmaxfp/vminfp
+    // operands carry 0 in the fourth lane, which is why the w lane is pinned to 0 here.
+    const Vector3 KV_MINUS_ONE = { -1.0f, -1.0f, -1.0f, 0.0f };
+    const Vector3 KV_PLUS_ONE  = {  1.0f,  1.0f,  1.0f, 0.0f };
 
     // ---- the identity-basis rodata block, DUMPED from the shipped image -----------------
     // Headless IDA 9.3 over BURNOUT_X360_ARTIST.XEX read 0x82181500..0x8218153F as four
@@ -84,6 +101,42 @@ namespace
     // own default parameter is a looser 1e-6 placeholder, so the calls below pass this
     // explicitly rather than silently widening the degenerate band by ten times.)
     const f32 KF_VPU_EPSILON = 1.1920929e-07f;
+
+    // ---- the console's inlined vector atan2 --------------------------------------------
+    // EulerAnglesZXYFromMatrix44Affine evaluates two quadrant-correct arctangents inline;
+    // both expand to the SAME nine-instruction pattern (X360 0x82222374..0x822223E0 and
+    // 0x82222404..0x82222438, and again in both degenerate arms at 0x82222534..0x8222255C).
+    // The DecFIGS PS3 build attributes the identical block to the SDK's own vector arctan
+    // (bits/atanf4.h + rw/math/vpu/detail/ps3/ppu/trig_operation_inline.h), so this is the
+    // SDK helper, not hand-written code. Transcribed arm for arm:
+    //
+    //   base = XMVectorATan(num * Reciprocal(den))
+    //   vcmpgtfp(0, den) -> vsel :  if (den <  0)  base += copysign(pi,   num)
+    //   vcmpeqfp(0, den) -> vsel :  if (den == 0)  base  = copysign(pi/2, num)
+    //
+    // (the sign transplant is the literal `vand` of num against the 0x80000000 mask followed
+    // by `vor` into the constant -- i.e. copysign, including for a negative zero numerator.)
+    //
+    // ⚠️ NOT std::atan2: for den == 0 the console hands back +/-pi/2 even when the numerator
+    // is also zero, where std::atan2(0,0) is 0. That divergence is preserved deliberately --
+    // it is the console's own degenerate answer.
+    // FLAG (PC-platform, numeric): the console's `Reciprocal` is a vrefp estimate refined by
+    // one Newton-Raphson step (`t = 1 - e*d ; e*t + e`, asm 0x82222364/0x82222368) and its
+    // XMVectorATan is a minimax polynomial. Both are de-optimised here to the exact divide and
+    // std::atan -- the standing convention of this tree (see rw/math/vpu/vector3_operation.h's
+    // Normalize). Tighter than the console, never looser.
+    f32 ATan2(f32 lfNumerator, f32 lfDenominator)
+    {
+        if (lfDenominator == 0.0f)
+            return std::copysign(KF_HALF_PI, lfNumerator);
+
+        const f32 lfAngle = std::atan(lfNumerator / lfDenominator);
+
+        if (lfDenominator < 0.0f)
+            return lfAngle + std::copysign(KF_PI, lfNumerator);
+
+        return lfAngle;
+    }
 } // namespace
 
 // @ 0x821F22A0 -- CameraUtils.h:157/:160 range tripwires (both non-gating; the
@@ -316,6 +369,82 @@ Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition, Vecto
     lLookAt.zAxis = lZaxis;
     lLookAt.wAxis = lEyePosition;
     return lLookAt;
+}
+
+// ----------------------------------------------------------------------------------------
+// ⭐ @0x82222180 -- CameraUtils.cpp:453. The ZXY Euler angles (radians) of an affine's
+// rotation. THE gate that was holding the fly-by's camera BANK: TrafficLaneTruck::Update
+// feeds it the frame-to-frame relative rotation and the road-runner behaviour rolls the
+// camera by the resulting yaw rate.
+//
+// Read off the raw instruction stream (the pseudocode fuses the two degenerate arms):
+//
+//   0x822221A4..0x82222218  the three ROTATION rows are each clamped lane-wise into
+//                             [-1, +1]: vmaxfp against {-1,-1,-1,0} (flt_820037C8) then
+//                             vminfp against {+1,+1,+1,0} (flt_82001C98). The translation
+//                             row is never loaded.
+//   0x8222221C..0x82222264  the "keep last frame" arm: only when lpLastAngles is non-null
+//                             AND | |zAxis.y| - 1 | < lfVerticalComparisonEpsilon, i.e. the
+//                             frame is within epsilon of straight up/down, where the yaw and
+//                             roll are not separable. Returns *lpLastAngles VERBATIM.
+//   0x82222268..0x82222294  pitch = XMVectorASin(-zAxis.y)   -> lane x  (vrlimi128 mask 8)
+//   0x822222BC / 0x822222FC the two-sided gate on that pitch: pi/2 > pitch > -pi/2
+//                             (flt_82001754 / flt_82005560, both dumped).
+//   0x8222232C..0x822223E8    normal arm, yaw : atan2(zAxis.x, zAxis.z) -> lane y (mask 4/3)
+//   0x822223EC..0x8222243C    normal arm, roll: atan2(xAxis.y, yAxis.y) -> lane z (mask 2/2)
+//   0x82222440 / 0x822224B0   the two DEGENERATE arms -- the compiler duplicated one body
+//                             into two stack-slot allocations; both compute the identical
+//                             pair: yaw = atan2(xAxis.z, xAxis.x) and roll = 0
+//                             (flt_82001CC0). At the poles the roll is folded into the yaw,
+//                             which is exactly what that substitution says.
+//
+// ⚠️ VMX128 OPERAND-ORDER NOTE (a correction to the rule this tree recorded with SLerp):
+// IDA prints the PLAIN VMX `vnmsubfp` in architectural order, so 0x82222470's
+// `vnmsubfp v13, v0, v13, v12` really is `vB - vA*vC`. The VMX128 forms are NOT the same
+// shape -- `vnmsubfp128 vD, vA, vB` is `vD -= vA*vB` and `vmaddcfp128 vD, vA, vB` is
+// `vD = vA*vD + vB`, with IDA printing the implied vD as an extra operand. Both are pinned
+// by the reciprocal idiom at 0x82222364/0x8222236C, which only reads as `t = 1 - e*d` and
+// `num * (1/den)` under that reading.
+//
+// FLAG (PC-platform, numeric): XMVectorASin is the console's minimax polynomial; std::asin
+// is the exact form, the same de-optimisation the rest of this file already applies. The
+// clamp above guarantees the argument is in range, so there is no domain risk.
+// FLAG (lane w): the console never writes the fourth lane -- it loads the result register
+// from an uninitialised stack slot and vrlimi128s only lanes x/y/z into it, so the w lane is
+// whatever residue was there. Pinned to 0 here rather than propagating indeterminate bits;
+// every consumer reads xyz only (IsValid / GetLocalAngularVelocity().y).
+Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngles,
+                                         f32 lfVerticalComparisonEpsilon)
+{
+    const Vector3 lXaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.xAxis, KV_MINUS_ONE),
+                                              KV_PLUS_ONE);
+    const Vector3 lYaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.yAxis, KV_MINUS_ONE),
+                                              KV_PLUS_ONE);
+    const Vector3 lZaxis = rw::math::vpu::Min(rw::math::vpu::Max(lIn.zAxis, KV_MINUS_ONE),
+                                              KV_PLUS_ONE);
+
+    if (lpLastAngles != 0
+        && std::fabs(std::fabs(lZaxis.y) - 1.0f) < lfVerticalComparisonEpsilon)
+    {
+        return *lpLastAngles;
+    }
+
+    Vector3 lEulerAngles;
+    lEulerAngles.x = std::asin(-lZaxis.y);
+    lEulerAngles.w = 0.0f;
+
+    if (KF_HALF_PI > lEulerAngles.x && lEulerAngles.x > -KF_HALF_PI)
+    {
+        lEulerAngles.y = ATan2(lZaxis.x, lZaxis.z);
+        lEulerAngles.z = ATan2(lXaxis.y, lYaxis.y);
+    }
+    else
+    {
+        lEulerAngles.y = ATan2(lXaxis.z, lXaxis.x);
+        lEulerAngles.z = 0.0f;
+    }
+
+    return lEulerAngles;
 }
 
 }

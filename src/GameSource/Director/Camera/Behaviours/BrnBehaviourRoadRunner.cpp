@@ -9,7 +9,9 @@
 //   BehaviourRoadRunner::Reverse             (BrnBehaviourRoadRunner.h:331, inlined on console)
 //   BehaviourRoadRunner::GetName             @0x821FB130
 //   BehaviourRoadRunner::GetParameters / SetParameters
-//   BehaviourRoadRunner::Update              @0x82247E98   -- ⚠️ the un-prepared leg only (see below)
+//   BehaviourRoadRunner::Update              @0x82247E98   -- seed + advance + placement + BANK
+//                                                            (the fixation / collision-probe /
+//                                                             shake refinements are still gated)
 //   BehaviourRoadRunner::PostCollisionUpdate @0x8220F850   -- ⚠️ gated
 //   TrafficLaneTruck::GetTransform           @0x821F53D8
 //   TrafficLaneTruck::GetLocalAngularVelocity@0x821F5470
@@ -619,13 +621,9 @@ void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDi
 // near-vertical epsilon, matching CameraUtils.h's default), flt_82001770 / flt_82002514 =
 // +/-2^-23 (the fpu IsZero pair). All dumped, none guessed.
 //
-// ⚠️ ONE DOCUMENTED QUIET GATE -- the angular half. Utils::EulerAnglesZXYFromMatrix44Affine
-// @0x82222180 is DECLARATION-ONLY in this tree, so lNewAngularVelocity cannot be computed
-// honestly and mLocalAngularVelocity is left as Prepare set it (zero). Its ONLY reader is
-// TrafficLaneTruck::GetLocalAngularVelocity, which the road-runner behaviour uses for the
-// camera BANK -- so the consequence is an unbanked fly-by, not a wrong position. The linear
-// half and the transform advance are both real.
-// DELETE-WHEN: EulerAnglesZXYFromMatrix44Affine is bodied.
+// ⭐ THE ANGULAR HALF IS NOW REAL. Utils::EulerAnglesZXYFromMatrix44Affine @0x82222180 was the
+// last gate in this body and it is bodied (CameraUtils.cpp); mLocalAngularVelocity is filled
+// every frame, which is what feeds BehaviourRoadRunner::Update's camera BANK.
 // ----------------------------------------------------------------------------
 void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTimestep,
                               void* /*lpRandom*/)
@@ -662,14 +660,22 @@ void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTim
         mLinearVelocity = rw::math::vpu::Mult(lNewTransform.wAxis - mTransform.wAxis,
                                               lfFramesPerSec);
 
-        // ⚠️ the gate documented above: the relative rotation is built (it is pure named-member
-        // matrix algebra the vendor home already provides) but its Euler decomposition is not
-        // available, so the lerp into mLocalAngularVelocity cannot run.
-        //   lRelative           = Mult(lNewTransform, InverseOfMatrixWithOrthonormal3x3(mTransform));
-        //   lNewAngularVelocity = Utils::EulerAnglesZXYFromMatrix44Affine(lRelative, 0, 0.01f)
-        //                             * lfFramesPerSec;
-        //   mLocalAngularVelocity = Lerp(mLocalAngularVelocity, lNewAngularVelocity,
-        //                                mfTransformBlendAmount * 0.5f);
+        // The rotation this frame applied, expressed in the PREVIOUS frame's basis (mTransform
+        // is still last frame's here -- see the ordering note above), decomposed into ZXY Euler
+        // rates and eased into the stored angular velocity at HALF the transform blend amount
+        // (flt_82001DA0 == 0.5f). flt_82002138 == 0.01f is the near-vertical epsilon; the null
+        // lpLastAngles is the console's own literal 0 -- this call site does NOT carry a previous
+        // angle set, so at the poles it takes the degenerate arm rather than holding.
+        const rw::math::vpu::Matrix44Affine lRelative =
+            rw::math::vpu::Mult(lNewTransform,
+                                rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(mTransform));
+
+        const rw::math::vpu::Vector3 lNewAngularVelocity =
+            rw::math::vpu::Mult(Utils::EulerAnglesZXYFromMatrix44Affine(lRelative, 0, 0.01f),
+                                lfFramesPerSec);
+
+        mLocalAngularVelocity = rw::math::vpu::Lerp(mLocalAngularVelocity, lNewAngularVelocity,
+                                                    mfTransformBlendAmount * 0.5f);
     }
 
     CGS_ASSERT(rw::math::vpu::IsValid(mLocalAngularVelocity), "IsValid(mLocalAngularVelocity)");
@@ -973,19 +979,68 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     }
     lrCamera.SetFOV(95.0f);
 
+    // ⭐⭐ THE BANK (asm 0x82248294..0x82248514) -- the fly-by's signature move, unconditional
+    // straight-line code with no gate.
+    //
+    //   0x82248294  angVel = mTrafficLaneTruck.GetLocalAngularVelocity()
+    //   0x822482AC  theta  = -angVel.y * mfBankingScale        (vspltw lane 1; vxor sign flip)
+    //   0x822482E8..0x82248470  XMVectorSinCos(theta), inlined: range-reduce by 2*pi (the
+    //               constants at unk_82000C60 lane 1 == 6.283185482 and lane 3 == 0.1591549367
+    //               == 1/2pi, with vrfin doing the round-to-nearest) then TWO Taylor series --
+    //               0x82000BD0 = {1, -1/6, 1/120, -1/5040, ...} (sin, odd powers of the reduced
+    //               angle) and 0x82000C00 = {1, -1/2, 1/24, -1/720, ...} (cos, even powers).
+    //               Both tables DUMPED from the shipped image; they are the textbook
+    //               coefficients, which is what licenses the de-optimisation below.
+    //   0x82248478..0x822484B4  the roll basis. The console assembles it with the vperm mask
+    //               unk_82CDA350 == 00 01 02 03 | 14 15 16 17 | 00 01 02 03 | 00 01 02 03
+    //               (lane0 <- vA.x, lane1 <- vB.y). Every operand is a splat, so the mask only
+    //               decides WHICH of cos / sin / -sin lands in which lane; a vrlimi128 then
+    //               zeroes lane 2 of the first two rows and writes 1.0 into the third's:
+    //                   xAxis { cos, sin, 0 }   yAxis { -sin, cos, 0 }
+    //                   zAxis {  0,   0,  1 }   wAxis {  0,   0,  0 }
+    //               -- a rotation about the frame's OWN forward (Z) axis, i.e. a roll.
+    //   0x822484A8..0x82248510  camera.mTransform = Mult(roll, camera.mTransform): each output
+    //               row is roll.row_i.x*right + .y*up + .z*at (the translation row additionally
+    //               + pos, which with an all-zero wAxis leaves the eye exactly where it was).
+    //               That is precisely the vendor Mult(lhs, rhs)'s TransformVector(rhs, lhs.row_i).
+    //
+    // FLAG (PC-platform, numeric): the two minimax series are evaluated here as std::sin /
+    // std::cos -- the standing convention of this tree (rw/math/vpu/matrix44affine_operation.h's
+    // SLerp de-optimises the SAME XMVectorSinCos block the same way). Exact, never a placeholder.
+    // FLAG (lane w): the console's permute leaves cos / -sin in the w lanes of the first two roll
+    // rows as residue; TransformVector reads xyz only, so they are written 0 here.
+    {
+        const f32 lfBankRads =
+            -mTrafficLaneTruck.GetLocalAngularVelocity().y * mfBankingScale;
+        const f32 lfSin = std::sin(lfBankRads);
+        const f32 lfCos = std::cos(lfBankRads);
+
+        rw::math::vpu::Matrix44Affine lBank;
+        lBank.xAxis = {  lfCos, lfSin, 0.0f, 0.0f };
+        lBank.yAxis = { -lfSin, lfCos, 0.0f, 0.0f };
+        lBank.zAxis = {   0.0f,  0.0f, 1.0f, 0.0f };
+        lBank.wAxis = {   0.0f,  0.0f, 0.0f, 0.0f };
+
+        lrCamera.SetTransform(rw::math::vpu::Mult(lBank, lrCamera.GetTransform()));
+    }
+
     // [diagnostic] where the fly-by camera actually IS, once a second. This is the measurement
     // the whole campaign is for -- it must CHANGE frame to frame.
     {
         static s32 siFlybyFrame = 0;
-        if ((siFlybyFrame % 60) == 0 && (CgsDev::Message::gxMessageFilterFlags & 1)
+        if ((siFlybyFrame % 15) == 0 && (CgsDev::Message::gxMessageFilterFlags & 1)
             && CgsDev::Log::gpDebugPrint != 0)
         {
             const rw::math::vpu::Matrix44Affine& lrX = lrCamera.GetTransform();
+            const rw::math::vpu::Vector3 lAngVel = mTrafficLaneTruck.GetLocalAngularVelocity();
             *CgsDev::Log::gpDebugPrint
                 << "[flyby] f" << siFlybyFrame << " dt " << lfTimestep
                 << " speed " << mTrafficLaneTruck.GetSpeed()
                 << " eye (" << lrX.wAxis.x << ", " << lrX.wAxis.y << ", " << lrX.wAxis.z << ")"
-                << " at (" << lrX.zAxis.x << ", " << lrX.zAxis.y << ", " << lrX.zAxis.z << ")\n";
+                << " at (" << lrX.zAxis.x << ", " << lrX.zAxis.y << ", " << lrX.zAxis.z << ")"
+                << " up (" << lrX.yAxis.x << ", " << lrX.yAxis.y << ", " << lrX.yAxis.z << ")"
+                << " angvel (" << lAngVel.x << ", " << lAngVel.y << ", " << lAngVel.z << ")"
+                << " bank " << (-lAngVel.y * mfBankingScale) << "\n";
         }
         ++siFlybyFrame;
     }
@@ -1004,18 +1059,13 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     }
 
     // ⚠️ THE REMAINING GATES, each with what it costs:
-    //   * the BANKING roll (0x82248294..0x82248514) -- a genuine VMX sin/cos minimax lane
-    //     pipeline that rolls the finished transform about its own forward by
-    //     -angularVelocity.y * mfBankingScale. It needs mLocalAngularVelocity, which
-    //     TrafficLaneTruck::Update cannot fill yet (EulerAnglesZXYFromMatrix44Affine is
-    //     declaration-only), so the input would be zero and the roll the identity anyway.
     //   * the FIXATION blend + acquisition -- needs Utils::SineLerp and
     //     WorldMap::GetInterestingPointNear over mpTriggerData, which the director never loads
     //     (TriggerQueryManager::Prepare @0x82398218 is a GameState-module TU).
     //   * the two near-clip LineTestNearest probes -- need Utils::CalcNearClipCorners (itself
     //     declaration-only) and the post-box interiors.
     //   * the CameraShake concat -- Utils::CameraShake has no home outside BehaviourRig.h.
-    // None of them moves the camera; all four only refine an already-placed one.
+    // None of them moves the camera; all three only refine an already-placed one.
     return true;                                       // every console exit is `li r3, 1`
 }// ============================================================================
 // BehaviourRoadRunner::PostCollisionUpdate @0x8220F850 -- vtable slot 3. Drains the two fine
