@@ -1,6 +1,7 @@
 #include "GameSource/World/AI/BrnAIPortal.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include <cstdint>                                   // uintptr_t (relocation arithmetic)
 
 // BrnAI::Portal::GetBoundaryLine @0x82764480.
 //
@@ -18,5 +19,47 @@ namespace BrnAI
         CGS_ASSERT(lu8BoundryIndex < mu8NumBoundaryLines,
                    "lu8BoundryIndex < mu8NumBoundaryLines");
         return &mpaBoundaryLines[lu8BoundryIndex];
+    }
+
+    // Trivial position accessors (:256 / :259 / :262). AISection::GetMiddle @0x826771D0 uses
+    // GetPositionY to lift the corner mean to the portal's height; the X360 inlines the
+    // `lfs f0, 4(portal)` read, so these have no standalone symbol -- de-inlined here to the
+    // named members because Portal keeps them private.
+    f32 Portal::GetPositionX() const { return mPositionX; }
+    f32 Portal::GetPositionY() const { return mPositionY; }
+    f32 Portal::GetPositionZ() const { return mPositionZ; }
+
+    // ------------------------------------------------------------------------------
+    // Portal::FixUp / FixDown -- load-time relocation of the one pointer slot.
+    //
+    // Inlined into AISection::FixUp @0x8267D8C8 / FixDown @0x8267D978 on the console:
+    //
+    //     if (portal->mpaBoundaryLines) {
+    //         portal->mpaBoundaryLines += base;             // (-= on the FixDown leg)
+    //         for (k = 0; k < portal->mu8NumBoundaryLines; ++k) { /* empty */ }
+    //     }
+    //
+    // The inner loop body really is empty -- BoundaryLine::FixUp holds no pointers to
+    // rebase (it is four packed floats), so it compiled away. The NULL GUARD is real and
+    // is kept: unlike the Traffic graph, the AI graph does serialise null slots.
+    // ------------------------------------------------------------------------------
+    void Portal::FixUp(const void* lpBaseData)
+    {
+        if (mpaBoundaryLines != nullptr)
+        {
+            mpaBoundaryLines = reinterpret_cast<BoundaryLine*>(
+                reinterpret_cast<uintptr_t>(mpaBoundaryLines)
+                + reinterpret_cast<uintptr_t>(lpBaseData));
+        }
+    }
+
+    void Portal::FixDown(const void* lpBaseData)
+    {
+        if (mpaBoundaryLines != nullptr)
+        {
+            mpaBoundaryLines = reinterpret_cast<BoundaryLine*>(
+                reinterpret_cast<uintptr_t>(mpaBoundaryLines)
+                - reinterpret_cast<uintptr_t>(lpBaseData));
+        }
     }
 }

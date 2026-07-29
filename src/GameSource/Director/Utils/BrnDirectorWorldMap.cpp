@@ -17,6 +17,12 @@
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // the gate log
+#include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"  // GetScriptedLoadGameDataInput
+#include "GameSource/Resource/BrnGameDataModuleIO.h"              // GameDataIO::InputBuffer
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // RequestInterface<512> (LoadData)
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"        // GetGameDataEvent (the lane replies)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceResponse
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"   // BrnTraffic::TrafficData (mpPvs, GetHull)
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"                // BrnTraffic::Pvs::GetHullIndexForPoint
 // BrnTrafficSection.h MUST precede BrnTrafficHull.h: it sets BRNTRAFFIC_SECTION_DEFINED so the
@@ -41,6 +47,11 @@ namespace BrnDirector
     // Below this squared displacement magnitude, the displacement query degenerates to the
     // plain nearest-safe query (X360 flt_82001C98 == 1.0, vcmpgtfp vs |lDisplacement|^2).
     static const f32      KF_MIN_DISPLACEMENT_SQ = 1.0f;
+
+    // LoadData's request constants (the X360 `li r31,1` / `li r10,5` pair at every stage).
+    // The event id doubles as the reply's expected miEventId in stages 3 and 5.
+    static const s32      KI_DATA_ACQUIRE_REQUEST = 1;
+    static const s32      KI_LANE_DATA_POOL_ID    = 5;
 
     // -------------------------------------------------------------------------
     // LoadData @0x8225F5A0  -- ⚠️ DOCUMENTED QUIET GATE (director wave).
@@ -230,8 +241,209 @@ namespace BrnDirector
     // -------------------------------------------------------------------------
     bool WorldMap::LoadData(void* lpRequestInterface)
     {
+        // FLAG PC-platform leaf: WHERE THE REQUESTS ARE STAGED.
+        //
+        // The X360 stages them in the director OUTPUT buffer's own RequestInterface<512>
+        // (OutputBuffer::GetResour() -> mResourceInterface @+0x2E0) and the loading spine
+        // bridges that interface into the GameData input once per frame, exactly like
+        // BridgeWorldToResource @0x823E5300 does for the world module.
+        //
+        // Neither half exists on the PC yet, and the first half CANNOT be used as it stands:
+        // DirectorIO::OutputBuffer models mResourceInterface as a raw
+        // `u8 maResourceInterface[0x4F0 - 0x2E0]` byte slice sized to the CONSOLE span (528
+        // bytes), while a host RequestInterface<512> is a VariableEventQueue<512,16> an order
+        // of magnitude bigger. Staging into that slice would overrun straight through
+        // mDirectorOutputInterface and mTimerRequestInterface -- the same class of latent
+        // overrun the world wave found in the trigger InputInterfaceStorage. It also is not
+        // Constructed, which is what the queue's own "Not Constructed" assert reports.
+        //
+        // So on the PC the lane requests are staged DIRECTLY on the scripted-load GameData
+        // input that the loading spine already pumps every frame
+        // (BrnGameMainFlowStates.cpp's s_GameDataInput, published through
+        // GetScriptedLoadGameDataInput). Same queue, same pump, one hop fewer -- and no
+        // bridge to forget. DELETE-WHEN: DirectorIO::OutputBuffer::mResourceInterface is
+        // retyped to the real RequestInterface<512> and Constructed, and LoadDirectorModule
+        // grows its BridgeDirectorToResource append; then pass lpRequestInterface through.
         (void)lpRequestInterface;
-        return true;
+
+        // ⚠️ ONE-SHOT GATE -- THE REQUESTS ARE REAL, THE PUMP IS NOT THERE YET (measured).
+        //
+        // DirectorModule::Prepare runs at InitialLoadingScreen stage 3, but nothing services
+        // the GameData input at that point in boot: LoadingScriptedState::Update (which owns
+        // the per-frame GameDataModule::Update pump) only starts running from the Marketing
+        // screen onwards, and GameDataModule::Prepare itself is InitialLoadingScreen's stage 8.
+        // Measured, both ways, on 2026-07-29:
+        //   * with no pump, the state machine below stages its request and then waits for a
+        //     reply for ever -> DirectorModule::Prepare never returns true -> THE LOADING FLOW
+        //     WEDGES AT STAGE 3 (219 frames, no title);
+        //   * pumping GameDataModule::Update inline from the stage-3 leg (the obvious fix, and
+        //     it is written and gated behind gbBrnLaneRequestPumpEnabled in
+        //     BrnGameMainFlowStates.cpp) CRASHES -- the module is not prepared yet, so it is
+        //     not safe to pump there.
+        // So the honest behaviour until the per-frame GameData IO bracket exists is: issue
+        // NOTHING, return true so Prepare completes and the boot flow is unchanged, and leave
+        // meLoadingState at its constructed value -- GetTrafficData()'s own LOADED gate then
+        // keeps returning null, which is the truthful "no world map data yet" answer.
+        //
+        // DELETE-WHEN: the frame's GameData IO bracket is threaded through LoadDirectorModule
+        // the way the X360 threads it through every LoadXxxModule (or the director module's
+        // load simply moves after GameDataModule::Prepare). At that point flip
+        // gbBrnLaneRequestPumpEnabled on and the rest of this function is already the real
+        // X360 state machine -- nothing else here needs to change.
+        if (!gbBrnLaneRequestPumpEnabled)
+        {
+            static bool sbLogged = false;
+            if (!sbLogged)
+            {
+                sbLogged = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "[WorldMap] LoadData gated: no GameData pump at loading stage 3 "
+                           "(set BRN_LANE_PUMP=1 once the per-frame GameData IO bracket lands)\n";
+            }
+            return true;
+        }
+
+        BrnResource::GameDataIO::InputBuffer* lpGameDataInput =
+            BrnGameMainFlowController::GetScriptedLoadGameDataInput();
+        if (lpGameDataInput == 0)
+            return false;   // the spine has not brought the GameData IO up yet -- retry next tick
+
+        // The GameData input's own interface is a RequestInterface<32768>, and it is fully
+        // instantiated (BrnGameDataRequestInterface_32768.cpp), so the builders are called on
+        // the real type -- no <512> re-cast, which would run <512> capacity arithmetic over a
+        // <32768> queue. The <512> capacity is the CONSOLE's director-side queue; on the PC
+        // the requests land straight in the pump's own queue.
+        // The write lock: GetRequestInterface() (non-const) asserts it, and the loading spine
+        // only holds it around its own append, not around DirectorModule::Prepare.
+        lpGameDataInput->LockForWrite();
+        BrnResource::GameDataIO::RequestInterface<32768>* lpRequests =
+            lpGameDataInput->GetRequestInterface();
+        const bool lbDone = LoadDataStep(lpRequests);
+        lpGameDataInput->UnlockForWrite();
+        return lbDone;
+    }
+
+    // The state machine proper (the X360 LoadData body @0x8225F5A0), split out so the
+    // PC request-staging bracket above owns the lock and every `return` below stays a plain
+    // early-out exactly as the asm has it.
+    bool WorldMap::LoadDataStep(BrnResource::GameDataIO::RequestInterface<32768>* lpRequests)
+    {
+
+        switch (meLoadingState)
+        {
+        case E_LOADING_STATE_TRIGGERS_NOT_REQUESTED:
+            // AcquireResource IS the "get trigger data" builder -- no GetTriggerData symbol
+            // exists on the X360 either. Event id 1 == KI_DATA_ACQUIRE_REQUEST, pool 5.
+            lpRequests->AcquireResource(&mReceiverQueue, KI_DATA_ACQUIRE_REQUEST,
+                                        KI_LANE_DATA_POOL_ID, "TriggerData");
+            meLoadingState = E_LOADING_STATE_LOADING_TRIGGERS;
+            return false;
+
+        case E_LOADING_STATE_LOADING_TRIGGERS:
+        {
+            // Drain the acquire reply. The response is an AcquireResourceResponse, whose
+            // {mpResourceMemory, mpSourceEntry} pair IS a ResourceHandle -- read BY MEMBER,
+            // not at the console's literal record offset (the host handle is 16 bytes where
+            // the console's is 8, so every literal offset past it shifts).
+            // ⚠️ GetFirstEvent returns the event TYPE (-1 at end), NOT a bool -- the console's
+            // own "is the reply here yet" test is the COUNT (its baked assert text is
+            // "mReceiverQueue.GetLength() == 1"). Testing the return value as a bool is
+            // exactly backwards: an empty queue answers -1, which is truthy.
+            if (mReceiverQueue.GetCount() < 1)
+                return false;
+
+            const CgsModule::Event* lpEvent = nullptr;
+            s32                     liSize  = 0;
+            mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+
+            while (lpEvent != nullptr)
+            {
+                // reinterpret_cast, not static_cast: CgsResource::Events::Event and
+                // CgsModule::Event are unrelated roots, and the receiver queue hands out the
+                // module one. Same idiom as BrnGuiColourCalibrationScreen.cpp:137 and
+                // BrnGameDataModule.cpp:417.
+                const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                    reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+
+                CgsResource::ResourceHandle lHandle;
+                lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+                lHandle.mpSourceEntry    = lpResponse->mpSourceEntry;
+                mpTriggerData = lHandle;
+
+                const CgsModule::Event* lpNext = nullptr;
+                mReceiverQueue.GetNextEvent(lpEvent, &lpNext, &liSize);
+                lpEvent = lpNext;
+            }
+            mReceiverQueue.Clear();
+            meLoadingState = E_LOADING_STATE_TRAFFIC_NOT_REQUESTED;
+        }
+        // fall through -- the X360 drops straight into the traffic request on the same tick.
+
+        case E_LOADING_STATE_TRAFFIC_NOT_REQUESTED:
+            lpRequests->LoadTrafficLanes(&mReceiverQueue, KI_DATA_ACQUIRE_REQUEST,
+                                         KI_LANE_DATA_POOL_ID);
+            meLoadingState = E_LOADING_STATE_LOADING_TRAFFIC;
+            return false;
+
+        case E_LOADING_STATE_LOADING_TRAFFIC:
+        {
+            // Count first -- GetFirstEvent's return is the event TYPE, not a success flag.
+            if (mReceiverQueue.GetCount() < 1)
+                return false;
+
+            const CgsModule::Event* lpEvent = nullptr;
+            s32                     liSize  = 0;
+            mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+
+            CGS_ASSERT(lpEvent != nullptr, "lpEvent != NULL");
+            const BrnResource::GameDataIO::GetGameDataEvent* lpResponse =
+                static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST,
+                       "lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST");
+            mpTrafficData = lpResponse->mHandle;
+
+            mReceiverQueue.Clear();
+            meLoadingState = E_AI_DATA_ACQUIRE_NOT_STARTED;
+        }
+        // fall through.
+
+        case E_AI_DATA_ACQUIRE_NOT_STARTED:
+            mReceiverQueue.Clear();
+            lpRequests->GetAILanes(&mReceiverQueue, KI_DATA_ACQUIRE_REQUEST,
+                                   KI_LANE_DATA_POOL_ID);
+            meLoadingState = E_AI_DATA_ACQUIRE_REQUESTED;
+            return false;
+
+        case E_AI_DATA_ACQUIRE_REQUESTED:
+        {
+            // Count first -- GetFirstEvent's return is the event TYPE, not a success flag.
+            if (mReceiverQueue.GetCount() < 1)
+                return false;
+
+            const CgsModule::Event* lpEvent = nullptr;
+            s32                     liSize  = 0;
+            mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+
+            CGS_ASSERT(lpEvent != nullptr, "lpEvent != NULL");
+            const BrnResource::GameDataIO::GetGameDataEvent* lpResponse =
+                static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>(lpEvent);
+            CGS_ASSERT(lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST,
+                       "lpResponse->miEventId == KI_DATA_ACQUIRE_REQUEST");
+            mpAISectionData = lpResponse->mHandle;
+
+            mReceiverQueue.Clear();
+            meLoadingState = E_LOADING_STATE_LOADED;
+        }
+        // fall through.
+
+        case E_LOADING_STATE_LOADED:
+            return true;
+
+        default:
+            CGS_ASSERT(false, "unhandled case");
+            return false;
+        }
     }
 
     // BrnDirectorWorldMap.h:82 / body @0x8221CE98.

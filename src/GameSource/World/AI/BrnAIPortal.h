@@ -34,10 +34,16 @@ namespace BrnAI
         // ResetOnTrackManager::ConvertNodesToPositionAndDirection.
         const BoundaryLine* GetBoundaryLine(u8 lu8BoundryIndex) const;
 
-        // Declared-only members (bodied in their own TUs); listed so the public
-        // surface matches the DWARF declarations.
-        void          FixDown(void* lpMemoryResource);                 // :236
-        void          FixUp(const rw::Resource& lrResource);           // :240
+        // Load-time pointer relocation of mpaBoundaryLines. On the console this is INLINED
+        // into AISection::FixUp @0x8267D8C8 / FixDown @0x8267D978 (under a null guard, and
+        // with an empty per-line inner loop because BoundaryLine holds no pointers); the
+        // DWARF still declares the pair (:236 / :240), so it is de-inlined here and bodied
+        // in BrnAIPortal.cpp.
+        // ⚠️ The base is passed as a plain block pointer rather than the DWARF's
+        // MemoryResource/rw::Resource, matching the Traffic relocation path: the x64 lane
+        // data carries 64-bit slots, so nothing may narrow the base to 32 bits.
+        void          FixUp(const void* lpBaseData);                   // :240
+        void          FixDown(const void* lpBaseData);                 // :236
         u8            GetNumBoundryLines() const;                      // :243
         Vector3       GetPosition() const;                            // :250
         Vector2       GetPosition2D() const;                          // :253
@@ -57,4 +63,11 @@ namespace BrnAI
         u8            mu8NumBoundaryLines; // +0x12  :284
         u8            mau8Pad[1];          // +0x13  :285 (tail pad to 20 bytes)
     };
+
+    // Host layout contract with tools/assets/bundles/lane_transcode.py's emitter: the one
+    // pointer widens 4->8, so the console's 20-byte record becomes 32 bytes on the host and
+    // the two trailing scalars shift with it. (X360: mpaBoundaryLines +0x0C,
+    // mu8NumBoundaryLines +0x12, sizeof 20 -- confirmed by GetBoundaryLine @0x82764480 and
+    // AISection::GetPortal @0x8230F5D0's *20 index maths.)
+    static_assert(sizeof(Portal) == 0x20, "Portal host sizeof (X360 20 -> widened 32)");
 }

@@ -24,6 +24,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <cstddef>   // offsetof (host layout static_asserts)
 
 namespace BrnTraffic
 {
@@ -134,7 +135,23 @@ struct Hull
     // X360 @ 0x82705C20. asm: assert(luIndex < muNumStoplines);
     // return mpaStopLines + 2*luIndex.
     inline const void* GetStopLine(u32 luIndex) const;
+
+    // --- load-time pointer relocation (DWARF :135 / :140) ---------------------
+    // X360 @0x827620A0 / @0x827622E0. Rebases the twelve consecutive pointer slots
+    // (X360 +0x10..+0x3C) against the resource block base, then asserts the junction
+    // count and the two 16-byte alignment guards. Called per hull from
+    // TrafficData::FixUp / FixDown; bodied in BrnTrafficHull.cpp.
+    void FixUp(const void* lpBaseData);
+    void FixDown(const void* lpBaseData);
 };
+
+// Host layout contract with tools/assets/bundles/lane_transcode.py's emitter.
+static_assert(offsetof(Hull, muNumRungs)                    == 0x08, "Hull::muNumRungs");
+static_assert(offsetof(Hull, mpaSections)                   == 0x10, "Hull::mpaSections");
+static_assert(offsetof(Hull, mpaRungs)                      == 0x18, "Hull::mpaRungs");
+static_assert(offsetof(Hull, mpaLightTriggerJunctionLookup) == 0x68, "Hull::mpaLightTriggerJunctionLookup");
+static_assert(offsetof(Hull, mauVehicleAssets)              == 0x70, "Hull::mauVehicleAssets");
+static_assert(sizeof(Hull) == 0x80, "Hull host sizeof");
 
 inline const Section* Hull::GetSection(u32 luIndex) const
 {

@@ -1,14 +1,26 @@
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource + rw::BaseResourceDescriptors<5>
+#include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"  // GetLoadBase64
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "types.hpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnTraffic::TrafficDataResourceType::FixDown   @ 0x82763E68
 //   BrnTraffic::TrafficDataResourceType::GetTypeID @ 0x82752560
+//   BrnTraffic::TrafficDataResourceType::GetSerialisedResourceDescriptor @ 0x82760660
+//   BrnTraffic::TrafficDataResourceType::FixDown   @ 0x82763E68
+//   BrnTraffic::TrafficDataResourceType::FixUp     @ 0x82763E70
 //
-// FixDown forwards to BrnTraffic::TrafficData::FixDown (own TU); that call takes no
-// delta, so the rw::Resource argument is unused. GetTypeID returns the lane-data id.
+// ⚠️ FixUp @0x82763E70 is ABSENT from .ida-exports/ -- it is an 8-byte tail thunk with no
+// .pdata unwind record, so IDA never promoted it to a function and the exporter (which walks
+// idautils.Functions()) never saw it. That, plus the fact that TrafficData::FixUp @0x827637D8
+// is only ever reached through the vtable (hence zero code xrefs), is what made this type look
+// like it had no FixUp at all. It does; the vtable @0x820A1520 holds it in slot 4, and
+// CgsResource::Pool::FixUpEntry @0x828EB860 calls slot 4 unconditionally (no flag, no import
+// gate -- GetImportCount is the ICF-folded `return 0` for this type).
+//
+// Both thunks are `mr r3,r4` + branch: TrafficData::FixUp/FixDown receive the resource block
+// as BOTH `this` and the relocation base, i.e. every serialised slot is an offset from the
+// start of the TrafficData header itself.
 
 namespace BrnTraffic
 {
@@ -42,8 +54,16 @@ namespace BrnTraffic
         return lDescriptor;
     }
 
+    // @0x82763E68 -- `mr r3,r4; b TrafficData::FixDown`. The X360 passes lpResource as the
+    // relocation base, so the rw::Resource is unused on this leg.
     void TrafficDataResourceType::FixDown(void* lpResource, const rw::Resource&) const
     {
-        static_cast<TrafficData*>(lpResource)->FixDown();
+        static_cast<TrafficData*>(lpResource)->FixDown(lpResource);
+    }
+
+    // @0x82763E70 -- `mr r3,r4; b TrafficData::FixUp`. Same shape: the block is its own base.
+    void TrafficDataResourceType::FixUp(void* lpResource, const rw::Resource&) const
+    {
+        static_cast<TrafficData*>(lpResource)->FixUp(lpResource);
     }
 }

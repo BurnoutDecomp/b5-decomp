@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"    // CgsMemory::LinearMalloc (the scratch allocator)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
+#include <cstdint>   // uintptr_t (load-time pointer relocation arithmetic)
+
 #include <cstring>   // memset
 #include <cmath>     // ceilf, floorf
 
@@ -371,5 +373,67 @@ namespace BrnAI
         }
 
         return lpMap->mpuSections[liBest & 0xFFFF];
+    }
+
+    // ------------------------------------------------------------------------------
+    // AISectionsData::FixUp @0x8267DA28 / FixDown @0x8267DAA0 -- load-time pointer
+    // relocation of the AI lane graph.
+    //
+    // Reached from AISectionsResourceType::FixUp @0x8267DB28
+    // (`mr r3,r4; mr r4,r5; b ...`), which forwards the rw::Resource; the body's first
+    // instruction is `lwz r29, 0(r4)`, i.e. it reads the resource's segment-0 base out of
+    // it. The forwarder here resolves that to the block pointer and passes it directly, so
+    // nothing narrows the 64-bit host base (the console's 32-bit `int` delta was bug class
+    // (a) waiting to happen once the slots were widened).
+    //
+    // Order (the asm's): the section table first, then every AISection, then the reset
+    // pairs. FixDown mirrors it, walking the sections BEFORE un-rebasing the table that
+    // holds them. Both slots are NULL-GUARDED on this path -- unlike the Traffic graph.
+    //
+    // NOTE the console does NOT check muVersion here (KU_AI_SECTIONS_DATA_VERSION == 12),
+    // unlike TrafficData::FixUp's version assert. Left unchecked, faithfully.
+    // ------------------------------------------------------------------------------
+    void AISectionsData::FixUp(const void* lpBaseData)
+    {
+        const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+
+        if (mpaSections != nullptr)
+        {
+            mpaSections = reinterpret_cast<AISection*>(
+                reinterpret_cast<uintptr_t>(mpaSections) + luBase);
+
+            for (u32 luSection = 0; luSection < muNumSections; ++luSection)
+            {
+                mpaSections[luSection].FixUp(lpBaseData);
+            }
+        }
+
+        if (mpaSectionResetPairs != nullptr)
+        {
+            mpaSectionResetPairs = reinterpret_cast<SectionResetPair*>(
+                reinterpret_cast<uintptr_t>(mpaSectionResetPairs) + luBase);
+        }
+    }
+
+    void AISectionsData::FixDown(const void* lpBaseData)
+    {
+        const uintptr_t luBase = reinterpret_cast<uintptr_t>(lpBaseData);
+
+        if (mpaSections != nullptr)
+        {
+            for (u32 luSection = 0; luSection < muNumSections; ++luSection)
+            {
+                mpaSections[luSection].FixDown(lpBaseData);
+            }
+
+            mpaSections = reinterpret_cast<AISection*>(
+                reinterpret_cast<uintptr_t>(mpaSections) - luBase);
+        }
+
+        if (mpaSectionResetPairs != nullptr)
+        {
+            mpaSectionResetPairs = reinterpret_cast<SectionResetPair*>(
+                reinterpret_cast<uintptr_t>(mpaSectionResetPairs) - luBase);
+        }
     }
 }

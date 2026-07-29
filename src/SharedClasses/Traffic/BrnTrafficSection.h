@@ -35,6 +35,7 @@
 
 #include "BrnCommonTypes.h"               // Vector3, VecFloat (= rw::math::vpu::Vector3 / Vector4)
 #include "BrnTrafficSharedConstants.h"    // BrnTraffic::Side (FindNeighbourForRung arg)
+#include <cstddef>                        // offsetof (host layout static_asserts)
 
 namespace BrnTraffic
 {
@@ -140,5 +141,15 @@ namespace BrnTraffic
         f32   CalcDistanceAlongSection(f32 lfParam, u32 luSegment,                        // :188
                                        const f32* lpafRungLengths) const;
     };
+
+    // Host layout contract with tools/assets/bundles/lane_transcode.py's emitter. Section
+    // holds NO pointers (muRungOffset / muNeighbourOffset / muStopLineOffset are indices
+    // into the owning Hull's tables), so its stride is identical on target and host -- and
+    // the 48-byte footprint is load-bearing for Hull::GetSection's `&mpaSections[i]`.
+    static_assert(offsetof(Section, mfSpeed)  == 0x24, "Section::mfSpeed");
+    static_assert(offsetof(Section, mfLength) == 0x28, "Section::mfLength");
+    static_assert(sizeof(Section) == 48, "Section stride (Hull::GetSection @0x821F52E0 uses 48)");
+    static_assert(sizeof(LaneRung) == 32, "LaneRung stride");
+    static_assert(sizeof(Neighbour) == 4, "Neighbour stride (Hull::GetNeighbour @0x821F5358)");
 #endif
 }

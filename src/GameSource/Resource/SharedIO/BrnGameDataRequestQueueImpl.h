@@ -309,14 +309,19 @@ namespace GameDataIO
         lEvent.mpUser          = lpReceiverQueue;
         lEvent.miEventId       = liEventId;
         lEvent.miPoolId        = liPoolId;
-        // The hash rides zero-extended in the id's low word with the pool id packed in
-        // the top nibble (the X360 std of the HashString result OR'd with poolId << 48).
-        // CgsResource::ID exposes only the default ctor + SetHash (no u64 ctor), so build the
-        // packed 64-bit value and stamp it via SetHash -- same stored bits as the X360.
+        // ⚠️ THE `| (poolId << 48)` IS A HEX-RAYS FUSION ARTIFACT -- REMOVED 2026-07-29.
+        // The decompiler fused the interleaved `li r10,<poolId>` (which is the SEPARATE
+        // miPoolId store at +0x08) into the `std` of the hash. The id itself is a plain
+        // zero-extended 32-bit CRC: CgsResource::ID::HashString @0x828D84A8 ends
+        // `clrldi r3,r11,32`, and CgsResource::Pool::FindResource compares the whole 64-bit
+        // value, so an id with the pool packed into bits 48+ matches NOTHING and the request
+        // parks on the receiver queue for ever. This is the same artifact family already
+        // called out at BrnWorldModule.cpp:191-194 and in the two GET handlers in
+        // BrnGameDataModule.cpp, and the untagged form is what every attested producer
+        // stores (the "TAGGED-ID CORRECTION" the world wave landed in 97992836).
         lEvent.mResourceId.SetHash(
             static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
-                reinterpret_cast<const u8*>(lpcResourceName))))
-            | (static_cast<u64>(liPoolId) << 48));
+                reinterpret_cast<const u8*>(lpcResourceName)))));
         lEvent.mbCheckRefCount = false;
 
         return mRequestQueue.AddEvent(&lEvent, 4);
