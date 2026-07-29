@@ -146,28 +146,74 @@ namespace BrnDirector
     //       BrnGameStateStreetManager_wB_01.cpp:137-141 and BrnGuiProfile.cpp:1498-1502, so it
     //       wants one coordinated pass, and confirming CgsResource::Pool::FindResource's id
     //       comparison WIDTH decides whether those sites are actively broken or merely unfaithful;
-    //   (b) ⭐ RESOLVED 2026-07-29, AND IT MOVED TO THE FRONT OF THE QUEUE: the data FILES are
-    //       all present in build/game -- B5TRAFFIC.BNDL (1,270,144 B; bnd2 v2, one zlib
-    //       resource id 0xC43359DA that unpacks to 0x2AC100), AI.DAT (1,659,648 B) and
-    //       TRIGGERS.DAT (166,400 B) -- but NOTHING EVER OPENS THEM. The PC dispatchers in
-    //       GameSource/Resource/BrnGameDataModule.cpp:1310-1313 route the LANE and AI__ ids
-    //       into DeferredGameDataRequest (:1255-1260), which logs, frees the event slot and
-    //       posts NO RESPONSE. So the acquire never completes.
-    //       ⚠️ CONSEQUENCE FOR WHOEVER LIFTS THIS GATE: transcribing LoadData while that is
-    //       true WEDGES BOOT. State 2 fires LoadTrafficLanes, state 3 then sees
-    //       GetLength() == 0 forever and returns false forever, so mePrepareStage never
-    //       reaches 4, MainDirector never prepares, and the loading screen sticks at
-    //       "stage 3 (DirectorModule)". That is strictly worse than this `return true`.
-    //       DO (b) FIRST, and do it as its own item: body ProcessLoadTrafficLanesRequest
-    //       @0x8266F398 + ProcessGetTrafficLanesRequest @0x826703B0 (and the AI pair
-    //       @0x8266F4B0 / @0x826704C0) in BrnGameDataModule.cpp. They are low risk -- their
-    //       PVS twins right beside them are already bodied and are a line-for-line model --
-    //       and they are what actually unblocks everything downstream. Note it is a TWO-HOP
-    //       fetch (Load streams the bundle, Get acquires the named resource from the pool;
-    //       see the `case 30:` -> "GetTrafficLanes after load" re-dispatch at :1947-1949),
-    //       so both halves must land before one handle comes back. Still unquantified: whether
-    //       the 2.8 MB payload's Hull/Section/LaneRung/Pvs fixups survive the 4->8-byte host
-    //       pointer widening.
+    //   (b) ✅ DONE 2026-07-29 (traffic-lane FETCH wave). All four handlers are bodied in
+    //       GameSource/Resource/BrnGameDataModule.cpp and the three dispatch sites that used
+    //       to drop these ids into DeferredGameDataRequest now call them:
+    //           ProcessLoadTrafficLanesRequest @0x8266F398  "B5Traffic.bndl"  resp id 30
+    //           ProcessLoadAILanesRequest      @0x8266F4B0  "AI.dat"          resp id 29
+    //           ProcessGetTrafficLanesRequest  @0x826703B0  "BaseTraffic"     resp id 55
+    //           ProcessGetAILanesRequest       @0x826704C0  "WorldMapData"    resp id 54
+    //       Each is store-for-store its already-bodied PVS twin with a different baked name.
+    //       Both hops are wired: ProcessInternalLoadBundleResponse cases 29/30 now dispatch
+    //       the paired GET, and ProcessInternalAcquireResponse cases 54/55 were ALREADY
+    //       posting the resolved handle back to the requester. So the request no longer
+    //       vanishes -- THE WEDGE THIS NOTE WARNED ABOUT IS GONE.
+    //       Both resource names are attested twice over: CRC32-lowercase("BaseTraffic") ==
+    //       0xC43359DA == the id of the single type-65538 resource in B5TRAFFIC.BNDL, and
+    //       CRC32-lowercase("WorldMapData") == 0xA8CD78D4 == the id of the single type-65537
+    //       resource in AI.DAT (the same cross-check that pinned "newgrid" for PVS).
+    //
+    //   (b2) ⚠️ THE BLOCKER MOVED, IT DID NOT GO AWAY. Transcribing LoadData TODAY still
+    //       wedges/crashes, for two NEW reasons, both measured on the shipped files:
+    //       1. THE THREE FILES ARE STILL X360 BIG-ENDIAN. build/game's B5TRAFFIC.BNDL,
+    //          AI.DAT and TRIGGERS.DAT are all bnd2 version 2 / platform 2 (X360), where the
+    //          loadable PVS.BNDL beside them is platform 4 little-endian. Read little-endian
+    //          their header says 33554432 resources. The porters are in tools/assets/bundles/
+    //          (convert_world_bundle.py + friends); the X360 originals are in
+    //          build/game_x360_world/.
+    //       2. THE PAYLOAD IS A 32-BIT POINTER GRAPH AND THE HOST STRUCTS ARE 64-BIT. The
+    //          "unquantified risk" this note used to carry is now QUANTIFIED, by decompressing
+    //          B5TRAFFIC.BNDL's single zlib resource (0x2AC100 bytes) and reading it:
+    //              +0x00  0x2C00013B   muReserved0 (the u16 at +2 == 315 == the hull count)
+    //              +0x04  0x002AC100   muSizeInBytes -- EXACTLY the decompressed size ✅
+    //              +0x08  0x00000170   mpPvs         \
+    //              +0x0C  0x00001A50   mpapHulls      >  three CONSECUTIVE 4-byte slots
+    //              +0x10  0x0029AE80   mpapFlowTypes /
+    //              +0x14  0x002C       muNumFlowTypes (44)
+    //          i.e. the committed TrafficData offsets are confirmed against real shipped data,
+    //          and the serialised pointer slots are 4 bytes. The host struct declares them
+    //          `void*` (8 bytes), so mpapHulls lands at +0x10 and mpapFlowTypes at +0x18 --
+    //          every slot past the first is misaligned. Same for Hull::mpaSections (X360
+    //          +0x10, 4 bytes) and every Section/LaneRung/Pvs pointer under it.
+    //          NOTE the project already has the machinery for this: the x64 port reserves a
+    //          low-4GB block (GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h) and has an
+    //          established PointerFromU32 convention for serialised 4-byte slots (see
+    //          CgsMaterialResourceType.cpp:119 and attribloadandgo.cpp:291). So the choice for
+    //          the porting wave is a real one: WIDEN the payload 4->8 (the apt_widen_4to8.py
+    //          shape), or RETYPE TrafficData/Hull/Section/Pvs onto u32 slots + PointerFromU32
+    //          (the InstanceList precedent, which convert_world_bundle.py already keeps at
+    //          32-bit LE). Either way it is a data wave, not a handler wave.
+    //       3. The three lane RESOURCE TYPES are not all registered.
+    //          CgsResourceTypeRegistration.cpp now registers TriggerResourceType (65539) but
+    //          NOT AISectionsResourceType (65537) or TrafficDataResourceType (65538), because
+    //          those two handler TUs do not link: they forward to Fix* bodies nobody has
+    //          reconstructed -- TrafficData::FixDown @0x82763CB8 (which needs Pvs::FixDown
+    //          @0x827624A0 + Hull::FixDown @0x827622E0), AISectionsData::FixUp @0x8267DA28 /
+    //          FixDown @0x8267DAA0 (which need AISection::FixUp @0x8267D8C8), and
+    //          AISection::GetMiddle @0x826771D0 (needs GetPortal @0x8230F5D0). Without a
+    //          registered handler Pool::CreateEntryInSlot stores a NULL mpResourceType and
+    //          AllocateMemoryForResource null-derefs it -- the trap the PVS wave hit on 0xB000.
+    //       4. ⭐ OPEN ANOMALY worth chasing FIRST, it may change the shape of all of the
+    //          above: BrnTraffic::TrafficDataResourceType has NO FixUp on the console. Its
+    //          only virtuals in the ARTIST symbol table are GetTypeID @0x82752560,
+    //          GetSerialisedResourceDescriptor @0x82760660 and FixDown @0x82763E68 -- while
+    //          BOTH siblings do have one (AISectionsResourceType::FixUp @0x8267DB28,
+    //          TriggerResourceType::FixUp @0x826800D8). BrnTraffic::TrafficData::FixUp
+    //          @0x827637D8 exists as a function but has ZERO xrefs. So nothing in the shipped
+    //          binary appears to relocate the traffic lane graph through the resource system,
+    //          yet Hull::GetSection dereferences mpaSections as a real pointer. One of those
+    //          two readings is wrong (bug class (e): the real relocation entry point is
+    //          invisible). Resolve that before writing any Fix* body or any porter.
     //       (The lane-walk CONSUMER side is already complete and linked: BrnTrafficData.cpp,
     //       BrnTrafficPvs.cpp, BrnTrafficSection.cpp, BrnTriggerData.cpp and BrnGenericRegion.cpp
     //       are all mounted, and Hull::GetSection/GetNeighbour are inline in BrnTrafficHull.h.

@@ -28,6 +28,7 @@
 #include "SharedClasses/Physics/Props/BrnPropInstanceDataResourceType.h"       // Props::PropInstanceDataResourceType (0x10011)
 #include "SharedClasses/Sound/World/BrnStaticSoundMapResourceType.h"           // World::StaticSoundMapResourceType (0x10016)
 #include "SharedClasses/Gui/Flapt/BrnFlaptFileResourceType.h"                  // BrnFlapt::FlaptFileResourceType (0x10020)
+#include "SharedClasses/Trigger/BrnTriggerResourceType.h"                      // BrnTrigger::TriggerResourceType (0x10003)
 
 // ============================================================================================
 // Resource-type registration -- the faithful counterpart of the X360
@@ -123,6 +124,24 @@ namespace CgsResource
         TypeRegistry::Register(&sPropInstanceData);
         static BrnSound::World::StaticSoundMapResourceType     sStaticSoundMap;   // 0x10016 (65558)
         TypeRegistry::Register(&sStaticSoundMap);
+        // The DIRECTOR/world lane-data types (traffic-lane fetch wave, 2026-07-29). Same
+        // reason ZoneList had to be added for the PVS wave: the lane bundles' single
+        // resources carry these type ids, and with no registered handler
+        // CgsResource::Pool::CreateEntryInSlot stores a NULL mpResourceType and
+        // AllocateMemoryForResource null-derefs it (GetCachedCanDefrag). Each bundle's id is
+        // the CRC32-lowercase of the resource name the GameDataModule GET handler hashes:
+        //   AI.DAT         -> id 0xA8CD78D4 == HashString("WorldMapData") type 65537 (0x10001)
+        //   B5TRAFFIC.BNDL -> id 0xC43359DA == HashString("BaseTraffic")  type 65538 (0x10002)
+        //   TRIGGERS.DAT   -> id 0xE4A32837 == HashString("TriggerData")  type 65539 (0x10003)
+        static BrnTrigger::TriggerResourceType        sTriggerData;  // 0x10003 (65539)
+        TypeRegistry::Register(&sTriggerData);
+        // ⚠️ AISectionsResourceType (65537) and TrafficDataResourceType (65538) are NOT
+        // registered yet -- their handler TUs do not link (their Fix* forwardees are not
+        // reconstructed; the exact list is in tools/build/build_game_exe.bat next to the
+        // mount), and their payloads still need the 4->8 pointer widening described in the
+        // traffic-lane note in GameSource/Resource/BrnGameDataModule.cpp. Registering a
+        // handler whose FixUp cannot be right would turn a clean null-deref into silent
+        // pointer garbage, so this stays honest until the widener lands.
 
         // ---- the world-render resource types (2026-07-27) -------------------------------------
         // The streamed TRK_UNIT bundles carry these; without a registered handler the
