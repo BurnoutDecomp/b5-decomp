@@ -178,6 +178,27 @@ public:
     // deliver each result to the post office that minted its query id. BODIED.
     void ProcessSceneQueryResults(const DirectorIO::SceneQueryInputBuffer* lpSceneQueryInputBuffer);
 
+    // ADDITIVE accessor: the owned top-level director. The X360 reaches it as `this + 0xB00`
+    // from inside this class's own bodies; this accessor is what lets the outside world raise
+    // MainDirector::GetArbitrator().SetDoAttractMode(true) -- the single input that moves the
+    // arbitrator onto the attract-mode (DJ fly-by) path -- without forming that offset.
+    MainDirector& GetMainDirector() { return mMainDirector; }
+
+    // ADDITIVE query: has the staged Prepare above finished? The console's module scheduler
+    // only dispatches a module's per-frame entry points once its Prepare has reported true;
+    // the PC drives the three passes by hand, so it needs to ask. (Driving Update before
+    // Prepare's stage 7 has run means the arbitrator constructs behaviours out of a
+    // BehaviourManager whose pools have not been carved -- BehaviourManager.h:782's
+    // `lHelperID >= 0` is the assert that catches it.)
+    // NOTE ON THE VALUE TESTED: Prepare's own terminal stage in THIS reconstruction is 5
+    // (E_PREPARESTAGE_BEHAVIOUR_CONTROLLER) -- its case 5 stores 5 and is the only path that
+    // returns true. The enum runs to E_PREPARESTAGE_DONE (8) because the console splits what
+    // this body folds into a single MainDirector::Prepare call (which carries its OWN stage
+    // machine for the manager / behaviour controller / moment controller / arbitrator). So the
+    // test is against 5, not 8, and it is exact: no other path stores 5.
+    // DELETE-WHEN: Prepare grows the remaining console stages -- then test E_PREPARESTAGE_DONE.
+    bool IsPrepared() const { return mePrepareStage >= E_PREPARESTAGE_BEHAVIOUR_CONTROLLER; }
+
 private:
     // ====================================================================
     //  DATA LAYOUT -- named members at asm-proven `this+offset` (X360 CONSOLE bytes),

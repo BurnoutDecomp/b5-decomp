@@ -48,24 +48,34 @@ namespace BrnDirector
     {
         Camera::BehaviourManager* lpBehaviourManager = lrSharedInfo.mpBehaviourManager;
 
-        // The manager's per-named-behaviour parameter bank (X360 manager + 0x12530, computed
-        // once up front in the asm).
-        const Camera::BehaviourParameterBank& lrBehaviourParameterBank =
-            lpBehaviourManager->GetBehaviourParameterBank();
-
         // The in-car bumper cam: allocate (no owning state, args 0/4), then bind its
         // parameter block out of the bank (SetParameters asserts the block's type tag and
         // caches the block pointer + its name word).
         lpBehaviourManager->NewBehaviour<Camera::BehaviourGameplayBumper>(
             mGameplayBumper, NULL, 0, 4);
-        mGameplayBumper.GetBehaviour()->SetParameters(
-            &lrBehaviourParameterBank.GetGameplayBumperCameraParamsForCar());
 
         // The external chase cam: same allocate + parameter bind.
         lpBehaviourManager->NewBehaviour<Camera::BehaviourGameplayExternal>(
             mGameplayExternal, NULL, 0, 4);
-        mGameplayExternal.GetBehaviour()->SetParameters(
-            &lrBehaviourParameterBank.GetGameplayExternalCameraParamsForCar());
+
+        // [GATED -- the two SetParameters binds]
+        //   const Camera::BehaviourParameterBank& lrBank =            // X360 manager + 0x12530
+        //       lpBehaviourManager->GetBehaviourParameterBank();
+        //   mGameplayBumper  .GetBehaviour()->SetParameters(&lrBank.GetGameplayBumperCameraParamsForCar());
+        //   mGameplayExternal.GetBehaviour()->SetParameters(&lrBank.GetGameplayExternalCameraParamsForCar());
+        //
+        // WHY: BehaviourManager models mBehaviourParameterBank (DWARF :325, X360 manager
+        // +0x12530) as an OPAQUE embedded sub-object -- BehaviourParameterBank has a declared
+        // API but NO homed layout and NO TU, so all three accessors above return REFERENCES to
+        // objects that do not exist here. A stub for a reference-returning accessor can only
+        // hand back a fabricated object, and SetParameters would then latch that fabrication as
+        // the two shared gameplay cameras' live parameter block -- strictly worse than leaving
+        // them on their Construct() defaults. The ALLOCATIONS above are the part that matters
+        // structurally (the handles become valid, so SetUpdatesDuringPause's IsAllocated assert
+        // below holds); only the parameter BIND is skipped.
+        // Nothing on the DJ fly-by path reads either camera -- ArbStateAttractMode drives its
+        // own BehaviourRoadRunner.
+        // DELETE-WHEN: BehaviourParameterBank gets a homed layout + TU (then restore verbatim).
 
         // Both shared gameplay cameras keep updating while the game is paused (asserts each
         // handle is allocated -- BrnBehaviourManager.h:676).

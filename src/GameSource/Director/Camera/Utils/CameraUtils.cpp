@@ -79,6 +79,17 @@ void TransitionSmoother::Set(f32 lfValue, f32 lfLerpAmount0to1,
     mfSimilarityToleranceScale = lfSimilarityToleranceScale;
 }
 
+// CameraUtils.h:130 -- aim the smoother at a new value WITHOUT snapping to it (Set() above is
+// the snapping form: it assigns mfData as well). One store; the console inlines it everywhere,
+// so there is no standalone symbol and nothing to transcribe. `Update(dt)` is what walks
+// mfData toward mfTarget and is still its own (declared-only) ledger function -- until it
+// lands, a smoother that has only been given a target holds its Set() value, which is the
+// conservative direction (a target with no chase never overshoots).
+void TransitionSmoother::SetTarget(f32 lfTarget)
+{
+    mfTarget = lfTarget;
+}
+
 // @ 0x821F2378 -- wrap a value into [lo, hi) after adding a step (unsigned modular cycle).
 // Guards lo < hi (CameraUtils.h:340). The __twllei on (hi-lo)==0 is the compiler-inserted
 // divide-by-zero trap for the modulo below, not a separate assert.

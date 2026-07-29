@@ -73,16 +73,60 @@ namespace BrnDirector
     //   6 LOADED                 : return true.
     //   default                  : assert "unhandled case" (line 190); return false.
     //
-    // WHY GATED. Every stage above rides one shape this reconstruction cannot yet assert: the
-    // GameData request/response RECORD layout. The X360 builds the stage-0 request with
-    //     +0x00 = &mReceiverQueue, +0x04 = eventId, +0x08 = poolId, +0x10 = the 64-bit id
-    // and pushes it with size 24 -- whereas the committed
-    // BrnResource::GameDataIO::GameDataEvent (GameSource/Resource/SharedIO/BrnGameDataEvents.h)
-    // models the first two fields the OTHER WAY ROUND (miEventId@0x00, mpReceiverQueue@0x04)
-    // and its GameDataAssetEvent is 32 bytes, not 24. Reconciling that is a GameDataEvents
-    // question, not a WorldMap one, and BrnGameDataEvents.h is outside this wave's ownership
-    // -- writing the request against a guessed record shape would push malformed events into
-    // the live resource queue. The two committed builders this function also needs
+    // ⭐ WHY GATED -- THE ORIGINAL REASON IS WRONG AND HAS BEEN WITHDRAWN (2026-07-29).
+    //
+    // This gate used to claim a record-shape conflict: that the X360 builds the stage-0
+    // request as {queue@0x00, eventId@0x04, poolId@0x08, id@0x10} at size 24, whereas the
+    // committed BrnResource::GameDataIO::GameDataEvent
+    // (GameSource/Resource/SharedIO/BrnGameDataEvents.h) has the first two fields the other way
+    // round and is 32 bytes -- "one of the two is wrong".
+    //
+    // NEITHER IS WRONG. They are TWO DIFFERENT EVENT TYPES:
+    //   * the stage-0 record is `CgsResource::Events::AcquireResourceRequest` (the pool-module
+    //     ACQUIRE family), which really does put the receiver queue FIRST -- DWARF
+    //     references/DecFIGS/dwarfdump/GameShared/.../CgsResourceIOEvents.h:221 (`PoolEvent`:
+    //     mpUser, miEventId, miPoolId) + :314 (`AcquireResourceRequest`: mResourceId).
+    //     Console size = 4+4+4+pad+8 = 24. Proof in LoadData's own asm @0x8225F5A0:
+    //       0x8225F60C addi r10,r30,0x60 / 0x8225F620 stw r10,var_60   -> +0x00 = &mReceiverQueue
+    //       0x8225F614 li r31,1          / 0x8225F634 stw r31,var_5C   -> +0x04 = eventId 1
+    //       0x8225F624 li r10,5          / 0x8225F638 stw r10,var_58   -> +0x08 = poolId 5
+    //       0x8225F62C std r11,var_50                                  -> +0x10 = the 64-bit id
+    //       0x8225F618 li r6,0x18 / 0x8225F61C li r5,4 / bl AddEvent   -> type 4, size 24
+    //     The consumer agrees: PoolModule::DoAcquireResourceRequest @0x828FCD48 reads
+    //     0/4/8/0x10 in exactly that order. Three other sites build the identical record
+    //     (StreetManager::LoadDistrictMap @0x8234FBE8, ColourCalibrationScreen::Update
+    //     @0x8246AA9C, WorldModule @0x827D11D8).
+    //   * `GameDataIO::GameDataEvent` is the GAMEDATA family and is CORRECT as committed
+    //     (miEventId@0x00, mpReceiverQueue@0x04). Attested by the DecFIGS DWARF's member order
+    //     for BrnGameDataEvents.h, by RequestInterface<512>::LoadTrafficLanes @0x82256288's own
+    //     stores (eventId to +0x00, queue to +0x04, poolId +0x08, id +0x10, type +0x18), by
+    //     ::GetAILanes @0x822563C0, and by the module-side readers
+    //     (ProcessLoadWorldUnitRequest @0x8266F600/0x8266F608, ProcessLoadPVSRequest
+    //     @0x8266F9E0). Its 32-byte size is pinned by AddEvent<LoadGameDataEvent> @0x82252EB8
+    //     (`li r6,0x20`).
+    // So the 24-vs-32 difference was never a contradiction -- it was two structs.
+    //
+    // WHAT STILL GATES IT (the honest, much smaller list):
+    //   1. the stage-0 builder to call is `RequestInterface<N>::AcquireResource`
+    //      (GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h:153, bodied in
+    //      BrnGameDataRequestQueueImpl.h:303) -- i.e. exactly
+    //          lpRequestInterface->AcquireResource(&mReceiverQueue, 1, 5, "TriggerData")
+    //      -- but that builder currently ORs `(u64)poolId << 48` into the resource id. That OR
+    //      is a HEX-RAYS FUSION ARTIFACT of the interleaved `li r10,<poolId>` / `std` pair, not
+    //      a real store: CgsResource::ID::HashString @0x828D84A8 ends `clrldi r3,r11,32`, a
+    //      zero-extended 32-bit CRC, and no attested site ORs anything into it. (The same
+    //      artifact is already called out independently at
+    //      GameSource/World/BrnWorldModule.cpp:191-194.) Issuing a request with a poisoned id
+    //      would simply never resolve. The builder also carries an `mbCheckRefCount` member
+    //      that lies outside the console's 24-byte record.
+    //   2. stage 1/3/5 must read the reply BY MEMBER off the response type, not at the
+    //      console's literal +0x18/+0x20 -- the host ResourceHandle is 16 bytes where the
+    //      console's is 8, so every literal offset in the asm walk-through above shifts.
+    //   3. whether the PC data set even carries TriggerData / the traffic-lane and AI-lane
+    //      bundles in converted form is unverified; a request for an absent resource parks the
+    //      state machine at stage 1 for ever (it returns false while the receiver queue is
+    //      empty), which would wedge DirectorModule::Prepare.
+    // The two other committed builders this function needs
     // (RequestInterface<512>::LoadTrafficLanes @0x82256288 / ::GetAILanes @0x822563C0) DO
     // exist and are ready.
     //
@@ -95,12 +139,19 @@ namespace BrnDirector
     //     that instead of a fabricated resource. All of those consumers currently sit behind
     //     the gated MainDirector::Update middle, so none of them runs this wave.
     //
-    // DELETE-WHEN: delete this gate and transcribe the state machine above verbatim once the
-    // GameData request/response record layout is settled -- i.e. once
-    // BrnGameDataEvents.h's GameDataEvent field order is reconciled against the X360
-    // (queue@0x00 / eventId@0x04 / poolId@0x08 / id@0x10, record size 24) and a
-    // GetTriggerData request builder exists on RequestInterface<N> alongside the committed
-    // LoadTrafficLanes / GetAILanes.
+    // DELETE-WHEN (revised 2026-07-29 -- the record-shape blocker is WITHDRAWN, see above):
+    //   (a) drop the `| (poolId << 48)` fusion artifact and the `mbCheckRefCount` member from
+    //       RequestInterface<N>::AcquireResource (BrnGameDataRequestQueueImpl.h:303-323 and
+    //       CgsResourceIOEvents.h:202) -- note the same artifact also sits in
+    //       BrnGameStateStreetManager_wB_01.cpp:137-141 and BrnGuiProfile.cpp:1498-1502, so it
+    //       wants one coordinated pass, and confirming CgsResource::Pool::FindResource's id
+    //       comparison WIDTH decides whether those sites are actively broken or merely unfaithful;
+    //   (b) confirm the PC data set carries TriggerData + the traffic/AI lane bundles;
+    //   (c) then transcribe the state machine above, reading each reply by member
+    //       (AcquireResourceResponse / GetTrafficLaneDataResponse::mTrafficLaneHandle /
+    //       GetAIDataResponse::mAIDataHandle), NOT at the console's literal offsets.
+    // No new `GetTriggerData` builder is needed -- AcquireResource IS the one, and no such
+    // symbol exists on the X360 either.
     // -------------------------------------------------------------------------
     bool WorldMap::LoadData(void* lpRequestInterface)
     {

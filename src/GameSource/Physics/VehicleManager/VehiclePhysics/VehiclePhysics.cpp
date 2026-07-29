@@ -1914,7 +1914,7 @@ namespace Vehicle
             const f32 lfExternal =
                 (mWeightTransfer.x + mWeightTransfer.y + mWeightTransfer.z) * KF_WEIGHT_TRANSFER_UNITS;
 
-            maSprings[liWheel].SetExternalForce(VecFloat{ lfExternal, lfExternal, lfExternal, lfExternal });
+            maSprings[liWheel].SetExternalForce(lfExternal);
         }
     }
 

@@ -97,8 +97,8 @@ namespace BrnDirector
         , miMomentBucketFreeCount(0)
         , muMomentBucketOccupancy(0)
         , miForcedCameraCarIndex(-1)
-        , miStageCounter(0)
-        , miStage(0)
+        , miPrepareStage(0)
+        , miReleaseStage(0)
         , mfConstructTime(0.0)
     {
         // Owned sub-objects: mICEWrapper / mCameraFinaliser / mArbitrator /
@@ -174,9 +174,13 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void MainDirector::Construct(const DirectorResourceManager* lpResourceManager, f32 lfTime)
     {
-        miStage         = 5;
+        // ASM (@0x8225B448): `stwx r31(=0), r30, r11` with r11 = 0x35420 and
+        // `li r9,5; stwx r9, r30, r10` with r10 = 0x35424 -- the PREPARE stage starts at 0
+        // (so Prepare runs its whole machine, including case 4's
+        // BehaviourManager::Prepare) and the RELEASE stage starts at 5 == already released.
+        miPrepareStage  = 0;
+        miReleaseStage  = 5;
         mfConstructTime = static_cast<f64>(lfTime);
-        miStageCounter  = 0;
 
         // ⚠️ GATE: DirectorDevTools::Construct( this, this, lpResourceManager );
 
@@ -261,7 +265,7 @@ namespace BrnDirector
     bool MainDirector::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
                                const DirectorResourceManager* lpResourceManager)
     {
-        switch (miStage)
+        switch (miPrepareStage)
         {
         case 0:
             lpAsCollisionGenerator(&mCgsCamera)->Destruct();
@@ -271,24 +275,24 @@ namespace BrnDirector
             //   store that follows it belongs to the same un-homed object.
             // fall through
         case 1:
-            miStage = 1;
+            miPrepareStage = 1;
             // ⚠️ GATE: the frame counter inside maShotAndAnalysisBlock (console +0x121A0).
             // fall through
         case 2:
-            miStage = 2;
+            miPrepareStage = 2;
             // The wrapper pumps its own ICE resource acquisition through the director output
             // buffer, forwarding the prepare arg and the module's resource manager.
             if (!mICEWrapper.Prepare(lpOutputBuffer, liPrepareArg, lpResourceManager))
                 return false;
             // fall through
         case 4:
-            miStage = 4;
+            miPrepareStage = 4;
             if (!mBehaviourManager.Prepare())
                 return false;
             // fall through
         case 5:
         {
-            miStage = 5;
+            miPrepareStage = 5;
             muMomentBucketOccupancy = 0;
             for (s32 liSlot = 19; liSlot >= 0; --liSlot)
             {
@@ -298,11 +302,11 @@ namespace BrnDirector
             // fall through
         }
         case 6:
-            miStage = 6;
+            miPrepareStage = 6;
             // fall through
         case 7:
-            miStage = 7;
-            miStageCounter = 0;
+            miPrepareStage = 7;
+            miReleaseStage = 0;   // asm: *(this+218148) = 0
             return true;
 
         default:
@@ -322,7 +326,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     bool MainDirector::Release()
     {
-        switch (miStage)
+        switch (miReleaseStage)
         {
         case 0:
             // asm 0x82236F0C `addi r3,r30,0x50` -> BaseCollisionGenerator::Destruct(this+0x50),
@@ -331,17 +335,17 @@ namespace BrnDirector
             lpAsCollisionGenerator(&mICEWrapper)->Destruct();
             // fall through
         case 1:
-            miStage = 1;
+            miReleaseStage = 1;
             // fall through
         case 2:
-            miStage = 2;
+            miReleaseStage = 2;
             // fall through
         case 3:
-            miStage = 3;
+            miReleaseStage = 3;
             // fall through
         case 5:
-            miStage = 5;
-            miStageCounter = 0;
+            miReleaseStage = 5;
+            miPrepareStage = 0;   // asm: *(this+218144) = 0
             return true;
 
         default:

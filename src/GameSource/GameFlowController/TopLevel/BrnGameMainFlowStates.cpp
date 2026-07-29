@@ -11,6 +11,7 @@
 #include "GameSource/World/BrnWorldModule.h"         // BrnWorld::WorldModule::Update (the per-frame world drive)
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h" // CgsMemory::LinearMalloc (the world frame allocator)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (the command slot values)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer (stage 3)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -229,6 +230,38 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
 
     lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
     lpUpdateInputStack->DestroyIOBuffer(&lpWorldInput);
+}
+
+// X360: LoadDirectorModule -- the E_LOADINGSTAGE_DIRECTORMODULE leg of InitialLoadingScreen's
+// stage machine, in the same shape as LoadSoundModule above: create the module's IO buffer on
+// the update stack, run ONE tick of its staged Prepare, destroy the buffer, report done.
+//
+// DirectorModule::Prepare @0x822712D8 is a 6-stage machine (register the debug component ->
+// base ModuleSingleBuffered::Prepare -> DirectorResourceManager::Prepare -> WorldMap::LoadData
+// -> MainDirector::Prepare -> done); it write-locks the output buffer for the whole call and
+// returns true only at the last stage, so the caller pumps it until it does.
+//
+// [FLAG PC placement] the X360 threads the frame's GameData IO through every LoadXxxModule so
+// the director's resource requests reach the streamer; that bracket is not reconstructed here
+// (same deferral as LoadSoundModule), and the two Prepare stages that would use it
+// (DirectorResourceManager::Prepare, WorldMap::LoadData) are themselves documented gates.
+bool LoadingScriptedState::LoadDirectorModule()
+{
+    BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
+    CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+
+    BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutput = 0;
+    lpUpdateOutputStack->CreateIOBuffer(&lpDirectorOutput, "Director");
+    // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc; the
+    // generic PC template placement-news only (same restoration as LoadWorldModule).
+    lpDirectorOutput->CgsModule::IOBuffer::Construct();
+
+    // liPrepareArg: the X360 passes the module's own prepare argument through; 0 is the
+    // value MainDirector::Prepare reads as "no replay restore".
+    const bool lbPrepared = lpGameModule->GetDirectorModule().Prepare(lpDirectorOutput, 0);
+
+    lpUpdateOutputStack->DestroyIOBuffer(&lpDirectorOutput);
+    return lbPrepared;
 }
 
 // @ 0x823F22D8 -- the shared scripted-load spine EVERY titled flow state's Update runs
@@ -584,9 +617,20 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         }
         break;
     case E_LOADINGSTAGE_DIRECTORMODULE:
-        // X360: LoadDirectorModule. [stub: interim dwell; real load = roadmap]
-        if (StageDwellElapsed())
-            AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
+        // X360: LoadDirectorModule -- REAL (2026-07-29, DJ fly-by campaign). Was an interim
+        // timed dwell while the DirectorModule was an ODR stub.
+        {
+            static bool s_bLoggedDirectorLoad = false;
+            if (!s_bLoggedDirectorLoad)
+            {
+                s_bLoggedDirectorLoad = true;
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                    *CgsDev::Log::gpDebugPrint
+                        << "InitialLoadingScreen: loading stage 3 (DirectorModule) -- real load\n";
+            }
+            if (LoadDirectorModule())
+                AdvanceLoadingStage(E_LOADINGSTAGE_SOUND_MODULE);
+        }
         break;
     case E_LOADINGSTAGE_SOUND_MODULE:
         // X360: LoadSoundModule (0x823E75A8) -- the real per-frame load: create the Root sound IO

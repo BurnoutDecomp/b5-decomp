@@ -142,5 +142,16 @@ namespace DirectorIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return mCameraOutput = lrCamera;
     }
+
+    // The read-lock twin of SetCameraOutput over the same member. The consumer side is the
+    // renderer/world dispatch bridge (X360 BridgeRendererToWorld @0x823CDD20 reads the director
+    // output's camera under LockForRead and hands it to the world dispatch input), which is the
+    // path that turns a published director camera into the camera the world is drawn from.
+    // Same read-lock assert as every other read-side getter in this TU.
+    const BrnDirector::Camera::Camera* OutputBuffer::GetCameraOutput() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mCameraOutput;
+    }
 }
 }

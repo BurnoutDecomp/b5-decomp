@@ -81,6 +81,12 @@ namespace DirectorIO
         CgsGraphics::Camera&           SetCgsCamera(const CgsGraphics::Camera& lrCamera);
         BrnDirector::Camera::Camera&   SetCameraOutput(const BrnDirector::Camera::Camera& lrCamera);
 
+        // --- read-lock-asserted camera getter (the consumer side of SetCameraOutput) ---
+        // The published director camera. X360 consumers read it under LockForRead through the
+        // renderer/world bridge (BridgeRendererToWorld @0x823CDD20); the setter beside it is
+        // @0x8224EF70. Same member, same buffer, opposite lock.
+        const BrnDirector::Camera::Camera* GetCameraOutput() const;
+
     private:
         // @0x0001 .. 0x0010: the IOBuffer base is 1 byte (FlagSet8); pad up to the 16-byte-aligned
         // first camera member.

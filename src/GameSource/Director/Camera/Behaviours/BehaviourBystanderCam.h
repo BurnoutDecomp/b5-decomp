@@ -63,7 +63,9 @@ class Camera;                 // the camera being driven (its flags/transform li
 
 namespace Utils
 {
-    class Tweaker;            // dev-tools tweaker SetupTweaker wires the rig members into
+    struct Tweaker;           // dev-tools tweaker SetupTweaker wires the rig members into
+                              // (`struct` per its real home Camera/Utils/BrnCameraTweaker.h:45 --
+                              //  the class-key is part of the MSVC mangled name)
     class Random;            // the randomised-offset RNG (== CgsNumeric::Random; opaque here)
 }
 

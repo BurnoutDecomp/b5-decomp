@@ -231,6 +231,24 @@ namespace DirectorIO
         maVehicleInfoArray[leIndex] = static_cast<u32>(liTeam);
     }
 
+    // ADDITIVE setters for the two published fields MainDirector::GetLivePlayerCarIndex reads
+    // (see the header). Same write-lock assert as every other mutator in this TU.
+    void InputBuffer::SetPlayerCarIndex(EActiveRaceCarIndex leIndex)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mePlayerCarIndex = leIndex;
+    }
+
+    void InputBuffer::SetRaceCarInUse(u32 luIndex, bool lbInUse)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(luIndex < 8u, "Index < Number of bits");   // CgsBitArray.h:222
+        if (lbInUse)
+            mUsedRaceCars.SetBit(luIndex);
+        else
+            mUsedRaceCars.UnSetBit(luIndex);
+    }
+
     void InputBuffer::SetShortcutMenuEvent(bool lbState)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

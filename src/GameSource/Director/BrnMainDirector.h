@@ -340,11 +340,25 @@ namespace BrnDirector
         //           snapshot scratch. FLAG: un-homed; named opaque span.
         u8 maModeActionAndDebugBlock[0x35420 - 0x34B40];
 
-        // +0x35420  the staged-init RELEASE-stage counter.
-        s32 miStageCounter;
-        // +0x35424  the staged-init STAGE word (Release writes 1/2/3/5; Construct sets 5;
-        //           Prepare walks 0..7 and clears the counter at the end).
-        s32 miStage;
+        // ⭐ THESE ARE TWO SEPARATE STAGE MACHINES, not a stage + a counter. Corrected
+        // 2026-07-29 (fly-by campaign) against the asm; the previous reading had the two words
+        // swapped AND ran both machines off one of them, which meant MainDirector::Prepare
+        // started at case 5 and SKIPPED case 4 -- `BehaviourManager::Prepare()`, the call that
+        // carves the three behaviour pools' free queues. Every later NewBehaviour<> then
+        // allocated out of an empty pool (BehaviourManager.h:782 `lHelperID >= 0` fired the
+        // moment the arbitrator ran). This is the same {prepare stage, release stage} pair the
+        // owning DirectorModule keeps.
+        //
+        // +0x35420 (218144)  the PREPARE stage. Prepare @0x8224FB38 switches on it
+        //   (`v6 = a1 + 218144; switch (*v6)`) and writes it at every case; Release's last case
+        //   zeroes it (`*(a1 + 218144) = 0`, so a re-prepare restarts at 0); Construct stores 0
+        //   (`stwx r31(=0), r30, r11` with r11 = 0x35420).
+        s32 miPrepareStage;
+        // +0x35424 (218148)  the RELEASE stage. Release @0x82236EB0 switches on it
+        //   (`v2 = a1 + 218148; switch (*v2)`) and writes it at every case; Prepare's last case
+        //   zeroes it (`*(a1 + 218148) = 0`); Construct stores 5 == "release already complete",
+        //   i.e. nothing to release yet (`li r9, 5; stwx r9, r30, r10` with r10 = 0x35424).
+        s32 miReleaseStage;
         // +0x35428  the construct timestamp (the X360 stores the incoming time as a double).
         f64 mfConstructTime;
 
