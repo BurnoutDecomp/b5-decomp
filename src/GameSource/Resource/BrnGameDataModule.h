@@ -186,6 +186,14 @@ namespace BrnResource
         void ProcessLoadPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                              const GameDataIO::GameDataAssetEvent* lpEvent,
                                              s32 liEventId, s32 liSlotIndex);          // 0x8266F178
+        // The two lane-data LOAD legs (the director's WorldMap::LoadData feeds off these).
+        // Both are line-for-line ProcessLoadPVSRequest with a different baked file name.
+        void ProcessLoadTrafficLanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                            const GameDataIO::GameDataAssetEvent* lpEvent,
+                                            s32 liEventId, s32 liSlotIndex);           // 0x8266F398
+        void ProcessLoadAILanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                       const GameDataIO::GameDataAssetEvent* lpEvent,
+                                       s32 liEventId, s32 liSlotIndex);                // 0x8266F4B0
 
         // ---- the GET acquire builders the completion routing dispatches (THIS BATCH) ----
         // Each stages its response id at the slot and publishes a type-4 AcquireResource
@@ -199,6 +207,14 @@ namespace BrnResource
         void ProcessGetPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                             const GameDataIO::GameDataAssetEvent* lpEvent,
                                             s32 liEventId, s32 liSlotIndex);           // 0x8266FB68
+        // The two lane-data GET legs -- hop 2 of the lane fetch, dispatched from
+        // ProcessInternalLoadBundleResponse's cases 29/30 once the bundle is in the pool.
+        void ProcessGetTrafficLanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                           const GameDataIO::GameDataAssetEvent* lpEvent,
+                                           s32 liEventId, s32 liSlotIndex);            // 0x826703B0
+        void ProcessGetAILanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                      const GameDataIO::GameDataAssetEvent* lpEvent,
+                                      s32 liEventId, s32 liSlotIndex);                 // 0x826704C0
 
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])

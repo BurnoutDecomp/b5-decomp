@@ -981,6 +981,22 @@ namespace BrnResource
         // in the shipped PVS.BNDL (its debug ResourceStringTable also names it "newgrid").
         const char* const KPC_PVS_RESOURCE_NAME      = "newgrid";
 
+        // The lane-data file names + resource names, all four read straight out of the four
+        // handlers' own asm (the `lwz rN, off_82F2Axxx` right before SetFileName/HashString):
+        //   off_82F2A6EC "B5Traffic.bndl"  ProcessLoadTrafficLanesRequest @0x8266F398
+        //   off_82F2A700 "AI.dat"          ProcessLoadAILanesRequest      @0x8266F4B0
+        //   off_82F2A710 "BaseTraffic"     ProcessGetTrafficLanesRequest  @0x826703B0
+        //   off_82F2A724 "WorldMapData"    ProcessGetAILanesRequest       @0x826704C0
+        // Both RESOURCE names are attested a second time by the shipped data, exactly the way
+        // KPC_PVS_RESOURCE_NAME is: CRC32-lowercase("BaseTraffic") == 0xC43359DA == the id of
+        // the one TrafficData (type 65538) resource in B5TRAFFIC.BNDL, and
+        // CRC32-lowercase("WorldMapData") == 0xA8CD78D4 == the id of the one AISections
+        // (type 65537) resource in AI.DAT.
+        const char* const KPC_TRAFFIC_LANES_FILE_NAME    = "B5Traffic.bndl";
+        const char* const KPC_AI_LANES_FILE_NAME         = "AI.dat";
+        const char* const KPC_TRAFFIC_LANES_RESOURCE_NAME = "BaseTraffic";
+        const char* const KPC_AI_LANES_RESOURCE_NAME      = "WorldMapData";
+
         // off_82F2A708 -- the world-collision bundle file name (ProcessInternalValidate
         // Response's swap-in reload + the LoadWorldCollision handler family). Read from
         // the ARTIST .i64 data segment (headless IDA dump; the exports are function-only).
@@ -1308,9 +1324,9 @@ namespace BrnResource
         else if (memcmp(lacName, "GD__", 4) == 0)
         {
             if (memcmp(lacName + 8, "LANE", 4) == 0)
-                DeferredGameDataRequest("LoadTrafficLanes (0x8266F398, id 30)", lpSlot);
+                ProcessLoadTrafficLanesRequest(lpResourceInput, lpEvent, 30, liIndex);
             else if (memcmp(lacName + 4, "AI__", 4) == 0)
-                DeferredGameDataRequest("LoadAILanes (0x8266F4B0, id 29)", lpSlot);
+                ProcessLoadAILanesRequest(lpResourceInput, lpEvent, 29, liIndex);
             else
                 CGS_ASSERT(false, "Invalid game data id: ");   // X360 streams the id (line 2914)
         }
@@ -1399,9 +1415,9 @@ namespace BrnResource
         else if (memcmp(lacName, "GD__", 4) == 0)
         {
             if (memcmp(lacName + 8, "LANE", 4) == 0)
-                DeferredGameDataRequest("GetTrafficLanes (0x826703B0, id 55)", lpSlot);
+                ProcessGetTrafficLanesRequest(lpResourceInput, lpEvent, 55, liIndex);
             else if (memcmp(lacName + 4, "AI__", 4) == 0)
-                DeferredGameDataRequest("GetAILanes (0x826704C0, id 54)", lpSlot);
+                ProcessGetAILanesRequest(lpResourceInput, lpEvent, 54, liIndex);
             else
                 CGS_ASSERT(false, "Invalid id\n");   // X360 line 3133
         }
@@ -1663,6 +1679,68 @@ namespace BrnResource
             2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
     }
 
+    // @ 0x8266F398 -- service a LOAD traffic-lanes request: stream the traffic lane-graph
+    // bundle ("B5Traffic.bndl") into the request's pool. Response id staged at the slot (30);
+    // ProcessInternalLoadBundleResponse's case 30 then fires the paired GET (id 55).
+    //
+    // Store-for-store identical to ProcessLoadPVSRequest @0x8266F9C0 apart from the file name
+    // and the assert text -- the asm is the same 148-byte type-2 LoadBundleRequest build with
+    // the same field order (mpUser <- &mReceiverQueue @+0x00, miEventId <- the slot index
+    // @+0x04, SetFileName, mbLiveUpdateReplace <- 0 @+0x08, miPoolId <- lwz 8(event) @+0x8C,
+    // mbAllowFailiure <- lbz 0x1C(event) @+0x90, mbUseHDCache <- 0 @+0x91) and the same
+    // `li r5,2 / li r6,0x94` AddEvent tail.
+    void GameDataModule::ProcessLoadTrafficLanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                        const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                        s32 liEventId, s32 liSlotIndex)
+    {
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for traffic lanes\n");   // X360 line 4188 (0x105C)
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(KPC_TRAFFIC_LANES_FILE_NAME);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266F4B0 -- service a LOAD AI-lanes request: stream the AI section graph
+    // ("AI.dat") into the request's pool. Response id staged at the slot (29);
+    // ProcessInternalLoadBundleResponse's case 29 then fires the paired GET (id 54).
+    // Byte-for-byte the same shape as ProcessLoadTrafficLanesRequest above.
+    void GameDataModule::ProcessLoadAILanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                   const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                   s32 liEventId, s32 liSlotIndex)
+    {
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for AI lanes\n");   // X360 line 4216 (0x1078)
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(KPC_AI_LANES_FILE_NAME);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
     // @ 0x8266F718 -- service a LOAD surface-list request: stream the world's surface
     // list ("surfacelist.bin") into the request's pool. Response id staged at the slot
     // (37 -- the id the WorldEntityModule surface-list consumer waits on).
@@ -1762,6 +1840,74 @@ namespace BrnResource
         lRequest.miPoolId  = lpEvent->miPoolId;
         lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
             CgsResource::ID::HashString(reinterpret_cast<const u8*>(KPC_PVS_RESOURCE_NAME)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x826703B0 -- service a GET traffic-lanes request: acquire the "BaseTraffic"
+    // TrafficData resource (type 65538) from the request's pool, now that B5Traffic.bndl is
+    // resident. Response id staged at the slot (55); ProcessInternalAcquireResponse's
+    // case 55 posts the resolved handle back to the requester (WorldMap::LoadData state 3).
+    //
+    // Store-for-store identical to ProcessGetPVSRequest @0x82670880 apart from the resource
+    // name and the assert text.
+    //
+    // ⚠️ Hex-Rays reads the id store as `HIDWORD(v14) = a1 + 363096` -- i.e. the receiver-queue
+    // pointer in the id's HIGH half (known bug class (b)). It is a FUSION ARTIFACT, the same
+    // one the WorldMap gate note and BrnWorldModule.cpp:191-194 already call out. The asm has
+    // two INDEPENDENT stores to two different slots:
+    //     0x82670498  std  r11, var_50(r1)   <- r11 = HashString(...), the 8-byte mResourceId
+    //     0x8267049C  stw  r10, var_60(r1)   <- r10 = &mReceiverQueue, mpUser at +0x00
+    // and HashString @0x828D84A8 ends `clrldi r3,r11,32`, so the stored id is the ZERO-EXTENDED
+    // 32-bit CRC. Nothing is ORed into it.
+    void GameDataModule::ProcessGetTrafficLanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                       const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                       s32 liEventId, s32 liSlotIndex)
+    {
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for traffic lanes\n");   // X360 line 4832 (0x12E0)
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(
+                reinterpret_cast<const u8*>(KPC_TRAFFIC_LANES_RESOURCE_NAME)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x826704C0 -- service a GET AI-lanes request: acquire the "WorldMapData" AISections
+    // resource (type 65537) from the request's pool. Response id staged at the slot (54).
+    // Same shape as ProcessGetTrafficLanesRequest above (same Hex-Rays fusion artifact on the
+    // id store at 0x826705A8/0x826705AC -- two separate stores in the asm).
+    void GameDataModule::ProcessGetAILanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                  const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                  s32 liEventId, s32 liSlotIndex)
+    {
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
+                   "Invalid asset type for AI lanes\n");   // X360 line 4860 (0x12FC)
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(
+                reinterpret_cast<const u8*>(KPC_AI_LANES_RESOURCE_NAME)))));
         lRequest.mbCheckRefCount = false;
 
         lpResourceInput->GetResourceQueue()->AddEvent(
@@ -1939,14 +2085,14 @@ namespace BrnResource
                 DeferredGameDataRequest("GetTrafficVehicle after load (0x82670280, id 51)", lpSlot);
             break;
 
-        case 29:   // AI lanes
+        case 29:   // AI lanes -- hop 2: AI.dat is resident, acquire "WorldMapData"
             CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3238
-            DeferredGameDataRequest("GetAILanes after load (0x826704C0, id 54)", lpSlot);
+            ProcessGetAILanesRequest(lpResourceInput, &lpSlot->mEvent, 54, liSlotIndex);
             break;
 
-        case 30:   // traffic lanes
+        case 30:   // traffic lanes -- hop 2: B5Traffic.bndl is resident, acquire "BaseTraffic"
             CGS_ASSERT(!lbFailed, "Failed to load\n");   // X360 line 3245
-            DeferredGameDataRequest("GetTrafficLanes after load (0x826703B0, id 55)", lpSlot);
+            ProcessGetTrafficLanesRequest(lpResourceInput, &lpSlot->mEvent, 55, liSlotIndex);
             break;
 
         case 31:   // world unit
