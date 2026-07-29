@@ -53,10 +53,14 @@ namespace Utils
     // DWARF CameraUtils.h:60. Clamp an FOV (degrees) into the engine's sensible band.
     f32 ClampToSensibleFOVDegs(f32 lfFOVDegs);
 
-    // DWARF CameraUtils.cpp:14 / :65. Build a world look-at matrix from eye/target (and an
-    // optional explicit up). Used by Track.
-    Matrix44Affine CreateLookAt(Vector3 lEye, Vector3 lTarget);
-    Matrix44Affine CreateLookAt(Vector3 lEye, Vector3 lTarget, Vector3 lUp);
+    // @0x8220C4F8 (DWARF CameraUtils.cpp:704) / @0x8220C960 (:767). Build a world look-at
+    // frame from eye/target -- rows {xAxis, yAxis, zAxis, wAxis=eye} where zAxis is the
+    // normalised eye->target direction, xAxis = Normalize(Cross(up, zAxis)) and yAxis =
+    // Cross(zAxis, xAxis). The two-argument form uses the world up axis {0,1,0}. Parameter
+    // names are the console's own (baked into the assert literals "IsValid(lEyePosition)" /
+    // "IsValid(lTargetPosition)"). BODIED in CameraUtils.cpp.
+    Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition);
+    Matrix44Affine CreateLookAt(Vector3 lEyePosition, Vector3 lTargetPosition, Vector3 lUpVector);
 
     // DWARF CameraUtils.cpp:56. Apply a screen-space (x,y) look offset to a look-at matrix
     // given the camera FOV / aspect. Used by Track.
