@@ -113,6 +113,12 @@ protected:
     // per-frame LoadBundle requests (TRK / PVS / prop graphics) into the GameData pump.
     void UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer);
 
+    // X360: LoadDirectorModule -- the E_LOADINGSTAGE_DIRECTORMODULE leg. Creates this frame's
+    // director OUTPUT buffer on the update output stack, runs the module's staged
+    // DirectorModule::Prepare @0x822712D8 once, destroys the buffer, and returns whether the
+    // stage machine has finished. Same shape as LoadSoundModule/LoadWorldModule.
+    bool LoadDirectorModule();
+
     // The update set the loading spine drives the world with: ConstructUpdateSetFromFsm
     // @0x823BD420's base value 128 (frustum testing on; no in-game / boot-video / paused
     // bits while the scripted load runs).

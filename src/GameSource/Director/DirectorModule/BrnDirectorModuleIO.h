@@ -135,6 +135,17 @@ namespace DirectorIO
         void SetCrashingCentreOfMass(u32 luIndex, const Matrix44Affine& lrCentreOfMass);
         void SetVehicleTeam(EActiveRaceCarIndex leIndex, s32 liTeam);
 
+        // ADDITIVE (write-lock-asserted): the two published fields that decide whether the
+        // director sees a LIVE PLAYER CAR. The X360 fills them from the race-car entity
+        // module's global output interface during the per-frame input staging (which is not
+        // threaded on the PC yet); MainDirector::GetLivePlayerCarIndex reads exactly this pair,
+        // and its answer is what gates the ENTIRE gameplay/arbitrator middle of
+        // MainDirector::Update. Named setters so no caller pokes mUsedRaceCars / mePlayerCarIndex
+        // by offset. FLAG: additive accessors -- the fields and their roles are the console's;
+        // only the entry points are ours.
+        void SetPlayerCarIndex(EActiveRaceCarIndex leIndex);
+        void SetRaceCarInUse(u32 luIndex, bool lbInUse);
+
         void SetShortcutMenuEvent(bool lbState);
         void SetGotCrashNavShownEvent();
         void SetGotCrashNavHiddenEvent();

@@ -98,7 +98,12 @@ namespace Camera
     class BehaviourControllerLockInterface;
     class CollisionPolicy;
 
-    namespace Utils { class Tweaker; }
+    // NOTE: `struct`, not `class` -- the real home (Camera/Utils/BrnCameraTweaker.h:45) declares
+    // `struct Tweaker`, and MSVC mangles the class-key into the symbol (`V` vs `U`). Declaring it
+    // `class` here made every SetupTweaker override define ?...@@UEAAXAEAVTweaker@... while every
+    // caller that had seen the real header referenced ?...@@UEAAXAEAUTweaker@... -- two distinct
+    // symbols, so the whole SetupTweaker vtable slot came up unresolved at link.
+    namespace Utils { struct Tweaker; }
 
     // ------------------------------------------------------------------------
     // BehaviourSharedPrepareReleaseInfo (DWARF Behaviour.h:149..:155)

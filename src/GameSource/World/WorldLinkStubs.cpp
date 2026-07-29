@@ -55,6 +55,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultSlot.h"     // VaultSlot::DoLoad stub
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h" // CollectionHashMap (RemoveIndex gap stub)
+#include "GameSource/World/EnvironmentManager/BrnEnvironmentManager.h" // the three env sub-object Constructs below
 #include "SDKs/Realmc/RealmcMemcardInterface.h" // MemcardInterface base ctor/dtor (trivial real bodies)
 #include "GameShared/GameClasses/Graphics/Resources/CgsShaderTechniqueResourceType.h" // the two documented deferrals below       // Attrib::Database stubs
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault / IGarbageCollector stubs
@@ -1008,83 +1009,6 @@ void BrnWorld::EnvironmentSettings::DebugComponent::OnActivate()
         s_bLogged = true;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
             *CgsDev::Log::gpDebugPrint << "DebugComponent: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// -------------------------------------------------------------------------
-// BrnWorld::EnvironmentSettings::EnvironmentManager -- PARTIALLY DESTUBBED
-// (2026-07-26 wave): BeginRelease (the WorldModule::Release stage-8 inline) now
-// lives in BrnEnvironmentManager.cpp. The remaining six stay stubbed, each for
-// a concrete dependency reason:
-//   * Construct @0x827CA408 / Prepare @0x827D49A8: large staged resource
-//     machines (colour-cube dictionary / keyframe bundle loads via the
-//     GameData request queue, StrStream-formatted asserts, debug-variable
-//     registration) over a member region (+0x700..+0x1240) the committed
-//     class model has not homed yet.
-//   * CalcKeyLightDirection @0x827B0638: forwards into BrnWorld::
-//     EnvironmentSettings::ComputeKeyLightDirection @0x82678AB0, which is
-//     built on XMMatrixRotationX/Y (xnamath helpers, not reconstructed) with
-//     a decompiler-garbled register-lane matrix combine.
-//   * Enable/DisableJunkyardLightingSetup @0x827B0F98/@0x827B10E8 and
-//     GenerateEffects @0x827BE698: touch the un-homed +0x1220..+0x1C70 member
-//     region (override-key-light vector, junkyard light table + count, the
-//     time-of-day bounds) -- the committed class model ends at +0x11E8 and
-//     needs a dedicated layout-growth pass first.
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-struct rw::math::vpu::Vector3 BrnWorld::EnvironmentSettings::EnvironmentManager::CalcKeyLightDirection() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return rw::math::vpu::Vector3();
-}
-
-// BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
-// WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
-// AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnWorld::EnvironmentSettings::EnvironmentManager::Construct()
-{
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::EnvironmentSettings::EnvironmentManager::DisableJunkyardLightingSetup()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::EnvironmentSettings::EnvironmentManager::EnableJunkyardLightingSetup()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "EnvironmentManager: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
 }
 
@@ -4033,4 +3957,46 @@ uint32_t CgsResource::ShaderTechniqueResourceType::GetShaderConstantExternalSeri
 {
     CGS_ASSERT(false, "ShaderTechniqueResourceType::GetShaderConstantExternalSerialisedResourceDescriptorSize: documented deferral -- reconstruct");
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// BrnWorld::EnvironmentSettings -- the three environment sub-object Constructs
+// that the REAL EnvironmentManager::Construct @0x827CA408 (sky wave) calls.
+// Their own bodies belong to the environment-data TUs, which are not yet
+// reconstructed; the manager's Construct zero-seeds the aggregates it owns, so
+// a quiet no-op here leaves them in the zeroed state the manager already put
+// them in rather than faulting the boot.
+// DELETE-WHEN: the environment-data TUs (Scattering/Lighting/Clouds) land.
+// ---------------------------------------------------------------------------
+void BrnWorld::EnvironmentSettings::ScatteringData::Construct()
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::ScatteringData::Construct: inert [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnWorld::EnvironmentSettings::LightingData::Construct()
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::LightingData::Construct: inert [FLAG PC boot gate]\n";
+    }
+}
+
+void BrnWorld::EnvironmentSettings::CloudsData::Construct()
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "EnvironmentSettings::CloudsData::Construct: inert [FLAG PC boot gate]\n";
+    }
 }

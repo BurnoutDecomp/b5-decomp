@@ -78,5 +78,22 @@ void ValidityAccount::SetNoCutFromFlag(s32 leFlag)
     mFailedFlags.SetBit(static_cast<u32>(leFlag));
 }
 
+// The no-cut-TO counterpart of the function above. It has no standalone symbol in the
+// available ARTIST dumps (inlined at every call site), so what IS attested is only the shape
+// its twin proves: raise the caller's reason bit in the same 32-slot set.
+// FLAG (band NOT attested): the twin's own band [E_FIRST_NOCUTFROM_FLAG, E_END_NOCUTFROM_FLAG)
+// comes from a `cmpwi 0x1B`/`cmpwi 0x1F` pair in @0x82204148. No such pair is available for
+// this one, so its band assert is DELIBERATELY OMITTED rather than fabricated -- only the
+// container's own index guard (which is universal) is kept. The single caller
+// (Behaviour::SetCantSwitchToMeNow) passes the reason straight through, so the bit raised is
+// exactly the one the console raises regardless of where the band boundaries sit.
+// DELETE-WHEN: the no-cut-TO setter's address/band is identified -- then add its range assert.
+void ValidityAccount::SetNoCutToFlag(s32 leFlag)
+{
+    CGS_ASSERT(static_cast<u32>(leFlag) < 32u,
+               "Index < Number of bits");   // CgsBitArray.h:222 (streamed on the X360)
+    mFailedFlags.SetBit(static_cast<u32>(leFlag));
+}
+
 }
 }

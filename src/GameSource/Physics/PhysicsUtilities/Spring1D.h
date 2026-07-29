@@ -125,7 +125,11 @@ namespace BrnPhysics
         // @0x825BFCA8: base+32, vrlimi mask 8 -> lane 0 (.x) of the external-force vec.
         void SetExternalForce(f32 lfExternalForce);
 
-    protected:
+        // ACCESS NOTE: the three registers are PUBLIC. The console inlines every spring access, so
+        // C++ access control is not observable in the asm -- but VehiclePhysics::ApplySuspensionForces
+        // @0x825D1EE8 reads reg0.z (mass) * reg1.y (acceleration) directly from OUTSIDE the class, and
+        // the (now-retired) VehiclePhysics.h fork of this same type modelled them public for exactly
+        // that reason. `protected` here would only force a fabricated accessor.
         // :147  +0x00  {x=stiffness, y=damping, z=mass, w=position}
         Vector4 mvStiffness_Damping_Mass_Position;
         // :148  +0x10  {x=velocity, y=acceleration, z=damping force, w=spring force}

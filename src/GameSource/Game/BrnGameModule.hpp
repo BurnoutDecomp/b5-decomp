@@ -36,7 +36,12 @@ namespace EA { namespace GameTalk { class GameTalkMessage; } }
 // (The former ModelIO::OutputBuffer placeholder is DELETED per the same ODR-trap rule:
 // the REAL CgsGui::ModelIO::OutputBuffer now arrives via BrnGuiModule.h ->
 // CgsModelModuleIO.h -- the IO stack allocates the real 86KB buffer.)
-namespace BrnDirector { namespace DirectorIO { struct OutputBuffer {}; } }
+// (The former DirectorIO::OutputBuffer placeholder -- an EMPTY `struct OutputBuffer {}` -- is
+// DELETED per the same ODR-trap rule. It meant the update output stack allocated a ZERO-BYTE
+// "Director" buffer while the real 1828-byte one (with the published camera at mCameraOutput)
+// was defined in the director's own TU: two definitions of one type, and the game module got
+// the empty one. The REAL buffer now arrives here.)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp"
 
 // Engine module member types - placeholders that derive from the REAL module base
 // (CgsModule::ModuleSingleBuffered), so the game module addresses + drives them through the
@@ -114,7 +119,11 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 // real BrnGameStateModule.h; keeping the empty stub here alongside them was the exact silent-ODR
 // hazard the warning above describes).
 #include "GameSource/GameState/BrnGameStateModule.h"
-namespace BrnDirector  { class DirectorModule  : public CgsModule::ModuleSingleBuffered {}; }
+// BrnDirector::DirectorModule is now the REAL module (the director spine: MainDirector ->
+// Arbitrator -> BehaviourManager -> the camera behaviours -> CameraFinaliser -> the output
+// buffer). It was an ODR stub here exactly like GameStateModule/WorldModule were; the real
+// header is included instead, per this header's own ODR-TRAP instruction above.
+#include "GameSource/Director/BrnDirectorModule.h"
 namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleBuffered {}; }
 // BrnGui::GuiModule is now the REAL module (hosts the MovieManager) -- included above (BrnGuiModule.h),
 // no longer the opaque stub.
@@ -149,6 +158,10 @@ namespace BrnGame
         BrnGame::DispatchThreadInputBufferManager& GetDispatchThreadInputBufferManager()
         { return mDispatchThreadInputBufferManager; }
         BrnSound::Module::RootSoundModule& GetSoundModule() { return mSoundModule; }
+        // The director module (the loading flow's LoadDirectorModule drives its staged Prepare
+        // at E_LOADINGSTAGE_DIRECTORMODULE; the per-frame spine then drives its
+        // PreSceneQueryUpdate/Update/PostGuiUpdate).
+        BrnDirector::DirectorModule& GetDirectorModule() { return mDirectorModule; }
 
         // Per-frame spines the in-game flow state drives directly (non-virtual; each returns
         // an int status the void flow-state Update/Render slots discard):
@@ -171,6 +184,18 @@ namespace BrnGame
                             BrnWorldIO::UpdateOutputBuffer* lpWorldUpdateOutputBuffer,
                             CgsMemory::LinearMalloc* lpWorldFrameAllocator,
                             BrnUpdateSet lUpdateSet);
+
+        // The per-frame DIRECTOR leg (2026-07-29, DJ fly-by campaign). Creates this
+        // sub-step's director INPUT + scene-query IO buffers on the update stacks and runs the
+        // console's own three-pass order around the caller's GUI update:
+        //   PreSceneQueryUpdate @0x8225C768   (the cameras may ISSUE scene queries)
+        //   Update              @0x82275300   (consume last frame's answers, drive the
+        //                                      arbitrator, finalise and PUBLISH the camera)
+        //   PostGuiUpdate       @0x82250DD0   (post-GUI latch)
+        // The OUTPUT buffer is the frame's mpDirectorOutputBuffer (CreateStaticIOBuffers), so
+        // the published camera survives into DoDispatch, which runs before it is destroyed.
+        // lbPostGui selects the third pass; the first two run together on the pre-GUI call.
+        void DoUpdate_Director(bool lbPostGui);
 
         // The per-frame update IO stacks. The scripted module loads (LoadingScriptedState::
         // LoadXxxModule) create their per-frame module IO buffers on these, exactly as the

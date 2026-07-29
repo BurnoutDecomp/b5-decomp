@@ -14,6 +14,8 @@
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount::SetupFailFlagMask (interim bridge in Construct)
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
 // stand-in below keys its loading-complete report on it.
@@ -203,13 +205,14 @@ namespace BrnGame
                                          //            module); the movie-hosting slice takes none.
         mGameStateModule.Construct();    // +0x669380  (slot 0; placeholder -> base)
         mEffectsModule.Construct();      // +0x878A00  (slot 0; placeholder -> base)
-        mDirectorModule.Construct();     // +0x6B0C90  [gated] X360 slot +64; placeholder -> base.
-        // [FLAG interim bridge] the console DirectorModule's camera constructs run
-        // CameraState::Construct -> ValidityAccount::SetupFailFlagMask during its real
-        // Construct; the placeholder above skips them, but WorldModule::Prepare's
-        // mLastCameraInput.Clear() (CameraState::Clear @0x82220950) asserts the mask was
-        // set up. Run the one-time setup here until the DirectorModule is real.
+        // [FLAG interim bridge] ValidityAccount's static fail-flag mask must be built BEFORE the
+        // director module constructs its cameras: CameraState::Construct/Clear (@0x82220950) and
+        // BehaviourHelper::Update both assert `sbFailFlagMaskSet`. The console builds it inside
+        // CameraState::Construct; until that runs it, the one-time setup happens here.
+        // DELETE-WHEN: CameraState::Construct performs the setup itself.
         BrnDirector::Camera::ValidityAccount::SetupFailFlagMask();
+        mDirectorModule.Construct(0.0f); // +0x6B0C90  X360 slot +64 @0x8225C590 (REAL module,
+                                         //            mounted 2026-07-29 -- DJ fly-by campaign).
         mReplayModule.Construct();       // +0x8BD680  (slot 0; ReplayModule -> base)
         mNetworkModule.Construct();      // +0x8C39C0  [gated] X360 slot +64 with arg 0; placeholder -> base.
 
@@ -499,6 +502,155 @@ namespace BrnGame
         const bool lbDestroyed = lpUpdateInputBufferStack->DestroyIOBuffer(&lpWorldInput);
         CGS_ASSERT(lbDestroyed, "mpStack->DestroyIOBuffer( &mpBuffer )");        // CgsModuleIOHelper.h:57
         (void)lbDestroyed;
+    }
+
+    // ------------------------------------------------------------------------------------
+    // The per-frame DIRECTOR leg (2026-07-29, DJ fly-by campaign).
+    //
+    // The console drives the director module through the module scheduler in three passes per
+    // sub-step, bracketing the GUI update:
+    //     DirectorModule::PreSceneQueryUpdate @0x8225C768   (before the scene query)
+    //     <the scene manager services the queries>
+    //     DirectorModule::Update              @0x82275300   (consumes the answers, runs
+    //                                                        MainDirector -> the arbitrator ->
+    //                                                        CameraFinaliser, PUBLISHES)
+    //     <the GUI update>
+    //     DirectorModule::PostGuiUpdate       @0x82250DD0
+    //
+    // [FLAG PC placement] the PC has no module scheduler yet (BrnGameModule::DoUpdate is a
+    // documented no-op -- the host loop owns the module walk), so the three passes are driven
+    // straight from the sim loop in the same ORDER, with the scene-query step between passes 1
+    // and 2 being whatever the scene manager already did this frame. The two scene-query IO
+    // buffers are created per sub-step on the update stacks (the console's own lifetime); the
+    // OUTPUT buffer is the frame's mpDirectorOutputBuffer so the published camera is still
+    // alive when DoDispatch runs.
+    //
+    // [FLAG PC input staging] the director INPUT buffer is created and Constructed here but
+    // NOT staged: the X360 fills it through BridgeControllerToDirector / the race-car entity
+    // module's global output interface / the world's contact + timer publishes, none of which
+    // is threaded on the PC. A zero-staged input reports NO live player car
+    // (GetPlayerCarIndex + GetUsedRaceCars), which MainDirector::Update reads as its
+    // "no player" branch -- so the director carries its last finalised camera forward instead
+    // of driving a fabricated one. That is the console's own no-player behaviour, and it is
+    // why the published camera is currently STATIC.
+    // ------------------------------------------------------------------------------------
+    void BrnGameModule::DoUpdate_Director(bool lbPostGui)
+    {
+        if (mpDirectorOutputBuffer == 0)
+            return;
+
+        // The console's module scheduler only dispatches a module's per-frame entry points once
+        // its staged Prepare has reported done; the PC drives them by hand, so it asks here.
+        // Skipping this is not cosmetic: DirectorModule::Prepare stage 7 is what carves the
+        // BehaviourManager's helper/behaviour pools, and an arbitrator running before that
+        // allocates out of an un-carved pool (BehaviourManager.h:782 `lHelperID >= 0` fires).
+        if (!mDirectorModule.IsPrepared())
+            return;
+
+        BrnDirector::DirectorIO::InputBuffer* lpDirectorInput = 0;
+        mpUpdateInputBufferStack->CreateIOBuffer(&lpDirectorInput, "Director");
+        if (lpDirectorInput == 0)
+            return;
+        // [FLAG PC bring-up] Zero the staged region before Construct. The IO stack hands back
+        // RE-USED memory and the generic PC CreateIOBuffer<T> only placement-news, so every
+        // published member (mePlayerCarIndex, mUsedRaceCars, the per-car VehicleInfo array, the
+        // control block) would otherwise hold the PREVIOUS tenant's bytes. That is not a
+        // cosmetic risk here: MainDirector::GetLivePlayerCarIndex reads mePlayerCarIndex and
+        // mUsedRaceCars to decide whether a player car exists, so stale bytes could hand the
+        // arbitrator a car index whose VehicleInfo is garbage. Zeroing gives the console's own
+        // "no live player car" answer deterministically (index 0 with its used-race-car bit
+        // clear -> GetLivePlayerCarIndex returns -1).
+        // DELETE-WHEN: the real per-frame staging lands (BridgeControllerToDirector + the
+        // race-car entity module's global output interface + the world contact/timer publishes),
+        // at which point every one of these fields is written before it is read.
+        memset(lpDirectorInput, 0, sizeof(*lpDirectorInput));
+        // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc;
+        // the generic PC template placement-news only (same restoration as LoadWorldModule).
+        lpDirectorInput->CgsModule::IOBuffer::Construct();
+
+        // [FLAG PC bring-up, env-gated BRN_DIRECTOR_ATTRACT] Stage a live player car and raise
+        // the attract-mode request, so the director's OWN state machine can be exercised before
+        // the real staging exists.
+        //
+        // WHY THIS EXISTS. MainDirector::Update @0x82274070 runs its entire gameplay middle --
+        // including UpdateArbitrator, the only path to ArbStateAttractMode and therefore to the
+        // DJ fly-by's BehaviourRoadRunner -- ONLY when GetLivePlayerCarIndex() != -1. On the
+        // console that is always true in attract mode (the demo drives a real car); on this
+        // build no race car exists, so the director takes its no-player branch every frame and
+        // re-publishes its last finalised camera. Measured with BRN_DIRECTOR_TRACE: the
+        // published camera sits at the origin, identity basis, FOV 90 (Camera::Construct's
+        // defaults) and never changes.
+        //
+        // ⚠️ THIS IS A DIAGNOSTIC, NOT A FEATURE, AND IT IS OFF BY DEFAULT. With it on, the
+        // arbitrator runs against a ZEROED VehicleInfo -- so anything downstream that reads the
+        // player car reads zeros. It exists to find the NEXT blocker, not to produce a camera.
+        // DELETE-WHEN: the race-car entity module publishes into the director input for real.
+        static const bool sbForceAttract = (getenv("BRN_DIRECTOR_ATTRACT") != 0);
+        if (sbForceAttract && !lbPostGui)
+        {
+            lpDirectorInput->LockForWrite();
+            lpDirectorInput->SetPlayerCarIndex(E_ACTIVE_RACE_CAR_INDEX_0);
+            lpDirectorInput->SetRaceCarInUse(0u, true);
+            lpDirectorInput->UnlockForWrite();
+            mDirectorModule.GetMainDirector().GetArbitrator().SetDoAttractMode(true);
+        }
+
+        if (!lbPostGui)
+        {
+            BrnDirector::DirectorIO::SceneQueryOutputBuffer* lpSceneQueryOutput = 0;
+            BrnDirector::DirectorIO::SceneQueryInputBuffer*  lpSceneQueryInput  = 0;
+            mpUpdateOutputBufferStack->CreateIOBuffer(&lpSceneQueryOutput, "DirectorSceneQuery");
+            mpUpdateInputBufferStack->CreateIOBuffer(&lpSceneQueryInput, "DirectorSceneQuery");
+            if (lpSceneQueryOutput != 0 && lpSceneQueryInput != 0)
+            {
+                lpSceneQueryOutput->CgsModule::IOBuffer::Construct();
+                lpSceneQueryInput->CgsModule::IOBuffer::Construct();
+
+                // lbIsReplaying == false: the PC has no replay playback path (the module's own
+                // replay legs are documented gates).
+                mDirectorModule.PreSceneQueryUpdate(0, 0, lpDirectorInput,
+                                                    mpDirectorOutputBuffer,
+                                                    lpSceneQueryOutput, false);
+                mDirectorModule.Update(0, 0, lpDirectorInput, mpDirectorOutputBuffer,
+                                       lpSceneQueryInput, lpSceneQueryOutput);
+            }
+            if (lpSceneQueryInput != 0)
+                mpUpdateInputBufferStack->DestroyIOBuffer(&lpSceneQueryInput);
+            if (lpSceneQueryOutput != 0)
+                mpUpdateOutputBufferStack->DestroyIOBuffer(&lpSceneQueryOutput);
+        }
+        else
+        {
+            mDirectorModule.PostGuiUpdate(0, 0, lpDirectorInput, mpDirectorOutputBuffer);
+
+            // [DIAG BRN_DIRECTOR_TRACE] Report what the director actually PUBLISHED this
+            // frame. This is the measurement the fly-by campaign needs: whether the director
+            // camera exists, where it is, and whether it MOVES. Off unless the env var is set;
+            // remove with the bring-up path.
+            static const bool sbTrace = (getenv("BRN_DIRECTOR_TRACE") != 0);
+            if (sbTrace)
+            {
+                static s32 siTraceFrame = 0;
+                if ((siTraceFrame % 30) == 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    mpDirectorOutputBuffer->LockForRead();
+                    const BrnDirector::Camera::Camera* lpCamera =
+                        mpDirectorOutputBuffer->GetCameraOutput();
+                    const rw::math::vpu::Matrix44Affine& lXform = lpCamera->GetTransform();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director] f" << siTraceFrame
+                        << " eye (" << lXform.wAxis.x << ", " << lXform.wAxis.y
+                        << ", " << lXform.wAxis.z << ")"
+                        << " at (" << lXform.zAxis.x << ", " << lXform.zAxis.y
+                        << ", " << lXform.zAxis.z << ")"
+                        << " fov " << lpCamera->GetFOV() << "\n";
+                    mpDirectorOutputBuffer->UnlockForRead();
+                }
+                ++siTraceFrame;
+            }
+        }
+
+        mpUpdateInputBufferStack->DestroyIOBuffer(&lpDirectorInput);
     }
 
     // @ 0x823DC458 -- the dispatch (render-feed) spine. The X360 body creates the
@@ -898,6 +1050,10 @@ namespace BrnGame
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);
                     lpState->Update();
                 }
+                // ---- the DIRECTOR's pre-GUI passes (X360 module-scheduler order) ----------
+                // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
+                // mpDirectorOutputBuffer, which stays alive through this frame's Render.
+                DoUpdate_Director(false);
                 // ---- controller -> GUI input pass (the console per-substep bridge) ---------
                 // Fill the player-0 pad record (InputPadsPC, the PC stand-in for the input
                 // module's own fill), then run the REAL BridgeControllerToGui: it synthesises
@@ -953,6 +1109,8 @@ namespace BrnGame
                 // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
                 // commands (70/71, the loading screen 19/20, ...) the states posted.
                 BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
+                // ---- the DIRECTOR's post-GUI pass (X360 module-scheduler order) -----------
+                DoUpdate_Director(true);
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)
@@ -1004,6 +1162,14 @@ namespace BrnGame
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer, "Gui");
         mpUpdateOutputBufferStack->CreateIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer, "GuiModel");
         mpUpdateOutputBufferStack->CreateIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer, "Director");
+        // The X360 CreateIOBuffer<T> instantiation runs the buffer's Construct after the stack
+        // alloc; the generic PC template placement-news only. This was harmless while
+        // DirectorIO::OutputBuffer was an EMPTY ODR stub with no lock state; now that the real
+        // 1828-byte buffer is here, every DirectorModule pass locks it and the lock asserts
+        // eStatusConstructed (CgsIOBuffer.cpp:27/36). Raise the base status here, exactly as
+        // the GUI input buffer above does.
+        if (mpDirectorOutputBuffer != 0)
+            mpDirectorOutputBuffer->CgsModule::IOBuffer::Construct();
     }
 
     // @ BrnGameModule.cpp:2515 - free this sub-step's static GUI/director IO buffers (reverse

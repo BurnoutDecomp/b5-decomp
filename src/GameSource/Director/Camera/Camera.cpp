@@ -146,6 +146,29 @@ void Camera::SetFOV(f32 lfFOV)
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::GetFOV / ::GetTransform / ::SetTransform
+//
+// The three field accessors the X360 always INLINES (no exported symbol -- every consumer
+// shows a direct load/store of mfFOV @+0x58 or the mTransform block @+0x00). They are
+// declared in Camera.h precisely so no consumer forms those offsets itself; the bodies are
+// the loads/stores themselves, so there is nothing to transcribe and nothing to flag.
+// ----------------------------------------------------------------------------
+f32 Camera::GetFOV() const
+{
+    return mfFOV;
+}
+
+const rw::math::vpu::Matrix44Affine& Camera::GetTransform() const
+{
+    return mTransform;
+}
+
+void Camera::SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform)
+{
+    mTransform = lrTransform;
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::GetNearClipDistance @0x82205B68
 //
 // The active near-clip distance. The asm:

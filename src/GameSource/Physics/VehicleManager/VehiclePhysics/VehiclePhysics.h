@@ -32,38 +32,18 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"   // Wheel + Wheel::RoadContact
 #include "rw/physics/rigidbody.h"   // rw::physics::InputSpace (AirRamEffect::meImpulseSpace)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<N> (air-ram/spin slot allocators)
+// BrnPhysics::SuspensionSpring at its DWARF home. This file used to carry a MINIMAL OWNING SLICE
+// of the same namespace-scope type (its own comment: "when the real Spring1D.h lands, REPLACE this
+// slice with an include of the committed type"). Spring1D.h has since landed with the identical
+// three-register storage (Spring1D.h:147-149, sizeof == 0x30 == the maSprings stride) plus the full
+// setter/getter API, so the fork is RETIRED here in favour of the include -- the two definitions
+// were an ODR clash for any TU that reached both (every camera-behaviour TU does, via BehaviourRig.h).
+#include "GameSource/Physics/PhysicsUtilities/Spring1D.h"   // BrnPhysics::SuspensionSpring (canonical home)
 
 namespace CgsNumeric { struct Random; }   // UpdateRoadNoise draws from the shared Random ring (CgsRandom.h)
 
 namespace BrnPhysics
 {
-    // ----- ADDITIVE GROW (suspension/downforce/weight group, C03): a MINIMAL OWNING SLICE of the
-    //       per-wheel 1-D damped suspension spring (BrnPhysics::SuspensionSpring, namespace-scope,
-    //       NOT nested -- references/DecFIGS/.../PhysicsUtilities/Spring1D.h:38). The full
-    //       SuspensionSpring TU (Construct/Reset/Integrate/Prepare + the ~25 accessors) is owned
-    //       elsewhere (Spring1D.cpp / BrnPhysicsUnity). This group bodies the four VehiclePhysics
-    //       suspension PHASES that drive the springs, so only the storage (three packed registers,
-    //       verbatim DWARF order Spring1D.h:147-149) + the setter/Prepare entry points those phases
-    //       call BY NAME are reconstructed here -- declare-only bodies live in the SuspensionSpring
-    //       TU (no ODR clash). sizeof == 0x30 (3 * Vector4), matching the maSprings stride. When the
-    //       real Spring1D.h lands, REPLACE this slice with an include of the committed type.
-    struct SuspensionSpring
-    {
-        // Spring1D.h:147-149 -- the three packed registers (DWARF-named lanes, kept verbatim).
-        Vector4 mvStiffness_Damping_Mass_Position;                  // .x=k .y=c .z=mass .w=position
-        Vector4 mvVelocity_Acceleration_DampingForce_SpringForce;   // .x=v .y=a .z=Fdamp .w=Fspring
-        Vector4 mvExternalForce;                                    // additive load-transfer force
-
-        // Owned by the SuspensionSpring TU -- declare only every entry point this group calls BY
-        // NAME. Args spelled VecFloat per the DWARF (Spring1D.h prototypes).
-        void Prepare(VecFloat lrStiffness, VecFloat lrDamping, VecFloat lrMass);   // Spring1D.h:51
-        void SetStiffness(VecFloat lvfStiffness);                                  // Spring1D.h:89
-        void SetDamping(VecFloat lvfDamping);                                      // Spring1D.h:97
-        void SetMass(VecFloat lvfMass);                                            // Spring1D.h:105
-        void SetPosition(VecFloat lvfPosition);                                    // Spring1D.h:113
-        void SetVelocity(VecFloat lvfVelocity);                                    // Spring1D.h:121
-        void SetExternalForce(VecFloat lvfExternalForce);                          // Spring1D.h:191
-    };
 namespace Vehicle
 {
     // The driver-control input block the driving/aftertouch methods read (throttle/brake/steer +
