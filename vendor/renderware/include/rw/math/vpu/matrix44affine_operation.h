@@ -22,6 +22,7 @@
 // include/rw/; it never touches rw/math/vpu/, so this hand-maintained header (like
 // its siblings types.h / vector3_operation.h) is immune to regeneration.
 
+#include <cmath>                           // std::acos / std::sin (SLerp's arc)
 #include "rw/math/vpu/types.h"             // rw::math::vpu::Matrix44Affine / Vector3
 #include "rw/math/vpu/vector3_operation.h" // Vector3 operator+/-, Mult, Lerp
 
@@ -163,16 +164,89 @@ namespace vpu
             && IsValid(lrMatrix.wAxis);
     }
 
-    // ADDITIVE GROW (consumed by BrnLooker.cpp / BrnBehaviourIceAnim.cpp): spherical-linear
-    // blend between two affine transforms by a per-lane blend amount (the SDK reads the
-    // amount as a broadcast VecFloat; the call sites pass a pointer to a single f32 that is
-    // splatted across the lanes). Returns the blended transform. The console body lives in
-    // the SDK *_platform_inline headers (rotation extracted as a quaternion, slerped, the
-    // translation lerped); DECLARATION-ONLY here -- the body is not reproduced (the rotation
-    // slerp uses SIMD quaternion ops not modelled in this vocabulary). FLAG: a not-yet-bodied
-    // vendor op; the per-TU `cl /c` gate does not link.
-    Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
-                         const float* lpfAmount);
+    // SLerp(from, to, amount, &angleOut) -- X360 0x82216858. Spherical-linear blend between
+    // two affine transforms. SIGNATURE CORRECTED (the previous `const float* lpfAmount` was a
+    // mis-read): the asm takes r3 = the sret, r4 = lrFrom, r5 = lrTo, v1 = the blend amount as
+    // a broadcast VecFloat, and r6 = a POINTER the function WRITES -- the remaining rotation
+    // angle after the blend. BrnDirector::Camera::TrafficLaneTruck::Update @0x82247AC0 passes a
+    // stack slot for it that it never reads (DWARF names that local `lUnusedAngle`).
+    //
+    // The console's four arms, read off the branch structure:
+    //   0x8221688C  amount <= 0            -> out = from, *angleOut = the angle (below)
+    //   0x8221694C  amount >= 1            -> out = to,   *angleOut = 0
+    //   0x82216A94  angle < flt_82001764   -> out = per-row LERP, the three axis rows
+    //                                         re-normalised; *angleOut = angle*(1 - amount)
+    //   0x82216BB4  otherwise              -> the true slerp; *angleOut = angle*(1 - amount)
+    // where `angle` is computed at 0x822168BC..0x82216910 as
+    //   XMVectorACos( clamp( Dot3( Normalize(from.zAxis), Normalize(to.zAxis) ), -1, +1 ) )
+    // and flt_82001764 == 0.03490658476948738 == 2 degrees (dumped from the shipped image).
+    //
+    // FLAG (VMX->portable, the standing convention of this vendor home): the console evaluates
+    // the arc with the XNA minimax pipeline -- vrsqrtefp + two Newton-Raphson steps for the
+    // normalises, XMVectorACos, and an XMVectorSinCos whose Taylor coefficient block is the
+    // shipped rodata at 0x82000BD0..0x82000C6F. Exactly as Normalize/Magnitude/SqrtFast in the
+    // sibling header already do, that estimate pipeline is reconstructed as the exact
+    // closed-form scalar math (std::acos / std::sin): numerically tighter than the console's
+    // approximation, never a placeholder. The BRANCH STRUCTURE, the 2-degree threshold, the
+    // "which rows get re-normalised" choice and the angle written back through lpvAngleOut are
+    // all transcribed, not invented.
+    inline Matrix44Affine SLerp(const Matrix44Affine& lrFrom, const Matrix44Affine& lrTo,
+                                float lfAmount, Vector3* lpvAngleOut)
+    {
+        Matrix44Affine lResult;
+
+        // 0x822168BC..0x82216910 -- the angle between the two forward axes.
+        const Vector3 lvFromAt = Normalize(lrFrom.zAxis);
+        const Vector3 lvToAt   = Normalize(lrTo.zAxis);
+        float lfCos = Dot(lvFromAt, lvToAt);
+        if (lfCos < -1.0f) lfCos = -1.0f;      // vmaxfp against vcfsx(-1)
+        if (lfCos >  1.0f) lfCos =  1.0f;      // vminfp against vcfsx(+1)
+        const float lfAngle = std::acos(lfCos);
+
+        // 0x8221688C -- amount <= 0: hand back `from` untouched, report the whole angle.
+        if (lfAmount <= 0.0f)
+        {
+            if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ lfAngle, lfAngle, lfAngle, lfAngle };
+            return lrFrom;
+        }
+
+        // 0x8221694C -- amount >= 1: hand back `to`, report no remaining angle.
+        if (lfAmount >= 1.0f)
+        {
+            if (lpvAngleOut != 0) *lpvAngleOut = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            return lrTo;
+        }
+
+        const float lfRemaining = lfAngle - lfAngle * lfAmount;   // 0x82216E20 / 0x82216E3C
+        if (lpvAngleOut != 0)
+            *lpvAngleOut = Vector3{ lfRemaining, lfRemaining, lfRemaining, lfRemaining };
+
+        // 0x82216AA8 (angle < 2 degrees) -- a straight per-row lerp with the three axis rows
+        // re-normalised. 0x82216BB4 (the wider arc) -- the same endpoints distributed along the
+        // arc by sin((1-t)*angle)/sin(angle) and sin(t*angle)/sin(angle); at the threshold the
+        // two agree to within the console's own estimate error, and for a degenerate (sin ~ 0)
+        // arc the slerp weights collapse back to the lerp ones.
+        float lfWeightFrom = 1.0f - lfAmount;
+        float lfWeightTo   = lfAmount;
+        if (lfAngle >= 0.03490658476948738f)
+        {
+            const float lfSin = std::sin(lfAngle);
+            if (lfSin != 0.0f)
+            {
+                lfWeightFrom = std::sin((1.0f - lfAmount) * lfAngle) / lfSin;
+                lfWeightTo   = std::sin(lfAmount * lfAngle) / lfSin;
+            }
+        }
+
+        lResult.xAxis = Normalize(Mult(lrFrom.xAxis, lfWeightFrom) + Mult(lrTo.xAxis, lfWeightTo));
+        lResult.yAxis = Normalize(Mult(lrFrom.yAxis, lfWeightFrom) + Mult(lrTo.yAxis, lfWeightTo));
+        lResult.zAxis = Normalize(Mult(lrFrom.zAxis, lfWeightFrom) + Mult(lrTo.zAxis, lfWeightTo));
+
+        // The translation row is ALWAYS a plain lerp (0x82216AE0..0x82216B00 / 0x82216DFC's
+        // vmaddcfp128 `from.w + (to.w - from.w)*amount`), never normalised.
+        lResult.wAxis = Lerp(lrFrom.wAxis, lrTo.wAxis, lfAmount);
+        return lResult;
+    }
 }
 }
 }

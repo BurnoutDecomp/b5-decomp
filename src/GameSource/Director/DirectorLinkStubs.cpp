@@ -382,16 +382,12 @@ namespace BrnTraffic
     // @0x821F4DB8. It was on the fly-by's own data path -- the road runner's lane frame -- and
     // the stub's zeroed output is what made the first real lane seat report dir=(0,0,0).
 
-    void Section::CalcTransformAtParameter(const LaneRung* lpaGlobalRungs, VecFloat lfParam,
-                                           u32 luSegment, Vector3& lrPosition,
-                                           Vector3& lrDirection, Vector3& lrUp) const
-    {
-        // The POSITION leg is the real one (its sibling is landed); only the frame axes are
-        // missing, so hand back the true position and zeroed axes.
-        CalcPositionAtParameter(lpaGlobalRungs, lfParam, luSegment, lrPosition);
-        lrDirection.SetZero();
-        lrUp.SetZero();
-    }
+    // CalcTransformAtParameter is GONE FROM HERE (2026-07-29): transcribed for real into
+    // SharedClasses/Traffic/BrnTrafficSection.cpp from the console's two-function split
+    // (sub_82219030 resolves the rung pair, sub_82207998 does the arithmetic). It is on the
+    // fly-by's own data path -- MoveAlongTrafficLane{Forwards,Backwards} sample the reached
+    // lane point through it -- and the stub's zeroed axes would have produced a look-at with
+    // no forward at every step of the walk.
 
     u16 Section::FindNeighbourForRung(u32 luRung, Side leSide, const Hull* lpHull) const
     {

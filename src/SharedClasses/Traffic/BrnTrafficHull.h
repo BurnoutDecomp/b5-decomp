@@ -112,6 +112,13 @@ struct Hull
     // returns &mpaSections[luIndex] (stride 48, proven by the asm index math).
     inline const Section* GetSection(u32 luIndex) const;
 
+    // DWARF BrnBehaviourRoadRunner.cpp names this in both MoveAlongTrafficLane{Forwards,
+    // Backwards} call lists; the console inlines it (asm 0x8222A804..0x8222A814:
+    // `lwz r9, 0x18(hull)` then `add r28, lpSection->muRungOffset << 2, r9`). The cumulative
+    // rung-length table is ONE array for the whole hull; a section's slice starts at its own
+    // muRungOffset, so `lengths[i+1] - lengths[i]` is the length of local segment i.
+    inline const f32* GetRungLengthsForSection(const Section* lpSection) const;
+
     // --- attested standalone accessors (brn-traffic3 group) ------------------
     // FLAG (opaque-element stride): Neighbour / StaticTrafficVehicle / the
     // stop-line index element are forward-declared-only in this slice (their real
@@ -157,6 +164,12 @@ inline const Section* Hull::GetSection(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumSections, "luIndex < muNumSections");
     return &mpaSections[luIndex];
+}
+
+inline const f32* Hull::GetRungLengthsForSection(const Section* lpSection) const
+{
+    CGS_ASSERT(lpSection != nullptr, "lpSection");
+    return mpafCumulativeRungLengths + lpSection->muRungOffset;
 }
 
 inline const void* Hull::GetNeighbour(u32 luIndex) const

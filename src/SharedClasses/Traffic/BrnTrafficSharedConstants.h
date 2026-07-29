@@ -21,6 +21,18 @@ namespace BrnTraffic
     // (DWARF :31). Sizes TrafficNetworkOutputInterface::mau16ActiveHulls[].
     static const u32 KU_MAX_HULLS_IN_PVS = 8;
 
+    // Which way a lane split is taken (DWARF BrnTrafficSharedConstants.h:65). Indexes both
+    // Section::mauForwardSections/mauForwardHulls and their backward twins, and is the first
+    // argument of the road runner's lane walkers -- whose console assert literal is baked as
+    // "lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT" (asm 0x821FAE7C compares 3).
+    enum Directions
+    {
+        E_DIR_STRAIGHT_ON  = 0,
+        E_DIR_LEFT         = 1,
+        E_DIR_RIGHT        = 2,
+        E_DIRECTIONS_COUNT = 3,
+    };
+
     // Which lateral side of a lane a neighbour / lane-change is on (DWARF
     // BrnTrafficSharedConstants.h:76). Consumed by Section::FindNeighbourForRung (the
     // WorldMap lane walk passes E_LEFT). Additive grow of this canonical home.

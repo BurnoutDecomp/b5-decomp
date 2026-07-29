@@ -120,6 +120,13 @@ namespace BrnDirector
         //  pointer return is a no-op for callers -> `const TrafficData*`.)
         const BrnTraffic::TrafficData* GetTrafficData() const;
 
+        // DWARF BrnBehaviourRoadRunner.cpp's call list names both of these. The console
+        // inlines them everywhere it walks the lane graph (e.g. MoveAlongTrafficLaneForwards
+        // @0x8222A728: `lwzx r25, 4*lpPositionInOut->muHullIndex, trafficData[+0xC]` after the
+        // same LOADED assert, and `lhz r11, 2(trafficData)` for the count).
+        const BrnTraffic::Hull* GetTrafficHullData(u32 luHull) const;
+        u32                     GetNumTrafficHulls() const;
+
         // BrnDirectorWorldMap.h:67 -- find the nearest safe position to lPosition
         // along lDisplacement; true on success with the result written into lOut.
         // Consumed by BrnDirector::Camera::Utils::PositionFinder::Update @0x8223FD50.

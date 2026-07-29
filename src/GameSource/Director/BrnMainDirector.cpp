@@ -674,8 +674,7 @@ namespace BrnDirector
     {
         const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
 
-        const CgsSystem::TimerStatusInterface* lpTimerStatus =
-            reinterpret_cast<const CgsSystem::TimerStatusInterface*>(lpInput->GetTimerStatusInterface());
+        const CgsSystem::TimerStatusInterface* lpTimerStatus = lpInput->GetTimerStatusInterface();
 
         const CgsSystem::TimerStatus* lpGameTimer = lpTimerStatus->GetGameTimerStatus();
         const CgsSystem::TimerStatus* lpSimTimer  = lpTimerStatus->GetSimTimerStatus();

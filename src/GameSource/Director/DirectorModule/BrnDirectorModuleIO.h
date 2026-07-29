@@ -7,6 +7,7 @@
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"    // BrnDirector::Camera::VehicleInfo (committed, 1264 bytes)
 #include "GameSource/Director/Camera/Utils/BrnDebugController.h"
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface @0x6750, exactly 48B)
 
 // BrnDirector::DirectorIO::InputBuffer -- the Director module's per-frame INPUT payload buffer.
 // Like every CgsModule IO buffer it derives the shared CgsModule::IOBuffer (status-flag-guarded
@@ -92,7 +93,10 @@ namespace DirectorIO
         // Address of the X360 VehicleInfo* pointer table (stored as pointer-width u32 slots).
         const u32*                                         GetVehicleInfoArray() const;
         const void*                                        GetControllerInfo() const;
-        const void*                                        GetTimerStatusInterface() const;
+        const CgsSystem::TimerStatusInterface*             GetTimerStatusInterface() const;
+        // X360 @0x823B27E8 -- the WRITE-side overload BrnGameModule::BridgeTimers uses to
+        // copy the game module's 48-byte snapshot in under the buffer's write lock.
+        CgsSystem::TimerStatusInterface*                   GetTimerStatusInterface();
         const void*                                        GetVehicleInputInterface() const;
         void*                                              GetVehicleInputInterface();
         const void*                                        GetHookEnumeration() const;
@@ -188,8 +192,15 @@ namespace DirectorIO
         // recovered anchor after the controller block is mTimerInterface @0x6750. HONEST opaque span.
         u8  mMidInterfaceBlock[0x6750 - 0x3340];         // StatusInterface / driver-input / score / etc.
 
-        // @0x6750 (26448): timer status interface (GetTimerStatusInterface). HONEST opaque.
-        u8  mTimerInterface[0x6780 - 0x6750];            // @0x6750
+        // @0x6750 (26448): the published game/sim timer snapshot. RETYPED from an opaque
+        // u8[0x30] to the real CgsSystem::TimerStatusInterface -- the span was already exactly
+        // sizeof(TimerStatusInterface) (48 == two 24-byte TimerStatus blocks), the type is
+        // 4-aligned like the offset, and _AssertLayout() still pins 0x6750. The producer is
+        // BrnGameModule::BridgeTimers @0x823BD150, which copies all 48 bytes of the game
+        // module's own interface (gm+10095372) in here; the consumer is
+        // MainDirector::UpdateCameraBehavioursPostScene, which reads the frame timesteps out
+        // of it. Naming it is what lets both sides stop casting.
+        CgsSystem::TimerStatusInterface mTimerInterface;  // @0x6750
 
         // @0x6780 (26496): the vehicle driver-input interface (Get/SetVehicleInputInterface).
         // HONEST opaque, spanning to the contact-spy interface @0x6AB8.
