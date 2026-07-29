@@ -2,64 +2,101 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_GAMEPLAY_BUMPER_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (type assert + Parameters::Set sanity)
+#include "BrnCommonTypes.h"                                            // Vector3
+#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"           // THE Behaviour base
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"           // Utils::CameraShake(+Params)
+                                                                       //   + CameraShakeICEController
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h
 //
 // BrnDirector::Camera::BehaviourGameplayBumper -- the in-car "bumper cam" gameplay behaviour:
-// the low, fast camera mounted at the front of the player car, with its own FOV / boost-FOV
-// and shake tunables. HOME for the two BehaviourGameplayBumper class slices this header's
-// TUs body:
-//   - BehaviourGameplayBumper::SetParameters @0x821F39C0   (adopt a bumper-cam param block)
-//   - BehaviourGameplayBumper::Parameters::Set @0x821F94C8 (seed a param block from an
-//     attribute-system source block, with default tunables)
-// The full behaviour (Construct/Prepare/Update and the rest of the rig) lands with its own
-// TU; this header models only the slices these two functions need, BY NAME.
-// ----------------------------------------------------------------------------
+// the low, fast camera mounted at the front of the player car, with acceleration dampening,
+// pitch/yaw/roll springs, body roll/pitch scaling, its own FOV / boost-FOV and an impact
+// shake. It is one of the TWO SHARED gameplay cameras SharedCameraContainer::Prepare
+// @0x82263D50 allocates, and it is the one selected by default
+// (GetGameplayCameraHelperIndex picks the bumper unless mbUseGameplayExternal is set).
+//
+// ⭐ RE-BASED (2026-07-29). This class used to be a raw-offset SLICE: a `void* mpVTable` head,
+// two reserved byte spans, an invented `mpcCachedName` member, and a local
+// `EBehaviourTypeGameplayBumper` enum. It now derives the canonical
+// BrnDirector::Camera::Behaviour and carries the DWARF member list by name.
+//
+// WHY IT HAD TO BE RE-BASED: BehaviourManager::AllocateBehaviour<BehaviourGameplayBumper>
+// @0x82253250 hands a raw pool slot to AbstractPool::AllocateVoid<T> @0x8224BAB8, which
+// placement-news the behaviour in it; BehaviourHelper::Prepare @0x82255F48 then dispatches
+// vtable slot 0 (Construct). For a NON-POLYMORPHIC class placement-new installs no vtable, so
+// that dispatch read a null vptr -- an access violation in BehaviourHelper::Prepare
+// (`call [rax+8]` with rax = 0) the moment Arbitrator::Update entered E_STATE_PREPARE. This
+// was the FIRST thing on the path to a moving director camera.
+//
+// LAYOUT AUTHORITY: the DECFIGS DWARF (BrnBehaviourGameplayBumper.h:53, members :88..:100;
+// Parameters :106, members :109..:129) -- and EVERY member offset below is independently
+// re-derived from the X360 asm of Construct @0x82242418 and Prepare @0x821F9640:
+//
+//   Construct: *(this+8..12)=0, *(this+4)=0, *(this+16)=0        <- the inlined base Construct
+//              *(this+2088)=0                                    <- mpParameters      @0x828
+//              CameraShakeICEController::Construct(this+48)      <- mBoostShake       @0x030
+//              *(this+32/36/40/44)=0.0f                          <- mImpactShake      @0x020
+//              *(this+20)=0.0f                                   <- mfImpactShakeFactor @0x014
+//   Prepare:   stvx128 v0(=0), this+2064                         <- mLastCameraAngles @0x810
+//              *(this+2080)=0.0f, *(this+2084)=0.0f              <- mfLastSpeed       @0x820
+//                                                                   mfDampenedAcceleration @0x824
+//              *(this+8)=1                                       <- mbIsPrepared
+//              return 1
+//   SetParameters @0x821F39C0: stw params,0x828 / stw params->+4,0x10
+//
+// ⭐ Those two anchors (mBoostShake at +0x30, mLastCameraAngles at +0x810) PIN
+// Utils::CameraShakeICEController's console size at 0x7E0 -- independently re-confirmed by
+// BehaviourGameplayExternal (its own Prepare Constructs one at +0x2C0 and its
+// mLastPlayerTransform sits at +0xAA0). See BrnCameraShake.h.
+//
+// x64: parity is BY NAMED MEMBER (pointers widen); the console offsets above are provenance.
+// ============================================================================
 
 namespace BrnDirector
 {
 namespace Camera
 {
 
-// FLAG: minimal slice of the camera-behaviour type tag. The console value for
-//   eBehaviourGameplayBumper is 1 (the asm at 0x821F39DC compares the param block's first
-//   word against 1; Parameters::Set stores 1 into that word). Replace with the real
-//   EBehaviourType enum when the Behaviour base TU lands; the enumerator VALUE (1) is pinned.
+// RETIRED (2026-07-29): the local `enum EBehaviourTypeGameplayBumper { eBehaviourGameplayBumper
+// = 1 }` that used to sit here was a minimal slice of the shared camera-behaviour type tag,
+// declared "replace with the real EBehaviourType enum when the Behaviour base TU lands". The
+// base landed; the tag now lives on Behaviour::Parameters::mType (the word SetParameters
+// @0x821F39C0 compares against 1). The enumerator is kept, with its X360-pinned VALUE, as the
+// bumper's own tag constant so no call site changes meaning -- there is still no single homed
+// EBehaviourType enum (each behaviour's tag is only observable in its own asserts:
+// external 0, bumper 1, rig 2, helicam 6, passenger 7).
 enum EBehaviourTypeGameplayBumper
 {
     eBehaviourGameplayBumper = 1
 };
 
-class BehaviourGameplayBumper
+class BehaviourGameplayBumper : public Behaviour
 {
 public:
 
     // ------------------------------------------------------------------------
-    // The bumper-cam parameter block. Layout pinned store-for-store from the asm of
-    // Parameters::Set @0x821F94C8 (offsets are the stfs/stw/stb displacements off r31):
-    //   +0x00 meType (s32, =eBehaviourGameplayBumper)   +0x04 mpcName (const char*)
-    //   +0x08..+0x30 the f32 tunables copied from the attribute-system source block
-    //   +0x24 mfFOV (asserted > 0)   +0x30 mfBoostFOV (asserted > 0)
-    //   +0x34 mbFlag (u8, =1)        +0x38..+0x44 the default shake/blend tunables
-    // The X360 build seeds the source-copied tunables from a block reached via
-    // *(a2+4) (the attribute-system parameter source); the field names below are the
-    // observable roles (FOV / boost-FOV asserted) with the remainder named by their slot
-    // so every store has a named home. Re-name precisely when the bumper-cam attribute
-    // schema TU lands; the OFFSETS are authoritative.
+    // The bumper-cam parameter block (DWARF BrnBehaviourGameplayBumper.h:106, deriving
+    // Behaviour::Parameters).
+    //
+    // ⭐ EVERY FIELD NAME BELOW IS DOUBLY ATTESTED: the DWARF member order, and this block's
+    // own serialiser labels (the write instance @0x82230B68 / read @0x82214C70 walk the
+    // fields in ascending offset order with the labels quoted per field). The retired slice
+    // called these mfField08..mfField2C.
     // ------------------------------------------------------------------------
-    class Parameters
+    class Parameters : public Behaviour::Parameters
     {
     public:
-        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
-        // serialiser S (TextFile{Read,Write}Serialiser); the per-instance body is a separate TU.
-        // Declared so the serialiser's Serialise<Parameters> can drive it by name.
+        // X360 visitor: `void Serialise<S>(S&)` -- walks this block into the camera-tunings
+        // serialiser S (TextFile{Read,Write}Serialiser / DebugMenuSerialiser). Bodied in
+        // BrnBehaviourGameplayBumper.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
         EBehaviourTypeGameplayBumper GetType() const
         {
-            return static_cast<EBehaviourTypeGameplayBumper>(meType);
+            return static_cast<EBehaviourTypeGameplayBumper>(mType);
         }
 
         // The source block this seeds from: a small object whose +0x04 holds a pointer to
@@ -73,72 +110,98 @@ public:
         // bumper-cam tunables. @0x821F94C8.
         void Set(const Source* lpSource);
 
-        s32         meType;       // +0x00  type tag (= eBehaviourGameplayBumper)
-        const char* mpcName;      // +0x04  debug name ("Bumper Cam")
-        f32         mfField08;    // +0x08  <- source[0x04]
-        f32         mfField0C;    // +0x0C  <- source[0x00]
-        f32         mfField10;    // +0x10  <- source[0x28]
-        f32         mfField14;    // +0x14  <- source[0x24]
-        f32         mfField18;    // +0x18  <- source[0x10]
-        f32         mfField1C;    // +0x1C  <- source[0x08]
-        f32         mfField20;    // +0x20  <- source[0x0C]
-        f32         mfFOV;        // +0x24  <- source[0x14]  (asserted > 0)
-        f32         mfField28;    // +0x28  <- source[0x1C]
-        f32         mfField2C;    // +0x2C  <- source[0x20]
-        f32         mfBoostFOV;   // +0x30  <- source[0x18]  (asserted > 0)
-        u8          mbField34;    // +0x34  default flag (= 1)
-        u8          maReserved35[0x38 - 0x35]; // +0x35..+0x37 padding to the next f32 slot
-        f32         mfField38;    // +0x38  default tunable (= 0.0f)
-        f32         mfField3C;    // +0x3C  default tunable (= 0.0f)
-        f32         mfField40;    // +0x40  default tunable (= 3.0f)
-        f32         mfField44;    // +0x44  default tunable (= 1.0f)
+        // DWARF h:132 -- declaration-only (its own ledger function; nothing on the live
+        // director path calls it, Set is what the attribute pump uses).
+        void Construct();
+
+        // ---- layout (DWARF h:109..:129; console offsets after the 8-byte base) ----------
+        f32 mfYOffset;                 // :109  +0x08  "Y Offset"          <- source[0x04]
+        f32 mfZOffset;                 // :110  +0x0C  "Z Offset"          <- source[0x00]
+        f32 mfAccelerationDampening;   // :112  +0x10  "Accel. Dampening"  <- source[0x28]
+        f32 mfAccelerationResponse;    // :114  +0x14  "Accel. Response"   <- source[0x24]
+        f32 mfPitchSpring;             // :116  +0x18  "Pitch Spring"      <- source[0x10]
+        f32 mfYawSpring;               // :117  +0x1C  "Yaw Spring"        <- source[0x08]
+        f32 mfRollSpring;              // :118  +0x20  "Roll Spring"       <- source[0x0C]
+        f32 mfFOV;                     // :120  +0x24  (label @0x820051C0) <- source[0x14]  (>0)
+        f32 mfBodyRollScale;           // :122  +0x28  "Body Roll Scale"   <- source[0x1C]
+        f32 mfBodyPitchScale;          // :123  +0x2C  "Body Pitch Scale"  <- source[0x20]
+        f32 mfBoostFOV;                // :125  +0x30  "FOV during boost"  <- source[0x18]  (>0)
+        bool mbIsValid;                // :127  +0x34  (Set stores 1)
+
+        // ⭐ :129 +0x38 -- the four f32 the retired slice called mfField38..mfField44 ARE one
+        // CameraShake::Parameters (0.0f / 0.0f / 3.0f / 1.0f). Confirmed by the identical
+        // quadruple at BehaviourGameplayExternal::Parameters +0x1C, which that block's own
+        // serialiser labels "Impact Shake Params" and drives as a nested
+        // CameraShake::Parameters section.
+        Utils::CameraShake::Parameters mImpactShakeParams;   // :129  +0x38 .. +0x47
     };
 
-    // Adopt a bumper-cam parameter block: assert it carries the bumper-cam type tag, then
-    // cache its first word and store the pointer. @0x821F39C0.
+    // ---- the virtual interface (DWARF h:53) --------------------------------------------
+
+    // @0x82242418 -- zero the base, the impact-shake state and the parameter pointer, then
+    // Construct the boost shake.
+    virtual void Construct();
+
+    // @0x821F9640 -- clear the last-frame tracking and report ready (cannot fail).
+    virtual bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo);
+
+    // @0x821F9670.
+    virtual const char* GetName() const;
+
+    // Adopt a bumper-cam parameter block. @0x821F39C0. NOT a virtual override: the DWARF
+    // declares it (h:144) taking the DERIVED Parameters type, so it does not share the base's
+    // slot-7 signature -- it HIDES the base name rather than overriding it, which is exactly
+    // what the console does (the bumper has a standalone symbol; the external's SetParameters
+    // @0x821F91A8 takes Behaviour::Parameters and IS the override).
     void SetParameters(const Parameters* lpParameters);
 
-private:
+    // FLAG (not transcribed): the DWARF also declares `virtual bool Update(Camera&, const
+    //   BehaviourSharedInfo&)` (BrnBehaviourGameplayBumper.cpp:85, X360 @0x82226778, ~230
+    //   lines: the acceleration-dampened spring rig that rides the player car) and
+    //   `virtual void SetupTweaker(Tweaker&)` (.cpp:314). Neither is declared here, so both
+    //   vtable slots keep the base's defaults (Update returns true and leaves the camera
+    //   untouched; SetupTweaker does nothing). That is a DOCUMENTED GAP, not a fabrication --
+    //   the alternative would be inventing a camera rig. Nothing dispatches slot 2 today
+    //   anyway: MainDirector::UpdateCameraBehavioursPostScene @0x8224FD30 (the only caller of
+    //   UpdateAllBehaviours) is itself still gated.
+    //   DELETE-WHEN: @0x82226778 is transcribed.
 
-    // FLAG: only the members SetParameters writes are modelled at their asm-attested offsets;
-    //   the rest of the bumper-cam rig lands with the full behaviour TU. The vtable/base head
-    //   occupies +0x00; the cached param word is at +0x10 (stw r11, 0x10(this)) and the param
-    //   pointer is at +0x828 (stw r31, 0x828(this)). Reserved byte spans place them exactly.
-    void*             mpVTable;                        // +0x00  behaviour vtable (opaque base head)
-    u8                maReserved04[0x10 - 0x04];       // +0x04 .. +0x0F (rig members not modelled here)
-    const char*       mpcCachedName;                   // +0x10  cached lpParameters->mpcName
-    u8                maReserved14[0x828 - 0x14];      // +0x14 .. +0x827 (rig members not modelled here)
-    const Parameters* mpParameters;                    // +0x828  the adopted parameter block
+private:
+    // ---- layout (DWARF h:88..:100; every offset asm-pinned -- see the file banner) -------
+    f32                            mfImpactShakeFactor;  // :88   +0x014
+    f32                            mfTimeInJump;         // :89   +0x018
+    bool                           mbJumping;            // :90   +0x01C
+    Utils::CameraShake             mImpactShake;         // :91   +0x020
+    Utils::CameraShakeICEController mBoostShake;         // :94   +0x030 (0x7E0)
+    Vector3                        mLastCameraAngles;    // :95   +0x810
+    f32                            mfLastSpeed;          // :97   +0x820
+    f32                            mfDampenedAcceleration; // :98 +0x824
+    const Parameters*              mpParameters;         // :100  +0x828
 };
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourGameplayBumper::SetParameters @0x821F39C0
-//   lwz  r11, 0(r4)         ; lpParameters->meType
+//   lwz  r11, 0(r4)         ; lpParameters->mType
 //   cmplwi r11, 1           ; == eBehaviourGameplayBumper
 //   ... assert on mismatch ...
-//   lwz  r11, 4(r4)         ; lpParameters->miParamWord1 (its +0x04 word)
+//   lwz  r11, 4(r4)         ; lpParameters->mpcDebugName  (Behaviour::Parameters +0x04)
 //   stw  r4,  0x828(r3)     ; mpParameters = lpParameters
-//   stw  r11, 0x10(r3)      ; mParamWord1  = lpParameters's +0x04 word
+//   stw  r11, 0x10(r3)      ; the BASE's mpcDebugParametersName (Behaviour +0x10)
+//
+// ⭐ The +0x10 store used to be modelled as an invented member `mpcCachedName`. With the real
+// base in place it resolves to Behaviour::mpcDebugParametersName, and the whole function is
+// the base's own protected SetDebugParametersName(lpParameters->GetDebugName()) -- both
+// offsets (+0x04 on the param block, +0x10 on the behaviour) fall out of Behaviour::Parameters
+// and Behaviour exactly. No invented member remains.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourGameplayBumper::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourGameplayBumper,
                "lpParameters->GetType() == eBehaviourGameplayBumper");
-    mpParameters  = lpParameters;             // stw r4,  0x828(this)
-    // The asm caches the param block's +0x04 word into the rig's +0x10 word (lwz r11,4(r4);
-    // stw r11, 0x10(this)). The block's +0x04 slot is its mpcName pointer, so the cached word
-    // is that name pointer -- read BY NAME here.
-    mpcCachedName = lpParameters->mpcName;     // lwz r11,4(lp); stw r11, 0x10(this)
+    mpParameters = lpParameters;                                  // stw r4,  0x828(this)
+    SetDebugParametersName(lpParameters->GetDebugName());         // stw r11, 0x10(this)
 }
-
-// Layout note: the offsets in the field comments are the X360 store displacements (4-byte
-//   console pointers). This PC reconstruction is a 64-bit build, so the single pointer member
-//   (mpcName) is 8 bytes here and the absolute host offsets of the trailing f32 fields differ
-//   from the console -- that is expected and matches the project's host-native-pointer-width
-//   convention. The store ROLES (which source value lands in mfFOV / mfBoostFOV, which default
-//   in each field) are preserved by name; the FOV/boost-FOV asserts below are pointer-width
-//   independent and lock the two semantically load-bearing fields.
 
 } // namespace Camera
 } // namespace BrnDirector

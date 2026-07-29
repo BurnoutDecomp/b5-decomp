@@ -34,6 +34,9 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h" // Utils::Tweaker (the REAL home;
                                                               //   this header's old minimal
                                                               //   slice is retired -- see below)
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"  // Utils::CameraShake (+ Parameters)
+                                                              //   -- THE home; this header's own
+                                                              //   full definition is retired below
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"       // Looker + Random typedef
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"  // PositionLag
 #include "GameSource/Director/Utils/BrnVehicleRef.h"          // BrnDirector::VehicleRef (base)
@@ -185,36 +188,23 @@ private:
 };
 
 // ============================================================================
-// CameraShake -- adds XY/Z wobble to the camera matrix each frame.
-//   FULL DEFINITION from DWARF BrnCameraShake.h.
+// RETIRED (2026-07-29): CameraShake used to be defined here in full ("FULL DEFINITION from
+// DWARF BrnCameraShake.h" -- which is exactly the point: its home is BrnCameraShake.h, and
+// that home now EXISTS at Camera/Utils/BrnCameraShake.h, included at the top of this file).
+// The definition moved there byte-identically (same four f32, same Parameters block).
+//
+// WHY IT HAD TO MOVE: the two shared gameplay camera behaviours each embed a
+// Utils::CameraShakeICEController, whose own DWARF home is BrnCameraShake.h too and which had
+// no definition anywhere -- that is what kept BehaviourGameplayBumper /
+// BehaviourGameplayExternal as raw-offset `void* mpVTable` forks instead of real
+// Camera::Behaviour subclasses. Re-basing them means their headers need CameraShake, and
+// BrnBehaviourManager.cpp pulls BOTH those headers and this one (via
+// BrnBehaviourAftertouchCam.h) in a single TU -- two definitions of Camera::Utils::CameraShake
+// in one TU is C2011. One home settles it.
+// (The THIRD fork, the 16-byte reserved slice in BrnBehaviourIceAnim.h, is untouched: nothing
+// outside its own .cpp includes that header, so it collides with nothing. Retire it with the
+// rest of the IceAnim fork family -- Step 0 #3.)
 // ============================================================================
-class CameraShake
-{
-public:
-    struct Parameters
-    {
-        // X360 visitor: `void Serialise<S>(S&)` (camera-tunings TextFile{Read,Write}Serialiser).
-        // Per-instance body is a separate TU.
-        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
-
-        f32  mfXYShakeMagnitudeDegs;   // +0x00
-        f32  mfZShakeMagnitudeDegs;    // +0x04
-        f32  mfXYWobbleMagnitudeDegs;  // +0x08
-        f32  mfWobbleCenteringFactor;  // +0x0C
-        void Construct();
-    };
-
-    void Construct();
-    void Update(Matrix44Affine& lrTransform, const Parameters& lrParams,
-                BrnDirector::Camera::Utils::Random lRandom,
-                f32 lfTimestep, f32 lfSpeedRatio);
-
-private:
-    f32  mfCurrentWobbleX;    // +0x00
-    f32  mfCurrentWobbleY;    // +0x04
-    f32  mfCurrentWobbleXVel; // +0x08
-    f32  mfCurrentWobbleYVel; // +0x0C
-};
 
 // ============================================================================
 // OrientationLag -- smoothly lag the camera orientation from frame to frame.

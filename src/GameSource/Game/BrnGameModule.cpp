@@ -637,8 +637,19 @@ namespace BrnGame
                     const BrnDirector::Camera::Camera* lpCamera =
                         mpDirectorOutputBuffer->GetCameraOutput();
                     const rw::math::vpu::Matrix44Affine& lXform = lpCamera->GetTransform();
+                    // Also report WHERE THE ARBITRATOR IS. Without this the trace cannot tell
+                    // "the camera is static because the arbitrator never ran" from "... because
+                    // the behaviour it picked produced nothing" -- which is exactly the
+                    // distinction the fly-by campaign keeps having to make. EState:
+                    // 0 PREPARE / 1 PRE_NORMAL / 2 NORMAL / 3 CRASH_NAV / 4 CRASH_NAV_ICE /
+                    // 5 CHANGING_TO_ATTRACT / 6 ATTRACT_MODE / 7 FINAL_ELITE / 8 RENDER_METRICS /
+                    // 9 RELEASE.
+                    const BrnDirector::Arbitrator& lrArbitrator =
+                        mDirectorModule.GetMainDirector().GetArbitrator();
                     *CgsDev::Log::gpDebugPrint
                         << "[director] f" << siTraceFrame
+                        << " arb " << static_cast<s32>(lrArbitrator.GetState())
+                        << (lrArbitrator.GetDoAttractMode() ? " attract" : " -")
                         << " eye (" << lXform.wAxis.x << ", " << lXform.wAxis.y
                         << ", " << lXform.wAxis.z << ")"
                         << " at (" << lXform.zAxis.x << ", " << lXform.zAxis.y

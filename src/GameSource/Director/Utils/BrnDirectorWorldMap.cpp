@@ -146,10 +146,39 @@ namespace BrnDirector
     //       BrnGameStateStreetManager_wB_01.cpp:137-141 and BrnGuiProfile.cpp:1498-1502, so it
     //       wants one coordinated pass, and confirming CgsResource::Pool::FindResource's id
     //       comparison WIDTH decides whether those sites are actively broken or merely unfaithful;
-    //   (b) confirm the PC data set carries TriggerData + the traffic/AI lane bundles;
+    //   (b) ⭐ RESOLVED 2026-07-29, AND IT MOVED TO THE FRONT OF THE QUEUE: the data FILES are
+    //       all present in build/game -- B5TRAFFIC.BNDL (1,270,144 B; bnd2 v2, one zlib
+    //       resource id 0xC43359DA that unpacks to 0x2AC100), AI.DAT (1,659,648 B) and
+    //       TRIGGERS.DAT (166,400 B) -- but NOTHING EVER OPENS THEM. The PC dispatchers in
+    //       GameSource/Resource/BrnGameDataModule.cpp:1310-1313 route the LANE and AI__ ids
+    //       into DeferredGameDataRequest (:1255-1260), which logs, frees the event slot and
+    //       posts NO RESPONSE. So the acquire never completes.
+    //       ⚠️ CONSEQUENCE FOR WHOEVER LIFTS THIS GATE: transcribing LoadData while that is
+    //       true WEDGES BOOT. State 2 fires LoadTrafficLanes, state 3 then sees
+    //       GetLength() == 0 forever and returns false forever, so mePrepareStage never
+    //       reaches 4, MainDirector never prepares, and the loading screen sticks at
+    //       "stage 3 (DirectorModule)". That is strictly worse than this `return true`.
+    //       DO (b) FIRST, and do it as its own item: body ProcessLoadTrafficLanesRequest
+    //       @0x8266F398 + ProcessGetTrafficLanesRequest @0x826703B0 (and the AI pair
+    //       @0x8266F4B0 / @0x826704C0) in BrnGameDataModule.cpp. They are low risk -- their
+    //       PVS twins right beside them are already bodied and are a line-for-line model --
+    //       and they are what actually unblocks everything downstream. Note it is a TWO-HOP
+    //       fetch (Load streams the bundle, Get acquires the named resource from the pool;
+    //       see the `case 30:` -> "GetTrafficLanes after load" re-dispatch at :1947-1949),
+    //       so both halves must land before one handle comes back. Still unquantified: whether
+    //       the 2.8 MB payload's Hull/Section/LaneRung/Pvs fixups survive the 4->8-byte host
+    //       pointer widening.
+    //       (The lane-walk CONSUMER side is already complete and linked: BrnTrafficData.cpp,
+    //       BrnTrafficPvs.cpp, BrnTrafficSection.cpp, BrnTriggerData.cpp and BrnGenericRegion.cpp
+    //       are all mounted, and Hull::GetSection/GetNeighbour are inline in BrnTrafficHull.h.
+    //       TrafficLaneTruck::Prepare @0x82247A08 is ~20 lines whose ONLY gate is
+    //       mLanePosition.mbValid. This is a data problem, not a code problem.)
     //   (c) then transcribe the state machine above, reading each reply by member
     //       (AcquireResourceResponse / GetTrafficLaneDataResponse::mTrafficLaneHandle /
-    //       GetAIDataResponse::mAIDataHandle), NOT at the console's literal offsets.
+    //       GetAIDataResponse::mAIDataHandle), NOT at the console's literal offsets. Note the
+    //       two handle reads are at DIFFERENT record offsets on the console (+0x18 in state 1,
+    //       +0x20 in states 3/5) because they are different reply types -- do not "tidy" that
+    //       into one offset.
     // No new `GetTriggerData` builder is needed -- AcquireResource IS the one, and no such
     // symbol exists on the X360 either.
     // -------------------------------------------------------------------------
