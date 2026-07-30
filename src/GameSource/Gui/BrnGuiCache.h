@@ -486,6 +486,19 @@ namespace BrnGui
         const BrnProgression::Profile* GetProfile() const;   // X360 far member @0x405C
         f32 GetDistanceDriven() const;                        // X360 far member @0x13B94
 
+        // @0x824EE7B0 / @0x824EE7C0 -- the player-name LANGUAGE-DATABASE STRING IDs, not the
+        // name text. GuiModule::UpdatePlayerName @0x824F0D30 fetches the signed-in gamertag
+        // (XUserGetName, or the "DEFAULTPLAYERNAME" database entry when that fails) and
+        // registers it in the language manager UNDER these ids
+        // (LanguageManager::AddString(mgr, id, name)); every consumer then resolves the id.
+        // The X360 bodies are a single load of a .data const char* (off_82F278AC /
+        // off_82F278B0) and never touch `this`. Consumers: LicenseComponent::SetPlayerInfo
+        // via Intro / CrashNavDriverDetails / CompletedGame / ReplayCredits, RoadPanel,
+        // CrashNavPanel (GetPlayerName); RoadRuleComponent, InGameMessageRenderer
+        // (GetPlayerNameInQuotes). Bodies in BrnGuiCache.cpp.
+        const char* GetPlayerName() const;
+        const char* GetPlayerNameInQuotes() const;
+
         // The player-options profile block (X360 far member @0xB878/47224 -- past the
         // modelled tail; both CrashNavOptions::SetSettingsFromProfile @0x824B8028 and
         // OnlineGameRoomPlayerInfo::ShowSettingsOptions @0x82485140 inline the fetch).

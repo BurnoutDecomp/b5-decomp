@@ -56,6 +56,16 @@ namespace BrnGui
             E_LICENSE_RESOURCES_UNLOADED      = 16,
         };
 
+        // NOT DECLARED HERE (deliberately): BrnGui::LicenseComponent::Construct @0x8241A610.
+        // Its X360 signature (name, stateInterface, parentName) is identical to the virtual
+        // CgsGui::GuiComponent::Construct, so declaring it here makes it an OVERRIDE -- and
+        // an override with no linked body puts a hole in this class's vtable, which breaks
+        // every TU that embeds a LicenseComponent BY VALUE (BrnGui::Intro does). Until
+        // BrnLicenseComponent.cpp can be mounted in the build (see the block comment in
+        // tools/build/build_game_exe.bat for the four link gaps that stop it), the class
+        // must keep inheriting GuiComponent's Construct unchanged. The recovered body is
+        // preserved in the .cpp behind the same #if 0 note.
+
         // 0x824B31E8 -- latch the GUI cache the component streams its resources through
         // (asserts non-null; the store is unconditional).
         void SetCachePointer(GuiCache* lpGuiCache);

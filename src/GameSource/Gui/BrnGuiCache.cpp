@@ -978,6 +978,29 @@ namespace BrnGui
         return meGameModeType;
     }
 
+    // ---- the player-name string ids -------------------------------------------------
+    // Namespace-scope .data const char* pointers on X360 (off_82F278AC / off_82F278B0),
+    // shared with BrnGuiModule.cpp's UpdatePlayerName -- which is the writer side: it
+    // AddString()s the live gamertag into the language database under exactly these two
+    // ids (and falls back to the "DEFAULTPLAYERNAME" / "DEFAULTPLAYERNAMEQUOTED" database
+    // entries, off_82F278B4 / off_82F278B8, when XUserGetName fails). Literals read from
+    // BURNOUT_X360_ARTIST.XEX. They live here because this TU owns the two accessors; the
+    // GuiModule TU picks them up by declaration when it grows UpdatePlayerName.
+    const char* const KAPC_PLAYER_NAME_STRING_ID          = "PLAYER_NAME_STRING_ID";    // @0x8206E7DC
+    const char* const KAPC_PLAYER_NAME_QUOTED_STRING_ID   = "PLAYER_NAME_STRING_ID_Q";  // @0x8206E7C4
+
+    // @ 0x824EE7B0 -- `lwz r3, off_82F278AC; blr`. No `this` access, no assert.
+    const char* GuiCache::GetPlayerName() const
+    {
+        return KAPC_PLAYER_NAME_STRING_ID;
+    }
+
+    // @ 0x824EE7C0 -- `lwz r3, off_82F278B0; blr`. No `this` access, no assert.
+    const char* GuiCache::GetPlayerNameInQuotes() const
+    {
+        return KAPC_PLAYER_NAME_QUOTED_STRING_ID;
+    }
+
     // The GuiCache layout pin (GuiCache::_AssertLayout) now lives ONCE, inline in
     // BrnGuiCache.h, as the comprehensive GC_FAR block that pins every asm-attested far member
     // relative to mv4WorldCameraPosition (plus the pointer-invariant prefix). The former,
