@@ -238,6 +238,18 @@ public:
     bool GetIsNewProfile() const               { return mbIsNewProfile; }
     void SetIsNewProfile(bool lbIsNewProfile)  { mbIsNewProfile = lbIsNewProfile; }
 
+    // ADDITIVE GROW: the two profile reads BrnGui::LicenseComponent inlines. Neither has a
+    // standalone symbol in the X360 image -- every call site open-codes the load pair -- so
+    // both are defined inline here, exactly as the GetIsNewProfile pair above.
+    //   GetPlayerLicencePicture: `mbPlayerLicencePictureIsValid ? &mPlayerLicencePicture : NULL`
+    //     (the lbz +112248 / addi +102620 pair in LicenseComponent::OnLoad @0x82440AC0,
+    //      ShowLicense @0x82440C98, SetVisible @0x82440E38, SendPlayerPictureEvent @0x8243CB90).
+    //   GetHaveSet100PercentCompletedDate: the +118037 byte LicenseComponent::SetPlayerInfo
+    //     @0x8243C380 gates the completion-date fields on.
+    const CgsNetwork::NetworkTexture* GetPlayerLicencePicture() const
+    { return mbPlayerLicencePictureIsValid ? &mPlayerLicencePicture : 0; }
+    bool GetHaveSet100PercentCompletedDate() const { return mbHaveSet100PercentCompletedDate; }
+
     void DEBUG_ClearMedals();
 
     // ------------------------------------------------------------------------

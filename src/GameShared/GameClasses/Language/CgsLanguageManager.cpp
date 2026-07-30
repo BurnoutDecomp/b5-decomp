@@ -688,7 +688,7 @@ namespace CgsLanguage
     void LanguageManager::FormatXoverYString(char*, s32, s32, s32) const                  { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatPercentageString(char*, s32, s32) const                   { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatCurrencyString(char*, s32, s32) const                     { __debugbreak(); }   // FLAG trap-stub
-    void LanguageManager::FormatDateString(char*, s32, s32, s32, s32) const               { __debugbreak(); }   // FLAG trap-stub
+    // (FormatDateString is no longer a trap-stub -- its faithful body is below this block.)
     void LanguageManager::FormatHoursMinutesAndSecondsString(char*, f32, s32) const       { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatMinutesAndSecondsString(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatMinutesAndSecondsAndHundredsString(char*, f32, s32) const { __debugbreak(); }   // FLAG trap-stub
@@ -707,6 +707,55 @@ namespace CgsLanguage
     void LanguageManager::FormatSmallDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatLargeDistanceStringLong(char*, f32, s32) const            { __debugbreak(); }   // FLAG trap-stub
     void LanguageManager::FormatHoursAndMinutesAndSecondsString(u8*, f32, s32) const      { __debugbreak(); }   // FLAG trap-stub
+
+    // ------------------------------------------------------------------------
+    // @ 0x828615F8 (CgsLanguageManager.cpp:1566/:1567 own its two asserts) -- print a
+    // day/month/year triple through the locale's date template. Lifted out of the trap-stub
+    // block above (2026-07-30): it is on the driver-licence path --
+    // BrnGui::LicenseComponent::SetProfilePointer @0x824B3248 formats the profile's licence
+    // issue date through it -- so a __debugbreak() there took the intro down.
+    //
+    // The X360 body renders each field with CgsUnicode::IntToString (day/month zero-padded to
+    // 2 digits, year to 4) with an EMPTY thousands separator (the stack descriptor it passes
+    // leads with a NUL byte), stages the three results through UnicodeBuffer::Convert, and
+    // hands them to _Print against mpTimeFormatDate ("%1/%2/%3" from
+    // PrepareDefaultFormattingStrings).
+    // ------------------------------------------------------------------------
+    void LanguageManager::FormatDateString(char* lpcTarget, s32 liDays, s32 liMonths,
+                                           s32 liYears, s32 liTargetSize) const
+    {
+        CGS_ASSERT(lpcTarget != 0, "lpTargetString != NULL");   // cpp:1566
+        CGS_ASSERT(mpTimeFormatDate != 0, "mpTimeFormatDate");  // cpp:1567
+
+        // The X360 stack descriptors are memset to zero before use, so the separator string
+        // each IntToString sees is empty -- no thousands separators in a date.
+        static const CgsUnicode::CgsUtf8 kacNoSeparator[1] = { 0 };
+
+        CgsUnicode::CgsUtf8 lacDay[256];
+        CgsUnicode::CgsUtf8 lacMonth[256];
+        CgsUnicode::CgsUtf8 lacYear[256];
+
+        CgsUnicode::IntToString(lacDay,   liDays,   2, kacNoSeparator);
+        CgsUnicode::IntToString(lacMonth, liMonths, 2, kacNoSeparator);
+        CgsUnicode::IntToString(lacYear,  liYears,  4, kacNoSeparator);
+
+        CgsUnicode::UnicodeBuffer lDayBuffer;
+        CgsUnicode::UnicodeBuffer lMonthBuffer;
+        CgsUnicode::UnicodeBuffer lYearBuffer;
+        lDayBuffer.Convert(lacDay);
+        lMonthBuffer.Convert(lacMonth);
+        lYearBuffer.Convert(lacYear);
+
+        const CgsUnicode::CgsUtf8* lapArgs[3] =
+        {
+            lDayBuffer.GetBuffer(),
+            lMonthBuffer.GetBuffer(),
+            lYearBuffer.GetBuffer(),
+        };
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpcTarget),
+                           mpTimeFormatDate, liTargetSize, lapArgs, 3);
+    }
 
     // @ 0x828641F0 -- the FLOAT value dispatcher (DWARF CgsLanguageManager.h: the
     // (char*, u32, f32, ParameterFormatType) overload): switch the format onto its

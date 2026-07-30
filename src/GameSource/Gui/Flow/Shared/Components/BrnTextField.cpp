@@ -1,6 +1,7 @@
 #include "GameSource/Gui/BrnGuiTextField.h"
 
 #include <cstring>                                                    // std::memset / std::strlen
+#include <cstdarg>                                                    // va_list (the positional-parameter SetLocalisedText)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                  // CgsGui::GuiAccessPointers (mpLanguageManager @+4)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface (GetAccessPointers)
@@ -157,6 +158,65 @@ bool TextField::SetLocalisedText(s32 liValue,
         TextFieldGetLanguageManager(mpStateInterface);
 
     lpLanguageManager->FormatText(macText, KU_MAX_TEXTFIELD_LEN, liValue, leFormat);
+    OutputAptData();
+    return true;
+}
+
+// @ 0x824E7800 -- cpp:264/:265/:266. The POSITIONAL-PARAMETER variant (ledger-unnamed
+// sub_824E7800). The X360 spills its variadic register block and hands the cursor straight
+// to LanguageManager::FormatTextV, which walks liNumParams (const char*, format) pairs;
+// the 1024-byte formatted result is then adopted through SetDatabaseText (NOT SetText --
+// over-long results go into the localisation database under this component's name) and the
+// apt data is pushed. Always reports success (the X360 returns 1).
+bool TextField::SetLocalisedText(const char* lpacText,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                                 s32 liNumParams, ...)
+{
+    CGS_ASSERT(lpacText != 0,
+               "Text field is invalid in TextField::SetLocalisedText");                 // :264 (streamed; folded)
+    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+               "Text string too long in TextField::SetLocalisedText");                  // :265 (streamed; folded)
+    CGS_ASSERT(liNumParams > 0 && liNumParams < 4,
+               "Wrong number of Parameters int SetLocalisedText");                      // :266 (streamed; folded)
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        TextFieldGetLanguageManager(mpStateInterface);
+
+    char lacFormatted[1136];   // X360 sp+0x90 local (the formatter writes through a 1024 cap)
+
+    va_list lArguments;
+    va_start(lArguments, liNumParams);
+    lpLanguageManager->FormatTextV(lacFormatted, 1024, lpacText, leFormat, liNumParams, lArguments);
+    va_end(lArguments);
+
+    SetDatabaseText(lacFormatted);
+    OutputAptData();
+    return true;
+}
+
+// @ 0x824E7A20 -- cpp:314/:315/:316. The ARRAY form (ledger-unnamed sub_824E7A20): the same
+// three asserts, then LanguageManager::Obsolete_FormatTextByArray over the two parallel
+// parameter arrays. Same SetDatabaseText + OutputAptData tail, same constant 1 return.
+bool TextField::SetLocalisedText(const char* lpacText,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                                 s32 liNumParams, const char* const* lppacParams,
+                                 const CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats)
+{
+    CGS_ASSERT(lpacText != 0,
+               "Text field is invalid in TextField::SetLocalisedText");                 // :314 (streamed; folded)
+    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+               "Text string too long in TextField::SetLocalisedText");                  // :315 (streamed; folded)
+    CGS_ASSERT(liNumParams > 0 && liNumParams < 4,
+               "Wrong number of Parameters int SetLocalisedText");                      // :316 (streamed; folded)
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        TextFieldGetLanguageManager(mpStateInterface);
+
+    char lacFormatted[1152];   // X360 sp+0x80 local (the formatter writes through a 1024 cap)
+    lpLanguageManager->Obsolete_FormatTextByArray(lacFormatted, 1024, lpacText, leFormat,
+                                                  liNumParams, lppacParams, lpeParamFormats);
+
+    SetDatabaseText(lacFormatted);
     OutputAptData();
     return true;
 }

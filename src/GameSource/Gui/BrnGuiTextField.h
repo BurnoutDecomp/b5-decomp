@@ -86,6 +86,24 @@ namespace BrnGui
         bool SetLocalisedText(s32 liValue,
                               CgsLanguage::LanguageManager::ParameterFormatType leFormat);
 
+        // @0x824E7800 (BrnTextField.cpp:264/:265/:266) -- the POSITIONAL-PARAMETER variant
+        // (ledger-unnamed sub_824E7800). liNumParams (1..3) `(const char* text, u32 format)`
+        // pairs follow in the varargs; the source id and every parameter are resolved through
+        // LanguageManager::FormatTextV, and the result is adopted with SetDatabaseText.
+        // Always reports success (the X360 returns 1). Body links from the BrnTextField TU.
+        bool SetLocalisedText(const char* lpacText,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                              s32 liNumParams, ...);
+
+        // @0x824E7A20 (BrnTextField.cpp:314/:315/:316) -- the ARRAY form of the above
+        // (ledger-unnamed sub_824E7A20): the parameter texts and their format types arrive as
+        // two parallel arrays and are resolved through
+        // LanguageManager::Obsolete_FormatTextByArray. Body links from the BrnTextField TU.
+        bool SetLocalisedText(const char* lpacText,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                              s32 liNumParams, const char* const* lppacParams,
+                              const CgsLanguage::LanguageManager::ParameterFormatType* lpeParamFormats);
+
         // @0x824E5020 (BrnTextField.cpp:100, DWARF h:191) -- adopt already-resolved text:
         // strings that fit go straight into macText; over-long strings are registered in
         // the localisation database under this component's name and displayed as the
