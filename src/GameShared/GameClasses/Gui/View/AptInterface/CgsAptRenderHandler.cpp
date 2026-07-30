@@ -369,9 +369,15 @@ namespace CgsGui
         CGS_ASSERT(mpImRenderers->mp3dRenderer != 0, "Invalid 3D renderer in AptRenderHandler::Render");
 
         // Skip a fully-transparent batch: the colour-scale ALPHA below the epsilon means nothing
-        // this batch draws is visible. Channel order per AptCallbackRender::SetColourTransform:
-        // (Alpha, Red, Green, Blue) in (x, y, z, w) -- alpha is .x.
-        if (std::fabs(mVertexTransform.mColourScale.x) < 0.00000011920929f)
+        // this batch draws is visible. Channel order is (Red, Green, Blue, Alpha) in
+        // (x, y, z, w) -- alpha is .w. CORRECTED 2026-07-30: this read .x, so the test was
+        // gating on RED, and any batch that merely had no red was skipped as if it were
+        // fully transparent. AptCallbackRender::SetColourTransform does NOT copy the CXForm
+        // through unchanged -- the CXForm's mfVal[0..3] are (A,R,G,B) and it explicitly
+        // ROTATES them into (R,G,B,A). The X360 original reads +0xC here, i.e. the fourth
+        // lane, which is the direct attestation. Full evidence: CgsIm2d.cpp's
+        // FoldIm2dColourChannel note.
+        if (std::fabs(mVertexTransform.mColourScale.w) < 0.00000011920929f)
             return;
 
         // Fetch the active 2D renderer base (GetIm2dRendererType == **(this+108588)) and reach its
