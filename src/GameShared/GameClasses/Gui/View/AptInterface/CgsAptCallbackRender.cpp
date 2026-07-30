@@ -182,10 +182,12 @@ namespace CgsGui
             return;
 
         // Fully-transparent batch -> nothing to draw. The guest's early-out is `vcmpeqfp` on the
-        // colour-scale ALPHA lane; in the committed Im2dTransform packing that lane is .x
-        // (SetColourTransform maps the CXForm's (Alpha, Red, Green, Blue) into (x, y, z, w) --
-        // the same order Dispatch's colour fold unpacks).
-        if (lrHandler.GetVertexTransform().mColourScale.x == 0.0f)
+        // colour-scale ALPHA lane, which is .w: SetColourTransform rotates the CXForm's
+        // (A,R,G,B) into (R,G,B,A) on the way into the Im2dTransform, and
+        // AptRenderHandler::Render @0x82859300 reads the same row at +0xC (the fourth float).
+        // CORRECTED 2026-07-30 -- this read .x, so the text path skipped any batch that merely
+        // had no RED as though it were invisible.
+        if (lrHandler.GetVertexTransform().mColourScale.w == 0.0f)
             return;
 
         // The glyphs ride the SAME dispatched command buffer as the Apt shapes, under this text
@@ -386,17 +388,28 @@ namespace CgsGui
         CgsGraphics::Im2dTransform& lrTransform =
             AptAuxPointer::mpAptAuxInst->mRenderHandler.GetVertexTransform();
 
-        // mColourShift <- the additive (translate) ARGB channels.
-        lrTransform.mColourShift.x = lpAptColourTransform->translate.GetValuef(AptColorHelper::Alpha);
-        lrTransform.mColourShift.y = lpAptColourTransform->translate.GetValuef(AptColorHelper::Red);
-        lrTransform.mColourShift.z = lpAptColourTransform->translate.GetValuef(AptColorHelper::Green);
-        lrTransform.mColourShift.w = lpAptColourTransform->translate.GetValuef(AptColorHelper::Blue);
+        // LANE ORDER (corrected 2026-07-30): the Im2dTransform colour rows are
+        // (R, G, B, A) -- alpha is .w -- NOT the CXForm's own (A,R,G,B) order. The guest
+        // ROTATES on the way in; that is what the "multiply-add against a splatted 1.0"
+        // shuffle in the guest body is doing. Attestations: AptRenderHandler::Render
+        // @0x82859300 takes its fully-transparent early-out on the row's +0xC, i.e. the
+        // FOURTH float; and the sibling FLAPT path culls on `vspltw v0,v0,3`
+        // (MovieClipInstance::Render @0x824718F0) -- both agree alpha is lane 3.
+        // This TU previously wrote Alpha->.x, which made the PC Apt chain self-consistent
+        // with a consumer that also read .x, so pixels came out right for the wrong
+        // reason. Both ends are now on the real console convention.
 
-        // mColourScale <- the multiplicative (scale) ARGB channels.
-        lrTransform.mColourScale.x = lpAptColourTransform->scale.GetValuef(AptColorHelper::Alpha);
-        lrTransform.mColourScale.y = lpAptColourTransform->scale.GetValuef(AptColorHelper::Red);
-        lrTransform.mColourScale.z = lpAptColourTransform->scale.GetValuef(AptColorHelper::Green);
-        lrTransform.mColourScale.w = lpAptColourTransform->scale.GetValuef(AptColorHelper::Blue);
+        // mColourShift <- the additive (translate) channels, rotated to (R,G,B,A).
+        lrTransform.mColourShift.x = lpAptColourTransform->translate.GetValuef(AptColorHelper::Red);
+        lrTransform.mColourShift.y = lpAptColourTransform->translate.GetValuef(AptColorHelper::Green);
+        lrTransform.mColourShift.z = lpAptColourTransform->translate.GetValuef(AptColorHelper::Blue);
+        lrTransform.mColourShift.w = lpAptColourTransform->translate.GetValuef(AptColorHelper::Alpha);
+
+        // mColourScale <- the multiplicative (scale) channels, rotated to (R,G,B,A).
+        lrTransform.mColourScale.x = lpAptColourTransform->scale.GetValuef(AptColorHelper::Red);
+        lrTransform.mColourScale.y = lpAptColourTransform->scale.GetValuef(AptColorHelper::Green);
+        lrTransform.mColourScale.z = lpAptColourTransform->scale.GetValuef(AptColorHelper::Blue);
+        lrTransform.mColourScale.w = lpAptColourTransform->scale.GetValuef(AptColorHelper::Alpha);
     }
 
     // -------------------------------------------------------------------------
