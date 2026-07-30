@@ -71,6 +71,7 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavPanel.h"     // BrnGui::CrashNavPanel (by value)
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavLegend.h"    // BrnGui::CrashNavLegend (by value)
 #include "GameSource/Gui/Flow/Screen/Components/BrnCursor.h"            // BrnGui::GuiCursor (by value)
+#include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h" // BrnGui::AnimationComponent (by value)
 
 #include <cstddef>   // offsetof (layout pins in _AssertLayout)
 
@@ -81,18 +82,12 @@ namespace BrnGui
     class GuiCache;         // GameSource/Gui/BrnGuiCache.h (pointer member only)
     class MapIconManager;   // GameSource/Gui/SatNav/BrnMapIconManager.h (pointer member only)
 
-    // Same guarded stopgap as the committed siblings (BrnCarSelectUnlock.h /
-    // BrnCarSelectOnlineEnd.h): the real BrnGui::AnimationComponent TU is not committed
-    // yet; this state only reaches its GuiComponent base surface (virtual Construct in
-    // OnEnter, AddOutputAptViewState). GROW to the real AnimationComponent when it lands.
-    // X360 sizeof == 140 (the OnEnter ctor-call stride 24404 -> 24544 -> 24684).
-#ifndef BRN_GUI_ANIMATION_COMPONENT_STOPGAP
-#define BRN_GUI_ANIMATION_COMPONENT_STOPGAP
-    struct AnimationComponent : public CgsGui::GuiComponent
-    {
-        u8 maReservedAnimationTail[0x40];   // opaque animation tail (see the note above)
-    };
-#endif
+    // The AnimationComponent stopgap that used to stand in here is RETIRED (intro wave
+    // 2026-07-29): the real BrnGui::AnimationComponent is homed in
+    // GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h, included above. Its
+    // X360 sizeof is 140 == CgsGui::GuiComponent's 0x8C (this state's own OnEnter proves
+    // the stride: 24404 -> 24544 -> 24684), so it adds no members and the stopgap's
+    // 0x40-byte reserved tail was surplus.
 
     // DWARF BrnCrashNavMap.h:52 -- the map-move/scroll sound debouncer embedded at the
     // class tail (mSoundData @X360 +24880).
