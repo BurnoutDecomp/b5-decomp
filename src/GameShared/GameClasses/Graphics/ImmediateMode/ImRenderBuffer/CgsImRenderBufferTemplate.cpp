@@ -769,10 +769,66 @@ namespace CgsGraphics
             CgsDev::Log::WriteToLog(lacLine);
         }
 
+
+        // [diag] BRN_CXFORM_TRACE: dump each DISTINCT bound texture ONCE as raw level-0 bytes
+        // plus a tiny header, into %BRN_CXFORM_TRACE_TEXDIR%. Decoded offline. This answers
+        // "is the texel this shape samples what the art should be" -- which no amount of
+        // vertex-side tracing can. Locks the texture directly (no D3DX in this SDK).
+        void DumpBoundTextureOnce(renderengine::Texture* lpTexture)
+        {
+            enum { KI_MAX_TEX = 24 };
+            static const void* sapSeen[KI_MAX_TEX];
+            static int siNumTex = 0;
+            if (lpTexture == 0 || lpTexture->mpD3DTexture == 0)
+                return;
+            for (int liSeen = 0; liSeen < siNumTex; ++liSeen)
+                if (sapSeen[liSeen] == lpTexture) return;
+            if (siNumTex >= KI_MAX_TEX) return;
+            sapSeen[siNumTex++] = lpTexture;
+
+            // renderengine::Texture holds the BASE interface; only a 2D texture has
+            // GetLevelDesc/LockRect, so query for it and skip cube/volume textures.
+            // GetType() avoids QueryInterface (which would drag in dxguid.lib for the IID)
+            // and, unlike it, takes no reference -- so there is nothing to release.
+            if (lpTexture->mpD3DTexture->GetType() != D3DRTYPE_TEXTURE)
+                return;   // cube/volume textures have no GetLevelDesc/LockRect
+            IDirect3DTexture9* lpD3D =
+                static_cast<IDirect3DTexture9*>(lpTexture->mpD3DTexture);
+            D3DSURFACE_DESC lDesc;
+            if (FAILED(lpD3D->GetLevelDesc(0, &lDesc))) return;
+
+            D3DLOCKED_RECT lLock;
+            if (FAILED(lpD3D->LockRect(0, &lLock, 0, D3DLOCK_READONLY)))
+                return;   // DEFAULT-pool textures are not lockable; skip them
+
+            char lacDir[512];
+            if (GetEnvironmentVariableA("BRN_CXFORM_TRACE_TEXDIR", lacDir, sizeof(lacDir)) == 0)
+                lacDir[0] = 0;
+            char lacPath[640];
+            std::snprintf(lacPath, sizeof(lacPath), "%s%stex_%p.raw",
+                          lacDir, lacDir[0] ? "\\" : "", (const void*)lpTexture);
+            FILE* lpFile = std::fopen(lacPath, "wb");
+            if (lpFile != 0)
+            {
+                const u32 lauHdr[4] = { lDesc.Width, lDesc.Height,
+                                        static_cast<u32>(lDesc.Format),
+                                        static_cast<u32>(lLock.Pitch) };
+                std::fwrite(lauHdr, 4, 4, lpFile);
+                u32 luRows = lDesc.Height;
+                if (lDesc.Format == D3DFMT_DXT1 || lDesc.Format == D3DFMT_DXT3 ||
+                    lDesc.Format == D3DFMT_DXT5)
+                    luRows = (lDesc.Height + 3u) / 4u;      // DXT pitch is per BLOCK row
+                std::fwrite(lLock.pBits, 1, luRows * lLock.Pitch, lpFile);
+                std::fclose(lpFile);
+            }
+            lpD3D->UnlockRect(0);
+        }
+
         // [diag] BRN_CXFORM_TRACE: one line per DISTINCT large batch (bounds + final colour).
         void BigBatchTraceLog(s32 liX0, s32 liY0, s32 liX1, s32 liY1,
                               u32 luColour, u32 luBright, u32 luVerts,
-                              bool lbMasked, s32 liMaskDepth, const void* lpTexture)
+                              bool lbMasked, s32 liMaskDepth, const void* lpTexture,
+                              f32 lfU0, f32 lfU1, f32 lfV0, f32 lfV1)
         {
             // Dedupe WITHIN a frame only: the point is a complete picture of one dumped frame,
             // so the same batch reappearing on a later frame must be logged again. A global
@@ -807,15 +863,51 @@ namespace CgsGraphics
             std::snprintf(lacLine, sizeof(lacLine),
                           "[BigBatch] f=%u (%d,%d)-(%d,%d) verts=%u"
                           "  dim=%02X %02X %02X %02X  bright=%02X %02X %02X %02X"
-                          "  masked=%d depth=%d tex=%p\n",
+                          "  masked=%d depth=%d tex=%p uv=[%.3f..%.3f, %.3f..%.3f]\n",
                           renderengine::guPresentCount,
                           liX0, liY0, liX1, liY1, luVerts,
                           (luColour >> 24) & 0xFFu, (luColour >> 16) & 0xFFu,
                           (luColour >> 8) & 0xFFu, luColour & 0xFFu,
                           (luBright >> 24) & 0xFFu, (luBright >> 16) & 0xFFu,
                           (luBright >> 8) & 0xFFu, luBright & 0xFFu,
-                          lbMasked ? 1 : 0, liMaskDepth, lpTexture);
+                          lbMasked ? 1 : 0, liMaskDepth, lpTexture,
+                          lfU0, lfU1, lfV0, lfV1);
             CgsDev::Log::WriteToLog(lacLine);
+        }
+
+        // The SCALE half of the CXForm only. The console evaluates
+        //     final = texel * (vertexColour * scale) + shift
+        // i.e. the additive shift is applied AFTER the texture modulate, on the GPU.
+        // Folding the shift into the vertex colour instead computes
+        //     texel * (vertexColour * scale + shift)
+        // which is wrong whenever a texture is bound, and catastrophically wrong for the
+        // SOLID-FILL case Apt uses constantly (scale == 0, shift == the fill colour): the
+        // console yields a flat, texture-INDEPENDENT colour, while the vertex fold yields
+        // that colour tinted by whatever texel the shape happens to sample. Measured on the
+        // autosave prompt's red banner: console/Xenia (107,0,0) vs the vertex fold's
+        // 151/255 * 101 = (60,0,0). So the scale goes in the vertex colour and the shift is
+        // added by a second texture stage from D3DRS_TEXTUREFACTOR -- see the stage setup.
+        u8 DispatchColourScaleOnly(u8 lu8In, f32 lfScale)
+        {
+            f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * (lfScale / 255.0f);
+            if (lfOut < 0.0f) lfOut = 0.0f;
+            if (lfOut > 1.0f) lfOut = 1.0f;
+            return static_cast<u8>(lfOut * 255.0f + 0.5f);
+        }
+
+        // Pack the CXForm shift into a D3DCOLOR for D3DRS_TEXTUREFACTOR.
+        u32 DispatchShiftToTextureFactor(f32 lfR, f32 lfG, f32 lfB, f32 lfA)
+        {
+            const f32 lafIn[4] = { lfA, lfR, lfG, lfB };
+            u32 luOut = 0;
+            for (int liChan = 0; liChan < 4; ++liChan)
+            {
+                f32 lfV = lafIn[liChan] / 255.0f;
+                if (lfV < 0.0f) lfV = 0.0f;
+                if (lfV > 1.0f) lfV = 1.0f;
+                luOut = (luOut << 8) | static_cast<u32>(lfV * 255.0f + 0.5f);
+            }
+            return luOut;
         }
 
         u8 DispatchColourChannel(u8 lu8In, f32 lfScale, f32 lfShift)
@@ -975,6 +1067,7 @@ namespace CgsGraphics
                 renderengine::Texture* lpTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
                 lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
                 lpTraceBoundTexture = lpTexture;   // [diag]
+                if (CxformTraceEnabled()) DumpBoundTextureOnce(lpTexture);
                 // Texture present: modulate by vertex colour. (CgsIm2d.cpp's SetState(TextureState*).)
                 lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
                 lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
@@ -988,6 +1081,7 @@ namespace CgsGraphics
                 renderengine::Texture* lpTexture = lpSet->mpTexture;
                 lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
                 lpTraceBoundTexture = lpTexture;   // [diag]
+                if (CxformTraceEnabled()) DumpBoundTextureOnce(lpTexture);
                 // No texture -> drive the stage from the vertex colour alone (SELECTARG2 = DIFFUSE),
                 // exactly as CgsIm2d.cpp's SetTexture(nullptr) path does for the untextured solids.
                 const unsigned long luOp = (lpTexture != nullptr) ? D3DTOP_MODULATE : D3DTOP_SELECTARG2;
@@ -1113,10 +1207,12 @@ namespace CgsGraphics
                     u8 lu8A = lrVertex.mv4Colour.a;
                     if (lbHaveTransform)
                     {
-                        lu8R = DispatchColourChannel(lu8R, lfColScaleR, lfColShiftR);
-                        lu8G = DispatchColourChannel(lu8G, lfColScaleG, lfColShiftG);
-                        lu8B = DispatchColourChannel(lu8B, lfColScaleB, lfColShiftB);
-                        lu8A = DispatchColourChannel(lu8A, lfColScaleA, lfColShiftA);
+                        // SCALE only here; the shift is added after the texture
+                        // modulate by the TEXTUREFACTOR stage installed below.
+                        lu8R = DispatchColourScaleOnly(lu8R, lfColScaleR);
+                        lu8G = DispatchColourScaleOnly(lu8G, lfColScaleG);
+                        lu8B = DispatchColourScaleOnly(lu8B, lfColScaleB);
+                        lu8A = DispatchColourScaleOnly(lu8A, lfColScaleA);
                     }
                     saBatch[luIndex].color =
                         static_cast<u32>(D3DCOLOR_ARGB(lu8A, lu8R, lu8G, lu8B));
@@ -1168,6 +1264,15 @@ namespace CgsGraphics
                         // Log the colour RANGE across the batch, not just vertex 0 -- Apt shapes
                         // routinely carry gradient fills, and a single-vertex sample cannot tell
                         // a gradient apart from a uniformly-wrong fill.
+                        f32 lfU0 = saBatch[0].u, lfU1 = saBatch[0].u;
+                        f32 lfV0 = saBatch[0].v, lfV1 = saBatch[0].v;
+                        for (u32 luB = 1; luB < luCount; ++luB)
+                        {
+                            if (saBatch[luB].u < lfU0) lfU0 = saBatch[luB].u;
+                            if (saBatch[luB].u > lfU1) lfU1 = saBatch[luB].u;
+                            if (saBatch[luB].v < lfV0) lfV0 = saBatch[luB].v;
+                            if (saBatch[luB].v > lfV1) lfV1 = saBatch[luB].v;
+                        }
                         u32 luDim = saBatch[0].color, luBright = saBatch[0].color;
                         u32 luDimSum = 0xFFFFFFFFu, luBrightSum = 0u;
                         for (u32 luB = 0; luB < luCount; ++luB)
@@ -1181,7 +1286,8 @@ namespace CgsGraphics
                                          static_cast<s32>(lfMaxX), static_cast<s32>(lfMaxY),
                                          luDim, luBright, luCount,
                                          lbMaskStageBound, liMaskDepth,
-                                         lpTraceBoundTexture);
+                                         lpTraceBoundTexture,
+                                         lfU0, lfU1, lfV0, lfV1);
                     }
                 }
 
@@ -1192,7 +1298,35 @@ namespace CgsGraphics
                     break;
                 }
 
+                // ---- the CXForm SHIFT, applied AFTER the texture modulate -----------------
+                // The console computes  final = texel * (vertexColour * scale) + shift  on the
+                // GPU. The vertex fold above has applied the scale; the additive shift is a
+                // per-batch constant, so it goes in D3DRS_TEXTUREFACTOR and is added by the
+                // first free texture stage (stage 1 normally; stage 2 while a clip mask owns
+                // stage 1). Alpha passes through -- the shipped data has shift.w == 0 in every
+                // record, and adding to alpha would change coverage rather than colour.
+                const bool lbNeedShift = lbHaveTransform &&
+                    (lfColShiftR != 0.0f || lfColShiftG != 0.0f || lfColShiftB != 0.0f);
+                const DWORD luShiftStage = lbMaskStageBound ? 2u : 1u;
+                if (lbNeedShift)
+                {
+                    lpDevice->SetRenderState(D3DRS_TEXTUREFACTOR,
+                        DispatchShiftToTextureFactor(lfColShiftR, lfColShiftG, lfColShiftB, 0.0f));
+                    lpDevice->SetTextureStageState(luShiftStage, D3DTSS_COLOROP, D3DTOP_ADD);
+                    lpDevice->SetTextureStageState(luShiftStage, D3DTSS_COLORARG1, D3DTA_CURRENT);
+                    lpDevice->SetTextureStageState(luShiftStage, D3DTSS_COLORARG2, D3DTA_TFACTOR);
+                    lpDevice->SetTextureStageState(luShiftStage, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+                    lpDevice->SetTextureStageState(luShiftStage, D3DTSS_ALPHAARG1, D3DTA_CURRENT);
+                }
+
                 lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
+
+                if (lbNeedShift)
+                {
+                    // Leave the cascade as the next batch expects to find it.
+                    lpDevice->SetTextureStageState(luShiftStage, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                    lpDevice->SetTextureStageState(luShiftStage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                }
                 break;
             }
 
