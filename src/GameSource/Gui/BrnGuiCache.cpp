@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiCache.h"
+#include "GameSource/Gui/BrnGuiShared.h"               // BrnGui::EGuiResourceId + gGuiResourceIdentifier (this TU defines the table)
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
 #include "GameShared/GameClasses/Containers/CgsHash.h" // CgsContainers::CgsHash::CalculateHash (AppendExpectedAptComponent name entry)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -10,6 +11,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"   // CgsGui::GuiEventTimeInfo (the per-frame time latch)
 
 #include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior) / std::strlen
 
@@ -22,11 +24,17 @@
 
 namespace BrnGui
 {
-    namespace
-    {
         // ARTIST off_82F278E0, read directly from BURNOUT_X360_ARTIST.XEX.i64.
         // StateLoadingHelper::Update indexes this 237-entry table by resource id.
-        const char* const kapcGuiResourceNames[237] =
+        //
+        // NOT a file-static: the X360 references off_82F278E0 from FOUR TUs -- this one
+        // (the resource pump) plus PhotoBoothComponent::OnLoad @0x8243CD68,
+        // LicenseComponent::OnLoad @0x82440AC0 and LicenseComponent::Update @0x8243C0B8,
+        // each of which turns a resource id into the apt movie name it plays. It is
+        // therefore a shared global with its declaration in BrnGuiShared.h
+        // (DWARF name: gGuiResourceIdentifier, BrnGuiShared.h:473) and its single
+        // definition here, in the TU that owns the resource pump.
+        const char* const gGuiResourceIdentifier[E_GUI_RESOURCEID_NUM] =
         {
             "<LANG DATABASE>", "boostbarmask", "boostfirebody", "boostbarbackground",
             "boostbarbackgroundendcap", "boostfireover", "boostbarendcap", "boostbarendglow",
@@ -86,9 +94,11 @@ namespace BrnGui
             "<COLOURCUBE2>", "<COLOURCUBE3>", "<COLOURCUBE4>", "<COLOURCUBE5>",
             "<COLOURCUBE6>", "RoadSigns_0", "Headtif"
         };
-        static_assert(sizeof(kapcGuiResourceNames) / sizeof(kapcGuiResourceNames[0]) == 237,
+        static_assert(sizeof(gGuiResourceIdentifier) / sizeof(gGuiResourceIdentifier[0]) == 237,
                       "ARTIST GUI resource-name table must contain 237 entries");
 
+    namespace
+    {
         u32 CountRealPendingUnloads(const StateLoadingHelper::ResourceInfo* lpResources, u32 luCount)
         {
             u32 luRealPending = 0;
@@ -200,7 +210,7 @@ namespace BrnGui
             const u32 luResourceId = maRequestDirtyList.GetItem(luDirty);
             ResourceInfo& lrInfo = maResources[luResourceId];
 
-            const char* lpacResourceName = kapcGuiResourceNames[luResourceId];
+            const char* lpacResourceName = gGuiResourceIdentifier[luResourceId];
 
             CgsGui::GuiEventLoadRequest lRequest;
             if (lrInfo.meState == E_STATE_LOAD_REQUESTED)
@@ -825,6 +835,18 @@ namespace BrnGui
         return mfTimeStep;
     }
 
+    // The per-frame time latch (see the header note). Copies GUI event 26's two words into
+    // the cache's leading GuiEventTimeInfo pair.
+    void GuiCache::RecTimeInfo(const CgsGui::GuiEventTimeInfo* lpTimeInfo)
+    {
+        CGS_ASSERT(lpTimeInfo != 0, "lpTimeInfo");
+        if (lpTimeInfo == 0)
+            return;
+
+        mfTimeStep = lpTimeInfo->GetTimeStep();
+        mfTimeNow  = lpTimeInfo->GetTimeNow();
+    }
+
     // @ X360 far member +0xB878 -- hand out the embedded player-options profile
     // block (the X360 callers inline the address computation; the accessor is the
     // named PC face of that far member). The block is reserved opaque in the
@@ -1036,6 +1058,16 @@ namespace BrnGui
     s32 GuiCache::GetCurrentGameModeType() const
     {
         return meGameModeType;
+    }
+
+    // @ (far member +0x13B58 / 80728) -- the latched BrnGui::GuiEventCamStatus word.
+    // Every X360 reader inlines a bare `lwzx` of this slot and tests it against zero; there
+    // is no out-of-line accessor in the image, so this one exists purely to keep the
+    // component TUs off a raw offset. Plain read, no assert (none of the fifteen X360 read
+    // sites guards it).
+    s32 GuiCache::GetCamStatus() const
+    {
+        return miCamStatus;
     }
 
     // ---- the player-name string ids -------------------------------------------------

@@ -16,7 +16,7 @@
 // resource/component watcher embedded in the cache; GuiCache is the cache itself. Only
 // the methods reached by the in-scope GUI code are declared on GuiCache (its full data
 // layout is an out-of-scope boundary object the leaves only touch through these calls).
-namespace CgsGui { class ObjectController; struct GuiEventAptTriggerPayload; }
+namespace CgsGui { class ObjectController; struct GuiEventAptTriggerPayload; class GuiEventTimeInfo; }
 namespace CgsGui { namespace ModelIO { struct InputBuffer; } }
 namespace BrnResource { class ChallengeList; } // GetFreeburnChallengeList return (pointer only)
 namespace BrnGui { struct WorldDataController; }  // GetWorldDataController return (pointer only)
@@ -486,6 +486,28 @@ namespace BrnGui
         const BrnProgression::Profile* GetProfile() const;   // X360 far member @0x405C
         f32 GetDistanceDriven() const;                        // X360 far member @0x13B94
 
+        // ADDITIVE GROW (BrnPhotoBoothComponent / BrnLicenseComponent / BrnIntro TUs).
+        // The latched BrnGui::GuiEventCamStatus word (X360 far member @0x13B58) -- see the
+        // member's own note for the producer and the fifteen readers. Every X360 reader
+        // inlines the raw far-member load and tests it against zero; exposing it by name is
+        // what keeps those TUs off raw offsets.
+        // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
+        s32 GetCamStatus() const;                            // X360 far member @0x13B58
+
+        // ADDITIVE GROW (the GUI per-frame time pump). The cache LEADS with the embedded
+        // GuiEventTimeInfo pair (mfTimeStep @+0x00, mfTimeNow @+0x04) and every GUI-side timer
+        // in the game reads it -- Intro::HandleStateTransitions @0x824DAA48 does
+        // `lfs f13, 0(mpGuiCache)` for its two 2 s dwells, LicenseComponent::Update @0x8243C0B8
+        // does `**(this+168)` for its rank tick-up, and so on. The pair is refreshed once a
+        // frame from GUI event 26 (CgsGui::GuiEventTimeInfo, payload { delta, now }, 8 bytes,
+        // produced by BridgeGameStateToGui @0x823EF300).
+        // ⚠ The X360's latch is NOT in GuiCache::RecEvent -- that function was walked
+        // instruction by instruction this wave and stores nothing to +0x00/+0x04 in any of its
+        // 240 cases -- so it happens inside GuiModule::Update @0x82527A58, the only other
+        // per-frame owner of the cache. This is the named PC face of that latch; BrnGuiModule
+        // calls it from its own input drain, at the same point in the frame.
+        void RecTimeInfo(const CgsGui::GuiEventTimeInfo* lpTimeInfo);
+
         // @0x824EE7B0 / @0x824EE7C0 -- the player-name LANGUAGE-DATABASE STRING IDs, not the
         // name text. GuiModule::UpdatePlayerName @0x824F0D30 fetches the signed-in gamertag
         // (XUserGetName, or the "DEFAULTPLAYERNAME" database entry when that fails) and
@@ -908,7 +930,28 @@ namespace BrnGui
         // ---- mProfileEventState: offline profile-event CgsArray ----
         u8  mProfileEventStateStorage[1400];             // +0x135DC (79324) GetProfileEvent @0x82449880 forwards 79324; count is miProfileEventsCount @+1400
         s32 miProfileEventsCount;                         // +0x13B54 (80724) GetNumProfileEvents count / CgsArray sentinel (ctor -1)
-        u8  mPad_13B58[60];                              // +0x13B58..+0x13B93
+        // ---- the latched Live Vision camera status ----
+        // +0x13B58 (80728). Written in exactly two places: GuiCache::Construct @0x82506204
+        // seeds it 0 (stwx of the zero register through r9 = 0x13B58), and GuiCache::RecEvent
+        // @0x82510EDC latches the payload word of GUI event **570**
+        // (BrnGui::GuiEventCamStatus, size 4, posted by
+        // BrnNetworkManager::OutputPlayerStatusInfo through
+        // BrnNetworkModule::AddOutputGuiEvent<GuiEventCamStatus> @0x82595788, which stamps
+        // id 0x23A). Both the store and all 15 reads are 32-bit (stwx / lwzx), so this is a
+        // word, not a bool.
+        //
+        // Every reader treats non-zero as "a Live Vision camera is attached": Intro
+        // ::HandleTransitionFromWelcomeText @0x824D1B00 picks the "Intro_Take_Photo" voice
+        // over when it is set and "Intro_No_Cam" when it is not, and the other fourteen are
+        // all photo-booth / mugshot paths (PhotoBoothComponent OnLoad / ShowComponent /
+        // SetButtonPromptVisible / SendPlayerPictureEvent, InstantResultsState
+        // ::UpdatePhoto / ::UpdateTakePhotoPage, CrashNavDriverDetails, CompletedGame).
+        //
+        // PC has no Live Vision camera and no producer for event 570, so it stays 0 -- which
+        // is exactly an Xbox 360 with no camera plugged in, and selects the retail
+        // no-camera path in every one of those readers.
+        s32 miCamStatus;                                 // +0x13B58 (80728)
+        u8  mPad_13B5C[56];                              // +0x13B5C..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
         u8  mPad_13B98[8];                               // +0x13B98..+0x13B9F
         // ---- replay slots / status interface / player tables ----

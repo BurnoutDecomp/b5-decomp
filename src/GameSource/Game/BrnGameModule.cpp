@@ -12,6 +12,7 @@
 
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h" // CgsGui::GuiEventTimeInfo (the per-frame GUI timestep)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount::SetupFailFlagMask (interim bridge in Construct)
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
@@ -1280,6 +1281,50 @@ namespace BrnGame
                     // write bracket the console's LoadingScriptedState::Update uses): post
                     // any pending GuiEventRunFsm stage the main flow requested.
                     BridgeGameToGui(mpGuiInputBuffer);
+
+                    // ⭐ THE GUI FRAME TIMESTEP. X360 BridgeGameStateToGui @0x823EE880 closes
+                    // with AddGuiEvent<CgsGui::GuiEventTimeInfo> @0x823EF300, whose 8-byte
+                    // payload the asm builds as
+                    //     payload[0] = timerStatus[+8] * timerStatus[+4]
+                    //                  (mfTimeStepMultiplier * mfBaseTimeStep,
+                    //                   i.e. TimerStatus::GetCurrentTimeStep())
+                    //     payload[1] = time.miSeconds + time.mfFraction
+                    // MainGameFlowStateInitialLoadingScreen::Update @0x823EF9B0 and
+                    // LoadingScriptedState::Update @0x823F2950 post the identical record while
+                    // the boot loading screen is up. GuiCache latches it at its +0x00/+0x04
+                    // and EVERY GUI-side timer reads it from there.
+                    //
+                    // This is the GAME timer (not the sim timer): the console reads the
+                    // game-timer half of the published TimerStatus pair. Read here off the
+                    // LIVE mGameTimer rather than off mTimerStatusInterface, because on this
+                    // build the status pair is only published by BridgeTimers, which runs
+                    // inside DoUpdate_Director and returns early until the director module
+                    // reports prepared -- so the published half reads 0 for the whole boot
+                    // and every GUI dwell would stay frozen. The two are the SAME VALUE by
+                    // construction: TimerStatusInterface::StoreTimers @0x828D7518 copies
+                    // mfBaseTimeStep <- Timer::mfRate and mfTimeStepMultiplier <-
+                    // Timer::mfScaleCurrent, and TimerStatus::GetCurrentTimeStep() is their
+                    // product; mTime is likewise Timer::miAccumTicks + Timer::mfAccumulator.
+                    // UpdateTimers() has already ticked both timers earlier in this sub-step.
+                    //
+                    // ⚠️ NOT through CgsGui::GuiModule::AddGuiEvent<T>: that template assumes
+                    // T derives from CgsGui::GuiEvent<N> and pushes (&event + 12) with size
+                    // sizeof(T) - 12. GuiEventTimeInfo is a PLAIN 8-byte payload with no
+                    // GuiEvent<N> base (its own GetEventType() carries the id, and the header
+                    // pins sizeof == 8), so that arithmetic goes negative and the template
+                    // takes its payload-less arm -- a 1-byte marker. The console's
+                    // AddGuiEvent<GuiEventTimeInfo> @0x823D1468 pushes the WHOLE object:
+                    // AddEvent(&event, 26, 8). Reproduced against the queue directly.
+                    {
+                        CgsGui::GuiEventTimeInfo lTimeInfo;
+                        lTimeInfo.Set(mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
+                                      static_cast<f32>(mGameTimer.GetAccumTicks())
+                                          + mGameTimer.GetAccumulator());
+                        mpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lTimeInfo),
+                            lTimeInfo.GetEventType(),
+                            static_cast<s32>(sizeof(lTimeInfo)));
+                    }
                     // FLAG world-load stand-in: the console's GameState side reports the
                     // world-load status as game action 191, which the game module's
                     // translator (GameBridgeGameStateToX @0x823E9CE0, case 191) forwards to
