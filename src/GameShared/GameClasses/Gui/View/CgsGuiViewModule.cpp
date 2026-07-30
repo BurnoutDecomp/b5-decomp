@@ -510,7 +510,13 @@ namespace CgsGui
         lUnitToScreen.mRightUp.z = 0.0f;             // up    = (0, 720)
         lUnitToScreen.mRightUp.w = 720.0f;
         lUnitToScreen.mColourShift.SetZero();        // (A,R,G,B) shift 0
-        lUnitToScreen.mColourScale.x = 255.0f;       // (A,R,G,B) scale identity
+        lUnitToScreen.mColourScale.x = 255.0f;       // (R,G,B,A) scale identity; the Apt chain
+                                                     // carries CXForm fixed-point 0..255 units
+                                                     // end to end on PC, which is what
+                                                     // DispatchColourChannel's /255 expects.
+                                                     // All four lanes are equal here, so the
+                                                     // lane order does not bite -- but do not
+                                                     // "simplify" this to 1.0f.
         lUnitToScreen.mColourScale.y = 255.0f;
         lUnitToScreen.mColourScale.z = 255.0f;
         lUnitToScreen.mColourScale.w = 255.0f;
