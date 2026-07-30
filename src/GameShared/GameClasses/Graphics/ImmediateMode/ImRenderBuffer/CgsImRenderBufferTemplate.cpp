@@ -839,12 +839,23 @@ namespace CgsGraphics
                 // matching AptCallbackRender::SetVertexMatrix's packing + DrawRenderingUnit's fold.
                 lfRightX  = lTransform.mRightUp.x;   lfRightY  = lTransform.mRightUp.y;
                 lfUpX     = lTransform.mRightUp.z;   lfUpY     = lTransform.mRightUp.w;
-                // Channel order per AptCallbackRender::SetColourTransform: the CXForm's
-                // (Alpha, Red, Green, Blue) land in (x, y, z, w).
-                lfColScaleA = lTransform.mColourScale.x; lfColScaleR = lTransform.mColourScale.y;
-                lfColScaleG = lTransform.mColourScale.z; lfColScaleB = lTransform.mColourScale.w;
-                lfColShiftA = lTransform.mColourShift.x; lfColShiftR = lTransform.mColourShift.y;
-                lfColShiftG = lTransform.mColourShift.z; lfColShiftB = lTransform.mColourShift.w;
+                // Channel order: (Red, Green, Blue, Alpha) -> (x, y, z, w). CORRECTED
+                // 2026-07-30 -- this previously read (Alpha, Red, Green, Blue), so every
+                // Apt/GUIAPT batch on PC took its "alpha" from the RED lane and its red
+                // from alpha. AptCallbackRender::SetColourTransform does NOT copy the
+                // CXForm straight through: the CXForm's mfVal[0..3] are (A,R,G,B) and it
+                // explicitly ROTATES them into (R,G,B,A) before they reach an
+                // Im2dTransform -- so by the time the transform is latched here, alpha is
+                // already in .w. Confirmed four ways (X360 Im2d shader microcode; the
+                // FLAPT alpha cull `vspltw v0,v0,3` in MovieClipInstance::Render
+                // @0x824718F0; the fully-transparent early-out at +0xC in
+                // AptRenderHandler::Render @0x82859300; and all 5158 shipped FLAPTHUD
+                // cxform records, where [1,1,1,x] occurs 2333 times and [x,1,1,1] never).
+                // The Apt and FLAPT pipelines share this one convention.
+                lfColScaleR = lTransform.mColourScale.x; lfColScaleG = lTransform.mColourScale.y;
+                lfColScaleB = lTransform.mColourScale.z; lfColScaleA = lTransform.mColourScale.w;
+                lfColShiftR = lTransform.mColourShift.x; lfColShiftG = lTransform.mColourShift.y;
+                lfColShiftB = lTransform.mColourShift.z; lfColShiftA = lTransform.mColourShift.w;
                 break;
             }
 

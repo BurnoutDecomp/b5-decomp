@@ -293,6 +293,50 @@ namespace CgsGraphics
         // (see note above) is intentionally not applied on this path.
     }
 
+    // ------------------------------------------------------------------------------
+    // The Im2dTransform colour fold. SETTLED 2026-07-30 from four independent sources:
+    //   * the X360 Im2d shader microcode (nushaders XeniaShaderDump): VS `mul o2,r1,c3`,
+    //     PS `mad oC0,r0,r2,r1` => texel * (vertexColour * scale) + shift, lane-wise, and
+    //     the colour vfetch is NORMALISED (no NumFormat=integer, unlike the position
+    //     fetches) -- which forces identity scale == 1.0, not 255.0;
+    //   * MovieClipInstance::Render @0x824718F0, whose FLAPT alpha cull is
+    //     `vspltw v0,v0,3` on BOTH rows then vcmpgtfp128 vs 0 -- lane 3 is alpha, and
+    //     scale/shift provably share one convention;
+    //   * AptRenderHandler::Render @0x82859300, whose fully-transparent early-out reads
+    //     the same lane (+0xC);
+    //   * all 5158 FLAPTHUD cxform records: lanes 0/1/2 carry byte-identical histograms
+    //     (they move together => RGB), lane 3 has 218 distinct values vs 92/93/92,
+    //     [1,1,1,x] occurs 2333 times while [x,1,1,1] occurs ZERO times, and translate
+    //     lane 3 is 0.0 in every record.
+    //
+    // => lanes are (R,G,B,A) -- alpha is .w -- in 0..1 units for BOTH rows; identity is
+    // scale {1,1,1,1} / shift {0,0,0,0}. This is the SAME convention the Apt path uses:
+    // AptCallbackRender::SetColourTransform rotates the CXForm's ARGB into (R,G,B,A)
+    // before it ever reaches an Im2dTransform. Do NOT route this through
+    // ImRenderBuffer's DispatchColourChannel, which is a 0..255 helper.
+    //
+    // FIDELITY NOTE: the console does not fold colour on the CPU at all --
+    // Im2dRenderBuffer::Dispatch @0x827F9BA0 case 0x16 calls SetTransform @0x823AC048,
+    // which uploads the four rows verbatim as GPU shader constants, and the shader adds
+    // the shift AFTER the texture modulate:   texel * (vertexColour * scale) + shift.
+    // Folding into the vertex colour here instead yields
+    //                                          texel * (vertexColour * scale + shift),
+    // which is EXACT for alpha (shift.w == 0.0 in all 5158 shipped records) and EXACT
+    // for untextured meshes (texId < 0 -> the 4x4 white GetFlaptNoTexture() singleton),
+    // hence exact for the alpha-0 meshes and for every fade. It is an APPROXIMATION only
+    // for textured RGB carrying a non-zero shift (1611/5158 records). The PC 2D sites are
+    // D3D9 fixed-function, so there is no shader constant to upload; a programmable 2D
+    // path should move this fold back onto the GPU and recover exactness.
+    // FLAG PC-platform leaf: CPU fold standing in for the console's GPU constant upload.
+    // ------------------------------------------------------------------------------
+    static inline u8 FoldIm2dColourChannel(u8 lu8In, f32 lfScale, f32 lfShift)
+    {
+        f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * lfScale + lfShift;
+        if (lfOut < 0.0f) lfOut = 0.0f;
+        if (lfOut > 1.0f) lfOut = 1.0f;
+        return static_cast<u8>(lfOut * 255.0f + 0.5f);
+    }
+
     // ---- Im2dBase<V> (template) --------------------------------------------------
     template <typename V>
     void Im2dBase<V>::SetTransform(const Im2dTransform& lTransform)
@@ -353,6 +397,21 @@ namespace CgsGraphics
             // 1280x720 logical coordinates, while the console command carries NDC.
             laTransformed[luVertex].mv2Pos.x = (lfNdcX + 1.0f) * 640.0f;
             laTransformed[luVertex].mv2Pos.y = (1.0f - lfNdcY) * 360.0f;
+
+            // The colour transform (see FoldIm2dColourChannel above for the lane order
+            // and unit derivation). Without this the batch drew at its authored vertex
+            // colour regardless of the transform, so every mesh authored alpha-0 --
+            // notably the Showtime button prompt's two untextured backing quads -- drew
+            // fully opaque, and every FLAPT fade was inert.
+            const RGBA8 lSrcColour = lpVertices[luVertex].mv4Colour;
+            laTransformed[luVertex].mv4Colour.r =
+                FoldIm2dColourChannel(lSrcColour.r, lrTransform.mColourScale.x, lrTransform.mColourShift.x);
+            laTransformed[luVertex].mv4Colour.g =
+                FoldIm2dColourChannel(lSrcColour.g, lrTransform.mColourScale.y, lrTransform.mColourShift.y);
+            laTransformed[luVertex].mv4Colour.b =
+                FoldIm2dColourChannel(lSrcColour.b, lrTransform.mColourScale.z, lrTransform.mColourShift.z);
+            laTransformed[luVertex].mv4Colour.a =
+                FoldIm2dColourChannel(lSrcColour.a, lrTransform.mColourScale.w, lrTransform.mColourShift.w);
         }
 
         this->Render(lePrimitiveType, laTransformed, luNumVertices);
