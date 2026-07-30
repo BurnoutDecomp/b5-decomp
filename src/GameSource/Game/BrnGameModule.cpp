@@ -5,6 +5,7 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
 #include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h" // GUI presentation-sound PC consumer
+#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h" // SpeechAudioPC -- the voice-over leaf
 
 #include <cstring>   // memset
 #include <string.h>  // _stricmp (RenderMetricsMessageHandler; MSVC canonical, not declared by <cstring>)
@@ -279,7 +280,9 @@ namespace BrnGame
         miGuiFsmStage      = 0;
         mbGuiPhaseComplete = false;
         mbGuiPreAccept     = false;
-        mbGuiVoiceOverPending = false;
+        mbGuiVoiceOverPending  = false;
+        muGuiVoiceOverHash     = 0;
+        mbGuiVoiceOverSounding = false;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -383,6 +386,10 @@ namespace BrnGame
                         // On the console this leaves through BridgeGuiToSound and the
                         // sound module answers it on the GUI input side; see the FLAG'd
                         // reply block in the GUI-input write bracket below.
+                        // The payload word (record +12) is the line's
+                        // CgsSound::Playback::Name::MakeHash id -- carry it through so the
+                        // speech player can resolve and sound the actual stream.
+                        muGuiVoiceOverHash    = reinterpret_cast<const u32*>(lpEvent)[3];
                         mbGuiVoiceOverPending = true;
                         break;
                     case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
@@ -1429,11 +1436,39 @@ namespace BrnGame
                     // same sub-step. No duration is invented; the GUI simply gets its
                     // dwell floor back. Replace with the real bridge when the sound
                     // module's GUI legs land.
+                    // WHAT THIS DOES NOW: the request's name hash is handed to the PC
+                    // speech player (CgsSystem::SpeechAudioPC -- the SpeechEffect leaf),
+                    // which resolves it to its stream and sounds it on the audio output's
+                    // dedicated voice slot. 466 goes back as soon as the line starts and
+                    // 467 only when it has PLAYED OUT, which is the console's own timing
+                    // (SpeechEffect::UpdateParams @0x826F8074 posts 467 off the stream's
+                    // end state) -- so BrnGui::Intro's mfPauseTimer now holds for the real
+                    // length of the line instead of being released in the same sub-step.
+                    // When the line cannot be sounded (no mapping, missing stream, no
+                    // audio device) the old immediate 466-then-467 answer still goes out,
+                    // so the flow can never stall on a silent line.
                     if (mbGuiVoiceOverPending)
                     {
                         mbGuiVoiceOverPending = false;
+                        const bool lbSounding =
+                            CgsSystem::SpeechAudioPC::PlayByNameHash(muGuiVoiceOverHash);
+
                         CgsGui::GuiEvent<466> lVoiceOverStarted;
                         CgsGui::GuiModule::AddGuiEvent(lVoiceOverStarted, mpGuiInputBuffer);
+
+                        if (lbSounding)
+                        {
+                            mbGuiVoiceOverSounding = true;   // 467 follows when it ends
+                        }
+                        else
+                        {
+                            CgsGui::GuiEvent<467> lVoiceOverFinished;
+                            CgsGui::GuiModule::AddGuiEvent(lVoiceOverFinished, mpGuiInputBuffer);
+                        }
+                    }
+                    else if (mbGuiVoiceOverSounding && CgsSystem::SpeechAudioPC::ConsumeFinished())
+                    {
+                        mbGuiVoiceOverSounding = false;
                         CgsGui::GuiEvent<467> lVoiceOverFinished;
                         CgsGui::GuiModule::AddGuiEvent(lVoiceOverFinished, mpGuiInputBuffer);
                     }

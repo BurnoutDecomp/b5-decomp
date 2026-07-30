@@ -50,6 +50,14 @@ public:
     // owner churns as the movie/music streams swap the voice; the overlay must not.
     static void SetOverlayFill(FillFn lpFill, void* lpUser);
 
+    // Register the additive VOICE fill (the speech/voice-over stream), mixed the
+    // same saturating way on top of the primary + overlay. A separate slot because
+    // on the console speech is its OWN effect (BrnSound::Logic::SpeechEffect) with
+    // its own voice, concurrent with both the music stream and the UI presentation
+    // blips -- DJ Atomika talks over whatever else is sounding. Persists across
+    // Open/Close for the same reason the overlay does.
+    static void SetVoiceFill(FillFn lpFill, void* lpUser);
+
     // Diagnostic: route a finite 440 Hz sine through the backend (lfSeconds) to confirm
     // output works by ear, then fall silent. Opens the device first if needed.
     static void PlayTestTone(float lfSeconds);

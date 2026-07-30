@@ -45,8 +45,26 @@ void*                   g_user        = nullptr;
 // owner churns as the movie/music streams swap the voice; the overlay must not).
 AudioOutputPC::FillFn   g_overlayFill = nullptr;
 void*                   g_overlayUser = nullptr;
+// The additive VOICE fill (the speech / voice-over stream). Its own slot: on the
+// console speech is a separate effect with a separate voice, sounding concurrently
+// with the music stream AND the presentation blips.
+AudioOutputPC::FillFn   g_voiceFill   = nullptr;
+void*                   g_voiceUser   = nullptr;
 s16                     g_buf[kBuffers][kFrames * kMaxChannels];
 s16                     g_overlayBuf[kFrames * kMaxChannels];
+s16                     g_voiceBuf[kFrames * kMaxChannels];
+
+// Saturating add of one already-filled mix source into the outgoing buffer.
+void MixInto(s16* lpDst, const s16* lpSrc, int liValues)
+{
+    for (int li = 0; li < liValues; ++li)
+    {
+        int liMix = int(lpDst[li]) + int(lpSrc[li]);
+        if (liMix >  32767) liMix =  32767;
+        if (liMix < -32768) liMix = -32768;
+        lpDst[li] = s16(liMix);
+    }
+}
 
 void SubmitBuffer(int liIndex)
 {
@@ -56,17 +74,16 @@ void SubmitBuffer(int liIndex)
     else
         std::memset(lpBuf, 0, sizeof(s16) * kFrames * g_channels);
 
+    const int liValues = kFrames * g_channels;
     if (g_overlayFill)
     {
         g_overlayFill(g_overlayBuf, kFrames, g_overlayUser);
-        const int liValues = kFrames * g_channels;
-        for (int i = 0; i < liValues; ++i)
-        {
-            int liMix = int(lpBuf[i]) + int(g_overlayBuf[i]);
-            if (liMix >  32767) liMix =  32767;
-            if (liMix < -32768) liMix = -32768;
-            lpBuf[i] = s16(liMix);
-        }
+        MixInto(lpBuf, g_overlayBuf, liValues);
+    }
+    if (g_voiceFill)
+    {
+        g_voiceFill(g_voiceBuf, kFrames, g_voiceUser);
+        MixInto(lpBuf, g_voiceBuf, liValues);
     }
 
     XAUDIO2_BUFFER lBuf;
@@ -200,6 +217,8 @@ int AudioOutputPC::GetOpenSampleRate() { return g_openRate; }
 void AudioOutputPC::SetFill(FillFn lpFill, void* lpUser) { g_fill = lpFill; g_user = lpUser; }
 
 void AudioOutputPC::SetOverlayFill(FillFn lpFill, void* lpUser) { g_overlayFill = lpFill; g_overlayUser = lpUser; }
+
+void AudioOutputPC::SetVoiceFill(FillFn lpFill, void* lpUser) { g_voiceFill = lpFill; g_voiceUser = lpUser; }
 
 void AudioOutputPC::PlayTestTone(float lfSeconds)
 {

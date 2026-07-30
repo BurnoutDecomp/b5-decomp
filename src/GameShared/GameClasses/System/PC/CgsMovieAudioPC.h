@@ -90,6 +90,50 @@ namespace CgsSystem
     private:
         static void FillStatic(s16* lpOut, int liFrames, void* lpUser);
     };
+
+    // ------------------------------------------------------------------------
+    // CgsSystem::SpeechAudioPC -- PC playback of a SPEECH (voice-over) stream:
+    // the DJ-Atomika intro lines, and any other line the GUI requests by name.
+    //
+    // Console correspondence: a GUI voice-over request (out-event 466, payload =
+    // a CgsSound::Playback::Name::MakeHash id) reaches
+    // BrnSound::Logic::SoundLogicModule::ProcessGuiEvents @0x826ED6C8, whose
+    // `case 466` arm raises a CgsSound::Io::Message id 36 that the
+    // BrnSound::Logic::SpeechEffect answers -- PlaySpeech/PlaySpeechMapping ->
+    // PlayStream @0x8269EAF0 starts the stream voice, and SpeechEffect::UpdateParams
+    // @0x826F8074 posts the completion (GUI event 467) when the state word says the
+    // line has run out. SpeechEffect owns its OWN voice, concurrent with the music
+    // stream and the presentation blips.
+    //
+    // FLAG (PC leaf, same shape as MenuMusicPC): the sound module's message web
+    // (ProcessGuiEvents / Logic::Module::ProcessMessageQueue / SpeechEffect) is not
+    // reconstructed, so this host player reproduces the OBSERVABLE -- name -> the
+    // named stream sounding once, and a finished flag the caller turns into 467.
+    // It never takes the PRIMARY fill (that belongs to the movie / menu music); it
+    // mixes on AudioOutputPC's dedicated VOICE slot and RESAMPLES from the stream's
+    // own rate to whatever rate the device is already open at, so a line can start
+    // over a playing movie or music track without disturbing it. The intro lines are
+    // mono 48 kHz with zero prefetch, so the .SNS alone is the whole line.
+    // ------------------------------------------------------------------------
+    class SpeechAudioPC
+    {
+    public:
+        // ContentSpec name (e.g. "int_lperm") -> registry zone-1 .SNS -> play once.
+        static bool PlaySpec(const char* lpacSpecName);
+        // The GUI-facing entry: a CgsSound::Playback::Name::MakeHash id (the payload
+        // BrnGui::Intro's out-event 466 carries) -> the line's stream -> play once.
+        // Returns false when the id has no known stream, so the caller can fall back
+        // to answering the request immediately rather than stalling its flow.
+        static bool PlayByNameHash(u32 luNameHash);
+        static void Stop();
+        // True while a line is still sounding.
+        static bool IsActive();
+        // True once a line that DID start has played out (one-shot: cleared by the
+        // next PlaySpec). This is what the caller turns into GUI event 467.
+        static bool ConsumeFinished();
+    private:
+        static void FillStatic(s16* lpOut, int liFrames, void* lpUser);
+    };
 }
 
 #endif // CGS_SYSTEM_PC_MOVIEAUDIOPC_H

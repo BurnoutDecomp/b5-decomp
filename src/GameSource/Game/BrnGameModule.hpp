@@ -607,8 +607,16 @@ namespace BrnGame
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
         // FLAG sound stand-in (no console member): a GUI voice-over request (out-event
         // 466) seen by BridgeGuiToGame is answered on the next sub-step -- see the block
-        // in DoUpdate_Gui that consumes it.
+        // in DoUpdate_Gui that consumes it. muGuiVoiceOverHash carries the request's
+        // CgsSound::Playback::Name::MakeHash payload through to the speech player (on the
+        // console the hash travels the same way, out-queue -> BridgeGuiToSound ->
+        // SoundLogicModule::ProcessGuiEvents case 466 -> Io::Message 36 -> SpeechEffect).
         bool mbGuiVoiceOverPending;
+        u32  muGuiVoiceOverHash;
+        // Set once a line is actually sounding, so the 467 completion is posted when the
+        // line ENDS (the console's SpeechEffect::UpdateParams @0x826F8074) instead of in
+        // the same sub-step as the 466.
+        bool mbGuiVoiceOverSounding;
 
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)
