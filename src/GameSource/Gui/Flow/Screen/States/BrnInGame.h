@@ -28,11 +28,19 @@
 // Handler-param base (pointer-only in this header; the .cpp includes the queue header).
 namespace CgsModule { struct Event; }
 
+// DWARF BrnIngame.h:78 declares the member as an UNQUALIFIED `Profile *` while the
+// sibling member is the qualified `BrnGui::GuiCache *`, i.e. the type is not in BrnGui
+// (there is no BrnGui::Profile anywhere in the DWARF). It is BrnProgression::Profile:
+// the X360 Update reads the gate byte at +118033 == BrnProgression::Profile::
+// mbIsNewProfile, and BrnGui::Intro -- which takes the same pointer off the same event
+// 350 -- calls BrnProgression::Profile::SetLicenceIssuedDateAsNow / GetLicenceIssuedDate
+// on it (Intro::HandleIncomingEvents @0x824C1F68). Same shape as the committed
+// BrnGuiHudMessageAnalyzer.h:439 member, which the DWARF prints identically.
+namespace BrnProgression { class Profile; }   // GameSource/GameState/Progression/BrnProfile.h
+
 namespace BrnGui
 {
     class GuiCache;   // GameSource/Gui/BrnGuiCache.h (held by pointer only)
-    class Profile;    // DWARF BrnIngame.h:78 (pointer-only member; the GUI profile object
-                      // arrives by pointer on event 350 - its owning TU is unreconstructed)
 
     // The online main-menu option ids. DWARF home: the nested enum
     // BrnGui::GuiEventPerformOnlineMainMenuOption::EMainMenuOptions
@@ -108,7 +116,7 @@ namespace BrnGui
         static const char* const KAPC_MAIN_MENU_STATE_ACTIONS_TEXT[13];
 
         GuiCache*        mpGuiCache;                      // DWARF h:77; X360 +0x38 (the 64-event fills it)
-        Profile*         mpProfile;                       // DWARF h:78; X360 +0x3C (the 350-event fills it)
+        BrnProgression::Profile* mpProfile;               // DWARF h:78; X360 +0x3C (the 350-event fills it)
         EMainMenuOptions meSelectedOnlineMainMenuOption;  // DWARF h:82; X360 +0x40 (COUNT == none pending)
         bool             mbIsInEventStartLocation;        // DWARF h:84; X360 +0x44 (event-map gate, recomputed per frame)
         bool             mbIsGuideVisible;                // DWARF h:85; X360 +0x45 (event 516; forces the pause path)

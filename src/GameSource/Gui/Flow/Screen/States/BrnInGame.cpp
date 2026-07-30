@@ -8,6 +8,7 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest / GuiOverlayCompleteEvent / GuiEventActivateCrashNav
 #include "GameSource/Gui/BrnGuiOverlaysDirector.h"                        // GuiOverlayWaitFinishRequest (the 188 handshake payload)
 #include "GameSource/Gui/Flow/Screen/States/Shared/BrnScreenShared.h"     // GetSplashScreenIDForGameMode (+ GsmIO::EGameModeType)
+#include "GameSource/GameState/Progression/BrnProfile.h"                  // BrnProgression::Profile::GetIsNewProfile (the intro gate)
 
 // BrnGui::InGame -- reconstructed from BURNOUT_X360_ARTIST.XEX (addresses in the
 // header). The SCREEN flow's in-game root state: it owns the pause / main-map /
@@ -85,7 +86,7 @@ namespace BrnGui
 
         struct GuiEventProfilePointer : public CgsModule::Event   // event 350 payload
         {
-            Profile* mpProfile;
+            BrnProgression::Profile* mpProfile;
         };
 
         // The GuiOverlayCompleteEvent payload (id @+0, leave method @+8 -- the X360
@@ -272,10 +273,17 @@ namespace BrnGui
         // "mpGuiCache->GetGuiTracker()" asserts (X360 lwz +0x4054 != 0).
         bool CacheHasGuiTracker(const GuiCache* lpCache) { return lpCache != 0; }
 
-        // FLAG PC-platform leaf: BrnGui::Profile is unreconstructed; the X360 reads the
-        // profile gate byte @+0x1CD11 each frame ("return to title" request -- it fires
-        // "TO_INTRO" + command 476). Clear on PC until Profile lands.
-        bool ProfileWantsTitleReset(const Profile* /*lpProfile*/) { return false; }
+        // The X360 Update reads the profile gate byte at +118033 (= 0x1CD91) each frame
+        // and, when it is set, fires "TO_INTRO" + command 476 -- the first-boot entry to
+        // the intro (welcome text / photo booth / licence / fly-by) sequence. That byte is
+        // BrnProgression::Profile::mbIsNewProfile (BrnProfile.h:476, Construct seeds true;
+        // BrnGui::Intro::OnLeave @0x824D1640 clears it), reached here through the
+        // DWARF-attested accessor. Named for the X360 semantic, which is "this profile has
+        // never played", not "wants a title reset".
+        bool ProfileIsNew(const BrnProgression::Profile* lpProfile)
+        {
+            return lpProfile->GetIsNewProfile();
+        }
     }
 
     // @ 0x82066680 (.rdata, read from the image): the 30 observed event ids, in table
@@ -1032,8 +1040,9 @@ namespace BrnGui
                 PostCommand16<461>(mpStateInterface, KI_CHANNEL_GUI_OUT);
         }
 
-        // ---- the profile "return to title" gate --------------------------------------
-        if (mpProfile != 0 && ProfileWantsTitleReset(mpProfile))
+        // ---- the first-boot intro gate (X360 Update tail: `lwz mpProfile` ->
+        //      `lbz +118033` -> SendStateEvent("TO_INTRO") + command 476) ---------------
+        if (mpProfile != 0 && ProfileIsNew(mpProfile))
         {
             SendStateEvent("TO_INTRO");
             PostCommand16<476>(mpStateInterface, KI_CHANNEL_GUI_OUT);

@@ -1451,22 +1451,14 @@ bool BrnWorld::RaceCarEntityModule::Release()
 // -------------------------------------------------------------------------
 // BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-enum EGlobalRaceCarIndex BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::GetPlayerGlobalRaceCarIndex() const
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "GetPlayerGlobalRaceCarIndex: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return (EGlobalRaceCarIndex)0;
-}
+// GetPlayerGlobalRaceCarIndex DESTUBBED (intro wave 2026-07-29): the real body lives
+// in the interface's own TU BrnRCEntityGlobalRaceCarOutputInterface.cpp. The gate here
+// returned (EGlobalRaceCarIndex)0 -- i.e. "the player is global car 0" -- where the
+// X360 returns mePlayerGlobalRaceCarIndex, which Clear() @0x822B4088 seeds to
+// E_GLOBAL_RACE_CAR_INDEX_INVALID(-1). (The gate's "REACHED every frame" note was not
+// borne out: the one-shot log never appears in build/game/BrnGame.log, so nothing on
+// the current PC boot path calls it -- BridgeWorldVehicleDataToGui, its only X360
+// caller, is not reconstructed.)
 
 // -------------------------------------------------------------------------
 // BrnWorld::ShadowMap -- DESTUBBED (2026-07-26 wave): Construct @0x827B43E8,

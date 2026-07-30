@@ -226,6 +226,18 @@ public:
     bool GetOneHundredHudMessageViewed() const   { return mbOneHundredHudMessageViewed; }
     void SetOneHundredHudMessageViewed(bool lbViewed) { mbOneHundredHudMessageViewed = lbViewed; }
 
+    // ADDITIVE GROW: the "this profile has never played" flag pair, DWARF-attested shapes
+    // (BrnProfile.h:1129 SetIsNewProfile / :1132 GetIsNewProfile). Construct seeds it true;
+    // it gates the first-boot intro (licence / photo-booth) sequence:
+    //   BrnGui::InGame::Update  @0x824E0ED0 -- `lbz +118033` -> "TO_INTRO" + command 476
+    //   BrnGui::Intro::Update   @0x824DF0B0 -- case WAIT_FOR_FLYBY_FINISH picks
+    //                                          "ADVANCE" vs "GO_BACK" on it
+    //   BrnGui::Intro::OnLeave  @0x824D1640 -- `stb 0, +118033` (clears it)
+    // The X360 image has no standalone symbol for either accessor (every callsite inlines
+    // the +118033 lbz/stb), so they are defined inline here -- same as the pair above.
+    bool GetIsNewProfile() const               { return mbIsNewProfile; }
+    void SetIsNewProfile(bool lbIsNewProfile)  { mbIsNewProfile = lbIsNewProfile; }
+
     void DEBUG_ClearMedals();
 
     // ------------------------------------------------------------------------

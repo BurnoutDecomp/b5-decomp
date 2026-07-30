@@ -164,6 +164,29 @@ void RCEntityGlobalRaceCarOutputInterface::SetPlayerGlobalRaceCarIndex(EGlobalRa
 }
 
 // ============================================================================
+// GetPlayerGlobalRaceCarIndex. Has no standalone X360 symbol -- every caller inlines
+// it; the body is attested verbatim inside BrnWorldIO::UpdateOutputBuffer::
+// GetPlayerGlobalRaceCarIndex @0x823B6E58, which after its own "Not locked for reading"
+// guard runs the tripwire + load of the member word at interface+0x968:
+//
+//     if ( *(a1 + 13770) == -1 )                      /* 13770 == +0x35CA, the buffer's
+//        FireAssert("Player car index hasn't been set",   RCEntityGlobal... base + 0x968 */
+//                   "...BrnRaceCarEntityModuleOutputInterface.h", 1444);
+//     result = *(a1 + 13770);
+//
+// so the tripwire is declared in THIS interface's header (h:1444) and belongs on this
+// accessor, not on the buffer wrapper. Clear() @0x822B4088 seeds the member with
+// E_GLOBAL_RACE_CAR_INDEX_INVALID(-1) and SetPlayerGlobalRaceCarIndex @0x822A1290 is
+// the only writer, so -1 means "no player car has been published this frame".
+// ============================================================================
+EGlobalRaceCarIndex RCEntityGlobalRaceCarOutputInterface::GetPlayerGlobalRaceCarIndex() const
+{
+    CGS_ASSERT(mePlayerGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID,
+               "Player car index hasn't been set");
+    return mePlayerGlobalRaceCarIndex;   // @+0x968
+}
+
+// ============================================================================
 // X360 0x822B4138 -- SetRaceCarData. Publishes a full per-car global snapshot at the
 // given EGlobalRaceCarIndex (asm asserts it in [0,35), and the embedded active index
 // in [0,8)). The args (declared order in the home) map to the asm stores:

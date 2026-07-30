@@ -25,25 +25,18 @@
 #include "GameSource/Gui/BrnGuiTextField.h"                                      // BrnGui::TextField (by value)
 #include "GameSource/Gui/Flow/Shared/Components/BrnHelpItem.h"                    // BrnGui::HelpItem (by value)
 #include "GameSource/Gui/Flow/Screen/Components/BrnManufacturerIcon.h"           // BrnGui::ManufacturersIcon (by value)
+#include "GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h"          // BrnGui::AnimationComponent (by value)
 
 namespace BrnGui { class GuiCache; }
 
 namespace BrnGui
 {
     // The apt transition/animation clips embedded at X360 +0x1F4 (LogoAnim) and +0x434
-    // (HelpPrompt). DWARF types them BrnGui::AnimationComponent; that concrete class is not
-    // committed yet and this state only reaches its GuiComponent base surface (the virtual
-    // Construct in OnEnter, GetName() in UpdateLoadResources, AddOutputAptViewState in
-    // UpdateRunning), so it is modelled as a GuiComponent-derived carrier with an opaque
-    // animation tail -- the same stopgap the committed siblings BrnCarSelectOnlineEnd.h /
-    // BrnOnlineQuickCustomCreate.h use. GROW to the real AnimationComponent when it lands.
-#ifndef BRN_GUI_ANIMATION_COMPONENT_STOPGAP
-#define BRN_GUI_ANIMATION_COMPONENT_STOPGAP
-    struct AnimationComponent : public CgsGui::GuiComponent
-    {
-        u8 maReservedAnimationTail[0x40];   // opaque animation tail (see the note above)
-    };
-#endif
+    // (HelpPrompt) are BrnGui::AnimationComponent (DWARF). The local stopgap that used to
+    // stand in for it here is RETIRED (intro wave 2026-07-29): the real class is homed in
+    // GameSource/Gui/Flow/Shared/Components/BrnAnimationComponent.h, included above. It
+    // adds no members over CgsGui::GuiComponent (X360 stride 0x8C), so the stopgap's
+    // 0x40-byte reserved tail was surplus.
 
     struct CarSelectUnlock : public CgsGui::State
     {
