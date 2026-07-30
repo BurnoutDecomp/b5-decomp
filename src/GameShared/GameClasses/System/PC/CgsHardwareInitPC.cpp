@@ -108,6 +108,53 @@ static LRESULT CALLBACK windowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM l
     }
 }
 
+// ---------------------------------------------------------------------------
+// FLAG PC-platform leaf (no console counterpart -- the X360/PS3 present straight to
+// the display and have no compositor).
+//
+// Opt this window OUT of the Windows 11 DWM "system backdrop" (Mica / Acrylic).
+// When a backdrop is applied -- either by the OS or by a third-party backdrop
+// injector, which is how it reaches a window like ours that never opts in -- DWM
+// composites a translucent, blurred desktop sample UNDER the window and blends the
+// presented frame over it. The rendered image is untouched (the D3D9 back buffer is
+// pixel-correct and X8R8G8B8, i.e. carries no alpha of its own), but everything the
+// user SEES is desaturated and its dark values are lifted, which reads as "washed out
+// colours" and makes fine art -- e.g. the Paradise City logo -- look muddy.
+// Measured on the autosave prompt's red banner: the back buffer holds a strong red
+// while a window-space grab of the same frame reads (56, 32, 33) with a ~32 green/blue
+// floor that the source pixels do not contain.
+//
+// DWMWA_SYSTEMBACKDROP_TYPE(38) = DWMSBT_NONE(1) is the documented opt-out (Win11
+// 22H2+). DWMWA_MICA_EFFECT(1029) = 0 is the undocumented predecessor honoured by
+// Win11 21H2. Both are set, newest first; unsupported attributes simply return a
+// failure HRESULT on older systems, so this is safe down to Win7.
+// dwmapi is resolved dynamically so the link does not gain a hard dwmapi.lib dependency.
+// ---------------------------------------------------------------------------
+static void DisableSystemBackdrop(HWND window)
+{
+    typedef HRESULT(WINAPI * PFN_DwmSetWindowAttribute)(HWND, DWORD, LPCVOID, DWORD);
+
+    HMODULE dwm = LoadLibraryA("dwmapi.dll");
+    if (dwm == nullptr)
+        return;
+
+    PFN_DwmSetWindowAttribute setAttribute = reinterpret_cast<PFN_DwmSetWindowAttribute>(
+        reinterpret_cast<void*>(GetProcAddress(dwm, "DwmSetWindowAttribute")));
+    if (setAttribute != nullptr)
+    {
+        const DWORD KU_DWMWA_SYSTEMBACKDROP_TYPE = 38;
+        const DWORD KU_DWMWA_MICA_EFFECT         = 1029;
+
+        INT liBackdropNone = 1;    // DWMSBT_NONE
+        setAttribute(window, KU_DWMWA_SYSTEMBACKDROP_TYPE, &liBackdropNone, sizeof(liBackdropNone));
+
+        BOOL lbMicaOff = FALSE;
+        setAttribute(window, KU_DWMWA_MICA_EFFECT, &lbMicaOff, sizeof(lbMicaOff));
+    }
+
+    FreeLibrary(dwm);
+}
+
 static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
 {
     HINSTANCE module = GetModuleHandle(nullptr);
@@ -156,6 +203,8 @@ static HWND CreateGameWindow(const s32 width, const s32 height, bool fullscreen)
         GetLastError(); // TODO: This is probably handled in the internal build
         return nullptr;
     }
+
+    DisableSystemBackdrop(window);
 
     HDEVNOTIFY notify = nullptr;
     return RegisterDeviceNotif(&notify) ? window : nullptr;
