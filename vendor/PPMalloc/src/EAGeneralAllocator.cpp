@@ -352,6 +352,35 @@ namespace Allocator
         return lpP >= lpCore && lpP < lpCore + mHeadCoreBlock.mnSize;
     }
 
+    // DWARF EAGeneralAllocator.h:819 - walk the heap and report whether its bookkeeping is
+    // intact. The X360 engine validates the dlmalloc bin/chunk invariants at increasing depth
+    // per HeapValidationLevel; the PC-leaf engine here keeps a single boundary-tag list, so the
+    // equivalent walk is: every block from the core base carries the magic, has a non-degenerate
+    // size, and the chain lands exactly on the core end. kHeapValidationLevelNone short-circuits
+    // true, matching the console's own early-out. Callers use this only inside asserts
+    // (CgsNetwork::NetworkTexture::Prepare, BrnGameState::CarData::Prepare, the DXT compressor).
+    bool GeneralAllocator::ValidateHeap(HeapValidationLevel heapValidationLevel)
+    {
+        if (heapValidationLevel == kHeapValidationLevelNone)
+            return true;
+        if (!mHeadCoreBlock.mpCore)
+            return true;   // nothing adopted yet -- vacuously intact
+
+        char* lpBase = static_cast<char*>(mHeadCoreBlock.mpCore);
+        char* lpEnd  = lpBase + mHeadCoreBlock.mnSize;
+        char* lpCur  = lpBase;
+        while (lpCur < lpEnd)
+        {
+            const PcBlock* lpBlk = reinterpret_cast<const PcBlock*>(lpCur);
+            if (lpBlk->mnMagic != KU_PC_MAGIC)
+                return false;
+            if (lpBlk->mnSize < KU_PC_ALIGN)
+                return false;
+            lpCur += lpBlk->mnSize;
+        }
+        return lpCur == lpEnd;
+    }
+
     // @ 0x82B4E0B0 - consolidate the fast bins back into the regular free list. The real X360
     // engine caches small frees in mpFastBinArray and flushes them here (from SetOption /
     // TraceAllocatedMemory / GetLargestFreeBlock). The PC-leaf engine never populates the fast

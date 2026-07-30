@@ -83,6 +83,45 @@ namespace CgsGraphics
         u32 muSize;   // [c:0x04] size in bytes of this command record (stride to next)
     };
 
+    // -------------------------------------------------------------------------
+    // The command-record stride, DERIVED rather than transcribed.
+    //
+    // Every console writer stores a LITERAL byte count into ImCommand::muSize and bumps
+    // the write position by the same number: 16 for a header-only or single-word-payload
+    // record, 32 for RenderPrimitives, 48 for PushBoostBarColours, 80 for SetTransform,
+    // 112 for the FLAPT batch. Those literals are that record's struct size rounded up to
+    // the writers' 16-byte command alignment - GetNextCommand strides by muSize, so the
+    // record size and the stride are necessarily the same number.
+    //
+    // On the x64 target the payload POINTERS are 8 bytes wide, so some records no longer
+    // fit their console literal. Transcribing the literal breaks the stream twice over:
+    // the widened payload stores run PAST the reserved slot into the next record, and
+    // GetNextCommand strides into the middle of the record it just read. That is exactly
+    // what the Apt clip-mask ops did - {texture, corner-run} is two words (16 B) on
+    // console but two pointers (24 B) here, so PushMaskGeometry's corner-run store landed
+    // on the following record's header and Dispatch then read a {muType,muSize} pair back
+    // as the corner-run pointer (0x0000001000000013 = {19,16} = an END_MASK header). Only
+    // Apt content that actually carries masks reaches it, which is why the licence/photo
+    // INTRO movie was the first thing to hit it.
+    //
+    // So each writer reserves ImCommandRecord<T>::KU_BYTES: sizeof(T) rounded up to the
+    // same 16-byte command alignment. Every record whose payload holds no pointer (and
+    // every single-pointer record) lands back on the console's own literal - the
+    // static_asserts next to each writer pin that - so this stays a faithful translation
+    // of the console rule rather than a new PC-side convention.
+    // -------------------------------------------------------------------------
+    enum { KU_IMCOMMAND_ALIGNMENT = 16u };
+
+    template <typename T>
+    struct ImCommandRecord
+    {
+        enum : u32
+        {
+            KU_BYTES = (static_cast<u32>(sizeof(T)) + (KU_IMCOMMAND_ALIGNMENT - 1u))
+                       & ~static_cast<u32>(KU_IMCOMMAND_ALIGNMENT - 1u)
+        };
+    };
+
     // The command opcodes the dispatcher switches on (Im2dRenderBuffer::Dispatch
     // @0x575BD4). Values are the literals the PS3 command writers store into
     // ImCommand::muType (BeginRendering writes 0, EndRendering 1, Render 2, ...).

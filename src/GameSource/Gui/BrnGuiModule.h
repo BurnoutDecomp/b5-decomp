@@ -103,6 +103,14 @@ namespace BrnGui
         // OUTPUT buffer's out-event queue the bridge reads. Cleared by the bridge.
         CgsModule::VariableEventQueue<18432, 16>* GetGuiOutQueue() { return &mGuiOutQueue; }
 
+        // The module's profile manager (X360 module+681696). Exposed so the game module's
+        // per-sub-step GUI bridge can read back the progression pair the console's
+        // GameState module publishes as game action 193 -- see the FLAG in
+        // BrnGameModule.cpp. The X360 reaches the embedded manager by offset from inside
+        // GuiModule::Update itself, so no accessor is emitted there.
+        ProfileManager&       GetProfileManager()       { return mProfileManager; }
+        const ProfileManager& GetProfileManager() const { return mProfileManager; }
+
     private:
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,

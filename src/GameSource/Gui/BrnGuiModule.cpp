@@ -15,6 +15,7 @@
 #include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h"   // priority removal/blocking event ids
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::GuiEventLoadNotification / GuiEventLoadRequest
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                          // BrnGui::GuiAudioTriggerEvent
+#include "GameSource/GameState/Progression/BrnProfile.h"                   // BrnProgression::Profile::Construct (the PC progression block seed)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"        // AlwaysAvailableComponentsManager + free accessor (bodied below)
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers (flow interface wiring)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"       // CgsGui::AptAuxPointer (the AptAux singleton)
@@ -110,7 +111,15 @@ namespace
     // the real segment widths (BrnGuiProfile.h): live-revenge is memcpy'd 30016 B, the
     // manifest is dereferenced by value, the progression profile is only read by the
     // (FLAG'd no-op) serialiser.
-    alignas(16) u8 s_pcProgressionProfileBacking[118064];   // KI_PROGRESSION_PROFILE_SIZE_BYTES
+    //
+    // SIZE TRAP (intro wave, 2026-07-30): the progression block must be sizeof(Profile),
+    // NOT KI_PROGRESSION_PROFILE_SIZE_BYTES (118064). Those are two different numbers --
+    // 118064 is the SERIALISED segment width inside BrnGuiSaveLoad::Profile, while the live
+    // object is 120840 bytes on X360 (BrnProfile.h:151) and wider still on the x64 target.
+    // The array used to be 118064, which was harmless only while nothing ever wrote the live
+    // object; the moment Profile::Construct() runs over it, an 118064-byte array overruns by
+    // thousands of bytes into the next static (an access violation a few frames later).
+    alignas(16) u8 s_pcProgressionProfileBacking[sizeof(BrnProgression::Profile)];
     alignas(16) u8 s_pcProgressionManifestBacking[4096];    // ExpectedManifest (generous)
     alignas(16) u8 s_pcLiveRevengeProfileBacking[30016];    // KI_LIVEREVENGE_PROFILE_SIZE_BYTES
 
@@ -1070,6 +1079,13 @@ namespace BrnGui
         std::memset(s_pcProgressionProfileBacking, 0, sizeof(s_pcProgressionProfileBacking));
         std::memset(s_pcProgressionManifestBacking, 0, sizeof(s_pcProgressionManifestBacking));
         std::memset(s_pcLiveRevengeProfileBacking, 0, sizeof(s_pcLiveRevengeProfileBacking));
+        // ...then run the REAL BrnProgression::Profile::Construct @0x823708A8 over the
+        // progression block. On the console the live profile is a member of the GameState
+        // module and its Construct is what seeds the empty-profile state -- including
+        // mbIsNewProfile = true, which is the byte BrnGui::InGame::Update tests to enter
+        // the licence/photo INTRO on a first boot. A raw memset leaves that byte 0, i.e.
+        // "an old profile", which is NOT the console's fresh-profile state.
+        reinterpret_cast<BrnProgression::Profile*>(s_pcProgressionProfileBacking)->Construct();
         mProfileManager.SetProgressionProfile(
             reinterpret_cast<BrnProgression::Profile*>(s_pcProgressionProfileBacking),
             reinterpret_cast<const BrnProgression::ProgressionData*>(s_pcProgressionManifestBacking));
@@ -2008,6 +2024,22 @@ namespace BrnGui
         mScreenFlow.Update();
         mHudFlow.Update();
         mOverlayFlow.Update();
+        // ...then RESET each observer's per-frame queue, exactly as the always-available
+        // manager's queue is reset above. The console's EventInterpreterModule fills an
+        // observer's in-queue from the subscription filter, runs UpdateObservers, and the
+        // queue starts the next frame empty -- an observer sees an event once.
+        //
+        // These three were never cleared, so every routed event stayed in the queue and was
+        // re-delivered on every subsequent frame, growing without bound until the 18 KB
+        // VariableEventQueue overflowed (a boot reached "Event Type 64 has 223 entries" and
+        // then asserted "Queue overflow. Write Pos=18431"). Past the overflow the walk reads
+        // whatever is at the tail, which is how BrnGui::Intro started tripping its
+        // unhandled-event assert on ids 0 and 256 -- ids nothing ever posts. It stayed
+        // invisible while only a handful of events were routed per frame; the INTRO path
+        // routes a profile record every sub-step and hit the wall in seconds.
+        mScreenInQueue.Clear();
+        mHudInQueue.Clear();
+        mOverlayInQueue.Clear();
 
         // ---- 5. drain the flow's output (subscriptions / movie / view / game / audio) --
         mViewInputBuffer.LockForWrite();
@@ -2130,8 +2162,8 @@ namespace BrnGui
                 // "apt_Transition" pair visible. With no vehicle side on PC, feed the
                 // one-shot ignition ONCE the in-game HUD movie has composed (its AS
                 // components must be registered before the apt-view writes can land --
-                // an earlier write is silently dropped by AptCommunicator::
-                // UpdateComponent's unknown-component return). The real GameState
+                // an earlier write is discarded by AptCommunicator::
+                // UpdateComponent's unknown-component early return). The real GameState
                 // producer replaces this when the vehicle/world side lands.
                 {
                     static bool s_bEngineOnFed = false;

@@ -178,6 +178,14 @@ namespace BrnGui
         void SetProgressionProfile(BrnProgression::Profile* lpProgressionProfile,
                                    const BrnProgression::ProgressionData* lpProgressionData);
 
+        // Read-backs of the two members SetProgressionProfile latches. The X360 reads them
+        // inline (no out-of-line accessor is emitted), so these are named reads of committed
+        // members, not new state. They exist because on PC the module -- not a running
+        // GameState module -- is the origin of the event-350 pair (see the FLAG in
+        // BrnGameModule.cpp's per-sub-step GUI bridge).
+        BrnProgression::Profile* GetProgressionProfile() const { return mpProgressionProfile; }
+        const BrnProgression::ProgressionData* GetProgressionData() const { return mpProgressionData; }
+
         // BrnGuiProfile.h:650 (X360 inline at GuiModule::Update event 351; the inlined
         // assert cites BrnGuiProfile.h:672 "lpLiveRevengeProfile != NULL").
         void SetLiveRevengeProfile(BrnNetwork::LiveRevengeProfile* lpLiveRevengeProfile);

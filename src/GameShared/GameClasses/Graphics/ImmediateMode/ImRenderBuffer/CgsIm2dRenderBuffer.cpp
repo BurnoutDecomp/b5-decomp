@@ -54,15 +54,20 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::PushMask(renderengine::Texture* lpTexture, const V* lpaMaskVertices)
     {
+        // RECORD SIZE: console literal 16 (two 4-byte payload words); both payload members
+        // are POINTERS, so the x64 record is 24 and the reserved stride 32. Same widening
+        // trap as PushMaskGeometry - see ImCommandRecord in CgsImRenderBufferTemplate.h.
+        const u32 luRecord = ImCommandRecord<ImCommandPushMaskTexture<V> >::KU_BYTES;
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
         ImCommandPushMaskTexture<V>* lpCommand = nullptr;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             lpCommand = reinterpret_cast<ImCommandPushMaskTexture<V>*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize = 16u;
+            lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_PUSH_MASK;                             // 17
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
         }
         else
         {
@@ -92,14 +97,16 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::PopMask()
     {
+        const u32 luRecord = ImCommandRecord<ImCommandPopMask>::KU_BYTES;   // 16, as on console
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommand* lpCommand = reinterpret_cast<ImCommand*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize = 16u;
+            lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_END_MASK;                             // 19 (== pop/clear mask)
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
         }
         else
         {
@@ -116,14 +123,18 @@ namespace CgsGraphics
     void ImRenderBuffer<V>::PushBoostBarColours(const rw::math::vpu::Vector4& lrColour0,
                                                 const rw::math::vpu::Vector4& lrColour1)
     {
+        static_assert(ImCommandRecord<ImCommandPushBoostBarColours>::KU_BYTES == 48u,
+                      "console record size 48");
+        const u32 luRecord = ImCommandRecord<ImCommandPushBoostBarColours>::KU_BYTES;
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 48u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandPushBoostBarColours* lpCommand = reinterpret_cast<ImCommandPushBoostBarColours*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize = 48u;
+            lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_PUSH_BOOST_BAR_COLOURS;               // 21
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 48u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->maColours[0] = lrColour0;   // v1 -> +16
             lpCommand->maColours[1] = lrColour1;   // v2 -> +32
         }
@@ -154,15 +165,21 @@ namespace CgsGraphics
         u32 luNumVertices,
         u8 lu8Flags)
     {
+        // RECORD SIZE: console literal 112. Three of the six trailing payload members are
+        // POINTERS, so the x64 record is 120 and the reserved stride 128 - transcribing 112
+        // would let the vertex count + flag byte spill into the next record. See
+        // ImCommandRecord in CgsImRenderBufferTemplate.h.
+        const u32 luRecord = ImCommandRecord<ImCommandBatchTransformTextureBlendRender<V> >::KU_BYTES;
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 112u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandBatchTransformTextureBlendRender<V>* lpCommand =
                 reinterpret_cast<ImCommandBatchTransformTextureBlendRender<V>*>(
                     mpWriteBuffer->mpu8CommandBuffer + luPos);
             lpCommand->muType = IM_CMD_BATCH_TRANSFORM_TEXTURE_BLEND_RENDER;  // 22
-            lpCommand->muSize = 112u;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 112u;
+            lpCommand->muSize = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mTransform      = lrTransform;      // -> +16 (64-byte copy)
             lpCommand->mpTexture       = lpTexture;        // a3 -> +80
             lpCommand->mpBlendState    = lpBlendState;     // a4 -> +84

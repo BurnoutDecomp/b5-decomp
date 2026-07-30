@@ -513,6 +513,54 @@ namespace BrnGui
         }
     }
 
+    // @ 0x824FE258 -- the unload-side mirror of EnsureResourceIsLoaded. The X360 body is
+    // the bounds assert (BrnGuiCache.cpp:505, same message text as the load side but with
+    // the Unloaded verb), then: if the slot is not already UNLOADED, step it with
+    // UnloadResource and report NOT-yet-unloaded; otherwise report unloaded.
+    bool StateLoadingHelper::EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource)
+    {
+        CGS_ASSERT(lResource.muId < KU_MAX_RESOURCES_TO_WATCH,
+                   "lResourceTuple.muId out of bounds in StateLoadingHelper::EnsureResourceIsUnloaded");
+
+        if (maResources[lResource.muId].meState != E_STATE_UNLOADED)
+        {
+            UnloadResource(lResource);
+            return false;
+        }
+        return true;
+    }
+
+    // @ 0x824FE330 -- the unload-side mirror of EnsureResourcesAreLoaded. The X360 walks
+    // ALL KU_MAX_RESOURCES_TO_WATCH slots first and bails out `false` the moment any of
+    // them is mid-LOAD (LOAD_REQUESTED / LOADING) or has a cancelled unload
+    // (UNLOAD_CANCELLED) -- i.e. nothing unloads while a load is in flight, the exact
+    // counterpart of the load side's pending-unload gate. Only then does it step every
+    // tuple and report whether ALL of them reached UNLOADED. (Note the X360 tests the
+    // three states directly here; there is no latched counter on this side.)
+    bool StateLoadingHelper::EnsureResourcesAreUnloaded(const CgsGui::sResourceTuple* lpResources,
+                                                        u32 luCount)
+    {
+        for (u32 luWatched = 0; luWatched < KU_MAX_RESOURCES_TO_WATCH; ++luWatched)
+        {
+            const EResourceState leState = maResources[luWatched].meState;
+            if (leState == E_STATE_LOADING || leState == E_STATE_UNLOAD_CANCELLED
+                || leState == E_STATE_LOAD_REQUESTED)
+            {
+                return false;
+            }
+        }
+
+        bool lbAllUnloaded = true;
+        for (u32 luResource = 0; luResource < luCount; ++luResource)
+        {
+            if (!EnsureResourceIsUnloaded(lpResources[luResource]))
+            {
+                lbAllUnloaded = false;
+            }
+        }
+        return lbAllUnloaded;
+    }
+
     // @ 0x824FE1F8 -- request the unload of every watched slot of the given type
     // that is not already sitting UNLOADED.
     void StateLoadingHelper::UnloadAllResources(CgsGui::ResourceRequestTypes leType)
@@ -663,6 +711,18 @@ namespace BrnGui
     bool GuiCache::EnsureResourceIsLoaded(const CgsGui::sResourceTuple& lResource)
     {
         return mStateLoadingHelper.EnsureResourceIsLoaded(lResource);
+    }
+
+    // @ 0x824FEBB8 / @ 0x824FEBC0 -- both are literally `addi r3,r3,8` + tail-branch into
+    // the embedded watcher, i.e. the same two-instruction face as the load pair above.
+    bool GuiCache::EnsureResourceIsUnloaded(const CgsGui::sResourceTuple& lResource)
+    {
+        return mStateLoadingHelper.EnsureResourceIsUnloaded(lResource);
+    }
+
+    bool GuiCache::EnsureResourcesAreUnloaded(const CgsGui::sResourceTuple* lpResources, u32 luCount)
+    {
+        return mStateLoadingHelper.EnsureResourcesAreUnloaded(lpResources, luCount);
     }
 
     void GuiCache::UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount)
