@@ -74,6 +74,13 @@ void MainGameFlowStateInGame::Update()
 {
     BrnGame::GetMainGameModule()->DoUpdate();
 
+    // Drive the world module per frame while in-game. DoUpdate above is a PC-platform leaf
+    // (the host loop owns the module walk) and its world leg, DoUpdate_World @0x823E8BD0, is
+    // reached from nowhere -- so without this the world module, its PVS query and the streamer
+    // all stop the moment the flow leaves the loading screen, leaving the query frozen at the
+    // world-space (0,0,0) it was last taken from during loading.
+    DriveInGameWorldUpdate();
+
     if (!BrnGameMainFlowController::gBrnReturnToFrontEndRequested)
         return;
     BrnGameMainFlowController::gBrnReturnToFrontEndRequested = false;
