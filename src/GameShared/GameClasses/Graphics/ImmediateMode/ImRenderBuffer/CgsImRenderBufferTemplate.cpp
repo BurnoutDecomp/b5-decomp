@@ -26,6 +26,10 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (X360 RenderStart guards)
 
+#include <cstdio>   // [diag] BRN_CXFORM_TRACE line formatting
+// [diag] BRN_CXFORM_TRACE writes through the engine log (same hook CgsIm2d.cpp's trace uses).
+namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
+
 namespace CgsGraphics
 {
     // The vertex stride the PS3 bodies hard-code (20 * luNumVertices): a
@@ -721,6 +725,78 @@ namespace CgsGraphics
         // AptCallbackRender::SetColourTransform copies to the Im2dTransform), so both fold
         // terms normalise by 255 here. scale/shift default to {255,0} (identity) for buffers
         // that never emitted a SET_TRANSFORM.
+        // [diag] BRN_CXFORM_TRACE=1 -- see the SET_TRANSFORM case. Logs every DISTINCT
+        // (scale, shift) octet once, with a small dedupe table so a 60 Hz boot does not
+        // flood the log. Temporary investigation aid.
+        bool CxformTraceEnabled()
+        {
+            static int siState = -1;
+            if (siState < 0)
+            {
+                char lacBuf[8];
+                siState = (GetEnvironmentVariableA("BRN_CXFORM_TRACE", lacBuf, sizeof(lacBuf)) > 0) ? 1 : 0;
+            }
+            return siState == 1;
+        }
+
+        void CxformTraceLog(f32 lfSR, f32 lfSG, f32 lfSB, f32 lfSA,
+                            f32 lfTR, f32 lfTG, f32 lfTB, f32 lfTA)
+        {
+            enum { KI_MAX_SEEN = 64 };
+            static f32 saSeen[KI_MAX_SEEN][8];
+            static int siNumSeen = 0;
+
+            for (int liSeen = 0; liSeen < siNumSeen; ++liSeen)
+            {
+                const f32* lpS = saSeen[liSeen];
+                if (lpS[0] == lfSR && lpS[1] == lfSG && lpS[2] == lfSB && lpS[3] == lfSA &&
+                    lpS[4] == lfTR && lpS[5] == lfTG && lpS[6] == lfTB && lpS[7] == lfTA)
+                    return;
+            }
+            if (siNumSeen >= KI_MAX_SEEN)
+                return;
+            f32* lpNew = saSeen[siNumSeen++];
+            lpNew[0] = lfSR; lpNew[1] = lfSG; lpNew[2] = lfSB; lpNew[3] = lfSA;
+            lpNew[4] = lfTR; lpNew[5] = lfTG; lpNew[6] = lfTB; lpNew[7] = lfTA;
+
+            char lacLine[256];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[CXform] #%02d scale=(%.4f, %.4f, %.4f, %.4f)  shift=(%.4f, %.4f, %.4f, %.4f)\n",
+                          siNumSeen - 1, lfSR, lfSG, lfSB, lfSA, lfTR, lfTG, lfTB, lfTA);
+            CgsDev::Log::WriteToLog(lacLine);
+        }
+
+        // [diag] BRN_CXFORM_TRACE: one line per DISTINCT large batch (bounds + final colour).
+        void BigBatchTraceLog(s32 liX0, s32 liY0, s32 liX1, s32 liY1, u32 luColour, u32 luVerts)
+        {
+            enum { KI_MAX_BIG = 48 };
+            static u32 sauSeen[KI_MAX_BIG][5];
+            static int siNumBig = 0;
+
+            const u32 lauKey[5] = { static_cast<u32>(liX0), static_cast<u32>(liY0),
+                                    static_cast<u32>(liX1), static_cast<u32>(liY1), luColour };
+            for (int liSeen = 0; liSeen < siNumBig; ++liSeen)
+            {
+                const u32* lpS = sauSeen[liSeen];
+                if (lpS[0] == lauKey[0] && lpS[1] == lauKey[1] && lpS[2] == lauKey[2] &&
+                    lpS[3] == lauKey[3] && lpS[4] == lauKey[4])
+                    return;
+            }
+            if (siNumBig >= KI_MAX_BIG)
+                return;
+            for (int liLane = 0; liLane < 5; ++liLane)
+                sauSeen[siNumBig][liLane] = lauKey[liLane];
+            ++siNumBig;
+
+            char lacLine[256];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[BigBatch] (%d,%d)-(%d,%d) verts=%u  ARGB=%02X %02X %02X %02X\n",
+                          liX0, liY0, liX1, liY1, luVerts,
+                          (luColour >> 24) & 0xFFu, (luColour >> 16) & 0xFFu,
+                          (luColour >> 8) & 0xFFu, luColour & 0xFFu);
+            CgsDev::Log::WriteToLog(lacLine);
+        }
+
         u8 DispatchColourChannel(u8 lu8In, f32 lfScale, f32 lfShift)
         {
             f32 lfOut = (static_cast<f32>(lu8In) / 255.0f) * (lfScale / 255.0f) + (lfShift / 255.0f);
@@ -856,6 +932,13 @@ namespace CgsGraphics
                 lfColScaleB = lTransform.mColourScale.z; lfColScaleA = lTransform.mColourScale.w;
                 lfColShiftR = lTransform.mColourShift.x; lfColShiftG = lTransform.mColourShift.y;
                 lfColShiftB = lTransform.mColourShift.z; lfColShiftA = lTransform.mColourShift.w;
+                // [diag] BRN_CXFORM_TRACE=1: log each DISTINCT colour transform latched, so the
+                // units/magnitudes the Apt producer actually supplies can be read off a real boot
+                // instead of inferred. Temporary investigation aid; remove once the Apt popup
+                // brightness question is closed.
+                if (CxformTraceEnabled())
+                    CxformTraceLog(lfColScaleR, lfColScaleG, lfColScaleB, lfColScaleA,
+                                   lfColShiftR, lfColShiftG, lfColShiftB, lfColShiftA);
                 break;
             }
 
@@ -1031,6 +1114,29 @@ namespace CgsGraphics
                         saBatch[luIndex].u2 = 0.0f;
                         saBatch[luIndex].v2 = 0.0f;
                     }
+                }
+
+                // [diag] BRN_CXFORM_TRACE=1: report each DISTINCT large batch (>= 15% of the
+                // logical stage) with its final folded vertex colour, so "what colour and alpha
+                // does the popup background actually get" is measured rather than inferred.
+                if (CxformTraceEnabled() && luCount >= 3u)
+                {
+                    f32 lfMinX = saBatch[0].x, lfMaxX = saBatch[0].x;
+                    f32 lfMinY = saBatch[0].y, lfMaxY = saBatch[0].y;
+                    for (u32 luB = 1; luB < luCount; ++luB)
+                    {
+                        if (saBatch[luB].x < lfMinX) lfMinX = saBatch[luB].x;
+                        if (saBatch[luB].x > lfMaxX) lfMaxX = saBatch[luB].x;
+                        if (saBatch[luB].y < lfMinY) lfMinY = saBatch[luB].y;
+                        if (saBatch[luB].y > lfMaxY) lfMaxY = saBatch[luB].y;
+                    }
+                    const f32 lfArea = (lfMaxX - lfMinX) * (lfMaxY - lfMinY);
+                    const f32 lfStage = static_cast<f32>(renderengine::gDisplayWidth) *
+                                        static_cast<f32>(renderengine::gDisplayHeight);
+                    if (lfStage > 0.0f && lfArea >= lfStage * 0.15f)
+                        BigBatchTraceLog(static_cast<s32>(lfMinX), static_cast<s32>(lfMinY),
+                                         static_cast<s32>(lfMaxX), static_cast<s32>(lfMaxY),
+                                         saBatch[0].color, luCount);
                 }
 
                 // Recompute the primitive count if the count was clamped.
