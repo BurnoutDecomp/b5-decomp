@@ -18,6 +18,52 @@
 
 namespace BrnGui
 {
+#if 0   // see the header note: declaring Construct here makes it an override of the virtual
+        // CgsGui::GuiComponent::Construct, and this TU cannot be linked yet, so the vtable
+        // hole breaks every TU that embeds a LicenseComponent by value. Recovered body kept
+        // verbatim; enable it together with the header declaration when the TU is mounted.
+    // 0x8241A610 -- Construct. The X360 body is:
+    //     IconComponent::Construct(this, lpacName, lpStateInterface, NULL, lpacParentName);
+    //     +1980 = 0.08f;  +168 = 0;  +1988 = 0.08f;  +172 = 0;
+    //     +1952 = 0; +1953 = 0; +1984 = 0.0f; +1954 = 0;
+    //     +1956 = -1; +1960 = -1; +1964 = 0;
+    //     +1976 = 1; +1977 = 1; +1968 = 0; +1969 = 0; +1972 = 0; +1978 = 0;
+    //     +148 = 0; +152 = 0; +156 = 0; +160 = 0; +164 = 0;
+    //     <the six embedded TextFields Construct with "playerName" / "playerUpgrade" /
+    //      "IssuedOnText_cpt" / "MonthText_cpt" / "DateText_cpt" / "YearText_cpt",
+    //      each parented on macName>
+    //     +1992 = 0;
+    //
+    // PARTIAL BY DESIGN: this header models the resource tuples, the cache/profile
+    // pointers, miRank (+1956), mbRankTransitionActive (+1969) and meCurrentLicenseState
+    // (+1972). Those seeds are reproduced exactly. The remaining stores belong to members
+    // this header has not carved yet -- the two 0.08f dirt timers (+1980/+1988), the dirt
+    // accumulator (+1984), the win counter (+1960 = -1), the presentation booleans
+    // (+1952/+1953/+1954/+1964/+1968/+1976/+1977/+1978) and the gamerpic flag (+1992) --
+    // plus the six embedded TextFields.
+    // FLAG PC-platform leaf: those land with the licence-presentation slice
+    // (BrnLicenseComponent.cpp's 15 remaining X360 functions); until then this state's
+    // presentation is inert, which is why the seeds that DO exist are the ones that keep
+    // EnsureResourcesAreLoaded / SetProfilePointer from reading uninitialised storage.
+    void LicenseComponent::Construct(const char* lpacName,
+                                     CgsGui::StateInterface* lpStateInterface,
+                                     const char* lpacParentName)
+    {
+        IconComponent::Construct(lpacName, lpStateInterface, 0, lpacParentName);
+
+        maResources[0].muId   = 0;                                    // +148
+        maResources[0].meType = CgsGui::E_GUI_RESOURCETYPE_START;     // +152
+        maResources[1].muId   = 0;                                    // +156
+        maResources[1].meType = CgsGui::E_GUI_RESOURCETYPE_START;     // +160
+        muNumResources        = 0;                                    // +164
+        mpGuiCache            = 0;                                    // +168
+        mpProfile             = 0;                                    // +172
+        miRank                = -1;                                   // +1956
+        mbRankTransitionActive = false;                               // +1969
+        meCurrentLicenseState = static_cast<ELicenseState>(0);        // +1972
+    }
+#endif
+
     // 0x824B31E8
     void LicenseComponent::SetCachePointer(GuiCache* lpGuiCache)
     {

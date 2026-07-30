@@ -273,7 +273,7 @@ namespace BrnGui
         // "mpGuiCache->GetGuiTracker()" asserts (X360 lwz +0x4054 != 0).
         bool CacheHasGuiTracker(const GuiCache* lpCache) { return lpCache != 0; }
 
-        // The X360 Update reads the profile gate byte at +118033 (= 0x1CD91) each frame
+        // The X360 Update reads the profile gate byte at +118033 (= 0x1CD11) each frame
         // and, when it is set, fires "TO_INTRO" + command 476 -- the first-boot entry to
         // the intro (welcome text / photo booth / licence / fly-by) sequence. That byte is
         // BrnProgression::Profile::mbIsNewProfile (BrnProfile.h:476, Construct seeds true;
