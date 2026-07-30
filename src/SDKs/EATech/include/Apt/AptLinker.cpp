@@ -443,7 +443,13 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
             if (nTypeTag != 9)                                               // non-animation
             {
                 AptFile* pStub = nullptr;
-                void* pMem = gpAptSharedPtrPool->Allocate(28);
+                // FLAG (x64 widening -- same class as the AptCharacterInst site below):
+                // the console literal 28 is ITS sizeof(AptFile) (refcount + a 4-byte
+                // EAStringC + state + field12 + three 4-byte pointers). The x64 record is
+                // 48 bytes, so the literal let MakeAptFile's ctor write 20 bytes past the
+                // block; the paired free (AptSharedPtr.cpp) already uses sizeof. Size from
+                // the type.
+                void* pMem = gpAptSharedPtrPool->Allocate(sizeof(AptFile));   // X360 Allocate(28)
                 if (pMem != nullptr)
                     pStub = MakeAptFile(pMem, pName);                        // AptFile::AptFile(mem, a2)
                 if (pStub != nullptr)
@@ -474,7 +480,13 @@ void AptLinker::Load(EAStringC* pName, EAStringC* pFileName)
             {
                 // Animation inst: same stub path, slightly different ordering.
                 AptFile* pStub = nullptr;
-                void* pMem = gpAptSharedPtrPool->Allocate(28);
+                // FLAG (x64 widening -- same class as the AptCharacterInst site below):
+                // the console literal 28 is ITS sizeof(AptFile) (refcount + a 4-byte
+                // EAStringC + state + field12 + three 4-byte pointers). The x64 record is
+                // 48 bytes, so the literal let MakeAptFile's ctor write 20 bytes past the
+                // block; the paired free (AptSharedPtr.cpp) already uses sizeof. Size from
+                // the type.
+                void* pMem = gpAptSharedPtrPool->Allocate(sizeof(AptFile));   // X360 Allocate(28)
                 if (pMem != nullptr)
                     pStub = MakeAptFile(pMem, pName);
                 if (pStub != nullptr) AptSharedPtrIncRef(pStub);
@@ -562,7 +574,19 @@ void AptLinker::Update()
             else
             {
                 AptCharacterInst* pInst = nullptr;
-                void* pMem = gpAptSharedPtrPool->Allocate(16);
+                // FLAG (x64 widening): the console allocates its literal sizeof
+                // (16 == 4 dwords: vtable / mpRenderItem / mTypeFlags / mpProperties).
+                // On x64 the same record is 32 bytes, so the literal under-allocated by
+                // half and the ctor's `mTypeFlags` read-modify-write ran PAST the block
+                // -- straight onto the AptRenderItemLevel the very next pool carve hands
+                // back inside that same ctor, clobbering byte 3 of its vtable pointer
+                // (`and byte ptr [..+3],3` / `or byte ptr [..+3],3Ch` == the
+                // `(mTypeFlags & 0x03FFFFFF) | (15 << 26)` stamp for a null character).
+                // The AV then fired one frame later in AptRenderLeaf's `Render` dispatch.
+                // The matching free (AptCIH.cpp / AptCIHBehaviour.cpp) already uses
+                // sizeof, so the literal also returned the block to the wrong free-list
+                // bucket. Size from the type.
+                void* pMem = gpAptSharedPtrPool->Allocate(sizeof(AptCharacterInst));   // X360 Allocate(16)
                 if (pMem != nullptr)
                 {
                     pInst = ::new (pMem) AptCharacterInst(nullptr);          // AptCharacterInst::AptCharacterInst(v27,0)
