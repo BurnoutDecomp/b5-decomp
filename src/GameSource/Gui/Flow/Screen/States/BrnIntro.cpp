@@ -40,12 +40,18 @@
 //     lands on the "Unhandled event" assert (cpp:479). Retail strips the assert, so it is
 //     a silent no-op there. Reproduced rather than "fixed".
 //
-// COMPONENT BOUNDARY: BrnLicenseComponent.cpp and BrnPhotoBoothComponent.cpp have not had
-// their presentation slices reconstructed yet, so the calls this state makes into them go
-// through the FLAG'd leaves in the anonymous namespace below. Each leaf names the X360
-// address it stands in for and is deleted when that TU lands. The two leaves that return a
-// value (PhotoBoothSelect / PhotoBoothCancel) return the console's OWN result for the PC
-// configuration (no Live Vision camera -> photo state 1), not a convenience value.
+// COMPONENT BOUNDARY (half closed): BrnPhotoBoothComponent.cpp IS now reconstructed and
+// mounted, so every photo-booth call below is the REAL component (Construct / SetVisualStyle
+// / SetCachePointer / SetProfilePointer / EnsureResourcesAreLoaded / OnLoad / ShowComponent /
+// HideComponent / SetButtonPromptVisible / Select / Cancel /
+// HandleCompressedStillImageEvent / SendPlayerPictureEvent / ReleaseResources) and its leaves
+// are gone. BrnLicenseComponent.cpp's presentation slice is still deferred, so the LICENSE
+// calls still go through the FLAG'd leaves in the anonymous namespace below; each names the
+// X360 address it stands in for and is deleted when that slice lands.
+//
+// ⚠ 8 -> 9 IS A CONTROLLER PRESS and the PC input bridge delivers the accept as action 45,
+// not the console's 49 -- see KI_ACTION_CONFIRM_PC below. Recognising only 49 parks the state
+// in PHOTOBOOTH forever (boot-measured).
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
@@ -59,12 +65,16 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"  // GuiEventAptTriggerPayload
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"        // CgsSystem::DateAndTime
 #include "GameSource/GameState/Progression/BrnProfile.h"                      // BrnProgression::Profile
-#include "GameSource/Gui/BrnGuiCache.h"                                       // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiCache.h"                                       // BrnGui::GuiCache (+ GetCamStatus)
+#include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"               // ButtonIconComponent::EPadButton (the photo-booth Construct args)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                               // BrnGui::GuiFlow
 #include "GameSource/Gui/BrnGuiMovieManager.h"                                // MovieManager::VideoDefinition
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                                 // BrnGui::GuiEventStopVideo
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // CgsDev::Log::WriteToLog (the state-transition diagnostic)
+
 #include <cstring>   // std::strcmp (the X360 inlines the apt-trigger name compares)
+#include <cstdio>    // std::snprintf (the state-transition diagnostic)
 
 namespace BrnGui
 {
@@ -147,6 +157,13 @@ namespace BrnGui
         // committed BrnPauseScreen / BrnInGame slices use.
         const s32 KI_ACTION_CONFIRM = 49;
         const s32 KI_ACTION_BACK    = 50;
+        // FLAG PC-platform input bridge (the same one BrnBootProfile.cpp:44 documents): the
+        // console A-button "select" arrives as action 49, but the PC input reconstruction
+        // (CgsInput::InputPadsPC) maps the accept key (ENTER / SPACE / pad-A) to action 45 --
+        // the action the title SelectionMenu consumes. Boot-measured: with only 49 recognised,
+        // BrnGui::Intro parks in PHOTOBOOTH forever because the confirm press it is waiting for
+        // is delivered as 45. Recognised alongside 49; behaviour is otherwise identical.
+        const s32 KI_ACTION_CONFIRM_PC = 45;
 
         const s32 KI_CHANNEL_GUI_OUT      = 40;  // GuiEventOut
         const s32 KI_CHANNEL_GUI_INTERNAL = 42;  // internal/HUD-component channel
@@ -282,16 +299,6 @@ namespace BrnGui
         // FLAG PC-platform leaf: PC has no Xbox sign-in; the local player is always present.
         bool CacheIsUserSignedIn(const GuiCache* lpCache) { return lpCache != 0; }
 
-        // GuiCache +0x13B58 is "a vision camera is attached". Proof: this state's own
-        // HandleTransitionFromWelcomeText picks the voice-over "Intro_Take_Photo" when it is
-        // set and "Intro_No_Cam" when it is clear; the other 14 image-wide readers are all
-        // photo-booth / mugshot paths (PhotoBoothComponent OnLoad / ShowComponent /
-        // SendPlayerPictureEvent / SetButtonPromptVisible, InstantResultsState,
-        // CrashNavDriverDetails, CompletedGame).
-        // FLAG PC-platform leaf: no Live Vision camera exists on PC. Returning false selects
-        // the console's own no-camera presentation, which is a first-class retail path.
-        bool CacheIsVisionCameraAttached(const GuiCache* /*lpCache*/) { return false; }
-
         // GuiCache +0x13B5E, set to 1 by Intro::OnLeave and also written by
         // CarSelect{Livery,Vehicle}::SetupComponents / CarSelectLivery::OnLeave+Update and
         // GuiCache::Construct. Its role is NOT settled -- do not guess it.
@@ -339,53 +346,6 @@ namespace BrnGui
         // FLAG PC-platform leaf: see the note above.
         void LicenseSendPlayerPictureEvent(LicenseComponent& /*lrLicense*/) {}
 
-        // the X360 stores the photo-booth's GUI resource id (92 ==
-        // "B5PhotoBoothComponentDMV" in the cache's 237-entry name table) straight into
-        // PhotoBoothComponent::mPhotoResourceToLoad.muId (component+0x94) from this call
-        // site. It is an inlined component setter with no standalone symbol and no assert,
-        // so its source name is not recoverable, and mPhotoResourceToLoad is private on the
-        // committed component. No-op boundary until that TU exposes the setter.
-        // FLAG PC-platform leaf: see the note above.
-        void PhotoBoothSetPhotoResourceId(PhotoBoothComponent& /*lrPhotoBooth*/, u32 /*luId*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::OnLoad @0x8243CD68.
-        void PhotoBoothOnLoad(PhotoBoothComponent& /*lrPhotoBooth*/) {}
-
-        // BrnGui::PhotoBoothComponent::ShowComponent @0x8243D030 --
-        // with no camera attached it takes the else-branch that makes the prompt
-        // "$CAPS_BUTTON_CONTINUE" and leaves the component in photo state 1 (GAMERPIC).
-        // FLAG PC-platform leaf: see the note above.
-        void PhotoBoothShowComponent(PhotoBoothComponent& /*lrPhotoBooth*/, bool /*lbUpgrade*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::SetButtonPromptVisible @0x82427870.
-        void PhotoBoothSetButtonPromptVisible(PhotoBoothComponent& /*lrPhotoBooth*/, bool /*lbVisible*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::SendPlayerPictureEvent @0x8243D6F8
-        // -- sends an explicit NULL texture when the profile carries no picture.
-        void PhotoBoothSendPlayerPictureEvent(PhotoBoothComponent& /*lrPhotoBooth*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::ReleaseResources @0x8243CF20.
-        void PhotoBoothReleaseResources(PhotoBoothComponent& /*lrPhotoBooth*/) {}
-
-        // BrnGui::PhotoBoothComponent::Select @0x8243D1B0. In the
-        // no-camera photo state 1 (GAMERPIC) the console's own case is
-        // `HideComponent(false); return true` -- confirm ACCEPTS and the intro advances to
-        // the licence. That is the value returned here; it is the console's behaviour for
-        // this configuration, not a shortcut.
-        // FLAG PC-platform leaf: see the note above.
-        bool PhotoBoothSelect(PhotoBoothComponent& /*lrPhotoBooth*/) { return true; }
-
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::Cancel @0x8243D330. In photo
-        // state 1 the console's own case falls straight to `return false`.
-        bool PhotoBoothCancel(PhotoBoothComponent& /*lrPhotoBooth*/) { return false; }
-
-        // BrnGui::PhotoBoothComponent::HandleCompressedStillImageEvent
-        // @0x8243D4B0 -- latches a 160x120 DXT1 still. It only stores while the component is
-        // in photo state 3 (WAITINGFORSTILL), which is camera-only, so PC never reaches it.
-        // FLAG PC-platform leaf: see the note above.
-        void PhotoBoothHandleCompressedStillImageEvent(PhotoBoothComponent& /*lrPhotoBooth*/,
-                                                       const CgsModule::Event* /*lpEvent*/) {}
-
         // BrnGui::LicenseComponent::Construct @0x8241A610 and
         // BrnGui::PhotoBoothComponent::Construct @0x8241ABC0. Neither TU can be linked yet --
         // see the block comment in tools/build/build_game_exe.bat for the four link gaps.
@@ -405,22 +365,12 @@ namespace BrnGui
             lrLicense.IconComponent::Construct(lpacName, lpStateInterface, 0, lpacParentName);
         }
 
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::Construct @0x8241ABC0 (as above).
-        void PhotoBoothConstruct(PhotoBoothComponent& lrPhotoBooth, const char* lpacName,
-                                 CgsGui::StateInterface* lpStateInterface)
-        {
-            lrPhotoBooth.IconComponent::Construct(lpacName, lpStateInterface, 0, 0);
-        }
-
         // FLAG PC-platform leaf: BrnGui::LicenseComponent::SetCachePointer @0x824B31E8.
         void LicenseSetCachePointer(LicenseComponent& /*lrLicense*/, GuiCache* /*lpCache*/) {}
 
         // FLAG PC-platform leaf: BrnGui::LicenseComponent::SetProfilePointer @0x824B3248.
         void LicenseSetProfilePointer(LicenseComponent& /*lrLicense*/,
                                       BrnProgression::Profile* /*lpProfile*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::SetCachePointer @0x824B3490.
-        void PhotoBoothSetCachePointer(PhotoBoothComponent& /*lrPhotoBooth*/, GuiCache* /*lpCache*/) {}
 
         // BrnGui::LicenseComponent::EnsureResourcesAreLoaded @0x824B3300 and
         // BrnGui::PhotoBoothComponent::EnsureResourcesAreLoaded @0x824B34F0 stream the
@@ -430,9 +380,6 @@ namespace BrnGui
         // (maResourcesToLoad, which the cache really does load) gate the sequence.
         // FLAG PC-platform leaf: see the note above.
         bool LicenseEnsureResourcesAreLoaded(LicenseComponent& /*lrLicense*/) { return true; }
-
-        // FLAG PC-platform leaf: BrnGui::PhotoBoothComponent::EnsureResourcesAreLoaded @0x824B34F0 (as above).
-        bool PhotoBoothEnsureResourcesAreLoaded(PhotoBoothComponent& /*lrPhotoBooth*/) { return true; }
 
         // BrnProgression::Profile::SetLicenceIssuedDateAsNow @0x8235A0E0 and
         // GetLicenceIssuedDate both live in BrnProfile.cpp, which is not mounted in this
@@ -452,16 +399,26 @@ namespace BrnGui
             return lDate;
         }
 
-        // BrnGui::PhotoBoothComponent::SetProfilePointer -- INLINED at
-        // this call site on X360 (the assert it fires is BrnPhotoBoothComponent.h:280, i.e. a
-        // header inline). Declaration-only on the committed component, so the assert is
-        // reproduced here and the store lands when that TU grows.
-        // FLAG PC-platform leaf: see the note above.
-        void PhotoBoothSetProfilePointer(PhotoBoothComponent& /*lrPhotoBooth*/,
-                                         BrnProgression::Profile* lpProfile)
-        {
-            CGS_ASSERT(lpProfile != 0, "NULL != lpProfile");   // BrnPhotoBoothComponent.h:280
-        }
+    }
+
+    // Intro-state transition log -- the [BootLegal] / [BootProfile] / [FBurnMainHud]-style
+    // diagnostic every boot/flow state in this tree carries. PC-side only; the X360 has no
+    // equivalent (its retail build strips all of these).
+    static void LogIntroState(s32 liFrom, s32 liTo, const char* lpacWhere)
+    {
+        char lac[96];
+        std::snprintf(lac, sizeof(lac), "[Intro] state %d -> %d (%s)\n", liFrom, liTo, lpacWhere);
+        CgsDev::Log::WriteToLog(lac);
+    }
+
+    // The voice-over gate diagnostic: HandleStateTransitions holds both timed transitions
+    // while a voice-over is playing, so a stuck mbVoiceOverPlaying stalls the whole sequence.
+    static void LogIntroVoiceOver(bool lbPlaying, s32 liState)
+    {
+        char lac[96];
+        std::snprintf(lac, sizeof(lac), "[Intro] voice-over %s (state %d)\n",
+                      lbPlaying ? "STARTED" : "FINISHED", liState);
+        CgsDev::Log::WriteToLog(lac);
     }
 
     // ================================================================================
@@ -515,7 +472,12 @@ namespace BrnGui
         //   no parent name. The two button ids are ButtonIconComponent::EPadButton values.
         //   back button 5, confirm button 4, take-photo string E_TAKEPHOTOSTRING_CONTINUE(2),
         //   back string E_BACKSTRING_CANCEL(3), no parent name.
-        PhotoBoothConstruct(mPhotoBoothComponent, KAC_PHOTOBOOTHCOMP_NAME, mpStateInterface);
+        mPhotoBoothComponent.Construct(KAC_PHOTOBOOTHCOMP_NAME, mpStateInterface,
+                                       ButtonIconComponent::E_PADBUTTON_BACK,
+                                       ButtonIconComponent::E_PADBUTTON_SELECT,
+                                       PhotoBoothComponent::E_TAKEPHOTOSTRING_CONTINUE,
+                                       PhotoBoothComponent::E_BACKSTRING_CANCEL,
+                                       0);
 
         mWelcomeText1Anim.Construct(KAC_WELCOMETEXT1COMP_NAME, mpStateInterface, 0);
         mWelcomeText2Anim.Construct(KAC_WELCOMETEXT2COMP_NAME, mpStateInterface, 0);
@@ -542,7 +504,7 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie("", 3);
 
         LicenseReleaseResources(mLicenseComponent);
-        PhotoBoothReleaseResources(mPhotoBoothComponent);
+        mPhotoBoothComponent.ReleaseResources();
 
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
@@ -605,7 +567,7 @@ namespace BrnGui
         case E_INTROSTATE_WELCOMETEXT:
             PostVoiceOver(mpStateInterface, KAC_VO_INTRO_NEED_PICTURE);
             LicenseSetVisible(mLicenseComponent, false);
-            PhotoBoothShowComponent(mPhotoBoothComponent, false);   // X360: HideComponent(true)
+            mPhotoBoothComponent.HideComponent(true);
             mWelcomeText1Anim.AddOutputAptViewState("apt_Transition", "transin", false);
             mScreenAnim.AddOutputAptViewState("apt_Transition",
                                               KAPC_SCREEN_FRAMENAMES[meIntroState], false);
@@ -613,7 +575,7 @@ namespace BrnGui
 
         case E_INTROSTATE_PHOTOBOOTH:
             mWelcomeText1Anim.AddOutputAptViewState("apt_Transition", "transout", false);
-            PhotoBoothShowComponent(mPhotoBoothComponent, false);
+            mPhotoBoothComponent.ShowComponent(false);
             mScreenAnim.AddOutputAptViewState("apt_Transition",
                                               KAPC_SCREEN_FRAMENAMES[meIntroState], false);
             break;
@@ -638,12 +600,13 @@ namespace BrnGui
     // ================================================================================
     void Intro::HandleTransitionFromWelcomeText()
     {
+        LogIntroState(E_INTROSTATE_WELCOMETEXT, E_INTROSTATE_PHOTOBOOTH, "HandleTransitionFromWelcomeText");
         meIntroState = E_INTROSTATE_PHOTOBOOTH;
         SetupComponents();
 
         PostVoiceOver(mpStateInterface,
-                      CacheIsVisionCameraAttached(mpGuiCache) ? KAC_VO_INTRO_TAKE_PHOTO
-                                                              : KAC_VO_INTRO_NO_CAM);
+                      mpGuiCache->GetCamStatus() != 0 ? KAC_VO_INTRO_TAKE_PHOTO
+                                                      : KAC_VO_INTRO_NO_CAM);
     }
 
     // ================================================================================
@@ -657,10 +620,11 @@ namespace BrnGui
         // X360: the inlined GuiEventPlayAptMovie record {8, 18, 12, "", 3} on channel 41.
         mpStateInterface->PlayAptMovie("", 3);
 
+        LogIntroState(E_INTROSTATE_LICENCE, E_INTROSTATE_START_FLYBY, "HandleTransitionFromLicense");
         meIntroState = E_INTROSTATE_START_FLYBY;
 
         LicenseReleaseResources(mLicenseComponent);
-        PhotoBoothReleaseResources(mPhotoBoothComponent);
+        mPhotoBoothComponent.ReleaseResources();
 
         PostVoiceOver(mpStateInterface, KAC_VO_INTRO_GO_TO_JUNKYARD);
     }
@@ -758,10 +722,16 @@ namespace BrnGui
                     mpGuiCache = reinterpret_cast<const GuiEventCache*>(lpEvent)->mpGuiCache;
                     LicenseSetCachePointer(mLicenseComponent, mpGuiCache);
                     LicenseSetPlayerInfo(mLicenseComponent, mpGuiCache->GetPlayerName());
-                    // X360: stw 92, photoBooth+0x94 -- the component's photo resource id
-                    // (kapcGuiResourceNames[92] == "B5PhotoBoothComponentDMV").
-                    PhotoBoothSetPhotoResourceId(mPhotoBoothComponent, 92u);
-                    PhotoBoothSetCachePointer(mPhotoBoothComponent, mpGuiCache);
+                    // X360: an INLINED `stw 92, photoBooth+0x94` -- the component's photo
+                    // resource id. 92 == E_GUI_RESOURCEID_APT_COMPONENT_PHOTOBOOTH_DMV
+                    // ("B5PhotoBoothComponentDMV"), i.e. the DMV_FULL_PAGE visual style; the
+                    // setter is PhotoBoothComponent::SetVisualStyle (DWARF h:296), a header
+                    // inline the compiler folded into this store. The three sibling call
+                    // sites in the image store 91 / 93 / (93|91) from the same slot, one per
+                    // EPhotoBoothStyle, which is what identifies it.
+                    mPhotoBoothComponent.SetVisualStyle(
+                        PhotoBoothComponent::E_PHOTOBOOTH_STYLE_DMV_FULL_PAGE);
+                    mPhotoBoothComponent.SetCachePointer(mpGuiCache);
                 }
                 break;
 
@@ -771,7 +741,7 @@ namespace BrnGui
                     mpProfile = reinterpret_cast<const GuiEventProfilePointer*>(lpEvent)->mpProfile;
                     ProfileSetLicenceIssuedDateAsNow(mpProfile);
                     LicenseSetProfilePointer(mLicenseComponent, mpProfile);
-                    PhotoBoothSetProfilePointer(mPhotoBoothComponent, mpProfile);
+                    mPhotoBoothComponent.SetProfilePointer(mpProfile);
 
                     const CgsSystem::DateAndTime lLicenceDate = ProfileGetLicenceIssuedDate(mpProfile);
 
@@ -792,24 +762,26 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_VOICEOVER_STARTED:
+                LogIntroVoiceOver(true, meIntroState);
                 mbVoiceOverPlaying = true;
                 if (meIntroState == E_INTROSTATE_PHOTOBOOTH)
                 {
-                    PhotoBoothSetButtonPromptVisible(mPhotoBoothComponent, false);
+                    mPhotoBoothComponent.SetButtonPromptVisible(false);
                 }
                 break;
 
             case KI_EVENT_VOICEOVER_STOPPED:
+                LogIntroVoiceOver(false, meIntroState);
                 mfPauseTimer       = 0.0f;
                 mbVoiceOverPlaying = false;
                 if (meIntroState == E_INTROSTATE_PHOTOBOOTH)
                 {
-                    PhotoBoothSetButtonPromptVisible(mPhotoBoothComponent, true);
+                    mPhotoBoothComponent.SetButtonPromptVisible(true);
                 }
                 break;
 
             case KI_EVENT_CAM_PIC:
-                PhotoBoothHandleCompressedStillImageEvent(mPhotoBoothComponent, lpEvent);
+                mPhotoBoothComponent.HandleCompressedStillImageEvent(lpEvent);
                 break;
 
             default:
@@ -859,16 +831,19 @@ namespace BrnGui
             break;
 
         case E_INTROSTATE_PLAYING_VIDEO:
+        {
             // UNREACHABLE in this build (nothing ever sets PLAYING_VIDEO) -- the removed
             // "press A to skip the intro video" path, kept because the console kept it.
-            if (reinterpret_cast<const GuiEventControllerAction*>(lpEvent)->miAction ==
-                KI_ACTION_CONFIRM)
+            const s32 liVideoAction =
+                reinterpret_cast<const GuiEventControllerAction*>(lpEvent)->miAction;
+            if (liVideoAction == KI_ACTION_CONFIRM || liVideoAction == KI_ACTION_CONFIRM_PC)
             {
                 GuiEventStopVideo lStopVideo;
                 mpStateInterface->OutputGuiEvent(lStopVideo);
                 meIntroState = E_INTROSTATE_WAITING_FOR_VIDEO;
             }
             break;
+        }
 
         case E_INTROSTATE_PHOTOBOOTH:
             // X360: virtual dispatch through vtable slot 10.
@@ -894,17 +869,18 @@ namespace BrnGui
             const s32 liAction =
                 reinterpret_cast<const GuiEventControllerAction*>(lpEvent)->miAction;
 
-            if (liAction == KI_ACTION_CONFIRM)
+            if (liAction == KI_ACTION_CONFIRM || liAction == KI_ACTION_CONFIRM_PC)
             {
-                lbAdvance = PhotoBoothSelect(mPhotoBoothComponent);
+                lbAdvance = mPhotoBoothComponent.Select();
             }
             else if (liAction == KI_ACTION_BACK)
             {
-                lbAdvance = PhotoBoothCancel(mPhotoBoothComponent);
+                lbAdvance = mPhotoBoothComponent.Cancel();
             }
 
             if (lbAdvance)
             {
+                LogIntroState(meIntroState, E_INTROSTATE_LICENCE, "HandleControllerPressedPhotoBooth");
                 meIntroState = E_INTROSTATE_LICENCE;
                 SetupComponents();
             }
@@ -926,6 +902,7 @@ namespace BrnGui
         case E_INTROSTATE_NONE:
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:212
             mpStateInterface->StopLoadingScreen();
+            LogIntroState(E_INTROSTATE_NONE, E_INTROSTATE_LOADINGRESOURCES, "Update");
             meIntroState = E_INTROSTATE_LOADINGRESOURCES;
             // FALL THROUGH -- the X360 case 0 runs straight on into case 5 (no branch).
 
@@ -933,14 +910,15 @@ namespace BrnGui
             if (mpGuiCache != 0 &&
                 mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad) &&
                 LicenseEnsureResourcesAreLoaded(mLicenseComponent) &&
-                PhotoBoothEnsureResourcesAreLoaded(mPhotoBoothComponent))
+                mPhotoBoothComponent.EnsureResourcesAreLoaded())
             {
                 // off_82F27B2C[0] == "BrnIntro", apt level 3.
                 mpStateInterface->PlayAptMovie("BrnIntro", 3);
                 LicenseOnLoad(mLicenseComponent);
-                PhotoBoothOnLoad(mPhotoBoothComponent);
+                mPhotoBoothComponent.OnLoad();
                 mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
                 AppendExpectedComponents();
+                LogIntroState(E_INTROSTATE_LOADINGRESOURCES, E_INTROSTATE_WAITINGFORCOMPONENTS, "Update");
                 meIntroState = E_INTROSTATE_WAITINGFORCOMPONENTS;
             }
             break;
@@ -949,6 +927,7 @@ namespace BrnGui
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:248
             if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
             {
+                LogIntroState(E_INTROSTATE_WAITINGFORCOMPONENTS, E_INTROSTATE_WELCOMETEXT, "Update");
                 meIntroState = E_INTROSTATE_WELCOMETEXT;
                 SetupComponents();
             }
@@ -958,6 +937,7 @@ namespace BrnGui
             if (CacheIsUserSignedIn(mpGuiCache))
             {
                 mfFlybyTimer = 0.0f;
+                LogIntroState(E_INTROSTATE_START_FLYBY, E_INTROSTATE_WAIT_FOR_FLYBY_FINISH, "Update");
                 meIntroState = E_INTROSTATE_WAIT_FOR_FLYBY_FINISH;
                 PostCommand16<KI_COMMAND_FLYBY_START>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             }
@@ -988,6 +968,6 @@ namespace BrnGui
         }
 
         LicenseSendPlayerPictureEvent(mLicenseComponent);
-        PhotoBoothSendPlayerPictureEvent(mPhotoBoothComponent);
+        mPhotoBoothComponent.SendPlayerPictureEvent();
     }
 }

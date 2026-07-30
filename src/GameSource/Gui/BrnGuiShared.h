@@ -20,10 +20,55 @@
 //                                     names ARE the enum suffixes ("397134", ...); the
 //                                     table is DEFINED by this header's data TU
 //                                     (BrnGuiShared.cpp / off_82F27C98), declared here.
+//   - BrnGui::EGuiResourceId       -- the GUI resource-id enum (slice), and
+//   - gGuiResourceIdentifier[]     -- the parallel resource-NAME table (X360 off_82F278E0).
 // ============================================================================
 
 namespace BrnGui
 {
+    // ------------------------------------------------------------------------
+    // BrnGuiShared.h (DWARF) -- the GUI resource id enum. Only the enumerators the
+    // landed TUs name are spelled here; the enum is dense and grows additively.
+    //
+    // ⚠ VERSION DRIFT: the DecFIGS PS3 DWARF ends this enum at
+    // E_GUI_RESOURCEID_NUM = 228. The X360 ARTIST build this tree reconstructs has
+    // **237** ids -- its resource-NAME table (off_82F278E0) has 237 entries, and both
+    // PhotoBoothComponent::EnsureResourcesAre(Un)Loaded @0x824B34F0/@0x824B3578 compare
+    // mPhotoResourceToLoad.muId against the literal 237 (cmplwi 0xED). The NAMES below
+    // are the DWARF's; the VALUES are gated on the X360 ledger (each was read back out
+    // of gGuiResourceIdentifier[] at that index -- see the trailing comments).
+    // ------------------------------------------------------------------------
+    enum EGuiResourceId
+    {
+        // PhotoBoothComponent::SetVisualStyle picks one of these three by EPhotoBoothStyle.
+        E_GUI_RESOURCEID_APT_COMPONENT_PHOTOBOOTH_BASIC       = 91,   // "B5PhotoBoothComponent"
+        E_GUI_RESOURCEID_APT_COMPONENT_PHOTOBOOTH_DMV         = 92,   // "B5PhotoBoothComponentDMV"
+        E_GUI_RESOURCEID_APT_COMPONENT_PHOTOBOOTH_DMV_UPGRADE = 93,   // "B5PhotoBoothCptDMVUpgrade"
+
+        // LicenseComponent::SetPlayerInfo's KA_LICENSE_RESOURCES_AVAILABLE / the two
+        // elite tuples (X360 .data @0x82F25360 / 0x82F25390 / 0x82F25398).
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_0             = 97,   // "B5LicenseRank0"
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_1             = 98,   // "B5LicenseRank1"
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_2             = 99,   // "B5LicenseRank2"
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_3             = 100,  // "B5LicenseRank3"
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_4             = 101,  // "B5LicenseRank4"
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_5             = 102,  // "B5LicenseRank5"
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_ELITE         = 103,  // "B5LicenseElite"
+        E_GUI_RESOURCEID_APT_COMPONENT_LICENSE_RANK_ELITE_COMPLETE = 104, // "B5LicenseEliteFinal"
+
+        // Terminating count. X360-gated (see the drift note above).
+        E_GUI_RESOURCEID_NUM = 237,
+    };
+
+    // BrnGuiShared.h:473 (DWARF) -- the resource-NAME table, one entry per
+    // EGuiResourceId, in id order (X360 off_82F278E0). It is a SHARED global, not a
+    // file-static: GuiCache's own load/unload pump indexes it, and so do
+    // PhotoBoothComponent::OnLoad @0x8243CD68, LicenseComponent::OnLoad @0x82440AC0 and
+    // LicenseComponent::Update @0x8243C0B8, each of which turns its resource tuple's id
+    // straight into the apt movie name it asks StateInterface::PlayAptMovie for.
+    // DEFINED by BrnGuiCache.cpp (the TU that owns the resource pump).
+    extern const char* const gGuiResourceIdentifier[E_GUI_RESOURCEID_NUM];
+
     // BrnGuiShared.h:296 (DWARF) -- a sat-nav road icon. Each value's numeric suffix
     // is the apt timeline-label code for that road's sign artwork; the parallel name
     // table below holds those code strings in the same order.

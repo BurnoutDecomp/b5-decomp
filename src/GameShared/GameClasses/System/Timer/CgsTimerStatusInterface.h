@@ -95,6 +95,7 @@ namespace CgsSystem
     inline f32  TimerStatus::GetBaseTimeStep() const       { return mfBaseTimeStep; }
     inline f32  TimerStatus::GetTimeStepMultiplier() const { return mfTimeStepMultiplier; }
     inline bool TimerStatus::IsRunning() const             { return mbRunning; }
+    inline Time TimerStatus::GetTime() const               { return mTime; }
 
     inline const TimerStatus* TimerStatusInterface::GetGameTimerStatus() const { return &mGameTimerStatus; }
     inline const TimerStatus* TimerStatusInterface::GetSimTimerStatus()  const { return &mSimTimerStatus; }

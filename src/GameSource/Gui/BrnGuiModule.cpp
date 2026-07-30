@@ -1506,6 +1506,15 @@ namespace BrnGui
                     break;
                 }
 
+                case 26:    // GuiEventTimeInfo -- the per-frame { delta, now } pair
+                    // The cache LEADS with this pair and every GUI-side timer reads it
+                    // straight off mpGuiCache+0 (see GuiCache::RecTimeInfo's note). Without
+                    // this latch mfTimeStep stays 0 and every GUI dwell/tick in the game is
+                    // frozen -- which is exactly what parked BrnGui::Intro in WELCOMETEXT.
+                    mGuiCache.RecTimeInfo(
+                        reinterpret_cast<const CgsGui::GuiEventTimeInfo*>(lpEvent));
+                    break;
+
                 case 504:   // localized audio ready
                 case 508:   // play video
                 case 513:   // (movie family)

@@ -25,6 +25,19 @@ namespace CgsGui
         // plain payload (not GuiEvent<N>-derived), so the queued event id is carried here.
         s32 GetEventType() const { return 26; }
 
+        // The frame delta companion GuiCache latches at its +0x00 (BrnGui::GuiCache::GetTimeStep,
+        // and Intro::HandleStateTransitions @0x824DAA48's `lfs f13, 0(mpGuiCache)`).
+        f32 GetTimeStep() const { return mfTimeDelta; }
+
+        // The raw "now" stamp, without GetTime()'s -FLT_MAX assert (the cache latch copies
+        // the pair verbatim; the assert belongs to the consumer that READS the stamp).
+        f32 GetTimeNow() const { return mfTimeNow; }
+
+        // The producer builds the 8-byte record on the stack word by word (X360
+        // BridgeGameStateToGui @0x823EF300: `payload[0] = base*multiplier; payload[1] =
+        // seconds + fraction`), then hands it to AddGuiEvent<T>. This is that fill.
+        void Set(f32 lfTimeDelta, f32 lfTimeNow) { mfTimeDelta = lfTimeDelta; mfTimeNow = lfTimeNow; }
+
     private:
         f32 mfTimeDelta;    // +0x00 - leading frame-delta companion to mfTimeNow
         f32 mfTimeNow;      // +0x04 - current time stamp (-FLT_MAX while unset)
