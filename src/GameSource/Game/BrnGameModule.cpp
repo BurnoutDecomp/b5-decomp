@@ -2,7 +2,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
 #include "GameShared/GameClasses/Development/DebugSystem/CgsDebugFontBringUp.h"   // LoadAndSetDebugFont
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
-#include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
+#include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
 #include "GameShared/GameClasses/System/PC/CgsGuiSoundPC.h" // GUI presentation-sound PC consumer
 
 #include <cstring>   // memset
@@ -1294,6 +1295,60 @@ namespace BrnGame
                     {
                         CgsGui::GuiEvent<137> lWorldLoadComplete;
                         CgsGui::GuiModule::AddGuiEvent(lWorldLoadComplete, mpGuiInputBuffer);
+                    }
+                    // FLAG GameState stand-in (the live-progression handoff, event 350).
+                    // CONSOLE CHAIN, recovered end to end from ARTIST:
+                    //   BrnGameState::GameStateModule::PreWorldUpdate @0x823A5EA4 posts, on
+                    //   EVERY pre-world update and unconditionally, game action 193 =
+                    //   { &this->mProfile, the ProgressionData resource (or NULL), a flag }
+                    //   (12 bytes) onto the module's GameActionQueue; then
+                    //   BrnGameModule::BridgeGameStateToGui @0x823EE880 ->
+                    //   TranslateGameActionsToGuiEvents @0x823E9CE0 case 193 @0x823EBBA4
+                    //   copies those 12 bytes into a stack record and publishes them with
+                    //   AddGuiEvent<GuiEventProgressionProfileData> @0x823EBBC8. That single
+                    //   `bl` is the ONLY producer of GUI event 350 in the whole image.
+                    // On arrival the console does two things: CgsGui::GuiModule::Update's
+                    // event switch (case 209 == id 350, the switch is rebased by 141)
+                    // @0x82528AB4 hands payload[0]/payload[1] to
+                    // ProfileManager::SetProgressionProfile, and the registered flow states
+                    // latch the profile pointer -- which is how BrnGui::InGame gets the
+                    // mpProfile whose mbIsNewProfile byte gates "TO_INTRO".
+                    // WHY A STAND-IN: none of that chain exists on PC. mGameStateModule is a
+                    // placeholder (BrnGameModule.cpp:204), BrnGameModule::DoUpdate is a
+                    // documented no-op, and GameBridgeGameStateToX.cpp explicitly defers
+                    // BridgeGameStateToGui. The GUI module is therefore the only owner of a
+                    // BrnProgression::Profile in the process -- BrnGuiModule::Prepare installs
+                    // it through the very accessor the console's event-350 handler calls -- so
+                    // this posts the SAME pair the console's action 193 carries, from the same
+                    // point in the sub-step (inside the GUI-input write bracket, before the
+                    // GUI drive), through the same AddGuiEvent<T> boundary. Replace it with
+                    // the real translator when the GameState module lands.
+                    {
+                        BrnGui::GuiEventProgressionProfileData lProgressionProfile;
+                        lProgressionProfile.mpProfile =
+                            mGuiModule.GetProfileManager().GetProgressionProfile();
+                        lProgressionProfile.mpProgressionData =
+                            mGuiModule.GetProfileManager().GetProgressionData();
+                        // The console's flag byte ORs Profile::muMedalCountFromTheStart >= 4
+                        // with two game-state-module words that have no PC equivalent; the
+                        // medal-count half is the readable one (it is the same test
+                        // ProgressionManager::AreRoadRulesAvailable makes) and no
+                        // reconstructed consumer reads the byte yet.
+                        lProgressionProfile.mbRoadRulesAvailable =
+                            lProgressionProfile.mpProfile != 0
+                            && lProgressionProfile.mpProfile->GetMedalCountFromTheStart() >= 4u;
+                        if (lProgressionProfile.mpProfile != 0)
+                        {
+                            // The three steps of AddGuiEvent<GuiEventProgressionProfileData>
+                            // @0x823D4548, inlined: the X360 emits it as a NON-static member of
+                            // the CgsGui::GuiModule the game module holds at +7252512, but the
+                            // body never reads `this` (see CgsGuiModule.h), and the PC game
+                            // module has no such embed to call it through.
+                            mpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lProgressionProfile),
+                                lProgressionProfile.GetEventType(),
+                                static_cast<s32>(sizeof(lProgressionProfile)));
+                        }
                     }
                     mpGuiInputBuffer->UnlockForWrite();
                     mPcInputOutputBuffer.UnlockForRead();

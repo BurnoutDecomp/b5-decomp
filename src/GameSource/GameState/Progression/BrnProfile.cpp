@@ -490,6 +490,19 @@ void Profile::SetBestStuntStats(s32 liCompletedBarrelRolls, f32 lfCompletedAirSp
 }
 
 // ====================================================================================
+// Profile::GetMedalCountFromTheStart
+// Trivial named-member getter for the medal-progress count the X360 reads inline
+// (Profile +42512): ProgressionManager::AreRoadRulesAvailable tests it >= 4, and so does
+// GameStateModule::PreWorldUpdate when it builds the game-action-193 flag byte. The X360
+// emits no out-of-line body (every reader inlines the load); the declaration was already
+// in the header, this is its definition.
+// ====================================================================================
+u32 Profile::GetMedalCountFromTheStart() const
+{
+    return muMedalCountFromTheStart;
+}
+
+// ====================================================================================
 // Profile::GetLicenceIssuedDate  @ 0x8235A0B8
 // Copy out the licence-issued date (returned by value).
 // ====================================================================================

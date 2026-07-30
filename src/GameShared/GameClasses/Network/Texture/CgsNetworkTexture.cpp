@@ -124,6 +124,39 @@ namespace CgsNetwork
         return true;
     }
 
+    // ---- Prepare(buffer, size, width, height, format) @ 0x82893A80 -----------------------------
+    // The caller-owned-buffer overload (X360 callers: BrnProgression::Profile::
+    // SetPlayerLicencePicture @0x8235A08C, BrnGameState::GameStateModule::OnProfileLoaded
+    // @0x8239738C, BrnGui::PhotoBoothComponent::Construct @0x8241AC9C). It is a sibling
+    // function in the image, immediately after the heap overload; IDA leaves it unnamed
+    // (sub_82893A80) because it has no DWARF entry of its own, but the two asserts
+    // ("lacTextureBuffer" CgsNetworkTexture.cpp:109 and "GetTextureSize() <=
+    // liTextureBufferSize" :125) identify it unambiguously.
+    //
+    // No allocation happens: the geometry/format are recorded, the bit depth derived, the
+    // caller's buffer adopted, and mpHeapMalloc / mbTextureAllocatedFromHeap /
+    // mbIsUncompressedYUV are cleared -- so Release() will NOT try to free it.
+    bool NetworkTexture::Prepare(char* lacTextureBuffer, s32 liTextureBufferSize, s32 liWidth,
+                                 s32 liHeight, renderengine::PixelFormat lFormat)
+    {
+        CGS_ASSERT(lacTextureBuffer, "lacTextureBuffer");
+
+        miWidth        = liWidth;
+        miHeight       = liHeight;
+        mFormat        = lFormat;
+        miBitsPerPixel = GetBitsPerPixel(lFormat);
+
+        mpcTexture                 = lacTextureBuffer;
+        mpHeapMalloc               = nullptr;
+        mbTextureAllocatedFromHeap = false;
+        mbIsUncompressedYUV        = false;
+
+        CGS_ASSERT(GetTextureSize() <= liTextureBufferSize,
+                   "GetTextureSize() <= liTextureBufferSize");
+        (void)liTextureBufferSize;
+        return true;
+    }
+
     // ---- Release @ 0x8287E5D0 ------------------------------------------------------------------
     // If this texture owns a heap allocation, free it; then reset all fields to the
     // freshly-constructed state (matching Construct: format word back to PIXELFORMAT_A8R8G8B8).

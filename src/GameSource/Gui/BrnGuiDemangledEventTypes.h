@@ -126,7 +126,12 @@ namespace BrnGui
     struct GuiEventPrepareForInvite { u8 maData[1]; s32 GetEventType() const { return 128; } };  // id 128 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventPrepareForModeStart : public CgsGui::GuiEvent<93> { u8 maPayload[140]; };  // id 93 size 152 (12B GuiEvent header + opaque payload)
     struct GuiEventPreraceTrigger { u8 maData[4]; s32 GetEventType() const { return 160; } };  // id 160 size 4 (raw; size not GuiEvent-shaped)
-    struct GuiEventProgressionProfileData : public CgsGui::GuiEvent<350> {};  // id 350 size 12
+    // GuiEventProgressionProfileData (id 350, size 12) MOVED to
+    // GameSource/Gui/BrnGuiEventTypeDefs.h with its real field shape
+    // { BrnProgression::Profile*, const BrnProgression::ProgressionData*, bool } --
+    // the auto-derived shell here read the attested record size 12 as "GuiEvent<350>
+    // header, no payload", but the X360 producer (GameBridgeGameStateToX case 193
+    // @0x823EBBA4) fills all 12 bytes with payload. Do not re-add it here.
     struct GuiEventRaceDistanceRemaining : public CgsGui::GuiEvent<239> { u8 maPayload[132]; };  // id 239 size 144 (12B GuiEvent header + opaque payload)
     struct GuiEventRaceDistanceToCheckpoint { u8 maData[4]; s32 GetEventType() const { return 240; } };  // id 240 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventRacePositionInfo : public CgsGui::GuiEvent<238> { u8 maPayload[12]; };  // id 238 size 24 (12B GuiEvent header + opaque payload)

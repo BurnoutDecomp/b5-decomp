@@ -1,12 +1,16 @@
 // CgsNetwork::NetworkImageConverter - the network mugshot/texture image pipeline.
 //
-// This TU reconstructs the four X360-attested methods that live in this source file:
+// This TU reconstructs the seven X360-attested methods that live in this source file:
 //   SetupPerfmons                       @ 0x82871860  register the eight CPU perfmons
+//   Convert                             @ 0x828943A8  same-size convert dispatch
+//   Copy                                @ 0x82871B08  same-format blit
+//   ConvertX8R8G8B8ToA1R5G5B5           @ 0x8288EC98  same-size 32bpp -> 16bpp pack
 //   ConvertAndResize                    @ 0x828944C8  validate + dispatch the resize convert
 //   ConvertAndResizeX8R8G8B8ToA1R5G5B5  @ 0x8288EDD8  the bilinear/point resize + pack
 //   UnpackFromNetworkTexture            @ 0x8288F498  blit into a locked GPU surface
-// The sibling Convert / Copy / ConvertX8R8G8B8ToA1R5G5B5 bodies live in their own TUs (they
-// share CgsNetworkImageConverter.h). Behaviour is taken from the X360 ARTIST asm; the geometry
+// (The first three landed with the intro wave: BrnProgression::Profile::SetPlayerLicencePicture
+// @0x8235A020 calls Convert, so mounting the Profile TU needed them.)
+// Behaviour is taken from the X360 ARTIST asm; the geometry
 // getters the X360 inlined (GetWidth/GetHeight/GetFormat/GetTexture/GetBitsPerPixel/GetTextureSize)
 // are restored as NetworkTexture method calls.
 
@@ -54,6 +58,106 @@ namespace CgsNetwork
         CGS_ASSERT(miCompressPM       >= 0, "miCompressPM >= 0");
         CGS_ASSERT(miUnpackToImage    >= 0, "miUnpackToImage >= 0");
         CGS_ASSERT(miPackToTexture    >= 0, "miPackToTexture >= 0");
+    }
+
+    // ---- Convert @ 0x828943A8 -------------------------------------------------------------------
+    // Same-size convert: identical formats are a straight Copy; X8/A8 R8G8B8 -> A1R5G5B5 is the one
+    // real conversion; anything else is the streamed "Cannot convert these formats!" assert
+    // (CgsNetworkImageConverter.cpp:123). The whole body is bracketed by the Convert perfmon.
+    // (X360 raw format words: 405274758 == 0x18280086 A8R8G8B8, 673710214 == 0x28280086 X8R8G8B8,
+    //  405274691 == 0x18280043 A1R5G5B5.)
+    void NetworkImageConverter::Convert(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miConvertPM);
+
+        const renderengine::PixelFormat leSrcFormat = lpSrcTexture->GetFormat();
+        const renderengine::PixelFormat leDstFormat = lpDstTexture->GetFormat();
+
+        if (leSrcFormat == leDstFormat)
+        {
+            Copy(lpSrcTexture, lpDstTexture);
+        }
+        else if ((leSrcFormat == renderengine::PIXELFORMAT_A8R8G8B8
+                  && leDstFormat == renderengine::PIXELFORMAT_A1R5G5B5)
+              || (leSrcFormat == renderengine::PIXELFORMAT_X8R8G8B8
+                  && leDstFormat == renderengine::PIXELFORMAT_A1R5G5B5))
+        {
+            ConvertX8R8G8B8ToA1R5G5B5(lpSrcTexture, lpDstTexture);
+        }
+        else
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Cannot convert these formats!";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(miConvertPM);
+    }
+
+    // ---- Copy @ 0x82871B08 ----------------------------------------------------------------------
+    // Same-format blit: three geometry/format asserts (cpp:588/589/590), then one XMemCpy of
+    // GetTextureSize() SOURCE bytes -- (srcBitsPerPixel * srcHeight * srcWidth + 7) / 8 -- from the
+    // source pixel buffer to the destination's. Bracketed by the Copy perfmon.
+    void NetworkImageConverter::Copy(const NetworkTexture* lpSrcTexture, NetworkTexture* lpDstTexture)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miCopyPM);
+
+        CGS_ASSERT(lpDstTexture->GetWidth()  >= lpSrcTexture->GetWidth(),
+                   "lpDstTexture->GetWidth() >= lpSrcTexture->GetWidth()");
+        CGS_ASSERT(lpDstTexture->GetHeight() >= lpSrcTexture->GetHeight(),
+                   "lpDstTexture->GetHeight() >= lpSrcTexture->GetHeight()");
+        CGS_ASSERT(lpDstTexture->GetFormat() == lpSrcTexture->GetFormat(),
+                   "lpDstTexture->GetFormat() == lpSrcTexture->GetFormat()");
+
+        std::memcpy(lpDstTexture->GetTexture(), lpSrcTexture->GetTexture(),
+                    static_cast<usize>(lpSrcTexture->GetTextureSize()));
+
+        CgsDev::PerfMonCpu::StopMonitor(miCopyPM);
+    }
+
+    // ---- ConvertX8R8G8B8ToA1R5G5B5 @ 0x8288EC98 -------------------------------------------------
+    // Straight (no resize) 32bpp -> 16bpp pack, row by row through each texture's own stride.
+    // Same-size only (the two dimension asserts, cpp:195/196). The pack is the same one the resize
+    // path uses: dst16 = 0x8000 | (R5 << 10) | (G5 << 5) | B5, taking the top five bits of each
+    // source channel (the X360 forms it as 32*(32*((r&0x1F)-32) + (g&0x1F)) + (b&0x1F), whose
+    // -32 term IS the forced alpha bit once truncated to 16 bits). Bracketed by the X8->R5 perfmon.
+    void NetworkImageConverter::ConvertX8R8G8B8ToA1R5G5B5(const NetworkTexture* lpSrcTexture,
+                                                          NetworkTexture* lpDstTexture)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miXToRPM);
+
+        const char* lpcSrcRow = lpSrcTexture->GetTexture();
+        char*       lpcDstRow = lpDstTexture->GetTexture();
+        const s32   liSrcStride = lpSrcTexture->GetStride();
+        const s32   liDstStride = lpDstTexture->GetStride();
+
+        CGS_ASSERT(lpSrcTexture->GetWidth()  == lpDstTexture->GetWidth(),
+                   "lpSrcTexture->GetWidth() == lpDstTexture->GetWidth()");
+        CGS_ASSERT(lpSrcTexture->GetHeight() == lpDstTexture->GetHeight(),
+                   "lpSrcTexture->GetHeight() == lpDstTexture->GetHeight()");
+
+        for (s32 liRow = 0; liRow < lpDstTexture->GetHeight(); ++liRow)
+        {
+            const u32* lpuSrc = reinterpret_cast<const u32*>(lpcSrcRow);
+            u16*       lpuDst = reinterpret_cast<u16*>(lpcDstRow);
+
+            for (s32 liColumn = 0; liColumn < lpDstTexture->GetWidth(); ++liColumn)
+            {
+                const u32 luSource = *lpuSrc++;
+                const u32 luRed    = (luSource >> 19) & 0x1Fu;
+                const u32 luGreen  = (luSource >> 11) & 0x1Fu;
+                const u32 luBlue   = (luSource >>  3) & 0x1Fu;
+                *lpuDst++ = static_cast<u16>(0x8000u | (luRed << 10) | (luGreen << 5) | luBlue);
+            }
+
+            lpcSrcRow += liSrcStride;
+            lpcDstRow += liDstStride;
+        }
+
+        CgsDev::PerfMonCpu::StopMonitor(miXToRPM);
     }
 
     // ---- ConvertAndResize @ 0x828944C8 ----------------------------------------------------------

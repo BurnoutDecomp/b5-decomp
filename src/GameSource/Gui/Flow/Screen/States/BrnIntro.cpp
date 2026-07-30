@@ -51,6 +51,8 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                  // CgsDev::StrStream (the streamed unhandled-event assert)
+#include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h" // CgsDev::Assert::Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                       // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"              // the state in-queue
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"      // StateInterface / OutputGuiEvent
@@ -811,11 +813,23 @@ namespace BrnGui
                 break;
 
             default:
+            {
                 // Event 510 ("the video finished") lands HERE, deliberately: it is
                 // registered in maiEventToObserve and has no case anywhere in the X360
                 // function. Retail compiles the assert out.
-                CGS_ASSERT(false, "Unhandled event in Intro::Update()");   // cpp:479
+                //
+                // The X360 message is STREAMED, not a fixed literal (LABEL_42 of
+                // HandleIncomingEvents @0x824C1F68): "Unhandled event " << liEventType <<
+                // " in Intro::Update()\n". Reproduced -- an unhandled id is useless
+                // without the id, and this is the assert a boot actually trips.
+                char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream << "Unhandled event " << liEventType << " in Intro::Update()\n";
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);   // cpp:479
+                CgsDev::Assert::EndAssert();
                 break;
+            }
             }
 
             liEventType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);

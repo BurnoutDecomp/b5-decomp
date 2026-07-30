@@ -199,9 +199,12 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::BeginRendering()
     {
+        static_assert(ImCommandRecord<ImCommand>::KU_BYTES == 16u, "console record size 16");
+        const u32 luRecord = ImCommandRecord<ImCommand>::KU_BYTES;
+
         mbInRenderBlock = true;                                               // this+52
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;            // (*this+32)+8
-        if (muCommandBufferSize < luPos + 16u)                               // this+48
+        if (muCommandBufferSize < luPos + luRecord)                          // this+48
         {
             SetBufferFullRewindToLastEndRender();
         }
@@ -210,8 +213,8 @@ namespace CgsGraphics
             ImCommand* lpCommand = reinterpret_cast<ImCommand*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
             lpCommand->muType = IM_CMD_BEGIN_RENDERING;
-            lpCommand->muSize = 16u;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            lpCommand->muSize = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
         }
     }
 
@@ -223,9 +226,11 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::EndRendering()
     {
+        const u32 luRecord = ImCommandRecord<ImCommand>::KU_BYTES;   // 16, as on console
+
         mbInRenderBlock = false;                                              // this+52
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize < luPos + 16u)
+        if (muCommandBufferSize < luPos + luRecord)
         {
             SetBufferFullRewindToLastEndRender();
         }
@@ -234,8 +239,8 @@ namespace CgsGraphics
             ImCommand* lpCommand = reinterpret_cast<ImCommand*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
             lpCommand->muType = IM_CMD_END_RENDERING;
-            lpCommand->muSize = 16u;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            lpCommand->muSize = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             muLastEndRenderPos = luPos;                                       // this+60
         }
     }
@@ -260,15 +265,19 @@ namespace CgsGraphics
             return;
         }
 
+        static_assert(ImCommandRecord<ImCommandRenderPrimitives<V> >::KU_BYTES == 32u,
+                      "console record size 32");
+        const u32 luRecord = ImCommandRecord<ImCommandRenderPrimitives<V> >::KU_BYTES;
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 32u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandRenderPrimitives<V>* lpCommand =
                 reinterpret_cast<ImCommandRenderPrimitives<V>*>(
                     mpWriteBuffer->mpu8CommandBuffer + luPos);
             lpCommand->muType         = IM_CMD_RENDER_PRIMITIVES;
-            lpCommand->muSize         = 32u;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 32u;
+            lpCommand->muSize         = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mePrimitiveType = lePrimitiveType;
             lpCommand->mpVertices      = lpDest;
             lpCommand->muNumVertices   = luNumVertices;
@@ -292,15 +301,17 @@ namespace CgsGraphics
     void ImRenderBuffer<V>::RenderFromStaticVertexBuffer(renderengine::PrimitiveType lePrimitiveType,
                                                          const V* lpVertices, u32 luNumVertices)
     {
+        const u32 luRecord = ImCommandRecord<ImCommandRenderPrimitives<V> >::KU_BYTES;  // 32
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 32u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandRenderPrimitives<V>* lpCommand =
                 reinterpret_cast<ImCommandRenderPrimitives<V>*>(
                     mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize          = 32u;
+            lpCommand->muSize          = luRecord;
             lpCommand->muType          = IM_CMD_RENDER_PRIMITIVES;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 32u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mpVertices      = lpVertices;
             lpCommand->mePrimitiveType = lePrimitiveType;
             lpCommand->muNumVertices   = luNumVertices;
@@ -363,15 +374,17 @@ namespace CgsGraphics
     void ImRenderBuffer<V>::RenderEnd(renderengine::PrimitiveType lePrimitiveType,
                                       const V* lpVerticesFromRenderStart, u32 luNumVertices)
     {
+        const u32 luRecord = ImCommandRecord<ImCommandRenderPrimitives<V> >::KU_BYTES;  // 32
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 32u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandRenderPrimitives<V>* lpCommand =
                 reinterpret_cast<ImCommandRenderPrimitives<V>*>(
                     mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize          = 32u;
+            lpCommand->muSize          = luRecord;
             lpCommand->muType          = IM_CMD_RENDER_PRIMITIVES;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 32u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mpVertices      = lpVerticesFromRenderStart;
             lpCommand->mePrimitiveType = lePrimitiveType;
             lpCommand->muNumVertices   = luNumVertices;
@@ -389,14 +402,18 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::SetTexture(renderengine::Texture* lpTexture)
     {
+        static_assert(ImCommandRecord<ImCommandSetTexture>::KU_BYTES == 16u,
+                      "console record size 16");
+        const u32 luRecord = ImCommandRecord<ImCommandSetTexture>::KU_BYTES;
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandSetTexture* lpCommand = reinterpret_cast<ImCommandSetTexture*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize    = 16u;
+            lpCommand->muSize    = luRecord;
             lpCommand->muType    = IM_CMD_SET_TEXTURE;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mpTexture = lpTexture;
         }
         else
@@ -412,15 +429,17 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::SetProgram(s8 li8Program)
     {
+        const u32 luRecord = ImCommandRecord<ImCommandSetShaderProgram>::KU_BYTES;  // 16
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandSetShaderProgram* lpCommand =
                 reinterpret_cast<ImCommandSetShaderProgram*>(
                     mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize          = 16u;
+            lpCommand->muSize          = luRecord;
             lpCommand->muType          = IM_CMD_SET_SHADER_PROGRAM;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mi8ShaderProgram = li8Program;
         }
         else
@@ -442,15 +461,17 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::SetState(const renderengine::RasterizerState* lpRasterizerState)
     {
+        const u32 luRecord = ImCommandRecord<ImCommandSetStateRasterizer>::KU_BYTES;  // 16
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandSetStateRasterizer* lpCommand =
                 reinterpret_cast<ImCommandSetStateRasterizer*>(
                     mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize = 16u;
+            lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_SET_STATE_RASTERIZER;   // 6
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mpRasterizerState = lpRasterizerState;
         }
         else
@@ -470,14 +491,16 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::SetTextureState(const renderengine::TextureState* lpTextureState)
     {
+        const u32 luRecord = ImCommandRecord<ImCommandSetStateTexture>::KU_BYTES;  // 16
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandSetStateTexture* lpCommand = reinterpret_cast<ImCommandSetStateTexture*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
             lpCommand->muType         = IM_CMD_SET_STATE_TEXTURE;            // 9
-            lpCommand->muSize         = 16u;
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            lpCommand->muSize         = luRecord;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mpTextureState = reinterpret_cast<const TextureState*>(lpTextureState);
         }
         else
@@ -497,14 +520,18 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::SetTransform(const Im2dTransform& lrTransform)
     {
+        static_assert(ImCommandRecord<ImCommandSetTransform>::KU_BYTES == 80u,
+                      "console record size 80");
+        const u32 luRecord = ImCommandRecord<ImCommandSetTransform>::KU_BYTES;
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 80u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommandSetTransform* lpCommand = reinterpret_cast<ImCommandSetTransform*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize = 80u;
+            lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_SET_TRANSFORM;                        // 16
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 80u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
             lpCommand->mTransform = lrTransform;
         }
         else
@@ -516,25 +543,34 @@ namespace CgsGraphics
     // -------------------------------------------------------------------------
     // PushMaskGeometry - the Apt mask ADD op (AptCallbackRender::DrawRenderingUnit @0x5CBA30,
     // per-mesh). Reserve the 2-vertex screen-space corner run (AllocVertices(2)), append a
-    // 16-byte {muType=18, muSize=16} record carrying the bound texture id @ +8 and the corner-run
+    // {muType=18} record carrying the bound texture id @ +8 and the corner-run
     // pointer @ +12, then copy the two filled corners into the run. The PS3 stores the command
     // header FIRST (and pre-warms the line with dcbz, dropped here), then calls AllocVertices, then
     // -- only when BOTH the run and the command slot are valid -- writes the +8/+12 payload and the
-    // two corner vertices. A command-buffer overflow (no room for the 16-byte record) rewinds.
+    // two corner vertices. A command-buffer overflow (no room for the record) rewinds.
+    //
+    // RECORD SIZE: the console literal is 16 (two 4-byte payload words after the 8-byte
+    // header). Both payload members are POINTERS, so on x64 the record is 24 bytes and the
+    // reserved stride is 32 -- see ImCommandRecord in the header. Writing the console's 16
+    // here put the corner-run pointer on top of the FOLLOWING record's header and made
+    // GetNextCommand re-enter this record mid-way, which crashed Dispatch on the first Apt
+    // movie that carries masks (the licence/photo INTRO).
     // -------------------------------------------------------------------------
     template <typename V>
     void ImRenderBuffer<V>::PushMaskGeometry(uintptr_t luTextureId, const V& lrCorner0,
                                              const V& lrCorner1)
     {
+        const u32 luRecord = ImCommandRecord<ImCommandPushMaskTexture<V> >::KU_BYTES;
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
         ImCommandPushMaskTexture<V>* lpCommand = nullptr;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             lpCommand = reinterpret_cast<ImCommandPushMaskTexture<V>*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize = 16u;
+            lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_PUSH_MASK_GEOMETRY;                    // 18
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
         }
         else
         {
@@ -564,14 +600,16 @@ namespace CgsGraphics
     template <typename V>
     void ImRenderBuffer<V>::EndMask()
     {
+        const u32 luRecord = ImCommandRecord<ImCommandPopMask>::KU_BYTES;   // 16, as on console
+
         const u32 luPos = mpWriteBuffer->muCommandBufferWritePos;
-        if (muCommandBufferSize >= luPos + 16u)
+        if (muCommandBufferSize >= luPos + luRecord)
         {
             ImCommand* lpCommand = reinterpret_cast<ImCommand*>(
                 mpWriteBuffer->mpu8CommandBuffer + luPos);
-            lpCommand->muSize = 16u;
+            lpCommand->muSize = luRecord;
             lpCommand->muType = IM_CMD_END_MASK;                             // 19
-            mpWriteBuffer->muCommandBufferWritePos = luPos + 16u;
+            mpWriteBuffer->muCommandBufferWritePos = luPos + luRecord;
         }
         else
         {

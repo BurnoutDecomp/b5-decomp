@@ -55,6 +55,12 @@
 // home (same idiom as BrnScoringSystem.h).
 namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
 
+// Pointer-only collaborators of GuiEventProgressionProfileData (id 350). The real homes
+// are GameSource/GameState/Progression/BrnProfile.h and the progression manifest resource;
+// this header only carries the two pointers, so a forward declaration is enough (and keeps
+// the 118 KB progression profile out of every AddGuiEvent<T> translation unit).
+namespace BrnProgression { class Profile; struct ProgressionData; }
+
 namespace BrnGui
 {
 
@@ -1341,5 +1347,52 @@ struct GuiEventRoadRuleNewHighScore
     s32 GetEventType() const { return 342; }
 };
 static_assert(sizeof(GuiEventRoadRuleNewHighScore) == 48, "X360 AddGuiEvent size 48 (id 342)");
+
+// ---------------------------------------------------------------------------------------
+// GuiEventProgressionProfileData (id 350, X360 record 12 bytes)
+//
+// The live-progression handoff from the GAME STATE module to the GUI. Recovered end to
+// end from BURNOUT_X360_ARTIST.XEX this wave:
+//
+//   producer   BrnGameState::GameStateModule::PreWorldUpdate @0x823A5EA4 --
+//              AddEvent(&{ &this->mProfile (this+48288),
+//                          ResourcePtr<ProgressionData> ? its resource : NULL,
+//                          byte }, /*game action*/ 193, /*size*/ 12)
+//              on the module output buffer's GameActionQueue (VariableEventQueue<13312,16>).
+//   transport  BrnGame::BrnGameModule::BridgeGameStateToGui @0x823EE880 ->
+//              TranslateGameActionsToGuiEvents @0x823E9CE0, jump-table case 193
+//              @0x823EBBA4: `lwz 0(payload)` / `lwz 4(payload)` / `lbz 8(payload)` into a
+//              12-byte stack record, then AddGuiEvent<GuiEventProgressionProfileData>
+//              @0x823EBBC8 (the ONLY producer of event 350 in the image).
+//   consumers  CgsGui::GuiModule::Update case 209 (== id 350; the switch is rebased by
+//              141) @0x82528AB4 -> ProfileManager::SetProgressionProfile(payload[0],
+//              payload[1]); plus the registered flow states (BrnGui::InGame,
+//              BrnGui::Intro, BrnGui::FBurnMainHudState, BrnGui::HudMessageAnalyzer),
+//              all of which read the Profile pointer at offset 0.
+//
+// The X360 record is {u32,u32,u8} padded to 12; the pointers widen to 8 bytes here
+// (semantic parity by named members). The trailing flag is the OR the producer computes
+// from Profile::muMedalCountFromTheStart >= 4 and two game-state-module words -- the same
+// medal-count test ProgressionManager::AreRoadRulesAvailable uses -- so it is named for
+// that meaning; no reconstructed consumer reads it yet.
+//
+// (This type used to sit in BrnGuiDemangledEventTypes.h as an opaque
+// `GuiEvent<350>`-derived shell, i.e. the auto-derived table read the attested record
+// size 12 as "header only, no payload". That was wrong: the 12 bytes ARE the payload.)
+struct GuiEventProgressionProfileData
+{
+    BrnProgression::Profile*               mpProfile;              // +0x00
+    const BrnProgression::ProgressionData* mpProgressionData;      // +0x04 (X360) / +0x08 (x64)
+    bool                                   mbRoadRulesAvailable;   // +0x08 (X360)
+
+    GuiEventProgressionProfileData()
+        : mpProfile(0)
+        , mpProgressionData(0)
+        , mbRoadRulesAvailable(false)
+    {
+    }
+
+    s32 GetEventType() const { return 350; }
+};
 
 } // namespace BrnGui
