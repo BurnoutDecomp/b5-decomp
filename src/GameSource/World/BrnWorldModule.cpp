@@ -3830,17 +3830,48 @@ WorldModule::GenerateShadowMapDispatchLists(
 // those constants would arrive NULL and the technique would draw with whatever was left
 // in the register file.
 //
-// This publishes a NEUTRAL, DOCUMENTED set derived from what the shaders do with each
-// constant (D:\Reverse\nushaders\Reference\TUB\...\Include\{Irradiance,Fog,Shadow}.fxh):
+// The values below are NOT invented: they are the SHIPPED environment keyframe
+// ENV_KF_Paradise_ingame_junk_city_1200 (build/game/ENVIRONMENTSETTINGS/
+// PARADISE_INGAME_JUNK.BUNDLE, one of the nine city_HHMM keyframes; 0x240 bytes each,
+// decoded against BrnEnvironmentKeyframe.h's asm-attested layout) pushed through the real
+// X360 producer maths:
+//
+//   WorldModule::SetupShaderConstantsBeforeRendering  @0x827D1410  (out-param -> slot)
+//   EnvironmentSettings::EnvironmentManager::
+//                            GenerateShaderConstants  @0x827D0098
+//   GlobalIrradianceManager::ComputeFrameCoeffs       @0x827C5188  (basis + 6 projections)
+//   GlobalIrradianceManager::UpdateCoefficients       @0x827BEF70  (order-2 SH projection)
+//   GlobalIrradianceManager::ComputeIrradianceMatrix  @0x827B1160  (irradiance matrix)
+//   sub_827B0790                                                   (matrices -> quadrics)
+//
+// Two inputs of that chain cannot be attested until ENVIRONMENTSETTINGS is converted from
+// its stock X360 platform-2 form and actually streamed, so they stay bring-up choices and
+// everything else is made consistent with them:
+//   * KeyLightDirection. ComputeKeyLightDirection @0x82678AB0 derives it from the manager's
+//     time-of-day + three tuning angles (float504/510/514/518), none of which exist yet.
+//     The pre-existing bring-up direction is kept, and the irradiance rig below is solved
+//     for THAT direction, so the fill lights and the key light agree.
+//   * whiteLevel (EnvironmentManager::float11C0). Every colour the console publishes is
+//     scaled by it and the post-FX tonemap divides it back out; with post-FX off, 1.0 is
+//     the only non-blowing value -- which is what HDRConstants already assumed.
 //
 //   IrradianceQuadricA/B  ComputeIrradianceFast = saturate(A[0].xyz + linear(N) +
-//                         quadratic(N)); rows 1..3 / B rows 0..2 zeroed leaves a flat
-//                         ambient term, which is the correct "no irradiance probe" value.
+//                         quadratic(N)). Solved offline by the four functions above from
+//                         the keyframe's six fill colours x AmbientIrradianceScale (0.4);
+//                         the repack was checked against n^T M n on 2000 random unit
+//                         normals (max error 1.1e-16). ComputeIrradianceRigFromSky
+//                         (@0x8267C948, gated on the manager's gap6F5) is treated as off,
+//                         i.e. the authored fill colours are used rather than sky-derived
+//                         ones.
 //   KeyLight*             the sun. Direction is the direction the light TRAVELS (the
 //                         shaders use -KeyLightDirection as the vector towards it).
-//   ScattCoeffs           CalculateScattering = pow(saturate(d*x - y), z) * w, so w = 0
-//                         is exactly "no fog"; FogColourPlusWhiteLevel is then unused by
-//                         the lerp but still has to be published (it is dispatched).
+//                         Colour/Specular are the keyframe's; Specular additionally
+//                         carries gfSpecularScale, which is 1.0 in the shipped image
+//                         (@0x82F307E8). Clamped = min(max(colour,0), whiteLevel).
+//   ScattCoeffs           CalculateScattering = pow(saturate(d*x - y), z) * w with
+//                         x = 1/(far-near), y = near/(far-near), z = ScattPow, w = ScattCap
+//                         -- i.e. .w is the fog CAP, and publishing 0 (as this function
+//                         used to) made fog identically zero on every world mesh.
 //   ShadowMap_Constants/2 CalcShadowFactor*CSM ends in
 //                         ApplyFade(factor, fade) = factor*fade + 1 - fade with
 //                         fade = saturate(Constants.w - eyeZ * Constants2.w). Zeroing both
@@ -3858,32 +3889,35 @@ WorldModule::PublishWorldShadingConstantsBringUp()
 {
     ::ShaderConstantTable& lrTable = CgsGraphics::mShaderConstantTable;
 
-    // --- ambient irradiance (a flat sky-lit term; the higher-order rows stay zero) ----
+    // --- ambient irradiance: the real six-fill rig solved into the shader's quadric form
+    // (rows 1..3 of A are the per-channel (x, y, z, x*x) coefficients, rows 0..2 of B the
+    // per-channel (x*y, y*z, z*x, y*y) coefficients; A[0].xyz is the constant term).
     Matrix44 lQuadricA;
-    lQuadricA.xAxis = Vector4{ 0.34f, 0.37f, 0.44f, 0.0f };   // irradiance_1 (constant term)
-    lQuadricA.yAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-    lQuadricA.zAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-    lQuadricA.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lQuadricA.xAxis = Vector4{  0.365244f,  0.427732f,  0.430775f,  0.000000f };
+    lQuadricA.yAxis = Vector4{ -0.061486f,  0.087392f, -0.067495f,  0.000131f };
+    lQuadricA.zAxis = Vector4{ -0.058614f,  0.118284f, -0.064128f, -0.000443f };
+    lQuadricA.wAxis = Vector4{ -0.056434f,  0.132722f, -0.057723f, -0.000384f };
     Matrix44 lQuadricB;
-    lQuadricB.xAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-    lQuadricB.yAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-    lQuadricB.zAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
-    lQuadricB.wAxis = Vector4{ 0.0f, 0.0f, 0.0f, 0.0f };
+    lQuadricB.xAxis = Vector4{  0.000000f,  0.000000f, -0.004146f, -0.057522f };
+    lQuadricB.yAxis = Vector4{  0.000000f,  0.000000f,  0.014042f, -0.073080f };
+    lQuadricB.zAxis = Vector4{  0.000000f,  0.000000f,  0.012188f, -0.066545f };
+    lQuadricB.wAxis = Vector4{  0.000000f,  0.000000f,  0.000000f,  0.000000f };
     lrTable.SetShaderConstantData( 18, lQuadricA );
     lrTable.SetShaderConstantData( 19, lQuadricB );
 
     // --- the key light (direction of travel: high sun, slightly behind the camera) -----
     const Vector4 lKeyLightDirection{ 0.406f, -0.812f, 0.419f, 0.0f };
     lrTable.SetShaderConstantData( 10, lKeyLightDirection );
-    lrTable.SetShaderConstantData(  9, Vector4{ 0.95f, 0.91f, 0.82f, 1.0f } );   // KeyLightColour
-    lrTable.SetShaderConstantData( 11, Vector4{ 0.95f, 0.91f, 0.82f, 1.0f } );   // KeyLightSpecularColour
-    lrTable.SetShaderConstantData( 12, Vector4{ 0.95f, 0.91f, 0.82f, 1.0f } );   // KeyLightClampedColour
+    lrTable.SetShaderConstantData(  9, Vector4{ 1.700000f, 1.700000f, 1.054000f, 1.0f } );   // KeyLightColour
+    lrTable.SetShaderConstantData( 11, Vector4{ 1.591840f, 1.286597f, 0.954163f, 1.0f } );   // KeyLightSpecularColour
+    lrTable.SetShaderConstantData( 12, Vector4{ 1.000000f, 1.000000f, 1.000000f, 1.0f } );   // KeyLightClampedColour
 
-    // --- atmosphere: scattering off, fog colour published for the techniques that read it
-    lrTable.SetShaderConstantData( 27, Vector4{ 0.0f, 0.0f, 1.0f, 0.0f } );      // ScattCoeffs
-    lrTable.SetShaderConstantData( 28, Vector4{ 0.62f, 0.70f, 0.80f, 1.0f } );   // FogColourPlusWhiteLevel
-    lrTable.SetShaderConstantData( 33, Vector4{ 0.62f, 0.70f, 0.80f, 1.0f } );   // SkyReflectionColour
-    lrTable.SetShaderConstantData( 29, Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } );      // HDRConstants
+    // --- atmosphere: ScattDist (25, 1500), ScattPow 1, ScattCap 0.87; the fog colour is
+    // the keyframe's ScattHorColour and the sky reflection its (SkyHorColour, SkyHorPow).
+    lrTable.SetShaderConstantData( 27, Vector4{ 0.000678f, 0.016949f, 1.000000f, 0.870000f } );   // ScattCoeffs
+    lrTable.SetShaderConstantData( 28, Vector4{ 0.383928f, 0.437485f, 0.527000f, 1.000000f } );   // FogColourPlusWhiteLevel
+    lrTable.SetShaderConstantData( 33, Vector4{ 1.015278f, 0.882773f, 0.807155f, 0.500000f } );   // SkyReflectionColour
+    lrTable.SetShaderConstantData( 29, Vector4{ 1.000000f, 1.000000f, 0.000000f, 0.000000f } );   // HDRConstants
 
     // --- shadow cascades: fade = 0 -> shadow factor exactly 1 (see the banner) ---------
     Matrix44 laWorldToLight[3];
