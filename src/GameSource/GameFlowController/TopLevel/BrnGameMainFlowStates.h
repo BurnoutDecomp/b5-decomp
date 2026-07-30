@@ -236,6 +236,21 @@ private:
     bool mbIsCollisionWorldPrepared;
 };
 
+// The in-game simulation update set. ConstructUpdateSetFromFsm @0x823BD420 starts at 0x80
+// and ORs 0x08 once the flow state machine reports in-game, giving 0x88 (it also folds 0x40
+// for save/load and 0x20 for video states, neither of which reaches the world tick below).
+// Mirrored here because that method is private to BrnGameModule. WorldModule::Update only
+// tests 0x1 / 0x80 / 0x100, so the 0x08 bit is inert there -- this cannot change the world's
+// behaviour relative to the loading drive, only how often it runs.
+const BrnUpdateSet KU_INGAME_UPDATE_SET = 0x88;
+
+// The per-frame world UPDATE leg, shared by the scripted-load spine and the in-game state.
+// See the commentary on DriveWorldUpdateFrame in the .cpp for why the world previously
+// stopped updating the moment the flow left the loading screen.
+void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                           BrnUpdateSet lUpdateSet);
+void DriveInGameWorldUpdate();
+
 struct MainGameFlowStateInGame : public MainGameFlowState
 {
     MainGameFlowStateInGame();

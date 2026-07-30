@@ -179,6 +179,30 @@ bool LoadingScriptedState::LoadWorldModule(BrnResource::GameDataIO::InputBuffer*
 //     pair LoadWorldModule runs during the prepare stages, now running per frame.
 void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer)
 {
+    DriveWorldUpdateFrame(lpGameDataInputBuffer, KU_LOADING_UPDATE_SET);
+}
+
+// The same leg, callable from ANY flow state.
+//
+// WHY THIS EXISTS: the world was only ever driven from the scripted-load spine, so it stopped
+// updating the instant the flow left the loading screen. WorldModule::Update had exactly one
+// reachable caller (LoadingScriptedState::UpdateWorldModule above), and the in-game state's
+// whole per-frame body is BrnGameModule::DoUpdate(), a PC-platform leaf returning 0; the
+// console's in-game world leg (BrnGameModule::DoUpdate_World @0x823E8BD0) is reconstructed
+// but reached from nowhere. Net effect: the PVS query ran ONCE, from world-space (0,0,0),
+// during the loading screen, and its answer -- zone 174 plus 24 neighbours, 25 of the 396
+// track units -- stayed frozen for the whole session, so driving the camera across the city
+// streamed nothing new in or out.
+//
+// This is the narrow fix: drive the WORLD leg per frame from the in-game state as well. It
+// deliberately does NOT re-run the rest of DoUpdate's cascade -- the PC host loop
+// (EngineUpdate -> DispatchThread) still owns the module walk, and duplicating that here
+// would double-update every module, which is exactly why DoUpdate is a leaf. Fold this back
+// into the real DoUpdate cascade when the module scheduler moves under the game module's own
+// spines.
+void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                           BrnUpdateSet lUpdateSet)
+{
     BrnGame::BrnGameModule* lpGameModule = BrnGame::GetMainGameModule();
     CgsModule::IOBufferStack* lpUpdateInputStack  = lpGameModule->GetUpdateInputBufferStack();
     CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
@@ -207,7 +231,7 @@ void LoadingScriptedState::UpdateWorldModule(BrnResource::GameDataIO::InputBuffe
     // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
     // dispatch. The loading update set is 0x80 (frustum testing on, nothing else).
     s_WorldFrameAllocator.FreeAll();
-    lpGameModule->GetWorldModule().Update(KU_LOADING_UPDATE_SET,
+    lpGameModule->GetWorldModule().Update(lUpdateSet,
                                           lpUpdateInputStack, lpUpdateOutputStack,
                                           lpWorldInput, lpWorldOutput,
                                           &s_WorldFrameAllocator);
@@ -1001,3 +1025,16 @@ void MainGameFlowStateCompleteLoading::Render() {}
 MainGameFlowStateInGame::MainGameFlowStateInGame() {}
 // OnEnter/OnLeave/Update/Render are homed in BrnGameMainFlowInGameState.cpp (the DWARF
 // home for the in-game state's per-frame surface); only the ctor stays with this group.
+
+// ---------------------------------------------------------------------------
+// The in-game per-frame world tick, called by MainGameFlowStateInGame::Update.
+// Requests go into the same GameData input the scripted spine uses; the frame-level
+// resource tick (BrnGameModule::ResourceUpdateThread) drains it for every flow state,
+// so no extra pump is needed here.
+// ---------------------------------------------------------------------------
+void DriveInGameWorldUpdate()
+{
+    if (BrnGame::GetMainGameModule() == 0)
+        return;
+    DriveWorldUpdateFrame(&s_GameDataInput, KU_INGAME_UPDATE_SET);
+}
