@@ -27,8 +27,11 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (X360 RenderStart guards)
 
 #include <cstdio>   // [diag] BRN_CXFORM_TRACE line formatting
-// [diag] BRN_CXFORM_TRACE writes through the engine log (same hook CgsIm2d.cpp's trace uses).
+// [diag] BRN_CXFORM_TRACE writes through the engine log (same hook CgsIm2d.cpp's trace uses),
+// and stamps each line with the present counter that lives in device.cpp so a traced batch can
+// be correlated against the BRN_FRAME_DUMP image of the SAME frame.
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
+namespace renderengine { extern u32 guPresentCount; }
 
 namespace CgsGraphics
 {
@@ -767,11 +770,23 @@ namespace CgsGraphics
         }
 
         // [diag] BRN_CXFORM_TRACE: one line per DISTINCT large batch (bounds + final colour).
-        void BigBatchTraceLog(s32 liX0, s32 liY0, s32 liX1, s32 liY1, u32 luColour, u32 luVerts)
+        void BigBatchTraceLog(s32 liX0, s32 liY0, s32 liX1, s32 liY1,
+                              u32 luColour, u32 luBright, u32 luVerts,
+                              bool lbMasked, s32 liMaskDepth, const void* lpTexture)
         {
-            enum { KI_MAX_BIG = 48 };
+            // Dedupe WITHIN a frame only: the point is a complete picture of one dumped frame,
+            // so the same batch reappearing on a later frame must be logged again. A global
+            // dedupe hid the per-frame composition and produced a misleading partial list.
+            enum { KI_MAX_BIG = 64 };
             static u32 sauSeen[KI_MAX_BIG][5];
             static int siNumBig = 0;
+            static u32 suSeenFrame = 0xFFFFFFFFu;
+
+            if (suSeenFrame != renderengine::guPresentCount)
+            {
+                suSeenFrame = renderengine::guPresentCount;
+                siNumBig = 0;
+            }
 
             const u32 lauKey[5] = { static_cast<u32>(liX0), static_cast<u32>(liY0),
                                     static_cast<u32>(liX1), static_cast<u32>(liY1), luColour };
@@ -788,12 +803,18 @@ namespace CgsGraphics
                 sauSeen[siNumBig][liLane] = lauKey[liLane];
             ++siNumBig;
 
-            char lacLine[256];
+            char lacLine[320];
             std::snprintf(lacLine, sizeof(lacLine),
-                          "[BigBatch] (%d,%d)-(%d,%d) verts=%u  ARGB=%02X %02X %02X %02X\n",
+                          "[BigBatch] f=%u (%d,%d)-(%d,%d) verts=%u"
+                          "  dim=%02X %02X %02X %02X  bright=%02X %02X %02X %02X"
+                          "  masked=%d depth=%d tex=%p\n",
+                          renderengine::guPresentCount,
                           liX0, liY0, liX1, liY1, luVerts,
                           (luColour >> 24) & 0xFFu, (luColour >> 16) & 0xFFu,
-                          (luColour >> 8) & 0xFFu, luColour & 0xFFu);
+                          (luColour >> 8) & 0xFFu, luColour & 0xFFu,
+                          (luBright >> 24) & 0xFFu, (luBright >> 16) & 0xFFu,
+                          (luBright >> 8) & 0xFFu, luBright & 0xFFu,
+                          lbMasked ? 1 : 0, liMaskDepth, lpTexture);
             CgsDev::Log::WriteToLog(lacLine);
         }
 
@@ -855,6 +876,9 @@ namespace CgsGraphics
         // through -- the same observable pixel result as the console's masked program.
         int liMaskDepth = 0;
         bool lbMaskStageBound = false;
+        // [diag] BRN_CXFORM_TRACE: the texture currently bound on stage 0, so a traced batch
+        // records whether it was MODULATEd by a texel or took its diffuse straight through.
+        const void* lpTraceBoundTexture = nullptr;
         f32 lfMaskX0 = 0.0f, lfMaskY0 = 0.0f, lfMaskInvW = 0.0f, lfMaskInvH = 0.0f;
         f32 lfMaskU0 = 0.0f, lfMaskV0 = 0.0f, lfMaskDU = 0.0f, lfMaskDV = 0.0f;
 
@@ -950,6 +974,7 @@ namespace CgsGraphics
                     reinterpret_cast<const renderengine::TextureState*>(lpSet->mpTextureState);
                 renderengine::Texture* lpTexture = (lpState != nullptr) ? lpState->mpRaster : nullptr;
                 lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                lpTraceBoundTexture = lpTexture;   // [diag]
                 // Texture present: modulate by vertex colour. (CgsIm2d.cpp's SetState(TextureState*).)
                 lpDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
                 lpDevice->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_MODULATE);
@@ -962,6 +987,7 @@ namespace CgsGraphics
                     static_cast<const ImCommandSetTexture*>(lpCommand);
                 renderengine::Texture* lpTexture = lpSet->mpTexture;
                 lpDevice->SetTexture(0, lpTexture != nullptr ? lpTexture->mpD3DTexture : nullptr);
+                lpTraceBoundTexture = lpTexture;   // [diag]
                 // No texture -> drive the stage from the vertex colour alone (SELECTARG2 = DIFFUSE),
                 // exactly as CgsIm2d.cpp's SetTexture(nullptr) path does for the untextured solids.
                 const unsigned long luOp = (lpTexture != nullptr) ? D3DTOP_MODULATE : D3DTOP_SELECTARG2;
@@ -1119,7 +1145,11 @@ namespace CgsGraphics
                 // [diag] BRN_CXFORM_TRACE=1: report each DISTINCT large batch (>= 15% of the
                 // logical stage) with its final folded vertex colour, so "what colour and alpha
                 // does the popup background actually get" is measured rather than inferred.
-                if (CxformTraceEnabled() && luCount >= 3u)
+                // Gate on the SAME frames BRN_FRAME_DUMP writes (every 30th present) so the
+                // logged bounds and the dumped pixels come from ONE frame -- correlating a
+                // trace from one boot against a dump from another produced a false lead.
+                if (CxformTraceEnabled() && luCount >= 3u &&
+                    (renderengine::guPresentCount % 30u) == 0u)
                 {
                     f32 lfMinX = saBatch[0].x, lfMaxX = saBatch[0].x;
                     f32 lfMinY = saBatch[0].y, lfMaxY = saBatch[0].y;
@@ -1133,10 +1163,26 @@ namespace CgsGraphics
                     const f32 lfArea = (lfMaxX - lfMinX) * (lfMaxY - lfMinY);
                     const f32 lfStage = static_cast<f32>(renderengine::gDisplayWidth) *
                                         static_cast<f32>(renderengine::gDisplayHeight);
-                    if (lfStage > 0.0f && lfArea >= lfStage * 0.15f)
+                    if (lfStage > 0.0f && lfArea >= lfStage * 0.02f)
+                    {
+                        // Log the colour RANGE across the batch, not just vertex 0 -- Apt shapes
+                        // routinely carry gradient fills, and a single-vertex sample cannot tell
+                        // a gradient apart from a uniformly-wrong fill.
+                        u32 luDim = saBatch[0].color, luBright = saBatch[0].color;
+                        u32 luDimSum = 0xFFFFFFFFu, luBrightSum = 0u;
+                        for (u32 luB = 0; luB < luCount; ++luB)
+                        {
+                            const u32 luC = saBatch[luB].color;
+                            const u32 luSum = ((luC >> 16) & 0xFFu) + ((luC >> 8) & 0xFFu) + (luC & 0xFFu);
+                            if (luSum < luDimSum)    { luDimSum = luSum;    luDim = luC; }
+                            if (luSum > luBrightSum) { luBrightSum = luSum; luBright = luC; }
+                        }
                         BigBatchTraceLog(static_cast<s32>(lfMinX), static_cast<s32>(lfMinY),
                                          static_cast<s32>(lfMaxX), static_cast<s32>(lfMaxY),
-                                         saBatch[0].color, luCount);
+                                         luDim, luBright, luCount,
+                                         lbMaskStageBound, liMaskDepth,
+                                         lpTraceBoundTexture);
+                    }
                 }
 
                 // Recompute the primitive count if the count was clamped.
