@@ -40,14 +40,11 @@
 //     lands on the "Unhandled event" assert (cpp:479). Retail strips the assert, so it is
 //     a silent no-op there. Reproduced rather than "fixed".
 //
-// COMPONENT BOUNDARY (half closed): BrnPhotoBoothComponent.cpp IS now reconstructed and
-// mounted, so every photo-booth call below is the REAL component (Construct / SetVisualStyle
-// / SetCachePointer / SetProfilePointer / EnsureResourcesAreLoaded / OnLoad / ShowComponent /
-// HideComponent / SetButtonPromptVisible / Select / Cancel /
-// HandleCompressedStillImageEvent / SendPlayerPictureEvent / ReleaseResources) and its leaves
-// are gone. BrnLicenseComponent.cpp's presentation slice is still deferred, so the LICENSE
-// calls still go through the FLAG'd leaves in the anonymous namespace below; each names the
-// X360 address it stands in for and is deleted when that slice lands.
+// COMPONENT BOUNDARY: CLOSED (2026-07-30). BrnPhotoBoothComponent.cpp AND
+// BrnLicenseComponent.cpp are both reconstructed and mounted, so every component call below is
+// the real component. The FLAG'd License* / Profile* leaves this file used to carry are DELETED
+// -- BrnProfile.cpp (GetLicenceIssuedDate / SetLicenceIssuedDateAsNow) is mounted too.
+// What remains in the anonymous namespace is only the two un-named GuiCache far members.
 //
 // ⚠ 8 -> 9 IS A CONTROLLER PRESS and the PC input bridge delivers the accept as action 45,
 // not the console's 49 -- see KI_ACTION_CONFIRM_PC below. Recognising only 49 parks the state
@@ -70,11 +67,13 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                               // BrnGui::GuiFlow
 #include "GameSource/Gui/BrnGuiMovieManager.h"                                // MovieManager::VideoDefinition
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                                 // BrnGui::GuiEventStopVideo
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"              // CgsSound::Playback::Name::MakeHash
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // CgsDev::Log::WriteToLog (the state-transition diagnostic)
 
 #include <cstring>   // std::strcmp (the X360 inlines the apt-trigger name compares)
 #include <cstdio>    // std::snprintf (the state-transition diagnostic)
+#include <cstddef>   // offsetof (the x64 payload-offset word of the voice-over record)
 
 namespace BrnGui
 {
@@ -245,24 +244,49 @@ namespace BrnGui
         // The six ids are CgsSound::Playback::Name::MakeHash results computed by static
         // initialisers (X360 sub_82C54E20 / ..E50 / ..E80 / ..EB0 / ..EE0 / ..F10 ->
         // dword_82FB4A80 / ..4A38 / ..4A84 / ..4A3C / ..4A8C / ..4C18).
-        // CgsSound::Playback::Name::MakeHash is unreconstructed, so
-        // the PC build posts id 0 (the sound module ignores an unknown id). The sequence's
-        // TIMING is unaffected -- the 2 s dwells are gated on the 466/467 events, which the
-        // sound module raises for whatever it decides to play.
-        // FLAG PC-platform leaf: see the note above.
-        u32 VoiceOverNameHash(const char* /*lpacVoiceOverName*/) { return 0u; }
-
-        // Mirror of BrnGui::GuiEventAudioVoiceOver (real home BrnGuiDemangledEventTypes.h,
-        // "id 466 size 4"). That header cannot be included here: it redefines
-        // BrnGui::GuiEventRunFsm and BrnGui::GuiAudioTriggerEvent, which this TU already has
-        // from their real home BrnGuiEventTypeDefs.h. Mirroring the payload is the same
-        // remedy BrnGuiDemangledEventTypes.h itself documents for GuiEventAudioTraxUpdate.
-        // (CgsModule::Event is empty, so the base keeps sizeof == 4, which is the payload
-        // size the X360 wrapper header records.)
-        struct GuiEventAudioVoiceOver : public CgsModule::Event
+        //
+        // ⚠ CORRECTION (2026-07-30): the previous revision of this comment said
+        // "CgsSound::Playback::Name::MakeHash is unreconstructed, so the PC build posts id 0".
+        // THAT WAS STALE -- MakeHash is fully bodied (GameShared/GameClasses/Sound/Playback/
+        // CgsCommon.cpp:148, faithful to X360 @0x82689A50) and is already used at runtime by
+        // BrnGuiModule's menu-music table. The hash is therefore computed for real here, which
+        // is what the console posts.
+        //
+        // What is still ABSENT is the CONSUMER: BrnGameModule::BridgeGuiToSound hands the GUI
+        // out-queue to the sound module, whose SoundLogicModule::ProcessGuiEvents @0x826ED6C8
+        // is unreconstructed, and the sound -> GUI feedback leg
+        // (BridgeSoundToGuiPreUpdate, GameBridgeSoundToX.cpp:10-11) is unreconstructed too.
+        // So nothing raises 466/467 back and mbVoiceOverPlaying stays false -- see the pacing
+        // note on HandleStateTransitions.
+        u32 VoiceOverNameHash(const char* lpacVoiceOverName)
         {
-            u8 maData[4];
-            s32 GetEventType() const { return KI_EVENT_VOICEOVER_STARTED; }
+            return static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpacVoiceOverName));
+        }
+
+        // The wire record for BrnGui::GuiEventAudioVoiceOver (real home
+        // BrnGuiDemangledEventTypes.h, "id 466 size 4"; that header cannot be included here --
+        // it redefines BrnGui::GuiEventRunFsm and BrnGui::GuiAudioTriggerEvent, which this TU
+        // already has from their real home BrnGuiEventTypeDefs.h).
+        //
+        // ⚠ FIXED 2026-07-30: this used to be posted through the generic
+        // StateInterface::OutputGuiEvent<T>, whose committed body queues the record under
+        // lrEvent.GetEventType() -- i.e. under id 466 -- and GuiModule::Update's out-queue
+        // switch has no arm for that id, so the request never reached
+        // BrnGameModule::BridgeGuiToGame at all. The X360's OutputGuiEvent<T> builds a
+        // GuiEventWrapper<T, 40> and posts it on CHANNEL 40 (@0x824C3178 --
+        // "{4, 466, 12, <name hash>}, channel 40, 16 bytes"). Reproduced directly here, the
+        // same way this file's PostCommand16<N> already does it.
+        struct GuiEventAudioVoiceOverRecord : public CgsGui::GuiEvent<KI_EVENT_VOICEOVER_STARTED>
+        {
+            u32 muNameHash;   // payload +0x00 -- CgsSound::Playback::Name::MakeHash result
+
+            explicit GuiEventAudioVoiceOverRecord(u32 luNameHash)
+                : CgsGui::GuiEvent<KI_EVENT_VOICEOVER_STARTED>(), muNameHash(luNameHash)
+            {
+                const size_t luOffset = offsetof(GuiEventAudioVoiceOverRecord, muNameHash);
+                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 4
+                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
+            }
         };
 
         const char* const KAC_VO_INTRO_NEED_PICTURE   = "Intro_Need_Picture";    // -> 0x82FB4A80
@@ -274,13 +298,11 @@ namespace BrnGui
 
         void PostVoiceOver(CgsGui::StateInterface* lpInterface, const char* lpacVoiceOverName)
         {
-            GuiEventAudioVoiceOver lEvent;
-            const u32 luNameHash = VoiceOverNameHash(lpacVoiceOverName);
-            lEvent.maData[0] = static_cast<u8>((luNameHash >> 24) & 0xFF);
-            lEvent.maData[1] = static_cast<u8>((luNameHash >> 16) & 0xFF);
-            lEvent.maData[2] = static_cast<u8>((luNameHash >>  8) & 0xFF);
-            lEvent.maData[3] = static_cast<u8>( luNameHash        & 0xFF);
-            lpInterface->OutputGuiEvent(lEvent);
+            // The hash word is stored NATIVELY (the console's big-endian bytes are that
+            // platform's native order; the consumer reads a u32, not a byte string).
+            GuiEventAudioVoiceOverRecord lRecord(VoiceOverNameHash(lpacVoiceOverName));
+            lpInterface->GetOutputEventQueue()->AddEvent(&lRecord, KI_CHANNEL_GUI_OUT,
+                                                        static_cast<s32>(sizeof(lRecord)));
         }
 
         // ================================================================================
@@ -304,100 +326,6 @@ namespace BrnGui
         // GuiCache::Construct. Its role is NOT settled -- do not guess it.
         // FLAG PC-platform leaf: no-op boundary until the GuiCache TU names the byte.
         void CacheSetIntroLeftFlag(GuiCache* /*lpCache*/) {}
-
-        // ================================================================================
-        // Component boundaries. These stand in for REAL X360 functions whose bodies are
-        // recovered but not yet reconstructed into their own TUs (the ledger's
-        // BrnLicenseComponent.cpp / BrnPhotoBoothComponent.cpp slices). Each leaf names the
-        // X360 address so it can be deleted the moment that TU lands. Nothing here invents
-        // behaviour: where a leaf returns a value it returns the console's own result for
-        // this configuration.
-        // ================================================================================
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::OnLoad @0x82440AC0.
-        void LicenseOnLoad(LicenseComponent& /*lrLicense*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::ShowLicense @0x82440C98.
-        void LicenseShowLicense(LicenseComponent& /*lrLicense*/, bool /*lbUpgraded*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::SetVisible @0x82440E38.
-        void LicenseSetVisible(LicenseComponent& /*lrLicense*/, bool /*lbVisible*/) {}
-
-        // BrnGui::LicenseComponent::SetPlayerInfo @0x8243C380 --
-        // pushes the driver name (a language-database string id) plus the rank / percentage
-        // set the X360 passes as six zeroes from this call site.
-        // FLAG PC-platform leaf: see the note above.
-        void LicenseSetPlayerInfo(LicenseComponent& /*lrLicense*/, const char* /*lpacPlayerName*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::HandleAptLoadTriggers @0x8241A848.
-        void LicenseHandleAptLoadTriggers(LicenseComponent& /*lrLicense*/,
-                                          const CgsGui::GuiEventAptTriggerPayload* /*lpTrigger*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::HandleAptTransitionTriggers @0x8243BE20.
-        void LicenseHandleAptTransitionTriggers(LicenseComponent& /*lrLicense*/,
-                                                const CgsGui::GuiEventAptTriggerPayload* /*lpTrigger*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::ReleaseResources @0x82440BC0.
-        void LicenseReleaseResources(LicenseComponent& /*lrLicense*/) {}
-
-        // BrnGui::LicenseComponent::SendPlayerPictureEvent @0x8243CB90
-        // -- posts event 258 carrying the profile's licence picture, and posts NOTHING when
-        // the profile has no picture, which is the PC configuration.
-        // FLAG PC-platform leaf: see the note above.
-        void LicenseSendPlayerPictureEvent(LicenseComponent& /*lrLicense*/) {}
-
-        // BrnGui::LicenseComponent::Construct @0x8241A610 and
-        // BrnGui::PhotoBoothComponent::Construct @0x8241ABC0. Neither TU can be linked yet --
-        // see the block comment in tools/build/build_game_exe.bat for the four link gaps.
-        // FLAG PC-platform leaf: see the note above.
-        // PARTIAL, not empty: both X360 bodies OPEN with the same call --
-        //   IconComponent::Construct(this, lpacName, lpStateInterface, NULL, lpacParentName)
-        // -- and BrnIcon.cpp IS linked, so that first statement is reproduced for real. It is
-        // the statement that matters to this state: it fills the component's macName /
-        // muHashedName, which AppendExpectedComponents hands to the GUI cache as the apt
-        // components the intro waits on. Only the per-component tails (the licence's six
-        // TextFields + scalars, the photo booth's two HelpItems + NetworkTexture + enums)
-        // are deferred.
-        void LicenseConstruct(LicenseComponent& lrLicense, const char* lpacName,
-                              CgsGui::StateInterface* lpStateInterface,
-                              const char* lpacParentName)
-        {
-            lrLicense.IconComponent::Construct(lpacName, lpStateInterface, 0, lpacParentName);
-        }
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::SetCachePointer @0x824B31E8.
-        void LicenseSetCachePointer(LicenseComponent& /*lrLicense*/, GuiCache* /*lpCache*/) {}
-
-        // FLAG PC-platform leaf: BrnGui::LicenseComponent::SetProfilePointer @0x824B3248.
-        void LicenseSetProfilePointer(LicenseComponent& /*lrLicense*/,
-                                      BrnProgression::Profile* /*lpProfile*/) {}
-
-        // BrnGui::LicenseComponent::EnsureResourcesAreLoaded @0x824B3300 and
-        // BrnGui::PhotoBoothComponent::EnsureResourcesAreLoaded @0x824B34F0 stream the
-        // licence-rank / photo-booth GUIAPT bundles through the cache. With their TUs
-        // unlinked the components own no resources, so reporting "loaded" is the honest
-        // reading of "nothing outstanding" -- and it is what lets the state's OWN resources
-        // (maResourcesToLoad, which the cache really does load) gate the sequence.
-        // FLAG PC-platform leaf: see the note above.
-        bool LicenseEnsureResourcesAreLoaded(LicenseComponent& /*lrLicense*/) { return true; }
-
-        // BrnProgression::Profile::SetLicenceIssuedDateAsNow @0x8235A0E0 and
-        // GetLicenceIssuedDate both live in BrnProfile.cpp, which is not mounted in this
-        // build. The date the licence card shows therefore stays at the profile's stored
-        // value instead of "now"; the month/day/year fields still receive it.
-        // FLAG PC-platform leaf: see the note above.
-        void ProfileSetLicenceIssuedDateAsNow(BrnProgression::Profile* /*lpProfile*/) {}
-
-        // FLAG PC-platform leaf: BrnProgression::Profile::GetLicenceIssuedDate (as above).
-        CgsSystem::DateAndTime ProfileGetLicenceIssuedDate(const BrnProgression::Profile* /*lpProfile*/)
-        {
-            // Update() == "now", which is exactly what SetLicenceIssuedDateAsNow would have
-            // stored a frame earlier, so the month/day/year fields still get a valid date
-            // (and the cpp:443/444 month asserts stay quiet).
-            CgsSystem::DateAndTime lDate;
-            lDate.Update();
-            return lDate;
-        }
 
     }
 
@@ -463,8 +391,9 @@ namespace BrnGui
         PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
 
         mScreenAnim.Construct(KAC_SCREENANIM_NAME, mpStateInterface, 0);
-        // X360: LicenseComponent::Construct @0x8241A610 (partial on PC -- see its body).
-        LicenseConstruct(mLicenseComponent, KAC_LICENSECOMP_NAME, mpStateInterface, 0);
+        // X360: LicenseComponent::Construct @0x8241A610 (its own virtual override of
+        // CgsGui::GuiComponent::Construct -- it seeds the six embedded TextFields).
+        mLicenseComponent.Construct(KAC_LICENSECOMP_NAME, mpStateInterface, 0);
 
         // X360: PhotoBoothComponent::Construct(this+0x89C, "PhotoBooth_cpt",
         //   mpStateInterface, 5, 4, 2, 3, 0) -- back button 5, confirm button 4,
@@ -503,7 +432,7 @@ namespace BrnGui
         // 20 bytes -- unmount the intro apt movie at level 3.
         mpStateInterface->PlayAptMovie("", 3);
 
-        LicenseReleaseResources(mLicenseComponent);
+        mLicenseComponent.ReleaseResources();
         mPhotoBoothComponent.ReleaseResources();
 
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
@@ -566,7 +495,7 @@ namespace BrnGui
 
         case E_INTROSTATE_WELCOMETEXT:
             PostVoiceOver(mpStateInterface, KAC_VO_INTRO_NEED_PICTURE);
-            LicenseSetVisible(mLicenseComponent, false);
+            mLicenseComponent.SetVisible(false);
             mPhotoBoothComponent.HideComponent(true);
             mWelcomeText1Anim.AddOutputAptViewState("apt_Transition", "transin", false);
             mScreenAnim.AddOutputAptViewState("apt_Transition",
@@ -582,7 +511,7 @@ namespace BrnGui
 
         case E_INTROSTATE_LICENCE:
             PostVoiceOver(mpStateInterface, KAC_VO_INTRO_LEARNER_PERMIT);
-            LicenseShowLicense(mLicenseComponent, false);
+            mLicenseComponent.ShowLicense(false);
             mWelcomeText2Anim.AddOutputAptViewState("apt_Transition", "transin", false);
             mScreenAnim.AddOutputAptViewState("apt_Transition",
                                               KAPC_SCREEN_FRAMENAMES[meIntroState], false);
@@ -623,7 +552,7 @@ namespace BrnGui
         LogIntroState(E_INTROSTATE_LICENCE, E_INTROSTATE_START_FLYBY, "HandleTransitionFromLicense");
         meIntroState = E_INTROSTATE_START_FLYBY;
 
-        LicenseReleaseResources(mLicenseComponent);
+        mLicenseComponent.ReleaseResources();
         mPhotoBoothComponent.ReleaseResources();
 
         PostVoiceOver(mpStateInterface, KAC_VO_INTRO_GO_TO_JUNKYARD);
@@ -706,12 +635,12 @@ namespace BrnGui
                         // fallthrough), but the licence component is still offered the
                         // trigger on every matched and unmatched name alike.
                     }
-                    LicenseHandleAptLoadTriggers(mLicenseComponent, lpTrigger);
+                    mLicenseComponent.HandleAptLoadTriggers(lpTrigger);
                 }
                 else if (lpTrigger->meEventType ==
                          CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE)
                 {
-                    LicenseHandleAptTransitionTriggers(mLicenseComponent, lpTrigger);
+                    mLicenseComponent.HandleAptTransitionTriggers(lpTrigger);
                 }
                 break;
             }
@@ -720,8 +649,13 @@ namespace BrnGui
                 if (mpGuiCache == 0)
                 {
                     mpGuiCache = reinterpret_cast<const GuiEventCache*>(lpEvent)->mpGuiCache;
-                    LicenseSetCachePointer(mLicenseComponent, mpGuiCache);
-                    LicenseSetPlayerInfo(mLicenseComponent, mpGuiCache->GetPlayerName());
+                    mLicenseComponent.SetCachePointer(mpGuiCache);
+                    // X360: SetPlayerInfo(name, false, false, 0, 0, false, false) -- a
+                    // brand-new profile's licence: rank 0, no points line, no upgrade
+                    // pending. The name is a language-database string id (GetPlayerName
+                    // returns "PLAYER_NAME_STRING_ID", not the gamertag text).
+                    mLicenseComponent.SetPlayerInfo(mpGuiCache->GetPlayerName(),
+                                                    false, false, 0, 0, false, false);
                     // X360: an INLINED `stw 92, photoBooth+0x94` -- the component's photo
                     // resource id. 92 == E_GUI_RESOURCEID_APT_COMPONENT_PHOTOBOOTH_DMV
                     // ("B5PhotoBoothComponentDMV"), i.e. the DMV_FULL_PAGE visual style; the
@@ -739,11 +673,11 @@ namespace BrnGui
                 if (mpProfile == 0)
                 {
                     mpProfile = reinterpret_cast<const GuiEventProfilePointer*>(lpEvent)->mpProfile;
-                    ProfileSetLicenceIssuedDateAsNow(mpProfile);
-                    LicenseSetProfilePointer(mLicenseComponent, mpProfile);
+                    mpProfile->SetLicenceIssuedDateAsNow();
+                    mLicenseComponent.SetProfilePointer(mpProfile);
                     mPhotoBoothComponent.SetProfilePointer(mpProfile);
 
-                    const CgsSystem::DateAndTime lLicenceDate = ProfileGetLicenceIssuedDate(mpProfile);
+                    const CgsSystem::DateAndTime lLicenceDate = mpProfile->GetLicenceIssuedDate();
 
                     const s32 liMonth = lLicenceDate.GetMonth() - 1;
                     CGS_ASSERT(liMonth >= 0, "liMonth >= 0");                                  // cpp:443
@@ -909,12 +843,12 @@ namespace BrnGui
         case E_INTROSTATE_LOADINGRESOURCES:
             if (mpGuiCache != 0 &&
                 mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad) &&
-                LicenseEnsureResourcesAreLoaded(mLicenseComponent) &&
+                mLicenseComponent.EnsureResourcesAreLoaded() &&
                 mPhotoBoothComponent.EnsureResourcesAreLoaded())
             {
                 // off_82F27B2C[0] == "BrnIntro", apt level 3.
                 mpStateInterface->PlayAptMovie("BrnIntro", 3);
-                LicenseOnLoad(mLicenseComponent);
+                mLicenseComponent.OnLoad();
                 mPhotoBoothComponent.OnLoad();
                 mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
                 AppendExpectedComponents();
@@ -967,7 +901,7 @@ namespace BrnGui
             break;
         }
 
-        LicenseSendPlayerPictureEvent(mLicenseComponent);
+        mLicenseComponent.SendPlayerPictureEvent();
         mPhotoBoothComponent.SendPlayerPictureEvent();
     }
 }

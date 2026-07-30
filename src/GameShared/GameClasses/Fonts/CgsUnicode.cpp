@@ -108,6 +108,92 @@ namespace CgsUnicode
         return true;
     }
 
+    // Faithful port of X360 ARTIST 0x82834740 (CgsUnicode.cpp:549 is its one assert line):
+    // render liValue as UTF-8 decimal digits with optional thousands separators.
+    //
+    // The X360 body accumulates the digits LEAST-significant-first into a 176-byte stack
+    // scratch and copies them back out in reverse at the end, so the separator run is written
+    // reversed into the scratch too (the `for (i = trailing; i >= 0; ...) scratch[++n] = sep[i]`
+    // loop). The digit counter stops at 32 (KU_MAX_DIGITS below) -- the console's overflow
+    // guard on the scratch. `lu8MinimumDigits` is a MINIMUM: zeroes are emitted ahead of the
+    // digits when the value is shorter.
+    CgsUtf8* IntToString(CgsUtf8* lpUtf8TargetString, s32 liValue, u8 lu8MinimumDigits,
+                         const CgsUtf8* lpUtf8ThousandsSeparator)
+    {
+        // The console's digit cap (the `if (v9 >= 0x20) goto LABEL_15` early-out).
+        const u32 KU_MAX_DIGITS = 32u;
+
+        CgsUtf8* lpOut  = lpUtf8TargetString;
+        s32      liRest = liValue;
+
+        if (liValue < 0)
+        {
+            liRest    = -liValue;
+            *lpOut++  = static_cast<CgsUtf8>('-');
+        }
+
+        CgsUtf8 lacScratch[176];
+        u32     luScratchLen  = 0u;   // bytes written into the scratch (digits + separators)
+        u32     luDigitCount  = 0u;   // DIGITS only (what the minimum-digits pad compares to)
+        u32     luGroupDigits = 0u;   // digits since the last separator
+
+        for (;;)
+        {
+            const s32 liNext = liRest / 10;
+            lacScratch[luScratchLen] = static_cast<CgsUtf8>((liRest % 10) + '0');
+
+            if (liNext == 0)
+            {
+                ++luDigitCount;
+                ++luScratchLen;
+                break;
+            }
+
+            if (lpUtf8ThousandsSeparator != 0 && *lpUtf8ThousandsSeparator != 0)
+            {
+                ++luGroupDigits;
+                if (luGroupDigits == 3u)
+                {
+                    luGroupDigits = 0u;
+
+                    const u32 luTrailing = lUtf8TrailingBytes(*lpUtf8ThousandsSeparator);
+                    // (X360 streams "Character supplied is not a valid start UTF8 character
+                    // (<byte>)" at CgsUnicode.cpp:549 when the table returns 255.)
+                    CGS_ASSERT(luTrailing != 255u,
+                               "Character supplied is not a valid start UTF8 character");
+                    if (luTrailing <= 3u)
+                    {
+                        // Written back-to-front so the final reverse copy restores the order.
+                        for (s32 liByte = static_cast<s32>(luTrailing); liByte >= 0; --liByte)
+                        {
+                            ++luScratchLen;
+                            lacScratch[luScratchLen] = lpUtf8ThousandsSeparator[liByte];
+                        }
+                    }
+                }
+            }
+
+            ++luDigitCount;
+            ++luScratchLen;
+            liRest = liNext;
+
+            if (luDigitCount >= KU_MAX_DIGITS)
+                break;
+        }
+
+        for (u32 luPad = lu8MinimumDigits; luPad > luDigitCount; --luPad)
+            *lpOut++ = static_cast<CgsUtf8>('0');
+
+        for (u32 luLeft = luScratchLen; luLeft != 0u; )
+        {
+            --luLeft;
+            *lpOut++ = lacScratch[luLeft];
+        }
+
+        *lpOut = 0;
+        return lpOut;
+    }
+
     // Faithful port of X360 ARTIST 0x82834EA0: a string is valid when it is empty or every
     // character in it is a valid UTF-8 character.
     bool IsValidUtf8String(const u8* lpUtf8String)

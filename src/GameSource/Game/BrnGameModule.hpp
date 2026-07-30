@@ -605,6 +605,10 @@ namespace BrnGame
         s32  miGuiFsmStage;             // @ +10094148 (1..5 = pending RunFsm post; 6 = idle)
         bool mbGuiPhaseComplete;        // @ +10094152 (command 70 -- the flow-advance flag)
         bool mbGuiPreAccept;            // @ +10094153 (command 71 -- resume-world-load)
+        // FLAG sound stand-in (no console member): a GUI voice-over request (out-event
+        // 466) seen by BridgeGuiToGame is answered on the next sub-step -- see the block
+        // in DoUpdate_Gui that consumes it.
+        bool mbGuiVoiceOverPending;
 
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)

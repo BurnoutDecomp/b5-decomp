@@ -279,6 +279,7 @@ namespace BrnGame
         miGuiFsmStage      = 0;
         mbGuiPhaseComplete = false;
         mbGuiPreAccept     = false;
+        mbGuiVoiceOverPending = false;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -374,6 +375,15 @@ namespace BrnGame
                         break;
                     case 71:   // pre-accept -- resume the world load during the accept dwell
                         mbGuiPreAccept = true;
+                        break;
+                    case 466:
+                        // A GUI voice-over REQUEST (the {4, 466, 12, <name hash>} record
+                        // BrnGui::Intro's SetupComponents / HandleTransitionFrom* /
+                        // Update post through OutputGuiEvent<GuiEventAudioVoiceOver>).
+                        // On the console this leaves through BridgeGuiToSound and the
+                        // sound module answers it on the GUI input side; see the FLAG'd
+                        // reply block in the GUI-input write bracket below.
+                        mbGuiVoiceOverPending = true;
                         break;
                     case 90:   // profile-first-boot flag (X360 +10094136: 0 -> 1)
                         if (miInputModuleState == 0)
@@ -1394,6 +1404,38 @@ namespace BrnGame
                                 lProgressionProfile.GetEventType(),
                                 static_cast<s32>(sizeof(lProgressionProfile)));
                         }
+                    }
+                    // FLAG sound stand-in (the VOICE-OVER round trip, GUI events 466/467).
+                    // CONSOLE CHAIN: the GUI posts a voice-over REQUEST as out-event 466
+                    // carrying a CgsSound::Playback::Name::MakeHash id; BridgeGuiToSound
+                    // @0x823C0A58 hands the GUI out-queue to the sound root input buffer,
+                    // and the sound side reports back through the module's
+                    // PreUpdateOutput GuiOutEventQueue -- 466 when the line STARTS, 467
+                    // when it FINISHES. BrnGui::Intro subscribes to both and gates every
+                    // one of its timed transitions on them: 466 sets mbVoiceOverPlaying
+                    // (which freezes mfPauseTimer) and 467 clears it AND RESETS
+                    // mfPauseTimer to 0 -- 467 is the ONLY writer of that reset outside
+                    // Intro::OnEnter (image-wide scan of stores to Intro+0xDEC).
+                    // WHY A STAND-IN: neither leg exists on PC. The sound module's GUI
+                    // drain (BrnSound::Logic::SoundLogicModule::ProcessGuiEvents
+                    // @0x826ED6C8) is unreconstructed and so is the return leg
+                    // (BridgeSoundToGuiPreUpdate -- see the banner in
+                    // GameBridgeSoundToX.cpp). With NOBODY answering, mfPauseTimer is
+                    // never reset after the WELCOME-TEXT dwell has already run it up to
+                    // KF_INTRO_TRANSITION_PAUSE, so the LICENCE state's own 2 s dwell is
+                    // zero and the driver licence is on screen for a single frame.
+                    // WHAT THIS POSTS: the console's own answer for a voice-over whose
+                    // sample never plays -- started, then immediately finished, in the
+                    // same sub-step. No duration is invented; the GUI simply gets its
+                    // dwell floor back. Replace with the real bridge when the sound
+                    // module's GUI legs land.
+                    if (mbGuiVoiceOverPending)
+                    {
+                        mbGuiVoiceOverPending = false;
+                        CgsGui::GuiEvent<466> lVoiceOverStarted;
+                        CgsGui::GuiModule::AddGuiEvent(lVoiceOverStarted, mpGuiInputBuffer);
+                        CgsGui::GuiEvent<467> lVoiceOverFinished;
+                        CgsGui::GuiModule::AddGuiEvent(lVoiceOverFinished, mpGuiInputBuffer);
                     }
                     mpGuiInputBuffer->UnlockForWrite();
                     mPcInputOutputBuffer.UnlockForRead();

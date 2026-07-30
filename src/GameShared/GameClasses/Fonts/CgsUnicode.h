@@ -126,6 +126,19 @@ namespace CgsUnicode
                     s32 lnTargetStringSize, const CgsUtf8* const* lppUtf8Arguments,
                     u8 luNumArguments);
 
+    // X360 ARTIST 0x82834740 (CgsUnicode.cpp:549 owns its one assert). Render liValue as
+    // UTF-8 decimal digits into lpUtf8TargetString:
+    //   * a negative value emits '-' first and is negated;
+    //   * digits are accumulated least-significant-first into a scratch stack buffer, and
+    //     lpUtf8ThousandsSeparator (a UTF-8 string; the EMPTY string disables it) is spliced
+    //     in after every third digit;
+    //   * the result is left-padded with '0' to lu8MinimumDigits;
+    //   * the scratch is copied out in reverse and NUL-terminated.
+    // Returns the terminator position. Used by the LanguageManager Format*String family
+    // (FormatDateString / FormatIntegerString / ...) and UnicodeBuffer::Convert(s32).
+    CgsUtf8* IntToString(CgsUtf8* lpUtf8TargetString, s32 liValue, u8 lu8MinimumDigits,
+                         const CgsUtf8* lpUtf8ThousandsSeparator);
+
     // Print<...> -- the per-arity string formatters the GUI in-game message renderer uses
     // (X360 ARTIST 0x824490E8 = 2-arg, 0x82449150 = 3-arg). Each stages its N string arguments
     // through a scratch UnicodeBuffer (UnicodeBuffer::Convert stages the text into maBuffer, the
