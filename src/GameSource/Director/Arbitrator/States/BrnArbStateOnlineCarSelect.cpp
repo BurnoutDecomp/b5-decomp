@@ -47,8 +47,13 @@ namespace BrnDirector
 
         // The two trailing selectors the BehaviourManager::NewBehaviour<TBehaviour> allocation
         // request carries (X360 li r6,0 / li r7,1). Same as the sibling arbitrator states.
-        const s32 KI_NEW_BEHAVIOUR_ARG_A = 0;
-        const s32 KI_NEW_BEHAVIOUR_ARG_B = 1;
+        // r6 is the manager's `const void* lpOwner` slot (null here -- the arbitrator states own
+        // their behaviours through lpOwningState), so it must be typed as a POINTER: a `const s32`
+        // whose value is 0 stopped being a null-pointer constant in C++11, so the old `s32` form
+        // matched no NewBehaviour overload under /std:c++17 /permissive-. ArbStateDriveThru
+        // already spells it `const void* const`; matched here.
+        const void* const KI_NEW_BEHAVIOUR_ARG_A = 0;
+        const s32         KI_NEW_BEHAVIOUR_ARG_B = 1;
 
         // The per-take reset byte the ICE-anim reveal behaviour is seeded with after SetParameters
         // (X360 stb 1 at behaviour +0xDE4 == BehaviourIceAnim::SetTakeResetByte0(1)).

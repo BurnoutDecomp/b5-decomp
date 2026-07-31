@@ -70,81 +70,19 @@ namespace Camera
 // used to carry are retired.
 
 // ============================================================================
-// FLAG: minimal slice of the abstract collision-policy interface.
-//   The real layout/method set lands with the CollisionPolicy TU.
+// RETIRED (2026-07-30, the ICE-anim de-fork wave): `class CollisionPolicy` and
+// `class VisibilityCollisionPolicy` used to be defined here. Their real home -- the one every
+// one of their own tripwires names -- is ../BrnCollisionPolicy.h, included at the top of this
+// file, and they MOVED there unchanged (VisibilityCollisionPolicy additionally carved out the
+// three see-through bytes at +0x1A0..+0x1A2 that the retired BrnBehaviourIceAnim.h slice
+// carried, from inside its own [+0xE8, +0x210) reserved span).
+//
+// WHY THEY HAD TO MOVE: BrnBehaviourIceAnim.h carried its OWN definitions of both, so any TU
+// pulling the named-parameter bank (-> BehaviourPassengerCam.h -> this file) AND the ICE-anim
+// behaviour was C2011 on both -- which is exactly the set of arbitrator states the retail game
+// intro runs through (ArbStateCarSelect / ArbStateOnlineCarSelect / ArbStateRaceIntro ...).
+// One home settles it, the same way CameraShake's and Tweaker's moves did.
 // ============================================================================
-class CollisionPolicy
-{
-public:
-    virtual ~CollisionPolicy() {}
-    virtual void GenerateSceneQueries(const void*, Camera&) {}
-    virtual void ProcessSceneQueryResults(const void*, Camera&) {}
-
-    // @0x82206450 (class TU; body in ../BrnCameraCollisionPolicy.cpp) -- give up:
-    // record the failure reason in the shared info's validity account (+0x138),
-    // drop the info's follow-request bit (the +0x140 u64, bit 1), raise mbFailed.
-    void Fail(BehaviourSharedInfo* lpInfo, s32 liReason);
-
-private:
-    // ADDITIVE GROW (Fail @0x82206450 `stb 1,4(this)`): the policy's failed latch.
-    bool mbFailed;   // +0x04 (X360; right after the vptr)
-};
-
-// ============================================================================
-// FLAG: minimal slice of the visibility collision policy used by BehaviourRig.
-//   The opaque blob is now CARVED around the members the class-TU bodies touch
-//   (X360 offsets in comments; ORDER preserved, PC offsets differ -- all access
-//   is BY NAME). The remaining reserved spans still need the unrecovered types
-//   (LineTestNearestPostBox, VolumeTestDeepestPostBox, GroundConstraint etc.).
-//   Nominal X360 size 0x240 bytes.
-// ============================================================================
-class VisibilityCollisionPolicy : public CollisionPolicy
-{
-public:
-    void Construct();
-    void SetCanFail(bool lbCanFail);
-    void SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
-                   CgsSceneManager::EntityId lTargetEntityId);
-    void SetTestLookingAt(bool lbTestLookingAt);
-    void SetVelocity(Vector3 lVelocity);
-    bool IsVisibilityInterrupted() const;
-    float GetMinTimeToVisibilityFailure() const;
-
-    // ---- class-TU surface (bodies in ../BrnVisibilityCollisionPolicy.cpp) ----
-
-    // The guards the two time queries assert on (the X360 inlines the embedded
-    // predictors' flag reads into the wrappers).
-    bool WillCollideWithGeometry() const { return mGeometryCollisionPredictor.WillCollide(); }
-    bool WillCollideWithVehicle() const  { return mVehicleCollisionPredictor.HasPredictedCollision(); }
-
-    // @0x821F38E0 (BrnCollisionPolicy.h:489) -- raise the desired-height override
-    // latch, assert the height positive, store it.
-    void SetDesiredHeight(f32 lfDesiredHeight);
-
-    // @0x821F37C8 (BrnCollisionPolicy.h:425 wrapper + the embedded geometry
-    // predictor's own :206 tripwire) -- predicted time until the camera hits
-    // geometry.
-    f32 TimeUntilCollisionWithGeometry() const;
-
-    // @0x821F3858 (BrnCollisionPolicy.h:431 wrapper + the embedded vehicle
-    // predictor's own BrnVehicleCollisionPredictor.h:69 tripwire) -- predicted
-    // time until the camera hits the tracked vehicle.
-    f32 TimeUntilCollisionWithVehicle() const;
-
-private:
-    // FLAG: reserved spans = rig members not yet recovered (LineTestNearestPostBox,
-    //   VolumeTestDeepestPostBox, GroundConstraint etc.); the named members are the
-    //   asm-attested carves from the three class-TU bodies.
-    u8 maReservedToVehiclePredictor[0x70 - 0x08];              // X360 [+0x08, +0x70)
-    Utils::VehicleCollisionPredictor mVehicleCollisionPredictor;   // X360 +0x70 (flag/time @+0x70/+0x74)
-    u8 maReserved78[0x80 - 0x78];                              // X360 [+0x78, +0x80)
-    GeometryCollisionPredictor mGeometryCollisionPredictor;    // X360 +0x80 (its +0x60/+0x64 pair == policy +0xE0/+0xE4)
-    u8 maReservedE8[0x210 - 0xE8];                             // X360 [+0xE8, +0x210)
-    f32 mfDesiredHeight;                                       // X360 +0x210 (SetDesiredHeight stores)
-    u8 maReserved214[0x23C - 0x214];                           // X360 [+0x214, +0x23C)
-    u8 mbHaveDesiredHeight;                                    // X360 +0x23C (SetDesiredHeight raises)
-    u8 maReservedTail[0x240 - 0x23D];                          // X360 [+0x23D, +0x240)
-};
 
 namespace Utils
 {

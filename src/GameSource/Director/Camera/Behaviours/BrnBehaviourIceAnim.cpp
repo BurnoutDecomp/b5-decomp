@@ -82,9 +82,11 @@ namespace Utils
 } // namespace Camera
 
 // The on-screen debug text printer the Update body writes its visibility result through.
-class DebugPrinter
+// ⚠️ CLASS KEY: `struct`, not `class` -- the home (DirectorModule/BrnDirectorModuleDebugPrinter.h)
+//   and every other forward declaration in the tree spell it `struct`, and MSVC mangles the two
+//   differently, so a `class` here would silently mint a DIFFERENT symbol and only fail at link.
+struct DebugPrinter
 {
-public:
     static void ActualPrint(void* lpSink, const char* lpcText, s32 liColour);
 };
 
@@ -148,9 +150,11 @@ void BehaviourIceAnim::Construct()
     mbForceMotionBlurEverything = false;
 
     // --- the free visibility policy's three see-through state bytes (defaults) ---
-    mCollisionPolicy.mbSeeThroughEnabled = true;
-    mCollisionPolicy.mbSeeThroughAlways = false;
-    mCollisionPolicy.mbSeeThroughSuppressed = true;
+    // (through the policy's named setters since the de-fork -- the bytes are private in the
+    //  canonical BrnCollisionPolicy.h home; the console stores are unchanged.)
+    mCollisionPolicy.SetSeeThroughEnabled(true);
+    mCollisionPolicy.SetSeeThroughAlways(false);
+    mCollisionPolicy.SetSeeThroughSuppressed(true);
 
     // --- the per-take reset sub-block at +0xDE0 ---
     mfReset0DE0 = 0.0f;
@@ -256,7 +260,9 @@ const char* BehaviourIceAnim::GetName() const
 // ============================================================================
 void BehaviourIceAnim::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
-    Utils::Tweaker::Construct(lrTweaker);
+    // X360 `Tweaker::Construct(a2)` -- the canonical home (Utils/BrnCameraTweaker.h) has that
+    // @0x821F8588 as a MEMBER with this == a2, so the console's one-argument call IS this.
+    lrTweaker.Construct();
 }
 
 // ============================================================================

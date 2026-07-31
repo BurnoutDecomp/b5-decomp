@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                            // Vector3 / Matrix44Affine / VecFloat aliases
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT (the mpParameters / mbSetup asserts)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"  // CgsNumeric::Random (Camera::Utils::Random typedef)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h
@@ -72,7 +73,14 @@ namespace Utils
     struct Tweaker;           // dev-tools tweaker SetupTweaker wires the rig members into
                               // (`struct` per its real home Camera/Utils/BrnCameraTweaker.h:45 --
                               //  the class-key is part of the MSVC mangled name)
-    class Random;            // the randomised-offset RNG (== CgsNumeric::Random; opaque here)
+    // The randomised-offset RNG. DE-FORKED 2026-07-30: this used to be `class Random;`, a
+    // forward declaration of a class that does not exist -- Camera::Utils::Random is a TYPEDEF
+    // of CgsNumeric::Random (see Utils/BrnCameraShake.h:51 and Utils/BrnLooker.h:31, which both
+    // spell it that way). The two forms are not interchangeable: a TU that saw both was C2371
+    // ("redefinition; different basic types"), which is what BrnArbStateTakedown.cpp hit the
+    // moment the ICE-anim behaviour started including the real CameraShake/Looker homes. A
+    // repeated typedef to the same type is well-formed, so this now matches them exactly.
+    typedef CgsNumeric::Random Random;
 }
 
 // FLAG: the camera-behaviour type tag. Each behaviour carries a type id in the leading word of
