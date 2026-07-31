@@ -1,4 +1,5 @@
 #include "SharedClasses/DataLists/VehicleListResourceType.h"
+#include "SharedClasses/DataLists/VehicleList.h"        // BrnResource::VehicleListResource (single home)
 #include "SharedClasses/DataLists/VehicleListEntry.h"   // BrnResource::VehicleListEntry (single home)
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
@@ -20,17 +21,11 @@ namespace BrnResource
         return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
     }
 
-    // VehicleListEntry (incl. its embedded BaseCollisionGenerator keys) now lives in the
-    // shared SharedClasses/DataLists/VehicleListEntry.h home (included above).
-
-    struct VehicleListResource
-    {
-        VehicleListEntry* GetEntries() const { return PointerFromU32<VehicleListEntry>(mpEntries); }
-
-        u32 muNumVehicles;
-        u32 mpEntries;
-        u64 mu16BytePad;
-    };
+    // VehicleListEntry (incl. its embedded BaseCollisionGenerator keys) lives in the shared
+    // SharedClasses/DataLists/VehicleListEntry.h home; VehicleListResource lives in
+    // SharedClasses/DataLists/VehicleList.h (both included above). This TU used to carry a
+    // file-local re-declaration of VehicleListResource -- exactly the local-re-declaration
+    // fork this project has been bitten by before -- so it now includes the one home instead.
 
     void VehicleListEntry::FixUp()
     {
@@ -69,7 +64,7 @@ namespace BrnResource
         const VehicleListResource* lpVehicleList =
             static_cast<const VehicleListResource*>(lpResource);
         const u32 luSize =
-            KU_VEHICLE_LIST_HEADER_SIZE + KU_VEHICLE_LIST_ENTRY_SIZE * lpVehicleList->muNumVehicles;
+            KU_VEHICLE_LIST_HEADER_SIZE + KU_VEHICLE_LIST_ENTRY_SIZE * lpVehicleList->GetNumVehicles();
 
         CgsResource::ResourceDescriptor lDescriptor;
         lDescriptor.m_baseResourceDescriptors[0].m_size      = luSize;
@@ -84,16 +79,18 @@ namespace BrnResource
 
     void VehicleListResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
     {
-        static_cast<VehicleListResource*>(lpResource)->mpEntries -= CgsResource::GetLoadBase(lrResource);
+        static_cast<VehicleListResource*>(lpResource)->muEntriesOffset -=
+            CgsResource::GetLoadBase(lrResource);
     }
 
     void VehicleListResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
     {
         VehicleListResource* lpVehicleList = static_cast<VehicleListResource*>(lpResource);
-        lpVehicleList->mpEntries += CgsResource::GetLoadBase(lrResource);
+        lpVehicleList->muEntriesOffset += CgsResource::GetLoadBase(lrResource);
 
-        VehicleListEntry* lpEntries = lpVehicleList->GetEntries();
-        for (u32 luVehicle = 0; luVehicle < lpVehicleList->muNumVehicles; ++luVehicle)
+        VehicleListEntry* lpEntries =
+            PointerFromU32<VehicleListEntry>(lpVehicleList->muEntriesOffset);
+        for (u32 luVehicle = 0; luVehicle < lpVehicleList->GetNumVehicles(); ++luVehicle)
             lpEntries[luVehicle].FixUp();
     }
 }

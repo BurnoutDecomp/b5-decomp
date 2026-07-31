@@ -1,0 +1,113 @@
+// VehicleListEntry.cpp
+// BrnResource::VehicleListEntry -- the accessors VehicleListEntry.h declares.
+//
+// The record is a SERIALISED image (sizeof == 0xF0 / 240, the stride
+// VehicleListResourceType::GetSerialisedResourceDescriptor @0x8267B540 multiplies the
+// vehicle count by), so every field position below is a property of the shipped data,
+// not of a host struct: each accessor reads inside the named opaque region declared in
+// the header (maPad0 / maPad224) at the offset its own X360 reader uses. The offsets
+// carried here are exactly the ones VehicleListEntry.h already documents per accessor;
+// this TU only supplies the bodies those declarations promised.
+//
+// Attestation for each offset (all recorded in the header, repeated at the body):
+//   +0x00 CgsID mId          -- VehicleList::GetVehicleIndex @0x822188C8 (`ld r11,0(r3)`)
+//   +0x08 CgsID mParentId    -- DeveloperChallengeManager::CheckCarID parent-chain walk
+//   +0x30 char macVehicleName[64] -- ResetPlayerDebugComponent::OnChangeCarFilter (`entry+0x30`)
+//   +0x94 u32   flags        -- DriveThruManager::HandleDriveThru (`lwz r11,0x94(r3)`)
+//                               bit0 = trophy car, bit6 = can auto-repair
+//   +0x99 u8    unlock rank  -- CarSelectManager::IsThisCarInCurrentUnlockSequence
+//   +0xE8 u8    car type     -- ChallengeManager::CheckCurrentCar (`lbz r11,0xE8(entry)`)
+//   +0xE9 u8    livery type  -- LeaderboardTableComponent::SetCell (`lbz r11,0xE9(entry)`)
+//
+// x64 note: the record is read straight out of the streamed bundle payload, so the reads
+// are done through memcpy into a host-typed local rather than by casting an interior
+// pointer -- same value, no alignment assumption.
+
+#include "SharedClasses/DataLists/VehicleListEntry.h"
+
+#include <cstring>   // memcpy
+
+namespace BrnResource
+{
+
+namespace
+{
+    // Offsets INSIDE the serialised record's leading opaque header (maPad0, +0x00..0x9F).
+    const u32 KU_OFFSET_ID           = 0x00;
+    const u32 KU_OFFSET_PARENT_ID    = 0x08;
+    const u32 KU_OFFSET_VEHICLE_NAME = 0x30;
+    const u32 KU_OFFSET_FLAGS        = 0x94;
+    const u32 KU_OFFSET_UNLOCK_RANK  = 0x99;
+
+    // Offsets inside the trailing opaque region (maPad224, +0xE0..0xEF).
+    const u32 KU_OFFSET_CAR_TYPE     = 0xE8 - 0xE0;
+    const u32 KU_OFFSET_LIVERY_TYPE  = 0xE9 - 0xE0;
+
+    // The two flag bits the X360 readers extract from the +0x94 word.
+    const u32 KU_FLAG_TROPHY_CAR     = 1u << 0;   // `extrwi r11,r11,1,31` (bit 0)
+    const u32 KU_FLAG_CAN_AUTOREPAIR = 1u << 6;   // `extrwi r11,r11,1,25` (bit 6)
+
+    u64 ReadU64(const u8* lpBytes)
+    {
+        u64 luValue = 0;
+        std::memcpy(&luValue, lpBytes, sizeof(luValue));
+        return luValue;
+    }
+
+    u32 ReadU32(const u8* lpBytes)
+    {
+        u32 luValue = 0;
+        std::memcpy(&luValue, lpBytes, sizeof(luValue));
+        return luValue;
+    }
+}
+
+// The leading car id (X360 reads it at entry+0x00 as an 8-byte load).
+CgsID VehicleListEntry::GetId() const
+{
+    return static_cast<CgsID>(ReadU64(&maPad0[KU_OFFSET_ID]));
+}
+
+// The parent/derived-from car id (0 == no parent).
+CgsID VehicleListEntry::GetParentId() const
+{
+    return static_cast<CgsID>(ReadU64(&maPad0[KU_OFFSET_PARENT_ID]));
+}
+
+// The display name C-string (macVehicleName, char[64] at +0x30).
+const char* VehicleListEntry::GetName() const
+{
+    return reinterpret_cast<const char*>(&maPad0[KU_OFFSET_VEHICLE_NAME]);
+}
+
+// X360 `lwz r11,0x94(r3); extrwi r11,r11,1,31` -- bit 0 of the +0x94 flags word.
+bool VehicleListEntry::IsTrophyCar() const
+{
+    return (ReadU32(&maPad0[KU_OFFSET_FLAGS]) & KU_FLAG_TROPHY_CAR) != 0;
+}
+
+// X360 `lwz r11,0x94(r3); extrwi r11,r11,1,25` -- bit 6 of the same flags word.
+bool VehicleListEntry::CanAutoRepair() const
+{
+    return (ReadU32(&maPad0[KU_OFFSET_FLAGS]) & KU_FLAG_CAN_AUTOREPAIR) != 0;
+}
+
+// The required-progression-rank byte inside the gameplay-data sub-object (+0x99).
+u8 VehicleListEntry::GetUnlockRank() const
+{
+    return maPad0[KU_OFFSET_UNLOCK_RANK];
+}
+
+// The car's boost class (+0xE8) -- raw byte, mapped by the caller.
+u8 VehicleListEntry::GetCarType() const
+{
+    return maPad224[KU_OFFSET_CAR_TYPE];
+}
+
+// The livery/"Finish Type" tag (+0xE9) -- raw byte, mapped by the caller.
+u8 VehicleListEntry::GetLiveryType() const
+{
+    return maPad224[KU_OFFSET_LIVERY_TYPE];
+}
+
+} // namespace BrnResource

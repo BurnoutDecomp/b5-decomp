@@ -18,7 +18,8 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"            // EventReceiverQueue (acquire response receiver)
 #include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                            // GameDataIO In/OutputBuffer (Update pump)
-#include "GameShared/GameClasses/Core/CgsID.h"                                  // CgsIDUnCompress / CgsIDConvertToString
+#include "GameShared/GameClasses/Core/CgsID.h"                                  // CgsIDUnCompress / CgsIDConvertToString / CgsIDCompress
+#include "SharedClasses/DataLists/VehicleListEntry.h"                           // VehicleListEntry (the vehicle-table probe)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                    // CgsDev::StrStream (prop bundle name build)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
@@ -117,6 +118,22 @@ namespace BrnResource
             }
             // fall through
         }
+        case E_PREPARE_VEHICLE_LIST:
+            // X360 stage 9 (LABEL_26): PrepareVehicleList. (Stage 7 GameTalk and stage 8's
+            // module prepare stay deferred between ATTRIBSYS and here.)
+            mePrepareStage = E_PREPARE_VEHICLE_LIST;
+            if (!PrepareVehicleList())
+                return false;
+            // fall through
+            // (X360 stages 10 PrepareFreeburnChallengeList and 11 PrepareICEList sit here --
+            //  still deferred; neither list has a committed manager yet.)
+        case E_PREPARE_WHEEL_LIST:
+            // X360 stage 12 (LABEL_30): PrepareWheelList.
+            mePrepareStage = E_PREPARE_WHEEL_LIST;
+            if (!PrepareWheelList())
+                return false;
+            // fall through
+            // (X360 stages 13 PrepareHudMessages and 14 PreparePopups follow -- deferred.)
         case E_PREPARE_DONE:
             meReleaseStage = E_PREPARE_START;
             mePrepareStage = E_PREPARE_DONE;
@@ -810,6 +827,265 @@ namespace BrnResource
         }
     }
 
+    // ====================================================================================
+    // The data-table prepares -- Prepare stages 9 (@0x8266C410) and 12 (@0x8266D1F8).
+    //
+    // ⭐ These, not the VL__/WL__ GET handlers, are where the vehicle and wheel tables are
+    // actually loaded. The GET handlers stream nothing (see ProcessGetVehicleListRequest).
+    //
+    // The X360 pair are two near-identical six-state machines. Reproduced faithfully as one
+    // shared body plus two thin wrappers, because the ONLY differences are:
+    //     stage word   a1[140]                        a1[142]
+    //     bundle       "Vehicles/VehicleList.bundle"   "Wheels/WheelList.bundle"
+    //     resource     "B5VehicleList"                 "B5WheelList"
+    //     allowFail    true                            false
+    //     consumer     mVehicleList.AddListResource    mWheelList.AddListResource
+    //     assert lines 875 / 907 / 914 / 946           1383 / 1415 / 1422 / 1446
+    // [marked deviation] the console emits two separate functions with the bodies written
+    // out twice; folding them keeps every store and every guard identical.
+    //
+    // The state machine (X360 store-for-store):
+    //   0/1 : LoadBundleRequest{mpUser=&mReceiverQueue, miEventId=0, file=<bundle>,
+    //         mbLiveUpdateReplace=false, miPoolId=5, mbAllowFailiure=<flag>,
+    //         mbUseHDCache=false} -> resource queue type 2; mReceiverQueue.Clear(); -> 2
+    //   2   : nothing queued -> tail (pump + return false). Queued -> assert the event id is
+    //         2 (LoadBundleResponse), fall into 3.
+    //   3   : AcquireResourceRequest{mpUser=&mReceiverQueue, miEventId=0, miPoolId=5,
+    //         mResourceId=HashString(<resource>)} -> resource queue type 4;
+    //         mReceiverQueue.Clear(); -> 4  (which then sees the empty queue and tails out)
+    //   4   : nothing queued -> tail. Queued -> assert the event id is 4 and the response's
+    //         miEventId is 0, bind a ResourcePtr from the response handle, AddListResource.
+    //   5   : terminal -> return true.
+    // Every non-terminal exit runs the X360's shared tail: unlock the resource input, pump
+    // the resource module (UpdateResourceModule @0x826663B0), and return false.
+    // ====================================================================================
+    namespace
+    {
+        // The X360 carves a "Resource" ResourceIO::InputBuffer off the IOBufferStack on every
+        // pass and destroys it at the end. [marked deviation] the IOBufferStack is deferred,
+        // so the two prepares share one function-local static, exactly like Update's own
+        // s_ResourceInput and the CreatePools bring-up path.
+        CgsResource::ResourceIO::InputBuffer* GetListPrepareResourceInput()
+        {
+            static CgsResource::ResourceIO::InputBuffer s_ListPrepareInput;
+            static bool s_bConstructed = false;
+            if (!s_bConstructed)
+            {
+                s_bConstructed = true;
+                s_ListPrepareInput.Construct();
+            }
+            return &s_ListPrepareInput;
+        }
+
+        const s32 KI_DATA_LIST_POOL_ID = 5;   // X360 immediate (the "GameData" pool)
+    }
+
+    bool GameDataModule::PrepareDataListResource(s32& lriStage, const char* lpcBundleFileName,
+                                                 const char* lpcResourceName, bool lbAllowFailure,
+                                                 CgsResource::ResourceHandle* lpOutHandle)
+    {
+        CgsResource::ResourceIO::InputBuffer* lpResourceInput = GetListPrepareResourceInput();
+        lpResourceInput->LockForWrite();
+
+        bool lbComplete = false;
+        bool lbFallThrough = true;
+
+        switch (lriStage)
+        {
+        case 0:
+        case 1:
+        {
+            lriStage = 1;
+            CgsResource::Events::LoadBundleRequest lRequest;
+            memset(&lRequest, 0, sizeof(lRequest));
+            lRequest.mpUser    = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.SetFileName(lpcBundleFileName);
+            lRequest.mbLiveUpdateReplace = false;
+            lRequest.miPoolId            = KI_DATA_LIST_POOL_ID;
+            lRequest.mbAllowFailiure     = lbAllowFailure;
+            lRequest.mbUseHDCache        = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+        // fall through
+        case 2:
+        {
+            lriStage = 2;
+            if (mReceiverQueue.GetLength() < 1)
+            {
+                lbFallThrough = false;
+                break;
+            }
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 2, "Invalid event id received\n");   // X360 cpp:875 / 1383
+        }
+        // fall through
+        case 3:
+        {
+            lriStage = 3;
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            memset(&lRequest, 0, sizeof(lRequest));
+            lRequest.mpUser    = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId  = KI_DATA_LIST_POOL_ID;
+            lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+                CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcResourceName)))));
+            lRequest.mbCheckRefCount = false;
+            lpResourceInput->GetResourceQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+            mReceiverQueue.Clear();
+        }
+        // fall through
+        case 4:
+        {
+            lriStage = 4;
+            if (mReceiverQueue.GetLength() < 1)
+            {
+                lbFallThrough = false;
+                break;
+            }
+            const CgsModule::Event* lpEvent = 0;
+            s32 liSize = 0;
+            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+            CGS_ASSERT(liType == 4, "Invalid event id received\n");   // X360 cpp:907 / 1415
+
+            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+            CGS_ASSERT(lpResponse != 0 && lpResponse->miEventId == 0,
+                       "Invalid event id received\n");                // X360 cpp:914 / 1422
+
+            // X360: BaseResourcePtr::CreateFromHandle(&localPtr, &response.mHandle) then
+            // <List>::AddListResource(this + <offset>, &localPtr). The handle is handed back
+            // to the caller so the two wrappers can bind their own typed ResourcePtr.
+            if (lpResponse != 0 && lpOutHandle != 0)
+            {
+                lpOutHandle->mpResourceMemory = lpResponse->mpResourceMemory;
+                lpOutHandle->mpSourceEntry    = lpResponse->mpSourceEntry;
+            }
+            lriStage = 5;
+            lbComplete = true;
+            break;
+        }
+        case 5:
+            // X360 LABEL_27 / LABEL_19: terminal. (The wheel machine resets its word to 2
+            // here rather than leaving it at 5 -- a console quirk with no observable effect,
+            // since Prepare never re-enters a completed stage. Left at 5 for both.)
+            lbFallThrough = false;
+            lbComplete = false;
+            lpResourceInput->UnlockForWrite();
+            mReceiverQueue.Clear();
+            return true;
+        default:
+            CGS_ASSERT(false, "Invalid Stage\n");   // X360 cpp:946 / 1446
+            lbFallThrough = false;
+            break;
+        }
+        (void)lbFallThrough;
+
+        // The shared X360 tail: unlock the input, then UpdateResourceModule @0x826663B0
+        // (which on the PC is the embedded streaming engine's own pump), then destroy the
+        // carve. Runs on EVERY pass, completing or not -- that pump is what actually services
+        // the LoadBundle / AcquireResource this pass just published.
+        lpResourceInput->UnlockForWrite();
+        mResourceModule.Update(lpResourceInput, 0);
+
+        if (lbComplete)
+        {
+            mReceiverQueue.Clear();
+            return true;
+        }
+        return false;
+    }
+
+    // @ 0x8266C410 -- Prepare stage 9.
+    bool GameDataModule::PrepareVehicleList()
+    {
+        CgsResource::ResourceHandle lHandle;
+        lHandle.Clear();
+        if (!PrepareDataListResource(miVehicleListPrepareStage,
+                                     "Vehicles/VehicleList.bundle", "B5VehicleList",
+                                     true /*mbAllowFailiure -- the X360 sets 1 here*/,
+                                     &lHandle))
+            return false;
+
+        if (lHandle.mpResourceMemory != 0)
+        {
+            CgsResource::ResourcePtr<VehicleListResource> lResourcePtr(lHandle);
+            mVehicleList.AddListResource(lResourcePtr);
+        }
+        else
+        {
+            // [marked deviation] the console has no null path here (mbAllowFailiure only
+            // covers the bundle load); report instead of binding a null list.
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] PrepareVehicleList: B5VehicleList did not resolve"
+                   " -- vehicle table is EMPTY\n";
+        }
+
+        *CgsDev::Log::gpDebugPrint
+            << "[GameData] PrepareVehicleList: " << mVehicleList.GetVehicleCount()
+            << " vehicles (" << mVehicleList.GetSelectableVehicleCount()
+            << " selectable, " << mVehicleList.GetSponsorVehicleCount() << " sponsor)\n";
+
+        // [PC diagnostic] prove the table is not just RESIDENT but READABLE: resolve the
+        // Junkyard starter car by id and read its display name back out of the streamed
+        // payload. A silently un-FixUp'd entry array (no registered resource type, or a
+        // mis-sized offset slot) shows up here as index -1 / garbage rather than as an AV
+        // three subsystems later.
+        {
+            const s32 liCavalry = mVehicleList.GetVehicleIndex(CgsIDCompress("PUSMC01"));
+            const VehicleListEntry* lpFirst = mVehicleList.GetVehicleData(0);
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData]   PUSMC01 (Hunter Cavalry) index=" << liCavalry
+                << "  entry0 name='" << (lpFirst != 0 ? lpFirst->GetName() : "<null>")
+                << "' rank=" << (lpFirst != 0 ? (s32)lpFirst->GetUnlockRank() : -1)
+                << " carType=" << (lpFirst != 0 ? (s32)lpFirst->GetCarType() : -1) << "\n";
+        }
+        return true;
+    }
+
+    // @ 0x8266D1F8 -- Prepare stage 12. (This one is NOT in the .ida-exports set -- the gap
+    // rule applies: it was recovered straight from the ARTIST database with headless IDA.)
+    bool GameDataModule::PrepareWheelList()
+    {
+        CgsResource::ResourceHandle lHandle;
+        lHandle.Clear();
+        if (!PrepareDataListResource(miWheelListPrepareStage,
+                                     "Wheels/WheelList.bundle", "B5WheelList",
+                                     false /*mbAllowFailiure -- the X360 sets 0 here*/,
+                                     &lHandle))
+            return false;
+
+        if (lHandle.mpResourceMemory != 0)
+        {
+            CgsResource::ResourcePtr<WheelListResource> lResourcePtr(lHandle);
+            mWheelList.AddListResource(lResourcePtr);
+        }
+        else
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] PrepareWheelList: B5WheelList did not resolve"
+                   " -- wheel table is EMPTY\n";
+        }
+
+        *CgsDev::Log::gpDebugPrint
+            << "[GameData] PrepareWheelList: " << mWheelList.GetWheelCount() << " wheels\n";
+        {
+            // [PC diagnostic] the Hunter Cavalry's default wheel, resolved by name through
+            // the same rebased entry array (also the regression gate on the FixUp fix).
+            const s32 liWheel = mWheelList.FindWheelIndexFromName("5Spoke_19_16_650");
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData]   wheel '5Spoke_19_16_650' index=" << liWheel << "\n";
+        }
+        return true;
+    }
+
     void GameDataModule::Construct()
     {
         // X360 0x82671B90 first runs the module base's Construct (stage/DataBuffer reset; it
@@ -841,6 +1117,15 @@ namespace BrnResource
         miWorldCollisionRefCount        = 0;
         miWorldCollisionValidatePending = 0;
         miResourcePrepareStage          = 0;
+        miVehicleListPrepareStage       = 0;
+        miWheelListPrepareStage         = 0;
+
+        // X360 0x82671B90 also constructs the two resident data tables here (VehicleList::
+        // Construct @0x82677850 and WheelList::Construct @0x82677DB8 both list
+        // GameDataModule::Construct as their only caller). They MUST run before Prepare
+        // stages 9/12: AddListResource appends into slot tables that Construct seeds with -1.
+        mVehicleList.Construct();
+        mWheelList.Construct();
 
         // X360 0x82671B90 (tail): reset the bank->allocator registry -- the inline
         // `maiAllocatorMap[0..66] = -1` loop == AllocatorList::Construct. CreateAllocators
@@ -1387,7 +1672,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "VL__", 4) == 0)
         {
-            DeferredGameDataRequest("GetVehicleList (id 52)", lpSlot);
+            ProcessGetVehicleListRequest(lpResourceInput, lpEvent, 52, liIndex);
         }
         else if (memcmp(lacName, "CL__", 4) == 0)
         {
@@ -1410,7 +1695,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "WL__", 4) == 0)
         {
-            DeferredGameDataRequest("GetWheelList (id 59)", lpSlot);
+            ProcessGetWheelListRequest(lpResourceInput, lpEvent, 59, liIndex);
         }
         else if (memcmp(lacName, "GD__", 4) == 0)
         {
@@ -1962,6 +2247,67 @@ namespace BrnResource
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
             4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // ====================================================================================
+    // The two LIST GET handlers -- @0x82666688 (vehicle, id 52) and @0x82666868 (wheel,
+    // id 59). Both are 40-instruction leaves.
+    //
+    // ⚠️ These do NOT stream anything, and that is the whole point: the tables were made
+    // resident by Prepare stages 9/12, so the GET just posts a reply whose resource-memory
+    // lane is a POINTER TO THE EMBEDDED MANAGER (the console literally stores `this+444336`
+    // / `this+458696`) and recycles the slot immediately. Note the two IMMEDIATES the X360
+    // bakes into the reply and does NOT take from the request: miPoolId = 5 and mId = the
+    // fixed CgsID of the table ("VL__VEHICIST" 0xC98B447411F97E38 / "WL__WHEELIST"
+    // 0xCF5D625701228838, both base-40 decoded); meType = 3 likewise.
+    //
+    // [x64 note] the reply's mHandle.mpResourceMemory carries the manager pointer directly,
+    // matching the console's single `stw r11, +0x20` store; mpSourceEntry stays null (the
+    // X360 leaves that word untouched -- there is no pool entry behind a resident member).
+    // ====================================================================================
+
+    void GameDataModule::ProcessGetVehicleListRequest(
+            CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        GameDataIO::GameDataAssetEvent lResponse;
+        memset(&lResponse, 0, sizeof(lResponse));
+        lResponse.miEventId       = lpEvent->miEventId;
+        lResponse.mpReceiverQueue = 0;
+        lResponse.miPoolId        = 5;                       // X360 immediate
+        lResponse.mId             = 0xC98B447411F97E38ull;   // CgsID("VL__VEHICIST")
+        lResponse.meType          = static_cast<EAssetSet>(3);
+        lResponse.mbFailFlag      = false;
+        lResponse.mHandle.mpResourceMemory = &mVehicleList;
+        lResponse.mHandle.mpSourceEntry    = 0;
+
+        lpEvent->mpReceiverQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            static_cast<s32>(sizeof(lResponse)));
+
+        mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+    }
+
+    void GameDataModule::ProcessGetWheelListRequest(
+            CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        GameDataIO::GameDataAssetEvent lResponse;
+        memset(&lResponse, 0, sizeof(lResponse));
+        lResponse.miEventId       = lpEvent->miEventId;
+        lResponse.mpReceiverQueue = 0;
+        lResponse.miPoolId        = 5;                       // X360 immediate
+        lResponse.mId             = 0xCF5D625701228838ull;   // CgsID("WL__WHEELIST")
+        lResponse.meType          = static_cast<EAssetSet>(3);
+        lResponse.mbFailFlag      = false;
+        lResponse.mHandle.mpResourceMemory = &mWheelList;
+        lResponse.mHandle.mpSourceEntry    = 0;
+
+        lpEvent->mpReceiverQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            static_cast<s32>(sizeof(lResponse)));
+
+        mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
     }
 
     // ====================================================================================

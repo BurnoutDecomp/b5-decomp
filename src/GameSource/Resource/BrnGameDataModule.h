@@ -10,6 +10,8 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"                   // maGeneratedLinearAllocators / mAudioStreamAllocator
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                     // maGeneratedHeapAllocators
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"      // mAttribSysModule (X360 a1+399000)
+#include "SharedClasses/DataLists/VehicleList.h"                             // mVehicleList (X360 a1+444336)
+#include "SharedClasses/DataLists/WheelList.h"                               // mWheelList   (X360 a1+458696)
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
 namespace rw { struct LinearResourceAllocator; namespace core { struct GeneralResourceAllocator; } }
@@ -57,10 +59,15 @@ namespace BrnResource
         {
             E_PREPARE_START = 0, E_PREPARE_BASE = 1, E_PREPARE_RESOURCE = 2, E_PREPARE_BANKS = 3,
             E_PREPARE_POOLS = 4, E_PREPARE_ALLOCATORS = 5, E_PREPARE_ATTRIBSYS = 6,
-            E_PREPARE_DONE = 7
-            // (X360 stage 6 = the AttribSysModule prepare + the baked-schema registration;
-            // the DLC 16-18 / GameTalk 7 / vehicle-table 8.. stages remain deferred and are
-            // skipped between ATTRIBSYS and DONE.)
+            E_PREPARE_DONE = 7,
+            // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
+            // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
+            // PrepareHudMessages 13, PreparePopups 14). The two that are live here keep the
+            // console's numbers; the DLC 16-18 / GameTalk 7 stages and 10/11/13/14 are still
+            // skipped between ATTRIBSYS and DONE. (Order of execution comes from the switch's
+            // fall-through order below, not from the numeric value.)
+            E_PREPARE_VEHICLE_LIST = 9,
+            E_PREPARE_WHEEL_LIST   = 12
         };
 
         // X360 @0x82671B90 Construct: event-slot pool capacity (96 slots wired inline:
@@ -160,6 +167,23 @@ namespace BrnResource
         // when complete (Prepare advances), false while still registering.
         bool PrepareAttribSysSchemaResource(CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer);
 
+        // ---- the data-table prepares (Prepare stages 9 and 12) --------------------------
+        // @0x8266C410 / @0x8266D1F8. Each is a six-state resumable machine on its own stage
+        // word: push a LoadBundleRequest for the table's bundle into the ResourceModule
+        // (pool 5), wait for the reply on mReceiverQueue, push an AcquireResourceRequest for
+        // the named resource, wait, then hand the resolved handle to the embedded list
+        // manager's AddListResource. Returns true only in the terminal state.
+        bool PrepareVehicleList();   // 0x8266C410  "Vehicles/VehicleList.bundle" / "B5VehicleList"
+        bool PrepareWheelList();     // 0x8266D1F8  "Wheels/WheelList.bundle"     / "B5WheelList"
+
+        // The shared body of the two above (the X360 emits them as two near-identical
+        // functions; the only differences are the bundle path, the resource name, the
+        // mbAllowFailiure flag, the stage word and the list object). PC helper, not an X360
+        // function -- see the .cpp.
+        bool PrepareDataListResource(s32& lriStage, const char* lpcBundleFileName,
+                                     const char* lpcResourceName, bool lbAllowFailure,
+                                     CgsResource::ResourceHandle* lpOutHandle);
+
         // Shared completion-post helper (the X360 inlines this 40-byte response build in
         // every acquire/load-fail case): post a GameDataAssetEvent built from the slot's
         // captured request (+ the resolved handle / fail flag) to the requester's queue.
@@ -216,7 +240,24 @@ namespace BrnResource
                                       const GameDataIO::GameDataAssetEvent* lpEvent,
                                       s32 liEventId, s32 liSlotIndex);                 // 0x826704C0
 
+        // ---- the two LIST GET handlers (vehicle-load wave) ------------------------------
+        // Unlike every other GET, these stream NOTHING: the tables are already resident in
+        // the module (Prepare stages 9/12), so the handler just posts a reply carrying a
+        // pointer to the embedded manager and frees the slot immediately.
+        void ProcessGetVehicleListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                          const GameDataIO::GameDataAssetEvent* lpEvent,
+                                          s32 liEventId, s32 liSlotIndex);             // 0x82666688
+        void ProcessGetWheelListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                        const GameDataIO::GameDataAssetEvent* lpEvent,
+                                        s32 liEventId, s32 liSlotIndex);               // 0x82666868
+
     public:
+        // ADDITIVE accessors (the console reaches these by member offset -- the GET handlers
+        // hand out `this + 444336` / `this + 458696`). The two resident data tables every
+        // car-facing subsystem resolves through.
+        BrnResource::VehicleList& GetVehicleList() { return mVehicleList; }
+        BrnResource::WheelList&   GetWheelList()   { return mWheelList; }
+
         // ADDITIVE accessor (the console reaches the sub-module by member offset). Lets the
         // game module resolve an already-resident resource through the same
         // PoolModule::GetPool -> Pool::FindResource pair the pool module's own
@@ -290,6 +331,16 @@ namespace BrnResource
         // Prepare stage 6 brings it up with the memory-map allocators (heap banks 19/20/21
         // + linear bank 22, liMaxNumVaults 80); Update pumps it with the "Attrib" input.
         CgsAttribSys::AttribSysModule  mAttribSysModule;
+        // X360 a1+444336 / a1+458696: the two RESIDENT data tables. Construct()s them,
+        // Prepare stages 9/12 fill them, and ProcessGet{Vehicle,Wheel}ListRequest hands a
+        // pointer to them straight back to the requester (the console literally replies with
+        // `this + 444336` / `this + 458696`).
+        BrnResource::VehicleList       mVehicleList;
+        BrnResource::WheelList         mWheelList;
+        // X360 a1[140] / a1[142] -- the two data-table prepares' own stage words (each
+        // Prepare* helper owns one; a1[141] is the ICE list's, still deferred).
+        s32                            miVehicleListPrepareStage;
+        s32                            miWheelListPrepareStage;
         // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)
     };
