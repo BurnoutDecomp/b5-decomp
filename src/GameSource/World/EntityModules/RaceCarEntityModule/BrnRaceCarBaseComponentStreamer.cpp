@@ -38,7 +38,15 @@ namespace BrnWorld
 // inlined BitArray::Construct(); on the committed BitArray that is UnSetAll().
 void RaceCarBaseComponentStreamer::Construct( s32 liPoolId, bool lbAllowFailure, BrnResource::EAssetSet leAssetSet )
 {
-    BaseClass::Construct( liPoolId, leAssetSet, lbAllowFailure );
+    // BaseStreamer<8>::Construct( liPoolId, lbSlotPoolSystem, leAssetSet, lbAllowFailure ).
+    // [fixed on mount] the previous 3-argument call predates the BaseStreamer<N> header
+    // landing and did not compile. The X360 race-car component streamers are NOT slot-pool
+    // streamers -- each posts its load into the ONE pool its Construct names (pool 4 for
+    // graphics/wheel-graphics, 17 for physics/attribs, 6 for sound), with no per-slot pool
+    // offset; InternalBaseStreamer::PostLoadRequest only adds the list index to the pool id
+    // when mbSlotPoolSystem is set, and the runtime-observed load really did land in pool 4
+    // rather than 4+slot.
+    BaseClass::Construct( liPoolId, false /*lbSlotPoolSystem*/, leAssetSet, lbAllowFailure );
 
     mAddedEntries.UnSetAll();
     mLoadedEntries.UnSetAll();
