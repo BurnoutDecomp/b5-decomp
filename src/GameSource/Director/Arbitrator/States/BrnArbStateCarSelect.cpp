@@ -47,20 +47,41 @@
 // All member access is BY NAME (the x64 gate rule); the console byte offsets quoted in
 // the header are provenance only.
 //
-// ⚠️ COMPILE STATUS (inherited, pre-existing). This .cpp does NOT pass `cl /c` yet, and
-// neither do its already-committed siblings BrnArbStateOnlineCarSelect.cpp /
-// BrnArbStateRaceIntro.cpp (verified 2026-07-31: identical failure). The cause is not in
-// this TU: any TU that includes BOTH the named-parameter bank (-> BehaviourPassengerCam.h
-// -> BehaviourRig.h) AND Behaviours/BrnBehaviourIceAnim.h hits SIX C2011 redefinitions,
-// because the ICE-anim header still carries its own forks of CollisionPolicy /
-// VisibilityCollisionPolicy / CollisionPolicyAttachedToVehicle / Utils::CameraShake /
-// Utils::Looker / Utils::Tweaker whose canonical homes (BehaviourRig.h /
-// BrnCollisionPolicy.h) define the same names. Both calls are unavoidable here (the
-// look-around-car cam is configured from the bank; the ICE-anim behaviour IS the state's
-// camera). That de-fork is its own wave -- the same one that already retired the ICE-anim
-// header's Behaviour + Timestep forks -- and it is what unblocks this whole state family
-// (and lets ArbitratorStateContainer de-fork its ArbStateCarSelect placeholder). The GAME
-// BUILD is green with this file present: it is not mounted, exactly like its siblings.
+// ✅ COMPILE STATUS (re-measured 2026-07-31). This .cpp COMPILES CLEAN. So do its siblings
+// BrnArbStateOnlineCarSelect.cpp and BrnArbStateRaceIntro.cpp -- `cl /c` on all three emits
+// ZERO errors and real objects (this one is ~118 KB of code). The banner that used to sit
+// here claimed six C2011 redefinitions from Behaviours/BrnBehaviourIceAnim.h carrying its own
+// forks of CollisionPolicy / VisibilityCollisionPolicy / CollisionPolicyAttachedToVehicle /
+// Utils::{CameraShake, Looker, Tweaker}; that de-fork has since landed (the header now
+// #includes all six canonical homes) and the claim was stale.
+//
+// ⛔ STILL NOT MOUNTED -- and the reason is now purely LINK closure, measured with dumpbin
+// over the linked object set (2026-07-31): this TU alone raises 63 externals, 26 of which the
+// linked set already provides and 10 of which the CRT supplies, leaving 27 REAL unresolved
+// game symbols. Mounting it today therefore breaks the build outright. The breakdown:
+//
+//   14  DirectorResourceManager::GetCarSelect*Shots / GetCarUnlockShots / GetGameIntroShots.
+//       These are DECLARATION-ONLY in Behaviours/BrnBehaviourIceAnim.h ("bodies in the
+//       resource-manager TU"), and no body exists anywhere in the tree: the fourteen
+//       mCarSelect*/mCarUnlock/mGameIntroGroup members appear only in the recon-map COMMENT
+//       in BrnDirectorResourceManager.h, are not declared, and that TU is not mounted.
+//    6  Camera::BehaviourInterpolate::{Setup, SetupDuration, SetupCameraAFromHelper,
+//       SetupCameraBFromHelper, SetParameters, HasFinished} -- un-landed behaviour.
+//    2  Camera::BehaviourRotateAboutVehicle::{BecomeSimilarTo, SetParameters} -- un-landed.
+//    5  Camera::BehaviourIceAnim::ClearBaseFirstFrameGate, Camera::EnsureEffectIsPlaying,
+//       SharedCameraContainer::{ForcePrimaryGameplayBehaviourToFinish,
+//       GetSelectedGameplayCamera}, and CgsDev::StrStreamBase's vector-deleting destructor.
+//
+// All three siblings together: 81 referenced / 33 provided / 11 CRT / 37 unresolved.
+// DELETE-WHEN: the DirectorResourceManager shot-group member set + the two behaviours land.
+//
+// ⚠️ AND BEFORE MOUNTING, fix the ShotReference decode. Behaviours/BrnBehaviourIceAnim.h
+// typedefs `ShotReference` to Attrib::Gen::iceanim, but SetParameters is handed what is really
+// the raw Attrib::RefSpec ShotList element. The console wraps that RefSpec in a TEMPORARY
+// iceanim and reads the temporary's resolved LAYOUT block at +0xC; the committed C++ calls
+// GetAnimGuid() straight on the RefSpec, which reads RefSpec+4 as if it were mpAttributeData.
+// Latent only because this TU is unmounted. Full write-up at Attrib::Gen::iceanim::GetAnimGuid
+// in AttribSys/Generated/classes/iceanim.h.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
