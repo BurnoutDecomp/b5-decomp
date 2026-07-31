@@ -98,4 +98,33 @@ private:
     f32            mGameTime;                              // @0x314
     f32            mfWhiteLevel;                           // @0x318
     bool volatile  mbLockedForWriting;                     // @0x31C
+
+public:
+    // ADDITIVE (not X360 symbols). The console opens and closes the write lock around
+    // WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410, which is the frame's
+    // only producer; that function is not reconstructed yet, so the bring-up publisher in
+    // BrnRendererModule drives the lock by name rather than poking the flag. Delete with
+    // the bring-up publisher.
+    void LockForWriting()   { mbLockedForWriting = true; }
+    void UnlockForWriting() { mbLockedForWriting = false; }
 };
+
+// [FLAG PC bring-up] The stand-in camera the world producer framed this frame.
+//
+// The console's WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410 fills the
+// renderer's BrnShaderConstantsFrame from the world module's own camera + the environment
+// manager's blended keyframe. Neither producer is live: the camera is
+// GenerateDispatchListsBringUp's stand-in and the environment settings are not converted
+// or streamed. So the one thing the renderer cannot derive for itself -- the view
+// projection the world was actually drawn with -- is handed across here, and the renderer
+// supplies the rest (BrnRendererModule::PublishSkyConstantsBringUp).
+//
+// DELETE together with GenerateDispatchListsBringUp / PublishSkyConstantsBringUp when the
+// real camera and EnvironmentManager::GenerateShaderConstants land.
+struct BrnSkyCameraBringUp
+{
+    Matrix44 mViewProjection;   // ROW-VECTOR convention, as everywhere in the dispatch path
+    Vector3  mViewPosition;     // the eye
+    bool     mbValid;
+};
+extern BrnSkyCameraBringUp gBrnSkyCameraBringUp;

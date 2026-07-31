@@ -1045,9 +1045,79 @@ namespace BrnGame
         // fall through
 
         case E_GAMEPREPARESTAGE_WAITACQUIRES:
+        {
+            meGamePrepareStage = E_GAMEPREPARESTAGE_WAITACQUIRES;
+
+            // Stage 3: resolve the five global textures and hand them to the renderer.
+            //
+            // The five gamedb paths below are the X360's own literals (GamePrepare
+            // @0x823EFBD0, BrnGameModule.cpp:1751-1755) and every one of them hashes to an
+            // entry that IS present in the converted platform-4 GlobalTextureDictionary.bin
+            // -- the bundle stage 2 above just finished loading into pool 10.
+            //
+            // FLAG PC-platform leaf: the console posts five ASYNC AcquireResource events
+            // (ids 0..4) into the GameData request queue and collects the replies here on a
+            // later frame. Its responder, PoolModule::DoAcquireResourceRequest @0x828FCD48,
+            // is exactly `GetPool(poolId)->FindResource(id, checkRefCount, statusMask 2)`
+            // plus the entry's main-memory slot -- so the resolve below calls that same pair
+            // directly. The bundle is already resident (stage 2 waited for it), so there is
+            // nothing to wait for and the round trip would only add a frame. Replace this
+            // with the real acquire events when the GameData RequestInterface grows its
+            // AcquireResource builder.
+            {
+                static const char* const KAPC_GLOBAL_TEXTURE_PATHS[5] =
+                {
+                    "gamedb://burnout5/Playground/GlobalTextures/blobbyshadow.TextureConfig2d?ID=240931",
+                    "gamedb://burnout5/Playground/GlobalTextures/cloud1density.TextureConfig2d?ID=381388",
+                    "gamedb://burnout5/Playground/GlobalTextures/cloud1quadrant.TextureConfig2d?ID=381382",
+                    "gamedb://burnout5/Playground/GlobalTextures/corona_atlas.TextureConfig2d?ID=297312",
+                    "gamedb://burnout5/Playground/GlobalTextures/glass_fracture.TextureConfig2d?ID=440917"
+                };
+                const s32 KI_GLOBAL_TEXTURE_POOL = 10;   // the same pool stage 2 loaded into
+
+                renderengine::Texture* lapTextures[5] = { 0, 0, 0, 0, 0 };
+                CgsResource::Pool* lpPool =
+                    mGameDataModule.GetResourceModule().GetPoolModule().GetPool(KI_GLOBAL_TEXTURE_POOL);
+                if (lpPool != 0)
+                {
+                    for (s32 liTexture = 0; liTexture < 5; ++liTexture)
+                    {
+                        // The bundle keys every resource by CgsResource::ID::HashString of the
+                        // full lowercased gamedb path (a reflected CRC32, @0x828D84A8), widened
+                        // into the 64-bit id slot.
+                        CgsResource::ID lId;
+                        lId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
+                            reinterpret_cast<const u8*>(KAPC_GLOBAL_TEXTURE_PATHS[liTexture])))));
+                        s32 liIndex = -1;
+                        CgsResource::Entry* lpEntry = lpPool->FindResource(lId, false, 2, &liIndex);
+                        if (lpEntry != 0)
+                        {
+                            lapTextures[liTexture] = static_cast<renderengine::Texture*>(
+                                lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY]);
+                        }
+                    }
+                }
+
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[GamePrepare] global textures: blobby=" << (lapTextures[0] != 0)
+                        << " cloudDensity=" << (lapTextures[1] != 0)
+                        << " cloudLighting=" << (lapTextures[2] != 0)
+                        << " corona=" << (lapTextures[3] != 0)
+                        << " glassFracture=" << (lapTextures[4] != 0) << "\n";
+                }
+
+                // X360 BrnGameModule.cpp:1751-1755 -- the argument ORDER is the console's.
+                mRenderModule.PrepareAgain(lapTextures[0], lapTextures[1], lapTextures[2],
+                                           lapTextures[3], lapTextures[4]);
+            }
+        }
+        // fall through
+
         case E_GAMEPREPARESTAGE_GAMESTATE:
         {
-            // [gated] stages 3 + 4 -- see the note above.
+            // [gated] stage 4 -- see the note above.
             meGamePrepareStage = E_GAMEPREPARESTAGE_GAMESTATE;
             lbDone = true;
             break;

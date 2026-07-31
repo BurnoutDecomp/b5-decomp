@@ -216,6 +216,14 @@ namespace BrnResource
                                       const GameDataIO::GameDataAssetEvent* lpEvent,
                                       s32 liEventId, s32 liSlotIndex);                 // 0x826704C0
 
+    public:
+        // ADDITIVE accessor (the console reaches the sub-module by member offset). Lets the
+        // game module resolve an already-resident resource through the same
+        // PoolModule::GetPool -> Pool::FindResource pair the pool module's own
+        // DoAcquireResourceRequest @0x828FCD48 uses.
+        CgsResource::ResourceModule& GetResourceModule() { return mResourceModule; }
+
+    private:
         // ---- Layout (faithful order; x64 widths; compiler-laid-out; incremental) ------
         EPrepareStage                  mePrepareStage;   // +0x228 (a1[138])
         EPrepareStage                  meReleaseStage;   // +0x22C (a1[139])
