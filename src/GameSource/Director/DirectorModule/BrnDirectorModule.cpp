@@ -622,18 +622,18 @@ s32 DirectorModule::PostGuiUpdate(s32 liUnusedA, s32 liUnusedB,
         mMainDirector.PostGuiUpdate(&lIO);
     }
 
-    // ⚠️ QUIET GATE (one store): the X360 finishes with
+    // ✅ GATE CLOSED (fly-by wave). The X360 finishes with
     //     s32 liIndex = *(s32*)((u8*)lpInputBuffer + 0x7AB8);   // a4[7854]
     //     if ( liIndex > -1 )  miPostGuiCarIndexLatch = liIndex;
-    // i.e. a sticky latch of an input-buffer car index that is only updated when it is not
-    // the -1 "none" sentinel. GATED because that source word sits inside the committed
-    // DirectorIO::InputBuffer's `mIndexTailBlock` opaque span (BrnDirectorModuleIO.h) -- it
-    // has no recovered producer-side name and therefore no accessor, and reading it by raw
-    // offset through another class's opaque storage is exactly the pattern this TU avoids.
-    // CONSEQUENCE: miPostGuiCarIndexLatch stays at its constructed value. Nothing this wave
-    // reconstructs reads it (its consumers live in the gated MainDirector middle).
-    // DELETE-WHEN: the InputBuffer index/flag tail @0x7AA8..0x7AC1 is named and given
-    // accessors on BrnDirectorModuleIO.h (a Director-owned header -- cheap follow-up).
+    // -- a sticky latch that is only updated when the published word is not the -1 "none"
+    // sentinel. The source word is now the NAMED DirectorIO::InputBuffer::miCameraType (the
+    // slot BridgeGuiToDirector's command-591 arm writes, whose own assert calls it a "camera
+    // type"), so this reads it through the accessor instead of poking the buffer.
+    {
+        const s32 liCameraType = lpInputBuffer->GetCameraType();
+        if (liCameraType > -1)
+            miPostGuiCarIndexLatch = liCameraType;
+    }
 
     lpOutputBuffer->UnlockForWrite();
     lpInputBuffer->UnlockForRead();

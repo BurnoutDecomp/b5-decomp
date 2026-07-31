@@ -283,6 +283,7 @@ namespace BrnGame
         mbGuiVoiceOverPending  = false;
         muGuiVoiceOverHash     = 0;
         mbGuiVoiceOverSounding = false;
+        mbDirectorCameraLive   = false;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -448,7 +449,186 @@ namespace BrnGame
             liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
         }
-        lpGuiOutQueue->Clear();
+        // ⚠️ The Clear moved OUT of this function (fly-by wave). The console does not clear
+        // here either -- BridgeGuiToDirector @0x823CBF70 walks the SAME queue later in the same
+        // frame, and clearing it in the first consumer would drop every director command on the
+        // floor. DoUpdate now clears once, after both bridges have run.
+    }
+
+    // ------------------------------------------------------------------------------------
+    // BridgeGuiToDirector  @ 0x823CBF70   -- ⭐ THE GUI -> DIRECTOR SEAM
+    //
+    // The console walks the GUI module's out-event queue and, for each recognised command,
+    // raises the matching published flag on the DIRECTOR's input buffer. Every store is a
+    // literal 1 (or a payload word) into the buffer's flag tail; MainDirector::PostGuiUpdate
+    // @0x82236F88 reads them all back one pass later and folds them into the director's
+    // GameState. Reconstructed arm-for-arm from the X360 switch; each `case` below carries the
+    // console's own offset so the mapping is checkable.
+    //
+    // ⭐ 476 / 477 / 478 are the whole point of this function for the intro: BrnGui::Intro
+    // posts 477 at START_FLYBY and 478 when its 7.67 s dwell expires, and until this bridge
+    // existed NOTHING carried them anywhere -- the director never learned the front-end had
+    // asked for a fly-by. Their meanings are NOT assumed: 477 -> +0x7ABE ->
+    // GameState::mbGameIntroFlybyActive is pinned by ArbStateCarSelect::Update's own assert
+    // string, and 476/478 fall either side of it in both the DWARF member order and the asm.
+    //
+    // FLAG PC-ABI adapter (identical to BridgeGuiToGame's): on the console the GUI out queue
+    // re-keys each record by its GuiEventWrapper type, so GetFirstEvent returns 477 directly
+    // and hands back the boxed payload. The PC GuiModule keeps the records on their CHANNEL
+    // (40) and forwards them verbatim, so the type is read out of the record's own header word
+    // and the payload is taken at the record's own miOutEventOffset -- which is exactly what
+    // the console's GuiEventWrapper::GetRawEvent() does, so the payload words the arms read are
+    // the same words.
+    // ------------------------------------------------------------------------------------
+    void BrnGameModule::BridgeGuiToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+                                            CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
+    {
+        if (lpDirectorInput == 0 || lpGuiOutQueue == 0)
+            return;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liId = lpGuiOutQueue->GetFirstEvent(&lpEvent, &liSize);
+        while (liId >= 0 && lpEvent != 0)
+        {
+            // ---- resolve (command, payload) -- see the PC-ABI FLAG above ------------------
+            const u32* lpuRecord  = reinterpret_cast<const u32*>(lpEvent);
+            s32        liCommand  = liId;
+            const u32* lpuPayload = lpuRecord;
+            if (liId == 40 && liSize >= 12)
+            {
+                liCommand = static_cast<s32>(lpuRecord[1]);
+                const u32 luOffset = lpuRecord[2];
+                if (luOffset >= 12u && static_cast<s32>(luOffset) < liSize)
+                {
+                    lpuPayload = reinterpret_cast<const u32*>(
+                        reinterpret_cast<const u8*>(lpEvent) + luOffset);
+                }
+            }
+            const s32 liPayload0 = static_cast<s32>(lpuPayload[0]);
+
+            switch (liCommand)
+            {
+                case 77:    // +0x7ACC  the car-select ticker closed
+                    lpDirectorInput->SetCarSelectTickerClosedThisFrame();
+                    break;
+
+                case 94:    // the shortcut menu opened/closed (payload word = the new state)
+                    lpDirectorInput->SetShortcutMenuEvent(liPayload0 != 0);
+                    break;
+
+                case 191:   // crash-nav shown/hidden -- ignored entirely when payload[1] == 2
+                    if (static_cast<s32>(lpuPayload[1]) != 2)
+                    {
+                        if (liPayload0 == 0)
+                            lpDirectorInput->SetGotCrashNavShownEvent();
+                        else if (liPayload0 == 1)
+                            lpDirectorInput->SetGotCrashNavHiddenEvent();
+                    }
+                    break;
+
+                case 192:   // +0x7AC2  end of car select (only for payload {4, 1})
+                    if (liPayload0 == 4 && static_cast<s32>(lpuPayload[1]) == 1)
+                        lpDirectorInput->SetEndOfCarSelect();
+                    break;
+
+                case 290:   // +0x7AD0  entered the online post-event flow
+                    lpDirectorInput->SetEnteredOnlinePostEvent();
+                    break;
+
+                case 294:   // +0x7ACF  left the online post-event flow
+                    lpDirectorInput->SetLeftOnlinePostEvent();
+                    break;
+
+                case 298:   // the console's own "over to you, Big E..." placeholder -- a debug
+                            // print and nothing else. Kept because it is real console output.
+                    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0
+                        && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "Handle new rival camera presentation stuff here - over to you, Big E...\n";
+                    }
+                    break;
+
+                case 303:   // +0x7ABC / +0x7AB4  rank up this frame + the new rank. The X360
+                            // also runs the colour-calibration-shown store on this arm (the
+                            // compiler merged the two tails); reproduced.
+                    lpDirectorInput->SetRankUp(liPayload0);
+                    lpDirectorInput->SetGotColourCalibrationShownEvent();
+                    break;
+
+                case 415:   // +0x7ACB  the car selection changed
+                    lpDirectorInput->SetCarSelectionChangedThisFrame();
+                    break;
+
+                case 469:   // +0x7AD3 / +0x7AD4  the 100%-completion sequence start/finish
+                case 470:   // (the two ids share one body on the console)
+                    if (liPayload0 != 0)
+                        lpDirectorInput->SetStarting100PercentSequence();
+                    else
+                        lpDirectorInput->SetFinished100PercentSequence();
+                    break;
+
+                case 475:   // +0x7AC9 / +0x7AA4  new director profile data + its payload word
+                    lpDirectorInput->SetDirectorProfileData(liPayload0);
+                    break;
+
+                case 476:   // +0x7ABD  ⭐ start the NEW-PROFILE intro
+                    lpDirectorInput->SetStartNewProfileIntro();
+                    break;
+
+                case 477:   // +0x7ABE  ⭐ START the GAME-INTRO FLY-BY
+                    lpDirectorInput->SetStartGameIntroFlyby();
+                    break;
+
+                case 478:   // +0x7ABF  ⭐ STOP the game-intro fly-by (clears both latches)
+                    lpDirectorInput->SetStopGameIntroFlyby();
+                    break;
+
+                case 479:   // +0x7AD2  online event loading started
+                    lpDirectorInput->SetStartedOnlineEventLoading();
+                    break;
+
+                case 480:   // +0x7AD1  online event loading finished
+                    lpDirectorInput->SetFinishedOnlineEventLoading();
+                    break;
+
+                case 501:   // the GUI PFX hook enumeration (a 404-byte publish). The console
+                            // memcpys all 404 bytes off the payload unconditionally; the size
+                            // guard is ours, because a short record here would read past the
+                            // queue entry (the exact class of bug that cost this project the
+                            // intro AV). No producer posts 501 on this build yet.
+                    if (liSize >= static_cast<s32>(404 + (reinterpret_cast<const u8*>(lpuPayload)
+                                                          - reinterpret_cast<const u8*>(lpEvent))))
+                    {
+                        lpDirectorInput->SetHookEnumeration(lpuPayload);
+                    }
+                    break;
+
+                case 514:
+                    lpDirectorInput->SetGotColourCalibrationShownEvent();
+                    break;
+
+                case 515:
+                    lpDirectorInput->SetGotColourCalibrationHiddenEvent();
+                    break;
+
+                case 591:   // +0x7AB8  the requested camera type. The console stores 0 or 1 and
+                            // fires "Unhandled camera type : <n>" for anything else WITHOUT
+                            // storing (GameBridgeGUIToX.cpp:1657).
+                    CGS_ASSERT(liPayload0 == 0 || liPayload0 == 1, "Unhandled camera type");
+                    if (liPayload0 == 0 || liPayload0 == 1)
+                        lpDirectorInput->SetCameraType(liPayload0);
+                    break;
+
+                default:
+                    break;
+            }
+
+            const CgsModule::Event* lpNext = 0;
+            liId = lpGuiOutQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            lpEvent = lpNext;
+        }
     }
 
     // The per-frame spines the in-game flow state drives (MainGameFlowStateInGame::
@@ -664,7 +844,10 @@ namespace BrnGame
         memset(lpDirectorInput, 0, sizeof(*lpDirectorInput));
         // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc;
         // the generic PC template placement-news only (same restoration as LoadWorldModule).
-        lpDirectorInput->CgsModule::IOBuffer::Construct();
+        // ⚠️ This must be the buffer's OWN Construct @0x822393D0, not just the IOBuffer base:
+        // the console seeds mePlayerCarIndex and miCameraType to -1 there, and the zero-fill
+        // above would otherwise publish camera-type 0 as a live request every single frame.
+        lpDirectorInput->Construct();
 
         // ⭐ THE FRAME TIMESTEP. The console's module scheduler runs BridgeTimers @0x823BD150
         // over this exact pair (game module -> director input) before the director's passes;
@@ -675,31 +858,105 @@ namespace BrnGame
         if (!lbPostGui)
             BridgeTimers(lpDirectorInput);
 
-        // [FLAG PC bring-up, env-gated BRN_DIRECTOR_ATTRACT] Stage a live player car and raise
-        // the attract-mode request, so the director's OWN state machine can be exercised before
-        // the real staging exists.
-        //
-        // WHY THIS EXISTS. MainDirector::Update @0x82274070 runs its entire gameplay middle --
-        // including UpdateArbitrator, the only path to ArbStateAttractMode and therefore to the
-        // DJ fly-by's BehaviourRoadRunner -- ONLY when GetLivePlayerCarIndex() != -1. On the
-        // console that is always true in attract mode (the demo drives a real car); on this
-        // build no race car exists, so the director takes its no-player branch every frame and
-        // re-publishes its last finalised camera. Measured with BRN_DIRECTOR_TRACE: the
-        // published camera sits at the origin, identity basis, FOV 90 (Camera::Construct's
-        // defaults) and never changes.
-        //
-        // ⚠️ THIS IS A DIAGNOSTIC, NOT A FEATURE, AND IT IS OFF BY DEFAULT. With it on, the
-        // arbitrator runs against a ZEROED VehicleInfo -- so anything downstream that reads the
-        // player car reads zeros. It exists to find the NEXT blocker, not to produce a camera.
-        // DELETE-WHEN: the race-car entity module publishes into the director input for real.
-        static const bool sbForceAttract = (getenv("BRN_DIRECTOR_ATTRACT") != 0);
-        if (sbForceAttract && !lbPostGui)
+        // ⭐ THE GUI -> DIRECTOR BRIDGE. X360 DoUpdate_DirectorPostGUI @0x823DCE38 runs it on
+        // the POST-GUI pass, bracketed by the same write lock, immediately before
+        // DirectorModule::PostGuiUpdate consumes what it published. This is the only path by
+        // which BrnGui::Intro's fly-by START/END commands (477 / 478) reach the director.
+        if (lbPostGui)
         {
             lpDirectorInput->LockForWrite();
-            lpDirectorInput->SetPlayerCarIndex(E_ACTIVE_RACE_CAR_INDEX_0);
-            lpDirectorInput->SetRaceCarInUse(0u, true);
+            BridgeGuiToDirector(lpDirectorInput, mGuiModule.GetGuiOutQueue());
             lpDirectorInput->UnlockForWrite();
-            mDirectorModule.GetMainDirector().GetArbitrator().SetDoAttractMode(true);
+        }
+
+        // ------------------------------------------------------------------------------
+        // [FLAG PC bring-up] THE INTRO FLY-BY STAND-IN PRODUCER.
+        //
+        // What the CONSOLE does with the fly-by request (VERIFIED, X360):
+        //   BridgeGuiToDirector 477 -> InputBuffer::mbStartGameIntroFlyby
+        //   MainDirector::PostGuiUpdate  -> GameState::mbGameIntroFlybyActive = true
+        //   ArbStateCarSelect::Update    -> while that flag is set, plays TWO authored ICE
+        //     camera movies back to back out of the "game intro" attrib shot group
+        //     (BehaviourIceAnim::ChangeMovie on shot-list entries 1 then 2, its own assert
+        //     being "Not enough ice movies in game intro group"), then interpolates onto the
+        //     player's car when the flag clears.
+        // So the retail intro camera is DATA (an ICE movie), not a procedural behaviour, and
+        // it is reached through ArbStateCarSelect -- which is not reconstructed, needs the
+        // attrib shot group, the ICE movie resources, and a real player car.
+        //
+        // What this build does INSTEAD, until that lands: run the arbitrator's OWN attract
+        // state, whose BehaviourRoadRunner rides a real traffic lane with Camera::Utils::
+        // CreateLookAt and banks with the console's own mfBankingScale. It is real console
+        // code and it is a fly-by over the real city -- but be clear about what it is NOT:
+        // ⚠️ ArbStateAttractMode is reached ONLY through Arbitrator::mbDoAttractMode, and the
+        //    X360 image's ONLY writer of that flag besides Arbitrator::Construct is the
+        //    DEBUG MENU entry "Do attract mode" (DebugComponent::OnActivate @0x82275F68).
+        //    It is a developer camera, not the shipping intro camera.
+        //
+        // ⚠️ Staging a player car here is the second half of the stand-in: MainDirector::Update
+        //    runs its whole gameplay middle -- including UpdateArbitrator, the only path to any
+        //    arbitrator state -- ONLY when GetLivePlayerCarIndex() != -1, and this build has no
+        //    race car. The staged VehicleInfo is ZEROED, so anything downstream that reads the
+        //    player car reads zeros.
+        //
+        // The env shim this replaces (BRN_DIRECTOR_ATTRACT) is RETIRED: there is now one
+        // mechanism, and it is driven by the front-end's real request.
+        // DELETE-WHEN: ArbStateCarSelect + BehaviourIceAnim + the game-intro shot group are
+        // real (then the whole block goes, and the request reaches the console's own consumer).
+        // ------------------------------------------------------------------------------
+        if (!lbPostGui)
+        {
+            const bool lbFlybyRequested =
+                mDirectorModule.GetMainDirector().IsGameIntroFlybyActive();
+
+            BrnDirector::Arbitrator& lrArbitrator =
+                mDirectorModule.GetMainDirector().GetArbitrator();
+            const BrnDirector::Arbitrator::EState leArbState = lrArbitrator.GetState();
+
+            // The arbitrator is "unwinding" for the frames between the request dropping and
+            // UpdateAttractMode's `if (!mbDoAttractMode) { Release(); meState = NORMAL; }`
+            // actually running. Keep the stand-in alive across that, or the arbitrator never
+            // gets another Update (the staged player car is what lets MainDirector::Update
+            // reach UpdateArbitrator at all) and parks in ATTRACT_MODE re-publishing its last
+            // camera for ever -- a frozen world.
+            const bool lbUnwinding =
+                (leArbState == BrnDirector::Arbitrator::E_STATE_CHANGING_TO_ATTRACT_MODE ||
+                 leArbState == BrnDirector::Arbitrator::E_STATE_ATTRACT_MODE);
+            const bool lbDriving = lbFlybyRequested || lbUnwinding;
+
+            if (lbDriving)
+            {
+                lpDirectorInput->LockForWrite();
+                lpDirectorInput->SetPlayerCarIndex(E_ACTIVE_RACE_CAR_INDEX_0);
+                lpDirectorInput->SetRaceCarInUse(0u, true);
+                lpDirectorInput->UnlockForWrite();
+            }
+
+            if (lrArbitrator.GetDoAttractMode() != lbFlybyRequested)
+            {
+                lrArbitrator.SetDoAttractMode(lbFlybyRequested);
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] game-intro fly-by "
+                        << (lbFlybyRequested ? "REQUESTED" : "ENDED")
+                        << " by the GUI -- director fly-by stand-in "
+                        << (lbFlybyRequested ? "engaged" : "released") << "\n";
+                }
+            }
+
+            // Hand the world camera to the director for exactly as long as the fly-by owns it.
+            if (mbDirectorCameraLive != lbDriving)
+            {
+                mbDirectorCameraLive = lbDriving;
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] world camera "
+                        << (lbDriving ? "-> DIRECTOR (fly-by)"
+                                      : "-> bring-up tour camera (fly-by over)") << "\n";
+                }
+            }
         }
 
         if (!lbPostGui)
@@ -807,7 +1064,13 @@ namespace BrnGame
         // somewhere real.
         // DELETE-WHEN: DoDispatch's IO buffer set is real (then this whole staging goes with
         // GenerateDispatchListsBringUp).
-        if (mpDirectorOutputBuffer != 0)
+        // ⭐ ...and only while the DIRECTOR is the thing driving it (mbDirectorCameraLive, set
+        // in DoUpdate_Director for exactly the frames the GUI's fly-by request owns the
+        // camera). Outside that window the director publishes whatever its last state left --
+        // a STATIC camera -- and routing that would freeze the world and stop the streamer
+        // turning over. Handing the world back to the tour camera keeps it alive until the
+        // real post-fly-by consumer (ArbStateCarSelect) exists.
+        if (mpDirectorOutputBuffer != 0 && mbDirectorCameraLive)
         {
             mpDirectorOutputBuffer->LockForRead();
             const BrnDirector::Camera::Camera* lpCamera = mpDirectorOutputBuffer->GetCameraOutput();
@@ -1556,7 +1819,13 @@ namespace BrnGame
                 // commands (70/71, the loading screen 19/20, ...) the states posted.
                 BridgeGuiToGame(mGuiModule.GetGuiOutQueue());
                 // ---- the DIRECTOR's post-GUI pass (X360 module-scheduler order) -----------
+                // It runs BridgeGuiToDirector over the SAME out-queue, so the queue must still
+                // be intact here -- that is why BridgeGuiToGame no longer clears it.
                 DoUpdate_Director(true);
+                // Both GUI out-event consumers have now run; retire this frame's records.
+                // (The console's queue lifecycle is the module scheduler's IO-buffer teardown;
+                // on PC the queue is a module member, so it is cleared explicitly.)
+                mGuiModule.GetGuiOutQueue()->Clear();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
                 if (liStep != miNumSimFramesRequired - 1)

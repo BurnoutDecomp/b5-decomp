@@ -39,6 +39,35 @@
 //     mbGotShortcutMenuEvent     @0x7ACD (31437)   SetShortcutMenuEvent sets =1; HasGotShortcutMenuEvent
 //     mbShortcutMenuState        @0x7ACE (31438)   SetShortcutMenuEvent stores arg; GetShortcutMenuState
 //
+// The rest of the scalar/flag tail is attested by the two functions that are the ONLY producer
+// and the ONLY consumer of it -- BrnGameModule::BridgeGuiToDirector @0x823CBF70 (which stores
+// the literal 1 at each flag as it walks the GUI out-queue) and MainDirector::PostGuiUpdate
+// @0x82236F88 (which reads every one of them back). Anchors:
+//
+//     miDirectorProfileData      @0x7AA4 (31396)   bridge 475 stores the payload word
+//     miRankUpNewRank            @0x7AB4 (31412)   bridge 303 `stw r11, 0x7AB4(r31)`
+//     miCameraType               @0x7AB8 (31416)   bridge 591; DirectorModule::PostGuiUpdate reads it
+//     mbRankUpThisFrame          @0x7ABC (31420)   bridge 303
+//     mbStartNewProfileIntro     @0x7ABD (31421)   bridge 476  -> GameState::mbNewProfileIntroActive
+//     mbStartGameIntroFlyby      @0x7ABE (31422)   bridge 477  -> GameState::mbGameIntroFlybyActive
+//     mbStopGameIntroFlyby       @0x7ABF (31423)   bridge 478  -> clears BOTH of the above
+//     mbEndOfCarSelect           @0x7AC2 (31426)   bridge 192
+//     mbSimPaused                @0x7AC8 (31432)   MainDirector::UpdateArbitrator's lbPaused
+//     mbHasNewDirectorProfileData@0x7AC9 (31433)   bridge 475
+//     mbCarSelectionChanged...   @0x7ACB (31435)   bridge 415
+//     mbCarSelectTickerClosed... @0x7ACC (31436)   bridge 77
+//     mbLeftOnlinePostEvent      @0x7ACF (31439)   bridge 294
+//     mbEnteredOnlinePostEvent   @0x7AD0 (31440)   bridge 290
+//     mbFinishedOnlineEventLoad  @0x7AD1 (31441)   bridge 480
+//     mbStartedOnlineEventLoad   @0x7AD2 (31442)   bridge 479
+//     mbStarting100PercentSeq    @0x7AD3 (31443)   bridge 469/470 with flag != 0
+//     mbFinished100PercentSeq    @0x7AD4 (31444)   bridge 469/470 with flag == 0
+//
+// The three flags with no store site of their own (mbPlayerTakenDown @0x7AC0,
+// mbWorldWantsDebugControllerFocus @0x7AC7, mbPlayerCrashbreakerFired @0x7ACA) sit at the
+// offsets the DWARF member order puts them at BETWEEN two attested neighbours, so their
+// placement is forced rather than guessed.
+//
 // VehicleInfo's own internal offsets are independently confirmed by SetCrashingCentreOfMass:
 // element base this+1264*idx, mCrashingCentreOfMass at element+0x460 (BrnPlayerInfo.h), the
 // mbHasCrashingCenterOfMass flag at element+0x4E5 -- exactly the committed VehicleInfo layout.
@@ -84,6 +113,17 @@ namespace DirectorIO
 
     struct InputBuffer : public CgsModule::IOBuffer
     {
+        // X360 @0x822393D0 -- the buffer's OWN Construct, which the console's
+        // CreateIOBuffer<InputBuffer> runs after the stack allocation. Raises the IOBuffer base
+        // status and seeds the published scalars.
+        // ⚠️ IT IS NOT A ZERO-FILL: it seeds mePlayerCarIndex @0x7AA8 AND miCameraType @0x7AB8
+        // to -1 (`*(a1 + 31400) = -1; *(a1 + 31416) = -1;`). Both are "none" sentinels that
+        // consumers test with `> -1`, so a plain memset publishes a live request every frame.
+        // Only the SEEDS whose members are named here are reproduced; the aggregate sub-object
+        // Constructs the X360 also runs (the contact spy, the vehicle-event queue, the score
+        // data, ...) belong to their own un-homed homes and stay with them.
+        void Construct();
+
         // --- queries (getters): all const, all read-lock-asserted ---
         // (GetContacts/GetHookEnumeration/GetControllerInfo/GetTimerStatusInterface/
         //  GetVehicleInputInterface return the addresses of opaque-but-correctly-sized members,
@@ -131,6 +171,32 @@ namespace DirectorIO
         bool HasGotColourCalibrationShownEvent() const;
         bool HasGotColourCalibrationHiddenEvent() const;
 
+        // ---- the GUI->director command flags BrnGameModule::BridgeGuiToDirector @0x823CBF70
+        //      raises and MainDirector::PostGuiUpdate @0x82236F88 consumes -------------------
+        // Every one of these is a 1-byte published flag at an X360-attested offset (pinned in
+        // _AssertLayout()); the NAMES are the DecFIGS DWARF's for this header (decl lines
+        // 346-372), matched to the offsets by walking the DWARF member order back from
+        // mbHasGotHookEnumeration @0x7AC1 -- which lands mbRankUpThisFrame on @0x7ABC, the
+        // exact byte PostGuiUpdate pairs with the @0x7AB4 rank word, so the run is anchored at
+        // both ends.
+        bool GetStartNewProfileIntro() const;    // @0x7ABD  (GUI command 476)
+        bool GetStartGameIntroFlyby() const;     // @0x7ABE  (GUI command 477)
+        bool GetStopGameIntroFlyby() const;      // @0x7ABF  (GUI command 478)
+        bool GetRankUpThisFrame() const;         // @0x7ABC  (GUI command 303)
+        s32  GetRankUpNewRank() const;           // @0x7AB4  (GUI command 303 payload)
+        s32  GetCameraType() const;              // @0x7AB8  (GUI command 591; -1 == none)
+        bool GetEndOfCarSelect() const;          // @0x7AC2  (GUI command 192)
+        bool HasNewDirectorProfileData() const;  // @0x7AC9  (GUI command 475)
+        s32  GetDirectorProfileData() const;     // @0x7AA4  (GUI command 475 payload)
+        bool GetCarSelectionChangedThisFrame() const;      // @0x7ACB  (GUI command 415)
+        bool GetCarSelectTickerClosedThisFrame() const;    // @0x7ACC  (GUI command 77)
+        bool GetLeftOnlinePostEvent() const;               // @0x7ACF  (GUI command 294)
+        bool GetEnteredOnlinePostEvent() const;            // @0x7AD0  (GUI command 290)
+        bool GetFinishedOnlineEventLoading() const;        // @0x7AD1  (GUI command 480)
+        bool GetStartedOnlineEventLoading() const;         // @0x7AD2  (GUI command 479)
+        bool GetStarting100PercentSequence() const;        // @0x7AD3  (GUI command 469/470, flag != 0)
+        bool GetFinished100PercentSequence() const;        // @0x7AD4  (GUI command 469/470, flag == 0)
+
         // --- mutators: all write-lock-asserted ---
         void AppendContacts(const void* lpContacts);
         void SetControllerInfo(const void* lpControllerInfo);
@@ -155,6 +221,24 @@ namespace DirectorIO
         void SetGotCrashNavHiddenEvent();
         void SetGotColourCalibrationShownEvent();
         void SetGotColourCalibrationHiddenEvent();
+
+        // The BridgeGuiToDirector setters (one per GUI command arm; the X360 stores the
+        // literal 1 / the payload word inline, so these carry no extra behaviour).
+        void SetStartNewProfileIntro();          // 476
+        void SetStartGameIntroFlyby();           // 477
+        void SetStopGameIntroFlyby();            // 478
+        void SetRankUp(s32 liNewRank);           // 303
+        void SetCameraType(s32 liCameraType);    // 591
+        void SetEndOfCarSelect();                // 192
+        void SetDirectorProfileData(s32 liData); // 475
+        void SetCarSelectionChangedThisFrame();  // 415
+        void SetCarSelectTickerClosedThisFrame();// 77
+        void SetLeftOnlinePostEvent();           // 294
+        void SetEnteredOnlinePostEvent();        // 290
+        void SetFinishedOnlineEventLoading();    // 480
+        void SetStartedOnlineEventLoading();     // 479
+        void SetStarting100PercentSequence();    // 469/470 (flag != 0)
+        void SetFinished100PercentSequence();    // 469/470 (flag == 0)
 
     private:
         // Recovered byte offsets are pinned by _AssertLayout() below.
@@ -214,28 +298,68 @@ namespace DirectorIO
         // @0x7910 (30992): the GUI PFX hook enumeration, 404 (0x194) bytes (SetHookEnumeration
         // memcpy). HONEST opaque, padded out to the scalar/flag tail @0x7AA8.
         u8  mHookEnumeration[404];                       // @0x7910 .. 0x7AA4
-        u8  mHookTailBlock[0x7AA8 - (0x7910 + 404)];     // DirectorProfileData etc. up to the index
+
+        // @0x7AA4 (31396): the DWARF's mDirectorProfileData, which on this build is exactly the
+        // four bytes between the hook enumeration and the car index. BridgeGuiToDirector's
+        // command-475 arm stores the event's payload word here, and MainDirector::PostGuiUpdate
+        // reads the same word back as a 32-bit value (and compares it against 1). Modelled as
+        // the single s32 both sides address; the aggregate's interior is not otherwise known.
+        s32 miDirectorProfileData;                       // @0x7AA4
 
         // @0x7AA8 (31400): the active player car index (GetPlayerCarIndex, read as a 32-bit word).
         EActiveRaceCarIndex mePlayerCarIndex;            // @0x7AA8
-        // @0x7AAC .. 0x7AC1: mePlayerKillerCarIndex + miRankUpNewRank + early bool flags
-        // (mbRankUpThisFrame, mbStartNewProfileIntro, ...) up to mbHasGotHookEnumeration. HONEST.
-        u8  mIndexTailBlock[0x7AC1 - (0x7AA8 + sizeof(EActiveRaceCarIndex))];
+        // @0x7AAC (31404): the DWARF's mePlayerKillerCarIndex -- next in member order, same
+        // 4-byte enum width. Not addressed by any recovered body; named, not opaque, so the
+        // run down to the flag block is continuous.
+        EActiveRaceCarIndex mePlayerKillerCarIndex;      // @0x7AAC
+        // @0x7AB0 .. 0x7AB4: one 4-byte slot between the killer index and the rank word that no
+        // recovered body touches. HONEST opaque -- the DWARF's member list for this header is
+        // trimmed and does not account for it.
+        u8  mUnknownScalar7AB0[0x7AB4 - 0x7AB0];         // @0x7AB0
 
-        // @0x7AC1 (31425): the recovered trailing event flags. Each is a 1-byte bool addressed by
-        // the X360 bodies at the exact offsets pinned in _AssertLayout().
+        // @0x7AB4 (31412): the new rank BridgeGuiToDirector's command-303 arm publishes
+        // alongside mbRankUpThisFrame (X360 `stw r11, 0x7AB4(r31)`), read straight back by
+        // MainDirector::PostGuiUpdate.
+        s32 miRankUpNewRank;                             // @0x7AB4
+        // @0x7AB8 (31416): the requested camera type (command 591: 0 or 1, anything else fires
+        // "Unhandled camera type"). A 32-bit word -- DirectorModule::PostGuiUpdate @0x82250DD0
+        // reads it as `lwz r11, 0x7AB8(r30)` and forwards it when it is > -1, so the buffer's
+        // cleared state (0) is a REQUEST and -1 would be "none". No DWARF name for this build;
+        // named for the role its own assert text states.
+        s32 miCameraType;                                // @0x7AB8
+
+        // @0x7ABC (31420): the trailing 1-byte flag run. The order is the DecFIGS DWARF's;
+        // the offsets are the X360 store/load sites, pinned in _AssertLayout().
+        bool mbRankUpThisFrame;                          // @0x7ABC
+        bool mbStartNewProfileIntro;                     // @0x7ABD
+        bool mbStartGameIntroFlyby;                      // @0x7ABE
+        bool mbStopGameIntroFlyby;                       // @0x7ABF
+        bool mbPlayerTakenDown;                          // @0x7AC0 (DWARF order; not addressed here)
         bool mbHasGotHookEnumeration;                    // @0x7AC1
-        bool mbEndOfCarSelect;                           // @0x7AC2 (DWARF order; not addressed here)
+        bool mbEndOfCarSelect;                           // @0x7AC2
         bool mbGotCrashNavShownEvent;                    // @0x7AC3
         bool mbGotCrashNavHiddenEvent;                   // @0x7AC4
         bool mbGotColourCalibrationShownEvent;           // @0x7AC5
         bool mbGotColourCalibrationHiddenEvent;          // @0x7AC6
-        // @0x7AC7 .. 0x7ACD: mbWorldWantsDebugControllerFocus, mbSimPaused,
-        // mbHasNewDirectorProfileData, mbPlayerCrashbreakerFired, mbCarSelectionChangedThisFrame,
-        // mbCarSelectTickerClosedThisFrame (DWARF order), up to mbGotShortcutMenuEvent.
-        u8  mMidFlagBlock[0x7ACD - 0x7AC7];
+        bool mbWorldWantsDebugControllerFocus;           // @0x7AC7 (DWARF order; not addressed here)
+        bool mbSimPaused;                                // @0x7AC8
+        bool mbHasNewDirectorProfileData;                // @0x7AC9
+        bool mbPlayerCrashbreakerFired;                  // @0x7ACA (DWARF order; not addressed here)
+        bool mbCarSelectionChangedThisFrame;             // @0x7ACB
+        bool mbCarSelectTickerClosedThisFrame;           // @0x7ACC
         bool mbGotShortcutMenuEvent;                     // @0x7ACD
         bool mbShortcutMenuState;                        // @0x7ACE
+        bool mbLeftOnlinePostEvent;                      // @0x7ACF
+        bool mbEnteredOnlinePostEvent;                   // @0x7AD0
+        bool mbFinishedOnlineEventLoading;               // @0x7AD1
+        bool mbStartedOnlineEventLoading;                // @0x7AD2
+        bool mbStarting100PercentSequence;               // @0x7AD3
+        bool mbFinished100PercentSequence;               // @0x7AD4
+        // @0x7AD5: one more flag byte InputBuffer::Construct @0x822393D0 seeds to 0 and that
+        // nothing else in the recovered set addresses. The DWARF member list for this header
+        // ends at mbFinished100PercentSequence, so it has no name. HONEST opaque tail byte --
+        // it is what makes Construct's seed list complete.
+        u8  maFlagTail[1];                               // @0x7AD5
 
         // Compile-time pin of every recovered offset (private members -> assert from a member fn).
         static void _AssertLayout();

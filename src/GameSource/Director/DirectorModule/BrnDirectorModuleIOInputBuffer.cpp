@@ -37,14 +37,81 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
         static_assert(offsetof(InputBuffer, mContacts)            == 0x6AB8, "mContacts @0x6AB8");
         static_assert(offsetof(InputBuffer, mHookEnumeration)     == 0x7910, "mHookEnumeration @0x7910");
+        static_assert(offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4, "miDirectorProfileData @0x7AA4");
         static_assert(offsetof(InputBuffer, mePlayerCarIndex)     == 0x7AA8, "mePlayerCarIndex @0x7AA8");
+        static_assert(offsetof(InputBuffer, miRankUpNewRank)      == 0x7AB4, "miRankUpNewRank @0x7AB4");
+        static_assert(offsetof(InputBuffer, miCameraType)         == 0x7AB8, "miCameraType @0x7AB8");
+        static_assert(offsetof(InputBuffer, mbRankUpThisFrame)      == 0x7ABC, "mbRankUpThisFrame @0x7ABC");
+        static_assert(offsetof(InputBuffer, mbStartNewProfileIntro) == 0x7ABD, "mbStartNewProfileIntro @0x7ABD");
+        static_assert(offsetof(InputBuffer, mbStartGameIntroFlyby)  == 0x7ABE, "mbStartGameIntroFlyby @0x7ABE");
+        static_assert(offsetof(InputBuffer, mbStopGameIntroFlyby)   == 0x7ABF, "mbStopGameIntroFlyby @0x7ABF");
         static_assert(offsetof(InputBuffer, mbHasGotHookEnumeration)           == 0x7AC1, "mbHasGotHookEnumeration @0x7AC1");
+        static_assert(offsetof(InputBuffer, mbEndOfCarSelect)                  == 0x7AC2, "mbEndOfCarSelect @0x7AC2");
         static_assert(offsetof(InputBuffer, mbGotCrashNavShownEvent)           == 0x7AC3, "mbGotCrashNavShownEvent @0x7AC3");
         static_assert(offsetof(InputBuffer, mbGotCrashNavHiddenEvent)          == 0x7AC4, "mbGotCrashNavHiddenEvent @0x7AC4");
         static_assert(offsetof(InputBuffer, mbGotColourCalibrationShownEvent)  == 0x7AC5, "mbGotColourCalibrationShownEvent @0x7AC5");
         static_assert(offsetof(InputBuffer, mbGotColourCalibrationHiddenEvent) == 0x7AC6, "mbGotColourCalibrationHiddenEvent @0x7AC6");
+        static_assert(offsetof(InputBuffer, mbSimPaused)                       == 0x7AC8, "mbSimPaused @0x7AC8");
+        static_assert(offsetof(InputBuffer, mbHasNewDirectorProfileData)       == 0x7AC9, "mbHasNewDirectorProfileData @0x7AC9");
+        static_assert(offsetof(InputBuffer, mbCarSelectionChangedThisFrame)    == 0x7ACB, "mbCarSelectionChangedThisFrame @0x7ACB");
+        static_assert(offsetof(InputBuffer, mbCarSelectTickerClosedThisFrame)  == 0x7ACC, "mbCarSelectTickerClosedThisFrame @0x7ACC");
         static_assert(offsetof(InputBuffer, mbGotShortcutMenuEvent)            == 0x7ACD, "mbGotShortcutMenuEvent @0x7ACD");
         static_assert(offsetof(InputBuffer, mbShortcutMenuState)              == 0x7ACE, "mbShortcutMenuState @0x7ACE");
+        static_assert(offsetof(InputBuffer, mbLeftOnlinePostEvent)             == 0x7ACF, "mbLeftOnlinePostEvent @0x7ACF");
+        static_assert(offsetof(InputBuffer, mbEnteredOnlinePostEvent)          == 0x7AD0, "mbEnteredOnlinePostEvent @0x7AD0");
+        static_assert(offsetof(InputBuffer, mbFinishedOnlineEventLoading)      == 0x7AD1, "mbFinishedOnlineEventLoading @0x7AD1");
+        static_assert(offsetof(InputBuffer, mbStartedOnlineEventLoading)       == 0x7AD2, "mbStartedOnlineEventLoading @0x7AD2");
+        static_assert(offsetof(InputBuffer, mbStarting100PercentSequence)      == 0x7AD3, "mbStarting100PercentSequence @0x7AD3");
+        static_assert(offsetof(InputBuffer, mbFinished100PercentSequence)      == 0x7AD4, "mbFinished100PercentSequence @0x7AD4");
+    }
+
+    // ---- Construct @0x822393D0 --------------------------------------------------------------
+    // The scalar/flag seeds of the console body, for the members this class names. The X360
+    // additionally runs the embedded aggregates' own Constructs (ContactSpyInterface @+27320,
+    // the NewVehicleEvent queue @+26496, TimerStatusInterface::Clear @+26448, CarScoreData::
+    // ClearData @+12560, the vehicle-info pointer table clear, ...); each of those belongs to
+    // its own home and stays there, so this seeds what it owns and leaves the honest-opaque
+    // spans to the caller's zero-fill.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        // The two "none" sentinels. Everything downstream tests them with `> -1` / `== -1`.
+        mePlayerCarIndex       = static_cast<EActiveRaceCarIndex>(-1);   // 31400 = -1
+        mePlayerKillerCarIndex = static_cast<EActiveRaceCarIndex>(-1);
+        miCameraType           = -1;                                     // 31416 = -1
+
+        miRankUpNewRank        = 0;
+        miDirectorProfileData  = 0;
+
+        mbRankUpThisFrame                = false;   // 31420
+        mbStartNewProfileIntro           = false;   // 31421
+        mbStartGameIntroFlyby            = false;   // 31422
+        mbStopGameIntroFlyby             = false;   // 31423
+        mbPlayerTakenDown                = false;   // 31424
+        mbHasGotHookEnumeration          = false;   // 31425
+        mbEndOfCarSelect                 = false;   // 31426
+        mbGotCrashNavShownEvent          = false;   // 31427
+        mbGotCrashNavHiddenEvent         = false;   // 31428
+        mbGotColourCalibrationShownEvent = false;   // 31429
+        mbGotColourCalibrationHiddenEvent= false;   // 31430
+        mbWorldWantsDebugControllerFocus = false;   // 31431
+        mbSimPaused                      = false;   // 31432
+        mbHasNewDirectorProfileData      = false;   // 31433
+        mbPlayerCrashbreakerFired        = false;   // 31434
+        mbCarSelectionChangedThisFrame   = false;   // 31435
+        mbCarSelectTickerClosedThisFrame = false;   // 31436
+        mbGotShortcutMenuEvent           = false;   // 31437
+        mbShortcutMenuState              = false;   // 31438
+        mbLeftOnlinePostEvent            = false;   // 31439
+        mbEnteredOnlinePostEvent         = false;   // 31440
+        mbFinishedOnlineEventLoading     = false;   // 31441
+        mbStartedOnlineEventLoading      = false;   // 31442
+        mbStarting100PercentSequence     = false;   // 31443
+        mbFinished100PercentSequence     = false;   // 31444
+        maFlagTail[0]                    = 0;       // 31445
+
+        mUsedRaceCars.UnSetAll();
     }
 
     // ---- getters (read-lock asserted) -------------------------------------------------------
@@ -95,14 +162,12 @@ namespace DirectorIO
         return &mContacts[0x78E0 - 0x6AB8];
     }
 
-    // @0x7AC8 -- the second byte of the mid-flag block (which spans 0x7AC7..0x7ACD:
-    // mbWorldWantsDebugControllerFocus @0x7AC7, mbSimPaused @0x7AC8, ...). Read by
-    // MainDirector::UpdateArbitrator (as Arbitrator::Update's lbPaused) and by the gameplay
-    // middle of MainDirector::Update.
+    // @0x7AC8. Read by MainDirector::UpdateArbitrator (as Arbitrator::Update's lbPaused) and
+    // by the gameplay middle of MainDirector::Update.
     bool InputBuffer::IsSimPaused() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mMidFlagBlock[0x7AC8 - 0x7AC7] != 0;
+        return mbSimPaused;
     }
 
     const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
@@ -188,6 +253,113 @@ namespace DirectorIO
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return mbGotColourCalibrationHiddenEvent;
+    }
+
+    // ---- the BridgeGuiToDirector command flags (read-lock asserted) --------------------------
+    // MainDirector::PostGuiUpdate @0x82236F88 reads every one of these off the locked input
+    // buffer; the X360 does it by raw offset because they are private data of a header-inline
+    // accessor set the compiler folded away. Named here so neither side indexes the buffer.
+
+    bool InputBuffer::GetStartNewProfileIntro() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbStartNewProfileIntro;
+    }
+
+    bool InputBuffer::GetStartGameIntroFlyby() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbStartGameIntroFlyby;
+    }
+
+    bool InputBuffer::GetStopGameIntroFlyby() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbStopGameIntroFlyby;
+    }
+
+    bool InputBuffer::GetRankUpThisFrame() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbRankUpThisFrame;
+    }
+
+    s32 InputBuffer::GetRankUpNewRank() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return miRankUpNewRank;
+    }
+
+    s32 InputBuffer::GetCameraType() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return miCameraType;
+    }
+
+    bool InputBuffer::GetEndOfCarSelect() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbEndOfCarSelect;
+    }
+
+    bool InputBuffer::HasNewDirectorProfileData() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbHasNewDirectorProfileData;
+    }
+
+    s32 InputBuffer::GetDirectorProfileData() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return miDirectorProfileData;
+    }
+
+    bool InputBuffer::GetCarSelectionChangedThisFrame() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbCarSelectionChangedThisFrame;
+    }
+
+    bool InputBuffer::GetCarSelectTickerClosedThisFrame() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbCarSelectTickerClosedThisFrame;
+    }
+
+    bool InputBuffer::GetLeftOnlinePostEvent() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbLeftOnlinePostEvent;
+    }
+
+    bool InputBuffer::GetEnteredOnlinePostEvent() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbEnteredOnlinePostEvent;
+    }
+
+    bool InputBuffer::GetFinishedOnlineEventLoading() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbFinishedOnlineEventLoading;
+    }
+
+    bool InputBuffer::GetStartedOnlineEventLoading() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbStartedOnlineEventLoading;
+    }
+
+    bool InputBuffer::GetStarting100PercentSequence() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbStarting100PercentSequence;
+    }
+
+    bool InputBuffer::GetFinished100PercentSequence() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbFinished100PercentSequence;
     }
 
     // ---- mutators (write-lock asserted) -----------------------------------------------------
@@ -287,6 +459,105 @@ namespace DirectorIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         mbGotColourCalibrationHiddenEvent = true;
+    }
+
+    // ---- the BridgeGuiToDirector command setters (write-lock asserted) -----------------------
+    // One per arm of BrnGameModule::BridgeGuiToDirector @0x823CBF70. The X360 stores the
+    // literal 1 (or the event's payload word) straight into the buffer under the write lock the
+    // bridge's caller DoUpdate_DirectorPostGUI @0x823DCE38 has already taken.
+
+    void InputBuffer::SetStartNewProfileIntro()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbStartNewProfileIntro = true;
+    }
+
+    void InputBuffer::SetStartGameIntroFlyby()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbStartGameIntroFlyby = true;
+    }
+
+    void InputBuffer::SetStopGameIntroFlyby()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbStopGameIntroFlyby = true;
+    }
+
+    // X360 case 303 sets the flag, reads the payload word, sets the flag AGAIN and then stores
+    // the rank -- the duplicated store is the compiler's, not a second observable.
+    void InputBuffer::SetRankUp(s32 liNewRank)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbRankUpThisFrame = true;
+        miRankUpNewRank   = liNewRank;
+    }
+
+    void InputBuffer::SetCameraType(s32 liCameraType)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        miCameraType = liCameraType;
+    }
+
+    void InputBuffer::SetEndOfCarSelect()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbEndOfCarSelect = true;
+    }
+
+    void InputBuffer::SetDirectorProfileData(s32 liData)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbHasNewDirectorProfileData = true;
+        miDirectorProfileData       = liData;
+    }
+
+    void InputBuffer::SetCarSelectionChangedThisFrame()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbCarSelectionChangedThisFrame = true;
+    }
+
+    void InputBuffer::SetCarSelectTickerClosedThisFrame()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbCarSelectTickerClosedThisFrame = true;
+    }
+
+    void InputBuffer::SetLeftOnlinePostEvent()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbLeftOnlinePostEvent = true;
+    }
+
+    void InputBuffer::SetEnteredOnlinePostEvent()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbEnteredOnlinePostEvent = true;
+    }
+
+    void InputBuffer::SetFinishedOnlineEventLoading()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbFinishedOnlineEventLoading = true;
+    }
+
+    void InputBuffer::SetStartedOnlineEventLoading()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbStartedOnlineEventLoading = true;
+    }
+
+    void InputBuffer::SetStarting100PercentSequence()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbStarting100PercentSequence = true;
+    }
+
+    void InputBuffer::SetFinished100PercentSequence()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbFinished100PercentSequence = true;
     }
 
     // ---- control-input accessors (read/write) -----------------------------------------------
