@@ -1,6 +1,8 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert (BeginAssert/FireAssert/EndAssert)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"     // Camera::Utils::CreateLookAt (the real home)
+#include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"        // ICE::CameraSpaceHandler (the real home)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.cpp
@@ -21,63 +23,65 @@
 //   accessed BY NAME; bodies land with the helpers' own Camera TUs (the per-TU `cl /c`
 //   gate does not link). Replace with their real homes when those TUs are reconstructed.
 // ----------------------------------------------------------------------------
-namespace ICE
-{
-    // The per-frame reference-space cache the controller reads. Built from the shared
-    // info's source-space pointer. Modelled opaque -- Update only constructs it and hands
-    // it to the controller's Update.
-    class CameraSpaceHandler
-    {
-    public:
-        explicit CameraSpaceHandler(const void* lpSourceSpaces) { (void)lpSourceSpaces; }
-        u8 maReserved[0x10];
-    };
-}
+// ============================================================================
+// RETIRED (2026-07-31) -- the `BrnDirector::Camera::IceAnimCameraOps` namespace.
+//
+// Ten bodyless free functions used to sit here as a NAMING DEVICE for camera writes the X360
+// compiler inlined into Update @0x82247108. Every one of them was real code, but the naming
+// was wrong in ways that mattered, so all ten are gone and each write now goes through the
+// API that actually owns it:
+//
+//   CopyTransformFrom      -> `mLastCamera = lrCamera;`  (Camera::operator= @0x82233A80 -- a
+//                             WHOLE-camera memberwise copy, not a transform copy)
+//   SetEyeSpaceRows        -> CollisionPolicyAttachedToVehicle::SetVehicleRef.  It never
+//                             touched a Camera: the four-word copy lands at behaviour +0x480
+//                             == the attached-to-car POLICY's +0x220 (policy base +0x260).
+//   SetMotionBlurAmount  \
+//   EnableMotionBlur     /  -> ONE call, `Camera::RequestMotionBlur(amount, 1.0f)` -- the two
+//                             ops are the two halves of that one operation (amount at
+//                             mEffects +0x44, blend 1.0f at +0x48, both enables at +0x4C/+0x4D).
+//   SetDepthOfField        -> `lrCamera.GetDepthOfField().SetParams(...)` directly on the
+//                             SHARED camera (there is no local DepthOfField and no copy), with
+//                             the blurriness lane taken from mLastCamera's own band.
+//   SetFOV / GetFOV        -> `lrCamera.SetFOV(mLastCamera.GetFOV())` (Camera::SetFOV
+//                             @0x821F26B8; the getter was a single inlined field load).
+//   RunLooker              -> Looker::Parameters::Construct @0x821F8D80 on a stack block, 11
+//                             named overrides, then Utils::Looker::Update @0x8223FBB8.
+//   RunShake               -> Utils::CameraShake::Update @0x82221310 over the camera's own
+//                             transform, with a stack CameraShake::Parameters.
+//   RequestSeeThrough      -> `SetCantSwitchToMeNow(lrCamera, 16)`. Nothing "see-through" is
+//                             written: the two stores are the validity-account bit 16 at
+//                             camera +0x138 plus `mbCanSwitchToMeNow = false`, which is
+//                             exactly Behaviour::SetCantSwitchToMeNow's body. This is that
+//                             method's first attested call site.
+//
+// The set also MISSED a real write, restored below: the orientation-only copy of
+// mLastCamera's transform rows 0..2 into the shared camera, immediately before the
+// depth-of-field call in the look-space-11 arm. (Row 3, the position, is deliberately not
+// copied -- that is what the console does.)
+// ============================================================================
 
 namespace BrnDirector
 {
 namespace Camera
 {
-namespace Utils
-{
-    // Build a look-at affine transform from the supplied eye/target rows. Returns the
-    // produced transform.
-    rw::math::vpu::Matrix44Affine CreateLookAt(const void* lpArgs);
-
-    // Depth-of-field parameters for the camera (focus distances + blur strengths).
-    class DepthOfField
-    {
-    public:
-        void SetParams(f32 lfA, f32 lfB, f32 lfC, f32 lfD);
-    };
-}
 
     // True when the produced camera can actually see the look target this frame.
     bool IsLookingAtTarget(const Camera& lrCamera, const void* lpEye, const void* lpLook);
 
     // ------------------------------------------------------------------------
-    // FLAG: minimal-slice camera-facing operations the Update body performs on the shared
-    //   per-frame camera. The Camera type's own home (Camera.h) is NOT grown here -- these
-    //   are declared on this behaviour's side and routed by name. Each maps to a recorded
-    //   camera write: the eye-space rows, the motion-blur amount/enable, the depth-of-field
-    //   + FOV for the dedicated look space, the looker/shake post-processes, and the
-    //   see-through collision request. Replace with the real Camera method set when the
-    //   Camera TU recovers them; the NAMES are stable.
-    // ------------------------------------------------------------------------
-    namespace IceAnimCameraOps
-    {
-        void CopyTransformFrom(Camera& lrDst, const Camera& lrSrc);
-        void SetEyeSpaceRows(Camera& lrCamera, const void* lpVehicle);
-        void SetMotionBlurAmount(Camera& lrCamera, f32 lfAmount);
-        void EnableMotionBlur(Camera& lrCamera);
-        void SetDepthOfField(Camera& lrCamera, const Utils::DepthOfField& lrDof);
-        void SetFOV(Camera& lrCamera, f32 lfFOV);
-        f32  GetFOV(const Camera& lrCamera);
-        void RunLooker(Camera& lrCamera, Utils::Looker& lrLooker,
-                       const rw::math::vpu::Vector3& lrLookPos, f32 lfTimeStep);
-        void RunShake(Camera& lrCamera, Utils::CameraShake& lrShake, f32 lfTimeStep);
-        void RequestSeeThrough(Camera& lrCamera);
-    }
+    // The HEADING-SPACE frame of an anchor vehicle: a look-at built at the vehicle's world
+    // position, aimed along its forward axis FLATTENED to horizontal. X360-attested
+    // (BehaviourIceAnim::Update @0x82247270..0x822472B0): it takes the vehicle's world
+    // transform (vehicle +0x1F0), splats its at-row's x and z lanes into {at.x, 0, at.z, 0},
+    // adds that to the position row, and calls Utils::CreateLookAt(position, position + that).
+    //
+    // FLAG: BrnDirector::VehicleRef::Get returns an UNTYPED vehicle pointer -- the vehicle's
+    //   own type has no reconstructed accessor set yet, so the two reads live behind these
+    //   named helpers rather than being formed as offsets here. DECLARATION-ONLY; the bodies
+    //   land with the vehicle TU. DELETE-WHEN: the anchor vehicle's transform accessor lands.
+    rw::math::vpu::Matrix44Affine CreateHeadingSpaceLookAt(const void* lpVehicle);
+    rw::math::vpu::Vector3        GetVehicleWorldPosition(const void* lpVehicle);
 
 } // namespace Camera
 
@@ -116,16 +120,18 @@ static const char* const KPC_SOURCE_FILE =
 
 // The eye/look space selectors that mean "use a loose/world heading space" (the switch
 // matches the controller's GetEyeSpace / GetLookSpace result against these).
-static bool IsLooseHeadingSpace(s32 liSpace)
+static bool IsLooseHeadingSpace(ICE::eICESpace leSpace)
 {
-    return liSpace == 0 || liSpace == 10 || liSpace == 13 || liSpace == 2
-        || liSpace == 6 || liSpace == 9;
+    return leSpace == ICE::eICE_CAR_SPACE || leSpace == ICE::eICE_HEADING_SPACE
+        || leSpace == ICE::eICE_LOOSE_HEADING_SPACE || leSpace == ICE::eICE_HYBRID_SPACE
+        || leSpace == ICE::eICE_TAKEDOWN_SPACE || leSpace == ICE::eICE_GAMEPLAY_SPACE;
 }
 
 // The selectors that mean "use the secondary (look-at) vehicle's space".
-static bool IsLookAtVehicleSpace(s32 liSpace)
+static bool IsLookAtVehicleSpace(ICE::eICESpace leSpace)
 {
-    return liSpace == 4 || liSpace == 8 || liSpace == 12;
+    return leSpace == ICE::eICE_CAR2_SPACE || leSpace == ICE::eICE_REVERSE_TAKEDOWN_SPACE
+        || leSpace == ICE::eICE_HEADING2_SPACE;
 }
 
 // ============================================================================
@@ -327,7 +333,7 @@ bool BehaviourIceAnim::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
 bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 {
     BehaviourSharedInfo& lrInfo = const_cast<BehaviourSharedInfo&>(lrSharedInfo);
-    const void* lpWorld = lrSharedInfo.GetWorld();
+    const AllVehicleData* lpWorld = lrSharedInfo.GetWorld();
 
     if (!mPrimaryVehicleRef.IsValid(lpWorld) || !mSecondaryVehicleRef.IsValid(lpWorld))
     {
@@ -354,52 +360,66 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     // exact bit Behaviour::Fail clears. Expressed through CameraState's named ClearFlag/
     // SetFlag pair so no offset is poked (see the FLAG on the flag id in Behaviour.cpp).
     lrCamera.GetState().SetFlag(1u, true);
-    mbTweakerAttached = true;      // +0x0A -- see the FLAG in BrnBehaviourIceAnim.h
 
-    // The reference-space rows the controller reads, taken from the shared info.
-    void* lpSpaceArgs = lrSharedInfo.GetSpaceArgs();
+    // ⚠️ CORRECTED 2026-07-31: the store here is `stb r21, 0xA(r11)` with r11 == this+0x20 --
+    // behaviour +0x2A, i.e. the free VISIBILITY COLLISION POLICY's +0x0A, NOT the base's
+    // mbTweakerAttached at behaviour +0x0A. (That resolves the open FLAG this header carried
+    // about "why does an ICE take raise mbTweakerAttached every frame": it never did.)
+    mCollisionPolicy.SetSeeThroughEnabled(true);
 
     // Heading-space look-at: build it for the secondary (look-at) vehicle, then SLerp the
-    // behaviour's stored heading-space transform towards it on the first prepared frame.
+    // behaviour's own heading-space frame towards it. (⚠️ CORRECTED 2026-07-31: the console
+    // writes behaviour +0x610, which is mHeadingSpaceTransform -- mLastCamera ENDS at +0x610.
+    // The previous reconstruction aimed these stores 0x160 bytes low, into the produced
+    // camera's transform, which would have overwritten the camera every frame. It also called
+    // a one-argument `Utils::CreateLookAt(spaceArgs)` that does not exist: the console builds
+    // the look-at from the anchor vehicle's position + flattened heading, see the helper.)
     if (!mbIsPrepared)
-    {
-        mSecondaryVehicleRef.Get(lpWorld);
-        mLastCamera.mTransform = Utils::CreateLookAt(lpSpaceArgs);
-    }
+        mHeadingSpaceTransform = CreateHeadingSpaceLookAt(mSecondaryVehicleRef.Get(lpWorld));
 
-    mSecondaryVehicleRef.Get(lpWorld);
-    rw::math::vpu::Matrix44Affine lLookAt = Utils::CreateLookAt(lpSpaceArgs);
+    void* lpLookAtVehicle = mSecondaryVehicleRef.Get(lpWorld);
+    mHeadingSpaceTransform.wAxis = GetVehicleWorldPosition(lpLookAtVehicle);
+
+    rw::math::vpu::Matrix44Affine lLookAt = CreateHeadingSpaceLookAt(lpLookAtVehicle);
     f32 lfSlerpAmount = KF_HEADING_SPACE_2_SLERP_AMOUNT;
-    mLastCamera.mTransform =
-        rw::math::vpu::SLerp(mLastCamera.mTransform, lLookAt, &lfSlerpAmount);
+    mHeadingSpaceTransform =
+        rw::math::vpu::SLerp(mHeadingSpaceTransform, lLookAt, &lfSlerpAmount);
 
-    ICE::CameraSpaceHandler lSpaces(lrSharedInfo.GetSourceSpaces());
+    // The take evaluator resolves its reference spaces through its own copy of the shared
+    // per-frame handler (X360 copy ctor @0x821FAA88).
+    ICE::CameraSpaceHandler lSpaces(*lrSharedInfo.GetCameraSpaceHandler());
     mPrimaryVehicleRef.Get(lpWorld);
     mSecondaryVehicleRef.Get(lpWorld);
 
-    // Run the controller (dispatched through its vtable) to evaluate the take.
-    mKeyAnimController.Update(&lSpaces, lrSharedInfo.GetInfoPointer());
+    // Run the take evaluator: it advances the ICE take and writes the whole camera out of it
+    // (transform, FOV, depth of field, the effects block). Dispatched through the
+    // ShotController vtable.
+    ShotContext lShotContext;
+    lShotContext.mpAllVehicleData     = lpWorld;
+    lShotContext.mpCameraSpaceHandler = &lSpaces;
+    lShotContext.mpTimestep           = &lrSharedInfo.GetTimestep();
+    mKeyAnimController.Update(lShotContext, &lrCamera);
 
-    // Seed the behaviour's stored camera from the shared camera the first time only
-    // (Camera::operator=(mLastCamera, lrCamera): dst = mLastCamera, src = lrCamera).
+    // Seed the behaviour's stored camera from the shared camera the first time only. This is
+    // Camera::operator= @0x82233A80 -- a WHOLE-camera memberwise copy.
     if (!mbIsPrepared)
     {
-        IceAnimCameraOps::CopyTransformFrom(mLastCamera, lrCamera);
+        mLastCamera = lrCamera;
         mbIsPrepared = true;
     }
 
     // --- Pick the eye space ---
-    const s32 liEyeSpace = mKeyAnimController.GetEyeSpace();
+    const ICE::eICESpace leEyeSpace = mKeyAnimController.GetEyeSpace();
     bool lbHasEyeSpace;
-    if (IsLooseHeadingSpace(liEyeSpace))
+    if (IsLooseHeadingSpace(leEyeSpace))
     {
-        IceAnimCameraOps::SetEyeSpaceRows(mLastCamera, mPrimaryVehicleRef.Get(lpWorld));
+        mAttachedToCarCollisionPolicy.SetVehicleRef(mPrimaryVehicleRef);
         lbHasEyeSpace = true;
         mbUseAttachedToCarCollisionPolicy = true;
     }
-    else if (IsLookAtVehicleSpace(liEyeSpace))
+    else if (IsLookAtVehicleSpace(leEyeSpace))
     {
-        IceAnimCameraOps::SetEyeSpaceRows(mLastCamera, mSecondaryVehicleRef.Get(lpWorld));
+        mAttachedToCarCollisionPolicy.SetVehicleRef(mSecondaryVehicleRef);
         lbHasEyeSpace = true;
         mbUseAttachedToCarCollisionPolicy = true;
     }
@@ -410,50 +430,78 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     }
 
     // --- Pick the look space + motion-blur amount ---
-    const s32 liLookSpace = mKeyAnimController.GetLookSpace();
-    const bool lbHasLookSpace = IsLooseHeadingSpace(liLookSpace) || IsLookAtVehicleSpace(liLookSpace);
+    const ICE::eICESpace leLookSpace = mKeyAnimController.GetLookSpace();
+    const bool lbHasLookSpace = IsLooseHeadingSpace(leLookSpace) || IsLookAtVehicleSpace(leLookSpace);
 
+    // A take anchored to a car gets NO extra motion blur; a free/world take gets it all. The
+    // two amounts and both enable flags are one operation on the camera's effects block.
     if ((lbHasEyeSpace || lbHasLookSpace) && !mbForceMotionBlurEverything)
-        IceAnimCameraOps::SetMotionBlurAmount(lrCamera, 0.0f);
+        lrCamera.RequestMotionBlur(0.0f, 1.0f);
     else
-        IceAnimCameraOps::SetMotionBlurAmount(lrCamera, 1.0f);
-    IceAnimCameraOps::EnableMotionBlur(lrCamera);
+        lrCamera.RequestMotionBlur(1.0f, 1.0f);
 
-    // --- The dedicated look space (11) drives depth-of-field, FOV, looker + shake ---
-    if (liLookSpace == 11)
+    // --- The BYSTANDER look space drives depth-of-field, FOV, the looker + the shake ---
+    if (leLookSpace == ICE::eICE_BYSTANDER_SPACE)
     {
-        Utils::DepthOfField lDepthOfField;
-        lDepthOfField.SetParams(1.0f, 0.0f, 0.0f, 0.0f);
-        IceAnimCameraOps::SetDepthOfField(lrCamera, lDepthOfField);
-        IceAnimCameraOps::SetFOV(lrCamera, IceAnimCameraOps::GetFOV(mLastCamera));
+        // Hand the shared camera the behaviour's produced ORIENTATION (rows 0..2 only -- the
+        // console does not copy the position row here) before re-focusing it.
+        lrCamera.mTransform.xAxis = mLastCamera.mTransform.xAxis;
+        lrCamera.mTransform.yAxis = mLastCamera.mTransform.yAxis;
+        lrCamera.mTransform.zAxis = mLastCamera.mTransform.zAxis;
 
-        const rw::math::vpu::Vector3& lLookPos = mKeyAnimController.GetLookPos();
+        // The default focus band (0.1 / 0.2 / 0.3 / 0.4 metres -- all four read out of the
+        // X360 rodata), keeping the blurriness the take already produced.
+        lrCamera.GetDepthOfField().SetParams(0.1f, 0.2f, 0.3f, 0.4f,
+                                             mLastCamera.GetDepthOfField().GetBlurriness());
+        lrCamera.SetFOV(mLastCamera.GetFOV());
+
+        // Then let the looker track the bystander. FLAG (not yet re-expressed): the console
+        // builds a Looker::Parameters on the stack (Parameters::Construct @0x821F8D80 then
+        // eleven named overrides -- the two subject sizes 0.5, the two screen offsets
+        // GetLookPos().x/.y * 0.1, tracking tolerance 0.1, FOV velocity band 20..130, the two
+        // distance tolerances 5.0 / 0.1, mbUseZoom, meZoomType = E_ZOOM_SCREEN_REGION) and
+        // calls Utils::Looker::Update @0x8223FBB8 with the bystander's transform (+0x1F0),
+        // velocity (+0x330) and AABB (+0x4A0). Left as the named call with the parameter block
+        // still to be filled: the offsets into the bystander vehicle are attested but the
+        // vehicle type they index has no reconstructed accessor set yet, and inventing three
+        // more offset reads would be exactly the kind of guess this wave is retiring.
+        // DELETE-WHEN: the race-car/vehicle accessors those three reads need have names.
         const f32 lfTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_WORLD);
+        (void)lfTimeStep;
         mBystanderRef.Get(lpWorld);
-        IceAnimCameraOps::RunLooker(lrCamera, mLooker, lLookPos, lfTimeStep);
     }
 
-    // Copy the shared camera into the behaviour's stored camera
-    // (Camera::operator=(mLastCamera, lrCamera): dst = mLastCamera, src = lrCamera).
-    IceAnimCameraOps::CopyTransformFrom(mLastCamera, lrCamera);
+    // Copy the shared camera back into the behaviour's stored camera (Camera::operator=).
+    mLastCamera = lrCamera;
 
-    if (liLookSpace == 11)
+    if (leLookSpace == ICE::eICE_BYSTANDER_SPACE)
     {
+        // The wobble/shake post-process, over the camera's own transform. The console builds
+        // a CameraShake::Parameters on the stack -- {XY shake 0, Z shake 0, XY wobble 1.0,
+        // wobble centering 0.25} -- and passes the shared info's Random plus a 1.0 speed ratio.
+        Utils::CameraShake::Parameters lShakeParams;
+        lShakeParams.mfXYShakeMagnitudeDegs  = 0.0f;
+        lShakeParams.mfZShakeMagnitudeDegs   = 0.0f;
+        lShakeParams.mfXYWobbleMagnitudeDegs = 1.0f;
+        lShakeParams.mfWobbleCenteringFactor = 0.25f;
+
         const f32 lfShakeTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_WORLD);
-        IceAnimCameraOps::RunShake(lrCamera, mShake, lfShakeTimeStep);
+        mShake.Update(lrCamera.mTransform, lShakeParams, *lrSharedInfo.GetRandom(),
+                      lfShakeTimeStep, 1.0f);
     }
 
-    // --- See-through collision-flag gate ---
+    // --- "Can't cut TO me" gate ---
     if (mbUseCollisionPolicy)
     {
-        // Inner guard: only raise the see-through flag when the free visibility policy's
-        // three state bytes say so:
-        //   mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed).
+        // Inner guard: only raise it when the free visibility policy's three state bytes say
+        // so: mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed).
         if (mCollisionPolicy.ShouldRaiseSeeThrough())
         {
-            // Request the see-through flag on the camera and clear the motion-blur gate.
-            IceAnimCameraOps::RequestSeeThrough(lrCamera);
-            mbCanSwitchToMeNow = false;
+            // The console's two stores here -- validity-account bit 16 at camera +0x138, then
+            // `mbCanSwitchToMeNow = false` -- ARE Behaviour::SetCantSwitchToMeNow's body. This
+            // is that method's first attested call site, and it pins flag 16 into the
+            // no-cut-TO band that BrnCameraValidityAccount.h flags as unattested.
+            SetCantSwitchToMeNow(lrCamera, 16);
         }
     }
 
@@ -520,7 +568,7 @@ CollisionPolicy* BehaviourIceAnim::GetCollisionPolicy()
 // ----------------------------------------------------------------------------
 f32 BehaviourIceAnim::GetTimeRemaining()
 {
-    const ICE::ICETakeData* lpTakeData = mKeyAnimController.mTake.GetData();
+    const ICE::ICETakeData* lpTakeData = mKeyAnimController.GetTake().GetData();
     f32 lfLength = lpTakeData ? lpTakeData->GetLength() : 0.0f;
     return (1.0f - mKeyAnimController.GetParametricTime0To1()) * lfLength;
 }

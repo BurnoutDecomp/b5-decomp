@@ -2,99 +2,174 @@
 #define GAMESOURCE_DIRECTOR_SHOTS_SHOTCONTROLLERS_BRN_KEY_ANIM_CONTROLLER_H
 
 #include "types.hpp"
-#include "rw/math/vpu/types.h"                        // rw::math::vpu::Vector3 (the look position)
-#include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (the mbPrepared guards)
+#include "rw/math/vpu/types.h"                              // rw::math::vpu::Vector3 (mLookPos)
+#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (the mbPrepared guards)
+#include "SDKs/Packages/ICE/ICEData.hpp"                    // ICE::ICETake / ICETakeData
+#include "SDKs/Packages/ICE/ICEDataEnums.hpp"               // ICE::eICESpace
+#include "GameSource/Director/Shots/BrnShotController.h"    // BrnDirector::ShotController / ShotContext
 
 // ============================================================================
 // GameSource/Director/Shots/ShotControllers/BrnKeyAnimController.h
 //
-// BrnDirector::KeyAnimController -- the keyframed-animation shot controller: it drives a camera
-// shot off a keyframed animation clip (eye space, look space, look-at position, a running time),
-// sampled each frame by BehaviourIceAnim::Update. HOME for the four KeyAnimController slices this
-// TU bodies:
-//   - GetEyeSpace  @0x821F4138  (return the eye-space pointer @+0x758)
-//   - GetLookSpace @0x821F4190  (return the look-space pointer @+0x75C)
-//   - GetLookPos   @0x821F41E8  (return, by value, the 16-byte look position @+0x10)
-//   - HasFinished  @0x821F4258  (clip done? forward: time >= duration; reverse: time <= 0)
-// All four assert the controller has been prepared (!!mbPrepared @+0x765) before sampling. The
-// full controller (Prepare/Update and the rest of the rig) lands with its own TU; this header
-// models only the members these accessors touch, BY NAME, at their asm-attested offsets.
+// BrnDirector::KeyAnimController -- THE ICE take evaluator. It is the shot controller that
+// plays one recorded ICE ("In-game Camera Editor") camera take: it owns the live
+// ICE::ICETake, advances a playback timer each frame, samples the take's 48 authored
+// elements at the resulting parameter, and writes the whole camera out of them -- transform
+// (eye/look points projected through the reference spaces, plus the dutch roll), lens (FOV
+// from the authored lens length), focus (the depth-of-field band), and the effects block
+// (time scale, shake, letterbox, blend/lag, post-FX hook).
+//
+// This is the code that turns an authored ICE take into a camera picture. The retail game
+// intro's fly-by (BrnArbStateCarSelect -> BehaviourIceAnim -> this) runs entirely through it.
+//
 // ----------------------------------------------------------------------------
+// LAYOUT (DecFIGS DWARF BrnKeyAnimController.h:45, member-for-member; the offsets are
+// X360-attested by every body in BrnKeyAnimController.cpp):
+//
+//   +0x000  ShotController                  (base: vptr, 16-byte aligned for the Vector3)
+//   +0x010  rw::math::vpu::Vector3 mLookPos
+//   +0x020  ICE::ICETake           mPlaybackTake       (mpTakeData at +0x024 == take +0x04)
+//   +0x758  ICE::eICESpace         mEyeSpace
+//   +0x75C  ICE::eICESpace         mLookSpace
+//   +0x760  f32                    mfPlaybackTimer
+//   +0x764  bool                   mbIsLooping
+//   +0x765  bool                   mbPrepared
+//   +0x766  bool                   mbPaused
+//   +0x767  bool                   mbReversed
+//
+// (The previous slice in this file modelled +0x024 as a "clip pointer" into an invented
+// `KeyAnimClip` with a duration at +0x2C, and typed the two space selectors as opaque
+// `Space*`. Both readings are retired: +0x024 is the embedded ICETake's own mpTakeData and
+// +0x2C of THAT is ICETakeData::mfLength, which is exactly what GetLength() returns; the
+// selectors are ICE::eICESpace enums, which is why BehaviourIceAnim switches on them by
+// integer value.)
+//
+// x64 note: the console is a 4-byte-pointer build, so mEyeSpace lands at exactly +0x758.
+// Here sizeof(ICETake) differs (its interior pointers widen), so the byte offsets are NOT
+// reproduced -- parity is BY NAMED MEMBER, per the project's x64 gate. Declaration ORDER is
+// the DWARF's.
+// ============================================================================
 
 namespace BrnDirector
 {
 
-// FLAG: opaque space/transform handle. GetEyeSpace/GetLookSpace each return a single 32-bit word
-//   (lwz) that the caller treats as a space object; its concrete type lands with the controller's
-//   own TU. Modelled as a forward-declared opaque type so the accessors return a typed pointer.
-class Space;
+// The director resource manager Prepare resolves takes through (its ICE resource manager,
+// its editor author and its on-disk ICE dictionary list). Declared by name only -- the full
+// home is GameSource/Director/BrnDirectorResourceManager.h, which this header deliberately
+// does NOT pull in (the manager includes the whole attrib-vault vocabulary).
+class DirectorResourceManager;
 
-// FLAG: the keyframed animation clip the controller plays. Only the member HasFinished reads is
-//   modelled -- the clip duration at +0x2C (lfs 0x2C(r11)). Its full type lands with the anim TU.
-class KeyAnimClip
+// DWARF BrnKeyAnimController.h:45.
+class KeyAnimController : public ShotController
 {
 public:
-    u8  maReserved00[0x2C];   // +0x00 .. +0x2B (clip header not modelled here)
-    f32 mfDuration;           // +0x2C  clip duration in seconds (HasFinished comparand)
-};
+    // ------------------------------------------------------------------------
+    // Lifecycle
+    // ------------------------------------------------------------------------
 
-class KeyAnimController
-{
-public:
-    // Return the eye-space pointer (the camera's eye transform space). Asserts prepared.
-    // @0x821F4138: lwz r3, 0x758(this).
-    Space* GetEyeSpace() const;
+    // Bring the controller up empty (BrnKeyAnimController.cpp:38). Declaration-only: it is
+    // its own X360 function and lands with the controller-construct slice.
+    void Construct();
 
-    // Return the look-space pointer (the look-at transform space). Asserts prepared.
-    // @0x821F4190: lwz r3, 0x75C(this).
-    Space* GetLookSpace() const;
+    // Bind the controller to the take named by liAnimGuid, resolved through the director
+    // resource manager: the ICE editor's edited copy first, then the on-disk ICE dictionary.
+    // Seeds the playback take, rewinds it to parameter 0, caches the eye/look reference
+    // spaces and the authored look position. Always returns true. @0x821F7E10 (cpp:62).
+    bool Prepare(const DirectorResourceManager& lrResourceManager, s32 liAnimGuid);
 
-    // Return (by value) the 16-byte look-at position. Asserts prepared. @0x821F41E8: a single
-    // 16-byte aligned vector copied from +0x10 (lvx128) into the sret (stvx128); sret in r3,
-    // this in r4.
-    rw::math::vpu::Vector3 GetLookPos() const;
+    // ------------------------------------------------------------------------
+    // The per-frame entry point (ShotController's virtual)
+    // ------------------------------------------------------------------------
 
-    // True iff the keyframed clip has finished. Asserts prepared. @0x821F4258:
-    //   reverse (mbReverse @+0x767 != 0): finished when mfTime <= 0.0
-    //   forward (mbReverse == 0):         finished when mfTime >= clip duration
-    //                                     (duration = mpClip ? mpClip->mfDuration : 0.0)
+    // Advance the playback timer by the context's GAME timestep (honouring pause / reverse /
+    // looping), clamp it into the take, publish it as the camera's running time, seek the
+    // take, then write the whole camera out of the take. @0x8223D020 (cpp:224).
+    virtual void Update(const ShotContext& lrContext, Camera::Camera* lpCamera);
+
+    // ------------------------------------------------------------------------
+    // Playback state
+    // ------------------------------------------------------------------------
+
+    // The bound take's authored length in seconds (0 when nothing is bound). Header-inline
+    // in the original (h:69) -- every caller has it folded in.
+    f32 GetLength() const
+    {
+        const ICE::ICETakeData* lpTakeData = mPlaybackTake.GetData();
+        return lpTakeData ? lpTakeData->GetLength() : 0.0f;
+    }
+
+    // Seek to lfParametricTime0To1 (0..1) of the take. @0x821F80F8 (cpp:331).
+    void SetParametricTime0To1(f32 lfParametricTime0To1);
+
+    // The normalised playback parameter, clamped to [0,1]. @0x8220AD50 (cpp:357).
+    f32 GetParametricTime0To1() const;
+
+    // h:85 / h:88 / h:91 -- header-inline playback controls.
+    void Reverse() { mbReversed = !mbReversed; }
+    void Pause()   { mbPaused = true; }
+    void Resume()  { mbPaused = false; }
+
+    // True once the take has run off its end (forward: timer >= length; reverse: timer <= 0).
+    // @0x821F4258 (h:155).
     bool HasFinished() const;
 
-    // Seek the controller's normalised playback parameter to lf01 (0..1) of the clip. The
-    // rank-up arbitrator state rewinds a freshly-swapped take to its start with 0.0 each time
-    // it advances to the next rival's take (BrnArbStateRankUp::Update @0x82236380). REAL X360
-    // function (BrnKeyAnimController.cpp); DECLARATION-ONLY here (the per-TU cl /c gate does
-    // not link, and the controller's full rig lands with its own TU).
-    void SetParametricTime0To1(f32 lf01);
+    // h:97 / h:101 / h:104 -- header-inline state accessors.
+    bool IsPrepared() const           { return mbPrepared; }
+    void SetLooping(bool lbLooping)   { mbIsLooping = lbLooping; }
+    bool IsLooping() const            { return mbIsLooping; }
 
-    // FLAG: only the members these accessors touch are modelled at their asm-attested offsets. The
-    //   pinned region uses SIZE-STABLE fields only (the X360 is a 4-byte-pointer build; this PC
-    //   reconstruction is 64-bit, so a real 8-byte pointer mid-struct would shift every later
-    //   offset -- and the eye/look space pointers sit only 4 bytes apart at +0x758/+0x75C, which a
-    //   pair of 8-byte pointers could not occupy). The console's 4-byte pointer slots are therefore
-    //   reserved here; the type-correct pointer values live in the tail shadows below, reached by
-    //   name through the accessors. Members are public so the file-scope offsetof pins in the .cpp
-    //   can verify the (exact) layout. The rest of the controller rig lands with its own TU.
-    u8                     maReserved00[0x10];          // +0x000 .. +0x00F  controller head (not modelled)
-    rw::math::vpu::Vector3 mLookPos;                    // +0x010  look-at position (GetLookPos source)
-    u8                     maReserved020[0x24 - 0x20];  // +0x020 .. +0x023 (rig members not modelled here)
-    u32                    muClipSlot;                  // +0x024  clip pointer (X360 4B ptr slot)
-    u8                     maReserved028[0x758 - 0x28]; // +0x028 .. +0x757 (rig members not modelled here)
-    u32                    muEyeSpaceSlot;              // +0x758  eye-space pointer (X360 4B ptr slot)
-    u32                    muLookSpaceSlot;             // +0x75C  look-space pointer (X360 4B ptr slot)
-    f32                    mfTime;                      // +0x760  running clip time (HasFinished)
-    u8                     maReserved764[0x765 - 0x764];// +0x764 (rig member not modelled here)
-    u8                     mbPrepared;                  // +0x765  set once the controller is prepared
-    u8                     maReserved766[0x767 - 0x766];// +0x766 (rig member not modelled here)
-    u8                     mbReverse;                   // +0x767  play the clip backwards
+    // The take's current eye / look reference-space selectors. @0x821F4138 / @0x821F4190
+    // (h:107 / h:110). BehaviourIceAnim::Update switches on these to decide which vehicle
+    // the produced camera anchors to.
+    ICE::eICESpace GetEyeSpace() const;
+    ICE::eICESpace GetLookSpace() const;
 
-    // x64 type-correct shadows of the three 4-byte pointer slots above. Appended at the tail so
-    // they never disturb the pinned offsets; the X360 packs each pointer into its 4-byte slot. The
-    // accessors read/deref these by name (the eye/look-space getters return a typed pointer;
-    // HasFinished dereferences the clip's duration).
-    Space*             mpEyeSpace;
-    Space*             mpLookSpace;
-    const KeyAnimClip* mpClip;
+    // The take's current authored look-at point. @0x821F41E8 (h:113). Returned BY VALUE --
+    // the X360 copies the 16-byte lane out of +0x10 into the caller's sret slot.
+    rw::math::vpu::Vector3 GetLookPos() const;
+
+    // The live take itself (BehaviourIceAnim::GetTimeRemaining reads its bound take data).
+    const ICE::ICETake& GetTake() const { return mPlaybackTake; }
+
+private:
+    // ------------------------------------------------------------------------
+    // The four take->camera writers. All FOUR ARE STATIC: the X360 passes the ICETake in r3
+    // with no instance register left over (UpdateCameraFromICE is called as
+    // `UpdateCameraFromICE(this+0x20, ctx->mpCameraSpaceHandler, camera)`), and they touch no
+    // controller member. Same precedent as PerlinShakeController::Update
+    // (BrnPerlinShakeController.h) -- the asm arbitrates the calling convention.
+    // ------------------------------------------------------------------------
+
+    // Sample every camera-facing element of the take into the camera. @0x8221E630 (cpp:288).
+    static void UpdateCameraFromICE(const ICE::ICETake& lrTake,
+                                    const ICE::CameraSpaceHandler& lrSpaces,
+                                    Camera::Camera* lpCamera);
+
+    // The camera's world transform: project the authored eye/look points through their
+    // reference spaces, build the look-at frame, roll it by the authored dutch angle, and
+    // publish the look point as the camera's subject. @0x8221E2C8 (cpp:98).
+    static void UpdateTransformationMatrix(const ICE::ICETake& lrTake,
+                                           const ICE::CameraSpaceHandler& lrSpaces,
+                                           Camera::Camera* lpCamera);
+
+    // The camera's depth-of-field band, from the take's raw-focus channel. @0x821F7F50
+    // (cpp:154). (The ledger homes this function under BrnDepthOfField.h; that is a TU-path
+    // misattribution -- the DWARF puts it in BrnKeyAnimController.cpp, where it lives here.)
+    static void UpdateFocus(const ICE::ICETake& lrTake, Camera::Camera* lpCamera);
+
+    // The camera's FOV, from the take's authored lens length. @0x821F8068 (cpp:200).
+    static void UpdateLens(const ICE::ICETake& lrTake, Camera::Camera* lpCamera);
+
+    // ---- Layout (DWARF member order) ----------------------------------------
+    rw::math::vpu::Vector3 mLookPos;          // h:133
+    ICE::ICETake           mPlaybackTake;     // h:135
+    ICE::eICESpace         mEyeSpace;         // h:136
+    ICE::eICESpace         mLookSpace;        // h:137
+    f32                    mfPlaybackTimer;   // h:138
+    bool                   mbIsLooping;       // h:140
+    bool                   mbPrepared;        // h:141
+    bool                   mbPaused;          // h:142
+    bool                   mbReversed;        // h:143
 };
 
 } // namespace BrnDirector

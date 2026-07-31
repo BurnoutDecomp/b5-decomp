@@ -109,10 +109,7 @@ namespace Camera
         maReserved84[0x95 - 0x84] = 0;
         maReserved84[0x96 - 0x84] = 0;
         maReserved84[0x97 - 0x84] = 0;
-        maReservedA0[0]           = 0;                  // stfs 0 @+0xA0
-        maReservedA0[1]           = 0;
-        maReservedA0[2]           = 0;
-        maReservedA0[3]           = 0;
+        mfGameCameraBlend         = 0.0f;               // stfs 0 @+0xA0 (carved from maReservedA0)
         mbSetTimeOfDay            = false;              // stb 0 @+0xB9 (carved from maReservedB9)
         mfCameraLag               = 0.0f;               // stfs 0 @+0xA4
         mbHasStartHookNameString  = false;              // stb 0 @+0xB7
