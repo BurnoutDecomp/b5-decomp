@@ -113,13 +113,13 @@ namespace Camera
         maReservedA0[1]           = 0;
         maReservedA0[2]           = 0;
         maReservedA0[3]           = 0;
-        maReservedB9[0]           = 0;                  // stb 0 @+0xB9
+        mbSetTimeOfDay            = false;              // stb 0 @+0xB9 (carved from maReservedB9)
         mfCameraLag               = 0.0f;               // stfs 0 @+0xA4
         mbHasStartHookNameString  = false;              // stb 0 @+0xB7
         mfSimTimeScale            = 1.0f;               // stfs 1.0 @+0x9C
         mbHasStopHookNameString   = false;              // stb 0 @+0xB8
         mfShakeAmplitude          = 0.0f;               // stfs 0 @+0xAC
-        maReservedB9[1]           = 0;                  // stb 0 @+0xBA
+        maReservedBA[0]           = 0;                  // stb 0 @+0xBA
         mfShakeFrequency          = 1.0f;               // stfs 1.0 @+0xB0
         mStartHookNameString.mHookNameString[0] = '\0'; // stb 0 @+0x00
         mfRaceEndEffectAmount     = 0.0f;               // stfs 0 @+0xA8

@@ -79,10 +79,23 @@ namespace Gen
         // null-element fallback @0x822398A0).
         const Attrib::RefSpec* ShotList(u32 luIndex) const
         {
-            const void* lpElement = GetAttributePointer(0x7533C0E215246B49ULL, luIndex);
+            return reinterpret_cast<const Attrib::RefSpec*>(GetShotListElement(luIndex));
+        }
+
+        // ADDITIVE GROW (BrnArbStateCarSelect): the SAME indexed element resolve as
+        // ShotList() above, handed back untyped. Every arbitrator state that feeds a shot to
+        // BehaviourIceAnim::SetParameters/ChangeMovie needs the element as the generated
+        // `iceanim` view of the block, not as a RefSpec -- and the X360 site is literally
+        // `Attrib::Instance::GetAttributePointer(group, 0x15246B49, index)` returning void*
+        // with the 24-byte DefaultDataArea null-element fallback (@0x822398A0), so the untyped
+        // form is the faithful one; ShotList() is the typed convenience over it.
+        const void* GetShotListElement(u32 luIndex) const
+        {
+            const void* lpElement =
+                const_cast<shotgroup*>(this)->GetAttributePointer(0x7533C0E215246B49ULL, luIndex);
             if (lpElement == 0)
                 lpElement = DefaultDataArea(0x18u);
-            return reinterpret_cast<const Attrib::RefSpec*>(lpElement);
+            return lpElement;
         }
     };
 

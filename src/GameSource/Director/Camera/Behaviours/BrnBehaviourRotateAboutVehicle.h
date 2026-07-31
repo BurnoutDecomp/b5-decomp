@@ -24,6 +24,10 @@
 
 namespace BrnDirector
 {
+// The per-frame vehicle data the re-seat resolve reads (real home:
+// GameSource/Director/Utils/BrnDirectorAllVehicleData.h). Reference-only here.
+class AllVehicleData;
+
 namespace Camera
 {
 
@@ -88,6 +92,15 @@ public:
     // produced-camera member it returns) land with this behaviour's own TU; modelled here BY
     // NAME so consumers never reach the camera by offset.
     const Camera& GetProducedCamera() const;
+
+    // ADDITIVE GROW (BrnArbStateCarSelect::Update @0x8226F5D0, several arms): re-seat this
+    // orbit behaviour so it starts from the camera another behaviour is currently producing,
+    // resolved against the frame's vehicle data (the X360 call is
+    // `BehaviourRotateAboutVehicle::BecomeSimilarTo(behaviour, &sourceCamera,
+    // info.mpAllVehicleData)` -- the junkyard states keep the look-around-car cam aligned with
+    // the ICE movie so the later interpolation onto the car has no discontinuity).
+    // DECLARATION-ONLY: the body lands with this behaviour's own TU.
+    void BecomeSimilarTo(const Camera& lrSourceCamera, const AllVehicleData& lrAllVehicleData);
 
 private:
 

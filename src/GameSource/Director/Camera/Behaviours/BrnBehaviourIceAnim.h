@@ -184,6 +184,36 @@ public:
     const Attrib::Gen::shotgroup& GetDriveThruGasStationShots() const;
     const Attrib::Gen::shotgroup& GetDriveThruTuningShopShots() const;
     const Attrib::Gen::shotgroup& GetDriveThruTireShopShots() const;
+
+    // ADDITIVE GROW (BrnArbStateCarSelect @0x821F64A0 / @0x8226EFA0 / @0x8226F5D0): the
+    // JUNKYARD (offline car-select) shot-group bank + the game-intro group. The manager
+    // embeds one Attrib::Instance per slot; the X360 reaches each at its own fixed interior
+    // offset, and DirectorResourceManager::Prepare @0x8225CA08 names every one of them in
+    // its own IsValid()/Num_ShotList() asserts (which is where these NAMES come from --
+    // `mCarSelectMotorCity`, `mCarSelectMotorCityRivalUnlock`, ... `mGameIntroGroup`).
+    //   +1064 mCarSelectMotorCity            +1080 mCarSelectMotorCityRivalUnlock
+    //   +1096 mCarSelectWestAcres            +1112 mCarSelectWestAcresRivalUnlock
+    //   +1128 mCarSelectSouthBay             +1144 mCarSelectSouthBayRivalUnlock
+    //   +1160 mCarSelectHeartbreak           +1176 mCarSelectHeartbreakRivalUnlock
+    //   +1192 mCarSelectLowerPeaks           +1208 mCarSelectLowerPeaksRivalUnlock
+    //   +1224 mCarSelectIdle                 +1240 mCarSelectOutro
+    //   +1256 mCarUnlock                     +1272 mGameIntroGroup   ⭐ the retail intro
+    // DECLARATION-ONLY (bodies in the resource-manager TU). FLAG: modelled on this minimal
+    // DirectorResourceManager slice; the real home is BrnDirectorResourceManager.h.
+    const Attrib::Gen::shotgroup& GetCarSelectMotorCityShots() const;              // +1064
+    const Attrib::Gen::shotgroup& GetCarSelectMotorCityRivalUnlockShots() const;   // +1080
+    const Attrib::Gen::shotgroup& GetCarSelectWestAcresShots() const;              // +1096
+    const Attrib::Gen::shotgroup& GetCarSelectWestAcresRivalUnlockShots() const;   // +1112
+    const Attrib::Gen::shotgroup& GetCarSelectSouthBayShots() const;               // +1128
+    const Attrib::Gen::shotgroup& GetCarSelectSouthBayRivalUnlockShots() const;    // +1144
+    const Attrib::Gen::shotgroup& GetCarSelectHeartbreakShots() const;             // +1160
+    const Attrib::Gen::shotgroup& GetCarSelectHeartbreakRivalUnlockShots() const;  // +1176
+    const Attrib::Gen::shotgroup& GetCarSelectLowerPeaksShots() const;             // +1192
+    const Attrib::Gen::shotgroup& GetCarSelectLowerPeaksRivalUnlockShots() const;  // +1208
+    const Attrib::Gen::shotgroup& GetCarSelectIdleShots() const;                   // +1224
+    const Attrib::Gen::shotgroup& GetCarSelectOutroShots() const;                  // +1240
+    const Attrib::Gen::shotgroup& GetCarUnlockShots() const;                       // +1256
+    const Attrib::Gen::shotgroup& GetGameIntroShots() const;                       // +1272
 };
 
 // RETIRED (2026-07-29): the minimal `struct Timestep` fork that used to sit here (whose only
