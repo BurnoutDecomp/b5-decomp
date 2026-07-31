@@ -639,6 +639,14 @@ namespace BrnGame
         // DoUpdate_Director. DELETE with GenerateDispatchListsBringUp.
         bool mbDirectorCameraLive;
 
+        // [FLAG PC bring-up] (no console member): one-shot latch for the "the staged player car
+        // is FAKE" warning DoUpdate_Director emits the first time it marks race car 0 in-use
+        // with a zeroed VehicleInfo. See the ⚠️⚠️ block at that write site: the used-race-car bit
+        // makes VehicleRef::IsValid pass on a car that does not exist, so any ICE-anim take
+        // framed against it is an origin camera. DELETE with the stand-in, when a real spawned
+        // player car exists.
+        bool mbWarnedStagedPlayerCarIsFake;
+
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)
         s32  miSecondaryControllerPort; // @ +10094144 (the rumble/debug-controller read port)
