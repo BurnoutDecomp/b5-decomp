@@ -1,4 +1,5 @@
 #include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"
+#include "SharedClasses/World/BrnVehicleGraphicsSpec.h"   // BrnVehicle::GraphicsSpec (the real, DWARF-named home)
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
@@ -22,34 +23,22 @@ namespace BrnVehicle
         return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
     }
 
-    // The vehicle graphics-spec resource layout is not committed; DWARF gives no
-    // member names. Only the relocation slice is modelled here — the fields the
-    // FixUp/FixDown rebase arithmetic touches, named u32 (load-relative pointers
-    // stored as u32 offsets, rebased by += / -= delta like VehicleList::mpEntries).
-    //
-    // FLAG: every member name is INFERRED from the rebase pattern; the X360 has
-    //       no DWARF. The PS3 DecFIGS build (BrnVehicle::GraphicsSpecResourceType::
-    //       FixUp/FixDown, demangled) DOES carry the rebase-pointer ELEMENT TYPES,
-    //       noted per field below; they are kept as u32 load-relative offsets here
-    //       (rebased by += / -= delta) since the layout header is not committed.
-    // FLAG: muField3 (+12) is NOT rebased by either function — it is an inline
-    //       value (count), not a load-relative pointer (PS3 only loops over it).
-    struct GraphicsSpec
-    {
-        u32 muVersion;   // +0   on-disk version == 3
-        s32 miCount;     // +4   number of entries in the mpArray (+32) table
-        u32 mpField2;    // +8   rebased; PS3 type CgsGraphics::Model**
-        u32 muField3;    // +12  NOT rebased (inline count) — FLAG
-        u32 mpField4;    // +16  rebased; PS3 type BrnVehicle::ShatteredGlassPart*
-        u32 mpField5;    // +20  rebased; PS3 type rw::math::vpu::Matrix44Affine*
-        u32 mpField6;    // +24  rebased (last, via a helper rebase fn in PS3)
-        u32 mpField7;    // +28  rebased (via a helper rebase fn in PS3)
-        u32 mpArray;     // +32  rebased; PS3 type rw::math::vpu::Matrix44Affine**
-                         //      (miCount rebased entries)
-    };
+    // The GraphicsSpec layout is no longer TU-local: it is the DWARF-named home
+    // SharedClasses/World/BrnVehicleGraphicsSpec.h, whose member NAMES this file's
+    // rebase arithmetic independently confirms three ways --
+    //   +12 muShatteredGlassPartsCount : NOT rebased, and the descriptor charges
+    //       12 bytes per entry == sizeof(ShatteredGlassPart)
+    //   +20 mpPartLocators             : muPartsCount << 6 == 64 B per part (Matrix44Affine)
+    //   +24 mpPartVolumeIDs / +28 mpNumRigidBodiesForPart : 1 byte per part each
+    //   +28 mpNumRigidBodiesForPart    : each entry drives (count << 6) bytes of
+    //       rigid-body -> skin matrices, which is what +32 points at
+    //   +32 mppRigidBodyToSkinMatrixTransforms : 4 bytes per entry, and it is the
+    //       one table FixUp rebases ELEMENT-WISE
+    // (and the whole layout is runtime-probe-verified -- see that header's banner).
 
-    // FLAG: value 3 taken from the X360 `*a2 != 3` version check in FixUp.
-    static const u32 KU_VEHICLE_GRAPHICS_SPEC_VERSION = 3;
+    // (KU_VEHICLE_GRAPHICS_SPEC_VERSION -- the X360 `*a2 != 3` gate -- now lives with the
+    //  type in BrnVehicleGraphicsSpec.h, where the runtime probe confirmed the shipped
+    //  VEH_PUSMC01_GR.bin really does carry 3.)
 
     // Resource registry type id for the vehicle graphics-spec resource (0x10006).
     // Recovered verbatim from GetTypeID @ 0x82676480.
@@ -88,10 +77,10 @@ namespace BrnVehicle
     {
         const GraphicsSpec* lpSpec = static_cast<const GraphicsSpec*>(lpResource);
 
-        const u32 luCount = static_cast<u32>(lpSpec->miCount);   // v3 (a3[1])
+        const u32 luCount = static_cast<u32>(lpSpec->muPartsCount);   // v3 (a3[1])
 
         u32 luSize = (4u * luCount + 0x3Fu) & ~0xFu;             // (4*v3 + 63) & ~0xF
-        luSize = AlignUp16(luSize + 12u * lpSpec->muField3);     // + 12*a3[3]
+        luSize = AlignUp16(luSize + 12u * lpSpec->muShatteredGlassPartsCount);     // + 12*a3[3]
         luSize = AlignUp16(luSize + (luCount << 6));             // + (v3 << 6)
         luSize = AlignUp16(luSize + luCount);                    // + v3
         luSize = AlignUp16(luSize + luCount);                    // + v3
@@ -99,7 +88,7 @@ namespace BrnVehicle
 
         if (luCount != 0u)
         {
-            const u8* lpBytes = PointerFromU32<u8>(lpSpec->mpField7);   // a3[7]
+            const u8* lpBytes = PointerFromU32<u8>(lpSpec->mpNumRigidBodiesForPart);   // a3[7]
             for (u32 luEntry = 0; luEntry < luCount; ++luEntry)
             {
                 if (lpBytes != nullptr && lpBytes[luEntry] != 0u)
@@ -133,20 +122,20 @@ namespace BrnVehicle
 
         const u32 luDelta = CgsResource::GetLoadBase(lrResource);
 
-        lpSpec->mpField2 += luDelta;   // a2[2] (+8)
-        lpSpec->mpField4 += luDelta;   // a2[4] (+16)
-        lpSpec->mpField5 += luDelta;   // a2[5] (+20)
-        lpSpec->mpField7 += luDelta;   // a2[7] (+28)
-        lpSpec->mpArray  += luDelta;   // a2[8] (+32)
+        lpSpec->mppPartModels += luDelta;   // a2[2] (+8)
+        lpSpec->mpShatteredGlassParts += luDelta;   // a2[4] (+16)
+        lpSpec->mpPartLocators += luDelta;   // a2[5] (+20)
+        lpSpec->mpNumRigidBodiesForPart += luDelta;   // a2[7] (+28)
+        lpSpec->mppRigidBodyToSkinMatrixTransforms  += luDelta;   // a2[8] (+32)
 
-        if (lpSpec->miCount)           // if (v13 = a2[1])
+        if (lpSpec->muPartsCount)           // if (v13 = a2[1])
         {
-            u32* lpArray = PointerFromU32<u32>(lpSpec->mpArray);
-            for (u32 luEntry = 0; luEntry < static_cast<u32>(lpSpec->miCount); ++luEntry)
+            u32* lpArray = PointerFromU32<u32>(lpSpec->mppRigidBodyToSkinMatrixTransforms);
+            for (u32 luEntry = 0; luEntry < static_cast<u32>(lpSpec->muPartsCount); ++luEntry)
                 lpArray[luEntry] += luDelta;
         }
 
-        lpSpec->mpField6 += luDelta;   // a2[6] (+24)
+        lpSpec->mpPartVolumeIDs += luDelta;   // a2[6] (+24)
     }
 
     // FixDown @ 0x8267E338. The inverse of FixUp: subtract the load-base delta
@@ -158,25 +147,25 @@ namespace BrnVehicle
 
         const u32 luDelta = CgsResource::GetLoadBase(lrResource);
 
-        lpSpec->mpField6 -= luDelta;   // *(result + 24) -= *a2
+        lpSpec->mpPartVolumeIDs -= luDelta;   // *(result + 24) -= *a2
 
-        if (lpSpec->miCount)           // if (v3 = *(result + 4))
+        if (lpSpec->muPartsCount)           // if (v3 = *(result + 4))
         {
             // FLAG: the asm guards each array-entry write on *(result + 28)
             //       (mpField7), NOT on the array base *(result + 32). The array
             //       base it dereferences is mpArray (+32). Reproduced verbatim.
-            u32* lpArray = PointerFromU32<u32>(lpSpec->mpArray);
-            for (u32 luEntry = 0; luEntry < static_cast<u32>(lpSpec->miCount); ++luEntry)
+            u32* lpArray = PointerFromU32<u32>(lpSpec->mppRigidBodyToSkinMatrixTransforms);
+            for (u32 luEntry = 0; luEntry < static_cast<u32>(lpSpec->muPartsCount); ++luEntry)
             {
-                if (lpSpec->mpField7)
+                if (lpSpec->mpNumRigidBodiesForPart)
                     lpArray[luEntry] -= luDelta;
             }
         }
 
-        lpSpec->mpArray  -= luDelta;   // *(result + 32) -= *a2
-        lpSpec->mpField7 -= luDelta;   // *(result + 28) -= *a2
-        lpSpec->mpField5 -= luDelta;   // *(result + 20) -= *a2
-        lpSpec->mpField2 -= luDelta;   // *(result + 8)  -= *a2
-        lpSpec->mpField4 -= luDelta;   // *(result + 16) -= *a2
+        lpSpec->mppRigidBodyToSkinMatrixTransforms  -= luDelta;   // *(result + 32) -= *a2
+        lpSpec->mpNumRigidBodiesForPart -= luDelta;   // *(result + 28) -= *a2
+        lpSpec->mpPartLocators -= luDelta;   // *(result + 20) -= *a2
+        lpSpec->mppPartModels -= luDelta;   // *(result + 8)  -= *a2
+        lpSpec->mpShatteredGlassParts -= luDelta;   // *(result + 16) -= *a2
     }
 }
