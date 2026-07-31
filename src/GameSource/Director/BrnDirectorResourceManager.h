@@ -47,6 +47,109 @@ namespace BrnResource
 namespace BrnDirector
 {
 
+// ============================================================================
+// ⭐ RECON MAP for the real DirectorResourceManager (recovered + cross-checked 2026-07-30).
+// Nothing below is implemented yet -- this is the ground truth the rebuild needs, recorded
+// here so the next wave is mechanical rather than another recovery pass.
+//
+// SHAPE. DirectorResourceManager::DirectorResourceManager @0x827DEB98 default-constructs a run
+// of exactly 65 contiguous 16-byte sub-objects spanning byte 568..1592, then clears three
+// trailing fields (1608 / 1616 / 1624). Those 65 slots ARE the shot-group bank: 64
+// Attrib::Gen::shotgroup + one Attrib::Gen::cameradefaults, in the DecFIGS DWARF's declaration
+// order (which is the memory order). The DWARF head members land ahead of them:
+//     +0x000  EventReceiverQueue<512,16>   mReceiverQueue                (spans .. +535)
+//     +536    ResourceHandle               mAttribsysVaultResourceHandle (8 bytes; a1[134]/[135])
+//     +544    const BrnResource::ICEList*  mpICEDictionaryList           (a1[136])
+//     +548    EPrepareStage                mePrepareStage                (a1[137])
+//     +552    ICEResourceMgr               mICEResourceMgr               (vptr + owner ptr)
+//     +560    ICEWrapper*                  mpICEWrapper                  (a1[140])
+//     +564    const VehicleList*           mpVehicleList                 (a1[141])
+//     +1608   Attrib::RefSpec              mAfterTouchCam                (key "428410", refspec
+//                                                                         hi word 0x75E62FC1632388D6)
+// EPrepareStage (DWARF BrnDirectorResourceManager.h:245):
+//     0 CONSTRUCTED  1 REQUEST_RESOURCES  2 ACQUIRE_RESOURCES
+//     3 REGISTER_ATTRIBSYSVAULT  4 REGISTER_ATTRIBSYSVAULT_WAIT  5 PREPARED
+//
+// Prepare @0x8225CA08 is a switch on mePrepareStage that falls through stage to stage:
+//   0/1: Clear the receiver queue; stash the ICE wrapper; then through the output buffer's
+//        resource request interface issue GameDataIO::RequestInterface<512>::GetICEList(this, 2)
+//        and ::GetVehicleList(this, 1), and AddEvent a 24-byte load request for the resource
+//        CgsResource::ID::HashString("CameraVault") | 0x5_00000000 (event type 4).  -> stage 2
+//   2:   pump the receiver queue (returns 0 = "not prepared yet" while it holds < 2 events):
+//          event 4  -> mAttribsysVaultResourceHandle = payload words 6/7
+//          event 52 -> mpVehicleList        = payload word 8   (asserts payload[0] == 1)
+//          event 64 -> mpICEDictionaryList  = payload word 8   (asserts payload[0] == 2)
+//          default  -> assert "Invalid event id received"      (cpp:110/:121/:132/:139)
+//        then Clear, and AttribSysRequestInterface<512>::RegisterVault(this,
+//        mAttribsysVaultResourceHandle, 1, 0).                                   -> stage 4
+//   4:   once the queue reports the registration, construct all 66 attrib instances (below),
+//        each as `mX = Attrib::Gen::shotgroup(Attrib::StringToKey("<key>"), 0)` with the
+//        IsValid()/Num_ShotList() asserts the console bakes.                      -> stage 5
+//   5:   return true.
+//
+// THE 65-SLOT TABLE. Byte offset, DWARF member, and the vault name key Prepare constructs it
+// over. Every one of the 26 slots marked (A) is independently confirmed by its own
+// IsValid()/Num_ShotList() assert string in Prepare; the rest follow from DWARF declaration
+// order, which those 26 pin exactly (no gaps, no reordering).
+//    568 mRaceStartGroup 424409 (A)            584 mRoadRageStartGroup 474399 (A)
+//    600 mRaceStartRivalInFrontGroup 428119(A) 616 mOnlineRaceStart 428118 (A)
+//    632 mBurningRouteStartGroup 475199        648 mSurvivorStartGroup 474394
+//    664 mEliminatorStartGroup 474388          680 mTrafficAttackStartGroup 475200
+//    696 mOnlineLobbyStartGroup 480584         712 mPursuitStartGroup 474389 (A)
+//    728 mStuntRaceStartGroup 559418 (A)       744 mMarkedManStartGroup 559367 (A)
+//    760 mBurningRouteFinishGroup 480563 (A)   776 mMarkedManFinishGroup 480562 (A)
+//    792 mRaceFinishGroup 476830 (A)           808 mRoadRageFinishGroup 561160 (A)
+//    824 mStuntFinishGroup 480560 (A)          840 mRaceFinishNorth 561973 (A)
+//    856 mRaceFinishNorthEast 561960 (A)       872 mRaceFinishEast 561961 (A)
+//    888 mRaceFinishSouthEast 561962 (A)       904 mRaceFinishSouth 561963 (A)
+//    920 mRaceFinishSouthWest 561964 (A)       936 mRaceFinishWest 561965 (A)
+//    952 mRaceFinishNorthWest 561972 (A)       968 mRankUpGroup 544056 (A)
+//    984 mDriveThruGasStationGroup 428141     1000 mDriveThruBodyShopGroup 428144
+//   1016 mDriveThruTyreShopGroup 428142       1032 mDriveThruAutoPartsGroup 428143
+//   1048 mDriveThruTuningShopGroup 428140     1064 mCarSelectMotorCity 432577 (A)
+//   1080 mCarSelectMotorCityRivalUnlock 558663 (A)
+//   1096 mCarSelectWestAcres 450907 (A)       1112 mCarSelectWestAcresRivalUnlock 558657 (A)
+//   1128 mCarSelectSouthBay 450916 (A)        1144 mCarSelectSouthBayRivalUnlock 558658 (A)
+//   1160 mCarSelectHeartbreak 451080 (A)      1176 mCarSelectHeartbreakRivalUnlock 558660 (A)
+//   1192 mCarSelectLowerPeaks 450948 (A)      1208 mCarSelectLowerPeaksRivalUnlock 558659 (A)
+//   1224 mCarSelectIdle 611284 (A)            1240 mCarSelectOutro 611285 (A)
+//   1256 mCarUnlock 553098 (A)          ⭐   1272 mGameIntroGroup 606002 (A)
+//   1288 mBurnoutLicense 605835 (A)           1304 mShakeAnimsGroup 428114
+//   1320 mJumpRig 440805 (A)                  1336 mHardStopWorldLeft 461063
+//   1352 mHardStopWorldRight 461057           1368 mHardStopCarLeft 466945
+//   1384 mHardStopCarRight 466946             1400 mFastCrashShotGroup 494628 (A)
+//   1416 mNormalCrashShotGroup 543590 (A)     1432 mSlowCrashShotGroup 542963 (A)
+//   1448 mAfterCrash 461719 (A)               1464 mAfterCrashSafe 466949 (A)
+//   1480 mOnlineCarSelect 613970              1496 mCameraDefaults 430819  <- cameradefaults,
+//                                                    the ONLY non-shotgroup slot, and the ctor
+//                                                    builds exactly this one with a different
+//                                                    element ctor (sub_827DC8C8). Independent
+//                                                    confirmation of the whole ordering.
+//   1512 mFailsafe 467917 (A)                 1528 mTakedown 475241
+//   1544 mCrashbreaker 478055 (A)             1560 mTakendown 575796 (A)
+//   1576 mTestbed 535488 (A)                  1592 mTestbed2 568320 (A)
+//
+// ⚠️ ONE CONSOLE BUG, DO NOT "FIX" IT: the asserts that follow the mOnlineCarSelect (+1480)
+//    construction re-test mRankUpGroup (a1+242 == byte 968), not the group just built -- a
+//    copy-paste in the original at BrnDirectorResourceManager.cpp:329/:330. Reproduce it.
+//
+// ⚠️ ACCESSOR NAMES. The DWARF spells them GetCarSelect_MotorCity() / GetGameIntro() /
+//    GetDriveThruTyreShopGroup() etc. The committed CALLERS (the seven ICE-anim arbitrator
+//    states) currently call the names invented by the minimal DirectorResourceManager slice in
+//    Behaviours/BrnBehaviourIceAnim.h -- GetCarSelectMotorCityShots(), GetGameIntroShots(), ...
+//    The rebuild must reconcile to the DWARF names AND retire that slice: it is a SECOND
+//    definition of BrnDirector::DirectorResourceManager with a completely different layout,
+//    and both are already in the same program (this header via DirectorLinkStubs.cpp, the fork
+//    via every arbitrator state). They mangle identically, so they will link and then disagree
+//    about where every member is. Nothing calls across the two today only because the ICE-anim
+//    states are all unmounted.
+//
+// ⚠️ DATA. Prepare's whole point is the CameraVault, and build/game/CAMERAS.BUNDLE is still
+//    un-ported X360 (bnd2 header platform == 2, checked 2026-07-30). Until it is transcoded to
+//    platform 4, a perfectly reconstructed Prepare resolves nothing: every shotgroup comes back
+//    invalid and all 66 asserts fire.
+// ============================================================================
+
 class DirectorResourceManager
 {
 public:
