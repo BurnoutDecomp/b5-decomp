@@ -859,7 +859,7 @@ WorldModule::Prepare( CgsModule::IOBufferStack* lpInputBufferStack,
             // minimal slice and its module Prepare is boot-gated).
             lpRaceCarOutput->CgsModule::IOBuffer::Construct();
 
-            if ( !mRaceCarEntityModule.Prepare( mDistrictMapResourceHandle ) )
+            if ( !mRaceCarEntityModule.Prepare( lpRaceCarOutput, mDistrictMapResourceHandle ) )
             {
                 CgsModule::LockBuffersForIO( lpUpdateOutputBuffer, lpRaceCarOutput );
                 ::WorldModule::BridgeRaceCarResourceRequestsToOutput_Prepare(

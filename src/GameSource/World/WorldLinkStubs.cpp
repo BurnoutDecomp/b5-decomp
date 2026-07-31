@@ -1308,10 +1308,10 @@ bool BrnWorld::PropEntityModule::Release()
 // BOOT-GATE (world-module mount 2026-07-26): REACHED at boot by the wired
 // WorldModule::Construct @0x827CF540 fleet cascade; quiet no-op (see
 // AIModule::Construct above). Reconstruct from X360 before wiring Prepare.
-// FLAG PC-platform leaf: boot-gate no-op (world-module mount 2026-07-26) -- reached by the wired WorldModule::Construct cascade; real body pending X360 reconstruction (see note above).
-void BrnWorld::RaceCarEntityModule::Construct()
-{
-}
+// RETIRED (global-resource wave 2026-07-31): RaceCarEntityModule::Construct is now bodied
+// in BrnRaceCarEntityModule.cpp -- it brings up mReceiverQueue (without which every
+// GameData reply addressed to the module is dropped on the floor) and seeds the two stage
+// machines. The rest of the module interior is still opaque and stays unconstructed there.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
@@ -1394,22 +1394,11 @@ void BrnWorld::RaceCarEntityModule::PrePhysicsUpdate(struct BrnWorld::RaceCarEnt
     }
 }
 
-// LINK STUB (world-fleet mount 2026-07-26): body not reconstructed yet.
-bool BrnWorld::RaceCarEntityModule::Prepare(struct CgsResource::ResourceHandle const &)
-{
-    // BOOT-GATE (attribsys wave 2026-07-26): REACHED by the world Prepare stage
-    // chain. One-shot log + report success so the scripted load advances toward
-    // WORLDENTITY; the module stays inert (zero-initialised storage) and its
-    // deeper consumers keep their traps. Reconstruct from X360.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule::Prepare: inert [FLAG PC boot gate]\n";
-    }
-    return true;
-}
+// RETIRED (global-resource wave 2026-07-31): RaceCarEntityModule::Prepare is now the real
+// X360 0x82303E78 body in BrnRaceCarEntityModule.cpp -- it takes the OutputBuffer_Prepare
+// the console signature always had, and its stage 2 runs the real LoadGlobalResources
+// (CarColours acquire + "Vehicles/VEHICLETEX.BIN" into pool 25 + the vehicle/wheel list
+// GETs). The old one-argument stub that reported success is gone.
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
