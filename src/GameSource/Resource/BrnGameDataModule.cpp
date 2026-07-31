@@ -1300,6 +1300,14 @@ namespace BrnResource
         // 0x820016F0 "AT") -- i.e. exactly the BrnResource::EAssetSet order.
         const char* const KAPC_ASSET_SET_SUFFIXES[] = { "GR", "PH", "SO", "DA", "AT" };
         const char* const KPC_TRACK_UNIT_FILE_FORMAT = "%s_%s.bndl";   // off_82F2A6B4-adjacent format literal
+
+        // The vehicle handlers' four format literals (X360 aVehiclesSSBin / aEngines08xBund /
+        // aSS_13 / aSS). The engine-bundle one is shared by BOTH sound legs; note its SPrintf
+        // cap is 64, not 128.
+        const char* const KPC_VEHICLE_FILE_FORMAT          = "Vehicles\\%s_%s.bin";
+        const char* const KPC_ENGINE_BUNDLE_FILE_FORMAT    = "Engines\\%08x.bundle";
+        const char* const KPC_VEHICLE_RESOURCE_FORMAT      = "%s_%s";
+        const char* const KPC_VEHICLE_RESOURCE_NOSEP_FORMAT = "%s%s";
     }
 
     // @ 0x82674670 -- the per-frame pump. Reconstructed slice: the GameData request drain
@@ -1583,7 +1591,7 @@ namespace BrnResource
 
         if (memcmp(lacName, "VEH_", 4) == 0)
         {
-            DeferredGameDataRequest("LoadVehicle (0x8266EB98, id 27)", lpSlot);
+            ProcessLoadVehicleRequest(lpResourceInput, lpEvent, 27, liIndex);
         }
         else if (memcmp(lacName, "WHE_", 4) == 0)
         {
@@ -1656,7 +1664,7 @@ namespace BrnResource
 
         if (memcmp(lacName, "VEH_", 4) == 0)
         {
-            DeferredGameDataRequest("GetVehicle (0x8266FDA0, id 50)", lpSlot);
+            ProcessGetVehicleRequest(lpResourceInput, lpEvent, 50, liIndex);
         }
         else if (memcmp(lacName, "ICE_", 4) == 0)
         {
@@ -1809,6 +1817,223 @@ namespace BrnResource
     // mReceiverQueue and ProcessInternalLoadBundleResponse's case 31 then dispatches the
     // paired GET (ProcessGetWorldUnitRequest, id 56) which acquires the unit's instance
     // list. This is the FIRST hop of the world graphics streamer's load chain.
+    // @ 0x8266EB98 -- service a LOAD vehicle request (dispatch id 27).
+    //
+    // Five asset sets share one handler. The bundle-set index is the request's meType with
+    // ONE remap: E_ASSETSET_PHYSICS (1) -> E_ASSETSET_ATTRIBS (4), so physics and attribs
+    // both stream "VEH_<code>_AT.bin" (that file carries the AttribSysVault AND the
+    // StreamedDeformationSpec). The X360 does this remap only for vehicles -- the wheel and
+    // traffic-vehicle Load handlers index the same suffix table with meType unremapped.
+    //
+    // SOUND (2) does not build a "Vehicles\..." name at all: it resolves the request's id
+    // through the VehicleList and streams the entry's EXHAUST engine bundle
+    // ("Engines\%08x.bundle" of HashString(decode(mExhaustName))), resetting
+    // muLoadedSoundBundlesCount to 0 first. Its twin in ProcessGetVehicleRequest streams the
+    // ENGINE one (+0xC0) -- that is not an inconsistency: they are two different named
+    // fields of the entry's mAudioData block and a car legitimately has both assets.
+    //
+    // The file name is built from the FULL id string here (it keeps the "VEH_" prefix,
+    // matching "VEHICLES\VEH_PUSMC01_GR.BIN" on disk); ProcessGetVehicleRequest builds
+    // RESOURCE names from id+4. That asymmetry is real.
+    //
+    // No reply is posted: the completion rides ProcessInternalLoadBundleResponse's case 27,
+    // which is why the response id is staged into the slot first.
+    void GameDataModule::ProcessLoadVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                   const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                   s32 liEventId, s32 liSlotIndex)
+    {
+        // X360 store order: the response id is staged FIRST (`stw r6, 0x28(slot)`).
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        char lacVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacVehicleID);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
+                       || lpEvent->meType == E_ASSETSET_PHYSICS
+                       || lpEvent->meType == E_ASSETSET_SOUND
+                       || lpEvent->meType == E_ASSETSET_ATTRIBS,
+                   "Invalid asset type for vehicles\n");   // X360 line 3938
+
+        // X360 0x8266EC44: `if (meType == 1) bundleAssetSet = 4;` -- and the SOUND branch
+        // below tests the ORIGINAL meType, not the remapped one.
+        const u32 luBundleAssetSet =
+            (lpEvent->meType == E_ASSETSET_PHYSICS)
+                ? static_cast<u32>(E_ASSETSET_ATTRIBS)
+                : static_cast<u32>(lpEvent->meType);
+
+        char lacResourceName[208];
+
+        if (lpEvent->meType == E_ASSETSET_SOUND)
+        {
+            CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )");   // X360 line 3951
+
+            const VehicleListEntry* lpVehicleListEntry =
+                mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
+            CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");   // X360 line 3956
+            if (lpVehicleListEntry == 0)
+                return;   // [marked deviation] the X360 assert is non-fatal and the next
+                          // load would fault on the null entry; guard the host instead.
+
+            muLoadedSoundBundlesCount = 0;
+
+            char lacEngineName[KI_CGSID_STRING_LEN];   // the X360 local name, for BOTH legs
+            CgsIDConvertToString(lpVehicleListEntry->mExhaustName, lacEngineName);
+            CgsCore::SPrintf(lacResourceName, 64, KPC_ENGINE_BUNDLE_FILE_FORMAT,
+                             CgsResource::ID::HashString(
+                                 reinterpret_cast<const u8*>(lacEngineName)));
+        }
+        else
+        {
+            const char* lpcSuffix =
+                (luBundleAssetSet < (sizeof(KAPC_ASSET_SET_SUFFIXES) / sizeof(KAPC_ASSET_SET_SUFFIXES[0])))
+                    ? KAPC_ASSET_SET_SUFFIXES[luBundleAssetSet]
+                    : KAPC_ASSET_SET_SUFFIXES[0];
+            CgsCore::SPrintf(lacResourceName, 128, KPC_VEHICLE_FILE_FORMAT,
+                             lacVehicleID, lpcSuffix);
+        }
+
+        CgsResource::Events::LoadBundleRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.SetFileName(lacResourceName);
+        lRequest.mbLiveUpdateReplace = false;
+        lRequest.miPoolId            = lpEvent->miPoolId;
+        lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+        lRequest.mbUseHDCache        = false;   // X360 stores 0 here (unlike the track-unit path)
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
+    // @ 0x8266FDA0 -- service a GET vehicle request (dispatch id 50).
+    //
+    // Four asset sets, four RESOURCE names, all built from the id string WITHOUT its
+    // "VEH_" prefix:
+    //   GRAPHICS(0) -> "<code>_Graphics"            (confirmed at runtime: the car's
+    //                                                graphics bundle really does publish
+    //                                                exactly this hash)
+    //   ATTRIBS(4)  -> strncpy(<code>, 9) + "_AttribSys"
+    //   SOUND(2)    -> the ref-counted engine-bundle leg below (returns early)
+    //   otherwise   -> "<code>DeformationModel"     (NO separator -- the X360 format is
+    //                                                "%s%s", not "%s_%s")
+    // then one AcquireResourceRequest (type 4) for HashString(name) out of the request's pool.
+    //
+    // The SOUND leg is a two-pass ref count on muLoadedSoundBundlesCount:
+    //   0 -> 1 : stream "Engines\%08x.bundle" of the entry's mEngineName (+0xC0) and re-stage
+    //            the slot's response id to 27, so ProcessInternalLoadBundleResponse's vehicle
+    //            case calls straight back in here with the SAVED request. No reply yet.
+    //   1 -> 2 : post the id-50 reply (meType forced to SOUND) to the ORIGINAL requester's
+    //            queue and free the slot. No bundle work.
+    //   >= 2   : assert and bail (the counter still increments).
+    void GameDataModule::ProcessGetVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                  const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                  s32 liEventId, s32 liSlotIndex)
+    {
+        GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
+        lpSlot->miResponseEventId = liEventId;
+
+        char lacVehicleID[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEvent->mId, lacVehicleID);
+
+        CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
+                       || lpEvent->meType == E_ASSETSET_PHYSICS
+                       || lpEvent->meType == E_ASSETSET_SOUND
+                       || lpEvent->meType == E_ASSETSET_ATTRIBS,
+                   "Invalid asset type for vehicles\n");   // X360 line 4649
+
+        char lacResourceName[208];
+
+        if (lpEvent->meType == E_ASSETSET_SOUND)
+        {
+            ++muLoadedSoundBundlesCount;
+
+            if (muLoadedSoundBundlesCount == 1)
+            {
+                CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0,
+                           "strstr( lacVehicleID, \"VEH_\" )");   // X360 line 4684
+
+                const VehicleListEntry* lpVehicleListEntry =
+                    mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
+                CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");   // X360 line 4689
+                if (lpVehicleListEntry == 0)
+                    return;   // [marked deviation] see ProcessLoadVehicleRequest
+
+                char lacEngineName[KI_CGSID_STRING_LEN];
+                CgsIDConvertToString(lpVehicleListEntry->mEngineName, lacEngineName);
+                CgsCore::SPrintf(lacResourceName, 64, KPC_ENGINE_BUNDLE_FILE_FORMAT,
+                                 CgsResource::ID::HashString(
+                                     reinterpret_cast<const u8*>(lacEngineName)));
+
+                CgsResource::Events::LoadBundleRequest lRequest;
+                memset(&lRequest, 0, sizeof(lRequest));
+                lRequest.mpUser    = &mReceiverQueue;
+                lRequest.miEventId = liSlotIndex;
+                lRequest.SetFileName(lacResourceName);
+                lRequest.mbLiveUpdateReplace = false;
+                lRequest.miPoolId            = lpEvent->miPoolId;
+                lRequest.mbAllowFailiure     = lpEvent->mbFailFlag;
+                lRequest.mbUseHDCache        = false;
+
+                lpResourceInput->GetResourceQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                    2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
+
+                // X360 `li r11,0x1B; stw r11,0x28(slot)` -- re-route the completion through
+                // the LOAD-vehicle case so this handler is re-entered on the second pass.
+                lpSlot->miResponseEventId = 27;
+                return;
+            }
+
+            if (muLoadedSoundBundlesCount == 2)
+            {
+                PostGameDataResponse(lpSlot, 50, lpSlot->mEvent.mbFailFlag,
+                                     static_cast<u32>(E_ASSETSET_SOUND), 0, 0);
+                mGameDataEventSlotPool.PushIndex(
+                    static_cast<s16>(mGameDataEventSlotPool.GetObjectIndex(lpSlot)));
+                return;
+            }
+
+            CGS_ASSERT(false, "Tried to load too many sound bundles");   // X360 line 4721
+            return;
+        }
+
+        if (lpEvent->meType == E_ASSETSET_GRAPHICS)
+        {
+            CgsCore::SPrintf(lacResourceName, 128, KPC_VEHICLE_RESOURCE_FORMAT,
+                             lacVehicleID + 4, "Graphics");
+        }
+        else if (lpEvent->meType == E_ASSETSET_ATTRIBS)
+        {
+            // X360: strncpy(dst, id+4, 9) then an inline StrCat of "_AttribSys" (with the
+            // CgsStringUtils.h:75 length tripwire the inline expansion carries).
+            strncpy(lacResourceName, lacVehicleID + 4, 9);
+            lacResourceName[9] = '\0';
+            CGS_ASSERT(strlen(lacResourceName) + 10 < 0x7F,
+                       "strlen(lpcDest) + strlen(lpcSrc) < liMaxLength");   // CgsStringUtils.h:75
+            strcat(lacResourceName, "_AttribSys");
+        }
+        else
+        {
+            CgsCore::SPrintf(lacResourceName, 128, KPC_VEHICLE_RESOURCE_NOSEP_FORMAT,
+                             lacVehicleID + 4, "DeformationModel");
+        }
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        memset(&lRequest, 0, sizeof(lRequest));
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId  = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
+        lRequest.mbCheckRefCount = false;
+
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest),
+            4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
+    }
+
     void GameDataModule::ProcessLoadWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                                      const GameDataIO::GameDataAssetEvent* lpEvent,
                                                      s32 liEventId, s32 liSlotIndex)
@@ -2418,7 +2643,7 @@ namespace BrnResource
                 mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
             }
             else
-                DeferredGameDataRequest("GetVehicle after load (0x8266FDA0, id 50)", lpSlot);
+                ProcessGetVehicleRequest(lpResourceInput, &lpSlot->mEvent, 50, liSlotIndex);
             break;
 
         case 28:   // traffic vehicle
