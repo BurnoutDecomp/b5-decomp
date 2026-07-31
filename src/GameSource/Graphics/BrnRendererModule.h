@@ -70,14 +70,10 @@ class OcclusionCullManager
 };
 }
 
-namespace BrnGraphics
-{
-// EffectsArbitrator is the real type (BrnEffectsArbitrator.h).
-
-class Im3dSkyDome
-{
-};
-}
+// EffectsArbitrator is the real type (BrnEffectsArbitrator.h); Im3dSkyDome is the real
+// BrnGraphics::Im3dSkyDome (BrnIm3d.h) now that the sky-dome draw path is mounted -- the
+// ODR placeholder that used to stand here is gone.
+#include "GameSource/Graphics/ImmediateMode/BrnIm3d.h"               // BrnGraphics::Im3dSkyDome
 
 namespace BrnResource
 {
@@ -142,9 +138,9 @@ struct OcclusionJobData
 // DispatchObjectContext / DispatchList are the real CgsGraphics types now
 // (CgsDispatcherCommands.h / CgsDispatcher.h, included above).
 
-struct BrnSkyDomeManager
-{
-};
+// BrnSkyDomeManager is the real type (BrnSkyDomeManager.h) -- the placeholder that used to
+// stand here is gone with the sky-dome mount.
+#include "GameSource/Graphics/BrnSkyDomeManager.h"
 
 // BrnSunCorona is the real type (BrnSunCorona.h, included below) - it owns the sun-flare vertex
 // descriptor + shader programs and is embedded by value as mSunCorona.
@@ -368,7 +364,31 @@ private:
 
     // The world/car/sky pass block of Render (@0x8240BFA8 mid-section), split out
     // for readability; runs between the frame begin and the 2D overlay tail.
+public:
+    // @ 0x823FF8F8 - BrnRendererModule::PrepareAgain. The second half of the renderer's
+    // prepare: BrnGameModule::GamePrepare stage 3 hands it the five global textures it just
+    // resolved and it stores them for the passes that sample them (the blobby-shadow
+    // manager, the sky dome's two cloud layers, the corona atlas, the damage-FX glass
+    // fracture). The X360 writes them at this+0xC4E0 / +0xC4E4 (the two cloud slots
+    // BrnSkyDomeManager::Render is handed) and their three siblings.
+    void PrepareAgain(renderengine::Texture* lpBlobbyShadow,
+                      renderengine::Texture* lpCloudDensity,
+                      renderengine::Texture* lpCloudLighting,
+                      renderengine::Texture* lpCoronaAtlas,
+                      renderengine::Texture* lpGlassFracture);
+
+private:
     void RenderWorldPasses(const BrnGame::DispatchThreadInputBuffer* lpDispatchThreadInputBuffer);
+
+    // [FLAG PC bring-up] Sky-dome bring-up (NOT X360 functions -- see the bodies).
+    // EnsureSkyDomeBringUp does the Construct/Prepare pair the console runs from
+    // BrnRendererModule::Construct/Prepare, deferred to the first world frame because
+    // both need a live D3D device; PublishSkyConstantsBringUp fills the per-frame
+    // constants the console's EnvironmentManager -> WorldModule producer chain would.
+    bool mbSkyDomeReady;
+    bool mbSkyDomeTried;
+    bool EnsureSkyDomeBringUp();
+    void PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFrame);
 
     ERendererPrepareStage mePrepareStage;
     ERendererReleaseStage meReleaseStage;
@@ -615,6 +635,8 @@ inline BrnRendererModule::BrnRendererModule()
     mvBackgroundColour.SetZero();
     mpCloudDensity0Texture = 0;
     mpCloudLighting0Texture = 0;
+    mbSkyDomeReady = false;
+    mbSkyDomeTried = false;
 
     meFrameStallStage = E_FRAMESTALL_NOT_STALLED;
     miFrameStallCountdown = 0;

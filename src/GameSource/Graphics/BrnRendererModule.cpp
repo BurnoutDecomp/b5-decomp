@@ -162,7 +162,12 @@ namespace
 
         const u32 luHeapBytes = KU_PC_DISPATCH_BIN_BYTES
                               + 2u * KU_PC_GDL_DISPATCH_BIN_BYTES
-                              + (3u * 4096u); // per-bin align128(size)+128 slop + headroom
+                              + (3u * 4096u)   // per-bin align128(size)+128 slop + headroom
+                              + (64u * 1024u); // + the small renderengine objects that share
+                                               //   this allocator (the sky dome's four buffer
+                                               //   headers); without it their DoAllocate came
+                                               //   back empty and tripped CreateGeometry's
+                                               //   GetMemoryResource asserts
         void* lpHeap = ::operator new(luHeapBytes, std::nothrow);
         if (lpHeap == 0)
             return false;
@@ -478,7 +483,24 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
         }
     }
 
-    // (sky here when BrnSkyDomeManager comes online)
+    // ---- THE SKY (X360 Render @0x8240BFA8: BrnSkyDomeManager::Render right here, between
+    // the opaque and the transparent passes, gated on mbRenderSky). --------------------
+    // The dome is camera-centred and 9500 units across, so it is drawn AFTER the opaque
+    // geometry and depth-tests against it (its depth/stencil state writes no depth) --
+    // it fills only the pixels the city left empty.
+    if (mbRenderSky && (lbPreZWork || lbOpaqueWork || lbTransparentWork)
+        && gBrnSkyCameraBringUp.mbValid && EnsureSkyDomeBringUp())
+    {
+        BrnShaderConstantsFrame& lrFrame =
+            maShaderConstantsFrames[mu8ShaderConstantsFrameExternal];
+        PublishSkyConstantsBringUp(&lrFrame);
+        mSkyDome.Render(&mIm3dRendererSkyDome,
+                        mpCloudDensity0Texture, mpCloudLighting0Texture,
+                        &lrFrame);
+        // The sky binds its own blend / raster / depth-stencil states; hand the device
+        // back to the pass default so the transparent pass below starts where it expects.
+        renderengine::Device::SetWorldPassDefaultStates(false);
+    }
 
     // Transparent passes: Z test on / write off, alpha blend on. Same FLAG.
     if (lbTransparentWork)
@@ -501,6 +523,161 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     {
         renderengine::Device::SetWorldPassDefaultStates(false);
     }
+}
+
+// @ 0x823FF8F8 - BrnRendererModule::PrepareAgain. Store the five global textures
+// GamePrepare's stage-3 acquires resolved. The X360 body is five stores; the two cloud
+// slots (this+0xC4E0 / +0xC4E4) are the pair Render passes to BrnSkyDomeManager::Render,
+// which hard-returns if either is null.
+void BrnRendererModule::PrepareAgain(renderengine::Texture* lpBlobbyShadow,
+                                     renderengine::Texture* lpCloudDensity,
+                                     renderengine::Texture* lpCloudLighting,
+                                     renderengine::Texture* lpCoronaAtlas,
+                                     renderengine::Texture* lpGlassFracture)
+{
+    mpBlobbyShadowTexture   = lpBlobbyShadow;
+    mpCloudDensity0Texture  = lpCloudDensity;
+    mpCloudLighting0Texture = lpCloudLighting;
+    mpGlassFractureTexture  = lpGlassFracture;
+    // The corona atlas' slot is the CoronaManager's, not one of this module's members --
+    // the X360 hands it on rather than storing it. The corona pass is not live, so it is
+    // accepted and dropped here; wire it when BrnCoronaManager comes online.
+    (void)lpCoronaAtlas;
+}
+
+// =============================================================================
+// [FLAG PC bring-up] The sky-dome bring-up pair. NEITHER is an X360 function.
+// =============================================================================
+//
+// The console builds the sky renderer in BrnRendererModule::Construct and its geometry in
+// Prepare, and fills the per-frame constants in WorldModule::SetupShaderConstantsBeforeRendering
+// @0x827D1410 from EnvironmentManager::GenerateShaderConstants @0x827D0098.
+//
+// Two reasons the Construct/Prepare pair is deferred to the first world frame instead:
+//   * both need a live IDirect3DDevice9 (the vertex descriptor becomes a D3D9 vertex
+//     declaration and the programs become D3D9 shader objects), and the renderer module is
+//     constructed before the device exists;
+//   * BrnRendererModule::Prepare is not reconstructed at all yet.
+//
+// DELETE both when the environment manager publishes for real.
+
+// [FLAG PC bring-up] see BrnShaderConstantsFrame.h. Written by
+// WorldModule::GenerateDispatchListsBringUp once per dispatch frame.
+BrnSkyCameraBringUp gBrnSkyCameraBringUp = { {}, {}, false };
+
+bool BrnRendererModule::EnsureSkyDomeBringUp()
+{
+    if (mbSkyDomeReady)
+        return true;
+    if (mbSkyDomeTried)
+        return false;
+    if (renderengine::gDevice == 0 || !EnsureWorldDispatchAllocator())
+        return false;          // retry next frame -- the device arrives later than Construct
+
+    mbSkyDomeTried = true;
+
+    // X360 Construct: mIm3dRendererSkyDome.Construct(mpGraphicsAllocator) -- builds the
+    // 20-byte sky vertex descriptor, uploads the one vertex/pixel program pair and resolves
+    // the seventeen named constants on it.
+    mIm3dRendererSkyDome.Construct(&sWorldDispatchAllocator);
+    if (!mIm3dRendererSkyDome.HasPrograms())
+    {
+        if (CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint
+                << "[Sky] sky-dome programs unavailable - the sky pass stays off\n";
+        return false;
+    }
+
+    // X360 Prepare: mSkyDome.Construct() + mSkyDome.Prepare(&renderer, allocator) -- the
+    // 22x45 main dome and the 5x10 env-map dome.
+    mSkyDome.Construct();
+    mSkyDome.Prepare(&mIm3dRendererSkyDome, &sWorldDispatchAllocator);
+
+    mbSkyDomeReady = true;
+    if (CgsDev::Log::gpDebugPrint != 0)
+        *CgsDev::Log::gpDebugPrint << "[Sky] sky dome constructed + prepared\n";
+    return true;
+}
+
+// The per-frame sky/cloud constants.
+//
+// The values are the SHIPPED environment keyframe ENV_KF_Paradise_ingame_junk_city_1200
+// (build/game/ENVIRONMENTSETTINGS/PARADISE_INGAME_JUNK.BUNDLE -- the timeline pins city_1200
+// to exactly 12:00:00), decoded against the asm-attested BrnEnvironmentKeyframe layout and
+// pushed through the real producer maths read out of
+// EnvironmentManager::GenerateShaderConstants @0x827D0098. Three of those transforms are NOT
+// identities and are the difference between a sky and a bug:
+//   * g_layerCloudiness is 1 - LayerDensity   (`v159 = 1.0 - a50[0]` before the +0x280 store)
+//   * g_layerInvFeather is 1 / LayerFeathering(`v159 = 1.0 / a52[0]` before the +0x290 store)
+//   * the cloud texture scale is LayerScale * 0.00012500001 (flt_820CD130), not a world size
+//
+// WHITE LEVEL. The console multiplies every colour by EnvironmentManager::mfWhiteLevel
+// (+0x11C0), which Construct @0x827CA408 seeds to 0.5 and nothing else writes, and the post-FX
+// tonemapper divides it back out. This build has no tonemapper, and the world's own bring-up
+// publisher already publishes its colours at white level 1.0 (HDRConstants = (1,1,1,1)), so the
+// sky is published the same way -- the RAW keyframe colours. The clouds are the one place that
+// choice is visible: BrnSkyDomeManager multiplies both cloud colours by KF_CLOUD_COLOUR_SCALE
+// (2.0), which on the console exactly cancels the 0.5, so they are pre-divided by 2 here and
+// reach the shader at their authored values. (That round trip is also what pins mfWhiteLevel
+// to 0.5 independently of the asm.)
+void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFrame)
+{
+    if (lpFrame == 0)
+        return;
+
+    lpFrame->LockForWriting();
+
+    // ---- camera (the console's WorldModule::SetupShaderConstantsBeforeRendering half) ----
+    lpFrame->SetViewProjectionMatrix(gBrnSkyCameraBringUp.mViewProjection);
+    lpFrame->SetViewPosition(gBrnSkyCameraBringUp.mViewPosition);
+
+    // ---- the key light -------------------------------------------------------------------
+    // MUST match the direction WorldModule::PublishWorldShadingConstantsBringUp publishes at
+    // shader-constant slot 10, or the sun in the sky sits somewhere other than where the world
+    // is lit from. It is the direction the light TRAVELS; Im3dSkyDome::SetConstants negates it
+    // and appends its XZ length for the shader's KeyLightDirAndXZLength.
+    //
+    // FLAG: this is the bring-up direction, NOT the console's. ComputeKeyLightDirection
+    // @0x82678AB0 derives the real one from the time of day and three manager tuning angles
+    // (SunRigRotation 45 deg, SunTiltAtHorizon 20 deg, SunTiltAtMidday 50 deg, all seeded by
+    // EnvironmentManager::Construct); at city_1200's 43200 s that gives
+    // (-0.60916963, -0.66981047, -0.42457779) -- a different azimuth and a 12-degree lower
+    // sun. Adopt it in the same change that adopts it for the world, not before.
+    lpFrame->SetKeyLightDirection(Vector3{ 0.406f, -0.812f, 0.419f, 0.0f });
+    lpFrame->SetKeyLightColour(Vector3{ 1.700000f, 1.700000f, 1.054000f, 0.0f });
+    lpFrame->SetWhiteLevel(1.0f);
+
+    // ---- the sky gradient (ScatteringData @keyframe+0x090) --------------------------------
+    // rgb from Sky{Top,Hor,Sun}Colour; .w from SkyDrk / SkyHorPow / SkySunPow (the .w lanes
+    // are exponents and offsets, and the console's white-level vector is (wl,wl,wl,1) exactly
+    // so they are NOT scaled).
+    lpFrame->SetTopColourDrk  (Vector4{ 0.05321430f, 0.41437697f, 0.71731997f,  0.0f });
+    lpFrame->SetHorColourPow  (Vector4{ 1.01527800f, 0.88277322f, 0.80715537f,  0.5f });
+    lpFrame->SetSunColourPow  (Vector4{ 1.00100000f, 1.00100000f, 0.97702491f, 13.1f });
+    // SkyHorBleedScl / SkyHorBleedPow / SkySunBleedPow (keyframe +0x0CC/+0x0D0/+0x0D4).
+    lpFrame->SetHorBleedSclPow(Vector3{ 5.0f, 4.3f, 6.5f, 0.0f });
+
+    // ---- fog / scattering: {1/(far-near), near/(far-near), ScattPow, ScattCap} ------------
+    // ScattDist = (25, 1500), ScattPow = 1, ScattCap = 0.87. Same four numbers the world's
+    // ScattCoeffs (slot 27) carries, so the dome's horizon haze matches the city's.
+    lpFrame->SetFogScattering(Vector4{ 0.000677966102f, 0.0169491525f, 1.0f, 0.87f });
+
+    // ---- the clouds (CloudsData @keyframe+0x1D0) -----------------------------------------
+    // Pre-divided by KF_CLOUD_COLOUR_SCALE (see the white-level note above).
+    lpFrame->SetCloudDarkColour0(Vector4{ 0.50000000f, 0.49262166f, 0.46200001f, 0.5f });
+    lpFrame->SetCloudLiteColour0(Vector4{ 0.10284000f, 0.10284000f, 0.10284000f, 0.5f });
+    // (xy) the cloud drift offset -- EnvironmentManager::Update accumulates it from
+    // LayerSpeed/DirectionAngle; Construct's t=0 value is (0,0), so the clouds do not drift.
+    // (zw) LayerScale[0] (1.0) * 0.00012500001.
+    lpFrame->SetCloudTextureScaleAndOffsets0(Vector4{ 0.0f, 0.0f, 0.00012500001f, 0.00012500001f });
+    lpFrame->SetCloudLayerDensity   (Vector4{ 0.0f,          1.0f,  0.0f, 0.0f });  // 1 - (1.0, 0.0)
+    lpFrame->SetCloudLayerInvFeather(Vector4{ 0.909090889f, 10.0f,  0.0f, 0.0f });  // 1 / (1.1, 0.1)
+    lpFrame->SetCloudLayerOpacity   (Vector4{ 0.5f,          0.0f,  0.0f, 0.0f });
+    // g_domeRanges.z. EnvironmentManager::Construct seeds +0x6F0 to 1.0 and nothing else
+    // writes it; no keyframe field feeds it.
+    lpFrame->SetCloudDistanceCurve(1.0f);
+
+    lpFrame->UnlockForWriting();
 }
 
 // @ 0x8240BFA8 - BrnRendererModule::Render. Reconstructed from the X360 ARTIST build.

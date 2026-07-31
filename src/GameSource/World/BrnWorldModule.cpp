@@ -4174,7 +4174,14 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             / static_cast< f32 >( renderengine::gDisplayHeight ) )
         : ( 16.0f / 9.0f );
     const f32 lfNear = 0.5f;
-    const f32 lfFar  = ( lfRadius * 4.0f > 4000.0f ) ? ( lfRadius * 4.0f ) : 4000.0f;
+    // ⚠ The floor has to clear the SKY DOME. BrnSkyDomeManager pushes the dome's vertices
+    // out to KF_SKY_SCALE = 9500 world units from the eye (flt_820473B0, the sky scale in
+    // ViewPositionAndSkyScale.w), and this stand-in camera's old 4000-unit floor -- and the
+    // radius*4 term, which measured 5665 for the resident world -- put the whole dome
+    // BEYOND the far plane, where it is geometrically clipped away whatever depth state the
+    // sky pass binds. 12000 clears it with margin. The console's own far plane comes from
+    // the director camera, which is not live here.
+    const f32 lfFar  = ( lfRadius * 4.0f > 12000.0f ) ? ( lfRadius * 4.0f ) : 12000.0f;
     // 60 degrees vertical for the stand-in tour; when the director drives, its own FOV
     // (BehaviourRoadRunner::Update's SetFOV(95)) is the horizontal one, so the vertical it
     // implies is 2*atan( tan(fovH/2) / aspect ).
@@ -4252,6 +4259,13 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     mShaderLodInfo.Update();
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 8, lEye );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 3, lViewProjection );
+
+    // [FLAG PC bring-up] Hand the same framing to the renderer's sky pass. The console
+    // routes it through WorldModule::SetupShaderConstantsBeforeRendering @0x827D1410;
+    // see BrnSkyCameraBringUp in BrnShaderConstantsFrame.h. DELETE with this function.
+    gBrnSkyCameraBringUp.mViewProjection = lViewProjection;
+    gBrnSkyCameraBringUp.mViewPosition   = lEye;
+    gBrnSkyCameraBringUp.mbValid         = true;
 
     // ViewProjectionModified (34) is NOT the view-projection: the shaders consume it as
     //     hpos.x = dot(worldPos4, VPM[0]);  hpos.y = dot(worldPos4, VPM[1]);
