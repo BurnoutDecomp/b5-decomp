@@ -284,6 +284,7 @@ namespace BrnGame
         muGuiVoiceOverHash     = 0;
         mbGuiVoiceOverSounding = false;
         mbDirectorCameraLive   = false;
+        mbWarnedStagedPlayerCarIsFake = false;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -924,12 +925,63 @@ namespace BrnGame
                  leArbState == BrnDirector::Arbitrator::E_STATE_ATTRACT_MODE);
             const bool lbDriving = lbFlybyRequested || lbUnwinding;
 
+            // ⚠️⚠️ THIS PAIR OF WRITES IS A LIE, AND IT IS ONLY SAFE WHILE THE ICE-ANIM CAMERA
+            //    PATH IS OUT OF THE LINK. Read this before mounting BrnBehaviourIceAnim.cpp.
+            //
+            //    SetPlayerCarIndex(0) + SetRaceCarInUse(0, true) exist for exactly ONE reason:
+            //    MainDirector::Update runs its whole gameplay middle -- including
+            //    UpdateArbitrator, the only path to any arbitrator state -- only when
+            //    GetLivePlayerCarIndex() != -1, and that predicate is
+            //        index = GetPlayerCarIndex();  return GetUsedRaceCars()->IsBitSet(index) ? index : -1;
+            //    so BOTH halves are load-bearing. Without them the attract fly-by never ticks.
+            //
+            //    What makes it a lie: this build spawns NO race car. Nothing ever ran
+            //    RaceCarEntityModule's spawn path, and InputBuffer::SetRaceCarInfo (which has a
+            //    real body) has ZERO callers -- so race car 0's VehicleInfo is ZEROED while its
+            //    "in use" bit says otherwise. Every consumer that trusts the bit alone gets a
+            //    car at the world origin with a zero transform:
+            //      * BrnDirector::VehicleRef::IsValid @0x822336A8 returns true iff mbSet AND the
+            //        AllVehicleData used-race-car bit is set -- both true here. It would PASS.
+            //      * BehaviourIceAnim::Update's first branch (X360 @0x82247108) is exactly
+            //        `if (!mPrimaryVehicleRef.IsValid(world) || !mSecondaryVehicleRef.IsValid(world))
+            //         { Fail(); return; }`, then VehicleRef::Get dereferences the vehicle at
+            //        +496/+528 to build the CreateLookAt. On this staged car that is an ORIGIN
+            //        camera -- the failure mode already recorded four times in this file, where
+            //        a static origin camera unloads the streamed city to black.
+            //    A fake pass is strictly worse than an honest fail: Fail() at least lets the
+            //    behaviour report "no camera" and hand back to something that works.
+            //
+            //    ⛔ DELETE-WHEN (hard gate, not a nice-to-have): the moment
+            //    BrnBehaviourIceAnim.cpp / BrnArbStateCarSelect.cpp join the link, this whole
+            //    block must go and be replaced by a REAL spawned player car (the minimum is
+            //    RaceCarEntityModule's spawn entry points + a real InputBuffer::SetRaceCarInfo
+            //    caller). Mounting the ICE-anim path while this stand-in is live is the one
+            //    combination that manufactures a silently-wrong camera instead of a visible
+            //    failure.
             if (lbDriving)
             {
                 lpDirectorInput->LockForWrite();
                 lpDirectorInput->SetPlayerCarIndex(E_ACTIVE_RACE_CAR_INDEX_0);
                 lpDirectorInput->SetRaceCarInUse(0u, true);
                 lpDirectorInput->UnlockForWrite();
+
+                // One-shot, so the log says out loud what the used-race-car bit is claiming.
+                // (Not a mechanical guard -- there is no symbol to key one off until the real
+                //  spawn path exists -- but it makes the lie impossible to read past.)
+                if (!mbWarnedStagedPlayerCarIsFake)
+                {
+                    mbWarnedStagedPlayerCarIsFake = true;
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[FLAG PC bring-up] STAGING A FAKE PLAYER CAR: race car 0 is "
+                               "marked in-use so MainDirector::GetLivePlayerCarIndex() != -1, "
+                               "but its VehicleInfo is ZEROED (no spawn path). VehicleRef::"
+                               "IsValid would PASS on it -- any ICE-anim take framed against "
+                               "this car is an ORIGIN camera. Do not mount BehaviourIceAnim "
+                               "while this is live.\n";
+                    }
+                }
             }
 
             if (lrArbitrator.GetDoAttractMode() != lbFlybyRequested)
