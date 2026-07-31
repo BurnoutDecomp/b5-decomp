@@ -104,6 +104,15 @@ struct VehicleListEntry
     // OnChangeCarFilter streams `entry+0x30` into the menu label). Returns nullptr/empty-safe.
     const char* GetName() const;
 
+    // ADDITIVE GROW (declare-only; body in the VehicleList/VehicleListEntry TU) for the
+    // race-car streaming path. The car's default wheel-set NAME -- a char[32] at entry+0x10.
+    // X360-attested: RaceCarEntityModule::HandleSelectionRequestStreamingAction @0x822E9918
+    // and SpawnRaceCar @0x822FE5D8 both feed `entry + 0x10` straight into
+    // WheelList::FindWheelIndexFromName (@0x822CD4D8, which stricmp's against wheel entry+0x08).
+    // The burnout.wiki Vehicle-List table names it mDefaultWheelName, char[32] @0x10 --
+    // independent agreement, same NAME-ONLY adoption as mExhaustName/mEngineName below.
+    const char* GetDefaultWheelName() const;
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[160];                                                       // +0x00
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;        // +0xA0

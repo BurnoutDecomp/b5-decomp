@@ -3339,37 +3339,12 @@ void WorldModule::BridgeScenePotentialContactsToPhysics(void *,class BrnPhysics:
 
 // ---- module entry points driven by the spines ----------------------------
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the race-car pre-scene tick.
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::RaceCarEntityModule::PreSceneUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule::PreSceneUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED (race-car streamer wave 2026-07-31): RaceCarEntityModule::PreSceneUpdate and
+// ::PostPhysicsUpdate are now REAL partial slices in BrnRaceCarEntityModule.cpp -- they
+// latch the sim time step, pump the five component streamers (UpdateStreaming @0x822FEFE0)
+// and drain their GameData request rings onto the output buffer (SendStreamerEvents
+// @0x82304F70). The rest of both console spines is still un-homed and FLAGGED there.
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. the race-car post-physics tick.
-// Reconstruct from X360 and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void BrnWorld::RaceCarEntityModule::PostPhysicsUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostPhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule::PostPhysicsUpdate: inert [FLAG PC boot gate]\n";
-    }
-}
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. the traffic pre-scene tick.
@@ -3713,17 +3688,17 @@ void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PostScene::Construct()
 //  real inlines in BrnRaceCarEntityModuleIO.h. The stubs returned NULL, which the
 //  scene->race-car bridge then dereferenced.)
 
-// BOOT GATE: base bring-up only (see the block note above).
-void BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
+// (BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene::Construct gate RETIRED
+//  2026-07-31: real partial slice in BrnRaceCarEntityModuleIO.h from X360 0x822EA3C0 --
+//  the base-only gate left mTimerStatusInterface / mGameActionQueue /
+//  mAudioCarLoadedDataQueue un-Constructed; the race-car streamer pump reads two of them
+//  every frame.)
 
-// BOOT GATE: base bring-up only (see the block note above).
-void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
+// (BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics::Construct gate RETIRED
+//  2026-07-31: the real partial slice now lives in BrnRaceCarEntityModuleIO.h from
+//  X360 0x822EA8F8 -- the base-only gate left mResourceRequestInterface.mRequestQueue
+//  un-Constructed, and RaceCarEntityModule::SendStreamerEvents Appends into it every
+//  frame, which fired a "Not Constructed" assert per frame.)
 
 // BOOT GATE: base bring-up only (see the block note above).
 void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene::Construct()
@@ -3737,11 +3712,9 @@ void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct()
     CgsModule::IOBuffer::Construct();
 }
 
-// BOOT GATE: base bring-up only (see the block note above).
-void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
+// (BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene::Construct gate RETIRED
+//  2026-07-31: real partial slice in BrnRaceCarEntityModuleIO.h from X360 0x822EA4E0 --
+//  mAudioCarLoadedDataQueue is written by RaceCarAudioStreamer::Update every frame.)
 
 // (BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene::Construct gate RETIRED
 //  2026-07-27: the REAL body (X360 0x822EED90) already lived in the owning TU

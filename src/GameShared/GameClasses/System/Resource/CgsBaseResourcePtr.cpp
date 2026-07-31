@@ -76,11 +76,22 @@ namespace CgsResource
     // @0x8227D298  IsEqual. asm walks both objects from offset 0 comparing dwords; returns 1 iff the
     // first three dwords are pairwise equal (the loop bound is v3 >= 3), else 0. The compared region is
     // mResourceMemory (+0) followed by the two mHandle pointers (+4,+8) -- a BaseResourcePtr's identity.
+    // ⚠️ x64 WIDTH FIX (race-car streamer wave 2026-07-31). The console's "3 dwords" are
+    // three POINTERS -- mpResourceMemory, mHandle.mpResourceMemory, mHandle.mpSourceEntry --
+    // which are 4 bytes each only because the Xenon is 32-bit. Walking literally 3 x u32 on
+    // the x64 gate compares 12 of the 24 identity bytes (mpResourceMemory plus the LOW HALF
+    // of mHandle.mpResourceMemory), so two pointers differing only in their high halves
+    // compared EQUAL. Size the walk from the identity region itself, per the project's
+    // "never transcribe a console byte-size literal" rule; on X360 this is bit-identical
+    // to the original loop.
     bool BaseResourcePtr::IsEqual(const void* lpOther) const
     {
-        const u32* lpThis = reinterpret_cast<const u32*>(this);
-        const u32* lpRhs  = reinterpret_cast<const u32*>(lpOther);
-        for (u32 luIndex = 0; luIndex < 3; ++luIndex)
+        const u32 KU_IDENTITY_WORDS = static_cast<u32>(
+            (sizeof(void*) + sizeof(ResourceHandle)) / sizeof(void*));   // 3 on both targets
+
+        void* const* lpThis = reinterpret_cast<void* const*>(this);
+        void* const* lpRhs  = reinterpret_cast<void* const*>(lpOther);
+        for (u32 luIndex = 0; luIndex < KU_IDENTITY_WORDS; ++luIndex)
         {
             if (lpThis[luIndex] != lpRhs[luIndex])
                 return false;
@@ -124,4 +135,25 @@ namespace CgsResource
         lpList->mpPrev = this;           // *(list+0x10) = this
         mpPrev->mpNext = this;           // *(this->mpPrev + 0xC) = this
     }
+
+    // ------------------------------------------------------------------------
+    // The shared "null resource pointer" sentinel -- X360 &dword_82FAD94C.
+    //
+    // ATTESTED USE (race-car streamer wave 2026-07-31): every `slot != NULLResourcePtr`
+    // in game source compiles to `BaseResourcePtr::IsEqual(&dword_82FAD94C, slot)` --
+    // RaceCarStreamer::AddVehicleData @0x822EBE18 does it three times, and the three
+    // RaceCarStreamer::Get*Resource asserts do it once each. IsEqual reads only the
+    // IDENTITY region (mpResourceMemory + the two mHandle pointers), so the only
+    // load-bearing property of this object is that all three are NULL.
+    //
+    // ⚠️ DIVERGENCE, deliberate and behaviourally inert: the console's is a static
+    // all-zero blob, so ITS mpThis/mpNext/mpPrev are 0 too. BaseResourcePtr has a
+    // user-provided default ctor that self-links the alias ring (mpNext = mpPrev =
+    // mpThis = this), and there is no legal way to produce a zero-byte const object of
+    // this type without bypassing that ctor. Nothing reads those three fields of the
+    // SENTINEL: IsEqual ignores them, and the assign-from-sentinel sites are spelled
+    // against CgsResource::NULLResourceHandle (the console's own dword_82FAD960 ==
+    // &NULLResourcePtr + 0x14, i.e. exactly the {mpThis, muThreadId} pair -- which for
+    // the console blob IS {0, 0}). Its dtor unlinks a one-element ring: a no-op.
+    const BaseResourcePtr NULLResourcePtr;
 }

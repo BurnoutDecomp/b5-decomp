@@ -35,6 +35,7 @@ namespace
     // Offsets INSIDE the serialised record's leading opaque header (maPad0, +0x00..0x9F).
     const u32 KU_OFFSET_ID           = 0x00;
     const u32 KU_OFFSET_PARENT_ID    = 0x08;
+    const u32 KU_OFFSET_WHEEL_NAME   = 0x10;
     const u32 KU_OFFSET_VEHICLE_NAME = 0x30;
     const u32 KU_OFFSET_FLAGS        = 0x94;
     const u32 KU_OFFSET_UNLOCK_RANK  = 0x99;
@@ -78,6 +79,13 @@ CgsID VehicleListEntry::GetParentId() const
 const char* VehicleListEntry::GetName() const
 {
     return reinterpret_cast<const char*>(&maPad0[KU_OFFSET_VEHICLE_NAME]);
+}
+
+// The default wheel-set name C-string (mDefaultWheelName, char[32] at +0x10) -- what the
+// streaming path hands to WheelList::FindWheelIndexFromName.
+const char* VehicleListEntry::GetDefaultWheelName() const
+{
+    return reinterpret_cast<const char*>(&maPad0[KU_OFFSET_WHEEL_NAME]);
 }
 
 // X360 `lwz r11,0x94(r3); extrwi r11,r11,1,31` -- bit 0 of the +0x94 flags word.

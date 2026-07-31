@@ -464,6 +464,67 @@ void RaceCarAudioStreamer::OnAssetUnloading( s32 liActiveRaceCar )
     mpStreamer->OnAudioUnloading( liActiveRaceCar );
 }
 
+// ---------------------------------------------------------------------------
+// @ 0x822C0B60. Drop car luUserId's desired streaming sound.
+//
+// SIGNATURE RECOVERED FROM THE ASM, not from the PC declaration: the console form
+// is RemoveEntry(CgsID lAssetId, u64 luUserId) returning bool, and the CALLER
+// (RaceCarStreamer::AddVehicleData @0x822EBE18) reads the slot's own desired id at
+// the call site -- `v47 = *(24*(i+207)+this+19920); RemoveEntry(HIDWORD(v47), v47)`
+// -- so the two asserts below are validation of an invariant the caller maintains.
+// The 1-argument overload underneath is the encapsulated form the PC call site uses;
+// it re-derives exactly the id the console passed, so behaviour is identical.
+//
+// Body: assert the index (BrnRaceCarComponentStreamers.cpp:812), assert the slot HAS
+// a desired id (:816) and that it matches the one being removed (:817), log under the
+// KI_PRINT_CAR_LOADING_STATES gate, then clear mbDesiredIsPlayer and mDesiredId.
+// NOTE it does NOT touch mLoadedBundleId / meState -- the slot's own state machine
+// (Update) notices mDesiredId == 0 and drives the DETACH/unload sequence itself.
+// ---------------------------------------------------------------------------
+bool RaceCarAudioStreamer::RemoveEntry( CgsID lAssetId, u64 luUserId )
+{
+    CGS_ASSERT( luUserId < static_cast<u64>( KI_MAX_ACTIVE_RACE_CARS ),
+                "luUserId >= 0 && luUserId < static_cast<uint64_t>(KI_MAX_ACTIVE_RACE_CARS)" );
+
+    RaceCarStreamingSound& lEntry = maEntries[luUserId];
+
+    // The X360 streamed the racecar index into both message buffers.
+    CGS_ASSERT( lEntry.mDesiredId != 0,
+                "Removing a streaming asset that hasn't been set, racecar=" );
+    CGS_ASSERT( lEntry.mDesiredId == lAssetId,
+                "Removing a different asset from a racecar from the one that was added, racecar=" );
+
+    if( KI_PRINT_CAR_LOADING_STATES != 0 && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "RaceCarAudioStreamer::RemoveEntry: " << luUserId
+                                   << " Asset:" << lAssetId << "\n";
+    }
+
+    lEntry.mbDesiredIsPlayer = false;
+    lEntry.mDesiredId        = 0;
+
+    return true;
+}
+
+// The encapsulated 1-argument form the PC RaceCarStreamer call site uses (see the
+// signature note above): it reads the slot's own desired id, which is precisely what
+// the console open-codes at the call site.
+void RaceCarAudioStreamer::RemoveEntry( s32 liActiveRaceCar )
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    RemoveEntry( maEntries[liActiveRaceCar].mDesiredId, static_cast<u64>( liActiveRaceCar ) );
+}
+
+// The X360 inlines the audio leaf's Destruct into RaceCarStreamer::Destruct
+// @0x822EBC98 exactly as it does the other four (clear the owner back-pointer);
+// same shape as RaceCarGraphicsStreamer::Destruct below.
+void RaceCarAudioStreamer::Destruct()
+{
+    mpStreamer = 0;
+}
+
 // ===========================================================================
 // The four non-audio leaves.
 //
@@ -612,6 +673,32 @@ void RaceCarStreamer::Prepare( const BrnResource::VehicleList* lpVehicleList,
     CGS_ASSERT( lpVehicleList != 0, "lpVehicleList != NULL" );   // X360 BrnRaceCarStreamer.cpp:87
     (void)lpWheelList;   // FLAG: the console stores only the vehicle list at this site
     mpVehicleList = lpVehicleList;
+}
+
+// @ 0x82302038. Drain the five component streamers' own GameData request rings onto the
+// module output buffer's request interface. Each leaf's ring is at its object +0x18
+// (InternalBaseStreamer::mGDRequestInterface, a RequestInterface<2048>), and the console
+// appends them in the SAME order UpdateStreaming pumps them: attributes (+0x1398),
+// physics (+0x2708), graphics (+0x28), wheel graphics (+0x3A78), audio (+0x4DE8).
+//
+// ⭐ This is load-bearing, not bookkeeping: InternalBaseStreamer::Update CLEARS its own
+// request ring at the top of every frame, so a load request that is not drained in the
+// same frame it was posted never reaches the GameData module.
+void RaceCarStreamer::AppendGameDataRequests(
+        RaceCarEntityModuleIO::ResourceRequestInterface* lpInterface ) const
+{
+    CGS_ASSERT( lpInterface != 0, "lpInterface" );   // X360 BrnRaceCarStreamer.cpp:378
+
+    if( lpInterface == 0 )
+    {
+        return;
+    }
+
+    lpInterface->Append( *mAttributeStreamer.GetGameDataRequestInterface() );
+    lpInterface->Append( *mPhysicsStreamer.GetGameDataRequestInterface() );
+    lpInterface->Append( *mGraphicsStreamer.GetGameDataRequestInterface() );
+    lpInterface->Append( *mWheelGraphicsStreamer.GetGameDataRequestInterface() );
+    lpInterface->Append( *mAudioStreamer.GetGameDataRequestInterface() );
 }
 
 } // namespace BrnWorld

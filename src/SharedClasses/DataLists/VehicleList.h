@@ -85,7 +85,12 @@ struct SponsorCarSlot
 };
 
 // VehicleList.h:76 (DWARF)
-class VehicleList
+// CLASS KEY: `struct`, matching the ten forward declarations across the tree
+// (BrnGameStateModule.h, BrnCarSelectManager.h, BrnRaceCarEntityModule.h, ...).
+// MSVC mangles the key, so a `class` definition against `struct` declarations makes
+// two TUs emit different symbols for the same function -- it surfaced as an LNK2019
+// on RaceCarStreamer::Prepare/GetVehicleList the moment two such TUs cross-called.
+struct VehicleList
 {
 public:
     static const s32 KI_MAX_VEHICLE_LISTS = 32;    // :81

@@ -271,7 +271,7 @@ void RaceCarStreamer::OnGraphicsUnloading( s32 liActiveRaceCar )
         *CgsDev::Log::gpDebugPrint << "STRM: " << "Graphics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDGFX );
-    maGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
+    maGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
 }
 
 // @ 0x822B75E8.
@@ -281,7 +281,7 @@ void RaceCarStreamer::OnPhysicsUnloading( s32 liActiveRaceCar )
         *CgsDev::Log::gpDebugPrint << "STRM: " << "Physics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDPHYSICS );
-    maPhysicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
+    maPhysicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
 }
 
 // @ 0x822B7698.
@@ -301,7 +301,7 @@ void RaceCarStreamer::OnWheelGraphicsUnloading( s32 liActiveRaceCar )
         *CgsDev::Log::gpDebugPrint << "STRM: " << "Wheel graphics unloading: " << liActiveRaceCar << "\n";
 
     OnResourceUnloading( liActiveRaceCar, E_LOADFLAG_LOADEDWHEELGFX );
-    maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
+    maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
 }
 
 // @ 0x822B77E8.
@@ -322,6 +322,25 @@ void RaceCarStreamer::SetAudioLoadDataStatus( s32 liActiveRaceCar, bool lbStatus
                 "liActiveRaceCar < static_cast<int32_t>(sizeof(mabAudioLoaded)/sizeof(mabAudioLoaded[0]))" );
 
     mabAudioLoaded[liActiveRaceCar] = lbStatus;
+}
+
+// The three pure accessors the audio leaf calls back through (the X360 inlines all
+// three at their call sites inside RaceCarAudioStreamer::SendLoadRequest @0x822D5080
+// and ::Update @0x822ECC00 -- a single load/store of the member, no other work).
+// Bodied here because they are members of THIS class and the audio TU references them.
+const BrnResource::VehicleList* RaceCarStreamer::GetVehicleList() const
+{
+    return mpVehicleList;
+}
+
+bool RaceCarStreamer::HACK_IsWaitingForAudioAfterCarSelect() const
+{
+    return mbHACK_WaitingForAudioAfterCarSelect;
+}
+
+void RaceCarStreamer::HACK_SetWaitingForAudioAfterCarSelect( bool lbWaiting )
+{
+    mbHACK_WaitingForAudioAfterCarSelect = lbWaiting;
 }
 
 // @ 0x822A1950. "VEH_" + decode(model id) -> compress; "WHE_" + decode(wheel id) ->
@@ -376,10 +395,10 @@ void RaceCarStreamer::Construct()
     {
         maxLoadFlags[liActiveRaceCar] = 0;
 
-        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourcePtr;
-        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourcePtr;
+        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourceHandle;
+        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourceHandle;
         mabAttribsLoaded[liActiveRaceCar]         = false;
-        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
+        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
         mabAudioLoaded[liActiveRaceCar]           = false;
 
         maDesiredCarIds[liActiveRaceCar]    = 0;
@@ -409,10 +428,10 @@ void RaceCarStreamer::Destruct()
 
     for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
     {
-        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourcePtr;
-        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourcePtr;
+        maGraphicsResources[liActiveRaceCar]      = CgsResource::NULLResourceHandle;
+        maPhysicsResources[liActiveRaceCar]       = CgsResource::NULLResourceHandle;
         mabAudioLoaded[liActiveRaceCar]           = false;
-        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourcePtr;
+        maWheelGraphicsResources[liActiveRaceCar] = CgsResource::NULLResourceHandle;
     }
 }
 

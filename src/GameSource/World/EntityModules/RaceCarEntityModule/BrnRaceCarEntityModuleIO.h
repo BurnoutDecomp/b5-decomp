@@ -38,6 +38,7 @@
 #include "types.hpp"
 #include <cstring>   // memset (partial-slice Constructs)                                                       // s8/s32/u8/u16/u32/f32
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                      // CgsModule::IOBuffer base
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"    // CgsSystem::TimerStatusInterface (by value)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // CgsModule::EventQueue<T,N>
 #include "BrnCommonTypes.h"                                                 // CgsID, Vector3, Vector4
 #include "GameSource/BurnoutConstants.h"                                    // EActiveRaceCarIndex, EGlobalRaceCarIndex
@@ -97,10 +98,15 @@ namespace RaceCarEntityModuleIO
     // CgsSystem::TimerStatusInterface payload (two 24-byte TimerStatus blocks, game then sim).
     // Accessed only by-name across homes, so the exact field spelling is not load-bearing;
     // the 48-byte size IS (it fixes mCameraInput's offset).
-    struct alignas(4) TimerStatusInterface                // :254 (by-value payload, 48B)
-    {
-        unsigned char maReserved[48];   // 2 x 24B TimerStatus (game/sim); size X360-attested
-    };
+    // REAL as of the race-car streamer wave (2026-07-31): the 48-byte reserved blob is
+    // retired in favour of the engine's own CgsSystem::TimerStatusInterface, which is
+    // exactly the same 48 bytes (two 24-byte TimerStatus blocks, game then sim, align 4)
+    // and carries the member NAMES. RaceCarEntityModule::PreSceneUpdate @0x8230D928 reads
+    // `*(iface+28) * *(iface+32)` for the frame's sim step -- i.e. the SIM block's
+    // mfBaseTimeStep * mfTimeStepMultiplier -- and with the blob that could only have been
+    // spelled as a raw offset poke. Type alias, so the FQN and the 48-byte footprint (which
+    // pins mCameraInput at +0x90) are unchanged.
+    typedef CgsSystem::TimerStatusInterface TimerStatusInterface;   // :254 (by-value, 48B)
 
     // AudioCarLoadedDataQueue (homed in BrnRaceCarEntityModuleOutputInterface.h via the
     // AudioCarDataLoadedEvent element, which is in this namespace): EventQueue<...,16>.
@@ -168,7 +174,26 @@ namespace RaceCarEntityModuleIO
         typedef RaceCarEntityModuleIO::GameActionQueue          GameActionQueue;           // :98
         typedef BrnReplays::ReplayIO::StatusInterface           ReplayStatusInterface;     // :106
         typedef RaceCarEntityModuleIO::AudioCarLoadedDataQueue  AudioCarLoadedDataQueue;   // OutputInterface.h
-        void Construct();                                                                  // :151
+
+        // X360 0x822EA3C0 -- IOBuffer status, TimerStatusInterface::Clear(+92),
+        // Camera::Construct(+144), the seven-slot 0x700000000 seed, VariableEventQueue<13312,16>
+        // ::Construct(+556) [== mGameActionQueue], the payback/replay scalars, then
+        // EventQueue<AudioCarDataLoadedEvent,16>::Construct(+15456) [== mAudioCarLoadedDataQueue]
+        // and the eight-slot per-car clear.
+        // PARTIAL SLICE: the three members whose committed types expose Construct/Clear run the
+        // REAL call; the rest belong to their own TUs [marked deviation]. This replaces the
+        // WorldLinkStubs base-only gate, which left both queues un-Constructed --
+        // RaceCarAudioStreamer::Update reads mAudioCarLoadedDataQueue every frame (it fired
+        // "mpEvents != NULL" + "Base event queue overflow"), and PreSceneUpdate reads the timer
+        // status interface for the frame's sim step.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mTimerStatusInterface.Clear();
+            // (mGameActionQueue's committed type is a sized blob with no Construct yet --
+            //  the console's VariableEventQueue<13312,16>::Construct(+556) lands with its type.)
+            mAudioCarLoadedDataQueue.Construct();
+        }
         const TimerStatusInterface*    GetTimerStatusInterface() const;                    // :154
         void                           SetTimerStatusInterface(const TimerStatusInterface*); // :155
         const BrnDirector::Camera::Camera* GetCameraInput() const;                         // :157
@@ -228,7 +253,21 @@ namespace RaceCarEntityModuleIO
         typedef BrnPhysics::Vehicle::VehicleInputInterface          VehicleInputInterface; // :72
         typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterface; // :71
         typedef BrnAI::AIModuleIO::RaceCarAIInterface               RaceCarAIInterface;     // :81
-        void Construct();                                                                   // :279
+        typedef RaceCarEntityModuleIO::AudioCarLoadedDataQueue      AudioCarLoadedDataQueue; // OutputInterface.h
+
+        // X360 0x822EA4E0 -- IOBuffer status, VehicleInputInterface::Construct(+16),
+        // InSceneUpdateInterface::Construct(+142192), the four RCEntity*OutputInterface::Clear
+        // calls, a nine-slot zero fill, VariableEventQueue<16384,16>::Construct(+987512), then
+        // EventQueue<AudioCarDataLoadedEvent,16>::Construct(+1004120)
+        // [== mAudioCarLoadedDataQueue] and the eight-slot per-car clear.
+        // PARTIAL SLICE for the same reason as the InputBuffer twin above: the audio streamer
+        // appends its per-frame (un)load requests into this queue every frame and the base-only
+        // WorldLinkStubs gate left it un-Constructed. GROW as the other members' types land.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mAudioCarLoadedDataQueue.Construct();
+        }
         const VehicleInputInterface* GetVehicleInputInterface() const;                      // :282
         VehicleInputInterface*       GetVehicleInputInterface();                            // :283 W  (0x822B4ED0)
         const SceneInputInterface*   GetSceneInputInterface() const;                        // :285
@@ -434,7 +473,23 @@ namespace RaceCarEntityModuleIO
     {
         typedef BrnDirector::BrnDirectorVehicleInputInterface DirectorVehicleInputInterface; // :103
         typedef RaceCarEntityModuleIO::ResourceRequestInterface ReplayRequestInterface;       // :107
-        void Construct();                                                                  // :560
+
+        // X360 0x822EA8F8 -- IOBuffer status, then VariableEventQueue<8192,16>::Construct +
+        // ::Clear on the resource-request ring at +4 (== mResourceRequestInterface.mRequestQueue),
+        // InSceneUpdateInterface::Construct, NewVehicleEvent<50>::Construct, the four
+        // RCEntity*OutputInterface::Clear calls, VariableEventQueue<1536,16>::Construct on the
+        // game-event queue, an 11-word zero fill and VehicleInputInterface::Construct.
+        // PARTIAL SLICE: only the request ring is brought up here -- it is the one this build
+        // actually writes (RaceCarEntityModule::SendStreamerEvents @0x82304F70 Appends the five
+        // component streamers' queues into it every frame, and the base-only WorldLinkStubs gate
+        // this replaces left it un-Constructed, which fired "Not Constructed" once per frame).
+        // GROW as the other members' types land.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mResourceRequestInterface.mRequestQueue.Construct();
+            mResourceRequestInterface.mRequestQueue.Clear();
+        }
         const ResourceRequestInterface* GetResourceRequestInterface() const;              // :563
         ResourceRequestInterface*       GetResourceRequestInterface();                     // :564
         const OutputBuffer_PreScene::SceneInputInterface* GetSceneInputInterface() const;  // :566

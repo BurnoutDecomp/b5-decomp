@@ -78,6 +78,31 @@ void RaceCarBaseComponentStreamer::AddEntry( CgsID lAssetId, s32 liActiveRaceCar
     InternalBaseStreamer::AddEntry( lAssetId, false, static_cast<u64>( liActiveRaceCar ) );
 }
 
+// @ 0x822B6FA0. The counterpart of AddEntry: drop the race-car slot's request.
+// The X360 asserts the index (BrnRaceCarBaseComponentStreamer.h:211) and that the
+// slot actually HAS an added entry (:212, "Removing a streaming asset that hasn't
+// been set, racecar=" with the index streamed into the message buffer), then calls
+// InternalBaseStreamer::RemoveEntry with the slot's own desired asset id and the
+// race-car index as the user id (asm: the id is read from `8*(i+603)+this`, i.e.
+// maDesiredAssets[i], and passed as the id/userId pair), clears the added bit
+// (`this+0x1358` == mAddedEntries) and finally zeroes maDesiredAssets[i].
+// The X360 inlines BitArray<8>'s own bounds asserts (CgsBitArray.h:203/:241) at the
+// IsBitSet/UnSetBit sites; per this TU's committed style they are not reproduced.
+void RaceCarBaseComponentStreamer::RemoveEntry( s32 liActiveRaceCar )
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    CGS_ASSERT( mAddedEntries.IsBitSet( static_cast<u32>( liActiveRaceCar ) ),
+                "Removing a streaming asset that hasn't been set, racecar=" );
+
+    InternalBaseStreamer::RemoveEntry( maDesiredAssets[liActiveRaceCar],
+                                       static_cast<u64>( liActiveRaceCar ) );
+
+    mAddedEntries.UnSetBit( static_cast<u32>( liActiveRaceCar ) );
+    maDesiredAssets[liActiveRaceCar] = 0;
+}
+
 // @ 0x822A1358. Return the CgsID the given race-car slot currently WANTS loaded
 // (0 == none). Pure accessor into maDesiredAssets (this+0x12D8).
 CgsID RaceCarBaseComponentStreamer::GetDesiredAsset( s32 liActiveRaceCar ) const
