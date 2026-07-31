@@ -122,7 +122,7 @@ bool MomentPlayerJumping::Prepare(void* lrBehaviourController)
         // allocated (although this could be changed)" assert -- cpp:159 -- lands
         // with the collection bodies.)
         const Attrib::Gen::shotgroup& lrJumpShots =
-            lpBehaviourManager->GetDirectorResourceManager()->GetPlayerJumpingShots();
+            lpBehaviourManager->GetDirectorResourceManager()->GetJumpRig();   // rm +1320
         u32 luNumShots = lrJumpShots.Num_ShotList();
         if (luNumShots > 5u)
             luNumShots = 5u;

@@ -166,10 +166,14 @@ namespace BrnDirector
                 const bool lbCarInFront  = lfAlongForward > lfAlongRight;   // X360 vcmpgtfp
 
                 // ---- resolve the intro shot-group -----------------------------------------
+                // (2026-07-31: GetEventIntroShots now returns the group BY REFERENCE off the
+                // real DirectorResourceManager -- the retired ICE-anim fork typed it `const
+                // void*` because the manager had no declared members to hand back. The X360
+                // @0x821F6AB8 returns `this + <group offset>`, i.e. a reference, so the cast
+                // that used to sit here is gone.)
                 const Attrib::Gen::shotgroup* lpDefaultShots =
-                    static_cast<const Attrib::Gen::shotgroup*>(
-                        lrSharedInfo.mpDirectorResourceManager->GetEventIntroShots(
-                            lrGameState.meEventType, lbCarInFront));
+                    &lrSharedInfo.mpDirectorResourceManager->GetEventIntroShots(
+                        lrGameState.meEventType, lbCarInFront);
 
                 if (lrGameState.miEventSpecificShotGroup == KI_NO_EVENT_SPECIFIC_SHOT_GROUP)
                 {

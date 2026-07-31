@@ -60,7 +60,7 @@
 // linked set already provides and 10 of which the CRT supplies, leaving 27 REAL unresolved
 // game symbols. Mounting it today therefore breaks the build outright. The breakdown:
 //
-//   14  DirectorResourceManager::GetCarSelect*Shots / GetCarUnlockShots / GetGameIntroShots.
+//   14  DirectorResourceManager::GetCarSelect*Shots / GetCarUnlock / GetGameIntro.
 //       These are DECLARATION-ONLY in Behaviours/BrnBehaviourIceAnim.h ("bodies in the
 //       resource-manager TU"), and no body exists anywhere in the tree: the fourteen
 //       mCarSelect*/mCarUnlock/mGameIntroGroup members appear only in the recon-map COMMENT
@@ -333,16 +333,16 @@ namespace BrnDirector
 
         JunkyardShotGroups laJunkyards[KI_NUM_JUNKYARDS];
 
-        laJunkyards[0].mpCarSelectShots   = &lrResources.GetCarSelectMotorCityShots();
-        laJunkyards[0].mpRivalUnlockShots = &lrResources.GetCarSelectMotorCityRivalUnlockShots();
-        laJunkyards[1].mpCarSelectShots   = &lrResources.GetCarSelectWestAcresShots();
-        laJunkyards[1].mpRivalUnlockShots = &lrResources.GetCarSelectWestAcresRivalUnlockShots();
-        laJunkyards[2].mpCarSelectShots   = &lrResources.GetCarSelectSouthBayShots();
-        laJunkyards[2].mpRivalUnlockShots = &lrResources.GetCarSelectSouthBayRivalUnlockShots();
-        laJunkyards[3].mpCarSelectShots   = &lrResources.GetCarSelectHeartbreakShots();
-        laJunkyards[3].mpRivalUnlockShots = &lrResources.GetCarSelectHeartbreakRivalUnlockShots();
-        laJunkyards[4].mpCarSelectShots   = &lrResources.GetCarSelectLowerPeaksShots();
-        laJunkyards[4].mpRivalUnlockShots = &lrResources.GetCarSelectLowerPeaksRivalUnlockShots();
+        laJunkyards[0].mpCarSelectShots   = &lrResources.GetCarSelect_MotorCity();
+        laJunkyards[0].mpRivalUnlockShots = &lrResources.GetCarSelect_MotorCity_RivalUnlock();
+        laJunkyards[1].mpCarSelectShots   = &lrResources.GetCarSelect_WestAcres();
+        laJunkyards[1].mpRivalUnlockShots = &lrResources.GetCarSelect_WestAcres_RivalUnlock();
+        laJunkyards[2].mpCarSelectShots   = &lrResources.GetCarSelect_SouthBay();
+        laJunkyards[2].mpRivalUnlockShots = &lrResources.GetCarSelect_SouthBay_RivalUnlock();
+        laJunkyards[3].mpCarSelectShots   = &lrResources.GetCarSelect_Heartbreak();
+        laJunkyards[3].mpRivalUnlockShots = &lrResources.GetCarSelect_Heartbreak_RivalUnlock();
+        laJunkyards[4].mpCarSelectShots   = &lrResources.GetCarSelect_LowerPeaks();
+        laJunkyards[4].mpRivalUnlockShots = &lrResources.GetCarSelect_LowerPeaks_RivalUnlock();
 
         for (s32 liJunkyard = 0; liJunkyard < KI_NUM_JUNKYARDS; ++liJunkyard)
         {
@@ -424,7 +424,7 @@ namespace BrnDirector
             mbIsLeft = true;
         }
 
-        mpIdle = GetShot(lrResources.GetCarSelectIdleShots(), 0u);
+        mpIdle = GetShot(lrResources.GetCarSelect_Idle(), 0u);
 
         if (!mIntroNoNewCars.IsAllocated())
         {
@@ -442,7 +442,7 @@ namespace BrnDirector
 
             mpIntroNewCarsShot = GetShot(lrJunkyardShots, KU_JUNKYARD_SHOT_INTRO_NEW_CARS);
             mpOutroShot        = GetShot(lrJunkyardShots, KU_JUNKYARD_SHOT_OUTRO);
-            mpWaitForAudioShot = GetShot(lrResources.GetCarSelectOutroShots(), 0u);
+            mpWaitForAudioShot = GetShot(lrResources.GetCarSelect_Outro(), 0u);
 
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                 mIntroNewCars, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_STATE);
@@ -514,7 +514,7 @@ namespace BrnDirector
         //   CONSEQUENCE: a car whose asset declares a bespoke unlock movie gets the shared one.
         //   DELETE-WHEN: the burnoutcarasset generated field set is recovered.
         const Attrib::Gen::shotgroup& lrCarUnlockShots =
-            lrSharedInfo.mpDirectorResourceManager->GetCarUnlockShots();
+            lrSharedInfo.mpDirectorResourceManager->GetCarUnlock();
         Camera::BehaviourIceAnim::ShotReference* lpUnlockShot =
             GetShot(lrCarUnlockShots, muCarUnlockMovie);
         muCarUnlockMovie = Camera::Utils::Cycle(muCarUnlockMovie, 0u,
@@ -739,7 +739,7 @@ namespace BrnDirector
             {
                 // ⭐ THE RETAIL GAME-INTRO FLY-BY. Bind mGameIntro to shot 0 of the "game
                 // intro" shot group (holding on its last frame) and start the sequence.
-                const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntroShots();
+                const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntro();
                 if (lrGameIntroShots.Num_ShotList() == 0u)
                     FireAssert("Not enough ice movies in game intro group", 299);
 
@@ -798,7 +798,7 @@ namespace BrnDirector
 
             if (lrGameState.mbGameIntroFlybyActive)
             {
-                const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntroShots();
+                const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntro();
                 if (lrGameIntroShots.Num_ShotList() < KU_MIN_GAME_INTRO_CHANGE_SHOTS)
                     FireAssert("Not enough ice movies in game intro group", 451);
 
@@ -816,7 +816,7 @@ namespace BrnDirector
 
             if (mGameIntro.GetBehaviour()->HasFinishedOrFailed())
             {
-                const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntroShots();
+                const Attrib::Gen::shotgroup& lrGameIntroShots = lrResources.GetGameIntro();
                 if (lrGameIntroShots.Num_ShotList() < KU_MIN_GAME_INTRO_CHANGE_SHOTS)
                     FireAssert("Not enough ice movies in game intro group", 469);
 
