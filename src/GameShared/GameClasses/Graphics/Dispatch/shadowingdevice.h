@@ -46,6 +46,14 @@ namespace shadow
         // binding actually changed and a D3D pixel shader was bound.
         static bool SetPixelProgram(const renderengine::ProgramBufferData* lpPixelProgram);
 
+        // Bind the active vertex descriptor through the shadow cache. The X360 writes
+        // off_83010958 (this class's mpVertexDescriptor) and sets byte_83010A34 -- the
+        // immediate-mode renderers do it inline, which is why no standalone symbol
+        // survives; FlushVertexProgramState is the sole consumer and dereferences the
+        // pointer, so a path that binds a program without also binding its descriptor is
+        // a null dereference. Returns true when the binding actually changed.
+        static bool SetVertexDescriptor(const renderengine::VertexDescriptorData* lpVertexDescriptor);
+
         // Bind a sampler state object through the shadow cache (X360 0x822769E0).
         static void* SetState(void* lpState, u32 luSamplerId);
 

@@ -45,18 +45,34 @@
 // The mask value and the constant name agree independently.
 // =============================================================================
 
+// The two converted sky-dome program images (pc/gcm/renderengine/SkyDomeProgramsPC.cpp --
+// a generated PC-platform leaf). Declared here as the minimal external surface, the same
+// convention the other PC-leaf seams in this tree use.
+namespace renderengine
+{
+    extern const u8  gauSkyDomeVertexProgramPC[];
+    extern const u32 guSkyDomeVertexProgramPCSize;
+    extern const u8  gauSkyDomePixelProgramPC[];
+    extern const u32 guSkyDomePixelProgramPCSize;
+}
+
 namespace
 {
-    // ---- the two sky-dome program binaries (X360 .data blobs) -------------------------
-    // Construct passes &unk_8203D278 / 1312 bytes as the vertex program and
-    // &unk_8203D798 / 780 bytes as the pixel program. The SIZES are the asm immediates;
-    // the ADDRESSES are guest .data and have no PC counterpart, so the pointers are PC
-    // module data the shader bring-up fills in (the converted SHADERS bundle), and the
-    // program upload is skipped -- quietly, once -- while they are null.
-    // FLAG PC-platform leaf: guest microcode blobs are not addressable on PC; the two
-    // pointers below are the wiring seam for the converted sky-dome programs.
-    const u32 KU_SKYDOME_VERTEX_PROGRAM_SIZE = 1312u;   // X360 unk_8203D278
-    const u32 KU_SKYDOME_PIXEL_PROGRAM_SIZE  = 780u;    // X360 unk_8203D798
+    // ---- the two sky-dome program binaries --------------------------------------------
+    // The X360 Construct passes &unk_8203D278 / 1312 bytes as the vertex program and
+    // &unk_8203D798 / 780 bytes as the pixel program -- guest .data Xenos microcode with
+    // no PC counterpart, so BOTH the addresses and the sizes are console-only.
+    //
+    // FLAG PC-platform leaf: the PC build supplies the SAME TWO TECHNIQUES, recompiled
+    // from their TUB HLSL (nushaders/Reference/TUB/Executable/28.fx and 29.fx -- pinned
+    // to this renderer by an exact 10 + 7 match against the seventeen constant names
+    // resolved below) with the shader converter's own fxc line, then wrapped into
+    // platform-4 ShaderProgramBuffer images. They are module data, not bundle
+    // resources, exactly as on the console. Sizes are the WRAPPED image sizes, not the
+    // console's microcode sizes: ImRenderer<V>::AddProgram's PC seam adopts the image
+    // whole (see CgsIm3dSkyDome.cpp).
+    const u32 KU_SKYDOME_VERTEX_PROGRAM_SIZE = renderengine::guSkyDomeVertexProgramPCSize;
+    const u32 KU_SKYDOME_PIXEL_PROGRAM_SIZE  = renderengine::guSkyDomePixelProgramPCSize;
 
     // ---- the clouds sampler-state parameter block (X360 Construct tail, store-for-store)
     // Sixteen words + five trailing flag bytes, exactly the renderengine sampler parameter
@@ -152,12 +168,10 @@ namespace BrnGraphics
 // -----------------------------------------------------------------------------------------
 void Im3dSkyDome::Construct(rw::IResourceAllocator* lpAllocator)
 {
-    // The one program pair. On PC the converted binaries are not bound yet, so the arrays
-    // carry null pointers and ImRenderer::Construct uploads nothing.
-    // FLAG PC-platform leaf: guest microcode addresses (unk_8203D278 / unk_8203D798) have
-    // no PC counterpart -- see the file banner.
-    const void* lapVertexProgramBinary[1] = { nullptr };
-    const void* lapPixelProgramBinary[1]  = { nullptr };
+    // The one program pair (X360: the two guest .data microcode blobs; PC: the two
+    // converted ShaderProgramBuffer images -- see the KU_SKYDOME_*_PROGRAM_SIZE note).
+    const void* lapVertexProgramBinary[1] = { renderengine::gauSkyDomeVertexProgramPC };
+    const void* lapPixelProgramBinary[1]  = { renderengine::gauSkyDomePixelProgramPC };
     const u32   lauVertexProgramSize[1]   = { KU_SKYDOME_VERTEX_PROGRAM_SIZE };
     const u32   lauPixelProgramSize[1]    = { KU_SKYDOME_PIXEL_PROGRAM_SIZE };
 

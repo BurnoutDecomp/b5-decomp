@@ -112,6 +112,15 @@ namespace renderengine
         static void Release(ProgramBufferData* lpData);
         static u32  Xbox2CreateConstantTable(const void* lpFunction, void* lpDestTable, u32* lpTotalSize);
     };
+
+    // [PC platform leaf -- pc/gcm/renderengine/ImmediateModePCLeaf.cpp]
+    // Adopt a pre-built platform-4 ShaderProgramBuffer image (the form
+    // tools/assets/shaders/shader_transcode.py::build_pc_program_buffer emits) as a live
+    // ProgramBufferData: copy it into low-4GB memory and rebase the variable descriptors'
+    // name offsets from FILE offsets to the absolute addresses GetVariableHandleByName
+    // dereferences. Returns null when lpBlob is not such an image, so a caller can fall
+    // through to the console GetResourceDescriptor/Initialize route.
+    ProgramBufferData* ProgramBufferPC_Adopt(const void* lpBlob, u32 luBlobSize, u32 luShaderType);
 }
 
 #endif // RENDERENGINE_PROGRAMBUFFER_H
