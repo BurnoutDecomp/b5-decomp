@@ -36,8 +36,16 @@ namespace Gen
     class shotgroup : private Instance
     {
     public:
-        // The shotgroup class key the ctor resolves its collection against (0x388C8F47).
+        // The shotgroup class key the ctor resolves its collection against, LOW word
+        // (0x3887CBC7 == 948423623). Kept for the AssertOnClassCheck sites that quote it.
         static const int KI_SHOTGROUP_CLASS = 948423623;
+
+        // The FULL 64-bit class key Attrib::FindCollection resolves against. The ctor
+        // @0x82208620 builds it in r3 as `lis 0x3887 / ori 0xCBC7 / lis 0x38ED /
+        // ori 0x2D37 / insrdi r3,r11,32,0`, i.e. high word 0x38ED2D37 over
+        // KI_SHOTGROUP_CLASS. The class registry is keyed by the whole doubleword, so
+        // the low word alone MISSES.
+        static const u64 KU_SHOTGROUP_CLASS_KEY = 0x38ED2D373887CBC7ULL;
 
         // The "ShotList" array attribute key (the shot list this group plays through).
         // 0x15246B49 == 354708297; used by Num_ShotList and the per-shot accessor.
@@ -99,11 +107,20 @@ namespace Gen
         }
     };
 
-    // X360 ctor @0x82208620: Collection = FindCollection(948423623, owner); chain the
-    // Instance ctor over it. (The keyed group name the caller passes selects which named
-    // shotgroup collection the AttribSys resolve binds.)
-    inline shotgroup::shotgroup(Attrib::Key /*luGroupNameKey*/, void* lpOwner)
-        : Instance(FindCollection(KI_SHOTGROUP_CLASS, lpOwner), lpOwner)
+    // X360 ctor @0x82208620:
+    //     r3 = 0x38ED2D37_3887CBC7        (the class key -- the ONLY register it writes)
+    //     bl Attrib::FindCollection       (r4 = the caller's key, untouched, = collection key)
+    //     Attrib::Instance::Instance(this, collection, owner)   (r5 = owner)
+    //
+    // ⭐ FIXED 2026-07-31. This ctor used to read
+    //     `: Instance(FindCollection(KI_SHOTGROUP_CLASS, lpOwner), lpOwner)`
+    // with the group-name key COMMENTED OUT -- so every construction resolved the same
+    // collection regardless of which shot group was asked for, and the owner pointer was
+    // being passed where the collection key belongs. That is the defect
+    // BrnDirectorResourceManager.h:203 flagged: all 65 of the director resource manager's
+    // shot-group slots would have bound the wrong collection.
+    inline shotgroup::shotgroup(Attrib::Key luGroupNameKey, void* lpOwner)
+        : Instance(FindCollection(KU_SHOTGROUP_CLASS_KEY, luGroupNameKey), lpOwner)
     {
     }
 

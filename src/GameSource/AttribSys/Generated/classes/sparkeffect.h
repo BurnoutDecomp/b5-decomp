@@ -31,6 +31,13 @@ namespace Gen
         // sibling shotgroup ctor's shape).
         static const int KI_SPARKEFFECT_CLASS = -1126789476; // 0xBCD68E9C
 
+        // The FULL 64-bit class key Attrib::FindCollection resolves against -- the
+        // doubleword the X360 ctor stages in r3 with lis/ori + insrdi. KI_KI_SPARKEFFECT_CLASS
+        // above is only its LOW word (which is what Hex-Rays surfaces, and what this
+        // header used to pass to the old one-key FindCollection(int)); the class
+        // registry is keyed by the whole doubleword, so the low word alone MISSES.
+        static const u64 KU_SPARKEFFECT_CLASS_KEY = 0xCAF7F032BCD68E9CULL;
+
         // Construct over the sparkeffect collection, optionally owned by lpOwner.
         explicit sparkeffect(void* lpOwner = nullptr);
     };
@@ -39,7 +46,13 @@ namespace Gen
     // Instance ctor over it; then give the instance a default data area (0x90 bytes) if
     // it has none. No class-check assert in this ctor (unlike debrisparams/iceanim).
     inline sparkeffect::sparkeffect(void* lpOwner)
-        : Instance(FindCollection(KI_SPARKEFFECT_CLASS), lpOwner)
+                // FLAG (collection key): the X360 ctor never writes r4, so the CALLER's key
+        // argument passes straight through to FindCollection as the collection key.
+        // This ctor does not model that parameter yet (no call site in this repo
+        // supplies one), so it resolves the class's collection key 0 -- exactly what
+        // the previous `FindCollection(KI_..., nullptr)` form did. Add the parameter
+        // when a real call site needs a named collection.
+    : Instance(FindCollection(KU_SPARKEFFECT_CLASS_KEY, 0), lpOwner)
     {
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x90u);

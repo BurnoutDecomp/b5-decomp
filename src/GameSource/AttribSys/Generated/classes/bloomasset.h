@@ -41,6 +41,13 @@ namespace Gen
         // matching the sibling sparkeffect ctor's shape).
         static const int KI_BLOOMASSET_CLASS = -1929517549; // 0x8CFDE613
 
+        // The FULL 64-bit class key Attrib::FindCollection resolves against -- the
+        // doubleword the X360 ctor stages in r3 with lis/ori + insrdi. KI_KI_BLOOMASSET_CLASS
+        // above is only its LOW word (which is what Hex-Rays surfaces, and what this
+        // header used to pass to the old one-key FindCollection(int)); the class
+        // registry is keyed by the whole doubleword, so the low word alone MISSES.
+        static const u64 KU_BLOOMASSET_CLASS_KEY = 0xB632EC178CFDE613ULL;
+
         // Construct over the bloomasset collection, optionally owned by lpOwner.
         explicit bloomasset(void* lpOwner = nullptr);
     };
@@ -49,7 +56,13 @@ namespace Gen
     // Instance ctor over it; then give the instance a default data area (0x20 bytes) if it
     // has none. No class-check assert in this ctor (unlike debrisparams/iceanim).
     inline bloomasset::bloomasset(void* lpOwner)
-        : Instance(FindCollection(KI_BLOOMASSET_CLASS), lpOwner)
+                // FLAG (collection key): the X360 ctor never writes r4, so the CALLER's key
+        // argument passes straight through to FindCollection as the collection key.
+        // This ctor does not model that parameter yet (no call site in this repo
+        // supplies one), so it resolves the class's collection key 0 -- exactly what
+        // the previous `FindCollection(KI_..., nullptr)` form did. Add the parameter
+        // when a real call site needs a named collection.
+    : Instance(FindCollection(KU_BLOOMASSET_CLASS_KEY, 0), lpOwner)
     {
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x20u);

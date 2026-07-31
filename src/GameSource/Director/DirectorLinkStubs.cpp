@@ -437,26 +437,13 @@ namespace ICE
     ICETake::ICETake() {}   // pulled in by ICEManager's embedded ICEController
 }
 
-namespace Attrib
-{
-    // Attrib::FindCollection @0x82808378 is DELIBERATELY not reconstructed -- see the block
-    // comment at the top of SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/
-    // attribsupport.cpp: the committed declaration `FindCollection(int liKey, void* lpOwner)`
-    // that 57 generated Attrib::Gen ctors bind against is irreconcilable with the true X360
-    // signature `FindCollection(Attribute::Key classKey, Attribute::Key collectionKey)`, and
-    // fixing that spans the declaration plus every consumer.
-    // It reaches this link through ONE path: ArbStateRaceIntro's ctor, which the arbitrator's
-    // state container runs when it default-constructs all ten states by value. Returning NULL
-    // is the resolver's own "no such collection" answer; the state holds an unresolved
-    // Attrib::Gen handle and is never entered on the fly-by path.
-    // DELETE-WHEN: the coordinated decl+consumer pass lands the real two-key resolver.
-    Collection* FindCollection(int liKey, void* lpOwner)
-    {
-        (void)liKey;
-        (void)lpOwner;
-        return 0;
-    }
-}
+// RETIRED (2026-07-31): the `Attrib::FindCollection` stub that used to sit here is GONE.
+// The coordinated decl+consumer pass it was waiting on has landed -- the canonical
+// declaration in GameSource/AttribSys/Generated/attrib_findcollection.h now carries the
+// asm-verified two-key signature and the real body lives in its own TU,
+// SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribsupport.cpp (already in
+// the exe source list). The consumer count turned out to be 9 generated ctors + one
+// hand-written caller, not the 57 the old comment estimated.
 
 namespace rw
 {

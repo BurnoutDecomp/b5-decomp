@@ -31,6 +31,13 @@ namespace Gen
         // second argument, matching the sibling shotgroup/sparkeffect key-staging.
         static const int KI_DEPTHOFFIELDASSET_CLASS = 516781242; // 0x1ECD74BA
 
+        // The FULL 64-bit class key Attrib::FindCollection resolves against -- the
+        // doubleword the X360 ctor stages in r3 with lis/ori + insrdi. KI_KI_DEPTHOFFIELDASSET_CLASS
+        // above is only its LOW word (which is what Hex-Rays surfaces, and what this
+        // header used to pass to the old one-key FindCollection(int)); the class
+        // registry is keyed by the whole doubleword, so the low word alone MISSES.
+        static const u64 KU_DEPTHOFFIELDASSET_CLASS_KEY = 0x9F2F63E81ECD74BAULL;
+
         // Construct over the depthoffieldasset collection, optionally owned by lpOwner.
         explicit depthoffieldasset(void* lpOwner = nullptr);
     };
@@ -40,7 +47,13 @@ namespace Gen
     // instance a default data area (0x14 bytes) if construction left it without one.
     // No class-check assert in this ctor (unlike debrisparams/iceanim/surfacelist).
     inline depthoffieldasset::depthoffieldasset(void* lpOwner)
-        : Instance(FindCollection(KI_DEPTHOFFIELDASSET_CLASS), lpOwner)
+                // FLAG (collection key): the X360 ctor never writes r4, so the CALLER's key
+        // argument passes straight through to FindCollection as the collection key.
+        // This ctor does not model that parameter yet (no call site in this repo
+        // supplies one), so it resolves the class's collection key 0 -- exactly what
+        // the previous `FindCollection(KI_..., nullptr)` form did. Add the parameter
+        // when a real call site needs a named collection.
+    : Instance(FindCollection(KU_DEPTHOFFIELDASSET_CLASS_KEY, 0), lpOwner)
     {
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x14u);

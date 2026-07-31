@@ -45,17 +45,24 @@ namespace Gen
         // 32-bit-key shape.
         static const int KI_BOOSTPARAMSASSET_CLASS = 0x48943FAC; // 1217675180
 
+        // The FULL 64-bit class key Attrib::FindCollection resolves against -- the
+        // doubleword the X360 ctor stages in r3 with lis/ori + insrdi. KI_KI_BOOSTPARAMSASSET_CLASS
+        // above is only its LOW word (which is what Hex-Rays surfaces, and what this
+        // header used to pass to the old one-key FindCollection(int)); the class
+        // registry is keyed by the whole doubleword, so the low word alone MISSES.
+        static const u64 KU_BOOSTPARAMSASSET_CLASS_KEY = 0xDA21657C48943FACULL;
+
         // Construct over the boostparamsasset collection. luUnused mirrors the
         // incoming 2nd parameter the X360 ctor never reads; lpOwner is the
         // optional owning object threaded through to Instance.
-        explicit boostparamsasset(u32 luUnused = 0, void* lpOwner = nullptr);
+        explicit boostparamsasset(u32 luCollectionKey = 0, void* lpOwner = nullptr);
     };
 
     // X360 ctor @0x822B8C88: Collection = FindCollection(0x48943FAC); chain the
     // Instance ctor over it; then give the instance a default data area (0x88
     // bytes) if it has none.
-    inline boostparamsasset::boostparamsasset(u32 /*luUnused*/, void* lpOwner)
-        : Instance(FindCollection(KI_BOOSTPARAMSASSET_CLASS), lpOwner)
+    inline boostparamsasset::boostparamsasset(u32 luCollectionKey, void* lpOwner)
+        : Instance(FindCollection(KU_BOOSTPARAMSASSET_CLASS_KEY, luCollectionKey), lpOwner)
     {
         if (!GetLayoutPointer())
             mpAttributeData = DefaultDataArea(0x88u);
