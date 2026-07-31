@@ -197,16 +197,20 @@ public:
         // ONLY way a race-car load request leaves this module. Called from PostPhysicsUpdate.
         void SendStreamerEvents( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
 
-        // [FLAG PC bring-up] NOT an X360 function -- the stand-in that drives the REAL
-        // RenderRaceCar for the one car whose body the streamer has delivered, because
-        // AttachActiveRaceCar and the vehicle physics publisher do not exist on this build.
-        // See the banner in BrnRaceCarEntityModule_Render.cpp. DELETE with them.
-        void RenderStreamedCarBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame,
-                                       const ShadowMap* lpShadowMap,
-                                       const Matrix44Affine& lrCarTransform,
-                                       f32 lfCameraDistance,
-                                       Vector4 lvFogScattering,
-                                       Vector4 lvFogColourPlusWhiteLevel );
+        // X360 0x822F4DB0. Bind lpRaceCar to an active-race-car slot and start its asset
+        // load. leActiveRaceCarIndex may be E_ACTIVE_RACE_CAR_INDEX_INVALID (-1), in which
+        // case the console re-uses the car's own previous slot if it has one and otherwise
+        // takes the first slot whose muState is E_STATE_INACTIVE. Returns the slot used.
+        //
+        // ⚠️ NOT [VMX]: the PC FLAG INVENTORY files this function under [VMX]; the console
+        // body contains no vector instruction at all.
+        EActiveRaceCarIndex AttachActiveRaceCar( RaceCar* lpRaceCar,
+                                                 EActiveRaceCarIndex leActiveRaceCarIndex );
+
+        // [FLAG PC bring-up] NOT an X360 function. The world module's bring-up tour camera
+        // asks where the spawned car is so it can frame it; false when no slot is active.
+        // DELETE with that camera.
+        bool GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const;
 
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
@@ -380,13 +384,40 @@ private:
     // IsEqual(0) DEREFERENCES its argument -- so the answer is recorded at bind time.
     bool mbCarColoursBound;
 
-    // [FLAG PC bring-up] one-shot latch for StreamFirstUnlockedCarBringUp (see the .cpp
-    // banner). DELETE with it when AttachActiveRaceCar @0x822F4DB0 lands.
+    // [FLAG PC bring-up] one-shot latch for SpawnFirstUnlockedCarBringUp (see the .cpp
+    // banner). DELETE when a real caller of AttachActiveRaceCar @0x822F4DB0 lands.
     bool mbBringUpCarRequested;
 
-    // [FLAG PC bring-up] NOT an X360 function -- the stand-in producer that asks the
-    // streamer for the first unlocked car, because no spawn path exists yet to do it.
-    void StreamFirstUnlockedCarBringUp();
+    // [FLAG PC bring-up] NOT an X360 function -- the stand-in TRIGGER that stands in for
+    // SpawnRaceCar's seven callers. Everything it calls is console code.
+    void SpawnFirstUnlockedCarBringUp();
+
+    // [FLAG PC bring-up] NOT an X360 function -- stands in for the two data-blocked
+    // console steps between E_STATE_ATTACHED and E_STATE_ACTIVE. Full rationale in the
+    // .cpp banner; the pose it publishes IS the console's own CalcBodyTransform.
+    void PromoteAttachedCarToActiveBringUp( ActiveRaceCar* lpActiveRaceCar );
+
+    // ========================================================================
+    // MODELLED members (pose wave 2026-07-31): the three module flags
+    // AttachActiveRaceCar reads. All three are named + placed by the SAME DWARF bool run
+    // the render wave fitted (BrnRaceCarEntityModule.h:370..386): mbRenderCarsDuringCrash
+    // is DWARF entry :377 at +99147, so entry :370 -- the first bool of the run -- is at
+    // 99147 - 7 == +99140, which is exactly the byte AttachActiveRaceCar copies into
+    // ActiveRaceCar::mbIsInGameMode. That makes the render wave's two-point fit a
+    // three-point fit anchored at both ends of the run.
+    // ========================================================================
+
+    // X360 +0x18344 (99140). DWARF BrnRaceCarEntityModule.h:370.
+    bool mbIsInGameMode;
+
+    // X360 +0x186C9 (100041) / +0x186D0 (100048). DWARF BrnRaceCarEntityModule.h:444/:447
+    // (mbInCarSelectScreen, mbInCarModScreen, meCarSelectResetType(4),
+    // mbCarSelectDontStreamAudio -- 100041 + 1 + 2 pad + 4 == 100048, an exact fit).
+    // AttachActiveRaceCar forwards mbCarSelectDontStreamAudio into ActiveRaceCar::Attach
+    // and uses `(!mbInCarSelectScreen || !mbCarSelectDontStreamAudio) && IsPlayerDriven()`
+    // as RaceCarStreamer::AddVehicleData's "stream this car's audio" flag.
+    bool mbInCarSelectScreen;
+    bool mbCarSelectDontStreamAudio;
 
     // ========================================================================
     // MODELLED members (race-car streamer wave 2026-07-31). Same additive rule as the

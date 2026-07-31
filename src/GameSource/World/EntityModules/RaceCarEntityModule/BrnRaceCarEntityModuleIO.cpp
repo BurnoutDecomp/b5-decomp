@@ -585,5 +585,22 @@ InputBuffer_GenerateDispatchLists::SetDispatchFrame(CgsGraphics::DispatchFrame* 
     mpDispatchFrame = lpDispatchFrame;
 }
 
+// X360 0x8279EC78 (W, :643) -- RECOVERED FROM AN EXPORT HOLE, not from a named export.
+// The four setters of this buffer are emitted as one 0xB0-byte-apiece run:
+//   0x8279EA68 SetDispatchFrame            (last insn 0x8279EB14)
+//   0x8279EB18 SetBlobbyShadowBuffer       (last insn 0x8279EBC4)
+//   0x8279EBC8 SetCoronaSubmissionInterface(last insn 0x8279EC74)
+//   0x8279EC78 <hole>                      -- next export is 0x8279ED28, exactly 0xB0 on
+// so the run has a fourth member the .ida-exports set does not carry. It is SetShadowMap:
+// the DWARF declares the four in exactly this order (:634, :637, :640, :643), and
+// GetShadowMap @0x822B6C80 reads the very member left unwritten (this+0x818C). The body
+// is the same two statements as its three neighbours.
+void
+InputBuffer_GenerateDispatchLists::SetShadowMap(BrnWorld::ShadowMap* lpShadowMap)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mpShadowMap = lpShadowMap;
+}
+
 }
 }

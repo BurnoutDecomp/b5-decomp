@@ -126,14 +126,14 @@ public:
     bool  IsDesiredRaceCarLoadedForCarSelect( s32 liActiveRaceCar ) const;
     CgsID GetCarModelId( s32 liActiveRaceCar ) const;
 
-    // [FLAG PC bring-up] NOT an X360 function. GetGraphicsResource below asserts
-    // IsRaceCarLoaded(), i.e. ALL FIVE resource bits. On this build a car reaches
-    // graphics-loaded and stops: VEH_<id>_AT.bin (attributes) is not ported at all and the
-    // wheel-graphics GameData handler is still deferred, so the all-resources predicate can
-    // never be true and the console's own render path could not be exercised at all. This
-    // pair lets the bring-up producer in BrnRaceCarEntityModule_Render.cpp ask the narrower
-    // question ("is the BODY loaded?") and take the resource. DELETE both the moment
-    // AddVehicleData's attribute + wheel legs resolve.
+    // [FLAG PC bring-up] NOT X360 functions. GetGraphicsResource / GetWheelGraphicsResource
+    // below assert IsRaceCarLoaded(), i.e. ALL FIVE resource bits. As of 2026-08-01 a car
+    // gets three of them (LOADEDGFX + LOADEDPHYSICS + LOADEDATTRS); LOADEDWHEELGFX waits on
+    // the deferred `LoadWheel` GameData handler (id 36) and LOADEDAUDIO on the audio
+    // streamer, so the all-resources predicate is still constant-false and the console's
+    // accessors would fire a dev assert on every rendered frame. This trio lets the render
+    // leg ask the narrower question ("is the BODY loaded?") and take the resource without
+    // it. DELETE all three the moment the wheel + audio legs resolve.
     bool IsGraphicsLoadedBringUp( s32 liActiveRaceCar ) const
     {
         return ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_LOADEDGFX ) != 0;
@@ -141,6 +141,10 @@ public:
     const GraphicsResourcePtr& GetGraphicsResourceBringUp( s32 liActiveRaceCar ) const
     {
         return maGraphicsResources[liActiveRaceCar];
+    }
+    const WheelGraphicsResourcePtr& GetWheelGraphicsResourceBringUp( s32 liActiveRaceCar ) const
+    {
+        return maWheelGraphicsResources[liActiveRaceCar];
     }
 
     const GraphicsResourcePtr&      GetGraphicsResource( s32 liActiveRaceCar ) const;

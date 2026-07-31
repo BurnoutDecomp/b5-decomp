@@ -359,10 +359,25 @@ RaceCarEntityModule::GenerateDispatchLists(
             // intrusive alias list right after the call. That round trip only registers a
             // temporary alias; ResourcePtr's copy constructor has no reconstructed body in
             // this tree, so the read-only render use takes the streamer's own references.
+            //
+            // [FLAG PC bring-up] ...but through the BringUp getters, not the console's.
+            // GetGraphicsResource / GetWheelGraphicsResource both assert
+            // IsRaceCarLoaded(), i.e. ALL FIVE resource bits, and on this build two of
+            // them (physics + attributes) come from the unported VEH_<id>_AT.bin and a
+            // third (wheel graphics) from a still-deferred GameData handler -- so the
+            // console's own accessors fire a dev assert every single frame for a car that
+            // is otherwise perfectly renderable. The BringUp pair returns the same member
+            // without the all-resources precondition. RESTORE the console accessors the
+            // moment AddVehicleData's attribute + wheel legs resolve.
             const RaceCarStreamer::GraphicsResourcePtr&      lrCarGraphics =
-                mRaceCarStreamer.GetGraphicsResource( liCar );
+                mRaceCarStreamer.GetGraphicsResourceBringUp( liCar );
             const RaceCarStreamer::WheelGraphicsResourcePtr& lrWheelGraphics =
-                mRaceCarStreamer.GetWheelGraphicsResource( liCar );
+                mRaceCarStreamer.GetWheelGraphicsResourceBringUp( liCar );
+
+            // RenderRaceCar Submits into the OBJECT list (12); 19/20 are mesh-bin routing
+            // ids that the dispatch interpreter fans the packet out to, not lists this
+            // producer appends to directly.
+            const s32 liBefore = lpDispatchFrame->GetList( liObjectList )->GetCount();
 
             RenderRaceCar( lpDispatchFrame,
                            lrActiveRaceCar.GetRenderParams(),
@@ -376,112 +391,28 @@ RaceCarEntityModule::GenerateDispatchLists(
                            lfDistance,
                            lvFogScattering,
                            lvFogColourPlusWhiteLevel );
+
+            // [DIAG pose wave] one-shot proof that the console leg reached the submission
+            // leaf, and with what pose. Cheap enough to leave in: it fires once per boot.
+            static bool sbLoggedFirstSubmission = false;
+            if ( !sbLoggedFirstSubmission && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedFirstSubmission = true;
+                const Matrix44Affine& lrBody =
+                    lrActiveRaceCar.GetRenderParams()->GetBodyTransform();
+                *CgsDev::Log::gpDebugPrint
+                    << "[racecar-render] GenerateDispatchLists -> RenderRaceCar: car "
+                    << liCar << " at (" << lrBody.wAxis.x << ", " << lrBody.wAxis.y
+                    << ", " << lrBody.wAxis.z << ") dist " << lfDistance
+                    << " object list " << liObjectList << " " << liBefore << " -> "
+                    << lpDispatchFrame->GetList( liObjectList )->GetCount()
+                    << " (mesh bins " << liOpaqueMeshList << "/"
+                    << liTransparentMeshList << ")\n";
+            }
         }
     }
 
     lpInput->UnlockForRead();
-}
-
-// ============================================================================
-// [FLAG PC bring-up] RenderStreamedCarBringUp -- NOT an X360 function.
-//
-// The console reaches RenderRaceCar through
-//   RaceCarEntityModule::AttachActiveRaceCar @0x822F4DB0
-//     -> ActiveRaceCar::Attach @0x822BEEE0             (muState = E_STATE_ATTACHED)
-//     -> ActiveRaceCar::OnResourcesLoaded @0x822EB168   (the resources arrive)
-//     -> the vehicle physics module fills mRenderParams every frame (mBodyTransform,
-//        the part-visibility mask, the wheel transforms, mLOD)
-//     -> GenerateDispatchLists above sees IsActive() && mbRenderThisFrame.
-// On this build ALL SEVEN callers of AttachActiveRaceCar are absent, the vehicle physics
-// module does not exist, and the streamer can never report IsRaceCarLoaded() because the
-// attribute resource VEH_<id>_AT.bin is not ported and the wheel-graphics GameData handler
-// is still deferred. So nothing sets muState, nothing sets mbRenderThisFrame, and nothing
-// ever writes a body transform.
-//
-// This is the smallest honest stand-in for that chain: take the car whose BODY the
-// streamer has actually delivered, pose it where the caller asks, and drive the REAL
-// RenderRaceCar with a locally-owned RenderParams. Everything downstream -- the part loop,
-// the locator maths, the shader constants, AddToBin, Submit, the dispatch interpreter and
-// the D3D9 leaf -- is the reconstructed console path.
-//
-// DELETE this function (and its GenerateDispatchListsBringUp call site) once
-// AttachActiveRaceCar and the vehicle physics publisher land.
-// ============================================================================
-void
-RaceCarEntityModule::RenderStreamedCarBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame,
-                                               const ShadowMap* lpShadowMap,
-                                               const Matrix44Affine& lrCarTransform,
-                                               f32 lfCameraDistance,
-                                               Vector4 lvFogScattering,
-                                               Vector4 lvFogColourPlusWhiteLevel )
-{
-    if ( lpDispatchFrame == 0 || lpShadowMap == 0 )
-    {
-        return;
-    }
-
-    const s32 KI_BRING_UP_CAR = 0;   // the slot StreamFirstUnlockedCarBringUp requested
-
-    if ( !mRaceCarStreamer.IsRaceCarActive( KI_BRING_UP_CAR ) ||
-         !mRaceCarStreamer.IsGraphicsLoadedBringUp( KI_BRING_UP_CAR ) )
-    {
-        return;
-    }
-
-    // The render snapshot the physics side would own. Reset() is the console's own
-    // just-spawned visual state (identity transforms, white paint, LOD 4, the authored part
-    // mask); only the body pose is supplied from outside.
-    static ActiveRaceCar::RenderParams sBringUpRenderParams;
-    static bool sbBringUpRenderParamsReset = false;
-    if ( !sbBringUpRenderParamsReset )
-    {
-        sbBringUpRenderParamsReset = true;
-        sBringUpRenderParams.Reset();
-
-        // Reset() seeds the console's authored 0xB80FFFFFFFF part mask, which leaves most of
-        // the Cavalry's 24 body parts hidden. With no deformation/damage system to maintain
-        // it, make the whole shell visible -- this is the console's own MakeAllPartsVisible.
-        sBringUpRenderParams.MakeAllPartsVisible();
-
-        // LOD 0 (Reset seeds state 4; the Cavalry's part models do not all carry that one).
-        sBringUpRenderParams.SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
-    }
-    sBringUpRenderParams.SetBodyTransform( lrCarTransform );
-
-    const RaceCarStreamer::GraphicsResourcePtr& lrCarGraphics =
-        mRaceCarStreamer.GetGraphicsResourceBringUp( KI_BRING_UP_CAR );
-
-    if ( CgsDev::Log::gpDebugPrint != 0 )
-    {
-        static bool sbLogged = false;
-        if ( !sbLogged )
-        {
-            sbLogged = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[racecar-render] bring-up producer live: car " << KI_BRING_UP_CAR
-                << " parts "
-                << static_cast< s32 >( lrCarGraphics.operator->()->muPartsCount )
-                << " at (" << lrCarTransform.wAxis.x << ", " << lrCarTransform.wAxis.y
-                << ", " << lrCarTransform.wAxis.z << ")\n";
-        }
-    }
-
-    // The wheel resource is never bound on this build; RenderRaceCar's wheel block is not
-    // reconstructed and never dereferences it (see the banner).
-    static const RaceCarStreamer::WheelGraphicsResourcePtr sNullWheelGraphics;
-
-    RenderRaceCar( lpDispatchFrame,
-                   &sBringUpRenderParams,
-                   &lrCarGraphics,
-                   &sNullWheelGraphics,
-                   KI_RACE_CAR_OBJECT_LIST,
-                   KI_RACE_CAR_OPAQUE_MESH_LIST,
-                   KI_RACE_CAR_TRANSPARENT_MESH_LIST,
-                   lpShadowMap,
-                   true,
-                   lfCameraDistance,
-                   lvFogScattering,
-                   lvFogColourPlusWhiteLevel );
 }
 
 }

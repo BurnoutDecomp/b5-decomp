@@ -33,7 +33,8 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"        // Attrib::Database (export policies)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault
 
-#include <new>   // placement new (Vault over the package-allocator block)
+#include <new>      // placement new (Vault over the package-allocator block)
+#include <cstring>  // memcpy (the console's XMemCpy in GetFreeSlot)
 
 namespace CgsAttribSys
 {
@@ -259,14 +260,52 @@ void VaultArray::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregist
     CGS_ASSERT(false, "Tried to unregister a vault that wasn't loaded into a slot");  // .cpp:225
 }
 
-// StreamedVaultAllocator::GetFreeSlot @ 0x82808638 -- stage a streamed vault's
-// bin payload into a free streamed slot. Own TU (the free-list walk + copy);
-// only STREAMED vault registration reaches it -- the world data vaults are
-// RESIDENT -- so it defers with the vault-allocator slice.
+// StreamedVaultAllocator::GetFreeSlot @ 0x82808638 -- claim the first free streamed-vault
+// slot and stage the vault's bin payload into it.
+//
+// RECONSTRUCTED 2026-08-01 (pose wave). It used to be a `CGS_ASSERT(false); return -1`
+// deferral on the grounds that "only STREAMED vault registration reaches it -- the world
+// data vaults are RESIDENT". That stopped being true the moment the VEH_<id>_AT.BIN
+// vehicle-attribute bundles were ported: every one of them registers a STREAMED vault, so
+// the deferral returned -1, GetSlotMemory(-1) walked 4096 bytes BELOW the pool and the
+// boot died inside Attrib::Vault::ResolveDependency. Measured, not theorised.
+//
+// The console body is a first-CLEAR-bit scan over mUsedStreamedVaults, a SetBit, and a
+// bounded copy into that slot's 4 KiB bin:
+//   * the scan is the usual `x = ~field; lowest = x & -x; index = 63 - cntlzd(lowest)`
+//     over each 64-bit field, skipping fields that are all-ones -- re-rolled here as the
+//     plain per-index loop it de-optimises to (same result, no endianness trap);
+//   * `Ran out of free streamed vault slots` is CgsAttribSysVaultAllocator.cpp:101;
+//   * `Size of streamed vault .bin is too large (actual size = N bytes, max = 4096)` is
+//     CgsAttribSysVaultAllocator.cpp:112, fired AFTER the slot is claimed and BEFORE the
+//     copy -- the console copies regardless, so this reproduces that ordering.
 s32 StreamedVaultAllocator::GetFreeSlot(u8* lpau8BinData, u32 lu16BinSizeInBytes)
 {
-    (void)lpau8BinData; (void)lu16BinSizeInBytes;
-    CGS_ASSERT(false, "StreamedVaultAllocator::GetFreeSlot @0x82808638: deferred TU (streamed vaults)");
-    return -1;
+    s32 liSlot = -1;
+    for (s32 liIndex = 0; liIndex < KI_MAX_NUM_STREAMED_VAULTS; ++liIndex)
+    {
+        if (!mUsedStreamedVaults.IsBitSet(static_cast<u32>(liIndex)))
+        {
+            liSlot = liIndex;
+            break;
+        }
+    }
+
+    CGS_ASSERT(liSlot >= 0, "Ran out of free streamed vault slots");               // .cpp:101
+    if (liSlot < 0)
+    {
+        return -1;
+    }
+
+    mUsedStreamedVaults.SetBit(static_cast<u32>(liSlot));
+
+    u8* lpSlotMemory = GetSlotMemory(liSlot);
+
+    CGS_ASSERT(lu16BinSizeInBytes < static_cast<u32>(KI_MAX_STREAMED_VAULT_BIN_SIZE),
+               "Size of streamed vault .bin is too large");                        // .cpp:112
+
+    memcpy(lpSlotMemory, lpau8BinData, lu16BinSizeInBytes);
+
+    return liSlot;
 }
 }
