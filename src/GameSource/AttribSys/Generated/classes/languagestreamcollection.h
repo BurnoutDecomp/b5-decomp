@@ -61,13 +61,19 @@ namespace Gen
     // -1965515439) — DWARF-attested at languagestreamcollection.h:100.
     inline unsigned int languagestreamcollection::Num_Items() const
     {
-        static const int KI_ITEMS_KEY = -1965515439; // 0x8AD89D51 == Attrib::Hash::languagestreamcollection::Items (2329451857)
+        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
+        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
+        // the X360 stages the high half with a separate lis/ori pair that was not recorded
+        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
+        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
+        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
+        static const u64 KU_ITEMS_KEY = 0x8AD89D51ull; // Attrib::Hash::languagestreamcollection::Items (2329451857), low word only
 
-        AttributeValue lScratch; // 16-byte stack-resident Attrib::Attribute cursor (attribinstance.h)
+        AttributeValue lScratch; // stack-resident Attrib::Attribute cursor, 4 machine words (attribinstance.h)
         // Get is non-const; Num_Items is const per DWARF -> const_cast the instance.
         languagestreamcollection* lpSelf = const_cast<languagestreamcollection*>(this);
         Attribute* lpCursor = reinterpret_cast<Attribute*>(
-            lpSelf->Get(&lScratch, reinterpret_cast<int*>(lpSelf), KI_ITEMS_KEY));
+            lpSelf->Get(&lScratch, reinterpret_cast<int*>(lpSelf), KU_ITEMS_KEY));
         unsigned int luLength = static_cast<unsigned int>(lpCursor->GetLength());
         CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lScratch);
         return luLength;

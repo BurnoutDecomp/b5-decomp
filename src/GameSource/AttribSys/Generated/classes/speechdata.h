@@ -71,11 +71,17 @@ namespace Gen
     // the low 32 bits of a 64-bit immediate; the high half is a dead upper word.
     inline unsigned int speechdata::Num_LicenseUpgradeVoiceOvers() const
     {
-        static const int KI_KEY = static_cast<int>(0x3216CDCCu); // 840355276
-        AttributeValue lCursor;
+        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
+        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
+        // the X360 stages the high half with a separate lis/ori pair that was not recorded
+        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
+        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
+        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
+        static const u64 KU_KEY = 0x3216CDCCull; // 840355276 (low word only)
+        AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
-            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KI_KEY));
+            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KU_KEY));
         unsigned int luLength = static_cast<unsigned int>(lpAttribute->GetLength());
         CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lCursor);
         return luLength;
@@ -83,11 +89,17 @@ namespace Gen
 
     inline unsigned int speechdata::Num_RoadRageIntros() const
     {
-        static const int KI_KEY = 1042661986; // 0x3E25C262
-        AttributeValue lCursor;
+        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
+        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
+        // the X360 stages the high half with a separate lis/ori pair that was not recorded
+        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
+        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
+        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
+        static const u64 KU_KEY = 0x3E25C262ull; // 1042661986 (low word only)
+        AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
-            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KI_KEY));
+            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KU_KEY));
         unsigned int luLength = static_cast<unsigned int>(lpAttribute->GetLength());
         CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lCursor);
         return luLength;
@@ -95,11 +107,17 @@ namespace Gen
 
     inline unsigned int speechdata::Num_StuntRunIntros() const
     {
-        static const int KI_KEY = -1134185477; // 0xBC65B3FB (u32 3160781819)
-        AttributeValue lCursor;
+        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
+        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
+        // the X360 stages the high half with a separate lis/ori pair that was not recorded
+        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
+        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
+        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
+        static const u64 KU_KEY = 0xBC65B3FBull; // 3160781819 (low word only)
+        AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
-            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KI_KEY));
+            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KU_KEY));
         unsigned int luLength = static_cast<unsigned int>(lpAttribute->GetLength());
         CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lCursor);
         return luLength;
@@ -107,11 +125,17 @@ namespace Gen
 
     inline unsigned int speechdata::Num_StuntRunIntrosShort() const
     {
-        static const int KI_KEY = -23753109; // 0xFE958E6B == 4271214187
-        AttributeValue lCursor;
+        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
+        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
+        // the X360 stages the high half with a separate lis/ori pair that was not recorded
+        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
+        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
+        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
+        static const u64 KU_KEY = 0xFE958E6Bull; // 4271214187 (low word only)
+        AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
-            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KI_KEY));
+            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KU_KEY));
         unsigned int luLength = static_cast<unsigned int>(lpAttribute->GetLength());
         CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lCursor);
         return luLength;

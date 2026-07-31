@@ -16,6 +16,7 @@ namespace Attrib
 {
     typedef u32 Key;   // X360: 32-bit class/attribute key (an earlier SDK rev was 64-bit).
 
+    class Instance;    // defined at the bottom of this header; the Collection_Get seam names it.
     class Class;       // full definition in vechashmap.h; RefSpec::GetClass returns it by pointer.
     class Vault;       // full definition in attribloadandgo.h; a collection's source vault.
     struct Node;       // schema node (full definition in attribute.h); GetNode/GetData use it.
@@ -146,8 +147,20 @@ namespace Attrib
                            const TypeDesc& lrTypeDesc) const;               // @0x8280A068
     };
 
-    // The 16-byte attribute record Get copies out.
-    struct AttributeValue { u32 mauWords[4]; };
+    // The attribute cursor record Instance::Get copies out: an opaque, correctly-sized and
+    // correctly-aligned stack home for one Attrib::Attribute (attribute.h), which the
+    // generated Num_<array>() accessors build on the stack and hand straight back to
+    // Instance::Get. Attribute cannot be named here -- attribute.h includes THIS header.
+    //
+    // ⚠️ WIDENED 2026-07-31 from `u32 mauWords[4]`. Attrib::Attribute is FOUR MACHINE
+    // WORDS ({instance, collection, node, data} -- all pointers), which is 16 bytes on the
+    // console and 32 here. The console byte count had been transcribed literally, so every
+    // generated accessor that declares one of these on the stack (surfacelist::Num_Surfaces,
+    // the four speechdata::Num_*, languagestreamcollection::Num_Items, and now
+    // shotgroup::Num_ShotList) was a 16-byte stack buffer about to receive a 32-byte write.
+    // That was inert only because Collection_Get was a __debugbreak() stub and nothing ever
+    // reached the copy. Sized by word count, not by the console's byte literal.
+    struct AttributeValue { void* mapWords[4]; };
 
     // A reference to another generated-class instance carried inside attribute data
     // (DWARF attribsys.h:735, members :762-764). X360 record: the 64-bit generated-
@@ -203,8 +216,14 @@ namespace Attrib
     // Collection helpers + generated-class helpers (each its own TU).
     Collection* Collection_AddRef(Collection* lpCollection, int liFlags);
     int         Collection_Release(Collection* lpCollection, int liFlags);
-    void*       Collection_Get(void* lpOut, int liKey, int* lpName, int liArg);
-    void*       Collection_GetData(Collection* lpCollection);
+    // Attrib::Collection::Get @0x82807E30 -- resolve luKey through lpCollection and hand
+    // back the 16-byte Attrib::Attribute cursor by value (the X360 returns it through the
+    // hidden r3 sret pointer, which is why the out parameter leads). It is a real member of
+    // Collection, but its return type is Attribute, which is only complete in attribute.h --
+    // and attribute.h includes THIS header. The free-function seam keeps that layering
+    // intact; the body lives in attribute.cpp where both types are complete.
+    void*       Collection_Get(void* lpOut, Collection* lpCollection,
+                               const Instance* lpInstance, u64 luKey);
     int         RefSpec_GetCollectionWithDefault(int* lpRefSpec);
     // (third argument WIDENED to the collection KEY: Instance::GetCollection
     // @0x82802F40 hands over a 64-bit `ld` and the diagnostic formats it as a
@@ -220,17 +239,54 @@ namespace Attrib
     {
     public:
         Instance(Collection* lpCollection, void* lpOwner);
+
+        // Copy construct -- share the source's collection and take a reference on it.
+        // ⚠️ NOT an X360 symbol: the console inlines it at every site (the IDA function
+        // inventory for Attrib::Instance has ctor / dtor / Unmodify / Change /
+        // ChangeWithDefault / Get / GetAttributePointer / GetClass / GetCollection /
+        // operator= and nothing else). The PS3 DWARF does attest that the SDK declares it
+        // out of line (attribinstance.cpp:37, between the RefSpec ctor at :24 and
+        // operator= at :50), so this is a REAL member, not an invention -- only its body
+        // is derived. It is derived from an invariant, not guessed: ~Instance @0x8280D100
+        // releases mpCollection unconditionally, so every Instance holding a non-null
+        // collection must own exactly one reference. The compiler-implicit copy would
+        // share the pointer WITHOUT a reference, giving one AddRef and two Releases.
+        // Field selection and the bounded-AddRef spelling mirror the attested sibling
+        // RefSpec::RefSpec(const RefSpec&) @0x82803560 in this same SDK.
+        Instance(const Instance& lrOther);
+
         ~Instance();
+
+        // @0x8280DE08 -- Change() onto the source's collection (which releases this
+        // instance's old one and takes a reference on the new one), then copy the owner
+        // and the flag word verbatim. Recovered 2026-07-31 from the X360 image: the
+        // function is absent from the JSON export set but is present and named in the
+        // IDA database, immediately after Database::GetExportPolicies (which ends at
+        // 0x8280DE04). 65 of its ~80 call sites are DirectorResourceManager::Prepare.
+        Instance& operator=(const Instance& lrOther);
+
         Collection* Change(Collection* lpNewCollection);
         Collection* ChangeWithDefault(int* lpRefSpec);
-        void*       Get(AttributeValue* pOut, int* lpName, int liArg);
-        void*       GetAttributePointer();
+        // Resolve luAttributeKey into a 16-byte Attrib::Attribute cursor written through
+        // pOut (the X360 sret shape: r3 = the cursor, r4 = the instance, r5 = the key).
+        // ⚠️ luAttributeKey is 64 BITS. It was `int` until 2026-07-31, and that silently
+        // truncated every generated Hash:: constant to its low word -- Collection::GetNode
+        // hashes the WHOLE doubleword, so a truncated key MISSES (the same defect
+        // FindCollection had). lpName is the instance the cursor binds to.
+        void*       Get(AttributeValue* pOut, int* lpName, u64 luAttributeKey);
 
         // Indexed array-attribute element lookup: the 64-bit attribute key (the
         // generated Hash:: constant widened with its type tag) + the element index.
-        // REAL X360 symbol (Attrib::Instance::GetAttributePointer overload; called by
-        // ShotSelector::GetCrashShot @0x82239894 with 0x7533C0E2_15246B49 = the
-        // shotgroup ShotList key). Declaration-only (bodied with the AttribSys TUs).
+        //
+        // ⭐ CORRECTED 2026-07-31. This IS Attrib::Instance::GetAttributePointer
+        // @0x82805880 -- there is exactly ONE such symbol in the image, and its body is
+        //     lwz r3,0(r3) ; cmplwi ; beq -> return 0 ; b Attrib__Collection__GetData
+        // i.e. a TAIL CALL that leaves r4 and r5 untouched, so the key and the index pass
+        // straight through into Collection::GetData(this, key, index) @0x82804FD0.
+        // Hex-Rays renders it as a one-argument function because the body never WRITES
+        // r4/r5; the tree had grown a second, no-argument spelling on the strength of
+        // that, plus call-site comments claiming "the staged key/selector are dead in the
+        // called body". They are not dead. The no-argument overload is retired.
         void*       GetAttributePointer(u64 luAttributeKey, u32 luIndex) const;
         int         GetClass() const;
         // @0x82802F40 -- the referenced collection's 64-bit KEY (`ld r3,0x10(r11)`),

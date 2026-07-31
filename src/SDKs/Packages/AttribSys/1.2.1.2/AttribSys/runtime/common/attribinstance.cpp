@@ -55,10 +55,12 @@ namespace Attrib
         return lpCollection ? lpCollection->Release() : 0;
     }
 
-    // Still un-landed (own TUs); trap stubs. Types are declared in attribinstance.h
+    // Still un-landed (own TU); trap stub. Types are declared in attribinstance.h
     // (reconstructed header), not forked locally here.
-    void*       Collection_Get(void*, int, int*, int) { __debugbreak(); return nullptr; }
-    void*       Collection_GetData(Collection*) { __debugbreak(); return nullptr; }
+    // (Collection_Get and Collection_GetData were two more of these until 2026-07-31.
+    // Collection_Get is now real in attribute.cpp; Collection_GetData is GONE -- its only
+    // caller was the phantom no-argument GetAttributePointer, and the real
+    // Collection::GetData(key, index) is bodied by name in attribcollection.cpp.)
     int         RefSpec_GetCollectionWithDefault(int*) { __debugbreak(); return 0; }
 
     // Attrib::Instance (and Collection / AttributeValue) are declared in attribinstance.h.
@@ -121,6 +123,49 @@ namespace Attrib
         }
     }
 
+    // Copy construct. NOT an X360 out-of-line symbol (the console inlines it everywhere);
+    // the PS3 DWARF attests the SDK declares it at attribinstance.cpp:37. The body is
+    // DERIVED from the refcount invariant ~Instance @0x8280D100 enforces -- it releases
+    // mpCollection unconditionally, so a copy that shared the pointer without taking a
+    // reference would give one AddRef and two Releases. Shape and the bounded-AddRef
+    // spelling follow the attested sibling RefSpec::RefSpec(const RefSpec&) @0x82803560
+    // just above. mpAttributeData is copied rather than re-derived: it is already the
+    // source's `collection->mpData` (or its DefaultDataArea override, which re-deriving
+    // would throw away).
+    Instance::Instance(const Instance& lrOther)
+        : mpCollection(lrOther.mpCollection)
+        , mpAttributeData(lrOther.mpAttributeData)
+        , mpOwner(lrOther.mpOwner)
+        , muFlags(lrOther.muFlags)
+    {
+        if (mpCollection)
+        {
+            CGS_ASSERT(mpCollection->muRefCount != 0xFFFF,
+                       "Exceeded collection refcount maximum!\n");
+            ++mpCollection->muRefCount;
+        }
+    }
+
+    // Attrib::Instance::operator= @ 0x8280DE08
+    //     mr r30,r4 / mr r31,r3
+    //     lwz r4,0(r30)          ; rhs.mpCollection
+    //     bl  Attrib__Instance__Change
+    //     lwz r11,8(r30) / stw r11,8(r31)     ; mpOwner = rhs.mpOwner
+    //     lwz r11,0xC(r30) / stw r11,0xC(r31) ; muFlags = rhs.muFlags
+    //     mr  r3,r31             ; return *this
+    // Change() does the whole refcount transition (release the old collection, take a
+    // reference on the new one, re-cache mpAttributeData), which is why nothing here
+    // touches +4. Note the flag word is copied AFTER Change, so it OVERWRITES the bit0
+    // Change just recomputed from the new collection's source vault -- reproduce that;
+    // for a right-hand side built over the same collection the two agree anyway.
+    Instance& Instance::operator=(const Instance& lrOther)
+    {
+        Change(lrOther.mpCollection);
+        mpOwner = lrOther.mpOwner;
+        muFlags = lrOther.muFlags;
+        return *this;
+    }
+
     Instance::~Instance()
     {
         if (mpCollection)
@@ -159,14 +204,20 @@ namespace Attrib
         return Change(reinterpret_cast<Collection*>(liCollection));
     }
 
-    void* Instance::Get(AttributeValue* pOut, int* lpName, int liArg)
+    // @0x828081B0 -- resolve luAttributeKey against the instance whose address arrives in
+    // lpName and copy the resulting 16-byte Attrib::Attribute cursor into pOut (the X360
+    // returns the cursor by value through the hidden sret pointer in r3, which is why the
+    // out parameter leads and `this` rides in r4). An instance with no collection yields a
+    // zeroed cursor.
+    void* Instance::Get(AttributeValue* pOut, int* lpName, u64 luAttributeKey)
     {
+        Instance* lpInstance = reinterpret_cast<Instance*>(lpName);
         AttributeValue lScratch;
         AttributeValue* lpValue;
-        if (*lpName)
+        if (lpInstance->mpCollection)
         {
             lpValue = reinterpret_cast<AttributeValue*>(
-                Collection_Get(&lScratch, *lpName, lpName, liArg));
+                Collection_Get(&lScratch, lpInstance->mpCollection, lpInstance, luAttributeKey));
         }
         else
         {
@@ -177,9 +228,16 @@ namespace Attrib
         return pOut;
     }
 
-    void* Instance::GetAttributePointer()
+    // @0x82805880 -- `lwz r3,0(r3); if (!r3) return 0; b Attrib__Collection__GetData`.
+    // The branch is a TAIL CALL, so r4 (the 64-bit attribute key) and r5 (the element
+    // index) reach Collection::GetData @0x82804FD0 untouched. This is the ONE
+    // GetAttributePointer symbol in the image; the no-argument spelling that used to sit
+    // beside it was Hex-Rays' view of this same body and is retired.
+    void* Instance::GetAttributePointer(u64 luAttributeKey, u32 luIndex) const
     {
-        return mpCollection ? Collection_GetData(mpCollection) : nullptr;
+        if (!mpCollection)
+            return nullptr;
+        return mpCollection->GetData(luAttributeKey, luIndex);
     }
 
     int Instance::GetClass() const

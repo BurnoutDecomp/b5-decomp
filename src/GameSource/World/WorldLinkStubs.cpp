@@ -2800,14 +2800,11 @@ void BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::oper
 // reference whose bodies are documented NEXT-WAVE gaps (attrib_sdk_wave_log
 // G-list). Each traps loudly; none is on the schema/vault-register path.
 // ---------------------------------------------------------------------------
-// LINK STUB (attrib mount closure): generated-accessor keyed lookup; the X360
-// no-arg form is real in attribinstance.cpp -- this keyed overload is gap G5
-// (runs only when Gen:: accessors walk a materialized collection).
-void * Attrib::Instance::GetAttributePointer(unsigned __int64, unsigned int) const
-{
-    CGS_ASSERT(false, "Attrib::Instance::GetAttributePointer(key,idx): attrib gap G5 -- reconstruct");
-    return 0;
-}
+// (Attrib::Instance::GetAttributePointer(key, index) was a CGS_ASSERT(false) stub here
+// until 2026-07-31, on the theory that the X360 "no-arg form" was the real one and this
+// keyed overload was a separate un-landed function. There is only ONE such symbol
+// @0x82805880 and this IS its signature -- the body tail-calls Collection::GetData with
+// r4/r5 untouched. Real in attribinstance.cpp now; the no-arg spelling is retired.)
 
 // LINK STUB (attrib mount closure): gap G5 sibling (Gen:: ChangeWithDefault edit path).
 Attrib::Collection * Attrib::FindCollectionWithDefault(int)

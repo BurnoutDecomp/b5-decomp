@@ -31,7 +31,9 @@ namespace Attrib
         u16 mTypeIndex;    // +0x0C  attribute type index
         u8  mMax;          // +0x0E  cached probe-run length (bucket role; unused by cursors)
         u8  muFlags;       // +0x0F : bit1(0x2)=array, bit4(0x10)=laid-out/local,
-                           //         bit5(0x20)=inherited, bit7(0x80)=occupied
+                           //         bit5(0x20)=inherited, bit6(0x40)=value stored INLINE
+                           //         in the node (GetPointer @0x828045B0 tests 0x40 first
+                           //         and returns `this + 8`), bit7(0x80)=occupied
 
         // Node @ 0x82809430 — placement-construct a node/bucket for (key, type, value).
         // Resolves the node's schema type index from the attribute database, sets the
@@ -47,16 +49,24 @@ namespace Attrib
         // the stack). Declared so the bodied ctor above does not suppress it.
         Node() {}
 
-        // GetPointer @ external — resolve this node's value pointer inside lpLayout
-        // (the instance's mpAttributeData block).
-        void* GetPointer(void* lpLayout);
-
-        // GetPointer(layout, collection) @ external — the collection-aware resolve the
-        // out-of-line Attribute::GetInternalPointer path calls (DWARF attribhashmap.h:289).
+        // GetPointer(layout, collection) @ 0x828045B0 — resolve this node's value pointer.
+        // Four cases, in the order the X360 tests them: the value stored INLINE in the node
+        // (0x40 -> `this + 8`); a laid-out node (0x10 -> lpLayout + muValue); an inherited
+        // node (0x20 -> the owning class's static data area + muValue); otherwise muValue is
+        // itself the pointer. RECOVERED 2026-07-31 from the IDA database -- the function is
+        // absent from the JSON export set (it sits between Array::GetData and Node::GetCount,
+        // both of which ARE exported).
+        //
+        // ⚠️ There used to be a one-argument `GetPointer(void*)` declared beside this, with a
+        // __debugbreak() body in attribute.cpp. It was a FORK, not an overload: both of the
+        // X360 call sites (Collection::GetData @0x828050A8, Attribute::Attribute @0x82805B38)
+        // stage a collection in r5, and the 0x20 branch dereferences it. Retired.
         void* GetPointer(void* lpLayout, const Collection* lpCollection);
 
-        // GetCount(layout, collection) @ external — element count of an array-typed node
-        // (DWARF attribhashmap.h:326); drives Attribute::GetLength.
+        // GetCount(layout, collection) @ 0x82804610 — element count of this node's value.
+        // Drives Attribute::GetLength. Unoccupied node (no 0x80 bit) -> 0; non-array -> 1;
+        // otherwise the Array header's muNumElements, located exactly as GetPointer locates
+        // the value. (DWARF attribhashmap.h:326.)
         unsigned int GetCount(void* lpLayout, const Collection* lpCollection);
 
         // GetTypeDesc @ own AttribSys TU (todo) — resolve this node's schema TypeDesc from
@@ -99,4 +109,12 @@ namespace Attrib
         Node*             mpNode;        // +8
         void*             mpData;        // +0xC
     };
+
+    // The generated Num_<array>() accessors declare their stack cursor as an opaque
+    // Attrib::AttributeValue (attribinstance.h, which cannot name Attribute) and let
+    // Instance::Get / Collection_Get build an Attribute into it. Keep the two in step.
+    static_assert(sizeof(AttributeValue) == sizeof(Attribute),
+                  "Attrib::AttributeValue must be a byte-exact stack home for Attrib::Attribute");
+    static_assert(alignof(AttributeValue) >= alignof(Attribute),
+                  "Attrib::AttributeValue must be at least as aligned as Attrib::Attribute");
 }
