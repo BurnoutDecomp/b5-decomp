@@ -14,19 +14,19 @@
 // consumes it (RaceCarEntityModule::RenderRaceCar / SubmitCoronasForRaceCar).
 //
 // All 13 X360 functions are bodied here:
-//   GetWheelTransform                    @ 0x822A3220  ((luWheel+33)<<6)+this  -> &maWheelTransforms[luWheel]
-//   GetWheelScaleMatrix                  @ 0x822A31B8  ((luWheel+39)<<6)+this  -> &maWheelScaleMatrices[luWheel]
+//   GetWheelTransform                    @ 0x822A3220  ((luWheel+33)<<6)+this  -> &mWheelTransforms[luWheel]
+//   GetWheelScaleMatrix                  @ 0x822A31B8  ((luWheel+39)<<6)+this  -> &mWheelScaleTransforms[luWheel]
 //   SetWheelScale                        @ 0x822CD170  maWheelScaleMatrices[luWheel] = lrScale
-//   IsPartVisible                        @ 0x822B8B60  (mau64PartVisibility[p>>6] >> (p&63)) & 1
+//   IsPartVisible                        @ 0x822B8B60  the inlined BitArray<96>::IsBitSet
 //   GetCrackedGlassFractureAmountN       @ 0x822A1E30  4*(n+1286)+this  -> mafCrackedGlassFractureAmount[n]   (byte 5144 + 4n)
 //   SetCrackedGlassFractureAmountN       @ 0x822A1D30  store n+1286
 //   GetCrackedGlassEqualisationFactorN   @ 0x822A1EA0  4*(n+1294)+this  -> mafCrackedGlassEqualisationFactor[n] (byte 5176 + 4n)
 //   SetCrackedGlassEqualisationFactorN   @ 0x822A1DB0  store n+1294
-//   GetCrackedGlassScale                 @ 0x822B8410  8*(n+651)+this   -> mav2CrackedGlassScale[n]            (byte 5208 + 8n)
+//   GetCrackedGlassScale                 @ 0x822B8410  8*(n+651)+this   -> mavCrackedGlassScaleFactors[n]            (byte 5208 + 8n)
 //   SetCrackedGlassScaleFactorsN         @ 0x822B83A0  store 2*n+1302 (two floats)
 //   RequestBluesAndTwosStateSwitch       @ 0x822A1C90  strobe-timer accumulate/wrap/toggle on +5132/+5136/+5140/+5141
 //   Reset                                @ 0x822E6818  init to just-spawned visual state
-//   DEBUG_OverrideScratchAmount          @ 0x822A21B0  W-lane broadcast over the 128 scratch vectors
+//   DEBUG_OverrideScratchAmount          @ 0x822A21B0  W-lane broadcast over the 128 verlet offsets
 //                                                      (compiler-unrolled VMX; re-rolled -- wave-2 pass)
 //
 // The X360-baked d:\p4 ...BrnActiveRaceCar.h file/line cites are discarded per project
@@ -40,34 +40,43 @@ namespace BrnWorld
 
 // PIN every X360-asm-proven byte offset in the RenderParams layout map. These are the
 // ONLY place offsets appear numerically; all member access in the bodies is by name.
-// They live inside this member function so offsetof has access to the private members
+// They live inside a member function so offsetof has access to the private members
 // (the data members carry a single private access control => RenderParams is still a
 // standard-layout type, so offsetof is well-defined).
-#define PIN_RP_OFFSETS()                                                                                      \
-    do {                                                                                                      \
-        static_assert(offsetof(RenderParams, mBodyTransform)                    == 0,    "mBodyTransform @0");            \
-        static_assert(offsetof(RenderParams, mav4ScratchVertices)               == 64,   "scratch vectors @64");          \
-        static_assert(offsetof(RenderParams, maWheelTransforms)                 == 2112, "maWheelTransforms @2112");      \
-        static_assert(offsetof(RenderParams, maWheelScaleMatrices)             == 2496, "maWheelScaleMatrices @2496");   \
-        static_assert(offsetof(RenderParams, mv4Field2944)                      == 2944, "mv4Field2944 @2944");           \
-        static_assert(offsetof(RenderParams, mv4Field2960)                      == 2960, "mv4Field2960 @2960");           \
-        static_assert(offsetof(RenderParams, mau8Field3456)                     == 3456, "mau8Field3456 @3456");          \
-        static_assert(offsetof(RenderParams, mau64PartVisibility)              == 3488, "mau64PartVisibility @3488");    \
-        static_assert(offsetof(RenderParams, mpDetachedPartRenderQueue)        == 3504, "queue buffer ptr @3504");       \
-        /* queue max/count internal sub-offsets (3508/3512 on X360) are pointer-size      \
-           dependent on the 64-bit PC gate, so they are intentionally NOT pinned. */       \
-        static_assert(offsetof(RenderParams, maDetachedPartRenderQueueStorage) == 3520, "queue storage @3520");          \
-        static_assert(offsetof(RenderParams, mu5120Version)                    == 5120, "version word @5120");           \
-        static_assert(offsetof(RenderParams, mb5125)                           == 5125, "byte @5125");                   \
-        static_assert(offsetof(RenderParams, mb5131)                           == 5131, "byte @5131");                   \
-        static_assert(offsetof(RenderParams, mfBluesAndTwosTimerA)            == 5132, "blues/twos timer A @5132");      \
-        static_assert(offsetof(RenderParams, mfBluesAndTwosTimerB)            == 5136, "blues/twos timer B @5136");      \
-        static_assert(offsetof(RenderParams, mbBluesAndTwosState)             == 5140, "blues/twos state @5140");        \
-        static_assert(offsetof(RenderParams, mbBluesAndTwosReturnState)       == 5141, "blues/twos return state @5141"); \
-        static_assert(offsetof(RenderParams, mb5142)                           == 5142, "byte @5142");                   \
-        static_assert(offsetof(RenderParams, mafCrackedGlassFractureAmount)     == 5144, "glass fracture[8] @5144");     \
-        static_assert(offsetof(RenderParams, mafCrackedGlassEqualisationFactor) == 5176, "glass equalisation[8] @5176"); \
-        static_assert(offsetof(RenderParams, mav2CrackedGlassScale)            == 5208, "glass scale[8] @5208");         \
+//
+// RenderParams is byte-identical on the x64 gate: its only pointer lives inside
+// maDetachedParts' CgsModule::EventQueue base, whose 16-byte alignment absorbs the
+// widening (console ptr/max/count + 4 pad vs. x64 ptr + max/count), so maEvents and
+// everything after it land on the console offsets.
+#define PIN_RP_OFFSETS()                    \
+    do {                                                                          \
+        static_assert(offsetof(RenderParams, mBodyTransform) == 0, "mBodyTransform @0");                      \
+        static_assert(offsetof(RenderParams, maVerletOffsets) == 64, "verlet offsets @64");                   \
+        static_assert(offsetof(RenderParams, mWheelTransforms) == 2112, "wheel xforms @2112");                \
+        static_assert(offsetof(RenderParams, mWheelScaleTransforms) == 2496, "wheel scales @2496");           \
+        static_assert(offsetof(RenderParams, maAxlePositions) == 2880, "axle positions @2880");               \
+        static_assert(offsetof(RenderParams, mPaintColour) == 2944, "paint colour @2944");                    \
+        static_assert(offsetof(RenderParams, mPearlescentColour) == 2960, "pearlescent @2960");               \
+        static_assert(offsetof(RenderParams, maLightLocatorPos) == 2976, "light pos[24] @2976");              \
+        static_assert(offsetof(RenderParams, maLightLocatorType) == 3360, "light type[24] @3360");            \
+        static_assert(offsetof(RenderParams, mabWheelExists) == 3456, "wheel exists @3456");                  \
+        static_assert(offsetof(RenderParams, mfDeformationSquared) == 3484, "deform^2 @3484");                \
+        static_assert(offsetof(RenderParams, mBodyPartVisibility) == 3488, "part visibility @3488");          \
+        static_assert(offsetof(RenderParams, maDetachedParts) == 3504, "detached queue @3504");               \
+        static_assert(offsetof(RenderParams, mLOD) == 5120, "mLOD @5120");                                    \
+        static_assert(offsetof(RenderParams, mbCrashing) == 5125, "mbCrashing @5125");                        \
+        static_assert(offsetof(RenderParams, mbIsEngineOff) == 5126, "engine off @5126");                     \
+        static_assert(offsetof(RenderParams, mbIsBraking) == 5127, "braking @5127");                          \
+        static_assert(offsetof(RenderParams, mbIsHidden) == 5131, "hidden @5131");                            \
+        static_assert(offsetof(RenderParams, mfLightOpacityFlipFlop) == 5132, "light flipflop @5132");        \
+        static_assert(offsetof(RenderParams, mfLightSwitchTimeOut) == 5136, "light timeout @5136");           \
+        static_assert(offsetof(RenderParams, mbBluesAndTwosCanSwitchState) == 5140, "b and t can switch @5140");\
+        static_assert(offsetof(RenderParams, mbBluesAndTwosActive) == 5141, "b and t active @5141");          \
+        static_assert(offsetof(RenderParams, mu8RenderDamageFlags) == 5142, "damage flags @5142");            \
+        static_assert(offsetof(RenderParams, mafCrackedGlassFractureAmount) == 5144, "glass fracture @5144"); \
+        static_assert(offsetof(RenderParams, mafCrackedGlassEqualisationFactor) == 5176, "glass equal @5176");\
+        static_assert(offsetof(RenderParams, mavCrackedGlassScaleFactors) == 5208, "glass scale @5208");      \
+        static_assert(sizeof(RenderParams) == 5280, "sizeof == 0x14A0");                                      \
     } while (0)
 
 // ----------------------------------------------------------------------------
@@ -75,26 +84,26 @@ namespace BrnWorld
 // ----------------------------------------------------------------------------
 
 // X360 0x822A3220: &maWheelTransforms[luWheel] via ((luWheel+33)<<6)+this.
-Matrix44& ActiveRaceCar::RenderParams::GetWheelTransform(u32 luWheel)
+Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelTransform(u32 luWheel)
 {
     CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
-    return maWheelTransforms[luWheel];
+    return mWheelTransforms[luWheel];
 }
 
 // X360 0x822A31B8: &maWheelScaleMatrices[luWheel] via ((luWheel+39)<<6)+this.
-Matrix44& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel)
+Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel)
 {
     CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
-    return maWheelScaleMatrices[luWheel];
+    return mWheelScaleTransforms[luWheel];
 }
 
 // X360 0x822CD170: the scale matrix arrived split across the int arg registers on
-// console; the asm broadcasts each column and stores a full Matrix44 into slot
-// (luWheel+39)<<6. In clean C++ this is a plain Matrix44 copy-assign.
-void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Matrix44& lrScale)
+// console; the asm broadcasts each column and stores a full Matrix44Affine into slot
+// (luWheel+39)<<6. In clean C++ this is a plain Matrix44Affine copy-assign.
+void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Matrix44Affine& lrScale)
 {
     CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
-    maWheelScaleMatrices[luWheel] = lrScale;
+    mWheelScaleTransforms[luWheel] = lrScale;
 }
 
 // ----------------------------------------------------------------------------
@@ -103,10 +112,33 @@ void ActiveRaceCar::RenderParams::SetWheelScale(u32 luWheel, const Matrix44& lrS
 
 // X360 0x822B8B60: load the 64-bit word for this part group, shift the part's bit
 // down to bit 0, mask. Word index = luPart>>6, bit index = luPart&63.
-bool ActiveRaceCar::RenderParams::IsPartVisible(u8 luPart) const
+bool ActiveRaceCar::RenderParams::IsPartVisible(u8 lu8Part) const
 {
-    CGS_ASSERT(luPart < 96, "( 0 <= n ) && ( 96 > n )");
-    return (mau64PartVisibility[luPart >> 6] >> (luPart & 63)) & 1;
+    CGS_ASSERT(lu8Part < KU_MAX_BODY_PARTS_PER_RACE_CAR, "( 0 <= n ) && ( 96 > n )");
+    return mBodyPartVisibility.IsBitSet(lu8Part);
+}
+
+// ChangePartVisibility (DWARF BrnActiveRaceCar.h:170) -- the inlined BitArray Set/UnSetBit.
+void ActiveRaceCar::RenderParams::ChangePartVisibility(u8 lu8Part, bool lbVisible)
+{
+    CGS_ASSERT(lu8Part < KU_MAX_BODY_PARTS_PER_RACE_CAR, "( 0 <= n ) && ( 96 > n )");
+    if (lbVisible)
+    {
+        mBodyPartVisibility.SetBit(lu8Part);
+    }
+    else
+    {
+        mBodyPartVisibility.UnSetBit(lu8Part);
+    }
+}
+
+// MakeAllPartsVisible (DWARF BrnActiveRaceCar.h:178).
+void ActiveRaceCar::RenderParams::MakeAllPartsVisible()
+{
+    for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
+    {
+        mBodyPartVisibility.SetBit(luPart);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -141,15 +173,15 @@ void ActiveRaceCar::RenderParams::SetCrackedGlassEqualisationFactorN(u32 n, f32 
     mafCrackedGlassEqualisationFactor[n] = lfValue;
 }
 
-// X360 0x822B8410: 8*(n+651)+this == byte 5208 + 8n == &mav2CrackedGlassScale[n]. The
+// X360 0x822B8410: 8*(n+651)+this == byte 5208 + 8n == &mavCrackedGlassScaleFactors[n]. The
 // console returns the 2-float pair through a hidden out-pointer (copies *v7 then v7[1]);
 // clean C++ returns a Vector2 by value built from the packed pair.
 Vector2 ActiveRaceCar::RenderParams::GetCrackedGlassScale(u32 n) const
 {
     CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
     Vector2 lScale;
-    lScale.x = mav2CrackedGlassScale[n].x;
-    lScale.y = mav2CrackedGlassScale[n].y;
+    lScale.x = mavCrackedGlassScaleFactors[n].x;
+    lScale.y = mavCrackedGlassScaleFactors[n].y;
     lScale.z = 0.0f;
     lScale.w = 0.0f;
     return lScale;
@@ -159,8 +191,8 @@ Vector2 ActiveRaceCar::RenderParams::GetCrackedGlassScale(u32 n) const
 void ActiveRaceCar::RenderParams::SetCrackedGlassScaleFactorsN(u32 n, const Vector2& lrScale)
 {
     CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
-    mav2CrackedGlassScale[n].x = lrScale.x;
-    mav2CrackedGlassScale[n].y = lrScale.y;
+    mavCrackedGlassScaleFactors[n].x = lrScale.x;
+    mavCrackedGlassScaleFactors[n].y = lrScale.y;
 }
 
 // ----------------------------------------------------------------------------
@@ -175,32 +207,32 @@ void ActiveRaceCar::RenderParams::SetCrackedGlassScaleFactorsN(u32 n, const Vect
 // logical NOT of the previous reported state.
 bool ActiveRaceCar::RenderParams::RequestBluesAndTwosStateSwitch(f32 lfDeltaTime, bool lbForce)
 {
-    mfBluesAndTwosTimerB += lfDeltaTime;
-    if (mfBluesAndTwosTimerB > 0.1f)
+    mfLightSwitchTimeOut += lfDeltaTime;
+    if (mfLightSwitchTimeOut > 0.1f)
     {
-        mfBluesAndTwosTimerB = 0.0f;
-        mbBluesAndTwosState = 1;
+        mfLightSwitchTimeOut = 0.0f;
+        mbBluesAndTwosCanSwitchState = 1;
     }
 
-    mfBluesAndTwosTimerA += lfDeltaTime;
-    if (mfBluesAndTwosTimerA > 1.0f)
+    mfLightOpacityFlipFlop += lfDeltaTime;
+    if (mfLightOpacityFlipFlop > 1.0f)
     {
-        mfBluesAndTwosTimerA -= 1.0f;
+        mfLightOpacityFlipFlop -= 1.0f;
     }
 
-    if (!lbForce || !mbBluesAndTwosState)
+    if (!lbForce || !mbBluesAndTwosCanSwitchState)
     {
-        return mbBluesAndTwosReturnState != 0;
+        return mbBluesAndTwosActive != 0;
     }
 
     // Forced switch with the strobe armed: toggle and reset the timers. Note the
     // console writes the strobe state (+5140) and returns the toggled value but does
-    // NOT write +5141 here -- faithful to the asm, mbBluesAndTwosReturnState is left
+    // NOT write +5141 here -- faithful to the asm, mbBluesAndTwosActive is left
     // unchanged and the toggle is computed from its current value.
-    const bool lbToggled = (mbBluesAndTwosReturnState == 0);
-    mfBluesAndTwosTimerB = 0.0f;
-    mfBluesAndTwosTimerA = 0.0f;
-    mbBluesAndTwosState = lbToggled ? 1 : 0;
+    const bool lbToggled = (mbBluesAndTwosActive == 0);
+    mfLightSwitchTimeOut = 0.0f;
+    mfLightOpacityFlipFlop = 0.0f;
+    mbBluesAndTwosCanSwitchState = lbToggled ? 1 : 0;
     return lbToggled;
 }
 
@@ -222,40 +254,40 @@ void ActiveRaceCar::RenderParams::Reset()
     // loop; re-rolled here).
     for (u32 luWheel = 0; luWheel < 6; ++luWheel)
     {
-        maWheelTransforms[luWheel].SetIdentity();
-        maWheelScaleMatrices[luWheel].SetIdentity();
+        mWheelTransforms[luWheel].SetIdentity();
+        mWheelScaleTransforms[luWheel].SetIdentity();
     }
 
-    // Two all-ones vectors the console seeds at +2944/+2960 (presumed default scale).
-    mv4Field2944.x = mv4Field2944.y = mv4Field2944.z = mv4Field2944.w = 1.0f;
-    mv4Field2960.x = mv4Field2960.y = mv4Field2960.z = mv4Field2960.w = 1.0f;
+    // The two colour vectors seed to white (the paint / pearlescent shader tints).
+    mPaintColour.x = mPaintColour.y = mPaintColour.z = mPaintColour.w = 1.0f;
+    mPearlescentColour.x = mPearlescentColour.y = mPearlescentColour.z = mPearlescentColour.w = 1.0f;
 
-    // Six bytes at +3456 cleared (the console clears one per wheel inside the matrix loop).
+    // Six wheel-exists bytes cleared (the console clears one per wheel inside the
+    // matrix loop above).
     for (u32 luByte = 0; luByte < 6; ++luByte)
     {
-        mau8Field3456[luByte] = 0;
+        mabWheelExists[luByte] = false;
     }
 
-    // All 96 body parts visible. The console seeds both words with 0xB80FFFFFFFF
-    // (the top bits beyond the 96 valid parts carry a fixed pattern; preserved verbatim).
-    mau64PartVisibility[0] = 0xB80FFFFFFFFull;
-    mau64PartVisibility[1] = 0xB80FFFFFFFFull;
+    // Body-part visibility. The console seeds BOTH 64-bit fields with the literal
+    // 0xB80FFFFFFFF; that is not "all parts visible", it is the authored default part
+    // mask, so it is preserved verbatim rather than "corrected" to all-ones.
+    mBodyPartVisibility.SetBitField(0, 0xB80FFFFFFFFull);
+    mBodyPartVisibility.SetBitField(1, 0xB80FFFFFFFFull);
 
-    // Detached-part render queue: empty, pointing at the embedded storage.
-    mpDetachedPartRenderQueue      = maDetachedPartRenderQueueStorage;
-    muDetachedPartRenderQueueMax   = 20;
-    muDetachedPartRenderQueueCount = 0;
+    // Detached-part render queue: empty, pointing at its embedded storage.
+    maDetachedParts.Construct();
 
-    // Misc scalar/flag fields the console zero-/seeds in Reset.
-    mu5120Version = 4;
-    mb5125        = 0;
-    mb5131        = 0;
-    mb5142        = 0;
+    // The just-spawned visual state.
+    mLOD                 = static_cast<CgsGraphics::Model::State>(4);
+    mbCrashing           = false;
+    mbIsHidden           = false;
+    mu8RenderDamageFlags = 0;
 
-    // Blues-and-twos strobe: timer A zeroed, strobe armed, reported state off.
-    mfBluesAndTwosTimerA     = 0.0f;
-    mbBluesAndTwosState      = 1;
-    mbBluesAndTwosReturnState = 0;
+    // Blues-and-twos strobe: the light flip-flop zeroed, switching armed, strobe off.
+    mfLightOpacityFlipFlop       = 0.0f;
+    mbBluesAndTwosCanSwitchState = true;
+    mbBluesAndTwosActive         = false;
 
     // Clear all 8 cracked-glass fracture amounts (console unrolls 8x; re-rolled).
     for (u32 luPane = 0; luPane < 8; ++luPane)
@@ -287,9 +319,9 @@ void ActiveRaceCar::RenderParams::DEBUG_OverrideScratchAmount(f32 lfScratchAmoun
 {
     for (u32 luVector = 0; luVector < 128; ++luVector)
     {
-        Vector4 lv4Value = mav4ScratchVertices[luVector];    // lvx128: whole register
-        lv4Value.w = lfScratchAmount;                        // stfs f1 -> byte 12 (lane W)
-        mav4ScratchVertices[luVector] = lv4Value;            // stvx128: all 16 bytes back
+        Vector3Plus lvValue = maVerletOffsets[luVector];  // lvx128: whole register
+        lvValue.w = lfScratchAmount;                     // stfs f1 -> byte 12 (lane W)
+        maVerletOffsets[luVector] = lvValue;             // stvx128: all 16 bytes back
     }
 }
 

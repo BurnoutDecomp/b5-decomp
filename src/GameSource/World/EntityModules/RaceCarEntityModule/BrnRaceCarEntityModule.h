@@ -36,14 +36,30 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<N,A>
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::BaseResourcePtr
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.h" // BrnWorld::RaceCarStreamer (by value)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"         // BrnWorld::RaceCar (by value)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"   // BrnWorld::ActiveRaceCar (by value)
 
 #include <cstddef>                                   // offsetof
+
+namespace CgsGraphics { class DispatchFrame; }
+// (BrnWorld::ShadowMap is a `struct` -- BrnShadowMap.h:65; never forward-declare it
+//  as `class` here, the class key is part of the MSVC mangling.)
+namespace BrnWorld { struct ShadowMap; }
+
 
 namespace CgsResource { struct ResourceHandle; }
 namespace BrnResource { struct VehicleList; class WheelList; }
 
 namespace BrnWorld
 {
+
+// The three dispatch-list ids the console's WorldModule::GenerateDispatchLists hands the
+// race-car module (`li r6, 0xC` / `li r7, 0x13` / `li r8, 0x14` @0x827D27AC..0x827D27B8):
+// the dispatch-frame OBJECT list and the two race-car MESH lists. Compare the world's own
+// 2 / 11 / 15 in BrnWorldModule.cpp.
+const s32 KI_RACE_CAR_OBJECT_LIST           = 12;
+const s32 KI_RACE_CAR_OPAQUE_MESH_LIST      = 19;
+const s32 KI_RACE_CAR_TRANSPARENT_MESH_LIST = 20;
 
 // X360-attested pending-training-request ring depth (DWARF BrnRaceCarEntityModule.h:66).
 // AddTrainingRequest asserts miPendingRequestCount < this before appending.
@@ -59,26 +75,17 @@ namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuff
 // SharedClasses/Graphics/BrnGlobalColourPalette.h); held by pointer only here.
 struct GlobalColourPalette;
 
-// ---- PLACEHOLDER element types ---------------------------------------------
-// The real RaceCar / ActiveRaceCar live in their own (not-yet-committed) homes
-// under .../RaceCarEntityModule/BrnRaceCar.h and BrnActiveRaceCar.h. These two
-// accessors only ever return the ADDRESS of an element, so for this TU only the
-// element SIZE is load-bearing (it sets the array stride the asm proves). The
-// byte sizes below are the X360-attested strides (0xB0 / 0x1CD0); the internal
-// members are intentionally opaque and FLAGGED -- do NOT treat these as the real
-// class layouts. When the real types are committed, replace these stand-ins and
-// drop the size static_asserts in the .cpp.
-class RaceCar
-{
-public:
-    u8 maPlaceholderBytes[0xB0];   // FLAG: opaque; size only (X360 stride 0xB0 == 176)
-};
-
-class ActiveRaceCar
-{
-public:
-    u8 maPlaceholderBytes[0x1CD0]; // FLAG: opaque; size only (X360 stride 0x1CD0 == 7376)
-};
+// ---- element types (2026-07-31: THE ODR FORK IS GONE) ----------------------
+// This header used to define its own opaque `class RaceCar { u8 [0xB0]; }` and
+// `class ActiveRaceCar { u8 [0x1CD0]; }` so the two array accessors could compile
+// against a known stride. Both real types are committed (BrnRaceCar.h /
+// BrnActiveRaceCar.h) and are now included above, so those stand-ins -- a genuine
+// two-definitions-of-one-class ODR violation the moment any TU saw both headers --
+// are deleted. Consequence: on the x64 gate the element strides are the real
+// sizeof()s (both types carry pointers the console stored in 4 bytes), so the
+// CONSOLE array offsets 0x250 / 0x1A60 no longer hold for maActiveRaceCars and the
+// offsetof pins below drop to the members whose offsets are still meaningful.
+// Nothing reads this module by offset -- parity is by named member.
 
 class RaceCarEntityModule
 {
@@ -119,12 +126,48 @@ public:
                                 RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
                                 BrnUpdateSet lUpdateSet );
 
-        // ---- ADDITIVE (WorldModule::GenerateDispatchLists @0x827D1CE8) ----
+        // ---- X360 0x822E79F8 (called by WorldModule::GenerateDispatchLists @0x827D27C8) ----
+        // ⚠ NOTE the argument list. The earlier PC declaration carried only the input
+        // buffer, the visible-entity array and the three vector args -- it DROPPED the four
+        // GPR arguments the console call site loads right before the branch:
+        //     li r6, 0xC   li r7, 0x13   li r8, 0x14   li r9, 0
+        // i.e. the dispatch-frame OBJECT list (12) and the two MESH lists (19 = race-car
+        // opaque, 20 = race-car transparent) that RenderRaceCar forwards straight into
+        // DispatchFrame::GetList / DrawRenderable::AddToBin, plus a bool. Without them the
+        // render leg has nowhere to submit. (Same trap as the streamer wave's Prepare:
+        // recover a stub's signature from the ASM, not from the existing declaration.)
+        // The vector args: v1 = fog scattering, v2 = fog colour + white level,
+        // v3 = the camera position (the `vsubfp128 v13, v123, v13` operand).
         void GenerateDispatchLists( RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists* lpInput,
                                     const Array<CgsSceneManager::EntityId, 32u>& lrVisibleEntities,
+                                    s32  liObjectList,
+                                    s32  liOpaqueMeshList,
+                                    s32  liTransparentMeshList,
+                                    bool lbEnvironmentMapPass,
                                     Vector4 lvFogScattering,
                                     Vector4 lvFogColourPlusWhiteLevel,
                                     Vector3 lvCameraPosition );
+
+        // ---- X360 0x822CF6A0 -- submit ONE race car's dispatch entries ----
+        // Signature recovered from the asm prologue (@0x822CF6C4..0x822CF764: r3->r20 this,
+        // r5->r16 render params, r6->r25 graphics ptr, r7/r8/r9/r10 spilled to arg_64/6C/74/7C,
+        // r4 spilled to arg_1C) and the call site @0x822E8550 (r5 = &activeCar + 0x7E0,
+        // stack arg_84 = the shadow map, stack arg_8F = the "render attached geometry" bool).
+        //   lfCameraDistance : v1 -- the camera->car DISTANCE the caller computes with
+        //                      vmsum3fp128 + vrsqrtefp + vmulfp (a scalar broadcast into all
+        //                      four lanes, NOT a direction vector).
+        void RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
+                            ActiveRaceCar::RenderParams* lpRenderParams,
+                            const CgsResource::ResourcePtr<BrnVehicle::GraphicsSpec>* lpCarGraphics,
+                            const CgsResource::ResourcePtr<BrnWheel::GraphicsSpec>* lpWheelGraphics,
+                            s32 liObjectList,
+                            s32 liOpaqueMeshList,
+                            s32 liTransparentMeshList,
+                            const ShadowMap* lpShadowMap,
+                            bool lbRenderAttachedGeometry,
+                            f32  lfCameraDistance,
+                            Vector4 lvFogScattering,
+                            Vector4 lvFogColourPlusWhiteLevel );
 
         // ---- X360 0x82303E78 (attested by WorldModule::Prepare @0x827D53B0 stage 6) ----
         // NOTE the argument list: the console signature is
@@ -153,6 +196,17 @@ public:
         // queues onto the PostPhysics output buffer's resource-request interface -- the
         // ONLY way a race-car load request leaves this module. Called from PostPhysicsUpdate.
         void SendStreamerEvents( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
+
+        // [FLAG PC bring-up] NOT an X360 function -- the stand-in that drives the REAL
+        // RenderRaceCar for the one car whose body the streamer has delivered, because
+        // AttachActiveRaceCar and the vehicle physics publisher do not exist on this build.
+        // See the banner in BrnRaceCarEntityModule_Render.cpp. DELETE with them.
+        void RenderStreamedCarBringUp( CgsGraphics::DispatchFrame* lpDispatchFrame,
+                                       const ShadowMap* lpShadowMap,
+                                       const Matrix44Affine& lrCarTransform,
+                                       f32 lfCameraDistance,
+                                       Vector4 lvFogScattering,
+                                       Vector4 lvFogColourPlusWhiteLevel );
 
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
@@ -348,6 +402,24 @@ private:
     // gap 0x11100 - 0x100E8 == 4120, so these two are the same layout fact.
     RaceCarStreamer mRaceCarStreamer;
 
+    // ========================================================================
+    // MODELLED members (render wave 2026-07-31): the three render debug switches the
+    // dispatch leg reads. Their console offsets are pinned by a TWO-POINT fit against
+    // the DWARF bool run (BrnRaceCarEntityModule.h:370..386 -- 17 bools ending just
+    // before the 8-byte-aligned mxGameModeFlags @+0x18358):
+    //   +99148 mbRenderWheels        -- `if (*(this+99148) && lbRenderAttachedGeometry)`
+    //                                   gates RenderRaceCar's wheel block
+    //   +99151 mbRenderRaceCarCoronas-- `if (*(this+99151) && ...)` gates
+    //                                   SubmitCoronasForRaceCar in GenerateDispatchLists
+    // Both land exactly, and the DWARF's spacing between them (+3) matches, so the
+    // member one slot before mbRenderWheels is mbRenderCarsDuringCrash -- which is the
+    // switch RenderRaceCar tests to gate its whole BODY-PART loop (`if (*(this+99147))`).
+    // (The name reads oddly for that role; the offsets are what is attested, so the
+    // DWARF name is kept and the role recorded here.)
+    bool mbRenderCarsDuringCrash;   // X360 +0x1834B (99147)
+    bool mbRenderWheels;            // X360 +0x1834C (99148)
+    bool mbRenderRaceCarCoronas;    // X360 +0x1834F (99151)
+
     // X360 +0x18398 (99224). The SIM time step latched once per frame by PreSceneUpdate
     // (`mfTimeStep = lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->
     //  GetCurrentTimeStep()`, asm `*(v52+28) * *(v52+32)`), zeroed when the update set's
@@ -391,22 +463,15 @@ RaceCarEntityModule::GetGlobalRaceCar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 // accessor asm bakes in (this + 592 / this + 6752).
 inline void RaceCarEntityModule::LockLayout_()
 {
+    // maRaceCars still lands on the console offset (its leading span is exact and RaceCar
+    // has no leading pointer). NOTHING AFTER maActiveRaceCars can be pinned any more: with
+    // the ODR fork retired the element is the REAL ActiveRaceCar, whose mpRaceCar widens
+    // 4->8 on the x64 gate, so the array stride (console 0x1CD0) and every member the array
+    // pushes downstream shift. That is exactly the project's named-member parity rule --
+    // the console offsets survive as the per-member comments, which is what a later wave
+    // needs; no code reads this module by offset.
     static_assert(offsetof(RaceCarEntityModule, maRaceCars) == 0x250,
                   "maRaceCars @+0x250 (== 592)");
-    static_assert(offsetof(RaceCarEntityModule, maActiveRaceCars) == 0x1A60,
-                  "maActiveRaceCars @+0x1A60 (== 6752)");
-    static_assert(offsetof(RaceCarEntityModule, mxGameModeFlags) == 0x18358,
-                  "mxGameModeFlags @+0x18358 (== 99160)");
-    static_assert(offsetof(RaceCarEntityModule, maActiveRaceCarForPlayerScoringIndex) == 0x187BC,
-                  "maActiveRaceCarForPlayerScoringIndex @+0x187BC (== 100284)");
-    static_assert(offsetof(RaceCarEntityModule, mfCurrentTailgateDuration) == 0x182F0,
-                  "mfCurrentTailgateDuration @+0x182F0 (== 99056)");
-    static_assert(offsetof(RaceCarEntityModule, mePendingTrainingRequestQueue) == 0x18374,
-                  "mePendingTrainingRequestQueue @+0x18374 (== 99188)");
-    static_assert(offsetof(RaceCarEntityModule, miPendingRequestCount) == 0x18394,
-                  "miPendingRequestCount @+0x18394 (== 99220)");
-    static_assert(offsetof(RaceCarEntityModule, mePlayerActiveRaceCarIndex) == 0x182F8,
-                  "mePlayerActiveRaceCarIndex @+0x182F8 (== 99064)");
 }
 
 }

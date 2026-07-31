@@ -40,4 +40,20 @@ uint8_t WorldMap2D::GetValue(Vector2 lPosition) const
     return mpValues[liY * muWidth + liX];
 }
 
+// The Vector3 overload. The X360 emits ONE GetValue body (@0x82907FF8) for both
+// declarations: its prologue is `vspltw v10, v1, 0` / `vspltw v9, v1, 1`, i.e. it reads
+// LANES 0 AND 1 of whatever vector it is handed and ignores the rest -- so a Vector3
+// argument contributes its x and y lanes exactly like a Vector2 does. (Callers: e.g.
+// RaceCar::UpdatePositioningData @0x822D3788 passes mTransform.Pos().) Expressed here as
+// the forward that same-body-two-declarations arrangement means.
+uint8_t WorldMap2D::GetValue(Vector3 lPosition) const
+{
+    Vector2 lFlat;
+    lFlat.x = lPosition.x;
+    lFlat.y = lPosition.y;
+    lFlat.z = 0.0f;
+    lFlat.w = 0.0f;
+    return GetValue(lFlat);
+}
+
 }

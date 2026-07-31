@@ -26,6 +26,7 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the inline accessors below)
 #include "BrnCommonTypes.h"                                        // Matrix44Affine, Vector3, CgsID
 #include "GameSource/BurnoutConstants.h"                          // EGlobalRaceCarIndex, EActiveRaceCarIndex
 #include "GameSource/World/AI/BrnAISharedConstants.h"             // BrnAI::EResetType
@@ -71,9 +72,28 @@ public:
 
     // ---- Simple state accessors --------------------------------------------
     ERaceCarType GetType() const { return static_cast<ERaceCarType>(muType); }
-    Vector3 GetPosition() const;
+    // GetPosition @0x822B3588 / GetDirection @0x822B3610. Both are one-line transform-row
+    // reads guarded by the same two asserts, and the X360 INLINES both at every call site
+    // (e.g. ActiveRaceCar::GetDirection @0x822CD038 carries the expanded assert pair). Homed
+    // here as inline members -- alongside GetTransform/GetVelocity, which were already
+    // header-inline -- so a consumer of this class can link without BrnRaceCar.cpp's whole
+    // lifecycle TU, which needs the WorldRegion district/county NAME TABLES: pure .rodata
+    // that the function-only IDA export cannot supply. Bodies verbatim from the .cpp.
+    Vector3 GetPosition() const
+    {
+        CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+        CGS_ASSERT(IsInWorld(), "IsInWorld()");
+
+        return mTransform.Pos();
+    }
     Vector3 GetPreviousPosition() const { return mPreviousPosition; }
-    Vector3 GetDirection() const;
+    Vector3 GetDirection() const
+    {
+        CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+        CGS_ASSERT(IsInWorld(), "IsInWorld()");
+
+        return mTransform.At();
+    }
     Vector3 GetVelocity() const { return mVelocity; }
     Matrix44Affine GetTransform() const { return mTransform; }
 

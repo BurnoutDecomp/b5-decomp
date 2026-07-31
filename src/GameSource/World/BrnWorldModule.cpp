@@ -3456,6 +3456,8 @@ WorldModule::GenerateDispatchLists(
             PerfMonCpu::StartMonitor( miRaceCarGenerateDispListClearPM );
             mRaceCarEntityModule.GenerateDispatchLists(
                 lpRaceCarDispatchInput, lpFilteredEntityData->maRaceCarEntityIds,
+                KI_RACE_CAR_OBJECT_LIST, KI_RACE_CAR_OPAQUE_MESH_LIST,
+                KI_RACE_CAR_TRANSPARENT_MESH_LIST, false,
                 lvFogScattering, lvFogColourPlusWhiteLevel, gDispatchCamera.GetPosition() );
             PerfMonCpu::StopMonitor( miRaceCarGenerateDispListClearPM );
         }
@@ -3778,6 +3780,7 @@ WorldModule::GenerateShadowMapDispatchLists(
         {
             mRaceCarEntityModule.GenerateDispatchLists(
                 lpRaceCarDispatchInput, lpFilteredEntityData->maRaceCarEntityIds,
+                liCascadeList, liCascadeList, liCascadeList, false,
                 Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
                 lpCameraInput->GetPosition() );
         }
@@ -4408,6 +4411,83 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 lViewProjection, lEye, lForward, 1.0f, &mShaderLodInfo,
                 KI_WORLD_OPAQUE_LIST, KI_WORLD_SORT_LAYER, KI_WORLD_SORT_KEY,
                 KI_WORLD_PREZ_LIST, false );
+        }
+
+        // [FLAG PC bring-up] THE RACE CAR. The console reaches
+        // RaceCarEntityModule::GenerateDispatchLists from the real
+        // WorldModule::GenerateDispatchLists with the module's own dispatch input buffer;
+        // that buffer set does not exist here (see the FLAG above) and no ActiveRaceCar is
+        // ever attached, so the module's own bring-up producer is called directly. It
+        // drives the REAL RenderRaceCar @0x822CF6A0. DELETE with the rest of this function.
+        {
+            // Pose the car ahead of and slightly below the eye, facing the way the camera
+            // looks. The console's pose comes from the vehicle physics module, which does
+            // not exist; this is the stand-in that makes the car visible from the tour
+            // camera. The basis is orthonormal (RenderRaceCar's own dev asserts check that).
+            const f32 KF_CAR_AHEAD = 9.0f;
+            const f32 KF_CAR_BELOW = 1.6f;
+            const f32 KF_CAR_YAW   = 0.60f;   // radians -- a three-quarter front framing
+
+            // The camera's own horizontal basis.
+            Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
+            Vector3 lCamRight;
+            lCamRight.x = lWorldUp.y * lForward.z - lWorldUp.z * lForward.y;
+            lCamRight.y = lWorldUp.z * lForward.x - lWorldUp.x * lForward.z;
+            lCamRight.z = lWorldUp.x * lForward.y - lWorldUp.y * lForward.x;
+            lCamRight.w = 0.0f;
+            {
+                const f32 lfLen = sqrtf( lCamRight.x * lCamRight.x + lCamRight.y * lCamRight.y
+                                         + lCamRight.z * lCamRight.z );
+                const f32 lfInv = ( lfLen > 0.0001f ) ? ( 1.0f / lfLen ) : 1.0f;
+                lCamRight.x *= lfInv;  lCamRight.y *= lfInv;  lCamRight.z *= lfInv;
+            }
+
+            // The car faces back toward the camera, yawed a little, so the shot is a
+            // three-quarter FRONT view instead of a straight-on tail.
+            const f32 lfCos = cosf( KF_CAR_YAW );
+            const f32 lfSin = sinf( KF_CAR_YAW );
+            Vector3 lCarForward;
+            lCarForward.x = -( lForward.x * lfCos + lCamRight.x * lfSin );
+            lCarForward.y = -( lForward.y * lfCos + lCamRight.y * lfSin );
+            lCarForward.z = -( lForward.z * lfCos + lCamRight.z * lfSin );
+            lCarForward.w = 0.0f;
+
+            Vector3 lCarRight;
+            lCarRight.x = lWorldUp.y * lCarForward.z - lWorldUp.z * lCarForward.y;
+            lCarRight.y = lWorldUp.z * lCarForward.x - lWorldUp.x * lCarForward.z;
+            lCarRight.z = lWorldUp.x * lCarForward.y - lWorldUp.y * lCarForward.x;
+            lCarRight.w = 0.0f;
+            {
+                const f32 lfLen = sqrtf( lCarRight.x * lCarRight.x + lCarRight.y * lCarRight.y
+                                         + lCarRight.z * lCarRight.z );
+                const f32 lfInv = ( lfLen > 0.0001f ) ? ( 1.0f / lfLen ) : 1.0f;
+                lCarRight.x *= lfInv;  lCarRight.y *= lfInv;  lCarRight.z *= lfInv;
+            }
+            Vector3 lCarUp;
+            lCarUp.x = lCarForward.y * lCarRight.z - lCarForward.z * lCarRight.y;
+            lCarUp.y = lCarForward.z * lCarRight.x - lCarForward.x * lCarRight.z;
+            lCarUp.z = lCarForward.x * lCarRight.y - lCarForward.y * lCarRight.x;
+            lCarUp.w = 0.0f;
+
+            rw::math::vpu::Matrix44Affine lCarTransform;
+            lCarTransform.xAxis = lCarRight;
+            lCarTransform.yAxis = lCarUp;
+            lCarTransform.zAxis = lCarForward;
+            Vector3 lCarPosition;
+            lCarPosition.x = lEye.x + lForward.x * KF_CAR_AHEAD - lCarUp.x * KF_CAR_BELOW;
+            lCarPosition.y = lEye.y + lForward.y * KF_CAR_AHEAD - lCarUp.y * KF_CAR_BELOW;
+            lCarPosition.z = lEye.z + lForward.z * KF_CAR_AHEAD - lCarUp.z * KF_CAR_BELOW;
+            lCarPosition.w = 0.0f;
+            lCarTransform.wAxis = lCarPosition;
+
+            // Fog: the console hands the race-car module the frame's scattering /
+            // colour+white-level vectors from the environment settings, which are not
+            // converted on this build (see PublishWorldShadingConstantsBringUp). Zero
+            // scattering makes RenderRaceCar's fog blend exactly zero -- i.e. no fog --
+            // which is the same state the world pass is already in.
+            mRaceCarEntityModule.RenderStreamedCarBringUp(
+                lpDispatchFrame, &mShadowMap, lCarTransform, KF_CAR_AHEAD,
+                Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );
         }
         sQueryOutput.UnlockForRead();
 

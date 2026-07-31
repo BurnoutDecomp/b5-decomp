@@ -458,15 +458,17 @@ Vector4** AddShaderTechniqueConstantsToDispatchBin(DispatchBin* lpBin,
 // "excluded mesh" statics -- they are the shader-constant dirty list):
 //   * lbMarkAllConstantsDirty: rebuild the table's dirty list as the identity of
 //     every used constant (the every-128-submissions "send everything" refresh).
-//   * word1 = opaqueList<<24 | technique<<16 | transparentList<<8 | frustumEnable.
+//   * word1 = opaqueList<<24 | transparentList<<16 | technique<<8 | frustumEnable.
+//     (CORRECTED 2026-07-31 -- see the note in Interpret: the X360 adds liListBase to the
+//     >>24 AND >>16 bytes, so those are the two LIST ids and the >>8 byte is the technique.)
 //   * trailer (cmd + 16 + dirtyQw*16): the DrawRenderableDispatchThreadInfo bytes
 //     [0]=zOnly [1]=preZList [2]=instanceCount [3]=preZTechnique [4]=excludeBits,
 //     and the renderable's LAST mesh pointer at trailer+8.
 //   * the dirty-constant block is drained into cmd+16.
 // =============================================================================
 bool DrawRenderable::AddToBin(const Renderable* lpRenderable, DispatchFrame* lpFrame,
-                              bool lbMarkAllConstantsDirty, s8 li8OpaqueList, s8 li8Technique,
-                              u8 lu8FrustumEnable, u8 lu8TransparentList, bool lbZOnly,
+                              bool lbMarkAllConstantsDirty, s8 li8OpaqueList, s8 li8TransparentList,
+                              u8 lu8FrustumEnable, u8 lu8Technique, bool lbZOnly,
                               u8 lu8PreZList, u8 lu8PreZTechnique,
                               s32 liInstanceCount, u8 lu8ExcludeMeshBits)
 {
@@ -516,9 +518,12 @@ bool DrawRenderable::AddToBin(const Renderable* lpRenderable, DispatchFrame* lpF
 
     WriteCommandPointer(&lpCommand[2], lpRenderable);       // [x64] words 2..3
     lpCommand[0] = (lu16DirtyQw + 1u) | 0x01000000u;        // DRAWRENDERABLE id + length
+    // X360 @0x827FA264..0x827FA294: r11 = (extsb(arg4) << 8) | extsb(arg5);
+    //                                 insrwi arg7, r11, 24, 0;  insrwi arg6, arg7, 24, 0
+    // i.e. arg4<<24 | arg5<<16 | arg7<<8 | arg6.
     lpCommand[1] = (static_cast<u32>(static_cast<u8>(li8OpaqueList)) << 24)
-                 | (static_cast<u32>(static_cast<u8>(li8Technique)) << 16)
-                 | (static_cast<u32>(lu8TransparentList) << 8)
+                 | (static_cast<u32>(static_cast<u8>(li8TransparentList)) << 16)
+                 | (static_cast<u32>(lu8Technique) << 8)
                  | lu8FrustumEnable;
     return true;
 }
@@ -654,10 +659,19 @@ void DrawRenderable::Interpret(DispatchCommand* lpCommand, DispatchFrame* lpFram
     CGS_ASSERT(lpRenderable != 0, "lpRenderable");
 
     // word1 routing bytes.
+    // ⭐ CORRECTED (race-car render wave 2026-07-31). Byte 2 and byte 1 were swapped here:
+    // the X360 Interpret @0x827FCE94..0x827FCEDC adds the context's liListBase to BOTH the
+    // >>24 and the >>16 bytes (`add r5, r5, r7` / `add r7, r6, r7`) and stores the >>8 byte
+    // RAW. Two list ids and one technique -- so byte2 is the TRANSPARENT LIST and byte1 is
+    // the TECHNIQUE, not the other way round. RenderInstance in BrnWorldEntityModule.cpp
+    // passed AddToBin's arguments with the same swap, so the two errors cancelled and the
+    // world still drew correctly; the race car passes (opaque 19, transparent 20, technique
+    // 0..3) and would have been routed into list 19 with technique 20 (clamped to the last
+    // material) and its transparent meshes into list 0..3 -- the SHADOW cascades.
     const u32 luWord1          = lpWords[1];
     const u8  lu8OpaqueList    = static_cast<u8>(luWord1 >> 24);
-    const u8  lu8Technique     = static_cast<u8>(luWord1 >> 16);
-    const u8  lu8Transparent   = static_cast<u8>(luWord1 >> 8);
+    const u8  lu8Transparent   = static_cast<u8>(luWord1 >> 16);
+    const u8  lu8Technique     = static_cast<u8>(luWord1 >> 8);
     bool      lbFrustumTest    = (luWord1 & 0xFFu) != 0;
     const s32 liListBase       = lpContext->miListIdBase;
     const u32 luOpaqueListId   = static_cast<u32>(lu8OpaqueList + liListBase);

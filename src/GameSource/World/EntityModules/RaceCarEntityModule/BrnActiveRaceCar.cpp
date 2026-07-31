@@ -1,54 +1,81 @@
 // ============================================================================
-// BrnWorld::ActiveRaceCar -- per-frame state accessors for the live (simulated,
-// in-range) half of a race car.
+// BrnWorld::ActiveRaceCar -- identity + per-frame state accessors for the live
+// (simulated, in-range) half of a race car.
 //
 // Reconstructed from the X360 ARTIST/"Breaker" build (BURNOUT_X360_ARTIST.XEX):
+//   GetActiveRaceCarIndex  @ (inlined; reads meActiveRaceCarIndex @+0x748)
+//   GetGlobalRaceCar       @ (inlined; reads mpRaceCar @+0x6F0)
+//   IsAttached             @ 0x822A1F10   (mpRaceCar != NULL)
+//   IsActive               @ 0x822A1FB8   (muState @+0x740 == E_STATE_ACTIVE)
 //   GetTransform           @ 0x822CCEB8
 //   GetDirection           @ 0x822CD038
 //   GetVelocity            @ 0x822CD0F8
 //   IsPlayer               @ 0x822B8540
-//   IsCrashing             @ 0x822A2150   (mbIsCrashing @+0x52A)
+//   IsCrashing             @ 0x822A2150   (mPhysicsState.mbCrashing)
 //   IsOnRaceStartState     @ 0x822A2060   (meRaceStartState @+0x77C)
 //   IsInAnyRaceStartState  @ 0x822A20D8   (meRaceStartState @+0x77C)
-//   SetBraking             @ 0x822B8610   (miBrakingCounter @+0x738 / mbBraking @+0x1BE7)
-//   UpdateWheelPhysicsState@ 0x822B8738   (wheel transform blocks @+0x310/+0x1020, on-ground @+0x526/+0x1560)
+//   SetBraking             @ 0x822B8610   (miBrakeChangeCounter @+0x738 /
+//                                          mRenderParams.mbIsBraking)
+//   UpdateWheelPhysicsState@ 0x822B8738   (mPhysicsState.maWheelTransforms[4] +
+//                                          mRenderParams.mWheelTransforms[])
 //
-// SCOPE: the four forwarders touch only the method-homed members (mpGlobalRaceCar via
-// GetGlobalRaceCar(), mbIsAttached via IsAttached()). The five per-frame accessors touch
-// per-frame state members that the committed header now homes BY NAME in its private
-// layout section (offsets X360-asm-proven, sized with u8 padding). Every member access
-// below is by name -- no raw-offset access into the instance.
+// ---- 2026-07-31: THREE MIS-ATTRIBUTIONS CORRECTED --------------------------
+// The previous revision homed the two wheel-transform blocks, the two on-ground byte
+// arrays, mbIsCrashing and mbBraking directly on ActiveRaceCar at raw offsets. They are
+// not ActiveRaceCar members: block A / the on-ground bytes / the crash flag live in
+// mPhysicsState (RaceCarState @+224 -> +560/+1094/+1098) and block B / its on-ground
+// bytes / the braking flag live in mRenderParams (@+2016 -> +2112/+3456/+5127). Subtract
+// the sub-object base from each console offset and all six land exactly. The physics-side
+// wheel arrays are [4] (RaceCarState), not [6]. See the header banner.
 //
-// Behaviour + member offsets are authoritative from the asm; declaration shapes from the
-// DecFIGS DWARF. The forwarders mirror the X360 assert order exactly (no added/inverted
-// branches): the inlined GetGlobalRaceCar() contributes the trailing IsAttached() assert.
+// Every member access below is BY NAME through the two sub-objects; the numeric offsets
+// survive only as comments (the offsetof pins are retired -- see the header's x64 note).
+// Behaviour is authoritative from the asm; declaration shapes from the DecFIGS DWARF.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-#include <cstddef>   // offsetof
-
 namespace BrnWorld
 {
 
-// PIN every X360-asm-proven byte offset the per-frame accessors depend on. This is the
-// ONLY place these offsets appear numerically; all member access in the bodies is by name.
-// ActiveRaceCar carries a single (private) data-member access control and no virtuals, so
-// it is standard-layout and offsetof is well-defined.
-#define PIN_ARC_OFFSETS()                                                                               \
-    do {                                                                                                \
-        static_assert(offsetof(ActiveRaceCar, maWheelPhysicsTransformA) == 784,  "wheel xform A @784");  \
-        static_assert(offsetof(ActiveRaceCar, mau8WheelOnGroundA)       == 1318, "on-ground A @1318");   \
-        static_assert(offsetof(ActiveRaceCar, mbIsCrashing)             == 1322, "mbIsCrashing @1322");  \
-        static_assert(offsetof(ActiveRaceCar, miBrakingCounter)         == 1848, "brake counter @1848"); \
-        static_assert(offsetof(ActiveRaceCar, meRaceStartState)         == 1916, "race start @1916");    \
-        static_assert(offsetof(ActiveRaceCar, maWheelPhysicsTransformB) == 4128, "wheel xform B @4128"); \
-        static_assert(offsetof(ActiveRaceCar, mau8WheelOnGroundB)       == 5472, "on-ground B @5472");   \
-        static_assert(offsetof(ActiveRaceCar, mbBraking)                == 7143, "mbBraking @7143");     \
-        static_assert(sizeof(ActiveRaceCar)                             == 7376, "instance == 0x1CD0");  \
-    } while (0)
+// ----------------------------------------------------------------------------
+// The identity accessors the header declares. All four are inlined into every caller
+// on the X360 (they are one load each); IsAttached is also emitted standalone
+// @0x822A1F10 and IsActive @0x822A1FB8, so both keep an out-of-line home here.
+// ----------------------------------------------------------------------------
+EActiveRaceCarIndex ActiveRaceCar::GetActiveRaceCarIndex() const
+{
+    return meActiveRaceCarIndex;
+}
+
+RaceCar* ActiveRaceCar::GetGlobalRaceCar() const
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+
+    return mpRaceCar;
+}
+
+bool ActiveRaceCar::IsAttached() const
+{
+    return mpRaceCar != nullptr;
+}
+
+// IsActive @ 0x822A1FB8. The two asserts are the X360's own, in asm order.
+bool ActiveRaceCar::IsActive() const
+{
+    CGS_ASSERT(muState < E_STATE_COUNT, "muState < E_STATE_COUNT");
+    CGS_ASSERT(muState == E_STATE_INACTIVE || mpRaceCar != nullptr,
+               "Active ActiveRaceCar without a RaceCar");
+
+    return muState == E_STATE_ACTIVE;
+}
+
+bool ActiveRaceCar::ToBePlacedOnTrack() const
+{
+    return mbToBePlacedOnTrack;
+}
 
 // ----------------------------------------------------------------------------
 // GetTransform @ 0x822CCEB8. Forwards to the paired global slot's world transform.
@@ -104,13 +131,15 @@ bool ActiveRaceCar::IsPlayer() const
 }
 
 // ----------------------------------------------------------------------------
-// IsCrashing @ 0x822A2150. Assert IsAttached(), then return the per-frame crash flag.
+// IsCrashing @ 0x822A2150. Assert IsAttached(), then return the physics snapshot's crash
+// flag (X360 this+0x52A == mPhysicsState @+224 + mbCrashing @+1098 -- the same byte
+// GenerateDispatchLists reads through GetPhysicsState() when it gates the coronas).
 // ----------------------------------------------------------------------------
 bool ActiveRaceCar::IsCrashing() const
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");
 
-    return mbIsCrashing;
+    return mPhysicsState.mbCrashing;
 }
 
 // ----------------------------------------------------------------------------
@@ -132,16 +161,18 @@ bool ActiveRaceCar::IsInAnyRaceStartState() const
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");
 
-    return meRaceStartState == E_RACE_START_STATE_STAGE_0
-        || meRaceStartState == E_RACE_START_STATE_STAGE_1;
+    return meRaceStartState == E_RACE_START_STATE_ON_START_LINE
+        || meRaceStartState == E_RACE_START_STATE_ROLLING_START;
 }
 
 // ----------------------------------------------------------------------------
 // SetBraking @ 0x822B8610. Asserts (in asm order): mpGlobalRaceCar != NULL, IsAttached(),
 // then -- inlined from RaceCar::GetType() -- muType < E_RACE_CAR_TYPE_COUNT. For an AI car
 // the braking input drives a hysteresis counter (ramps up +1 to a +10 ceiling while
-// braking, decays -2 to a -10 floor while not) and mbBraking latches on once the counter
-// is positive; every other car type takes the raw braking flag.
+// braking, decays -2 to a -KI_MAX_BRAKE_COUNTER floor while not) and the render snapshot's
+// mbIsBraking latches on once the counter is positive; every other car type publishes the
+// raw braking flag. (The flag's home is mRenderParams.mbIsBraking -- X360 this+0x1BE7 ==
+// mRenderParams @+2016 + mbIsBraking @+5127 -- not an ActiveRaceCar member.)
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::SetBraking(bool lbBraking)
 {
@@ -153,47 +184,44 @@ void ActiveRaceCar::SetBraking(bool lbBraking)
 
     if (lpGlobalRaceCar->GetType() == E_RACE_CAR_TYPE_AI)
     {
-        const s32 KI_BRAKING_COUNTER_MAX =  10;
-        const s32 KI_BRAKING_COUNTER_MIN = -10;
-
         if (lbBraking)
         {
-            miBrakingCounter = miBrakingCounter + 1;
-            if (miBrakingCounter >= KI_BRAKING_COUNTER_MAX)
+            miBrakeChangeCounter = miBrakeChangeCounter + 1;
+            if (miBrakeChangeCounter >= KI_MAX_BRAKE_COUNTER)
             {
-                miBrakingCounter = KI_BRAKING_COUNTER_MAX;
+                miBrakeChangeCounter = KI_MAX_BRAKE_COUNTER;
             }
         }
         else
         {
-            miBrakingCounter = miBrakingCounter - 2;
-            if (miBrakingCounter <= KI_BRAKING_COUNTER_MIN)
+            miBrakeChangeCounter = miBrakeChangeCounter - 2;
+            if (miBrakeChangeCounter <= -KI_MAX_BRAKE_COUNTER)
             {
-                miBrakingCounter = KI_BRAKING_COUNTER_MIN;
+                miBrakeChangeCounter = -KI_MAX_BRAKE_COUNTER;
             }
         }
 
-        mbBraking = (miBrakingCounter > 0);
+        mRenderParams.SetBraking(miBrakeChangeCounter > 0);
     }
     else
     {
-        mbBraking = lbBraking;
+        mRenderParams.SetBraking(lbBraking);
     }
 }
 
 // ----------------------------------------------------------------------------
 // UpdateWheelPhysicsState @ 0x822B8738. For each of the four road wheels, copy the wheel's
-// 64-byte physics transform out of the physics snapshot into BOTH transform blocks (A and B)
-// and copy the wheel's on-ground byte into both on-ground arrays. The console does this with
-// compiler-unrolled lvx128/stvx128 (whole-Matrix44 loads/stores); the faithful C++ is a
-// Matrix44 copy-assign per wheel. The inlined accessor for block B asserts the wheel index
-// against KU_DEFORMATION_MODEL_DATA_MAX_WHEELS (6); the loop only ever visits the four road
-// wheels, which the on-ground arrays (sized [4]) pin.
+// 64-byte physics transform out of the physics snapshot into BOTH the physics state
+// (mPhysicsState.maWheelTransforms[4] -- X360 this+0x310) and the render snapshot
+// (mRenderParams.mWheelTransforms[] -- X360 this+0x1020), and copy the wheel's on-ground
+// byte into both mabWheelExists arrays (X360 this+0x526 / this+0x1560). The console does
+// this with compiler-unrolled lvx128/stvx128 (whole-matrix loads/stores); the faithful C++
+// is a matrix copy-assign per wheel. The inlined render-side accessor asserts the wheel
+// index against KU_DEFORMATION_MODEL_DATA_MAX_WHEELS (6); the loop only ever visits the
+// four road wheels, which the physics-side arrays (RaceCarState's [4]) pin.
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::UpdateWheelPhysicsState(const void* lpPhysicsWheelData)
 {
-    PIN_ARC_OFFSETS();   // compile-time layout pin (no runtime cost)
-
     // Read-only view of the physics wheel-data snapshot the caller
     // (RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics) passes. Layout is
     // X360-asm-attested: per-wheel entries stride 96 bytes with the 64-byte transform at
@@ -202,25 +230,27 @@ void ActiveRaceCar::UpdateWheelPhysicsState(const void* lpPhysicsWheelData)
     {
         struct WheelEntry
         {
-            Matrix44 mTransform;   // +0x00 (64 bytes)
-            u8       mPad40[32];   // +0x40 .. +0x60 (96-byte stride)
+            Matrix44Affine mTransform;   // +0x00 (64 bytes)
+            u8             mPad40[32];   // +0x40 .. +0x60 (96-byte stride)
         };
-        WheelEntry maWheels[4];    // +0x000 .. +0x180
-        u8         mau8OnGround[4];// +0x180 .. +0x184
+        WheelEntry maWheels[4];          // +0x000 .. +0x180
+        u8         mau8OnGround[4];      // +0x180 .. +0x184
     };
 
-    const PhysicsWheelSnapshot* lpSnapshot = static_cast<const PhysicsWheelSnapshot*>(lpPhysicsWheelData);
+    const PhysicsWheelSnapshot* lpSnapshot =
+        static_cast<const PhysicsWheelSnapshot*>(lpPhysicsWheelData);
 
     const u32 KU_ROAD_WHEEL_COUNT = 4;
     for (u32 luWheel = 0; luWheel < KU_ROAD_WHEEL_COUNT; ++luWheel)
     {
-        maWheelPhysicsTransformA[luWheel] = lpSnapshot->maWheels[luWheel].mTransform;
-        mau8WheelOnGroundA[luWheel]       = lpSnapshot->mau8OnGround[luWheel];
+        mPhysicsState.maWheelTransforms[luWheel] = lpSnapshot->maWheels[luWheel].mTransform;
+        mPhysicsState.mabWheelExists[luWheel]    = (lpSnapshot->mau8OnGround[luWheel] != 0);
 
-        CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
+        CGS_ASSERT(luWheel < 6,
+                   "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
 
-        maWheelPhysicsTransformB[luWheel] = maWheelPhysicsTransformA[luWheel];
-        mau8WheelOnGroundB[luWheel]       = lpSnapshot->mau8OnGround[luWheel];
+        mRenderParams.GetWheelTransform(luWheel) = mPhysicsState.maWheelTransforms[luWheel];
+        mRenderParams.SetWheelExists(luWheel, lpSnapshot->mau8OnGround[luWheel] != 0);
     }
 }
 

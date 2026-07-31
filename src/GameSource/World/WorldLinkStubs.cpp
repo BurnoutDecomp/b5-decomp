@@ -1329,21 +1329,9 @@ void BrnWorld::RaceCarEntityModule::Destruct()
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::RaceCarEntityModule::GenerateDispatchLists(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists *,class Array<class CgsSceneManager::EntityId,32> const &,struct rw::math::vpu::Vector4,struct rw::math::vpu::Vector4,struct rw::math::vpu::Vector3)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// (RaceCarEntityModule::GenerateDispatchLists gate RETIRED 2026-07-31: the real X360
+//  body @0x822E79F8 lands in BrnRaceCarEntityModule_Render.cpp.)
+
 
 // BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
 // one-shot log. This symbol is REACHED every frame now that WorldModule::Update
