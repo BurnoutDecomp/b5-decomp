@@ -48,6 +48,16 @@ namespace BrnDirector
     // one definition.
     class ArbStateCrashing        : public ArbitratorState {};
     class ArbStateTakedown        : public ArbitratorState {};
+    // ⚠️ ArbStateCarSelect HAS a real layout + bodies now (States/BrnArbStateCarSelect.h /
+    // .cpp) but is NOT de-forked here yet: that .cpp cannot be mounted until
+    // Behaviours/BrnBehaviourIceAnim.h's CollisionPolicy / VisibilityCollisionPolicy /
+    // CollisionPolicyAttachedToVehicle / Utils::{CameraShake,Looker,Tweaker} forks are
+    // retired in favour of their canonical homes (BehaviourRig.h / BrnCollisionPolicy.h) --
+    // six C2011 redefinitions that already block BrnArbStateOnlineCarSelect.cpp,
+    // BrnArbStateRaceIntro.cpp and their siblings today. Including the real header here
+    // would drag its (currently unbuildable) .cpp into the link. Keep the placeholder until
+    // that de-fork wave lands, then swap this line for the #include, exactly as the eight
+    // sibling states above did.
     class ArbStateCarSelect       : public ArbitratorState {};
 
     class ArbitratorStateContainer

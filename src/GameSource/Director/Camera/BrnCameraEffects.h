@@ -81,9 +81,17 @@ struct CameraEffects
     //   the earlier +0x9C mis-name is what the mfSimTimeScale reconcile retired).
     f32 mfStartHookNameBlendAmount;               // +0x80
 
-    // +0x84 .. +0x9B: the stop-hook counterpart scalars + fade floats (Construct zeroes
+    // +0x84 .. +0x97: the stop-hook counterpart scalars + fade floats (Construct zeroes
     //   +0x90/+0x94). NOMINAL span.
-    u8  maReserved84[0x9C - 0x84];
+    u8  maReserved84[0x98 - 0x84];
+
+    // +0x98: the requested world clock (hours, 0..24). CARVED 2026-07-31 from the DWARF
+    //   member order (BrnCameraEffects.h:311 puts mfTimeOfDay immediately before
+    //   mfSimTimeScale @+0x9C) and X360-attested by ArbStateCarSelect::Update, which stores
+    //   16.5 here for the junkyard / game-intro states and 12.5 for the outro, always paired
+    //   with the mbSetTimeOfDay byte below (DWARF :329, the byte right after
+    //   mbHasStopHookNameString @+0xB8).
+    f32 mfTimeOfDay;                            // +0x98
 
     // +0x9C: the requested sim-time (timestep) scale. Construct sets it to 1.0f
     //   (normal speed). RECONCILED 2026-07 (was "mfStartHookBlendAmount", an
@@ -135,9 +143,15 @@ struct CameraEffects
     bool mbHasStartHookNameString;                // +0xB7
     bool mbHasStopHookNameString;                 // +0xB8
 
-    // +0xB9 .. +0xBB: trailing bytes (+0xB9/+0xBA zeroed; +0xBB the final pad). NOMINAL
-    //   span; pads the block to the X360-proven 0xBC stride.
-    u8  maReservedB9[0xBC - 0xB9];
+    // +0xB9: "the requested world clock above is live this frame" (DWARF :329
+    //   mbSetTimeOfDay -- the byte immediately after mbHasStopHookNameString). Zeroed by
+    //   Construct; raised (with mfTimeOfDay) by ArbStateCarSelect's junkyard / game-intro
+    //   / outro arms. CARVED 2026-07-31 alongside mfTimeOfDay above.
+    bool mbSetTimeOfDay;                          // +0xB9
+
+    // +0xBA .. +0xBB: trailing bytes (+0xBA zeroed; +0xBB the final pad). NOMINAL span;
+    //   pads the block to the X360-proven 0xBC stride.
+    u8  maReservedBA[0xBC - 0xBA];
 
     // The shake-request read accessors (DWARF: CameraEffects::GetShakeAmplitude is named
     // by the PerlinShakeController::Update hint; GetShakeFrequency by symmetry).
