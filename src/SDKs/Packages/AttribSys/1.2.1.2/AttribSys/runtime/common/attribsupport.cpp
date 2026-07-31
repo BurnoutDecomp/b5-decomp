@@ -10,31 +10,84 @@
 //   Attrib::Private::GetLength                @ 0x82803558
 //   Attrib::AssertOnClassCheck                @ 0x828034D0
 //   Attrib::ITypeHandler::~ITypeHandler       @ 0x828035F0
+//   Attrib::FindCollection                    @ 0x82808378   (landed 2026-07-31)
 //
-// Attrib::FindCollection @ 0x82808378 is deliberately NOT reconstructed here: the committed
-// canonical declaration Attrib::FindCollection(int liKey, void* lpOwner = nullptr) --
-// which the generated Attrib::Gen::* ctors bind against (several passing a void* owner as
-// the second argument, e.g. shotgroup / cameradefaults) -- is irreconcilable with the true
-// X360 signature FindCollection(Attribute::Key classKey, Attribute::Key collectionKey)
-// (DWARF attribsupport.cpp:35; the 0x82808378 body uses the second argument as a collection
-// key: Class::Ta(mCollections @ mpPrivates+0x1C, a2)). Implementing the true two-key body
-// under the committed void* signature would misuse the owner pointer as a key (wrong for the
-// single-argument callers); correcting the signature breaks the committed consumers' compile
-// gate. That reconciliation spans attrib_findcollection.h + 57 generated ctors and is out of
-// scope for this TU, so this function is left for a coordinated decl+consumer pass.
+// Attrib::FindCollection @ 0x82808378 used to be deliberately skipped here, because the
+// committed declaration `FindCollection(int liKey, void* lpOwner = nullptr)` was
+// irreconcilable with the true X360 two-key signature. That reconciliation is DONE: the
+// declaration in GameSource/AttribSys/Generated/attrib_findcollection.h now carries the
+// asm-verified `(u64 luClassKey, u64 luCollectionKey)` shape, every generated ctor was
+// re-pointed at it, and the body lives below. (The consumer count was 9 generated ctors +
+// one hand-written caller, not the 57 this comment used to estimate.)
 
 #include <cstdint> // uintptr_t
 
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"     // RefSpec, Collection, Collection_AddRef/Release, AssertOnClassCheck
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"        // ITypeHandler
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"                  // Database::IsInitialized
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h" // GetDatabasePrivate
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h"                 // Class, VecHashMap_Attrib_Class_TablePolicy_0_16
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"                         // Attrib::FindCollection (the canonical decl this TU bodies)
 #include "GameSource/AttribSys/Generated/attrib_private.h"                                // Attrib::Private
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT + CgsDev::Assert::*
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                   // CgsCore::SPrintf
 
 namespace Attrib
 {
+
+// ===========================================================================
+// Attrib::FindCollection @ 0x82808378
+// ===========================================================================
+// Resolve a collection by (class key, collection key) against the process attribute
+// database. Two chained hash lookups:
+//   1. the class registry -- DatabasePrivate::mClasses, which the X360 reaches as
+//      `Database::sThis->mPrivates + 8` (the same seam RefSpec::GetClass below uses);
+//   2. that class's collection table -- ClassPrivate::mCollections, which the X360
+//      reaches as `Class::mpPrivates + 0x1C` and which Class::GetCollection already
+//      wraps by name.
+// NULL when either lookup misses. GetDatabasePrivate() carries the console's
+// "Attribute database not initialized." assert (attribsys.h:649), so the null-sThis
+// guard the X360 open-codes here is not repeated.
+//
+// NOTE the console does NOT AddRef the collection it hands back -- the caller's
+// Attrib::Instance ctor takes the reference. Do not add one here.
+Collection* FindCollection(u64 luClassKey, u64 luCollectionKey)
+{
+    // ⚠️ PC BOOT-ORDER GUARD -- a deliberate, narrow divergence from the X360 body, NOT a
+    // stub. The console open-codes `if (!sThis) assert("Attribute database not
+    // initialized.")` and then dereferences sThis regardless, because on console nothing
+    // reaches this resolve before the database exists. On PC something does:
+    //
+    //     GameSource/Main/BrnMain.cpp:43   `static BrnGame::BrnGameModule gGameModule;`
+    //
+    // is a file-scope global, so its DYNAMIC INITIALIZER runs before main(). That builds
+    // the whole module tree, including the director arbitrator's state container, which
+    // default-constructs all ten states BY VALUE -- and ArbStateRaceIntro embeds an
+    // Attrib::Gen::shotgroup (BrnArbStateRaceIntro.h:128), whose ctor lands here. At that
+    // point Attrib::Database has not been constructed, CgsDev::Assert::Manager has no
+    // renderer installed, and the console's assert path takes
+    // CgsDev::Assert::Manager::HandleAssert+0x129 (`call qword ptr [rax+8]` with rax == 0)
+    // straight into an access violation -- before the log file is even open.
+    // (Measured 2026-07-31: exit 0xC0000005 at ~3.5 s, zero log lines, vs 417 lines and
+    // still running for the same build with this guard.)
+    //
+    // Returning "no such collection" is the resolver's own honest answer for a database
+    // that holds nothing yet, and it is what every caller already handles (Attrib::Instance
+    // treats a null collection as "unresolved handle").
+    // DELETE-WHEN: the module tree stops being constructed by a pre-main global.
+    if (!Database::IsInitialized())
+        return nullptr;
+
+    u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
+    VecHashMap_Attrib_Class_TablePolicy_0_16* lpClassTable =
+        reinterpret_cast<VecHashMap_Attrib_Class_TablePolicy_0_16*>(lpPrivates + 8);
+
+    const Class* lpClass = lpClassTable->Find(luClassKey);
+    if (!lpClass)
+        return nullptr;
+
+    return lpClass->GetCollection(luCollectionKey);
+}
 
 // ===========================================================================
 // Attrib::RefSpec::operator= @ 0x8280DFB0

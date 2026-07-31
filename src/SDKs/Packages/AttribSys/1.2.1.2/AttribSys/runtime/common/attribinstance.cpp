@@ -20,10 +20,43 @@
 
 namespace Attrib
 {
-    // Collection helpers (own TUs); trap stubs until they land. Types are declared
-    // in attribinstance.h (reconstructed header), not forked locally here.
-    Collection* Collection_AddRef(Collection*, int) { __debugbreak(); return nullptr; }
-    int         Collection_Release(Collection*, int) { __debugbreak(); return 0; }
+    // ------------------------------------------------------------------------
+    // Collection refcount helpers. These two are NOT separate functions on the
+    // console -- they ARE Attrib::Collection::AddRef @0x828028E0 and
+    // Attrib::Collection::Release @0x8280C2E8, both of which are reconstructed by
+    // name in attribcollection.cpp. Verified from the one-line caller:
+    //
+    //   Attrib::Instance::~Instance @0x8280D100
+    //     0x8280D100  lwz  r3, 0(r3)        ; mpCollection
+    //     0x8280D104  cmplwi cr6, r3, 0
+    //     0x8280D108  beqlr cr6
+    //     0x8280D10C  li   r4, 0            ; <- the "flags" argument ...
+    //     0x8280D110  b    Attrib__Collection__Release
+    //
+    // ...and Collection::Release's own body (@0x8280C2E8) never reads r4 -- it is
+    // `mr r30, r3` / `bl HashMap::Release` / queue-for-delete. The second argument
+    // is a dead register stage that Hex-Rays surfaces as a parameter; the callers
+    // stage 0 or -1 indifferently. So the faithful body of these free-function
+    // seams is a straight forward to the real members, and liFlags is (void)'d.
+    //
+    // ⚠️ These were `__debugbreak()` traps until 2026-07-31. That was load-bearing
+    // by accident: Attrib::FindCollection was a `return 0` stub, so mpCollection was
+    // always null and ~Instance never reached the trap. The moment FindCollection
+    // started resolving real collections (same date) every Instance destructor would
+    // have hit the breakpoint. Do not re-trap these.
+    // ------------------------------------------------------------------------
+    Collection* Collection_AddRef(Collection* lpCollection, int /*liFlags*/)
+    {
+        return lpCollection ? lpCollection->AddRef() : nullptr;
+    }
+
+    int Collection_Release(Collection* lpCollection, int /*liFlags*/)
+    {
+        return lpCollection ? lpCollection->Release() : 0;
+    }
+
+    // Still un-landed (own TUs); trap stubs. Types are declared in attribinstance.h
+    // (reconstructed header), not forked locally here.
     void*       Collection_Get(void*, int, int*, int) { __debugbreak(); return nullptr; }
     void*       Collection_GetData(Collection*) { __debugbreak(); return nullptr; }
     int         RefSpec_GetCollectionWithDefault(int*) { __debugbreak(); return 0; }

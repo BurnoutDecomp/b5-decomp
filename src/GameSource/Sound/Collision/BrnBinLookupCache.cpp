@@ -38,12 +38,13 @@
 // b4blurasset / languagestreamconfiguration key-staging convention) and the 0x190-byte data
 // area (== crashbin's DefaultDataArea size) -- rather than fabricating a propscrashbin ctor.
 //
-// FLAG (FindCollection owner arg): the X360 forwards *(RefSpec + 8) (the RefSpec's 64-bit
-// collection key) as FindCollection's second (owner) argument. The committed FindCollection
-// takes `void* lpOwner`; the qword is reinterpret_cast to that pointer parameter to carry
-// the same value the asm passes in r4. Its exact resolve semantics live in the AttribSys
-// runtime (not homed); the observable effect -- a resolved propscrashbin Collection* handed
-// to the Instance handle -- matches.
+// RESOLVED 2026-07-31 (was: "FLAG (FindCollection owner arg)"). The X360 forwards
+// *(RefSpec + 8) -- the RefSpec's 64-bit COLLECTION key -- in r4, and r4 is exactly what
+// Attrib::FindCollection @0x82808378 uses as the collection key. This site had it right all
+// along and was only obscured by the old `FindCollection(int, void*)` declaration, which
+// forced the qword through a pointer parameter. With the corrected two-key signature the
+// cast is gone and both keys are passed at their true widths (the class key as the whole
+// doubleword 0x4154BD6D_E9FF326C, not just its low word).
 // =============================================================================
 
 namespace BrnSound
@@ -61,8 +62,8 @@ BinLookupCache BinLookupCache::Build( const List& lrList )
     (void)sizeof( Bin* );
 
     // Bin=propscrashbin compile-time constants the X360 baked into this instantiation.
-    static const int KI_PROPSCRASHBIN_CLASS  = static_cast<int>( 0xE9FF326Cu ); // low word of 0x4154BD6DE9FF326C
-    static const u32 KU_PROPSCRASHBIN_DATA   = 0x190u;
+    static const u64 KU_PROPSCRASHBIN_CLASS_KEY = 0x4154BD6DE9FF326CULL;
+    static const u32 KU_PROPSCRASHBIN_DATA      = 0x190u;
 
     BinLookupCache lCache; // entries left indeterminate past mNumBins, as in the asm
 
@@ -75,14 +76,13 @@ BinLookupCache BinLookupCache::Build( const List& lrList )
         // i-th crash-bin RefSpec (OOB -> shared null-RefSpec sentinel).
         const void* lpRef = lrList.GetCrashBinRefData( i );
 
-        // RefSpec collection key (qword @ +8) -> FindCollection owner argument.
-        const u64 luOwnerKey =
+        // RefSpec collection key (qword @ +8) -> FindCollection's collection-key argument.
+        const u64 luCollectionKey =
             *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpRef ) + 8 );
 
         // Resolve the bin's propscrashbin collection.
         Attrib::Collection* lpCollection =
-            Attrib::FindCollection( KI_PROPSCRASHBIN_CLASS,
-                                    reinterpret_cast<void*>( static_cast<u64>( luOwnerKey ) ) );
+            Attrib::FindCollection( KU_PROPSCRASHBIN_CLASS_KEY, luCollectionKey );
 
         // Handle onto the resolved collection; fall back to a default data area if the
         // handle resolved without one (the X360 `if (!v11) v11 = DefaultDataArea(0x190)`).

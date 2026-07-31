@@ -36,6 +36,13 @@ namespace Gen
         // shape surface the low half, matching the shotgroup sibling key-staging).
         static const int KI_B4BLURASSET_CLASS = 1935857871;
 
+        // The FULL 64-bit class key Attrib::FindCollection resolves against -- the
+        // doubleword the X360 ctor stages in r3 with lis/ori + insrdi. KI_KI_B4BLURASSET_CLASS
+        // above is only its LOW word (which is what Hex-Rays surfaces, and what this
+        // header used to pass to the old one-key FindCollection(int)); the class
+        // registry is keyed by the whole doubleword, so the low word alone MISSES.
+        static const u64 KU_B4BLURASSET_CLASS_KEY = 0xEF9F6F047362D8CFULL;
+
         explicit b4blurasset(void* lpOwner = nullptr);
     };
 
@@ -43,7 +50,13 @@ namespace Gen
     // Instance ctor over it (Instance(this, Collection, lpOwner)); then give the
     // instance a default data area (0x60 bytes) if construction left it without one.
     inline b4blurasset::b4blurasset(void* lpOwner)
-        : Instance(FindCollection(KI_B4BLURASSET_CLASS), lpOwner)
+                // FLAG (collection key): the X360 ctor never writes r4, so the CALLER's key
+        // argument passes straight through to FindCollection as the collection key.
+        // This ctor does not model that parameter yet (no call site in this repo
+        // supplies one), so it resolves the class's collection key 0 -- exactly what
+        // the previous `FindCollection(KI_..., nullptr)` form did. Add the parameter
+        // when a real call site needs a named collection.
+    : Instance(FindCollection(KU_B4BLURASSET_CLASS_KEY, 0), lpOwner)
     {
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x60u);

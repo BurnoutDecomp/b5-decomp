@@ -38,17 +38,24 @@ namespace Gen
         // 64-bit load (same key-staging pattern as sparkeffect/shotgroup/surfacelist).
         static const int KI_VIGNETTEASSET_CLASS = -1677543617; // 0x9C02B73F
 
+        // The FULL 64-bit class key Attrib::FindCollection resolves against -- the
+        // doubleword the X360 ctor stages in r3 with lis/ori + insrdi. KI_KI_VIGNETTEASSET_CLASS
+        // above is only its LOW word (which is what Hex-Rays surfaces, and what this
+        // header used to pass to the old one-key FindCollection(int)); the class
+        // registry is keyed by the whole doubleword, so the low word alone MISSES.
+        static const u64 KU_VIGNETTEASSET_CLASS_KEY = 0x92F96F629C02B73FULL;
+
         // luUnusedKey mirrors the ctor's dead middle argument (r4, clobbered before use --
         // same provenance pattern as shotgroup's luGroupNameKey). lpOwner is the optional
         // owning object the AttribSys collection resolve threads through (arrives in r5).
-        explicit vignetteasset(int luUnusedKey = 0, void* lpOwner = nullptr);
+        explicit vignetteasset(u32 luCollectionKey = 0, void* lpOwner = nullptr);
     };
 
     // X360 ctor @0x82677F70: Collection = FindCollection(0x9C02B73F); chain the Instance
     // ctor over it; give the instance a default data area (0x50 bytes) if construction left
     // it without one. No class-check assert in this ctor (unlike debrisparams/surfacelist).
-    inline vignetteasset::vignetteasset(int /*luUnusedKey*/, void* lpOwner)
-        : Instance(FindCollection(KI_VIGNETTEASSET_CLASS), lpOwner)
+    inline vignetteasset::vignetteasset(u32 luCollectionKey, void* lpOwner)
+        : Instance(FindCollection(KU_VIGNETTEASSET_CLASS_KEY, luCollectionKey), lpOwner)
     {
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x50u);
