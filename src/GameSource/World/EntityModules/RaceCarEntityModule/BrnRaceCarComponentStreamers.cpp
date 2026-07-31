@@ -464,4 +464,154 @@ void RaceCarAudioStreamer::OnAssetUnloading( s32 liActiveRaceCar )
     mpStreamer->OnAudioUnloading( liActiveRaceCar );
 }
 
+// ===========================================================================
+// The four non-audio leaves.
+//
+// The X360 INLINED each of these Constructs into RaceCarStreamer::Construct
+// @0x822F7FA0, so they have no standalone export -- but the inlined call sites are
+// unambiguous. Reading that function's asm, each leaf is set up with
+//   RaceCarBaseComponentStreamer::Construct(this, r4 = liPoolId,
+//                                           r5 = lbAllowFailure, r6 = leAssetSet)
+// followed by `stw r31, 0x1368(leaf)` (the mpStreamer back-pointer):
+//
+//   leaf @ streamer+0x0010 : r4=4     r5=0  r6=0  -> pool 4,  allowFail false, GRAPHICS
+//   leaf @ streamer+0x26F0 : r4=0x11  r5=1  r6=1  -> pool 17, allowFail true,  PHYSICS
+//   leaf @ streamer+0x1380 : r4=0x11  r5=1  r6=4  -> pool 17, allowFail true,  ATTRIBS
+//   leaf @ streamer+0x3A60 : r4=4     r5=0  r6=0  -> pool 4,  allowFail false, GRAPHICS
+//   leaf @ streamer+0x4DD0 : RaceCarAudioStreamer::Construct (pool 6, SOUND -- above)
+//
+// The offset->member mapping is fixed independently by RaceCarEntityModule::
+// UpdateStreaming @0x822FEFE0, whose four InternalBaseStreamer::Update calls go
+// +0x1380, +0x26F0, +0x0010, +0x3A60 in that order -- which is exactly the DWARF
+// member order this header declares for RaceCarStreamer::Update (attributes, physics,
+// graphics, wheel graphics). So +0x1380 is the ATTRIBUTE streamer and +0x26F0 the
+// PHYSICS one, and both share pool 17.
+//
+// Pool 4 is independently corroborated at RUNTIME: a probe that loaded
+// 'Vehicles\VEH_PUSMC01_GR.bin' logged "-> pool 4: 273 resources", and pool 4's
+// memory-map entry (BrnMemoryMapData.h) depends on pool 25 CarSharedPool, which is
+// exactly where RaceCarEntityModule::LoadGlobalResources puts VEHICLETEX.BIN.
+// ===========================================================================
+
+namespace
+{
+    // The two pool ids the inlined Constructs pass. No reconstructed enum home exists for
+    // the memory-pool ids yet (see the KI_POOL_SOUND note above), so the X360 literals
+    // stand, named after their BrnMemoryMapData.h rows.
+    const s32 KI_POOL_CAR       = 4;    // "CarPool"
+    const s32 KI_POOL_CAR_PHYS  = 0x11; // 17
+}
+
+void RaceCarGraphicsStreamer::Construct( RaceCarStreamer* lpStreamer )
+{
+    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false, BrnResource::E_ASSETSET_GRAPHICS );
+    mpStreamer = lpStreamer;
+}
+
+void RaceCarGraphicsStreamer::Destruct()
+{
+    mpStreamer = 0;
+}
+
+void RaceCarPhysicsStreamer::Construct( RaceCarStreamer* lpStreamer )
+{
+    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true, BrnResource::E_ASSETSET_PHYSICS );
+    mpStreamer = lpStreamer;
+}
+
+void RaceCarPhysicsStreamer::Destruct()
+{
+    mpStreamer = 0;
+}
+
+void RaceCarAttributeStreamer::Construct( RaceCarStreamer* lpStreamer )
+{
+    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR_PHYS, true, BrnResource::E_ASSETSET_ATTRIBS );
+    mpStreamer = lpStreamer;
+}
+
+void RaceCarAttributeStreamer::Destruct()
+{
+    mpStreamer = 0;
+}
+
+void RaceCarWheelGraphicsStreamer::Construct( RaceCarStreamer* lpStreamer )
+{
+    CGS_ASSERT( lpStreamer != nullptr, "lpStreamer != NULL" );
+    RaceCarBaseComponentStreamer::Construct( KI_POOL_CAR, false, BrnResource::E_ASSETSET_GRAPHICS );
+    mpStreamer = lpStreamer;
+}
+
+void RaceCarWheelGraphicsStreamer::Destruct()
+{
+    mpStreamer = 0;
+}
+
+// The four leaves' notification hooks. Same shape as the audio pair above: forward to the
+// owning RaceCarStreamer, which folds the per-resource bit into maxLoadFlags[] and caches
+// the pointer. The three that cache a resource take a ResourcePtr; the base's
+// OnLoadComplete hands the whole GameDataAssetEvent down, and its mHandle is the only
+// member carrying the acquired resource, so the ptr is bound from it.
+// FLAG: the ResourcePtr construction is INFERRED from the base's call shape plus the
+// console On*Loaded signatures (which take the ptr by value) -- these four leaves were
+// inlined on the X360 and have no standalone asm to read it off.
+void RaceCarGraphicsStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
+{
+    mpStreamer->OnGraphicsLoaded( liActiveRaceCar,
+                                  RaceCarStreamer::GraphicsResourcePtr( lpEvent->mHandle ) );
+}
+
+void RaceCarGraphicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )
+{
+    mpStreamer->OnGraphicsUnloading( liActiveRaceCar );
+}
+
+void RaceCarPhysicsStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
+{
+    mpStreamer->OnPhysicsLoaded( liActiveRaceCar,
+                                 RaceCarStreamer::PhysicsResourcePtr( lpEvent->mHandle ) );
+}
+
+void RaceCarPhysicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )
+{
+    mpStreamer->OnPhysicsUnloading( liActiveRaceCar );
+}
+
+void RaceCarAttributeStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
+{
+    (void)lpEvent;   // the attribute set is registered with AttribSys, not cached here
+    mpStreamer->OnAttributesLoaded( liActiveRaceCar );
+}
+
+void RaceCarAttributeStreamer::OnAssetUnloading( s32 liActiveRaceCar )
+{
+    mpStreamer->OnAttributesUnloading( liActiveRaceCar );
+}
+
+void RaceCarWheelGraphicsStreamer::OnAssetLoaded( s32 liActiveRaceCar, const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent )
+{
+    mpStreamer->OnWheelGraphicsLoaded( liActiveRaceCar,
+                                       RaceCarStreamer::WheelGraphicsResourcePtr( lpEvent->mHandle ) );
+}
+
+void RaceCarWheelGraphicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )
+{
+    mpStreamer->OnWheelGraphicsUnloading( liActiveRaceCar );
+}
+
+// X360: RaceCarEntityModule::Prepare @0x82303E78's stage-3 tail stores the module's
+// vehicle-list pointer into the streamer (`*(a1 + 69888) = *(a1 + 99380)`), and
+// BrnRaceCarStreamer.cpp:87 asserts it is non-null right there. The wheel list is the
+// second half of the DWARF signature.
+void RaceCarStreamer::Prepare( const BrnResource::VehicleList* lpVehicleList,
+                               const BrnResource::WheelList* lpWheelList )
+{
+    CGS_ASSERT( lpVehicleList != 0, "lpVehicleList != NULL" );   // X360 BrnRaceCarStreamer.cpp:87
+    (void)lpWheelList;   // FLAG: the console stores only the vehicle list at this site
+    mpVehicleList = lpVehicleList;
+}
+
 } // namespace BrnWorld
