@@ -219,7 +219,11 @@ void* Attrib::Collection::GetData(u64 luKey, unsigned int luIndex) const
     }
 
     CGS_ASSERT(luIndex == 0, "Cannot get non-array data from a non-zero index.");
-    return lpNode->GetPointer(lpOwner->mpData);
+    // X360 `lwz r5,var_20(r1); lwz r4,0x1C(r5); bl Node::GetPointer` -- the container
+    // collection rides in r5 as GetPointer's third argument (its 0x20/inherited branch
+    // dereferences it). The one-argument spelling this used to call was a fork; retired
+    // 2026-07-31 when the real GetPointer @0x828045B0 landed.
+    return lpNode->GetPointer(lpOwner->mpData, lpOwner);
 }
 
 // ============================================================================

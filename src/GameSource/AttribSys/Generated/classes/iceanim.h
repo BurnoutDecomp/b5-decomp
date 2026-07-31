@@ -41,13 +41,27 @@ namespace Gen
         u32 SuitableFor() const     { return reinterpret_cast<const u32*>(GetLayoutPointer())[0]; }
         u32 ShotProperties() const  { return reinterpret_cast<const u32*>(GetLayoutPointer())[1]; }
 
-        // ADDITIVE GROW (BrnBehaviourIceAnim.h's SetParameters/ChangeMovie consumers): the take
-        // guid carried by this parameter block (instance +0xC, past the 8-byte class-key head
-        // GetClassKey() reads). FLAG: declaration-only here -- this class is used as a raw
-        // serialised attrib-data block by its consumers (the class-key IS the object's own
-        // leading bytes, not reached through Instance::mpAttributeData), so the +0xC field is
-        // this object's own concern; no body is fabricated. The consuming behaviour's own TU
-        // provides the body when it is reconstructed.
+        // The ICE take guid this shot names. Bodied in iceanim.cpp.
+        //
+        // ⭐ OFFSET BASE CORRECTED 2026-07-31, and it was wrong before. This used to be
+        // annotated "instance +0xC, past the 8-byte class-key head". The X360 call site
+        // (BehaviourIceAnim::SetParameters @0x8220F5C0) settles it:
+        //     Attrib::Gen::iceanim::iceanim(v6, a2, 0);   // a2 = the shot RefSpec
+        //     v4 = *(v7 + 12);                            // v7 == v6[+4] == mpAttributeData
+        //     *(a1 + 3616) = v4;                          // miAnimGuid
+        // i.e. the guid is at the resolved LAYOUT block +0xC, not at the object +0xC. It is
+        // read through a live instance built from the shot's RefSpec, exactly like
+        // SuitableFor()/ShotProperties() above.
+        //
+        // ⚠️ FLAG -- LATENT CALL-SITE MISMATCH, not fixed here. BrnBehaviourIceAnim.h:368
+        // does `typedef Attrib::Gen::iceanim ShotReference`, and SetParameters is handed a
+        // ShotReference* that is really the raw 24-byte Attrib::RefSpec element. The X360
+        // wraps that RefSpec in a TEMPORARY iceanim and reads the temporary's layout; the
+        // committed C++ calls lpParameters->GetAnimGuid() directly on the RefSpec, so it
+        // will read RefSpec+4 as if it were mpAttributeData. Same for GetClassKey(), which
+        // reads the RefSpec's leading qword and happens to be right for that reason. That
+        // TU is unmounted (the ICE frontier), so this is latent; whoever mounts
+        // BrnBehaviourIceAnim.cpp must construct the temporary iceanim the console does.
         s32 GetAnimGuid() const;
     };
 

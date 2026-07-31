@@ -48,8 +48,16 @@ namespace Gen
         static const u64 KU_SHOTGROUP_CLASS_KEY = 0x38ED2D373887CBC7ULL;
 
         // The "ShotList" array attribute key (the shot list this group plays through).
-        // 0x15246B49 == 354708297; used by Num_ShotList and the per-shot accessor.
+        // 0x15246B49 == 354708297; the DecFIGS DWARF spells the same value as
+        // Attrib::Hash::shotgroup::ShotList.
         static const u32 KU_SHOTLIST_KEY = 354708297u;
+
+        // The FULL 64-bit "ShotList" attribute key. Both Num_ShotList @0x821F5948 and the
+        // indexed element reads build it as `lis 0x1524 / ori 0x6B49 / lis 0x7533 /
+        // ori 0xC0E2 / insrdi r5,r11,32,0`. The attribute table hashes the WHOLE
+        // doubleword (Collection::GetNode -> HashMap::FindIndex takes it in one register),
+        // so the low word alone MISSES -- the same trap the class key had.
+        static const u64 KU_SHOTLIST_ATTRIBUTE_KEY = 0x7533C0E215246B49ULL;
 
         // Construct over the shotgroup collection named by the keyed group name. lpOwner is
         // the optional owning object the AttribSys collection resolve threads through.
@@ -62,21 +70,21 @@ namespace Gen
 
         // The data block for this group's ShotList attribute (the per-shot ICE-anim
         // parameter block fed to BehaviourIceAnim::SetParameters). The X360 inlines the
-        // generated Get_ShotList accessor down to Instance::GetAttributePointer, so this
-        // forwards to that. FLAG: the X360 call also stages a 64-bit attribute key
-        // (0x7533C0E2_15246B49) and a 0/1 selector in the argument registers, but the
-        // resolved body (Attrib::Instance::GetAttributePointer @0x82805880) reads only
-        // `this` and returns the collection data block -- the staged key/selector are
-        // dead in the called body. lbUseSecond mirrors that 0/1 selector for provenance.
+        // generated Get_ShotList accessor down to Instance::GetAttributePointer.
+        //
+        // ⭐ CORRECTED 2026-07-31. Both of these used to call a no-argument
+        // GetAttributePointer() and carried a comment saying the staged 64-bit key
+        // (0x7533C0E2_15246B49) and the 0/1 selector "are dead in the called body". They
+        // are NOT dead: GetAttributePointer @0x82805880 tail-calls Collection::GetData and
+        // leaves r4/r5 untouched, so the key and the index are exactly what select the
+        // element. Both forms now resolve the real indexed element, which makes them the
+        // same call as GetShotListElement below -- kept as named spellings because the
+        // call sites read better with them.
         const void* GetShotListData(bool lbUseSecond) const;
 
         // The per-shot data block at a given index in this group's ShotList. The rank-up
         // arbitrator state (BrnArbStateRankUp) walks the shots one rival at a time, indexing
-        // by (rivalIndex % Num_ShotList()). The X360 stages the same 64-bit ShotList key with
-        // the shot index in the low word (0x7533C0E2_15246B49 + the index selector), but the
-        // resolved body (Attrib::Instance::GetAttributePointer @0x82805880) reads only `this`
-        // and hands back the collection data block -- the staged key/index are dead in the
-        // called body. liShotIndex mirrors that index selector for provenance.
+        // by (rivalIndex % Num_ShotList()).
         const void* GetShotListData(s32 liShotIndex) const;
 
         // ShotList(index) -- the RefSpec for the index'th shot in this group's ShotList
@@ -99,8 +107,7 @@ namespace Gen
         // form is the faithful one; ShotList() is the typed convenience over it.
         const void* GetShotListElement(u32 luIndex) const
         {
-            const void* lpElement =
-                const_cast<shotgroup*>(this)->GetAttributePointer(0x7533C0E215246B49ULL, luIndex);
+            const void* lpElement = GetAttributePointer(KU_SHOTLIST_ATTRIBUTE_KEY, luIndex);
             if (lpElement == 0)
                 lpElement = DefaultDataArea(0x18u);
             return lpElement;
@@ -124,14 +131,14 @@ namespace Gen
     {
     }
 
-    inline const void* shotgroup::GetShotListData(bool /*lbUseSecond*/) const
+    inline const void* shotgroup::GetShotListData(bool lbUseSecond) const
     {
-        return const_cast<shotgroup*>(this)->GetAttributePointer();
+        return GetAttributePointer(KU_SHOTLIST_ATTRIBUTE_KEY, lbUseSecond ? 1u : 0u);
     }
 
-    inline const void* shotgroup::GetShotListData(s32 /*liShotIndex*/) const
+    inline const void* shotgroup::GetShotListData(s32 liShotIndex) const
     {
-        return const_cast<shotgroup*>(this)->GetAttributePointer();
+        return GetAttributePointer(KU_SHOTLIST_ATTRIBUTE_KEY, static_cast<u32>(liShotIndex));
     }
 }
 }

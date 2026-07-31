@@ -75,11 +75,16 @@ namespace Gen
     // high half is dead. Read the cursor's length, tear the cursor down, return length.
     inline int surfacelist::Num_Surfaces()
     {
-        static const int KI_SURFACES_KEY = -203784417; // 0xF3DA7F1F
+        // ⚠️ WIDENED 2026-07-31. This used to pass the low word alone (`int` -203784417
+        // == 0xF3DA7F1F) with a comment saying "the high half is dead". It is not: the
+        // attribute table hashes the whole doubleword, so the truncated key MISSES. The
+        // full key is the same 0x0ADCE56E_F3DA7F1F the indexed Surfaces() accessor above
+        // already uses.
+        static const u64 KU_SURFACES_KEY = 0x0ADCE56EF3DA7F1Full;
 
-        AttributeValue lCursor; // 16-byte stack-resident Attrib::Attribute cursor
+        AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
-            Get(&lCursor, reinterpret_cast<int*>(this), KI_SURFACES_KEY));
+            Get(&lCursor, reinterpret_cast<int*>(this), KU_SURFACES_KEY));
         int liLength = lpAttribute->GetLength();
         CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lCursor);
         return liLength;
