@@ -372,24 +372,9 @@ ActiveRaceCar* RaceCar::GetActiveRaceCar()
 // ----------------------------------------------------------------------------
 // GetPosition @ 0x822B3500. The car's world position (mTransform translation row, +0x30).
 // ----------------------------------------------------------------------------
-Vector3 RaceCar::GetPosition() const
-{
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
-    CGS_ASSERT(IsInWorld(), "IsInWorld()");
-
-    return mTransform.Pos();
-}
-
-// ----------------------------------------------------------------------------
-// GetDirection @ 0x822B3610. The car's forward direction (mTransform At/zAxis row, +0x20).
-// ----------------------------------------------------------------------------
-Vector3 RaceCar::GetDirection() const
-{
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
-    CGS_ASSERT(IsInWorld(), "IsInWorld()");
-
-    return mTransform.At();
-}
+// GetPosition @0x822B3588 and GetDirection @0x822B3610 moved to BrnRaceCar.h as inline
+// members (render wave 2026-07-31): the X360 inlines both at every call site, and homing
+// them in the header lets a consumer link against RaceCar without this whole lifecycle TU.
 
 // ----------------------------------------------------------------------------
 // HasActiveRaceCar @ 0x822A0CD8. True iff this slot is in the world and has an attached

@@ -1676,10 +1676,18 @@ WorldEntityModule::RenderInstance(
         // transparent world mesh would have been routed into mesh list 0/1/2 -- the
         // SHADOW cascades. liSortLayer/liSortKey are the world opaque/transparent mesh
         // list ids (11/15); the LOD technique picked above is the technique byte.
+        // ⭐ CORRECTED (race-car render wave 2026-07-31). The 5th/7th arguments were
+        // swapped -- the technique went into the TRANSPARENT-LIST slot and the transparent
+        // list id into the TECHNIQUE slot. Interpret's decode carried the mirror-image
+        // swap, so the emitted word1 bytes (and therefore the pixels) were already right;
+        // both sides are corrected together, so this call still emits exactly the same
+        // word1 = 11<<24 | 15<<16 | technique<<8 | 1. Proof: the X360 camera-pass call site
+        // @0x822D7010..0x822D7054 loads r6 = extsb(arg_6C) and r7 = extsb(arg_74) -- BOTH of
+        // the world module's list-id parameters -- and r9 = the computed technique.
         CgsGraphics::DrawRenderable::AddToBin(
             lpRenderable, lpDispatchFrame, lbFirstInList,
-            static_cast<s8>( liSortLayer ), static_cast<s8>( luTechnique ),
-            1, static_cast<u8>( liSortKey ), false, lu8PreZList, 1, 0, 0 );
+            static_cast<s8>( liSortLayer ), static_cast<s8>( liSortKey ),
+            1, static_cast<u8>( luTechnique ), false, lu8PreZList, 1, 0, 0 );
     }
 
     lpDispatchList->Submit( 0, lpDispatchFrame->GetBin().EndPacket() );

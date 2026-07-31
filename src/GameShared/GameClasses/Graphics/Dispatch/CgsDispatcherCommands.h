@@ -130,9 +130,13 @@ struct DrawRenderable : public DispatchCommand
     //     [0]=lbZOnly [1]=preZList [2]=instanceCount [3]=preZTechnique [4]=excludeMeshBits
     // Positions are unchanged from the previous declaration, so existing call sites
     // keep their (asm-pinned) argument VALUES.
+    // ⭐ Parameters 5 and 7 were NAMED the wrong way round until 2026-07-31: word1 is
+    // opaqueList<<24 | transparentList<<16 | technique<<8 | frustumEnable (Interpret
+    // @0x827FCE94 adds the list base to the top TWO bytes), so the 5th argument is the
+    // TRANSPARENT list and the 7th is the technique. See the note in Interpret.
     static bool AddToBin(const Renderable* lpRenderable, DispatchFrame* lpFrame,
-                         bool lbMarkAllConstantsDirty, s8 li8OpaqueList, s8 li8Technique,
-                         u8 lu8FrustumEnable, u8 lu8TransparentList, bool lbZOnly,
+                         bool lbMarkAllConstantsDirty, s8 li8OpaqueList, s8 li8TransparentList,
+                         u8 lu8FrustumEnable, u8 lu8Technique, bool lbZOnly,
                          u8 lu8PreZList, u8 lu8PreZTechnique,
                          s32 liInstanceCount, u8 lu8ExcludeMeshBits);
 

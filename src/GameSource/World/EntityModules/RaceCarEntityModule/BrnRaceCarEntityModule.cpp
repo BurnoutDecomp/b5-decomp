@@ -175,6 +175,19 @@ void RaceCarEntityModule::Construct()
     mpWheelList          = 0;
     mbCarColoursBound    = false;
     mbBringUpCarRequested = false;
+
+    // The three render switches the dispatch leg reads (see the header for the offset
+    // fit). The console seeds them from its debug-variable table, which is not live on
+    // this build; both body and coronas default ON.
+    mbRenderCarsDuringCrash = true;
+    mbRenderRaceCarCoronas  = true;
+
+    // [FLAG PC bring-up] mbRenderWheels OFF. RenderRaceCar's wheel block is not
+    // reconstructed: its only submission path is
+    // CgsGraphics::Model::SetupShaderConstantsForInstancing (absent from the tree) and its
+    // draw leaf DrawInstancedIndexedPrimitive_Custom is an explicit CGS_ASSERT(false) trap
+    // (CgsDispatcherCommands.cpp:1045 / :1177). Set true when both land.
+    mbRenderWheels = false;
 }
 
 // X360 0x82300730. The module's resumable global-resource load, driven from Prepare

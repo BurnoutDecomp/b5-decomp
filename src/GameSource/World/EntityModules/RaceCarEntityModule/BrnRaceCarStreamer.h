@@ -126,6 +126,23 @@ public:
     bool  IsDesiredRaceCarLoadedForCarSelect( s32 liActiveRaceCar ) const;
     CgsID GetCarModelId( s32 liActiveRaceCar ) const;
 
+    // [FLAG PC bring-up] NOT an X360 function. GetGraphicsResource below asserts
+    // IsRaceCarLoaded(), i.e. ALL FIVE resource bits. On this build a car reaches
+    // graphics-loaded and stops: VEH_<id>_AT.bin (attributes) is not ported at all and the
+    // wheel-graphics GameData handler is still deferred, so the all-resources predicate can
+    // never be true and the console's own render path could not be exercised at all. This
+    // pair lets the bring-up producer in BrnRaceCarEntityModule_Render.cpp ask the narrower
+    // question ("is the BODY loaded?") and take the resource. DELETE both the moment
+    // AddVehicleData's attribute + wheel legs resolve.
+    bool IsGraphicsLoadedBringUp( s32 liActiveRaceCar ) const
+    {
+        return ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_LOADEDGFX ) != 0;
+    }
+    const GraphicsResourcePtr& GetGraphicsResourceBringUp( s32 liActiveRaceCar ) const
+    {
+        return maGraphicsResources[liActiveRaceCar];
+    }
+
     const GraphicsResourcePtr&      GetGraphicsResource( s32 liActiveRaceCar ) const;
     const PhysicsResourcePtr&       GetPhysicsResource( s32 liActiveRaceCar ) const;
     const WheelGraphicsResourcePtr& GetWheelGraphicsResource( s32 liActiveRaceCar ) const;

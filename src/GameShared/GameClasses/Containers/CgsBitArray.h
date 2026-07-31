@@ -129,6 +129,20 @@ public:
         }
     }
 
+    // ADDITIVE GROW (race-car render wave 2026-07-31). Whole-field store/load. The X360
+    // ActiveRaceCar::RenderParams::Reset @0x822E6818 seeds the 96-bit body-part mask by
+    // storing a single 64-bit LITERAL (0xB80FFFFFFFF) into each of its two fields -- not
+    // by setting individual bits -- so the faithful expression of that store needs a
+    // field-granular setter rather than a bit-granular one.
+    void SetBitField(u32 luField, u64 lu64Value)
+    {
+        maxBits[luField] = lu64Value;
+    }
+    u64 GetBitField(u32 luField) const
+    {
+        return maxBits[luField];
+    }
+
     // True iff no bit is set (the popcount==0 guard).
     bool IsZero() const
     {
