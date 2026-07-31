@@ -51,6 +51,26 @@ namespace
         lBuffer.SetGotCrashNavHiddenEvent();
         lBuffer.SetGotColourCalibrationShownEvent();
         lBuffer.SetGotColourCalibrationHiddenEvent();
+
+        // the BridgeGuiToDirector command pairs
+        lBuffer.SetStartNewProfileIntro();          (void)lBuffer.GetStartNewProfileIntro();
+        lBuffer.SetStartGameIntroFlyby();           (void)lBuffer.GetStartGameIntroFlyby();
+        lBuffer.SetStopGameIntroFlyby();            (void)lBuffer.GetStopGameIntroFlyby();
+        lBuffer.SetRankUp(1);                       (void)lBuffer.GetRankUpThisFrame();
+                                                    (void)lBuffer.GetRankUpNewRank();
+        lBuffer.SetCameraType(0);                   (void)lBuffer.GetCameraType();
+        lBuffer.SetEndOfCarSelect();                (void)lBuffer.GetEndOfCarSelect();
+        lBuffer.SetDirectorProfileData(0);          (void)lBuffer.HasNewDirectorProfileData();
+                                                    (void)lBuffer.GetDirectorProfileData();
+        lBuffer.SetCarSelectionChangedThisFrame();  (void)lBuffer.GetCarSelectionChangedThisFrame();
+        lBuffer.SetCarSelectTickerClosedThisFrame();(void)lBuffer.GetCarSelectTickerClosedThisFrame();
+        lBuffer.SetLeftOnlinePostEvent();           (void)lBuffer.GetLeftOnlinePostEvent();
+        lBuffer.SetEnteredOnlinePostEvent();        (void)lBuffer.GetEnteredOnlinePostEvent();
+        lBuffer.SetFinishedOnlineEventLoading();    (void)lBuffer.GetFinishedOnlineEventLoading();
+        lBuffer.SetStartedOnlineEventLoading();     (void)lBuffer.GetStartedOnlineEventLoading();
+        lBuffer.SetStarting100PercentSequence();    (void)lBuffer.GetStarting100PercentSequence();
+        lBuffer.SetFinished100PercentSequence();    (void)lBuffer.GetFinished100PercentSequence();
+        (void)lBuffer.IsSimPaused();
     }
 }
 

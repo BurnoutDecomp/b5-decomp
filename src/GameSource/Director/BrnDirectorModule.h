@@ -330,10 +330,12 @@ private:
     // this+0x38920 (231712). RECOVERED by PostGuiUpdate @0x82250DD0, whose last act is
     //   `v10 = lpInputBuffer[7854];  if ( v10 > -1 )  *(this + 231712) = v10;`
     // i.e. latch the input buffer's word at ITS +0x7AB8 whenever it is not the -1 "none"
-    // sentinel. The source word sits in the input buffer's index/flag tail just past
-    // mePlayerCarIndex (@0x7AA8) -- inside the committed InputBuffer's mIndexTailBlock, so
-    // the producer-side NAME is not recovered. Modelled by its role.
-    // FLAG: name inferred from the role (a latched, "sticky" post-GUI car index), not DWARF.
+    // sentinel.
+    // ⚠ NAME CORRECTION (fly-by wave): the source word is NOT a car index. It is now the named
+    // DirectorIO::InputBuffer::miCameraType -- the slot BridgeGuiToDirector @0x823CBF70 writes
+    // on GUI command 591, whose own assert text is "Unhandled camera type : ". The member name
+    // below is kept (renaming re-keys the lint fingerprint for no behavioural gain) but it
+    // latches a CAMERA TYPE, not a car index. FLAG: name inferred, not DWARF.
     s32 miPostGuiCarIndexLatch;                              // +0x38920
 
     // this+0x38924 (231716). Construct zeroes it; PreSceneQueryUpdate @0x8225C768 SETS IT

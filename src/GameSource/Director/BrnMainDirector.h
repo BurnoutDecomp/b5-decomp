@@ -195,6 +195,12 @@ namespace BrnDirector
 
         ICEWrapper&               GetICEWrapper()             { return mICEWrapper; }
         Arbitrator&               GetArbitrator()             { return mArbitrator; }
+
+        // ⭐ The game-intro fly-by latch (GameState +217), raised/cleared by PostGuiUpdate from
+        // the GUI's fly-by START/END commands. Exposed by name because the PC bring-up producer
+        // in BrnGameModule::DoUpdate_Director reads it -- see the FLAG'd block there.
+        bool IsGameIntroFlybyActive() const   { return mbGameIntroFlybyActive; }
+        bool IsNewProfileIntroActive() const  { return mbNewProfileIntroActive; }
         Camera::BehaviourManager& GetBehaviourManager()       { return mBehaviourManager; }
         CameraFinaliser&          GetCameraFinaliser()        { return mCameraFinaliser; }
 
@@ -322,8 +328,22 @@ namespace BrnDirector
         u8 maDebugPrinterMain[0x337E0 - 0x337B0];    // +0x337B0  <- ArbStateSharedInfo +0x04
 
         // +0x337E0 .. +0x339E0  BrnDirector::GameState (ArbStateSharedInfo +0x24; also the
-        //           block CameraFinaliser::Update takes). FLAG: un-homed; named opaque span.
-        u8 maGameState[0x339E0 - 0x337E0];
+        //           block CameraFinaliser::Update takes). FLAG: un-homed; named opaque span --
+        //           EXCEPT for the two intro latches carved out below, which are the only
+        //           members of it any reconstructed code has to name.
+        u8 maGameStateHead[0xD8];                     // +0x337E0 .. +0x338B8
+
+        // ⭐ GameState +216 / +217 -- the game-intro latches PostGuiUpdate @0x82236F88 sets
+        // (`lbz 0x7ABD/0x7ABE(input)` -> `stbx 1, this+0x338B8/0x338B9`) and clears together on
+        // the stop command. VERIFIED NAMES: DecFIGS DWARF BrnDirectorGameState.h declares
+        // mbNewProfileIntroActive / mbGameIntroFlybyActive as consecutive bools, and
+        // ArbStateCarSelect::Update's own assert string pins the SECOND one to +217 --
+        // "!lSharedInfo.mpGameState->mbGameIntroFlybyActive" fires on `*(sharedInfo->mpGameState
+        // + 217)` (BrnArbStateCarSelect.cpp:381).
+        bool mbNewProfileIntroActive;                 // +0x338B8 (GameState +216)
+        bool mbGameIntroFlybyActive;                  // +0x338B9 (GameState +217)
+
+        u8 maGameStateTail[0x339E0 - 0x338BA];        // +0x338BA .. +0x339E0
 
         // +0x339E0 .. +0x33C90  BrnDirector::VehicleTracker (ArbStateSharedInfo +0x3C).
         //           FLAG: un-homed; named opaque span.

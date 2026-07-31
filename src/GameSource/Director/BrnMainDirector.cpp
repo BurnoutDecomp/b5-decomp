@@ -515,7 +515,7 @@ namespace BrnDirector
         lrSharedInfo.mpMomentController      = reinterpret_cast<MomentController*>(
                                                   const_cast<u8*>(maMomentController));         // +0x20
         lrSharedInfo.mpGameState             = reinterpret_cast<GameState*>(
-                                                  const_cast<u8*>(maGameState));                // +0x24
+                                                  const_cast<u8*>(maGameStateHead));            // +0x24
         lrSharedInfo.mpRandom                = reinterpret_cast<Random*>(
                                                   const_cast<u8*>(maRandom));                   // +0x28
         lrSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                       // +0x2C
@@ -826,7 +826,7 @@ namespace BrnDirector
         }
 
         // Finalise: camera inertia + shake (the CameraFinaliser owns the InertiaController).
-        mCameraFinaliser.Update(lpIO->mpInputBuffer, maGameState, lpIO->mpResourceManager,
+        mCameraFinaliser.Update(lpIO->mpInputBuffer, maGameStateHead, lpIO->mpResourceManager,
                                 &lCamera);
 
         // Carry the finalised camera into the next frame.
@@ -859,38 +859,69 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // PostGuiUpdate  @ 0x82236F88   -- ⚠️ DOCUMENTED QUIET GATE
+    // PostGuiUpdate  @ 0x82236F88   -- PARTIALLY LIVE (the two intro latches), rest still gated
     //
     // The post-GUI pass DirectorModule::PostGuiUpdate runs when not replaying. The X360 body
-    // folds this frame's GUI events into the director's game state and then runs the effect
-    // interface + the "prepare for mode" action:
+    // folds this frame's GUI events -- the ones BrnGameModule::BridgeGuiToDirector @0x823CBF70
+    // has just published into the director INPUT buffer -- into the director's GameState, then
+    // runs the effect interface + the "prepare for mode" action:
     //
+    //     if ( input->GetCarSelectionChangedThisFrame() )     <GameState +211328 = 1>
     //     if ( input->HasGotCrashNavShownEvent() )            <set the crash-nav shown latch>
     //     if ( input->HasGotCrashNavHiddenEvent() )           <clear it>
     //     if ( input->HasGotColourCalibrationShownEvent() )   <set the colour-cal latch>
     //     if ( input->HasGotColourCalibrationHiddenEvent() )  <clear it>
     //     if ( input->HasGotShortcutMenuEvent() )
     //         <GameState shortcut-menu state> = input->GetShortcutMenuState();
+    //     if ( input->GetEndOfCarSelect() && <mode> )         <mode = 5; clear a flag>
     //     if ( input->HasGotHookEnumeration() )
     //         EffectInterface::Update( maEffectInterface, *input->GetHookEnumeration(), ... )
-    //     ... ( the mode/action tail )
+    //     if ( input->GetRankUpThisFrame() )                  <rank latch + new rank>
+    // ⭐  if ( input->GetStartNewProfileIntro() )    mbNewProfileIntroActive = true;
+    // ⭐  if ( input->GetStartGameIntroFlyby()  )    mbGameIntroFlybyActive  = true;
+    // ⭐  if ( input->GetStopGameIntroFlyby()   )  { mbGameIntroFlybyActive  = false;
+    //                                               mbNewProfileIntroActive = false; }
+    //     if ( input->HasNewDirectorProfileData() )           <profile data + a derived bool>
+    //     ... ( the online post-event / 100%-sequence / mode-action tail )
     //     MainDirector::HandlePrepareForModeAction( this, maModeActionAndDebugBlock, lpIO )
     //
-    // Every INPUT-side accessor it needs is already committed on DirectorIO::InputBuffer --
-    // the blockers are all on the MainDirector side: the four GUI latches and the
-    // shortcut-menu state land inside the un-homed maGameState region, BrnDirector::
+    // ⭐ LIVE HERE: the three starred legs -- the ONLY route by which the front-end's
+    // "start / stop the game-intro fly-by" reaches the director at all. Both destinations are
+    // named members now (see the header: GameState +216 / +217); every other destination in the
+    // list above still lands inside the un-homed remainder of maGameState, BrnDirector::
     // EffectInterface has no reconstructed home, and HandlePrepareForModeAction is itself
     // declaration-only (it dispatches over the same un-homed action region).
     //
-    // CONSEQUENCE WHILE GATED: the director does not learn that the crash-nav / colour-
-    // calibration / shortcut-menu overlays opened or closed, and fires no GUI-driven camera
-    // effects. It does not affect the published camera (PostGuiUpdate runs AFTER Update).
+    // CONSEQUENCE WHILE THE REST IS GATED: the director still does not learn that the crash-nav
+    // / colour-calibration / shortcut-menu overlays opened or closed, and fires no GUI-driven
+    // camera effects. None of that affects the published camera (PostGuiUpdate runs AFTER
+    // Update, so the latches take effect on the FOLLOWING frame -- which is the console's own
+    // one-frame delay, not a shortfall).
     //
-    // DELETE-WHEN: the MainDirector GameState region is named and BrnDirector::EffectInterface
-    // is homed (HandlePrepareForModeAction unblocks with it).
+    // DELETE-WHEN: the rest of the MainDirector GameState region is named and BrnDirector::
+    // EffectInterface is homed (HandlePrepareForModeAction unblocks with it).
     // ------------------------------------------------------------------------
     void MainDirector::PostGuiUpdate(const DirectorInputOutput* lpIO)
     {
-        (void)lpIO;
+        const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
+        if (lpInput == 0)
+            return;
+
+        // ⚠️ GATE: the car-selection / crash-nav / colour-calibration / shortcut-menu /
+        //    end-of-car-select / hook-enumeration / rank-up legs (see the banner).
+
+        if (lpInput->GetStartNewProfileIntro())
+            mbNewProfileIntroActive = true;
+
+        if (lpInput->GetStartGameIntroFlyby())
+            mbGameIntroFlybyActive = true;
+
+        if (lpInput->GetStopGameIntroFlyby())
+        {
+            mbGameIntroFlybyActive  = false;
+            mbNewProfileIntroActive = false;
+        }
+
+        // ⚠️ GATE: the profile-data / online post-event / 100%-sequence / mode-action tail.
     }
 }

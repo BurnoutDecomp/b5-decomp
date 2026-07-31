@@ -389,6 +389,19 @@ namespace BrnGame
         // via BrnGui::GuiModule::GetGuiOutQueue().
         void BridgeGuiToGame(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
 
+        // ⭐ X360 0x823CBF70 -- the GUI->DIRECTOR out-event consumer. Walks the same GUI
+        // out-event queue BridgeGuiToGame walks and raises the matching published flag on the
+        // director's INPUT buffer, which MainDirector::PostGuiUpdate then folds into the
+        // director GameState. This is the ONLY route from the front-end to the director:
+        // commands 476/477/478 are the new-profile-intro and the GAME-INTRO FLY-BY start/stop.
+        // Called by DoUpdate_DirectorPostGUI @0x823DCE38, between LockBuffersForIO and
+        // DirectorModule::PostGuiUpdate. FLAG PC-ABI adapter, same one BridgeGuiToGame
+        // carries: the console form takes the GUI module OUTPUT buffer and calls
+        // CgsGuiModuleIO::OutputBuffer::GetOutEventQueu on it; the PC module publishes that
+        // same queue directly via BrnGui::GuiModule::GetGuiOutQueue().
+        void BridgeGuiToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+                                 CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+
         // The main-flow states' pending GUI FSM stage request (the X360 +2523537 byte the
         // MainGameFlowState OnEnters write; BridgeGameToGui consumes it).
         void RequestGuiFsmStage(s32 liStage) { miGuiFsmStage = liStage; }
@@ -617,6 +630,14 @@ namespace BrnGame
         // line ENDS (the console's SpeechEffect::UpdateParams @0x826F8074) instead of in
         // the same sub-step as the 466.
         bool mbGuiVoiceOverSounding;
+
+        // [FLAG PC bring-up] (no console member): true while the DIRECTOR is the thing driving
+        // the world camera -- i.e. from the frame the GUI's game-intro fly-by request reaches
+        // the director until the arbitrator has finished unwinding its attract states.
+        // DoDispatch routes the director's published camera to the world ONLY while this is
+        // set; outside it the bring-up tour camera keeps the world alive. Set in
+        // DoUpdate_Director. DELETE with GenerateDispatchListsBringUp.
+        bool mbDirectorCameraLive;
 
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)
