@@ -61,14 +61,20 @@ namespace
     // the second attribute starts 12 bytes into the vertex (after the position).
     const u16 KU_PACKED_ELEMENT_OFFSET = 12u;
 
-    // ---- per-module shadow caches (X360 .data block off_83010950) -----------------------------------
-    // These mirror the live device bindings the immediate-mode renderer compares against; they are one
-    // set per module (NOT per renderer), shared by BeginRendering and SetProgram in this TU. They
-    // correspond to dword_8301095C (last vertex program), off_83010958 (last vertex descriptor) and
-    // byte_83010A34 (the vertex-program-state dirty flag).
-    renderengine::ProgramBufferData*           spgLastVertexProgram   = nullptr;  // dword_8301095C
-    const renderengine::VertexDescriptorData*  spVertexDescriptorLast = nullptr;  // off_83010958
-    bool                                       sbVertexProgramDirty   = false;    // byte_83010A34
+    // ---- the device's own shadow cache (X360 .data block off_83010950) ------------------------------
+    // ⭐ The three "module statics" the X360 compares against here -- dword_8301095C (last vertex
+    // program), off_83010958 (last vertex descriptor) and byte_83010A34 (the vertex-program-state
+    // dirty flag) -- are NOT this TU's: they are shadow::Device's OWN fields, mpVertexProgramShadow /
+    // mpVertexDescriptor / mbVertexProgramStateDirty, which live at exactly those addresses in the
+    // one off_83010950 block (see shadowingdevice.h). Modelling them as TU-local copies was a real
+    // bug with a visible symptom: BeginRendering calls Device::ResetShadowing(), which clears the
+    // DEVICE's copies, but the TU-local copies survived -- so from the SECOND frame on the compares
+    // below said "unchanged", the binds were skipped, and Device::FlushVertexProgramState found a
+    // null program/descriptor and rebound nothing. The sky drew on frame 1 and never again.
+    //
+    // The compares now live where the state does: Device::SetVertexProgram / SetPixelProgram /
+    // SetVertexDescriptor each do the shadow compare themselves and report whether the binding
+    // actually changed, which is exactly what the X360 code inlines here.
 }
 
 } // namespace CgsGraphics
@@ -81,6 +87,14 @@ namespace shadow
 {
     void DeviceSetVertexProgramInternal(void* lpVertexProgram);
     void DeviceSetPixelProgram(void* lpPixelProgram);
+    // ⭐ The three "module statics" below (off_83010958 / dword_8301095C / byte_83010A34)
+    // are NOT TU-local on the X360: they are the shadow device's own fields, which all
+    // live in the same off_83010950 .data block. The vertex-descriptor one is the only
+    // one with no free-function binder in this TU's asm (the renderer writes it inline),
+    // and Device::FlushVertexProgramState -- which BrnSkyDomeManager::Render calls right
+    // before the sky draw -- DEREFERENCES it. Bind it through the device so the flush
+    // sees the descriptor this renderer just made current.
+    void DeviceSetVertexDescriptor(void* lpVertexDescriptor);
 }
 
 // The renderengine shader-state entry point SetTransform writes the world matrix into. Out-of-scope
@@ -122,6 +136,30 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
+
+    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image ----------------------
+    // The console route below (GetResourceDescriptor -> allocator Create -> Initialize) cannot run
+    // on the PC backend: both renderengine::ProgramBuffer bodies call XGGetMicrocodeShaderParts,
+    // whose PC stub returns 0 WITHOUT writing *lpParts, and then read that uninitialised
+    // ProgramMicrocodeParts for the microcode size and hand a 64-bit function pointer truncated
+    // into the u32 muFunction to Xbox2CreateConstantTable. When the supplied binary is already a
+    // converted platform-4 ShaderProgramBuffer (which is what the PC sky-dome programs are), the
+    // leaf adopts it directly -- there is nothing for Initialize to build. A non-PC binary returns
+    // null here and falls through to the console path unchanged.
+    if (renderengine::ProgramBufferData* lpAdoptedVertex =
+            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
+    {
+        renderengine::ProgramBufferData* const lpAdoptedPixel =
+            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
+        if (lpAdoptedPixel != nullptr)
+        {
+            mapVertexProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
+            mapPixelProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
+            return li8ProgramIndex;
+        }
+    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -282,22 +320,17 @@ void ImRenderer<V>::BeginRendering()
 
     mi8CurrentProgram = 0;
 
-    if (spgLastVertexProgram != reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram))
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram);
-    }
-
+    // (the compare against the last-bound vertex program is the device's -- see the note above)
+    shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
     shadow::DeviceSetPixelProgram(lpPixelProgram);
 
     // Shadow this renderer's vertex descriptor; mark the vertex-program state dirty when it changed.
-    const renderengine::VertexDescriptorData* lpVertexDescriptor =
-        reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor);
-    if (spVertexDescriptorLast != lpVertexDescriptor)
-    {
-        sbVertexProgramDirty   = true;
-        spVertexDescriptorLast = lpVertexDescriptor;
-    }
+    // (X360 off_83010958 / byte_83010A34 == shadow::Device::mpVertexDescriptor and
+    // mbVertexProgramStateDirty -- the compare-then-set + dirty flag IS Device::
+    // SetVertexDescriptor, so the shadow is kept where the flush reads it.)
+    shadow::DeviceSetVertexDescriptor(
+        const_cast<renderengine::VertexDescriptorData*>(
+            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor)));
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -316,17 +349,9 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram))
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = reinterpret_cast<renderengine::ProgramBufferData*>(lpVertexProgram);
-        lbChanged = true;
-    }
+    // The device's own shadow answers "did this bind change anything?" (see the note above).
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     if (lbChanged)
     {

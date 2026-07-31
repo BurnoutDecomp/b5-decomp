@@ -988,6 +988,17 @@ namespace renderengine
         }
     }
 
+    // [DIAG] Set by the immediate-mode leaf's constant flush, which is the last thing that
+    // happens before an immediate-mode draw; consumed (and cleared) by the next draw. Lets a
+    // probe distinguish the sky-dome draw from a world mesh that happens to share its
+    // 20-byte stride.
+    bool sbNextDrawIsImmediateMode = false;
+    void WorldDraw_MarkImmediateMode()
+    {
+        sbNextDrawIsImmediateMode = true;
+    }
+
+
     void WorldDraw_SetIndexSource(const void* lpIndexBufferHeader)
     {
         spIndexSource = static_cast<const IndexBufferHeader32*>(lpIndexBufferHeader);
@@ -1035,6 +1046,7 @@ namespace renderengine
         if (!MapPrimitive(luPrimTypeXenon, luIndexCount, &lePrim, &luPrimCount))
             return;
 
+
         const u8* lpIndices  = static_cast<const u8*>(lpIndexData) + luStartIndex * luIndexSize;
         const u8* lpVertices = static_cast<const u8*>(lpVertexData) + luBaseVertexIndex * suVertexStride;
         const UINT luNumVertices = spVertexSource->muSize / suVertexStride;
@@ -1072,10 +1084,54 @@ namespace renderengine
             lpIndices   = &sResetScratch[0];
         }
 
-        lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
-                                         lpIndices,
-                                         lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
-                                         lpVertices, suVertexStride);
+        const HRESULT lhrDraw =
+            lpDevice->DrawIndexedPrimitiveUP(lePrim, 0, luNumVertices, luPrimCount,
+                                             lpIndices,
+                                             lb32Bit ? D3DFMT_INDEX32 : D3DFMT_INDEX16,
+                                             lpVertices, suVertexStride);
+        {
+            // [DIAG one-shot] The first IMMEDIATE-MODE draw of the run -- i.e. the sky dome,
+            // the only thing on this build that reaches here through
+            // shadow::Device::FlushVertexProgramState. Reports everything that decides
+            // whether that pass produces pixels, so a black sky can be diagnosed from a log
+            // instead of a capture: the draw result, the expanded primitive counts, whether a
+            // vertex/pixel program and a declaration are actually bound, and the depth/cull/
+            // colour-write state it inherited. DELETE with the sky bring-up.
+            static bool sbDiagSky = false;
+            const bool lbImmediateMode = sbNextDrawIsImmediateMode;
+            sbNextDrawIsImmediateMode = false;
+            if (!sbDiagSky && lbImmediateMode)
+            {
+                sbDiagSky = true;
+                IDirect3DVertexShader9*      lpVs   = nullptr;
+                IDirect3DPixelShader9*       lpPs   = nullptr;
+                IDirect3DVertexDeclaration9* lpDecl = nullptr;
+                DWORD luZEnable = 0, luZFunc = 0, luCull = 0, luColourWrite = 0, luDepthBias = 0;
+                lpDevice->GetVertexShader(&lpVs);
+                lpDevice->GetPixelShader(&lpPs);
+                lpDevice->GetVertexDeclaration(&lpDecl);
+                lpDevice->GetRenderState(D3DRS_ZENABLE, &luZEnable);
+                lpDevice->GetRenderState(D3DRS_ZFUNC, &luZFunc);
+                lpDevice->GetRenderState(D3DRS_CULLMODE, &luCull);
+                lpDevice->GetRenderState(D3DRS_COLORWRITEENABLE, &luColourWrite);
+                lpDevice->GetRenderState(D3DRS_DEPTHBIAS, &luDepthBias);
+                float lfDepthBias = 0.0f;
+                std::memcpy(&lfDepthBias, &luDepthBias, 4);
+                char lacMsg[288];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                              "[SkyDraw] hr=0x%08X prim=%d prims=%u verts=%u idx=%u reset=%d"
+                              " vs=%d ps=%d decl=%d z=%u zfunc=%u cull=%u cw=%u bias=%.6f\n",
+                              (unsigned)lhrDraw, (int)lePrim, (unsigned)luPrimCount,
+                              (unsigned)luNumVertices, (unsigned)luIndexCount,
+                              (int)spResetEnabled, (int)(lpVs != nullptr), (int)(lpPs != nullptr),
+                              (int)(lpDecl != nullptr), (unsigned)luZEnable, (unsigned)luZFunc,
+                              (unsigned)luCull, (unsigned)luColourWrite, lfDepthBias);
+                CgsDev::Log::WriteToLog(lacMsg);
+                if (lpVs) lpVs->Release();
+                if (lpPs) lpPs->Release();
+                if (lpDecl) lpDecl->Release();
+            }
+        }
     }
 
     // renderengine::D3DDevice_CreateVertexDeclaration (VertexDescriptor.cpp
@@ -1205,8 +1261,33 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
                                   void* lpTexture, unsigned int /*luFlags*/)
 {
     IDirect3DDevice9* lpDevice = Dev();
-    if (lpDevice != nullptr)
-        lpDevice->SetTexture(luSampler, static_cast<IDirect3DBaseTexture9*>(lpTexture));
+    if (lpDevice == nullptr)
+        return 0;
+
+    // The Xenon fast-set takes a GPU texture HEADER, which on the console is the leading
+    // part of the renderengine::Texture object itself -- so every caller passes a
+    // renderengine::Texture* (shadow::Device::SetResource, this build's only caller, is
+    // handed one straight from BrnIm3d.cpp's cloud-texture bind). D3D9 needs the wrapped
+    // COM object out of it; binding the wrapper as if it were an IDirect3DBaseTexture9
+    // would hand the runtime a bogus vtable. Same field the world path reads
+    // (WorldShader_BindTextureUnit).
+    IDirect3DBaseTexture9* lpD3DTexture = nullptr;
+    if (lpTexture != nullptr)
+        lpD3DTexture = static_cast<const renderengine::Texture*>(lpTexture)->mpD3DTexture;
+    const HRESULT lhr = lpDevice->SetTexture(luSampler, lpD3DTexture);
+    {
+        // [DIAG one-shot per unit] the first bind on each of the two cloud sampler units.
+        static bool sabDiag[2] = { false, false };
+        if (luSampler < 2u && !sabDiag[luSampler])
+        {
+            sabDiag[luSampler] = true;
+            char lacMsg[160];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[SkyTex] unit %u raster=%p d3d=%p hr=0x%08X\n",
+                          (unsigned)luSampler, lpTexture, (void*)lpD3DTexture, (unsigned)lhr);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
     return 0;
 }
 

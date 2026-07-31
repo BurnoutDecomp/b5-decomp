@@ -95,6 +95,17 @@ namespace BrnGraphics
         // widening the shared ImRenderer<V> template.
         const void* GetVertexDescriptorData() const { return mpVertexDescriptor; }
 
+        // ADDITIVE (not an X360 symbol): whether Construct actually got the sky-dome
+        // program pair onto slot 0. The console always does (the binaries are guest
+        // .data); on PC they come from the converted SkyDomeProgramsPC images, and a
+        // failed adoption must skip the whole pass -- BeginRendering would otherwise
+        // bind a null vertex program and shadow::Device::FlushVertexProgramState would
+        // dereference it.
+        bool HasPrograms() const
+        {
+            return mapVertexProgramBuffer[0] != 0 && mapPixelProgramBuffer[0] != 0;
+        }
+
     private:
         // BrnIm3d.h:101 -- the sixteen named sky/cloud shader-constant handles (see the
         // banner for the slot->name map).

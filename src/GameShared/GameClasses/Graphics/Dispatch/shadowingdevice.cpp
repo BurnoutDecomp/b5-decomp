@@ -134,6 +134,9 @@ namespace renderengine
     void  WorldShaderConstants_Set(bool lbPixel, u32 luRegister, const void* lpData, u32 luNumRegisters);
     // Bind one texture + the world sampler set at a D3D sampler unit.
     bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster);
+    // [PC leaf, pc/gcm/renderengine/ImmediateModePCLeaf.cpp] Drain the immediate-mode
+    // shader-constant rows staged by RenderEngineDeviceBeginShaderStates.
+    void  ImShaderConstants_Flush();
     // The draw stash the D3DDevice_* shims fill (index/vertex source for the UP draw path).
     void  WorldDraw_SetIndexSource(const void* lpIndexBufferHeader);
     void  WorldDraw_SetVertexSource(const void* lpVertexBufferHeader, u32 luStride);
@@ -188,7 +191,15 @@ namespace
 namespace shadow
 {
     renderengine::VertexProgramState Device::mVertexProgramState = {};
-    renderengine::VertexProgramState* Device::mapVertexProgramStateSlot[5] = {};
+    // ⚠ Seeded here, not only in Device::Initialize. The X360 fills this slot in
+    // Device::Initialize @0x827ED6E0 -- but shadow::Device::Initialize has NO caller on this
+    // build (BrnMain calls renderengine::Device::Initialize, its base, directly), so the slot
+    // stayed { nullptr, ... } and GetVertexProgramState -> VertexProgramState::
+    // InitializeNoBindX360 dereferenced `*lppState` == null on the first flush. The value is
+    // the same constant Initialize writes, so seeding it at definition is equivalent and
+    // cannot go stale.
+    renderengine::VertexProgramState* Device::mapVertexProgramStateSlot[5] =
+        { &Device::mVertexProgramState, nullptr, nullptr, nullptr, nullptr };
     bool Device::mbVertexProgramStateDirty = false;
 
     const void* Device::mpStreamArray = nullptr;
@@ -326,6 +337,19 @@ namespace shadow
         return true;
     }
 
+    // Bind the active vertex descriptor through the shadow (X360 off_83010958 +
+    // byte_83010A34, written inline by the immediate-mode renderers).
+    bool Device::SetVertexDescriptor(const renderengine::VertexDescriptorData* lpVertexDescriptor)
+    {
+        if (mpVertexDescriptor == lpVertexDescriptor)
+        {
+            return false;
+        }
+        mpVertexDescriptor = lpVertexDescriptor;
+        SetVertexProgramInternal();
+        return true;
+    }
+
     // @0x822769E0: bind a sampler-state object through the shadow.
     void* Device::SetState(void* lpState, u32 luSamplerId)
     {
@@ -366,6 +390,23 @@ namespace shadow
     // @0x827E7A10: rebind the dirty vertex-program state + the active stream sources to D3D.
     void Device::FlushVertexProgramState()
     {
+        // [PC leaf] Push the immediate-mode shader-constant rows staged since the last
+        // flush. The X360's renderengine::Device::BeginShaderStates opens rows straight
+        // in the command buffer, so they become visible to the GPU exactly here; D3D9
+        // has no such window, so the leaf stages them and this is the drain.
+        renderengine::ImShaderConstants_Flush();
+
+        // A flush with nothing bound has nothing to rebind -- and the block below
+        // dereferences BOTH shadows unconditionally (mpVertexDescriptor->mpDeclaration,
+        // and GetD3DVertexShader() is `&program->mauD3DVertexShader`, i.e. a fixed +0x14
+        // off the program pointer, so a null program yields the bogus address 0x14
+        // rather than null). ResetShadowing() nulls both, so any caller that flushes
+        // before its first bind would fault here.
+        if (mpVertexDescriptor == nullptr || mpVertexProgramShadow == nullptr)
+        {
+            return;
+        }
+
         if (mbVertexProgramStateDirty)
         {
             renderengine::VertexProgramState* lpState =

@@ -451,19 +451,21 @@ namespace
     // 0x10 * (elementCount + 1) -- exactly where renderengine::VertexDescriptor::Initialize
     // writes it ("Per-stream stride table base = +0x10 * (count + 1) bytes into the object").
     //
-    // FLAG: the committed renderengine::VertexDescriptorData models that table as a FIXED
-    // `u8 mauStreamStride[16]` at +0x110, which is only correct for a 16-element descriptor.
-    // Reading it by name here would give the wrong byte for the 2-element sky-dome format, so
-    // the stride is computed the way the asm does. (The same fixed-offset read in
-    // shadowingdevice.cpp is a separate, out-of-tree bug -- see the wave log.)
+    // ⚠ x64: the `0x10 * (count + 1)` cursor is a CONSOLE BYTE OFFSET and is wrong on this
+    // target. renderengine::VertexDescriptorData leads with a POINTER (mpDeclaration), so on
+    // LLP64 its element array starts at +0x14 rather than +0x10 and the packed stride bytes
+    // land at +0x114, not at 0x10*(count+1) -- for the sky's two elements that expression
+    // addresses 0x30, which is inside element 1's record. The table is therefore read BY NAME,
+    // which is also how the only other consumer reads it (shadow::Device::
+    // FlushVertexProgramState, `mauStreamStride[luElement]`), and how the PC leaf that builds
+    // the descriptor writes it. Element 0 owns stream 0, which is the stream being bound.
     u32 GetVertexStreamStride(const renderengine::VertexDescriptorData* lpDescriptor)
     {
-        if (lpDescriptor == nullptr)
+        if (lpDescriptor == nullptr || lpDescriptor->muElementCount == 0u)
         {
             return 0u;
         }
-        const u8* const lpBytes = reinterpret_cast<const u8*>(lpDescriptor);
-        return lpBytes[0x10u * (static_cast<u32>(lpDescriptor->muElementCount) + 1u)];
+        return lpDescriptor->mauStreamStride[0];
     }
 
     // Build the sky shader's Vector4 "g_domeRanges" from the manager's two cached ray-sphere
