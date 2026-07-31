@@ -23,14 +23,14 @@
 #include "types.hpp"                                                          // u32 / s64
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"   // Attrib::FindCollection (canonical)
+// ⭐ 2026-07-31: this file used to RE-DECLARE `u32 Attrib::StringToKey(const char*)` locally
+// instead of including the canonical header. MSVC does not mangle free-function return
+// types, so the fork linked happily against the real 64-bit body and simply read EAX --
+// truncating the shot-group name key at the call site. Include the real declaration.
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey (u64)
 
 namespace Attrib
 {
-    // The string-keyed lookup the generated ctor's caller uses to turn a shot-group name
-    // into the key it constructs over (codegen.cpp owns the body). Declared here so the
-    // consumer (BrnArbStateRaceIntro::Prepare) can name it; declaration-only.
-    u32 StringToKey(const char* pcName);
-
 namespace Gen
 {
     class shotgroup : private Instance
@@ -61,7 +61,12 @@ namespace Gen
 
         // Construct over the shotgroup collection named by the keyed group name. lpOwner is
         // the optional owning object the AttribSys collection resolve threads through.
-        explicit shotgroup(Attrib::Key luGroupNameKey = 0, void* lpOwner = nullptr);
+        // ⚠️ WIDENED to u64 2026-07-31. Attrib::StringToKey returns the FULL 64-bit
+        // hash (@0x82805828 tail-calls the lookup8 hash and returns r3 whole), and
+        // Attrib::FindCollection hashes the collection key as a whole doubleword. The
+        // 32-bit Attrib::Key spelling here truncated it, so every name-keyed collection
+        // resolve missed -- the identical defect the CLASS key had until c27208fc.
+        explicit shotgroup(u64 luGroupNameKey = 0, void* lpOwner = nullptr);
 
         // The number of shots in this group's ShotList (the length of the ShotList array
         // attribute). The intro state asserts this is > 0 before driving the group. REAL
@@ -126,7 +131,7 @@ namespace Gen
     // being passed where the collection key belongs. That is the defect
     // BrnDirectorResourceManager.h:203 flagged: all 65 of the director resource manager's
     // shot-group slots would have bound the wrong collection.
-    inline shotgroup::shotgroup(Attrib::Key luGroupNameKey, void* lpOwner)
+    inline shotgroup::shotgroup(u64 luGroupNameKey, void* lpOwner)
         : Instance(FindCollection(KU_SHOTGROUP_CLASS_KEY, luGroupNameKey), lpOwner)
     {
     }

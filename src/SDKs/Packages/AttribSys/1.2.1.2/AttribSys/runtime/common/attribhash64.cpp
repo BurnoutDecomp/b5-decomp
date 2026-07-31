@@ -122,15 +122,20 @@ u64 StringToKey64(const char* lpcText, u32 luLength, u64 luSeed)
     return c;
 }
 
-// The 32-bit ::Attribute::Key forms declared in AttributeKey.h: the same hash,
-// truncated to the low doubleword exactly as the 32-bit consumers do.
-::Attribute::Key StringToKey(const char* lpcText, u32 luLength, u64 luSeed)
+// The StringToKey forms declared in AttributeKey.h. ⭐ These used to narrow the hash with
+// an explicit `static_cast<::Attribute::Key>` and a comment calling that "exactly what the
+// 32-bit consumers do". The X360 body does no such thing -- @0x82805828 tail-calls the
+// 64-bit hash and returns r3 whole -- and the narrowing broke every collection-key resolve
+// built from a name string (all 65 of DirectorResourceManager::Prepare's shot groups).
+// See the correction note on the declarations. Consumers that really do want 32 bits now
+// narrow at their own call site, where it is visible.
+u64 StringToKey(const char* lpcText, u32 luLength, u64 luSeed)
 {
-    return static_cast<::Attribute::Key>(StringToKey64(lpcText, luLength, luSeed));
+    return StringToKey64(lpcText, luLength, luSeed);
 }
 
 // @ 0x82805828 -- NUL-terminated convenience form (strlen + the baked seed).
-::Attribute::Key StringToKey(const char* lpcText)
+u64 StringToKey(const char* lpcText)
 {
     return StringToKey(lpcText,
                        static_cast<u32>(strlen(lpcText)),
