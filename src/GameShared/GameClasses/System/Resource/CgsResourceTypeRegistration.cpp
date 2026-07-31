@@ -31,6 +31,8 @@
 #include "SharedClasses/Trigger/BrnTriggerResourceType.h"                      // BrnTrigger::TriggerResourceType (0x10003)
 #include "SharedClasses/AI/AISectionsResourceType.h"                           // BrnAI::AISectionsResourceType (0x10001)
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                  // BrnTraffic::TrafficDataResourceType (0x10002)
+#include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
+#include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
 
 // ============================================================================================
 // Resource-type registration -- the faithful counterpart of the X360
@@ -145,6 +147,29 @@ namespace CgsResource
         TypeRegistry::Register(&sTriggerData);
         static BrnTraffic::TrafficDataResourceType    sTrafficData;  // 0x10002 (65538)
         TypeRegistry::Register(&sTrafficData);
+
+        // ---- the vehicle/wheel LIST types (vehicle-load wave, 2026-07-31) --------------------
+        // GameDataModule::Prepare stages 9 and 12 stream Vehicles/VehicleList.bundle and
+        // Wheels/WheelList.bundle into pool 5 and then acquire "B5VehicleList" / "B5WheelList".
+        // Both resources carry a serialised 32-bit entry-array slot that ONLY FixUp rebases, so
+        // without a registered handler the pool stores a NULL mpResourceType, the loader skips
+        // FixUp, and every entry lookup reads through an un-relocated offset. (Measured: the
+        // shipped VEHICLELIST.BUNDLE resource id 0x1521E14B == HashString("B5VehicleList") and
+        // WHEELLIST.BUNDLE's 0xC2D08298 == HashString("B5WheelList") -- the same names the two
+        // Prepare stages hash, so this is the right pair.)
+        static BrnResource::VehicleListResourceType   sVehicleList;  // 0x10005 (65541)
+        TypeRegistry::Register(&sVehicleList);
+        static BrnResource::WheelListResourceType     sWheelList;    // 0x10009 (65545)
+        TypeRegistry::Register(&sWheelList);
+        // NOT registered: PlayerCarColours (0x1001E / 65566), the SECOND resource inside
+        // VEHICLELIST.BUNDLE. Its handler exists (SharedClasses/Graphics/
+        // PlayerCarColoursResourceType.cpp) but that TU is written against 32-bit pointers
+        // (`reinterpret_cast<u32>(lpResource)`) and does not compile for x64, so mounting it is
+        // its own job. With no handler the pool takes the documented null-type path
+        // (CgsResourcePool.cpp AllocateMemoryForResource): the payload is allocated and stored
+        // raw and its FixUp is SKIPPED -- safe today because nothing reads the palette yet, but
+        // the two colour-array pointers inside it stay un-relocated. Fix before any car-livery
+        // colour work.
 
         // ---- the world-render resource types (2026-07-27) -------------------------------------
         // The streamed TRK_UNIT bundles carry these; without a registered handler the

@@ -144,7 +144,26 @@ namespace CgsResource
             CreateFromHandle(&lrHandle);        // bind resource memory from the handle
         }
 
-        ResourcePtr<Type>& operator=(const ResourcePtr<Type>& lrOther);
+        // Copy-assign. X360-attested by the *ListResource::AddListResource family, which is
+        // where the compiler emitted it inline: e.g. VehicleList::AddListResource @0x8267B268
+        //     addi r4, r23, 0x14
+        //     bl   CgsResource::BaseResourcePtr::CreateFromHandle
+        // (WheelList @0x8267C0D4 and ChallengeList are the same two instructions). `+0x14` is
+        // the {mpThis, muThreadId} PAIR -- and CreateFromHandle itself is what stored the
+        // SOURCE handle's two pointers there (see its body + the slot-reuse note in
+        // CgsResourcePtr.cpp). So a copy-assign is exactly "rebind from the handle the source
+        // was bound with". Expressed BY NAME here rather than by re-reading the pair through
+        // a cast, so it stays correct on x64 where both members are 8 bytes wide.
+        // Defined inline so each instantiation emits it at its assign site.
+        ResourcePtr<Type>& operator=(const ResourcePtr<Type>& lrOther)
+        {
+            ResourceHandle lSrcHandle;
+            lSrcHandle.mpResourceMemory = lrOther.mpThis;                        // +0x14
+            lSrcHandle.mpSourceEntry    = reinterpret_cast<Entry*>(lrOther.muThreadId); // +0x18
+            CreateFromHandle(&lSrcHandle);
+            return *this;
+        }
+
         ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther);
 
         // Assign-from-handle: rebind the resource memory from the handle. X360-attested

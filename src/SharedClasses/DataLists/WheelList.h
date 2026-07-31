@@ -38,11 +38,19 @@ namespace BrnResource
 // inferred from the asm (the symbol is truncated to BrnResource::WheelListResource_::()).
 //
 // LAYOUT (X360-proven, minimal): +0x00 muNumWheels (count, read by AddListResource),
-// +0x04 mpaEntries (pointer to the WheelListEntry[] array; this is the field
-// rebased by WheelListResourceType::FixUp @ 0x8267DF28 and dereferenced by
-// WheelList::GetWheelData via `*(resource+4) + 72*entryIndex`). Only these two
-// fields are attested here; the rest of the record is owned by the dedicated
-// WheelListResource TU and intentionally not modeled.
+// +0x04 muEntriesOffset (the WheelListEntry[] array base; this is the field rebased by
+// WheelListResourceType::FixUp @ 0x8267DF28 and dereferenced by WheelList::GetWheelData
+// via `*(resource+4) + 72*entryIndex`). Only these two fields are attested here; the rest
+// of the record is owned by the dedicated WheelListResource TU and intentionally not
+// modeled. The shipped payload is 16 + 72*138 == 9952 bytes exactly, which pins the header
+// at 16 bytes and the entry slot at 4 bytes wide.
+//
+// ⚠️ CORRECTED 2026-07-31 (vehicle-load wave). The entry-array base was declared
+// `const WheelListEntry* mpaEntries` "at +0x04"; on MSVC x64 an 8-byte pointer there
+// actually lands at +0x08, and the paired FixUp did an 8-byte add at +0x04. The serialised
+// record really carries a FOUR-byte slot at +0x04, so this now matches the correct sibling
+// model (VehicleListResource): a u32 slot converted with PointerFromU32. Safe because the
+// GameData root is carved below 4 GB (BrnGameDataModule::Construct logs it).
 struct WheelListEntry;
 
 class WheelListResource
@@ -51,13 +59,16 @@ public:
     u32 GetNumWheels() const;   // X360: *BrnResource::WheelListResource_::(a2) -- count @+0x00
 
     // X360 (BrnResource::WheelList::GetWheelData @ 0x822CD3E8): the entry array base
-    // is the pointer at +0x04 and the per-entry stride is 72 (sizeof WheelListEntry);
-    // returns &mpaEntries[liEntryIndex]. Const accessor; the base is read directly.
+    // is the 32-bit slot at +0x04 and the per-entry stride is 72 (sizeof WheelListEntry);
+    // returns &entries[liEntryIndex].
     const WheelListEntry* GetEntry(s32 liEntryIndex) const;
 
 private:
-    u32                   muNumWheels;   // +0x00  wheel count
-    const WheelListEntry* mpaEntries;    // +0x04  entry array base (FixUp-rebased)
+    friend class WheelListResourceType;   // FixUp rebases muEntriesOffset
+
+    u32 muNumWheels;       // +0x00  wheel count
+    u32 muEntriesOffset;   // +0x04  serialised 32-bit entry-array slot (FixUp-rebased)
+    u64 muHeaderPad;       // +0x08  (the header is 16 bytes)
 };
 
 // WheelListEntry -- one wheel record inside a WheelListResource. Owned here in the

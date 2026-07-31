@@ -120,14 +120,30 @@ void WheelList::AddListResource(CgsResource::ResourcePtr<WheelListResource>& lrR
     ++miListCount;
 }
 
+// WheelListResource::GetNumWheels -- the count word at +0x00 (X360 reads it directly
+// inside AddListResource through the truncated accessor BrnResource::WheelListResource_::()).
+u32 WheelListResource::GetNumWheels() const
+{
+    return muNumWheels;
+}
+
 // WheelListResource::GetEntry -- inlined inside WheelList::GetWheelData on X360
 // (no standalone symbol; the body is the `*(resource+4) + 72*index` tail at
-// 0x822CD4A8..0x822CD4CC). The entry array base is mpaEntries (+0x04, FixUp-rebased)
-// and the per-entry stride is sizeof(WheelListEntry) == 72. No bounds check here --
-// the caller (GetWheelData) is the one that asserts the slot index range.
+// 0x822CD4A8..0x822CD4CC). The entry array base is the serialised 32-bit slot at +0x04
+// (FixUp-rebased) and the per-entry stride is sizeof(WheelListEntry) == 72. No bounds
+// check here -- the caller (GetWheelData) is the one that asserts the slot index range.
 const WheelListEntry* WheelListResource::GetEntry(s32 liEntryIndex) const
 {
-    return &mpaEntries[ liEntryIndex ];
+    const u8* lpBase = reinterpret_cast<const u8*>(static_cast<uintptr_t>(muEntriesOffset));
+    return reinterpret_cast<const WheelListEntry*>(
+        lpBase + sizeof(WheelListEntry) * static_cast<u32>(liEntryIndex));
+}
+
+// WheelList::GetWheelCount @ WheelList.h:79 (inlined on the console; the count word at
+// +0x1000 that GetWheelData/FindWheelIndexFromName bound their loops with).
+s32 WheelList::GetWheelCount() const
+{
+    return miCount;
 }
 
 // WheelList::GetWheelData(s32) @ 0x822CD3E8
