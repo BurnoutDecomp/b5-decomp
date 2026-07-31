@@ -33,9 +33,13 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h" // BrnProgression::ETrainingType
 
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<N,A>
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::BaseResourcePtr
+
 #include <cstddef>                                   // offsetof
 
 namespace CgsResource { struct ResourceHandle; }
+namespace BrnResource { struct VehicleList; class WheelList; }
 
 namespace BrnWorld
 {
@@ -48,7 +52,11 @@ const s32 KI_TRAINING_REQUEST_QUEUE_SIZE = 8;
 // SharedIO/BrnRaceCarEntityModuleOutputInterface.h). CopyActiveRaceCarToPlayerScoringMappingToOutput
 // only takes a pointer to it, so a forward declaration suffices here.
 namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }
-namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; }
+namespace RaceCarEntityModuleIO { class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; struct OutputBuffer_Prepare; }
+
+// The "CarColours" palette resource LoadGlobalResources acquires (real home
+// SharedClasses/Graphics/BrnGlobalColourPalette.h); held by pointer only here.
+struct GlobalColourPalette;
 
 // ---- PLACEHOLDER element types ---------------------------------------------
 // The real RaceCar / ActiveRaceCar live in their own (not-yet-committed) homes
@@ -117,9 +125,20 @@ public:
                                     Vector4 lvFogColourPlusWhiteLevel,
                                     Vector3 lvCameraPosition );
 
-        // ---- ADDITIVE (attested by WorldModule::Prepare @0x827D53B0 stage 6) ----
-        // Declaration-only; the body lands with this module's own TU.
-        bool Prepare( const CgsResource::ResourceHandle& lrDistrictMapHandle );
+        // ---- X360 0x82303E78 (attested by WorldModule::Prepare @0x827D53B0 stage 6) ----
+        // NOTE the argument list: the console signature is
+        //   Prepare(this, OutputBuffer_Prepare* lpOutput, ResourceHandle lDistrictMapHandle)
+        // (asm prologue: r4 -> the `lpOutput != NULL` assert at BrnRaceCarEntityModule.cpp:663,
+        // r5 -> the district-map handle asserted at :671). The earlier PC declaration dropped
+        // the output buffer, which is exactly the buffer LoadGlobalResources publishes its
+        // resource requests into -- without it the module can never ask for anything.
+        bool Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput,
+                      const CgsResource::ResourceHandle& lrDistrictMapHandle );
+
+        // X360 0x82300730. The module's own resumable global-resource load: acquire
+        // "CarColours" (pool 5), stream "Vehicles/VEHICLETEX.BIN" into the CarShared pool
+        // (25), then GET the vehicle list and the wheel list. Returns false while waiting.
+        bool LoadGlobalResources( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput );
 
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
@@ -241,6 +260,57 @@ private:
     // E_ACTIVE_RACE_CAR_INDEX_COUNT (8) when no active car is mapped to that player.
     EActiveRaceCarIndex maActiveRaceCarForPlayerScoringIndex
         [BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT];
+
+    // ========================================================================
+    // MODELLED members (global-resource wave).
+    //
+    // These five are real, named members carrying state that on the console lives
+    // INSIDE the opaque spans above. They are APPENDED rather than carved out of
+    // those spans deliberately: the pads are a 32-bit-console fiction that only
+    // holds while every byte in them is anonymous, and carving would move every
+    // following member and break the (still-useful) offset locks on the array
+    // strides. Per the project's named-member parity rule the x64 byte offsets are
+    // not load-bearing -- the console offsets are recorded per member so the next
+    // wave can fold the pads down when the rest of the interior is modelled.
+    // ========================================================================
+
+    // X360 +0x22C (556). Prepare's own resumable stage (0..3, `lwz r10,0x22C(r30)`).
+    s32 mePrepareStage;
+
+    // X360 +0x230 (560). Cleared to 0 by Prepare stage 3.
+    s32 miPrepareCarIndex;
+
+    // X360 +0x234 (564). LoadGlobalResources' resumable stage (an 18-case jump table;
+    // only 0..6, 9, 10 and 0x11 are live).
+    s32 meLoadGlobalResourcesStage;
+
+    // X360 +0x238 (568). The number of receiver-queue responses the current
+    // LoadGlobalResources step is waiting for (always 1 in the shipped path); the
+    // stage compares mReceiverQueue's event count against it and yields while short.
+    s32 miExpectedResponseCount;
+
+    // X360 +0x100E8 (65768). The module's own reply queue: every request
+    // LoadGlobalResources publishes names it as mpUser, so the GameData module posts
+    // the completions straight back here. Capacity 4096 is the console gap
+    // (mStreamer @+0x11100 - queue @+0x100E8 == 4120 == 4096 + the queue header).
+    CgsModule::EventReceiverQueue<4096, 16> mReceiverQueue;
+
+    // X360 +0x18434 / +0x18438 (99380 / 99384). The two resident data tables, taken
+    // from the GetVehicleList / GetWheelList replies (the console stores the reply's
+    // +0x20 payload word). Prepare stage 3 hands mpVehicleList to the streamer.
+    const BrnResource::VehicleList* mpVehicleList;
+    const BrnResource::WheelList*   mpWheelList;
+
+    // X360 +0x1843C (99388). The acquired "CarColours" palette resource
+    // (BaseResourcePtr::CreateFromHandle off the AcquireResource reply). The payload type
+    // is BrnWorld::GlobalColourPalette -- the same resource BrnDriveThruManager and
+    // BrnGuiWorldDataController already hold as ResourcePtr<GlobalColourPalette>.
+    CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette> mCarColoursResource;
+
+    // [PC diagnostic] whether the CarColours acquire actually resolved. The console has no
+    // such flag (it never inspects the ptr); BaseResourcePtr exposes no null query --
+    // IsEqual(0) DEREFERENCES its argument -- so the answer is recorded at bind time.
+    bool mbCarColoursBound;
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,

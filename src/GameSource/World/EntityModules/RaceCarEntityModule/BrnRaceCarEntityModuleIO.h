@@ -144,15 +144,15 @@ namespace RaceCarEntityModuleIO
     {
         typedef RaceCarEntityModuleIO::ResourceRequestInterface ResourceRequestInterface;  // :70
         // X360 0x822EA380 -- IOBuffer status then VariableEventQueue<8192,16>::Construct +
-        // ::Clear on the embedded request ring. PARTIAL SLICE: RaceCarEntityModuleIO::
-        // ResourceRequestInterface is still the sized-blob stand-in (its own TU owns the
-        // real RequestInterface<8192>), so the ring bring-up is the documented zero-fill
-        // [marked deviation]. (Replaces the WorldLinkStubs base-only gate.)
+        // ::Clear on the embedded request ring. Now REAL: ResourceRequestInterface is the
+        // live BrnResource::GameDataIO::RequestInterface<8192>, so the ring is brought up
+        // by its own Construct/Clear exactly as the console does (the previous zero-fill
+        // stood in for it while the member was a reserved-byte blob).
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
-            std::memset(mResourceRequestInterface.maReserved, 0,
-                        sizeof(mResourceRequestInterface.maReserved));
+            mResourceRequestInterface.mRequestQueue.Construct();
+            mResourceRequestInterface.mRequestQueue.Clear();
         }
         const ResourceRequestInterface* GetResourceRequestInterface() const;              // :126 R  (0x8279CDF0)
         ResourceRequestInterface*       GetResourceRequestInterface();                     // :127 W  (0x822B4990)

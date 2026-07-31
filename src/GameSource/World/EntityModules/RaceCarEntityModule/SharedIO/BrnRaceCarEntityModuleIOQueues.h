@@ -45,6 +45,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"           // CgsModule::EventQueue<T,N> (PotentialContactQueue base)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<32768,16> (SceneResultQueue base)   // u8 (reserved-byte blob)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (PotentialContactQueue element)
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // BrnResource::GameDataIO::RequestInterface<8192>
 
 namespace BrnWorld
 {
@@ -102,10 +103,20 @@ namespace RaceCarEntityModuleIO
 
     // ---- Resource-request interface (OutputBuffer_Prepare :131 / PostPhysics :595) --------
     // = BrnResource::GameDataIO::RequestInterface<8192>. The inline request ring is SIMD-aligned
-    // on X360 -> alignas(16). Size 8208 derived (see header comment), not the type's own TU yet.
+    // on X360 -> alignas(16).
+    //
+    // REAL as of the race-car global-resource wave: the sized-blob stand-in is retired.
+    // RaceCarEntityModule::LoadGlobalResources @0x82300730 calls
+    // RequestInterface<8192>::LoadBundle / ::GetVehicleList / ::GetWheelList straight on
+    // this member and raw-AddEvents an AcquireResourceRequest (type 4) for "CarColours",
+    // so it must be the live queue, not reserved bytes. Derives (rather than typedefs) so
+    // the existing `struct ResourceRequestInterface` forward references stay valid, exactly
+    // like SceneResultQueue above; RequestInterface<8192> holds its RequestQueue<8192> at
+    // offset 0, so WorldModule::BridgeRaceCarResourceRequestsToOutput_Prepare's
+    // reinterpret_cast to VariableEventQueue<8192,16> keeps working unchanged.
     struct alignas(16) ResourceRequestInterface
+        : public BrnResource::GameDataIO::RequestInterface<8192>
     {
-        unsigned char maReserved[8208];  // 8192 + 16-byte queue header (RequestInterface<8192>)
     };
 }
 }
