@@ -7,6 +7,9 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"               // CgsContainers::BitArray<8>
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"               // BrnDirector::Timestep (by value)
 #include "GameSource/Director/Utils/BrnVehicleRef.h"                     // BrnDirector::VehicleRef (base of the nested ref)
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"         // AllVehicleData -- VehicleRef::IsValid's
+                                                                         //   "world" (the used-race-car bit array
+                                                                         //   + the player race-car index)
 #include "GameSource/Director/Camera/Camera.h"                           // BrnDirector::Camera::Camera (Update/Fail arg)
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"         // ValidityAccount (the flag enums Fail takes)
 #include "GameSource/Director/Camera/Utils/BrnCamera2DRotationController.h"        // mRotationController (by value)
@@ -311,15 +314,79 @@ namespace Camera
             // name; it is the base VehicleRef's own populated flag, X360-pinned at +0x0C.)
             bool IsValid() const { return mbSet; }
 
-            // The world-taking overload the ICE-anim behaviour calls. The retired IceAnim slice
-            // declared it as `IsValid(const void* lpWorld)`; the "world" is the shared info's
-            // AllVehicleData block (see BehaviourSharedInfo::GetWorld). FLAG: whether the
-            // console's validity test actually CONSULTS the world (rather than just reading the
-            // populated flag) is not attested -- the retired slice never bodied it either. The
-            // flag read is the attested half; the argument is accepted and ignored so no
-            // consumer silently changes meaning.
-            // DELETE-WHEN: BrnDirector::VehicleRef::Get's body lands (BrnVehicleRef.cpp).
-            bool IsValid(const void* /*lpWorld*/) const { return mbSet; }
+            // The world-taking overload the ICE-anim behaviour calls -- BrnDirector::VehicleRef::
+            // IsValid @0x822336A8. The "world" is the shared info's AllVehicleData block (see
+            // BehaviourSharedInfo::GetWorld).
+            //
+            // ⭐ CORRECTED 2026-07-30. This used to be `return mbSet;` behind a FLAG that read
+            // "whether the console's validity test actually CONSULTS the world ... is not
+            // attested". It is attested, and it does. @0x822336A8 is:
+            //     if (!mbSet) return false;
+            //     switch (meType) {
+            //       case E_PLAYER_CAR:               index = world->mePlayerRaceCarIndex;   // +0xC4
+            //       case E_RACE_CAR:                 index = miRaceCarIndex;
+            //       case E_RACE_CAR_NEAREST_PLAYER:  index = world->GetNearestRaceCarIndexToPlayer(muRef);
+            //       case E_TRAFFIC_VEHICLE:          assert("not implemented yet"); return false;
+            //       default:                         assert("unknown type");        return false;
+            //     }
+            //     assert(index < 8);                                    // CgsBitArray.h:203
+            //     return world->mUsedRaceCars.IsBitSet(index);          // +0xC8
+            // (the two displacements land exactly on the committed AllVehicleData members --
+            //  mePlayerRaceCarIndex @+0xC4 == 196 and mUsedRaceCars @+0xC8 == 200, which the
+            //  pseudocode reads as *(world+196) and *(world + 8*((index>>6)+25)); independent
+            //  confirmation of that header's layout.)
+            //
+            // ⚠️ WHY THE OLD `return mbSet;` MATTERED: it made every populated reference valid,
+            // including references to race cars that were never spawned. The used-race-car bit is
+            // the console's ONLY guard against exactly that -- and note that it is a guard on the
+            // BIT, not on the vehicle data, so a car whose bit is set but whose VehicleInfo is
+            // zeroed still passes here on the console too (see the ⚠️⚠️ block in
+            // BrnGameModule::DoUpdate_Director).
+            // INLINE deliberately: AllVehicleData::GetNearestRaceCarIndexToPlayer @0x82233380 is
+            // its own (still unreconstructed) ledger function, so an out-of-line body would put an
+            // unresolved external into every link whether or not anything calls IsValid. Inline,
+            // the body materialises only where a caller actually needs it -- which today is
+            // BrnBehaviourIceAnim.cpp, and that TU cannot be mounted until the ICE take evaluator
+            // lands anyway (by which point that accessor must be real regardless).
+            bool IsValid(const void* lpWorld) const
+            {
+                if (!mbSet)
+                    return false;
+
+                const BrnDirector::AllVehicleData& lrWorld =
+                    *static_cast<const BrnDirector::AllVehicleData*>(lpWorld);
+
+                EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+                switch (meType)
+                {
+                case E_PLAYER_CAR:
+                    leIndex = lrWorld.GetPlayerRCIndex();                       // *(world+196)
+                    break;
+
+                case E_RACE_CAR:
+                    leIndex = static_cast<EActiveRaceCarIndex>(miRaceCarIndex); // *(this+4)
+                    break;
+
+                case E_RACE_CAR_NEAREST_PLAYER:
+                    leIndex = lrWorld.GetNearestRaceCarIndexToPlayer(muRef);    // @0x82233380
+                    break;
+
+                case E_TRAFFIC_VEHICLE:
+                    CGS_ASSERT(false, "not implemented yet");   // BrnVehicleRef.h:301 (non-gating)
+                    return false;
+
+                default:
+                    CGS_ASSERT(false, "unknown type");          // BrnVehicleRef.h:307 (non-gating)
+                    return false;
+                }
+
+                // CgsBitArray.h:203 "invalid index : N < 8" (non-gating)
+                CGS_ASSERT(static_cast<u32>(leIndex) < 8u, "invalid index");
+
+                // *(world + 8*((index>>6)+25))  ==  world+200  ==  mUsedRaceCars
+                return lrWorld.GetUsedRaceCarsBitArray().IsBitSet(static_cast<u32>(leIndex));
+            }
         };
 
         Behaviour()
