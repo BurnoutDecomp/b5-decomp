@@ -66,7 +66,27 @@ namespace Gen
         // Attrib::FindCollection hashes the collection key as a whole doubleword. The
         // 32-bit Attrib::Key spelling here truncated it, so every name-keyed collection
         // resolve missed -- the identical defect the CLASS key had until c27208fc.
-        explicit shotgroup(u64 luGroupNameKey = 0, void* lpOwner = nullptr);
+        //
+        // ⚠️ THE KEY IS NO LONGER DEFAULTED. See the ELEMENT ctor immediately below: the
+        // no-argument spelling must NOT resolve a collection.
+        explicit shotgroup(u64 luGroupNameKey, void* lpOwner = nullptr);
+
+        // ⭐ THE ELEMENT / DEFAULT ctor -- X360 `sub_827DC838`, the one
+        // DirectorResourceManager::DirectorResourceManager @0x827DEB98 calls 64 times
+        // (offsets 0x238..0x638 at stride 0x10, everything except +0x5D8) with
+        // (collection = 0, owner = 0). It is the SAME (Collection*, owner) shape as the
+        // already-committed generated siblings (aftertouchcam / audiosurface / ...):
+        // chain Instance, class-check, and -- unlike those siblings, and confirmed from
+        // the IDA database -- NO DefaultDataArea.
+        //
+        // ⚠️ THIS OVERLOAD IS WHY THE KEY ctor LOST ITS DEFAULT ARGUMENT. A
+        // DirectorResourceManager holds 65 of these BY VALUE and is reached from the
+        // file-scope static `gGameModule` (BrnMain.cpp:43), so all 65 default ctors run
+        // PRE-MAIN. If the no-argument spelling had stayed bound to the key ctor, every
+        // one of them would call Attrib::FindCollection before Attrib::Database exists --
+        // the exact pre-main AV the AttribSys wave hit with FindCollection and
+        // gGameModule. Default construction must resolve NOTHING.
+        explicit shotgroup(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
 
         // The number of shots in this group's ShotList (the length of the ShotList array
         // attribute). The intro state asserts this is > 0 before driving the group. REAL
@@ -134,6 +154,19 @@ namespace Gen
     inline shotgroup::shotgroup(u64 luGroupNameKey, void* lpOwner)
         : Instance(FindCollection(KU_SHOTGROUP_CLASS_KEY, luGroupNameKey), lpOwner)
     {
+    }
+
+    // X360 element ctor `sub_827DC838` (the DirectorResourceManager ctor's 64 slot
+    // builds): Instance::Instance(this, collection, owner) then the class check against
+    // 0x38ED2D37_3887CBC7. No DefaultDataArea (that is the cameradefaults sibling's
+    // distinguishing tail). The `GetClass() != 0` arm keeps a null-collection default
+    // construction quiet -- Instance::GetClass returns 0 when mpCollection is null, which
+    // is the state all 65 of DirectorResourceManager's slots start in.
+    inline shotgroup::shotgroup(Collection* lpCollection, void* lpOwner)
+        : Instance(lpCollection, lpOwner)
+    {
+        if (GetClass() != KI_SHOTGROUP_CLASS && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KI_SHOTGROUP_CLASS, GetCollection());
     }
 
     inline const void* shotgroup::GetShotListData(bool lbUseSecond) const

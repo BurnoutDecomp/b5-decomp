@@ -26,6 +26,12 @@
                                                               //   (THE home; the private slice
                                                               //    that used to sit below is gone)
 #include "GameSource/Director/Shots/BrnShotController.h"       // BrnDirector::ShotContext
+// ---- the SIXTH canonical home this header's own fork is retired in favour of ------------
+#include "GameSource/Director/BrnDirectorResourceManager.h"
+                                                              // BrnDirector::DirectorResourceManager
+                                                              //   (THE home -- the minimal slice that
+                                                              //    used to sit below is gone; it now
+                                                              //    carries all 65 shot-group members)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h
@@ -71,164 +77,68 @@
 //   +0x0E2B  bool                            mbForceMotionBlurEverything
 // ============================================================================
 
-// ----------------------------------------------------------------------------
-// FLAG: minimal slice of ICE::ICEAuthor (the in-game editor's author/edit store). No
-//   reconstructed home yet (ICEController.hpp notes the ICEAuthor base is not modelled).
-//   Prepare / ChangeMovie call exactly the one named accessor below -- the editor-edited
-//   take lookup by guid -- declaration-only (the per-TU `cl /c` gate does not link).
-//   Replace with its real home when the ICEAuthor base TU lands; the NAME is stable.
-// ----------------------------------------------------------------------------
-namespace ICE
-{
-    class ICEAuthor
-    {
-    public:
-        // The edited-take store the editor keeps; null when the guid is not being edited.
-        ICETakeData* FindEditedTakeFromGuid(s32 liGuid);
-    };
-}
-
-// The director "rank-up" shot-group lives in the AttribSys generated layer; the resource
-// manager embeds one and hands it back by reference. Forward-declared so the minimal
-// DirectorResourceManager slice can name it without pulling the generated header into this
-// behaviour header (the using TU includes shotgroup.h to reach Num_ShotList()/GetShotListData).
-namespace Attrib { namespace Gen { class shotgroup; } }
+// ============================================================================
+// RETIRED (2026-07-31, shot-group wave): the private `namespace ICE { class ICEAuthor
+// { ICETakeData* FindEditedTakeFromGuid(s32); }; }` slice that used to sit here is GONE.
+//
+// WARNING -- IT WAS A CLASS-KEY FORK. The real home
+// (SDKs/Packages/ICE/ICEAuthor.hpp:144) spells it `struct ICEAuthor`; this header said
+// `class`. MSVC encodes the two differently inside a mangled type (`U` vs `V`), so the
+// slice was not a duplicate declaration -- it was a DIFFERENT SYMBOL, and every
+// signature mentioning it (DirectorResourceManager::GetICEAuthor, and this behaviour's
+// two calls through it) would have failed to link against the real one with an
+// LNK2019 that names an identical-looking function. The manager's own header now
+// forward-declares it as the `struct` it is.
+// ============================================================================
 
 namespace BrnDirector
 {
 
-// ----------------------------------------------------------------------------
-// FLAG: minimal slice of the director resource manager Prepare / ChangeMovie resolve
-//   takes through. The behaviour reaches exactly the two named providers below: the
-//   in-game editor's author (edited-take lookup) and the runtime ICE list (on-disk take
-//   lookup by guid). The behaviour reaches the author at the manager's +560 and the
-//   ICE list at +544; modelled here as the two named accessors. Replace with the real
-//   home when the DirectorResourceManager TU lands; the NAMES are stable.
-// ----------------------------------------------------------------------------
-class DirectorResourceManager
-{
-public:
-    ICE::ICEAuthor&        GetICEAuthor() const;   // manager +560
-    const BrnResource::ICEList& GetICEList() const;  // manager +544
-
-    // The intro shot-group for an event mode. @0x821F6AB8: a switch on the event mode that
-    // returns a pointer to one of the manager's embedded shot-group records (manager + a
-    // mode-specific offset); lbCarInFront selects between the two shot variants per mode.
-    // Returns the shot group as an opaque pointer (the Attrib::Gen::shotgroup the arbitrator
-    // race-intro state drives). DECLARATION-ONLY (body in the resource-manager TU). FLAG:
-    // modelled on this behaviour's minimal DirectorResourceManager slice (the in-scope model
-    // for the director-camera cone); the real home is BrnDirectorResourceManager.h.
-    const void* GetEventIntroShots(s32 liEventMode, bool lbCarInFront) const;
-
-    // The event-COMPLETION shot-group for an event mode + finish line (the post-event
-    // results / winner take). @0x????: BrnArbStatePostEvent::Prepare resolves it as
-    // GetEventCompletionShots(mpGameState->meEventType, mpGameState->mFinishLineID) and
-    // asserts Num_ShotList() > 0 before driving it. Returns the shot group BY REFERENCE
-    // (the temporary the X360 builds on the caller stack; PickAppropriateShot takes it by
-    // const ref and Num_ShotList() is called on it). DECLARATION-ONLY (body in the
-    // resource-manager TU). FLAG: modelled on this minimal DirectorResourceManager slice;
-    // the real home is BrnDirectorResourceManager.h. liFinishLineID is the GameState
-    // mFinishLineID (an 8-byte CgsID); typed as s64 here to keep the camera-cone slice free
-    // of the CgsID header (the VALUE is what selects the completion group).
-    const Attrib::Gen::shotgroup& GetEventCompletionShots(s32 liEventMode,
-                                                          s64 liFinishLineID) const;
-
-    // The post-event completion MOVIE data block the ACTIVE state swaps to on a rank-up
-    // reveal. X360 (BrnArbStatePostEvent::Update case ACTIVE): the manager embeds an
-    // Attrib::Instance at +0x508 (manager + 1288); the state resolves its "ShotList"
-    // attribute via Attrib::Instance::GetAttributePointer (falling back to
-    // DefaultDataArea(0x18) when null) and hands the block to BehaviourIceAnim::ChangeMovie.
-    // Returned as an opaque pointer (the iceanim ShotReference block); the caller casts.
-    // DECLARATION-ONLY (body in the resource-manager TU). FLAG: modelled on this minimal
-    // DirectorResourceManager slice; the real home is BrnDirectorResourceManager.h.
-    void* GetPostEventMovieData() const;
-
-    // The rank-up sequence's shot-group (the manager's embedded shotgroup @+0x3C8). The
-    // rank-up arbitrator state (BrnArbStateRankUp) drives it: it asserts Num_ShotList() > 0
-    // and indexes the shots by rival. DECLARATION-ONLY (body in the resource-manager TU).
-    // FLAG: modelled on this minimal DirectorResourceManager slice; the real home is
-    // BrnDirectorResourceManager.h. X360: ArbStateRankUp reads it at manager +968 (+0x3C8).
-    const Attrib::Gen::shotgroup& GetRankUp() const;
-
-    // The online car-select reveal shot-group (the manager's embedded shotgroup @+0x5C8). The
-    // online-car-select arbitrator state (BrnArbStateOnlineCarSelect::Prepare) feeds its
-    // ShotList data block to the ICE-anim reveal behaviour's SetParameters. DECLARATION-ONLY
-    // (body in the resource-manager TU). FLAG: modelled on this minimal DirectorResourceManager
-    // slice; the real home is BrnDirectorResourceManager.h. X360: ArbStateOnlineCarSelect reads
-    // it at manager +1480 (+0x5C8) and resolves it through the same ShotList attribute key
-    // (0x7533C0E2_15246B49) the shotgroup accessor uses.
-    const Attrib::Gen::shotgroup& GetOnlineCarSelectShots() const;
-
-    // The two crash-moment shotgroup banks (X360 manager +1448/+1464, the 16-byte
-    // stride after the fast/normal/slow crash trio) and the guid->take resolver
-    // (@0x821F69A8). GROWN for MomentStationaryCrash::Update @0x82272EA8.
-    // DECLARATION-ONLY (bodies in the resource-manager TU). FLAG: modelled on this
-    // minimal DirectorResourceManager slice; the real home is
-    // BrnDirectorResourceManager.h (which carries the same decls).
-    const Attrib::Gen::shotgroup& GetTumblingCrashShots() const;     // +1448
-    const Attrib::Gen::shotgroup& GetStationaryCrashShots() const;   // +1464
-    ICE::ICETakeData* GetKeyAnimFromGuid(s32 liGuid) const;          // @0x821F69A8
-    ICE::ICETakeData* GetKeyAnim(s32 liHashedNameId) const;          // @0x821F6948 (the hashed-name lookup; MomentPlayerStunt's "World_Signature_%i" takes)
-
-    // The online-race-start shot-group (the manager's embedded shotgroup @+616 / +0x268). The
-    // online-race-intro arbitrator state (BrnArbStateOnlineRaceIntro::Update / ::SetupRivalMovie)
-    // drives it: it asserts Num_ShotList() >= the ICE-movie minimum, indexes the per-rival shots
-    // and feeds each ShotList data block to a BehaviourIceAnim's SetParameters. DECLARATION-ONLY
-    // (body in the resource-manager TU). FLAG: modelled on this minimal DirectorResourceManager
-    // slice; the real home is BrnDirectorResourceManager.h. X360: ArbStateOnlineRaceIntro reads
-    // it at manager +616 (+0x268) and resolves it through the same ShotList attribute key
-    // (0x7533C0E2_15246B49 / 354708297) the shotgroup accessor uses.
-    const Attrib::Gen::shotgroup& GetOnlineRaceStartShots() const;
-
-    // ADDITIVE GROW (BrnArbStateDriveThru::Prepare @0x8226E938): the five drive-thru shop
-    // shot-groups (the manager embeds one shotgroup per shop kind, at per-type offsets, NOT a
-    // contiguous array -- ArbStateDriveThru::Prepare itself switches on GameState::meDriveThruType
-    // to pick which one to read, so that switch stays in Prepare; these are just the five named
-    // per-type slots it reads). X360 offsets:
-    //   GetDriveThruAutoPartsShots  -> manager +1032 (+0x408)  E_DRIVETHRU_AUTO_PARTS(1)
-    //   GetDriveThruBodyShopShots   -> manager +1000 (+0x3E8)  E_DRIVETHRU_BODY_SHOP(2)
-    //   GetDriveThruGasStationShots -> manager +984  (+0x3D8)  E_DRIVETHRU_GAS_STATION(3)
-    //   GetDriveThruTuningShopShots -> manager +1048 (+0x418)  E_DRIVETHRU_TUNING_SHOP(4)
-    //   GetDriveThruTireShopShots   -> manager +1016 (+0x3F8)  E_DRIVETHRU_TIRE_SHOP(5) (also
-    //     the fallback Prepare's default case asserts "unhandled drivethru type" then reads)
-    // DECLARATION-ONLY (body in the resource-manager TU). FLAG: modelled on this minimal
-    // DirectorResourceManager slice; the real home is BrnDirectorResourceManager.h.
-    const Attrib::Gen::shotgroup& GetDriveThruAutoPartsShots() const;
-    const Attrib::Gen::shotgroup& GetDriveThruBodyShopShots() const;
-    const Attrib::Gen::shotgroup& GetDriveThruGasStationShots() const;
-    const Attrib::Gen::shotgroup& GetDriveThruTuningShopShots() const;
-    const Attrib::Gen::shotgroup& GetDriveThruTireShopShots() const;
-
-    // ADDITIVE GROW (BrnArbStateCarSelect @0x821F64A0 / @0x8226EFA0 / @0x8226F5D0): the
-    // JUNKYARD (offline car-select) shot-group bank + the game-intro group. The manager
-    // embeds one Attrib::Instance per slot; the X360 reaches each at its own fixed interior
-    // offset, and DirectorResourceManager::Prepare @0x8225CA08 names every one of them in
-    // its own IsValid()/Num_ShotList() asserts (which is where these NAMES come from --
-    // `mCarSelectMotorCity`, `mCarSelectMotorCityRivalUnlock`, ... `mGameIntroGroup`).
-    //   +1064 mCarSelectMotorCity            +1080 mCarSelectMotorCityRivalUnlock
-    //   +1096 mCarSelectWestAcres            +1112 mCarSelectWestAcresRivalUnlock
-    //   +1128 mCarSelectSouthBay             +1144 mCarSelectSouthBayRivalUnlock
-    //   +1160 mCarSelectHeartbreak           +1176 mCarSelectHeartbreakRivalUnlock
-    //   +1192 mCarSelectLowerPeaks           +1208 mCarSelectLowerPeaksRivalUnlock
-    //   +1224 mCarSelectIdle                 +1240 mCarSelectOutro
-    //   +1256 mCarUnlock                     +1272 mGameIntroGroup   ⭐ the retail intro
-    // DECLARATION-ONLY (bodies in the resource-manager TU). FLAG: modelled on this minimal
-    // DirectorResourceManager slice; the real home is BrnDirectorResourceManager.h.
-    const Attrib::Gen::shotgroup& GetCarSelectMotorCityShots() const;              // +1064
-    const Attrib::Gen::shotgroup& GetCarSelectMotorCityRivalUnlockShots() const;   // +1080
-    const Attrib::Gen::shotgroup& GetCarSelectWestAcresShots() const;              // +1096
-    const Attrib::Gen::shotgroup& GetCarSelectWestAcresRivalUnlockShots() const;   // +1112
-    const Attrib::Gen::shotgroup& GetCarSelectSouthBayShots() const;               // +1128
-    const Attrib::Gen::shotgroup& GetCarSelectSouthBayRivalUnlockShots() const;    // +1144
-    const Attrib::Gen::shotgroup& GetCarSelectHeartbreakShots() const;             // +1160
-    const Attrib::Gen::shotgroup& GetCarSelectHeartbreakRivalUnlockShots() const;  // +1176
-    const Attrib::Gen::shotgroup& GetCarSelectLowerPeaksShots() const;             // +1192
-    const Attrib::Gen::shotgroup& GetCarSelectLowerPeaksRivalUnlockShots() const;  // +1208
-    const Attrib::Gen::shotgroup& GetCarSelectIdleShots() const;                   // +1224
-    const Attrib::Gen::shotgroup& GetCarSelectOutroShots() const;                  // +1240
-    const Attrib::Gen::shotgroup& GetCarUnlockShots() const;                       // +1256
-    const Attrib::Gen::shotgroup& GetGameIntroShots() const;                       // +1272
-};
+// ============================================================================
+// RETIRED (2026-07-31, shot-group wave): the private `class DirectorResourceManager`
+// slice that used to sit here -- ~32 declaration-only accessors and NO data members --
+// is GONE. The real home is
+//     GameSource/Director/BrnDirectorResourceManager.h   (included above)
+// and it now declares all 65 shot-group slots plus the DWARF head members, so every
+// accessor below is a real header inline over a real member instead of an unresolved
+// external.
+//
+// WHY IT HAD TO GO: it was a SECOND definition of BrnDirector::DirectorResourceManager,
+// mangling identically to the real one and disagreeing with it about the layout of
+// every member. It survived only because every accessor on it was declaration-only, so
+// the disagreement surfaced as LNK2019 rather than as silent corruption -- and because
+// no TU ever saw both definitions. Declaring the real member bank turns that from
+// latent into live, which is why the two land in the same commit.
+//
+// THE RENAMES the merge forces (the fork's spellings were invented from each
+// consumer's role; the DWARF names are the originals, and the offsets agree):
+//     GetCarSelectMotorCityShots()            -> GetCarSelect_MotorCity()             +1064
+//     GetCarSelectMotorCityRivalUnlockShots() -> GetCarSelect_MotorCity_RivalUnlock() +1080
+//     ... the same four pairs for WestAcres / SouthBay / Heartbreak / LowerPeaks ...
+//     GetCarSelectIdleShots()                 -> GetCarSelect_Idle()                  +1224
+//     GetCarSelectOutroShots()                -> GetCarSelect_Outro()                 +1240
+//     GetCarUnlockShots()                     -> GetCarUnlock()                       +1256
+//     GetGameIntroShots()                     -> GetGameIntro()                       +1272
+//     GetDriveThruAutoPartsShots()            -> GetDriveThruAutoPartsGroup()         +1032
+//     GetDriveThruBodyShopShots()             -> GetDriveThruBodyShopGroup()          +1000
+//     GetDriveThruGasStationShots()           -> GetDriveThruGasStationsGroup()       +984
+//     GetDriveThruTuningShopShots()           -> GetDriveThruTuningShopGroup()        +1048
+//     GetDriveThruTireShopShots()             -> GetDriveThruTyreShopGroup()          +1016
+//     GetOnlineCarSelectShots()               -> GetOnlineCarSelect()                 +1480
+//     GetOnlineRaceStartShots()               -> GetOnlineRaceStart()                 +616
+//     GetTumblingCrashShots()                 -> GetAfterCrash()                      +1448
+//     GetStationaryCrashShots()               -> GetAfterCrashSafe()                  +1464
+//     GetRankUp() / GetICEAuthor() / GetICEList() / GetKeyAnimFromGuid() / GetKeyAnim()
+//     / GetEventIntroShots() / GetEventCompletionShots()  -- names unchanged.
+//
+// ONE FORK ACCESSOR HAS NO REAL COUNTERPART: `void* GetPostEventMovieData() const`.
+// The fork documented it as "the manager's Attrib::Instance at +0x508 (== 1288),
+// resolve its ShotList attribute, fall back to DefaultDataArea(0x18)". Byte 1288 is
+// mBurnoutLicense, and the DWARF's accessor for it is GetBurnoutLicense(), so the
+// console site is `GetBurnoutLicense().GetShotListData(...)` and the "accessor" was a
+// whole inlined expression mistaken for one. ArbStatePostEvent is rewritten to that
+// spelling; see its call site.
+// ============================================================================
 
 // RETIRED (2026-07-29): the minimal `struct Timestep` fork that used to sit here (whose only
 // enumerator was E_TYPE_DEFAULT = 0) is gone -- the real home is

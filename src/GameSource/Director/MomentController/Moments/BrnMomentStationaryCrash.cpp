@@ -148,8 +148,8 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
             const DirectorResourceManager* lpResourceManager =
                 lpBehaviourManager->GetDirectorResourceManager();
             const Attrib::Gen::shotgroup& lrShotGroup = mbIsTumblingCrash
-                ? lpResourceManager->GetTumblingCrashShots()      // rm +1448
-                : lpResourceManager->GetStationaryCrashShots();   // rm +1464
+                ? lpResourceManager->GetAfterCrash()      // rm +1448
+                : lpResourceManager->GetAfterCrashSafe();   // rm +1464
 
             CGS_ASSERT(lrShotGroup.Num_ShotList() > 0,
                        "lpShotGroup->Num_ShotList() > 0");   // :110 (non-gating)

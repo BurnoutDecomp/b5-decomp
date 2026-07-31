@@ -163,19 +163,19 @@ namespace BrnDirector
             switch (lrGameState.meDriveThruType)
             {
             case GameState::E_DRIVETHRU_AUTO_PARTS:
-                lpShotGroup = &lrResourceManager.GetDriveThruAutoPartsShots();
+                lpShotGroup = &lrResourceManager.GetDriveThruAutoPartsGroup();
                 break;
             case GameState::E_DRIVETHRU_BODY_SHOP:
-                lpShotGroup = &lrResourceManager.GetDriveThruBodyShopShots();
+                lpShotGroup = &lrResourceManager.GetDriveThruBodyShopGroup();
                 break;
             case GameState::E_DRIVETHRU_GAS_STATION:
-                lpShotGroup = &lrResourceManager.GetDriveThruGasStationShots();
+                lpShotGroup = &lrResourceManager.GetDriveThruGasStationsGroup();
                 break;
             case GameState::E_DRIVETHRU_TUNING_SHOP:
-                lpShotGroup = &lrResourceManager.GetDriveThruTuningShopShots();
+                lpShotGroup = &lrResourceManager.GetDriveThruTuningShopGroup();
                 break;
             case GameState::E_DRIVETHRU_TIRE_SHOP:
-                lpShotGroup = &lrResourceManager.GetDriveThruTireShopShots();
+                lpShotGroup = &lrResourceManager.GetDriveThruTyreShopGroup();
                 break;
             default:
             {
@@ -191,7 +191,7 @@ namespace BrnDirector
                 CgsDev::Assert::EndAssert();
 
                 // X360 falls through to the E_DRIVETHRU_TIRE_SHOP slot on any unhandled value.
-                lpShotGroup = &lrResourceManager.GetDriveThruTireShopShots();
+                lpShotGroup = &lrResourceManager.GetDriveThruTyreShopGroup();
                 break;
             }
             }

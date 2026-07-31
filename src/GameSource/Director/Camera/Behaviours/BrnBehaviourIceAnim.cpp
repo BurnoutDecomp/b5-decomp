@@ -3,6 +3,12 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert (BeginAssert/FireAssert/EndAssert)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"     // Camera::Utils::CreateLookAt (the real home)
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"        // ICE::CameraSpaceHandler (the real home)
+#include "SDKs/Packages/ICE/ICEAuthor.hpp"                    // ICE::ICEAuthor::FindEditedTakeFromGuid --
+                                                              //   THE home (2026-07-31). The header's own
+                                                              //   `class ICEAuthor` slice is retired; the
+                                                              //   real one is a `struct`, which mangles
+                                                              //   differently, so this include is what makes
+                                                              //   the two calls below link.
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.cpp

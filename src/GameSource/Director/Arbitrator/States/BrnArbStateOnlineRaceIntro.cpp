@@ -248,7 +248,7 @@ namespace BrnDirector
     void ArbStateOnlineRaceIntro::SetupRivalMovie(ArbStateSharedInfo& lrSharedInfo, u32 luRivalIndex)
     {
         const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
-            lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
+            lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
 
         // The number of RIVAL movies is the ShotList length minus the two leading non-rival
         // shots (the player + lights takes).
@@ -377,7 +377,7 @@ namespace BrnDirector
                     if (!mPlayerBehaviourHandle.IsAllocated())
                     {
                         const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
-                            lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
+                            lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
                         CGS_ASSERT(lrOnlineRaceStartShotGroup.Num_ShotList() >= KU_ICE_MOVIE_MIN_COUNT,
                                    "lOnlineRaceStartShotGroup.Num_ShotList() >= E_ICE_MOVIE_MIN_COUNT");
 
@@ -512,7 +512,7 @@ namespace BrnDirector
                     mPlayerBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
                 const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
-                    lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
+                    lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
                 const void* lpShotData =
                     const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
                         .GetShotListData(/*liShotIndex*/ 1);
@@ -614,7 +614,7 @@ namespace BrnDirector
             if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_COUNTDOWN)
             {
                 const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
-                    lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
+                    lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
@@ -646,7 +646,7 @@ namespace BrnDirector
             if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_COUNTDOWN)
             {
                 const Attrib::Gen::shotgroup& lrOnlineRaceStartShotGroup =
-                    lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStartShots();
+                    lrSharedInfo.mpDirectorResourceManager->GetOnlineRaceStart();
 
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
                     mLightsBehaviourHandle, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);

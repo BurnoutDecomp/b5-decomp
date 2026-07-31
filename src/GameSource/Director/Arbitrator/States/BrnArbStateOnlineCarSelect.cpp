@@ -180,7 +180,7 @@ namespace BrnDirector
                 mIceCam, this, KI_NEW_BEHAVIOUR_ARG_A, KI_NEW_BEHAVIOUR_ARG_B);
 
             const void* lpShotData =
-                lrSharedInfo.mpDirectorResourceManager->GetOnlineCarSelectShots().GetShotListData(
+                lrSharedInfo.mpDirectorResourceManager->GetOnlineCarSelect().GetShotListData(
                     /*lbUseSecond*/ false);
             if (!lpShotData)
                 lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);

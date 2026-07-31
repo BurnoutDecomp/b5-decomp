@@ -248,10 +248,21 @@ namespace BrnDirector
                     *lrSharedInfo.mpDirectorResourceManager;
 
                 // X360: GetAttributePointer(resourceManager + 0x508, ShotList key, 0), falling
-                // back to DefaultDataArea(0x18) when null -- modelled by the named slice accessor.
+                // back to DefaultDataArea(0x18) when null.
+                //
+                // ⭐ 2026-07-31: this used to go through a fork accessor called
+                // `GetPostEventMovieData()`. There is no such member. Console byte 0x508 == 1288
+                // is mBurnoutLicense, whose DWARF accessor is GetBurnoutLicense(), so the site is
+                // an INLINED EXPRESSION over that group -- resolve its ShotList element 0 -- that
+                // had been mistaken for a single accessor. Spelled out here; the retired
+                // DirectorResourceManager fork in BrnBehaviourIceAnim.h records the same finding.
+                const void* lpShotData = lrResourceManager.GetBurnoutLicense().GetShotListData(0);
+                if (lpShotData == 0)
+                    lpShotData = Attrib::DefaultDataArea(0x18u);
+
                 Camera::BehaviourIceAnim::ShotReference* lpMovieBlock =
-                    static_cast<Camera::BehaviourIceAnim::ShotReference*>(
-                        lrResourceManager.GetPostEventMovieData());
+                    reinterpret_cast<Camera::BehaviourIceAnim::ShotReference*>(
+                        const_cast<void*>(lpShotData));
 
                 mPostEventCam.GetBehaviour()->ChangeMovie(lpMovieBlock, lrResourceManager);
             }
