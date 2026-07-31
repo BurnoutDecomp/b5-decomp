@@ -20,6 +20,12 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"   // Utils::CameraShake  (struct)
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"        // Utils::Looker       (struct)
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h" // Utils::Tweaker      (struct)
+// ---- the fifth canonical home this header's own fork is retired in favour of --------------
+#include "GameSource/Director/Shots/ShotControllers/BrnKeyAnimController.h"
+                                                              // BrnDirector::KeyAnimController
+                                                              //   (THE home; the private slice
+                                                              //    that used to sit below is gone)
+#include "GameSource/Director/Shots/BrnShotController.h"       // BrnDirector::ShotContext
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h
@@ -48,6 +54,7 @@
 //   +0x0020  VisibilityCollisionPolicy       mCollisionPolicy            (GetCollisionPolicy -> &this)
 //   +0x0260  CollisionPolicyAttachedToVehicle mAttachedToCarCollisionPolicy
 //   +0x04B0  Camera                          mLastCamera                 (the produced camera)
+//   +0x0610  Matrix44Affine                  mHeadingSpaceTransform      (see the note below)
 //   +0x0650  CameraShake                     mShake
 //   +0x0660  Looker                          mLooker
 //   +0x0680  KeyAnimController               mKeyAnimController           (embeds ICETake @+0x6A0)
@@ -301,52 +308,27 @@ namespace Camera
 // ArbStateOnlineRaceIntro). None of them could be mounted.
 // ============================================================================
 
-// The key-anim controller: the live ICETake evaluator the behaviour advances. It embeds an
-// ICE::ICETake at its +0x20 (the behaviour's ctor constructs that ICETake and GetTimeRemaining
-// reads the take's data/length through it). Prepare binds it to the resource manager + guid,
-// Update advances it and reads its eye/look spaces. FLAG: minimal slice -- the real layout
-// and the rest of the method set land with the KeyAnimController TU; the offsets/NAMES below
-// are pinned from this behaviour's accesses.
+// ============================================================================
+// RETIRED (2026-07-31): the private `class BrnDirector::KeyAnimController` slice that used to
+// sit here -- an opaque {vptr, pad, ICETake} with `s32 GetEyeSpace()`, an untyped
+// `Update(const void*, void*)` and no other state -- is GONE. The real controller is
+// reconstructed at
+//     GameSource/Director/Shots/ShotControllers/BrnKeyAnimController.h  (included above)
+// and it is a `ShotController` subclass whose virtual is `Update(const ShotContext&, Camera*)`.
+//
+// ⚠️ This was a SECOND definition of BrnDirector::KeyAnimController, mangling identically to
+// the real one and disagreeing with it about the layout of every member. It survived only
+// because the two never met in one TU (the real .cpp did not exist). Nothing was lost in the
+// merge: every method the fork named is present on the real class, and the two type
+// corrections the merge forces are both improvements --
+//   * GetEyeSpace / GetLookSpace return `ICE::eICESpace`, not `s32` (which is why this
+//     behaviour's own Update compares them against 0/2/4/6/8/9/10/11/12/13 -- those are
+//     eICE_CAR_SPACE .. eICE_LOOSE_HEADING_SPACE);
+//   * GetLookPos returns BY VALUE (the console copies the 16-byte lane into the caller's
+//     sret slot), not by const reference.
+// ============================================================================
+
 } // namespace Camera
-
-// The key-anim controller lives directly under BrnDirector
-// (BrnDirector::KeyAnimController), not under Camera.
-class KeyAnimController
-{
-public:
-    // Bind the controller to a take resolved from the resource manager by guid. Returns
-    // true once the take data is bound. The behaviour also re-prepares it mid-Update.
-    bool Prepare(const DirectorResourceManager& lrResourceManager, s32 liAnimGuid);
-
-    // True once the controller's parameter has run off the end of the take.
-    bool HasFinished() const;
-
-    // The controller's normalised playback parameter [0..1].
-    f32  GetParametricTime0To1() const;
-
-    // Seek the controller's normalised playback parameter to lf01. The rank-up arbitrator
-    // state rewinds a freshly-swapped take to its start (X360
-    // KeyAnimController::SetParametricTime0To1(behaviour+0x680, 0.0)). DECLARATION-ONLY (the
-    // body lands with the KeyAnimController TU; the per-TU cl /c gate does not link).
-    void SetParametricTime0To1(f32 lf01);
-
-    // The eye / look reference-space selectors of the currently-bound take (the Update
-    // body switches on these to pick the heading/eye/look space rows).
-    s32  GetEyeSpace() const;
-    s32  GetLookSpace() const;
-
-    // The current look-target position (Update feeds it into the looker parameters).
-    const rw::math::vpu::Vector3& GetLookPos() const;
-
-    // The controller's per-frame entry point: advance the take and write into the camera.
-    // The behaviour calls it through the controller's vtable. Modelled as the named update.
-    void Update(const void* lpSpaces, void* lpInfo);
-
-    void* mpVTable;            // +0x00  controller vtable (Update is dispatched through it)
-    u8    maReserved[0x20 - sizeof(void*)]; // +0x?? span to the embedded ICETake (+0x20)
-    ICE::ICETake mTake;        // +0x20  the live evaluatable take
-};
-
 } // namespace BrnDirector
 
 // ----------------------------------------------------------------------------
@@ -539,6 +521,16 @@ private:
 
     // +0x04B0  the camera this behaviour produces each frame.
     Camera                           mLastCamera;
+
+    // +0x0610  the behaviour's own HEADING-SPACE frame: the look-at built from the secondary
+    // (look-at) vehicle, slerped forward each frame and handed to the take evaluator as the
+    // heading reference space. CARVED 2026-07-31: the Update asm reaches it with
+    // `addi r11, this, 0x610` / `addi r29, this, 0x610` / `stvx r31, 0x640` -- and
+    // mLastCamera starts at +0x4B0 with sizeof(Camera) == 0x160, i.e. it ENDS at exactly
+    // +0x610, so this is a separate 64-byte matrix member, not part of the camera. (The
+    // previous reconstruction wrote these stores into `mLastCamera.mTransform`, i.e. 0x160
+    // bytes too low.)
+    rw::math::vpu::Matrix44Affine    mHeadingSpaceTransform;
 
     // +0x0650  the camera shake the take's shake space drives.
     Utils::CameraShake               mShake;

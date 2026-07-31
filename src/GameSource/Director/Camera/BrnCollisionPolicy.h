@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                // CgsSceneManager::EntityId (SetTarget)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"                   // Camera::AABBox (SetTarget)
 #include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h"  // Utils::VehicleCollisionPredictor (embedded)
+#include "GameSource/Director/Utils/BrnVehicleRef.h"                        // BrnDirector::VehicleRef (SetVehicleRef)
 
 // ============================================================================
 // GameSource/Director/Camera/BrnCollisionPolicy.h
@@ -143,6 +144,17 @@ public:
     // it embeds at +0x260 with a trailing 0 selector. DECLARATION-ONLY (the body lands with the
     // policy's own TU; the per-TU `cl /c` gate does not link).
     void Construct(s32 liSelector);
+
+    // ADDITIVE GROW (2026-07-31, from the retired `IceAnimCameraOps::SetEyeSpaceRows`
+    // placeholder): bind the policy to the vehicle the camera is attached to. X360
+    // BehaviourIceAnim::Update @0x82247568..0x822475A4 copies the 16-byte VehicleRef (the four
+    // words at ref +0x00/+0x04/+0x08/+0x0C) into behaviour +0x480 -- which is this policy's
+    // +0x220, since the policy sits at behaviour +0x260 -- immediately before raising
+    // mbUseAttachedToCarCollisionPolicy. It is a POLICY write, not a Camera write (the retired
+    // placeholder mis-attributed it to the camera). The target lands inside maReserved214 below.
+    // DECLARATION-ONLY (the body lands with the policy's own TU). FLAG: the METHOD NAME is
+    // inferred from the role; the four-word copy at policy +0x220 is asm-attested.
+    void SetVehicleRef(const BrnDirector::VehicleRef& lrVehicleRef);
 
 private:
     // FLAG: only the two members SetDesiredHeight writes are modelled at their asm-attested

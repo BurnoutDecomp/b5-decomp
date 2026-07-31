@@ -102,8 +102,16 @@ struct CameraEffects
     //   arbitrator FLAG lists. Interpolate's lerp fits a time-scale blend equally.
     f32 mfSimTimeScale;                         // +0x9C
 
-    // +0xA0: fade colour / overlay lead word (Construct zeroes it). NOMINAL span.
-    u8  maReservedA0[0xA4 - 0xA0];
+    // +0xA0: the GAME-CAMERA BLEND amount. CARVED 2026-07-31 out of the previous nominal
+    //   4-byte span, X360-attested by BrnDirector::KeyAnimController::UpdateCameraFromICE
+    //   @0x8221E630, which stores `ICETake::GetValueFloat(CAMERA_BLEND_AMOUNT) * 0.01f` here
+    //   (`stfs f0, 0x108(camera)` == effects +0xA0) -- the authored ICE element is literally
+    //   named CAMERA_BLEND_AMOUNT (ICEData.cpp element [10], a 0..100 percentage), and it
+    //   lands three words before the shake triple alongside mfCameraLag, whose own element is
+    //   CAMERA_LAG_AMOUNT. This is the `mfGameCameraBlend` the FLAG on mfShakeFrequency below
+    //   says the DWARF names "elsewhere in the PS3 0xD8-sized block": on the X360 0xBC layout
+    //   it is here. Construct zeroes it. Same 4 bytes, same placement -- no size change.
+    f32 mfGameCameraBlend;                      // +0xA0
 
     // +0xA4: the camera-lag (inertia) amount (DWARF member name mfCameraLag).
     //   X360-attested: BrnDirector::InertiaController::Update @0x8221ECD0 reads
@@ -135,8 +143,16 @@ struct CameraEffects
     f32 mfShakeFrequency;                       // +0xB0 (Construct sets 1.0f)
     u8  mu8ShakeType;                           // +0xB4
 
-    // +0xB5 / +0xB6: trailing flag bytes (zeroed by Construct). NOMINAL.
-    u8  maReservedB5[2];
+    // +0xB5 / +0xB6: the two blend-shape selectors that go with mfGameCameraBlend @+0xA0.
+    //   CARVED 2026-07-31 out of the previous nominal 2-byte span, X360-attested by
+    //   BrnDirector::KeyAnimController::UpdateCameraFromICE @0x8221E630: `stb` of
+    //   ICETake::GetValueInt(BLEND_CURVE) at camera +0x11D (== effects +0xB5) and of
+    //   GetValueInt(INTERPOLATE_TYPE) at camera +0x11E (== effects +0xB6). Those are
+    //   ICEData.cpp elements [36] and [37], both on the take's BLEND channel (channel 1)
+    //   together with element [10] CAMERA_BLEND_AMOUNT and [11] CAMERA_LAG_AMOUNT -- one
+    //   coherent blend request. Zeroed by Construct. Same 2 bytes, same placement.
+    u8  mu8BlendCurve;                          // +0xB5
+    u8  mu8InterpolateType;                     // +0xB6
 
     // +0xB7 / +0xB8: the hook-name presence flags (member NAMES from the accessor
     //   asserts, BrnCameraEffects.h:175/:194).
