@@ -64,8 +64,19 @@ namespace BrnDirector
         Matrix44Affine GetPlayerLooseHeadingSpace() const;                       // :91
         const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const; // :94
         const VehicleInfo* GetRaceCars() const;                                  // :97
-        const CgsContainers::BitArray<8u>& GetUsedRaceCarsBitArray() const;      // :100
-        EActiveRaceCarIndex GetPlayerRCIndex() const;                            // :103
+        // BODIED INLINE (2026-07-30). Neither of these two has a standalone X360 export --
+        // the console inlines both at every call site (e.g. VehicleRef::IsValid @0x822336A8
+        // reads *(world+196) and the 64-bit used-race-car word at world+200 directly, which is
+        // exactly mePlayerRaceCarIndex @+0xC4 and mUsedRaceCars @+0xC8 below). An inline
+        // one-line member read IS the console shape; nothing is fabricated.
+        const CgsContainers::BitArray<8u>& GetUsedRaceCarsBitArray() const        // :100
+        {
+            return mUsedRaceCars;
+        }
+        EActiveRaceCarIndex GetPlayerRCIndex() const                             // :103
+        {
+            return mePlayerRaceCarIndex;
+        }
 
         // @0x82233488 (this class TU; body in BrnDirectorAllVehicleData.cpp) -- the
         // squared distance of the nearest OTHER car (sorted row 1; row 0 is the
