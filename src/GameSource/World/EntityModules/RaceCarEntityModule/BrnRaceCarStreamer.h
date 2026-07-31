@@ -64,6 +64,7 @@ namespace RaceCarEntityModuleIO
     struct InputBuffer_PreScene;
     struct OutputBuffer_PreScene;
     struct OutputBuffer_Prepare;
+    struct ResourceRequestInterface;
 }
 
 class RaceCarStreamer
@@ -110,7 +111,14 @@ public:
 
     void Update( const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
                  RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput, f32 lfTimeStep );
-    void AppendGameDataRequests( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpInterface ) const;
+
+    // @ 0x82302038. SIGNATURE RECOVERED FROM THE ASM: the console's caller
+    // (RaceCarEntityModule::SendStreamerEvents @0x82304F70) calls the output buffer's
+    // GetResourceRequestInterface() FIRST and passes the INTERFACE, not the buffer --
+    // `v4 = sub_822B6338(lpOutput); AppendGameDataRequests(this + 69888, v4)`. The earlier
+    // `OutputBuffer_Prepare*` spelling would have taken the write lock in the wrong place.
+    void AppendGameDataRequests(
+            RaceCarEntityModuleIO::ResourceRequestInterface* lpInterface ) const;
 
     // ---- bodied by THIS TU ----
     bool  IsRaceCarLoaded( s32 liActiveRaceCar ) const;

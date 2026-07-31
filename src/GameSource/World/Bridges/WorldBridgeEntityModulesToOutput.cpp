@@ -110,7 +110,6 @@ void BridgeEntityModulesToOutput_PostPhysics(
     const BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics* lpWorldEntityOutput_PostPhysics)
 {
     (void)lpWorldModule;
-    (void)lpRaceCarOutput_PostPhysics;
     (void)lpPropOutput_PostPhysics;
 
     CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");                                   // :74
@@ -123,6 +122,19 @@ void BridgeEntityModulesToOutput_PostPhysics(
     {
         lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
             lpWorldEntityOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
+    }
+
+    // The RACE-CAR (per-car streamer) resource-request flush -- the same transfer, one
+    // buffer over. RaceCarEntityModule::PostPhysicsUpdate -> SendStreamerEvents @0x82304F70
+    // has just drained the five component streamers' rings into this buffer's request
+    // interface; without this append they never reach the GameData module and no VEH_
+    // bundle is ever requested. (Part of the console's
+    // BridgeRaceCarEntityInfoToOutput_PostPhysics leg, whose other transfers -- the
+    // scene/game-event/network queues -- still reach un-homed interiors and stay dropped.)
+    if (lpRaceCarOutput_PostPhysics != 0)
+    {
+        lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
+            lpRaceCarOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
     }
 }
 

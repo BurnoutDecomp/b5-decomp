@@ -48,6 +48,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // CgsDev::Log::gpDebugPrint
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                               // BrnWorld::GlobalColourPalette
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"                              // GameDataAssetEvent (reply shape)
+#include "SharedClasses/DataLists/VehicleList.h"                                         // BrnResource::VehicleList
+#include "SharedClasses/DataLists/VehicleListEntry.h"                                    // BrnResource::VehicleListEntry
+#include "SharedClasses/DataLists/WheelList.h"                                           // BrnResource::WheelList / WheelListEntry
 
 #include <cstring>   // memset
 
@@ -161,9 +164,17 @@ void RaceCarEntityModule::Construct()
 
     mReceiverQueue.Construct();
 
-    mpVehicleList     = 0;
-    mpWheelList       = 0;
-    mbCarColoursBound = false;
+    // X360: the module Construct brings the streamer up along with the rest of the
+    // interior (the receiver queue and the streamer are adjacent members, +0x100E8 and
+    // +0x11100). Without this the five component streamers have no request/receiver
+    // queues, so no AddEntry can ever reach a request ring.
+    mRaceCarStreamer.Construct();
+    mfTimeStep = 0.0f;
+
+    mpVehicleList        = 0;
+    mpWheelList          = 0;
+    mbCarColoursBound    = false;
+    mbBringUpCarRequested = false;
 }
 
 // X360 0x82300730. The module's resumable global-resource load, driven from Prepare
@@ -379,17 +390,266 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
     // fall through
     case 3:
         // The console re-arms the stage to 1 here and runs the per-car Prepare sweep.
-        // [FLAG PC bring-up] the sweep is skipped (opaque RaceCar/ActiveRaceCar storage);
-        // the stage is parked at 3 so a re-entry is idempotent rather than replaying
-        // LoadGlobalResources.
+        // [FLAG PC bring-up] the RaceCar[35]/ActiveRaceCar[8] sweep is still skipped (opaque
+        // storage in this header); the stage is parked at 3 so a re-entry is idempotent
+        // rather than replaying LoadGlobalResources.
+        //
+        // What IS reproduced is the stage-3 TAIL: the console stores the module's vehicle-list
+        // pointer into the streamer (`*(a1 + 69888) = *(a1 + 99380)`), which is
+        // RaceCarStreamer::Prepare -- the assert at BrnRaceCarStreamer.cpp:87 sits right there.
         mePrepareStage         = 3;
         miPrepareCarIndex      = 0;
+
+        if( mpVehicleList != 0 )
+        {
+            mRaceCarStreamer.Prepare( mpVehicleList, mpWheelList );
+        }
+
         return true;
 
     default:
         CGS_ASSERT( false, "Invalid Stage\n" );   // X360 :776
         return false;
     }
+}
+
+// ============================================================================
+// THE PER-FRAME STREAMING PUMP (race-car streamer wave 2026-07-31).
+//
+// This is the leg that turns the (already faithful, already mounted) RaceCarStreamer
+// stack from orphaned code into a live subsystem. Three functions:
+//   PreSceneUpdate     @0x8230D928 -- partial slice; latches mfTimeStep, calls UpdateStreaming
+//   UpdateStreaming    @0x822FEFE0 -- full body except the ActiveRaceCar sweep (see below)
+//   PostPhysicsUpdate  @0x82307538 -- partial slice; calls SendStreamerEvents
+//   SendStreamerEvents @0x82304F70 -- full body
+// ============================================================================
+
+// X360 0x822FEFE0 (DWARF BrnRaceCarEntityModule.h:563).
+//
+// The head of the console body is a verbatim INLINE of RaceCarStreamer::Update
+// @0x822F80C0 -- the same four InternalBaseStreamer::Update calls in the same order
+// (attributes +0x1380, physics +0x26F0, graphics +0x10, wheel graphics +0x3A60), then
+// RaceCarAudioStreamer::Update, then `mfTimeSinceLastLoad += mfTimeStep` (streamer
+// +0x6740 += module +0x18398), then RaceCarStreamer::UpdateDesiredCars. Written here as
+// the one call the inline came from.
+//
+// The tail is a sweep of the eight active-car slots:
+//     if (GetActiveRaceCar(i)->muState == 1 /* waiting for load */) {
+//         if (mRaceCarStreamer.IsRaceCarLoaded(i) &&
+//             (car->IsPlayer() || !car->IsOnRaceStartState(0)))
+//                  OnRaceCarResourcesLoaded(i, lpOutput->GetVehicleInputInterface());
+//         else     lbAllLoaded = false;
+//     }
+// followed by the car-select wait latches (this+99168..99175, gated on
+// mbInCarSelectScreen at +0x186C9), the streaming-complete publish
+// (lpOutput[10337] = lbAllLoaded) and the "streaming finished" edge
+// (this[99144] -> this[99185]).
+//
+// [FLAG PC bring-up] THE TAIL IS NOT REPRODUCED. Every line of it reaches
+// ActiveRaceCar::muState / ::IsPlayer / ::IsOnRaceStartState, and this header still models
+// ActiveRaceCar as opaque placeholder bytes (a DIFFERENT type from the real
+// BrnActiveRaceCar.h -- the pre-existing ODR fork this TU's banner records). It also calls
+// OnRaceCarResourcesLoaded, which needs ActiveRaceCar::OnResourcesLoaded + SetupCarColour +
+// PlaceRaceCarOnLoad, none of which exist. Reproducing it would mean fabricating the
+// interior. Skipped, not paraphrased. It gates nothing this build can currently reach:
+// no ActiveRaceCar is ever attached, so muState is 0 for all eight slots and the sweep
+// would be a no-op even if it were written.
+// DELETE-WHEN: the ActiveRaceCar interior is homed (the DecFIGS DWARF has the complete
+// 78-member declaration) and AttachActiveRaceCar @0x822F4DB0 lands.
+void RaceCarEntityModule::UpdateStreaming(
+        const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // X360 :4241
+
+    StreamFirstUnlockedCarBringUp();
+
+    mRaceCarStreamer.Update( lpInput, lpOutput, mfTimeStep );
+}
+
+// ============================================================================
+// [FLAG PC bring-up] StreamFirstUnlockedCarBringUp -- NOT an X360 function.
+//
+// WHY IT EXISTS. `RaceCarStreamer::AddVehicleData` is the one entry point that starts a
+// per-car load, and on the console its only immediate caller is
+// RaceCarEntityModule::AttachActiveRaceCar @0x822F4DB0. That function needs
+// ActiveRaceCar::Prepare @0x822EAC28 / ::Attach @0x822BEEE0 / ::IsAttached @0x822A1F10,
+// none of which exists yet, AND all SEVEN of its own callers
+// (UpdateInAndOutOfRangeCars, AddRaceCarToStartingGridOrFreeburnLobby, SetUpAIForMode,
+// HandleResetPlayerCarAction, HandleSetupNetworkCarAction, SetUpPlayerCarForMode,
+// HandleGameActions) are equally absent. The deferred path
+// (HandleSelectionRequestStreamingAction @0x822E9918 -> SetDesiredVehicleData) needs the
+// game-action jump table, also absent. So without a stand-in, NOTHING in this build can
+// ever ask for a vehicle and the whole streamer stack below AddVehicleData -- which IS
+// faithful and IS now mounted -- stays unexercised, as do GameDataModule's
+// ProcessLoadVehicleRequest (27) / ProcessGetVehicleRequest (50).
+//
+// WHAT IS FAITHFUL HERE. The ID DERIVATION is the console's, taken from SpawnRaceCar
+// @0x822FE5D8 and HandleSelectionRequestStreamingAction @0x822E9918, which both do:
+//     entry      = mpVehicleList->GetVehicleData(<index>)
+//     lModelId   = entry->GetId()                                 (entry + 0x00)
+//     liWheel    = mpWheelList->FindWheelIndexFromName(entry + 0x10)
+//     if (liWheel < 0) { liWheel = 0; log "*** Couldn't find Wheel: ..." }
+//     lWheelId   = mpWheelList->GetWheelData(liWheel)->mID
+// and then hand the pair to the streamer. The "VEH_"/"WHE_" prefixes are applied inside
+// AddVehicleData by HACKGetValidModelIds @0x822A1950, exactly as on the console.
+//
+// WHAT IS FAKE. Only the TRIGGER: nobody spawned a car, so slot 0 is claimed by a
+// one-shot instead of by AttachActiveRaceCar, and the audio "is player" flag is passed
+// true because on the console that is `lpRaceCar->IsPlayerDriven()` for the player's car.
+// Vehicle index 0 is the Hunter Cavalry (PUSMC01) -- the one car unlocked at the Junkyard.
+//
+// DELETE-WHEN: AttachActiveRaceCar @0x822F4DB0 lands (which needs the ActiveRaceCar
+// interior homed -- the DecFIGS DWARF carries the complete 78-member declaration).
+// ============================================================================
+void RaceCarEntityModule::StreamFirstUnlockedCarBringUp()
+{
+    if( mbBringUpCarRequested || mpVehicleList == 0 || mpWheelList == 0 )
+    {
+        return;
+    }
+    mbBringUpCarRequested = true;
+
+    const s32 KI_BRINGUP_VEHICLE_INDEX  = 0;   // PUSMC01, "Hunter Cavalry"
+    const s32 KI_BRINGUP_ACTIVE_RACECAR = 0;   // the player's active-race-car slot
+
+    const BrnResource::VehicleListEntry* lpEntry =
+        mpVehicleList->GetVehicleData( KI_BRINGUP_VEHICLE_INDEX );
+    if( lpEntry == 0 )
+    {
+        return;
+    }
+
+    const CgsID lModelId       = lpEntry->GetId();
+    const char* lpcWheelName   = lpEntry->GetDefaultWheelName();
+
+    s32 liWheelIndex = mpWheelList->FindWheelIndexFromName( lpcWheelName );
+    if( liWheelIndex < 0 )
+    {
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "*** Couldn't find Wheel: " << lpcWheelName << " for Vehicle: "
+                << lpEntry->GetName() << "\n";
+        }
+        liWheelIndex = 0;
+    }
+
+    const BrnResource::WheelListEntry* lpWheelEntry = mpWheelList->GetWheelData( liWheelIndex );
+    if( lpWheelEntry == 0 )
+    {
+        return;
+    }
+    const CgsID lWheelId = lpWheelEntry->mID;
+
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[FLAG PC bring-up] RaceCar: no spawn path exists, so requesting the first "
+               "unlocked car by hand -- '" << lpEntry->GetName()
+            << "' wheels '" << lpcWheelName << "' (index " << liWheelIndex
+            << ") into active slot " << KI_BRINGUP_ACTIVE_RACECAR
+            << ". The id derivation is SpawnRaceCar's; only the trigger is a stand-in.\n";
+    }
+
+    mRaceCarStreamer.AddVehicleData( KI_BRINGUP_ACTIVE_RACECAR, lModelId, lWheelId, true );
+}
+
+// X360 0x82304F70. Two statements: assert the output buffer, then hand the buffer's
+// resource-request interface to the streamer's five-queue drain.
+void RaceCarEntityModule::SendStreamerEvents(
+        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    CGS_ASSERT( lpOutput != 0, "lpOutput" );   // X360 :5156
+
+    if( lpOutput == 0 )
+    {
+        return;
+    }
+
+    mRaceCarStreamer.AppendGameDataRequests( lpOutput->GetResourceRequestInterface() );
+}
+
+// X360 0x8230D928 -- PARTIAL SLICE.
+//
+// The console body is a 15-step per-frame spine (replay enter/leave edge, the camera-vector
+// copy, the serialiser read, UpdateSerialiser, HandleGameActions, the per-slot AI/palette
+// pass, UpdateRaceCars_PreScene / UpdateInAndOutOfRangeCars, UpdateStreaming,
+// WriteUpdatedAIData, UpdatePropBoundingBoxes_PreScene, UpdateOutputInterfaces,
+// UpdateActiveToAICarLookup, UpdateDisconnectedPlayers). Every one of those except the
+// two reproduced here reaches the un-homed RaceCar/ActiveRaceCar/manager interiors.
+//
+// REPRODUCED, exactly as the console orders them:
+//   * step 10: the sim time step latch. `if (update-set bit 0) mfTimeStep = 0 else
+//     mfTimeStep = simStatus->mfBaseTimeStep * simStatus->mfTimeStepMultiplier`
+//     (asm `*(v52+28) * *(v52+32)` on the input's TimerStatusInterface, whose sim block
+//     starts at +24). Bit 0 of the update set is the "sim paused" bit.
+//   * step 11: `if (!mbInReplay) UpdateStreaming(lpInput, lpOutput)`. mbInReplay
+//     (+0x18774... console +99828) is not modelled here; the PC build has no replay, so
+//     the guard is constant-false and the call is unconditional. FLAGGED rather than faked.
+//
+// [FLAG PC bring-up] everything else is dropped, NOT paraphrased.
+// DELETE-WHEN: the interior lands and the full spine is reconstructed.
+void RaceCarEntityModule::PreSceneUpdate(
+        RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+        BrnUpdateSet lUpdateSet )
+{
+    CGS_ASSERT( lpInput != 0, "lpInputBuffer" );     // X360 :986
+    CGS_ASSERT( lpOutput != 0, "lpOutputBuffer" );   // X360 :987
+
+    if( lpInput == 0 || lpOutput == 0 )
+    {
+        return;
+    }
+
+    lpInput->LockForRead();
+    lpOutput->LockForWrite();
+
+    // ---- step 10: latch the sim time step -----------------------------------
+    if( ( lUpdateSet & 1 ) != 0 )
+    {
+        mfTimeStep = 0.0f;
+    }
+    else
+    {
+        const RaceCarEntityModuleIO::TimerStatusInterface* lpTimers =
+            lpInput->GetTimerStatusInterface();
+        mfTimeStep = ( lpTimers != 0 )
+            ? lpTimers->GetSimTimerStatus()->GetCurrentTimeStep()
+            : 0.0f;
+    }
+
+    // ---- step 11: pump the five component streamers -------------------------
+    UpdateStreaming( lpInput, lpOutput );
+
+    lpOutput->UnlockForWrite();
+    lpInput->UnlockForRead();
+}
+
+// X360 0x82307538 -- PARTIAL SLICE. The console body runs the post-physics half of the
+// module (ProcessCreateVehicleEvents, the crash/takedown queues, the director vehicle
+// input, the replay request interface, ...). Only the streamer drain is reproduced --
+// and it is the load-bearing one: InternalBaseStreamer::Update clears its own request ring
+// at the top of every frame, so a load request that is not drained in the frame it was
+// posted is silently lost.
+// [FLAG PC bring-up] the rest is dropped, NOT paraphrased. DELETE-WHEN the interior lands.
+void RaceCarEntityModule::PostPhysicsUpdate(
+        RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput,
+        BrnUpdateSet lUpdateSet )
+{
+    (void)lpInput;
+    (void)lUpdateSet;
+
+    if( lpOutput == 0 )
+    {
+        return;
+    }
+
+    lpOutput->LockForWrite();
+    SendStreamerEvents( lpOutput );
+    lpOutput->UnlockForWrite();
 }
 
 // ============================================================================

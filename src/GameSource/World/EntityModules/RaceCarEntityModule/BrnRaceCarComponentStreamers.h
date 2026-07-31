@@ -161,10 +161,15 @@ public:
     // LOADEDANDATTACHED state. lAssetId / lbIsPlayer are validation-only (unused here).
     bool IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRaceCar, bool lbIsPlayer );
 
-    // Drop car liActiveRaceCar's streaming sound (drives the slot toward DETACH/unload).
-    // The X360 RaceCarStreamer removal path calls a dedicated RaceCarAudioStreamer::RemoveEntry
-    // passing the slot's own desired id; the encapsulated 1-arg form reads maEntries[i] itself.
-    // Declared for that call site; bodied with the leaf (in-scope callee).
+    // @ 0x822C0B60. Drop car luUserId's desired streaming sound -- the CONSOLE signature,
+    // recovered from the asm (2 args, returns bool). The caller
+    // (RaceCarStreamer::AddVehicleData @0x822EBE18) reads the slot's own desired id and
+    // passes it, which the two asserts inside validate.
+    bool RemoveEntry( CgsID lAssetId, u64 luUserId );
+
+    // The encapsulated 1-arg form the PC RaceCarStreamer call site uses: it re-derives
+    // exactly the id the console open-codes at its call site, then forwards to the form
+    // above. Behaviourally identical.
     void RemoveEntry( s32 liActiveRaceCar );
 
 protected:

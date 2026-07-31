@@ -58,7 +58,28 @@ InputBuffer_PreScene::GetGameActionQueue() const
     return &mGameActionQueue;
 }
 
+// DWARF BrnRaceCarEntityModuleIO.h -- const accessor for the per-car audio (un)load
+// REPLY queue. RaceCarAudioStreamer::Update @0x822ECC00 reads it on the way in (the
+// audio subsystem's "data loaded / data unloaded" answers) and writes the matching
+// request queue on the OutputBuffer_PreScene below. Same member-address idiom as the
+// game-action queue above.
+const InputBuffer_PreScene::AudioCarLoadedDataQueue*
+InputBuffer_PreScene::GetAudioCarLoadedDataQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mAudioCarLoadedDataQueue;
+}
+
 // ---- OutputBuffer_PreScene --------------------------------------------------
+
+// DWARF :306 -- mutable per-car audio (un)load REQUEST queue accessor. The audio
+// streamer appends its own per-frame queue onto this one at the end of Update.
+RaceCarEntityModuleIO::AudioCarLoadedDataQueue*
+OutputBuffer_PreScene::GetAudioCarLoadedDataQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mAudioCarLoadedDataQueue;
+}
 
 // X360 0x822B4ED0 (W, :283) -- mutable vehicle-input accessor.
 OutputBuffer_PreScene::VehicleInputInterface*
@@ -92,6 +113,27 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
     return &mActiveRaceCarOutputInterface;
+}
+
+// ---- OutputBuffer_PostPhysics -----------------------------------------------
+
+// DWARF :563/:564 -- the resource-request interface every race-car GameData request
+// leaves the module through. RaceCarEntityModule::SendStreamerEvents @0x82304F70 takes
+// the mutable one and hands it to RaceCarStreamer::AppendGameDataRequests; the const one
+// is read by WorldModule::BridgeEntityModulesToOutput_PostPhysics on the way to the
+// world's update-output buffer. Same member-address idiom as the rest of this file.
+RaceCarEntityModuleIO::ResourceRequestInterface*
+OutputBuffer_PostPhysics::GetResourceRequestInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mResourceRequestInterface;
+}
+
+const RaceCarEntityModuleIO::ResourceRequestInterface*
+OutputBuffer_PostPhysics::GetResourceRequestInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mResourceRequestInterface;
 }
 
 // ---- InputBuffer_PostScene --------------------------------------------------

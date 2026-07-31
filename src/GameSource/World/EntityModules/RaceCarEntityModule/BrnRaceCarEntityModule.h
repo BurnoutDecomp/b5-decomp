@@ -35,6 +35,7 @@
 
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<N,A>
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::BaseResourcePtr
+#include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.h" // BrnWorld::RaceCarStreamer (by value)
 
 #include <cstddef>                                   // offsetof
 
@@ -139,6 +140,19 @@ public:
         // "CarColours" (pool 5), stream "Vehicles/VEHICLETEX.BIN" into the CarShared pool
         // (25), then GET the vehicle list and the wheel list. Returns false while waiting.
         bool LoadGlobalResources( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput );
+
+        // ---- the per-frame STREAMING pump (race-car streamer wave 2026-07-31) ----
+
+        // X360 0x822FEFE0 (DWARF BrnRaceCarEntityModule.h:563). Pump the five component
+        // streamers for one frame, then sweep the eight active-car slots for cars whose
+        // resources have just completed. Called from PreSceneUpdate when not in replay.
+        void UpdateStreaming( const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+                              RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
+        // X360 0x82304F70. Drain the five component streamers' own GameData request
+        // queues onto the PostPhysics output buffer's resource-request interface -- the
+        // ONLY way a race-car load request leaves this module. Called from PostPhysicsUpdate.
+        void SendStreamerEvents( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
 
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
@@ -311,6 +325,35 @@ private:
     // such flag (it never inspects the ptr); BaseResourcePtr exposes no null query --
     // IsEqual(0) DEREFERENCES its argument -- so the answer is recorded at bind time.
     bool mbCarColoursBound;
+
+    // [FLAG PC bring-up] one-shot latch for StreamFirstUnlockedCarBringUp (see the .cpp
+    // banner). DELETE with it when AttachActiveRaceCar @0x822F4DB0 lands.
+    bool mbBringUpCarRequested;
+
+    // [FLAG PC bring-up] NOT an X360 function -- the stand-in producer that asks the
+    // streamer for the first unlocked car, because no spawn path exists yet to do it.
+    void StreamFirstUnlockedCarBringUp();
+
+    // ========================================================================
+    // MODELLED members (race-car streamer wave 2026-07-31). Same additive rule as the
+    // block above: the console offsets are recorded per member, the x64 offsets are not
+    // load-bearing (named-member parity).
+    // ========================================================================
+
+    // X360 +0x11100 (69888). The per-car asset director. Every function that reaches it
+    // in the console asm uses `this + 0x11100` as the receiver -- AttachActiveRaceCar,
+    // DetachActiveRaceCar, UpdateStreaming, SendStreamerEvents, OnRaceCarResourcesLoaded.
+    // DWARF BrnRaceCarEntityModule.h:343 names it mRaceCarStreamer (Feb-2007's mStreamer
+    // is drift). The receiver queue's 4096 capacity above was derived from the console
+    // gap 0x11100 - 0x100E8 == 4120, so these two are the same layout fact.
+    RaceCarStreamer mRaceCarStreamer;
+
+    // X360 +0x18398 (99224). The SIM time step latched once per frame by PreSceneUpdate
+    // (`mfTimeStep = lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->
+    //  GetCurrentTimeStep()`, asm `*(v52+28) * *(v52+32)`), zeroed when the update set's
+    // bit 0 says the sim is paused. UpdateStreaming accumulates it into the streamer's
+    // mfTimeSinceLastLoad.
+    f32 mfTimeStep;
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,

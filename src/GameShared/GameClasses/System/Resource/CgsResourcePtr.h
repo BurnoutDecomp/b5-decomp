@@ -164,6 +164,12 @@ namespace CgsResource
             return *this;
         }
 
+        // Assign-from-BASE. Declared by the DWARF; no call site in this port needs it (the
+        // X360 sites that LOOK like `slot = NULLResourcePtr` are literally
+        // `CreateFromHandle(slot, &dword_82FAD960)` where dword_82FAD960 == NULLResourcePtr
+        // + 0x14, i.e. the sentinel's {mpThis, muThreadId} pair -- see
+        // RaceCarStreamer::Construct @0x822F7FA0. Those are spelled with the ResourceHandle
+        // overload above, against CgsResource::NULLResourceHandle.) Left declaration-only.
         ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther);
 
         // Assign-from-handle: rebind the resource memory from the handle. X360-attested
@@ -235,11 +241,25 @@ namespace CgsResource
         }
 
         bool operator==(const ResourcePtr<Type>& lrOther) const;
-        bool operator==(const BaseResourcePtr& lrOther) const;
         bool operator==(const ResourceHandle& lrHandle) const;
         bool operator!=(const ResourcePtr<Type>& lrOther) const;
-        bool operator!=(const BaseResourcePtr& lrOther) const;
         bool operator!=(const ResourceHandle& lrHandle) const;
+
+        // Compare against a bare BaseResourcePtr. X360-attested at the RaceCarStreamer
+        // sites this wave exercises: `maGraphicsResources[i] != CgsResource::NULLResourcePtr`
+        // compiles to `CgsResource::BaseResourcePtr::IsEqual(&dword_82FAD94C, slot)`
+        // (RaceCarStreamer::AddVehicleData @0x822EBE18, and the same shape in the three
+        // Get*Resource asserts), i.e. the sentinel's IsEqual against the slot. IsEqual
+        // compares only the identity region and is symmetric, so it is spelled from `this`
+        // here. Defined inline so each instantiation emits it at its compare site.
+        bool operator==(const BaseResourcePtr& lrOther) const
+        {
+            return IsEqual(&lrOther);
+        }
+        bool operator!=(const BaseResourcePtr& lrOther) const
+        {
+            return !IsEqual(&lrOther);
+        }
     };
 
     // ADDITIVE GROW: the engine's shared "null" resource pointer sentinel. Game code
