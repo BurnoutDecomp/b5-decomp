@@ -122,27 +122,34 @@ namespace renderengine
         return lpBuffer;
     }
 
-    // 0x82B63778 -- build the rw resource descriptor: four {size=0, align=1} entries seeded, then
-    // slot0 = {4, 0x28} (the 0x28-byte header at align 4) and slot2 = {length, 4}.
-    u64* VertexBuffer::GetResourceDescriptor(u64* lpDescriptorOut, int a2)
+    // 0x82B63778 -- build the rw resource descriptor: five {size=0, align=1} identity entries
+    // seeded, then slot0 = the 0x28-byte VertexBufferHeader at alignment 4, and slot2 = the buffer
+    // bytes (Parameters::muLength) at alignment 4.
+    //
+    // ENDIANNESS. The X360 writes both live entries as MERGED 64-BIT STORES:
+    //     *result    = 0x0000002800000004ULL
+    //     result[2]  = ((u64)*(a2 + 4) << 32) | 4ULL
+    // rw::BaseResourceDescriptor is { u32 m_size; u32 m_alignment; }, so on big-endian PPC the high
+    // dword lands in m_size and the low dword in m_alignment -- i.e. slot0 = {0x28, 4} and
+    // slot2 = {muLength, 4}. Replaying those literals on little-endian x64 unpacks them SWAPPED, to
+    // {4, 0x28} and {4, muLength}: a 0x28-byte header would be requested as 4 bytes at an alignment
+    // of 40, which is not even a power of two, and the buffer lane would ask for 4 bytes. Written by
+    // NAMED MEMBERS here, which is also exactly how the sibling IndexBuffer descriptor is built
+    // inline in BrnSkyDomeManager::CreateGeometry ({0x24, 4} / {rounded index bytes, 4}).
+    ::rw::BaseResourceDescriptors<5>* VertexBuffer::GetResourceDescriptor(
+        ::rw::BaseResourceDescriptors<5>* lpDescriptorOut, const Parameters* lpParams)
     {
-        u32* lpDwords = reinterpret_cast<u32*>(lpDescriptorOut);  // v2 = result
-        int liIndex = 4;                                          // v3 = 4
-        do
+        // v3 = 4; do { ... } while (v3-- >= 0)  -- five identity entries.
+        for (int liIndex = 0; liIndex < 5; ++liIndex)
         {
-            --liIndex;
-            lpDwords[0] = 0u;     // *v2 = 0
-            lpDwords[1] = 1u;     // v2[1] = 1
-            lpDwords += 2;        // v2 += 2
+            lpDescriptorOut->m_baseResourceDescriptors[liIndex].m_size      = 0u;
+            lpDescriptorOut->m_baseResourceDescriptors[liIndex].m_alignment = 1u;
         }
-        while (liIndex >= 0);
 
-        // *result = 0x2800000004LL  -> low dword 4 (size), high dword 0x28 (align)
-        lpDescriptorOut[0] = 0x0000002800000004ULL;
-        // result[2] = (HIDWORD = *(a2 + 4)) : low dword 4 -> {4, *(a2+4)}
-        const u32 luLength = *reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(
-            static_cast<usize>(static_cast<u32>(a2))) + 4);
-        lpDescriptorOut[2] = (static_cast<u64>(luLength) << 32) | 4ULL;
+        lpDescriptorOut->m_baseResourceDescriptors[0].m_size      = 0x28u;   // sizeof(VertexBufferHeader)
+        lpDescriptorOut->m_baseResourceDescriptors[0].m_alignment = 4u;
+        lpDescriptorOut->m_baseResourceDescriptors[2].m_size      = lpParams->muLength;  // *(a2 + 4)
+        lpDescriptorOut->m_baseResourceDescriptors[2].m_alignment = 4u;
         return lpDescriptorOut;
     }
 

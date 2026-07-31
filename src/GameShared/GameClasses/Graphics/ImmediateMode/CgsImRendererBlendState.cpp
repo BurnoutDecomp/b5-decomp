@@ -11,6 +11,7 @@
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
+#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
 namespace CgsGraphics
 {
@@ -21,11 +22,19 @@ namespace
     class ResourceAllocator
     {
     public:
-        virtual void* Create(
+        // NOT a vtable slot. Declaring this `virtual` put it at slot 0, which on the
+        // rw::IResourceAllocator actually behind the reinterpret_cast is the VIRTUAL
+        // DESTRUCTOR -- so the call allocated nothing and left the allocator's vptr
+        // downgraded to the inert base for the rest of the run. Call the interface by
+        // NAME instead; see CgsResourceAllocatorCreate.h.
+        void* Create(
             void* lpStateHandlesOut,
-            ResourceAllocator* lpAllocator,
+            ResourceAllocator* /*lpAllocator*/,
             const void* lpDescriptor,
-            int liFlags) = 0;
+            int /*liFlags*/)
+        {
+            return CgsGraphics::ResourceAllocatorCreate(this, lpStateHandlesOut, lpDescriptor);
+        }
     };
 
     // The packed blend-factor word splated across channels 1..3 (same constant as

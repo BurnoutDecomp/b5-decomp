@@ -244,9 +244,32 @@ namespace renderengine
         if (lpParamsOut) { lpParamsOut[0] = 0u; lpParamsOut[1] = 0u; }
         return lpBuffer;
     }
-    u64* VertexBuffer::GetResourceDescriptor(u64* lpDescriptorOut, int /*a2*/)
+    // NOT A STUB. Relocated from src/pc/gcm/renderengine/VertexBuffer.cpp (X360 0x82B63778), which
+    // stays unmounted because mounting that TU was MEASURED WORSE (29 externals / 23 unresolved plus
+    // an LNK2005 against the linked CgsIm2d.cpp -- see the sky-wave note in build_game_exe.bat).
+    // The two bodies are kept identical; delete this one the day VertexBuffer.cpp mounts.
+    //
+    // The previous inert stub zeroed all five entries, which made slot0 m_size == 0. A zero-size lane
+    // is exactly the "nothing requested" case, so LinearResourceAllocator::DoAllocate skipped the
+    // Alloc and handed back a null lane 0, tripping BrnSkyDomeManager::CreateGeometry's
+    // CGS_ASSERT(vbResource.GetMemoryResource()) on both dome builds. (The sky still drew only
+    // because the PC leaf's VertexBuffer::Initialize falls back to ArenaAlloc.)
+    //
+    // See VertexBuffer.cpp for the endianness derivation: the console's merged 64-bit stores encode
+    // {m_size, m_alignment} in big-endian dword order, so they are written by NAME here rather than
+    // replayed as literals.
+    ::rw::BaseResourceDescriptors<5>* VertexBuffer::GetResourceDescriptor(
+        ::rw::BaseResourceDescriptors<5>* lpDescriptorOut, const VertexBuffer::Parameters* lpParams)
     {
-        if (lpDescriptorOut) { for (int i = 0; i < 5; ++i) lpDescriptorOut[i] = 0ull; }
+        for (int liIndex = 0; liIndex < 5; ++liIndex)
+        {
+            lpDescriptorOut->m_baseResourceDescriptors[liIndex].m_size      = 0u;
+            lpDescriptorOut->m_baseResourceDescriptors[liIndex].m_alignment = 1u;
+        }
+        lpDescriptorOut->m_baseResourceDescriptors[0].m_size      = 0x28u;   // sizeof(VertexBufferHeader)
+        lpDescriptorOut->m_baseResourceDescriptors[0].m_alignment = 4u;
+        lpDescriptorOut->m_baseResourceDescriptors[2].m_size      = lpParams->muLength;
+        lpDescriptorOut->m_baseResourceDescriptors[2].m_alignment = 4u;
         return lpDescriptorOut;
     }
 }

@@ -46,9 +46,7 @@ void EffectsVertexBufferManager::Construct(rw::IResourceAllocator* lpAllocator,
     lVbParams.muLength = luVertexBufferSize;
 
     CgsResource::ResourceDescriptor lVbResDesc;
-    renderengine::VertexBuffer::GetResourceDescriptor(
-        reinterpret_cast<u64*>(&lVbResDesc),
-        static_cast<int>(reinterpret_cast<usize>(&lVbParams)));
+    renderengine::VertexBuffer::GetResourceDescriptor(&lVbResDesc, &lVbParams);
 
     for (u32 luCount = 0u; luCount < KU_NUM_BUFFERS; ++luCount)
     {

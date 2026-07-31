@@ -309,13 +309,15 @@ namespace CgsResource
                 renderengine::VertexBufferHeader* lpVertexBuffer =
                     reinterpret_cast<renderengine::VertexBufferHeader*>(lpMesh->maBuffers[1u + luVb]);
 
-                u32 laVbParams[2] = { 0u, 0u };
-                renderengine::VertexBuffer::GetParameters(lpVertexBuffer, laVbParams);
+                // GetParameters writes { format, size } -- the same two dwords, in the same order,
+                // that VertexBuffer::Parameters names muFormat/muLength, so the X360's "hand the
+                // scratch pair straight back in as the parameters block" is spelled with the type.
+                renderengine::VertexBuffer::Parameters lVbParams = { 0u, 0u };
+                renderengine::VertexBuffer::GetParameters(lpVertexBuffer,
+                                                          reinterpret_cast<u32*>(&lVbParams));
 
                 CgsResource::ResourceDescriptor lVbDescriptor;
-                renderengine::VertexBuffer::GetResourceDescriptor(
-                    reinterpret_cast<u64*>(&lVbDescriptor),
-                    static_cast<int>(reinterpret_cast<usize>(laVbParams)));
+                renderengine::VertexBuffer::GetResourceDescriptor(&lVbDescriptor, &lVbParams);
                 lTotal += lVbDescriptor;
             }
         }

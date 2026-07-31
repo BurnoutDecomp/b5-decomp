@@ -28,6 +28,7 @@
 #include "rw/rwcore_structs.h"
 
 #include <cstring>   // memset
+#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
 // The X360 D3D texture-bind intrinsic the low-level SetTexture path issues (binds a texture to a
 // sampler stage on the device). Platform API: declared here so the body links against the X360 /
@@ -46,11 +47,19 @@ namespace
     class ResourceAllocator
     {
     public:
-        virtual void* Create(
+        // NOT a vtable slot. Declaring this `virtual` put it at slot 0, which on the
+        // rw::IResourceAllocator actually behind the reinterpret_cast is the VIRTUAL
+        // DESTRUCTOR -- so the call allocated nothing and left the allocator's vptr
+        // downgraded to the inert base for the rest of the run. Call the interface by
+        // NAME instead; see CgsResourceAllocatorCreate.h.
+        void* Create(
             void* lpStateHandlesOut,
-            ResourceAllocator* lpAllocator,
+            ResourceAllocator* /*lpAllocator*/,
             const void* lpDescriptor,
-            int liFlags) = 0;
+            int /*liFlags*/)
+        {
+            return CgsGraphics::ResourceAllocatorCreate(this, lpStateHandlesOut, lpDescriptor);
+        }
     };
 
     // The blend-state factor word the asm splats across all four channels (0x07060706); a single

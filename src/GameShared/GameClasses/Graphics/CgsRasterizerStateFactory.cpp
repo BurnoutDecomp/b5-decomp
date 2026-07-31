@@ -1,6 +1,7 @@
 #include "pc/gcm/renderengine/renderstates.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
 class CgsRasterizerStateFactory
 {
@@ -21,11 +22,19 @@ enum EFactoryRasterizerState
 class ResourceAllocator
 {
 public:
-    virtual void* Create(
+    // NOT a vtable slot. Declaring this `virtual` put it at slot 0, which on the
+    // rw::IResourceAllocator actually behind the reinterpret_cast is the VIRTUAL
+    // DESTRUCTOR -- so the call allocated nothing and left the allocator's vptr
+    // downgraded to the inert base for the rest of the run. Call the interface by
+    // NAME instead; see CgsResourceAllocatorCreate.h.
+    void* Create(
         void* pOut,
-        ResourceAllocator* pAllocator,
+        ResourceAllocator* /*pAllocator*/,
         renderengine::ResourceDescriptor5* pDescriptor,
-        int liFlags) = 0;
+        int /*liFlags*/)
+    {
+        return CgsGraphics::ResourceAllocatorCreate(this, pOut, pDescriptor);
+    }
 };
 
 renderengine::RasterizerState* gapRasterizerStates[E_FACTORY_RASTERIZER_STATE_COUNT];
