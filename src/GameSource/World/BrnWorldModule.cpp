@@ -4047,6 +4047,7 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     }
 
     static bool    sbPathLatched = false;
+    static bool    sbFramingCar  = false;
     static Vector3 sPathOrigin;
     static f32     sfPathRadius = 1.0f;
     static f32     sfPathAngle  = 0.0f;
@@ -4054,6 +4055,30 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     {
         sbPathLatched = true;
         sPathOrigin   = lCentre;
+
+        // [FLAG PC bring-up] ...unless a race car has actually been spawned, in which case
+        // frame IT. The car is parked at an authored, road-level Paradise City position
+        // (the console's own freeburn-lobby grid, see SpawnFirstUnlockedCarBringUp) which
+        // is nowhere near the resident-world centre this tour normally orbits, so without
+        // this the only thing on this build that is genuinely posed in the world would
+        // never be on screen. Publishing the car's position as the PVS query centre is
+        // also what makes the streamer deliver the city AROUND it.
+        // DELETE with the rest of this bring-up producer.
+        {
+            Vector3 lCarPosition;
+            if ( mRaceCarEntityModule.GetSpawnedCarPositionBringUp( lCarPosition ) )
+            {
+                sPathOrigin  = lCarPosition;
+                sbFramingCar = true;
+                if ( CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[FLAG PC bring-up] tour camera framing the spawned race car at ("
+                        << lCarPosition.x << ", " << lCarPosition.y << ", "
+                        << lCarPosition.z << ") instead of the resident-world centre\n";
+                }
+            }
+        }
 
         // [FLAG PC bring-up] The tour has to stay INSIDE the resident footprint, because
         // the fly-through publishes its EYE as the PVS query position (see lPvsPosition
@@ -4073,6 +4098,16 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         if ( sfPathRadius < 1.0f )
         {
             sfPathRadius = 1.0f;
+        }
+
+        // [FLAG PC bring-up] framing the CAR is a close-up, not a city tour: a 350 m
+        // orbit puts a 4 m car below one pixel, and a 350 m PVS neighbourhood centred
+        // 3.5 km from where the loading screen left the working set floods
+        // BaseStreamer's target list ("Stream target list is full", measured: 425 dev
+        // asserts in one run). 9 m keeps both the framing and the streamer sane.
+        if ( sbFramingCar )
+        {
+            sfPathRadius = 9.0f;
         }
 
         if ( CgsDev::Log::gpDebugPrint != 0 )
@@ -4131,6 +4166,15 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         lLookAt.y = sPathOrigin.y - sfPathRadius * 0.10f;
         lLookAt.z = lEye.z + lfOrbit * 0.75f * cosf( sfPathAngle );
         lLookAt.w = 0.0f;
+
+        // [FLAG PC bring-up] ...except when the orbit is framing the spawned race car, in
+        // which case look AT it. The tangential framing above exists to sweep new city
+        // geometry into view; a 9 m orbit around a parked car needs the opposite.
+        if ( sbFramingCar )
+        {
+            lLookAt   = sPathOrigin;
+            lLookAt.w = 0.0f;
+        }
 
         lPvsPosition = lEye;
     }
@@ -4348,12 +4392,14 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
         static CgsSceneManager::SceneManagerIO::InputBuffer_Query  sQueryInput;
         static CgsSceneManager::SceneManagerIO::OutputBuffer       sQueryOutput;
         static WorldEntityIO::InputBuffer_GenerateDispatchLists    sWorldDispatchInput;
+        static RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists sRaceCarDispatchInput;
         static FilteredEntityData                                  sFilteredEntityData;
         static bool sbBuffersConstructed = false;
         if ( !sbBuffersConstructed )
         {
             sbBuffersConstructed = true;
             sWorldDispatchInput.Construct();
+            sRaceCarDispatchInput.Construct();
             sFilteredEntityData.Construct();
         }
         sQueryInput.Construct();
@@ -4413,81 +4459,35 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 KI_WORLD_PREZ_LIST, false );
         }
 
-        // [FLAG PC bring-up] THE RACE CAR. The console reaches
-        // RaceCarEntityModule::GenerateDispatchLists from the real
-        // WorldModule::GenerateDispatchLists with the module's own dispatch input buffer;
-        // that buffer set does not exist here (see the FLAG above) and no ActiveRaceCar is
-        // ever attached, so the module's own bring-up producer is called directly. It
-        // drives the REAL RenderRaceCar @0x822CF6A0. DELETE with the rest of this function.
+        // THE RACE CAR (pose wave 2026-07-31). This is now the REAL console leg:
+        // RaceCarEntityModule::GenerateDispatchLists @0x822E79F8 sweeps its own eight
+        // active-race-car slots, and every car whose muState is E_STATE_ACTIVE and whose
+        // mbRenderThisFrame is armed goes through RenderRaceCar @0x822CF6A0 with the
+        // module's OWN RenderParams -- no locally-owned render snapshot and no
+        // camera-relative pose any more.
+        //
+        // [FLAG PC bring-up] what is still local to this bring-up producer:
+        //   * the IO buffer. The console stages this one through
+        //     BridgeWorldModuleToEntityModules_Render, which does not exist here; the
+        //     static above is the same stand-in the world pass already uses.
+        //   * the visible-entity array. GenerateDispatchLists' `else` arm ignores it (it
+        //     sweeps maActiveRaceCars instead), so sFilteredEntityData's race-car ids are
+        //     passed through unused, exactly as the console's own else arm does.
+        //   * fog. The environment settings are not converted on this build, so the
+        //     scattering vector is zero -- which makes RenderRaceCar's fog blend exactly
+        //     zero, the same state the world pass is already in.
         {
-            // Pose the car ahead of and slightly below the eye, facing the way the camera
-            // looks. The console's pose comes from the vehicle physics module, which does
-            // not exist; this is the stand-in that makes the car visible from the tour
-            // camera. The basis is orthonormal (RenderRaceCar's own dev asserts check that).
-            const f32 KF_CAR_AHEAD = 9.0f;
-            const f32 KF_CAR_BELOW = 1.6f;
-            const f32 KF_CAR_YAW   = 0.60f;   // radians -- a three-quarter front framing
+            sRaceCarDispatchInput.LockForWrite();
+            sRaceCarDispatchInput.SetDispatchFrame( lpDispatchFrame );
+            sRaceCarDispatchInput.SetShadowMap( &mShadowMap );
+            sRaceCarDispatchInput.UnlockForWrite();
 
-            // The camera's own horizontal basis.
-            Vector3 lWorldUp = { 0.0f, 1.0f, 0.0f, 0.0f };
-            Vector3 lCamRight;
-            lCamRight.x = lWorldUp.y * lForward.z - lWorldUp.z * lForward.y;
-            lCamRight.y = lWorldUp.z * lForward.x - lWorldUp.x * lForward.z;
-            lCamRight.z = lWorldUp.x * lForward.y - lWorldUp.y * lForward.x;
-            lCamRight.w = 0.0f;
-            {
-                const f32 lfLen = sqrtf( lCamRight.x * lCamRight.x + lCamRight.y * lCamRight.y
-                                         + lCamRight.z * lCamRight.z );
-                const f32 lfInv = ( lfLen > 0.0001f ) ? ( 1.0f / lfLen ) : 1.0f;
-                lCamRight.x *= lfInv;  lCamRight.y *= lfInv;  lCamRight.z *= lfInv;
-            }
-
-            // The car faces back toward the camera, yawed a little, so the shot is a
-            // three-quarter FRONT view instead of a straight-on tail.
-            const f32 lfCos = cosf( KF_CAR_YAW );
-            const f32 lfSin = sinf( KF_CAR_YAW );
-            Vector3 lCarForward;
-            lCarForward.x = -( lForward.x * lfCos + lCamRight.x * lfSin );
-            lCarForward.y = -( lForward.y * lfCos + lCamRight.y * lfSin );
-            lCarForward.z = -( lForward.z * lfCos + lCamRight.z * lfSin );
-            lCarForward.w = 0.0f;
-
-            Vector3 lCarRight;
-            lCarRight.x = lWorldUp.y * lCarForward.z - lWorldUp.z * lCarForward.y;
-            lCarRight.y = lWorldUp.z * lCarForward.x - lWorldUp.x * lCarForward.z;
-            lCarRight.z = lWorldUp.x * lCarForward.y - lWorldUp.y * lCarForward.x;
-            lCarRight.w = 0.0f;
-            {
-                const f32 lfLen = sqrtf( lCarRight.x * lCarRight.x + lCarRight.y * lCarRight.y
-                                         + lCarRight.z * lCarRight.z );
-                const f32 lfInv = ( lfLen > 0.0001f ) ? ( 1.0f / lfLen ) : 1.0f;
-                lCarRight.x *= lfInv;  lCarRight.y *= lfInv;  lCarRight.z *= lfInv;
-            }
-            Vector3 lCarUp;
-            lCarUp.x = lCarForward.y * lCarRight.z - lCarForward.z * lCarRight.y;
-            lCarUp.y = lCarForward.z * lCarRight.x - lCarForward.x * lCarRight.z;
-            lCarUp.z = lCarForward.x * lCarRight.y - lCarForward.y * lCarRight.x;
-            lCarUp.w = 0.0f;
-
-            rw::math::vpu::Matrix44Affine lCarTransform;
-            lCarTransform.xAxis = lCarRight;
-            lCarTransform.yAxis = lCarUp;
-            lCarTransform.zAxis = lCarForward;
-            Vector3 lCarPosition;
-            lCarPosition.x = lEye.x + lForward.x * KF_CAR_AHEAD - lCarUp.x * KF_CAR_BELOW;
-            lCarPosition.y = lEye.y + lForward.y * KF_CAR_AHEAD - lCarUp.y * KF_CAR_BELOW;
-            lCarPosition.z = lEye.z + lForward.z * KF_CAR_AHEAD - lCarUp.z * KF_CAR_BELOW;
-            lCarPosition.w = 0.0f;
-            lCarTransform.wAxis = lCarPosition;
-
-            // Fog: the console hands the race-car module the frame's scattering /
-            // colour+white-level vectors from the environment settings, which are not
-            // converted on this build (see PublishWorldShadingConstantsBringUp). Zero
-            // scattering makes RenderRaceCar's fog blend exactly zero -- i.e. no fog --
-            // which is the same state the world pass is already in.
-            mRaceCarEntityModule.RenderStreamedCarBringUp(
-                lpDispatchFrame, &mShadowMap, lCarTransform, KF_CAR_AHEAD,
-                Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f } );
+            mRaceCarEntityModule.GenerateDispatchLists(
+                &sRaceCarDispatchInput, sFilteredEntityData.maRaceCarEntityIds,
+                KI_RACE_CAR_OBJECT_LIST, KI_RACE_CAR_OPAQUE_MESH_LIST,
+                KI_RACE_CAR_TRANSPARENT_MESH_LIST, false,
+                Vector4{ 0.0f, 0.0f, 0.0f, 0.0f }, Vector4{ 0.0f, 0.0f, 0.0f, 0.0f },
+                lEye );
         }
         sQueryOutput.UnlockForRead();
 

@@ -4,13 +4,6 @@
 
 namespace BrnWorld
 {
-// Name strings live in the X360 .data segment; declared extern here and in the
-// header (DWARF BrnWorldRegion.cpp hint lines 4/7/10). KAPC_COUNTY_NAMES_ALT is
-// the alternate county-name table the X360 build emits alongside the primary one.
-extern const char* KAPC_COUNTY_NAMES[E_COUNTY_COUNT];
-extern const char* KAPC_COUNTY_NAMES_ALT[E_COUNTY_COUNT];
-extern const char* const KAPC_DISTRICT_NAMES[E_DISTRICT_COUNT];
-
 void WorldRegion::Construct(EDistrict leDistrict)
 {
     CGS_ASSERT(leDistrict < E_DISTRICT_COUNT, "leDistrict < E_DISTRICT_COUNT");
@@ -51,18 +44,9 @@ ECounty WorldRegion::DistrictToCounty(EDistrict leDistrict)
     }
 }
 
-const char* WorldRegion::CountyToString(ECounty leCounty)
-{
-    CGS_ASSERT(leCounty < E_COUNTY_COUNT, "leCounty >= 0 && leCounty < E_COUNTY_COUNT");
-
-    return KAPC_COUNTY_NAMES[leCounty];
-}
-
-const char* WorldRegion::DistrictToString(EDistrict leDistrict)
-{
-    CGS_ASSERT(static_cast<u32>(leDistrict) < (sizeof(KAPC_DISTRICT_NAMES) / sizeof(char*)),
-               "static_cast<size_t>( leDistrict ) < sizeof(KAPC_DISTRICT_NAMES) / sizeof(char*)");
-
-    return KAPC_DISTRICT_NAMES[leDistrict];
-}
+// CountyToString / DistrictToString moved to BrnWorldRegion_ToString.cpp (pose wave
+// 2026-08-01) -- bodies unchanged. They are the ONLY users of the two extern .data name
+// tables above, which have no definition in the tree (function-only IDA exports carry no
+// .data), so keeping them here made this TU unlinkable for every consumer that only needs
+// Construct/DistrictToCounty. See that file's banner.
 }

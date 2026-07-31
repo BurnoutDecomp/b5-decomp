@@ -58,11 +58,13 @@
 #include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex
 #include "BrnCommonTypes.h"                 // Matrix44Affine, Vector2/3/4, Vector3Plus
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"       // CgsContainers::BitArray<96>
+#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"      // CgsContainers::FixedRingBuffer<T,N>
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Graphics/CgsModel.h"             // CgsGraphics::Model::State
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnDetachedPartRenderEvent.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // ERaceCarType (IsPlayer)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
 
 namespace BrnWorld
 {
@@ -77,6 +79,17 @@ const u32 KU_MAX_GLASS_VOLUMES_PER_RACE_CAR = 12;
 // RenderParams::maVerletOffsets, which the X360 DEBUG_OverrideScratchAmount
 // @0x822A21B0 walks 128 times (0x40..0x830, 16-byte stride).
 const u32 KU_MAX_RACE_CAR_VERLET_POINTS     = 128;
+
+// DWARF BrnActiveRaceCar.h:101. The crash bookkeeping ActiveRaceCar embeds by value;
+// Attach @0x822BEEE0 zeroes the whole 80 bytes with ten 64-bit stores at this+0x540.
+struct alignas(16) RaceCarCrashData
+{
+    Matrix44Affine mInitialTransform;   // DWARF :103
+    bool           mbFirstCrash;        // DWARF :104
+};
+
+// DWARF BrnActiveRaceCar.h:1019. The depth of ActiveRaceCar::mPrevTransforms.
+const s32 KI_PREV_TRANSFORM_BUFFER_SIZE = 4;
 
 class ActiveRaceCar
 {
@@ -94,6 +107,19 @@ public:
     // asserts muState < E_STATE_COUNT (4) and "Active ActiveRaceCar without a RaceCar").
     bool IsActive() const;
 
+    // X360 inlined -- muState == E_STATE_ATTACHED, i.e. attached but still waiting for its
+    // resources. UpdateStreaming @0x822FEFE0 tests it (`*(car + 1856) == 1`) and
+    // OnRaceCarResourcesLoaded @0x822FEBF8 asserts it by this name
+    // ("lpActiveRaceCar->IsWaitingForLoad()").
+    bool IsWaitingForLoad() const { return muState == E_STATE_ATTACHED; }
+
+    // [FLAG PC bring-up] NOT an X360 setter. The console reaches E_STATE_ACTIVE only
+    // through RaceCarEntityModule::ResetActiveRaceCar @0x822F4880, which needs the vehicle
+    // physics interface. See PromoteAttachedCarToActiveBringUp in
+    // BrnRaceCarEntityModule.cpp for why this exists and exactly what it fakes.
+    // DELETE with that function.
+    void SetActiveBringUp() { muState = E_STATE_ACTIVE; }
+
     // X360: returns mbToBePlacedOnTrack (byte this+0x7C4). DWARF BrnActiveRaceCar.h:853.
     bool ToBePlacedOnTrack() const;
 
@@ -106,6 +132,10 @@ public:
         return mbRenderThisFrame && !mbIsInCarSelectOnline;
     }
     void SetRenderThisFrame(bool lbRender) { mbRenderThisFrame = lbRender; }
+
+    // X360 inlined -- AttachActiveRaceCar @0x822F4DB0 copies the module's own
+    // mbIsInGameMode into the slot (`stb r11, 0x777(r31)`) between Prepare and Attach.
+    void SetInGameMode(bool lbInGameMode) { mbIsInGameMode = lbInGameMode; }
 
     // ========================================================================
     // Per-frame state accessors bodied in BrnActiveRaceCar.cpp. These thin wrappers
@@ -309,8 +339,44 @@ public:
         E_RACE_START_STATE_RACING        = 2,
     };
 
+    // DWARF BrnActiveRaceCar.h:1063 types meOnlineState with this enum
+    // (BrnActiveRaceCar.h:304 in the DWARF dump). Attach @0x822BEEE0 stores 1.
+    enum EOnlineState : s32
+    {
+        E_ONLINE_STATE_CONNECTING   = 0,
+        E_ONLINE_STATE_NORMAL       = 1,
+        E_ONLINE_STATE_LOST_CONTACT = 2,
+        E_ONLINE_STATE_DISCONNECTED = 3,
+        E_ONLINE_STATE_COUNT        = 4,
+    };
+
     // DWARF BrnActiveRaceCar.h:63.
     static const s32 KI_MAX_BRAKE_COUNTER = 10;
+
+    // ========================================================================
+    // Lifecycle (pose wave 2026-07-31). All three are console functions.
+    // ========================================================================
+
+    // X360 0x822EA9C0: `meActiveRaceCarIndex = leIndex` FIRST (asm stores 0x748 before the
+    // two range asserts fire), then the same scalar/flag reset Prepare does.
+    void Construct(EActiveRaceCarIndex leActiveRaceCarIndex);
+
+    // X360 0x822EAC28: back to the detached, un-posed state -- identity centre-of-mass
+    // transform, no RaceCar, muState = E_STATE_INACTIVE, RenderParams::Reset(). Returns
+    // true (`li r3, 1`); the module's Prepare stage 3 sweeps all eight slots with it.
+    bool Prepare();
+
+    // X360 0x822BEEE0: bind a global RaceCar to this slot. Seeds mPhysicsState.mTransform
+    // from the RaceCar's world transform, makes every body part visible and arms
+    // mbRenderThisFrame. lbCarSelectDontStreamAudio is the module's
+    // mbCarSelectDontStreamAudio, forwarded by AttachActiveRaceCar (asm r5).
+    void Attach(RaceCar* lpRaceCar, bool lbCarSelectDontStreamAudio);
+
+    // X360 0x822B8828: the render body transform,
+    // `Mult(mCentreOfMassTransform, mPhysicsState.mTransform)`. The console's only caller
+    // is UpdatePhysicsState @0x822D4418, which stores the result into
+    // mRenderParams.mBodyTransform.
+    void CalcBodyTransform(Matrix44Affine& lrBodyTransform) const;
 
     // The render snapshot the dispatch leg consumes. Public because
     // RaceCarEntityModule::GenerateDispatchLists takes its ADDRESS directly
@@ -324,79 +390,185 @@ public:
 
 private:
     // ========================================================================
-    // Layout. Only the members this header's bodied surface touches are homed by
-    // name; the rest of the DWARF's 78 are honest `u8 maPadXXXX[N]` spans sized so
-    // each named member lands at its X360-asm-proven CONSOLE offset (recorded in the
-    // comment). On x64 mpRaceCar is 8 bytes wide, so everything after it sits +4;
-    // that is fine -- parity here is by named member (see the banner).
+    // Layout (completed by the pose wave 2026-07-31).
     //
-    // The opaque spans hold, per the DWARF in order:
-    //   +0    mAddRemoveNetworkCarForCollisionQueue, mCentreOfMassTransform,
-    //         mDeformationModelResourcePtr, mGraphicsModelResourcePtr,
-    //         mHandlingBodyVolumeId, mBaseDeformationID
-    //   +1344 mCrashData, mPrevTransforms, mLastRecordedPosition, mDeformedBBox,
-    //         mvfLowestPointWorldSpace
-    //   +1780 mDeferredResetPosition/Direction, the reset/invulnerability/creation
-    //         timers, mbDriveAwayCheckRequired, mfTimeToStartLineBoostChange
-    //   +1860 muPrevAISection, muCurrAISection, meOnlineState, meActiveRaceCarIndex,
-    //         mCurrentInAirRotations, mfTimeSinceLastStable, mbCurrentlyRotating,
-    //         meEngineState, mfEngineStateTime and the touching/game-mode bool run
-    //   +1950 mPlaceOnTrackPosition/Direction/Speed, mbToBePlacedOnTrack,
-    //         meBaseDeformationType, mfBaseDeformAmount, mCurrentCullingGroup
-    //   after mRenderParams: miDefaultColourIndex, miDefaultColourPalette,
-    //         mfIndicatorTime, mbRightIndicatorActive, mbLeftIndicatorActive
+    // ORDER + NAMES + TYPES: the DecFIGS DWARF's 78-member list, in declaration order
+    // (its `// BrnActiveRaceCar.h:NNNN` comments run monotonically 1026..1128, so the
+    // dump IS declaration order). Every member below whose console offset is recorded
+    // was independently proven by an ARTIST store/load; the ones without a recorded
+    // offset simply fill the gaps that the proven ones bracket. The proof set:
+    //   Prepare @0x822EAC28  : 0x90 0x598/59C/5A0 0x6B0 0x6F0 0x728 0x72C 0x73C 0x73E
+    //                          0x740 0x750 0x760 0x764 0x768 0x76C 0x770 0x775 0x776
+    //                          0x777 0x77A 0x77C 0x781 0x782 0x783 0x784 0x788 0x789
+    //                          0x78B 0x78C 0x7A0 0x7B0 0x7C0 0x7C4 0x7E0 0x1C80 0x1C84
+    //   Attach  @0x822BEEE0  : 0xD0 0xE0 0x2D0 0x430 0x540 0x724 0x744 0x794 0x798..0x79D
+    //                          0x1580/0x1588 0x1BE4
+    //   Construct @0x822EA9C0: 0x748
+    //   UpdatePhysicsState @0x822D4418 / CalcBodyTransform @0x822B8828 : 0x90, 0x2D0
+    //   AttachActiveRaceCar @0x822F4DB0 : 0x777
+    //   AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38 : 0x7C8, 0x7CC
+    //   OnResourcesLoaded @0x822EB168 : 0x1C90, 0x1CB0
+    // 0x1CB0 + sizeof(ResourcePtr) == 0x1CD0 closes the class at the attested stride.
+    //
+    // ⚠️ ONE DWARF/X360 DIVERGENCE (version drift, NOT a transcription error). The PS3
+    // DWARF declares mDeformationModelResourcePtr / mGraphicsModelResourcePtr as members
+    // #3 and #4, right after mCentreOfMassTransform. On X360 they are the LAST two
+    // members: OnResourcesLoaded creates them at this+0x1C90 / this+0x1CB0, and the DWARF
+    // slot at +0x0D0 is occupied by the two VolumeInstanceIds instead (Attach's 8-byte
+    // write at this+0xD0 followed by VolumeInstanceId::SetEntityIDEntityIndex). The X360
+    // order is what this header follows, because it is what the asm proves.
+    //
+    // Members whose TYPE is not reconstructed in this tree stay as honest `u8 maPadXXXX`
+    // spans sized to the console gap, with the DWARF name/type in the comment. On x64
+    // mpRaceCar is 8 bytes wide so everything after it sits +4 -- parity here is by named
+    // member (see the banner), the console offsets are documentation.
     // ========================================================================
-    u8 maPad0000[224];                                   // +0x000 (0)    .. +0x0E0 (224)
+
+    // DWARF mAddRemoveNetworkCarForCollisionQueue --
+    // CgsModule::EventQueue<BrnPhysics::Vehicle::VehicleAddedForCollisionEvent, 8>.
+    u8 maPad0000[144];                                   // +0x000 (0)    .. +0x090 (144)
+
+    // X360 +0x90 (144). Prepare and Attach both store the IDENTITY here;
+    // OnResourcesLoaded overwrites it from the vehicle's physics def (`BrnPhysics::Def(
+    // mDeformationModelResourcePtr) + 1552`), i.e. it is the authored body-to-chassis
+    // offset. CalcBodyTransform multiplies it by mPhysicsState.mTransform.
+    Matrix44Affine mCentreOfMassTransform;               // +0x090 (144)  .. +0x0D0 (208)
+
+    // DWARF mHandlingBodyVolumeId / mBaseDeformationID -- CgsSceneManager::VolumeInstanceId
+    // (8 bytes each; Attach writes the pair at +0xD0 as one 64-bit store, sets the entity
+    // TYPE byte to 1 and then calls VolumeInstanceId::SetEntityIDEntityIndex).
+    u8 maPad00D0[16];                                    // +0x0D0 (208)  .. +0x0E0 (224)
 
     // X360 +224 (0xE0): RaceCarState::Clear(this + 224) in Attach @0x822BEEE0.
     BrnPhysics::Vehicle::RaceCarState mPhysicsState;     // +0x0E0 (224)  1120 bytes
 
-    u8 maPad0540[1776 - 224 - 1120];                     // +0x540 (1344) .. +0x6F0 (1776)
+    // X360 +0x540 (1344). Attach zeroes all 80 bytes with ten 64-bit stores.
+    RaceCarCrashData mCrashData;                         // +0x540 (1344) .. +0x590 (1424)
+
+    // X360 +0x590 (1424). Prepare and Attach both Clear() it -- the three dwords the asm
+    // zeroes at +0x598/+0x59C/+0x5A0 are RingBuffer::miReadPos / miWritePos / miLength,
+    // which is exactly Clear() on a base whose mpData/miMaxLength sit at +0x590/+0x594.
+    CgsContainers::FixedRingBuffer<Matrix44Affine, KI_PREV_TRANSFORM_BUFFER_SIZE>
+        mPrevTransforms;                                 // +0x590 (1424) .. +0x6B0 (1712)
+
+    // X360 +0x6B0 (1712). Prepare zeroes it.
+    Vector3 mLastRecordedPosition;                       // +0x6B0 (1712) .. +0x6C0 (1728)
+
+    // DWARF mDeformedBBox (CgsGeometric::AxisAlignedBox, 32) + mvfLowestPointWorldSpace
+    // (rw::math::vpu::VecFloat, 16).
+    u8 maPad06C0[48];                                    // +0x6C0 (1728) .. +0x6F0 (1776)
 
     // X360 +0x6F0 (1776). The paired global slot ("mpRaceCar == NULL" assert in Attach).
-    RaceCar* mpRaceCar;
+    RaceCar* mpRaceCar;                                  // +0x6F0 (1776)
 
-    u8 maPad06F4[1848 - 1780];                           // +0x6F4 (1780) .. +0x738 (1848)
+    // Console alignment gap before the next 16-byte-aligned Vector3 (console +0x6F4..0x700).
+    u8 maPad06F4[12];
+
+    Vector3 mDeferredResetPosition;                      // +0x700 (1792)
+    Vector3 mDeferredResetDirection;                     // +0x710 (1808)
+    f32     mfDeferredResetTimer;                        // +0x720 (1824)
+    f32     mfInvulnerablityTime;                        // +0x724 (1828)  Attach: -1.0f
+    f32     mfTimeSinceCreation;                         // +0x728 (1832)
+    f32     mfTimeDriveableInCrash;                      // +0x72C (1836)
+    bool    mbDriveAwayCheckRequired;                    // +0x730 (1840)
+    f32     mfTimeToStartLineBoostChange;                // +0x734 (1844)
 
     // X360 +0x738 (1848). AI braking hysteresis counter (DWARF miBrakeChangeCounter).
     s32 miBrakeChangeCounter;                            // +0x738 (1848)
 
-    u8 maPad073C[1856 - 1852];                           // +0x73C (1852) .. +0x740 (1856)
+    // Both seeded to 0x7FFF ("no section") by Construct, Prepare and Attach.
+    u16 muPrevAISection;                                 // +0x73C (1852)
+    u16 muCurrAISection;                                 // +0x73E (1854)
 
     // X360 +0x740 (1856). ActiveRaceCar::IsActive/Attach.
     u8 muState;                                          // +0x740 (1856)
 
-    u8 maPad0741[1864 - 1857];                           // +0x741 (1857) .. +0x748 (1864)
+    EOnlineState        meOnlineState;                   // +0x744 (1860)  Attach: NORMAL
 
-    // X360 +0x748 (1864). DWARF meActiveRaceCarIndex.
+    // X360 +0x748 (1864). DWARF meActiveRaceCarIndex. Construct stores it first thing.
     EActiveRaceCarIndex meActiveRaceCarIndex;            // +0x748 (1864)
 
-    u8 maPad074C[1916 - 1868];                           // +0x74C (1868) .. +0x77C (1916)
+    Vector3 mCurrentInAirRotations;                      // +0x750 (1872)
+    f32     mfTimeSinceLastStable;                       // +0x760 (1888)
+    bool    mbCurrentlyRotating;                         // +0x764 (1892)
+
+    // The DWARF types this BrnWorld::RaceCarEntityModuleIO::EActiveRaceCarEngineState.
+    RaceCarEntityModuleIO::EActiveRaceCarEngineState meEngineState;   // +0x768 (1896)
+    f32     mfEngineStateTime;                           // +0x76C (1900)
+
+    bool mbEnableEngineSwitchOff;                        // +0x770 (1904)  Prepare: true
+    bool mbInsideAISectionSystem;                        // +0x771 (1905)
+    bool mbIsTouchingAnotherRaceCar;                     // +0x772 (1906)
+    bool mbIsTouchingPlayer;                             // +0x773 (1907)
+    bool mbIsTouchingWorld;                              // +0x774 (1908)
+    bool mbComingInRange;                                // +0x775 (1909)
+    bool mbIsJoiningGameMode;                            // +0x776 (1910)
+    bool mbIsInGameMode;                                 // +0x777 (1911)  AttachActiveRaceCar
+    bool mbIsWaitingForDeferredReset;                    // +0x778 (1912)
+    bool mbCanDriveAwayFromCrash;                        // +0x779 (1913)
+    bool mbUncrashedThisFrame;                           // +0x77A (1914)
 
     // X360 +0x77C (1916). DWARF meRaceStartState.
     ERaceStartState meRaceStartState;                    // +0x77C (1916)
 
-    u8 maPad0780[1946 - 1920];                           // +0x780 (1920) .. +0x79A (1946)
+    bool mbIsDoingStartLineBoost;                        // +0x780 (1920)
+    bool mbAIToBeActivated;                              // +0x781 (1921)
+    bool mbIsWrecked;                                    // +0x782 (1922)
+    bool mbCrashedIntoWater;                             // +0x783 (1923)
+    f32  mfTimeInWater;                                  // +0x784 (1924)
+    bool mbIsInShowtime;                                 // +0x788 (1928)
+    bool mbTakenDown;                                    // +0x789 (1929)
+    bool mbAddedToScene;                                 // +0x78A (1930)
+    bool mbAddedForCollision;                            // +0x78B (1931)
+    bool mbWonLastEvent;                                 // +0x78C (1932)
+    bool mbChangeCollisionState;                         // +0x78D (1933)
+    bool mbCollisionStateToChangeTo;                     // +0x78E (1934)
+    bool mbChangeCullingGroup;                           // +0x78F (1935)
+
+    // DWARF CgsSceneManager::InEventAddForCollision::CullingGroup (a 4-byte enum; the
+    // type's own home is not reconstructed, so the storage is spelled s32 here).
+    s32  mCullingGrouptoChangeTo;                        // +0x790 (1936)
+    s32  miFlashFrequency;                               // +0x794 (1940)
+
+    bool mbNotSendingNetworkUpdates;                     // +0x798 (1944)
+    bool mbIsDisconnectedFromNetwork;                    // +0x799 (1945)
 
     // X360 +0x79A (1946) / +0x79D (1949). GenerateDispatchLists renders a slot only when
     // (mbRenderThisFrame && !mbIsInCarSelectOnline).
     bool mbIsInCarSelectOnline;                          // +0x79A (1946)
-    u8   maPad079B[2];                                   // +0x79B (1947) .. +0x79D (1949)
-    bool mbRenderThisFrame;                              // +0x79D (1949)
+    bool mbCarSelectOnlineStateChanged;                  // +0x79B (1947)
+    bool mbReceivedNetworkDriverControls;                // +0x79C (1948)
+    bool mbRenderThisFrame;                              // +0x79D (1949)  Attach: true
 
-    u8 maPad079E[1988 - 1950];                           // +0x79E (1950) .. +0x7C4 (1988)
+    Vector3 mPlaceOnTrackPosition;                       // +0x7A0 (1952)  Prepare: (-1,-1,-1)
+    Vector3 mPlaceOnTrackDirection;                      // +0x7B0 (1968)  Prepare: (-1,-1,-1)
+    f32     mfPlaceOnTrackSpeed;                         // +0x7C0 (1984)
 
     // X360 +0x7C4 (1988). DWARF mbToBePlacedOnTrack.
     bool mbToBePlacedOnTrack;                            // +0x7C4 (1988)
 
-    u8 maPad07C5[2016 - 1989];                           // +0x7C5 (1989) .. +0x7E0 (2016)
+    // DWARF BrnPhysics::Deformation::DeformationResetType (4-byte enum, own home not
+    // reconstructed) -- AddRaceCarToStartingGridOrFreeburnLobby writes the pair at
+    // +0x7C8/+0x7CC.
+    s32 meBaseDeformationType;                           // +0x7C8 (1992)
+    f32 mfBaseDeformAmount;                              // +0x7CC (1996)
+    s32 mCurrentCullingGroup;                            // +0x7D0 (2000)
 
     // X360 +0x7E0 (2016).
     RenderParams mRenderParams;                          // +0x7E0 (2016) 5280 bytes
 
-    // X360 +0x1CA0 (7296) .. +0x1CD0 (7376): miDefaultColourIndex, miDefaultColourPalette,
-    // mfIndicatorTime, mbRightIndicatorActive, mbLeftIndicatorActive and the tail padding
-    // to the attested 0x1CD0 instance stride.
-    u8 maPad1CA0[7376 - 7296];
+    s32  miDefaultColourIndex;                           // +0x1C80 (7296) Prepare: -1
+    s32  miDefaultColourPalette;                         // +0x1C84 (7300) Prepare: -1
+    f32  mfIndicatorTime;                                // +0x1C88 (7304)
+    bool mbRightIndicatorActive;                         // +0x1C8C (7308)
+    bool mbLeftIndicatorActive;                          // +0x1C8D (7309)
+
+    // DWARF mDeformationModelResourcePtr (ResourcePtr<BrnPhysics::Deformation::
+    // StreamedDeformationSpec>) and mGraphicsModelResourcePtr (ResourcePtr<
+    // BrnVehicle::GraphicsSpec>) -- 32 bytes each, created by OnResourcesLoaded at
+    // this+0x1C90 / this+0x1CB0, closing the class at the attested 0x1CD0 stride.
+    // Kept opaque: nothing this TU bodies touches them, and homing them would drag the
+    // two spec types into every consumer of this header.
+    u8 maPad1C90[64];                                    // +0x1C90 (7312) .. +0x1CD0 (7376)
 };
 }
