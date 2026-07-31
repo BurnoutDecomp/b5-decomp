@@ -33,6 +33,7 @@
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                  // BrnTraffic::TrafficDataResourceType (0x10002)
 #include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
+#include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"            // BrnVehicle::GraphicsSpecResourceType (0x10006)
 
 // ============================================================================================
 // Resource-type registration -- the faithful counterpart of the X360
@@ -161,6 +162,15 @@ namespace CgsResource
         TypeRegistry::Register(&sVehicleList);
         static BrnResource::WheelListResourceType     sWheelList;    // 0x10009 (65545)
         TypeRegistry::Register(&sWheelList);
+        // The per-car graphics bundle's own spec resource. MEASURED over
+        // build/game/VEHICLES/VEH_PUSMC01_GR.BIN (275 resources): its type set is
+        // {0, 1, 10, 12, 13, 14, 15, 42, 65542}, and every one of those already had a
+        // registered handler EXCEPT 65542 -- so this single registration is what a
+        // Vehicles\VEH_*_GR.bin load was missing. (Type 10 == VertexDescriptor is also
+        // unregistered, but the shipped TRK_UNIT world bundles carry 7-10 of them each and
+        // load fine on the documented null-type path, so it is not a vehicle-specific gap.)
+        static BrnVehicle::GraphicsSpecResourceType   sVehicleGraphicsSpec;  // 0x10006 (65542)
+        TypeRegistry::Register(&sVehicleGraphicsSpec);
         // NOT registered: PlayerCarColours (0x1001E / 65566), the SECOND resource inside
         // VEHICLELIST.BUNDLE. Its handler exists (SharedClasses/Graphics/
         // PlayerCarColoursResourceType.cpp) but that TU is written against 32-bit pointers
