@@ -42,7 +42,12 @@ namespace Gen
         // through to FindCollection as the collection key, exactly like shotgroup. This
         // declaration used to take only the owner, which meant the caller's key was
         // dropped and the owner pointer was handed to FindCollection in its place.
-        explicit cameradefaults(Attrib::Key luCollectionKey = 0, void* lpOwner = nullptr);
+        // ⚠️ WIDENED to u64 2026-07-31. Attrib::StringToKey returns the FULL 64-bit
+        // hash (@0x82805828 tail-calls the lookup8 hash and returns r3 whole), and
+        // Attrib::FindCollection hashes the collection key as a whole doubleword. The
+        // 32-bit Attrib::Key spelling here truncated it, so every name-keyed collection
+        // resolve missed -- the identical defect the CLASS key had until c27208fc.
+        explicit cameradefaults(u64 luCollectionKey = 0, void* lpOwner = nullptr);
     };
 
     // X360 ctor @0x82208770: Collection = FindCollection(0x095B375E_5F206F31, r4); chain
@@ -50,7 +55,7 @@ namespace Gen
     // if it has none (lwz r11,4(r31) / cmplwi / bne-skip / DefaultDataArea(0x38) /
     // stw r11,4(r31)). No class-check assert appears in this ctor's asm (unlike the
     // shotgroup/iceanim/surfacelist/debrisparams siblings).
-    inline cameradefaults::cameradefaults(Attrib::Key luCollectionKey, void* lpOwner)
+    inline cameradefaults::cameradefaults(u64 luCollectionKey, void* lpOwner)
         : Instance(FindCollection(KU_CAMERADEFAULTS_CLASS_KEY, luCollectionKey), lpOwner)
     {
         if (!mpAttributeData)

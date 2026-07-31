@@ -30,10 +30,14 @@ namespace Attrib
 
     int  RefSpec_Clean(int liRefSpec);
     int  RefSpec_Clean(int) { __debugbreak(); return 0; }
-    u32  StringToKey(const char* pcName);
     // StringToKey: the real definition lives in the SDK attribhash64.cpp
     // (Bob Jenkins lookup8, seed 0xABCDEF0011223344) -- the placeholder that
     // lived here was removed at the AttribSys mount (LNK2005 otherwise).
+    // ⭐ 2026-07-31: this was a LOCAL `u32 StringToKey(const char*)` re-declaration. MSVC
+    // does not mangle free-function return types, so it linked against the real 64-bit
+    // body and then read only EAX -- a silent truncation at every call site in this TU.
+    // Use the canonical declaration instead of re-spelling it.
+    u64  StringToKey(const char* pcName);
 
     class Attrib_RefSpec_TypeHandler
     {
@@ -71,7 +75,14 @@ namespace Attrib
 
         u32 NameToType(const char* pcName)
         {
-            return StringToKey(pcName);
+            // FLAG (2026-07-31): the narrowing is now EXPLICIT rather than hidden in a
+            // forked u32 declaration of StringToKey, so today's behaviour is unchanged.
+            // It is probably still wrong -- attribdatabase.cpp:29 records that the real
+            // TypeDesc::NameToType (codegen @0x821F0150) keys on the full 64-bit hash, and
+            // the type-id globals in that TU already use StringToKey64. Left as-is
+            // deliberately: this TU's gaTypeKeys[].muKey is u32, so widening it is its own
+            // slice, not a side effect of the StringToKey correction.
+            return static_cast<u32>(StringToKey(pcName));
         }
     }
 }

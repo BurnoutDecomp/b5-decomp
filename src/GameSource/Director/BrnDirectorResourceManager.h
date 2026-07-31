@@ -192,15 +192,63 @@ namespace BrnDirector
 //    calls, 64 x sub_827DC838 and ONE sub_827DC8C8 at 0x5D8 (== byte 1496 == mCameraDefaults).
 //    sub_827DC838 is the shotgroup element ctor (Attrib::Instance::Instance then an
 //    AssertOnClassCheck against 0x38ED2D37_3887CBC7 == KI_SHOTGROUP_CLASS), called with
-//    (nullptr, nullptr). sub_827DC8C8 has no IDA export and its body could not be read; it is
-//    INFERRED to be the cameradefaults sibling. The ctor then clears bytes 1608..1627 as
+//    (nullptr, nullptr). sub_827DC8C8 was INFERRED to be the cameradefaults sibling and is
+//    now VERIFIED to be exactly that (2026-07-31, read from the IDA database: the same
+//    shape, AssertOnClassCheck against 0x095B375E_5F206F31, plus a DefaultDataArea(0x38)
+//    the shotgroup ctor does not have). The ctor then clears bytes 1608..1627 as
 //    std/std/stw (8+8+4 == the whole 20-byte Attrib::RefSpec mAfterTouchCam) -- the committed
 //    BrnDirectorResourceManager.cpp writes only 3 x 4 bytes there and leaves 1612..1615 and
 //    1620..1623 uninitialised.
 //
+// ============================================================================
+// ⭐ STATUS UPDATE 2026-07-31 (attrib-chain wave, b5-decomp bbf43771 + follow-up).
+// Blockers 1, 2 and 3 below are now CLEARED. Blocker 4 (the 65 members) stands, the fork
+// retirement stands, and ONE NEW BLOCKER was found that is not in the list below.
+//
+//  * BLOCKER 2 IS WRONG AS WRITTEN. `Attrib::Instance::operator=` @0x8280DE08 does NOT
+//    "exist nowhere" -- it is missing from .ida-exports/BURNOUT_X360_ARTIST.XEX/ but is
+//    present and named in the IDA database, in the gap between Database::GetExportPolicies
+//    (ends 0x8280DE04) and the next export at 0x8280DE58. Twenty instructions:
+//        Change(rhs.mpCollection); mpOwner = rhs.mpOwner; muFlags = rhs.muFlags; return this
+//    Landed. ⚠️ The flag word is copied AFTER Change, overwriting the bit0 Change just
+//    recomputed -- reproduce that. GENERAL LESSON: the JSON export set has holes, and two
+//    of them were load-bearing this wave (Node::GetPointer @0x828045B0 was the other).
+//    Before declaring a symbol unrecoverable, check the IDA database.
+//
+//  * ⭐ NEW BLOCKER, NOW FIXED: `Attrib::StringToKey` WAS TRUNCATING TO 32 BITS. Every one
+//    of the 65 slots is built as `shotgroup(Attrib::StringToKey("606002"), 0)` and that
+//    result passes through the generated ctor's r4 straight into FindCollection's
+//    COLLECTION KEY, which the class table hashes as a whole doubleword. AttributeKey.h
+//    declared StringToKey returning the 32-bit ::Attribute::Key and attribhash64.cpp
+//    implemented it with an explicit `static_cast`; the X360 body @0x82805828 has NO
+//    truncation (it tail-calls the 64-bit lookup8 hash and returns r3 whole, and the PS3
+//    DWARF spells it `return Attrib::StringHash64(str)`). shotgroup.h and codegen.cpp each
+//    ALSO carried a local `u32 StringToKey(const char*)` re-declaration, which links fine
+//    on MSVC (return types are not mangled) and then reads only EAX. All corrected; both
+//    generated ctors now take a u64 key. Without this every one of the 65 lookups missed.
+//
+//  * VERIFIED, replacing an INFERENCE below: `sub_827DC8C8` IS the cameradefaults element
+//    ctor. Its body (read from the IDA database) is Instance::Instance + an
+//    AssertOnClassCheck against 0x095B375E_5F206F31 == KI_CAMERADEFAULTS_CLASS, then
+//    DefaultDataArea(0x38) if the instance has no data area. Its sibling sub_827DC838 is
+//    the shotgroup element ctor (same shape, class key 0x38ED2D37_3887CBC7, and NO default
+//    data area). Both take (this, collection, owner) -- these are the (Collection*, owner)
+//    ctors, not the (key, owner) ones the Prepare stage-4 loop uses.
+//
+//  * STAGE 4 CONFIRMED INSTRUCTION-BY-INSTRUCTION at 0x8225CD08..0x8225CD70. The pattern is
+//        bl StringToKey("430819") ; mr r4,r3 ; addi r3,sp,temp ; li r5,0
+//        bl cameradefaults::cameradefaults
+//        mr r4,r3 ; addi r3,r31,0x5D8 ; bl Instance::operator=
+//        addi r3,sp,temp ; bl Instance::~Instance
+//    then "474399" -> +0x248, then "424409" -> ... . That is mCameraDefaults at 1496,
+//    mRoadRageStartGroup at 584, mRaceStartGroup at 568 -- the table below and its
+//    "construction order is NOT declaration order" note are both exactly right.
+//    Independently, Instance::operator='s xref list is 65 call sites inside Prepare.
+// ============================================================================
+//
 // WHAT BLOCKS A REAL Prepare TODAY (the RECOVERY is complete as of 2026-07-31; these four are
 // what stop it being written):
-//    1. `Attrib::Gen::shotgroup::shotgroup` (shotgroup.h:105) THROWS THE KEY AWAY. The real
+//    1. (CLEARED) `Attrib::Gen::shotgroup::shotgroup` (shotgroup.h:105) THROWS THE KEY AWAY. The real
 //       Attrib::FindCollection @0x82808378 is FindCollection(u64 luClassKey /*r3*/,
 //       u32 luCollectionKey /*r4*/) -- asm-verified -- and the shotgroup ctor sets only r3,
 //       letting the caller's StringToKey result pass through in r4. This repo declares
@@ -208,7 +256,8 @@ namespace BrnDirector
 //       COMMENTED OUT, so all 65 constructions would resolve the same wrong collection. Same
 //       defect in cameradefaults.h, which additionally declares a ONE-argument ctor where the
 //       X360 symbol takes (this, key, owner).
-//    2. `Attrib::Instance::operator=` @0x8280DE08 EXISTS NOWHERE -- not in b5-decomp/src and
+//    2. (CLEARED -- and the claim was false; see the STATUS UPDATE above)
+//       `Attrib::Instance::operator=` @0x8280DE08 EXISTS NOWHERE -- not in b5-decomp/src and
 //       not in the IDA export. All 65 slot writes go through it.
 //    3. (CLEARED 2026-07-31) build/game/CAMERAS.BUNDLE is now PORTED to platform 4 by
 //       tools/assets/bundles/attribsys_transcode.py + the new ice_transcode.py (X360 original
