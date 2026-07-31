@@ -204,6 +204,14 @@ namespace BrnResource
         void ProcessLoadPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                    const GameDataIO::GameDataAssetEvent* lpEvent,
                                    s32 liEventId, s32 liSlotIndex);                    // 0x8266F9C0
+        // The vehicle pair (dispatch ids 27 / 50). GET's SOUND leg re-enters itself through
+        // ProcessInternalLoadBundleResponse's case 27 -- see the .cpp.
+        void ProcessLoadVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                       const GameDataIO::GameDataAssetEvent* lpEvent,
+                                       s32 liEventId, s32 liSlotIndex);                // 0x8266EB98
+        void ProcessGetVehicleRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                      const GameDataIO::GameDataAssetEvent* lpEvent,
+                                      s32 liEventId, s32 liSlotIndex);                 // 0x8266FDA0
         void ProcessLoadSurfaceListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                            const GameDataIO::GameDataAssetEvent* lpEvent,
                                            s32 liEventId, s32 liSlotIndex);            // 0x8266F718

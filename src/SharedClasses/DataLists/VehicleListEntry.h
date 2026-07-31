@@ -107,10 +107,19 @@ struct VehicleListEntry
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[160];                                                       // +0x00
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;        // +0xA0
-    u8 maPad168[8];                                                       // +0xA8
+    // +0xA8 / +0xC0: the first and fourth members of the 0x40-byte mAudioData block
+    // (BrnResource::VehicleListEntryAudioData). Both are CgsIDs that decode to an engine
+    // asset name -- e.g. the Hunter Cavalry's "DRAG2_EX" and "DRAG2_ENG". Named from two
+    // independent sources that agree: GameDataModule::ProcessLoadVehicleRequest @0x8266EB98
+    // does `ld r3, 0xA8(entry)` and ProcessGetVehicleRequest @0x8266FDA0 does
+    // `ld r3, 0xC0(entry)` (both feeding "Engines\%08x.bundle"), and the burnout.wiki
+    // Vehicle List page anchors mAudioData at +0xA8 with mExhaustName@+0x00 /
+    // mEngineName@+0x18. NAME-ONLY adoption: the surrounding widths stay as recovered.
+    CgsID mExhaustName;                                                   // +0xA8
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mExhaustEntityKey;           // +0xB0
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mEngineEntityKey;            // +0xB8
-    u8 maPad192[16];                                                      // +0xC0
+    CgsID mEngineName;                                                    // +0xC0
+    u8 maPad200[8];                                                       // +0xC8
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mWonCarVoiceOverKey;         // +0xD0
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mRivalReleasedVoiceOverKey;  // +0xD8
     u8 maPad224[16];                                                      // +0xE0..0xEF

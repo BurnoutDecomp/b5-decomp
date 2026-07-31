@@ -302,4 +302,18 @@ s32 VehicleList::GetVehicleIndex( CgsID lCarId ) const
     return -1;
 }
 
+// X360 0x82233A28 (exported unnamed; the DWARF's GetVehicleData(CgsID) overload at
+// VehicleList.h:109). Literally `i = GetVehicleIndex(id); return i < 0 ? NULL :
+// GetVehicleData(i);`. Both GameDataModule vehicle handlers resolve their request id
+// through this; ProcessLoadVehicleRequest's asm shows the same pair not inlined.
+const VehicleListEntry* VehicleList::GetVehicleData( CgsID lID ) const
+{
+    const s32 liIndex = GetVehicleIndex( lID );
+    if ( liIndex < 0 )
+    {
+        return 0;
+    }
+    return GetVehicleData( liIndex );
+}
+
 } // namespace BrnResource
