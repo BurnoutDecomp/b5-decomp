@@ -25,8 +25,8 @@ void renderengine_vb_embed_check()
     u32 luOut[2] = {0u, 0u};
     (void)VertexBuffer::GetParameters(&lHeader, luOut);
 
-    u64 lDesc[5] = {0, 0, 0, 0, 0};
-    (void)VertexBuffer::GetResourceDescriptor(lDesc, 0);
+    ::rw::BaseResourceDescriptors<5> lDesc;
+    (void)VertexBuffer::GetResourceDescriptor(&lDesc, &lParams);
     (void)VertexBuffer::Xbox2CheckPhysicalMemoryFlags(reinterpret_cast<u32*>(&lHeader));
 
     (void)VertexFormatGetStride(1712986);

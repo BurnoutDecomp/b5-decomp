@@ -16,6 +16,7 @@
 #include "pc/gcm/renderengine/VertexDescriptor.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
+#include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
 
 namespace CgsGraphics
 {
@@ -24,8 +25,19 @@ namespace
     class ResourceAllocator
     {
     public:
-        virtual void* Create(void* lpResourceHandlesOut, ResourceAllocator* lpAllocator,
-                             const void* lpDescriptor, int liFlags) = 0;
+        // NOT a vtable slot. Declaring this `virtual` put it at slot 0, which on the
+        // rw::IResourceAllocator actually behind the reinterpret_cast is the VIRTUAL
+        // DESTRUCTOR -- so the call allocated nothing and left the allocator's vptr
+        // downgraded to the inert base for the rest of the run. Call the interface by
+        // NAME instead; see CgsResourceAllocatorCreate.h.
+        void* Create(
+            void* lpResourceHandlesOut,
+            ResourceAllocator* /*lpAllocator*/,
+            const void* lpDescriptor,
+            int /*liFlags*/)
+        {
+            return CgsGraphics::ResourceAllocatorCreate(this, lpResourceHandlesOut, lpDescriptor);
+        }
     };
 
     // Raw asm immediates written at each descriptor element's +4 dword.
@@ -83,7 +95,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     rw::BaseResourceDescriptors<5> lVertexDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lVertexDescriptor, &lVertexParams);
-    renderengine::ProgramResourceLayout lVertexLayout;
+    renderengine::ProgramResourceLayout lVertexLayout = {};
     lpAllocatorIf->Create(&lVertexLayout, lpAllocatorIf, &lVertexDescriptor, 0);
     mapVertexProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
@@ -100,7 +112,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
 
     rw::BaseResourceDescriptors<5> lPixelDescriptor;
     renderengine::ProgramBuffer::GetResourceDescriptor(&lPixelDescriptor, &lPixelParams);
-    renderengine::ProgramResourceLayout lPixelLayout;
+    renderengine::ProgramResourceLayout lPixelLayout = {};
     lpAllocatorIf->Create(&lPixelLayout, lpAllocatorIf, &lPixelDescriptor, 0);
     mapPixelProgramBuffer[li8ProgramIndex] =
         reinterpret_cast<renderengine::ProgramBuffer*>(
@@ -142,7 +154,7 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     u8 lauDescriptor[144] = {};
     renderengine::VertexDescriptor::GetResourceDescriptor(lauDescriptor, &lParameters);
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
-    rw::Resource lDescriptorResource;
+    rw::Resource lDescriptorResource = {};
     lpAllocatorIf->Create(&lDescriptorResource, lpAllocatorIf, lauDescriptor, 0);
     mpVertexDescriptor =
         reinterpret_cast<renderengine::VertexDescriptor*>(

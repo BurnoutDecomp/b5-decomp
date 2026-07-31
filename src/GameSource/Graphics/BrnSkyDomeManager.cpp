@@ -134,9 +134,7 @@ void BrnSkyDomeManager::CreateGeometry(
     lVbParams.muLength = static_cast<u32>(20 * liVertexCount);
 
     CgsResource::ResourceDescriptor lVbResDesc;
-    renderengine::VertexBuffer::GetResourceDescriptor(
-        reinterpret_cast<u64*>(&lVbResDesc),
-        static_cast<int>(reinterpret_cast<usize>(&lVbParams)));
+    renderengine::VertexBuffer::GetResourceDescriptor(&lVbResDesc, &lVbParams);
 
     rw::Resource lVbResource = lpAlloc->DoAllocate(
         reinterpret_cast<const rw::ResourceDescriptor&>(lVbResDesc), 0);

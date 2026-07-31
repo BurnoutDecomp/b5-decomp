@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> (GetResourceDescriptor's out-param)
 
 // renderengine::VertexBuffer -- the platform vertex-buffer object. On X360 it wraps the
 // Direct3D "vertex buffer header" (a GPUVERTEXBUFFER, derived from the D3DResource header):
@@ -79,8 +80,19 @@ namespace renderengine
         static VertexBufferHeader* GetParameters(VertexBufferHeader* lpBuffer, u32* lpParamsOut);
 
         // GetResourceDescriptor builds the rw resource descriptor (five {size, align} entries) for
-        // a vertex buffer: slot0 = the 0x28-byte header, slot2 = the buffer bytes (length from a2).
-        static u64* GetResourceDescriptor(u64* lpDescriptorOut, int a2);
+        // a vertex buffer: slot0 = the 0x28-byte header, slot2 = the buffer bytes (length from the
+        // parameters block).
+        //
+        // X64 SIGNATURE NOTE. The X360 prototype is (u64* result, int a2) -- a2 being a *pointer* to
+        // the Parameters block, which fits an `int` only because the console is 32-bit. Every caller
+        // was therefore forced through `static_cast<int>(reinterpret_cast<usize>(&params))`, which
+        // TRUNCATES a 64-bit stack address here. Both parameters are typed for real instead: the
+        // out-param as the serialised 5-entry descriptor the console writes (u64[5] and
+        // BaseResourceDescriptor[5] are the same 40 bytes; naming it lets the body assign
+        // m_size/m_alignment by name instead of replaying a big-endian merged 64-bit store), and a2
+        // as the Parameters pointer it always was.
+        static ::rw::BaseResourceDescriptors<5>* GetResourceDescriptor(
+            ::rw::BaseResourceDescriptors<5>* lpDescriptorOut, const Parameters* lpParams);
 
         // Set the system/graphics memory-protection flag (bit 0x200000) from the GPU page's
         // protection class; returns the queried protection.
