@@ -2,13 +2,44 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BRN_COLLISION_POLICY_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                          // Matrix44Affine / Vector3 (SetTarget / SetVelocity)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the policy sanity tripwires)
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                // CgsSceneManager::EntityId (SetTarget)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"                   // Camera::AABBox (SetTarget)
+#include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h"  // Utils::VehicleCollisionPredictor (embedded)
 
 // ============================================================================
 // GameSource/Director/Camera/BrnCollisionPolicy.h
 //
-// The director camera collision-policy types (BrnCollisionPolicy.h on the X360). HOME for the
-// class slices owned by this TU set:
+// CANONICAL HOME for the director camera COLLISION-POLICY family (BrnCollisionPolicy.h on the
+// X360 -- every one of the tripwires below quotes that filename, which is where these NAMES
+// come from):
+//   BrnDirector::Camera::CollisionPolicy                    (the abstract base)
+//   BrnDirector::Camera::VisibilityCollisionPolicy          (the "free" policy)
+//   BrnDirector::Camera::CollisionPolicyAttachedToVehicle   (the car-attached policy)
+//   BrnDirector::Camera::GeometryCollisionPredictor
+//   BrnDirector::Camera::VisibilityTest
+//
+// DE-FORK (2026-07-30). Until this wave the family had THREE partial definitions:
+//   * this file          -- GeometryCollisionPredictor / VisibilityTest /
+//                           CollisionPolicyAttachedToVehicle (no base, SetDesiredHeight only);
+//   * Behaviours/BehaviourRig.h        -- CollisionPolicy + VisibilityCollisionPolicy;
+//   * Behaviours/BrnBehaviourIceAnim.h -- its own CollisionPolicy + VisibilityCollisionPolicy
+//                           + CollisionPolicyAttachedToVehicle.
+// Any TU that pulled the named-parameter bank (-> BehaviourPassengerCam.h -> BehaviourRig.h)
+// AND the ICE-anim behaviour hit C2011 on all three -- which is what kept the ICE-anim
+// arbitrator states (CarSelect / OnlineCarSelect / RaceIntro / RankUp / PostEvent /
+// DriveThru / OnlineRaceIntro) out of the build. One home settles it: the two policy classes
+// MOVED here (BehaviourRig.h includes this file already), and the ICE-anim forks are retired.
+// The merge is ADDITIVE -- every member/method either slice named is carried forward:
+//   * VisibilityCollisionPolicy gains the three see-through state bytes the ICE-anim
+//     behaviour's Update gate reads (policy +0x1A0..+0x1A2), carved out of the existing
+//     [+0xE8, +0x210) reserved span at their asm-attested offsets;
+//   * CollisionPolicyAttachedToVehicle gains the `CollisionPolicy` base (proved by
+//     BehaviourIceAnim::GetCollisionPolicy @0x82246460 returning `&mAttachedToCarCollisionPolicy`
+//     as a `CollisionPolicy*`) and its `Construct(s32)`.
+//
+// HOME for the class slices owned by this TU set:
 //   - BrnDirector::Camera::GeometryCollisionPredictor::GetTimeUntilCollision @0x821F36C0
 //       (CollisionPolicy.h:206 assert -> mbWillCollide)
 //   - BrnDirector::Camera::CollisionPolicyAttachedToVehicle::SetDesiredHeight @0x821F3950
@@ -21,12 +52,22 @@
 // Each function bodies in its own .cpp next to this header. Only the members each function
 // touches are modelled, BY NAME, at their asm-attested offsets; the full policy rigs land with
 // their own TUs. Reserved spans place the written/read members exactly.
+//
+// x64 NOTE: parity here is BY NAMED MEMBER (the project rule). The console displacements
+// quoted throughout are provenance only -- the PC vptr/embedded-type widths differ, so the
+// absolute offsets shift and nothing indexes these by offset.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
 {
 namespace Camera
 {
+
+// The two by-reference/by-pointer arguments the policy interface takes. Pointer/reference-only
+// here, so forward declarations are correct (Camera.h and Behaviours/Behaviour.h are the homes;
+// including either would create a cycle -- Behaviour.h's behaviours embed policies).
+struct Camera;
+struct BehaviourSharedInfo;
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::GeometryCollisionPredictor
@@ -57,18 +98,51 @@ private:
     u8  mbWillCollide;        // +0x64           a collision was predicted (asserted set)
 };
 
+// ============================================================================
+// BrnDirector::Camera::CollisionPolicy -- the abstract collision-policy interface every
+// camera behaviour's GetCollisionPolicy() hands back.
+//
+// MOVED HERE (2026-07-30) from Behaviours/BehaviourRig.h, verbatim. That copy is retired in
+// favour of this home; BehaviourRig.h includes this file already. FLAG: minimal slice -- the
+// full method set lands with the CollisionPolicy TU.
+// ============================================================================
+class CollisionPolicy
+{
+public:
+    virtual ~CollisionPolicy() {}
+    virtual void GenerateSceneQueries(const void*, Camera&) {}
+    virtual void ProcessSceneQueryResults(const void*, Camera&) {}
+
+    // @0x82206450 (class TU; body in BrnCameraCollisionPolicy.cpp) -- give up:
+    // record the failure reason in the shared info's validity account (+0x138),
+    // drop the info's follow-request bit (the +0x140 u64, bit 1), raise mbFailed.
+    void Fail(BehaviourSharedInfo* lpInfo, s32 liReason);
+
+private:
+    // ADDITIVE GROW (Fail @0x82206450 `stb 1,4(this)`): the policy's failed latch.
+    bool mbFailed;   // +0x04 (X360; right after the vptr)
+};
+
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::CollisionPolicyAttachedToVehicle
 //
 // A camera collision policy that keeps the camera attached at a desired height above the tracked
-// vehicle. The gyro-cam Update seeds the policy's desired height each frame.
+// vehicle. The gyro-cam Update seeds the policy's desired height each frame; the ICE-anim
+// behaviour embeds one and Constructs it, and hands it back through GetCollisionPolicy when the
+// take's eye space is car-relative.
 // ----------------------------------------------------------------------------
-class CollisionPolicyAttachedToVehicle
+class CollisionPolicyAttachedToVehicle : public CollisionPolicy
 {
 public:
     // Set the desired camera height above the vehicle. @0x821F3950: marks the desired-height
     // override active (mbHaveDesiredHeight = 1), asserts the height is positive, then stores it.
     void SetDesiredHeight(f32 lfDesiredHeight);
+
+    // ADDITIVE GROW (de-fork 2026-07-30, from the retired BrnBehaviourIceAnim.h slice):
+    // build the policy in place. BehaviourIceAnim::Construct @0x82246048 calls it on the policy
+    // it embeds at +0x260 with a trailing 0 selector. DECLARATION-ONLY (the body lands with the
+    // policy's own TU; the per-TU `cl /c` gate does not link).
+    void Construct(s32 liSelector);
 
 private:
     // FLAG: only the two members SetDesiredHeight writes are modelled at their asm-attested
@@ -89,7 +163,10 @@ private:
     // SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish note quotes as an
     // unidentified behaviour-relative flag. It is a COLLISION-POLICY field, not a
     // behaviour field. The IceAnim fork's independent slice agrees on 0x250.
-    u8  maReserved000[0x210];                 // +0x000 .. +0x20F  rig members not modelled here
+    // (the leading span now starts AFTER the CollisionPolicy base sub-object -- the console
+    //  vptr that used to sit inside maReserved000 is the base's; same convention BehaviourRig.h's
+    //  VisibilityCollisionPolicy uses. Console displacements in the comments are unchanged.)
+    u8  maReserved000[0x210 - sizeof(CollisionPolicy)];  // .. +0x20F  rig members not modelled here
     f32 mfDesiredHeight;                      // +0x210            desired camera height (stored)
     u8  maReserved214[0x24B - 0x214];         // +0x214 .. +0x24A  rig members not modelled here
     u8  mbHaveDesiredHeight;                  // +0x24B            desired-height override active flag
@@ -131,6 +208,87 @@ private:
     u8  mbTestLookingAt;                     // +0x0B0            line-of-sight test enabled (asserted)
     u8  maReserved0B1;                       // +0x0B1            rig member not modelled here
     u8  mbOnScreen;                          // +0x0B2            subject currently on screen (returned)
+};
+
+// ============================================================================
+// BrnDirector::Camera::VisibilityCollisionPolicy -- the "free" (not car-attached) camera
+// collision policy: it runs the scene queries, keeps the geometry/vehicle collision
+// predictors, and owns the see-through state the behaviours' Update gates read.
+//
+// MOVED HERE (2026-07-30) from Behaviours/BehaviourRig.h. The opaque blob is CARVED around
+// the members the class-TU bodies touch (X360 offsets in comments; ORDER preserved, PC offsets
+// differ -- all access is BY NAME). The remaining reserved spans still need the unrecovered
+// types (LineTestNearestPostBox, VolumeTestDeepestPostBox, GroundConstraint etc.).
+// Nominal X360 size 0x240 bytes -- which the retired BrnBehaviourIceAnim.h slice independently
+// agreed on (its own reserved tail also ended at 0x240).
+//
+// FLAG: minimal slice -- the full policy layout/method set lands with its own TU.
+// ============================================================================
+class VisibilityCollisionPolicy : public CollisionPolicy
+{
+public:
+    void Construct();
+    void SetCanFail(bool lbCanFail);
+    void SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
+                   CgsSceneManager::EntityId lTargetEntityId);
+    void SetTestLookingAt(bool lbTestLookingAt);
+    void SetVelocity(Vector3 lVelocity);
+    bool IsVisibilityInterrupted() const;
+    float GetMinTimeToVisibilityFailure() const;
+
+    // ---- class-TU surface (bodies in BrnVisibilityCollisionPolicy.cpp) ----
+
+    // The guards the two time queries assert on (the X360 inlines the embedded
+    // predictors' flag reads into the wrappers).
+    bool WillCollideWithGeometry() const { return mGeometryCollisionPredictor.WillCollide(); }
+    bool WillCollideWithVehicle() const  { return mVehicleCollisionPredictor.HasPredictedCollision(); }
+
+    // @0x821F38E0 (BrnCollisionPolicy.h:489) -- raise the desired-height override
+    // latch, assert the height positive, store it.
+    void SetDesiredHeight(f32 lfDesiredHeight);
+
+    // @0x821F37C8 (BrnCollisionPolicy.h:425 wrapper + the embedded geometry
+    // predictor's own :206 tripwire) -- predicted time until the camera hits
+    // geometry.
+    f32 TimeUntilCollisionWithGeometry() const;
+
+    // @0x821F3858 (BrnCollisionPolicy.h:431 wrapper + the embedded vehicle
+    // predictor's own BrnVehicleCollisionPredictor.h:69 tripwire) -- predicted
+    // time until the camera hits the tracked vehicle.
+    f32 TimeUntilCollisionWithVehicle() const;
+
+    // ---- the see-through state block -------------------------------------------------
+    // ADDITIVE GROW (de-fork 2026-07-30, carried forward from the retired
+    // BrnBehaviourIceAnim.h slice). BehaviourIceAnim::Construct @0x82246048 seeds all three
+    // bytes (`stb 1 / stb 0 / stb 1` at policy +0x1A0/+0x1A1/+0x1A2) and its Update
+    // @0x82247108 consults exactly this predicate before raising the camera's see-through
+    // request. Exposed as named accessors so no caller pokes the (private) bytes.
+    bool ShouldRaiseSeeThrough() const
+    {
+        return mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed);
+    }
+
+    void SetSeeThroughEnabled(bool lbEnabled)       { mbSeeThroughEnabled    = lbEnabled; }   // +0x1A0
+    void SetSeeThroughAlways(bool lbAlways)         { mbSeeThroughAlways     = lbAlways; }    // +0x1A1
+    void SetSeeThroughSuppressed(bool lbSuppressed) { mbSeeThroughSuppressed = lbSuppressed; }// +0x1A2
+
+private:
+    // FLAG: reserved spans = rig members not yet recovered (LineTestNearestPostBox,
+    //   VolumeTestDeepestPostBox, GroundConstraint etc.); the named members are the
+    //   asm-attested carves from the class-TU bodies + the ICE-anim behaviour.
+    u8 maReservedToVehiclePredictor[0x70 - 0x08];              // X360 [+0x08, +0x70)
+    Utils::VehicleCollisionPredictor mVehicleCollisionPredictor;   // X360 +0x70 (flag/time @+0x70/+0x74)
+    u8 maReserved78[0x80 - 0x78];                              // X360 [+0x78, +0x80)
+    GeometryCollisionPredictor mGeometryCollisionPredictor;    // X360 +0x80 (its +0x60/+0x64 pair == policy +0xE0/+0xE4)
+    u8 maReservedE8[0x1A0 - 0xE8];                             // X360 [+0xE8, +0x1A0)
+    bool mbSeeThroughEnabled;                                  // X360 +0x1A0 (default true)
+    bool mbSeeThroughAlways;                                   // X360 +0x1A1 (default false)
+    bool mbSeeThroughSuppressed;                               // X360 +0x1A2 (default true)
+    u8 maReserved1A3[0x210 - 0x1A3];                           // X360 [+0x1A3, +0x210)
+    f32 mfDesiredHeight;                                       // X360 +0x210 (SetDesiredHeight stores)
+    u8 maReserved214[0x23C - 0x214];                           // X360 [+0x214, +0x23C)
+    u8 mbHaveDesiredHeight;                                    // X360 +0x23C (SetDesiredHeight raises)
+    u8 maReservedTail[0x240 - 0x23D];                          // X360 [+0x23D, +0x240)
 };
 
 } // namespace Camera

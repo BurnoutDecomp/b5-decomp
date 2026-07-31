@@ -13,6 +13,13 @@
                                                              //   BehaviourSharedPrepareReleaseInfo
                                                              //   (this header's forks retired)
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"   // BrnDirector::Timestep (real home)
+// ---- the four canonical homes this header's own forks are retired in favour of -----------
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"     // CollisionPolicy /
+                                                              //   VisibilityCollisionPolicy /
+                                                              //   CollisionPolicyAttachedToVehicle
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"   // Utils::CameraShake  (struct)
+#include "GameSource/Director/Camera/Utils/BrnLooker.h"        // Utils::Looker       (struct)
+#include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h" // Utils::Tweaker      (struct)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h
@@ -258,81 +265,41 @@ namespace Camera
 //   DELETE-WHEN: BehaviourIceAnim::Update's asm is re-walked against the base layout.
 // ----------------------------------------------------------------------------
 
-// ----------------------------------------------------------------------------
-// The two collision policies the behaviour exposes. GetCollisionPolicy hands back a
-// pointer to one (or null). They are embedded by value at fixed offsets in the behaviour.
-// FLAG: minimal slices -- the real policy layouts/method sets land with their own TUs.
-// ----------------------------------------------------------------------------
-
-// The base collision-policy interface GetCollisionPolicy returns through. Vtable only here.
-class CollisionPolicy
-{
-public:
-    virtual ~CollisionPolicy() {}
-};
-
-// The "free" visibility collision policy (embedded at +0x20). Sized so its vtable lands at
-// the behaviour's +0x20 and the attached-to-car policy follows at +0x260.
+// ============================================================================
+// RETIRED (2026-07-30 -- the de-fork wave this header's own FLAGs kept asking for). Six
+// private forks used to sit here:
 //
-// FLAG: minimal slice -- only the three see-through state bytes the Update gate reads are
-// named here (policy-relative +0x1A0/+0x1A1/+0x1A2). The Update see-through gate consults
-// these three bytes before raising the camera's see-through flag. The real policy layout /
-// method set lands with the VisibilityCollisionPolicy TU; the byte NAMES are stable.
-class VisibilityCollisionPolicy : public CollisionPolicy
-{
-public:
-    // True when the see-through flag should be raised this frame:
-    //   mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed).
-    bool ShouldRaiseSeeThrough() const
-    {
-        return mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed);
-    }
-
-    u8   maReservedHead[0x1A0 - sizeof(void*)];  // span from the vtable to the state bytes
-    bool mbSeeThroughEnabled;                    // +0x1A0  (default true)
-    bool mbSeeThroughAlways;                     // +0x1A1  (default false)
-    bool mbSeeThroughSuppressed;                 // +0x1A2  (default true)
-    u8   maReservedTail[0x240 - 0x1A3];          // span to the next embedded policy (+0x260)
-};
-
-// The "attached to the car" collision policy (embedded at +0x260). Construct builds it.
-class CollisionPolicyAttachedToVehicle : public CollisionPolicy
-{
-public:
-    // Build the policy in place. Construct takes a trailing 0 selector.
-    void Construct(s32 liSelector);
-
-    u8 maReserved[0x250 - sizeof(void*)];   // span to the camera (+0x4B0)
-};
-
-// The camera-shake post-process the take's shake space drives (embedded at +0x650).
-// Update samples it once per frame; Construct seeds its parameters by name. FLAG: minimal
-// slice -- the real layout/method set lands with the CameraShake TU.
-namespace Utils
-{
-    class CameraShake
-    {
-    public:
-        u8 maReserved[0x10];   // +0x00  nominal (the shake is 16 bytes wide)
-    };
-
-    // The looker post-process (embedded at +0x660). Update runs it for the look-at space.
-    // FLAG: minimal slice -- the real layout/method set lands with the Looker TU.
-    class Looker
-    {
-    public:
-        u8 maReserved[0x20];   // +0x00  nominal
-    };
-
-    // The dev-tools tweaker SetupTweaker hands the behaviour's editable parameters to.
-    // FLAG: minimal slice -- the real home is the camera-utils dev-tools TU. SetupTweaker
-    // only tail-calls Tweaker::Construct(tweaker), so just that static is modelled.
-    class Tweaker
-    {
-    public:
-        static void Construct(Tweaker& lrTweaker);
-    };
-}
+//   class CollisionPolicy                    -> ../BrnCollisionPolicy.h  (THE home; every one
+//   class VisibilityCollisionPolicy          ->   of the family's tripwires names that file)
+//   class CollisionPolicyAttachedToVehicle   ->
+//   class Utils::CameraShake                 -> ../Utils/BrnCameraShake.h   (struct, not class)
+//   class Utils::Looker                      -> ../Utils/BrnLooker.h        (struct, not class)
+//   class Utils::Tweaker                     -> ../Utils/BrnCameraTweaker.h (struct, not class)
+//
+// All six homes are included at the top of this file. Nothing was lost in the merge -- the
+// three members this header's slices uniquely named were CARRIED FORWARD into the canonical
+// homes as additive grows:
+//   * VisibilityCollisionPolicy's see-through bytes (+0x1A0/+0x1A1/+0x1A2) are now carved out
+//     of BrnCollisionPolicy.h's [+0xE8, +0x210) reserved span, reached through the named
+//     Set*/ShouldRaiseSeeThrough accessors instead of the fork's public bytes;
+//   * CollisionPolicyAttachedToVehicle::Construct(s32) and the `: public CollisionPolicy` base
+//     joined BrnCollisionPolicy.h's slice (the base is proved by GetCollisionPolicy returning
+//     `&mAttachedToCarCollisionPolicy` as a `CollisionPolicy*`).
+// The Tweaker's fork modelled Construct as a STATIC taking the tweaker by reference; the
+// canonical home has it as the MEMBER `void Construct()` (X360 @0x821F8588 with this == a2),
+// so SetupTweaker calls `lrTweaker.Construct()` now.
+//
+// ⚠️ THE CLASS KEYS DIFFERED: this header said `class` for all three Utils types where the
+// canonical homes say `struct`. MSVC mangles the two differently, so the fork was not merely a
+// duplicate definition -- it was a different SYMBOL. Deleting the forks (rather than "fixing"
+// the canonical homes to match) is what makes the ICE-anim behaviour link against the real ones.
+//
+// WHY IT MATTERED: any TU including both the named-parameter bank
+// (-> BehaviourPassengerCam.h -> BehaviourRig.h) and this header hit six C2011s, which is the
+// whole family of retail-intro arbitrator states (ArbStateCarSelect / ArbStateOnlineCarSelect /
+// ArbStateRaceIntro / ArbStateRankUp / ArbStatePostEvent / ArbStateDriveThru /
+// ArbStateOnlineRaceIntro). None of them could be mounted.
+// ============================================================================
 
 // The key-anim controller: the live ICETake evaluator the behaviour advances. It embeds an
 // ICE::ICETake at its +0x20 (the behaviour's ctor constructs that ICETake and GetTimeRemaining

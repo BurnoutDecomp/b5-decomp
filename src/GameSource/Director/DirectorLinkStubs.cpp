@@ -52,6 +52,7 @@
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 
+#include "GameSource/Director/Arbitrator/States/BrnArbStateCarSelect.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashNav.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h"
@@ -117,6 +118,21 @@ namespace BrnDirector
     // The GetName literals are the ARTIST .rodata names (one symbol each, 0x821F62F0 /
     // 0x821F6300 / 0x821F6330 / 0x821F6730 / 0x821F6480 / 0x821F6310 / 0x821F6320 /
     // 0x821F6710 / 0x821F6238).
+    // ArbStateCarSelect joined this group on 2026-07-30, when the ICE-anim header de-fork made
+    // its .cpp compile and the container swapped its empty placeholder for the real layout. It
+    // is stubbed rather than mounted for a DIFFERENT reason from its siblings: its .cpp compiles
+    // fine, but linking it pulls BrnBehaviourIceAnim.cpp, whose camera comes out of
+    // KeyAnimController (the ICE take evaluator -- 2 of ~8 functions bodied) and the
+    // declaration-only IceAnimCameraOps naming layer. Stubbing THOSE would stub the code that
+    // produces the camera. DELETE-WHEN: KeyAnimController::Update/Prepare land + IceAnimCameraOps
+    // is bodied -> mount BrnArbStateCarSelect.cpp + BrnBehaviourIceAnim.cpp, delete this line.
+    // (It declares no Release() of its own -- Release/Destruct are not in its exported X360
+    //  function set, so the base declarations stand and only four slots are stubbed here.)
+    void ArbStateCarSelect::Construct()                          { ArbitratorState::Construct(); }
+    bool ArbStateCarSelect::Prepare(ArbStateSharedInfo& lrInfo)  { (void)lrInfo; return true; }
+    void ArbStateCarSelect::Update(ArbStateSharedInfo& lrInfo)   { (void)lrInfo; }
+    const char* ArbStateCarSelect::GetName() const               { return "ArbStateCarSelect"; }
+
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateCrashMode,       "ArbStateCrashMode")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateDriveThru,       "ArbStateDriveThru")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineCarSelect, "ArbStateOnlineCarSelect")
