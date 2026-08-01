@@ -55,6 +55,8 @@ namespace CgsContainers
 {
 
 // @0x828157F8 -- relocate-on-load: turn the stored offsets into real pointers.
+// (DWARF CgsDictionary.cpp:48; its locals are `int32_t lnEntry` @:50 and, in the loop's
+// own scope, `DictEntry* lpEntry` @:60 -- spelled that way here.)
 void DictionaryBase::FixUp()
 {
     u8* const lpBase = reinterpret_cast<u8*>(this);
@@ -62,28 +64,29 @@ void DictionaryBase::FixUp()
     mpaIndex = reinterpret_cast<DictEntry*>(
         lpBase + reinterpret_cast<uintptr_t>(mpaIndex));
 
-    for ( s32 liEntry = 0; liEntry < miNumEntries; ++liEntry )
+    for ( s32 lnEntry = 0; lnEntry < miNumEntries; ++lnEntry )
     {
-        DictEntry& lrEntry = mpaIndex[ liEntry ];
-        lrEntry.mpData = reinterpret_cast<char*>(
-            lpBase + reinterpret_cast<uintptr_t>(lrEntry.mpData));
+        DictEntry* lpEntry = &mpaIndex[ lnEntry ];
+        lpEntry->mpData = reinterpret_cast<char*>(
+            lpBase + reinterpret_cast<uintptr_t>(lpEntry->mpData));
     }
 }
 
 // @0x82815848 -- relocate-for-save: the exact inverse, entries first then the index.
 // The per-entry guard is the console's own (CgsDictionary.cpp:91): an entry's payload
 // must live ABOVE the dictionary head, otherwise the subtraction underflows.
+// (DWARF CgsDictionary.cpp:82, locals `int32_t lnEntry` @:84 / `DictEntry* lpEntry` @:88.)
 void DictionaryBase::FixDown()
 {
     u8* const lpBase = reinterpret_cast<u8*>(this);
 
-    for ( s32 liEntry = 0; liEntry < miNumEntries; ++liEntry )
+    for ( s32 lnEntry = 0; lnEntry < miNumEntries; ++lnEntry )
     {
-        DictEntry& lrEntry = mpaIndex[ liEntry ];
-        CGS_ASSERT(reinterpret_cast<u8*>(lrEntry.mpData) > lpBase,
+        DictEntry* lpEntry = &mpaIndex[ lnEntry ];
+        CGS_ASSERT(reinterpret_cast<u8*>(lpEntry->mpData) > lpBase,
                    "(int32_t)lpEntry->mpData > (int32_t)this");
-        lrEntry.mpData = reinterpret_cast<char*>(
-            static_cast<uintptr_t>(reinterpret_cast<u8*>(lrEntry.mpData) - lpBase));
+        lpEntry->mpData = reinterpret_cast<char*>(
+            static_cast<uintptr_t>(reinterpret_cast<u8*>(lpEntry->mpData) - lpBase));
     }
 
     mpaIndex = reinterpret_cast<DictEntry*>(
