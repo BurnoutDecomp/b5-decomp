@@ -9,6 +9,7 @@
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"     // Camera::BehaviourManager (mBehaviourManager)
 #include "GameSource/Director/Camera/BrnCameraFinaliser.h"      // BrnDirector::CameraFinaliser (mCameraFinaliser)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (mLastCamera)
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (maGameState)
 
 // ============================================================================
 // GameSource/Director/BrnMainDirector.h
@@ -163,9 +164,14 @@ namespace BrnDirector
         void UpdateCameraBehavioursPreScene(const DirectorInputOutput* lpIO, s32 liArg);
         void UpdateCameraBehavioursPostScene(const DirectorInputOutput* lpIO, s32 liArg);
 
-        // X360 0x822372F8. Drain the director input event queue and apply each action to the
-        // GameState snapshot. DECLARATION-ONLY + FLAG (un-homed GameState action region).
-        void ProcessInputQueue();
+        // ⭐ X360 0x822372F8. Drain the input buffer's GAME-ACTION QUEUE and apply each action
+        // to the GameState snapshot. BODIED (junkyard/car-select arms; see the .cpp banner).
+        //
+        // ⚠️ DROPPED-ARGUMENT TRAP, CORRECTED 2026-08-01: this was declared `ProcessInputQueue()`.
+        // The console takes TWO arguments and r4 is LIVE -- `0x82237314 lwz r30, 0(r4)` loads
+        // the input buffer out of the DirectorInputOutput before anything else happens. A
+        // no-argument spelling would have compiled, linked and silently drained nothing.
+        void ProcessInputQueue(const DirectorInputOutput* lpIO);
 
         // X360 0x8221A6B0. Apply the per-frame new-vehicle events to the AllVehicleData tracker.
         // DECLARATION-ONLY + FLAG (AllVehicleData un-homed).
@@ -199,8 +205,15 @@ namespace BrnDirector
         // ⭐ The game-intro fly-by latch (GameState +217), raised/cleared by PostGuiUpdate from
         // the GUI's fly-by START/END commands. Exposed by name because the PC bring-up producer
         // in BrnGameModule::DoUpdate_Director reads it -- see the FLAG'd block there.
-        bool IsGameIntroFlybyActive() const   { return mbGameIntroFlybyActive; }
-        bool IsNewProfileIntroActive() const  { return mbNewProfileIntroActive; }
+        bool IsGameIntroFlybyActive() const   { return maGameState.mbGameIntroFlybyActive; }
+        bool IsNewProfileIntroActive() const  { return maGameState.mbNewProfileIntroActive; }
+
+        // ⭐ The director's per-event game-state snapshot, by name. THE junkyard / car-select
+        // sub-state (GameState::meJunkyardState) lives here; ProcessInputQueue writes it and
+        // ArbStateRoaming::ProcessActiveDrivingTransitions is what reads it to enter
+        // ArbitratorStateContainer::E_STATE_CAR_SELECT. Exposed const so the PC bring-up can
+        // OBSERVE the state machine without any caller being able to forge a transition.
+        const GameState& GetGameState() const { return maGameState; }
         Camera::BehaviourManager& GetBehaviourManager()       { return mBehaviourManager; }
         CameraFinaliser&          GetCameraFinaliser()        { return mCameraFinaliser; }
 
@@ -327,23 +340,26 @@ namespace BrnDirector
         u8 maDebugPrinterB[0x337B0 - 0x3378C];       // +0x3378C
         u8 maDebugPrinterMain[0x337E0 - 0x337B0];    // +0x337B0  <- ArbStateSharedInfo +0x04
 
-        // +0x337E0 .. +0x339E0  BrnDirector::GameState (ArbStateSharedInfo +0x24; also the
-        //           block CameraFinaliser::Update takes). FLAG: un-homed; named opaque span --
-        //           EXCEPT for the two intro latches carved out below, which are the only
-        //           members of it any reconstructed code has to name.
-        u8 maGameStateHead[0xD8];                     // +0x337E0 .. +0x338B8
-
-        // ⭐ GameState +216 / +217 -- the game-intro latches PostGuiUpdate @0x82236F88 sets
-        // (`lbz 0x7ABD/0x7ABE(input)` -> `stbx 1, this+0x338B8/0x338B9`) and clears together on
-        // the stop command. VERIFIED NAMES: DecFIGS DWARF BrnDirectorGameState.h declares
-        // mbNewProfileIntroActive / mbGameIntroFlybyActive as consecutive bools, and
-        // ArbStateCarSelect::Update's own assert string pins the SECOND one to +217 --
-        // "!lSharedInfo.mpGameState->mbGameIntroFlybyActive" fires on `*(sharedInfo->mpGameState
-        // + 217)` (BrnArbStateCarSelect.cpp:381).
-        bool mbNewProfileIntroActive;                 // +0x338B8 (GameState +216)
-        bool mbGameIntroFlybyActive;                  // +0x338B9 (GameState +217)
-
-        u8 maGameStateTail[0x339E0 - 0x338BA];        // +0x338BA .. +0x339E0
+        // ⭐⭐ +0x337E0 .. +0x339E0  BrnDirector::GameState (ArbStateSharedInfo +0x24; also the
+        //           block CameraFinaliser::Update takes). REAL TYPE since 2026-08-01.
+        //
+        // It was three members -- `u8 maGameStateHead[0xD8]`, the two carved-out intro bools,
+        // and `u8 maGameStateTail[...]` -- because the type was believed un-homed. It is NOT:
+        // BrnDirectorGameState.{h,cpp} have carried the full DWARF-ordered layout and a
+        // store-for-store GameState::Clear @0x82218930 for several waves; the TU simply was
+        // never mounted and this class never named the member. The cost of that was total:
+        // GameState::meJunkyardState -- the field the ENTIRE junkyard / car-select ladder
+        // hangs off -- had exactly ONE writer in the tree (Clear, in the unmounted TU), so it
+        // was never even reset, let alone driven.
+        //
+        // The base offset is +0x337E0 == 210912, PROVEN four ways (see the wave log): the
+        // compiler materialises it in ProcessInputQueue's prologue
+        // (`addis r11, r31, 3; addi r11, r11, 0x37E0`) and then stores at +0x185 / +0x19C,
+        // exactly the offsets Clear records; MainDirector::Construct @0x8225B448 calls
+        // `GameState::Clear(this + 210912)`; and +0x339E0 (211424) is the VehicleTracker, not
+        // the GameState -- taking the END of this range as the base is what hid
+        // meJunkyardState (at 210912 + 0x180 = 211296) for ten waves.
+        GameState maGameState;                        // +0x337E0 .. +0x339E0
 
         // +0x339E0 .. +0x33C90  BrnDirector::VehicleTracker (ArbStateSharedInfo +0x3C).
         //           FLAG: un-homed; named opaque span.

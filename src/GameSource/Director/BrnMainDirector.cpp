@@ -25,12 +25,14 @@
 //   * Update()        -- the prologue, the no-player path, the arbitrator leg of the
 //                        gameplay middle, and the whole publish tail
 //   * UpdateArbitrator() + BuildArbStateSharedInfo() -- the per-frame arbitrator context
+//   * ProcessInputQueue()     -- the game-action queue drain (junkyard/car-select arms)
+//   * PostGuiUpdate()         -- every leg whose destination is a GameState field
 //
 // DECLARATION-ONLY + FLAGGED (in the header): UpdateICE / UpdateMoments / UpdateAttribSys /
-// UpdateCameraBehaviours* / UpdateDebug* / ProcessInputQueue / ProcessNewVehicleEvents /
-// HandlePrepareForModeAction / CalcTrafficLightSpace / DebugDisplayCurrentCamera /
-// PostGuiUpdate. Each indexes a NOT-HOMED aggregate, paraphrases a VMX pipeline, or depends
-// on un-dumped rodata.
+// UpdateCameraBehaviours* / UpdateDebug* / ProcessNewVehicleEvents /
+// HandlePrepareForModeAction / CalcTrafficLightSpace / DebugDisplayCurrentCamera.
+// Each indexes a NOT-HOMED aggregate, paraphrases a VMX pipeline, or depends on un-dumped
+// rodata.
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
@@ -43,6 +45,8 @@
 #include "GameSource/Director/BrnDirectorResourceManager.h"            // BrnDirector::DirectorResourceManager
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatus
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+
+#include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 
 // FLAG: CgsSceneManager::CgsCollision::BaseCollisionGenerator has no reconstructed home
 //   layout yet (the committed CgsSceneManagerModule.h forward-declares it only). Destruct /
@@ -217,7 +221,15 @@ namespace BrnDirector
         // ⭐ REAL (was held back for host size): the ICE wrapper.
         mICEWrapper.Construct();
 
-        // ⚠️ GATE: GameState::Clear / the three DebugPrinter::Constructs.
+        // ⭐ REAL (2026-08-01): `BrnDirector::GameState::Clear(this + 210912)` @0x8225B448.
+        // This is the ONLY thing that seeds meJunkyardState to E_JY_INACTIVE, meEventType to
+        // E_MODE_NONE, the three director-space transforms to identity, and the -1 sentinels.
+        // While the region was an opaque byte span this never ran, so the whole snapshot --
+        // including the junkyard sub-state the car-select ladder tests -- started as whatever
+        // the allocator's memory happened to hold.
+        maGameState.Clear();
+
+        // ⚠️ GATE: the three DebugPrinter::Constructs.
 
         // The forced-camera-car override starts at the -1 "none" sentinel (+0x33100).
         miForcedCameraCarIndex = -1;
@@ -514,8 +526,7 @@ namespace BrnDirector
         lrSharedInfo.mpNamedParameters       = 0;                                   // +0x1C ⚠️ GATE
         lrSharedInfo.mpMomentController      = reinterpret_cast<MomentController*>(
                                                   const_cast<u8*>(maMomentController));         // +0x20
-        lrSharedInfo.mpGameState             = reinterpret_cast<GameState*>(
-                                                  const_cast<u8*>(maGameStateHead));            // +0x24
+        lrSharedInfo.mpGameState             = const_cast<GameState*>(&maGameState);            // +0x24
         lrSharedInfo.mpRandom                = reinterpret_cast<Random*>(
                                                   const_cast<u8*>(maRandom));                   // +0x28
         lrSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                       // +0x2C
@@ -597,20 +608,25 @@ namespace BrnDirector
     //     MainDirector::UpdateCameraBehavioursPreScene( this, lpIO, playerIndex )
     // and it also clears the "ICE just finished" latch at the very top.
     //
-    // ⚠️ THE GUARDED BODY IS A DOCUMENTED QUIET GATE. AllVehicleData / VehicleTracker /
-    // CrashAnalyser / GameState are named opaque regions with no interiors; ProcessInputQueue,
-    // UpdateCameraBehavioursPreScene and BehaviourManager::ReleaseBehaviours are themselves
+    // ⭐ STEP 2 IS NOW REAL. ProcessInputQueue is the ONLY consumer of the input buffer's
+    // GAME-ACTION QUEUE and therefore the only writer of GameState::meJunkyardState in the
+    // whole director. Until it ran, the junkyard sub-state could never leave E_JY_INACTIVE and
+    // ArbStateRoaming could never hand the arbitrator to E_STATE_CAR_SELECT -- i.e. neither
+    // the junkyard nor the retail intro camera was reachable, at ANY link-closure count.
+    //
+    // ⚠️ THE REST OF THE GUARDED BODY IS STILL A DOCUMENTED QUIET GATE. AllVehicleData /
+    // VehicleTracker / CrashAnalyser are named opaque regions with no interiors, and
+    // UpdateCameraBehavioursPreScene / BehaviourManager::ReleaseBehaviours are themselves
     // declaration-only (the last because its per-slot work drives the un-homed Behaviour
     // vtable).
     //
-    // WHY BODY THE GUARD AT ALL: it is the part that decides whether ANYTHING happens, and on
-    // the current PC bring-up it is FALSE every frame (no player vehicle, so the input
-    // buffer's player-car index is the -1 sentinel and the used-race-car mask is empty). So
-    // this reconstruction is behaviourally EXACT today and becomes partial, never wrong, the
-    // moment a player car exists.
+    // ⚠️ THE CONSOLE'S SECOND TEST is reproduced: `usedRaceCars.IsBitSet(playerCarIndex)`.
+    // GetLivePlayerCarIndex already folds it in (see the header), so the guard below IS both
+    // halves -- the X360 re-tests the bit because it inlines the index fetch, not because
+    // there is a second condition.
     //
-    // DELETE-WHEN: AllVehicleData / VehicleTracker / CrashAnalyser / GameState are homed and
-    // ProcessInputQueue + UpdateCameraBehavioursPreScene are bodied.
+    // DELETE-WHEN: AllVehicleData / VehicleTracker / CrashAnalyser are homed and
+    // UpdateCameraBehavioursPreScene is bodied.
     // ------------------------------------------------------------------------
     void MainDirector::PreSceneQueryUpdate(const DirectorInputOutput* lpIO)
     {
@@ -619,7 +635,219 @@ namespace BrnDirector
         if (GetLivePlayerCarIndex(lpIO) == -1)
             return;
 
-        // ⚠️ GATE -- the seven guarded steps above.
+        // ⚠️ GATE: AllVehicleData::Update( ..., usedRaceCars, vehicleInfoArray, playerIndex, contacts )
+
+        // ⭐ X360 line 2 of the guarded body.
+        ProcessInputQueue(lpIO);
+
+        // ⚠️ GATE -- the five remaining guarded steps above.
+    }
+
+    // ------------------------------------------------------------------------
+    // ProcessInputQueue  @ 0x822372F8   -- ⭐⭐ THE GAME-ACTION -> GAMESTATE SEAM
+    //
+    // Drain the input buffer's game-action queue (DirectorIO::InputBuffer::GetGameActionQueue
+    // @0x82206C50 == the buffer's embedded CgsModule::VariableEventQueue<13312,16>) and fold
+    // each action into the director's GameState snapshot. The console's shape is:
+    //
+    //     lpQueue = lpIO->mpInputBuffer->GetGameActionQueue();
+    //     mGameState.ResetPerFrameData();                       // inlined; see the GameState TU
+    //     ProcessNewVehicleEvents( lpIO->mpInputBuffer );
+    //     <the takedown pair + three straight copies out of the input buffer>
+    //     for ( action = queue.GetFirstEvent(); action; action = queue.GetNextEvent(action) )
+    //         switch ( action.type ) { ... 45 handled cases out of a 225-entry table ... }
+    //     <the three waiting -> receivedThisFrame handshakes>
+    //     <the slomo / crash / debug-render tail>
+    //
+    // ⚠️ WHAT IS BODIED HERE: the prologue, the walk, and the NINE junkyard / car-select cases
+    // (62, 63, 64, 65, 73, 75, 76, 77, 85) plus the three handshakes. Those are the complete
+    // set of arms that touch GameState +0x180..+0x1AC, i.e. the whole junkyard sub-machine.
+    //
+    // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
+    //   * the other 36 handled cases (0, 6, 12, 23, 24, 29, 30, 33, 34, 37, 39, 42, 43, 47,
+    //     53, 54, 56, 58, 97, 98, 100, 102, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
+    //     205, 215, 216, 218, 223, 224) -- every one of them writes into a part of the
+    //     GameState or the MainDirector flag tail that is still opaque, or calls an un-homed
+    //     aggregate (AllVehicleData, the VMX drive-thru transform pipeline, DebugRender).
+    //   * ProcessNewVehicleEvents -- declaration-only (AllVehicleData un-homed).
+    //   * the post-loop slomo / crash-active tail and the whole debug-render block.
+    // The console's own default arm is a no-op `b def_...`, so an unhandled id costs nothing.
+    //
+    // ⚠️ ACTION IDs ARE X360 ids, which run +5 above the PS3 DecFIGS DWARF's E_ACTION_* enum
+    // across this range. The shift is pinned at BOTH ends: case 77's own assert string is
+    // "lpExitAction" (BrnMainDirector.cpp:1410) and DWARF 72 == E_ACTION_CAR_SELECT_EXIT.
+    // ------------------------------------------------------------------------
+    void MainDirector::ProcessInputQueue(const DirectorInputOutput* lpIO)
+    {
+        // 0x82237314 `lwz r30, 0(r4)` -- the console's FIRST act is to take the input buffer
+        // out of the DirectorInputOutput. r4 being live is the whole reason this function's
+        // declaration needed the argument back.
+        const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
+        if (lpInput == 0)
+            return;
+
+        const CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpInput->GetGameActionQueue();
+
+        // 0x82237350..0x822373AC -- the inlined GameState::ResetPerFrameData().
+        maGameState.ResetPerFrameData();
+
+        // ⚠️ GATE: ProcessNewVehicleEvents( lpInput ) -- declaration-only (AllVehicleData).
+
+        // 0x822373B0 -- the takedown pair. The console re-reads the flag to assert on it
+        // ("mbPlayerTakenDown", BrnMainDirector.cpp:232) between the two stores.
+        if (lpInput->GetPlayerTakenDown())
+        {
+            maGameState.mbPlayerWasTakenDown = true;                        // +0x1C3
+            CGS_ASSERT(lpInput->GetPlayerTakenDown(), "mbPlayerTakenDown");
+            maGameState.mePlayerKillerIndex = lpInput->GetPlayerKillerCarIndex();  // +0x1C4
+        }
+
+        // 0x82237408..0x82237440 -- three straight copies out of the input buffer into the
+        // GameState's RankUpInfo sub-object. The sub-object's DWARF layout is unreliable, so
+        // the head word goes through its named 4-byte field and the two tail bytes through its
+        // own opaque storage.
+        maGameState.mRankUpInfo.miRivalTeamSelector = lpInput->GetRankUpRivalInfo();  // +0x1CC
+        // ⚠️ GATE: GameState +0x1D0 / +0x1D1 <- input @0x7AD5 / @0x7AD6. Both ends are opaque
+        //    bytes (InputBuffer::maFlagTail, RankUpInfo::maOpaque) with no recovered role on
+        //    either side, so copying them would move bytes nobody can name. Recorded, not run.
+
+        const CgsModule::Event* lpAction = 0;
+        s32 liActionSize = 0;
+        s32 liActionType = lpQueue->GetFirstEvent(&lpAction, &liActionSize);
+
+        while (lpAction != 0)
+        {
+            // The console reads every payload as raw bytes off the record pointer (r30); the
+            // per-action structs live in BrnGameActions.h, which is a GameState-side header
+            // this TU does not own. Same access, named per case.
+            const u8* lpacPayload = reinterpret_cast<const u8*>(lpAction);
+
+            switch (liActionType)
+            {
+            // ---- 62  E_ACTION_NEW_CAR_UNLOCKED (16 bytes) ----------------------------
+            case 62:
+                maGameState.meJunkyardState          = GameState::E_JY_CAR_UNLOCK;  // = 3
+                maGameState.mbIsRivalUnlock          = true;
+                maGameState.mbNewCarUnlockedThisFrame = true;
+                maGameState.miJunkyardPosIndex       = 0;
+                // `ld r10, 0(r30); stdx r10, r31, 0x33968` -- the unlocked vehicle's CgsID.
+                std::memcpy(&maGameState.mUnlockedVehicleType, lpacPayload + 0, sizeof(CgsID));
+                break;
+
+            // ---- 63  E_ACTION_CAR_UNLOCK_END (1 byte) --------------------------------
+            case 63:
+                if (maGameState.meJunkyardState == GameState::E_JY_CAR_UNLOCK)
+                    maGameState.meJunkyardState = GameState::E_JY_CAR_SELECT;
+                break;
+
+            // ---- 64  E_ACTION_CAR_SELECTION_CHANGED (0x40 bytes) ---------------------
+            case 64:
+                if (maGameState.meJunkyardState == GameState::E_JY_INACTIVE)
+                    maGameState.meJunkyardState = GameState::E_JY_CAR_SELECT;
+                maGameState.mbNewCarUnlockedThisFrame = false;
+                maGameState.miJunkyardPosIndex        = 0;
+                maGameState.mbJunkyardPosJustChanged  = true;
+                // ⭐ the ONLY writer of mJunkyardId in the image (see the GameState header).
+                std::memcpy(&maGameState.mJunkyardId, lpacPayload + 0, sizeof(CgsID));
+                maGameState.mbJunkyardPosIsLeft = (lpacPayload[0x30] != 0);
+                break;
+
+            // ---- 65  E_ACTION_CAR_SELECTION_CHANGED_DROPIN (16 bytes) ----------------
+            case 65:
+                maGameState.mbJunkyardPlayerRespawnedThisFrame = true;
+                maGameState.mbJunkyardPosIsLeft = (lpacPayload[0x08] != 0);
+                break;
+
+            // ---- 73  E_ACTION_CAR_SELECT_TRANSITION_IN (2 bytes) ---------------------
+            // ⭐⭐ THE ENTRY ACTION. payload[0] is "this is the transition IN"; payload[1] is
+            // "there are cars to unlock". A brand-new profile has one unlocked car, so
+            // CarSelectManager::StartTransitionInState @0x823929D0 posts {1,0} == INTRO_NO_CARS
+            // and its EndTransitionInState @0x82392B30 posts {0,x} == CAR_SELECT.
+            case 73:
+                if (lpacPayload[0] != 0)
+                {
+                    maGameState.meJunkyardState = (lpacPayload[1] != 0)
+                        ? GameState::E_JY_INTRO_UNLOCKING_CARS     // = 1
+                        : GameState::E_JY_INTRO_NO_CARS;           // = 2
+                }
+                else
+                {
+                    maGameState.meJunkyardState = GameState::E_JY_CAR_SELECT;   // = 4
+                }
+                maGameState.mbJunkyardCarModActive = false;
+                break;
+
+            // ---- 75  E_ACTION_CAR_SELECT_READY (4 bytes) -----------------------------
+            case 75:
+            {
+                s32 liReadyMode = 0;
+                std::memcpy(&liReadyMode, lpacPayload + 0, sizeof(s32));
+                if (liReadyMode == 2)
+                {
+                    maGameState.mbIsOnlineCarSelectActive          = true;
+                    maGameState.mbHasOnlineCarSelectBeenAborted    = false;
+                    maGameState.mbOnlineCarSelectCanStartRaceIntro = false;
+                    maGameState.mbOnlineCarSelectMustClampToCar    = false;
+                }
+                break;
+            }
+
+            // ---- 76  E_ACTION_CAR_SELECT_MODIFICATION_SCREEN (8 bytes) ---------------
+            case 76:
+                maGameState.mbJunkyardCarModActive = (lpacPayload[0x04] != 0);
+                break;
+
+            // ---- 77  E_ACTION_CAR_SELECT_EXIT (0x20 bytes) ---------------------------
+            case 77:
+                CGS_ASSERT(lpAction != 0, "lpExitAction");   // BrnMainDirector.cpp:1410
+                if (lpacPayload[0x10] != 0)
+                {
+                    maGameState.mbIsOnlineCarSelectActive = false;
+                }
+                else
+                {
+                    maGameState.meJunkyardState        = GameState::E_JY_INACTIVE;
+                    maGameState.mbJunkyardCarModActive = false;
+                }
+                break;
+
+            // ---- 85  (1 byte) --------------------------------------------------------
+            case 85:
+                maGameState.mbOnlineCarSelectCarIsShowable = (lpacPayload[0] != 0);
+                break;
+
+            default:
+                // The console's own default arm, plus the 36 GATED cases listed in the banner.
+                break;
+            }
+
+            liActionType = lpQueue->GetNextEvent(lpAction, &lpAction, &liActionSize);
+        }
+
+        // 0x822387FC..0x82238868 -- THE THREE waiting -> receivedThisFrame HANDSHAKES.
+        // PostGuiUpdate raises the *waiting* bit on the frame the GUI event lands; the NEXT
+        // ProcessInputQueue clears it and raises the *receivedThisFrame* bit, which
+        // ResetPerFrameData drops again one frame later. That one-frame delivery contract is
+        // the shape consumers depend on, so it is reproduced exactly.
+        if (maGameState.mbJunkyardSelectionChangedMessageWaiting)
+        {
+            maGameState.mbJunkyardSelectionChangedMessageWaiting = false;
+            maGameState.mbJunkyardSelectionChangedMessageReceivedThisFrame = true;
+        }
+        if (maGameState.mbJunkyardCarUnlockTickedClosedThisFrameMessageWaiting)
+        {
+            maGameState.mbJunkyardCarUnlockTickedClosedThisFrameMessageWaiting = false;
+            maGameState.mbJunkyardCarUnlockTickedClosedThisFrame = true;
+        }
+        if (maGameState.mbRankUpMessageWaiting)
+        {
+            maGameState.mbRankUpMessageWaiting           = false;
+            maGameState.mbRankUpMessageReceivedThisFrame = true;
+        }
+
+        // ⚠️ GATE: `if (<flag tail +0x35431>) mbCanUseSlomo = false;`, the crash-active leg
+        //   (it indexes the published VehicleInfo at element +0x44A, a byte with no recovered
+        //   name), and the whole debug-render tail.
     }
 
     // ------------------------------------------------------------------------
@@ -826,7 +1054,7 @@ namespace BrnDirector
         }
 
         // Finalise: camera inertia + shake (the CameraFinaliser owns the InertiaController).
-        mCameraFinaliser.Update(lpIO->mpInputBuffer, maGameStateHead, lpIO->mpResourceManager,
+        mCameraFinaliser.Update(lpIO->mpInputBuffer, &maGameState, lpIO->mpResourceManager,
                                 &lCamera);
 
         // Carry the finalised camera into the next frame.
@@ -885,21 +1113,27 @@ namespace BrnDirector
     //     ... ( the online post-event / 100%-sequence / mode-action tail )
     //     MainDirector::HandlePrepareForModeAction( this, maModeActionAndDebugBlock, lpIO )
     //
-    // ⭐ LIVE HERE: the three starred legs -- the ONLY route by which the front-end's
-    // "start / stop the game-intro fly-by" reaches the director at all. Both destinations are
-    // named members now (see the header: GameState +216 / +217); every other destination in the
-    // list above still lands inside the un-homed remainder of maGameState, BrnDirector::
-    // EffectInterface has no reconstructed home, and HandlePrepareForModeAction is itself
-    // declaration-only (it dispatches over the same un-homed action region).
+    // ⭐ NEARLY ALL OF IT IS LIVE NOW (2026-08-01). Naming maGameState turned the "un-homed
+    // remainder" into ordinary members, so every leg above whose destination is a GameState
+    // field is bodied below -- including the two that FEED the junkyard machine:
+    //     GetCarSelectionChangedThisFrame()  -> mbJunkyardSelectionChangedMessageWaiting
+    //     GetCarSelectTickerClosedThisFrame()-> mbJunkyardCarUnlockTickedClosedThisFrameMessageWaiting
+    // (ProcessInputQueue converts both into their one-frame *receivedThisFrame* bits), and
+    //     GetEndOfCarSelect() && meJunkyardState != E_JY_INACTIVE -> E_JY_WAITING_FOR_AUDIO.
+    // ⚠️ The `<mode>` in the banner's `if ( input->GetEndOfCarSelect() && <mode> ) <mode = 5>`
+    //    line is meJunkyardState, and 5 is E_JY_WAITING_FOR_AUDIO -- CORRECTED, it is not a
+    //    game mode.
     //
-    // CONSEQUENCE WHILE THE REST IS GATED: the director still does not learn that the crash-nav
-    // / colour-calibration / shortcut-menu overlays opened or closed, and fires no GUI-driven
-    // camera effects. None of that affects the published camera (PostGuiUpdate runs AFTER
-    // Update, so the latches take effect on the FOLLOWING frame -- which is the console's own
-    // one-frame delay, not a shortfall).
+    // ⚠️ STILL GATED (each names a destination this class cannot honestly reach yet):
+    //   * the hook-enumeration leg -- BrnDirector::EffectInterface has no reconstructed home;
+    //   * the online post-event / mode-action legs -- they write the MainDirector flag tail
+    //     (+0x35479/+0x3547A) and call HandlePrepareForModeAction, itself declaration-only;
+    //   * HasNewDirectorProfileData's SECOND store, `*(this + 91808) = (data == 1)`, which
+    //     lands inside mArbitrator, not the GameState. (Its FIRST store, into
+    //     DirectorProfileData +0x08, is an opaque sub-object byte-word -- also left alone.)
     //
-    // DELETE-WHEN: the rest of the MainDirector GameState region is named and BrnDirector::
-    // EffectInterface is homed (HandlePrepareForModeAction unblocks with it).
+    // PostGuiUpdate runs AFTER Update, so every latch here takes effect on the FOLLOWING
+    // frame. That is the console's own one-frame delay, not a shortfall.
     // ------------------------------------------------------------------------
     void MainDirector::PostGuiUpdate(const DirectorInputOutput* lpIO)
     {
@@ -907,21 +1141,78 @@ namespace BrnDirector
         if (lpInput == 0)
             return;
 
-        // ⚠️ GATE: the car-selection / crash-nav / colour-calibration / shortcut-menu /
-        //    end-of-car-select / hook-enumeration / rank-up legs (see the banner).
+        // GUI command 415 -> the junkyard selection-changed handshake's WAITING bit (+0x1A0).
+        if (lpInput->GetCarSelectionChangedThisFrame())
+            maGameState.mbJunkyardSelectionChangedMessageWaiting = true;
+
+        if (lpInput->HasGotCrashNavShownEvent())
+            maGameState.mbCrashNavShown = true;                       // +0x101
+        if (lpInput->HasGotCrashNavHiddenEvent())
+            maGameState.mbCrashNavShown = false;
+
+        if (lpInput->HasGotColourCalibrationShownEvent())
+            maGameState.mbColourCalibrationShown = true;              // +0x102
+        if (lpInput->HasGotColourCalibrationHiddenEvent())
+            maGameState.mbColourCalibrationShown = false;
+
+        if (lpInput->HasGotShortcutMenuEvent())
+            maGameState.mbShortCutMenuShown = lpInput->GetShortcutMenuState();   // +0x103
+
+        // ⭐ GUI command 192 -- the car-select audio hold. Note the SECOND half of the test:
+        // the console only takes this arm while the junkyard is already active, so an
+        // end-of-car-select that arrives outside the junkyard is ignored, not a state forge.
+        if (lpInput->GetEndOfCarSelect() &&
+            maGameState.meJunkyardState != GameState::E_JY_INACTIVE)
+        {
+            maGameState.meJunkyardState        = GameState::E_JY_WAITING_FOR_AUDIO;   // = 5
+            maGameState.mbJunkyardCarModActive = false;
+        }
+
+        // ⚠️ GATE: the hook-enumeration leg -> EffectInterface::Update (un-homed), and its
+        //    else-arm's flag-tail store.
+
+        // GUI command 303 -- the rank-up handshake's WAITING bit + the new rank.
+        if (lpInput->GetRankUpThisFrame())
+        {
+            maGameState.mbRankUpMessageWaiting = true;                // +0x1AA
+            maGameState.miRankUpNewRank        = lpInput->GetRankUpNewRank();   // +0x1AC
+        }
 
         if (lpInput->GetStartNewProfileIntro())
-            mbNewProfileIntroActive = true;
+            maGameState.mbNewProfileIntroActive = true;               // +0xD8 (GameState +216)
 
         if (lpInput->GetStartGameIntroFlyby())
-            mbGameIntroFlybyActive = true;
+            maGameState.mbGameIntroFlybyActive = true;                // +0xD9 (GameState +217)
 
         if (lpInput->GetStopGameIntroFlyby())
         {
-            mbGameIntroFlybyActive  = false;
-            mbNewProfileIntroActive = false;
+            maGameState.mbGameIntroFlybyActive  = false;
+            maGameState.mbNewProfileIntroActive = false;
         }
 
-        // ⚠️ GATE: the profile-data / online post-event / 100%-sequence / mode-action tail.
+        // ⚠️ GATE: HasNewDirectorProfileData (opaque sub-object word + an arbitrator field),
+        //    and the online post-event / mode-action pair.
+
+        // GUI command 77 -> the car-unlock-ticker handshake's WAITING bit (+0x1A4).
+        if (lpInput->GetCarSelectTickerClosedThisFrame())
+            maGameState.mbJunkyardCarUnlockTickedClosedThisFrameMessageWaiting = true;
+
+        // GUI commands 480 / 479 -- the online race-intro bar/clamp trio.
+        if (lpInput->GetFinishedOnlineEventLoading())
+        {
+            maGameState.mbOnlineRaceIntroCanUseBars        = true;     // +0x1A9
+            maGameState.mbOnlineCarSelectCanStartRaceIntro = true;     // +0x1A7
+        }
+        if (lpInput->GetStartedOnlineEventLoading())
+        {
+            maGameState.mbOnlineRaceIntroCanUseBars     = false;
+            maGameState.mbOnlineCarSelectMustClampToCar = true;        // +0x1A8
+        }
+
+        // GUI commands 469 / 470 -- the 100%-completion sequence latch.
+        if (lpInput->GetStarting100PercentSequence())
+            maGameState.mbDoing100PercentSequence = true;              // +0x1B0
+        if (lpInput->GetFinished100PercentSequence())
+            maGameState.mbDoing100PercentSequence = false;
     }
 }
