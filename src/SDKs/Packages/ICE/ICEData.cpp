@@ -1315,6 +1315,36 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
 }
 
 // ---------------------------------------------------------------------------
+// ICETakeData::FixUp
+//
+// RECOVERED 2026-08-01. The X360 symbol for this body is FOLDED: the per-entry call in
+// DictionaryResourceType<ICE::ICETakeData>::FixUp @0x82665FF8 targets 0x82839600, which
+// IDA labels CgsGeometric::PolygonSoupListSpatialMap::Construct -- an ICF fold, because
+// the two functions compile to the identical four instructions:
+//     0x82839600  li   r11, 0
+//     0x82839604  stw  r11, 0(r3)
+//     0x82839608  stw  r11, 4(r3)
+//     0x8283960C  blr
+// i.e. zero the first two words of the take and return. Those two words are the bTNode
+// base's Next/Prev links, and this is the exact mirror of FixDown's first action ("null
+// the intrusive-tree links ... they are rebuilt on load"). The resource argument is
+// unread -- the loaded take needs no pointer relocation, because ICETake::SetDataPointers
+// derives every channel pointer from the take base at USE time (see its body below).
+//
+// So relocate-on-load for a take is: unlink it. Nothing else.
+// ---------------------------------------------------------------------------
+void ICETakeData::FixUp(const CgsResource::Resource& lrResource)
+{
+    (void)lrResource;   // unread by the X360 body (r4 is never touched)
+
+    // bNode::Next @0x00 / bNode::Prev @0x04 -- mPadNodeBase is the committed placeholder
+    // for the not-yet-reconstructed bTNode/bNode base, so clearing its two words IS the
+    // console's two stores (NOT an offset hack).
+    *(u32*)&mPadNodeBase[0] = 0;   // bNode::Next
+    *(u32*)&mPadNodeBase[4] = 0;   // bNode::Prev
+}
+
+// ---------------------------------------------------------------------------
 // ICETakeData::FixDown
 //
 // Serialization fix-DOWN: turn live (in-memory, pointer-bearing) take data back into
