@@ -63,6 +63,7 @@ namespace BrnGame
         , mpGuiModelOutputBuffer(0)
         , mpGuiOutputBuffer(0)
         , mpDirectorOutputBuffer(0)
+        , mpWorldUpdateOutputBuffer(0)
         , mbGamePrepareReceiverQueueConstructed(false)
         , miInputModuleState(0)
         , miPlayer0ControllerPort(0)
@@ -284,7 +285,7 @@ namespace BrnGame
         muGuiVoiceOverHash     = 0;
         mbGuiVoiceOverSounding = false;
         mbDirectorCameraLive   = false;
-        mbWarnedStagedPlayerCarIsFake = false;
+        mbPlayerCarCrashing    = false;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -870,20 +871,44 @@ namespace BrnGame
             lpDirectorInput->UnlockForWrite();
         }
 
+        // ⭐⭐ THE WORLD -> DIRECTOR BRIDGE (X360 BridgeWorldToDirector @0x823E3AB0, run by
+        // DoUpdate_Director on the PRE-GUI pass, right after BridgeControllerToDirector).
+        // This is the ONLY caller of DirectorIO::InputBuffer::SetRaceCarInfo in the image --
+        // it is what gives the director's cameras a REAL per-car VehicleInfo instead of the
+        // zero-filled one every VehicleRef used to resolve to. The world output buffer is the
+        // one the world leg (DriveWorldUpdateFrame, run earlier in this same sub-step by the
+        // flow state) published into; see GetWorldUpdateOutputBuffer().
+        //
+        // ⛔ THE FAKE PLAYER CAR IS RETIRED. This block used to call SetPlayerCarIndex(0) +
+        // SetRaceCarInUse(0, true) on a car whose VehicleInfo was ZEROED, purely so
+        // MainDirector::GetLivePlayerCarIndex() != -1 and the attract-mode stand-in would
+        // tick. VehicleRef::IsValid passed on it and any ICE-anim take framed against it was
+        // an ORIGIN camera. Both fields now come from the real chain:
+        //   RaceCarEntityModule::UpdateOutputInterfaces  (publishes the active-car interface)
+        //     -> WorldModule::BridgeRaceCarEntityInfoToOutput_PostPhysics  (into the world out)
+        //       -> BridgeWorldToDirector                                   (into the director)
+        // If no player car is active the bridge publishes index -1, which is the console's own
+        // "no live player car" answer -- an honest fail instead of a silently wrong camera.
+        if (!lbPostGui && mpWorldUpdateOutputBuffer != 0)
+        {
+            mpWorldUpdateOutputBuffer->LockForRead();
+            lpDirectorInput->LockForWrite();
+            BridgeWorldToDirector(lpDirectorInput, mpWorldUpdateOutputBuffer);
+            lpDirectorInput->UnlockForWrite();
+            mpWorldUpdateOutputBuffer->UnlockForRead();
+        }
+
         // ------------------------------------------------------------------------------
-        // [FLAG PC bring-up] THE INTRO FLY-BY STAND-IN PRODUCER.
+        // [FLAG PC bring-up] THE INTRO FLY-BY STAND-IN.
         //
         // What the CONSOLE does with the fly-by request (VERIFIED, X360):
         //   BridgeGuiToDirector 477 -> InputBuffer::mbStartGameIntroFlyby
         //   MainDirector::PostGuiUpdate  -> GameState::mbGameIntroFlybyActive = true
-        //   ArbStateCarSelect::Update    -> while that flag is set, plays TWO authored ICE
-        //     camera movies back to back out of the "game intro" attrib shot group
-        //     (BehaviourIceAnim::ChangeMovie on shot-list entries 1 then 2, its own assert
-        //     being "Not enough ice movies in game intro group"), then interpolates onto the
-        //     player's car when the flag clears.
+        //   ArbStateCarSelect::Update    -> plays authored ICE camera movies out of the
+        //     DirectorResourceManager's "game intro" attrib shot group.
         // So the retail intro camera is DATA (an ICE movie), not a procedural behaviour, and
-        // it is reached through ArbStateCarSelect -- which is not reconstructed, needs the
-        // attrib shot group, the ICE movie resources, and a real player car.
+        // it is reached through ArbStateCarSelect -- which is not reconstructed and needs
+        // DirectorResourceManager::Prepare to have constructed the 65 shot-group slots.
         //
         // What this build does INSTEAD, until that lands: run the arbitrator's OWN attract
         // state, whose BehaviourRoadRunner rides a real traffic lane with Camera::Utils::
@@ -893,15 +918,6 @@ namespace BrnGame
         //    X360 image's ONLY writer of that flag besides Arbitrator::Construct is the
         //    DEBUG MENU entry "Do attract mode" (DebugComponent::OnActivate @0x82275F68).
         //    It is a developer camera, not the shipping intro camera.
-        //
-        // ⚠️ Staging a player car here is the second half of the stand-in: MainDirector::Update
-        //    runs its whole gameplay middle -- including UpdateArbitrator, the only path to any
-        //    arbitrator state -- ONLY when GetLivePlayerCarIndex() != -1, and this build has no
-        //    race car. The staged VehicleInfo is ZEROED, so anything downstream that reads the
-        //    player car reads zeros.
-        //
-        // The env shim this replaces (BRN_DIRECTOR_ATTRACT) is RETIRED: there is now one
-        // mechanism, and it is driven by the front-end's real request.
         // DELETE-WHEN: ArbStateCarSelect + BehaviourIceAnim + the game-intro shot group are
         // real (then the whole block goes, and the request reaches the console's own consumer).
         // ------------------------------------------------------------------------------
@@ -916,73 +932,12 @@ namespace BrnGame
 
             // The arbitrator is "unwinding" for the frames between the request dropping and
             // UpdateAttractMode's `if (!mbDoAttractMode) { Release(); meState = NORMAL; }`
-            // actually running. Keep the stand-in alive across that, or the arbitrator never
-            // gets another Update (the staged player car is what lets MainDirector::Update
-            // reach UpdateArbitrator at all) and parks in ATTRACT_MODE re-publishing its last
-            // camera for ever -- a frozen world.
+            // actually running. Keep the stand-in alive across that, or the arbitrator parks
+            // in ATTRACT_MODE re-publishing its last camera for ever -- a frozen world.
             const bool lbUnwinding =
                 (leArbState == BrnDirector::Arbitrator::E_STATE_CHANGING_TO_ATTRACT_MODE ||
                  leArbState == BrnDirector::Arbitrator::E_STATE_ATTRACT_MODE);
             const bool lbDriving = lbFlybyRequested || lbUnwinding;
-
-            // ⚠️⚠️ THIS PAIR OF WRITES IS A LIE, AND IT IS ONLY SAFE WHILE THE ICE-ANIM CAMERA
-            //    PATH IS OUT OF THE LINK. Read this before mounting BrnBehaviourIceAnim.cpp.
-            //
-            //    SetPlayerCarIndex(0) + SetRaceCarInUse(0, true) exist for exactly ONE reason:
-            //    MainDirector::Update runs its whole gameplay middle -- including
-            //    UpdateArbitrator, the only path to any arbitrator state -- only when
-            //    GetLivePlayerCarIndex() != -1, and that predicate is
-            //        index = GetPlayerCarIndex();  return GetUsedRaceCars()->IsBitSet(index) ? index : -1;
-            //    so BOTH halves are load-bearing. Without them the attract fly-by never ticks.
-            //
-            //    What makes it a lie: this build spawns NO race car. Nothing ever ran
-            //    RaceCarEntityModule's spawn path, and InputBuffer::SetRaceCarInfo (which has a
-            //    real body) has ZERO callers -- so race car 0's VehicleInfo is ZEROED while its
-            //    "in use" bit says otherwise. Every consumer that trusts the bit alone gets a
-            //    car at the world origin with a zero transform:
-            //      * BrnDirector::VehicleRef::IsValid @0x822336A8 returns true iff mbSet AND the
-            //        AllVehicleData used-race-car bit is set -- both true here. It would PASS.
-            //      * BehaviourIceAnim::Update's first branch (X360 @0x82247108) is exactly
-            //        `if (!mPrimaryVehicleRef.IsValid(world) || !mSecondaryVehicleRef.IsValid(world))
-            //         { Fail(); return; }`, then VehicleRef::Get dereferences the vehicle at
-            //        +496/+528 to build the CreateLookAt. On this staged car that is an ORIGIN
-            //        camera -- the failure mode already recorded four times in this file, where
-            //        a static origin camera unloads the streamed city to black.
-            //    A fake pass is strictly worse than an honest fail: Fail() at least lets the
-            //    behaviour report "no camera" and hand back to something that works.
-            //
-            //    ⛔ DELETE-WHEN (hard gate, not a nice-to-have): the moment
-            //    BrnBehaviourIceAnim.cpp / BrnArbStateCarSelect.cpp join the link, this whole
-            //    block must go and be replaced by a REAL spawned player car (the minimum is
-            //    RaceCarEntityModule's spawn entry points + a real InputBuffer::SetRaceCarInfo
-            //    caller). Mounting the ICE-anim path while this stand-in is live is the one
-            //    combination that manufactures a silently-wrong camera instead of a visible
-            //    failure.
-            if (lbDriving)
-            {
-                lpDirectorInput->LockForWrite();
-                lpDirectorInput->SetPlayerCarIndex(E_ACTIVE_RACE_CAR_INDEX_0);
-                lpDirectorInput->SetRaceCarInUse(0u, true);
-                lpDirectorInput->UnlockForWrite();
-
-                // One-shot, so the log says out loud what the used-race-car bit is claiming.
-                // (Not a mechanical guard -- there is no symbol to key one off until the real
-                //  spawn path exists -- but it makes the lie impossible to read past.)
-                if (!mbWarnedStagedPlayerCarIsFake)
-                {
-                    mbWarnedStagedPlayerCarIsFake = true;
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[FLAG PC bring-up] STAGING A FAKE PLAYER CAR: race car 0 is "
-                               "marked in-use so MainDirector::GetLivePlayerCarIndex() != -1, "
-                               "but its VehicleInfo is ZEROED (no spawn path). VehicleRef::"
-                               "IsValid would PASS on it -- any ICE-anim take framed against "
-                               "this car is an ORIGIN camera. Do not mount BehaviourIceAnim "
-                               "while this is live.\n";
-                    }
-                }
-            }
 
             if (lrArbitrator.GetDoAttractMode() != lbFlybyRequested)
             {
@@ -1906,6 +1861,7 @@ namespace BrnGame
             }
         }
 
+        mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer);
@@ -1937,12 +1893,25 @@ namespace BrnGame
         // status AND Constructs the embedded RequestInterface<512> queue.
         if (mpDirectorOutputBuffer != 0)
             mpDirectorOutputBuffer->Construct();
+
+        // ⭐ THIS SUB-STEP'S WORLD UPDATE OUTPUT BUFFER (see the header note on
+        // GetWorldUpdateOutputBuffer). The console's DoUpdate owns it for the whole sub-step
+        // and threads it through every leg; DoUpdate is a PC leaf, so it lives here with the
+        // other per-sub-step buffers. The world leg (DriveWorldUpdateFrame) drives the world
+        // INTO it and DoUpdate_Director's BridgeWorldToDirector reads it back out.
+        mpUpdateOutputBufferStack->CreateIOBuffer<BrnWorldIO::UpdateOutputBuffer>(
+            &mpWorldUpdateOutputBuffer, "World");
+        // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc;
+        // the generic PC template placement-news only.
+        if (mpWorldUpdateOutputBuffer != 0)
+            mpWorldUpdateOutputBuffer->Construct();
     }
 
     // @ BrnGameModule.cpp:2515 - free this sub-step's static GUI/director IO buffers (reverse
     // order of CreateStaticIOBuffers).
     void BrnGameModule::DestroyStaticIOBuffers()
     {
+        mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::ModelIO::OutputBuffer>(&mpGuiModelOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer);

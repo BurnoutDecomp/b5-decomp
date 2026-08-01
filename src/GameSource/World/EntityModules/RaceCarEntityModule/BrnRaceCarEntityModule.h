@@ -197,6 +197,20 @@ public:
         // ONLY way a race-car load request leaves this module. Called from PostPhysicsUpdate.
         void SendStreamerEvents( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
 
+        // X360 0x822F5CF8. THE per-frame OUTPUT PUBLISH: copy every attached active slot's
+        // live physics state + identity into the active-race-car output interface, and the
+        // player's slot/engine-state into its player-scoped scalars. Called from both
+        // PreSceneUpdate and PostPhysicsUpdate on the console; it is the ONLY producer of
+        // RCEntityActiveRaceCarOutputInterface anywhere in the image, and therefore the head
+        // of the chain that ends at the director's per-car VehicleInfo
+        // (UpdateOutputInterfaces -> BridgeRaceCarEntityInfoToOutput_PostPhysics ->
+        //  BrnGameModule::BridgeWorldToDirector -> DirectorIO::InputBuffer::SetRaceCarInfo).
+        void UpdateOutputInterfaces(
+                RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
+                RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalCarInterface,
+                RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpReplayActiveCarInterface,
+                RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpReplayGlobalCarInterface );
+
         // X360 0x822F4DB0. Bind lpRaceCar to an active-race-car slot and start its asset
         // load. leActiveRaceCarIndex may be E_ACTIVE_RACE_CAR_INDEX_INVALID (-1), in which
         // case the console re-uses the car's own previous slot if it has one and otherwise

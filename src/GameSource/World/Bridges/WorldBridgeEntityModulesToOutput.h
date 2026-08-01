@@ -104,6 +104,19 @@ namespace WorldModule
         BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
         const BrnWorld::WorldEntityIO::OutputBuffer_PreScene* lpWorldEntityOutput_PreScene);
 
+    // @ 0x827ADC38 -- ⭐ THE RACE-CAR OUTPUT-INTERFACE TRANSFER. Copies the race-car
+    // module's four published interfaces (live + replay active-race-car, live + replay
+    // global) out of its PostPhysics output buffer into the world update-output buffer,
+    // then appends its game-event queue. This is the ONLY path by which a race car's
+    // per-frame state leaves the race-car module, and therefore the middle link of the
+    // chain that ends at the director's per-car VehicleInfo.
+    // BODIED in WorldBridgeEntityModulesToOutput.cpp (called from
+    // BridgeEntityModulesToOutput_PostPhysics, as on the console).
+    void BridgeRaceCarEntityInfoToOutput_PostPhysics(
+        void* lpWorldModule,
+        BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+        const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutput_PostPhysics);
+
     // @ 0x827AF318
     void BridgeRaceCarEntityInfoToOutput_PreScene(
         void* lpWorldModule,

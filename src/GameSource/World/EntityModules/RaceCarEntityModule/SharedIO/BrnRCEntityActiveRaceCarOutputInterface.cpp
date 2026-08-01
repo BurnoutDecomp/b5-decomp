@@ -91,6 +91,53 @@ RCEntityActiveRaceCarOutputInterface::RCEntityActiveRaceCarOutputInterface(
 }
 
 // ============================================================================
+// operator= (DWARF :213). There is NO out-of-line operator= symbol in the image: the
+// only assignment site, BrnWorldIO::UpdateOutputBuffer::SetActiveRaceCarOutputInterface
+// @0x827A47A8, is a flat `XMemCpy(dst, src, 0x28F0)` == the whole 10480-byte object.
+//
+// ⚠️ WHY THIS EXISTS NOW: the declared-but-undefined operator= had been resolving from
+// WorldLinkStubs.cpp as an INERT one-shot log. `SetActiveRaceCarOutputInterface` therefore
+// compiled, ran every frame, and COPIED NOTHING -- a bridge that looks correct and silently
+// drops its payload. Retired here with the member-wise body (the same one the copy
+// constructor above uses; a byte-copy is not portable to the x64 layout).
+// ============================================================================
+void RCEntityActiveRaceCarOutputInterface::operator=(
+        const RCEntityActiveRaceCarOutputInterface& lrOther)
+{
+    if (this == &lrOther)
+    {
+        return;
+    }
+
+    maCarsInTheRace = lrOther.maCarsInTheRace;
+
+    for (s32 luIndex = 0; luIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luIndex)
+    {
+        maBoostOutputInfo[luIndex]                = lrOther.maBoostOutputInfo[luIndex];
+        maRaceCarStates[luIndex]                  = lrOther.maRaceCarStates[luIndex];
+        maRivalIds[luIndex]                       = lrOther.maRivalIds[luIndex];
+        maCarModelIds[luIndex]                    = lrOther.maCarModelIds[luIndex];
+        mauActiveRaceCarColourIndex[luIndex]      = lrOther.mauActiveRaceCarColourIndex[luIndex];
+        maiActiveRaceCarPaintFinishIndex[luIndex] = lrOther.maiActiveRaceCarPaintFinishIndex[luIndex];
+        mau16ActiveRaceCarAISections[luIndex]     = lrOther.mau16ActiveRaceCarAISections[luIndex];
+        maRaceCarMaterialColours[luIndex]         = lrOther.maRaceCarMaterialColours[luIndex];
+        maxRaceCarFlags[luIndex]                  = lrOther.maxRaceCarFlags[luIndex];
+        maCurrentInAirRotations[luIndex]          = lrOther.maCurrentInAirRotations[luIndex];
+        mbHasCrashedIntoWater[luIndex]            = lrOther.mbHasCrashedIntoWater[luIndex];
+        maGlobalRaceCarIndices[luIndex]           = lrOther.maGlobalRaceCarIndices[luIndex];
+        maeActiveRaceCarIndex[luIndex]            = lrOther.maeActiveRaceCarIndex[luIndex];
+        maDeformationModelResourceHandles[luIndex]= lrOther.maDeformationModelResourceHandles[luIndex];
+    }
+    mePlayerActiveRaceCarIndex = lrOther.mePlayerActiveRaceCarIndex;
+    mePlayerEngineState        = lrOther.mePlayerEngineState;
+    mbIsPlayerCarActive        = lrOther.mbIsPlayerCarActive;
+    mbAllActiveCarsReady       = lrOther.mbAllActiveCarsReady;
+    mWorldMap2D                = lrOther.mWorldMap2D;
+    mbPlayerWrecked            = lrOther.mbPlayerWrecked;
+    mbCanDriveAwayFromCrash    = lrOther.mbCanDriveAwayFromCrash;
+}
+
+// ============================================================================
 // X360 0x8227D550 -- Clear. Resets the per-car arrays, the per-scoring-index
 // active-car map and the player-scoped scalars to their cleared defaults:
 //   mePlayerActiveRaceCarIndex = -1   (E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -265,15 +312,27 @@ void RCEntityActiveRaceCarOutputInterface::SetDeformationModelResourcePtr(
 // (Vector4 arg -> RwRGBAReal slot), the in-air rotations (Vector3 arg), the crashed-into-water
 // flag and the can-drive-away flag. Float/SIMD args arrive in fp/vector registers (Vector4
 // lrMaterialColour, Vector3 lrInAirRotations); the bool tail args are the water/drive flags.
+//
+// ⚠️ PARAMETER ORDER CORRECTED 2026-08-01. The X360 argument registers/slots are
+//   r4=index r5=globalIndex r6=rivalId r7=carModelId r8=state
+//   r9  = FLAGS      -> `sthx r25, 2*(idx+0x13C0)+this` == maxRaceCarFlags[idx]
+//   r10 = AI section -> `sthx r24, 2*(idx+0x1378)+this` == mau16ActiveRaceCarAISections[idx]
+//   +0x54 = COLOUR IX-> `stwx r3,  4*(idx+0x9AC)+this`  == mauActiveRaceCarColourIndex[idx]
+//   +0x5C = paint ix -> `stwx r10, 4*(idx+0x9B4)+this`  == maiActiveRaceCarPaintFinishIndex[idx]
+//   v1 = material colour (shadow-spilled to caller+0x60 and re-read as four `lfs`),
+//   v2 = in-air rotations, +0x87 = hasCrashedIntoWater, +0x8F = canDriveAwayFromCrash.
+// The two u32s (flags / colour index) were transcribed the other way round. The STORES were
+// always right, so the defect was invisible: this function had no caller in the tree until
+// RaceCarEntityModule::UpdateOutputInterfaces landed (2026-08-01).
 void RCEntityActiveRaceCarOutputInterface::SetRaceCarState(
         EActiveRaceCarIndex leActiveRaceCarIndex,
         EGlobalRaceCarIndex leGlobalRaceCarIndex,
         CgsID               lRivalId,
         CgsID               lCarModelId,
         const RaceCarState* lpRaceCarState,
-        u32                 luColourIndex,
-        u16                 lu16AISection,
         u32                 luFlags,
+        u16                 lu16AISection,
+        u32                 luColourIndex,
         s32                 liPaintFinishIndex,
         Vector4             lMaterialColour,
         Vector3             lInAirRotations,

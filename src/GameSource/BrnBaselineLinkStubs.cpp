@@ -58,18 +58,13 @@ namespace BrnReplays
     ReplayModule::ReplayModule() {}
 }
 
-namespace BrnPhysics
-{
-namespace Vehicle
-{
-    // Link stub: the controller-bridge closure links BrnPlayerInfo.cpp (Director camera
-    // VehicleInfo::operator=), whose race-car-state copy calls this user-declared
-    // operator= ("own TU" in BrnVehicleEvents.h; body unreconstructed). Only the Director
-    // camera path -- OFF the boot/title/menu path -- reaches it. Inert no-op until the
-    // real body lands; DELETE when that TU is reconstructed.
-    void RaceCarState::operator=(const RaceCarState&) {}
-}
-}
+// RETIRED 2026-08-01 (camera wave). BrnPhysics::Vehicle::RaceCarState::operator= used to be
+// an inert `{}` here, on the reasoning quoted in its own comment: "Only the Director camera
+// path -- OFF the boot/title/menu path -- reaches it." That path went live with
+// BridgeWorldToDirector, and the empty body then discarded EVERY RaceCarState copy in the
+// tree with no diagnostic (the world published a car at (3008.17, -1.16, -1874.30); the
+// director's camera received one at the origin). The real bitwise body now lives in its home,
+// GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.cpp.
 
 namespace BrnNetwork
 {

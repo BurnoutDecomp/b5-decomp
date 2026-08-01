@@ -216,6 +216,12 @@ namespace DirectorIO
         void SetPlayerCarIndex(EActiveRaceCarIndex leIndex);
         void SetRaceCarInUse(u32 luIndex, bool lbInUse);
 
+        // @0x325C -- the player's boost fill fraction, published by
+        // BrnGameModule::BridgeWorldToDirector (the console stores it inline; there is no
+        // console setter symbol, so this entry point is ours and the field is the console's).
+        void SetPlayerBoostPercentage(f32 lfPercentage);
+        f32  GetPlayerBoostPercentage() const;
+
         void SetShortcutMenuEvent(bool lbState);
         void SetGotCrashNavShownEvent();
         void SetGotCrashNavHiddenEvent();
@@ -266,7 +272,16 @@ namespace DirectorIO
         // 64-bit host. To preserve the exact 32-byte X360 layout (4 bytes/slot) the pointer table is
         // stored as 8 X360-pointer-width u32 slots; the accessors reinterpret them as needed.
         u32 maVehicleInfoArray[8];                       // @0x3238 (32 bytes -> 0x3258)
-        u8  maVehicleInfoArrayPad[0x3260 - (0x3238 + 8 * sizeof(u32))]; // 8-byte gap to controller
+        u8  maVehicleInfoArrayPad[0x325C - (0x3238 + 8 * sizeof(u32))]; // 4-byte gap
+        // @0x325C (12892): the player's boost fill fraction. The producer is
+        // BrnGameModule::BridgeWorldToDirector @0x823E3AB0 -- `*(input + 0x325C) =
+        // (fabs(boost.mfMaxBoost) > eps) ? boost.mfBoostAmount / boost.mfMaxBoost : 0`.
+        // ⚠️ FINDING (2026-08-01): the file header above places mfPlayerBoostPercentage in
+        // the mScoreAndBoostBlock span BEFORE maVehicleInfoArray. The only writer proves it
+        // is AFTER it, in what was modelled as an 8-byte pad. Named here without moving any
+        // offset (_AssertLayout still pins 0x3238 / 0x3260); the header prose is corrected
+        // rather than the layout.
+        f32 mfPlayerBoostPercentage;                     // @0x325C
 
         // @0x3260 (12896): controller snapshot, 224 (0xE0) bytes (SetControllerInfo memcpy). HONEST.
         u8  mControllerInfo[224];                        // @0x3260 .. 0x3340
