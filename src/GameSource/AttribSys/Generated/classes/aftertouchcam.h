@@ -20,6 +20,13 @@ namespace Gen
     class aftertouchcam : private Instance
     {
     public:
+        // The FULL 64-bit class key, as the AttribSys class registry hashes it (the whole
+        // doubleword). Recorded here 2026-08-01 because DirectorResourceManager::Prepare
+        // @0x8225E3FC builds a bare Attrib::RefSpec over it -- `lis 0x6323 / ori 0x88D6 /
+        // lis 0x75E6 / ori 0x2FC1 / insrdi` -- to seed its mAfterTouchCam member; the
+        // low word alone would MISS, exactly like the shotgroup/cameradefaults keys.
+        static const u64 KU_AFTERTOUCHCAM_CLASS_KEY = 0x75E62FC1632388D6ULL;
+
         explicit aftertouchcam(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
     };
 

@@ -1,8 +1,21 @@
 // attribhashmap.cpp -- Attrib::HashMap open-addressing attribute hash map bodies.
 //
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX (AttribSys 1.2.1.2). The
-// container/Node layout is pinned in attribhashmap.h; the raw-offset accesses in
-// Remove/Transfer/UpdateSearchLength mirror the X360 doubleword/byte loads exactly.
+// container/Node layout is pinned in attribhashmap.h.
+//
+// ⛔⛔ KNOWN DEFECT, NOT FIXED HERE (2026-08-01): Remove / Transfer / UpdateSearchLength
+// still address this object and its buckets through raw CONSOLE byte offsets --
+// `*(u16*)(this+4)` for muCapacity, `+6` muCount, `+0xA` mu8MaxSearchLength, `+0xB`
+// mu8KeyShift, and a `<< 4` / `>> 4` bucket stride. Every one of those is WRONG on x64:
+// mpBuckets is a pointer, so the header fields sit 4 bytes later, and sizeof(Node) is 24,
+// not 16. Release @0x82802718 had the identical bug (`*(u16*)(this+8)` == muCapacity on the
+// host, not muRefCount) and it cost this project a whole boot -- "Too many releases of
+// object!" the moment DirectorResourceManager::Prepare gave the SDK its first real
+// collection to reference-count. Release is fixed by name below; the removal trio is NOT,
+// because nothing on the committed boot path removes an attribute and rewriting it deserves
+// its own verified pass. If you land ANY attribute removal / table repair, fix these first.
+// The already-correct half (HashMap / Add / RebuildTable / Find / FindIndex / GetKeyAtIndex /
+// PreFlightAdd / CountSearchCacheLines) reads every member BY NAME -- copy that.
 //
 //   HashMap::HashMap            @ 0x828094E8
 //   HashMap::CountSearchCacheLines @ 0x828048C8
@@ -425,8 +438,15 @@ unsigned int Attrib::HashMap::PreFlightAdd(u64 luKey, unsigned int luStartIndex,
 // X360 body writes mRefCount, so the reconstruction takes a non-const this.
 bool Attrib::HashMap::Release() const
 {
-    u8* lpThis = const_cast<u8*>(reinterpret_cast<const u8*>(this));
-    u16* lpuRefCount = reinterpret_cast<u16*>(lpThis + 8);
+    // ⚠️ FIXED 2026-08-01 (Prepare wave): this used to reach the refcount as
+    // `*(u16*)((u8*)this + 8)` -- the CONSOLE offset. mpBuckets is a POINTER, so on x64
+    // muCapacity sits at +8 and muRefCount at +12: every Release was decrementing the
+    // BUCKET COUNT of the table it was supposed to be releasing, while every AddRef
+    // (Collection::AddRef / Instance::Instance / RefSpec::RefSpec, all of which already
+    // used the named member) bumped the real muRefCount. Symptom: "Too many releases of
+    // object!" on the first Instance destructor that ever ran against a real collection --
+    // i.e. the moment DirectorResourceManager::Prepare landed. Read it BY NAME.
+    u16* lpuRefCount = &const_cast<Attrib::HashMap*>(this)->muRefCount;
     const unsigned int luRefs = *lpuRefCount;
 
     bool lbReleased;

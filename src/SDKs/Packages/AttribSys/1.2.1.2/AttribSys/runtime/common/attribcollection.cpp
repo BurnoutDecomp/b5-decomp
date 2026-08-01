@@ -213,7 +213,7 @@ void* Attrib::Collection::GetData(u64 luKey, unsigned int luIndex) const
         else
         {
             // Plain: the node's value word is the (X360 32-bit) Array pointer image.
-            lpArray = reinterpret_cast<Array*>(static_cast<uintptr_t>(lpNode->muValue));
+            lpArray = reinterpret_cast<Array*>(lpNode->mpValue);   // full-width payload
         }
         return lpArray->GetData(luIndex);
     }
@@ -371,7 +371,7 @@ void Attrib::Collection::Clear()
             else
             {
                 // Plain pointer stored in the node's value word.
-                lpData = reinterpret_cast<void*>(static_cast<uintptr_t>(lpNode->muValue));
+                lpData = lpNode->mpValue;   // full-width payload
             }
 
             if (lpData != NULL)
@@ -586,7 +586,7 @@ Attrib::Collection::Collection(const CollectionLoadData& lrLoad, Vault* lpSource
             lpArray = reinterpret_cast<Array*>(
                 static_cast<u8*>(lpClassPrivate->mStaticData) + lpNode->muValue);
         else
-            lpArray = reinterpret_cast<Array*>(static_cast<uintptr_t>(lpNode->muValue));
+            lpArray = reinterpret_cast<Array*>(lpNode->mpValue);   // full-width payload
 
         lpArray->muTypeInfo = static_cast<u16>((lpArray->muTypeInfo & 0x8000u) |
                                                static_cast<u16>(lpDesc->mIndex));

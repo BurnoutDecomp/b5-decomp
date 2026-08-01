@@ -26,6 +26,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"        // ITypeHandler
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"                  // Database::IsInitialized
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h" // GetDatabasePrivate
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabaseprivate.h" // DatabasePrivate::mClasses (by NAME, not +8)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h"                 // Class, VecHashMap_Attrib_Class_TablePolicy_0_16
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"                         // Attrib::FindCollection (the canonical decl this TU bodies)
 #include "GameSource/AttribSys/Generated/attrib_private.h"                                // Attrib::Private
@@ -41,7 +42,8 @@ namespace Attrib
 // Resolve a collection by (class key, collection key) against the process attribute
 // database. Two chained hash lookups:
 //   1. the class registry -- DatabasePrivate::mClasses, which the X360 reaches as
-//      `Database::sThis->mPrivates + 8` (the same seam RefSpec::GetClass below uses);
+//      `Database::sThis->mPrivates + 8` (the same seam RefSpec::GetClass below uses).
+//      ⚠️ +8 IS A CONSOLE OFFSET; on x64 the member sits at +16. Read it BY NAME.
 //   2. that class's collection table -- ClassPrivate::mCollections, which the X360
 //      reaches as `Class::mpPrivates + 0x1C` and which Class::GetCollection already
 //      wraps by name.
@@ -78,11 +80,17 @@ Collection* FindCollection(u64 luClassKey, u64 luCollectionKey)
     if (!Database::IsInitialized())
         return nullptr;
 
-    u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
-    VecHashMap_Attrib_Class_TablePolicy_0_16* lpClassTable =
-        reinterpret_cast<VecHashMap_Attrib_Class_TablePolicy_0_16*>(lpPrivates + 8);
-
-    const Class* lpClass = lpClassTable->Find(luClassKey);
+    // ⚠️ FIXED 2026-08-01 (Prepare wave): this used to be
+    //     reinterpret_cast<VecHashMap...*>(reinterpret_cast<u8*>(GetDatabasePrivate()) + 8)
+    // -- the CONSOLE byte offset of DatabasePrivate::mClasses. On x64 the Database base is
+    // {vptr, mPrivates} == 16 bytes, not 8, so that pointed EIGHT BYTES SHORT: the table
+    // header was read as {mPrivates-tail, mpTable, muTableSize...} shifted by one pointer,
+    // giving a nonsense bucket count and a garbage bucket array. The observable symptom was
+    // an unbounded storm of "Invalid node found during search; table invariant is broken"
+    // (vechashmap.cpp:113) the moment anything actually resolved a collection -- which
+    // nothing did until Prepare landed. Read the member by NAME (the x64-gate rule); the
+    // sibling Class::GetCollectionTable already did.
+    const Class* lpClass = GetDatabasePrivate()->mClasses.Find(luClassKey);
     if (!lpClass)
         return nullptr;
 
@@ -144,10 +152,9 @@ const Class* RefSpec::GetClass() const
     if (mClassKey == 0)
         return nullptr;
 
-    u8* lpPrivates = reinterpret_cast<u8*>(GetDatabasePrivate());
-    VecHashMap_Attrib_Class_TablePolicy_0_16* lpClassTable =
-        reinterpret_cast<VecHashMap_Attrib_Class_TablePolicy_0_16*>(lpPrivates + 8);
-    return lpClassTable->Find(mClassKey);
+    // Same x64-gate correction as FindCollection above: `privates + 8` is the CONSOLE
+    // offset of mClasses and lands 8 bytes short on the host. Read it by name.
+    return GetDatabasePrivate()->mClasses.Find(mClassKey);
 }
 
 // ===========================================================================

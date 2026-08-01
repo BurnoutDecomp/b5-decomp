@@ -63,6 +63,12 @@ namespace Gen
         // from the file-scope static gGameModule, so default construction runs PRE-MAIN
         // and must not call Attrib::FindCollection.
         explicit cameradefaults(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // The base validity test, re-exported past the PRIVATE inheritance (same shape as
+        // shotgroup's). DirectorResourceManager's PC bank diagnostic reads it; the console
+        // itself never asserts this slot (mCameraDefaults is one of the three
+        // Prepare builds and never validates).
+        using Instance::IsValid;
     };
 
     // X360 ctor @0x82208770: Collection = FindCollection(0x095B375E_5F206F31, r4); chain

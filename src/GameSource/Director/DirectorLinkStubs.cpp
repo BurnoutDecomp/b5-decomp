@@ -278,18 +278,10 @@ namespace BrnDirector
         return 0;
     }
 
-    // -- DirectorResourceManager::Prepare. The real body resolves the director's Attrib shot
-    //    vault (shot groups, key anims, playlists) through the output buffer's request
-    //    interfaces; none of that is reachable yet and the road runner reads none of it.
-    //    TRUE = "prepared", so DirectorModule::Prepare advances past stage 2.
-    //    DELETE-WHEN: the shot-vault resolve lands.
-    bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
-                                          ICEWrapper* lpHACKIceWrapper)
-    {
-        (void)lpOutputBuffer;
-        (void)lpHACKIceWrapper;
-        return true;
-    }
+    // -- DirectorResourceManager::Prepare RETIRED 2026-08-01. The real body @0x8225CA08 is
+    //    bodied in its own TU (GameSource/Director/BrnDirectorResourceManager.cpp), which is
+    //    now in the exe source list. It resolves the CameraVault and constructs all 65
+    //    shot-group slots; this `return true` was what left them null-collection instances.
 
     // -- The director's own CgsDev::DebugComponent page ("Camera"). Its five recovered
     //    functions all index DirectorModule regions this reconstruction does not model yet.

@@ -21,32 +21,48 @@ namespace Attrib
     // a node with no instance-resolved pointer and whose 0x10 bit marks a forced-local
     // (non-inheritable) attribute. GetPointer resolves the node's value pointer within an
     // instance's attribute-data block (its body lives in the Node slice / SDK).
+    // ⚠️⚠️ THIS STRUCT AND Attrib::HashMap::Node ARE THE SAME CONSOLE TYPE, and they must
+    // stay byte-identical on the host. Attrib::Collection::GetNode hands a
+    // HashMap::Bucket* straight back as an Attrib::Node* (`reinterpret_cast`), which is
+    // free on the console (both were 16 bytes) and was WRONG here from 2026-07-27 until
+    // 2026-08-01: HashMap::Node's payload slot is a machine word, so on x64 it is 8 bytes
+    // and pushes mTypeIndex/mMax/muFlags from +0x0C/+0x0E/+0x0F to +0x10/+0x12/+0x13 --
+    // while this struct still declared a u32 payload and read muFlags at +0x0F, i.e. the
+    // TOP BYTE OF THE PAYLOAD POINTER. Measured live: HashMap flags byte 0x80 (occupied),
+    // this struct's muFlags 0. Every generated Num_<array>() therefore reported ZERO
+    // elements -- Attribute::GetLength -> Node::GetCount bails on `(muFlags & 0x80) == 0`.
+    // That was invisible until DirectorResourceManager::Prepare landed and asked 37 shot
+    // groups for their ShotList length. attribute_embed_check.cpp now cross-asserts the two
+    // layouts against each other; do NOT re-pin either to a console byte literal.
     struct Node
     {
         u64 mKey;          // +0x00  attribute key (8 bytes)
-        u32 muValue;       // +0x08  value word: a byte offset into a data area (laid-out /
-                           //         inherited nodes) or the 32-bit Array pointer image
-                           //         (plain array node). X360 width -- the byte-exact node
-                           //         keeps muFlags at +0xF (see attribute_embed_check.cpp).
-        u16 mTypeIndex;    // +0x0C  attribute type index
-        u8  mMax;          // +0x0E  cached probe-run length (bucket role; unused by cursors)
-        u8  muFlags;       // +0x0F : bit1(0x2)=array, bit4(0x10)=laid-out/local,
+        // The payload slot. Console: 4 bytes. Host: a MACHINE WORD, because the collection
+        // loader and the class/collection registries store real host pointers here
+        // (attribdatabase.cpp `lpNode->mpValue = *lppValue`, attribhashmap.cpp's free-bucket
+        // self-pointer sentinel). The u32 view is the byte offset a laid-out / inherited
+        // node carries; the pointer view is the plain-pointer case.
+        union
+        {
+            void* mpValue; // +0x08  plain pointer payload / inline value word
+            u32   muValue; // +0x08  laid-out / inherited data-area byte offset (low word)
+        };
+        u16 mTypeIndex;    // console +0x0C / host +0x10  attribute type index
+        u8  mMax;          // console +0x0E / host +0x12  cached probe-run length (bucket role)
+        u8  muFlags;       // console +0x0F / host +0x13
+                           //       : bit1(0x2)=array, bit4(0x10)=laid-out/local,
                            //         bit5(0x20)=inherited, bit6(0x40)=value stored INLINE
                            //         in the node (GetPointer @0x828045B0 tests 0x40 first
                            //         and returns `this + 8`), bit7(0x80)=occupied
 
-        // Node @ 0x82809430 — placement-construct a node/bucket for (key, type, value).
-        // Resolves the node's schema type index from the attribute database, sets the
-        // occupied bit (0x80) into the flags byte, and -- for a laid-out/inherited node
-        // being placed into a data area (lbComputeOffset && flags & (0x10|0x20)) -- rewrites
-        // its value word as the byte offset of lpValue relative to that data-area base
-        // (lpBase). Own AttribSys ledger TU. (attribhashmap.h declares the same ctor on its
-        // Bucket alias so HashMap::Add can placement-new a slot.)
-        Node(u64 luKey, u16 luTypeIndex, void* lpValue, bool lbComputeOffset,
-             u8 lu8Flags, void* lpBase);
+        // Node @ 0x82809430 -- placement-construct a node/bucket for (key, type, value).
+        // The one DEFINITION lives on the HashMap::Node spelling of this same type
+        // (attribhashmap.cpp), which takes the 64-bit TYPE KEY and resolves the index
+        // itself. Nothing ever defined this (u16 index) spelling, so it is retired rather
+        // than left as a second declaration of a function that does not exist.
 
-        // Default construct — leaves the node uninitialised (the embed check builds one on
-        // the stack). Declared so the bodied ctor above does not suppress it.
+        // Default construct -- leaves the node uninitialised (the embed check builds one on
+        // the stack).
         Node() {}
 
         // GetPointer(layout, collection) @ 0x828045B0 — resolve this node's value pointer.

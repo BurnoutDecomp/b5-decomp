@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"          // CgsGraphics::Camera (committed, sizeof 0x170, pointer-free)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (committed; pointer members widen on x64)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // GameDataIO::RequestInterface<512> (mResourceInterface)
+#include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h"      // CgsSystem::TimerRequestInterface (mTimerRequestInterface)
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h"      // AttribSysRequestInterface<512> (mVaultRequestInterface)
 
 // BrnDirector::DirectorIO::OutputBuffer -- the Director module's per-frame OUTPUT payload buffer,
 // the write-side sibling of BrnDirector::DirectorIO::InputBuffer (BrnDirectorModuleIO.h). Like
@@ -26,16 +28,22 @@
 //     mTimerRequestInterface    @0x0500 (1280)   GetTimerRequestIn (read) / GetTimerRequestInterfac (write)
 //                                                 + a sub-interface 16 bytes in @0x0510 (see below)
 //
-// ⭐ 2026-07-29 FINDING about the +0x510 sub-interface. LoadDirectorModule @0x823E74C0 feeds
-// the @0x510 read-getter (0x823B24A0) straight into
+// ⭐ 2026-07-29 FINDING about the +0x510 sub-interface -- ACTED ON 2026-08-01 (Prepare wave).
+// LoadDirectorModule @0x823E74C0 feeds the @0x510 read-getter (0x823B24A0) straight into
 // `VariableEventQueue<32768,16>::Append<512,16>` on the GameData input's queue at +0x8014 --
 // which is the GameData input's ATTRIBSYS request queue (the same destination
 // LoadWorldModule's AttribSys append uses). So @0x510 is a VariableEventQueue<512,16> holding
-// ATTRIBSYS VAULT requests, not a timer sub-record; "GetTimerRequestSubInterface" is a
-// mis-naming inherited from the truncated IDA symbol. NOT renamed/re-homed in this wave: the
-// director issues no vault requests on the reconstructed path, and re-homing it would re-lay
-// the committed mTimerRequestInterface span. Rename it together with the append when the
-// director's AttribSys leg lands.
+// ATTRIBSYS VAULT requests, not a timer sub-record; "GetTimerRequestSubInterface" was a
+// mis-naming inherited from the truncated IDA symbol.
+// The span is now SPLIT into its two real members and the accessors carry the DWARF name
+// `GetVaultRequestInterface` (BrnDirectorResourceManager.h's own note demanded exactly this):
+//     mTimerRequestInterface  @0x0500  CgsSystem::TimerRequestInterface          (16 bytes:
+//                                       two 8-byte TimerRequests -- game + sim)
+//     mVaultRequestInterface  @0x0510  AttribSysRequestInterface<512>            (528 bytes:
+//                                       a VariableEventQueue<512,16>; 0x720-0x510 == 0x210)
+// The two console strides add up EXACTLY to the old opaque 0x220 span, which is the
+// independent confirmation that the split is where the console puts it. It is
+// DirectorResourceManager::Prepare @0x8225CA08 that posts on this queue (RegisterVault).
 //     mDirectorInterface        @0x0720 (1824)   GetDir (read)
 //     mReplayRequestInterface   @0x0724 (1828)   GetReplayRe (read) / GetReplayRequestI (write)
 //
@@ -86,10 +94,12 @@ namespace DirectorIO
         u8*       GetDir();                     // -> mDirectorInterface        @0x0720
         u8*       GetDirectorOu();              // -> mDirectorOutputInterface  @0x04F0
         u8*       GetReplayRe();                // -> mReplayRequestInterface   @0x0724
-        u8*       GetTimerRequestIn();          // -> mTimerRequestInterface    @0x0500
-        // +0x510: 16 bytes into the timer-request interface (read-lock). Exact Get-name is
-        // IDA-truncated to the class token 'Output' -> honest placeholder; offset+lock authoritative.
-        u8*       GetTimerRequestSubInterface();     // -> mTimerRequestInterface+0x10 (this+0x510)
+        CgsSystem::TimerRequestInterface* GetTimerRequestIn();   // -> mTimerRequestInterface @0x0500
+        // X360 0x823B24A0 -> &mVaultRequestInterface (this+0x510), READ-lock. DWARF name
+        // (BrnDirectorResourceManager.h:319 recorded the correction); the const overload is
+        // the read-side twin so both can carry the one DWARF spelling.
+        const CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512>*
+                  GetVaultRequestInterface() const;
 
         // --- write-lock-asserted getters (return &member) ---
         // X360 0x822077A0 -> mResourceInterface @0x02E0. This is the interface
@@ -98,10 +108,10 @@ namespace DirectorIO
         BrnResource::GameDataIO::RequestInterface<512>* GetResour();
         u8*       GetDirectorOutputIn();        // -> mDirectorOutputInterface  @0x04F0
         u8*       GetReplayRequestI();          // -> mReplayRequestInterface   @0x0724
-        u8*       GetTimerRequestInterfac();    // -> mTimerRequestInterface    @0x0500
-        // +0x510 write-lock twin of GetTimerRequestSubInterface (distinct name: C++ cannot overload
-        // two same-signature non-const u8* methods -- mirrors the committed 0x500 read/write split).
-        u8*       GetTimerRequestSubInterfaceW();    // -> mTimerRequestInterface+0x10 (this+0x510)
+        CgsSystem::TimerRequestInterface* GetTimerRequestInterfac();  // -> mTimerRequestInterface @0x0500
+        // X360 0x822069B0 -> &mVaultRequestInterface (this+0x510), WRITE-lock. Same DWARF name
+        // as the const twin above; the constness is what separates the two lock bits here.
+        CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512>* GetVaultRequestInterface();
 
         // --- write-lock-asserted camera setters (forward operator= on the sub-object) ---
         CgsGraphics::Camera&           SetCgsCamera(const CgsGraphics::Camera& lrCamera);
@@ -142,7 +152,17 @@ namespace DirectorIO
         // so growing it does NOT move mDirectorOutputInterface or anything after it.
         BrnResource::GameDataIO::RequestInterface<512> mResourceInterface;   // @0x02E0 (console)
         u8  mDirectorOutputInterface[0x0500 - 0x04F0];           // @0x04F0 (console)
-        u8  mTimerRequestInterface[0x0720 - 0x0500];             // @0x0500 (console) (+0x10 sub-iface)
+        // @0x0500 (console): GROWN to its REAL type (2026-08-01, Prepare wave). The console
+        // stride to the next member is 0x510-0x500 == 16 == sizeof(CgsSystem::TimerRequests)*2,
+        // which is exactly what CgsTimerRequestInterface.h declares (mGameTimer + mSimTimer,
+        // both {u32 muFlags; f32 mfMultiplier}). Pointer-free, so console == host stride.
+        CgsSystem::TimerRequestInterface mTimerRequestInterface;  // @0x0500 (console)
+        // @0x0510 (console): GROWN to its REAL type. Attested by LoadDirectorModule
+        // @0x823E74C0 (feeds it to VariableEventQueue<32768,16>::Append<512,16> on the GameData
+        // input's ATTRIBSYS queue) and by DirectorResourceManager::Prepare @0x8225CA08 (posts
+        // AttribSysRequestInterface<512>::RegisterVault @0x82256428 on it). Console stride
+        // 0x720-0x510 == 528 == 512 + the 16-byte VariableEventQueue header.
+        CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512> mVaultRequestInterface;  // @0x0510 (console)
         u8  mDirectorInterface[0x0724 - 0x0720];                 // @0x0720 (console) 4-byte word
         u8  mReplayRequestInterface[4];                          // @0x0724 (console) 4-byte handle word
 

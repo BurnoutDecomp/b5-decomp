@@ -49,6 +49,11 @@ namespace DirectorIO
     {
         CgsModule::IOBuffer::Construct();
         mResourceInterface.mRequestQueue.Construct();
+        // Same reason as mResourceInterface: DirectorResourceManager::Prepare posts a
+        // RegisterVault on this queue, and an un-Constructed VariableEventQueue asserts
+        // "Not Constructed" on its first AddEvent (and would inherit the previous IO-stack
+        // tenant's write position).
+        mVaultRequestInterface.mRequestQueue.Construct();
     }
 
     // ---- read-lock-asserted getters ---------------------------------------------------------
@@ -82,10 +87,10 @@ namespace DirectorIO
     }
 
     // X360 0x823B3500: return &mTimerRequestInterface (this+0x500), read-lock asserted.
-    u8* OutputBuffer::GetTimerRequestIn()
+    CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestIn()
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mTimerRequestInterface;
+        return &mTimerRequestInterface;
     }
 
     // ---- write-lock-asserted getters --------------------------------------------------------
@@ -112,31 +117,31 @@ namespace DirectorIO
     }
 
     // X360 0x822078F0: return &mTimerRequestInterface (this+0x500). Tests the WRITE lock (bit 3).
-    u8* OutputBuffer::GetTimerRequestInterfac()
+    CgsSystem::TimerRequestInterface* OutputBuffer::GetTimerRequestInterfac()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return mTimerRequestInterface;
+        return &mTimerRequestInterface;
     }
 
-    // ---- +0x510 timer-request sub-interface accessors (read/write) --------------------------
-    // The X360 returns this+0x510, which lands 16 bytes into the timer-request interface span
-    // (@0x500); addressed via that member (&mTimerRequestInterface[0x10]) to preserve the exact
-    // X360 offset without re-laying-out committed storage -> NO layout change. Exact Get-name is
-    // IDA-truncated to the class token 'Output' -> honest placeholder (FLAG).
+    // ---- +0x510 ATTRIBSYS VAULT request interface accessors (read/write) --------------------
+    // Re-homed 2026-08-01: this is NOT a timer sub-record. Both consumers agree it is an
+    // AttribSysRequestInterface<512> -- LoadDirectorModule appends its queue into the GameData
+    // input's AttribSys queue, and DirectorResourceManager::Prepare calls
+    // AttribSysRequestInterface<512>::RegisterVault @0x82256428 on it.
 
     // X360 0x823B24A0 (BrnDirectorModuleIO.h:469): read-lock; return this+0x510.
-    u8* OutputBuffer::GetTimerRequestSubInterface()
+    const CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512>*
+        OutputBuffer::GetVaultRequestInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mTimerRequestInterface[0x0510 - 0x0500];
+        return &mVaultRequestInterface;
     }
 
-    // X360 0x822069B0 (BrnDirectorModuleIO.h:470): write-lock; return this+0x510. Non-const
-    // (write-side) twin of the accessor above -- tests bit 3 (write-lock).
-    u8* OutputBuffer::GetTimerRequestSubInterfaceW()
+    // X360 0x822069B0 (BrnDirectorModuleIO.h:470): write-lock; return this+0x510.
+    CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512>* OutputBuffer::GetVaultRequestInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return &mTimerRequestInterface[0x0510 - 0x0500];
+        return &mVaultRequestInterface;
     }
 
     // ---- write-lock-asserted camera setters -------------------------------------------------
