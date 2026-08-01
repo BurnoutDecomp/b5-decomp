@@ -148,7 +148,7 @@ const BrnProgression::CarData* CarSelectManager::GetProfileCarData(CgsID& lrCarI
 // ============================================================================
 bool CarSelectManager::IsThisCarInCurrentUnlockSequence(const BrnProgression::CarData* lpProfileCar) const
 {
-    if (lpProfileCar->IsHiddenFromUnlockSequence())   // X360 *(lpProfileCar + 0x0A) -- FLAG: CarData +0x0A bool
+    if (lpProfileCar->WasUnlockSequenceAlreadyShown())   // X360 *(lpProfileCar + 0x0A) -- FLAG: CarData +0x0A bool
         return false;
 
     const s32 leUnlockType = lpProfileCar->GetUnlockType();   // X360 *(lpProfileCar + 0x10) -- FLAG: CarData +0x10 s32
@@ -901,7 +901,7 @@ void CarSelectManager::DEBUG_UnlockCarsForTesting()
                     lpNewCar->SetUnlockDeformationAmount(KF_DEBUG_TROPHY_CAR_DEFORM);   // CarData +0x0C = 0.85
                 ++luAddedThisPass;
             }
-            else if (!lpOwned->IsHiddenFromUnlockSequence())   // X360 *(lpOwned + 0x0A) == 0 (not hidden)
+            else if (!lpOwned->WasUnlockSequenceAlreadyShown())   // X360 *(lpOwned + 0x0A) == 0 (not hidden)
             {
                 // Already owned and visible -> still counts toward the cap, no re-add.
                 ++luAddedThisPass;

@@ -49,16 +49,24 @@ namespace BrnProgression
         void  SetColourIndex(s32 liColour);
         void  SetPaletteIndex(s32 liPalette);
 
-        //   IsHiddenFromUnlockSequence() / WasUnlockSequenceAlreadyShown() -> mbUnlockSequenceAlreadyShown @+0x0A.
+        //   WasUnlockSequenceAlreadyShown() -> mbUnlockSequenceAlreadyShown @+0x0A.
         //   GetUnlockType() / SetUnlockType()  -> meUnlockType @+0x10.
         //   GetUnlockDeformationAmount() / SetUnlockDeformationAmount() -> mfUnlockDeformedAmount @+0x0C.
-        bool       IsHiddenFromUnlockSequence() const;
-        bool       WasUnlockSequenceAlreadyShown() const;
+        // ⛔ IsHiddenFromUnlockSequence() IS DELETED. It was a FABRICATED name: the DWARF
+        // declares only WasUnlockSequenceAlreadyShown (BrnProfile.h:171) and both mapped to the
+        // SAME byte (+0x0A). Two names for one field is exactly how a "wrong but plausible"
+        // read gets introduced later; the DWARF name wins and the two call sites in
+        // BrnCarSelectManager_CarChange.cpp now use it.
+        //
+        // These four are DEFINED INLINE: the X360 emits no symbol for any of them (every call
+        // site is a raw +0x0A / +0x0C / +0x10 access, e.g. ReallyEnterJunkyardAtStartOfGame
+        // @0x823931F8 writes the start-of-game deform as a bare `*(carData + 12) = 0.85f`).
+        bool       WasUnlockSequenceAlreadyShown() const { return mbUnlockSequenceAlreadyShown; }
         void       SetUnlockSequenceAlreadyShown();
-        UnlockType GetUnlockType() const;
+        UnlockType GetUnlockType() const                 { return meUnlockType; }
         void       SetUnlockType(UnlockType leType);
-        f32        GetUnlockDeformationAmount() const;
-        void       SetUnlockDeformationAmount(f32 lfAmount);
+        f32        GetUnlockDeformationAmount() const    { return mfUnlockDeformedAmount; }
+        void       SetUnlockDeformationAmount(f32 lfAmount) { mfUnlockDeformedAmount = lfAmount; }
 
         // Layout (DWARF BrnProfile.h:151..158, offsets X360-proven by AddCar). All access by name.
         CgsID      mId;                            // +0x00  packed car id (8 bytes)

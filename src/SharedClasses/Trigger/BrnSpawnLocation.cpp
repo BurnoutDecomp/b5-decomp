@@ -33,4 +33,16 @@ SpawnLocation::Type SpawnLocation::GetType() const
     }
     return static_cast<Type>(muType);   // X360 re-loads the same u8 at +0x28
 }
+
+// ============================================================================
+// GetJunkyardId.
+// No standalone symbol exists in the X360 image -- it is an inlined 8-byte load of the CgsID at
+// SpawnLocation +0x20 (CarSelectManager::SetupSpawnLocations matches it against mJunkyardId to
+// claim each junkyard's spawn points; EnterJunkyardAtStartOfGame then takes maSpawnLocations[1]).
+// Kept out-of-line here because BrnSpawnLocation.h declares it that way.
+// ============================================================================
+CgsID SpawnLocation::GetJunkyardId() const
+{
+    return mJunkyardId;
+}
 }
