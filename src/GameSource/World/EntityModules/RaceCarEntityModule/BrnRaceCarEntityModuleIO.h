@@ -190,8 +190,12 @@ namespace RaceCarEntityModuleIO
         {
             CgsModule::IOBuffer::Construct();
             mTimerStatusInterface.Clear();
-            // (mGameActionQueue's committed type is a sized blob with no Construct yet --
-            //  the console's VariableEventQueue<13312,16>::Construct(+556) lands with its type.)
+            // The console's VariableEventQueue<13312,16>::Construct(+556). REAL as of the
+            // reset-player-car wave (the member is the live queue now, not a 256-byte blob):
+            // without it the first game action delivered by BridgeActionsToRaceCarModule fires
+            // the "Not Constructed" pair (CgsVariableEventQueue.h:454 then :728) -- the exact
+            // pair the world input buffers fired one wave ago.
+            mGameActionQueue.Construct();
             mAudioCarLoadedDataQueue.Construct();
         }
         const TimerStatusInterface*    GetTimerStatusInterface() const;                    // :154
@@ -266,6 +270,13 @@ namespace RaceCarEntityModuleIO
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
+            // The console's VariableEventQueue<16384,16>::Construct(+987512). REAL as of the
+            // reset-player-car wave: that offset is mRaceCarAIInterface.mManagementQueue (the
+            // interface's own +0x2F8), and RaceCarEntityModule::SpawnRaceCar AddEvents an
+            // AttachAIControlEvent into it for every car it spawns. The transcribed console
+            // list above named this call and the body never made it -- the first spawn would
+            // have fired the "Not Constructed" pair (CgsVariableEventQueue.h:454 / :728).
+            mRaceCarAIInterface.mManagementQueue.Construct();
             mAudioCarLoadedDataQueue.Construct();
         }
         const VehicleInputInterface* GetVehicleInputInterface() const;                      // :282

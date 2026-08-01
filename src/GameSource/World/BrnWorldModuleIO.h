@@ -372,6 +372,10 @@ namespace BrnWorldIO
         const TriggerManagementInputInterface*  GetTriggerManagementInputInterface() const;  // :276 R (IDA "UpdateInputB")
         const TriggerQueryInputInterface*       GetTriggerQueryInputInterface() const;       // :278 R (IDA sub_827A39A8)
         const GameActionQueue*                  GetGameActionQueue() const;                  // :265 R (IDA "UpdateInputBuffer")
+        // X360 0x827A4040 (IDA sub_827A4040; returns this+321840 == &mAudioCarDataLoadedQueue,
+        // asserting THIS header's read lock). Second half of
+        // WorldModule::BridgeActionsToRaceCarModule @0x827ABF40.
+        const AudioCarLoadedDataQueue*          GetAudioCarDataLoadedQueue() const;          // R (IDA sub_827A4040)
 
         // (b) Per-active-race-car getters -- X360 HEADER-INLINES (the bridge's asm has
         //     no bl for them, only the range-assert pairs citing THIS header's X360

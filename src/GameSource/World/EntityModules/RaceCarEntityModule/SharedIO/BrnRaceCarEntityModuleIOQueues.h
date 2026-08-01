@@ -52,10 +52,22 @@ namespace BrnWorld
 namespace RaceCarEntityModuleIO
 {
     // ---- GameAction queue (InputBuffer_PreScene :257) -------------------------------------
-    // Carries a BaseGameActionQueue -> alignas(16). Grown by its own TU.
-    struct alignas(16) GameActionQueue
+    // ⛔⛔ GROWN 2026-08-01 (reset-player-car wave), and it was a LIVE MEMORY-CORRUPTION HAZARD
+    // of exactly the family the physics module's one-byte queue was: this member was a
+    // `unsigned char maReserved[256]` NOMINAL blob, while the console's own producer
+    //     WorldModule::BridgeActionsToRaceCarModule @0x827ABF40
+    //         CgsModule::VariableEventQueue<13312,16>::Append<13312,16>(
+    //             InputBuffer_PreScene::GetGameActionQueue(), UpdateInputBuffer::GetGameActionQueue())
+    // copies a WHOLE 13328-byte queue into it -- 13072 bytes past the end, straight over
+    // meActivePaybackType / meActivePaybackAggressor / mReplayStatusInterface /
+    // mAudioCarLoadedDataQueue (this member is in the MIDDLE of the buffer, not at the end).
+    // It was invisible for one reason only: that bridge was an inert link stub, so nothing had
+    // ever put a game action into the race-car input buffer.
+    // The type is pinned by the mangled Append symbol at 0x827ABFC4 (13312,16), not inferred.
+    // Derives (rather than typedefs) so existing `struct GameActionQueue` forward references
+    // stay valid -- the SceneResultQueue / PotentialContactQueue precedent above.
+    struct alignas(16) GameActionQueue : public CgsModule::VariableEventQueue<13312, 16>
     {
-        unsigned char maReserved[256];   // NOMINAL -- not byte-verified, grown by own TU
     };
 
     // ---- Takedown event queue (InputBuffer_PrePhysics :444) -------------------------------

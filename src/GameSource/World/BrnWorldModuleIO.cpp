@@ -450,6 +450,16 @@ const GameActionQueue* UpdateInputBuffer::GetGameActionQueue() const
     return &mGameActionQueue;
 }
 
+// X360 0x827A4040 (IDA sub_827A4040) -- const audio-car-data-loaded queue accessor (+321840).
+// The X360 body is the read-lock assert citing "..\..\..\GameSource\World/BrnWorldModuleIO.h"
+// then `return a1 + 321840`. Consumer: WorldModule::BridgeActionsToRaceCarModule @0x827ABF40.
+const UpdateInputBuffer::AudioCarLoadedDataQueue*
+UpdateInputBuffer::GetAudioCarDataLoadedQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mAudioCarDataLoadedQueue;
+}
+
 // X360 0x827A3858 (:272 R, IDA "UpdateInputBuffer_") -- const takedown-event queue accessor (+160952).
 const TakedownEventQueue* UpdateInputBuffer::GetTakedownEventQueue() const
 {

@@ -70,6 +70,18 @@ InputBuffer_PreScene::GetAudioCarLoadedDataQueue() const
     return &mAudioCarLoadedDataQueue;
 }
 
+// X360 0x8279D308 (:176 W) -- MUTABLE per-car audio (un)load REPLY queue accessor. The
+// console body is the write-lock assert citing this header then `return a1 + 15456`. Added
+// with the reset-player-car wave: WorldModule::BridgeActionsToRaceCarModule @0x827ABF40 is
+// its only caller (it Appends the world input's own queue into this one), and that bridge
+// was an inert link stub until now, so nothing had ever needed the non-const overload.
+InputBuffer_PreScene::AudioCarLoadedDataQueue*
+InputBuffer_PreScene::GetAudioCarLoadedDataQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mAudioCarLoadedDataQueue;
+}
+
 // ---- OutputBuffer_PreScene --------------------------------------------------
 
 // DWARF :306 -- mutable per-car audio (un)load REQUEST queue accessor. The audio
