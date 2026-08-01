@@ -69,41 +69,34 @@ namespace
     const s32 KI_EVENT_GET_ICE_LIST     = 64;
 
     // ========================================================================================
-    // [PC DATA GATE -- flip to true when the vault port is fixed]
+    // [RESOLVED 2026-08-01 -- the PC DATA GATE that used to live here is GONE]
     //
     // Prepare bakes 100 asserts in stage 4: 63 IsValid() statements (over 26 distinct slots,
     // mRankUpGroup twice thanks to the console's own copy-paste bug) and 37 Num_ShotList()
-    // minimum-count statements. On this build the IsValid() half ALL PASS (measured
-    // 2026-08-01: 64/64 shotgroups + cameradefaults bind their collection). The COUNT half
-    // cannot pass, for a reason that is NOT in this file and NOT in the AttribSys runtime --
-    // it is in the PC vault port:
+    // minimum-count statements. Until today the count half could not pass and was held behind
+    // a KB_PC_ATTRIB_ARRAY_LENGTHS_VALID bool, because every array attribute in every ported
+    // vault reported exactly ONE element.
     //
-    //   The serialised CollectionLoadData entry is 16 bytes on the X360:
-    //       { u64 mKey; u32 muValue; u16 muTypeIndex; u8 mu8Flags; u8 pad }
-    //   tools/assets/bundles/attribsys_transcode.py's walk_attribute_header widens the +0x08
-    //   value slot to an 8-byte host POINTER whenever a PtrN fixup names it, but leaves the
-    //   record STRIDE at 16 -- so the pointer swallows muTypeIndex, mu8Flags and the pad.
-    //   Measured live on the "606002" (mGameIntroGroup) record: its one entry loads with the
-    //   payload word holding a real host pointer and mu8Flags == 0, so
-    //   Attrib::Node::GetCount takes its `(muFlags & 0x2) == 0` non-array exit and every
-    //   array attribute in every ported vault reports exactly ONE element. The vault's own
-    //   file bytes confirm it: item[0] key=7533C0E215246B49 raw=496b2415e2c033750002000000000000
-    //   -- 8 key bytes, then eight bytes of value with nothing left for the type/flag fields.
-    //   (The "> 0" spellings therefore pass by luck, 1 > 0; the ">= 2" / ">= 4" car-select
-    //   spellings fail. Gating only the failing ones would be gating the symptom.)
+    // The cause was in the PC vault PORT, and the previous diagnosis of it was WRONG in a way
+    // worth recording: it read "widen the entry stride to 24 in BOTH the transcoder and
+    // Attrib::CollectionLoadData::Entry". The record does NOT widen. The serialised entry is
+    // 16 bytes on x64 exactly as on the X360 --
+    //     { u64 mKey; u32 muValue; u16 muTypeIndex; u8 mu8Flags; u8 mu8Pad }
+    // -- because muValue is a POINTER SLOT INSIDE A SERIALISED RECORD, and Vault::Initialize's
+    // PtrN type-3 case rebases it with a 32-BIT store (attribloadandgo.cpp; the resource heap
+    // lives below 4 GB, the committed PointerFromU32 convention). attribsys_transcode.py was
+    // byte-swapping that slot as one u64 because a PtrN record names it, which walked
+    // mu8Flags off +0x0E; Attrib::Node::GetCount then took its `(muFlags & 0x2) == 0`
+    // non-array exit for every attribute in the vault.
     //
-    // The console's asserts are kept verbatim below and are simply not ARMED while the data
-    // cannot satisfy them -- the same shape as GameDataModule's KB_PC_ATTRIB_SCHEMA_FILES
-    // switch and WorldModule::LoadAttribSysVault's acquire hold. Flipping this to true is the
-    // one-line re-arm once the entry stride is widened to 24 in BOTH the transcoder and
-    // Attrib::CollectionLoadData::Entry / GetEntries().
-    // DELETE-WHEN: the ported vaults carry their entry flag byte again.
-    const bool KB_PC_ATTRIB_ARRAY_LENGTHS_VALID = false;
+    // Fixed in the porter (attribsys_transcode.py walk_attribute_header) and CAMERAS.BUNDLE /
+    // SURFACELIST.BIN / WORLDVAULT.BIN re-emitted. Oracle: over the 74 entries the X360 and
+    // the Remaster's shipped LE vaults share by collection key, {u32,u16,u8,u8} agrees 74/74
+    // and one-u64 0/74. mGameIntroGroup("606002") now reports 3 shots -- guids 610132
+    // Intro_FlyCam_Loop / 605855 DMV_IntroA / 605858 DMV_IntroB -- and all 37 count asserts
+    // are armed and passing. Nothing in this file or in the AttribSys runtime changed.
+    // ========================================================================================
 }
-
-// Every Num_ShotList() assert the console bakes, kept verbatim, armed by the gate above.
-#define DRM_ASSERT_SHOTCOUNT(cond, text) \
-    CGS_ASSERT(!KB_PC_ATTRIB_ARRAY_LENGTHS_VALID || (cond), text)
 
 
 // ⚠️ THE FIVE ICE-CONE BODIES MOVED OUT 2026-08-01, verbatim, to the sibling
@@ -418,10 +411,10 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         mPursuitStartGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("474389"), 0);   // +712
         mStuntRaceStartGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("559418"), 0);   // +728
         CGS_ASSERT(mStuntRaceStartGroup.IsValid(), "mStuntRaceStartGroup.IsValid()");   // cpp:181
-        DRM_ASSERT_SHOTCOUNT(mStuntRaceStartGroup.Num_ShotList() > 0, "mStuntRaceStartGroup.Num_ShotList() > 0");   // cpp:182
+        CGS_ASSERT(mStuntRaceStartGroup.Num_ShotList() > 0, "mStuntRaceStartGroup.Num_ShotList() > 0");   // cpp:182
         mMarkedManStartGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("559367"), 0);   // +744
         CGS_ASSERT(mMarkedManStartGroup.IsValid(), "mMarkedManStartGroup.IsValid()");   // cpp:185
-        DRM_ASSERT_SHOTCOUNT(mMarkedManStartGroup.Num_ShotList() > 0, "mMarkedManStartGroup.Num_ShotList() > 0");   // cpp:186
+        CGS_ASSERT(mMarkedManStartGroup.Num_ShotList() > 0, "mMarkedManStartGroup.Num_ShotList() > 0");   // cpp:186
         mBurningRouteFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("480563"), 0);   // +760
         mMarkedManFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("480562"), 0);   // +776
         mRaceFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("476830"), 0);   // +792
@@ -432,11 +425,11 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         CGS_ASSERT(mRaceFinishGroup.IsValid(), "mRaceFinishGroup.IsValid()");   // cpp:196
         CGS_ASSERT(mRoadRageFinishGroup.IsValid(), "mRoadRageFinishGroup.IsValid()");   // cpp:197
         CGS_ASSERT(mStuntFinishGroup.IsValid(), "mStuntFinishGroup.IsValid()");   // cpp:198
-        DRM_ASSERT_SHOTCOUNT(mBurningRouteFinishGroup.Num_ShotList() > 0, "mBurningRouteFinishGroup.Num_ShotList() > 0");   // cpp:200
-        DRM_ASSERT_SHOTCOUNT(mMarkedManFinishGroup.Num_ShotList() > 0, "mMarkedManFinishGroup.Num_ShotList() > 0");   // cpp:201
-        DRM_ASSERT_SHOTCOUNT(mRaceFinishGroup.Num_ShotList() > 0, "mRaceFinishGroup.Num_ShotList() > 0");   // cpp:202
-        DRM_ASSERT_SHOTCOUNT(mRoadRageFinishGroup.Num_ShotList() > 0, "mRoadRageFinishGroup.Num_ShotList() > 0");   // cpp:203
-        DRM_ASSERT_SHOTCOUNT(mStuntFinishGroup.Num_ShotList() > 0, "mStuntFinishGroup.Num_ShotList() > 0");   // cpp:204
+        CGS_ASSERT(mBurningRouteFinishGroup.Num_ShotList() > 0, "mBurningRouteFinishGroup.Num_ShotList() > 0");   // cpp:200
+        CGS_ASSERT(mMarkedManFinishGroup.Num_ShotList() > 0, "mMarkedManFinishGroup.Num_ShotList() > 0");   // cpp:201
+        CGS_ASSERT(mRaceFinishGroup.Num_ShotList() > 0, "mRaceFinishGroup.Num_ShotList() > 0");   // cpp:202
+        CGS_ASSERT(mRoadRageFinishGroup.Num_ShotList() > 0, "mRoadRageFinishGroup.Num_ShotList() > 0");   // cpp:203
+        CGS_ASSERT(mStuntFinishGroup.Num_ShotList() > 0, "mStuntFinishGroup.Num_ShotList() > 0");   // cpp:204
         mRaceFinishNorth = Attrib::Gen::shotgroup(Attrib::StringToKey("561973"), 0);   // +840
         mRaceFinishNorthEast = Attrib::Gen::shotgroup(Attrib::StringToKey("561960"), 0);   // +856
         mRaceFinishEast = Attrib::Gen::shotgroup(Attrib::StringToKey("561961"), 0);   // +872
@@ -461,49 +454,49 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         mShakeAnimsGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("428114"), 0);   // +1304
         mCarSelectMotorCity = Attrib::Gen::shotgroup(Attrib::StringToKey("432577"), 0);   // +1064
         CGS_ASSERT(mCarSelectMotorCity.IsValid(), "mCarSelectMotorCity.IsValid()");   // cpp:233
-        DRM_ASSERT_SHOTCOUNT(mCarSelectMotorCity.Num_ShotList() >= 4, "mCarSelectMotorCity.Num_ShotList() >= 4");   // cpp:234
+        CGS_ASSERT(mCarSelectMotorCity.Num_ShotList() >= 4, "mCarSelectMotorCity.Num_ShotList() >= 4");   // cpp:234
         mCarSelectMotorCityRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558663"), 0);   // +1080
         CGS_ASSERT(mCarSelectMotorCityRivalUnlock.IsValid(), "mCarSelectMotorCityRivalUnlock.IsValid()");   // cpp:237
-        DRM_ASSERT_SHOTCOUNT(mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2, "mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2");   // cpp:238
+        CGS_ASSERT(mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2, "mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2");   // cpp:238
         mCarSelectWestAcres = Attrib::Gen::shotgroup(Attrib::StringToKey("450907"), 0);   // +1096
         CGS_ASSERT(mCarSelectWestAcres.IsValid(), "mCarSelectWestAcres.IsValid()");   // cpp:241
-        DRM_ASSERT_SHOTCOUNT(mCarSelectWestAcres.Num_ShotList() >= 4, "mCarSelectWestAcres.Num_ShotList() >= 4");   // cpp:242
+        CGS_ASSERT(mCarSelectWestAcres.Num_ShotList() >= 4, "mCarSelectWestAcres.Num_ShotList() >= 4");   // cpp:242
         mCarSelectWestAcresRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558657"), 0);   // +1112
         CGS_ASSERT(mCarSelectWestAcresRivalUnlock.IsValid(), "mCarSelectWestAcresRivalUnlock.IsValid()");   // cpp:245
-        DRM_ASSERT_SHOTCOUNT(mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2, "mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2");   // cpp:246
+        CGS_ASSERT(mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2, "mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2");   // cpp:246
         mCarSelectSouthBay = Attrib::Gen::shotgroup(Attrib::StringToKey("450916"), 0);   // +1128
         CGS_ASSERT(mCarSelectSouthBay.IsValid(), "mCarSelectSouthBay.IsValid()");   // cpp:249
-        DRM_ASSERT_SHOTCOUNT(mCarSelectSouthBay.Num_ShotList() >= 4, "mCarSelectSouthBay.Num_ShotList() >= 4");   // cpp:250
+        CGS_ASSERT(mCarSelectSouthBay.Num_ShotList() >= 4, "mCarSelectSouthBay.Num_ShotList() >= 4");   // cpp:250
         mCarSelectSouthBayRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558658"), 0);   // +1144
         CGS_ASSERT(mCarSelectSouthBayRivalUnlock.IsValid(), "mCarSelectSouthBayRivalUnlock.IsValid()");   // cpp:253
-        DRM_ASSERT_SHOTCOUNT(mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2, "mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2");   // cpp:254
+        CGS_ASSERT(mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2, "mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2");   // cpp:254
         mCarSelectHeartbreak = Attrib::Gen::shotgroup(Attrib::StringToKey("451080"), 0);   // +1160
         CGS_ASSERT(mCarSelectHeartbreak.IsValid(), "mCarSelectHeartbreak.IsValid()");   // cpp:257
-        DRM_ASSERT_SHOTCOUNT(mCarSelectHeartbreak.Num_ShotList() >= 4, "mCarSelectHeartbreak.Num_ShotList() >= 4");   // cpp:258
+        CGS_ASSERT(mCarSelectHeartbreak.Num_ShotList() >= 4, "mCarSelectHeartbreak.Num_ShotList() >= 4");   // cpp:258
         mCarSelectHeartbreakRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558660"), 0);   // +1176
         CGS_ASSERT(mCarSelectHeartbreakRivalUnlock.IsValid(), "mCarSelectHeartbreakRivalUnlock.IsValid()");   // cpp:261
-        DRM_ASSERT_SHOTCOUNT(mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2, "mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2");   // cpp:262
+        CGS_ASSERT(mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2, "mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2");   // cpp:262
         mCarSelectLowerPeaks = Attrib::Gen::shotgroup(Attrib::StringToKey("450948"), 0);   // +1192
         CGS_ASSERT(mCarSelectLowerPeaks.IsValid(), "mCarSelectLowerPeaks.IsValid()");   // cpp:265
-        DRM_ASSERT_SHOTCOUNT(mCarSelectLowerPeaks.Num_ShotList() >= 4, "mCarSelectLowerPeaks.Num_ShotList() >= 4");   // cpp:266
+        CGS_ASSERT(mCarSelectLowerPeaks.Num_ShotList() >= 4, "mCarSelectLowerPeaks.Num_ShotList() >= 4");   // cpp:266
         mCarSelectLowerPeaksRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558659"), 0);   // +1208
         CGS_ASSERT(mCarSelectLowerPeaksRivalUnlock.IsValid(), "mCarSelectLowerPeaksRivalUnlock.IsValid()");   // cpp:269
-        DRM_ASSERT_SHOTCOUNT(mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2, "mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2");   // cpp:270
+        CGS_ASSERT(mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2, "mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2");   // cpp:270
         mCarSelectIdle = Attrib::Gen::shotgroup(Attrib::StringToKey("611284"), 0);   // +1224
         CGS_ASSERT(mCarSelectIdle.IsValid(), "mCarSelectIdle.IsValid()");   // cpp:273
-        DRM_ASSERT_SHOTCOUNT(mCarSelectIdle.Num_ShotList() > 0, "mCarSelectIdle.Num_ShotList() >= 1");   // cpp:274
+        CGS_ASSERT(mCarSelectIdle.Num_ShotList() > 0, "mCarSelectIdle.Num_ShotList() >= 1");   // cpp:274
         mCarSelectOutro = Attrib::Gen::shotgroup(Attrib::StringToKey("611285"), 0);   // +1240
         CGS_ASSERT(mCarSelectOutro.IsValid(), "mCarSelectOutro.IsValid()");   // cpp:277
-        DRM_ASSERT_SHOTCOUNT(mCarSelectOutro.Num_ShotList() > 0, "mCarSelectOutro.Num_ShotList() >= 1");   // cpp:278
+        CGS_ASSERT(mCarSelectOutro.Num_ShotList() > 0, "mCarSelectOutro.Num_ShotList() >= 1");   // cpp:278
         mCarUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("553098"), 0);   // +1256
         CGS_ASSERT(mCarUnlock.IsValid(), "mCarUnlock.IsValid()");   // cpp:281
-        DRM_ASSERT_SHOTCOUNT(mCarUnlock.Num_ShotList() > 0, "mCarUnlock.Num_ShotList() > 0");   // cpp:282
+        CGS_ASSERT(mCarUnlock.Num_ShotList() > 0, "mCarUnlock.Num_ShotList() > 0");   // cpp:282
         mGameIntroGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("606002"), 0);   // +1272
         CGS_ASSERT(mGameIntroGroup.IsValid(), "mGameIntroGroup.IsValid()");   // cpp:285
-        DRM_ASSERT_SHOTCOUNT(mGameIntroGroup.Num_ShotList() > 0, "mGameIntroGroup.Num_ShotList() > 0");   // cpp:286
+        CGS_ASSERT(mGameIntroGroup.Num_ShotList() > 0, "mGameIntroGroup.Num_ShotList() > 0");   // cpp:286
         mBurnoutLicense = Attrib::Gen::shotgroup(Attrib::StringToKey("605835"), 0);   // +1288
         CGS_ASSERT(mBurnoutLicense.IsValid(), "mBurnoutLicense.IsValid()");   // cpp:289
-        DRM_ASSERT_SHOTCOUNT(mBurnoutLicense.Num_ShotList() > 0, "mBurnoutLicense.Num_ShotList() > 0");   // cpp:290
+        CGS_ASSERT(mBurnoutLicense.Num_ShotList() > 0, "mBurnoutLicense.Num_ShotList() > 0");   // cpp:290
         mJumpRig = Attrib::Gen::shotgroup(Attrib::StringToKey("440805"), 0);   // +1320
         mHardStopWorldLeft = Attrib::Gen::shotgroup(Attrib::StringToKey("461063"), 0);   // +1336
         mHardStopWorldRight = Attrib::Gen::shotgroup(Attrib::StringToKey("461057"), 0);   // +1352
@@ -516,22 +509,22 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         mCrashbreaker = Attrib::Gen::shotgroup(Attrib::StringToKey("478055"), 0);   // +1544
         mTakendown = Attrib::Gen::shotgroup(Attrib::StringToKey("575796"), 0);   // +1560
         CGS_ASSERT(mTakendown.IsValid(), "mTakendown.IsValid()");   // cpp:309
-        DRM_ASSERT_SHOTCOUNT(mTakendown.Num_ShotList() > 0, "mTakendown.Num_ShotList() > 0");   // cpp:310
+        CGS_ASSERT(mTakendown.Num_ShotList() > 0, "mTakendown.Num_ShotList() > 0");   // cpp:310
         mFastCrashShotGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("494628"), 0);   // +1400
         CGS_ASSERT(mFastCrashShotGroup.IsValid(), "mFastCrashShotGroup.IsValid()");   // cpp:313
-        DRM_ASSERT_SHOTCOUNT(mFastCrashShotGroup.Num_ShotList() > 0, "mFastCrashShotGroup.Num_ShotList() > 0");   // cpp:314
+        CGS_ASSERT(mFastCrashShotGroup.Num_ShotList() > 0, "mFastCrashShotGroup.Num_ShotList() > 0");   // cpp:314
         mNormalCrashShotGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("543590"), 0);   // +1416
         CGS_ASSERT(mNormalCrashShotGroup.IsValid(), "mNormalCrashShotGroup.IsValid()");   // cpp:317
-        DRM_ASSERT_SHOTCOUNT(mNormalCrashShotGroup.Num_ShotList() > 0, "mNormalCrashShotGroup.Num_ShotList() > 0");   // cpp:318
+        CGS_ASSERT(mNormalCrashShotGroup.Num_ShotList() > 0, "mNormalCrashShotGroup.Num_ShotList() > 0");   // cpp:318
         mSlowCrashShotGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("542963"), 0);   // +1432
         CGS_ASSERT(mSlowCrashShotGroup.IsValid(), "mSlowCrashShotGroup.IsValid()");   // cpp:321
-        DRM_ASSERT_SHOTCOUNT(mSlowCrashShotGroup.Num_ShotList() > 0, "mSlowCrashShotGroup.Num_ShotList() > 0");   // cpp:322
+        CGS_ASSERT(mSlowCrashShotGroup.Num_ShotList() > 0, "mSlowCrashShotGroup.Num_ShotList() > 0");   // cpp:322
         mRankUpGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("544056"), 0);   // +968
         CGS_ASSERT(mRankUpGroup.IsValid(), "mRankUpGroup.IsValid()");   // cpp:325
-        DRM_ASSERT_SHOTCOUNT(mRankUpGroup.Num_ShotList() > 0, "mRankUpGroup.Num_ShotList() > 0");   // cpp:326
+        CGS_ASSERT(mRankUpGroup.Num_ShotList() > 0, "mRankUpGroup.Num_ShotList() > 0");   // cpp:326
         mOnlineCarSelect = Attrib::Gen::shotgroup(Attrib::StringToKey("613970"), 0);   // +1480
         CGS_ASSERT(mRankUpGroup.IsValid(), "mRankUpGroup.IsValid()");   // cpp:329
-        DRM_ASSERT_SHOTCOUNT(mRankUpGroup.Num_ShotList() > 0, "mRankUpGroup.Num_ShotList() > 0");   // cpp:330
+        CGS_ASSERT(mRankUpGroup.Num_ShotList() > 0, "mRankUpGroup.Num_ShotList() > 0");   // cpp:330
 
         // ---- mAfterTouchCam (+1608) -------------------------------------------------------
         // @0x8225E3FC. NOT a generated-class slot: the console builds a BARE Attrib::RefSpec on
@@ -580,15 +573,15 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         CGS_ASSERT(mAfterCrashSafe.IsValid(), "mAfterCrashSafe.IsValid()");   // cpp:366
         CGS_ASSERT(mFailsafe.IsValid(), "mFailsafe.IsValid()");   // cpp:367
         CGS_ASSERT(mCrashbreaker.IsValid(), "mCrashbreaker.IsValid()");   // cpp:368
-        DRM_ASSERT_SHOTCOUNT(mRaceStartGroup.Num_ShotList() > 0, "mRaceStartGroup.Num_ShotList() > 0");   // cpp:371  [v149 == &mRaceStartGroup]
-        DRM_ASSERT_SHOTCOUNT(mRaceStartRivalInFrontGroup.Num_ShotList() > 0, "mRaceStartRivalInFrontGroup.Num_ShotList() > 0");   // cpp:372
-        DRM_ASSERT_SHOTCOUNT(mOnlineRaceStart.Num_ShotList() > 0, "mOnlineRaceStart.Num_ShotList() > 0");   // cpp:373
-        DRM_ASSERT_SHOTCOUNT(mJumpRig.Num_ShotList() > 0, "mJumpRig.Num_ShotList() > 0");   // cpp:374
-        DRM_ASSERT_SHOTCOUNT(mAfterCrash.Num_ShotList() > 0, "mAfterCrash.Num_ShotList() > 0");   // cpp:375
-        DRM_ASSERT_SHOTCOUNT(mAfterCrashSafe.Num_ShotList() > 0, "mAfterCrashSafe.Num_ShotList() > 0");   // cpp:376
-        DRM_ASSERT_SHOTCOUNT(mFailsafe.Num_ShotList() > 0, "mFailsafe.Num_ShotList() > 0");   // cpp:377
-        DRM_ASSERT_SHOTCOUNT(mCrashbreaker.Num_ShotList() > 0, "mCrashbreaker.Num_ShotList() > 0");   // cpp:378
-        DRM_ASSERT_SHOTCOUNT(mPursuitStartGroup.Num_ShotList() > 0, "mPursuitStartGroup.Num_ShotList() > 0");   // cpp:379
+        CGS_ASSERT(mRaceStartGroup.Num_ShotList() > 0, "mRaceStartGroup.Num_ShotList() > 0");   // cpp:371  [v149 == &mRaceStartGroup]
+        CGS_ASSERT(mRaceStartRivalInFrontGroup.Num_ShotList() > 0, "mRaceStartRivalInFrontGroup.Num_ShotList() > 0");   // cpp:372
+        CGS_ASSERT(mOnlineRaceStart.Num_ShotList() > 0, "mOnlineRaceStart.Num_ShotList() > 0");   // cpp:373
+        CGS_ASSERT(mJumpRig.Num_ShotList() > 0, "mJumpRig.Num_ShotList() > 0");   // cpp:374
+        CGS_ASSERT(mAfterCrash.Num_ShotList() > 0, "mAfterCrash.Num_ShotList() > 0");   // cpp:375
+        CGS_ASSERT(mAfterCrashSafe.Num_ShotList() > 0, "mAfterCrashSafe.Num_ShotList() > 0");   // cpp:376
+        CGS_ASSERT(mFailsafe.Num_ShotList() > 0, "mFailsafe.Num_ShotList() > 0");   // cpp:377
+        CGS_ASSERT(mCrashbreaker.Num_ShotList() > 0, "mCrashbreaker.Num_ShotList() > 0");   // cpp:378
+        CGS_ASSERT(mPursuitStartGroup.Num_ShotList() > 0, "mPursuitStartGroup.Num_ShotList() > 0");   // cpp:379
         LogShotGroupBankState();
     }
     // fall through

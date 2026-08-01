@@ -283,12 +283,16 @@ namespace BrnDirector
 //         layouts (u32 payload vs machine word), so every cursor read the flags byte out of
 //         the payload pointer. Symptom: every generated Num_<array>() reported 0 elements.
 //
-// ⛔ ONE THING PREPARE CANNOT FIX, measured and left armed-but-gated: every ported vault's
-// serialised attribute entries lost their type-index/flag bytes in the PC port (the
-// transcoder widens the +0x08 value slot to a host pointer inside a 16-byte record), so
-// every array attribute reports exactly ONE element. The 37 Num_ShotList() asserts are kept
-// verbatim behind KB_PC_ATTRIB_ARRAY_LENGTHS_VALID in the .cpp; the 63 IsValid() asserts are
-// live and all pass. Full evidence at that constant.
+// ✅ CLOSED 2026-08-01 (vault-stride wave). Prepare's 37 Num_ShotList() asserts are ARMED
+// and PASSING, and the KB_PC_ATTRIB_ARRAY_LENGTHS_VALID gate is deleted. The defect was in
+// the PORT, not in the record: tools/assets/bundles/attribsys_transcode.py byte-swapped the
+// entry's `muValue` as one u64 because a PtrN fixup names it, walking `mu8Flags` off +0x0E,
+// so Node::GetCount took its non-array exit for every attribute in every ported vault.
+// A pointer-shaped slot inside a SERIALISED record stays 4 bytes on x64 -- Vault::Initialize
+// rebases it with a 32-bit store -- and the entry stride stays 16. CAMERAS.BUNDLE,
+// SURFACELIST.BIN and WORLDVAULT.BIN are re-emitted; mGameIntroGroup("606002") reports 3.
+// (SURFACELIST's one array was hit by the same bug: the world's surfacelist had been
+// reporting ONE surface instead of twenty.) Full evidence at the .cpp's namespace block.
 //
 // WHAT BLOCKED A REAL Prepare (historical; the RECOVERY was complete as of 2026-07-31):
 //    1. (CLEARED) `Attrib::Gen::shotgroup::shotgroup` (shotgroup.h:105) THROWS THE KEY AWAY. The real
