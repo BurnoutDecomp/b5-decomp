@@ -130,6 +130,13 @@ namespace BrnGui
         // stays off the raw offset. Faithful 1-store accessor (macText is private).
         void ClearText() { macText[0] = 0; }
 
+        // ADDITIVE GROW (BrnGui::TextSelection::Construct @0x824E8128): raise the field's
+        // autosize flag. DWARF names the helper SetAutoSize (BrnTextField.h); the X360
+        // inlines it to the single `li 1 / stb r11, +0x126(field)` store that closes
+        // TextSelection::Construct (asm 0x824E8264..0x824E8268, i.e. this+0xCBE with the
+        // field at this+0xB98). Faithful 1-store accessor (mbAutosize is private).
+        void SetAutoSize(bool lbAutosize) { mbAutosize = lbAutosize; }
+
     private:
         u32  muTextColour;          // +0x8C  (set by SetColour)
         s32  miScroll;              // +0x90
