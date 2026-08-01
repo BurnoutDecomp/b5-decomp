@@ -56,6 +56,15 @@ namespace
     // favour of the identity image the console actually compares against, spelled through
     // the real (bodied, X360-attested) IsEqual. Sized from the identity region itself, per
     // the project's never-transcribe-a-console-byte-size rule.
+    //
+    // ⚠️ FLAG (DecFIGS rung 2): the DWARF's call hints for both lookups name
+    // ResourcePtr<Dictionary<ICETakeData>>::operator!=, so the ORIGINAL SOURCE did spell
+    // this as an operator compare (the PS3 form is `if (NULLResourcePtr == slot) break;`).
+    // Both `operator!=`/`operator==` against a ResourceHandle are declaration-only in this
+    // port, and the BaseResourcePtr overloads that ARE inline need CgsResource::
+    // NULLResourcePtr, whose definition has not been recovered either. IsEqual is the same
+    // comparison the compiler emitted, so behaviour is exact; restore the operator spelling
+    // when NULLResourcePtr's home TU lands.
     struct NullIdentityImage
     {
         void*                        mpResourceMemory;
