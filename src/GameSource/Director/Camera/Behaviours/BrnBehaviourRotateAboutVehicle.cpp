@@ -16,10 +16,14 @@ namespace Camera
 {
 
 // Out-of-line anchor: forces the +0x50 accessor to be emitted in this TU.
-BehaviourRotateAboutVehicle::EmbeddedSubObject*
-BehaviourRotateAboutVehicle_GetEmbeddedSubObjectAnchor(BehaviourRotateAboutVehicle& lrBehaviour)
+// ⭐ RENAMED 2026-08-01: the accessor is GetCollisionPolicy(), and the "unrecoverable opaque
+// sub-object" it returned is the embedded CollisionPolicyAttachedToVehicle -- pinned by
+// BehaviourRotateAboutVehicle::Construct @0x8222BEDC, which calls that policy's Construct on
+// this+0x50. See the header.
+CollisionPolicyAttachedToVehicle*
+BehaviourRotateAboutVehicle_GetCollisionPolicyAnchor(BehaviourRotateAboutVehicle& lrBehaviour)
 {
-    return lrBehaviour.GetEmbeddedSubObject();   // addi r3, r3, 0x50 ; blr
+    return lrBehaviour.GetCollisionPolicy();   // addi r3, r3, 0x50 ; blr
 }
 
 } // namespace Camera
