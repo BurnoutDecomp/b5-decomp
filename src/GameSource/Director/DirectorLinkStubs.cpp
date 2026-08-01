@@ -272,18 +272,39 @@ namespace BrnDirector
     //    machine advances instead of spinning for ever.
     //    DELETE-WHEN: BrnDirectorICEWrapper.cpp's Construct/Prepare/Destruct land.
     ICEWrapper::ICEWrapper() {}
-    void ICEWrapper::Construct() {}
+    void ICEWrapper::Construct()
+    {
+        // ⭐ PARTIAL REAL BODY (2026-08-01). The console's Construct zeroes both ICE load-state
+        // scalars (+0x120E4 / +0x120E8 -- this header's own member comments record it), and
+        // +0x120E8 == miICELoadStateB is the STAGE WORD ICEWrapper::Prepare @0x8253DD90
+        // switches on. While Construct was a pure no-op that word held whatever the allocation
+        // left, so a non-zero value would send the newly-real Prepare straight down its
+        // "already prepared" arm and the ICE element-description system would never initialise
+        // -- the same end state as the stub it replaces, but silent and intermittent.
+        // The rest of Construct (the camera / mover / manager / action-queue sub-object builds)
+        // remains un-landed: see BrnDirectorICEWrapper.cpp.
+        miICELoadStateA = 0;
+        miICELoadStateB = 0;
+    }
     // (The two ICE sub-objects ICEWrapper embeds by value -- their ctors' TUs are un-landed;
     //  see the ICE::* block at the end of this file.)
     void ICEWrapper::Destruct() {}
-    bool ICEWrapper::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, s32 liPrepareArg,
-                             const DirectorResourceManager* lpResourceManager)
-    {
-        (void)lpOutputBuffer;
-        (void)liPrepareArg;
-        (void)lpResourceManager;
-        return true;
-    }
+
+    // ⛔⛔ RETIRED 2026-08-01 (ICE-anim transform wave) -- ICEWrapper::Prepare's `return true;`
+    // was THE most expensive stub in this subsystem, and it was invisible in exactly the way
+    // this project's top defect class always is.
+    //
+    // @0x8253DD90 runs `ICE::InitICEDescriptions()` at its stage 0, and that call is the ONLY
+    // one in the entire image. InitICEDescriptions builds the PER-CHANNEL ELEMENT SCHEDULES
+    // (gaICEElementChannels) that ICETake::SetParameter iterates to decide which elements to
+    // evaluate. With the stub in place those schedules stayed at miNumKeyElements == 0, so the
+    // take evaluator's element loops ran ZERO times, mValues[] was never written, and EVERY
+    // authored ICE camera element -- eye XYZ, look XYZ, the reference SPACES, lens, focus --
+    // read back as 0 for the whole session. A take could load, bind, seek and play its full
+    // parametric timeline (measured: guid 610132 Intro_FlyCam_Loop, 40.02 s, timer advancing,
+    // param 0 -> 1) and still produce a camera parked at (0,0,0) in car space with an identity
+    // basis. Nothing about that looks like a missing initialiser.
+    // The real (partial) body is now in GameSource/Director/BrnDirectorICEWrapperPrepare.cpp.
 
     // -- RETIRED 2026-08-01 (ICE take-runtime wave): ICEResourceMgr's two take-data lookups
     //    used to be `return 0` here. The ID overload @0x821F6A00 is now REAL in

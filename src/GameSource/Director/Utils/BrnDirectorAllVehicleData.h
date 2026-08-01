@@ -113,11 +113,24 @@ namespace BrnDirector
         //     not carry. Passing null through the real Update would fire that assert every
         //     frame, so this leg does not take the argument at all and mpTrafficVehicleArray
         //     is left as Construct left it (null). Nothing on the junkyard path reads it.
-        //  2. THE NEAREST-CAR REBUILD IS NOT RUN. The rest of Update walks every used race car,
-        //     Appends a NearestCarInfo per car and BubbleSorts them. The lazy sort flag is set
-        //     instead, which is the same signal the two distance queries already consume.
-        // DELETE-WHEN: the director input carries the traffic array and the nearest-car walk
-        // is transcribed (then this becomes the real four-argument Update).
+        //  2. ⭐ THE NEAREST-CAR REBUILD NOW RUNS (2026-08-01, ICE-anim transform wave). It had
+        //     to: BehaviourIceAnim::Construct anchors mSecondaryVehicleRef to
+        //     E_RACE_CAR_NEAREST_PLAYER rank 1, and BOTH VehicleRef::IsValid and VehicleRef::Get
+        //     route that through GetNearestRaceCarIndexToPlayer -- which, on an EMPTY table,
+        //     asserts and then computes `luRank = GetLength() - 1u == 0xFFFFFFFF` and indexes
+        //     with it. An out-of-bounds read, not a soft failure.
+        //     The walk below is Update @0x8221D938's own (pseudocode 344-400): clear the table,
+        //     then for every SET bit of mUsedRaceCars append {index, squared distance from the
+        //     player, team}. ⚠️ THE PLAYER IS NOT SKIPPED -- the console's bit scan has no such
+        //     test, and GetSqDistanceOfNearestCarToPlayer reads row 1 precisely because row 0
+        //     is the player itself at distance zero.
+        //     [FLAG PC bring-up] miTeam: the console's 5th Update argument is a per-car team
+        //     array (`lpaVehicleTeams`, its own :134 assert; Hex-Rays drops it), and the PC
+        //     director input carries no such array. The field is filled with 0 rather than
+        //     invented. CONSEQUENCE: SqDistanceOfNearestOpposingTeamMember would see every car
+        //     on team 0. Nothing on the junkyard / intro path calls it.
+        // DELETE-WHEN: the director input carries the traffic array and the team array (then
+        // this becomes the real Update).
         void UpdateRaceCarsBringUp(CgsContainers::BitArray<8u> lUsedRaceCars,
                                    const Camera::VehicleInfo*  lpRaceCars,
                                    EActiveRaceCarIndex         lePlayerIndex)
@@ -130,8 +143,38 @@ namespace BrnDirector
             CGS_ASSERT(static_cast<s32>(mePlayerRaceCarIndex) < 8,
                        "mePlayerRaceCarIndex < BrnPhysics::Vehicle::KI_MAX_VEHICLES");          // h:70
 
-            mbSorteddNearestRaceCarsToPlayer = false;
             mbShouldUpdateNearestRaceCars    = true;
+            maNearestRaceCarsToPlayer.Clear();                       // console `stw 0, +0x134`
+
+            // The player's world position, read once (the console reloads GetPlayer()+0x1F0's
+            // wAxis lane inside the loop; same value, one read here).
+            const Vector3& lrPlayerPos =
+                mpRaceCars[static_cast<s32>(mePlayerRaceCarIndex)].mRaceCarState.mTransform.wAxis;
+
+            for (u32 luCar = 0; luCar < 8u; ++luCar)
+            {
+                if (!mUsedRaceCars.IsBitSet(luCar))
+                {
+                    continue;
+                }
+
+                const Vector3& lrCarPos =
+                    mpRaceCars[luCar].mRaceCarState.mTransform.wAxis;
+
+                // `vsubfp` then `vmsum3fp128` -- the SQUARED distance over the x/y/z lanes.
+                const f32 lfDx = lrPlayerPos.x - lrCarPos.x;
+                const f32 lfDy = lrPlayerPos.y - lrCarPos.y;
+                const f32 lfDz = lrPlayerPos.z - lrCarPos.z;
+
+                NearestCarInfo lRow;
+                lRow.meRaceCarIndex = static_cast<EActiveRaceCarIndex>(luCar);
+                lRow.mfDistance     = (lfDx * lfDx) + (lfDy * lfDy) + (lfDz * lfDz);
+                lRow.miTeam         = 0;   // [FLAG PC bring-up] -- see the banner.
+
+                maNearestRaceCarsToPlayer.Append(lRow);
+            }
+
+            mbSorteddNearestRaceCarsToPlayer = false;
         }
 
         // ⭐ GetPlayer @0x82205C58 / GetRaceCar @0x82205DE8 -- BODIED INLINE HERE, which is
@@ -189,11 +232,21 @@ namespace BrnDirector
 
             return maNearestRaceCarsToPlayer.GetItem(luRank).meRaceCarIndex;
         }
-        Matrix44Affine GetPlayerImpactSpace() const;                             // :85
-        Matrix44Affine GetPlayerHeadingSpace() const;                            // :88
-        Matrix44Affine GetPlayerLooseHeadingSpace() const;                       // :91
+        // ⭐ BODIED INLINE 2026-08-01 (ICE-anim transform wave). None of the three has a
+        // standalone X360 export -- the console inlines all three, and the ONE consumer that
+        // proves what they hand back is MainDirector::UpdateCameraBehavioursPostScene
+        // @0x8224FD30, which stages the ICE camera-space handler's impact / heading /
+        // loose-heading matrices with four `lvx128/stvx128` pairs read straight off
+        // `mAllVehicleData + 0x00`, `+ 0x40` and `+ 0x80` (0x8224FFC8..0x82250000). Those are
+        // exactly the three members below, in this order, so each getter is the one-line
+        // by-value member return the DWARF return type already declares. Nothing is fabricated.
+        Matrix44Affine GetPlayerImpactSpace() const       { return mPlayerImpactSpace; }       // :85
+        Matrix44Affine GetPlayerHeadingSpace() const      { return mPlayerHeadingSpace; }      // :88
+        Matrix44Affine GetPlayerLooseHeadingSpace() const { return mPlayerLooseHeadingSpace; } // :91
         const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const; // :94
-        const Camera::VehicleInfo* GetRaceCars() const;                          // :97
+        // BODIED INLINE 2026-08-01, same one-line member read as the two accessors below it
+        // (no standalone X360 export; the console inlines every reach of mpRaceCars).
+        const Camera::VehicleInfo* GetRaceCars() const { return mpRaceCars; }     // :97
         // BODIED INLINE (2026-07-30). Neither of these two has a standalone X360 export --
         // the console inlines both at every call site (e.g. VehicleRef::IsValid @0x822336A8
         // reads *(world+196) and the 64-bit used-race-car word at world+200 directly, which is
