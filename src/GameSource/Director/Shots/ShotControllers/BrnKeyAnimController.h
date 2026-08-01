@@ -131,6 +131,11 @@ public:
     // The live take itself (BehaviourIceAnim::GetTimeRemaining reads its bound take data).
     const ICE::ICETake& GetTake() const { return mPlaybackTake; }
 
+    // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Raised for the frames
+    // Update decides to sample, so the static take->camera writers can add their own line to
+    // the same record. Remove with the bring-up path.
+    static bool sbIceTrace;
+
 private:
     // ------------------------------------------------------------------------
     // The four take->camera writers. All FOUR ARE STATIC: the X360 passes the ICETake in r3

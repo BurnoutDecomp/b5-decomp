@@ -353,6 +353,40 @@ void BehaviourIceAnim::Construct()
     mCollisionPolicy.SetSeeThroughAlways(false);
     mCollisionPolicy.SetSeeThroughSuppressed(true);
 
+    // ------------------------------------------------------------------------
+    // ⭐⭐ THE THREE ANCHOR VEHICLE REFERENCES. RESTORED 2026-08-01 -- THEY WERE MISSING,
+    // and their absence is why every ICE-anim camera in the game produced nothing.
+    //
+    // Update @0x82247108 opens with `IsValid(mPrimaryVehicleRef)` / `IsValid(mSecondary-
+    // VehicleRef)` and takes Behaviour::Fail on either failure; VehicleRef::IsValid tests
+    // mbSet FIRST. With these seeds absent the refs were whatever the behaviour pool slot
+    // happened to hold (zero), so Update failed out on its first line every frame and
+    // mLastCamera stayed exactly as BehaviourHelper::Prepare's Camera::Construct left it --
+    // identity basis at the world origin. That IS the "eye (0,0,0) at (0,0,1)" symptom the
+    // director trace showed to the last frame.
+    //
+    // The console's stores (Construct @0x82256100, 0x82256154..0x8225618C) are the inlined
+    // VehicleRef::Construct + VehicleRef::Set pair for each ref, in this order:
+    //     mPrimaryVehicleRef    stb 0/1 +0xDFC ; stw 0 +0xDF0 ; stw 0 +0xDF8 ; stw -1 +0xDF4
+    //     mSecondaryVehicleRef  stb 0/1 +0xE0C ; stw 2 +0xE00 ; stw -1 +0xE04 ; stw 1 +0xE08
+    //     mBystanderRef         stb 0/1 +0xE1C ; stw 0 +0xE10 ; stw 0 +0xE18 ; stw -1 +0xE14
+    // i.e. the EYE anchor and the BYSTANDER anchor are the PLAYER's car, and the LOOK-AT
+    // anchor is the nearest race car at RANK 1 (E_RACE_CAR_NEAREST_PLAYER, muRef == 1).
+    // Written through the named Construct/Set pair so nothing is poked by offset; the
+    // leading Construct is the console's own `stb 0` before the `stb 1`, not decoration.
+    // ------------------------------------------------------------------------
+    mPrimaryVehicleRef.Construct();
+    mPrimaryVehicleRef.Set(BrnDirector::VehicleRef::E_PLAYER_CAR,
+                           E_ACTIVE_RACE_CAR_INDEX_INVALID, 0u);
+
+    mSecondaryVehicleRef.Construct();
+    mSecondaryVehicleRef.Set(BrnDirector::VehicleRef::E_RACE_CAR_NEAREST_PLAYER,
+                             E_ACTIVE_RACE_CAR_INDEX_INVALID, 1u);
+
+    mBystanderRef.Construct();
+    mBystanderRef.Set(BrnDirector::VehicleRef::E_PLAYER_CAR,
+                      E_ACTIVE_RACE_CAR_INDEX_INVALID, 0u);
+
     // --- the per-take reset sub-block at +0xDE0 ---
     mfReset0DE0 = 0.0f;
     maReset0DE4[0] = 0;

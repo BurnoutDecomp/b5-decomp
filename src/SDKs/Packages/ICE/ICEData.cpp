@@ -860,13 +860,29 @@ void ICEElementDescription::Prepare()
     // in this element's own channel. ICEElementDescriptions[] is the global element
     // table (indexed by element number; entry stride is the description size). It is
     // owned by this TU (the GROUP 1 global above).
-    if (miCubicLinear <= 0x2F)
+    //
+    // ⚠️⚠️ THE GUARD IS UNSIGNED, AND IT MATTERS. It used to be spelled `miCubicLinear <=
+    // 0x2F` on an s32 -- a SIGNED test -- and 32 of the 48 table rows carry the "no such
+    // element" sentinel -1 in both slots. Signed, -1 passes the guard, the inner
+    // `< eICE_NUM_ELEMENTS` tripwire also passes (-1 < 48), and the line below then evaluates
+    // ICEElementDescriptions[-1]: an OUT-OF-BOUNDS READ 88 bytes before the table, whose
+    // garbage never matches miChannelNumber, so the assert fires for every sentinel row.
+    // MEASURED the first time this function ever ran on PC: 78 + 78 asserts in one boot.
+    //
+    // The console's own test @0x8252EEF0 is the `subfic/subfe/addi` carry idiom over the
+    // value the preceding `lwz` ZERO-EXTENDED into a 64-bit register -- i.e. exactly
+    // `(u32)miCubicLinear <= 0x2Fu`, which -1 (0xFFFFFFFF) fails, so the console skips both
+    // checks for a sentinel row. Reproduced as the unsigned compare it is. The INNER tripwire
+    // stays SIGNED (`cmpwi r11, 0x30` / `blt` at 0x8252EF14): the two comparisons genuinely
+    // differ in signedness, which is why the outer one reads like a duplicate of the inner one
+    // and is not.
+    if (static_cast<u32>(miCubicLinear) <= 0x2Fu)
     {
         CGS_ASSERT(miCubicLinear < eICE_NUM_ELEMENTS, "this->miCubicLinear < eICE_NUM_ELEMENTS");
         CGS_ASSERT(miChannelNumber == ICEElementDescriptions[miCubicLinear].miChannelNumber,
                    "this->miChannelNumber == ICE::ICEElementDescriptions[ miCubicLinear].miChannelNumber");
     }
-    if (miTangentScale <= 0x2F)
+    if (static_cast<u32>(miTangentScale) <= 0x2Fu)
     {
         CGS_ASSERT(miTangentScale < eICE_NUM_ELEMENTS, "miTangentScale < eICE_NUM_ELEMENTS");
         CGS_ASSERT(miChannelNumber == ICEElementDescriptions[miTangentScale].miChannelNumber,

@@ -27,6 +27,49 @@ namespace ICE
 {
 
 // ---------------------------------------------------------------------------
+// ⭐ Construct (DWARF ICECameraSpaceHandler.cpp:2) -- X360 @0x8252B950. BODIED 2026-08-01.
+//
+// It had NO BODY ANYWHERE in the tree, and nothing had noticed because it also had no
+// caller: MainDirector::UpdateCameraBehavioursPostScene published a NULL mpCameraSpaceHandler
+// instead of building one. That null is the third of the four faults that were hiding behind
+// BehaviourIceAnim's missing VehicleRef seeds -- BehaviourIceAnim::Update copy-constructs its
+// own handler off that pointer on every frame it runs.
+//
+// The console body is one flat stage: eight four-row matrix copies into the eight members in
+// declaration order, then the back-pointer word at +0x200. Verified argument-by-argument from
+// the register/home-slot spill map (the callee spills r3..r10 into arg_14..arg_4C and reads
+// the two stack arguments at arg_54 / arg_5C):
+//     r4 -> +0x000 mCarToWorld            r8       -> +0x100 mImpactToWorld
+//     r5 -> +0x040 mCar2ToWorld           r9       -> +0x140 mHeadingToWorld
+//     r6 -> +0x080 mTrafficLightToWorld   r10      -> +0x180 mLooseHeadingToWorld
+//     r7 -> +0x0C0 mSceneToWorld          arg_54   -> +0x1C0 mHeading2ToWorld
+//                                         arg_5C   -> +0x200 mpGamePlayCam
+// i.e. exactly the declared parameter order; no reordering, no derivation, no asserts.
+// ---------------------------------------------------------------------------
+void CameraSpaceHandler::Construct(
+    const Matrix44Affine& lrCarToWorld,
+    const Matrix44Affine& lrCar2ToWorld,
+    const Matrix44Affine& lrTrafficLightToWorld,
+    const Matrix44Affine& lrSceneToWorld,
+    const Matrix44Affine& lrImpactToWorld,
+    const Matrix44Affine& lrHeadingToWorld,
+    const Matrix44Affine& lrLooseHeadingToWorld,
+    const Matrix44Affine& lrHeading2ToWorld,
+    const BrnDirector::Camera::BehaviourHandle<BrnDirector::Camera::BehaviourGameplayExternal>* lpGamePlayCam)
+{
+    mCarToWorld          = lrCarToWorld;
+    mCar2ToWorld         = lrCar2ToWorld;
+    mTrafficLightToWorld = lrTrafficLightToWorld;
+    mSceneToWorld        = lrSceneToWorld;
+    mImpactToWorld       = lrImpactToWorld;
+    mHeadingToWorld      = lrHeadingToWorld;
+    mLooseHeadingToWorld = lrLooseHeadingToWorld;
+    mHeading2ToWorld     = lrHeading2ToWorld;
+
+    mpGamePlayCam = lpGamePlayCam;
+}
+
+// ---------------------------------------------------------------------------
 // GetTakedownToWorld / GetReverseTakedownToWorld (DWARF ICECameraSpaceHandler.cpp:95
 // and :103; private). The takedown frame looks from one car to the other. Both are
 // INLINED into GetTransformToWorld on the console -- cases 6 and 8 of its switch each

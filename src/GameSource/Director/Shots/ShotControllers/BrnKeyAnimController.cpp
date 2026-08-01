@@ -42,10 +42,15 @@
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"         // ICE::CameraSpaceHandler::TransformToWorld
 #include "rw/math/vpu/vector3_operation.h"                     // Vector3 operator* / operator+ / operator-
 #include "rw/math/fpu/scalar_operation.h"                      // rw::math::fpu Min / Max / Clamp / Sin / Cos
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] gpDebugPrint (bring-up only)
 #include <cmath>                                               // atan2
+#include <cstdlib>                                             // getenv ([DIAG] BRN_ICE_TRACE)
 
 namespace BrnDirector
 {
+
+// [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Remove with the bring-up path.
+bool KeyAnimController::sbIceTrace = false;
 
 // ----------------------------------------------------------------------------
 // File-scope constants.
@@ -146,6 +151,17 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
 
     CGS_ASSERT(lpTakeData != 0, "lpTakeData != NULL");                       // cpp:68
 
+    // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Which take guid the shot
+    // reference decoded to, and what the ICE list handed back for it. Remove with the
+    // bring-up path.
+    if (getenv("BRN_ICE_TRACE") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[ice] Prepare guid " << liAnimGuid
+            << " -> takeData " << (lpTakeData != 0 ? 1 : 0)
+            << " len " << (lpTakeData != 0 ? lpTakeData->GetLength() : 0.0f) << "\n";
+    }
+
     mPlaybackTake.SetDataPointers(lpTakeData, false);
 
     // Rewind to the start of the take, forcing the seek and taking the simple all-channel
@@ -210,6 +226,40 @@ void KeyAnimController::Update(const ShotContext& lrContext, Camera::Camera* lpC
     // NOT floor it here -- the clamp above already guarantees it is non-negative).
     const f32 lfParameter = rw::math::fpu::Min(mfPlaybackTimer / GetLength(), 1.0f);
     mPlaybackTake.SetParameter(lfParameter, false, false);
+
+    // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. One line per sampled frame
+    // per take, keyed by the take LENGTH (the three game-intro movies are 40.02 / 6.38 / 1.36 s,
+    // so the length identifies which behaviour is speaking). The whole point is the pair
+    // (dtGame, timer): if the GAME timestep is zero the take can never advance and every
+    // element stays at whatever the seek in Prepare left it, which looks exactly like "the take
+    // evaluates to nothing".
+    {
+        // ⚠️ THE SAMPLE WINDOW IS A BURST, NOT A STRIDE. This counter counts CALLS, and there
+        // are N live ICE behaviours per frame, so `% 60` samples call 0, 60, 120 ... -- with
+        // N == 2 or 3 that is ALWAYS THE SAME BEHAVIOUR and the other takes are invisible.
+        // (That aliasing cost this wave a whole build/boot cycle: the 40 s game-intro take
+        // looked as if it never ran.) A short burst catches every live behaviour in one frame.
+        static s32 siTraceFrame = 0;
+        sbIceTrace = (getenv("BRN_ICE_TRACE") != 0) && ((siTraceFrame % 300) < 4);
+        if (sbIceTrace && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[ice] f" << siTraceFrame
+                << " len " << GetLength()
+                << " dtGame " << lrContext.mpTimestep->Get(Timestep::E_GAME)
+                << " timer " << mfPlaybackTimer
+                << " param " << lfParameter
+                << " asmIntervals " << static_cast<s32>(mPlaybackTake.GetNumIntervals(10))
+                << " ch0Intervals " << static_cast<s32>(mPlaybackTake.GetNumIntervals(0))
+                << " ch0Keys " << static_cast<s32>(mPlaybackTake.GetNumKeys(0))
+                // elements 47 CONTAINS_SUBTAKE / 46 TAKE_NUMBER -- the assembly track's own
+                // sub-take gate and guid (see ICEData.cpp's public SetParameter).
+                << " hasSub " << mPlaybackTake.GetValueInt(47)
+                << " subGuid " << mPlaybackTake.GetValueInt(46)
+                << " subParam " << mPlaybackTake.GetSubParameter() << "\n";
+        }
+        ++siTraceFrame;
+    }
 
     // Evaluate the whole camera out of the take.
     UpdateCameraFromICE(mPlaybackTake, *lrContext.mpCameraSpaceHandler, lpCamera);
@@ -335,6 +385,26 @@ void KeyAnimController::UpdateTransformationMatrix(const ICE::ICETake& lrTake,
     // The take's look point IS the camera's subject.
     lpCamera->mbHasSubject = true;
     lpCamera->mSubject = lWorldLookPosition;
+
+    // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. What the authored take
+    // actually asks for, and what the reference-space projection makes of it. This is the
+    // measurement that separates "the take evaluates to nothing" from "the space it is
+    // authored against projects to nothing". Off unless the env var is set; remove with the
+    // bring-up path.
+    if (KeyAnimController::sbIceTrace && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "  eyeSpace " << static_cast<s32>(leEyeSpace)
+            << " lookSpace " << static_cast<s32>(leLookSpace)
+            << " rawEye (" << lEyePosition.x << ", " << lEyePosition.y
+            << ", " << lEyePosition.z << ")"
+            << " -> world (" << lWorldEyePosition.x << ", " << lWorldEyePosition.y
+            << ", " << lWorldEyePosition.z << ")"
+            << " rawLook (" << lLookPosition.x << ", " << lLookPosition.y
+            << ", " << lLookPosition.z << ")"
+            << " -> world (" << lWorldLookPosition.x << ", " << lWorldLookPosition.y
+            << ", " << lWorldLookPosition.z << ")\n";
+    }
 }
 
 // ============================================================================

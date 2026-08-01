@@ -264,7 +264,23 @@ namespace BrnDirector
         //           (+0x121B0) and CrashAnalyser (+0x1245C), plus the AllVehicleData-ready
         //           latch at +0x12160 and the frame counter at +0x121A0 that Construct and
         //           Prepare zero. FLAG: none of those four types is homed; named opaque span.
-        u8 maShotAndAnalysisBlock[0x12480 - 0x12160];
+        //
+        // ⭐ CARVED 2026-08-01 (ICE-anim transform wave): the 64 bytes at +0x12170 are the ICE
+        // SCENE-SPACE transform -- the 4th matrix MainDirector::UpdateCameraBehavioursPostScene
+        // @0x8224FD30 hands ICE::CameraSpaceHandler::Construct (`r7 = this + 0x12170`, landing
+        // on the handler's mSceneToWorld @+0x0C0). A whole-image scan for that displacement
+        // returns exactly TWO consumers, both in MainDirector: this staging read, and
+        // MainDirector::Update @0x82274A64, which WRITES the ICE editor's preview camera
+        // transform into it with four lvx128/stvx128 pairs. It is 64 bytes with a 16-byte
+        // alignment and it feeds a Matrix44Affine parameter -- hence the type.
+        //
+        // ⚠️ NOTHING SEEDS IT ON THE CONSOLE. Construct/Prepare never touch it, so on retail it
+        // holds whatever the module allocation left (zero) until the in-game ICE editor runs.
+        // A scene-space authored take therefore projects through a ZERO matrix on a retail
+        // console too -- worth knowing before treating a collapsed scene-space shot as a PC bug.
+        u8             maAllVehicleDataReadyLatch[0x12170 - 0x12160];   // +0x12160
+        Matrix44Affine mICESceneSpace;                                  // +0x12170
+        u8             maShotAndAnalysisBlock[0x12480 - 0x121B0];       // +0x121B0
 
         // +0x12480  the camera finaliser (inertia + key-anim shake). Console span to +0x124F0;
         //           the KeyAnimShakeController Construct builds at +0x124D0 is its own member.

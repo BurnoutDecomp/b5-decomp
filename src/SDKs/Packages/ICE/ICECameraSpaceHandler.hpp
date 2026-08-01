@@ -124,14 +124,21 @@ public:
     // FLAG: the entire method set below is declaration-only here; bodies live in
     // ICECameraSpaceHandler.cpp / sibling TUs and EXTEND this home. Shapes
     // (return types, params, trailing const) follow the DWARF, not Hex-Rays.
-    void Construct(Matrix44Affine lCarToWorld,
-                   Matrix44Affine lCar2ToWorld,
-                   Matrix44Affine lTrafficLightToWorld,
-                   Matrix44Affine lSceneToWorld,
-                   Matrix44Affine lImpactToWorld,
-                   Matrix44Affine lHeadingToWorld,
-                   Matrix44Affine lLooseHeadingToWorld,
-                   Matrix44Affine lHeading2ToWorld,
+    // ⭐ BODIED 2026-08-01 in ICECameraSpaceHandler.cpp (the DWARF's own home for it:
+    // ICECameraSpaceHandler.cpp:2). ⚠️ THE EIGHT MATRICES ARE `const&`, NOT BY VALUE: the
+    // .hpp line of the DWARF drops the reference decoration, the .cpp definition line carries
+    // it (`const rw::math::vpu::Matrix44Affine & lCarToWorld`, ...), and the X360 @0x8252B950
+    // agrees -- every argument arrives as a POINTER that the body lvx128's four rows out of.
+    // This declaration used to say by-value, which was a 512-byte-per-call stack copy the
+    // console does not make.
+    void Construct(const Matrix44Affine& lrCarToWorld,
+                   const Matrix44Affine& lrCar2ToWorld,
+                   const Matrix44Affine& lrTrafficLightToWorld,
+                   const Matrix44Affine& lrSceneToWorld,
+                   const Matrix44Affine& lrImpactToWorld,
+                   const Matrix44Affine& lrHeadingToWorld,
+                   const Matrix44Affine& lrLooseHeadingToWorld,
+                   const Matrix44Affine& lrHeading2ToWorld,
                    const BrnDirector::Camera::BehaviourHandle<BrnDirector::Camera::BehaviourGameplayExternal>* lpGamePlayCam);
 
     Vector3 TransformToWorld(Vector3 lvPoint, eICESpace leSpace) const;

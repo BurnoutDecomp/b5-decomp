@@ -394,6 +394,21 @@ private:
 };
 
 // ---------------------------------------------------------------------------
+// ⭐ ICE::InitICEDescriptions @0x82532A08 -- the RUNTIME INITIALISER of the whole ICE
+// element-description system: it fills the per-channel element schedules
+// (gaICEElementChannels) that ICETake::SetParameter walks to decide WHICH elements to
+// evaluate, and runs ICEElementDescription::Prepare over every element.
+//
+// ⚠️ IT HAD NO DECLARATION AND NO CALLER. The body has been sitting in ICEData.cpp
+// (mounted) since that TU landed, and nothing ever called it, so every per-channel
+// schedule stayed at miNumKeyElements == 0 and ICETake::SetParameter evaluated ZERO
+// elements per channel -- i.e. mValues[] was never written and EVERY authored ICE camera
+// element read back as 0 for the whole session. Declared here (its own home header) so its
+// real console caller, BrnDirector::ICEWrapper::Prepare @0x8253DD90, can reach it.
+// ---------------------------------------------------------------------------
+void InitICEDescriptions();
+
+// ---------------------------------------------------------------------------
 // ICEGroup (ICEData.hpp:376, DWARF). A named collection of takes + assembly takes.
 // Not referenced by-value from ICETake / ICETakeData, so it is intentionally NOT
 // reconstructed here -- the body phase can request it when an ICEData.cpp function

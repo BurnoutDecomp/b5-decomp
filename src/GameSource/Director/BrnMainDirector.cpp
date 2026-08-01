@@ -45,6 +45,9 @@
 #include "GameSource/Director/BrnDirectorResourceManager.h"            // BrnDirector::DirectorResourceManager
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatus
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"                 // ICE::CameraSpaceHandler
+                                                                       //   (UpdateCameraBehavioursPostScene
+                                                                       //    stages one per frame)
 
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 
@@ -240,6 +243,19 @@ namespace BrnDirector
         maGameState.Clear();
 
         // ⚠️ GATE: the three DebugPrinter::Constructs.
+
+        // [FLAG PC bring-up] The ICE scene-space transform (+0x12170). The console does NOT
+        // seed it -- nothing in the whole image writes it except the in-game ICE editor's
+        // preview leg in Update -- so on a console it starts at the module allocation's zero.
+        // The PC allocation carries no such guarantee, and this matrix is staged into every
+        // frame's ICE::CameraSpaceHandler, so it is zeroed explicitly rather than left to luck.
+        // A scene-space authored take projects through a zero matrix either way; that is the
+        // console's behaviour, not a deviation.
+        // DELETE-WHEN: the ICE editor's scene-space producer is reconstructed.
+        mICESceneSpace.xAxis.SetZero();
+        mICESceneSpace.yAxis.SetZero();
+        mICESceneSpace.zAxis.SetZero();
+        mICESceneSpace.wAxis.SetZero();
 
         // The forced-camera-car override starts at the -1 "none" sentinel (+0x33100).
         miForcedCameraCarIndex = -1;
@@ -912,13 +928,25 @@ namespace BrnDirector
     //   Camera2DRotationController::Update / CameraSphericalRotationController::Update
     //   <the ~90-line VMX copy of the two vehicle transforms into the shared info>
     //
-    // ⚠️ WHAT IS FLAGGED HERE (each names WHY, and none of them can be sourced honestly yet):
-    //   * mPlayerInfo -- Behaviour.h models it as a named opaque sub-object (embedding the real
-    //     VehicleInfo drags in a pre-existing SuspensionSpring ODR fork). Left zeroed.
-    //   * mpAllVehicleData / mpPlayerTracker / mpEffectInterface / mpDebugLog / mpDebugPrinter /
-    //     mpCameraSpaceHandler -- MainDirector still models each as a NAMED OPAQUE REGION, so
-    //     there is no object of the declared type to point at. Left null (the fly-by path reads
-    //     none of them; the ones that would are themselves gated).
+    // ⭐⭐ THE SIX-SLOT BLACK HOLE IS CLOSED (2026-08-01, ICE-anim transform wave).
+    // The banner that used to sit here said mPlayerInfo / mpAllVehicleData / mpPlayerTracker /
+    // mpEffectInterface / mpDebugLog / mpDebugPrinter / mpCameraSpaceHandler were "left null
+    // (the fly-by path reads none of them)". THAT JUSTIFICATION HAD ALREADY EXPIRED: three of
+    // them are on BehaviourIceAnim::Update's straight-line path --
+    //     mpAllVehicleData     -> every VehicleRef::IsValid / ::Get resolves against it
+    //     mpCameraSpaceHandler -> Update COPY-CONSTRUCTS its own handler off it, frame 1
+    //     mpDebugPrinter       -> the "Can/Can't see player" readout at the end of Update
+    // -- and each was a null dereference waiting for the frame the ICE behaviour actually ran.
+    // Nothing could observe that while BehaviourIceAnim::Construct's missing VehicleRef seeds
+    // made Update fail out on its first line (see that file). Same lesson as the junkyard
+    // wave's mpNamedParameters: a "not on the live path" note expires SILENTLY.
+    //
+    // Every one of them now points at storage this class already owns and already seeds; none
+    // needed a new type. mPlayerInfo is a real VehicleInfo by value (Behaviour.h's ODR blocker
+    // was retired when the tree collapsed to one SuspensionSpring), so it is filled with the
+    // console's own `VehicleInfo::operator=` copy of the player's race-car record.
+    //
+    // ⚠️ WHAT IS STILL FLAGGED HERE:
     //   * mCarModifier / mCameraModifier / mfSpeedRatio / mfCrashTimeRemaining /
     //     mfTempFOVBoostAmount -- products of the ~500-line VMX prologue. Left zeroed, which is
     //     also what UpdateAllBehaviours' own (gated) responder prologue would leave them at.
@@ -978,6 +1006,76 @@ namespace BrnDirector
         lSharedInfo.mpSceneQueryInterface     = lpIO->mpSceneQueryInterface;
         lSharedInfo.mpRandom                  = reinterpret_cast<CgsNumeric::Random*>(
                                                     const_cast<u8*>(maRandom));
+
+        // ---- the six slots that used to be published as null (see the banner) --------------
+        // Each is the console's own `this + <offset>`, reached through the named member.
+        lSharedInfo.mpAllVehicleData          = &mAllVehicleData;
+        lSharedInfo.mpPlayerTracker           = reinterpret_cast<const VehicleTracker*>(
+                                                    maVehicleTracker);
+        lSharedInfo.mpEffectInterface         = reinterpret_cast<const EffectInterface*>(
+                                                    maEffectInterface);
+        lSharedInfo.mpDebugLog                = reinterpret_cast<DebugLog*>(maDebugLog);
+        lSharedInfo.mpDebugPrinter            = reinterpret_cast<DebugPrinter*>(maDebugPrinterMain);
+
+        // The player's own vehicle record, BY VALUE (console: VehicleInfo::operator= @0x821F49C8
+        // into the shared info's mPlayerInfo, from `raceCars + 1264 * playerIndex` -- 1264 is the
+        // X360 sizeof(VehicleInfo); the indexed member read below is the same element).
+        // IsLookingAtTarget reads its mRaceCarState.mTransform and mAABB at the end of every
+        // ICE-anim Update, so a zeroed record made every take report "can't see player".
+        if (lSharedInfo.mpRaceCars != 0 && liPlayerCarIndex >= 0)
+        {
+            lSharedInfo.mPlayerInfo = lSharedInfo.mpRaceCars[liPlayerCarIndex];
+        }
+
+        // ---- the per-frame ICE reference-space cache ---------------------------------------
+        // X360 @0x82250074. The eight matrices, in the console's own argument order (recovered
+        // from the asm register/home-slot map, NOT from the 8-argument Hex-Rays rendering --
+        // which drops the two stack arguments, as it always does):
+        //     mCarToWorld          = the PLAYER's world transform
+        //     mCar2ToWorld         = GetRaceCar(GetNearestRaceCarIndexToPlayer(1))'s transform
+        //     mTrafficLightToWorld = GameState::mTrafficLightSpace          (maGameState + 0x10)
+        //     mSceneToWorld        = the ICE editor's scene space           (this + 0x12170)
+        //     mImpactToWorld       = AllVehicleData::GetPlayerImpactSpace()
+        //     mHeadingToWorld      = AllVehicleData::GetPlayerHeadingSpace()
+        //     mLooseHeadingToWorld = AllVehicleData::GetPlayerLooseHeadingSpace()
+        //     mHeading2ToWorld     = the nearest race car's transform AGAIN (the console
+        //                            recomputes the same index and re-reads the same +0x1F0;
+        //                            reproduced, not "cleaned up")
+        //     mpGamePlayCam        = &mSharedCameraContainer.mGameplayExternal (this + 0x166A4
+        //                            == mArbitrator + 0x38E4 == container + 0x04)
+        // The handler is a STACK object here exactly as it is on the console (its frame slot
+        // var_2C0); every behaviour that needs it copy-constructs its own inside the
+        // UpdateAllBehaviours call below, so its lifetime is this function.
+        //
+        // ⚠️ GUARD (not console code): the two vehicle reads go through AllVehicleData, which
+        // asserts and then indexes mpRaceCars. On the frames before PreSceneQueryUpdate has
+        // published one, that pointer is null. The console cannot reach this function in that
+        // state (its caller is inside the live-player-car guard); this build can, so the
+        // handler is staged only when the snapshot is populated and is otherwise left as
+        // Construct's default. DELETE-WHEN: MainDirector::Update's own live-player-car
+        // prologue is real.
+        ICE::CameraSpaceHandler lCameraSpaces;
+        if (mAllVehicleData.GetRaceCars() != 0)
+        {
+            const EActiveRaceCarIndex leNearest =
+                mAllVehicleData.GetNearestRaceCarIndexToPlayer(1u);
+
+            const Matrix44Affine& lrPlayerToWorld =
+                mAllVehicleData.GetPlayer().mRaceCarState.mTransform;
+            const Matrix44Affine& lrNearestToWorld =
+                mAllVehicleData.GetRaceCar(leNearest).mRaceCarState.mTransform;
+
+            lCameraSpaces.Construct(lrPlayerToWorld,
+                                    lrNearestToWorld,
+                                    maGameState.mTrafficLightSpace,
+                                    mICESceneSpace,
+                                    mAllVehicleData.GetPlayerImpactSpace(),
+                                    mAllVehicleData.GetPlayerHeadingSpace(),
+                                    mAllVehicleData.GetPlayerLooseHeadingSpace(),
+                                    lrNearestToWorld,
+                                    &mArbitrator.GetSharedCameras().mGameplayExternal);
+        }
+        lSharedInfo.mpCameraSpaceHandler = &lCameraSpaces;
 
         // ⚠️ FLAG (see the banner): the two incomplete-type reference arguments.
         static u8 saOpaqueControllerInfo[64] = { 0 };
