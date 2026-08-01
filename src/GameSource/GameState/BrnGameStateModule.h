@@ -329,6 +329,12 @@ private:
     // 198) from its VehicleListEntry. Sole caller: OnSpecialEventPlayerCarChange.
     void  ApplyCarStats(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpQueue);
 
+    // The shared body of Prepare's "receive a resident data list" stages (vehicle reply 52,
+    // wheel reply 59). The console writes each one out longhand; they differ only in the reply
+    // id and their two baked assert lines. Returns false while the reply has not arrived.
+    bool ReceiveListResource(s32 liExpectedReplyId, s32 liAssertLineType,
+                             s32 liAssertLineEventId, void** lppOutResource);
+
     // X360 0x823758E8. Walk lCarId up its VehicleListEntry parent chain (at most two levels, as the
     // console does) to the base/"original" car a livery variant derives from. Used by
     // OnPlayerCarChange to look up the opponent set, and by ModeManager::SetupOpponentData /
@@ -371,10 +377,14 @@ private:
     // X360 +0x456E0 (284384). The active player car's wheel-set CgsID (`stdx r5, this, 0x456E0`).
     CgsID               mActivePlayerWheelId;
     // X360 +0x456E8 (284392). The loaded vehicle list (`lwzx r29, this, 0x456E8`).
-    // ⚠️ FLAG (PC bring-up): nothing on PC calls GameStateModule::Prepare, which is where the console
-    // installs this, so it is null until a caller sets it. Every body that uses it asserts first,
-    // exactly as the console does. DELETE-WHEN the module's Prepare() lands.
+    // ✅ THE FLAG IS RETIRED (2026-08-01): Prepare's stage 7/8 (E_PREPARESTAGE_REQUEST/RECEIVE_
+    // VEHICLE_LIST) is real now and installs it from the GameData reply, exactly as the console
+    // does. (What is still deferred at that stage is the pair of ApplyVehicleList republish
+    // hooks, not the pointer.)
     BrnResource::VehicleList* mpVehicleList = 0;
+    // X360 +0x456EC (284396). The loaded wheel list -- Prepare's stage 9/10, same shape,
+    // reply id 59. GetWheelList() hands it back.
+    BrnResource::WheelList*   mpWheelList = 0;
 
     // X360 +0x397E0. The read-only active-race-car snapshot the module caches at the end of the last
     // world update, held BY VALUE as the console holds it (see GetLastActiveRaceCarInterface).
