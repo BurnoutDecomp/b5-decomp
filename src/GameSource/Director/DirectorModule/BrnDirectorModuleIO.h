@@ -3,6 +3,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer base + read/write lock-state queries
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue @0x3340)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (mUsedRaceCars)
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"    // BrnDirector::Camera::VehicleInfo (committed, 1264 bytes)
@@ -164,6 +165,27 @@ namespace DirectorIO
         // MainDirector::Update's gameplay middle tests it too.
         bool                                               IsSimPaused() const;
 
+        // ⭐ X360 @0x82206C50 (`addi r3, r28, 0x3340`, guarded by the "Not locked for reading"
+        // assert at BrnDirectorModuleIO.h:583). THE GAME-ACTION QUEUE -- the per-frame stream
+        // of BrnGameState game actions the director drains in
+        // MainDirector::ProcessInputQueue @0x822372F8. Its producer is
+        // BrnGameModule::BridgeGameStateToDirector @0x823CD170, which bulk-Appends the
+        // GameStateModule's own <13312,16> queue into this one once per frame.
+        const CgsModule::VariableEventQueue<13312, 16>*    GetGameActionQueue() const;
+        CgsModule::VariableEventQueue<13312, 16>*          GetGameActionQueue();
+
+        // @0x7AC0 / @0x7AAC -- the takedown pair BridgeGameStateToDirector @0x823CD170
+        // publishes together (`*(input + 31424) = 1; *(input + 31404) = killerIndex;`) and
+        // MainDirector::ProcessInputQueue's prologue reads back in the same order (it asserts
+        // "mbPlayerTakenDown" at BrnMainDirector.cpp:232 before taking the killer index).
+        bool                                               GetPlayerTakenDown() const;
+        EActiveRaceCarIndex                                GetPlayerKillerCarIndex() const;
+
+        // @0x7AB0 -- copied verbatim into GameState +0x1CC (mRankUpInfo's 4-byte head) by
+        // ProcessInputQueue's prologue (`lwz r11, 0x7AB0(r30); stwx r11, r31, 0x339AC`).
+        // InputBuffer::Construct seeds it to 0 (`stw r30, 0x7AB0`).
+        s32                                                GetRankUpRivalInfo() const;
+
         bool HasGotHookEnumeration() const;
         bool HasGotShortcutMenuEvent() const;
         bool HasGotCrashNavShownEvent() const;
@@ -286,10 +308,19 @@ namespace DirectorIO
         // @0x3260 (12896): controller snapshot, 224 (0xE0) bytes (SetControllerInfo memcpy). HONEST.
         u8  mControllerInfo[224];                        // @0x3260 .. 0x3340
 
-        // @0x3340 .. 0x6750: the world status interface, vehicle-driver input interface tail, timer,
-        // etc. live across this span; only the addressed anchors below are recovered. The first
-        // recovered anchor after the controller block is mTimerInterface @0x6750. HONEST opaque span.
-        u8  mMidInterfaceBlock[0x6750 - 0x3340];         // StatusInterface / driver-input / score / etc.
+        // ⭐ @0x3340 (13120): THE GAME-ACTION QUEUE. RETYPED (2026-08-01) from an opaque
+        // `u8 mMidInterfaceBlock[0x6750 - 0x3340]` labelled "StatusInterface / driver-input /
+        // score / etc." -- that prose was wrong and the span is ONE object:
+        //   * GetGameActionQueue @0x82206C50 returns `this + 0x3340`;
+        //   * InputBuffer::Construct @0x82239440-0x82239448 runs
+        //     `VariableEventQueue<13312,16>::Construct(this + 0x3340)`;
+        //   * the span is 0x6750 - 0x3340 == 0x3410 == 13328 bytes, and
+        //     sizeof(VariableEventQueue<13312,16>) is EXACTLY 13328 on the host
+        //     (1 + 13312 + 3 pad + 3*4). The fit is exact at both ends, so nothing else
+        //     can live in there.
+        // The offsets did not move; only the type and the prose did (_AssertLayout still
+        // pins both 0x3340 and the following 0x6750).
+        CgsModule::VariableEventQueue<13312, 16> mGameActionQueue;   // @0x3340
 
         // @0x6750 (26448): the published game/sim timer snapshot. RETYPED from an opaque
         // u8[0x30] to the real CgsSystem::TimerStatusInterface -- the span was already exactly
@@ -327,10 +358,16 @@ namespace DirectorIO
         // 4-byte enum width. Not addressed by any recovered body; named, not opaque, so the
         // run down to the flag block is continuous.
         EActiveRaceCarIndex mePlayerKillerCarIndex;      // @0x7AAC
-        // @0x7AB0 .. 0x7AB4: one 4-byte slot between the killer index and the rank word that no
-        // recovered body touches. HONEST opaque -- the DWARF's member list for this header is
-        // trimmed and does not account for it.
-        u8  mUnknownScalar7AB0[0x7AB4 - 0x7AB0];         // @0x7AB0
+        // @0x7AB0 (31408): NAMED 2026-08-01 (it was `mUnknownScalar7AB0`, "no recovered body
+        // touches it" -- that was a NAME search failing, not an absent writer).
+        // MainDirector::ProcessInputQueue's prologue copies this word straight into
+        // GameState +0x1CC, the 4-byte head of GameState::mRankUpInfo
+        // (`0x8223740C lwz r11, 0x7AB0(r30)` -> `0x82237428 stwx r11, r31, 0x339AC`), and
+        // InputBuffer::Construct @0x82239520 seeds it to 0 (`stw r30, 0x7AB0`).
+        // FLAG: the ROLE (a rank-up / rival-team selector) is inferred from its destination,
+        //   whose own DWARF layout the GameState header records as unreliable; the offset,
+        //   the width and the copy are asm.
+        s32 miRankUpRivalInfo;                           // @0x7AB0
 
         // @0x7AB4 (31412): the new rank BridgeGuiToDirector's command-303 arm publishes
         // alongside mbRankUpThisFrame (X360 `stw r11, 0x7AB4(r31)`), read straight back by
@@ -370,11 +407,13 @@ namespace DirectorIO
         bool mbStartedOnlineEventLoading;                // @0x7AD2
         bool mbStarting100PercentSequence;               // @0x7AD3
         bool mbFinished100PercentSequence;               // @0x7AD4
-        // @0x7AD5: one more flag byte InputBuffer::Construct @0x822393D0 seeds to 0 and that
-        // nothing else in the recovered set addresses. The DWARF member list for this header
-        // ends at mbFinished100PercentSequence, so it has no name. HONEST opaque tail byte --
-        // it is what makes Construct's seed list complete.
-        u8  maFlagTail[1];                               // @0x7AD5
+        // @0x7AD5 / @0x7AD6: TWO more flag bytes, not one (CORRECTED 2026-08-01).
+        // InputBuffer::Construct @0x82239514/0x82239518 seeds BOTH to 0, and
+        // MainDirector::ProcessInputQueue's prologue copies BOTH into the GameState
+        // (`lbz 0x7AD6(r30)` -> GameState +0x1D1, `lbz 0x7AD5(r30)` -> GameState +0x1D0 --
+        // the two RankUpInfo tail bytes). The DWARF member list for this header ends at
+        // mbFinished100PercentSequence, so neither has a name; HONEST opaque tail.
+        u8  maFlagTail[2];                               // @0x7AD5 .. @0x7AD6
 
         // Compile-time pin of every recovered offset (private members -> assert from a member fn).
         static void _AssertLayout();

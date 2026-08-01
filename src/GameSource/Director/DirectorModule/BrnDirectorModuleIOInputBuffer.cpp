@@ -32,6 +32,11 @@ namespace DirectorIO
         static_assert(sizeof(BrnDirector::Camera::VehicleInfo)    == 1264,   "VehicleInfo stride 0x4F0");
         static_assert(offsetof(InputBuffer, maVehicleInfoArray)   == 0x3238, "maVehicleInfoArray @0x3238");
         static_assert(offsetof(InputBuffer, mControllerInfo)      == 0x3260, "mControllerInfo @0x3260");
+        static_assert(offsetof(InputBuffer, mGameActionQueue)     == 0x3340, "mGameActionQueue @0x3340");
+        static_assert(sizeof(ControlInput) <= 224,
+                      "ControlInput is the view over the 224-byte controller snapshot @0x3260");
+        static_assert(sizeof(CgsModule::VariableEventQueue<13312, 16>) == 0x6750 - 0x3340,
+                      "the game-action queue fills the @0x3340 span exactly (0x3410 bytes)");
         static_assert(offsetof(InputBuffer, mTimerInterface)      == 0x6750, "mTimerInterface @0x6750");
         static_assert(sizeof(CgsSystem::TimerStatusInterface)     == 0x30,   "TimerStatusInterface fills the @0x6750 span exactly");
         static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
@@ -109,9 +114,17 @@ namespace DirectorIO
         mbStartedOnlineEventLoading      = false;   // 31442
         mbStarting100PercentSequence     = false;   // 31443
         mbFinished100PercentSequence     = false;   // 31444
-        maFlagTail[0]                    = 0;       // 31445
+        maFlagTail[0]                    = 0;       // 31445 (0x7AD5)
+        maFlagTail[1]                    = 0;       // 31446 (0x7AD6)
+
+        miRankUpRivalInfo                = 0;       // 31408 (0x7AB0) -- `stw r30, 0x7AB0`
 
         mUsedRaceCars.UnSetAll();
+
+        // ⭐ @0x82239440-0x82239448: `addi r3, r31, 0x3340; bl VariableEventQueue<13312,16>::
+        // Construct`. Without this the queue's mbIsConstructed stays false and EVERY
+        // GetFirstEvent / AddEvent on it fires the "Not Constructed" assert.
+        mGameActionQueue.Construct();
     }
 
     // ---- getters (read-lock asserted) -------------------------------------------------------
@@ -168,6 +181,44 @@ namespace DirectorIO
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return mbSimPaused;
+    }
+
+    // ---- the game-action queue (X360 @0x82206C50) -------------------------------------------
+    // The console body is exactly: assert the read lock, then `return this + 0x3340`.
+    const CgsModule::VariableEventQueue<13312, 16>* InputBuffer::GetGameActionQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mGameActionQueue;
+    }
+
+    // The WRITE-side overload BrnGameModule::BridgeGameStateToDirector @0x823CD170 uses to
+    // Append the GameStateModule's own queue in under the buffer's write lock. (The X360
+    // emits one accessor and lets the caller write through it; splitting it into a const/
+    // non-const pair is the same shape every other member of this class already uses.)
+    CgsModule::VariableEventQueue<13312, 16>* InputBuffer::GetGameActionQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mGameActionQueue;
+    }
+
+    // @0x7AC0 / @0x7AAC -- the takedown pair (producer: BridgeGameStateToDirector @0x823CD170).
+    bool InputBuffer::GetPlayerTakenDown() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbPlayerTakenDown;
+    }
+
+    EActiveRaceCarIndex InputBuffer::GetPlayerKillerCarIndex() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mePlayerKillerCarIndex;
+    }
+
+    // @0x7AB0 -- see the header: copied verbatim into GameState +0x1CC by ProcessInputQueue.
+    s32 InputBuffer::GetRankUpRivalInfo() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return miRankUpRivalInfo;
     }
 
     const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
@@ -576,24 +627,41 @@ namespace DirectorIO
     }
 
     // ---- control-input accessors (read/write) -----------------------------------------------
-    // The ControlInput sub-object occupies the head of the committed mMidInterfaceBlock span
-    // @0x3340; both overloads `return &mControlInput` (== this+0x3340), differing only in which
-    // lock bit they assert.
+    // ⛔⛔ CORRECTED 2026-08-01 -- THIS PAIR WAS POINTING AT THE WRONG BLOCK.
+    //
+    // Both overloads used to be attributed to X360 0x82206C50 / 0x823B2740 and to
+    // `return this + 0x3340`. Those two addresses are NOT GetControll: they are the const and
+    // write-side halves of InputBuffer::GetGameActionQueue (0x82206C50 asserts at
+    // BrnDirectorModuleIO.h:583 and 0x823B2740 at :574, and BOTH end `addi r3, r28, 0x3340` --
+    // which is the game-action queue, as ProcessInputQueue proves by handing that exact result
+    // to VariableEventQueue<13312,16>::GetFirstEvent).
+    //
+    // The REAL InputBuffer::GetControll is @0x822070E8 (assert line 0x2E6 == 742) and it ends
+    //     0x82207180  addi  r3, r28, 0x3260
+    // i.e. it returns the 224-byte CONTROLLER SNAPSHOT -- the same block SetControllerInfo
+    // memcpy's 224 bytes into. sizeof(ControlInput) (48 + sizeof(DebugController) == 220) fits
+    // that span and nothing else, which is a third independent confirmation.
+    //
+    // WHAT THE BUG DID: MainDirector::UpdateArbitrator's cycle-camera / look-back bits and
+    // ArbStateSharedInfo::mpControllerInfo were read out of the event queue's first bytes
+    // (mbIsConstructed and macData[0..3]) instead of the controller. It never crashed and never
+    // asserted -- the classic silent wrong-data failure -- because the queue span is zeroed by
+    // the PC bring-up's memset before Construct, so every control bit read as a plausible 0.
+    // ⚠️ The X360 emits ONE accessor and lets the caller write through it; the const/non-const
+    //    split (and therefore which lock bit each asserts) is this class's house style.
 
-    // X360 0x82206C50 (BrnDirectorModuleIO.h:583): read-lock; return &mControlInput (this+0x3340).
+    // X360 0x822070E8 (BrnDirectorModuleIO.h:742): read-lock; return &mControllerInfo (this+0x3260).
     const ControlInput* InputBuffer::GetControll() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return reinterpret_cast<const ControlInput*>(mMidInterfaceBlock);
+        return reinterpret_cast<const ControlInput*>(mControllerInfo);
     }
 
-    // X360 0x823B2740 (BrnDirectorModuleIO.h:574): write-lock; return &mControlInput (this+0x3340).
-    // Non-const (write-side) overload of GetControll(): tests bit 3 (write-lock), unlike the const
-    // read-lock overload above.
+    // Write-side overload of the same accessor: tests bit 3 (write-lock) instead of bit 4.
     ControlInput* InputBuffer::GetControll()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return reinterpret_cast<ControlInput*>(mMidInterfaceBlock);
+        return reinterpret_cast<ControlInput*>(mControllerInfo);
     }
 }
 }
