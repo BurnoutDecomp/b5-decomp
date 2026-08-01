@@ -41,6 +41,8 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"               // GetGameDataEvent (the traffic-lane reply)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"   // AcquireResourceResponse
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle
+#include "SharedClasses/Trigger/BrnTriggerData.h"                         // [diagnostic] record census
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"                       // [diagnostic] SpawnLocation::GetType
 
 namespace BrnGameState
 {
@@ -247,14 +249,48 @@ bool TriggerQueryManager::Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
         lpReceiverQueue->Clear();
         meTriggerLoadStage = E_TRIGGER_LOAD_DONE;
 
-        // [diagnostic, one-shot] the same shape as WorldMap::LoadData's LOADED line. Delete
-        // with the rest of the lane bring-up diagnostics.
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
+        // [diagnostic, one-shot] the same shape as WorldMap::LoadData's LOADED line, plus a
+        // census of the record the junkyard flow actually consumes. RESIDENT IS NOT USABLE:
+        // the counts below are what prove the platform-4 port + FixUp landed, and the
+        // per-junkyard spawn-location tally is exactly what CarSelectManager::
+        // SetupSpawnLocations walks (it needs one type-1/2/3 and two type-0 per junkyard, or
+        // its "all five slots filled" assert fires and maSpawnLocations[1] is null).
+        // Delete with the rest of the lane bring-up diagnostics.
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
                 << "[TriggerQueryManager] LOADED -- trigger="
                 << (mpTriggerData.HasMemoryResource() ? 1 : 0)
                 << " traffic=" << (mpTrafficData.HasMemoryResource() ? 1 : 0) << "\n";
+
+            if (mpTriggerData.HasMemoryResource())
+            {
+                const BrnTrigger::TriggerData* lpData = mpTriggerData.operator->();
+                *CgsDev::Log::gpDebugPrint
+                    << "[TriggerQueryManager] TriggerData v" << lpData->GetSize()
+                    << " landmarks=" << lpData->GetLandmarkCount()
+                    << " regions="   << lpData->GetRegionCount()
+                    << " generic="   << lpData->GetGenericRegionCount()
+                    << " roaming="   << lpData->GetRoamingLocationCount()
+                    << " spawn="     << lpData->GetSpawnLocationCount() << "\n";
+
+                // Per-type tally over the whole spawn table (the junkyard-id split is the
+                // caller's business; this only has to prove the records decode).
+                s32 laiByType[5] = { 0, 0, 0, 0, 0 };
+                const s32 liSpawnCount = lpData->GetSpawnLocationCount();
+                for (s32 li = 0; li < liSpawnCount; ++li)
+                {
+                    const BrnTrigger::SpawnLocation* lpLoc = lpData->GetSpawnLocation(li);
+                    if (lpLoc == 0)
+                        continue;
+                    const u32 luType = static_cast<u32>(lpLoc->GetType());
+                    laiByType[(luType < 4u) ? luType : 4u] += 1;
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << "[TriggerQueryManager] spawn types: player=" << laiByType[0]
+                    << " selectL=" << laiByType[1] << " selectR=" << laiByType[2]
+                    << " unlock="  << laiByType[3] << " BAD=" << laiByType[4] << "\n";
+            }
         }
         return true;
     }
