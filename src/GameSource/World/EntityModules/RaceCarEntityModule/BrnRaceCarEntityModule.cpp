@@ -51,11 +51,20 @@
 #include "SharedClasses/DataLists/VehicleList.h"                                         // BrnResource::VehicleList
 #include "SharedClasses/DataLists/VehicleListEntry.h"                                    // BrnResource::VehicleListEntry
 #include "SharedClasses/DataLists/WheelList.h"                                           // BrnResource::WheelList / WheelListEntry
+#include "GameSource/GameState/BrnGameActions.h"                                         // GameStateModuleIO::ResetPlayerCarAction (game action 0)
+#include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"                         // BrnAI::AIModuleIO::RaceCarAIInterface / AttachAIControlEvent
+#include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
+#include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
+#include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine)
 
 #include <cstring>   // memset
 
 namespace BrnWorld
 {
+
+// The null CgsID sentinel, spelled exactly as BrnRaceCar.cpp does (a "spawn/reset" record
+// carries 0 for "no car" / "derive the wheel set" / "no rival").
+static const CgsID KU_CGSID_NULL = 0;
 
 // X360 0x822A47A8. Append one training request to the per-frame ring.
 //
@@ -193,7 +202,6 @@ void RaceCarEntityModule::Construct()
     mpVehicleList        = 0;
     mpWheelList          = 0;
     mbCarColoursBound    = false;
-    mbBringUpCarRequested = false;
 
     // The three render switches the dispatch leg reads (see the header for the offset
     // fit). The console seeds them from its debug-variable table, which is not live on
@@ -503,7 +511,15 @@ void RaceCarEntityModule::UpdateStreaming(
 {
     CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // X360 :4241
 
-    SpawnFirstUnlockedCarBringUp();
+    // ⭐ THE BRING-UP SPAWN IS GONE (2026-08-01). SpawnFirstUnlockedCarBringUp used to be pulled
+    // here; the player's car is now placed by the console's own chain --
+    //   GameStateModule::PreWorldUpdate's latch -> SendSetupPlayerCarEvent
+    //     -> CarSelectManager::EnterJunkyardAtStartOfGame  (posts ResetPlayerCarAction)
+    //     -> BridgeGameStateToWorld -> BridgeActionsToRaceCarModule
+    //     -> RaceCarEntityModule::HandleGameActions case 0
+    //     -> HandleResetPlayerCarAction -> SpawnRaceCar + AttachActiveRaceCar
+    // -- which puts it at the JUNKYARD spawn location (maSpawnLocations[1]) instead of slot 0 of
+    // the freeburn-lobby grid.
 
     mRaceCarStreamer.Update( lpInput, lpOutput, mfTimeStep );
 
@@ -727,123 +743,406 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
 }
 
 // ============================================================================
-// [FLAG PC bring-up] SpawnFirstUnlockedCarBringUp -- NOT an X360 function.
+// SpawnRaceCar  @ 0x822FE5D8
 //
-// WHAT CHANGED (pose wave 2026-07-31). The previous revision of this stand-in called
-// RaceCarStreamer::AddVehicleData directly, because AttachActiveRaceCar and the whole
-// ActiveRaceCar interior were absent. Both are real now, so ALL this function still does
-// is pull the trigger that SpawnRaceCar's seven callers pull on the console:
-//     RaceCar::AddToWorld            (console, 0x822BE4F0)
-//     RaceCar::UpdatePositioningData (console, 0x822D3788)
-//     AttachActiveRaceCar            (console, 0x822F4DB0)
-// Every state change -- muState, mpRaceCar, the render snapshot, the streamer request --
-// is now console code operating on real console members. (UpdatePositioningData is the
-// one console call the first revision of this made and then dropped -- it dereferences
-// the module's mWorldMap2D, which this header still keeps opaque; see the call site.)
+// Take the first INACTIVE global race-car slot, reset it, put it in the world at
+// lrTransform, and tell the AI module to attach control. This is the console's ONE spawn
+// primitive -- all seven spawn paths (the starting grid / freeburn lobby, the mode set-ups,
+// AddRivalCar, the network-car handler and HandleResetPlayerCarAction) funnel through it.
 //
-// WHAT IS STILL FAKE, precisely:
-//   * THE TRIGGER. SpawnRaceCar @0x822FE5D8 itself is not reconstructed: its tail posts a
-//     BrnAI::AIModuleIO::AttachAIControlEvent into the AI module's variable event queue,
-//     and its callers (AddRaceCarToStartingGridOrFreeburnLobby, SetUpPlayerCarForMode, ...)
-//     need BrnGameState::GameModeParams. None of that exists here.
-//   * THE SPAWN POSE. It is the console's own data, not invented: the eight world
-//     positions AddRaceCarToStartingGridOrFreeburnLobby @0x82300B38 bakes into its code as
-//     the FREEBURN LOBBY grid (immediates at 0x82300B70..0x82300D20). Slot 0 is used.
-//     The console builds the car's basis from those positions plus a DIRECTION its caller
-//     supplies (Camera::Utils::CreateLookAt(pos, pos + dir)); that direction comes from
-//     GameModeParams, so the identity basis below is the one part of the pose that is a
-//     bring-up choice rather than console data.
-//   * Vehicle index 0 is the Hunter Cavalry (PUSMC01) -- the one car unlocked at the
-//     Junkyard. The ID derivation is SpawnRaceCar's own
-//     (entry->GetId() / WheelList::FindWheelIndexFromName(entry->GetDefaultWheelName())).
+// The console's slot RESET is a verbatim INLINE of RaceCar::Prepare() -- every store between
+// 0x822FEA64 and 0x822FEB34 matches that function field for field (identity transform, null
+// ids, muType = E_RACE_CAR_TYPE_INACTIVE, the four -1 sentinels, the two colour -1s,
+// mpActiveRaceCar = 0). Written here as the call the inline came from.
 //
-// DELETE-WHEN: SpawnRaceCar + one of its callers land.
+// [FLAG PC bring-up] TWO console legs are dropped rather than paraphrased:
+//   * RaceCar::UpdatePositioningData(lrTransform, &mWorldMap2D) -- the module's own
+//     CgsWorld::WorldMap2D lives inside this header's opaque tail (`this + 99072` in the
+//     asm, inside maTailPadA0), so there is no map to sample and the call would dereference
+//     the middle of a pad. All it adds beyond AddToWorld is mPreviousPosition and
+//     mWorldRegion; nothing on the reconstructed path reads either. Same drop the previous
+//     bring-up spawn made, for the same measured reason.
+//   * the "Vehicle with ID <id> is not in the list" assert's StrStream formatting -- the
+//     predicate IS reproduced, only the message is folded to static text.
 // ============================================================================
-void RaceCarEntityModule::SpawnFirstUnlockedCarBringUp()
+EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
+        BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
+        const Matrix44Affine& lrTransform,
+        ERaceCarType leType,
+        CgsID lModelId,
+        bool lbKeepResetSection,
+        CgsID lWheelModelId,
+        const CgsID* lpRivalId,
+        s32 liOpponentIndex )
 {
-    if( mbBringUpCarRequested || mpVehicleList == 0 || mpWheelList == 0 )
+    CGS_ASSERT( lpRaceCarAIInterface != 0, "lpRaceCarAIInterface" );            // X360 :1969
+    CGS_ASSERT( rw::math::vpu::IsValid( lrTransform ), "RwMath::IsValid( lTransform )" ); // :1970
+    CGS_ASSERT( leType < E_RACE_CAR_TYPE_COUNT, "leType < E_RACE_CAR_TYPE_COUNT" );       // :1971
+    CGS_ASSERT( mpVehicleList != 0 && mpVehicleList->GetVehicleIndex( lModelId ) >= 0,
+                "Vehicle with ID <id> is not in the list" );                              // :1972
+
+    if( mpVehicleList == 0 || mpWheelList == 0 )
+    {
+        return E_GLOBAL_RACE_CAR_INDEX_INVALID;
+    }
+
+    // ---- the car's AttribSys collection key + personality (the AI event's payload) -----
+    const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex( lModelId );
+    Attribute::Key lCarAssetAttribKey = 0;
+    s32 lePersonalityType = 0;   // BrnAI::EPersonalityType storage (its enum has no home yet)
+    if( liVehicleIndex >= 0 )
+    {
+        const BrnResource::VehicleListEntry* lpEntry =
+            mpVehicleList->GetVehicleData( liVehicleIndex );
+        if( lpEntry != 0 )
+        {
+            lCarAssetAttribKey = lpEntry->GetAttribCollectionKeyHash();
+            // asm: `lbz r11, 0xE8(entry); cmplwi r11, 1; bne skip; stw r11, personality`
+            // -- i.e. the personality is 1 for car type 1 and 0 for everything else.
+            if( lpEntry->GetCarType() == 1u )
+            {
+                lePersonalityType = 1;
+            }
+        }
+    }
+
+    const CgsID lRivalId = ( lpRivalId != 0 ) ? *lpRivalId : KU_CGSID_NULL;
+
+    // ---- resolve the wheel set when the caller passed the null id --------------------
+    CgsID lResolvedWheelId = lWheelModelId;
+    if( lResolvedWheelId == KU_CGSID_NULL )
+    {
+        const s32 liEntryIndex = mpVehicleList->GetVehicleIndex( lModelId );
+        const BrnResource::VehicleListEntry* lpEntry =
+            ( liEntryIndex >= 0 ) ? mpVehicleList->GetVehicleData( liEntryIndex ) : 0;
+        // The console passes `entry + 0x10` straight in; a null entry passes 0 (r3 = r30).
+        s32 liWheelIndex = mpWheelList->FindWheelIndexFromName(
+            ( lpEntry != 0 ) ? lpEntry->GetDefaultWheelName() : 0 );
+        if( liWheelIndex == -1 )
+        {
+            liWheelIndex = 0;
+        }
+        const BrnResource::WheelListEntry* lpWheelEntry = mpWheelList->GetWheelData( liWheelIndex );
+        if( lpWheelEntry != 0 )
+        {
+            lResolvedWheelId = lpWheelEntry->mID;
+        }
+    }
+
+    // ---- find the first INACTIVE global slot ------------------------------------------
+    s32 liGlobal = 0;
+    while( liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT )
+    {
+        RaceCar* lpCandidate = GetGlobalRaceCar( static_cast<EGlobalRaceCarIndex>( liGlobal ) );
+        CGS_ASSERT( lpCandidate->GetType() < E_RACE_CAR_TYPE_COUNT,
+                    "muType < E_RACE_CAR_TYPE_COUNT" );                    // BrnRaceCar.h:482
+        if( lpCandidate->GetType() == E_RACE_CAR_TYPE_INACTIVE )
+        {
+            break;
+        }
+        ++liGlobal;
+        CGS_ASSERT( liGlobal <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                    "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" );      // BurnoutConstants.h:84
+    }
+    CGS_ASSERT( liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT, "Ran out of RaceCars to spawn" ); // :2013
+    if( liGlobal >= E_GLOBAL_RACE_CAR_INDEX_COUNT )
+    {
+        return E_GLOBAL_RACE_CAR_INDEX_INVALID;
+    }
+
+    const EGlobalRaceCarIndex leGlobal = static_cast<EGlobalRaceCarIndex>( liGlobal );
+    RaceCar* lpRaceCar = GetGlobalRaceCar( leGlobal );
+
+    lpRaceCar->Prepare();          // the console's verbatim inline; see the banner
+    lpRaceCar->AddToWorld( leType, lrTransform, lRivalId, lModelId, lResolvedWheelId,
+                           static_cast<s8>( liGlobal ),   // asm `extsb r9, r29`
+                           liOpponentIndex );
+    // [FLAG PC bring-up] UpdatePositioningData -- see the banner.
+    lpRaceCar->UpdateVelocity( Vector3{ 0.0f, 0.0f, 0.0f, 0.0f } );   // asm `vmr128 v1, v127` (zero)
+
+    CGS_ASSERT( leGlobal >= E_GLOBAL_RACE_CAR_INDEX_0,
+                "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0" );   // BrnRaceCarAIInterfaces.h:412
+    CGS_ASSERT( leGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT,
+                "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT" ); // :413
+
+    // ---- tell the AI module to attach control ------------------------------------------
+    // The console builds the record on the stack at the four offsets the DecFIGS DWARF names
+    // (BrnRaceCarAIInterfaces.h:303..306) and posts it into the AI interface's own
+    // VariableEventQueue<16384,16> at +0x2F8 (== mManagementQueue).
+    BrnAI::AIModuleIO::AttachAIControlEvent lAttachEvent;
+    lAttachEvent.meGlobalRaceCarIndex = leGlobal;
+    lAttachEvent.mCarAssetAttribKey   = lCarAssetAttribKey;
+    lAttachEvent.mePersonalityType    = lePersonalityType;
+    lAttachEvent.mbKeepResetSection   = lbKeepResetSection;
+    lpRaceCarAIInterface->mManagementQueue
+        .AddEvent<BrnAI::AIModuleIO::AttachAIControlEvent>( &lAttachEvent, 0 );
+
+    return leGlobal;
+}
+
+// ============================================================================
+// HandleResetPlayerCarAction  @ 0x82304FE8   -- GAME ACTION 0
+//
+// ⭐ THIS IS THE FUNCTION THAT PUTS THE PLAYER'S CAR SOMEWHERE. Everything the junkyard
+// flow does upstream -- FindNearestJunkyardID, SetupSpawnLocations, the 80-byte
+// ResetPlayerCarAction, BridgeGameStateToWorld, BridgeActionsToRaceCarModule -- exists to
+// deliver one of these records here.
+//
+// The body has two independent binary decisions, and it is worth stating them because the
+// pseudocode hides both behind Hex-Rays' fake register pairs:
+//   * lpAction->HasToChangeLocation()  -> build the pose from the action's own
+//     position/direction (BrnMath::BuildTransform with the world up axis), else reuse the
+//     player's CURRENT ActiveRaceCar transform.
+//   * lpAction->mCarModelId != 0       -> RE-SPAWN (remove the old car, SpawnRaceCar the new
+//     one, AttachActiveRaceCar it), else TELEPORT the existing car
+//     (ActiveRaceCar::RequestPlaceOnTrack).
+// The junkyard start-of-game record takes the "change location + re-spawn" corner, which is
+// the one this build can execute end to end.
+// ============================================================================
+void RaceCarEntityModule::HandleResetPlayerCarAction(
+        const BrnGameState::GameStateModuleIO::ResetPlayerCarAction* lpAction,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    if( lpAction == 0 || lpOutput == 0 )
     {
         return;
     }
-    mbBringUpCarRequested = true;
 
-    const s32 KI_BRINGUP_VEHICLE_INDEX  = 0;   // PUSMC01, "Hunter Cavalry"
-
-    const BrnResource::VehicleListEntry* lpEntry =
-        mpVehicleList->GetVehicleData( KI_BRINGUP_VEHICLE_INDEX );
-    if( lpEntry == 0 )
+    // ---- 1. the pose -------------------------------------------------------------------
+    Matrix44Affine lTransform;
+    if( lpAction->HasToChangeLocation() )
     {
-        return;
+        CGS_ASSERT( BrnMath::IsNormal( lpAction->mDirection ),
+                    "BrnMath::IsNormal( lpAction->GetDirection() )" );          // X360 :7465
+        // asm: v1 = action+0x00 (position), v2 = action+0x10 (direction),
+        //      v3 = unk_82181510 (the world UP axis row the identity basis is built from).
+        BrnMath::BuildTransform( lTransform, lpAction->mPosition, lpAction->mDirection,
+                                 Vector3{ 0.0f, 1.0f, 0.0f, 0.0f } );
+    }
+    else
+    {
+        lTransform = GetActiveRaceCar( mePlayerActiveRaceCarIndex )->GetTransform();
     }
 
-    const CgsID lModelId       = lpEntry->GetId();
-    const char* lpcWheelName   = lpEntry->GetDefaultWheelName();
-
-    s32 liWheelIndex = mpWheelList->FindWheelIndexFromName( lpcWheelName );
-    if( liWheelIndex < 0 )
+    // ---- 2. the wheel set --------------------------------------------------------------
+    CgsID lWheelId = KU_CGSID_NULL;
+    if( lpAction->mCarModelId != KU_CGSID_NULL )
     {
+        if( lpAction->mWheelModelId != KU_CGSID_NULL )
+        {
+            lWheelId = lpAction->mWheelModelId;
+        }
+        else if( mpVehicleList != 0 && mpWheelList != 0 )
+        {
+            // asm: sub_82233A28(mpVehicleList, carId) -> the entry, then entry+0x10 (the
+            // default wheel NAME) into FindWheelIndexFromName; -1 falls back to wheel 0.
+            const BrnResource::VehicleListEntry* lpEntry =
+                mpVehicleList->GetVehicleData( lpAction->mCarModelId );
+            s32 liWheelIndex = mpWheelList->FindWheelIndexFromName(
+                ( lpEntry != 0 ) ? lpEntry->GetDefaultWheelName() : 0 );
+            if( liWheelIndex == -1 )
+            {
+                liWheelIndex = 0;
+            }
+            const BrnResource::WheelListEntry* lpWheelEntry =
+                mpWheelList->GetWheelData( liWheelIndex );
+            if( lpWheelEntry != 0 )
+            {
+                lWheelId = lpWheelEntry->mID;
+            }
+        }
+    }
+
+    // ---- 3. the three module flags the record carries ----------------------------------
+    mbInCarSelectScreen        = lpAction->mbInCarSelectScreen;         // +0x40 -> +0x186C9
+    mbCarSelectDontStreamAudio = lpAction->mbCarSelectDontStreamAudio;  // +0x41 -> +0x186D0
+    // [FLAG] the +0x3C word (miInCarModification) is copied to the module's +0x186CC word,
+    // which this header does not model yet (it is inside maTailPadB1). Nothing reconstructed
+    // reads it; dropped rather than aimed at an unnamed pad byte.
+
+    if( lpAction->mCarModelId != KU_CGSID_NULL )
+    {
+        // ================= RE-SPAWN ======================================================
+        s32 liColourIndex   = 0;
+        s32 liColourPalette = 0;
+        bool lbWasInGameMode = false;
+
+        if( mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID )
+        {
+            ActiveRaceCar* lpOldSlot = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+            RaceCar* lpOldCar = lpOldSlot->GetGlobalRaceCar();
+            // [FLAG] the console gates the game-mode carry-over on the module bool at
+            // +99141 -- the byte immediately after mbIsInGameMode(+99140) in the DWARF bool
+            // run BrnRaceCarEntityModule.h:370.., whose NAME this header has not fitted (only
+            // :370/:377/:378/:381 are pinned). Left as false rather than guessed onto a
+            // neighbour; it only matters when a car ALREADY in a game mode is re-spawned,
+            // which the start-of-game path this build drives never does.
+            (void)lbWasInGameMode;
+            // The console carries the OLD car's colour across ONLY when the model is unchanged.
+            if( lpOldCar->GetModelId() == lpAction->mCarModelId )
+            {
+                liColourPalette = lpOldCar->GetColourPalette();
+                liColourIndex   = lpOldCar->GetColourIndex();
+                CGS_ASSERT( liColourPalette < 4, "Invalid Number of Palettes: " );   // :7535
+                CGS_ASSERT( liColourIndex >= 0, "Invalid car colour: " );            // :7536
+            }
+            // [FLAG PC] RemoveRaceCar @ (this TU) is not reconstructed -- it walks the
+            // streamer's per-slot release plus DetachActiveRaceCar, both of which reach the
+            // un-homed manager interiors. UNREACHED on the start-of-game path, which is the
+            // only path this build drives: mePlayerActiveRaceCarIndex is still INVALID there.
+            // DELETE-WHEN RemoveRaceCar lands.
+        }
+
+        BrnAI::AIModuleIO::RaceCarAIInterface* lpAIInterface =
+            lpOutput->GetRaceCarAIInterface();
+
+        const EGlobalRaceCarIndex leGlobal =
+            SpawnRaceCar( lpAIInterface, lTransform, E_RACE_CAR_TYPE_PLAYER,
+                          lpAction->mCarModelId, lpAction->mbKeepResetSection,
+                          lWheelId, 0 /* no rival id */, -1 /* no opponent index */ );
+
+        if( leGlobal == E_GLOBAL_RACE_CAR_INDEX_INVALID )
+        {
+            return;
+        }
+
+        RaceCar* lpRaceCar = GetGlobalRaceCar( leGlobal );
+        AttachActiveRaceCar( lpRaceCar, E_ACTIVE_RACE_CAR_INDEX_INVALID );
+
+        CGS_ASSERT( liColourPalette < 4, "Invalid Number of Palettes: " );   // X360 :7556
+        CGS_ASSERT( liColourIndex >= 0, "Invalid car colour: " );            // X360 :7557
+
+        lpRaceCar->SetColourIndex( liColourIndex );
+        lpRaceCar->SetColourPalette( liColourPalette );
+
+        if( lbWasInGameMode )
+        {
+            lpRaceCar->SetInCurrentGameMode( true, true );
+        }
+
+        mePlayerActiveRaceCarIndex = lpRaceCar->GetActiveRaceCar()->GetActiveRaceCarIndex();
+
+        // [FLAG] the console then clears ActiveRaceCar+0x1BF6 and zero-fills the eight
+        // dwords at +0x1BF8. Both land INSIDE ActiveRaceCar::mRenderParams (0x7E0..0x1C80),
+        // whose members at those offsets this tree has not named. They are render/deform
+        // bookkeeping, not placement; dropped rather than poked by offset.
+
+        // asm `*(this + 99144) = 1` -- the byte immediately after mbIsInGameMode(+99140) in
+        // the same DWARF bool run. [FLAG] unnamed in this header's model of that run.
+    }
+    else
+    {
+        // ================= TELEPORT ======================================================
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+        CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar" );                 // X360 :7581
+
+        // [FLAG PC bring-up] ActiveRaceCar::RequestPlaceOnTrack(position, direction, 0.0f)
+        // is not reconstructed (it hands the request to PlaceOnTrackManager, which owns the
+        // physics teleport). The console's own debug line is kept so the drop is visible in
+        // the log the moment a teleport record does arrive.
         if( CgsDev::Log::gpDebugPrint != 0 )
         {
             *CgsDev::Log::gpDebugPrint
-                << "*** Couldn't find Wheel: " << lpcWheelName << " for Vehicle: "
-                << lpEntry->GetName() << "\n";
+                << "*** HandleResetPlayerCarAction: Teleport ["
+                << lTransform.wAxis.x << ", " << lTransform.wAxis.y << ", "
+                << lTransform.wAxis.z << "]\n";
         }
-        liWheelIndex = 0;
     }
 
-    const BrnResource::WheelListEntry* lpWheelEntry = mpWheelList->GetWheelData( liWheelIndex );
-    if( lpWheelEntry == 0 )
+    // ---- 4. the unlock deformation ------------------------------------------------------
+    if( lpAction->mfDeformationAmount >= 0.0f )
+    {
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+        CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar" );                 // X360 :7595
+        // [FLAG] the console stores the (+0x34,+0x38) pair into ActiveRaceCar[499]/[498]
+        // (inside mRenderParams, unnamed here) and into the module's own +99544/+99536 pair
+        // (inside maTailPadB1). The start-of-game record posts the -1.0 sentinel, so this
+        // arm is not taken on the path this build drives. DELETE-WHEN those members land.
+        (void)lpActiveRaceCar;
+    }
+
+    // ---- 5. the player scoring slot -----------------------------------------------------
+    if( static_cast<s32>( lpAction->mePlayerScoringIndex )
+            < BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT )
+    {
+        SetActiveRaceCarForPlayerScoringIndex( lpAction->mePlayerScoringIndex,
+                                               mePlayerActiveRaceCarIndex );
+    }
+}
+
+// ============================================================================
+// HandleGameActions  @ 0x8230BE08 -- PARTIAL SLICE.
+//
+// The console body is one walk of the pre-scene input buffer's game-action queue with a
+// ~100-case dispatch (two switch jump tables: ids > 100 at 0x8230CDBC, ids <= 100 at
+// 0x8230C098). Nearly every case reaches an un-reconstructed handler or the un-homed
+// RaceCar/ActiveRaceCar/manager interiors.
+//
+// REPRODUCED: the queue walk and case 0 (ResetPlayerCarAction). That is not an arbitrary
+// choice -- action 0 is the only game action on this build that has a live producer
+// (CarSelectManager) AND a fully reachable consumer.
+//
+// [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
+// console dispatches to and that are still un-reconstructed:
+//   3   RaceCar::RequestResetOnTrack        4   HandleSetPlayerOpponentsAction
+//   5   HandleSetupNetworkCarAction         7   the player-control-changed AI publish
+//   11  HandleRemotePlayerDisconnected      23  HandlePrepareForModeAction
+//   34  the payback arm                     39  HandleStopModeAction
+//   73/74/76/77/79  the car-select / drive-thru arms
+//   97/98/99        the network add/remove arms       + ~80 more.
+// Because the walk itself is real, adding any one of them later is a case label, not a
+// re-derivation. DELETE-WHEN the handlers land.
+// ============================================================================
+void RaceCarEntityModule::HandleGameActions(
+        RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    if( lpInput == 0 || lpOutput == 0 )
     {
         return;
     }
-    const CgsID lWheelId = lpWheelEntry->mID;
 
-    // The console's freeburn-lobby grid, slot 0. AddRaceCarToStartingGridOrFreeburnLobby
-    // @0x82300B38 loads all eight of these as immediates and indexes them by opponent
-    // index; they are authored, road-level Paradise City positions (every Y is between
-    // -4.13 and -0.94).
-    Matrix44Affine lSpawnTransform;
-    lSpawnTransform.xAxis = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
-    lSpawnTransform.yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
-    lSpawnTransform.zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
-    lSpawnTransform.wAxis = Vector3{ 3008.1699f, -1.16f, -1874.3f, 0.0f };
-
-    RaceCar* lpRaceCar = GetGlobalRaceCar( E_GLOBAL_RACE_CAR_INDEX_0 );
-
-    // The player's car has no rival id and no rival/opponent index (SpawnRaceCar passes
-    // the same sentinels for E_RACE_CAR_TYPE_PLAYER).
-    const CgsID KU_NO_RIVAL_ID      = 0;
-    const s8    KI_NO_RIVAL_INDEX   = -1;
-    const s32   KI_NO_OPPONENT_IDX  = -1;
-
-    // AddToWorld stores mTransform, which is the whole pose the attach chain needs.
-    // [FLAG PC bring-up] SpawnRaceCar additionally calls
-    // RaceCar::UpdatePositioningData(transform, &mWorldMap2D) to resample the car's
-    // district. mWorldMap2D lives inside this header's opaque tail span, so there is no
-    // map to sample and the call would dereference NULL. Dropped, not faked: the only
-    // thing it adds beyond AddToWorld is mPreviousPosition and mWorldRegion, neither of
-    // which the render leg reads.
-    lpRaceCar->AddToWorld( E_RACE_CAR_TYPE_PLAYER, lSpawnTransform,
-                           KU_NO_RIVAL_ID, lModelId, lWheelId,
-                           KI_NO_RIVAL_INDEX, KI_NO_OPPONENT_IDX );
-
-    const EActiveRaceCarIndex leSlot =
-        AttachActiveRaceCar( lpRaceCar, E_ACTIVE_RACE_CAR_INDEX_INVALID );
-
-    if( CgsDev::Log::gpDebugPrint != 0 )
+    const RaceCarEntityModuleIO::InputBuffer_PreScene::GameActionQueue* lpQueue =
+        const_cast<const RaceCarEntityModuleIO::InputBuffer_PreScene*>( lpInput )
+            ->GetGameActionQueue();
+    if( lpQueue == 0 )
     {
-        *CgsDev::Log::gpDebugPrint
-            << "[FLAG PC bring-up] RaceCar: no spawn path exists, so pulling "
-               "SpawnRaceCar's trigger by hand -- '" << lpEntry->GetName()
-            << "' wheels '" << lpcWheelName << "' (index " << liWheelIndex
-            << ") into active slot " << static_cast<s32>( leSlot )
-            << " at the console's freeburn-lobby position 0 ("
-            << lSpawnTransform.wAxis.x << ", " << lSpawnTransform.wAxis.y
-            << ", " << lSpawnTransform.wAxis.z
-            << "). AddToWorld / UpdatePositioningData / AttachActiveRaceCar are all "
-               "console code; only the trigger and the facing are stand-ins.\n";
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    s32 liType = lpQueue->GetFirstEvent( &lpEvent, &liSize );
+    while( lpEvent != 0 )
+    {
+        switch( liType )
+        {
+        case BrnGameState::GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR:   // 0
+            HandleResetPlayerCarAction(
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::ResetPlayerCarAction*>(
+                    lpEvent ),
+                lpOutput );
+            break;
+
+        default:
+            break;   // [FLAG PC bring-up] see the banner
+        }
+
+        liType = lpQueue->GetNextEvent( lpEvent, &lpEvent, &liSize );
     }
 }
+
+// ============================================================================
+// ⛔ RETIRED 2026-08-01 (reset-player-car wave): SpawnFirstUnlockedCarBringUp -- the
+// stand-in trigger that pulled RaceCar::AddToWorld + AttachActiveRaceCar by hand and parked
+// the Cavalry at slot 0 of the console's FREEBURN-LOBBY grid (3008.17, -1.16, -1874.30).
+//
+// It is replaced, not merely disabled: the car is now placed by the console's own
+// ResetPlayerCarAction chain, which spawns it at the JUNKYARD spawn location the trigger
+// data authored. Both the trigger and the pose it invented are gone with it, along with the
+// mbBringUpCarRequested latch. What SpawnRaceCar does now is what that stand-in was
+// paraphrasing -- RaceCar::Prepare + AddToWorld + UpdateVelocity + the AI attach event.
+// ============================================================================
 
 // X360 0x82304F70. Two statements: assert the output buffer, then hand the buffer's
 // resource-request interface to the streamer's five-queue drain.
@@ -1120,6 +1419,13 @@ void RaceCarEntityModule::PreSceneUpdate(
             ? lpTimers->GetSimTimerStatus()->GetCurrentTimeStep()
             : 0.0f;
     }
+
+    // ---- step 5: apply this frame's game actions ----------------------------
+    // ⭐ NEW (reset-player-car wave 2026-08-01). The console runs HandleGameActions here,
+    // before the per-slot passes, so a car spawned by an action is already in the world when
+    // the streaming sweep below looks at it. Its source queue only became non-empty this wave
+    // (WorldModule::BridgeActionsToRaceCarModule was an inert link stub).
+    HandleGameActions( lpInput, lpOutput );
 
     // ---- step 11: pump the five component streamers -------------------------
     UpdateStreaming( lpInput, lpOutput );

@@ -24,6 +24,7 @@
 // pointer -- same value, no alignment assumption.
 
 #include "SharedClasses/DataLists/VehicleListEntry.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysCollectionKey.h" // CgsAttribSys::AttribSysCollectionKey (GetAttribCollectionKeyHash)
 
 #include <cstring>   // memcpy
 
@@ -116,6 +117,19 @@ u8 VehicleListEntry::GetCarType() const
 u8 VehicleListEntry::GetLiveryType() const
 {
     return maPad224[KU_OFFSET_LIVERY_TYPE];
+}
+
+
+// The car's ATTRIBSYS COLLECTION KEY, hashed (+0xA0). X360-attested by
+// RaceCarEntityModule::SpawnRaceCar @0x822FE5D8, which does `addi r3, entry, 0xA0` then
+// `bl CgsAttribSys::AttribSysCollectionKey::GetHashKey` -- the eight bytes at +0xA0 are that
+// type's single s64 miAssetGuid. See the header for why the member itself still carries the
+// BaseCollisionGenerator forward shape (FixUp destructs it under that name).
+Attribute::Key VehicleListEntry::GetAttribCollectionKeyHash() const
+{
+    CgsAttribSys::AttribSysCollectionKey lKey;
+    std::memcpy(&lKey, &mAttribCollectionKey, sizeof(lKey));
+    return lKey.GetHashKey();
 }
 
 } // namespace BrnResource

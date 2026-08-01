@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID (GetId return)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attribute::Key
 
 // VehicleListEntry.h
 // Single home of BrnResource::VehicleListEntry, the per-vehicle record inside a
@@ -112,6 +113,20 @@ struct VehicleListEntry
     // The burnout.wiki Vehicle-List table names it mDefaultWheelName, char[32] @0x10 --
     // independent agreement, same NAME-ONLY adoption as mExhaustName/mEngineName below.
     const char* GetDefaultWheelName() const;
+
+    // ADDITIVE GROW (reset-player-car wave 2026-08-01). The car's ATTRIBSYS COLLECTION KEY,
+    // hashed. X360-attested: RaceCarEntityModule::SpawnRaceCar @0x822FE5D8 does
+    //     addi r3, entry, 0xA0
+    //     bl   CgsAttribSys::AttribSysCollectionKey::GetHashKey
+    // -- so the eight bytes at +0xA0 ARE a CgsAttribSys::AttribSysCollectionKey (DWARF
+    // {s64 miAssetGuid}); this header's local 8-byte BaseCollisionGenerator forward shape is
+    // the SAME storage under the name VehicleListResourceType::FixUp's destruct chain gave it.
+    // The console has NO accessor symbol (it inlines the address-of + call at each site); this
+    // one exists so callers do not reinterpret_cast the member by hand.
+    // FLAG: PC-only accessor, name provisional. Retire it when the +0xA0 member is retyped to
+    // AttribSysCollectionKey (blocked today: that type's Destruct() is declaration-only, and
+    // VehicleListResourceType::FixUp calls Destruct on this member).
+    Attribute::Key GetAttribCollectionKeyHash() const;
 
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[160];                                                       // +0x00
