@@ -1,6 +1,8 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert (BeginAssert/FireAssert/EndAssert)
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"        // CgsGraphics::Camera + CameraRwFrustum (IsLookingAtTarget)
+#include "vendor/renderware/collision/Frustum.hpp"            // rw::collision::Frustum::IsBoxInFrustum
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"     // Camera::Utils::CreateLookAt (the real home)
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"        // ICE::CameraSpaceHandler (the real home)
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"                    // ICE::ICEAuthor::FindEditedTakeFromGuid --
@@ -97,11 +99,13 @@ namespace Camera
     // TARGET's world transform and the TARGET's local bounds. The caller passes the shared
     // info's mPlayerInfo.mRaceCarState.mTransform (info +592) and mPlayerInfo.mAABB (info
     // +1280), which independently confirms both types.
-    // Still typed `const void*` because BehaviourSharedInfo's accessors return `const void*`
-    // (its mPlayerInfo is still a FLAGGED opaque slot -- see Behaviour.h:167-176).
+    // ⭐ NOW PROPERLY TYPED (2026-08-01): BehaviourSharedInfo::GetEyeTarget/GetLookTarget
+    // return the real sub-objects of the embedded mPlayerInfo, so the untyped `const void*`
+    // pair the retired fork forced is gone.
     // DECLARATION-ONLY; body below.
-    bool IsLookingAtTarget(const Camera& lrCamera, const void* lpTargetTransform,
-                           const void* lpTargetBounds);
+    bool IsLookingAtTarget(const Camera& lrCamera,
+                           const rw::math::vpu::Matrix44Affine& lrTargetTransform,
+                           const AABBox& lrTargetBounds);
 
     // ------------------------------------------------------------------------
     // The HEADING-SPACE frame of an anchor vehicle: a look-at built at the vehicle's world
@@ -176,6 +180,90 @@ namespace Camera
             static_cast<const VehicleInfo*>(lpVehicle)->mRaceCarState.mTransform;
 
         return lrTransform.wAxis;   // the whole 16-byte lane, as the single lvx128/stvx128 pair does
+    }
+
+    // ------------------------------------------------------------------------
+    // IsLookingAtTarget @0x822331F0 -- BODIED 2026-08-01. Full asm walk:
+    //   0x82233210  bl CopyToCgsCamera(camera, &lCgsCamera)
+    //   0x82233220  bl CgsGraphics::Camera::GetFrustumPerspective(&lCgsCamera, &lFrustum, false)
+    //   0x82233240  lfs f0, flt_82CDAD44          ; K, spilled twice as {K,0,0,0} then vspltw'd
+    //   0x8223322C  lvx128 v12, r0,  r30          ; lrTargetBounds.mMin
+    //   0x8223325C  lvx128 v0,  r30, 0x10         ; lrTargetBounds.mMax
+    //   0x82233234  lvx128 v11, r0,  r31          ; transform.xAxis
+    //   0x8223327C  lvx128 v10, r31, 0x10         ; transform.yAxis
+    //   0x82233298  lvx128 v13, r31, 0x20         ; transform.zAxis
+    //   0x82233270  lvx128 v9,  r31, 0x30         ; transform.wAxis
+    //   0x8223329C  v0  = max * K                 ; lHi
+    //   0x822332A4  v12 = min * K                 ; lLo
+    //   ... eight corners = wAxis + xAxis*sel.x + yAxis*sel.y + zAxis*sel.z ...
+    //   0x82233354  bl rw::collision::Frustum::IsBoxInFrustum(&lFrustum, laCorners)
+    //   0x82233358  cntlzw/extrwi/xori            ; return (result != 0)
+    //
+    // ⭐ K == flt_82CDAD44 == 0x3F400000 == 0.75f. This value had ONE witness and a prior wave
+    // flagged it "get a second before shipping" -- correctly, because the reader that produced
+    // it had silently drifted (its own sanity check fails today). Recalibrated this wave: the
+    // .id1 address mapping was off by 1594 bytes; the new calibration is agreed by NINE
+    // independent function prologues and reproduces flt_82001C98 == 1.0f, flt_82001CC0 == 0.0f
+    // and five constants this subsystem had already derived by other means. 0.75f confirmed.
+    // The box is therefore SHRUNK to three quarters before the test -- the target has to be
+    // comfortably inside the frustum, not merely clipping its edge.
+    //
+    // ⚠️ TRANSCRIPTION TRAP: IDA prints `vmaddfp` in RAW FIELD ORDER (VD,VA,VB,VC), not
+    // mnemonic order. `vmaddfp v7, v11, v9, v7` is v7 = v11*v7 + v9, i.e.
+    // xAxis*splat(sel.x) + wAxis. Read literally it says "row0 * position + splat(x)", which
+    // is nonsense -- that misreading is what makes this function look unrecoverable.
+    // ------------------------------------------------------------------------
+    bool IsLookingAtTarget(const Camera& lrCamera,
+                           const rw::math::vpu::Matrix44Affine& lrTargetTransform,
+                           const AABBox& lrTargetBounds)
+    {
+        // The fraction of the target's own bounds the test uses (flt_82CDAD44).
+        const f32 KF_TARGET_BOX_SCALE = 0.75f;
+
+        CgsGraphics::Camera lCgsCamera;
+        lrCamera.CopyToCgsCamera(&lCgsCamera);
+
+        CgsGraphics::CameraRwFrustum lFrustum;
+        lCgsCamera.GetFrustumPerspective(lFrustum, false);
+
+        // vmulfp128 v12, v12, splat(K) / vmulfp128 v0, v0, splat(K) -- the whole 4-lane
+        // register is scaled, so the w lane is scaled too (it is never read downstream).
+        const rw::math::vpu::Vector3& lrMin = lrTargetBounds.mMin;
+        const rw::math::vpu::Vector3& lrMax = lrTargetBounds.mMax;
+        const f32 lfLoX = lrMin.x * KF_TARGET_BOX_SCALE;
+        const f32 lfLoY = lrMin.y * KF_TARGET_BOX_SCALE;
+        const f32 lfLoZ = lrMin.z * KF_TARGET_BOX_SCALE;
+        const f32 lfHiX = lrMax.x * KF_TARGET_BOX_SCALE;
+        const f32 lfHiY = lrMax.y * KF_TARGET_BOX_SCALE;
+        const f32 lfHiZ = lrMax.z * KF_TARGET_BOX_SCALE;
+
+        // The console emits the eight corners in this exact order (the stvx128 sequence at
+        // 0x82233318..0x82233350, ascending stack address).
+        const f32 laSelectX[8] = { lfHiX, lfHiX, lfHiX, lfLoX, lfLoX, lfLoX, lfHiX, lfLoX };
+        const f32 laSelectY[8] = { lfHiY, lfHiY, lfLoY, lfHiY, lfLoY, lfHiY, lfLoY, lfLoY };
+        const f32 laSelectZ[8] = { lfHiZ, lfLoZ, lfHiZ, lfHiZ, lfHiZ, lfLoZ, lfLoZ, lfLoZ };
+
+        const rw::math::vpu::Vector3& lrX = lrTargetTransform.xAxis;
+        const rw::math::vpu::Vector3& lrY = lrTargetTransform.yAxis;
+        const rw::math::vpu::Vector3& lrZ = lrTargetTransform.zAxis;
+        const rw::math::vpu::Vector3& lrW = lrTargetTransform.wAxis;
+
+        rw::collision::Frustum::Vec4 laCorners[8];
+        for (s32 liCorner = 0; liCorner < 8; ++liCorner)
+        {
+            const f32 lfSX = laSelectX[liCorner];
+            const f32 lfSY = laSelectY[liCorner];
+            const f32 lfSZ = laSelectZ[liCorner];
+
+            laCorners[liCorner].x = lrW.x + lrX.x * lfSX + lrY.x * lfSY + lrZ.x * lfSZ;
+            laCorners[liCorner].y = lrW.y + lrX.y * lfSX + lrY.y * lfSY + lrZ.y * lfSZ;
+            laCorners[liCorner].z = lrW.z + lrX.z * lfSX + lrY.z * lfSY + lrZ.z * lfSZ;
+            laCorners[liCorner].w = lrW.w + lrX.w * lfSX + lrY.w * lfSY + lrZ.w * lfSZ;
+        }
+
+        return rw::collision::Frustum::IsBoxInFrustum(
+                   reinterpret_cast<const rw::collision::Frustum::Vec4*>(lFrustum.maPlanes),
+                   laCorners) != 0;
     }
 
 } // namespace Camera
@@ -480,7 +568,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     if (!mbIsPrepared)
         mHeadingSpaceTransform = CreateHeadingSpaceLookAt(mSecondaryVehicleRef.Get(lpWorld));
 
-    void* lpLookAtVehicle = mSecondaryVehicleRef.Get(lpWorld);
+    const VehicleInfo* lpLookAtVehicle = mSecondaryVehicleRef.Get(lpWorld);
     mHeadingSpaceTransform.wAxis = GetVehicleWorldPosition(lpLookAtVehicle);
 
     rw::math::vpu::Matrix44Affine lLookAt = CreateHeadingSpaceLookAt(lpLookAtVehicle);

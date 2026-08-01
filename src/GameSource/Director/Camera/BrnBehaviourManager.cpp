@@ -117,6 +117,11 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourHeliCam.h"
+// ⭐ 2026-08-01: the manager header used to define its own member-less BehaviourInterpolate
+// slice, so this TU's AllocateBehaviour<BehaviourInterpolate> instantiation booked a
+// 1600-byte pool bucket for a ONE-BYTE object. The slice is retired; the real home is
+// included here so sizeof(BehaviourInterpolate) is the real size.
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourPassengerCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"

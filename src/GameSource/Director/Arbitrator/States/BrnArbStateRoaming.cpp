@@ -39,10 +39,16 @@ namespace BrnDirector
         const f32 KF_NEAREST_CAR_FX_RANGE_SQ = 10000.0f;    // flt_82005D9C / flt_820092EC
         const f32 KF_NEAREST_CAR_FX_FALLOFF  = 3.3333334e-5f; // flt_82001770 group (1/30000)
         const f32 KF_FP_EPSILON              = 1.1920929e-7f;  // flt_82002514 (the fsel dead-zone)
-        const f32 KF_SHOWTIME_BORDERS_DUR    = 1.0f;        // flt_82CDA498 (borders duration)
-        const f32 KF_SHOWTIME_BLUR_RAMP      = 1.0f;        // flt_82CDA4A0 (blur ramp-in speed)
-        const f32 KF_SHOWTIME_BLUR_MAX       = 1.0f;        // flt_82CDA49C (blur maximum)
-        const f32 KF_SHOWTIME_POSTFX_SCALE   = 1.0f;        // flt_82CDA5E0 (post-FX scale)
+        // ⭐ PINNED 2026-08-01 from the .rdata image. All four were carried as 1.0f -- a
+        // "looks like the other blend amounts" default, not a read value -- and all four are
+        // wrong. Same recalibrated .id1 reader as KF_IDLE_TIME_BEFORE_PICTURE_PARADISE below;
+        // it independently reproduces five constants this subsystem had already derived by
+        // other means (flt_82CDA4E4 == 3.0, flt_82CDADA4 == 10.0, flt_82CDA4EC == 0.1,
+        // flt_82CDADA8 == 0.5, flt_82CDADA0 == 2.0 -- BrnArbStateCarSelect.cpp:94-104).
+        const f32 KF_SHOWTIME_BORDERS_DUR    = 2.0f;        // flt_82CDA498 (borders duration)
+        const f32 KF_SHOWTIME_BLUR_RAMP      = 0.8f;        // flt_82CDA4A0 (blur ramp-in speed)
+        const f32 KF_SHOWTIME_BLUR_MAX       = 0.7f;        // flt_82CDA49C (blur maximum)
+        const f32 KF_SHOWTIME_POSTFX_SCALE   = 0.15f;       // flt_82CDA5E0 (post-FX scale)
 
         // The X360 dirty-flag bits the FX path toggles in the camera state's flag word.
         const u32 KU_DIRTY_RACE_DAY_ACTIVE   = 0x80000;
@@ -51,10 +57,19 @@ namespace BrnDirector
         // Showtime (Picture Paradise) entry gate: the player-inactive-time threshold the X360
         // compares mfPlayerInactiveTime against (asm 0x82219F30 fcmpu vs flt_82CDA494). The DWARF
         // names this KF_IDLE_TIME_BEFORE_PICTURE_PARADISE (BrnArbStateRoaming.h:34).
-        // FLAG: the .rdata word at 0x82CDA494 is NOT in the exports (no 0x82CDA*.json), so the
-        // VALUE is a placeholder; only "> this const, not > 0.0f" is asm-attested. Pin the real
-        // value when 0x82CDA494's .rdata is dumped.
-        const f32 KF_IDLE_TIME_BEFORE_PICTURE_PARADISE = 0.0f;  // FLAG: placeholder (flt_82CDA494 undumped)
+        //
+        // ⭐⭐ PINNED 2026-08-01 -- and the placeholder it replaces was ACTIVELY WRONG.
+        // flt_82CDA494 == 0x43340000 == 180.0f, read out of the .rdata image (the unpacked
+        // IDA .id1 flag array, recalibrated this wave -- its address mapping was off by 1594
+        // bytes, which is why an earlier pass reported this word "not found"; the new
+        // calibration is agreed by NINE independent function prologues and independently
+        // reproduces flt_82001C98 == 1.0f and flt_82001CC0 == 0.0f).
+        // ⚠️ WHY THE PLACEHOLDER MATTERED: at 0.0f the guard below reads
+        // `mfPlayerInactiveTime > 0.0f`, i.e. it fires on the FIRST idle frame. The console
+        // wants THREE MINUTES. With the placeholder in place, the moment this ladder started
+        // running the arbitrator would have dived into Picture Paradise instead of handing off
+        // to the junkyard / car-select state.
+        const f32 KF_IDLE_TIME_BEFORE_PICTURE_PARADISE = 180.0f;  // flt_82CDA494
     }
 
     // ------------------------------------------------------------------------

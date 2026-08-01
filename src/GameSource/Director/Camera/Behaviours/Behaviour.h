@@ -14,6 +14,7 @@
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"         // ValidityAccount (the flag enums Fail takes)
 #include "GameSource/Director/Camera/Utils/BrnCamera2DRotationController.h"        // mRotationController (by value)
 #include "GameSource/Director/Camera/Utils/BrnCameraSphericalRotationController.h" // mSphericalRotationController
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"                     // Camera::VehicleInfo (mPlayerInfo, by value)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/Behaviour.h
@@ -96,7 +97,8 @@ namespace BrnDirector
 
 namespace Camera
 {
-    struct VehicleInfo;   // Camera/SharedIO/BrnPlayerInfo.h -- see the mPlayerInfo FLAG below
+    // VehicleInfo's real home (Camera/SharedIO/BrnPlayerInfo.h) is included at the top of this
+    // file -- BehaviourSharedInfo holds one BY VALUE.
     class BehaviourManager;
     class BehaviourControllerLockInterface;
     class CollisionPolicy;
@@ -161,21 +163,17 @@ namespace Camera
         Utils::Camera2DRotationController        mRotationController;          // :92
         Utils::CameraSphericalRotationController mSphericalRotationController; // :93
 
-        // :95  the player's own vehicle record (console reads at +1068/+1076/+1144).
-        // FLAG (opaque, NOT a console window): VehicleInfo IS homed
-        //   (Camera/SharedIO/BrnPlayerInfo.h), but that header transitively pulls
-        //   GameSource/Physics/.../VehiclePhysics.h, which carries a PRE-EXISTING ODR fork of
-        //   BrnPhysics::SuspensionSpring against GameSource/Physics/PhysicsUtilities/Spring1D.h
-        //   (the fork's own comment says "when the real Spring1D.h lands, REPLACE this slice").
-        //   Every behaviour TU already reaches Spring1D.h through BehaviourRig.h, so embedding
-        //   VehicleInfo here by value would break them all with C2011 -- and both files are
-        //   outside this wave's ownership. Modelled as a NAMED, sized-by-nothing sub-object:
-        //   no absolute offset is used anywhere, no consumer reads it, and the member keeps its
-        //   DWARF name and ORDER so the surrounding members stay in the right sequence.
-        //   DELETE-WHEN: the SuspensionSpring fork is reconciled (retire the VehiclePhysics.h
-        //   slice, include Spring1D.h) -- then this becomes `VehicleInfo mPlayerInfo;`.
-        struct OpaquePlayerInfo { u8 maOpaque[4]; };
-        OpaquePlayerInfo                         mPlayerInfo;
+        // :95  the player's own vehicle record, BY VALUE.
+        // The blocking FLAG that used to sit here (an ODR fork of BrnPhysics::SuspensionSpring
+        // between VehiclePhysics.h and PhysicsUtilities/Spring1D.h) is RETIRED: the tree now
+        // has exactly one `struct SuspensionSpring` (Spring1D.h:87), so including the real
+        // VehicleInfo home is safe.
+        // KEYSTONE (asm): mPlayerInfo sits at console +96 and sizeof(VehicleInfo) == 0x4F0,
+        // pinned from MainDirector::UpdateCameraBehavioursPostScene @0x8224FD30's frame
+        // (48 + 48 == 96, then VehicleInfo::operator= @0x821F49C8 copies into it; and
+        // 96 + 1264 == 1360 == mTimestep's console offset). That is what lets the two
+        // sub-object accessors below be written against NAMED members instead of offsets.
+        VehicleInfo                              mPlayerInfo;
         BrnDirector::Timestep                    mTimestep;                    // :96  console +1360
 
         Vector2                                  mCarModifier;                 // :98  console +1424
@@ -253,17 +251,24 @@ namespace Camera
         // The debug print sink (console +1488 -- the slice's `GetDebugSink`).
         void* GetDebugSink() const { return static_cast<void*>(mpDebugPrinter); }
 
-        // ---- carried forward DECLARATION-ONLY from the retired BrnBehaviourIceAnim.h slice --
-        // FLAG: each of these three console offsets (+1280 / +592) falls INSIDE one of the
-        //   by-value head sub-objects above (mPlayerInfo / the two rotation controllers)
-        //   whose interiors are not yet individually mapped, so the member each one names is
-        //   not yet identifiable. They are kept as declaration-only accessors -- the NAMES
-        //   are stable and the consumer (BehaviourIceAnim::Update) reads faithfully against
-        //   the asm -- rather than being resolved to a guessed member.
-        //   DELETE-WHEN: VehicleInfo's / the rotation controllers' interiors are byte-mapped.
-        void*       GetSpaceArgs() const;     // console +1280.. (the look-at build args)
-        const void* GetEyeTarget() const;     // console +592
-        const void* GetLookTarget() const;    // console +1280
+        // ---- carried forward from the retired BrnBehaviourIceAnim.h slice ------------------
+        // RESOLVED (2026-08-01). Both are `addi`, not `lwz`, in the asm -- they hand back
+        // SUB-OBJECT ADDRESSES inside mPlayerInfo, not loaded pointers, so with mPlayerInfo
+        // embedded by value above they resolve to named members:
+        //   console +592  == 96 + 0x1F0 -> mPlayerInfo.mRaceCarState.mTransform (Matrix44Affine)
+        //   console +1280 == 96 + 0x4A0 -> mPlayerInfo.mAABB                     (AABBox)
+        // Corroborated independently by their only consumer: IsLookingAtTarget @0x822331F0
+        // reads argument 2 at +0x00/+0x10/+0x20/+0x30 (four matrix rows) and argument 3 at
+        // +0x00/+0x10 only ({min,max}), i.e. exactly these two types.
+        // ⚠️ The DWARF NAMES are misleading -- "eye target" is the target car's world
+        // transform and "look target" is its object-space bounding box -- but they are the
+        // console's own names and are kept.
+        const Matrix44Affine& GetEyeTarget()  const { return mPlayerInfo.mRaceCarState.mTransform; }
+        const AABBox&         GetLookTarget() const { return mPlayerInfo.mAABB; }
+
+        // RETIRED (2026-08-01): `GetSpaceArgs()` named the SAME member as GetLookTarget
+        // (console +1280) and had zero consumers -- a duplicate carried in from the same
+        // retired fork. Removed rather than re-homed.
     };
 
     // ------------------------------------------------------------------------

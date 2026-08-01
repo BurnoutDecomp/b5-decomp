@@ -47,11 +47,17 @@ namespace BrnDirector
         const f32 KF_CLOSEUP_SLOMO_TIME_SCALE       = 0.2857143f;   // flt_8200177C (2/7, normal close-up)
 
         // ---- crash-mode tuning constants (DWARF BrnArbStateCrashMode.cpp:22..43) -------------
-        // FLAG (values): these are the named tuning floats the X360 loads from the .rdata pool at
-        // 0x82CDA4A4..0x82CDA4DC (+ 0x82FAA5E0/E4 for the intro flash/borders). That .rdata is not
-        // in the exports, so the VALUES below are inferred placeholders -- only the
-        // symbol->member->KF mapping (read off the load offsets) is asm-attested. Pin the real
-        // values when the 0x82CDA4xx / 0x82FAA5Ex .rdata is dumped. The mapping:
+        // ⭐ PINNED 2026-08-01 -- these WERE inferred placeholders ("plausible tuning value for
+        // the role"); every one is now read out of the .rdata image, and EIGHT OF THIRTEEN
+        // guesses were wrong. Source: the unpacked IDA .id1 flag array, recalibrated this wave
+        // (its address mapping had drifted by 1594 bytes -- which is why earlier passes reported
+        // this pool "not dumpable"). The calibration is agreed by nine independent function
+        // prologues AND independently reproduces five constants this subsystem had already
+        // derived by other means (flt_82CDA4E4 == 3.0, flt_82CDADA4 == 10.0, flt_82CDA4EC == 0.1,
+        // flt_82CDADA8 == 0.5, flt_82CDADA0 == 2.0 -- BrnArbStateCarSelect.cpp:94-104), plus
+        // flt_82001C98 == 1.0 and flt_82001CC0 == 0.0 above.
+        // The symbol -> member -> KF mapping (read off the load offsets) was and stays
+        // asm-attested; only the VALUES change.
         //   flt_82FAA5E0 -> KF_INTRO_FLASH_DURATION     flt_82FAA5E4 -> KF_INTRO_BORDERS_DURATION
         //   flt_82CDA4A4 -> KF_INTRO_BLUR_IN_DURATION   flt_82CDA4A8 -> KF_INTRO_BLUR_OUT_DURATION
         //   flt_82CDA4AC -> KF_INTRO_BLUR_RAMP_SPEED    flt_82CDA4B0 -> KF_INTRO_BLUR_MAXIMUM
@@ -62,27 +68,34 @@ namespace BrnDirector
         //   flt_82CDA4D0 -> KF_CAMERA_TILT_CHANGE_TIME
         //   flt_82CDA4D4 -> KF_MIN_TIME_BETWEEN_CLOSEUPS
         //   flt_82CDA4D8 -> KF_CLOSEUP_DURATION         flt_82CDA4DC -> KF_CLOSEUP_BLEND_IN_DURATION
-        const f32 KF_INTRO_FLASH_DURATION     = 0.5f;
-        const f32 KF_INTRO_BORDERS_DURATION   = 0.5f;
-        const f32 KF_INTRO_BLUR_IN_DURATION   = 0.25f;
-        const f32 KF_INTRO_BLUR_OUT_DURATION  = 0.25f;
-        const f32 KF_INTRO_BLUR_RAMP_SPEED    = 4.0f;
-        const f32 KF_INTRO_BLUR_MAXIMUM       = 1.0f;
-        const f32 KF_EXTRA_SPIN_BLUR_DURATION = 0.5f;
-        const f32 KF_EXTRA_SPIN_BLUR_MAXIMUM  = 1.0f;     // flt_82001C98 (shared 1.0)
-        const f32 KF_DEFAULT_BLUR_DURATION    = 0.5f;
-        const f32 KF_DEFAULT_BLUR_RAMP_SPEED  = 2.0f;
-        const f32 KF_BACKGROUND_BLUR_MAXIMUM  = 0.5f;
-        const f32 KF_CAMERA_MAX_TILT_ANGLE    = 0.1f;
-        const f32 KF_CAMERA_TILT_LERP_SPEED   = 0.05f;
-        const f32 KF_CAMERA_TILT_CHANGE_TIME  = 1.0f;
-        const f32 KF_MIN_TIME_BETWEEN_CLOSEUPS = 1.0f;
-        const f32 KF_CLOSEUP_DURATION          = 1.0f;
-        const f32 KF_CLOSEUP_BLEND_IN_DURATION = 0.25f;
+        //
+        // ⚠️ THE TWO INTRO DURATIONS ARE STILL NOT PINNED, and for a different reason than the
+        // rest: 0x82FAA5E0/E4 are NOT in the .rdata pool at all -- they are in the writable
+        // 0x82FAxxxx data segment, where the image-at-rest reads 0.0 for every word probed
+        // (0x82FAAAF0 and 0x82FAA990, the two crash-nav distance globals, read 0.0 as well).
+        // A zero there is indistinguishable from "runtime-initialised, zero at rest", so the
+        // two values below stay flagged placeholders. Do NOT copy 0.0 in from the image.
+        const f32 KF_INTRO_FLASH_DURATION     = 0.5f;    // flt_82FAA5E0  FLAG: still a placeholder (writable segment)
+        const f32 KF_INTRO_BORDERS_DURATION   = 0.5f;    // flt_82FAA5E4  FLAG: still a placeholder (writable segment)
+        const f32 KF_INTRO_BLUR_IN_DURATION   = 2.0f;    // flt_82CDA4A4  (was 0.25f)
+        const f32 KF_INTRO_BLUR_OUT_DURATION  = 1.0f;    // flt_82CDA4A8  (was 0.25f)
+        const f32 KF_INTRO_BLUR_RAMP_SPEED    = 1.0f;    // flt_82CDA4AC  (was 4.0f)
+        const f32 KF_INTRO_BLUR_MAXIMUM       = 0.2f;    // flt_82CDA4B0  (was 1.0f)
+        const f32 KF_EXTRA_SPIN_BLUR_DURATION = 0.25f;   // flt_82CDA4BC  (was 0.5f)
+        const f32 KF_EXTRA_SPIN_BLUR_MAXIMUM  = 1.0f;    // flt_82001C98 (shared 1.0) -- confirmed
+        const f32 KF_DEFAULT_BLUR_DURATION    = 1.0f;    // flt_82CDA4B4  (was 0.5f)
+        const f32 KF_DEFAULT_BLUR_RAMP_SPEED  = 100.0f;  // flt_82CDA4C0  (was 2.0f -- an instant ramp, not a slow one)
+        const f32 KF_BACKGROUND_BLUR_MAXIMUM  = 0.9f;    // flt_82CDA4B8  (was 0.5f)
+        const f32 KF_CAMERA_MAX_TILT_ANGLE    = 0.1f;    // flt_82CDA4C8  -- confirmed
+        const f32 KF_CAMERA_TILT_LERP_SPEED   = 0.003f;  // flt_82CDA4CC  (was 0.05f)
+        const f32 KF_CAMERA_TILT_CHANGE_TIME  = 30.0f;   // flt_82CDA4D0  (was 1.0f)
+        const f32 KF_MIN_TIME_BETWEEN_CLOSEUPS = 1.0f;   // flt_82CDA4D4  -- confirmed
+        const f32 KF_CLOSEUP_DURATION          = 1.0f;   // flt_82CDA4D8  -- confirmed
+        const f32 KF_CLOSEUP_BLEND_IN_DURATION = 0.25f;  // flt_82CDA4DC  -- confirmed
 
-        // The motion-blur baseline mfCurrentBlur resets to when both ramp timers expire (the
-        // separate .rdata word flt_82CDA4C4; ~0). FLAG: value undumped (placeholder 0.0).
-        const f32 KF_BLUR_BASELINE = 0.0f;                // flt_82CDA4C4
+        // The motion-blur baseline mfCurrentBlur resets to when both ramp timers expire.
+        // ⭐ PINNED 2026-08-01: flt_82CDA4C4 == 0x3D4CCCCD == 0.05f, not the "~0" placeholder.
+        const f32 KF_BLUR_BASELINE = 0.05f;               // flt_82CDA4C4
 
         // X360 dirty-flag bits the ACTIVE path OR-pokes into the camera state's flag word.
         const s32 KU_CAMERA_DIRTY_TRANSFORM = 0x2;    // ACTIVE: every frame

@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"      // Array<T,N>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<8>
 #include "GameShared/GameClasses/Algorithms/CgsBubbleSort.h" // CgsAlgorithms::BubbleSort
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the inline accessors' tripwires)
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h" // BrnDirector::Camera::VehicleInfo (mpRaceCars' real pointee)
 
 // BrnDirector::AllVehicleData - the director's per-frame view of every live
 // vehicle (player spaces, the race-car table, traffic, and the sorted
@@ -27,7 +29,16 @@ namespace BrnTraffic { namespace BrnTrafficIO { struct TrafficDirectorEntity; } 
 
 namespace BrnDirector
 {
-    struct VehicleInfo;   // pointer/reference-only here (own home)
+    // ⛔ RETIRED (2026-08-01) -- A NAMESPACE FORK, not a missing type. This header used to
+    // forward-declare `BrnDirector::VehicleInfo`, but no such type exists: the real one is
+    // BrnDirector::Camera::VehicleInfo (Camera/SharedIO/BrnPlayerInfo.h, included above).
+    // The declared pointee was therefore an incomplete type that could never be completed, so
+    // indexing mpRaceCars was a hard C2036 and GetPlayer/GetRaceCar could not be bodied at all.
+    // Same fork BrnArbStateCarSelect.cpp documents for ArbStateSharedInfo::mpPlayerCar; fixed
+    // once here for the whole surface rather than per call site with a reinterpret_cast.
+    // (Spelled out as Camera::VehicleInfo everywhere below rather than typedef'd back into
+    // BrnDirector -- a namespace-scope typedef of that name would clash with the surviving
+    // `struct VehicleInfo;` forward declarations in the sibling director headers.)
 
     struct AllVehicleData
     {
@@ -42,7 +53,16 @@ namespace BrnDirector
             f32                 mfDistance;       // :117  +0x4 (squared distance)
             s32                 miTeam;           // X360 +0x8 (FLAG: name inferred; absent from the PS3 DWARF)
 
-            bool operator>(const NearestCarInfo& lrOther) const;   // :111 (own ledger fn; the sort order)
+            // :111 -- the sort order BubbleSort uses. BODIED INLINE 2026-08-01: the sort
+            // (CgsAlgorithms::BubbleSort<T,N> @0x82213F80) compares element +0x04, i.e.
+            // mfDistance, and produces the ASCENDING nearest-first order both distance
+            // queries above rely on. It has no standalone X360 symbol -- the console inlines
+            // the compare straight into the sort's inner loop -- so a one-line member
+            // comparison IS the console shape.
+            bool operator>(const NearestCarInfo& lrOther) const
+            {
+                return mfDistance > lrOther.mfDistance;
+            }
         };
 
         // The 8-slot nearest-car container (inline buffer 8*12 = 0x60 bytes, live
@@ -52,18 +72,67 @@ namespace BrnDirector
 
         // ---- DWARF :54-:103 -- declared-only (their own ledger functions) ----
         void Construct();                                                        // :54
-        const VehicleInfo& GetPlayer() const;                                    // :57
-        const VehicleInfo& GetRaceCar(EActiveRaceCarIndex leIndex) const;        // :61 (@0x82205DE8; the race-intro consumer reads the car's +0x220 position lane)
-        void Update(CgsContainers::BitArray<8u> lUsedRaceCars, const VehicleInfo* lpRaceCars,
+
+        // ⭐ GetPlayer @0x82205C58 / GetRaceCar @0x82205DE8 -- BODIED INLINE HERE, which is
+        // where the CONSOLE had them: every assert in both cites this header
+        // (BrnDirectorAllVehicleData.h :157/:158/:159 and :170/:171/:172), and a function whose
+        // asserts cite a header was defined in that header. Each is three asserts then one
+        // indexed read at the VehicleInfo stride (`mulli rN, rIdx, 0x4F0` + the mpRaceCars
+        // base). ⚠️ The two index guards are deliberately DIFFERENT comparisons: the explicit
+        // range assert is a SIGNED `cmpwi`, while the third is IsBitSet's OWN inlined
+        // CgsBitArray.h:203 tripwire, an UNSIGNED `cmplwi`.
+        const Camera::VehicleInfo& GetPlayer() const                             // :57
+        {
+            CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                    // h:157
+            CGS_ASSERT(static_cast<s32>(mePlayerRaceCarIndex) < 8, "mePlayerRaceCarIndex < 8");   // h:158
+            CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(mePlayerRaceCarIndex)),
+                       "mUsedRaceCars.IsBitSet(mePlayerRaceCarIndex)");                           // h:159
+            return mpRaceCars[static_cast<s32>(mePlayerRaceCarIndex)];
+        }
+        const Camera::VehicleInfo& GetRaceCar(EActiveRaceCarIndex leIndex) const  // :61
+        {
+            CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                    // h:170
+            CGS_ASSERT(static_cast<s32>(leIndex) < 8, "leRaceCarIndex < 8");                      // h:171
+            CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(leIndex)),
+                       "mUsedRaceCars.IsBitSet(leRaceCarIndex)");                                 // h:172
+            return mpRaceCars[static_cast<s32>(leIndex)];
+        }
+
+        void Update(CgsContainers::BitArray<8u> lUsedRaceCars, const Camera::VehicleInfo* lpRaceCars,
                     EActiveRaceCarIndex lePlayerIndex,
                     const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTraffic); // :68
-        const VehicleInfo& GetNearestRaceCarToPlayer(u32 luRank) const;          // :75
-        EActiveRaceCarIndex GetNearestRaceCarIndexToPlayer(u32 luRank) const;    // :82 (@0x82233380)
+        const Camera::VehicleInfo& GetNearestRaceCarToPlayer(u32 luRank) const;   // :75
+
+        // ⭐ @0x82233380 -- BODIED INLINE HERE for the same reason: its own assert cites
+        // BrnDirectorAllVehicleData.h:186. (It was previously bodied out-of-line in the
+        // .cpp, which is NOT mounted, so every consumer saw it as an unresolved external.)
+        // ⚠️ The clamp happens BEFORE the sort and the range compare is UNSIGNED (`cmplw`), so
+        // a rank at or past the live count collapses onto the LAST row rather than wrapping.
+        // The extra "Array used before Construct/Clear was called" (CgsArray.h:336) asserts in
+        // the asm are GetLength()'s own inlined tripwire, one per call -- not separate logic.
+        EActiveRaceCarIndex GetNearestRaceCarIndexToPlayer(u32 luRank) const      // :82
+        {
+            CGS_ASSERT(maNearestRaceCarsToPlayer.GetLength() > 0,
+                       "maNearestRaceCarsToPlayer.GetLength() > 0");                              // h:186
+
+            if (luRank >= maNearestRaceCarsToPlayer.GetLength())
+            {
+                luRank = maNearestRaceCarsToPlayer.GetLength() - 1u;
+            }
+
+            if (!mbSorteddNearestRaceCarsToPlayer)
+            {
+                CgsAlgorithms::BubbleSort(maNearestRaceCarsToPlayer);
+                mbSorteddNearestRaceCarsToPlayer = true;
+            }
+
+            return maNearestRaceCarsToPlayer.GetItem(luRank).meRaceCarIndex;
+        }
         Matrix44Affine GetPlayerImpactSpace() const;                             // :85
         Matrix44Affine GetPlayerHeadingSpace() const;                            // :88
         Matrix44Affine GetPlayerLooseHeadingSpace() const;                       // :91
         const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const; // :94
-        const VehicleInfo* GetRaceCars() const;                                  // :97
+        const Camera::VehicleInfo* GetRaceCars() const;                          // :97
         // BODIED INLINE (2026-07-30). Neither of these two has a standalone X360 export --
         // the console inlines both at every call site (e.g. VehicleRef::IsValid @0x822336A8
         // reads *(world+196) and the 64-bit used-race-car word at world+200 directly, which is
@@ -94,7 +163,7 @@ namespace BrnDirector
         Matrix44Affine mPlayerImpactSpace;         // :121  X360 +0x00
         Matrix44Affine mPlayerHeadingSpace;        // :122  +0x40
         Matrix44Affine mPlayerLooseHeadingSpace;   // :123  +0x80
-        const VehicleInfo* mpRaceCars;             // :125  +0xC0
+        const Camera::VehicleInfo* mpRaceCars;     // :125  +0xC0 (stride 0x4F0 == sizeof(VehicleInfo))
         EActiveRaceCarIndex mePlayerRaceCarIndex;  // :126  +0xC4
         CgsContainers::BitArray<8u> mUsedRaceCars; // :127  +0xC8
         const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>*

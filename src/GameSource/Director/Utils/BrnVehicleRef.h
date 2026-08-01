@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex (VehicleRef::Set race car)
+#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (Get's five tripwires)
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h" // AllVehicleData -- the "world" Get resolves against
 
 // ============================================================================
 // GameSource/Director/Utils/BrnVehicleRef.h
@@ -44,9 +46,47 @@ namespace BrnDirector
 
         VehicleRef* Construct();   // body in BrnVehicleRef.cpp
 
-        // Resolve the reference to a live vehicle object given the world context.
-        // FLAG: declaration-only (body in BrnVehicleRef.cpp); signature from X360 pseudo.
-        void* Get(const void* lpWorld) const;
+        // ⭐ Get @0x822335A0 -- resolve the reference to the live vehicle record, BODIED INLINE
+        // HERE because that is where the CONSOLE had it: its five asserts all cite
+        // BrnVehicleRef.h (:121, :144, :150, :155), exactly like the already-inline IsValid.
+        // ⚠️ MOUNT HAZARD (measured): bodying this out of line in BrnVehicleRef.cpp -- which IS
+        // on the build list -- emits an unresolved external for every AllVehicleData accessor
+        // it reaches, in EVERY link, whether or not anything calls Get. Inline, the body
+        // materialises only where a caller needs it, and those accessors are themselves header
+        // inlines now (see BrnDirectorAllVehicleData.h).
+        // ⚠️ TRANSCRIPTION TRAP: in the asm, case E_PLAYER_CAR branches PAST the :155
+        // "this shouldn't happen" assert straight onto the same GetPlayer tail the fall-out
+        // path uses -- that is MSVC TAIL-MERGING two returns, NOT a fall-through. Written here
+        // as an early return so no assert is skipped that the console does not skip.
+        const Camera::VehicleInfo* Get(const void* lpWorld) const
+        {
+            CGS_ASSERT(mbSet, "mbSet");                                   // BrnVehicleRef.h:121
+
+            const AllVehicleData& lrWorld = *static_cast<const AllVehicleData*>(lpWorld);
+
+            switch (meType)
+            {
+            case E_PLAYER_CAR:
+                return &lrWorld.GetPlayer();
+
+            case E_RACE_CAR:
+                return &lrWorld.GetRaceCar(static_cast<EActiveRaceCarIndex>(miRaceCarIndex));
+
+            case E_RACE_CAR_NEAREST_PLAYER:
+                return &lrWorld.GetRaceCar(lrWorld.GetNearestRaceCarIndexToPlayer(muRef));
+
+            case E_TRAFFIC_VEHICLE:
+                CGS_ASSERT(false, "not implemented yet");                 // BrnVehicleRef.h:144
+                break;
+
+            default:
+                CGS_ASSERT(false, "unknown type");                        // BrnVehicleRef.h:150
+                break;
+            }
+
+            CGS_ASSERT(false, "this shouldn't happen");                   // BrnVehicleRef.h:155
+            return &lrWorld.GetPlayer();
+        }
 
         // @0x8252D7F8 (class TU; body in BrnVehicleRef.cpp) -- bind the reference.
         // The trailing word is stored only for E_RACE_CAR_NEAREST_PLAYER (the X360

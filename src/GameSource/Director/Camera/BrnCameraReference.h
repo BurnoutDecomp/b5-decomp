@@ -31,12 +31,21 @@ struct CameraReference
         E_TYPE_COUNT     = 4,
     };
 
-    // DWARF :49/:54/:58/:74 -- declared-only (their own ledger functions).
+    // DWARF :49/:74 -- declared-only (their own ledger functions).
     void Construct();
+    void Unlock(const BehaviourControllerLockInterface& lLockInterface);
+
+    // ⭐ @0x8223E990 (this TU, DWARF :54 / cpp:~58) -- BODIED 2026-08-01. It IS in the export
+    // set, as the unnamed sub_8223E990; the header note that used to call this and the
+    // by-value Setup(Camera) "not X360-exported" was stale. (Setup(Camera) is @0x8223EA08,
+    // still declaration-only.)
     void Setup(BehaviourHelperIndex lBehaviourHelperIndex,
                const BehaviourManager* lpBehaviourController);
+
+    // @0x8223EA08 (DWARF :58) -- the by-value overload; the CALLER materialises the copy
+    // (Camera::Camera @0x8224EF44 runs before the call), which confirms the by-value
+    // signature. Sets meType = E_TYPE_CACHED. Declaration-only.
     void Setup(Camera lCamera);
-    void Unlock(const BehaviourControllerLockInterface& lLockInterface);
 
     // @0x821F8508 (this TU, DWARF :62 / cpp:93).
     void Setup(const BrnDirector::ICEWrapper* lpIceWrapper);
