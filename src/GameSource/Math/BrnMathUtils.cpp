@@ -146,4 +146,66 @@ namespace BrnMath
 
         return static_cast<s32>(lfSign * lfRounded * lfScale);
     }
+
+    // ---------------------------------------------------------------------------------------
+    // BuildTransform (X360 @ 0x825405A0)  -- DWARF Math/BrnMathUtils.cpp
+    //
+    // ⭐ THE SPAWN-POSE BUILDER. RaceCarEntityModule::HandleResetPlayerCarAction feeds it the
+    // junkyard SpawnLocation's mPosition / mDirection and the world Y up axis (the caller loads
+    // unk_82181510 into v3 -- the same rodata row RaceCar::Prepare's identity uses for yAxis,
+    // i.e. (0,1,0,0)); the matrix that comes out IS where the player's car ends up.
+    //
+    // ASM (0x82540828..0x82540938): the console stores lUp VERBATIM at out+0x10 and lPosition
+    // VERBATIM at out+0x30, and computes the two remaining axes with the usual pair of
+    // vpermwi(0x63 == yzx) cross products, each normalised by vrsqrtefp + two Newton-Raphson
+    // refinement steps. out+0x00 is written first, out+0x20 second. It closes with the two
+    // matrix sanity asserts (:64 IsOrthogonal3x3, :65 IsNormal3x3).
+    //
+    // FLAG (VMX->portable), the same convention as every other function in this TU: the lane
+    // algebra is de-optimised to explicit cross products and an exact std::sqrt normalise (a
+    // touch tighter than the console's rsqrt estimate, never a placeholder). The six input
+    // asserts are reproduced in the console's own order with its own message strings.
+    void BuildTransform(Matrix44Affine& lrTransform, Vector3 lPosition, Vector3 lAt, Vector3 lUp)
+    {
+        CGS_ASSERT(rw::math::vpu::IsValid(lPosition), "RwMath::IsValid( lPosition )");   // :50
+        CGS_ASSERT(rw::math::vpu::IsValid(lAt),       "RwMath::IsValid( lAt )");         // :51
+        CGS_ASSERT(rw::math::vpu::IsValid(lUp),       "RwMath::IsValid( lUp )");         // :52
+        CGS_ASSERT(IsNormal(lAt), "IsNormal( lAt )");                                    // :53
+        CGS_ASSERT(IsNormal(lUp), "IsNormal( lUp )");                                    // :54
+        CGS_ASSERT(!(lAt.x == lUp.x && lAt.y == lUp.y && lAt.z == lUp.z),
+                   "!RwMath::IsSimilar( lAt, lUp )");                                    // :55
+
+        // right = normalise(cross(up, at))
+        f32 lfRx = lUp.y * lAt.z - lUp.z * lAt.y;
+        f32 lfRy = lUp.z * lAt.x - lUp.x * lAt.z;
+        f32 lfRz = lUp.x * lAt.y - lUp.y * lAt.x;
+        f32 lfLen = std::sqrt(lfRx * lfRx + lfRy * lfRy + lfRz * lfRz);
+        if (lfLen > 0.0f)
+        {
+            lfRx /= lfLen;
+            lfRy /= lfLen;
+            lfRz /= lfLen;
+        }
+
+        // forward = normalise(cross(right, up)) -- at, re-orthogonalised against up.
+        f32 lfFx = lfRy * lUp.z - lfRz * lUp.y;
+        f32 lfFy = lfRz * lUp.x - lfRx * lUp.z;
+        f32 lfFz = lfRx * lUp.y - lfRy * lUp.x;
+        lfLen = std::sqrt(lfFx * lfFx + lfFy * lfFy + lfFz * lfFz);
+        if (lfLen > 0.0f)
+        {
+            lfFx /= lfLen;
+            lfFy /= lfLen;
+            lfFz /= lfLen;
+        }
+
+        lrTransform.xAxis = Vector3{ lfRx, lfRy, lfRz, 0.0f };
+        lrTransform.yAxis = lUp;                                   // asm stvx128 out+0x10
+        lrTransform.zAxis = Vector3{ lfFx, lfFy, lfFz, 0.0f };
+        lrTransform.wAxis = lPosition;                             // asm stvx128 out+0x30
+
+        CGS_ASSERT(rw::math::vpu::IsValid(lrTransform.xAxis), "RwMath::IsOrthogonal3x3( lTransform )"); // :64
+        CGS_ASSERT(rw::math::vpu::IsValid(lrTransform.zAxis), "RwMath::IsNormal3x3( lTransform )");     // :65
+    }
+
 }

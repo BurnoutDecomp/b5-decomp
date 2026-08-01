@@ -380,6 +380,64 @@ s32 Vsprintf(char* lpcDst, const char* lpcFormat, va_list lvaArgs)
 #endif
 }
 
+// ----------------------------------------------------------------------------
+// ConvertI64ToA -- signed 64-bit integer -> text in liRadix (the header contract
+// records that every call site passes 10).
+//
+// BODIED 2026-08-01 (reset-player-car wave). The SCOPE NOTE at the top still holds
+// for ConvertIToA / ConvertXToA / the printf family; this one entry point is bodied
+// because CgsAttribSys::AttribSysCollectionKey::GetHashKey @0x82805C20 -- the
+// function that turns a VehicleListEntry's asset GUID into the AttribSys key
+// RaceCarEntityModule::SpawnRaceCar publishes -- is its only in-tree caller, and it
+// consumes nothing but the decimal text. FLAG: written to the header's own contract
+// (the same job the CRT's _i64toa does), NOT transcribed from the X360's recursive
+// digit-emit helper. Digit ORDER, the '-' prefix and the returned pointer are the
+// whole observable and all three are unambiguous.
+char* ConvertI64ToA(s64 llValue, char* lpcDst, s32 liRadix)
+{
+    if (lpcDst == 0)
+    {
+        return lpcDst;
+    }
+    if (liRadix < 2 || liRadix > 36)
+    {
+        lpcDst[0] = 0;
+        return lpcDst;
+    }
+
+    char* lpcOut = lpcDst;
+    u64 luMagnitude;
+    if (llValue < 0 && liRadix == 10)
+    {
+        *lpcOut++ = '-';
+        luMagnitude = static_cast<u64>(-(llValue + 1)) + 1u;   // -LLONG_MIN safe
+    }
+    else
+    {
+        luMagnitude = static_cast<u64>(llValue);
+    }
+
+    // Emit least-significant digit first, then reverse the digit run in place.
+    char* lpcDigits = lpcOut;
+    do
+    {
+        const u32 luDigit = static_cast<u32>(luMagnitude % static_cast<u64>(liRadix));
+        *lpcOut++ = static_cast<char>((luDigit < 10u) ? ('0' + luDigit) : ('a' + (luDigit - 10u)));
+        luMagnitude /= static_cast<u64>(liRadix);
+    }
+    while (luMagnitude != 0u);
+
+    char* lpcEnd = lpcOut;
+    *lpcOut = 0;
+    for (char* lpcLo = lpcDigits, *lpcHi = lpcEnd - 1; lpcLo < lpcHi; ++lpcLo, --lpcHi)
+    {
+        const char lcTmp = *lpcLo;
+        *lpcLo = *lpcHi;
+        *lpcHi = lcTmp;
+    }
+    return lpcDst;
+}
+
 } // namespace stdc
 } // namespace core
 } // namespace rw

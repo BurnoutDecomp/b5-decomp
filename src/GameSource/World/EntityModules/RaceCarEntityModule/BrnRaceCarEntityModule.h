@@ -49,6 +49,11 @@ namespace BrnWorld { struct ShadowMap; }
 
 namespace CgsResource { struct ResourceHandle; }
 namespace BrnResource { struct VehicleList; class WheelList; }
+// The game-action consumer's two argument types (pointer-only here; the .cpp includes both
+// owning headers). ResetPlayerCarAction is game action 0's 80-byte payload,
+// RaceCarAIInterface is the AI publish surface SpawnRaceCar posts its attach event into.
+namespace BrnGameState { namespace GameStateModuleIO { struct ResetPlayerCarAction; } }
+namespace BrnAI       { namespace AIModuleIO         { struct RaceCarAIInterface;   } }
 
 namespace BrnWorld
 {
@@ -221,6 +226,54 @@ public:
         EActiveRaceCarIndex AttachActiveRaceCar( RaceCar* lpRaceCar,
                                                  EActiveRaceCarIndex leActiveRaceCarIndex );
 
+        // ====================================================================
+        // THE GAME-ACTION CONSUMER (reset-player-car wave 2026-08-01).
+        // ====================================================================
+
+        // X360 0x8230BE08. Drain the pre-scene input buffer's game-action queue and apply
+        // every action this module owns. PARTIAL SLICE -- see the .cpp banner for exactly
+        // which of the ~100 cases are reproduced and why the rest are dropped rather than
+        // paraphrased.
+        //
+        // ⚠️ THREE arguments. Hex-Rays renders one: the console prologue is
+        //   r31 = r3 (this); r3 = r4 (the pre-scene INPUT buffer, whose GetGameActionQueue
+        //   the very next instruction calls); r20 = r5 (the pre-scene OUTPUT buffer, which
+        //   every case forwards to its handler). Recovered from the asm, not the pseudocode.
+        void HandleGameActions( RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
+                                RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
+        // X360 0x82304FE8 -- game action 0. Place (or re-spawn) the player's car. THE
+        // record CarSelectManager posts to put the player in a junkyard.
+        // ⚠️ THREE arguments again (this / lpAction / the pre-scene output buffer; r22/r16/r25
+        // in the prologue).
+        void HandleResetPlayerCarAction(
+                const BrnGameState::GameStateModuleIO::ResetPlayerCarAction* lpAction,
+                RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
+        // X360 0x822FE5D8. Find a free global race-car slot, Prepare + AddToWorld it at
+        // lrTransform, resolve the wheel set when lWheelModelId is null, and publish the AI
+        // module's AttachAIControlEvent. Returns the global slot used.
+        //
+        // ⚠️ The signature is EIGHT parameters and Hex-Rays renders TWENTY-TWO (it counts the
+        // callee's own spills into the caller-provided home area). Recovered from the X360
+        // home-area slot spacing (r3->sp+0x14, r4->+0x1C, r5->+0x24 ... r10->+0x4C, first
+        // stack arg -> +0x54, which is exactly the slot HandleResetPlayerCarAction writes):
+        //   r4 lpRaceCarAIInterface  r5 lrTransform  r6 leType  r7 lModelId
+        //   r8 lbKeepResetSection    r9 lWheelModelId  r10 lpRivalId (NULLABLE)
+        //   sp+0x54 liOpponentIndex
+        // lbKeepResetSection is named by the DecFIGS DWARF: it is the fourth member of
+        // AttachAIControlEvent (BrnRaceCarAIInterfaces.h:306), which this function is the
+        // only producer of.
+        EGlobalRaceCarIndex SpawnRaceCar(
+                BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
+                const Matrix44Affine& lrTransform,
+                ERaceCarType leType,
+                CgsID lModelId,
+                bool lbKeepResetSection,
+                CgsID lWheelModelId,
+                const CgsID* lpRivalId,
+                s32 liOpponentIndex );
+
         // [FLAG PC bring-up] NOT an X360 function. The world module's bring-up tour camera
         // asks where the spawned car is so it can frame it; false when no slot is active.
         // DELETE with that camera.
@@ -317,7 +370,19 @@ private:
     // X360 +0x182F8 (99064). The active-race-car slot the local player is driving, or
     // E_ACTIVE_RACE_CAR_INDEX_INVALID. UpdateTailgateTimer reads it (asm `lwzx` at 0x182F8)
     // to pick the player car. DWARF BrnRaceCarEntityModule.h:360 -> EActiveRaceCarIndex.
-    EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
+    // ⛔ SEEDED 2026-08-01 (reset-player-car wave), and this was a REAL DEFECT with two live
+    // consequences. RaceCarEntityModule::Construct @0x822FD898 -- which is where the console
+    // stores E_ACTIVE_RACE_CAR_INDEX_INVALID here -- is declaration-only on this build (it is in
+    // the [VMX] FLAG INVENTORY), so this member sat at whatever the zeroed module memory held:
+    // 0 == E_ACTIVE_RACE_CAR_INDEX_0, i.e. "the player is driving slot 0", from frame one.
+    //   * UpdateOutputInterfaces publishes slot 0 as the player's car before any car exists;
+    //   * HandleResetPlayerCarAction takes its "remove the EXISTING player car" branch on the
+    //     very first record it is ever handed -- MEASURED: the first live action fired the
+    //     console's own "Invalid Number of Palettes"/"Invalid car colour" pair, because it read
+    //     RaceCar::Prepare's -1 colour sentinels off a slot that had never been a player car.
+    // The in-class initialiser is the same seam BrnGameModule's mpOutputBuffer uses; DELETE it
+    // when Construct lands.
+    EActiveRaceCarIndex mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
                                         // +0x182F8 (99064) .. +0x182FC (99068)
 
     u8 maTailPadA1b[0x18358 - 0x182FC]; // +0x182FC (99068) .. +0x18358 (99160)
@@ -398,13 +463,8 @@ private:
     // IsEqual(0) DEREFERENCES its argument -- so the answer is recorded at bind time.
     bool mbCarColoursBound;
 
-    // [FLAG PC bring-up] one-shot latch for SpawnFirstUnlockedCarBringUp (see the .cpp
-    // banner). DELETE when a real caller of AttachActiveRaceCar @0x822F4DB0 lands.
-    bool mbBringUpCarRequested;
-
-    // [FLAG PC bring-up] NOT an X360 function -- the stand-in TRIGGER that stands in for
-    // SpawnRaceCar's seven callers. Everything it calls is console code.
-    void SpawnFirstUnlockedCarBringUp();
+    // (RETIRED 2026-08-01: mbBringUpCarRequested + SpawnFirstUnlockedCarBringUp are gone --
+    //  HandleResetPlayerCarAction is the real caller of AttachActiveRaceCar now.)
 
     // [FLAG PC bring-up] NOT an X360 function -- stands in for the two data-blocked
     // console steps between E_STATE_ATTACHED and E_STATE_ACTIVE. Full rationale in the

@@ -54,6 +54,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"         // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue, CgsModule::Event
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"  // BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attribute::Key (AttachAIControlEvent::mCarAssetAttribKey)
 
 namespace BrnAI
 {
@@ -116,15 +117,32 @@ namespace BrnAI
         // /types verbatim from the DWARF (BrnRaceCarAIInterfaces.h:353/347/366); the X360 typed
         // AddEvent liSize confirms each byte size (AddCarToCurrentModeEvent==20 @0x822FD028,
         // PlayerControlChangedEvent==1 @0x822FCF70, RemoveCarFromCurrentModeEvent==4 @0x822FD0E0).
-        // AttachAIControlEvent (DWARF BrnRaceCarAIInterfaces.h event-records group) carries an
-        // Attribute::Key and a BrnAI::EPersonalityType (the latter un-homed), so no field-level
-        // layout is reconstructed. The X360 typed AddEvent @0x822FCC90 bakes `li r6, 0x18`, so its
-        // byte image is 24 bytes -- homed minimally as an opaque payload at that attested size.
-        // FLAG: opaque interior -- field names/types NOT fabricated (HARD RULE 3); only the
-        // X360-attested sizeof(==24) is load-bearing (it is the liSize the typed AddEvent passes).
+        // ⭐ GROWN 2026-08-01 (reset-player-car wave): the opaque 24-byte payload is RETIRED.
+        // The DecFIGS DWARF names all four members (BrnRaceCarAIInterfaces.h:303..306) and the
+        // X360 asm of the event's ONLY producer -- RaceCarEntityModule::SpawnRaceCar
+        // @0x822FE5D8, stores at 0x822FEBC0..0x822FEBDC -- places each one exactly where the
+        // DWARF order puts it:
+        //   +0x00 stw  the free global race-car slot        -> meGlobalRaceCarIndex
+        //   +0x08 std  AttribSysCollectionKey::GetHashKey(vehicleEntry + 0xA0)
+        //                                                   -> mCarAssetAttribKey
+        //   +0x10 stw  (vehicleEntry+0xE8 == 1) ? 1 : 0     -> mePersonalityType
+        //   +0x14 stb  SpawnRaceCar's 5th argument          -> mbKeepResetSection
+        // 0x15 rounded to the 8-byte alignment of the CgsID is the attested 24.
+        // FLAG: BrnAI::EPersonalityType has no committed home, so its 4-byte storage is spelled
+        // s32 here (the StartNetworkGameEvent::meBoostType precedent). Adopt the enum when the
+        // AI personality header lands.
         struct AttachAIControlEvent : public CgsModule::Event
         {
-            u8 macOpaquePayload[24];   // +0x00  opaque (X360-attested 24-byte AddEvent liSize)
+            EGlobalRaceCarIndex meGlobalRaceCarIndex;   // +0x00 (DWARF :303)
+            // FLAG (Attribute::Key WIDTH SPLIT, already documented at
+            // CgsAttribSysCollectionKey.cpp:GetHashKey): this tree typedefs Attribute::Key to
+            // u32 because it is ALSO the type of several 4-byte serialised event fields, while
+            // the real key is 64-bit. The console stores this member with `std` at +0x08 and
+            // that 8-byte slot is what makes the record's attested sizeof 24 -- so the storage
+            // is spelled u64 here. Adopt Attribute::Key when the typedef split is done.
+            u64                 mCarAssetAttribKey;     // +0x08 (DWARF :304, Attribute::Key)
+            s32                 mePersonalityType;      // +0x10 (DWARF :305, BrnAI::EPersonalityType)
+            bool                mbKeepResetSection;     // +0x14 (DWARF :306)
         };
         static_assert(sizeof(AttachAIControlEvent) == 24, "AttachAIControlEvent byte image must match X360 AddEvent liSize (0x18)");
 

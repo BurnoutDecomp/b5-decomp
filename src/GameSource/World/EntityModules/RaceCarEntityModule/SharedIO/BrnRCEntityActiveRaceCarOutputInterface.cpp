@@ -294,6 +294,27 @@ void RCEntityActiveRaceCarOutputInterface::SetPlayerActiveRaceCarData(EActiveRac
     mbIsPlayerCarActive        = true;                   // @+0x2860 (stb 1)
 }
 
+// DWARF :420 -- SetActiveRaceCarIndex: record which active-race-car slot the given PLAYER
+// SCORING slot is driving, into maeActiveRaceCarIndex[player]. Its only caller is
+// RaceCarEntityModule::CopyActiveRaceCarToPlayerScoringMappingToOutput @0x822A3918, which
+// walks all eight player slots and forwards the module's own map cell for cell -- so the
+// EPlayerScoringIndex bound is the one that TU already asserts. Bodied here (2026-08-01)
+// because that TU is now mounted and this declaration was the only thing keeping it from
+// linking; the console emits it as a header inline (no out-of-line symbol in the image).
+void RCEntityActiveRaceCarOutputInterface::SetActiveRaceCarIndex(
+        BrnGameState::GameStateModuleIO::EPlayerScoringIndex lePlayerScoringIndex,
+        EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    // (this TU sees EPlayerScoringIndex only as a forward-declared enum, so the bound is
+    //  spelled as the array extent -- they are the same 8.)
+    CGS_ASSERT(static_cast<s32>(lePlayerScoringIndex) >= 0,
+               "lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0");
+    CGS_ASSERT(static_cast<s32>(lePlayerScoringIndex)
+                   < static_cast<s32>(sizeof(maeActiveRaceCarIndex) / sizeof(maeActiveRaceCarIndex[0])),
+               "lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT");
+    maeActiveRaceCarIndex[lePlayerScoringIndex] = leActiveRaceCarIndex;
+}
+
 // X360 0x822A1200 -- SetDeformationModelResourcePtr: copy the source ResourcePtr's embedded
 // ResourceHandle (its two id words at +20/+24) into maDeformationModelResourceHandles[idx]
 // (8-byte ResourceHandle, stride 8). Done by-name via GetResourceHandle().

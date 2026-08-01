@@ -51,6 +51,15 @@ namespace BrnMath
     // is inferred from the OnPropHit call site and the asm register setup.
     bool IsPointInsideBox(const Matrix44Affine& lBoxTransform, Vector3 lPoint, Vector3 lHalfExtents);
 
+    // ADDITIVE GROW (reset-player-car wave 2026-08-01). @ 0x825405A0, DWARF primary file
+    // Math/BrnMathUtils.cpp (its own asserts cite BrnMathUtils.cpp:50..:65).
+    // Build an affine transform positioned at lPosition, facing lAt, with lUp as the up axis:
+    //   xAxis = normalize(cross(lUp, lAt))   yAxis = lUp (stored VERBATIM, asm stvx128 out+0x10)
+    //   zAxis = normalize(cross(xAxis, lUp)) wAxis = lPosition (asm stvx128 out+0x30)
+    // The ONLY producer of a car's spawn pose: RaceCarEntityModule::HandleResetPlayerCarAction
+    // calls it with the junkyard SpawnLocation's mPosition/mDirection and the world Y up axis.
+    void BuildTransform(Matrix44Affine& lrTransform, Vector3 lPosition, Vector3 lAt, Vector3 lUp);
+
     // ADDITIVE GROW (declare-only; body @ X360, not homed in this batch). Perpendicular
     // distance from lPoint to the infinite line through (lLineStart, lLineEnd). Called by
     // BrnWorld::CheckVehicleForPowerPark @ 0x822B1FA0 (v1=point, v2=lineStart, v3=lineEnd).
