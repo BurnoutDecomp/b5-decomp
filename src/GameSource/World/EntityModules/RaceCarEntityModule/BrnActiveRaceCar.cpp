@@ -37,6 +37,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::Mult
+#include "GameSource/Math/BrnMathUtils.h"                // BrnMath::IsNormal
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface::CreateRaceCar
 
 #include <cstring>   // memset (the console's own inlined clears)
 
@@ -159,7 +161,11 @@ void ActiveRaceCar::Construct(EActiveRaceCarIndex leActiveRaceCarIndex)
     mbCrashedIntoWater           = false;                         // 0x783
     mbCanDriveAwayFromCrash      = false;                         // 0x779
     mbEnableEngineSwitchOff      = true;                          // 0x770
-    meBaseDeformationType        = -1;                            // 0x7C8
+    // 0x7C8: the console stores -1 here. ⚠️ BrnPhysics::Deformation::DeformationResetType
+    // (BrnDeformationEvents.h:17) currently carries only E_DEFORMATION_RESET_NONE = 0, so the
+    // sentinel has no recovered enumerator name yet -- the cast records that gap rather than
+    // hiding it behind an s32 member.
+    meBaseDeformationType        = static_cast<BrnPhysics::Deformation::DeformationResetType>( -1 );
 
     // [FLAG PC bring-up] mAddRemoveNetworkCarForCollisionQueue.Construct() -- see banner.
 
@@ -378,6 +384,151 @@ bool ActiveRaceCar::IsActive() const
 bool ActiveRaceCar::ToBePlacedOnTrack() const
 {
     return mbToBePlacedOnTrack;
+}
+
+// ============================================================================
+// RequestPlaceOnTrack @ 0x822BFB58   (drivable wave 2026-08-01)
+//
+// The only way a car asks to be dropped onto the road surface. Two producers on this
+// build: RaceCarEntityModule::PlaceRaceCarOnLoad @0x822CE588 (the moment a car's
+// resources finish streaming, which is the start-of-game path) and
+// HandleResetPlayerCarAction's TELEPORT arm.
+//
+// ⭐ ARGUMENTS RECOVERED FROM THE ASM, not the pseudocode -- incident TEN of the
+// dropped-argument rule and the SECOND time it is the vector registers:
+//   v1  = lPosition      (`vmr128 v126, v1`, stored to +0x7A0)
+//   v2  = lDirection     (`vmr128 v127, v2`, stored to +0x7B0)
+//   fp1 = lfSpeed        (stored to +0x7C0)
+// Hex-Rays renders the whole thing as `RequestPlaceOnTrack(int a1, double a2)`.
+//
+// Note the LATCH: every store sits inside `if (!mbToBePlacedOnTrack)`, so a second
+// request arriving while one is still pending is IGNORED -- that is console behaviour,
+// and it is why PlaceOnTrackManager::PrePhysicsUpdate must Clear before it resets.
+// ============================================================================
+void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3& lDirection,
+                                         f32 lfSpeed )
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");                        // BrnActiveRaceCar.cpp:1801
+    CGS_ASSERT(rw::math::vpu::IsValid(lDirection),
+               "RwMath::IsValid( lDirection )");                     // :1802
+    CGS_ASSERT(BrnMath::IsNormal(lDirection),
+               "BrnMath::IsNormal( lDirection )");                   // :1803
+
+    if( !mbToBePlacedOnTrack )
+    {
+        mfPlaceOnTrackSpeed    = lfSpeed;                            // +0x7C0
+        mPlaceOnTrackPosition  = lPosition;                          // +0x7A0
+        mPlaceOnTrackDirection = lDirection;                         // +0x7B0
+        mbToBePlacedOnTrack    = true;                               // +0x7C4
+
+        CGS_ASSERT(mfPlaceOnTrackSpeed >= 0.0f, "mfPlaceOnTrackSpeed >= 0.0f");   // :1813
+    }
+}
+
+// ============================================================================
+// OnResourcesLoaded @ 0x822EB168   (drivable wave 2026-08-01)  -- ATTACHED -> WAITING.
+//
+// This is the step the old PromoteAttachedCarToActiveBringUp stood in for, half of it.
+// Its FIRST store is the state transition, and that is the load-bearing part: nothing
+// else in the XEX writes E_STATE_WAITING, and ResetActiveRaceCar's promote arm is
+// gated on exactly that value.
+//
+// WHAT IS REPRODUCED (asm order):
+//   * the two asserts, the state store,
+//   * both resource HANDLES (the console's two BaseResourcePtr::CreateFromHandle calls
+//     store the handle at wrapper+0x14; AddHandlingModel reads exactly those two words),
+//   * the detached-part render queue Construct,
+//   * mbCanDriveAwayFromCrash / mbUncrashedThisFrame clears the module's caller makes
+//     right after (they are OnRaceCarResourcesLoaded's own two trailing stores).
+//
+// [FLAG PC bring-up] WHAT IS NOT, and why -- three legs, none paraphrased:
+//   1. mCentreOfMassTransform <- BrnPhysics::Def(mDeformationModelResourcePtr) + 1552.
+//      Needs the alias-list half of CreateFromHandle (to get the resource MEMORY, not
+//      just the handle) plus BrnPhysics::Deformation::StreamedDeformationSpec's +1552
+//      layout. Leaving it is not a silent drop: Prepare/Attach leave the IDENTITY there,
+//      which is what CalcBodyTransform already multiplies by today, so the pose this
+//      build renders is unchanged rather than wrong. DELETE-WHEN the spec is homed.
+//   2. the four RenderParams::SetWheelScale(i, Def + 96 + 48*i) calls -- same dependency,
+//      and this build cannot draw wheels at all (Model::SetupShaderConstantsForInstancing
+//      is absent).
+//   3. Attrib::FindCollection(-206702987) -> burnoutcargraphicsasset -> the two dwords
+//      stored at +0x1C80/+0x1C84 (miDefaultColourIndex / miDefaultColourPalette). Reads
+//      an attribute collection the vehicle's own attrib vault owns; SetupCarColour is the
+//      only consumer and it is not reconstructed either.
+//   4. ResetVerletOffsets @0x822A4E90 -- the ledger calls it `reviewed`, the tree has no
+//      body for it (same drift as BrnMath::BuildTransform last wave).
+// ============================================================================
+void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
+                                       const CgsResource::ResourceHandle& lrGraphicsModelHandle,
+                                       const Vector3&                     lrInitialVelocity,
+                                       u32                                luCarAssetAttribKey )
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");     // BrnActiveRaceCar.cpp:821
+    CGS_ASSERT(!IsActive(), "!IsActive()");       // :822
+
+    (void)lrInitialVelocity;     // consumed by AddHandlingModel, carried for signature parity
+    (void)luCarAssetAttribKey;   // ditto
+
+    muState = E_STATE_WAITING;                                       // +0x740 = 2
+
+    mDeformationModelHandle = lrDeformationModelHandle;              // +0x1CA4
+    mGraphicsModelHandle    = lrGraphicsModelHandle;                 // +0x1CC4
+
+    // BrnWorld::DetachedPartRenderEvent<20>::Construct(this + 5520) -- the queue lives
+    // inside mRenderParams and is the one member of the block this header names.
+    mRenderParams.GetDetachedPartQueue().Construct();
+}
+
+// ============================================================================
+// AddHandlingModel @ 0x822D3EC8   (drivable wave 2026-08-01)
+//
+// Hands a just-promoted car to the physics vehicle manager. Every argument below is
+// read off the ASM at 0x822D3EE4..0x822D4054, because the pseudocode is wrong twice
+// over (it drops the vector velocity and mis-pairs the 64-bit VolumeInstanceId load):
+//   r3 = lpVehicleInterface   r4 = mHandlingBodyVolumeId (ld 0xD0)
+//   r5 = lrInitialTransform   r6 = luCarAssetAttribKey
+//   r7 = mDeformationModelHandle (ld 0x1CA4)   r8 = mGraphicsModelHandle (ld 0x1CC4)
+//   r9 = mpRaceCar->GetType() (lbz 0xA4)       f1 = mfBaseDeformAmount (lfs 0x7CC)
+//   stack: meBaseDeformationType (lwz 0x7C8), the computed bool, lu8CarStrengthStat
+//   v1 = lrInitialVelocity     v2 = vspltisw 0  (angular velocity is ALWAYS zero here)
+//
+// The one piece of logic is the bool: it is TRUE only when the caller asked for it AND
+// the paired global car is the PLAYER (`lbz r11, 0xA4(mpRaceCar)` == E_RACE_CAR_TYPE_PLAYER
+// == 0). CreateRaceCar's own parameter name for it is lbDisablePhysicsStateReset.
+// ============================================================================
+void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                                      u32                   luCarAssetAttribKey,
+                                      const Matrix44Affine& lrInitialTransform,
+                                      const Vector3&        lrInitialVelocity,
+                                      bool                  lbResettingPhysicsState,
+                                      u8                    lu8CarStrengthStat )
+{
+    CGS_ASSERT(IsActive(), "IsActive()");                             // BrnActiveRaceCar.cpp:1153
+    CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInterface != NULL"); // :1154
+    CGS_ASSERT(mpRaceCar != 0, "mpRaceCar != NULL");                   // :1155
+
+    bool lbDisablePhysicsStateReset = false;
+    if( lbResettingPhysicsState )
+    {
+        CGS_ASSERT(IsAttached(), "IsAttached()");                      // BrnActiveRaceCar.h:1089
+        lbDisablePhysicsStateReset = ( mpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER );
+    }
+
+    CGS_ASSERT(IsAttached(), "IsAttached()");                          // BrnActiveRaceCar.h:1089
+
+    lpVehicleInterface->CreateRaceCar(
+        mHandlingBodyVolumeId,
+        lrInitialTransform,
+        lrInitialVelocity,
+        Vector3{ 0.0f, 0.0f, 0.0f, 0.0f },      // asm `vspltisw128 v127, 0` -> v2
+        luCarAssetAttribKey,
+        mDeformationModelHandle,
+        mGraphicsModelHandle,
+        mpRaceCar->GetType(),
+        mfBaseDeformAmount,                                            // +0x7CC
+        meBaseDeformationType,                                         // +0x7C8
+        lbDisablePhysicsStateReset,
+        static_cast<s32>( lu8CarStrengthStat ) );
 }
 
 // ----------------------------------------------------------------------------

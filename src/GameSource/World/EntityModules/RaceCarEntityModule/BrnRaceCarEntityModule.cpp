@@ -410,6 +410,12 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
     {
     case 0:
         // [FLAG PC bring-up] stage 0 skipped -- see the note above.
+        // ⚠️ ONE EXCEPTION (drivable wave 2026-08-01): mPlaceOnTrackManager.Construct(this).
+        // The console does it in RaceCarEntityModule::Construct @0x822FD898, which is
+        // declaration-only on this build -- the SAME seam that left mePlayerActiveRaceCarIndex
+        // at slot 0 last wave. Without it the manager's mpRaceCarEntityModule is whatever the
+        // module memory held and PrePhysicsUpdate dereferences it. DELETE when Construct lands.
+        mPlaceOnTrackManager.Construct( this );
         mePrepareStage = 0;
     // fall through
     case 1:
@@ -533,119 +539,318 @@ void RaceCarEntityModule::UpdateStreaming(
             continue;
         }
 
-        if( mRaceCarStreamer.IsRaceCarLoaded( liCar )
+        // [FLAG PC bring-up] the console's predicate is IsRaceCarLoaded() (all five resource
+        // bits); this build's DATA delivers three. See
+        // RaceCarStreamer::IsRaceCarLoadedForStateMachineBringUp for the measurement and the
+        // DELETE-WHEN. This is the ONE gate relaxation in the whole promote chain.
+        if( mRaceCarStreamer.IsRaceCarLoadedForStateMachineBringUp( liCar )
             && ( lpActiveRaceCar->IsPlayer()
               || !lpActiveRaceCar->IsOnRaceStartState(
                      ActiveRaceCar::E_RACE_START_STATE_ON_START_LINE ) ) )
         {
-            // [FLAG PC bring-up] OnRaceCarResourcesLoaded @0x822FEBF8 goes here and is not
-            // reconstructed -- see the banner. Unreachable on this build (IsRaceCarLoaded
-            // is constant-false while VEH_<id>_AT.bin is unported), so nothing is silently
-            // skipped today.
+            // ⭐ REAL as of 2026-08-01 (drivable wave). This is the console's own
+            // ATTACHED -> WAITING step and it is what retired the promote fiction.
+            OnRaceCarResourcesLoaded( static_cast<EActiveRaceCarIndex>( liCar ),
+                                      lpOutput->GetVehicleInputInterface() );
         }
         else
         {
             // Console: `lbAllLoaded = false` (the flag feeds the streaming-complete
             // publish, whose output member is not modelled here).
-            // [FLAG PC bring-up] and this is where the promote stands in -- see its banner.
-            PromoteAttachedCarToActiveBringUp( lpActiveRaceCar );
         }
     }
 }
 
 // ============================================================================
-// [FLAG PC bring-up] PromoteAttachedCarToActiveBringUp -- NOT an X360 function.
+// OnRaceCarResourcesLoaded  @ 0x822FEBF8   (drivable wave 2026-08-01)
 //
-// THE ONE REMAINING FICTION IN THE RACE-CAR RENDER PATH, and it is worth reading in full
-// because everything around it is now console code.
+// ⭐ THIS AND ResetActiveRaceCar BELOW ARE WHAT RETIRED PromoteAttachedCarToActiveBringUp.
+// The old function forced muState / mLOD / mbDamaged directly because BOTH console steps
+// between E_STATE_ATTACHED and E_STATE_ACTIVE were absent. Both are here now.
 //
-// The console walks E_STATE_ATTACHED -> E_STATE_WAITING -> E_STATE_ACTIVE through exactly
-// two functions, and NEITHER is reachable on this build:
+// The console body, in asm order:
+//   assert IsWaitingForLoad() (:2201), assert IsAttached(), assert mpRaceCar (:2204)
+//   liModelIndex = mpVehicleList->GetVehicleIndex(mpRaceCar->GetModelId());  assert >= 0
+//   lpListEntry  = mpVehicleList->GetVehicleData(liModelIndex);              assert != 0
+//   lVelocity    = 0, unless this car is the one at module+100212 in which case it is
+//                  (module+100192) * splat(module+100208)
+//   ActiveRaceCar::OnResourcesLoaded(streamerPhysicsRes, streamerGraphicsRes,
+//                                    lVelocity, lpListEntry->GetAttribKey())
+//   SetupCarColour(index)
+//   PlaceRaceCarOnLoad(mpRaceCar)
+//   car->mbComingInRange = false; car->mbIsJoiningGameMode = false     (+1909/+1910)
 //
-//   ActiveRaceCar::OnResourcesLoaded @0x822EB168   (muState = 2)
-//       not reconstructed, AND gated on RaceCarStreamer::IsRaceCarLoaded() == all five
-//       resource bits. As of 2026-08-01 three of the five arrive (LOADEDGFX,
-//       LOADEDPHYSICS, LOADEDATTRS -- the VEH_<id>_AT.BIN port landed and the streamed
-//       vault allocator now hands out slots); LOADEDWHEELGFX still waits on the deferred
-//       `LoadWheel` GameData handler (id 36) and LOADEDAUDIO on the audio streamer.
-//   RaceCarEntityModule::ResetActiveRaceCar @0x822F4880   (muState = 3)
-//       the ONLY writer of E_STATE_ACTIVE in the whole XEX. Its only caller is
-//       PlaceOnTrackManager::PrePhysicsUpdate, and it needs a
-//       BrnPhysics::Vehicle::VehicleInputInterface plus ActiveRaceCar::AddHandlingModel.
-//
-// And the render pose itself has exactly ONE console producer:
-//   ActiveRaceCar::UpdatePhysicsState @0x822D4418, whose only caller is
-//   ReadUpdatedActiveRaceCarDataFromPhysics -- it stores
-//   `CalcBodyTransform()` into mRenderParams.mBodyTransform.
-//
-// WHAT MAKES THIS HONEST RATHER THAN A FABRICATED TRANSFORM. CalcBodyTransform is
-// `Mult(mCentreOfMassTransform, mPhysicsState.mTransform)`. Until OnResourcesLoaded runs,
-// mCentreOfMassTransform is the IDENTITY that Prepare/Attach leave behind, and
-// mPhysicsState.mTransform is what Attach seeded from RaceCar::GetTransform(). So for a
-// car that is standing still, running the console's own CalcBodyTransform here produces
-// bit-for-bit what UpdatePhysicsState would have stored. Nothing about the pose is
-// invented: the position comes from RaceCar::AddToWorld, the maths is the console's.
-// (Once OnResourcesLoaded lands it will replace the identity with the authored
-// body-to-chassis offset out of the now-loaded physics def, and the pose gets *better*.)
-//
-// WHAT IS STILL A LIE, stated plainly:
-//   * muState is forced to E_STATE_ACTIVE without the physics handling model existing;
-//   * mLOD is forced to LOD 0. Reset() seeds state 4 and the console's own else-arm never
-//     writes mLOD either -- on the console the scene/replay arm sets it via
-//     ShadowMap::CalcOptimisedLod. The Cavalry's part models do not all carry state 4, so
-//     LOD 0 is a bring-up choice, not a reconstruction.
-//   * the car never moves, because nothing simulates it.
-//
-// DELETE-WHEN: VEH_<id>_AT.bin is ported AND ActiveRaceCar::OnResourcesLoaded +
-// PlaceOnTrackManager::PrePhysicsUpdate + ResetActiveRaceCar land. At that point this
-// whole function goes and the two console calls above take over.
+// [FLAG PC bring-up] TWO legs are not reproduced and are not paraphrased:
+//   * the initial-velocity override. It reads three module members inside maTailPadB1
+//     (+100192 a Vector3, +100208 a float, +100212 a RaceCar*) that this header does not
+//     name. They form a "spawn this specific car moving" hook; the start-of-game path
+//     spawns a stationary car, so zero is the value the console would compute anyway.
+//   * SetupCarColour @0x822F5170 -- it reaches the colour-palette resource plus the
+//     per-car graphics attrib collection ActiveRaceCar::OnResourcesLoaded is itself not
+//     reading yet (see its own banner). Left as an explicit call site comment.
 // ============================================================================
-void RaceCarEntityModule::PromoteAttachedCarToActiveBringUp( ActiveRaceCar* lpActiveRaceCar )
+void RaceCarEntityModule::OnRaceCarResourcesLoaded(
+        EActiveRaceCarIndex leActiveRaceCarIndex,
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface )
 {
-    const s32 liCar = static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() );
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
 
-    if( !mRaceCarStreamer.IsGraphicsLoadedBringUp( liCar ) )
+    CGS_ASSERT( lpActiveRaceCar->IsWaitingForLoad(),
+                "lpActiveRaceCar->IsWaitingForLoad()" );                       // X360 :2201
+    CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );               // BrnActiveRaceCar.h:1089
+
+    RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+    CGS_ASSERT( lpRaceCar != 0, "lpRaceCar" );                                 // X360 :2204
+    if( lpRaceCar == 0 || mpVehicleList == 0 )
     {
-        return;   // the body has not arrived yet
+        return;
     }
 
-    lpActiveRaceCar->SetActiveBringUp();
-    lpActiveRaceCar->GetRenderParams()->SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
+    const s32 liModelIndex = mpVehicleList->GetVehicleIndex( lpRaceCar->GetModelId() );
+    CGS_ASSERT( liModelIndex >= 0, "liModelIndex >= 0" );                      // X360 :2213
 
-    // ⚠️ [FLAG PC bring-up] FORCE mbDamaged OFF -- and this one is a MEASURED defect, not
-    // a tidy-up. ActiveRaceCar::Attach sets mbDamaged = RaceCar::ToBeRenderedDamaged(),
-    // which is true for EVERY player car (that is console behaviour and it stays in
-    // Attach). mbDamaged selects RenderRaceCar's DAMAGED technique (0/3 instead of 1/2),
-    // and the damaged technique reads the per-car deformation verlet block out of shader
-    // constants 22/23 -- which this build never uploads, because
-    // ShaderConstantTable::SetShaderConstantArrayData is declaration-only for all five
-    // overloads (CgsShaderConstants.h). The shader therefore offsets every vertex by
-    // whatever is left in those registers: the Cavalry renders with metre-long spikes
-    // where its doors and bonnet should be. Verified by A/B capture -- the render wave's
-    // stand-in producer never wrote mbDamaged, which is the only reason its screenshot
-    // looked clean.
-    // DELETE-WHEN: SetShaderConstantArrayData is bodied (then the damaged technique has
-    // its data and mbDamaged can carry Attach's console value through).
+    const BrnResource::VehicleListEntry* lpListEntry =
+        mpVehicleList->GetVehicleData( liModelIndex );
+    CGS_ASSERT( lpListEntry != 0, "lpListEntry != NULL" );                     // X360 :2217
+
+    // [FLAG PC bring-up] the module's spawn-with-velocity hook (see the banner). The
+    // console's default -- and the value on every path this build drives -- is zero.
+    const Vector3 lInitialVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+    lpActiveRaceCar->OnResourcesLoaded(
+        mRaceCarStreamer.GetPhysicsResourceHandle( static_cast<s32>( leActiveRaceCarIndex ) ),
+        mRaceCarStreamer.GetGraphicsResourceHandle( static_cast<s32>( leActiveRaceCarIndex ) ),
+        lInitialVelocity,
+        ( lpListEntry != 0 ) ? lpListEntry->GetAttribCollectionKeyHash() : 0u );
+
+    // [FLAG PC bring-up] SetupCarColour(leActiveRaceCarIndex) -- see the banner.
+
+    PlaceRaceCarOnLoad( lpRaceCar );
+
+    lpActiveRaceCar->SetComingInRange( false );          // +0x775 (1909)
+    lpActiveRaceCar->SetJoiningGameMode( false );        // +0x776 (1910)
+
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[PLACEONTRACK] race car " << static_cast<s32>( leActiveRaceCarIndex )
+            << " resources loaded -> E_STATE_WAITING\n";
+    }
+
+    (void)lpVehicleInputInterface;   // the console passes it straight through to
+                                     // ActiveRaceCar::OnResourcesLoaded's caller chain;
+                                     // AddHandlingModel is what actually consumes it.
+}
+
+// ============================================================================
+// PlaceRaceCarOnLoad  @ 0x822CE588   (drivable wave 2026-08-01) -- PARTIAL SLICE.
+//
+// Decides WHERE a freshly loaded car goes. The console body is a five-way branch on the
+// car's type + the module's game-mode state:
+//
+//   muType == E_RACE_CAR_TYPE_PLAYER (0):
+//       *(module+99141)                -> RaceCar::RequestResetOnTrack(car, 1, 0, 0)
+//       otherwise                      -> ⭐ ActiveRaceCar::RequestPlaceOnTrack(
+//                                            car->GetPosition(), car->GetDirection(), 0.0f)
+//   otherwise (AI / rival / traffic):  five further arms, all through
+//                                      RaceCar::RequestResetOnTrack with a start-line /
+//                                      buzz-by / grid offset.
+//
+// ONLY the player arm is reproduced, and deliberately: every other arm calls
+// RaceCar::RequestResetOnTrack (not reconstructed -- it posts into the AI module's
+// reset-on-track request interface, whose consumer is also absent) and two of them need
+// BrnAI::BuzzBy::MaintainAheadOrBehind plus three unnamed module members. The player arm
+// is the start-of-game path and the only one this build can reach: the junkyard spawn
+// creates exactly one car, of type E_RACE_CAR_TYPE_PLAYER.
+//
+// [FLAG] *(module+99141) -- the byte after mbIsInGameMode in the DWARF bool run
+// (BrnRaceCarEntityModule.h:370..), unnamed in this header's model of that run. It gates
+// "reset onto the track properly" vs "just drop me here"; false is what a start-of-game
+// junkyard spawn wants and false is what the zeroed module holds.
+// ============================================================================
+void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
+{
+    CGS_ASSERT( lpRaceCar != 0, "lpRaceCar" );
+    if( lpRaceCar == 0 )
+    {
+        return;
+    }
+
+    CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                "muType < E_RACE_CAR_TYPE_COUNT" );                     // BrnRaceCar.h:577
+
+    if( lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER )
+    {
+        ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
+        if( lpActiveRaceCar != 0 )
+        {
+            lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
+                                                  lpRaceCar->GetDirection(),
+                                                  0.0f );
+        }
+        return;
+    }
+
+    // [FLAG PC bring-up] the four non-player arms -- see the banner. They all end in
+    // RaceCar::RequestResetOnTrack, which is not reconstructed.
+}
+
+// ============================================================================
+// ResetActiveRaceCar  @ 0x822F4880   (drivable wave 2026-08-01)
+//
+// ⭐⭐ THE ONLY WRITER OF ActiveRaceCar::E_STATE_ACTIVE IN THE ENTIRE XEX. Its only
+// caller is PlaceOnTrackManager::PrePhysicsUpdate.
+//
+// ⚠️ SIGNATURE. Hex-Rays renders `(this, index, transform, vehicleInterface)` and DROPS
+// the velocity, which arrives in the VECTOR register v1 (`vmr128 v127, v1` at the top,
+// then `vmr128 v1, v127` immediately before each of the two callees). Incident TEN of the
+// dropped-argument rule and the second time it is a vector register.
+//
+// The body is a two-arm branch on the slot's state:
+//   IsActive()  -- re-reset a car that is ALREADY live (the wreck/road-rage path). It
+//                  computes a deformation-reset kind from four ActiveRaceCar predicates
+//                  and a "how close to totalled" scalar, calls
+//                  VehicleInputInterface::ResetRaceCar, flips the slot's bit in the
+//                  module's reset BitArray and calls ActiveRaceCar::ResetAfterCrash.
+//   muState==2  -- ⭐ the PROMOTE. This is the arm the start-of-game path takes.
+//
+// [FLAG PC bring-up] THE IsActive() ARM IS NOT REPRODUCED, and this is a deliberate slice
+// rather than a silent drop. It needs five module members that live inside maTailPadB1 and
+// maTailPadA0 and are unnamed in this header (+99536/+99544/+99548 the deformation-amount
+// pair and its one-shot flag, +99164 the game-mode flag word, +65760 the reset BitArray),
+// plus ActiveRaceCar::ResetAfterCrash @0x822BF3A0 (the ledger says `reviewed`; the tree has
+// no body -- same drift as BrnMath::BuildTransform last wave). It is UNREACHABLE on this
+// build: nothing re-requests placement for a car that is already ACTIVE.
+// DELETE-WHEN those members are named and ResetAfterCrash lands.
+// ============================================================================
+void RaceCarEntityModule::ResetActiveRaceCar(
+        EActiveRaceCarIndex leActiveRaceCarIndex,
+        const Matrix44Affine& lrTransform,
+        const Vector3& lrVelocity,
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface )
+{
+    // asm 0x822F489C..0x822F48C8: the four 16-byte lanes of the transform are copied into
+    // the module's own scratch at +97568 BEFORE anything else. [FLAG] that member is inside
+    // maTailPadA0 and unnamed; nothing reconstructed reads it back.
+
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
+
+    if( lpActiveRaceCar->IsActive() )
+    {
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
+        // [FLAG PC bring-up] the already-ACTIVE re-reset arm -- see the banner.
+        return;
+    }
+
+    if( !lpActiveRaceCar->IsWaitingForPlacement() )
+    {
+        // Console: neither arm. A slot that is merely ATTACHED (still streaming) is left
+        // alone; so is an INACTIVE one.
+        return;
+    }
+
+    // ---- the PROMOTE arm (asm 0x822F4D18..0x822F4E28) ----------------------------------
+    RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+    CGS_ASSERT( lpRaceCar != 0, "mpRaceCar != NULL" );
+    if( lpRaceCar == 0 || mpVehicleList == 0 )
+    {
+        return;
+    }
+
+    const CgsID lModelId    = lpRaceCar->GetModelId();
+    const s32   liModelIndex = mpVehicleList->GetVehicleIndex( lModelId );
+    const BrnResource::VehicleListEntry* lpVehicleListEntry =
+        mpVehicleList->GetVehicleData( lModelId );
+    CGS_ASSERT( lpVehicleListEntry != 0, "lpVehicleListEntry" );       // X360 :1934
+
+    CGS_ASSERT( mRaceCarStreamer.GetCarModelId(
+                    static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) ) == lModelId,
+                "mRaceCarStreamer.GetCarModelId( lpActiveRaceCar->GetActiveRaceCarIndex() ) "
+                "== lpActiveRaceCar->GetGlobalRaceCar()->GetModelId()" );   // X360 :1939
+    // [FLAG PC bring-up] same one gate relaxation as UpdateStreaming's predicate.
+    CGS_ASSERT( mRaceCarStreamer.IsRaceCarLoadedForStateMachineBringUp(
+                    static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) ),
+                "mRaceCarStreamer.IsRaceCarLoaded( lpActiveRaceCar->GetActiveRaceCarIndex() )" ); // :1940
+
+    // asm `lbz r30, 0x1874A(r31)` -- module+100042, the byte between mbInCarSelectScreen
+    // (+100041) and mbCarSelectDontStreamAudio (+100048) in the same DWARF run
+    // (BrnRaceCarEntityModule.h:444..447 -> mbInCarModScreen). It is AddHandlingModel's
+    // "reset the physics state" gate. [FLAG] not modelled here; false is what the zeroed
+    // module holds and what a start-of-game spawn wants.
+    const bool lbResettingPhysicsState = false;
+
+    // The strength stat the console reads at lpVehicleListEntry+155.
+    const u8 lu8CarStrengthStat = ( lpVehicleListEntry != 0 )
+        ? lpVehicleListEntry->GetStrengthStat() : 0;
+
+    const u32 luCarAssetAttribKey = ( lpVehicleListEntry != 0 )
+        ? lpVehicleListEntry->GetAttribCollectionKeyHash() : 0u;
+
+    (void)liModelIndex;
+
+    // ⭐ THE STATE WRITE. muState = E_STATE_ACTIVE, mbAIToBeActivated = true,
+    // mbChangeCollisionState = false, mbChangeCullingGroup = false.
+    lpActiveRaceCar->BecomeActiveForReset();
+
+    lpActiveRaceCar->AddHandlingModel( lpVehicleInputInterface, luCarAssetAttribKey,
+                                       lrTransform, lrVelocity,
+                                       lbResettingPhysicsState, lu8CarStrengthStat );
+
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[PLACEONTRACK] race car " << static_cast<s32>( leActiveRaceCarIndex )
+            << " -> E_STATE_ACTIVE at (" << lrTransform.wAxis.x << ", "
+            << lrTransform.wAxis.y << ", " << lrTransform.wAxis.z << ")\n";
+    }
+}
+
+// ============================================================================
+// [FLAG PC bring-up] PublishRenderPoseWithoutPhysicsBringUp -- NOT an X360 function.
+//
+// WHAT SURVIVED OF PromoteAttachedCarToActiveBringUp, and why it had to survive.
+//
+// The console's ONLY producer of mRenderParams.mBodyTransform is
+// ActiveRaceCar::UpdatePhysicsState @0x822D4418, whose only caller is
+// ReadUpdatedActiveRaceCarDataFromPhysics -- the PHYSICS READBACK. There is no physics
+// module on this build, so an ACTIVE car has no render pose, and retiring the promote
+// wholesale would have made the junkyard car INVISIBLE, not drivable. (Measured by
+// inspection before the change: SetBodyTransform and SetLOD had exactly one caller each,
+// the promote.)
+//
+// WHAT IS HONEST ABOUT IT. UpdatePhysicsState stores `CalcBodyTransform()`. Until the
+// physics def is read, mCentreOfMassTransform is the IDENTITY Prepare/Attach left behind
+// and mPhysicsState.mTransform is what Attach seeded from RaceCar::GetTransform(), so for
+// a stationary car the console's own CalcBodyTransform here produces bit-for-bit what
+// UpdatePhysicsState would have stored. Nothing about the pose is invented: the position
+// comes from the junkyard spawn location, the maths is the console's.
+//
+// WHAT IS STILL A LIE, stated plainly:
+//   * mLOD is forced to LOD 0. On the console the scene/replay arm sets it via
+//     ShadowMap::CalcOptimisedLod.
+//   * mbDamaged is forced OFF. ActiveRaceCar::Attach sets it from
+//     RaceCar::ToBeRenderedDamaged(), which is true for EVERY player car (console
+//     behaviour, and it stays in Attach). mbDamaged selects RenderRaceCar's DAMAGED
+//     technique, which reads the per-car deformation verlet block out of shader constants
+//     22/23 -- constants this build never uploads, because
+//     ShaderConstantTable::SetShaderConstantArrayData is declaration-only for all five
+//     overloads. The Cavalry renders with metre-long spikes where its doors should be.
+//     DELETE-WHEN SetShaderConstantArrayData is bodied.
+//   * the car still does not MOVE, because nothing simulates it.
+//
+// It runs from PostPhysicsUpdate, which is where the console's own producer runs.
+// DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdatePhysicsState land.
+// ============================================================================
+void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar )
+{
+    lpActiveRaceCar->GetRenderParams()->SetLOD( CgsGraphics::Model::E_STATE_LOD_0 );
     lpActiveRaceCar->GetRenderParams()->SetDamaged( false );
 
     Matrix44Affine lBodyTransform;
     lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
     lpActiveRaceCar->GetRenderParams()->SetBodyTransform( lBodyTransform );
-
-    if( CgsDev::Log::gpDebugPrint != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[FLAG PC bring-up] race car " << liCar
-            << " promoted to E_STATE_ACTIVE without the physics handling model "
-               "(all-resources loaded = "
-            << ( mRaceCarStreamer.IsRaceCarLoaded( liCar ) ? 1 : 0 )
-            << ", OnResourcesLoaded + ResetActiveRaceCar not reconstructed). Body "
-               "transform is the console's own CalcBodyTransform over the attach-time "
-               "pose: ("
-            << lBodyTransform.wAxis.x << ", " << lBodyTransform.wAxis.y
-            << ", " << lBodyTransform.wAxis.z << ")\n";
-    }
 }
+
 
 // [FLAG PC bring-up] NOT an X360 function -- see the header. Reports the first active
 // slot's render pose so the world module's bring-up tour camera can frame it.
@@ -1461,6 +1666,22 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     }
 
     lpOutput->LockForWrite();
+
+    // [FLAG PC bring-up] the console's ReadUpdatedActiveRaceCarDataFromPhysics runs HERE
+    // and is what publishes every active car's render pose. It does not exist on this
+    // build (no physics module), so the pose publish stands in for it -- see
+    // PublishRenderPoseWithoutPhysicsBringUp's banner. It must run BEFORE
+    // UpdateOutputInterfaces, exactly as the console's readback does.
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        ActiveRaceCar* lpActiveRaceCar =
+            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+        if( lpActiveRaceCar->IsActive() )
+        {
+            PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar );
+        }
+    }
+
     // The console reads the four interfaces off the output buffer in this order
     // (replayGlobal, replayActive, global, active) and passes them
     // (active, global, replayActive, replayGlobal).
@@ -1470,6 +1691,75 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                             lpOutput->GetReplayGlobalRaceCarOutputInterface() );
     SendStreamerEvents( lpOutput );
     lpOutput->UnlockForWrite();
+}
+
+// ============================================================================
+// PrePhysicsUpdate  @ 0x82307160   (drivable wave 2026-08-01) -- PARTIAL SLICE.
+//
+// ⭐ THIS RETIRES A SILENT-DROP STUB (WorldLinkStubs.cpp:1374 -- a one-shot log that
+// dropped both buffers). It is the frame slot the whole place-on-track chain ends in.
+//
+// The console body: assert the buffers + the player index, lock, then
+//   if (paused)  assert the takedown queue is empty
+//   else         CrashPlayManager::Update, UpdateActiveCars, UpdateTailgateTimer,
+//                UpdateBoost, ProcessPlayerVehicleInput, ProcessTakedownEvents
+//   ProcessResetOnTrackResultQueue
+//   ⭐ mPlaceOnTrackManager.PrePhysicsUpdate(lpInput, lpOutput)
+//   the eight-slot AI-request sweep, unlock.
+//
+// REPRODUCED: the asserts, the locks, and the PlaceOnTrackManager call.
+// [FLAG PC bring-up] everything else is dropped, NOT paraphrased: every one of the nine
+// other calls reaches an un-homed manager interior (CrashPlayManager, BoostManager, the
+// takedown queues, the AI request interface).
+//
+// ⚠️ THE PLAYER-INDEX ASSERT (X360 :1726) IS THE CONSOLE'S OWN AND IT IS REACHABLE HERE,
+// which the console's own flow guarantees it is not. mePlayerActiveRaceCarIndex stays
+// E_ACTIVE_RACE_CAR_INDEX_INVALID until the junkyard reset action lands, and the world runs
+// pre-physics frames before that -- so a verbatim CGS_ASSERT would HALT the game (the PC
+// assert manager blocks until END) on EVERY frame of that window. It is raised ONCE, with
+// this note, rather than dropped: the drop stays visible in the log and the boot survives.
+// DELETE-WHEN the player car is attached before the world's first pre-physics frame.
+// ============================================================================
+void RaceCarEntityModule::PrePhysicsUpdate(
+        RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput,
+        BrnUpdateSet lUpdateSet )
+{
+    (void)lUpdateSet;
+
+    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );        // X360 :1724
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );      // X360 :1725
+
+    if( lpInput == 0 || lpOutput == 0 )
+    {
+        return;
+    }
+
+    // The console's :1726 assert, raised once -- see the banner.
+    if( static_cast<u32>( mePlayerActiveRaceCarIndex ) >= E_ACTIVE_RACE_CAR_INDEX_COUNT )
+    {
+        static bool sbReportedNoPlayerCar = false;
+        if( !sbReportedNoPlayerCar )
+        {
+            sbReportedNoPlayerCar = true;
+            if( CgsDev::Log::gpDebugPrint != 0 )
+                *CgsDev::Log::gpDebugPrint
+                    << "[FLAG PC bring-up] RaceCarEntityModule::PrePhysicsUpdate: "
+                       "( mePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && "
+                       "( mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) "
+                       "(X360 BrnRaceCarEntityModule.cpp:1726) -- raised once, not per frame\n";
+        }
+    }
+
+    lpInput->LockForRead();
+    lpOutput->LockForWrite();
+
+    // [FLAG PC bring-up] the paused / not-paused split and its nine calls -- see the banner.
+
+    mPlaceOnTrackManager.PrePhysicsUpdate( lpInput, lpOutput );
+
+    lpOutput->UnlockForWrite();
+    lpInput->UnlockForRead();
 }
 
 // ============================================================================

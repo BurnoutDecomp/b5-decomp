@@ -61,10 +61,14 @@
 #include "GameShared/GameClasses/Containers/CgsRingBuffer.h"      // CgsContainers::FixedRingBuffer<T,N>
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Graphics/CgsModel.h"             // CgsGraphics::Model::State
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"     // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"      // CgsSceneManager::VolumeInstanceId
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnDetachedPartRenderEvent.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // ERaceCarType (IsPlayer)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
+
+namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
 
 namespace BrnWorld
 {
@@ -113,15 +117,59 @@ public:
     // ("lpActiveRaceCar->IsWaitingForLoad()").
     bool IsWaitingForLoad() const { return muState == E_STATE_ATTACHED; }
 
-    // [FLAG PC bring-up] NOT an X360 setter. The console reaches E_STATE_ACTIVE only
-    // through RaceCarEntityModule::ResetActiveRaceCar @0x822F4880, which needs the vehicle
-    // physics interface. See PromoteAttachedCarToActiveBringUp in
-    // BrnRaceCarEntityModule.cpp for why this exists and exactly what it fakes.
-    // DELETE with that function.
-    void SetActiveBringUp() { muState = E_STATE_ACTIVE; }
+    // X360 inlined -- muState == E_STATE_WAITING, the state ActiveRaceCar::OnResourcesLoaded
+    // @0x822EB168 stores and the ONLY state RaceCarEntityModule::ResetActiveRaceCar
+    // @0x822F4880 will promote to E_STATE_ACTIVE (`else if (*(car + 1856) == 2)`).
+    bool IsWaitingForPlacement() const { return muState == E_STATE_WAITING; }
+
+    // ------------------------------------------------------------------------
+    // X360 0x822EB168  ActiveRaceCar::OnResourcesLoaded  -- the ATTACHED -> WAITING step.
+    // Called only by RaceCarEntityModule::OnRaceCarResourcesLoaded @0x822FEBF8.
+    // Vector arg v1 is the initial velocity (Hex-Rays drops it -- vector register).
+    // ------------------------------------------------------------------------
+    void OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
+                            const CgsResource::ResourceHandle& lrGraphicsModelHandle,
+                            const Vector3&                     lrInitialVelocity,
+                            u32                                luCarAssetAttribKey );
+
+    // ------------------------------------------------------------------------
+    // X360 0x822D3EC8  ActiveRaceCar::AddHandlingModel -- hands the freshly-active car to
+    // the physics vehicle manager. Only caller: ResetActiveRaceCar's WAITING arm.
+    // Signature recovered from the ASM (0x822D3EE4..0x822D4054), not the pseudocode:
+    // r4/r5/r6/r7/r8 + v1, with the velocity in a vector register that Hex-Rays drops.
+    // ------------------------------------------------------------------------
+    void AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                           u32                   luCarAssetAttribKey,
+                           const Matrix44Affine& lrInitialTransform,
+                           const Vector3&        lrInitialVelocity,
+                           bool                  lbResettingPhysicsState,
+                           u8                    lu8CarStrengthStat );
 
     // X360: returns mbToBePlacedOnTrack (byte this+0x7C4). DWARF BrnActiveRaceCar.h:853.
     bool ToBePlacedOnTrack() const;
+
+    // ------------------------------------------------------------------------
+    // X360 0x822BFB58  ActiveRaceCar::RequestPlaceOnTrack -- ask PlaceOnTrackManager to
+    // drop this car onto the track at (lPosition, lDirection) with lfSpeed of forward
+    // velocity. Latches the request; a second request while one is pending is IGNORED
+    // (`if (!mbToBePlacedOnTrack)` guards every store).
+    // Vector args v1/v2 are the position and the direction; fp1 is the speed.
+    // ------------------------------------------------------------------------
+    void RequestPlaceOnTrack( const Vector3& lPosition, const Vector3& lDirection,
+                              f32 lfSpeed );
+
+    // X360 inlined at PlaceOnTrackManager::PrePhysicsUpdate (BrnPlaceOnTrackManager.cpp:238,
+    // right before ResetActiveRaceCar): clears the pending request.
+    void ClearPlaceOnTrack() { mbToBePlacedOnTrack = false; }
+
+    // X360 inlined at RaceCarEntityModule::OnRaceCarResourcesLoaded @0x822FEBF8 -- its two
+    // trailing stores (`*(car + 1909) = 0` / `*(car + 1910) = 0`), both named here.
+    void SetComingInRange(bool lbOn)    { mbComingInRange = lbOn; }
+    void SetJoiningGameMode(bool lbOn)  { mbIsJoiningGameMode = lbOn; }
+
+    const Vector3& GetPlaceOnTrackPosition()  const { return mPlaceOnTrackPosition; }
+    const Vector3& GetPlaceOnTrackDirection() const { return mPlaceOnTrackDirection; }
+    f32            GetPlaceOnTrackSpeed()     const { return mfPlaceOnTrackSpeed; }
 
     // The render gate GenerateDispatchLists applies to every active slot:
     // `if (*(car + 1949) && !*(car + 1946))` == mbRenderThisFrame && !mbIsInCarSelectOnline.
@@ -136,6 +184,24 @@ public:
     // X360 inlined -- AttachActiveRaceCar @0x822F4DB0 copies the module's own
     // mbIsInGameMode into the slot (`stb r11, 0x777(r31)`) between Prepare and Attach.
     void SetInGameMode(bool lbInGameMode) { mbIsInGameMode = lbInGameMode; }
+
+    // ------------------------------------------------------------------------
+    // The four stores RaceCarEntityModule::ResetActiveRaceCar @0x822F4880 INLINES into
+    // this object on its WAITING->ACTIVE arm (asm 0x822F4E00..0x822F4E18):
+    //     *(car + 1856) = 3    muState = E_STATE_ACTIVE
+    //     *(car + 1921) = 1    mbAIToBeActivated
+    //     *(car + 1933) = 0    mbChangeCollisionState
+    //     *(car + 1935) = 0    mbChangeCullingGroup
+    // Expressed as one named setter rather than four pokes from another class; this is
+    // the ONLY writer of E_STATE_ACTIVE in the XEX and it is not a bring-up seam.
+    // ------------------------------------------------------------------------
+    void BecomeActiveForReset()
+    {
+        muState                 = E_STATE_ACTIVE;
+        mbAIToBeActivated       = true;
+        mbChangeCollisionState  = false;
+        mbChangeCullingGroup    = false;
+    }
 
     // ========================================================================
     // Per-frame state accessors bodied in BrnActiveRaceCar.cpp. These thin wrappers
@@ -457,7 +523,12 @@ private:
     // DWARF mHandlingBodyVolumeId / mBaseDeformationID -- CgsSceneManager::VolumeInstanceId
     // (8 bytes each; Attach writes the pair at +0xD0 as one 64-bit store, sets the entity
     // TYPE byte to 1 and then calls VolumeInstanceId::SetEntityIDEntityIndex).
-    u8 maPad00D0[16];                                    // +0x0D0 (208)  .. +0x0E0 (224)
+    // NAMED 2026-08-01 (drivable wave): AddHandlingModel @0x822D3EC8 reads the FIRST of the
+    // pair with a single 64-bit load (`ld r4, 0xD0(r31)`) and hands it to
+    // VehicleInputInterface::CreateRaceCar as lVolumeInstanceId, so it needs a name -- and a
+    // TYPE, which CgsVolumeInstanceId.h already homes (8 bytes, same as the console).
+    CgsSceneManager::VolumeInstanceId mHandlingBodyVolumeId;  // +0x0D0 (208)
+    CgsSceneManager::VolumeInstanceId mBaseDeformationID;     // +0x0D8 (216) .. +0x0E0 (224)
 
     // X360 +224 (0xE0): RaceCarState::Clear(this + 224) in Attach @0x822BEEE0.
     BrnPhysics::Vehicle::RaceCarState mPhysicsState;     // +0x0E0 (224)  1120 bytes
@@ -567,10 +638,13 @@ private:
     // X360 +0x7C4 (1988). DWARF mbToBePlacedOnTrack.
     bool mbToBePlacedOnTrack;                            // +0x7C4 (1988)
 
-    // DWARF BrnPhysics::Deformation::DeformationResetType (4-byte enum, own home not
-    // reconstructed) -- AddRaceCarToStartingGridOrFreeburnLobby writes the pair at
-    // +0x7C8/+0x7CC.
-    s32 meBaseDeformationType;                           // +0x7C8 (1992)
+    // DWARF BrnPhysics::Deformation::DeformationResetType. ⛔ THE OLD COMMENT HERE SAID
+    // "own home not reconstructed" AND IT WAS STALE: BrnDeformationEvents.h:17 has carried
+    // the enum for several waves, and this header already pulls it in transitively via
+    // BrnVehicleEvents.h. Typed 2026-08-01 (drivable wave) because AddHandlingModel hands
+    // this member straight to VehicleInputInterface::CreateRaceCar, which takes the enum.
+    // AddRaceCarToStartingGridOrFreeburnLobby writes the pair at +0x7C8/+0x7CC.
+    BrnPhysics::Deformation::DeformationResetType meBaseDeformationType;   // +0x7C8 (1992)
     f32 mfBaseDeformAmount;                              // +0x7CC (1996)
     s32 mCurrentCullingGroup;                            // +0x7D0 (2000)
 
@@ -587,8 +661,21 @@ private:
     // StreamedDeformationSpec>) and mGraphicsModelResourcePtr (ResourcePtr<
     // BrnVehicle::GraphicsSpec>) -- 32 bytes each, created by OnResourcesLoaded at
     // this+0x1C90 / this+0x1CB0, closing the class at the attested 0x1CD0 stride.
-    // Kept opaque: nothing this TU bodies touches them, and homing them would drag the
-    // two spec types into every consumer of this header.
-    u8 maPad1C90[64];                                    // +0x1C90 (7312) .. +0x1CD0 (7376)
+    //
+    // PARTIALLY NAMED 2026-08-01 (drivable wave). The two ResourcePtr WRAPPERS stay opaque
+    // -- homing them would drag both spec types into every consumer of this header AND give
+    // ActiveRaceCar two non-trivial ctors/dtors (BaseResourcePtr links itself into an
+    // intrusive alias list), which the module's 8-slot array has never had. What IS named is
+    // the ResourceHandle each wrapper stores at its own +0x14: AddHandlingModel reads exactly
+    // those two, with two 64-bit loads (`ld r7, 0x1CA4(r31)` / `ld r8, 0x1CC4(r31)` ==
+    // 0x1C90+0x14 and 0x1CB0+0x14), and hands them straight to
+    // VehicleInputInterface::CreateRaceCar. OnResourcesLoaded is what fills them.
+    // [FLAG] the alias-list binding half of BaseResourcePtr::CreateFromHandle (the resource
+    // MEMORY pointer + Propogate) is not reproduced -- see OnResourcesLoaded's banner.
+    u8 maPad1C90a[20];                                   // +0x1C90 (7312) .. +0x1CA4 (7332)
+    CgsResource::ResourceHandle mDeformationModelHandle; // +0x1CA4 (7332)
+    u8 maPad1CAC[24];                                    // +0x1CAC (7340) .. +0x1CC4 (7364)
+    CgsResource::ResourceHandle mGraphicsModelHandle;    // +0x1CC4 (7364)
+    u8 maPad1CCC[12];                                    // +0x1CCC (7372) .. +0x1CD0 (7376)
 };
 }

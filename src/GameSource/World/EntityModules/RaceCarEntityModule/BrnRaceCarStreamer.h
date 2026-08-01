@@ -147,6 +147,46 @@ public:
         return maWheelGraphicsResources[liActiveRaceCar];
     }
 
+    // [FLAG PC bring-up] NOT an X360 predicate (drivable wave 2026-08-01). THE ONE GATE
+    // RELAXATION IN THE WHOLE ATTACHED -> WAITING -> ACTIVE CHAIN, and it is a DATA gap,
+    // not a code fiction:
+    //
+    //   the console's IsRaceCarLoaded() demands all FIVE resource bits;
+    //   MEASURED on this build (BrnGame.log "STRM: Flags are 0x..." + the three
+    //   "STRM: <kind> loaded: 0" lines) a car gets exactly THREE -- LOADEDGFX,
+    //   LOADEDPHYSICS and LOADEDATTRS. LOADEDWHEELGFX never arrives because the wheel
+    //   asset's GameData `LoadWheel` handler (request id 36) is deferred, and LOADEDAUDIO
+    //   never arrives because the audio streamer is absent.
+    //
+    // Neither missing bit is READ by anything on the promote path: ActiveRaceCar::
+    // OnResourcesLoaded takes the physics + graphics handles only, and AddHandlingModel
+    // forwards those same two. Blocking on them would keep the console's own state machine
+    // permanently at E_STATE_ATTACHED for a car whose body is fully loaded and drawing.
+    //
+    // Used at exactly TWO call sites, both flagged: UpdateStreaming's promote predicate and
+    // ResetActiveRaceCar's IsRaceCarLoaded assert. The console predicate itself is NOT
+    // touched.
+    // DELETE-WHEN the wheel handler and the audio streamer land.
+    bool IsRaceCarLoadedForStateMachineBringUp( s32 liActiveRaceCar ) const
+    {
+        const u8 lxRequired = E_LOADFLAG_LOADEDGFX | E_LOADFLAG_LOADEDPHYSICS
+                            | E_LOADFLAG_LOADEDATTRS;
+        return ( maxLoadFlags[liActiveRaceCar] & lxRequired ) == lxRequired;
+    }
+
+    // The two resource HANDLES ActiveRaceCar::OnResourcesLoaded binds (the console reads
+    // them off the same ResourcePtrs the getters below return; it never goes through
+    // IsRaceCarLoaded to get at them -- OnRaceCarResourcesLoaded already knows the car is
+    // loaded). Kept assert-free for the same reason the BringUp trio above is.
+    CgsResource::ResourceHandle GetPhysicsResourceHandle( s32 liActiveRaceCar ) const
+    {
+        return maPhysicsResources[liActiveRaceCar].GetResourceHandle();
+    }
+    CgsResource::ResourceHandle GetGraphicsResourceHandle( s32 liActiveRaceCar ) const
+    {
+        return maGraphicsResources[liActiveRaceCar].GetResourceHandle();
+    }
+
     const GraphicsResourcePtr&      GetGraphicsResource( s32 liActiveRaceCar ) const;
     const PhysicsResourcePtr&       GetPhysicsResource( s32 liActiveRaceCar ) const;
     const WheelGraphicsResourcePtr& GetWheelGraphicsResource( s32 liActiveRaceCar ) const;

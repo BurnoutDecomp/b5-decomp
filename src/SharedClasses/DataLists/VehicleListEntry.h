@@ -128,8 +128,19 @@ struct VehicleListEntry
     // VehicleListResourceType::FixUp calls Destruct on this member).
     Attribute::Key GetAttribCollectionKeyHash() const;
 
+    // ADDITIVE GROW (drivable wave 2026-08-01). The car's STRENGTH RATING byte at +0x9B.
+    // X360-attested: RaceCarEntityModule::ResetActiveRaceCar @0x822F4880 does
+    // `lbz r26, 0x9B(lpVehicleListEntry)` and forwards it to ActiveRaceCar::AddHandlingModel,
+    // which passes it to VehicleInputInterface::CreateRaceCar as liCarStrengthStat. The
+    // burnout.wiki Vehicle-List page independently names +0x9B "Strength Rating" -- it is the
+    // last byte of the 12-byte mGamePlayData block at +0x90 (GamePlayData +0xB). NAME-ONLY
+    // adoption per the wiki rule; the width (u8) is the one the asm loads.
+    u8 GetStrengthStat() const { return mu8StrengthRating; }
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
-    u8 maPad0[160];                                                       // +0x00
+    u8 maPad0[0x9B];                                                      // +0x00
+    u8 mu8StrengthRating;                                                 // +0x9B
+    u8 maPad9C[0xA0 - 0x9C];                                              // +0x9C (padding)
     CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;        // +0xA0
     // +0xA8 / +0xC0: the first and fourth members of the 0x40-byte mAudioData block
     // (BrnResource::VehicleListEntryAudioData). Both are CgsIDs that decode to an engine
