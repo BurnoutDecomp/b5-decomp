@@ -9,6 +9,14 @@
                                                               //   real one is a `struct`, which mangles
                                                               //   differently, so this include is what makes
                                                               //   the two calls below link.
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"
+                                                              // BrnDirector::DebugPrinter -- THE home
+                                                              //   (2026-08-01). Same story as ICEAuthor
+                                                              //   above: this file's own DebugPrinter slice
+                                                              //   declared ActualPrint as a STATIC 3-arg
+                                                              //   function, which is a different mangled
+                                                              //   symbol from the real non-static 2-arg
+                                                              //   member. See the RETIRED note below.
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.cpp
@@ -91,14 +99,22 @@ namespace Camera
 
 } // namespace Camera
 
-// The on-screen debug text printer the Update body writes its visibility result through.
-// ⚠️ CLASS KEY: `struct`, not `class` -- the home (DirectorModule/BrnDirectorModuleDebugPrinter.h)
-//   and every other forward declaration in the tree spell it `struct`, and MSVC mangles the two
-//   differently, so a `class` here would silently mint a DIFFERENT symbol and only fail at link.
-struct DebugPrinter
-{
-    static void ActualPrint(void* lpSink, const char* lpcText, s32 liColour);
-};
+// ============================================================================
+// RETIRED (2026-08-01): the private
+//     struct DebugPrinter { static void ActualPrint(void* lpSink, const char*, s32); };
+// slice that used to sit here is GONE, and the two Update call sites now go through the real
+// home (DirectorModule/BrnDirectorModuleDebugPrinter.h, included above).
+//
+// ⚠️ IT WAS AN ARITY + STATICNESS FORK, the species that only ever surfaces as LNK2019.
+// The real @0x821F71D8 is a NON-static, PRIVATE member `void DebugPrinter::ActualPrint(const
+// char*, CgsDev::RGBA)`; the console's `r3` at those two call sites is the printer itself,
+// not a first argument. Spelling it `static ActualPrint(void*, const char*, s32)` minted a
+// completely different mangled symbol that no TU in the tree could ever define -- it would
+// have stayed unresolved for ever while looking, in the source, like a call that just needed
+// its home mounted. The faithful spelling is the PUBLIC forwarder
+// `DebugPrinter::Print(text, colour)`, which the console inlines to exactly that direct
+// ActualPrint call (the forwarder is now bodied in the home header for that reason).
+// ============================================================================
 
 } // namespace BrnDirector
 
@@ -518,11 +534,15 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         SetCantSwitchFromMeNow(lrCamera, 29);
 
     // --- Debug visibility readout ---
-    void* lpDebugSink = lrSharedInfo.GetDebugSink();
+    // The console's `r3` here is the shared info's own DebugPrinter (info +1488), which the
+    // committed BehaviourSharedInfo already exposes by its real type -- GetDebugPrinter(), not
+    // the untyped GetDebugSink() the retired fork used to pair with its fabricated static
+    // ActualPrint. See the RETIRED note at the top of this file.
+    BrnDirector::DebugPrinter* lpDebugPrinter = lrSharedInfo.GetDebugPrinter();
     if (!IsLookingAtTarget(lrCamera, lrSharedInfo.GetEyeTarget(), lrSharedInfo.GetLookTarget()))
-        DebugPrinter::ActualPrint(lpDebugSink, "Can't see player", static_cast<s32>(0xFFF0F0FF));
+        lpDebugPrinter->Print("Can't see player", static_cast<CgsDev::RGBA>(0xFFF0F0FF));
     else
-        DebugPrinter::ActualPrint(lpDebugSink, "Can see player", static_cast<s32>(0xFFF0FFF0));
+        lpDebugPrinter->Print("Can see player", static_cast<CgsDev::RGBA>(0xFFF0FFF0));
 
     return true;
 }
