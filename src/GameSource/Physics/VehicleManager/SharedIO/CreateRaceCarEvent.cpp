@@ -18,8 +18,17 @@ namespace Vehicle
     //   lvx128/stvx128 @+0x10,+0x20,+0x30,+0x40  <- four 16-byte VMX rows (mInitialTransform)
     //   lvx128/stvx128 @+0x50,+0x60              <- two 16-byte vectors (mInitialVelocity,
     //                                               mAngularVelocity)
-    //   ld/std @+0x70                            <- 8-byte (mCarAssetAttribKey + mModelHandle head)
-    //   lwz/stw @+0x78,+0x7C,+0x80,+0x84,+0x88   <- words (rest of the handles + meRaceCarType)
+    //   ld/std @+0x70                            <- mCarAssetAttribKey, ALL EIGHT BYTES
+    //                                               (CORRECTED 2026-08-01: this line used to
+    //                                                read "mCarAssetAttribKey + mModelHandle
+    //                                                head", i.e. a 4-byte key. It is not --
+    //                                                ProcessCreateEvents @0x82616770 `ld`s the
+    //                                                same +0x70 and hands the whole doubleword
+    //                                                to Attrib::FindCollection as the collection
+    //                                                key. See BrnVehicleEvents.h's banner.)
+    //   lwz/stw @+0x78,+0x7C                     <- mModelHandle     (two console pointers)
+    //   lwz/stw @+0x80,+0x84                     <- mGraphicsHandle  (two console pointers)
+    //   lwz/stw @+0x88                           <- meRaceCarType
     //   lfs/stfs @+0x8C                          <- mfDeformAmount (copied as a float lane)
     //   lwz/stw @+0x90                           <- meBaseDeformationType
     //   lbz/stb @+0x94                           <- mbDisablePhysicsStateReset

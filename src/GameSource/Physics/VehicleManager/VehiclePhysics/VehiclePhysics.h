@@ -294,8 +294,12 @@ namespace Vehicle
         //       members. -----
 
         // @0x826412C0: the base per-frame tick (RaceCarPhysics::Update chains here).
+        // Carries the same two pass-through vector arguments its caller restores into v1/v2
+        // before chaining (`vmr128 v2,v126 ; vmr128 v1,v127` @0x8264185C in RaceCarPhysics::Update);
+        // lrTimeStep.x is the frame dt -- see RaceCarPhysics.h for the recovery.
         void Update(s32 a2, const BrnPlayerDriverControls* lpControls, bool lbApplyAftertouch,
-                    s32 a5, s32 a6, s32 a7);
+                    s32 a5, s32 a6, s32 a7,
+                    Vector3 lrPassThroughV1, Vector3 lrTimeStep);
 
         // ----- ADDITIVE GROW (C11 group): the crash master-gate accessors the TrafficPhysics layer
         //       consults. Inherited by SimpleVehiclePhysics in the console layout (mbIsCrashing @

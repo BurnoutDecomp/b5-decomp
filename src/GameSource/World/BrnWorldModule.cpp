@@ -1325,23 +1325,33 @@ WorldModule::HandleGameActions(
             {
                 CGS_ASSERT( meLocalPlayerActiveRaceCarIndex != -1,
                     "Unable to set the player car under AI control, as we don't know who they are yet" );
-                // ⛔ THE BAIL IS NEW (2026-08-01, junkyard-fire wave) AND IT PREVENTS AN
-                // OUT-OF-BOUNDS WRITE. On a miss the index is -1 and the console's own next
-                // instruction indexes the array with it -- `maeCarControls[-1]` lands on
-                // mfLocalPlayerActiveRaceCarSpeed, the member immediately before the array, and
-                // silently overwrites it with the payload word. The console gets away with it
-                // because its index is never -1 by the time an action 7 arrives; this build's is
-                // ALWAYS -1, because the only producer of meLocalPlayerActiveRaceCarIndex is
-                // WorldModule::BridgeRaceCarModuleToWorldModule_PreScene (X360: it copies the
-                // race-car module output's `+2582` player index into +6167272) and that bridge is
-                // not reconstructed -- Construct and the Prepare tail seed -1 and nothing ever
-                // writes anything else. This is the tree's standard "the X360 falls through into
-                // a bad access; bail instead of faulting" shape, and the assert above still fires
-                // so the missing producer stays visible.
-                // ⚠️ The assert IS reachable on this build: CarSelectManager::
-                // ReallyEnterJunkyardAtStartOfGame posts action 7 (the 48-byte junkyard
-                // drive-thru) the moment the start-of-game junkyard entry completes.
-                // DELETE-WHEN BridgeRaceCarModuleToWorldModule_PreScene lands.
+                // ⛔ THE BAIL PREVENTS AN OUT-OF-BOUNDS WRITE. On a miss the index is -1 and the
+                // console's own next instruction indexes the array with it -- `maeCarControls[-1]`
+                // lands on mfLocalPlayerActiveRaceCarSpeed, the member immediately before the
+                // array, and silently overwrites it with the payload word. The console has no
+                // bounds check here either; its index simply is not -1 by the time an action 7
+                // arrives.
+                //
+                // ⚠️ BANNER CORRECTED 2026-08-01 (physics wave 1) -- IT WAS STALE AND IT MISLED.
+                // This block used to say the index is "ALWAYS -1" because
+                // WorldModule::BridgeRaceCarModuleToWorldModule_PreScene "is not reconstructed".
+                // ⛔ THAT BRIDGE HAS LANDED: it is real, it is MOUNTED
+                // (WorldBridgeRaceCarToWorldModule.cpp, build_game_exe.bat line 137), and the
+                // car-select wave measured the player active-race-car index published as 0.
+                // KEEP THE GUARD ANYWAY: the assert still fires exactly once per boot, on the
+                // ONE-FRAME TRANSIENT at the slot-0 -> slot-1 car swap, before the bridge has
+                // republished the new slot. (Measured again this wave: exactly one
+                // "[ASSERT 1] Unable to set the player car under AI control ..." per boot.)
+                //
+                // ⛔ AND THE INDEX EXPRESSION BELOW IS NOT A TRANSCRIPTION BUG -- do not "fix" it.
+                // X360 HandleGameActions @0x827C44D8, jump-table case 0 (== action 7):
+                //     lis r11,0x17 ; ori r22,r11,0x86BC     ; r22 = 0x1786BC
+                //     lwz r11, 0(r31)                       ; meLocalPlayerActiveRaceCarIndex
+                //     add r11, r11, r22 ; slwi r11, r11, 2  ; (idx + 0x1786BC) * 4
+                //     stwx r10, r11, r26                    ; *(this + 4*idx + 0x5E1AF0) = payload[0]
+                // and 0x1786BC * 4 == 0x5E1AF0 == &maeCarControls exactly.
+                // DELETE-WHEN: nothing. The guard is now permanent PC-side hardening of a
+                // console behaviour, not a placeholder.
                 if ( static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) < 0 ||
                      static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) >= 8 )
                 {

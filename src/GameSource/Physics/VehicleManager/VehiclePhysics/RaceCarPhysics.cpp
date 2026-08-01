@@ -167,9 +167,17 @@ namespace Vehicle
     //   physics tick dt.
     // ---------------------------------------------------------------------------------------
     void RaceCarPhysics::Update(s32 a2, const BrnPlayerDriverControls* lpControls,
-                                bool lbApplyAftertouch, s32 a5, s32 a6, s32 a7)
+                                bool lbApplyAftertouch, s32 a5, s32 a6, s32 a7,
+                                Vector3 lrPassThroughV1, Vector3 lrTimeStep)
     {
-        static const f32 KF_DT = 0.0f;   // FLAG: frame dt (the VMX lane the asm splats; un-homed here)
+        // ⭐⭐ THE ZERO TIMESTEP IS GONE (2026-08-01, physics wave 1). This used to read
+        //     static const f32 KF_DT = 0.0f;   // FLAG: frame dt ... un-homed here
+        // -- a committed zero that made EVERY timer in this function a no-op, and a `0.0f`
+        // "placeholder" is never inert: it means *immediately* / *never*. The dt is lane 0 of
+        // the second incoming vector register; the asm is quoted in RaceCarPhysics.h above the
+        // declaration (`stvx128 v126 ; lfs f13 ; fadds` on mfSlamSteerEnvelope, at the top of
+        // the engine-only branch). NOT un-homed -- just never read off the asm.
+        const f32 lfDT = lrTimeStep.x;
 
         const f32 lfSteer = lpControls->GetSteer();
 
@@ -177,7 +185,7 @@ namespace Vehicle
         {
             // Engine-only / airborne envelope path: integrate the slam-steer envelope, optionally
             // shrink it toward a target (the unk_82FB8880 reciprocal blend), then chain Update.
-            mfSlamSteerEnvelope += KF_DT;   // this->float1430 += dt
+            mfSlamSteerEnvelope += lfDT;   // this->float1430 += dt (the asm's `fadds f0,f0,v2.x`)
             // (the unk_82FB8880 Newton-reciprocal blend that scales v127 is an un-homed rodata
             //  shaping term -- elided as faithful-but-inert; it does not change the member written.)
             mfSlamSteering = 0.0f;          // this->float1404 = 0.0
@@ -214,7 +222,10 @@ namespace Vehicle
 
         ApplyPropCollisionImpulseSum();
 
-        VehiclePhysics::Update(a2, lpControls, lbApplyAftertouch, a5, a6, a7);
+        // The asm restores BOTH vectors verbatim before this call (`vmr128 v2,v126 ;
+        // vmr128 v1,v127` @0x8264185C), i.e. they are pass-through arguments.
+        VehiclePhysics::Update(a2, lpControls, lbApplyAftertouch, a5, a6, a7,
+                               lrPassThroughV1, lrTimeStep);
 
         // Engine-only path follow-up: re-run steering with the car-type byte + steer (asm gap0[112]).
         if (mbUsingAftertouch)
@@ -222,10 +233,10 @@ namespace Vehicle
 
         // Decay the uncapped-speed window timer while it is positive.
         if (mbPlayerCarInShowtime && MS.mfUncappedSpeedTimer > 0.0f)
-            MS.mfUncappedSpeedTimer -= KF_DT;
+            MS.mfUncappedSpeedTimer -= lfDT;
 
         // Integrate the short slam-steer envelope timer (the asm's gap13F1[15] += dt).
-        mfSlamSteerEnvelope += KF_DT;
+        mfSlamSteerEnvelope += lfDT;
 
         // Latch aftertouch-active for this frame: needs the request flag (a5), an aftertouch-enable
         // input ( > 0 ) and the virtual "can use aftertouch" query (vtbl+20).

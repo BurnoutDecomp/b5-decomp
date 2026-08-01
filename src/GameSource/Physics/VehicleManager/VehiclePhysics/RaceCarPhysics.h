@@ -106,8 +106,24 @@ namespace Vehicle
         // impulses via ApplyPropCollisionImpulseSum, chains to VehiclePhysics::Update (+ a follow-up
         // UpdateSteering on the engine-only path), then decays the showtime/uncapped-speed timers in
         // the singleton and latches mbUsingAftertouch. lpControls is the driver-control block.
+        // ⭐ THE TIMESTEP IS lrTimeStep.x -- RECOVERED FROM THE ASM 2026-08-01 (physics wave 1).
+        // The entry prologue saves BOTH incoming vector registers (`vmr128 v126, v2` and
+        // `vmr128 v127, v1` at 0x8264160C/0x82641614) and the very first thing the engine-only
+        // branch does is spill v2 and read LANE 0 as a scalar float:
+        //     addi r11, r1, var_80 ; stvx128 v126, r0, r11
+        //     lfs  f13, var_80(r1)              ; == v2.x
+        //     lfs  f0, 0x1430(r31) ; fadds f0, f0, f13 ; stfs f0, 0x1430(r31)
+        // i.e. `mfSlamSteerEnvelope += v2.x`. Both vectors are restored verbatim
+        // (`vmr128 v2,v126 ; vmr128 v1,v127` @0x8264185C) immediately before the chained
+        // VehiclePhysics::Update, so they are pass-through arguments, not scratch.
+        // ⚠️ FLAG: only the REGISTER assignment is recovered, not the console's declaration
+        // POSITION for the two vector parameters -- vector args do not consume GPR slots on the
+        // X360 ABI, so their place in the C++ parameter list cannot be read off the asm. They are
+        // appended here. (Hex-Rays renders this function as 7 all-integer arguments and drops
+        // both vectors outright -- the twelfth instance of that failure in this project.)
         void Update(s32 a2, const BrnPlayerDriverControls* lpControls, bool lbApplyAftertouch,
-                    s32 a5, s32 a6, s32 a7);
+                    s32 a5, s32 a6, s32 a7,
+                    Vector3 lrPassThroughV1, Vector3 lrTimeStep);
 
         // @0x825FFBD8: the showtime bounce-boost state machine, run each frame from UpdateAftertouch
         // while in showtime. Decides if the car is airborne/slow enough to bounce, runs the latch

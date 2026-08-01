@@ -20,7 +20,12 @@ namespace CgsAttribSys
         void FixUp();
 
         // @0x82805C20 (this TU, DWARF cpp:79) -- decimal-print the GUID and hash it.
-        Attribute::Key GetHashKey() const;
+        // RETURNS 64 BITS (widened 2026-08-01, physics wave 1): the X360 body tail-calls
+        // Attrib::StringToKey and returns r3 whole, and every consumer of the value stores it
+        // with `std` (see the .cpp banner). It is the collection key
+        // VehicleManager::ProcessCreateEvents hands to Attrib::FindCollection, which hashes
+        // the full doubleword -- a 32-bit key can never match.
+        u64 GetHashKey() const;
 
     private:
         s64 miAssetGuid;   // +0x00 (DWARF h:94; GetHashKey `ld r3, 0(this)`)

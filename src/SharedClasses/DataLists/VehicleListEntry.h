@@ -126,7 +126,8 @@ struct VehicleListEntry
     // FLAG: PC-only accessor, name provisional. Retire it when the +0xA0 member is retyped to
     // AttribSysCollectionKey (blocked today: that type's Destruct() is declaration-only, and
     // VehicleListResourceType::FixUp calls Destruct on this member).
-    Attribute::Key GetAttribCollectionKeyHash() const;
+    // WIDENED to 64 bits 2026-08-01 (physics wave 1) -- see CgsAttribSysCollectionKey.cpp.
+    u64 GetAttribCollectionKeyHash() const;
 
     // ADDITIVE GROW (drivable wave 2026-08-01). The car's STRENGTH RATING byte at +0x9B.
     // X360-attested: RaceCarEntityModule::ResetActiveRaceCar @0x822F4880 does

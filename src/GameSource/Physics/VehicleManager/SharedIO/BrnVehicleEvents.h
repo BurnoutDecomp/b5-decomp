@@ -55,6 +55,47 @@ namespace Vehicle
     // be a COMPLETE, default-constructible, copyable type. Layout/order/types are verbatim
     // from the DWARF (BrnVehicleEvents.h:144); the reconstructed member offsets sum to
     // sizeof == 1120, matching the X360 `memset(this, 0, 1120)` in Clear(). 16-byte aligned.
+    //
+    // ⭐⭐ THE "+4 DRIFT" IS SETTLED (2026-08-01, physics wave 1) -- and it was
+    // mCarAssetAttribKey, which is EIGHT bytes, not four. Two earlier waves bounded the drift
+    // without locating it (GameBridgeWorldToX.cpp's banner narrowed it to "between mHalfExtent
+    // @848 and mEntityId @964"); the producer settles it outright.
+    // BrnPhysics::Vehicle::VehicleOutputInterface::UpdateRaceCarState @0x825EC808 is the only
+    // function that writes this struct, and it writes the key with a DOUBLEWORD store:
+    //     lwz r11, 0x720(r30)      ; the physics body's mpAttribs
+    //     ld  r11, 0x358(r11)      ; 8-byte load
+    //     std r11, 0x3C0(r31)      ; 8-byte store at state + 960
+    // Every one of the FOURTEEN scalar fields after it then lands 4 higher than the old model,
+    // and each one corroborates the shift semantically (r31 == &maRaceCarStates[idx], r30 ==
+    // the RaceCarPhysics):
+    //     0x3CC=972  <- physics+0x6C0            (VehiclePhysics::mfSpeedMPH)     -> mfSpeedMPH
+    //     0x3D0=976  <- mpAttribs+0x70  lane 2                                    -> mfMaxSpeedMPH
+    //     0x3D4=980  <- mpAttribs+0x290 lane 1                                    -> mfMaxBoostSpeedMPH
+    //     0x3D8=984  <- physics+0xFB0   lane 1                                    -> mfRPM
+    //     0x3DC=988  <- mpAttribs[(gear+0x1D)*16] lane 2 (per-GEAR upshift rpm)   -> mfUpShiftRPM
+    //     0x3E0=992  <- physics+0xF10   lane 3                                    -> mfDownShiftRPM
+    //     0x3E4..0x3F8 = 996..1016 <- mpAttribs+0x1D0/0x1E0/0x1F0/0x200/0x210/0x220 lane 0
+    //                                  (SIX consecutive gear ratios)              -> mafGearRatios[6]
+    //     0x3FC=1020 <- physics+0x1000 lane 3 with the 0x80000000 sign bit cleared by `vandc`
+    //                                  (an ABSOLUTE value of DriftScale)          -> mfAbsDriftScale
+    //     0x400=1024 <- physics+0x1010 lane 2 (the header's "TimeDrifting" lane)  -> mfTimeDrifting
+    //     0x408/0x40C/0x410 = 1032/1036/1040 <- driverControls+4/+8/+0xC          -> mfGas/Brake/HandBrake
+    //     0x414=1044 <- the vtable slot-0 call's result (GetSteeringAngle)        -> mfSteering
+    //     0x418=1048 <- physics+0x1040 lane 1 ("SideForceMag_TimeBoosting" .y)    -> mfTimeBoosting
+    //     0x434=1076 <- physics+0xEF0 lane 1, else 0 when not crashing            -> mfTimeCrashing
+    //     0x43C=1084 <- physics+0x13E0 (mi8SlammingRaceCarId) sign-extended        -> mi8LastAttackersRaceCarIndex
+    //     0x444=1092 <- physics+0xFC0 (the same word used as the GEAR index above) -> mi8Gear
+    //     0x44A/0x44B/0x44D = 1098/1099/1101 <- physics+0x710/+0x711/+0x712       -> mbCrashing/mbIsFatalyCrashing/mbStartedDeforming
+    //     0x44C=1100 <- (physics+0x1436 == 0)                                     -> mbIsDriveable
+    //     0x458=1112 <- driverControls+0xD0                                       -> meDriverType
+    // ⇒ the member is spelled u64 here, NOT Attribute::Key. This tree typedefs
+    // ::Attribute::Key to u32 (AttributeKey.h) and CgsAttribSysCollectionKey.cpp's own FLAG
+    // says the honest width is 64 but declined to widen because "Attribute::Key is ALSO the
+    // type of 4-byte serialised event payload fields (BrnVehicleEvents.h at @960 ...)".
+    // That reason is now disproved for THIS field and for both create events below, so they
+    // adopt u64 -- the same escape BrnRaceCarAIInterfaces.h:143 already took for
+    // AttachAIControlEvent::mCarAssetAttribKey. The typedef itself is left alone (the
+    // 4-byte serialised claim is untested for BrnDirectorEvents.h / BrnMessageData.h).
     struct alignas(16) RaceCarState
     {
         WheelLite                   maWheels[4];                     // @0
@@ -67,50 +108,50 @@ namespace Vehicle
         Vector3                     mComOffset;                      // @864
         VehiclePhysics::SlamEffect  mSlamEffect;                     // @880
         VehiclePhysics::ShuntEffect mShuntEffect;                    // @928
-        Attribute::Key              mCarAssetAttribKey;              // @960
-        EntityId                    mEntityId;                       // @964
-        f32                         mfSpeedMPH;                      // @968
-        f32                         mfMaxSpeedMPH;                   // @972
-        f32                         mfMaxBoostSpeedMPH;              // @976
-        f32                         mfRPM;                           // @980
-        f32                         mfUpShiftRPM;                    // @984
-        f32                         mfDownShiftRPM;                  // @988
-        f32                         mafGearRatios[6];                // @992
-        f32                         mfAbsDriftScale;                 // @1016
-        f32                         mfTimeDrifting;                  // @1020
-        f32                         mfTimeInAir;                     // @1024
-        f32                         mfGas;                           // @1028
-        f32                         mfBrake;                         // @1032
-        f32                         mfHandBrake;                     // @1036
-        f32                         mfSteering;                      // @1040
-        f32                         mfTimeBoosting;                  // @1044
-        f32                         mfInProgressBarrelRollAngle;     // @1048
-        f32                         mfInProgressAirSpinAngle;        // @1052
-        f32                         mfInProgressHandbreakTurnAngle;  // @1056
-        f32                         mfInProgressDriftTime;           // @1060
-        f32                         mfInProgressDriftDistance;       // @1064
-        f32                         mfTimeSinceLastRaceCarContact;   // @1068
-        f32                         mfTimeCrashing;                  // @1072
-        u32                         muStuntActionInProgress;         // @1076
-        s32                         mi8LastAttackersRaceCarIndex;    // @1080 (int32 in DWARF)
-        s32                         miRaceCarID;                     // @1084
-        s8                          mi8Gear;                         // @1088
-        s8                          mi8LastContactedRaceCar;         // @1089
-        bool                        mabWheelExists[4];               // @1090
-        bool                        mbCrashing;                      // @1094
-        bool                        mbIsFatalyCrashing;              // @1095
-        bool                        mbIsDriveable;                   // @1096
-        bool                        mbStartedDeforming;              // @1097
-        bool                        mbResetCarTransform;             // @1098
-        bool                        mbJustBeenSlammed;               // @1099
-        bool                        mbIsFrontRayOccluded;            // @1100
-        bool                        mbIsWedgedInWorld;               // @1101
-        bool                        mbIsHidden;                      // @1102
-        bool                        mbContactingWall;                // @1103
-        bool                        mbForceReset;                    // @1104
-        bool                        mbDeformedThisFrame;             // @1105
-        bool                        mbFullyDrivableFromCrash;        // @1106
-        E_DRIVER_TYPE               meDriverType;                    // @1108
+        u64                         mCarAssetAttribKey;              // @960 (8 bytes -- see banner)
+        EntityId                    mEntityId;                       // @968
+        f32                         mfSpeedMPH;                      // @972
+        f32                         mfMaxSpeedMPH;                   // @976
+        f32                         mfMaxBoostSpeedMPH;              // @980
+        f32                         mfRPM;                           // @984
+        f32                         mfUpShiftRPM;                    // @988
+        f32                         mfDownShiftRPM;                  // @992
+        f32                         mafGearRatios[6];                // @996
+        f32                         mfAbsDriftScale;                 // @1020
+        f32                         mfTimeDrifting;                  // @1024
+        f32                         mfTimeInAir;                     // @1028
+        f32                         mfGas;                           // @1032
+        f32                         mfBrake;                         // @1036
+        f32                         mfHandBrake;                     // @1040
+        f32                         mfSteering;                      // @1044
+        f32                         mfTimeBoosting;                  // @1048
+        f32                         mfInProgressBarrelRollAngle;     // @1052
+        f32                         mfInProgressAirSpinAngle;        // @1056
+        f32                         mfInProgressHandbreakTurnAngle;  // @1060
+        f32                         mfInProgressDriftTime;           // @1064
+        f32                         mfInProgressDriftDistance;       // @1068
+        f32                         mfTimeSinceLastRaceCarContact;   // @1072
+        f32                         mfTimeCrashing;                  // @1076
+        u32                         muStuntActionInProgress;         // @1080
+        s32                         mi8LastAttackersRaceCarIndex;    // @1084 (int32 in DWARF)
+        s32                         miRaceCarID;                     // @1088
+        s8                          mi8Gear;                         // @1092
+        s8                          mi8LastContactedRaceCar;         // @1093
+        bool                        mabWheelExists[4];               // @1094
+        bool                        mbCrashing;                      // @1098
+        bool                        mbIsFatalyCrashing;              // @1099
+        bool                        mbIsDriveable;                   // @1100
+        bool                        mbStartedDeforming;              // @1101
+        bool                        mbResetCarTransform;             // @1102
+        bool                        mbJustBeenSlammed;               // @1103
+        bool                        mbIsFrontRayOccluded;            // @1104
+        bool                        mbIsWedgedInWorld;               // @1105
+        bool                        mbIsHidden;                      // @1106
+        bool                        mbContactingWall;                // @1107
+        bool                        mbForceReset;                    // @1108
+        bool                        mbDeformedThisFrame;             // @1109
+        bool                        mbFullyDrivableFromCrash;        // @1110
+        E_DRIVER_TYPE               meDriverType;                    // @1112
 
         // The array `RaceCarState maRaceCarStates[8]` is default-constructed, but declaring
         // a copy ctor below would suppress the implicit default ctor -- so provide one. The
@@ -186,7 +227,12 @@ namespace Vehicle
         Matrix44Affine     mInitialTransform;
         Vector3            mInitialVelocity;
         Vector3            mAngularVelocity;
-        Attribute::Key     mCarAssetAttribKey;
+        // 8 BYTES (X360 event +0x70). operator= @0x825B7AE8 copies it with a single
+        // `ld r11,0x70(r4) / std r11,0x70(r3)` pair and then copies mModelHandle as TWO
+        // words (+0x78/+0x7C) before meTrafficType @0x80 / mbIsCab @0x84 / mCgsID @0x88
+        // (`ld`). See RaceCarState's banner for why this is u64 and not Attribute::Key.
+        // (The file's old "@112 / @120" annotation was derived from a 4-byte key and is wrong.)
+        u64                mCarAssetAttribKey;
         ResourceHandle     mModelHandle;
         ETrafficType       meTrafficType;
         bool               mbIsCab;
@@ -210,7 +256,24 @@ namespace Vehicle
         Matrix44Affine         mInitialTransform;
         Vector3                mInitialVelocity;
         Vector3                mAngularVelocity;
-        Attribute::Key         mCarAssetAttribKey;
+        // ⭐ 8 BYTES (X360 event +0x70), and this one is LOAD-BEARING TODAY. The event is
+        // already posted every boot (ActiveRaceCar::AddHandlingModel ->
+        // VehicleInputInterface::CreateRaceCar @0x822CC1E8) and its consumer,
+        // VehicleManager::ProcessCreateEvents @0x82616770, does:
+        //     ld  r11, 0x70(r3) ; std r11, <stack>        ; the key, 8 bytes
+        //     ...
+        //     lis/ori/insrdi r3 = 0x52B81656F3ADF675      ; == hash64("burnoutcarasset")
+        //     ld  r4, <stack>                             ; the SAME 8 bytes
+        //     bl  Attrib::FindCollection                  ; (classKey, collectionKey)
+        // FindCollection hashes the WHOLE doubleword, so a 32-bit key MISSES -- the identical
+        // defect the class key and Attrib::StringToKey each had (see BrnDirectorResourceManager.h).
+        // Its producer chain is now u64 end to end: AttribSysCollectionKey::GetHashKey
+        // @0x82805C20 -> VehicleListEntry::GetAttribCollectionKeyHash -> AddHandlingModel
+        // @0x822D3EC8 -> here. operator= @0x822AE040 confirms the width (`ld/std @0x70`, then
+        // mModelHandle as two words @0x78/0x7C, mGraphicsHandle two words @0x80/0x84,
+        // meRaceCarType @0x88, mfDeformAmount @0x8C, meBaseDeformationType @0x90,
+        // mbDisablePhysicsStateReset @0x94, miCarStrengthStat @0x98).
+        u64                    mCarAssetAttribKey;
         ResourceHandle         mModelHandle;
         ResourceHandle         mGraphicsHandle;
         BrnWorld::ERaceCarType meRaceCarType;
@@ -353,8 +416,13 @@ namespace Vehicle
         Vector3        mAngularVelocity_Trailer;
         VolumeInstanceId mVolumeInstanceID_Cab;
         VolumeInstanceId mVolumeInstanceID_Trailer;
-        Attribute::Key mAssetAttribKey_Cab;
-        Attribute::Key mAssetAttribKey_Trailer;
+        // 8 BYTES each (X360 event +0xD0 / +0xD8). operator= @0x8270BF70 copies the run
+        // 0xC0/0xC8/0xD0/0xD8 as FOUR `ld/std` doublewords -- the two VolumeInstanceIds then
+        // these two keys -- and only then drops to word pairs for the two ResourceHandles
+        // (+0xE0/+0xE8). They feed CreatePhysicalTrafficEvent::mCarAssetAttribKey verbatim
+        // (CreateArticulatedTrafficEvent.cpp), which is itself 8 bytes; see RaceCarState's banner.
+        u64 mAssetAttribKey_Cab;
+        u64 mAssetAttribKey_Trailer;
         ResourceHandle mModelHandle_Cab;
         ResourceHandle mModelHandle_Trailer;
         CgsID          mCgsId_Cab;

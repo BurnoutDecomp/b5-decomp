@@ -256,13 +256,28 @@ namespace Attrib
         Instance(const RefSpec& lrRefSpec, void* lpOwner);
 
         // Copy construct -- share the source's collection and take a reference on it.
-        // ⚠️ NOT an X360 symbol: the console inlines it at every site (the IDA function
+        // ⭐ CORRECTED 2026-08-01 (physics wave 1): IT *IS* AN X360 SYMBOL, at 0x82802E60.
+        // The sentence below ("NOT an X360 symbol ... the IDA function inventory for
+        // Attrib::Instance has ... and nothing else") was written off the JSON EXPORT SET,
+        // which has holes -- and this is one of them. Instance::Instance(Collection*,void*)
+        // @0x82802DB8 is 42 instructions and its last one is at 0x82802E5C, so 0x82802E60 is
+        // the very next byte; the body there is called with (this, other) and appears in the
+        // xrefs_to of CgsDev::Assert::BeginAssert/FireAssert (i.e. it fires the same
+        // "Exceeded collection refcount maximum!" assert the Collection* ctor does).
+        // Attrib::Gen::physicsvehiclehandling's copy ctor (`sub_825BDB88`) chains it. The
+        // alternatives are all located elsewhere: (const RefSpec&, owner) @0x8280A248,
+        // operator= @0x8280DE08, GetClass @0x82802F18.
+        // The DERIVED BODY BELOW IS UNCHANGED and still correct -- only the provenance claim
+        // was wrong. (Kept: the PS3 DWARF also attests the out-of-line declaration at
+        // attribinstance.cpp:37, between the RefSpec ctor at :24 and operator= at :50.)
+        //
+        // ⚠️⚠️ ORIGINAL, NOW-KNOWN-WRONG NOTE, kept so the next reader sees the failure mode:
+        // "NOT an X360 symbol: the console inlines it at every site (the IDA function
         // inventory for Attrib::Instance has ctor / dtor / Unmodify / Change /
         // ChangeWithDefault / Get / GetAttributePointer / GetClass / GetCollection /
-        // operator= and nothing else). The PS3 DWARF does attest that the SDK declares it
-        // out of line (attribinstance.cpp:37, between the RefSpec ctor at :24 and
-        // operator= at :50), so this is a REAL member, not an invention -- only its body
-        // is derived. It is derived from an invariant, not guessed: ~Instance @0x8280D100
+        // operator= and nothing else)."
+        //
+        // The body is derived from an invariant, not guessed: ~Instance @0x8280D100
         // releases mpCollection unconditionally, so every Instance holding a non-null
         // collection must own exactly one reference. The compiler-implicit copy would
         // share the pointer WITHOUT a reference, giving one AddRef and two Releases.

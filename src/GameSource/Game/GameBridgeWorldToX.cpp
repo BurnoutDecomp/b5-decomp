@@ -83,7 +83,16 @@
 //     only meaningful when mfHardestImpact > 0, i.e. inside the gated contact-spy leg;
 //     published as zero, flagged, NOT guessed.
 //
-// ⭐ RaceCarState +4 DRIFT, BOUND TIGHTENED (2026-08-01). This function's thirteen
+// ✅ RaceCarState +4 DRIFT -- SETTLED AND FIXED (2026-08-01, physics wave 1). The extra four
+// bytes were mCarAssetAttribKey: it is EIGHT bytes, not four. Proof and the full corroborating
+// field table live in BrnVehicleEvents.h's RaceCarState banner (the producer,
+// VehicleOutputInterface::UpdateRaceCarState @0x825EC808, stores it with `std` at state+960 and
+// then lands all fourteen following scalars exactly where the committed offsets now say).
+// The committed member offsets below are therefore CONSOLE-EXACT as of that fix, and this
+// function's own `*(state + 968)` entity-id reads are now literally mEntityId @968.
+// The historical measurement that bounded it is kept for provenance:
+//
+// (HISTORICAL) This function's thirteen
 // rw::math::IsValid asserts name the exact fields they check, so their X360 offsets pin the
 // X360-vs-PS3 member drift the pose wave measured:
 //     448 mAboveGroundTestResult.mIntersectionPosition   == committed 448  (no drift)
@@ -106,6 +115,7 @@
 // the mComOffset / mSlamEffect / mShuntEffect / mCarAssetAttribKey run. That OVERTURNS the
 // pose wave's recorded bound ("between mfBrake @1032 and mi8Gear @1088"), which was only ever
 // an upper bound. Nothing here depends on it: every access is by NAME.
+// (END HISTORICAL -- the bound was correct and the culprit was the last name in that run.)
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -288,11 +298,15 @@ namespace BrnGame
                 if (CgsDev::Log::gpDebugPrint != 0)
                 {
                     const Vector3& lPos = lVehicleInfo.mRaceCarState.mTransform.Pos();
+                    // [BRING-UP MEASUREMENT, physics wave 1] the WRITE end of the half-extent
+                    // transfer; BehaviourRotateAboutVehicle::Update prints the READ end.
                     *CgsDev::Log::gpDebugPrint
                         << "[world->director] publish #" << static_cast<s32>(suRaceCarInfoPublishCount)
                         << ": player index "
                         << static_cast<s32>(lePlayerIndex) << ", slot " << liSlot
                         << " at (" << lPos.x << ", " << lPos.y << ", " << lPos.z
+                        << "), halfExtent (" << lHalfExtent.x << ", " << lHalfExtent.y
+                        << ", " << lHalfExtent.z
                         << "), engine " << (lVehicleInfo.mbEngineOn ? "on" : "off") << "\n";
                 }
             }

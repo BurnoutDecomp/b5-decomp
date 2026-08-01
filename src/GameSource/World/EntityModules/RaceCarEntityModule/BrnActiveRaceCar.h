@@ -69,6 +69,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
 
 namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface; } }
+namespace CgsWorld { struct WorldMap2D; }   // UpdatePhysicsState forwards it to RaceCar::UpdatePositioningData
 
 namespace BrnWorld
 {
@@ -130,7 +131,7 @@ public:
     void OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
                             const CgsResource::ResourceHandle& lrGraphicsModelHandle,
                             const Vector3&                     lrInitialVelocity,
-                            u32                                luCarAssetAttribKey );
+                            u64                                luCarAssetAttribKey );
 
     // ------------------------------------------------------------------------
     // X360 0x822D3EC8  ActiveRaceCar::AddHandlingModel -- hands the freshly-active car to
@@ -139,7 +140,7 @@ public:
     // r4/r5/r6/r7/r8 + v1, with the velocity in a vector register that Hex-Rays drops.
     // ------------------------------------------------------------------------
     void AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
-                           u32                   luCarAssetAttribKey,
+                           u64                   luCarAssetAttribKey,
                            const Matrix44Affine& lrInitialTransform,
                            const Vector3&        lrInitialVelocity,
                            bool                  lbResettingPhysicsState,
@@ -244,6 +245,20 @@ public:
     // unrolled lvx128/stvx128; the faithful C++ is a matrix copy-assign per wheel.
     void UpdateWheelPhysicsState(const void* lpPhysicsWheelData);
 
+    // ⭐⭐ X360 0x822D4418 -- THE PHYSICS->RENDER SEAM. Take one frame's published
+    // BrnPhysics::Vehicle::RaceCarState and make it this car's pose. Its only caller is
+    // RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8, which the
+    // PC build has not landed yet, so nothing calls this today -- it is the consumer the
+    // physics module's publish side plugs into (see the .cpp banner).
+    //
+    // ⚠️ SIGNATURE FROM THE ASM, NOT FROM HEX-RAYS. The third argument is NOT a timestep
+    // (an earlier scoping pass read it as `dt`): 0x822D4750 does `mr r5, r20 ; lwz r3,
+    // 0x6F0(r29) ; mr r4, r27 ; bl RaceCar::UpdatePositioningData`, and that callee's
+    // second parameter is a CgsWorld::WorldMap2D* (BrnRaceCar.h:67). It is forwarded
+    // untouched, which is exactly why Hex-Rays renders it as a bare `int a3`.
+    void UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* lpState,
+                            CgsWorld::WorldMap2D* lpWorldMap);
+
     // ========================================================================
     // BrnWorld::ActiveRaceCar::RenderParams -- the per-car VISUAL snapshot the
     // renderer reads each frame to draw one race car. The physics/IO side fills it;
@@ -297,6 +312,13 @@ public:
         bool IsEngineOff() const   { return mbIsEngineOff; }
         bool IsBraking() const     { return mbIsBraking; }
         void SetBraking(bool lbOn) { mbIsBraking = lbOn; }
+        // ADDITIVE (physics wave 1): the two flags ActiveRaceCar::UpdatePhysicsState
+        // @0x822D4418 stores directly (this+0x1BE6 == +5126 and this+0x1BE8 == +5128; the
+        // console has no accessor symbol -- it emits bare `stb`s -- so these exist only so
+        // the body writes them BY NAME instead of by offset).
+        void SetEngineOff(bool lbOn) { mbIsEngineOff = lbOn; }
+        bool IsReversing() const     { return mbIsReversing; }
+        void SetReversing(bool lbOn) { mbIsReversing = lbOn; }
         bool IsRaceCarHidden() const { return mbIsHidden; }
         void SetRaceCarHidden(bool lbOn) { mbIsHidden = lbOn; }
         u8   GetRenderDamageFlag() const { return mu8RenderDamageFlags; }
