@@ -106,7 +106,9 @@ namespace BrnGameState
     // BrnAICarOutputInterface.h). The .cpp partials #include that header to deref it; pointer use here.
     typedef BrnAI::AIModuleIO::AICarOutputInterface AICarOutputInterface;
 
-    namespace InputBuffer                  { struct GameActionQueue; struct TakedownEventQueue; }
+    // GameActionQueue is the real GameStateModuleIO typedef (BrnGameStateSharedIO.h); only
+    // TakedownEventQueue stays an incomplete nested forward decl here.
+    namespace InputBuffer                  { struct TakedownEventQueue; }
     namespace GameStateToNetworkInterface  { struct DirtyTrickQueue; }
     namespace VehicleManagerOutputInterface{ struct RaceCarCrashEventQueue; }
     namespace VehicleOutputInterface       { struct PhysicalTrafficStateQueue; }
@@ -401,7 +403,7 @@ namespace BrnGameState
 
         // ===== gameplay event hooks (declare-only -- substantial) =====
         void OnPlayerDoesATakedown(CgsSystem::Time lTime,
-                                   InputBuffer::GameActionQueue* lpQueue);          // :569 / 0x8234CE08
+                                   GameStateModuleIO::GameActionQueue* lpQueue);          // :569 / 0x8234CE08
         void OnPlayerHitsRival(BrnPhysics::Vehicle::EImpactType leImpactType);      // :574
         void RegisterFinishForCar(bool lbFinished, EActiveRaceCarIndex leRaceCarIndex,
                                   const CgsSystem::Time& lTime);                    // :582 / 0x8231F198

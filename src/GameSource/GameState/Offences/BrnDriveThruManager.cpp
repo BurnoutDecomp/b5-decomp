@@ -88,12 +88,14 @@ static const s32 KI_TRAIN_GAS        = 10;
 static const s32 KI_TRAIN_CAR_PARK   = 34;  // 0x22
 static const s32 KI_TRAIN_PAINT      = 46;  // 0x2E
 
-// Reinterpret the forward-declared queue handle the callers hold (an ::InputBuffer::GameActionQueue*,
+// Reinterpret the forward-declared queue handle the callers hold (an GameStateModuleIO::GameActionQueue*,
 // X360 == OutputBuffer this+4) to the real CgsModule::VariableEventQueue<13312,16>. (Established
 // precedent: BrnTriggerQueryManager.cpp.)
-static inline GameActionQueueImpl* AsActionQueue(::InputBuffer::GameActionQueue* lpQueue)
+static inline GameActionQueueImpl* AsActionQueue(GameStateModuleIO::GameActionQueue* lpQueue)
 {
-    return reinterpret_cast<GameActionQueueImpl*>(lpQueue);
+    // IDENTITY. GameStateModuleIO::GameActionQueue IS CgsModule::VariableEventQueue<13312,16>
+    // (BrnGameStateSharedIO.h). The helper survives only as the call-site vocabulary.
+    return lpQueue;
 }
 
 // Post one shop drive-thru action (gas/body/paint, all 144-byte payloads seeded from the cached
@@ -347,8 +349,8 @@ void DriveThruManager::HandleDriveThru(
     {
         // OnDriveThru records the discovery + posts via the output buffer's queue
         // (X360 derives the queue from BrnGameState::GameStateModuleIO::Ou(output)).
-        ::InputBuffer::GameActionQueue* lpQueueHandle =
-            reinterpret_cast<::InputBuffer::GameActionQueue*>(lpOutput->GetGameActionQueue());
+        GameStateModuleIO::GameActionQueue* lpQueueHandle =
+            reinterpret_cast<GameStateModuleIO::GameActionQueue*>(lpOutput->GetGameActionQueue());
         mpProgressionManager->OnDriveThru(lRegionId, leTriggerType, lpQueueHandle);
 
         const s32 liNumDiscovered = lpProfile->GetNumDriveThrusDiscovered(leTriggerType);
@@ -483,7 +485,7 @@ void DriveThruManager::HandleDriveThru(
 // ProcessDriveThru (X360 0x8239B6E8).
 // ============================================================================
 void DriveThruManager::ProcessDriveThru(BrnTrigger::GenericRegion::Type leTriggerType,
-                                        ::InputBuffer::GameActionQueue*   lpActionQueue,
+                                        GameStateModuleIO::GameActionQueue*   lpActionQueue,
                                         CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
                                         RCEntityActiveRaceCarOutputInterface* lpRcOutputInterface,
                                         bool  lbIsOnline,
@@ -599,7 +601,7 @@ void DriveThruManager::ProcessDriveThru(BrnTrigger::GenericRegion::Type leTrigge
 // ============================================================================
 // Update (X360 0x8239EEF0).
 // ============================================================================
-void DriveThruManager::Update(::InputBuffer::GameActionQueue*  lpActionQueue,
+void DriveThruManager::Update(GameStateModuleIO::GameActionQueue*  lpActionQueue,
                               CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
                               f32  lfTimeStep,
                               RCEntityActiveRaceCarOutputInterface* lpRcOutputInterface,
@@ -780,7 +782,7 @@ void DriveThruManager::Update(::InputBuffer::GameActionQueue*  lpActionQueue,
 // ============================================================================
 // UnlockCarChallengeForCar (X360 0x82386840).
 // ============================================================================
-void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, ::InputBuffer::GameActionQueue* lpActionQueue)
+void DriveThruManager::UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     GameActionQueueImpl* lpQueue = AsActionQueue(lpActionQueue);
 

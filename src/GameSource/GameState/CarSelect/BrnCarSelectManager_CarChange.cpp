@@ -31,14 +31,16 @@
 
 namespace BrnGameState
 {
-// The game-action queue the callers hand us is an ::InputBuffer::GameActionQueue* (X360 == the
+// The game-action queue the callers hand us is an GameStateModuleIO::GameActionQueue* (X360 == the
 // OutputBuffer's embedded queue). Reinterpret it to the real backing type and post events via
 // AddEvent (same precedent the sibling FSM-core TU uses).
 typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 
-static inline GameActionQueueImpl* AsActionQueue(::InputBuffer::GameActionQueue* lpQueue)
+static inline GameActionQueueImpl* AsActionQueue(GameStateModuleIO::GameActionQueue* lpQueue)
 {
-    return reinterpret_cast<GameActionQueueImpl*>(lpQueue);
+    // IDENTITY. GameStateModuleIO::GameActionQueue IS CgsModule::VariableEventQueue<13312,16>
+    // (BrnGameStateSharedIO.h). The helper survives only as the call-site vocabulary.
+    return lpQueue;
 }
 
 // The verbatim X360-baked source paths the asserts reference (shared with the sibling TU; redeclared
@@ -447,7 +449,7 @@ void CarSelectManager::RequestChangeCar(const CgsID& lCarId)
 //                          second entry's "is-stream-target" flag layout differs for the prefetch).
 // The action posted is CarUnlockEndAction (type 69 == 0x45, size 88 == 0x58).
 // ============================================================================
-void CarSelectManager::RequestStreamingForUnlock(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::RequestStreamingForUnlock(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (muUnlockCount == 0)
         return;
@@ -506,7 +508,7 @@ void CarSelectManager::RequestStreamingForUnlock(::InputBuffer::GameActionQueue*
 // car was pending. Clears mbWaitingForStreaming. If we were EXITING and have held the exit long enough
 // (timer >= 2.0), posts the CarSelectExitAction (type 74) to actually leave the junkyard.
 // ============================================================================
-void CarSelectManager::StreamingFinished(CgsID lActiveCarZeroId, ::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::StreamingFinished(CgsID lActiveCarZeroId, GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     const CgsID lDesired = mDesiredCarId;   // X360 *(this + 0x48) [the +0x48 std the change path writes]
     if (lActiveCarZeroId == lDesired || lDesired == 0)
@@ -538,7 +540,7 @@ void CarSelectManager::StreamingFinished(CgsID lActiveCarZeroId, ::InputBuffer::
 // The spawn-location transform is read from the chosen SpawnLocation; its type bit (a single bool ==
 // "is this a generic / drive-in spawn") is derived from SpawnLocation::GetType().
 // ============================================================================
-void CarSelectManager::SpawnInStartCar(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     // X360 reads the spawn-location handle at this+0x2C == maSpawnLocations[1] (byte 0x28 + 4). The
     // frozen layout summary maps byte 0x2C to maSpawnLocations[1]; that is the "drive-in" slot the
@@ -619,7 +621,7 @@ void CarSelectManager::SpawnInStartCar(::InputBuffer::GameActionQueue* lpActionQ
 //   - CarSelectionDropInAction  (type 65, 16B): desired car id + spawn-location type bit.
 //   - CarUnlockAction           (type 79,  8B): the desired car's colour + palette indices.
 // ============================================================================
-void CarSelectManager::TeleportCurrentVehicle(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     // X360 indexes maSpawnLocations[meLastSpawnLocationType] (this + 4*(type+10)).
     const s32 liSpawnIndex = meLastSpawnLocationType;

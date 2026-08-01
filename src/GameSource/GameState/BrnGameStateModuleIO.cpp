@@ -218,11 +218,73 @@ TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutput
 
 // =====================  OutputBuffer (GameStateModuleIO TU)  =====================
 
+// ----------------------------------------------------------------------------
+// X360 0x82382940 - OutputBuffer::Construct.
+//
+// The console body is fully recovered; its construct list (verbatim, by byte offset) is:
+//     *this            = 1                                       // IOBuffer status: constructed
+//     VariableEventQueue<13312,16>::Construct(this + 4)          // mGameActionQueue    @ +0x0004
+//     VariableEventQueue<3072,16>::Construct (this + 13332)      // ResourceRequestIface@ +0x3414
+//     VariableEventQueue<3072,16>::Clear     (this + 13332)
+//     this+16420 = 0; this+16424 = 1.0f                          // TimerRequestInterface
+//     this+16428 = 0; this+16432 = 1.0f                          // FrameRateTypeRequestInterface
+//     this+16436 = 0; this+16440 = 0
+//     TakedownEvent<..,8>::Construct         (this + 16448)      // TakedownEventOutputQ@ +0x4040
+//     DirtyTrickEvent<..,28>::Construct      (this + 16784)
+//     GameStateToNetworkInterface::Clear     (this + 16784)
+//     BaseInputEvent<..,8>::Construct        (this + 17324)      // input BIND request queue
+//     BaseInputEvent<..,8>::Construct        (this + 17400)      // input UNBIND request queue
+//     this+17332 = 0; this+17408 = 0
+//     GameStateToGuiInterface::Construct     (this + 17488)      // @ +0x4450
+//     VariableEventQueue<18432,16>::Construct(this + 18496)      // GuiEventQueue       @ +0x4840
+//     VariableEventQueue<131072,16>::Construct(this + 36944)     // TriggerMgmtIface    @ +0x9050
+//     InRemoveTriggerEvent<..,256>::Construct(this + 168032)
+//     VariableEventQueue<4096,16>::Construct (this + 169068)
+//     this+173180 = 3 (EPaybackType); this+173184 = -1 (aggressor)
+//     Time::SetFloatVal(this + 173188, 0.0f)
+//     8 x s32 zeroed from this+173196; this+173228 = 0.0f; this+173232 = 0
+//     memset(this + 173240, 0, 2736)                             // ScoringOutputInterface
+//     this+175860 = -1; 8 x s32 = -1 from this+176008
+//     this+176336 = 0; this+176344/348/352/356 = -1
+//     this+184768 = 0; this+192484 = 0; this+192488/489/490 = 0
+//
+// ⚠️ FLAG (PC, partial): this model still carries most of those members as OPAQUE u8 storage
+// (see the private section below), so only the two that are real typed objects here -- the
+// base status byte and the +0x04 game-action queue -- can be constructed. That is exactly the
+// pair BridgeGameStateToDirector needs. Grow this body as each opaque span is typed; do NOT
+// pretend the buffer is fully constructed.
+// ----------------------------------------------------------------------------
+void OutputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+
+    // Constructed WITHOUT the write lock on purpose: the console does the same (Construct runs
+    // before anybody can lock the buffer), and the queue's own Construct is what makes
+    // AddEvent/Append legal at all.
+    reinterpret_cast<GameActionQueue*>(&mGameActionQueueStorage)->Construct();
+}
+
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
 GameActionQueue* OutputBuffer::GetGameActionQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return reinterpret_cast<GameActionQueue*>(&mGameActionQueueStorage);
+}
+
+// X360 0x823B96F0 (exported unnamed as sub_823B96F0) - read-lock accessor for the game-action
+// queue (this+0x04); assert __FILE__/__LINE__ = BrnGameStateModuleIO.h:265.
+const GameActionQueue* OutputBuffer::GetGameActionQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const GameActionQueue*>(&mGameActionQueueStorage);
+}
+
+// X360 0x823B9840 (exported unnamed as sub_823B9840) - read-lock accessor for the takedown-event
+// output queue (this+0x4040); assert __FILE__/__LINE__ = BrnGameStateModuleIO.h:271.
+const TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const TakedownEventOutputQueueType*>(&mTakedownEventOutputQueueStorage);
 }
 
 // X360 0x823B9798 - read-lock accessor for the resource-request interface (this+0x3414).

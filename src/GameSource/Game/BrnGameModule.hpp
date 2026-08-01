@@ -425,6 +425,18 @@ namespace BrnGame
         void BridgeWorldToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
                                    const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
 
+        // ⭐⭐ X360 0x823CD170 -- the GAME-STATE->DIRECTOR seam. Its Append of the game-state
+        // output buffer's game-action queue into the director input buffer's own queue is the
+        // ONLY producer of the actions MainDirector::ProcessInputQueue drains, i.e. the only
+        // route by which the junkyard / car-select ladder can ever start. Console home
+        // GameSource/Game/GameBridgeGameStateToX.cpp; the body sits in BrnGameModule.cpp with
+        // the other DoUpdate_Director bridges (the BridgeGuiToDirector precedent).
+        // Called by DoUpdate_Director @0x823E8DE0 on the PRE-GUI pass with this sub-step's
+        // director INPUT buffer and the game-state module's OUTPUT buffer.
+        void BridgeGameStateToDirector(
+            BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+            const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
         // The main-flow states' pending GUI FSM stage request (the X360 +2523537 byte the
         // MainGameFlowState OnEnters write; BridgeGameToGui consumes it).
         void RequestGuiFsmStage(s32 liStage) { miGuiFsmStage = liStage; }

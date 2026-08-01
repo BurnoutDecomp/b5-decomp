@@ -34,7 +34,6 @@ namespace BrnGameState     { class GameStateModule; class TriggerQueryManager; }
 namespace BrnProgression   { class ProgressionManager; struct CarData; }
 namespace BrnResource      { struct VehicleList; struct WheelList; }
 namespace BrnTrigger       { struct SpawnLocation; }
-namespace InputBuffer      { class  GameActionQueue; }
 
 namespace BrnGameState
 {
@@ -89,47 +88,47 @@ public:
     bool IsWaitingForStreaming() const;
     void Prepare(const BrnResource::VehicleList* lpVehicleList,
                  const BrnResource::WheelList* lpWheelList);
-    void Update(::InputBuffer::GameActionQueue* lpActionQueue,
+    void Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
                 const GameStateModuleIO::ControllerInput* lpControllerInput,
                 f32 lfGameTimestep);                                            // X360 0x8239C218
-    void EnterJunkyard(::InputBuffer::GameActionQueue* lpActionQueue, CgsID lJunkyardId); // X360 0x82398508
-    void EnterCarSelect(::InputBuffer::GameActionQueue* lpActionQueue);
-    void EnterModification(::InputBuffer::GameActionQueue* lpActionQueue);
-    void ExitJunkyard(::InputBuffer::GameActionQueue* lpActionQueue);             // X360 0x82387880
-    void ForceExitJunkyard(::InputBuffer::GameActionQueue* lpActionQueue, bool lbToOnlineEvent); // X360 0x8239C418
+    void EnterJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue, CgsID lJunkyardId); // X360 0x82398508
+    void EnterCarSelect(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void EnterModification(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void ExitJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue);             // X360 0x82387880
+    void ForceExitJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbToOnlineEvent); // X360 0x8239C418
     void RequestChangeCar(const CgsID& lCarId);
-    void StreamingFinished(CgsID lActiveCarZeroId, ::InputBuffer::GameActionQueue* lpActionQueue);
-    void EnterJunkyardAtStartOfGame(::InputBuffer::GameActionQueue* lpActionQueue,
+    void StreamingFinished(CgsID lActiveCarZeroId, GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQueue* lpActionQueue,
                                     CgsID lJunkyardId, CgsID lCarModelId, CgsID lWheelId,
                                     GameStateModuleIO::EPlayerScoringIndex leScoringIndex,
                                     GameStateModuleIO::CarSelectionChangedAction* lpCarSelectChangedAction); // X360 0x82393080
-    void ReallyEnterJunkyardAtStartOfGame(::InputBuffer::GameActionQueue* lpActionQueue); // X360 0x823931F8
+    void ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQueue* lpActionQueue); // X360 0x823931F8
     void OnCarUnlockTickerComplete();
     void SetCarUnlockEnabled(bool lbEnabled);
 
 private:
     // ---- private helpers (DWARF :166-285) ----------------------------------
-    void UpdateCarColour(CgsID lCarId, ::InputBuffer::GameActionQueue* lpActionQueue) const;
+    void UpdateCarColour(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpActionQueue) const;
     void SaveChosenLiveryForCar(CgsID lCarId);
-    void StartTransitionInState(::InputBuffer::GameActionQueue* lpActionQueue);      // X360 0x823929D0
-    void EndTransitionInState(::InputBuffer::GameActionQueue* lpActionQueue);        // X360 0x82392B30
-    void StartCarSelectState(::InputBuffer::GameActionQueue* lpActionQueue);         // X360 0x823872D0
-    void StartCarModificationState(::InputBuffer::GameActionQueue* lpActionQueue);
-    void StartUnlockState(::InputBuffer::GameActionQueue* lpActionQueue);            // X360 0x82387730
-    void UpdateRequestCarChangeState(::InputBuffer::GameActionQueue* lpActionQueue); // X360 0x82387AB8
-    void UpdateChangeCarState(::InputBuffer::GameActionQueue* lpActionQueue);        // X360 0x823986D0
-    void UpdateUnlockState(::InputBuffer::GameActionQueue* lpActionQueue);           // X360 0x82398920
-    void EndUnlockState(::InputBuffer::GameActionQueue* lpActionQueue);              // X360 0x82392C58
-    void UpdateExitState(::InputBuffer::GameActionQueue* lpActionQueue);             // X360 0x82398C20
+    void StartTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue);      // X360 0x823929D0
+    void EndTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue);        // X360 0x82392B30
+    void StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue);         // X360 0x823872D0
+    void StartCarModificationState(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void StartUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue);            // X360 0x82387730
+    void UpdateRequestCarChangeState(GameStateModuleIO::GameActionQueue* lpActionQueue); // X360 0x82387AB8
+    void UpdateChangeCarState(GameStateModuleIO::GameActionQueue* lpActionQueue);        // X360 0x823986D0
+    void UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue);           // X360 0x82398920
+    void EndUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue);              // X360 0x82392C58
+    void UpdateExitState(GameStateModuleIO::GameActionQueue* lpActionQueue);             // X360 0x82398C20
     void SetupSpawnLocations();
     void SetupNormalUnlockList();
     bool IsThisCarInCurrentUnlockSequence(const BrnProgression::CarData* lpProfileCar) const;
     void SetupShutdownUnlockList();
-    void SpawnInStartCar(::InputBuffer::GameActionQueue* lpActionQueue);
+    void SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpActionQueue);
     void GetCurrentPlayerVehicle(CgsID& lrCarID) const;
     const BrnProgression::CarData* GetProfileCarData(CgsID& lrCarID) const;
-    void RequestStreamingForUnlock(::InputBuffer::GameActionQueue* lpActionQueue);
-    void TeleportCurrentVehicle(::InputBuffer::GameActionQueue* lpActionQueue);
+    void RequestStreamingForUnlock(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    void TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue* lpActionQueue);
     CgsID GetNextUnlockCarID(CgsID lCurrentID);
 
 public:

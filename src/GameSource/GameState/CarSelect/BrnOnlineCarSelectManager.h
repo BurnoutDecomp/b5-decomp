@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"   // CgsID, Vector3
 
 #include <cstdint>            // uintptr_t (Pointer32)
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // GameStateModuleIO::GameActionQueue (real typedef)
 
 // Minimal owning slice for BrnGameState::OnlineCarSelectManager (DWARF: BrnOnlineCarSelectManager.h:61,
 // non-polymorphic struct). Only the members the four reconstructed functions of this TU touch are
@@ -16,7 +17,6 @@
 namespace BrnGameState   { class GameStateModule; }
 namespace BrnProgression { class ProgressionManager; }
 namespace BrnResource    { struct VehicleList; struct WheelList; }
-namespace InputBuffer    { struct GameActionQueue; }
 
 namespace BrnGameState
 {
@@ -53,14 +53,14 @@ struct OnlineCarSelectManager
 
     void Construct(GameStateModule* lpGameStateModule,
                    BrnProgression::ProgressionManager* lpProgressionManager);  // X360 0x823565C0
-    void EnterModification(InputBuffer::GameActionQueue* lpActionQueue);        // X360 0x8238EEA0
-    void EnterWaitForHost(InputBuffer::GameActionQueue* lpActionQueue);         // X360 0x82356650
+    void EnterModification(GameStateModuleIO::GameActionQueue* lpActionQueue);        // X360 0x8238EEA0
+    void EnterWaitForHost(GameStateModuleIO::GameActionQueue* lpActionQueue);         // X360 0x82356650
     void StreamingFinished(CgsID lActiveCarZeroId,
-                           InputBuffer::GameActionQueue* lpActionQueue);        // X360 0x82358AC8
+                           GameStateModuleIO::GameActionQueue* lpActionQueue);        // X360 0x82358AC8
 
     // Called by EnterModification; reconstructed by its own slice (declared-only here). DWARF spells
-    // it StartCarModificationState(InputBuffer::GameActionQueue*); the X360 forwards the queue arg.
-    void StartCarModificationState(InputBuffer::GameActionQueue* lpActionQueue);
+    // it StartCarModificationState(GameStateModuleIO::GameActionQueue*); the X360 forwards the queue arg.
+    void StartCarModificationState(GameStateModuleIO::GameActionQueue* lpActionQueue);
 
 private:
     EInternalState                                meInternalState;          // X360 this+0

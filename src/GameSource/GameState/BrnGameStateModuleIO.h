@@ -160,7 +160,8 @@ namespace GameStateModuleIO
     // the ActiveRaceCarOutputInterface == RCEntityActiveRaceCarOutputInterface pattern). It is
     // embedded by value @ +0xAAC0, so the real (complete) type is included above and aliased here.
     typedef BrnAI::AIModuleIO::AICarOutputInterface AICarOutputInterface; // PostWorldInputBuffer +0xAAC0
-    class GameActionQueue;                 // OutputBuffer +0x04
+    // GameActionQueue (OutputBuffer +0x04) is a REAL typedef now -- see
+    // BrnGameStateSharedIO.h (CgsModule::VariableEventQueue<13312,16>).
     class ResourceRequestInterface;        // OutputBuffer +0x3414 (RequestInterface<3072>)
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
     struct GameStateToGuiInterface;        // OutputBuffer +0x4450 (complete def: BrnGameStateToGuiIOInterfaces.h)
@@ -423,9 +424,23 @@ namespace GameStateModuleIO
     // ========================================================================
     struct OutputBuffer : public CgsModule::IOBuffer
     {
+        // X360 0x82382940. Raises the base status byte and constructs every embedded queue /
+        // interface. Body (with the console's full construct list, verbatim) in the .cpp.
+        void Construct();
+
         // ---- GameStateModuleIO TU accessors ----
         // X360 0x8231D4B8 (write-lock; "Not locked for writing", line 266)
         GameActionQueue*                  GetGameActionQueue();
+        // X360 0x823B96F0 (read-lock;  "Not locked for reading", BrnGameStateModuleIO.h line 265).
+        // RECOVERED IDENTITY: the exports carry this as an unnamed `sub_823B96F0`; it is the
+        // const half of GetGameActionQueue (returns this+4, asserts the read lock, and its
+        // assert's __FILE__/__LINE__ is BrnGameStateModuleIO.h:265, one line above the
+        // write-side's 266). BrnGameModule::BridgeGameStateToDirector @0x823CD170 is its
+        // caller -- it is the SOURCE of every game action the director ever sees.
+        const GameActionQueue*            GetGameActionQueue() const;
+        // X360 0x823B9840 (read-lock; BrnGameStateModuleIO.h line 271) -- likewise an unnamed
+        // `sub_823B9840` in the exports; returns this+0x4040, the takedown-event output queue.
+        const TakedownEventOutputQueueType* GetTakedownEventOutputQueue() const;
         // X360 0x823B9798 (read-lock;  "Not locked for reading", line 268)
         const ResourceRequestInterface*   GetResourceRequestInterface() const;
         // X360 0x82362B80 (write-lock; "Not locked for writing", line 272)
