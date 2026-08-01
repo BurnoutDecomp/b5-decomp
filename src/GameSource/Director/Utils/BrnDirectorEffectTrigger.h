@@ -107,10 +107,12 @@ namespace BrnDirector
         // DWARF h:95 (cpp:72) -- its own ledger function (declaration-only here).
         void Update(bool* lpbRequestEnumerationOut);
 
-        // DWARF h:98/h:102/h:106 -- their own ledger functions (declaration-only).
+        // DWARF h:98/h:106 -- their own ledger functions (declaration-only).
         s32 GetNumHooks() const;
-        bool HookExists(const char* lpcName) const;
         const char* GetHookName(s32 liIndex) const;
+
+        // @0x8221E268 -- BODIED 2026-08-01 in BrnDirectorEffectTrigger.cpp (asm walk there).
+        bool HookExists(const char* lpcName) const;
 
         // True when an effect hook is currently requested (X360 byte @+0xD37).
         bool HasCurrentEffectName() const { return mbHasCurrentEffectName; }
@@ -132,14 +134,29 @@ namespace BrnDirector
         bool HasCurrentBackgroundEffectName() const;
         const HookNameStringWrapper& GetCurrentBackgroundEffectName() const;
         f32 GetCurrentBackgroundEffectBlendAmount() const;
-        bool HasCurrentEffectId() const;
-        u32 GetCurrentEffectId() const;
         void RegisterStartingEffectWithName(const HookNameStringWrapper& lrName, f32 lfBlend);
         void RegisterStoppingEffectWithName(const HookNameStringWrapper& lrName);
-        void RegisterStartingBackgroundEffectWithName(const HookNameStringWrapper& lrName, f32 lfBlend);
         void RegisterStoppingBackgroundEffectWithName(const HookNameStringWrapper& lrName);
         void RegisterStartingEffectWithId(u32 luEffectId);
-        u32 GetNullEffectId() const;
+
+        // BODIED 2026-08-01 in BrnDirectorEffectTrigger.cpp -- the console INLINES it at its
+        // only caller, BackgroundEffectRequest::RegisterAndUpdateRequest @0x82232F20..0x82232F38,
+        // and that is where the three stores were read from.
+        void RegisterStartingBackgroundEffectWithName(const HookNameStringWrapper& lrName, f32 lfBlend);
+
+        // ---- the effect-ID trio (header inlines) ----------------------------------------
+        // BODIED 2026-08-01. All three are inlined by the console; the one function that reads
+        // all three in one place is Camera::StopCurrentEffect @0x82205C0C:
+        //     lbz r9, 0xD39(source)          -> mbHasCurrentEffectId
+        //     lwz r9, 0xCE8(source)          -> the current effect id (muRequestedPostFxId)
+        //     lis r10,7 / ori r10,r10,0xBEC6 -> 0x7BEC6 == 507078, the value it BOTH compares
+        //                                       against and writes back as "no effect"
+        // i.e. the null-effect id is a literal, not a member. (Note the DWARF's member name for
+        // +0xCE8 is muRequestedPostFxId -- the interface stores the requested id and the
+        // getter's DWARF name is GetCurrentEffectId; same word.)
+        bool HasCurrentEffectId() const { return mbHasCurrentEffectId; }
+        u32  GetCurrentEffectId() const { return muRequestedPostFxId; }
+        u32  GetNullEffectId() const    { return 507078u; }   // 0x7BEC6
 
     private:
         Array<HookNameStringWrapper, 100> maHookNames;             // +0x000 (DWARF h:195; count @+0xCE4)

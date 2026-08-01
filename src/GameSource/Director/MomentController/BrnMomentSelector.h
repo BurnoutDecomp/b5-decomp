@@ -190,14 +190,24 @@ public:
     // Each is homed in BrnMomentSelector.cpp at the quoted line; none is referenced by any
     // body in this tree today, so leaving them undefined costs the link nothing. Calling one
     // WILL open an unresolved external until its body lands.
-    void Update(f32 lfTimestep);                          // :113 -> cpp:115  (@0x82239FC0, 424 asm lines)
+    // :113 -> cpp:115 (@0x82239FC0). BODIED 2026-08-01 in BrnMomentSelector.cpp -- it is
+    // called UNCONDITIONALLY as the first statement of ArbStateRoaming::Update's DRIVING arm.
+    void Update(f32 lfTimestep);
+
     void Destruct();                                      // :119 -> cpp:246
     void SetSelectionMode(ESelectionMode leSelectionMode); // :123
     void ResetTimeActive();                               // :142
     f32  GetTimeActive();                                 // :145
     s32  GetFramesActive();                               // :148
-    u32  GetNumValidMoments();                            // :151
     u32  SnoopNumValidMoments();                          // :154 -> cpp:255  (@0x8221BD28)
+
+    // :151 -- BODIED 2026-08-01 as a header inline. It is the plain read of the cached count,
+    // NOT the recount: ArbStateRoaming::Update's DRIVING arm @0x822644D4 does a bare
+    // `lwz r10, 0x388(r31)` == mMomentSelector +0x1D0 == muValidMoments, with no call. (Its
+    // sibling SnoopNumValidMoments @0x8221BD28 is the RE-COUNT -- 130 asm lines that walk the
+    // handle array and STORE the result back into +0x1D0 -- so the two are genuinely different
+    // functions and only this one matches the roaming arm's single load.)
+    u32  GetNumValidMoments() const { return muValidMoments; }
     bool IsPrepared();                                    // :157
     void DebugRender(DebugPrinter& lrDebugPrinter) const;  // :193
 

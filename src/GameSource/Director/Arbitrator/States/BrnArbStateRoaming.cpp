@@ -9,6 +9,11 @@
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"            // Camera effect-hook free functions
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"           // SharedCameraContainer (Prepare camera select)
 #include "GameSource/Director/MomentController/BrnMoment.h"                // Moment::EState / EType
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                // BrnNetwork::EPaybackType
+#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT (Update's default arm)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // [DIAG] gpDebugPrint (bring-up only)
+#include <cstring>                                                         // strcmp (payback name compares)
+#include <cstdlib>                                                         // [DIAG] getenv (bring-up only)
 
 // ============================================================================
 // BrnDirector::ArbStateRoaming -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -70,6 +75,16 @@ namespace BrnDirector
         // running the arbitrator would have dived into Picture Paradise instead of handing off
         // to the junkyard / car-select state.
         const f32 KF_IDLE_TIME_BEFORE_PICTURE_PARADISE = 180.0f;  // flt_82CDA494
+
+        // Construct's three establishing-shot candidate weights: ONE register (f31) loaded once
+        // from flt_82001DA0 and reused for all three records. Read 2026-08-01.
+        const f32 KF_MOMENT_WEIGHTING = 0.5f;               // flt_82001DA0
+
+        // Update's prologue shake-fade divisors. Both are WRITABLE .data words at 0x82CDAD88 /
+        // 0x82CDAD84 (not .rdata), both 1.0f in the shipped image, and the console really does
+        // divide by them -- they are not a folded multiply. Faithful code keeps the division.
+        const f32 KF_IMPACT_SHAKE_FADE_TIME = 1.0f;         // flt_82CDAD88
+        const f32 KF_NORMAL_SHAKE_FADE_TIME = 1.0f;         // flt_82CDAD84
     }
 
     // ------------------------------------------------------------------------
@@ -79,6 +94,8 @@ namespace BrnDirector
     void ArbStateRoaming::Construct()
     {
         GetNonConstCamera().Construct();   // X360 Camera::Construct(this+0x10)
+
+        ResetBaseCameraFlags();            // stb 0, +0x170 / +0x171 @0x82259C5C..0x82259C60
 
         meState = E_STATE_PREPARING;       // +0x3BC = 1
 
@@ -110,11 +127,31 @@ namespace BrnDirector
         mu8ImpactShakeType    = 0;
         mfWreckedEffectAmount = 0.0f;
 
-        // Seed the establishing-shot candidates (X360 builds a {type, weight} MomentDescription
-        // for each: types 8/8/10 with weights 0.5/0.5/0).
-        mMomentSelector.AddMoment(Moment::E_MOMENT_PLAYER_STUNT, 0.5f);
-        mMomentSelector.AddMoment(Moment::E_MOMENT_PLAYER_STUNT, 0.5f);
-        mMomentSelector.AddMoment(Moment::E_MOMENT_NEW_CAR_JOINED, 0.0f);
+        // ⭐ ADDED 2026-08-01: the console inlines MomentSelector::Construct() over the embedded
+        // selector at +0x1B8 (@0x82259CD0..0x82259CF8 -- the three Array count words at +0x0A0 /
+        // +0x194 / +0x1C0 and the scalar block). It was MISSING here, which meant the three
+        // arrays were never Constructed: AddMoment's own "Array used before Construct/Clear was
+        // called" tripwire would have fired on the first candidate, and muValidMoments (which
+        // Update's DRIVING arm reads every frame) started as whatever the pool slot held.
+        mMomentSelector.Construct();
+
+        // Seed the establishing-shot candidates. The X360 builds a 16-byte MomentDescription on
+        // the stack for each and passes it in the r4:r5 GPR pair (the field-wise AddMoment
+        // overload, inlined). RE-READ 2026-08-01 off @0x82259C00 -- the three records are
+        //   {type 7 PLAYER_JUMPING, param 0, weight flt_82001DA0, canBeInhibited false}
+        //   {type 8 PLAYER_STUNT,   param 0, weight flt_82001DA0, canBeInhibited false}
+        //   {type 10 NEW_CAR_JOINED,param 0, weight flt_82001DA0, canBeInhibited false}
+        // ⚠️ The previous transcription ("types 8/8/10 with weights 0.5/0.5/0") was wrong on the
+        // first TYPE and on two of the three WEIGHTS, and it called a two-argument AddMoment that
+        // does not exist -- this TU did not compile. All three records share ONE weight register
+        // (f31, loaded once at 0x82259C40 from flt_82001DA0 == 0.5f, read out of the .rdata image
+        // with scratchpad\afw_id1b.py) and all three store 0 into the trailing bool.
+        mMomentSelector.AddMoment(Moment::E_MOMENT_PLAYER_JUMPING,  MomentParameterBank::E_PARAM_NONE,
+                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+        mMomentSelector.AddMoment(Moment::E_MOMENT_PLAYER_STUNT,    MomentParameterBank::E_PARAM_NONE,
+                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
+        mMomentSelector.AddMoment(Moment::E_MOMENT_NEW_CAR_JOINED,  MomentParameterBank::E_PARAM_NONE,
+                                  KF_MOMENT_WEIGHTING, /*mbCanBeInhibited*/ false);
     }
 
     // ------------------------------------------------------------------------
@@ -155,7 +192,11 @@ namespace BrnDirector
             mMomentSelector.CancelSelection();
         }
 
-        if (!mMomentSelector.Prepare(*lrSharedInfo.mpMomentController, *lrSharedInfo.mpGameState))
+        // @0x82259E40: r4 == sharedInfo+0x20 (mpMomentController), r5 == sharedInfo+0x18
+        // (mpBehaviourManager). ⚠️ The previous transcription passed *mpGameState as the second
+        // argument -- a type error that never compiled.
+        if (!mMomentSelector.Prepare(*lrSharedInfo.mpMomentController,
+                                     *lrSharedInfo.mpBehaviourManager))
         {
             lbPrepared = false;
         }
@@ -171,6 +212,412 @@ namespace BrnDirector
         mu8ImpactShakeType    = 7;         // +0x3C4
 
         return lbPrepared;
+    }
+
+    // ========================================================================
+    // Update @0x822643A0 -- the roaming state machine. ⭐ NEW 2026-08-01.
+    //
+    // SIGNATURE FROM ASM: `mr r27, r4` / `mr r31, r3` and nothing else is consumed on entry;
+    // f1 is never read (the timestep comes from `lfs f13, 0x5C(r27)` == lrSharedInfo.mfTimestep);
+    // every exit is a bare `b __restgprlr_21` with no r3 set-up. So:
+    //     void ArbStateRoaming::Update(ArbStateSharedInfo&)
+    // Hex-Rays' `_DWORD* __fastcall(_DWORD* result, float* a2)` is noise on both counts.
+    //
+    // SHAPE: a flat 16-entry jump table on meState.
+    //     lwz r11, 0x3BC(r31)  ; meState
+    //     cmplwi cr6, r11, 0xF ; bgt cr6, def_82264444
+    //     jpt_82264444 @0x82264448, 16 entries (0x40 bytes)
+    // ⚠️ E_STATE_RELEASING (16) is deliberately OUTSIDE the table -- it reaches the `default`
+    // arm, which fires CGS_ASSERT(false, "unhandled state") (BrnArbStateRoaming.cpp:643 ==
+    // 0x283) and falls into the shared epilogue. The EState enum is NOT wrong; the table is
+    // just 16 wide. Do not add `case E_STATE_RELEASING`.
+    //
+    // ⚠️ ARMS 3/4/5/6 (the Picture-Paradise / idle group) ARE DEGRADED IN THIS BUILD -- see
+    // the marked block below. Everything else is the console's own code.
+    // ========================================================================
+    void ArbStateRoaming::Update(ArbStateSharedInfo& lrSharedInfo)
+    {
+        SharedCameraContainer& lrContainer = *lrSharedInfo.mpSharedCameraContainer;
+
+        // ---- prologue @0x822643B8..0x8226441C: the impact/normal shake cross-fade. Runs for
+        // EVERY state, before the switch. Both divisors are writable .data words (1.0f in the
+        // shipped image) and the console really divides -- keep the division.
+        mfImpactShakeAmount -= lrSharedInfo.mfTimestep / KF_IMPACT_SHAKE_FADE_TIME;   // +0x3AC
+        if (mfImpactShakeAmount < 0.0f)                                               // fcmpu/bge
+        {
+            mfImpactShakeAmount  = 0.0f;
+            mfNormalShakeAmount += lrSharedInfo.mfTimestep / KF_NORMAL_SHAKE_FADE_TIME;  // +0x3B0
+            if (mfNormalShakeAmount > 1.0f)
+            {
+                mfNormalShakeAmount = 1.0f;
+            }
+        }
+
+        // [DIAG BRN_DIRECTOR_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Report every
+        // meState transition once. This is the measurement this wave exists to make: before it,
+        // the state was frozen at E_STATE_PREPARING with no way to observe the fact. Off unless
+        // the env var is set; remove with the bring-up path.
+        {
+            static const bool sbTrace = (getenv("BRN_DIRECTOR_TRACE") != 0);
+            static s32 siLastReported = -1;
+            if (sbTrace && static_cast<s32>(meState) != siLastReported &&
+                CgsDev::Log::gpDebugPrint != 0)
+            {
+                siLastReported = static_cast<s32>(meState);
+                *CgsDev::Log::gpDebugPrint << "[roaming] meState -> " << siLastReported << "\n";
+            }
+        }
+
+        switch (meState)
+        {
+        // ---- case 0 @0x822655D0 -------------------------------------------------------
+        case E_STATE_INACTIVE:
+            break;   // the shared epilogue; the prologue's shake decay has already run
+
+        // ---- case 1 @0x82264488 (12 lines) --------------------------------------------
+        // ⚠️ FALLS THROUGH into the DRIVING body in the SAME FRAME -- the console emits no
+        // branch at 0x822644B4. This is the whole entry gate: Prepare() is dispatched
+        // VIRTUALLY through this->vtable slot 1 (`lwz r11,0(r31); lwz r11,4(r11); bctrl`), not
+        // as a direct ArbStateRoaming::Prepare call.
+        case E_STATE_PREPARING:
+            if (!Prepare(lrSharedInfo))            // 0x8226449C
+            {
+                break;                             // -> 0x822655D0
+            }
+            mfStateTimer = 0.0f;                   // stfs f30(0.0), 0x3C0
+            meState      = E_STATE_DRIVING;        // stw 2, 0(r21)
+            // FALLTHROUGH
+
+        // ---- case 2 @0x822644B8 (123 lines) -- the DRIVING body -----------------------
+        // Reaches ProcessPossibleStateChanges @0x8226464C UNCONDITIONALLY: every branch
+        // between 0x822644B8 and 0x8226464C is forward-and-inside the arm.
+        case E_STATE_DRIVING:
+        {
+            mMomentSelector.Update(lrSharedInfo.mfTimestep);        // 0x822644C4
+
+            if (!mMomentSelector.HasSelectedMoment())               // lbz +0x398 == selector +0x1E0
+            {
+                // lwz +0x388 == selector +0x1D0 (muValidMoments), signed `> 0`.
+                if (static_cast<s32>(mMomentSelector.GetNumValidMoments()) > 0)
+                {
+                    // FLAG (type pun, not an offset hack): ArbStateSharedInfo models +0x28 as
+                    // `BrnDirector::Random*`, a forward declaration of a type that has no
+                    // definition anywhere; MainDirector reinterpret_casts the same bytes into
+                    // both that and CgsNumeric::Random (BrnMainDirector.cpp:530 / :946). The
+                    // selector's DWARF signature takes CgsNumeric::Random&, so the pun happens
+                    // here. De-forking the shared-info slot is its own job.
+                    mMomentSelector.SelectBestMoment(
+                        *reinterpret_cast<CgsNumeric::Random*>(lrSharedInfo.mpRandom));  // 0x822644E8
+                }
+            }
+            else if (!mMomentSelector.GetSelectedMoment()->IsValid())   // moment +0x174 != 3
+            {
+                mMomentSelector.CancelSelection();                     // 0x82264510
+                mfStateTimer = 0.0f;                                   // 0x82264514
+            }
+
+            // [GATED @0x82264518..0x82264550 -- the two shared gameplay parameter binds]
+            //   const Camera::BehaviourParameterBank& lrBank =                 // manager +0x12530
+            //       lrSharedInfo.mpBehaviourManager->GetBehaviourParameterBank();
+            //   lrContainer.mGameplayBumper.GetBehaviour()->SetParameters(
+            //       &lrBank.GetGameplayBumperCameraParamsForCar());            // bank +0x2538
+            //   lrContainer.mGameplayExternal.GetBehaviour()->SetParameters(
+            //       &lrBank.GetGameplayExternalCameraParamsForCar());          // bank +0x2488
+            // WHY: identical to the gate already documented at
+            // BrnDirectorArbitratorSharedCameraContainer.cpp:62 -- BehaviourManager models
+            // mBehaviourParameterBank (DWARF :325) as an OPAQUE 4-byte sub-object, so all three
+            // accessors return REFERENCES to objects that do not exist in this tree. A stub
+            // could only hand back a fabrication, and SetParameters would latch it as the two
+            // shared gameplay cameras' live parameter block -- strictly worse than leaving them
+            // on their Construct() defaults. This is a RE-BIND of the same two blocks the
+            // container already binds (or would) at Prepare time, so skipping it per-frame
+            // changes nothing that the container's own gate has not already changed.
+            // DELETE-WHEN: BehaviourParameterBank gets a homed layout + TU (restore verbatim,
+            // here and in SharedCameraContainer::Prepare together).
+
+            // ---- camera cycle request @0x82264554: the base's per-frame flag, ignored while
+            // the lookback override owns the choice; it flips which gameplay cam is selected.
+            if (ShouldCycleCameraThisFrame() && !lrContainer.mbLookbackOverride)
+            {
+                // cntlzw/extrwi == a logical NOT of the byte.
+                lrContainer.mbUseGameplayExternal = !lrContainer.mbUseGameplayExternal;
+            }
+
+            // ---- this frame's camera source @0x82264580 ------------------------------
+            if (mMomentSelector.HasSelectedMoment() &&
+                mMomentSelector.GetSelectedMoment()->IsValid())
+            {
+                // moment +0x10 == the moment's own camera (two separate GetSelectedMoment
+                // calls in the asm, 0x82264594 and 0x822645A8; either shape is parity).
+                GetNonConstCamera() = mMomentSelector.GetSelectedMoment()->GetCamera();
+            }
+            else if (lrSharedInfo.mpGameState->mDirectorProfileData.maOpaque[0x05] != 0)
+            {
+                // FLAG: gameState +0x1ED, the same inferred profile-data flag ProcessPossibleFX
+                // reads. When set the external chase cam is FORCED (the selection predicate is
+                // bypassed entirely -- 0x822645C8 goes straight to container +0x04).
+                GetNonConstCamera() = lrContainer.mGameplayExternal.GetProducedCamera();
+            }
+            else
+            {
+                GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            }
+
+            ProcessPossibleFX(lrSharedInfo);                 // 0x82264634
+            ProcessPossiblePaybackEffects(lrSharedInfo);     // 0x82264640
+            ProcessPossibleStateChanges(lrSharedInfo);       // 0x8226464C  ⭐ the transition point
+
+            // If the frame decided to leave DRIVING (and we are not in event mode 3), drop the
+            // camera's start-hook request and stop whatever effect is playing.
+            if (meState != E_STATE_DRIVING &&
+                lrSharedInfo.mpGameState->meEventType != 3)
+            {
+                GetNonConstCamera().ClearCrashNavEffectGate();                       // stb 0, +0x12F
+                Camera::StopCurrentEffect(GetNonConstCamera(), *lrSharedInfo.mpEffectInterface);
+                mbStartedJumpEffect = false;                                         // stb 0, +0x39D
+            }
+
+            mfStateTimer += lrSharedInfo.mfTimestep;         // 0x82264680..0x8226468C
+            break;
+        }
+
+        // ==================================================================================
+        // ⛔⛔ ARMS 3/4/5/6 -- THE PICTURE-PARADISE / IDLE GROUP. **DEGRADED, DELIBERATELY.**
+        //
+        // The console bodies (0x822646A4 / 0x82264960 / 0x82264B60 / 0x82264F14, 677 of this
+        // function's 1154 instruction lines) drive two BehaviourManager-allocated cameras --
+        // a BehaviourRoadRunner and a BehaviourInterpolate -- through
+        // NewBehaviour<T> / Setup / IsWaitingToPrepare / HasFailed / HasFinished / Release, plus
+        // Camera::EnsureEffectIsPlaying and RequestStartEffectHook on four named hooks
+        // ("Black_In_BW", "Black_Out_BW", "Picture_Effect", "Black_In(No_B_W)").
+        // They cannot be written here yet because:
+        //   * this header carries its OWN private nested BehaviourHandle<T> (a 5-field POD with
+        //     no methods) rather than Camera::BehaviourHandle<T> -- the type the manager's
+        //     NewBehaviour<T> takes and the only one with GetProducedCamera/GetBehaviour/
+        //     IsWaitingToPrepare/Release. De-forking that is its own job;
+        //   * BehaviourInterpolate::Setup(f32, BehaviourHelperIndex, BehaviourHelperIndex,
+        //     BehaviourManager*) and SharedCameraContainer::GetGameplayCameraHelperIndex have
+        //     no bodies anywhere in the tree;
+        //   * arms 5 and 6 gate on two 16-byte VMX distance-squared splats (unk_82FAAC00 /
+        //     unk_82FAAAC0) that have NOT been decoded. Inventing them would be worse.
+        //
+        // ⚠️ WHY THIS IS NOT JUST `break;`: ProcessPossibleStateChanges @0x82219FA4 writes
+        // meState = 3 DIRECTLY (not through ChangeToStateWithoutRelease), and arm 3 is the ONLY
+        // arm of the sixteen that never calls ProcessPossibleStateChanges. An empty arm 3 is a
+        // TERMINAL SINK: once a player idles for three minutes anywhere outside a junkyard, the
+        // ENTIRE director state machine stops re-evaluating for the rest of the session.
+        // What is reproduced instead, using only stores the console itself makes:
+        //   * arm 3 takes the console's own "the interpolater could not be produced" exit
+        //     (@0x82264828: meState = E_STATE_CHANGING_TO_IDLE_BLACKOUT, mfStateTimer = 0) --
+        //     which is exactly this build's situation, since NewBehaviour is never reached;
+        //   * arms 4/5/6 keep the camera on GetSelectedGameplayCamera (the console's own
+        //     fallback whenever mInterpolater is not allocated -- @0x822646CC), advance
+        //     mfStateTimer, and call ProcessPossibleStateChanges, whose 4/5/6 -> DRIVING escape
+        //     (ProcessActiveDrivingTransitions, "idle-reset hold") then returns the machine to
+        //     DRIVING as soon as the player becomes active again.
+        // OBSERVABLE COST: Picture Paradise produces no road-runner fly-around and no
+        // black-and-white fades; the game drops back to the normal chase camera instead. That
+        // is a visible degradation, NOT a strand, and it is loud rather than silent.
+        // DELETE-WHEN: the BehaviourHandle de-fork + BehaviourInterpolate::Setup +
+        // GetGameplayCameraHelperIndex land, and the two VMX splats are read.
+        // ==================================================================================
+        case E_STATE_CHANGING_TO_IDLE_INTERPOLATE:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();   // 0x822646CC arm
+            meState      = E_STATE_CHANGING_TO_IDLE_BLACKOUT;                // 0x82264828/0x82264838
+            mfStateTimer = 0.0f;                                             // 0x8226491C
+            break;
+
+        case E_STATE_CHANGING_TO_IDLE_BLACKOUT:
+        case E_STATE_IDLE:
+        case E_STATE_IDLE_RESET:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            mfStateTimer += lrSharedInfo.mfTimestep;
+            ProcessPossibleStateChanges(lrSharedInfo);   // all three console arms call it too
+            break;
+
+        // ==================================================================================
+        // The nine CHANGING_TO_* hand-off arms. Eight are the same 31-line shape:
+        //     mCamera = lrContainer.GetSelectedGameplayCamera();
+        //     ArbUtils::ChangeToStateWithoutRelease<EState>(info, TARGET, meState,
+        //                                                   E_STATE_CHANGING_TO_<X>, INACTIVE);
+        // ⚠️ Argument 4 is the BLOCKED value and argument 5 the SWITCHED value (see the asm
+        // proof in BrnDirectorArbitratorUtils.h). r7 is `li 0` at all nine sites.
+        // ==================================================================================
+
+        // ---- case 7 @0x822651B4 (58 lines) -- DEVIATION: an extra CanRun guard + fallback --
+        case E_STATE_CHANGING_TO_CRASHING:
+        {
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+
+            // container +0x1C60 is the CRASHING state, NOT crash-mode: ConstructAll @0x8224F020
+            // seeds the pointer table at +0x35A0 with +0x35A8 -> +0x1C60 -> E_STATE_CRASHING.
+            ArbitratorState* lpCrashingState =
+                lrSharedInfo.mpStateContainer->GetState(ArbitratorStateContainer::E_STATE_CRASHING);
+
+            if (lpCrashingState->CanRun(lrSharedInfo))          // vtable slot 5 (+0x14) @0x8226521C
+            {
+                ArbUtils::ChangeToStateWithoutRelease<EState>(
+                    lrSharedInfo, ArbitratorStateContainer::E_STATE_CRASHING,
+                    meState, E_STATE_CHANGING_TO_CRASHING, E_STATE_INACTIVE);
+            }
+            else
+            {
+                meState = E_STATE_DRIVING;                     // 0x82265260
+                lpCrashingState->Release(lrSharedInfo);        // vtable slot 3 (+0x0C) @0x82265278
+                ProcessPossibleStateChanges(lrSharedInfo);     // 0x82265284
+            }
+            break;
+        }
+
+        // ---- case 8 @0x8226529C ------------------------------------------------------
+        case E_STATE_CHANGING_TO_TAKEDOWN:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_TAKEDOWN,
+                meState, E_STATE_CHANGING_TO_TAKEDOWN, E_STATE_INACTIVE);
+            break;
+
+        // ---- case 9 @0x82265318 ------------------------------------------------------
+        case E_STATE_CHANGING_TO_RACE_INTRO:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_RACE_INTRO,
+                meState, E_STATE_CHANGING_TO_RACE_INTRO, E_STATE_INACTIVE);
+            break;
+
+        // ---- case 10 @0x82265394 -----------------------------------------------------
+        case E_STATE_CHANGING_TO_ONLINE_RACE_INTRO:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_ONLINE_RACE_INTRO,
+                meState, E_STATE_CHANGING_TO_ONLINE_RACE_INTRO, E_STATE_INACTIVE);
+            break;
+
+        // ---- case 11 @0x82265410 -----------------------------------------------------
+        case E_STATE_CHANGING_TO_RACE_POST_EVENT:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_POST_EVENT,
+                meState, E_STATE_CHANGING_TO_RACE_POST_EVENT, E_STATE_INACTIVE);
+            break;
+
+        // ---- case 12 @0x82265138 -----------------------------------------------------
+        case E_STATE_CHANGING_TO_DRIVETHRU:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_DRIVETHRU,
+                meState, E_STATE_CHANGING_TO_DRIVETHRU, E_STATE_INACTIVE);
+            break;
+
+        // ---- case 13 @0x8226548C ⭐ THE JUNKYARD / CAR-SELECT RETRY ARM ---------------
+        // MANDATORY. ProcessPossibleStateChanges @0x82219F14 parks meState on 0xD whenever
+        // ArbStateCarSelect::Prepare declines (target 8, blocked 0xD, switched 0); this arm is
+        // the per-frame re-attempt. Without it the ladder deadlocks on the first decline.
+        case E_STATE_CHANGING_TO_CAR_SELECT:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_CAR_SELECT,
+                meState, E_STATE_CHANGING_TO_CAR_SELECT, E_STATE_INACTIVE);
+            break;
+
+        // ---- case 14 @0x82265508 -----------------------------------------------------
+        case E_STATE_CHANGING_TO_RANK_UP:
+            GetNonConstCamera() = lrContainer.GetSelectedGameplayCamera();
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_RANK_UP,
+                meState, E_STATE_CHANGING_TO_RANK_UP, E_STATE_INACTIVE);
+            break;
+
+        // ---- case 15 @0x82265584 (11 lines) -- DEVIATION: NO camera copy --------------
+        case E_STATE_CHANGING_TO_ONLINE_CAR_SELECT:
+            ArbUtils::ChangeToStateWithoutRelease<EState>(
+                lrSharedInfo, ArbitratorStateContainer::E_STATE_ONLINE_CAR_SELECT,
+                meState, E_STATE_CHANGING_TO_ONLINE_CAR_SELECT, E_STATE_INACTIVE);
+            break;
+
+        // ---- default @0x822655B0 -- reached by E_STATE_RELEASING (16) and anything above.
+        default:
+            CGS_ASSERT(false, "unhandled state");   // BrnArbStateRoaming.cpp:643 (0x283)
+            break;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // ProcessPossiblePaybackEffects @0x82208BA8 -- ⭐ NEW 2026-08-01.
+    //
+    // SIGNATURE FROM ASM: `mr r23, r4` / `mr r22, r3`, f1 never read, epilogue a bare
+    // `b __restgprlr_22` -- void(ArbStateSharedInfo&). Hex-Rays' `float*(float*, int)` is noise.
+    //
+    // Called UNCONDITIONALLY from the DRIVING arm (0x82208BA8 <- 0x82264640), so it is on the
+    // junkyard path by construction. It never writes meState, never touches a behaviour handle
+    // and never calls ChangeTo* -- it only keeps the camera's effect-hook request in sync with
+    // the game state's active payback.
+    // ------------------------------------------------------------------------
+    void ArbStateRoaming::ProcessPossiblePaybackEffects(ArbStateSharedInfo& lrSharedInfo)
+    {
+        GameState&             lrGameState = *lrSharedInfo.mpGameState;
+        const EffectInterface& lrEffects   = *lrSharedInfo.mpEffectInterface;
+        Camera::Camera&        lrCamera    = GetNonConstCamera();
+
+        // off_82001AC0 -- a 3-entry const char* table (it ends at 0x82001ACC, which is the loop
+        // bound the console compares r30 against at 0x82208D54).
+        static const char* const KAPC_PAYBACK_EFFECT_NAMES[3] =
+        {
+            "Reverse",       // E_PAYBACK_TYPE_REVERSE_STEERING (0)
+            "Boost_Lock",    // E_PAYBACK_TYPE_BOOST_LOCK       (1)
+            "Boost_Steal"    // E_PAYBACK_TYPE_AGGRESSORS_CONTROLS_AFFECTS_VICTIM (2)
+        };
+
+        if (lrGameState.mbPaybackActive)                        // lbz +0xF0
+        {
+            // Request the payback hook unless it is ALREADY the live effect.
+            bool lbNeedsRequest = true;
+            if (lrEffects.HasCurrentEffectName())               // lbz +0xD37
+            {
+                const char* lpcWanted =
+                    KAPC_PAYBACK_EFFECT_NAMES[lrGameState.meActivePaybackType];   // lwz +0xF4
+                if (strcmp(lrEffects.GetCurrentEffectName(), lpcWanted) == 0)     // 0x82208BFC loop
+                {
+                    lbNeedsRequest = false;                    // 0x82208C24 -> the tail
+                }
+            }
+
+            if (lbNeedsRequest)
+            {
+                // :1094 -- the table only covers types 0..2; type 3 (SIX_AXIS_STEERING) has no
+                // camera effect. Non-gating in the console: it indexes the table either way.
+                CGS_ASSERT(lrGameState.meActivePaybackType != BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING,
+                           "lSharedInfo.mpGameState->meActivePayback");
+                Camera::RequestStartEffectHook(
+                    lrCamera, KAPC_PAYBACK_EFFECT_NAMES[lrGameState.meActivePaybackType], KF_UNIT);
+            }
+        }
+
+        // 0x82208C88 -- the complement: payback is NOT active but something IS playing. Walk
+        // the three names and stop the effect on the first match.
+        if (!lrGameState.mbPaybackActive && lrEffects.HasCurrentEffectName())
+        {
+            for (s32 liEnumIndex = 0; liEnumIndex < 3; ++liEnumIndex)
+            {
+                // The console re-asserts this every iteration (EffectTrigger.h:112, the
+                // GetCurrentEffectName tripwire re-emitted inline at 0x82208CD4).
+                CGS_ASSERT(lrEffects.HasCurrentEffectName(), "HasCurrentEffectName()");
+
+                if (strcmp(lrEffects.GetCurrentEffectName(),
+                           KAPC_PAYBACK_EFFECT_NAMES[liEnumIndex]) == 0)
+                {
+                    Camera::StopCurrentEffect(lrCamera, lrEffects);   // 0x82208D70
+                    return;
+                }
+
+                // The inlined GetPaybackTypeName helper's own bound check
+                // (GameSource/Network/SharedIO/..., line 182). ⚠️ FLAG: the console compares
+                // `cmpwi r25, 3` while this tree's BrnNetworkSharedIO.h carries
+                // E_PAYBACK_TYPE_COUNT == 4. The asm's number is kept (it can never fire from
+                // this 3-iteration loop either way); the enum discrepancy is not resolved here.
+                CGS_ASSERT((liEnumIndex + 1) <= 3, "leEnumIndex <= E_PAYBACK_TYPE_COUNT");
+            }
+        }
     }
 
     // ------------------------------------------------------------------------

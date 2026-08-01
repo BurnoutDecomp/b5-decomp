@@ -44,17 +44,12 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
     return true;
 }
 
-// DWARF BrnMomentController.cpp:277. Release the held slot back to the owning pool (a no-op
-// when nothing is held) and clear the allocated flag. Returns true.
-bool MomentController::MomentHandle::Release()
-{
-    if (mbIsAllocated)
-    {
-        mMomentPoolHandle.Release();   // frees the slot via AbstractPoolVoidHandle -> pool::FreeObject
-        mbIsAllocated = false;
-    }
-    return true;
-}
+// MomentHandle::Release MOVED OUT of this TU 2026-08-01 -> BrnMomentController.cpp, which is
+// the DWARF's own home for it (BrnMomentController.cpp:277) AND is on the exe source list.
+// This TU is not mounted (NewMoment's twelve AllocateVoid<MomentXxx>() arms drag the moment
+// subclass family), and BrnMomentSelector.cpp -- which IS mounted -- calls Release on every
+// handle, so leaving the only copy here meant the link could not see it.
+// ⚠️ WHEN THIS TU IS FINALLY MOUNTED, do NOT re-add Release here: it would be an LNK2005.
 
 // @0x82255850.
 bool MomentController::NewMoment(Moment::EType leMomentType,

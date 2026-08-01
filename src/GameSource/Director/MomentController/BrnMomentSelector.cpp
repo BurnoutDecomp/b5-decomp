@@ -142,6 +142,131 @@ bool MomentSelector::Prepare(MomentController& lrMomentController,
 }
 
 // ---------------------------------------------------------------------------------------
+// Update -- BrnMomentSelector.cpp:115   @0x82239FC0   ⭐ NEW 2026-08-01
+//
+// Signature FROM ASM: r3 = this, f1 = the timestep (`fmr f31, f1`, then f31 is added to
+// +0x1C4). Nothing is returned. Hex-Rays' `(_DWORD* result, double a2)` is the usual PPC
+// float-ABI artefact.
+//
+// Advance the selector's accumulators, decay every candidate's recency score, and re-classify
+// every live moment into four running counters -- one of which is muValidMoments, the count
+// ArbStateRoaming::Update's DRIVING arm reads every frame to decide whether to ask for an
+// establishing shot. Then inhibit any moment that is VALID but cannot be switched to.
+//
+// LOOP SHAPE (0x8223A088..0x8223A418), every branch attested:
+//   skip the currently-selected slot;  mRecencyArray[i] *= mfRecencyFactor;
+//   skip !IsAllocated();   then five ordered tests on the moment, four of which `continue`.
+// The console re-fetches the handle and re-calls GetMoment() before EVERY one of those tests
+// (nine separate `mbIsAllocated` tripwires at BrnMomentController.h:141 in one loop body);
+// hoisting them is the same reads in the same order, so this keeps one local per test group.
+// ---------------------------------------------------------------------------------------
+void MomentSelector::Update(f32 lfTimestep)
+{
+    CGS_ASSERT(mbPrepared, "mbPrepared");                            // cpp:117 (0x75)
+
+    mfTimeActive += lfTimestep;      // +0x1C4
+    ++miFramesActive;                // +0x1C8
+
+    const s32 liMomentCount = static_cast<s32>(mMomentDescriptionArray.GetLength());  // +0x0A0
+
+    u32 luUninhibited        = 0;    // r28 -- live, not inhibited, and inhibitable by policy
+    u32 luConditionsNotMet   = 0;    // r20 -- conditions not met, not inhibited, inhibitable
+    u32 luInhibitedCandidate = 0;    // r22 -- conditions met but currently inhibited
+
+    muValidMoments = 0;              // +0x1D0 -- recounted from scratch every frame
+
+    for (s32 liLoop = 0; liLoop < liMomentCount; ++liLoop)
+    {
+        // Never re-classify the slot that is already selected.
+        if (mbHasSelectedMoment && miSelectedMoment == liLoop)
+        {
+            continue;
+        }
+
+        // Recency decay (the console mutates the array element in place through GetItem).
+        mRecencyArray[static_cast<u32>(liLoop)] *= mfRecencyFactor;   // +0x198[i] *= +0x1CC
+
+        if (!mMomentHandleArray[static_cast<u32>(liLoop)].IsAllocated())
+        {
+            continue;
+        }
+
+        Moment* lpMoment = mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment();
+        const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
+
+        // (A) 0x8223A110 -- running, and the policy is allowed to inhibit it.
+        if (!lpMoment->IsInhibited() && lrDescription.mbCanBeInhibited)
+        {
+            ++luUninhibited;
+        }
+
+        // (B) 0x8223A170 -- VALID and switchable right now: this is the count the roaming
+        // state reads.
+        if (lpMoment->IsValid() && lpMoment->CanSwitchToMeNow())
+        {
+            ++muValidMoments;
+            continue;
+        }
+
+        // (C) 0x8223A208 -- waiting on its conditions, not inhibited, inhibitable.
+        if (!lpMoment->ConditionsAreMet() && !lpMoment->IsInhibited() &&
+            lrDescription.mbCanBeInhibited)
+        {
+            ++luConditionsNotMet;
+            continue;
+        }
+
+        // (D) 0x8223A2B0 -- ready but held back: a candidate for the rebalance below.
+        if (lpMoment->ConditionsAreMet() && lpMoment->IsInhibited())
+        {
+            ++luInhibitedCandidate;
+            continue;
+        }
+
+        // (E) 0x8223A340 -- VALID but NOT switchable: inhibit it.
+        if (!lpMoment->IsValid() || lpMoment->CanSwitchToMeNow())
+        {
+            continue;
+        }
+
+        lpMoment->Inhibit();                                   // 0x8223A3A4
+
+        // ⚠️ FAITHFUL QUIRK: when the description forbids inhibiting, the console inhibits it
+        // ANYWAY and then immediately un-inhibits it, asserts the byte really came back down
+        // (BrnMomentSelector.h line 0xA7), and decrements the uninhibited count. Inhibit()'s
+        // side effects (the virtual Release() and meState = E_STATE_INVALID_SEARCHING) are NOT
+        // undone -- only the flag is. Reproduced exactly.
+        if (!lrDescription.mbCanBeInhibited)
+        {
+            lpMoment->SetInhibited(false);                      // 0x8223A3DC
+            CGS_ASSERT(!lpMoment->IsInhibited(),
+                       "!mMomentHandleArray[liLoop].GetMoment()->IsInhibited()");   // :167
+            --luUninhibited;                                    // 0x8223A40C
+        }
+    }
+
+    // [GATED @0x8223A41C..0x8223A658 -- the max-active-moments REBALANCE]
+    //   if (mbHasMaxLimit && luInhibitedCandidate != 0)
+    //   {
+    //       // walk luUninhibited toward muMaxActiveMomentLimit: un-inhibit the best inhibited
+    //       // candidate while under budget (PickBestInhibitedMoment @0x8221C028), and when over
+    //       // budget swap -- PickWorstUninhibitedMoment @0x8221C358 picks the victim, the
+    //       // moment's vtable slot 4 Release() runs and meState goes to E_STATE_INVALID_INACTIVE.
+    //   }
+    // WHY GATED: PickBestInhibitedMoment (202 asm lines) and PickWorstUninhibitedMoment (222)
+    // have no body anywhere in this tree, and writing them is a wave of its own. The gate itself
+    // is FALSE for every consumer that exists today: mbHasMaxLimit is raised only by
+    // SetMaxActiveMoments (BrnMomentSelector.h:189) and NOTHING in the tree calls it -- grep is
+    // clean, and the three arbitrator states that embed a MomentSelector all go straight from
+    // Construct to AddMoment. So this block cannot execute even if it were written, and the
+    // three counters it consumes are computed above regardless.
+    // DELETE-WHEN: PickBestInhibitedMoment + PickWorstUninhibitedMoment land.
+    (void)luConditionsNotMet;
+    (void)luInhibitedCandidate;
+    (void)luUninhibited;
+}
+
+// ---------------------------------------------------------------------------------------
 // Release -- BrnMomentSelector.cpp:222   @0x8221BC90
 //
 // Signature FROM ASM: r3 = this only; `li r3, 1` before the epilogue, so it returns true

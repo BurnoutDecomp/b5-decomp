@@ -132,6 +132,18 @@ namespace BrnDirector
         // ADDITIVE GROW (MomentStaticCamImpact::Update @0x82266B6C, `stb 0x179`):
         void SetCanSwitchFromMeNow(bool lbCanSwitch) { mbCanSwitchFromMeNow = lbCanSwitch; }
 
+    public:
+        // ADDITIVE GROW 2026-08-01, PUBLIC by necessity: MomentSelector::Update @0x8223A3DC
+        // clears this moment's mbIsInhibited from OUTSIDE the class (`stb r21(0), 0x17B(r11)`
+        // on the pointer GetMoment() just returned), immediately after Inhibit() raised it, on
+        // the "valid but cannot be switched to, and the description says it may NOT be
+        // inhibited" path. The console reaches the private byte directly -- either MomentSelector
+        // was a friend or an inline setter folded away; a named setter is the faithful
+        // de-inlining and keeps the poke off a raw offset.
+        void SetInhibited(bool lbInhibited) { mbIsInhibited = lbInhibited; }
+
+    protected:
+
         // DWARF member layout (BrnMoment.h:243..256). Offsets are NOMINAL beyond the
         // by-name access used here -- see the size FLAG at the top of this file.
         Camera::Camera mCamera;        // BrnMoment.h:243
