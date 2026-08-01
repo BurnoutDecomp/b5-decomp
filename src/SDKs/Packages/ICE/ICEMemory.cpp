@@ -17,6 +17,24 @@ static const s32 KI_ICE_DEBUG_MEMORY_SIZE      = 1835008;   // ICEMemory.cpp:31 
 static const s32 KI_ICE_DEBUG_MEMORY_ALIGNMENT = 4;
 
 // ---------------------------------------------------------------------------
+// ICE::spICEMemory -- the ICE memory-manager singleton (X360 dword_82FB62C0, a
+// zero-initialised .data/.bss slot). Declared extern in ICEMemory.hpp; this is its
+// definition, homed with the manager it points at.
+//
+// ⚠️ ITS ONE WRITER IS NOT LANDED. The X360 assigns it exactly once, in
+// BrnDirector::ICEWrapper::Prepare @0x8253DD90 (`dword_82FB62C0 = a1`, immediately
+// after ICEMemory::Construct + HeapMalloc::Prepare over the same object -- the
+// wrapper IS-A ICEMemory at offset 0). ICEWrapper::Prepare is still the
+// DirectorLinkStubs `return true` stub, so on this build the pointer stays null and
+// every EDIT-buffer path (ICETake::NewEditBuffer / FreeEditBuffer / PushUndo /
+// DiscardUndo / FlushUndo's free, ICEAuthor's take editor) would null-deref. None of
+// those runs at playback: SetDataPointers binds a resident, resource-owned take with
+// lbEdit=false and allocates nothing. DELETE-WHEN: BrnDirectorICEWrapper.cpp lands;
+// then this null is the real Construct-time value again rather than a latent trap.
+// ---------------------------------------------------------------------------
+ICEMemory* spICEMemory = 0;
+
+// ---------------------------------------------------------------------------
 // ICEMemory::Construct(void* lpBuffer, s32 lnBufferSize)  @0x82533468
 //
 // Build the base ICE heap over the caller-supplied block, then allocate a 1.75 MB

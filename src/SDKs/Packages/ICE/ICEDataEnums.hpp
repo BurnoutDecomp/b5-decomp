@@ -234,8 +234,13 @@ public:
     void SetParameterData(ICEParameter* lpParams)   { mpParameters = lpParams; }
     ICEParameter* GetParameterData() const          { return mpParameters; }
 
-    // --- DECLARE-ONLY (curve / key / interval arithmetic; bodies elsewhere) ---
-    s16  GetKeyIndex(u16 lu16Interval) const;
+    // The stored key index at an interval boundary. No out-of-line X360 symbol --
+    // the console inlines it; the read is attested identically in ICETake::GetSlope
+    // @0x825303C0 (`v16 = *(2 * a4 + *(v13 + 220) - 2)`, i.e. mpKeyIndices[a4 - 1]
+    // for a call spelled GetKeyIndex(interval - 1)), in the private
+    // ICETake::SetParameter @0x82530668, and in ICETakeData::SaveData @0x82532CF8.
+    // Signed return per the DWARF (ICEDataEnums.hpp:387 `int16_t GetKeyIndex(uint16_t)`).
+    s16  GetKeyIndex(u16 lu16Interval) const        { return (s16)mpKeyIndices[lu16Interval]; }
     void SetIntervalKey(u16 lu16Interval, s16 li16Key);
 
     f32  GetIntervalParameter(u16 lu16Interval) const;

@@ -1079,12 +1079,13 @@ namespace BrnResource
     // DirectorResourceManager::Prepare's AcquireResource can find it. Without it that
     // acquire never replies and the director's prepare stage machine parks for ever.
     //
-    // [FLAG PC boot gate] the terminal AddListResource is the one part held back:
-    // BrnResource::ICEList (SharedClasses/DataLists/ICEList.cpp) and the ICE take
-    // dictionary's FixUp are not in the exe source list, so there is no list object to bind
-    // the resource into. Everything up to and including the acquire is the console's own
-    // sequence; only the bind is skipped (one-shot log). DELETE-WHEN: the ICE take-runtime
-    // group lands.
+    // ⭐ UN-GATED 2026-08-01 (ICE take-runtime wave). The terminal AddListResource used to be
+    // held back because neither ICEList.cpp nor the type-65 handler was in the exe source
+    // list -- with no registered handler the pool skips FixUp, so the dictionary's mpaIndex
+    // and every entry's mpData are still resource-relative OFFSETS, and binding that would
+    // have made every take lookup dereference an offset as a pointer. Both are mounted now
+    // (DictionaryResourceType<ICE::ICETakeData> is registered in
+    // CgsResourceTypeRegistration.cpp), so the bind is the console's own again.
     // ========================================================================================
     bool GameDataModule::PrepareICEList()
     {
@@ -1096,14 +1097,41 @@ namespace BrnResource
                                      &lHandle))
             return false;
 
-        static bool s_bLoggedICEListGate = false;
-        if (!s_bLoggedICEListGate)
+        if (lHandle.mpResourceMemory != 0)
         {
-            s_bLoggedICEListGate = true;
+            BrnResource::ICEList::ICETakeDictionaryResourcePtr lResourcePtr(lHandle);
+            mICEList.AddListResource(lResourcePtr);
+        }
+        else
+        {
+            // [marked deviation] the console has no null path here (as for the vehicle/wheel
+            // lists); report instead of binding a null dictionary.
             *CgsDev::Log::gpDebugPrint
-                << "[GameData] PrepareICEList: 'Cameras.bundle' resident (StandardICETakes "
-                << (lHandle.mpResourceMemory != 0 ? "acquired" : "NOT resolved")
-                << ") -- ICEList::AddListResource skipped [FLAG PC boot gate]\n";
+                << "[GameData] PrepareICEList: StandardICETakes did not resolve"
+                   " -- the ICE take table is EMPTY\n";
+        }
+
+        *CgsDev::Log::gpDebugPrint
+            << "[GameData] PrepareICEList: " << mICEList.GetICEMovieCount() << " ICE takes\n";
+        {
+            // [PC diagnostic] the three takes ArbStateCarSelect's game-intro shot group
+            // names (610132 Intro_FlyCam_Loop / 605855 DMV_IntroA / 605858 DMV_IntroB),
+            // resolved by guid through the same rebased entry array -- so this doubles as
+            // the regression gate on the type-65 FixUp.
+            static const s32 kaiIntroTakeGuids[3] = { 610132, 605855, 605858 };
+            for (s32 liIndex = 0; liIndex < 3; ++liIndex)
+            {
+                const ICE::ICETakeData* lpTake =
+                    mICEList.GetICETakeDataFromGuid(kaiIntroTakeGuids[liIndex]);
+                *CgsDev::Log::gpDebugPrint
+                    << "[GameData]   take guid " << kaiIntroTakeGuids[liIndex] << " -> "
+                    << (lpTake != 0 ? lpTake->GetName() : "<not found>");
+                if (lpTake != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << " len=" << lpTake->GetLength();
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
         }
         return true;
     }

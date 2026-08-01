@@ -34,6 +34,8 @@
 #include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
 #include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"            // BrnVehicle::GraphicsSpecResourceType (0x10006)
+#include "GameShared/GameClasses/Containers/CgsDictionaryResourceType.h"       // CgsContainers::DictionaryResourceType<ICE::ICETakeData> (0x41)
+#include "SDKs/Packages/ICE/ICEData.hpp"                                       // ICE::ICETakeData (the dictionary's element type)
 
 // ============================================================================================
 // Resource-type registration -- the faithful counterpart of the X360
@@ -171,6 +173,18 @@ namespace CgsResource
         // load fine on the documented null-type path, so it is not a vehicle-specific gap.)
         static BrnVehicle::GraphicsSpecResourceType   sVehicleGraphicsSpec;  // 0x10006 (65542)
         TypeRegistry::Register(&sVehicleGraphicsSpec);
+        // ---- the ICE take dictionary (ICE take-runtime wave, 2026-08-01) --------------------
+        // GameDataModule::PrepareICEList streams Cameras.bundle into pool 5 and acquires
+        // "StandardICETakes" (id 0x0DC0EE8F == HashString("StandardICETakes")), whose type is
+        // 0x41. Same reason as the two list types above, and it BITES here: every pointer slot
+        // in a serialised dictionary -- mpaIndex and each of the 549 entries' mpData -- is a
+        // resource-relative OFFSET on disk, and only DictionaryResourceType<T>::FixUp turns
+        // them into addresses. Without a registered handler the pool stores a NULL
+        // mpResourceType, the loader skips FixUp, and ICEList::GetICETakeData{,FromGuid} would
+        // dereference offsets as pointers on every single lookup. (Measured on the shipped
+        // build/game/CAMERAS.BUNDLE: miNumEntries 549, mpaIndex 0x10, entry[0].mpData 0x3388.)
+        static CgsContainers::DictionaryResourceType<ICE::ICETakeData> sICETakeDictionary; // 0x41 (65)
+        TypeRegistry::Register(&sICETakeDictionary);
         // NOT registered: PlayerCarColours (0x1001E / 65566), the SECOND resource inside
         // VEHICLELIST.BUNDLE. Its handler exists (SharedClasses/Graphics/
         // PlayerCarColoursResourceType.cpp) but that TU is written against 32-bit pointers

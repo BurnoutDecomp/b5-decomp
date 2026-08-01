@@ -66,6 +66,23 @@ namespace ICE
 // eICE_NUM_ELEMENTS (48) and the extern ICEElementDescriptions[] declaration now
 // live in ICEDataEnums.hpp so every ICE TU shares the one schema table.
 
+// -----------------------------------------------------------------------------
+// ICE_EPSILON -- the ICE package's shared float tolerance (ICEData.hpp:54 declares
+// it extern; this is its definition).
+//
+// VALUE RECOVERED, not guessed: it is the X360 .rodata slot flt_8207AB94, which
+// exactly six functions load. In two of them Hex-Rays folded the literal into the
+// pseudocode -- ICE::Cubic1D::Update @0x8252CE70 (`if ( *(result + 36) <=
+// 0.0000099999997 )`, and its asm loads flt_8207AB94 for that very compare at
+// 0x8252CF24/0x8252CF2C) and ICEAuthor::JumpToNextKey @0x825381C0 -- so the slot's
+// value prints as 0.0000099999997, i.e. the float nearest 1e-5 (0x3727C5AC).
+// The other four users are the two epsilon guards in ICETake::GetSlope @0x825303C0,
+// the `size > ICE_EPSILON` assert in the private ICETake::SetParameter @0x82530668
+// (ICEData.cpp:2473), JumpToPreviousKey and ICEAuthor::DeleteTakeSegment.
+// -----------------------------------------------------------------------------
+extern const f32 ICE_EPSILON;
+const f32 ICE_EPSILON = 1.0e-5f;   // X360 flt_8207AB94
+
 // eICE_NUM_CHANNELS == 12 (see docs/ICEData.md ICEChannels). The 12 channel names, in
 // channel order, seeded into the per-channel index records by InitICEDescriptions loop 1.
 // (A .rodata string list.)
@@ -440,6 +457,21 @@ ICEElementDescription ICEElementDescriptions[eICE_NUM_ELEMENTS] =
       1.0f, 1.0f, 1.0f,
       const_cast<char**>(kapcICETokens_NoYes), 2 }
 };
+
+// -----------------------------------------------------------------------------
+// Named slots into the two tables above, used by the public ICETake::SetParameter
+// (which reaches them as raw mValues[] byte offsets in the asm). Each name is read
+// straight off the table entry at that index -- nothing is inferred.
+//   channel 10 == "ASSEMBLY" in KAPC_ICE_CHANNEL_NAMES
+//   [17] SHAKE_AMPLITUDE / [18] SHAKE_FREQUENCY   (channel 3, SHAKE)
+//   [45] TAKE_START / [46] TAKE_NUMBER / [47] CONTAINS_SUBTAKE   (channel 10)
+// -----------------------------------------------------------------------------
+static const s32 KI_ICE_ASSEMBLY_CHANNEL             = 10;
+static const s32 KI_ICE_ELEMENT_SHAKE_AMPLITUDE      = 17;
+static const s32 KI_ICE_ELEMENT_SHAKE_FREQUENCY      = 18;
+static const s32 KI_ICE_ELEMENT_TAKE_START           = 45;
+static const s32 KI_ICE_ELEMENT_TAKE_NUMBER          = 46;
+static const s32 KI_ICE_ELEMENT_CONTAINS_SUBTAKE     = 47;
 
 // -----------------------------------------------------------------------------
 // Per-channel element-index records (a global, 12 * 204 bytes).
@@ -940,13 +972,26 @@ f32 ICEChannel::GetIntervalParameter(u16 lu16Interval) const
     return (f32)(s32)lu16Packed * (1.0f / (f32)ICE_PARAMETER_MAX);
 }
 
-// ICE::ICEChannel::GetIntervalBracket(u16, f32*, f32*) const
+// ICE::ICEChannel::GetIntervalBracket(f32*, f32*) const   @0x8252D6B8
 //
 // Returns the [start,end] parameter values bracketing the channel's CURRENT interval.
-// Note: lu16Interval is part of the frozen overload signature but the body operates on
-// the cached mu16CurrentInterval (it reads *(this+4), not the argument). When no
-// interval is current (mu16CurrentInterval == 0xFFFF) the bracket is the full unit range.
-void ICEChannel::GetIntervalBracket(u16 lu16Interval, f32* lpfStart, f32* lpfEnd) const
+// When no interval is current (mu16CurrentInterval == 0xFFFF) the bracket is the full
+// unit range.
+//
+// ⭐ OVERLOAD CORRECTED 2026-08-01. This body used to be attached to the
+// GetIntervalBracket(u16, f32*, f32*) sibling, with a comment noting that the u16
+// argument was ignored. It is not ignored -- it was never there: 0x8252D6B8 takes
+// exactly THREE registers (r3 = this, r4 = lpfStart, r5 = lpfEnd) and reads the
+// interval from `lhz r9, 4(r3)` == mu16CurrentInterval, and its ONE caller,
+// ICETake::Delete @0x8253C528, calls it with three registers too
+// (0x8253C5C4-0x8253C5D0). Both overloads are DWARF-declared (ICEDataEnums.hpp:397
+// and :399); this is the :399 one. The interval-argument sibling has no X360 body
+// and no caller in the tree, so it stays declaration-only rather than being given
+// this one's semantics.
+//
+// The console writes the END first (the 0x8252D708 call returns into `stfs f1,
+// 0(r5)`) and the START second; order preserved.
+void ICEChannel::GetIntervalBracket(f32* lpfStart, f32* lpfEnd) const
 {
     const u16 lu16Current = mu16CurrentInterval;
 
@@ -1409,15 +1454,28 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
 
 
 // =============================================================================
-// GROUP 5 -- ICE::ICETake bodies (11): Construct, NewEditBuffer, FreeEditBuffer,
-// SetDataPointers, SetSubTake(ptr), GetValue(2-arg), SetValue, GetValueFloat(1-arg),
-// GetValueInt(1-arg), GetSlope, SetParameter (private 3-arg).
+// GROUP 5 -- ICE::ICETake bodies (15): Construct, NewEditBuffer, FreeEditBuffer,
+// SetDataPointers, SetSubTake(ptr), SetSubTake(guid), GetValue(2-arg), SetValue,
+// GetValueFloat(1-arg + 2-arg), GetValueInt(1-arg + 2-arg), GetSlope,
+// SetParameter (private per-channel 3-arg) and SetParameter (PUBLIC 3-arg).
 //
 // Built against the frozen layout in ICEData.hpp (ICETake), ICEDataEnums.hpp
 // (ICEChannel, ICEElementDescription, ICEValue), and ICEPoint.hpp (Cubic1D).
-// The 11 bodies: Construct, NewEditBuffer, FreeEditBuffer, SetDataPointers,
-// SetSubTake, SetParameter, GetValue, SetValue, GetSlope, and the 1-arg
-// GetValueFloat/GetValueInt (which read mValues[element] directly).
+//
+// ⭐ FOUR OF THESE WERE RECOVERED FROM UNNAMED SUBS (2026-08-01, ICE take-runtime
+// wave). The X360 export set carries their bodies but not their symbol names, so
+// an earlier pass concluded they "have no body anywhere" and the whole TU stayed
+// out of the exe source list. Each is pinned by its caller set, not by a guess:
+//   sub_8252F848 -> ICETake::GetValueFloat(s32, u16) const   (called by GetSlope,
+//                   the private SetParameter, KeyAnimShakeController::Update,
+//                   CameraShakeICEController::Update, 6 ICEAuthor/ICEController ops)
+//   sub_8252F8F0 -> ICETake::GetValueInt(s32, u16) const
+//   sub_82534118 -> ICETake::SetParameter(f32, bool, bool)   (called by
+//                   KeyAnimController::Prepare/Update, ICEWrapper::PlayMovie,
+//                   ICETake::Construct/NewEditBuffer/PopUndo/ChangeSize/SetSubTake)
+//   sub_82533360 -> ICETake::SetSubTake(s32, bool)           (its own assert names
+//                   "..\..\..\SDKs\Packages\ICE\ICEData.cpp" line 2575, so this TU
+//                   is its home on the console's own evidence)
 //
 // External symbols this TU provides / references:
 //   * ICE::ICEElementDescriptions[] + eICE_NUM_ELEMENTS  -- GROUP 1 above.
@@ -1425,9 +1483,9 @@ void ICETakeData::FixDown(const CgsResource::Resource& lrResource)
 //   * ICE::ICEMemory::GetMemory + ICE::spICEMemory (the ICE::ICEMemory* singleton)
 //     + its embedded mEditHeap (CgsMemory::HeapMalloc at +0x520) -- ICEMemory.hpp.
 //   * CGS_ASSERT; ICE_INVALID_INTERVAL / ICE_EPSILON (frozen header constants).
-//   * ICETake private helpers MarkChannelFromSubTake / FlushUndo and the public
-//     SetParameter(f32,bool,bool); ICETakeData::Construct / ComputeEditSize /
-//     GetElementCounts / IsAllocated; ICEChannel / Cubic1D accessors -- all frozen.
+//   * ICETake private helpers MarkChannelFromSubTake / FlushUndo;
+//     ICETakeData::Construct / ComputeEditSize / GetElementCounts / IsAllocated;
+//     ICEChannel / Cubic1D accessors -- all frozen.
 // =============================================================================
 
 namespace ICE {
@@ -1439,17 +1497,19 @@ namespace ICE {
 // playback parameters, reset every runtime channel to "no data", then bind the
 // (still-null) data pointers and seed the parameter to 0.
 //
-// FLAG (+0x72C undo member): the ctor also self-links an intrusive undo-list
-// head at this+0x72C (Next/Prev -> &head), which lies past the frozen ICETake
-// layout's last member (mbNewSubTakeThisFrame @0x728). That undo-list member is NOT
-// in the committed header; omitted here pending its addition (it must be added
-// by GROWING the ICETake header when the undo TU lands).
+// The +0x72C undo-list head is self-linked here (0x8253B374/0x8253B388/0x8253B38C:
+// `addi r9, r31, 0x72C; stw r9, 0(r9); stw r9, 4(r9)`). It is REQUIRED, not
+// cosmetic: FlushUndo/DiscardUndo/PushUndo all terminate on `head->Next == &head`,
+// so an unlinked head walks uninitialised memory the first time NewEditBuffer runs.
+// (An older FLAG here said the member was absent from the frozen header and skipped
+// the self-link; ICEData.hpp has carried mUndoList[2] since the undo round landed,
+// so the store is restored.)
 //
-// FLAG (parameter-seed tail): the parameter-seed tail is the all-channels parameter
-// driver `(this,_,1,0,0.0f)`, the sole caller of the private 3-arg SetParameter.
-// It is not in the frozen-header method set under a resolved name; the best-matching
-// DECLARED member is the public SetParameter(f32,bool,bool), mapped here. Confirm
-// its exact arg mapping.
+// The parameter-seed tail is the PUBLIC SetParameter(f32,bool,bool) -- confirmed:
+// the callee at 0x8253B3EC is sub_82534118, whose caller set is
+// KeyAnimController::Prepare/Update + ICEWrapper::PlayMovie, and the argument
+// mapping is exactly `f1 = 0.0f, r5 = 1, r6 = 0` (the reserved r4 slot belongs to
+// the float). See that body below.
 // ---------------------------------------------------------------------------
 void ICETake::Construct(const IResourceManager* lpResourceManager)
 {
@@ -1457,6 +1517,10 @@ void ICETake::Construct(const IResourceManager* lpResourceManager)
     mfParameter    = 0.0f;
     mfSubParameter = 0.0f;
     mbNewSubTakeThisFrame = false;
+
+    // Self-link the undo-history head (empty list == head points at itself).
+    mUndoList[0] = mUndoList;   // Next
+    mUndoList[1] = mUndoList;   // Prev
 
     // Reset all 12 runtime channels: no keys/intervals, no current interval
     // (0xFFFF sentinel), null key/parameter pointers.
@@ -1689,12 +1753,43 @@ void ICETake::SetDataPointers(ICETakeData* lpTakeData, bool lbEdit)
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::SetSubTake(const ICETakeData*, bool)
+// ICETake::SetSubTake(s32 liGuid, bool lbForce)   @0x82533360 (X360 sub_82533360)
+//
+// Resolve a take id through the bound resource manager and bind the result as this
+// take's SUB-take. Its own assert names this file and line 2575, which is how the
+// unnamed sub is pinned to this TU.
+//
+//     lwz r3, 0(r31)    ; mpResourceManager
+//     lwz r11, 0(r3)    ; vptr
+//     lwz r11, 0(r11)   ; vtable slot 0 == IResourceManager::GetTakeData(ID)
+//     bctrl             ; r4 (the guid) is NOT reloaded -- the caller already left
+//                       ; it there, so the argument passes straight through
+//     assert(result, "lpSubTakeData", "..\\..\\..\\SDKs\\Packages\\ICE\\ICEData.cpp", 2575)
+//     SetDataPointers(result, /*lbEdit=*/1)
+//     if (lbForce) SetParameter(0.0f, true, true)
+//
+// NOTE the asymmetry with the pointer overload below: this one does NOT go through
+// it (no branch to 0x82530E00) -- it calls SetDataPointers itself. Preserved.
+// ---------------------------------------------------------------------------
+void ICETake::SetSubTake(s32 liGuid, bool lbForce)
+{
+    const ICETakeData* lpSubTakeData = mpResourceManager->GetTakeData(liGuid);
+
+    CGS_ASSERT(lpSubTakeData != 0, "lpSubTakeData");   // ICEData.cpp:2575
+
+    SetDataPointers(const_cast<ICETakeData*>(lpSubTakeData), true);
+
+    if (lbForce)
+    {
+        SetParameter(0.0f, /*lbForce=*/true, /*lbWrap=*/true);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ICETake::SetSubTake(const ICETakeData*, bool)   @0x82530E00
 //
 // Bind a sub-take's data pointers (edit mode), then (if lbForce) re-seed the
-// sub-take parameter so the new sub-take takes effect this frame. This is the
-// pointer overload (the s32-guid overload resolves the id to data first, then
-// forwards here).
+// sub-take parameter so the new sub-take takes effect this frame.
 // ---------------------------------------------------------------------------
 void ICETake::SetSubTake(const ICETakeData* lpSubTakeData, bool lbForce)
 {
@@ -1702,8 +1797,8 @@ void ICETake::SetSubTake(const ICETakeData* lpSubTakeData, bool lbForce)
     if (lbForce)
     {
         // Re-apply the parameter so the freshly bound sub-take is evaluated this
-        // frame: the all-channels parameter seed (this, _, 1, 1, 0.0f). Same helper
-        // as Construct (see FLAG); mapped to the public SetParameter(f32,bool,bool).
+        // frame: the all-channels parameter seed (this, _, 1, 1, 0.0f) -- i.e. the
+        // public SetParameter(f32,bool,bool) with lbForce and lbWrap both set.
         SetParameter(0.0f, /*lbForce=*/true, /*lbWrap=*/true);
     }
 }
@@ -1768,7 +1863,58 @@ void ICETake::SetValue(s32 liChannel, u16 lu16Key, ICEValue lValue)
 }
 
 // ---------------------------------------------------------------------------
-// ICETake::GetValueFloat(s32) const
+// ICETake::GetValueFloat(s32, u16) const   @0x8252F848  (X360 sub_8252F848)
+//
+// The value of element liChannel AT SAMPLE lu16Key as a float. Unlike the 1-arg
+// sibling below (which reads the already-evaluated mValues[] table), this one
+// decodes the element out of the bound data buffer through GetValue, then applies
+// the same IsFloat interpretation. The asm is GetValue into a stack ICEValue, then
+// the identical `mDataType == 3 || mDataType == 4` test and the same
+// int->float fcfid/frsp conversion as the 1-arg form:
+//     bl ICE::ICETake::GetValue                          (0x8252F86C)
+//     lwz r11, 0xC(&ICEElementDescriptions[liChannel])   (0x8252F880, 0x58 stride)
+//     cmpwi 3 / cmpwi 4  -> IsFloat                      (0x8252F884-0x8252F894)
+//     lfs  f1, <slot>    | lwz+extsw+fcfid+frsp          (0x8252F8A8 / 0x8252F8C0)
+// ---------------------------------------------------------------------------
+f32 ICETake::GetValueFloat(s32 liChannel, u16 lu16Key) const
+{
+    const ICEValue lValue = GetValue(liChannel, lu16Key);
+
+    if (ICEElementDescriptions[liChannel].IsFloat())
+        return lValue.GetFloat();
+
+    // Non-float element: convert the stored signed int to float.
+    return (f32)lValue.GetSignedInt();
+}
+
+// ---------------------------------------------------------------------------
+// ICETake::GetValueInt(s32, u16) const   @0x8252F8F0  (X360 sub_8252F8F0)
+//
+// The value of element liChannel at sample lu16Key as an int: GetValue, then the
+// same rounding the 1-arg sibling applies (truncate toward zero, bias down to a
+// floor, +1 once the fractional part reaches 0.5) for a float-decoding element,
+// or the stored int verbatim otherwise.
+// ---------------------------------------------------------------------------
+s32 ICETake::GetValueInt(s32 liChannel, u16 lu16Key) const
+{
+    const ICEValue lValue = GetValue(liChannel, lu16Key);
+
+    if (!ICEElementDescriptions[liChannel].IsFloat())
+        return lValue.GetSignedInt();
+
+    const f32 lfValue = lValue.GetFloat();
+    s32 liResult = (s32)lfValue;        // truncate toward zero
+    f32 lfFloor = (f32)liResult;
+    if (lfFloor > lfValue)
+        lfFloor -= 1.0f;
+    if ((lfValue - lfFloor) >= 0.5f)
+        ++liResult;
+
+    return liResult;
+}
+
+// ---------------------------------------------------------------------------
+// ICETake::GetValueFloat(s32) const   @0x8252C0B8
 //
 // The decoded value of element liElement as a float, read straight out of the
 // take's per-element value table mValues[liElement] (@+0x14). (The parameter is
@@ -1905,15 +2051,22 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
 
         // weight = (1 - sizeOther/sum) * (sizeThis/sizeOther), guarded against zero
         // sizes; the cubicDelta is folded in scaled by (sizeOther/sum).
+        //
+        // CORRECTED 2026-08-01: both guards were transcribed as the literal
+        // 0.00000099999997f (== 1e-6f, 0x358637BD) -- one decimal place too small.
+        // The X360 loads flt_8207AB94 for BOTH compares (0x825305D4/0x825305DC and
+        // 0x825305EC), and that slot is ICE_EPSILON == 1e-5f (0x3727C5AC); see its
+        // definition at the top of this TU. Spelled through the named constant, as
+        // the console does.
         f32 lfWeight = 1.0f;
         f32 lfRatio  = 0.0f;   // f10 = sizeOther / sum
         const f32 lfSum = lfSizeThis + lfSizeOther;
-        if (lfSum > 0.00000099999997f)   // epsilon guard
+        if (lfSum > ICE_EPSILON)
         {
             lfRatio  = lfSizeOther / lfSum;
             lfWeight = 1.0f - lfRatio;
         }
-        if (lfSizeOther > 0.00000099999997f)
+        if (lfSizeOther > ICE_EPSILON)
         {
             lfWeight *= (lfSizeThis / lfSizeOther);
         }
@@ -2075,6 +2228,123 @@ bool ICETake::SetParameter(s32 liChannel, f32 lfParameter, bool lbForce)
     }
 
     return lbChanged;
+}
+
+// ---------------------------------------------------------------------------
+// ICETake::SetParameter(f32 lfParameter, bool lbForce, bool lbWrap)
+//   (PUBLIC overload)   @0x82534118  (X360 sub_82534118)
+//
+// ⭐ THE TAKE-LEVEL PLAYBACK DRIVER. This is what BrnDirector::KeyAnimController
+// (Prepare + Update) and BrnDirector::ICEWrapper::PlayMovie call once per frame to
+// advance a camera take; the private per-channel SetParameter above is its worker.
+//
+// Structure, instruction for instruction from 0x82534118:
+//   1. clamp lfParameter into [0,1] with the fsel pair at 0x82534130-0x82534160
+//      (f29 = flt_82001CC0 = 0.0f low bound, f31 = flt_82001C98 = 1.0f high bound
+//      -- the same two rodata slots ICEChannel::GetIntervalBracket stores as its
+//      0.0/1.0 bracket). That is ICEMath::Clamp(v, 0, 1).
+//   2. unless lbForce, bail out when the clamped value already equals mfParameter
+//      -- but STILL fall through the common tail, which stores
+//      mbNewSubTakeThisFrame = 0 and returns 0 (`beq cr6, loc_825342C4`).
+//   3. store mfParameter, then choose one of two paths on the ASSEMBLY channel
+//      (channel 10, read as `lhz r11, 0x176(r31)` == mChannels[10].mu16Intervals):
+//        * assembly channel empty OR lbWrap -> drive all 12 channels at
+//          mfParameter with the caller's lbForce (loc_825342A0).
+//        * otherwise -> the assembly path below.
+//   4. assembly path: advance channel 10 first and keep its "changed" result; that
+//      result is BOTH the return value and mbNewSubTakeThisFrame. Then, if the
+//      take says it has a sub-take (element 47 CONTAINS_SUBTAKE), bind the sub-take
+//      named by element 46 (TAKE_NUMBER, the guid) and map the assembly-local
+//      parameter into the sub-take's own timeline:
+//              sub = (param - assemblyIntervalStart) * (takeLen / subTakeLen)
+//                    + element45 (TAKE_START)
+//          clamped into [0,1] and stored as mfSubParameter. Every channel except 10
+//          is then advanced at mfSubParameter if it is flagged sub-take-sourced
+//          (mxSubTakeChannels bit) or at mfParameter otherwise; a sub-take-sourced
+//          channel is forced when EITHER the assembly channel changed this frame or
+//          the caller asked (0x8253424C-0x82534264).
+//      If there is no sub-take, the two SHAKE elements (17 SHAKE_AMPLITUDE and
+//      18 SHAKE_FREQUENCY, `stfs f29, 0x58/0x5C(r31)`) are zeroed instead.
+//
+// The three element indices are pinned by the mValues[] base (+0x14, 4-byte
+// stride): 0xD0 -> [47] CONTAINS_SUBTAKE, 0xCC -> [46] TAKE_NUMBER, 0xC8 -> [45]
+// TAKE_START -- all three are channel-10 (ASSEMBLY) elements in the schema table at
+// the top of this TU, which is exactly what an assembly track needs.
+// ---------------------------------------------------------------------------
+bool ICETake::SetParameter(f32 lfParameter, bool lbForce, bool lbWrap)
+{
+    const f32 lfClamped = ICEMath::Clamp(lfParameter, 0.0f, 1.0f);
+
+    // The channel-10 result: the return value AND mbNewSubTakeThisFrame. Stays
+    // false on the all-channels path and on the unchanged-parameter early-out.
+    bool lbSubTakeChanged = false;
+
+    if (lbForce || mfParameter != lfClamped)
+    {
+        const s16 li16AssemblyIntervals =
+            mChannels[KI_ICE_ASSEMBLY_CHANNEL].GetNumIntervals();
+
+        mfParameter = lfClamped;
+
+        if (li16AssemblyIntervals <= 0 || lbWrap)
+        {
+            // No assembly track (or the caller asked for the flat drive): every
+            // channel runs on the take's own parameter.
+            for (s32 liChannel = 0; liChannel < eICE_NUM_CHANNELS; ++liChannel)
+            {
+                SetParameter(liChannel, lfClamped, lbForce);
+            }
+        }
+        else
+        {
+            lbSubTakeChanged = SetParameter(KI_ICE_ASSEMBLY_CHANNEL, lfClamped, lbForce);
+
+            if (mValues[KI_ICE_ELEMENT_CONTAINS_SUBTAKE].GetSignedInt() != 0)
+            {
+                // Bind the sub-take the assembly track currently names (not forced:
+                // this is the per-frame follow, not a seek).
+                SetSubTake(mValues[KI_ICE_ELEMENT_TAKE_NUMBER].GetSignedInt(), false);
+
+                f32 lfSubParameter = lfClamped;
+                if (mpSubTakeData != 0)
+                {
+                    const f32 lfTakeStart = mValues[KI_ICE_ELEMENT_TAKE_START].GetFloat();
+                    const f32 lfSegmentStart =
+                        mChannels[KI_ICE_ASSEMBLY_CHANNEL].GetIntervalStart();
+                    const f32 lfTimeScale =
+                        mpTakeData->GetLength() / mpSubTakeData->GetLength();
+
+                    lfSubParameter = (lfClamped - lfSegmentStart) * lfTimeScale + lfTakeStart;
+                }
+                mfSubParameter = ICEMath::Clamp(lfSubParameter, 0.0f, 1.0f);
+
+                for (s32 liChannel = 0; liChannel < eICE_NUM_CHANNELS; ++liChannel)
+                {
+                    if (liChannel == KI_ICE_ASSEMBLY_CHANNEL)
+                        continue;
+
+                    if ((mxSubTakeChannels & (1 << liChannel)) != 0)
+                    {
+                        SetParameter(liChannel, mfSubParameter,
+                                     lbSubTakeChanged || lbForce);
+                    }
+                    else
+                    {
+                        SetParameter(liChannel, mfParameter, lbForce);
+                    }
+                }
+            }
+            else
+            {
+                // No sub-take under the playhead: silence the shake pair.
+                mValues[KI_ICE_ELEMENT_SHAKE_AMPLITUDE] = 0.0f;
+                mValues[KI_ICE_ELEMENT_SHAKE_FREQUENCY] = 0.0f;
+            }
+        }
+    }
+
+    mbNewSubTakeThisFrame = lbSubTakeChanged;
+    return lbSubTakeChanged;
 }
 
 } // namespace ICE

@@ -3,16 +3,19 @@
 // Burnout X360 image; see rw/core/stdc/stdc.h for the per-entry-point contracts.
 //
 // SCOPE NOTE: the integer/hex formatters (ConvertIToA / ConvertI64ToA /
-// ConvertXToA) and the printf family (Vsprintf / Vsnprintf / Snprintf) are
+// ConvertXToA) and the rest of the printf family (Vsnprintf / Snprintf) are
 // DECLARATION-ONLY in the header. Their X360 bodies dispatch into private rwcore
 // recursive digit-emit helpers and float/field-padding routines that are not part
 // of this class' function set and have not been reconstructed; reconstructing the
 // bodies here would require fabricating those callees, so they are intentionally
 // left undefined (the per-TU `cl /c` gate is compile-only and does not link).
 // This file homes the fourteen self-contained mem*/string* primitives, each
-// matched against its disassembly.
+// matched against its disassembly, plus (2026-08-01) Vsprintf as the CRT wrapper
+// its own header contract describes -- see the FLAG on that body.
 
 #include "rw/core/stdc/stdc.h"
+
+#include <cstdio>    // ::vsprintf (the Vsprintf wrapper below)
 
 namespace rw
 {
@@ -348,6 +351,33 @@ char* StringnCopy(char* lpcDst, const char* lpcSrc, u32 luCount)
         *lpcDst = '\0';
     }
     return lpcStart;
+}
+
+// ---------------------------------------------------------------------------
+// Vsprintf -- the vararg formatter (0x82BC3728). See the SCOPE NOTE at the top of
+// this file: the X360 body is rwcore's own printf engine (a recursive digit-emit
+// helper plus float/field-padding routines that are not in this class' function
+// set), so it is NOT transcribed here.
+//
+// This is the header's documented contract -- "vsprintf wrapper: format lpcFormat
+// with the variadic args in lvaArgs into lpcDst, returning the number of characters
+// written" -- expressed as the C library call it wraps. That is the same rule the
+// project applies to every other vendor SDK entry point whose real implementation
+// is a standard-library equivalent: use the library, do not fabricate the engine.
+//
+// FLAG (formatting fidelity): rwcore's own engine and the CRT's can differ on
+// corner cases (%f digit counts, %p spelling, non-standard conversions). The two
+// call sites in this tree -- ICEMath::StringPrintf and ICEFileHandler::FilePrintf
+// -- format debug/diagnostic text only, so a divergence is cosmetic, not
+// behavioural. Revisit if a gameplay path ever formats through here.
+s32 Vsprintf(char* lpcDst, const char* lpcFormat, va_list lvaArgs)
+{
+#if defined(_MSC_VER)
+#pragma warning(suppress : 4996)   // vsprintf is the exact unbounded contract here
+    return static_cast<s32>(::vsprintf(lpcDst, lpcFormat, lvaArgs));
+#else
+    return static_cast<s32>(::vsprintf(lpcDst, lpcFormat, lvaArgs));
+#endif
 }
 
 } // namespace stdc

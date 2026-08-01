@@ -182,7 +182,8 @@ namespace BrnResource
         // asm's own string comments at off_82F2A6F8 / off_82F2A71C, and both confirmed by
         // hash against the shipped bundle: HashString("StandardICETakes") == 0x0DC0EE8F is
         // its type-65 ICETakeDictionary resource). Its terminal step feeds the handle to
-        // BrnResource::ICEList::AddListResource, which is the one part still gated.
+        // BrnResource::ICEList::AddListResource -- UN-GATED 2026-08-01, once the take
+        // runtime and the type-65 handler joined the link.
         bool PrepareICEList();       // 0x8266CEB0  "Cameras.bundle"              / "StandardICETakes"
 
         // The shared body of the two above (the X360 emits them as two near-identical

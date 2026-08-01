@@ -426,7 +426,16 @@ namespace ICE
     // DELETE-WHEN: ICEManager / ICECameraMover join the link.
     ICEManager::ICEManager() {}
     ICECameraMover::ICECameraMover() {}
-    ICETake::ICETake() {}   // pulled in by ICEManager's embedded ICEController
+
+    // ⭐ RETIRED 2026-08-01 (ICE take-runtime wave): `ICETake::ICETake() {}` used to sit
+    // here. It was a SILENT-DROP stub of the exact species the RaceCarState::operator=
+    // incident taught us to hunt: the real ctor (SDKs/Packages/ICE/ICEDataICETake.cpp,
+    // X360 @0x822145E8) MemClears the 48-entry decoded value table mValues[], and this
+    // empty body left all 192 bytes as stack/heap garbage. Its own comment justified it
+    // as "pulled in by ICEManager's embedded ICEController" -- i.e. never actually
+    // evaluated -- and that excuse expired the moment the take runtime joined the link.
+    // The real body now owns the symbol (this file lost an LNK2005 to it, which is how
+    // the stub was found).
 }
 
 // RETIRED (2026-07-31): the `Attrib::FindCollection` stub that used to sit here is GONE.
