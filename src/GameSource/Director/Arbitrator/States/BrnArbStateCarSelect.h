@@ -3,13 +3,13 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the helper tripwires)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"  // ArbitratorState / ArbStateSharedInfo
-#include "GameSource/Director/Camera/BrnBehaviourManager.h"  // Camera::BehaviourHandle + the BehaviourInterpolate
-                                                             // minimal slice (its HasFinished/Setup decls). NOTE: the
-                                                             // real Behaviours/BrnBehaviourInterpolate.h cannot ALSO be
-                                                             // included -- the manager header's slice is a second
-                                                             // definition of the same class (C2011); the pending
-                                                             // reconcile retires the manager slice in favour of the
-                                                             // real home.
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"  // Camera::BehaviourHandle / BehaviourHelperIndex
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h" // THE BehaviourInterpolate home
+                                                             // (RECONCILED 2026-08-01: the manager header used to carry
+                                                             // a rival, member-less slice of this class and the two were
+                                                             // mutually exclusive -- C2011. The slice is retired, so the
+                                                             // real home is included here and mInterpolaterParams below
+                                                             // is the real Parameters record.)
 
 // ============================================================================
 // GameSource/Director/Arbitrator/States/BrnArbStateCarSelect.h

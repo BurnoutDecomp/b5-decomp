@@ -11,21 +11,19 @@
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"
 
-#include <cstddef>   // offsetof (layout pins)
-
 namespace BrnDirector
 {
 namespace Camera
 {
 
-// Pin the asm-attested member offsets so the reserved-span layout above stays honest.
-static_assert(offsetof(BehaviourInterpolate, mfDuration)    == 0x2A4, "mfDuration @0x2A4");
-static_assert(offsetof(BehaviourInterpolate, mFromCamera)   == 0x2B0, "mFromCamera @0x2B0");
-static_assert(offsetof(BehaviourInterpolate, mToCamera)     == 0x420, "mToCamera @0x420");
-static_assert(offsetof(BehaviourInterpolate, mfRunningTime) == 0x590, "mfRunningTime @0x590");
-static_assert(offsetof(BehaviourInterpolate, mbUseCollisionPolicy) == 0x594, "mbUseCollisionPolicy @0x594");
-static_assert(offsetof(BehaviourInterpolate, mbSetup)       == 0x595, "mbSetup @0x595");
-static_assert(offsetof(BehaviourInterpolate, mbHasFinished) == 0x596, "mbHasFinished @0x596");
+// ⛔ RETIRED 2026-08-01: this TU used to carry seven `offsetof(BehaviourInterpolate, ...)`
+// static_asserts against X360 displacements (0x2A4 / 0x2B0 / 0x420 / 0x590 / 0x594 / 0x595 /
+// 0x596). They only ever passed because the class was modelled out of FABRICATED reserved
+// spans padded to hit those displacements on x64. The class now embeds the real
+// Camera::Behaviour base, the real VisibilityCollisionPolicy and the real CameraReference, so
+// the host layout legitimately differs from the console's -- and asserting a console byte
+// offset on an x64 build is exactly the trap the project's x64 rule exists to stop.
+// Parity is BY NAMED MEMBER; the offsets survive as provenance comments in the header.
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourInterpolate::GetCollisionPolicy @0x821F9EE8
@@ -35,12 +33,12 @@ static_assert(offsetof(BehaviourInterpolate, mbHasFinished) == 0x596, "mbHasFini
 //   bnelr cr6                ; if (mbUseCollisionPolicy) return &mCollisionPolicy
 //   li    r3, 0              ; else return NULL
 // ----------------------------------------------------------------------------
-BehaviourInterpolate::CollisionPolicy*
+CollisionPolicy*
 BehaviourInterpolate::GetCollisionPolicy()
 {
     if (mbUseCollisionPolicy)
     {
-        return reinterpret_cast<CollisionPolicy*>(maCollisionPolicy); // this + 0x20
+        return &mCollisionPolicy;   // this + 0x20 -- by NAME now that the real policy is embedded
     }
     return 0;
 }

@@ -245,8 +245,13 @@ namespace BrnDirector
                                      s32 leInterpolationMethod,
                                      s32 leInterpolationMapping)
     {
-        mInterpolaterParams.meInterpolationMethod  = leInterpolationMethod;   // helper +0x1C
-        mInterpolaterParams.meInterpolationMapping = leInterpolationMapping;  // helper +0x20
+        // (The two selectors arrive as the raw ints the console passes in r8/r9; the params
+        // record now carries them as the real BehaviourInterpolate enums -- see the ODR
+        // reconcile note in Behaviours/BrnBehaviourInterpolate.h.)
+        mInterpolaterParams.meInterpolationMethod =                            // helper +0x1C
+            static_cast<Camera::BehaviourInterpolate::EInterpolationMethod>(leInterpolationMethod);
+        mInterpolaterParams.meInterpolationMapping =                           // helper +0x20
+            static_cast<Camera::BehaviourInterpolate::EInterpolationMapping>(leInterpolationMapping);
 
         lpBehaviourController->NewBehaviour<Camera::BehaviourInterpolate>(
             mInterpolater,

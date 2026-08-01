@@ -102,60 +102,25 @@ namespace Camera
     };
 
     // ------------------------------------------------------------------------
-    // BehaviourInterpolate -- the per-behaviour interpolator that blends one camera source
-    // into another. The ICE movie-player allocates two of these through the manager and
-    // drives their setup. DECLARATION-ONLY (real bodies land with the BehaviourInterpolate
-    // TU). FLAG: minimal slice -- the REAL home now exists
-    // (Behaviours/BrnBehaviourInterpolate.h) but is MUTUALLY EXCLUSIVE with this slice
-    // (same class name -- including both is a C2011 redefinition). Pending reconcile:
-    // retire this slice and include the real home; until then consumers of this header
-    // (e.g. BrnArbStateCarSelect.h) reach HasFinished through THIS slice's decl.
+    // ⛔ RETIRED 2026-08-01 -- THE BehaviourInterpolate SLICE THAT USED TO LIVE HERE IS GONE.
+    //
+    // It was a second, mutually-exclusive definition of BrnDirector::Camera::BehaviourInterpolate
+    // (no base, no members, sizeof == 1, 11 declaration-only methods) and -- because this
+    // header is the one every arbitrator state includes -- it was the definition the whole
+    // tree actually saw, while the REAL home (Behaviours/BrnBehaviourInterpolate.h) sat
+    // unreachable behind a C2011.
+    //
+    // The slice could not be bodied at all: with no members there was nothing for
+    // SetParameters / SetupDuration / Setup / SetupCameraA|BFromHelper / HasFinished to write,
+    // so six symbols stayed permanently unresolved. It was also the reason
+    // BrnBehaviourManager.cpp's `AllocateBehaviour<BehaviourInterpolate>` booked a 1600-byte
+    // pool bucket and placement-new'd a ONE-BYTE object into it.
+    //
+    // Consumers that need the complete type now include the real home directly. A forward
+    // declaration is enough here: this header only ever names the class through the
+    // pointer member of BehaviourHandle<T>.
     // ------------------------------------------------------------------------
-    class BehaviourInterpolate
-    {
-    public:
-        // Per-take interpolation curve/easing parameters (DWARF BrnBehaviourInterpolate.h:
-        // 186-193; MomentPlayerJumping holds one BY VALUE @X360 +0x36C). GROWN from the
-        // earlier opaque model for MomentPlayerJumping::Construct @0x8225F2C0..: the real
-        // record is the Behaviour::Parameters head ({type tag, debug name}) + the
-        // method/mapping enum pair. The base head is folded FLAT into this slice (this
-        // header carries no Behaviour base; the real home Behaviours/BrnBehaviourInterpolate.h
-        // is mutually exclusive with this slice -- see the class FLAG above), and the two
-        // enums are s32-typed here for the same reason (values per the real home's
-        // EInterpolationMethod/EInterpolationMapping).
-        class Parameters
-        {
-        public:
-            // The inlined default construct (X360 stores {8, 0, mapping=1, method=0}):
-            // the interpolate behaviour-type tag, no debug name, slerp method,
-            // sinusoidal mapping.
-            void Construct()
-            {
-                mType                  = 8;   // the interpolate behaviour-type tag
-                mpcDebugName           = 0;
-                meInterpolationMapping = 1;   // E_MAPPING_SINUSOIDAL
-                meInterpolationMethod  = 0;   // E_METHOD_SLERP
-            }
-
-            u32         mType;                  // +0x00 (Behaviour::Parameters head)
-            const char* mpcDebugName;           // +0x04 (console)
-            s32         meInterpolationMethod;  // +0x08 (:189)
-            s32         meInterpolationMapping; // +0x0C (:190)
-        };
-
-        // 0 == cut / no pause updates, 2 == updates-during-pause.
-        void SetInterpolationMode(s32 liMode);
-        void SetParameters(const Parameters* lpParams);
-        void SetupDuration(f32 lfDuration);
-        bool HasFinished() const;
-        void SetupCameraAFromCamera(const Camera& lrCamera);
-        void SetupCameraAFromHelper(BehaviourHelperIndex lHelper, BehaviourManager& lrManager);
-        void SetupCameraBFromCamera(const Camera& lrCamera);
-        void SetupCameraBFromHelper(BehaviourHelperIndex lHelper, BehaviourManager& lrManager);
-        void Setup();
-        // The camera this interpolator is producing this frame.
-        const Camera& GetCamera() const;
-    };
+    class BehaviourInterpolate;
 
     // BehaviourHandle<TBehaviour> is DEFINED below BehaviourManager (it names the manager's
     // nested HelperPool / BehaviourHelper by value). Forward-declared here so the manager's
