@@ -128,10 +128,20 @@ namespace BrnDirector
     // is bodied -> mount BrnArbStateCarSelect.cpp + BrnBehaviourIceAnim.cpp, delete this line.
     // (It declares no Release() of its own -- Release/Destruct are not in its exported X360
     //  function set, so the base declarations stand and only four slots are stubbed here.)
-    void ArbStateCarSelect::Construct()                          { ArbitratorState::Construct(); }
-    bool ArbStateCarSelect::Prepare(ArbStateSharedInfo& lrInfo)  { (void)lrInfo; return true; }
-    void ArbStateCarSelect::Update(ArbStateSharedInfo& lrInfo)   { (void)lrInfo; }
-    const char* ArbStateCarSelect::GetName() const               { return "ArbStateCarSelect"; }
+    // ⭐⭐ ArbStateCarSelect's FOUR STUBS ARE GONE (2026-08-01). They were
+    //     void ArbStateCarSelect::Construct()                        { ArbitratorState::Construct(); }
+    //     bool ArbStateCarSelect::Prepare(ArbStateSharedInfo&)       { return true; }
+    //     void ArbStateCarSelect::Update(ArbStateSharedInfo&)        { (void)lrInfo; }
+    //     const char* ArbStateCarSelect::GetName() const             { return "ArbStateCarSelect"; }
+    // and they were four LNK2005s against the real TU. That TU
+    // (Arbitrator/States/BrnArbStateCarSelect.cpp) is now mounted together with
+    // Camera/Behaviours/BrnBehaviourIceAnim.cpp, Shots/ShotControllers/BrnKeyAnimController.cpp
+    // and Camera/BrnCameraReference.cpp -- it is the state that owns the REAL cameras: the
+    // junkyard shot-group setup, the three authored ICE intro shots off mGameIntroGroup
+    // ("606002"), and the rotate-about-car orbit camera. The stubbed Update above is what made
+    // ArbitratorStateContainer::UpdateAll drive nothing for that state every frame.
+    // (It declares no Release()/Destruct() of its own -- those are not in its exported X360
+    //  function set, so the base declarations stand.)
 
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateCrashMode,       "ArbStateCrashMode")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateDriveThru,       "ArbStateDriveThru")

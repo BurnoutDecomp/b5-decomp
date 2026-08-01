@@ -709,8 +709,27 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
         lShakeParams.mfWobbleCenteringFactor = 0.25f;
 
         const f32 lfShakeTimeStep = lrSharedInfo.GetTimestep().Get(Timestep::E_WORLD);
-        mShake.Update(lrCamera.mTransform, lShakeParams, *lrSharedInfo.GetRandom(),
-                      lfShakeTimeStep, 1.0f);
+        (void)lfShakeTimeStep;
+
+        // [GATED 2026-08-01 -- the bystander-space wobble post-process]
+        //   mShake.Update(lrCamera.mTransform, lShakeParams, *lrSharedInfo.GetRandom(),
+        //                 lfShakeTimeStep, 1.0f);
+        // WHY: Utils::CameraShake::Update @0x82221310 IS bodied, in
+        // Camera/Utils/BrnCameraShake.cpp -- but that TU is not in the link and mounting it
+        // TODAY costs +5 net unresolved (MEASURED 2026-08-01 with scratchpad\ice5_net.py):
+        // CgsNumeric::Random::{RandomFloat,RandomVector}, Utils::
+        // RotateMatrix44AffineByEulerAnglesZXY, and the three
+        // <Serialiser>::Serialise(const char*, f32&) overloads its Parameters::Serialise<S>
+        // instantiations pull in. Without this gate, mounting BrnBehaviourIceAnim.cpp -- which
+        // is what makes the REAL junkyard / game-intro ICE cameras run -- is blocked on a
+        // camera WOBBLE.
+        // COST: ICE shots authored in eICE_BYSTANDER_SPACE render without their 1-degree
+        // procedural wobble. Nothing else: CameraShake::Update only post-multiplies the
+        // transform it is handed, and mShake carries no state any other code reads.
+        // ⚠️ This is the ONLY thing in the ICE-anim behaviour that is gated; every other
+        // branch of RunShake and of Update is live.
+        // DELETE-WHEN: BrnCameraShake.cpp joins the link (body the three Serialise overloads
+        // and the two Random draws first, then the mount is free).
     }
 
     // --- "Can't cut TO me" gate ---
