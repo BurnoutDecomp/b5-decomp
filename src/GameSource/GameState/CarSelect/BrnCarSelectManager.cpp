@@ -14,6 +14,7 @@
 #include "GameSource/GameState/Progression/BrnProfile.h"           // BrnProgression::Profile (SetChosenLiveryIdForBaseCar / FindCar)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"// BrnProgression::ProgressionManager (GetCarColourAndPalette)
 #include "GameSource/GameState/BrnGameStateModule.h"               // BrnGameState::GameStateModule (streaming / car-change / pause hooks)
+#include "GameSource/GameState/BrnGameActions.h"                   // GameStateModuleIO::ResetPlayerCarAction / CarSelectionChangedAction (typed payloads)
 
 namespace BrnGameState
 {
@@ -1249,31 +1250,73 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
 
     meLastSpawnLocationType = static_cast<s32>(lpSpawnLocation->GetType());   // X360 *(this+60)
 
-    // ResetPlayerCarAction (80B): car model id + wheel id + the -1.0 deform sentinel + the spawn-location
-    // transform (opaque) + flags. leScoringIndex is recorded via SetPlayerScoringIndex (opaque slot).
+    // [diagnostic] the one line that proves the whole chain: WHICH junkyard spawn the player's
+    // car is about to be placed at. Compare it against the position
+    // RaceCarEntityModule::HandleResetPlayerCarAction ends up publishing.
+    if (CgsDev::Log::gpDebugPrint != 0)
     {
-        u8 lacReset[80];
-        std::memset(lacReset, 0, sizeof(lacReset));
-        std::memcpy(lacReset,        &lCarModelId, sizeof(lCarModelId));
-        std::memcpy(lacReset + 0x08, &lWheelId,    sizeof(lWheelId));
-        const f32 lfDeform = KF_STARTOFGAME_DEFORM_SENTINEL;   // -1.0
-        std::memcpy(lacReset + 0x34, &lfDeform, sizeof(lfDeform));
-        const s32 liScoring = static_cast<s32>(leScoringIndex);
-        std::memcpy(lacReset + 0x10, &liScoring, sizeof(liScoring));   // FLAG: scoring-index slot inferred
-        lacReset[0x40] = 1;   // in-car-select (X360 v27 = 1)
-        AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
+        *CgsDev::Log::gpDebugPrint
+            << "[CarSelectManager::EnterJunkyardAtStartOfGame] junkyard="
+            << static_cast<u64>(lJunkyardId)
+            << " spawn[1] type=" << meLastSpawnLocationType
+            << " pos=(" << lpSpawnLocation->mPosition.x << ", " << lpSpawnLocation->mPosition.y
+            << ", " << lpSpawnLocation->mPosition.z << ")"
+            << " dir=(" << lpSpawnLocation->mDirection.x << ", " << lpSpawnLocation->mDirection.y
+            << ", " << lpSpawnLocation->mDirection.z << ")\n";
     }
 
-    // Copy the spawn-location transform + junkyard id into the caller's CarSelectionChangedAction and
-    // set its "spawn type == 1" drop-in flag. FLAG: CarSelectionChangedAction layout opaque -- the
-    // X360 writes the junkyard id at +0x00, the transform at +0x10/+0x20, the type-1 bit at +0x30.
+    // ⛔⛔ CORRECTED 2026-08-01 (reset-player-car wave). THE START-OF-GAME RECORD WAS STILL BUILT AT
+    // THE OLD WRONG OFFSETS -- the previous wave fixed five ResetPlayerCarAction producers and
+    // missed this one, which lives in this file rather than BrnCarSelectManager_CarChange.cpp. It
+    // is the ONE the whole junkyard flow depends on: SendSetupPlayerCarEvent @0x8239A918 and
+    // OnProfileLoaded @0x82397310 are its only callers, and they are the start-of-game entry.
+    //
+    // What was wrong, measured against 0x8239310C..0x82393174 (record base == var_B0, size 0x50):
+    //   * the car model id was written at +0x00, ON TOP OF the spawn POSITION      (real: +0x20)
+    //   * the wheel id at +0x08, on top of the position's z/w lanes                (real: +0x28)
+    //   * the scoring index at +0x10, on top of the spawn DIRECTION                (real: +0x30)
+    //   * THE SPAWN TRANSFORM WAS ABSENT ENTIRELY -- so the consumer's
+    //     HasToChangeLocation() would have read the car id as a position and placed the car
+    //     wherever those bits landed.
+    // Real stores, one per field:
+    //   +0x00 stvx128 lvx128(spawnLoc+0x00)   mPosition
+    //   +0x10 stvx128 lvx128(spawnLoc+0x10)   mDirection
+    //   +0x20 std r26  mCarModelId      +0x28 std r24  mWheelModelId
+    //   +0x30 stw r23  mePlayerScoringIndex  (the 5th argument)
+    //   +0x34 stfs -1.0 mfDeformationAmount  (flt_820037C8)
+    //   +0x3C stw 0    +0x40 stb 1  +0x41 stb 0  +0x42 stb 0  +0x43 stb 0
+    // ⚠️ +0x38 is NOT written -- the console does not memset this record, and leaving that field
+    // uninitialised is safe ONLY because +0x34 carries the -1.0 sentinel that gates the consumer's
+    // read of the pair. The typed struct below zero-initialises it, which is strictly safer.
+    {
+        GameStateModuleIO::ResetPlayerCarAction lReset;
+        std::memset(&lReset, 0, sizeof(lReset));
+        lReset.mPosition            = lpSpawnLocation->mPosition;
+        lReset.mDirection           = lpSpawnLocation->mDirection;
+        lReset.mCarModelId          = lCarModelId;
+        lReset.mWheelModelId        = lWheelId;
+        lReset.mePlayerScoringIndex = leScoringIndex;
+        lReset.mfDeformationAmount  = KF_STARTOFGAME_DEFORM_SENTINEL;   // -1.0
+        lReset.miInCarModification  = 0;
+        lReset.mbInCarSelectScreen  = true;                             // X360 v27 = 1
+        AsActionQueue(lpActionQueue)->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lReset), KI_ACTION_RESET_PLAYER_CAR,
+            static_cast<s32>(sizeof(lReset)));
+    }
+
+    // Fill the caller's CarSelectionChangedAction (X360 0x82393178..0x823931E0). ⛔ THE TRANSFORM
+    // COPY WAS MISSING: the console does `std mJunkyardId, 0(r28)` then TWO stvx128 at r28+0x10
+    // and r28+0x20 (the spawn location's position and direction) before the type bit at +0x30.
+    // The old body wrote the id and the bit and dropped both vectors -- the same "the transform is
+    // opaque" mistake the sibling producers were corrected for one wave ago.
     if (lpCarSelectChangedAction != 0)
     {
-        u8* lpcAction = reinterpret_cast<u8*>(lpCarSelectChangedAction);
-        std::memcpy(lpcAction, &mJunkyardId, sizeof(mJunkyardId));
-        lpcAction[0x30] = (static_cast<u32>(lpSpawnLocation->GetType()) == 1) ? 1 : 0;
-        lpcAction[0x31] = 0;
+        lpCarSelectChangedAction->mJunkyardId         = mJunkyardId;
+        lpCarSelectChangedAction->mPosition           = lpSpawnLocation->mPosition;
+        lpCarSelectChangedAction->mDirection          = lpSpawnLocation->mDirection;
+        lpCarSelectChangedAction->mbJunkyardPosIsLeft =
+            (static_cast<u32>(lpSpawnLocation->GetType()) == 1u);
+        lpCarSelectChangedAction->mbReserved0x31      = false;
     }
 
     mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(lCarModelId, lWheelId, lpActionQueue, true);

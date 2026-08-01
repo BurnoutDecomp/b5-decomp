@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // OnlineGameResults round-index runtime asserts
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 
 #include <cmath>    // std::fabs
 #include <cstring>  // (OnlineGameResults helpers)
@@ -22,22 +23,13 @@ namespace CgsNetwork
 static const BrnNetwork::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
 }
 
-// File-local debug-print plumbing for RankInfoResponseAction::SetProgressionRankEventWins (the
-// X360 filter-gated rank-win spew), modelled as in the committed BrnRaceMode.cpp / BrnGuiModule.cpp:
-// gpDebugPrint is a chained line-writer (vtable slot 1 writes a C-string); WriteInt writes an int and
-// returns the stream. extern -> resolved at link, not needed for the compile gate.
-namespace CgsDev
-{
-    namespace Message { extern u32 gxMessageFilterFlags; }
-    namespace Log
-    {
-        struct DebugPrint;
-        typedef DebugPrint* (*DebugPrintFn)(DebugPrint*, const char*);
-        struct DebugPrint { DebugPrintFn* mpVTable; };
-        extern DebugPrint* gpDebugPrint;
-        extern DebugPrint* WriteInt(DebugPrint* lpStream, int liValue);
-    }
-}
+// ⛔ RETIRED 2026-08-01 (reset-player-car wave): this TU carried a FILE-LOCAL FORK of the
+// debug-print plumbing -- its own `CgsDev::Message::gxMessageFilterFlags`, its own
+// `CgsDev::Log::DebugPrint` struct and its own `WriteInt` -- which is an outright ODR clash
+// with the real CgsLog.h/CgsStrStream.h definitions this TU already includes transitively.
+// It compiled only because NOTHING EVER LINKED THIS FILE: mounting it in build_game_exe.bat
+// turned the fork into eight hard compile errors on the first try. The real
+// `*CgsDev::Log::gpDebugPrint << ...` chain is used below instead.
 
 namespace BrnGameState
 {
@@ -162,17 +154,12 @@ void RankInfoResponseAction::SetProgressionRanks(s32 liPlayerRank, s32 liRankCou
 void RankInfoResponseAction::SetProgressionRankEventWins(s32 liOfflineRaceRankWins, s32 liRoadRageRankWins,
                                                          s32 liStuntAttackRankWins, s32 liMarkedManRankWins)
 {
-    using namespace CgsDev;
-    if ((Message::gxMessageFilterFlags & 1) != 0)
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
     {
-        Log::DebugPrint* lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liOfflineRaceRankWins : ");
-        lp = Log::WriteInt(Log::gpDebugPrint, liOfflineRaceRankWins); lp->mpVTable[1](lp, "\n");
-        lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liRoadRageRankWins : ");
-        lp = Log::WriteInt(Log::gpDebugPrint, liRoadRageRankWins);    lp->mpVTable[1](lp, "\n");
-        lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liStuntAttackRankWins : ");
-        lp = Log::WriteInt(Log::gpDebugPrint, liStuntAttackRankWins); lp->mpVTable[1](lp, "\n");
-        lp = Log::gpDebugPrint->mpVTable[1](Log::gpDebugPrint, "liMarkedManRankWins : ");
-        lp = Log::WriteInt(Log::gpDebugPrint, liMarkedManRankWins);   lp->mpVTable[1](lp, "\n");
+        *CgsDev::Log::gpDebugPrint << "liOfflineRaceRankWins : " << liOfflineRaceRankWins << "\n";
+        *CgsDev::Log::gpDebugPrint << "liRoadRageRankWins : "    << liRoadRageRankWins    << "\n";
+        *CgsDev::Log::gpDebugPrint << "liStuntAttackRankWins : " << liStuntAttackRankWins << "\n";
+        *CgsDev::Log::gpDebugPrint << "liMarkedManRankWins : "   << liMarkedManRankWins   << "\n";
     }
 
     miOfflineRaceRankWins = liOfflineRaceRankWins;
