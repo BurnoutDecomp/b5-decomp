@@ -10,6 +10,8 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::NetworkPlayerID (s32 typedef; GetActiveRaceCarIndex param)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // GameStateModuleIO::GameActionQueue (real typedef)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h" // BrnProgression::ProgressionManager (mProgressionManager, by value)
+#include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (mTriggerQueryManager, by value)
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
 
 // The module's cached read-only snapshot of the active race cars (mLastActiveRaceCarInterface,
 // X360 this+0x397E0) is held BY VALUE exactly as the console holds it, so this is a full include
@@ -35,6 +37,9 @@ namespace BrnGameState   { class DeveloperChallengeManager; }
 namespace BrnResource    { class  WheelList; }
 namespace BrnTrigger     { struct TriggerData; }
 namespace CgsWorld       { struct WorldMap2D; }
+// Prepare's 2nd/3rd arguments (pointer-only; the reconstructed stages do not dereference them).
+namespace CgsModule      { struct IOBufferStack; }
+namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
 
 namespace BrnGameState
 {
@@ -80,6 +85,34 @@ public:
 
     void Construct() override;
     void Destruct()  override;
+
+    // ------------------------------------------------------------------------
+    // ⭐ X360 0x8239E578 -- the module's FIRST-pass prepare (vtable +64). DWARF
+    // BrnGameStateModule.h:510: `virtual bool Prepare(GameStateModuleIO::OutputBuffer*,
+    // IOBufferStack*, const AllocatorList*)`. Its ONE caller is
+    // BrnGameModule::GamePrepare @0x823EFBD0 stage 4, which pumps it until it returns true and
+    // forwards the requests it stages onto the output buffer's resource-request interface into
+    // the frame's GameData input (AppendRequestInterface<3072>).
+    //
+    // ⭐ THIS is where TRIGGERS.DAT is loaded (stage 3, E_PREPARESTAGE_LOAD_TRIGGER_DATA ->
+    // TriggerQueryManager::Prepare @0x82398218). Nothing on PC ran it before 2026-08-01, which
+    // is why `[WorldMap] LOADED -- traffic=1 trigger=0 ai=0` and why every consumer of
+    // `mpTriggerQueryManager->GetTriggerData()` (the junkyard spawn-location walk above all)
+    // was looking at a null resource pointer.
+    //
+    // ⚠️ SLICE: stage 3 is REAL; the other 24 stages log once and advance (each one names its
+    // X360 call at the body). See the body for the full deferral list.
+    //
+    // NOTE: this hides the base `ModuleSingleBuffered::Prepare()` -- exactly as the console's
+    // own override does. Stage 1 calls the base explicitly.
+    bool Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                 CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
+                 const BrnResource::GameDataIO::AllocatorList* lpAllocatorList);
+
+    // The track's TriggerData / traffic-lane owner, and the spawn-location source the junkyard
+    // car-select flow walks. DWARF BrnGameStateModule.h:201 (X360 this+42320).
+    TriggerQueryManager*       GetTriggerQueryManager()       { return &mTriggerQueryManager; }
+    const TriggerQueryManager* GetTriggerQueryManager() const { return &mTriggerQueryManager; }
 
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
@@ -356,5 +389,55 @@ private:
     // Zero-initialised in-class: BrnGameModule embeds this module by value and does NOT list
     // it in its ctor init list, so without this the Construct() guard would read garbage.
     GameStateModuleIO::OutputBuffer*         mpOutputBuffer = 0;
+
+    // ---- the Prepare slice's own members (X360 offsets from Prepare @0x8239E578) ----
+
+    // DWARF BrnGameStateModule.h:696. The 27-stage first-pass prepare machine's stage set.
+    // Enumerators + values are DWARF-authoritative; the X360 jump table has exactly these.
+    enum EPrepareStage
+    {
+        E_PREPARESTAGE_START                    = 0,
+        E_PREPARESTAGE_MANAGER                  = 1,
+        E_PREPARESTAGE_MODE_DATA_ACQUIRING      = 2,
+        E_PREPARESTAGE_LOAD_TRIGGER_DATA        = 3,
+        E_PREPARESTAGE_STUNT_MANAGER            = 4,
+        E_PREPARESTAGE_REQUEST_CHALLENGE_LIST   = 5,
+        E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST   = 6,
+        E_PREPARESTAGE_REQUEST_VEHICLE_LIST     = 7,
+        E_PREPARESTAGE_RECEIVE_VEHICLE_LIST     = 8,
+        E_PREPARESTAGE_REQUEST_WHEEL_LIST       = 9,
+        E_PREPARESTAGE_RECEIVE_WHEEL_LIST       = 10,
+        E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS = 11,
+        E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS = 12,
+        E_PREPARESTAGE_MODEMANAGER              = 13,
+        E_PREPARESTAGE_TAKEDOWNMANAGER          = 14,
+        E_PREPARESTAGE_MUGSHOTMANAGER           = 15,
+        E_PREPARESTAGE_PAYBACKMANAGER           = 16,
+        E_PREPARESTAGE_INVITEMANAGER            = 17,
+        E_PREPARESTAGE_FLYBYMANAGER             = 18,
+        E_PREPARESTAGE_NETWORKROUNDMANAGER      = 19,
+        E_PREPARESTAGE_PROGRESSION              = 20,
+        E_PREPARESTAGE_RICH_PRESENCE            = 21,
+        E_PREPARESTAGE_ACHIEVEMENT_MANAGER      = 22,
+        E_PREPARESTAGE_STREET_MANAGER           = 23,
+        E_PREPARESTAGE_IMAGE_MANAGER            = 24,
+        E_PREPARESTAGE_RUMBLE_MANAGER           = 25,
+        E_PREPARESTAGE_DONE                     = 26,
+    };
+
+    // DWARF BrnGameStateModule.h:180 (X360 this+552). ⚠️ This NAME-SHADOWS the private
+    // `mePrepareStage` of CgsModule::ModuleSingleBuffered -- exactly as the console's two
+    // classes do (they are different words at different offsets, +8 on the base vs +552 here).
+    // The base's copy is private, so there is no ambiguity; nothing reads it through this class.
+    EPrepareStage mePrepareStage = E_PREPARESTAGE_START;
+
+    // DWARF BrnGameStateModule.h:201 (X360 this+42320). The track-trigger dispatcher that owns
+    // the loaded TriggerData / traffic-lane resources. Held BY VALUE as the console holds it.
+    TriggerQueryManager mTriggerQueryManager;
+
+    // DWARF BrnGameStateModule.h:317 (X360 this+232384). The ONE reply queue every prepare
+    // stage names as the reply target for its resource request.
+    CgsModule::EventReceiverQueue<3072, 16> mReceiverQueue;
+    bool                                    mbReceiverQueueConstructed = false;
 };
 }

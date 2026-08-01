@@ -38,6 +38,12 @@ namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRace
 namespace BrnTrigger { struct TriggerRegion; }
 namespace BrnWorld { namespace TriggerEntityModuleIO { struct InRemoveTriggerEvent; } }
 
+// The OutputBuffer's +0x3414 member is the GameData resource-request interface. Only the
+// TYPE NAME is needed here (every accessor hands out a pointer); the request-builder bodies
+// live in BrnGameDataRequestQueue.h, which callers include for themselves. Forward-declaring
+// the template keeps this widely-included header off the GameData include chain.
+namespace BrnResource { namespace GameDataIO { template <s32 N> struct RequestInterface; } }
+
 // OutputBuffer::GetGameStateToNetworkInterface() (BrnPaybackManager grow) returns this by pointer
 // only; forward-declare its real home (BrnNetworkModuleGameStateIOInterfaces.h).
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct GameStateToNetworkInterface; } }
@@ -162,7 +168,22 @@ namespace GameStateModuleIO
     typedef BrnAI::AIModuleIO::AICarOutputInterface AICarOutputInterface; // PostWorldInputBuffer +0xAAC0
     // GameActionQueue (OutputBuffer +0x04) is a REAL typedef now -- see
     // BrnGameStateSharedIO.h (CgsModule::VariableEventQueue<13312,16>).
-    class ResourceRequestInterface;        // OutputBuffer +0x3414 (RequestInterface<3072>)
+    // ⭐ RE-HOMED 2026-08-01 (was `class ResourceRequestInterface;` -- an INCOMPLETE
+    // forward-declared class that no TU could ever define). The DWARF and the X360 agree the
+    // OutputBuffer member at +0x3414 IS a BrnResource::GameDataIO::RequestInterface<3072>:
+    //   * TriggerQueryManager::Prepare @0x82398218 calls
+    //     `RequestInterface<3072>::LoadBundle(outBuf->GetResourceRequestInterface(), ...)`;
+    //   * GameStateModule::Prepare @0x8239E578 calls GetVehicleList/GetWheelList/
+    //     GetFreeburnChallengeList on the same pointer;
+    //   * GamePrepare @0x823EFBD0 / LoadGameState2 @0x823EF4D8 hand it to
+    //     `GameDataIO::InputBuffer::AppendRequestInterface<3072>`;
+    //   * StreetManager::LoadAIData already reinterpret_casts it to exactly this type
+    //     (BrnGameStateStreetManager_wB_01.cpp:63).
+    // The storage blob below is 0x4024-0x3414 == 3088 bytes == sizeof(RequestInterface<3072>)
+    // on the host too (the type is pointer-free: a VariableEventQueue<3072,16> is a 3072-byte
+    // buffer plus a 16-byte {bool, 3*s32} header), so this is a pure type re-home -- no
+    // layout change. Asserted in the .cpp.
+    typedef BrnResource::GameDataIO::RequestInterface<3072> ResourceRequestInterface; // OutputBuffer +0x3414
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
     struct GameStateToGuiInterface;        // OutputBuffer +0x4450 (complete def: BrnGameStateToGuiIOInterfaces.h)
     class RaceCarRaceDistanceInterface;    // OutputBuffer +0x2A48C

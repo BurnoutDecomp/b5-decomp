@@ -1,6 +1,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diagnostic] Prepare's per-stage log line
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"            // BrnGameState::ModeManager::GetCurrentGameMode
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"     // BrnGameState::GameMode::IsOnline
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                  // GameStateModuleIO::EGameModeType (E_MODE_*_SHOWTIME)
@@ -70,6 +71,212 @@ void GameStateModule::Destruct()
     }
 
     CgsModule::ModuleSingleBuffered::Destruct();
+}
+
+// ----------------------------------------------------------------------------
+// ⭐ X360 0x8239E578 -- GameStateModule::Prepare (vtable +64), the module's FIRST-pass prepare.
+//
+// THE SHAPE (console, statement for statement):
+//     mbIsUpdating = true;                       // *(this + 292289) = 1
+//     LockForWrite(lpOutputBuffer);
+//     switch (mePrepareStage) { ...27 cases, each falling into the next on success... }
+//     UnlockForWrite(lpOutputBuffer);
+//     mbIsUpdating = false;
+//     return <true only after stage 26>;
+// Every stage that is still waiting for a resource reply breaks straight to the unlock tail and
+// returns false, so the caller pumps it once per frame.
+//
+// THE CALLER, and why this exists at all: BrnGameModule::GamePrepare @0x823EFBD0 stage 4 does
+//     CreateIOBuffer<GameStateModuleIO::OutputBuffer>(updateOutStack, &out, "GameState");
+//     prepared = mGameStateModule.Prepare(out, updateOutStack, gameDataOut->GetAllocatorList());
+//     if (!prepared) { LockForRead(out);
+//                      gameDataIn->AppendRequestInterface<3072>(*out->Get());
+//                      UnlockForRead(out); }
+// -- i.e. the requests the stages below stage onto the output buffer's +0x3414
+// RequestInterface<3072> leave through that append and are serviced by the GameData pump.
+// (LoadingScriptedState::LoadGameState2 @0x823EF4D8 is the same bracket for the SECOND pass,
+// GameStateModule::Prepare2 @0x8239ED10 -- Progression + Street. Not this wave.)
+//
+// ⚠️⚠️ RECONSTRUCTED SLICE -- say it plainly. ONE stage is real:
+//   stage 3  E_PREPARESTAGE_LOAD_TRIGGER_DATA -> TriggerQueryManager::Prepare @0x82398218.
+// Every other stage logs once and advances, naming its X360 call. In console order they are:
+//   0  START                    ClearData @(not exported by name) + DebugComponent::Register x2
+//                               (this+208544 / this+208376)
+//   1  MANAGER                  ModuleSingleBuffered::Prepare  -- see the mbIsNewModule note below
+//   2  MODE_DATA_ACQUIRING      pass-through on the console too (it only sets the stage word)
+//   4  STUNT_MANAGER            StuntManager::Prepare(this+183952, out)
+//   5/6 CHALLENGE_LIST          RequestInterface<3072>::GetFreeburnChallengeList(&rq, 0)
+//                               -> reply type 53, mpChallengeList = reply.mHandle.mpResourceMemory
+//   7/8 VEHICLE_LIST            GetVehicleList(&rq, 0) -> reply type 52, mpVehicleList = ...,
+//                               then ProgressionManager::ApplyVehicleList + ModeManager::ApplyVehicleList
+//   9/10 WHEEL_LIST             GetWheelList(&rq, 0) -> reply type 59, mpWheelList = ...
+//   11/12 PLAYERCARCOLOURS      inline AcquireResourceRequest{&rq, 0, pool 5,
+//                               HashString("CarColours")} -> CreateFromHandle(this+284400)
+//   13 MODEMANAGER              ModeManager::Prepare(this+4128, mpChallengeList,
+//                               allocatorList->GetHeapAllocator(0x1B))
+//   14 TAKEDOWNMANAGER          TakedownManager::Prepare(this+568)
+//   15 MUGSHOTMANAGER           (pass-through)
+//   16 PAYBACKMANAGER           *(this+1448) = 0
+//   17 INVITEMANAGER            VariableEventQueue<1536,16>::Prepare/Clear(this+2032)
+//   18 FLYBYMANAGER             GameStateModuleIO::FlybyData::Prepare(this+186608)
+//   19 NETWORKROUNDMANAGER      mReceiverQueue.Clear()
+//   20 PROGRESSION              ProgressionManager::Prepare(this+47920)
+//   21 RICH_PRESENCE            RichPresenceManagerBase::Prepare()
+//   22 ACHIEVEMENT_MANAGER      AchievementManagerX360::Prepare(this+181680)
+//   23 STREET_MANAGER           StreetManager::Prepare(this+284520, out, &rq)
+//   24 IMAGE_MANAGER            GameStateImageManagerBase::Prepare(this+185520, heapAlloc 0x1B)
+//   25 RUMBLE_MANAGER           RumbleManager::Prepare(this+46680)
+//   26 DONE                     DriveThruManager::Prepare(this+44240, mTriggerQueryManager's
+//                               TriggerData, the CarColours palette), publish the vehicle/wheel
+//                               list pointers into two sub-managers, re-arm mePrepareStage to 1
+//                               and clear the Prepare2 stage word.
+// NONE of those is faked here: each is a log line, not a fabricated body. They land as their
+// managers do. DO NOT read the log line as "done".
+//
+// ⚠️ FLAG (PC deviation, stage 1): `mbIsNewModule = true` before the base Prepare. The PC
+// ModuleSingleBuffered::Construct leaves it FALSE, and with it false the base walks the
+// old-style DataStructure path -- CreateInputDataStructure() fires its own
+// "This is a new module type" assert and returns null, so Prepare would return false FOR EVER
+// and GamePrepare would wedge. The GameState module is a new-style (IOBuffer) module on the
+// console, and the committed GameDataModule::Prepare carries the identical line with the same
+// reasoning (BrnGameDataModule.cpp:51, "[reliable] set before base Prepare"). The console sets
+// it inside ClearData, which is stage 0's deferral.
+// ----------------------------------------------------------------------------
+namespace
+{
+    // One log line per stage, once. (Same shape as the loading flow's LogScriptedStageOnce.)
+    void LogPrepareStageOnce(s32 liStage, const char* lpcWhat)
+    {
+        static bool sbLogged[32] = { false };
+        if (liStage < 0 || liStage >= 32 || sbLogged[liStage])
+            return;
+        sbLogged[liStage] = true;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[GameStateModule::Prepare] stage " << liStage << " -- " << lpcWhat << "\n";
+        }
+    }
+}
+
+bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
+                              CgsModule::IOBufferStack*        lpUpdateOutputBufferStack,
+                              const BrnResource::GameDataIO::AllocatorList* lpAllocatorList)
+{
+    // The console asserts nothing here; GamePrepare always hands it a live buffer. Guard anyway
+    // -- a null would otherwise fault inside TriggerQueryManager::Prepare's own assert.
+    if (lpOutputBuffer == 0)
+    {
+        CGS_ASSERT(false, "lpOutputBuffer");
+        return false;
+    }
+    (void)lpUpdateOutputBufferStack;   // stages 13/24 (heap allocator) + the manager prepares
+    (void)lpAllocatorList;             //   are the deferrals listed above
+
+    // X360: `*(this + 292289) = 1` at entry, cleared at the single exit.
+    mbIsUpdating = true;
+
+    if (!mbReceiverQueueConstructed)
+    {
+        // The console's mReceiverQueue is Construct'd by ClearData (stage 0's deferral). Every
+        // stage below names it as its reply target, and AddEvent on an unconstructed receiver
+        // queue writes through a null buffer base. One-shot here until ClearData lands.
+        mbReceiverQueueConstructed = true;
+        mReceiverQueue.Construct();
+    }
+
+    lpOutputBuffer->LockForWrite();
+
+    bool lbDone = false;
+
+    switch (mePrepareStage)
+    {
+    case E_PREPARESTAGE_START:
+        // X360: GameStateModule::ClearData(this); DebugComponent::Register(this+208544);
+        // DebugComponent::Register(this+208376). [deferred -- ClearData is a large member-wipe
+        // over members this slice does not model; the two components are debug-menu only.]
+        LogPrepareStageOnce(0, "ClearData + 2 x DebugComponent::Register [deferred]");
+        // fall through
+
+    case E_PREPARESTAGE_MANAGER:
+        mePrepareStage = E_PREPARESTAGE_MANAGER;
+        // See the FLAG above: the console's GameState module is a new-style module, so the base
+        // prepare is a no-op that reports done. Setting the flag is what makes that true here.
+        mbIsNewModule = true;
+        if (!CgsModule::ModuleSingleBuffered::Prepare())
+            break;
+        // fall through
+
+    case E_PREPARESTAGE_MODE_DATA_ACQUIRING:
+        // The console's case 2 only advances the stage word (LABEL_4 -> LABEL_5).
+        mePrepareStage = E_PREPARESTAGE_LOAD_TRIGGER_DATA;
+        // fall through
+
+    case E_PREPARESTAGE_LOAD_TRIGGER_DATA:
+        // ⭐ REAL. X360: `if (!TriggerQueryManager::Prepare(this + 42320, lpOutputBuffer,
+        //                    this + 232384)) break;  *(this + 552) = 4;`
+        // This is the LoadBundle("Triggers.dat", pool 5) -> acquire("TriggerData") ->
+        // LoadTrafficLanes chain. It needs several pumps.
+        mePrepareStage = E_PREPARESTAGE_LOAD_TRIGGER_DATA;
+        if (!mTriggerQueryManager.Prepare(lpOutputBuffer, &mReceiverQueue))
+            break;
+        mePrepareStage = E_PREPARESTAGE_STUNT_MANAGER;
+        // fall through
+
+    case E_PREPARESTAGE_STUNT_MANAGER:
+        LogPrepareStageOnce(4, "StuntManager::Prepare [deferred]");
+        // fall through
+    case E_PREPARESTAGE_REQUEST_CHALLENGE_LIST:
+    case E_PREPARESTAGE_RECEIVE_CHALLENGE_LIST:
+        LogPrepareStageOnce(5, "GetFreeburnChallengeList + receive (reply 53) [deferred]");
+        // fall through
+    case E_PREPARESTAGE_REQUEST_VEHICLE_LIST:
+    case E_PREPARESTAGE_RECEIVE_VEHICLE_LIST:
+        // ⚠️ This is where the console installs mpVehicleList (and calls the two
+        // ApplyVehicleList hooks). Until it lands, mpVehicleList stays null and every body that
+        // needs it asserts -- exactly as its own FLAG in the header says.
+        LogPrepareStageOnce(7, "GetVehicleList + receive (reply 52) + 2 x ApplyVehicleList [deferred]");
+        // fall through
+    case E_PREPARESTAGE_REQUEST_WHEEL_LIST:
+    case E_PREPARESTAGE_RECEIVE_WHEEL_LIST:
+        LogPrepareStageOnce(9, "GetWheelList + receive (reply 59) [deferred]");
+        // fall through
+    case E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS:
+    case E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS:
+        LogPrepareStageOnce(11, "acquire \"CarColours\" (pool 5) + bind [deferred]");
+        // fall through
+    case E_PREPARESTAGE_MODEMANAGER:
+    case E_PREPARESTAGE_TAKEDOWNMANAGER:
+    case E_PREPARESTAGE_MUGSHOTMANAGER:
+    case E_PREPARESTAGE_PAYBACKMANAGER:
+    case E_PREPARESTAGE_INVITEMANAGER:
+    case E_PREPARESTAGE_FLYBYMANAGER:
+    case E_PREPARESTAGE_NETWORKROUNDMANAGER:
+    case E_PREPARESTAGE_PROGRESSION:
+    case E_PREPARESTAGE_RICH_PRESENCE:
+    case E_PREPARESTAGE_ACHIEVEMENT_MANAGER:
+    case E_PREPARESTAGE_STREET_MANAGER:
+    case E_PREPARESTAGE_IMAGE_MANAGER:
+    case E_PREPARESTAGE_RUMBLE_MANAGER:
+        LogPrepareStageOnce(13, "the 13 manager prepares (Mode..Rumble) [deferred]");
+        // fall through
+    case E_PREPARESTAGE_DONE:
+        LogPrepareStageOnce(26, "DriveThruManager::Prepare + list publish [deferred] -- prepare DONE");
+        // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
+        // for a later re-prepare and clears the second-pass stage word (which this slice does
+        // not model yet). Reproduced for the stage word it does have.
+        mePrepareStage = E_PREPARESTAGE_MANAGER;
+        lbDone = true;
+        break;
+
+    default:
+        CGS_ASSERT(false, "Invalid Stage\n");   // X360 BrnGameStateModule.cpp:825
+        break;
+    }
+
+    lpOutputBuffer->UnlockForWrite();
+    mbIsUpdating = false;
+    return lbDone;
 }
 
 // X360 @ 0x823116D0. Returns whether the currently-running game mode is one of the online modes. May

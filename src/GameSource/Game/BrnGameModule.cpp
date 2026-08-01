@@ -1469,8 +1469,60 @@ namespace BrnGame
 
         case E_GAMEPREPARESTAGE_GAMESTATE:
         {
-            // [gated] stage 4 -- see the note above.
+            // ⭐ REAL since 2026-08-01 (was `[gated]`, which is why TRIGGERS.DAT never loaded).
+            // X360 0x823EFBD0, LABEL_31:
+            //     CreateIOBuffer<GameStateModuleIO::OutputBuffer>(mpUpdateOutputBufferStack,
+            //                                                     &out, "GameState");
+            //     prepared = (*(vtable+64))(&mGameStateModule, out, mpUpdateOutputBufferStack,
+            //                               GameDataOutputBuffer::GetAllocatorList(gameDataOut));
+            //     if (prepared) { DestroyIOBuffer(out); unlock both; return 1; }
+            //     else { LockForRead(out);
+            //            gameDataIn->AppendRequestInterface<3072>(*out->GetResourceRequestInterface());
+            //            UnlockForRead(out); DestroyIOBuffer(out); }
+            //
+            // ⚠️ FLAG (PC deviation, ONE buffer instead of a per-pass scratch): the console
+            // carves a FRESH GameStateModuleIO::OutputBuffer off the update-output IOBufferStack
+            // on every pass, so its request queue starts empty each time and the append moves
+            // exactly that pass's requests. The PC module owns ONE persistent buffer (see
+            // GameStateModule::GetOutputBuffer's own FLAG -- it is newed in Construct because
+            // nothing on PC ran the module's Prepare, which is the console's allocation point).
+            // Re-appending a persistent queue every pass would re-issue every request already
+            // sent, so the queue is CLEARED after the append -- which is exactly the state the
+            // console's next pass starts in. DELETE-WHEN the module's real
+            // CreateOutputDataStructure path lands and the buffer becomes per-pass again.
             meGamePrepareStage = E_GAMEPREPARESTAGE_GAMESTATE;
+
+            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                mGameStateModule.GetOutputBuffer();
+
+            const bool lbGameStatePrepared = mGameStateModule.Prepare(
+                lpGameStateOutput, mpUpdateOutputBufferStack,
+                lpGameDataOutput ? lpGameDataOutput->GetAllocatorList() : 0);
+
+            if (!lbGameStatePrepared)
+            {
+                if (lpGameStateOutput != 0)
+                {
+                    // ⚠️ The CONST overload of GetResourceRequestInterface is the one the console
+                    // calls here (X360 `OutputBu` @0x823B9798, "Not locked for reading" line 268);
+                    // its non-const twin @0x8231D560 asserts the WRITE lock and would fire under
+                    // this read lock. Same const-alias idiom as LoadDirectorModule's
+                    // GetVaultRequestInterface read.
+                    const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputRead =
+                        lpGameStateOutput;
+                    lpGameStateOutput->LockForRead();
+                    lpGameDataInput->AppendRequestInterface<3072>(
+                        *lpGameStateOutputRead->GetResourceRequestInterface());
+                    lpGameStateOutput->UnlockForRead();
+
+                    // [PC deviation, see the FLAG above] the console's per-pass buffer dies here.
+                    lpGameStateOutput->LockForWrite();
+                    lpGameStateOutput->GetResourceRequestInterface()->mRequestQueue.Clear();
+                    lpGameStateOutput->UnlockForWrite();
+                }
+                break;   // still preparing -- the tail below pumps the GameData module
+            }
+
             lbDone = true;
             break;
         }
