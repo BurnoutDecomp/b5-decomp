@@ -245,6 +245,53 @@ CgsID GuiOverlayRequest::Construct(const char* lpcOverlayId)
     return lId;
 }
 
+// @0x82472A18 -- append one message param at the next free slot.
+//   guard: *(this+0x118) >= 2 -> streamed "Not enough free params in the Overlay (<n>/2)."
+//                                (BrnGuiEventTypeDefs.h:7438)
+//   guard: lpcParam == NULL   -> "lpcParam != NULL"  (h:7440)
+//   entry = this + 0x44*count
+//   SPrintf(entry+0x0C, 63, "%s", lpcParam);  stb 0, 0x4B(entry);  stw luId, 8(entry);  ++count
+//   returns r3 == the SPrintf result (untouched between the call and the epilogue).
+//
+// ⚠️ CONSOLE-ATTESTED OVERRUN, reproduced deliberately: the text write spans entry+0x0C
+// .. entry+0x4B inclusive (63 bytes + the forced NUL at +0x4B) == 64 bytes, but the param
+// record stride is only 0x44. Each slot therefore spills its last 8 bytes into the FOLLOWING
+// record's 8-byte maHead: slot 0 into maMessages[1].maHead, slot 1 into mButton1.maHead.
+// Both are inside this object and neither head is read by any accessor (only
+// maMessages[0].maHead is used, and Construct writes the overlay id there BEFORE any
+// AddMessageParam call), so the spill is observationally inert -- but GetMessageParam reads
+// the text back with "%s", so a >55-char param genuinely relies on those 8 bytes and the
+// bytes must be written where the console writes them. Addressed through the record base with
+// the offsets pinned below rather than through macText[0x38], which would be a declared-bound
+// overrun.
+s32 GuiOverlayRequest::AddMessageParam(u32 luId, const char* lpcParam)
+{
+    static_assert(sizeof(ParamInfo) == 0x44, "param record stride 0x44 (GetMessageParam: 0x44*idx)");
+    static_assert(__builtin_offsetof(ParamInfo, muId) == 0x08, "param id @ record+0x08");
+    static_assert(__builtin_offsetof(ParamInfo, macText) == 0x0C, "param text @ record+0x0C");
+    // The console's 64-byte text write from the LAST slot must still land inside the object.
+    static_assert(KI_MAX_MESSAGES * 0x44 - 0x44 + 0x0C + 64 <= sizeof(GuiOverlayRequest),
+                  "the attested 64-byte text write stays within the request object");
+
+    CGS_ASSERT(miNumMessages < KI_MAX_MESSAGES,
+               "Not enough free params in the Overlay.");   // h:7438 (streamed "<n>/2." on the X360)
+    CGS_ASSERT(lpcParam != 0, "lpcParam != NULL");          // h:7440
+
+    ParamInfo& lParam = maMessages[miNumMessages];          // this + 0x44*count
+    char* const lpacText = reinterpret_cast<char*>(&lParam) + 0x0C;
+
+    CgsCore::SPrintf(lpacText, 0x3F, "%s", lpcParam);       // li r4, 0x3F
+    lpacText[0x3F] = 0;                                     // stb 0, 0x4B(entry)  (0x4B-0x0C == 0x3F)
+    lParam.muId    = luId;                                  // stw r24, 8(entry)
+    ++miNumMessages;                                        // stw r11, 0x118(this)
+
+    // The X360 leaves SPrintf's r3 in place and returns it. The committed CgsCore::SPrintf
+    // reconstruction returns void (CgsStringUtils.h:11), so that value is not available here --
+    // return 0, exactly as the sibling GetMessageParam/GetButton1Param/GetButton2Param bodies
+    // already do for the same reason. No caller in the tree inspects the result.
+    return 0;
+}
+
 // @0x824EB948 -- copy message param liIndex into *lpOut.
 //   guard: liIndex >= *(this+0x118)  -> "Index isn't used in Overlay." (h:7508)
 //   guard: liIndex <  0              -> "Index isn't valid."           (h:7509)

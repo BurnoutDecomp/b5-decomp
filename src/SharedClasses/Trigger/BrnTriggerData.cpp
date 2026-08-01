@@ -82,6 +82,26 @@ BrnTrigger::TriggerData::GetGenericRegion( int liIndex ) const
 // online-index equals liLandmarkIndex. On miss it builds a diagnostic string and fires the
 // assert, then returns the first landmark (the X360 `result = mpLandmarks`).
 //
+// The by-index landmark accessors BrnTriggerData.h:79-81 declares and delegates to this TU
+// ("the body (&mpLandmarks[liIndex]) needs the complete Landmark layout and is provided by a
+// sibling TU" -- this is that sibling). Semantics are the ones the header's own X360 note
+// pins down: base mpLandmarks at +0x30, bound miLandmarkCount at +0x34, 52-byte stride. The
+// bound assert follows the committed GetOnlineLandmark / ProgressionData::GetRival idiom
+// (the accessor owns the assert; callers do not duplicate it).
+const BrnTrigger::Landmark*
+BrnTrigger::TriggerData::GetLandmark( int liIndex ) const
+{
+    CGS_ASSERT( liIndex < miLandmarkCount, "liIndex < miLandmarkCount" );
+    return &mpLandmarks[liIndex];
+}
+
+BrnTrigger::Landmark*
+BrnTrigger::TriggerData::GetLandmark( int liIndex )
+{
+    CGS_ASSERT( liIndex < miLandmarkCount, "liIndex < miLandmarkCount" );
+    return &mpLandmarks[liIndex];
+}
+
 // NOTE: the X360 streams the miss diagnostic into the global CgsDev::Assert::gpcMessageBuffer.
 // That global has no committed home, so -- matching the committed CgsID.cpp / BrnGameStateSharedIO.cpp
 // precedent -- the message is built into a local stack buffer via CgsDev::StrStream instead;

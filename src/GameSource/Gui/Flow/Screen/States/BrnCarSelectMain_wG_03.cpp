@@ -347,3 +347,42 @@ namespace BrnGui
         lpInQueue->Clear();
     }
 }
+
+namespace BrnGui
+{
+    // ---- HandleLaunchingEvent @ 0x824C9008 ----------------------------------------
+    // In-queue event 57 (ProcesssIncomingEvents case 57, above). ONLINE-ONLY: it raises the
+    // "CNOnlLchGmH" (this client is the lobby host) or "CNOnlLchGame" (a peer is launching,
+    // + that player's name as message param 1) overlay, then adds the mode string
+    // KPAC_MODE_STRINGS[event.mode] as message param 2 and queues the 288-byte
+    // GuiOverlayRequest as event 184 on channel 40.
+    //
+    // ⭐ HOME-FILE CORRECTION. BrnCarSelectMain.h:145-149 said this body "is NOT part of this
+    // TU's ledger scope (identity attributes it to another TU)". That attribution is wrong and
+    // the function says so itself: its four asserts bake
+    // "..\..\..\GameSource\Gui/Flow/Screen/States/BrnCarSelectMain.cpp" at lines 712/716/719/731,
+    // and the DecFIGS DWARF places it at BrnCarSelectMain.cpp:690. This IS its home file, so the
+    // body belongs in a CarSelectMain partfile -- next to its only caller.
+    //
+    // ⛔ NOT RECONSTRUCTED, and deliberately NOT a silent {}. The X360 body needs two things
+    // this wave cannot attest: the unnamed GuiCache lookup sub_82482738(cache, event.miPlayerId)
+    // and the +0x100 name field of whatever it returns (the committed GuiCache models
+    // maLobbyPlayerInfo[8] at a 56-byte stride, which +0x100 does not fit, so the return type is
+    // NOT LobbyPlayerStatusData and guessing it would be fabrication). Every reachable path here
+    // is an online lobby launch; the offline junkyard car-select flow this TU was mounted for
+    // never posts event 57. The assert is the tripwire: if this is ever reached, it says so
+    // loudly instead of dropping the overlay on the floor.
+    void CarSelectMain::HandleLaunchingEvent(const CgsModule::Event* lpLaunchingEvent)
+    {
+        // cpp:712 -- the X360's streamed text, verbatim (it is the ORIGINAL copy-paste from
+        // OnlineGameRoomPlayerInfo, exactly like the sibling HandleLaunchedEvent/HandleLeftGameEvent).
+        CGS_ASSERT(lpLaunchingEvent != 0,
+                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandleLaunchingEvent");
+        CGS_ASSERT(lpLaunchingEvent != 0, "lpLaunchingEvent");   // cpp:716
+        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");               // cpp:719
+
+        CGS_ASSERT(false,
+                   "CarSelectMain::HandleLaunchingEvent (0x824C9008) is not reconstructed -- "
+                   "the online launch overlay is missing. Recover sub_82482738's return type first.");
+    }
+}

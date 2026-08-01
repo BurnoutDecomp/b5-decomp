@@ -24,6 +24,21 @@ const ProgressionRankData* ProgressionData::GetProgressionRankData(u32 luIndex) 
     return &mpaProgressionRanks[luIndex];
 }
 
+// The event-junction accessors BrnProgressionData.h:113-114 declares and delegates to this TU
+// ("declare-only here; bodies land with the ProgressionData TU"). Semantics are the ones the
+// header's own note pins down: count word muEventJunctionCount at +0x1C, base mpaEventJunctions
+// at +0x18, 16-byte stride. Bound assert per the sibling accessor idiom above.
+u32 ProgressionData::GetEventJunctionCount() const
+{
+    return muEventJunctionCount;
+}
+
+const EventJunction* ProgressionData::GetEventJunction(u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < muEventJunctionCount, "luIndex < muEventJunctionCount");
+    return &mpaEventJunctions[luIndex];
+}
+
 // X360 0x823569F0. Bounds-checked accessor into the trophy-unlock table (16-byte stride).
 TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 {
