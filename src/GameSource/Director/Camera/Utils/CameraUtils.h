@@ -14,6 +14,23 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector2/Vector3/Vector4(VecFloat)/Matrix44/Matrix44Affine aliases
 
+// ⛔⛔ ADDED 2026-08-01 (orbit-camera wave) -- THIS INCLUDE IS LOad-BEARING, NOT A CONVENIENCE.
+// Every `VecFloat` below sits inside `namespace BrnDirector`, and TWO types answer to that
+// name: the global `typedef rw::math::vpu::Vector4 VecFloat` from BrnCommonTypes.h above, and
+// `BrnDirector::VecFloat` from BrnDirectorTimestep.h. Unqualified lookup inside the namespace
+// picks the SECOND one -- but only in translation units that happened to have included that
+// header first. So the declarations here silently meant different types in different TUs, and
+// the two spellings mangle differently (`UVecFloat@3@` vs `UVector4@vpu@math@rw@@`).
+// It stayed invisible for as long as none of the VecFloat-taking helpers had a body: with
+// nothing to link against, no TU ever had to agree with another. The moment
+// GetSizeOnScreen / GetFOVDegsToFitObjectToScreenSize / CreateAdjustedLookAt were bodied, the
+// caller (which reaches BrnDirectorTimestep.h through Behaviour.h) and the definition (which
+// did not) produced two different symbols and an unresolved external that reads like a
+// missing body rather than a type mismatch.
+// Including it here forces every consumer onto BrnDirector::VecFloat. Timestep pulls only
+// types.hpp + CgsAssert.h and does not reach back here, so there is no cycle.
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"   // BrnDirector::VecFloat -- see above
+
 namespace BrnDirector
 {
 namespace Camera

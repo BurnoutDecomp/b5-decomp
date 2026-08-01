@@ -537,23 +537,33 @@ namespace BrnTrigger
 }
 
 // ============================================================================
-// GROUP E (NEW 2026-07-29, with the two shared gameplay cameras' RE-BASE) -- the two embedded
-// sub-object Constructs BehaviourGameplayExternal::Construct / ::Prepare call by name.
+// GROUP E (NEW 2026-07-29, with the two shared gameplay cameras' RE-BASE)
 //
-// Both are DECLARED in their own canonical homes and have no TU yet. They are stubbed rather
-// than bodied because neither shape is attested: the console INLINES
-// CameraSphericalRotationController::Construct into each owner (so there is no standalone
-// body to read, and its tail lands inside an un-mapped SmoothMover), and
-// CameraShakeICEController::Construct is a real call whose body was not dumped.
+// ⛔ ONE OF THE TWO IS RETIRED (2026-08-01, orbit-camera wave).
+//   `CameraSphericalRotationController::Construct` was an EMPTY body here, and BOTH clauses
+//   of its justification had expired:
+//     * "the console INLINES it into each owner (so there is no standalone body to read, and
+//        its tail lands inside an un-mapped SmoothMover)" -- the first half is true and is
+//        not a reason to leave it empty (the inlining IS the body, and three owners emit the
+//        identical ten stores); the second half is stale, because SmoothMover has been homed
+//        since, so the tail lands on named members.
+//     * "Nothing reads either one ... MainDirector::UpdateCameraBehavioursPostScene (the only
+//        path that would dispatch it) is gated" -- the post-scene behaviour pass was un-gated
+//        on 2026-08-01, and BehaviourRotateAboutVehicle::BecomeSimilarTo calls this on the
+//        LIVE car-select path to discard accumulated stick state. With the empty stub the
+//        stale yaw/pitch survived every re-seat.
+//   It now has its real body in its own home, Camera/Utils/BrnCameraSphericalRotationController.cpp.
+//   THAT IS THE THIRD TIME THIS CAMPAIGN A "nothing on the live path reads this" GATE HAS
+//   GONE STALE WITHOUT ANYTHING IN THE BUILD, THE LINKER OR A BOOT TEST NOTICING.
 //
-// SAFE TODAY, and provably so: the manager's pools construct every behaviour with
-// `new (slot) T()` (BrnAbstractPool.h:148) -- value-initialisation, which zero-initialises the
-// whole object before the ctor runs -- so both sub-objects start zeroed regardless. Nothing
-// reads either one: BehaviourGameplayExternal::Update is not transcribed, and
-// MainDirector::UpdateCameraBehavioursPostScene (the only path that would dispatch it) is
-// gated. The CALL SHAPE is what matters here; keeping it means the day these land, the
-// behaviour is already correct.
-// DELETE-WHEN: BrnCameraSphericalRotationController.cpp / BrnCameraShake.cpp land.
+// `CameraShakeICEController::Construct` IS STILL A STUB: unlike its neighbour it is a real
+// (non-inlined) console call whose body was never dumped, so there is nothing to transcribe.
+// It stays safe for the same reason as before -- the manager's pools construct every
+// behaviour with `new (slot) T()` (BrnAbstractPool.h:148), i.e. value-initialisation, so the
+// sub-object starts zeroed regardless -- but note that "safe because it starts zeroed" is an
+// argument about the FIRST use, not about a re-Construct on a live object, which is exactly
+// how its neighbour went wrong.
+// DELETE-WHEN: the CameraShakeICEController TU lands.
 // ============================================================================
 namespace BrnDirector
 {
@@ -561,11 +571,49 @@ namespace Camera
 {
 namespace Utils
 {
-    void CameraSphericalRotationController::Construct()
+    void CameraShakeICEController::Construct()
     {
     }
 
-    void CameraShakeICEController::Construct()
+    // ------------------------------------------------------------------------
+    // ⛔ CameraShake::Update @0x82221310 -- GATED 2026-08-01 (orbit-camera wave).
+    //
+    // ITS REAL BODY EXISTS, fully reconstructed, in Camera/Utils/BrnCameraShake.cpp. That TU
+    // is not mounted because it needs three functions THIS TREE DOES NOT HAVE:
+    //     CgsNumeric::Random::RandomFloat(f32, f32)          -- declared, no body anywhere,
+    //     CgsNumeric::Random::RandomVector(Vector3, Vector3) -- and no X360 symbol for either
+    //                                                          (both inlined / ICF-folded away)
+    //     Utils::RotateMatrix44AffineByEulerAnglesZXY @0x82204F98 -- 368 asm lines that are
+    //         almost entirely an inlined XMVectorSinCos minimax polynomial whose coefficient
+    //         table has not been dumped. It is on CameraUtils.cpp's own "declaration-only +
+    //         flagged" list for exactly that reason.
+    // (Mounting BrnCameraShake.cpp ALSO drags its three Parameters::Serialise<S> explicit
+    //  instantiations and therefore all three camera-tunings serialiser TUs. Splitting Update
+    //  into its own file would shed those, but not the three above.)
+    //
+    // ⚠️ THE CONSEQUENCE, BOUNDED EXACTLY: the caller passes an IDENTITY affine in and reads
+    //   it back out, so BehaviourRotateAboutVehicle::Update's shake stage reduces to
+    //   `SLerp(mLastShakeTransform, identity, blend)` followed by `Mult(that, camera)`. Once
+    //   mLastShakeTransform has settled to the identity, the camera transform is unchanged.
+    //   The behaviour's wobble STATE (mfCurrentWobbleX/Y and their velocities) also stops
+    //   advancing, which is the part that would matter if anything else read it. Nothing does.
+    //
+    // ⚠️⚠️ AND HERE IS THE PART THAT WILL EXPIRE -- SAY IT OUT LOUD RATHER THAN LEARN IT AGAIN.
+    //   The gate is UNOBSERVABLE TODAY FOR A SECOND, INDEPENDENT REASON: the only live caller's
+    //   parameter block comes from BehaviourRotateAboutVehicle::Parameters::Construct, which
+    //   seeds mfShakeBlending0to1 = 0.0f -- so even a PERFECT shake would be blended out to
+    //   nothing. Two independent things therefore hide this gate, and the second one dies the
+    //   moment the authored BehaviourParameterBank lands and a non-zero blend arrives. When
+    //   that happens the camera will silently not shake, and nothing in the build, the linker
+    //   or a boot test will say so. That is the fourth time this campaign has met this shape.
+    // DELETE-WHEN: the two Random draws are recovered and RotateMatrix44AffineByEulerAnglesZXY
+    //   is bodied -- then mount BrnCameraShake.cpp and delete this.
+    // ------------------------------------------------------------------------
+    void CameraShake::Update(rw::math::vpu::Matrix44Affine& /*lrTransform*/,
+                             const Parameters& /*lrParams*/,
+                             Random& /*lrRandom*/,
+                             f32 /*lfTimestep*/,
+                             f32 /*lfSpeedRatio*/)
     {
     }
 }

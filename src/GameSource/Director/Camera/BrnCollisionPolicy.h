@@ -200,6 +200,22 @@ public:
     // Same three console sites as ResetRadiusSmoothing (`stb 1, +0x24E`).
     void ResetTrafficCollision() { mbResetVehicleCollision = true; }
 
+    // ⭐ THE FOUR AUTHORED-FLAG SETTERS (DWARF BrnCollisionPolicyAttachedToVehicle.h:94/:97/
+    // :100/:103) -- ADDED 2026-08-01 (orbit-camera wave). Each is a single `stb` on the
+    // DWARF-named bool this header already carries at its asm-attested offset, and each is
+    // INLINED at every console call site (no standalone symbol exists for any of the four).
+    // The names are the DWARF's, not invented.
+    // FIRST CONSUMER: BehaviourRotateAboutVehicle::Construct @0x8222BF14..0x8222BF54, which
+    // re-tunes exactly these four right after CollisionPolicyAttachedToVehicle::Construct
+    // returns (`stb 0, 0x298(beh)` / `stb 1, 0x299` / `stb 1, 0x29C` / `stb 1, 0x29D`, i.e.
+    // policy +0x248/+0x249/+0x24C/+0x24D with the policy embedded at behaviour +0x50).
+    // Without them that behaviour could only have reached these bools by offset, which the
+    // x64 rule forbids.
+    void SetAutoElevate(bool lbAutoElevate)               { mbAutoElevate         = lbAutoElevate; }
+    void SetSmoothRadiusChanges(bool lbSmooth)            { mbSmoothRadiusChanges = lbSmooth; }
+    void SetTestAgainstWorldOnly(bool lbWorldOnly)        { mbTestAgainstWorldOnly = lbWorldOnly; }
+    void SetUseFrustrumResolver(bool lbUseResolver)       { mbUseFrustrumResolver = lbUseResolver; }
+
 private:
     // FLAG: only the members the bodied functions reach are modelled at their asm-attested
     //   offsets; the rest of the policy rig lands with its full TU.

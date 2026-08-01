@@ -49,8 +49,51 @@ namespace Utils
                 E_ZOOM_SCREEN_REGION      = 2,  // DWARF
             };
 
-            // Reset every field to its construction default (asm @0x821F8D80).
-            void Construct();
+            // ⭐ Parameters::Construct @0x821F8D80 -- MOVED HERE FROM BrnLooker.cpp 2026-08-01
+            // (orbit-camera wave). Every store is one stfs/stb/stw from the asm; offsets map
+            // 1:1 to the DWARF member order. FULLY GROUNDED -- unchanged from the committed
+            // out-of-line body, only re-homed.
+            //
+            // ⚠️ WHY IT IS A HEADER INLINE AND NOT AN OUT-OF-LINE BODY: its owning TU,
+            //   BrnLooker.cpp, DOES NOT COMPILE (BrnLooker.cpp:189 calls the three-argument
+            //   rw::math::vpu::SLerp that was replaced by the four-argument form long ago and
+            //   never re-fitted -- a stale TU nobody noticed because nothing ever linked it).
+            //   BehaviourRotateAboutVehicle::Parameters::Construct needs this seed on the live
+            //   car-select path, and it is not worth blocking a working camera on an unrelated
+            //   TU's rot. Inline, the body materialises only where a caller needs it, which is
+            //   the same mount-hazard reasoning BrnVehicleRef.h's VehicleRef::Get carries.
+            //   DELETE-WHEN: BrnLooker.cpp is re-fitted and mounted -- then move it back.
+            void Construct()
+            {
+                mfInitialXLookOffsetRange       = 0.0f;          // stfs 0.0  @4
+                mfInitialYLookOffsetRange       = 0.0f;          // stfs 0.0  @8
+                mfTargetSubjectSize             = 0.25f;         // stfs 0.25 @0xC
+                mfTargetSubjectXSize            = 0.25f;         // stfs 0.25 @0x10
+                mfTargetSubjectYSize            = 0.25f;         // stfs 0.25 @0x14
+                mfTargetSubjectXScreenOffset    = 0.0f;          // stfs 0.0  @0x18
+                mfTargetSubjectYScreenOffset    = 0.0f;          // stfs 0.0  @0x1C
+                mfTrackingTolerance             = 0.0f;          // stfs 0.0  @0x20
+                mfTrackingSpeed                 = 0.2f;          // stfs 0.2  @0x24
+                mfTrackingAcceleration          = 0.0099999998f; // stfs      @0x28
+                mfMinFOVVelocity                = 120.0f;        // stfs      @0x2C
+                mfMaxFOVVelocity                = 250.0f;        // stfs      @0x30
+                mfDesiredPerceivedDistance      = 10.0f;         // stfs      @0x34
+                mfDistanceToVelocityFactor      = 2.0f;          // stfs      @0x38
+                mfToleranceForDistanceFromIdeal = 5.0f;          // stfs      @0x3C
+                mfToleranceForDistanceFromTarget= 0.5f;          // stfs      @0x40
+                mfOvershootFactor               = 1.1f;          // stfs      @0x44
+                mfMinFOV                        = 10.0f;         // stfs      @0x48
+                mfMaxFOV                        = 80.0f;         // stfs      @0x4C
+                mfIdealFOVVelocityLerpAmount    = 0.5f;          // stfs      @0x50
+                mfStaticDOF                     = 0.42500001f;   // stfs      @0x54
+                mfStaticFocalLength             = 0.14f;         // stfs      @0x58
+                mbUseStaticDOF                  = false;         // stb 0     @0x5C
+                mbInitialiseToLookingAtTarget   = true;          // stb 1     @0x5D
+                mbInitialiseToZoomedToTarget    = true;          // stb 1     @0x5E
+                mbUseZoom                       = false;         // stb 0     @0x5F
+                meZoomType                      = E_ZOOM_PERCEIVED_DISTANCE; // stw 0 @0x60
+                // mVersion (@0x00) is left at its default-constructed value (no store in the asm).
+            }
 
             // ---- Layout (DWARF member order; offsets X360-pinned from the Construct stfs) ----
             VersionNumber mVersion;                       // +0x00  (not written by Construct)
@@ -83,10 +126,35 @@ namespace Utils
             EZoomType meZoomType;                         // +0x60  stw 0  @0x60(r3)
         };
 
-        // DWARF BrnLooker.h:118. Default-init the runtime state (declaration-only here:
-        // this TU exports no standalone body for it -- it is inlined at every behaviour's
-        // Construct site, so no X360 asm body is attributed to this TU).
-        void Construct();
+        // ⭐ DWARF BrnLooker.h:118 -- BODIED 2026-08-01 (orbit-camera wave). Default-init the
+        // runtime state. It used to be declaration-only ("this TU exports no standalone body
+        // for it -- it is inlined at every behaviour's Construct site"), which was an accurate
+        // diagnosis and an unresolved external for every caller.
+        //
+        // ⚠️ SINGLE WITNESS. The body below is transcribed from the ONE inlining this wave
+        //   read in full: BehaviourRotateAboutVehicle::Construct @0x8222BF98..0x8222BFAC,
+        //   which seeds its embedded Looker (behaviour +0x2B0) with exactly six stores --
+        //   +0x2B0 (0.0f), +0x2C0 (0.2f) and the four latch bytes +0x2CC..+0x2CF ({1,1,1,0}) --
+        //   landing on mfSlerpFactor, mfAssessmentTime and the four bools at this type's
+        //   committed offsets. The seven fields NOT written are left at the pool's zero, which
+        //   is what a placement-new'd behaviour already has.
+        //   WITH ONE WITNESS A CALLER'S OWN RE-TUNE CANNOT BE TOLD APART FROM THE
+        //   CONSTRUCTOR'S DEFAULT -- specifically `mfAssessmentTime = 0.2f` could belong to
+        //   either. It is transcribed here because the value repeats nowhere else in that
+        //   function and because the alternative (leaving this unresolved) is worse.
+        //   ⚠️ Any behaviour that Constructs a Looker AND relies on a different
+        //   mfAssessmentTime must set it explicitly rather than trusting this seed.
+        //   DELETE-WHEN: a second embedder's Construct is transcribed (BehaviourRig @+0x410 or
+        //   BehaviourIceAnim @+0x660) and the two are diffed.
+        void Construct()
+        {
+            mfSlerpFactor           = 0.0f;    // stfs flt_82001CC0, +0x00
+            mfAssessmentTime        = 0.2f;    // stfs flt_82004744, +0x10
+            mbFirstFrame            = true;    // stb 1, +0x1C
+            mbAssessingFOV          = true;    // stb 1, +0x1D
+            mbConstructed           = true;    // stb 1, +0x1E
+            mbForceZoomTargetUpdate = false;   // stb 0, +0x1F
+        }
 
         // DWARF BrnLooker.h:128. The per-frame entry point (@0x8223FBB8). Asserts the
         // looker was constructed, runs Track, then -- when the parameters request zoom --

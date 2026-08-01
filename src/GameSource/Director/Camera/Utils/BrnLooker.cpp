@@ -77,41 +77,12 @@ namespace
     const f32 KF_DOF_BLUR_RATE   = 0.0f;   // flt_82CDAD20 (FOV-moving branch)
 } // namespace
 
-// ---------------------------------------------------------------------------------------
-// Parameters::Construct @0x821F8D80 -- FULLY GROUNDED (the only goal-trace-executed body).
-// Every store is one stfs/stb/stw from the asm; offsets map 1:1 to the DWARF member order.
-// ---------------------------------------------------------------------------------------
-void Looker::Parameters::Construct()
-{
-    mfInitialXLookOffsetRange       = 0.0f;          // stfs 0.0  @4
-    mfInitialYLookOffsetRange       = 0.0f;          // stfs 0.0  @8
-    mfTargetSubjectSize             = 0.25f;         // stfs 0.25 @0xC
-    mfTargetSubjectXSize            = 0.25f;         // stfs 0.25 @0x10
-    mfTargetSubjectYSize            = 0.25f;         // stfs 0.25 @0x14
-    mfTargetSubjectXScreenOffset    = 0.0f;          // stfs 0.0  @0x18
-    mfTargetSubjectYScreenOffset    = 0.0f;          // stfs 0.0  @0x1C
-    mfTrackingTolerance             = 0.0f;          // stfs 0.0  @0x20
-    mfTrackingSpeed                 = 0.2f;          // stfs 0.2  @0x24
-    mfTrackingAcceleration          = 0.0099999998f; // stfs      @0x28
-    mfMinFOVVelocity                = 120.0f;        // stfs      @0x2C
-    mfMaxFOVVelocity                = 250.0f;        // stfs      @0x30
-    mfDesiredPerceivedDistance      = 10.0f;         // stfs      @0x34
-    mfDistanceToVelocityFactor      = 2.0f;          // stfs      @0x38
-    mfToleranceForDistanceFromIdeal = 5.0f;          // stfs      @0x3C
-    mfToleranceForDistanceFromTarget= 0.5f;          // stfs      @0x40
-    mfOvershootFactor               = 1.1f;          // stfs      @0x44
-    mfMinFOV                        = 10.0f;         // stfs      @0x48
-    mfMaxFOV                        = 80.0f;         // stfs      @0x4C
-    mfIdealFOVVelocityLerpAmount    = 0.5f;          // stfs      @0x50
-    mfStaticDOF                     = 0.42500001f;   // stfs      @0x54
-    mfStaticFocalLength             = 0.14f;         // stfs      @0x58
-    mbUseStaticDOF                  = false;         // stb 0     @0x5C
-    mbInitialiseToLookingAtTarget   = true;          // stb 1     @0x5D
-    mbInitialiseToZoomedToTarget    = true;          // stb 1     @0x5E
-    mbUseZoom                       = false;         // stb 0     @0x5F
-    meZoomType                      = E_ZOOM_PERCEIVED_DISTANCE; // stw 0 @0x60
-    // mVersion (@0x00) is left at its default-constructed value (no store in the asm).
-}
+// NOTE -- Looker::Parameters::Construct @0x821F8D80 MOVED to BrnLooker.h as a header inline
+// on 2026-08-01 (orbit-camera wave). This TU does not compile (see the SLerp call below at
+// what is now roughly line 150 -- it uses the retired three-argument form) and is therefore
+// not mounted, but BehaviourRotateAboutVehicle::Parameters::Construct needs that seed on the
+// live car-select path. The body is unchanged; only its home moved. MOVE IT BACK when this
+// TU is re-fitted and mounted.
 
 // ---------------------------------------------------------------------------------------
 // Track @0x82222680 -- orientation follow.

@@ -78,7 +78,28 @@ namespace Utils
             f32  mfXYWobbleMagnitudeDegs;  // :89  +0x08
             f32  mfWobbleCenteringFactor;  // :90  +0x0C
 
-            void Construct();              // :93  (declaration-only -- its own ledger fn)
+            // ⭐ :93 -- BODIED 2026-08-01 (orbit-camera wave). It used to be declaration-only
+            // ("its own ledger fn"), which made it an unresolved external for any caller.
+            // The console has NO standalone body for it: it is INLINED at every one of the
+            // nineteen sites that seed a shake block, and the four defaults are attested by
+            // the three rodata literals those sites all load
+            // (flt_820047B8 = 0.06, flt_82001CC0 = 0.0, flt_820047BC = 1.15,
+            //  flt_820047C0 = 0.11), in this member order.
+            // THREE INDEPENDENT WITNESSES, two of them already committed in this tree:
+            //   BehaviourGameplayExternal::Parameters::Construct  (BrnBehaviourGameplayExternal.cpp:58-61)
+            //   BehaviourGameplayBumper::Parameters::Construct    (BrnBehaviourGameplayBumper.cpp:59-62)
+            //   BehaviourRotateAboutVehicle::Parameters::Construct @0x821FB328..0x821FB358
+            // Each of the three then OVERRIDES a subset immediately afterwards, which is how
+            // the seed can be told apart from the caller's own tunings: the seed is the store
+            // that is dead (overwritten) at the sites that re-tune, and live at the ones that
+            // do not.
+            void Construct()
+            {
+                mfXYShakeMagnitudeDegs  = 0.06f;   // stfs flt_820047B8
+                mfZShakeMagnitudeDegs   = 0.0f;    // stfs flt_82001CC0
+                mfXYWobbleMagnitudeDegs = 1.15f;   // stfs flt_820047BC
+                mfWobbleCenteringFactor = 0.11f;   // stfs flt_820047C0
+            }
         };
 
         // :62 -- clear the live wobble state. BODIED (inline) and X360-attested: the console

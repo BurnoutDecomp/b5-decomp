@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/fpu/scalar_operation.h"            // Tan / IsZero
 #include "rw/math/vpu/vector3_operation.h"           // Subtract / Normalize / IsZero
+#include "rw/math/vpu/matrix44affine_operation.h"    // Mult / TransformPoint /
+                                                     //   InverseOfMatrixWithOrthonormal3x3
 
 #include <cmath>   // std::atan / std::acos / std::asin / std::fabs / std::copysign
 
@@ -24,6 +26,13 @@
 //   CreateLookAt(Vector3, Vector3)          @0x8220C4F8   (CameraUtils.cpp:704)
 //   CreateLookAt(Vector3, Vector3, Vector3) @0x8220C960   (CameraUtils.cpp:767)
 //
+// Bodied here (3 ledger functions, class:BrnDirector::Camera::Utils -- the zoom/screen-fit
+// trio the car-select orbit camera and Looker::Zoom both drive; ADDED 2026-08-01, all three
+// were declaration-only and all three are on the live path):
+//   GetSizeOnScreen                    @0x82221918   (360 asm lines)
+//   GetFOVDegsToFitObjectToScreenSize  @0x8220C258   (80 asm lines)
+//   CreateAdjustedLookAt               @0x82221EB8   (106 asm lines)
+//
 // Bodied here (1 ledger function, class:BrnDirector::Camera::Utils -- the Euler decomposition
 // that feeds the fly-by camera's BANK; see the block comment at its definition for the
 // branch-by-branch attestation):
@@ -35,12 +44,21 @@
 // tables, so they are left unbodied per the no-fabrication rule):
 //   ApplyPitchAboutPointRads          @0x822183E0  (Sin/Cos minimax, rodata 82000BD0..82000C60)
 //   CalcNearClipCorners               @0x821F25B8  (XMVectorTan + VMX corner lattice)
-//   CreateAdjustedLookAt              @0x82221EB8  (vrefp128 + vperm128 mask unk_82CDA350)
 //   FindNonParallelNormalisedVectorTo @0x822171B0  (the SECOND of its two returned constants
 //                                                   is still unattested; unk_82181510 is now
 //                                                   pinned -- see KV_AXIS_Y below)
 //   GetFOVDegsToFitObjectToScreenArea @0x8220C398  (VMX rsqrt/reciprocal Newton-refine + vsel)
-//   GetFOVDegsToFitObjectToScreenSize @0x8220C258  (two vrefp128 Newton-refine reciprocals)
+//
+// ⛔ CORRECTED 2026-08-01 -- CreateAdjustedLookAt and GetFOVDegsToFitObjectToScreenSize used
+//   to sit in the list above, described as unbodiable "vrefp128 + vperm128 mask" and "two
+//   vrefp128 Newton-refine reciprocals" blocks. THAT WAS A MISREADING OF WHAT THE VMX IS
+//   DOING: neither reads a coefficient table. `vrefp128` + Newton-Raphson is a RECIPROCAL
+//   (i.e. a divide, which the PC writes as `/`), and the `vperm` against unk_82CDA350 is the
+//   tree's already-documented `Vector3(x, y, z)` construction mask, not data. There was
+//   nothing to fabricate in either, and both are now bodied below.
+//   THE LESSON GENERALISES: "unattested rodata" and "an addressing mode I have not decoded"
+//   are different findings, and only the first one blocks a reconstruction. Anything still
+//   on the list above should be re-read with that distinction in mind before it is trusted.
 
 namespace BrnDirector
 {
@@ -445,6 +463,243 @@ Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngl
     }
 
     return lEulerAngles;
+}
+
+// ============================================================================
+// THE ZOOM / SCREEN-FIT TRIO -- BODIED 2026-08-01 (orbit-camera wave).
+//
+// All three were DECLARATION-ONLY, and all three are on the live car-select path:
+// BehaviourRotateAboutVehicle::Update calls GetSizeOnScreen and
+// GetFOVDegsToFitObjectToScreenSize twice each and CreateAdjustedLookAt once, per frame.
+// (Looker::Zoom is the console's other caller of the first two.)
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// GetSmallestDifferenceBetweenDegsAngles @0x821F8868   (71 asm lines)
+//
+// The signed shortest arc (degrees) from lfFromDegs to lfToDegs, wrapped into [-180, 180].
+// BODIED 2026-08-01 (orbit-camera wave): it was declaration-only, and it is the last callee
+// standing between CameraSphericalRotationController::Update (the car-select free-look stick)
+// and a clean link.
+//
+//   0x821F8884  fsubs f31, f2, f1                       -- the raw delta, TO minus FROM
+//   0x821F8894  the |delta| >= 360 gate; inside it, `* (1/360)` (flt_82004920) then
+//               fctiwz/fcfid/frsp -- a TRUNCATION toward zero, not a round -- then
+//               `fnmsubs f31, f0, f30, f31` == delta - trunc(delta/360) * 360
+//   0x821F88D8  assert "(lrAngle < 360.0f) && (lrAngle > -360.0f)"   CameraUtils.cpp:535
+//   0x821F890C  if (delta >  180) delta -= 360;  else if (delta < -180) delta += 360;
+//   0x821F8938  assert "(lrAngle <= 180.0f) && (lrAngle >= -180.0f)" CameraUtils.cpp:546
+//
+// ⚠️ THE TWO ASSERTS ARE NOT REDUNDANT AND ARE NOT THE SAME TEST: the first is STRICT on both
+//   ends (< 360 / > -360) and the second is INCLUSIVE (<= 180 / >= -180). Reproduced exactly.
+// ⚠️ The half-open wrap is asymmetric on purpose: a delta of exactly +180 is left alone
+//   (the test is `> 180`) while exactly -180 is also left alone (`< -180`), so both ends of
+//   the band survive and the second assert passes either way.
+// ----------------------------------------------------------------------------
+f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs)
+{
+    const f32 KF_FULL_TURN_DEGS     = 360.0f;    // flt_82004928
+    const f32 KF_NEG_FULL_TURN_DEGS = -360.0f;   // flt_82004924
+    const f32 KF_RECIP_FULL_TURN    = 0.0027777778f;  // flt_82004920 == 1/360
+    const f32 KF_HALF_TURN_DEGS     = 180.0f;    // flt_820025FC
+    const f32 KF_NEG_HALF_TURN_DEGS = -180.0f;   // flt_820048B4
+
+    f32 lfAngle = lfToDegs - lfFromDegs;
+
+    if (lfAngle >= KF_FULL_TURN_DEGS || lfAngle <= KF_NEG_FULL_TURN_DEGS)
+    {
+        // `fctiwz` truncates toward zero, so this is the sign-preserving remainder.
+        const f32 lfTurns = static_cast<f32>(static_cast<s32>(lfAngle * KF_RECIP_FULL_TURN));
+        lfAngle -= lfTurns * KF_FULL_TURN_DEGS;
+    }
+
+    CGS_ASSERT(lfAngle < KF_FULL_TURN_DEGS && lfAngle > KF_NEG_FULL_TURN_DEGS,
+               "(lrAngle < 360.0f) && (lrAngle > -360.0f)");            // .cpp:535
+
+    if (lfAngle > KF_HALF_TURN_DEGS)
+    {
+        lfAngle -= KF_FULL_TURN_DEGS;
+    }
+    else if (lfAngle < KF_NEG_HALF_TURN_DEGS)
+    {
+        lfAngle += KF_FULL_TURN_DEGS;
+    }
+
+    CGS_ASSERT(lfAngle <= KF_HALF_TURN_DEGS && lfAngle >= KF_NEG_HALF_TURN_DEGS,
+               "(lrAngle <= 180.0f) && (lrAngle >= -180.0f)");          // .cpp:546
+
+    return lfAngle;
+}
+
+// ----------------------------------------------------------------------------
+// GetSizeOnScreen @0x82221918   (360 asm lines)
+//
+// The on-screen footprint of an oriented AABB, in NORMALISED SCREEN FRACTIONS: project all
+// eight corners through the camera and return the width/height of their screen-space bounds.
+//
+// ---- asm walk (r30 = &lCameraTransform, r29 = &lTargetTransform, r5..r8 = the AABB) ----
+//   0x82221970..0x82221998  lvFOV * (pi/180) * 0.5 -> XMVectorTan   == tan(half FOV)
+//   0x8222199C..0x82221A40  vrefp128 + 2x Newton on lvAspect, times that tangent
+//                             == tan(half FOV) / aspect, the vertical half-extent at unit depth
+//   0x822219C8..0x82221AE0  six vmrghw/vmrglw (the 3x3 transpose) + `vsubfp v12, 0, camPos`
+//                             + two vmaddfp cascades == the target transform expressed in
+//                             CAMERA space, i.e. Mult(target, inverse(camera))
+//   0x82221AD0..0x82221BB4  four vperm (mask @0x82CDA350 == {A.x, B.y, A.x, A.x}) each followed
+//                             by a `vrlimi128 …, 2, 0` that drops in the z lane -- the eight
+//                             Vector3(x, y, z) min/max combinations, stored to an 8x16 stack array
+//   0x82221BF8..0x82221CA0  each corner run through the camera-space transform (vmaddfp cascade)
+//   0x82221CB4..0x82221E90  the r9 = 8 loop: reject |z| <= FLT_EPSILON, perspective-divide,
+//                             scale by 0.5, and fold into a running min/max
+//   0x82221E94              `vsubfp v1, v29, v31` == max - min, returned in v1
+//
+// ⚠️⚠️ THE MAX ACCUMULATOR IS SEEDED WITH FLT_MIN (1.1754944e-38, `flt_82001738`), NOT
+//   -FLT_MAX. That is the smallest positive normal, so an object whose entire screen
+//   footprint lies at negative x (or negative y) never updates that axis's max and the
+//   returned size is wrong -- for a centred subject it cannot happen (the bounds straddle
+//   zero), which is why it shipped. REPRODUCED AS-IS: it is the console's behaviour, it is
+//   benign for every caller in the image, and "fixing" it would break parity. The min
+//   accumulator's FLT_MAX seed is correct.
+// ⚠️ The `> FLT_EPSILON` test is on |z|, so a corner BEHIND the camera (negative z) is NOT
+//   rejected -- it is projected with a negative divisor and lands mirrored through the
+//   origin. Also the console's own behaviour; also reproduced.
+// ----------------------------------------------------------------------------
+Vector2 GetSizeOnScreen(Matrix44Affine lCameraTransform,
+                        VecFloat lvFOV,
+                        VecFloat lvAspect,
+                        Matrix44Affine lTargetTransform,
+                        AABBox lAABB)
+{
+    // The frustum half-extents at unit depth.
+    const f32 lfTanHalfFOV        = rw::math::fpu::Tan(lvFOV * KF_HALF_DEGS_TO_RADS);
+    const f32 lfTanHalfFOVPerAspect = lfTanHalfFOV / lvAspect;
+
+    // The subject's frame, expressed in the camera's. The console open-codes the transpose
+    // and the negated-position cascade; that is exactly this composition, and the rw helper
+    // documents the same X360 shape.
+    const Matrix44Affine lTargetInCameraSpace =
+        rw::math::vpu::Mult(lTargetTransform,
+                            rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lCameraTransform));
+
+    // The eight corners. The console emits them in the order
+    // (max,max,max) (min,max,max) (max,min,max) (min,min,max) (max,max,min) (min,max,min)
+    // (max,min,min) (min,min,min); the order cannot matter to a min/max reduction, so it is
+    // written here as the readable three-bit enumeration.
+    Vector3 laCorners[8];
+    for (s32 liCorner = 0; liCorner < 8; ++liCorner)
+    {
+        laCorners[liCorner].x = ((liCorner & 1) != 0) ? lAABB.mMax.x : lAABB.mMin.x;
+        laCorners[liCorner].y = ((liCorner & 2) != 0) ? lAABB.mMax.y : lAABB.mMin.y;
+        laCorners[liCorner].z = ((liCorner & 4) != 0) ? lAABB.mMax.z : lAABB.mMin.z;
+        laCorners[liCorner].w = 0.0f;
+    }
+
+    // The screen-space bounds. See the ⚠️⚠️ banner for the max seed.
+    const f32 KF_FLT_MAX     = 3.4028235e+38f;   // flt_8200173C
+    const f32 KF_FLT_MIN     = 1.1754944e-38f;   // flt_82001738
+    const f32 KF_FLT_EPSILON = 1.1920929e-07f;   // flt_82001770
+
+    f32 lfMinX = KF_FLT_MAX;
+    f32 lfMinY = KF_FLT_MAX;
+    f32 lfMaxX = KF_FLT_MIN;
+    f32 lfMaxY = KF_FLT_MIN;
+
+    for (s32 liCorner = 0; liCorner < 8; ++liCorner)
+    {
+        const Vector3 lCornerInCameraSpace =
+            rw::math::vpu::TransformPoint(lTargetInCameraSpace, laCorners[liCorner]);
+
+        if (!(std::fabs(lCornerInCameraSpace.z) > KF_FLT_EPSILON))
+        {
+            continue;
+        }
+
+        // The perspective divide, then the console's 0.5 scale: the result is the fraction of
+        // the screen the corner sits at, so the returned size is directly comparable with the
+        // authored mfTargetSubjectXSize/YSize (both are 0..1 screen fractions).
+        const f32 lfScreenX =
+            (lCornerInCameraSpace.x / (lCornerInCameraSpace.z * lfTanHalfFOV)) * 0.5f;
+        const f32 lfScreenY =
+            (lCornerInCameraSpace.y / (lCornerInCameraSpace.z * lfTanHalfFOVPerAspect)) * 0.5f;
+
+        if (lfMinX > lfScreenX) { lfMinX = lfScreenX; }
+        if (lfMinY > lfScreenY) { lfMinY = lfScreenY; }
+        if (lfMaxX < lfScreenX) { lfMaxX = lfScreenX; }
+        if (lfMaxY < lfScreenY) { lfMaxY = lfScreenY; }
+    }
+
+    Vector2 lSize;
+    lSize.x = lfMaxX - lfMinX;
+    lSize.y = lfMaxY - lfMinY;
+    lSize.z = 0.0f;
+    lSize.w = 0.0f;
+    return lSize;
+}
+
+// ----------------------------------------------------------------------------
+// GetFOVDegsToFitObjectToScreenSize @0x8220C258   (80 asm lines)
+//
+// The FOV that would make an object currently occupying `lSizeOnScreen` occupy
+// `lTargetSize` instead: scale the current zoom by whichever axis needs the tighter fit.
+//   0x8220C290..0x8220C2D0  vrefp128 + Newton reciprocals of lSizeOnScreen.x / .y
+//   0x8220C2D8              GetZoomFromFOVDegs(the first argument)
+//   0x8220C2F0..0x8220C31C  a second Newton pass on each reciprocal, then * lTargetSize.{x,y}
+//   0x8220C31C              vminfp -- the SMALLER of the two ratios wins (fit, not fill)
+//   0x8220C320..0x8220C32C  zoom * that ratio -> GetFOVDegsFromZoom
+//   0x8220C348..0x8220C378  assert IsValid(lRequiredFOV)   CameraUtils.cpp:191
+//
+// ⚠️ THE FIRST PARAMETER IS NAMED `lvDistance` IN THE DWARF AND IS NOT A DISTANCE -- it goes
+//   straight into GetZoomFromFOVDegs, so it is an FOV in degrees, and both console callers
+//   pass the camera's current FOV. The name is the console's own and is kept.
+// ⚠️ NO GUARD ON A ZERO lSizeOnScreen. A subject that projects to nothing gives an infinite
+//   ratio, an infinite zoom and an FOV of 0 -- which is exactly what the IsValid assert here
+//   is watching for. Callers are expected to have a visible subject.
+// ----------------------------------------------------------------------------
+VecFloat GetFOVDegsToFitObjectToScreenSize(VecFloat lvDistance,
+                                           Vector2 lSizeOnScreen,
+                                           Vector2 lTargetSize)
+{
+    const f32 lfZoom = GetZoomFromFOVDegs(lvDistance);
+
+    const f32 lfRatioX = lTargetSize.x / lSizeOnScreen.x;
+    const f32 lfRatioY = lTargetSize.y / lSizeOnScreen.y;
+    const f32 lfRatio  = (lfRatioX < lfRatioY) ? lfRatioX : lfRatioY;   // vminfp
+
+    const f32 lfRequiredFOV = GetFOVDegsFromZoom(lfZoom * lfRatio);
+
+    CGS_ASSERT(rw::math::fpu::IsValid(lfRequiredFOV), "IsValid(lRequiredFOV)");   // .cpp:191
+
+    return lfRequiredFOV;
+}
+
+// ----------------------------------------------------------------------------
+// CreateAdjustedLookAt @0x82221EB8   (106 asm lines)
+//
+// Re-aim a look-at frame so the subject sits at an authored SCREEN-SPACE offset instead of
+// dead centre: build the small rotation that points at that offset on the unit-depth plane,
+// and pre-multiply it onto the frame.
+//   0x82221F00..0x82221F30  lvFOV * (pi/180) * 0.5 -> XMVectorTan
+//   0x82221F44              * 2 -- the FULL width of the unit-depth plane, so a screen offset
+//                             expressed as a 0..1 fraction maps onto it directly
+//   0x82221F3C..0x82221F80  the aspect reciprocal (vrefp + 2x Newton) scales the Y offset
+//   0x82221F84/F88          vperm (mask @0x82CDA350) + vrlimi128 lane 2 == Vector3(x, y, 1)
+//   0x82221F8C              CreateLookAt(origin, that) -- the offset aim
+//   0x82221F94..0x8222203C  the four-row vmaddfp cascade == Mult(offsetAim, lLookAt)
+// ----------------------------------------------------------------------------
+Matrix44Affine CreateAdjustedLookAt(Matrix44Affine lLookAt,
+                                    VecFloat lvFOV,
+                                    VecFloat lvAspect,
+                                    Vector2 lScreenOffset)
+{
+    const f32 lfPlaneWidthAtUnitDepth = 2.0f * rw::math::fpu::Tan(lvFOV * KF_HALF_DEGS_TO_RADS);
+
+    const Vector3 lOffsetTarget = { lScreenOffset.x * lfPlaneWidthAtUnitDepth,
+                                    lScreenOffset.y * (lfPlaneWidthAtUnitDepth / lvAspect),
+                                    1.0f,
+                                    0.0f };
+
+    const Vector3 lOrigin = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    return rw::math::vpu::Mult(CreateLookAt(lOrigin, lOffsetTarget), lLookAt);
 }
 
 }
