@@ -42,6 +42,10 @@ enum EGsmGameAction
     KI_ACTION_CAR_OPPONENT_SET     = 4,     // size 64  -- OnPlayerCarChange (Array<CgsID,7> of opponents)
     KI_ACTION_UNPAUSE              = 87,    // size 1   -- RequestUnpause
     KI_ACTION_APPLY_CAR_STATS      = 198,   // size 24  -- ApplyCarStats
+    // ProcessGameEvents case 78 (`li r6,0x40; li r5,0x40` @0x823A45E0). Same id + size as the
+    // CarSelectManager-side KI_ACTION_CAR_SELECTION_CHANGED; consumed by
+    // MainDirector::ProcessInputQueue case 64.
+    KI_ACTION_CAR_SELECTION_CHANGED = 64,   // size 64  -- CarSelectionChangedAction
 };
 
 // ----------------------------------------------------------------------------
@@ -1060,16 +1064,22 @@ GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex le
 //   4. junkyardId = FindNearestJunkyardID(playerStartPosition)
 //   5. scoringIdx = FindPlayerScoringIndexForActiveRaceCar(GetPlayerActiveRaceCarIndex())
 //   6. CarSelectManager::EnterJunkyardAtStartOfGame(queue, junkyardId, carId, wheelId,
-//                                                  scoringIdx, &mCarSelectionChangedAction)
+//                                                  scoringIdx, &mCachedCarSelectChangedAction)
 //   7. ProgressionManager::OnDriveThru(junkyardId, 0, 0)
 //   8. this+232306 = 1     (the "waiting to REALLY enter the junkyard" flag ProcessGameEvents
 //                           case 78 tests before ReallyEnterJunkyardAtStartOfGame)
 //
-// [FLAG PC bring-up] steps 1 (the two cached pose members), 7 and 8 are DROPPED, not
-// paraphrased: the two pose members and the +232306 flag sit inside this slice's un-modelled
-// span and have no reconstructed reader, and ProgressionManager::OnDriveThru is not
-// reconstructed. Step 4 reads the start position straight from the TriggerData, which is the
-// same value step 1 would have cached.
+// ⭐ STEP 8 IS NOW REAL (2026-08-01). It is the console's own member -- DWARF
+// BrnGameStateModule.h:811 mbWaitingToPutPlayerInJunkyard -- and its reader, the extracted
+// case-78 arm, is ProcessGameEventsReallyEnterJunkyardBringUp() below. Without this store the
+// junkyard entry stops half-done: the player's car is placed at maSpawnLocations[1] and NOTHING
+// ever posts the transition-in action, so the director's meJunkyardState stays E_JY_INACTIVE and
+// ArbStateCarSelect is never reached. That was the whole gap.
+//
+// [FLAG PC bring-up] steps 1 (the two cached pose members) and 7 are DROPPED, not paraphrased:
+// the two pose members sit inside this slice's un-modelled span and have no reconstructed reader,
+// and ProgressionManager::OnDriveThru is not reconstructed. Step 4 reads the start position
+// straight from the TriggerData, which is the same value step 1 would have cached.
 void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
@@ -1114,20 +1124,97 @@ void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue
     }
 
     mCarSelectManager.EnterJunkyardAtStartOfGame(lpActionQueue, lJunkyardId, lCarModelId, lWheelId,
-                                                leScoringIndex, &mCarSelectionChangedAction);
+                                                leScoringIndex, &mCachedCarSelectChangedAction);
+
+    // Step 8 -- X360 `li r11,1; stb r11, <this+0x38B72>`. Arm the "waiting to REALLY enter the
+    // junkyard" latch that ProcessGameEvents case 78 tests.
+    mbWaitingToPutPlayerInJunkyard = true;
+}
+
+// ============================================================================
+// ProcessGameEventsReallyEnterJunkyardBringUp
+//   -- the extracted case-78 arm of ProcessGameEvents @0x823A0A18 (0x823A4590..0x823A45F8).
+// See the header for the full FLAG (why the GUI-event trigger is not used on this build).
+//
+// The console arm, instruction for instruction:
+//   0x823A4590  r29 = this + 0x38B72 (232306)
+//   0x823A4598  lbz  r11, 0(r29);  if (!r11) break                  -- mbWaitingToPutPlayerInJunkyard
+//   0x823A45A4  r3 = this + 0x2CDA0 (183712) == &mCarSelectManager
+//   0x823A45A8  r4 = the game ACTION queue
+//   0x823A45B0  bl  CarSelectManager::ReallyEnterJunkyardAtStartOfGame
+//   0x823A45B4  r30 = this + 0x38B80 (232320) == &mCachedCarSelectChangedAction
+//   0x823A45BC  ld   r11, 0(r30);  if (!r11) FireAssert(.., BrnGameStateModule.cpp, 0x1003=4099)
+//   0x823A45E0  AddEvent(queue, r30, 0x40, 0x40)                    -- action 64, 64 bytes
+//   0x823A45F4  stb  r18(==0), 0(r29)                               -- clear the latch
+//
+// ⚠️ THE ASSERT IS A 64-BIT TEST. Hex-Rays renders it `if (!*(v23 + 232324))` -- the classic
+// big-endian misrender of a `ld` at +232320 as a word read of its low half. The asm computes
+// r30 == this+232320 and does `ld r11, 0(r30)`, i.e. it tests the whole CgsID mJunkyardId. The
+// same r30 is then handed to AddEvent as the record base, which only makes sense at +232320.
+// ============================================================================
+void GameStateModule::ProcessGameEventsReallyEnterJunkyardBringUp(
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (!mbWaitingToPutPlayerInJunkyard)
+    {
+        return;
+    }
+
+    mCarSelectManager.ReallyEnterJunkyardAtStartOfGame(lpActionQueue);
+
+    // X360 assert literal, as IDA renders it: "mCachedCarSelectChangedAction.mJunkyard"... --
+    // the string is truncated in the export at 39 characters; the tail below is this repo's
+    // completion of it, in the file's own house style. The TEST is the console's.
+    CGS_ASSERT(mCachedCarSelectChangedAction.mJunkyardId != 0,
+               "mCachedCarSelectChangedAction.mJunkyardId != kCGSID_NULL");
+
+    // The 64-byte CarSelectionChangedAction the entry filled in. MainDirector::ProcessInputQueue
+    // case 64 is its consumer: it is the ONLY writer of the director GameState's mJunkyardId and
+    // mbJunkyardPosIsLeft.
+    lpActionQueue->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&mCachedCarSelectChangedAction),
+        KI_ACTION_CAR_SELECTION_CHANGED,
+        static_cast<s32>(sizeof(mCachedCarSelectChangedAction)));
+
+    mbWaitingToPutPlayerInJunkyard = false;
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[GameStateModule::ProcessGameEvents case 78] ReallyEnterJunkyardAtStartOfGame done;"
+            << " junkyard=" << static_cast<u64>(mCachedCarSelectChangedAction.mJunkyardId)
+            << " posIsLeft=" << (mCachedCarSelectChangedAction.mbJunkyardPosIsLeft ? 1 : 0) << "\n";
+    }
 }
 
 // ============================================================================
 // PreWorldUpdateSetupPlayerCarBringUp -- the extracted one-shot leg of
 // PreWorldUpdate @0x823A5328 (0x823A5510..0x823A5540). See the header for the FLAG.
 // ============================================================================
-void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
+void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunkyardEntry)
 {
-    if (!mbSendSetupPlayerCarPending || mpOutputBuffer == 0)
+    // Two legs of PreWorldUpdate live here now, each behind its own console latch, in the
+    // console's own body order: the one-shot setup leg @0x823A5510, then the case-78 arm of
+    // ProcessGameEvents @0x823A58B8.
+    //
+    // ⚠️ lbMayCompleteJunkyardEntry IS THE ORDERING STAND-IN FOR GAME EVENT 78, and it is
+    // MEASURED, not defensive. See the header FLAG for why the GUI's own event cannot drive the
+    // arm on this build; what the caller supplies instead is the GUI's OTHER first-boot signal
+    // (the new-profile intro being live). Firing without it is not merely early, it is WRONG:
+    // ArbStateCarSelect::Prepare picks its opening arm from mbNewProfileIntroActive, so an entry
+    // that completes before the GUI has raised that flag puts the state in the junkyard
+    // E_STATE_INTRO instead of E_STATE_GAME_INTRO_PART_ONE -- and then the intro's own fly-by
+    // request trips that state's `!mbGameIntroFlybyActive` tripwire (:381) on EVERY frame of the
+    // intro. Measured on this build: 163 asserts in a 98-second run.
+    if (mpOutputBuffer == 0)
     {
         return;
     }
-    mbSendSetupPlayerCarPending = false;   // the console's `stb r17, 0(r28)` -- one-shot
+    if (!mbSendSetupPlayerCarPending &&
+        !(mbWaitingToPutPlayerInJunkyard && lbMayCompleteJunkyardEntry))
+    {
+        return;
+    }
 
     // The console gets the queue from GameStateModuleIO::OutputBuffer (its `Ou` accessor at
     // 0x823A54E4) and asserts it non-null at BrnGameStateModule.cpp:1149.
@@ -1135,7 +1222,15 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
     GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
     mbIsUpdating = true;                   // the module asserts this in its own accessors
-    SendSetupPlayerCarEvent(lpActionQueue);
+    if (mbSendSetupPlayerCarPending)
+    {
+        mbSendSetupPlayerCarPending = false;   // the console's `stb r17, 0(r28)` -- one-shot
+        SendSetupPlayerCarEvent(lpActionQueue);
+    }
+    if (lbMayCompleteJunkyardEntry)
+    {
+        ProcessGameEventsReallyEnterJunkyardBringUp(lpActionQueue);
+    }
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
 

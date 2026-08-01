@@ -1325,6 +1325,28 @@ WorldModule::HandleGameActions(
             {
                 CGS_ASSERT( meLocalPlayerActiveRaceCarIndex != -1,
                     "Unable to set the player car under AI control, as we don't know who they are yet" );
+                // ⛔ THE BAIL IS NEW (2026-08-01, junkyard-fire wave) AND IT PREVENTS AN
+                // OUT-OF-BOUNDS WRITE. On a miss the index is -1 and the console's own next
+                // instruction indexes the array with it -- `maeCarControls[-1]` lands on
+                // mfLocalPlayerActiveRaceCarSpeed, the member immediately before the array, and
+                // silently overwrites it with the payload word. The console gets away with it
+                // because its index is never -1 by the time an action 7 arrives; this build's is
+                // ALWAYS -1, because the only producer of meLocalPlayerActiveRaceCarIndex is
+                // WorldModule::BridgeRaceCarModuleToWorldModule_PreScene (X360: it copies the
+                // race-car module output's `+2582` player index into +6167272) and that bridge is
+                // not reconstructed -- Construct and the Prepare tail seed -1 and nothing ever
+                // writes anything else. This is the tree's standard "the X360 falls through into
+                // a bad access; bail instead of faulting" shape, and the assert above still fires
+                // so the missing producer stays visible.
+                // ⚠️ The assert IS reachable on this build: CarSelectManager::
+                // ReallyEnterJunkyardAtStartOfGame posts action 7 (the 48-byte junkyard
+                // drive-thru) the moment the start-of-game junkyard entry completes.
+                // DELETE-WHEN BridgeRaceCarModuleToWorldModule_PreScene lands.
+                if ( static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) < 0 ||
+                     static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) >= 8 )
+                {
+                    break;
+                }
                 maeCarControls[ meLocalPlayerActiveRaceCarIndex ] = lpiPayload[ 0 ];
                 break;
             }

@@ -186,7 +186,20 @@ ICETakeData* ICEAuthor::FindEditedTakeFromGuid(s32 liGuid)
     lIterator._Ptr = reinterpret_cast<bNode*>(mEditedTakeList[0]);
     lIterator._Lst = lpList;
 
-    while (lIterator._Ptr != lpEnd)
+    // ⛔ THE NULL-CURSOR TERMINATOR IS LOAD-BEARING (added 2026-08-01, junkyard-fire wave).
+    // A bTList that has been CONSTRUCTED and is empty self-links its head (head->Next == head),
+    // so `_Ptr != lpEnd` alone terminates it. A list that has never been constructed has a ZERO
+    // head->Next, and `0 != lpEnd` walked straight into `lpNode->miGuid` -- an access violation
+    // in FindEditedTakeFromGuid, reached from DirectorResourceManager::GetKeyAnimFromGuid ->
+    // KeyAnimController::Prepare the first time an ICE-anim camera behaviour was ever prepared.
+    // That is exactly the state the PC build is in: nothing constructs the in-game ICE editor's
+    // author store, so its edited-take list head is null.
+    // Returning 0 here is not a papering-over -- it is the function's OWN documented miss result,
+    // and GetKeyAnimFromGuid's next line is the on-disk fallback
+    // (`ICEList::GetICETakeDataFromGuid`, the 549-take resource list that IS loaded). The
+    // console's own precondition assert below already declares `_Ptr != 0`; this stops the code
+    // running past it into the fault.
+    while (lIterator._Ptr != 0 && lIterator._Ptr != lpEnd)
     {
         // Guard the live cursor (the iterator's own post-increment also asserts this).
         CGS_ASSERT(lIterator._Ptr != 0 && lIterator._Lst != 0 && lIterator._Ptr != lpEnd,

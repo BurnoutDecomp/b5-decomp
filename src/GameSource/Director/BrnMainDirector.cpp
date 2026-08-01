@@ -197,10 +197,20 @@ namespace BrnDirector
         // ValidateTransformWithDebugInfo would assert on the NaNs.
         mLastCamera.Construct();
 
-        // ⚠️ GATE: AllVehicleData::Construct( maAllVehicleData ) + the five flag bytes.
+        // ⭐ REAL (2026-08-01): the director's per-frame vehicle snapshot. Its three player
+        // spaces go to identity and its race-car pointer/index/bitset are cleared, so a frame
+        // that reaches it before PreSceneQueryUpdate has published sees a defined object rather
+        // than pool garbage. ⚠️ GATE (unchanged): the five flag bytes that follow it.
+        mAllVehicleData.Construct();
 
         // ⭐ REAL (was held back for host size): the camera-behaviour manager.
         mBehaviourManager.Construct();
+
+        // The named-camera-parameter bank. On the console this is
+        // BehaviourParameterBank::Construct, which BehaviourManager::Construct calls (that call
+        // is marked as a GATE in its body); here the one modelled block is seeded so
+        // BuildArbStateSharedInfo can publish a REAL pointer instead of the null it used to.
+        mNamedParameters.Construct();
 
         CGS_ASSERT(lpResourceManager != 0, "lpDirectorResourceManager != NULL");
         mBehaviourManager.SetDirectorResourceManager(lpResourceManager);
@@ -458,13 +468,21 @@ namespace BrnDirector
     // `mpStateContainer` (+0x14) before dispatching. Zeroing them here is what the console's
     // uninitialised stack slots amount to, and the callee overwrites both unconditionally.
     //
-    // ⚠️ ONE SLOT IS A DOCUMENTED QUIET GATE: `mpNamedParameters` (+0x1C) comes from
-    // MainDirector +192592 == mBehaviourManager +75072, i.e. 16 bytes INTO the manager's
-    // `mBehaviourParameterBank`, which is a FLAGGED opaque sub-object with no homed layout.
-    // Passing a pointer into un-modelled storage would be a fabrication, so it is null.
-    // CONSEQUENCE: an arbitrator state that reads named camera parameters gets null. None of
-    // the states on the attract/flyby path does (Arbitrator::Update never touches +0x1C).
-    // DELETE-WHEN: BehaviourParameterBank is homed.
+    // ⛔⛔ THE `mpNamedParameters` GATE IS CLOSED (2026-08-01, junkyard-fire wave) -- AND ITS
+    // OWN JUSTIFICATION IS WHY IT HAD TO BE. The gate used to publish null with the note
+    // "CONSEQUENCE: an arbitrator state that reads named camera parameters gets null. None of
+    // the states on the attract/flyby path does". That was true when it was written and stopped
+    // being true the moment the junkyard fired: ArbStateCarSelect::Prepare does
+    //     mLookAroundCarCam.GetBehaviour()->SetParameters(
+    //         &lrSharedInfo.mpNamedParameters->GetLookAroundCarCamParameters());
+    // which is a null dereference, and it crashed on the first frame the car-select state was
+    // ever entered. (ArbStateOnlineCarSelect::Prepare has the identical line.) A stub's
+    // "not on the live path" reasoning expires silently -- nothing in the build, the linker or
+    // any boot test can tell you it has.
+    // The slot now points at MainDirector::mNamedParameters, real named storage seeded by
+    // NamedParameters::Construct. ⚠️ The block carries the console's TYPE TAG but not its
+    // authored tunings -- see BehaviourRotateAboutVehicle::Parameters::Construct for exactly
+    // what is and is not transcribed. DELETE-WHEN: BehaviourParameterBank is homed.
     //
     // ⚠️ THE UN-HOMED REGION POINTERS. mpDebugPrinter / mpDebugLog / mpMomentController /
     // mpGameState / mpRandom / mpEffectInterface / mpAllVehicleData / mpPlayerTracker and the
@@ -523,7 +541,7 @@ namespace BrnDirector
         lrSharedInfo.mpStateContainer        = 0;                                   // +0x14 (callee-filled)
         lrSharedInfo.mpBehaviourManager      = const_cast<Camera::BehaviourManager*>(
                                                   &mBehaviourManager);                          // +0x18
-        lrSharedInfo.mpNamedParameters       = 0;                                   // +0x1C ⚠️ GATE
+        lrSharedInfo.mpNamedParameters       = &mNamedParameters;                   // +0x1C
         lrSharedInfo.mpMomentController      = reinterpret_cast<MomentController*>(
                                                   const_cast<u8*>(maMomentController));         // +0x20
         lrSharedInfo.mpGameState             = const_cast<GameState*>(&maGameState);            // +0x24
@@ -534,8 +552,7 @@ namespace BrnDirector
                                                   maEffectInterface);                           // +0x30
         lrSharedInfo.mpPlayerCrashInfo       = reinterpret_cast<const PlayerCrashInfo*>(
                                                   lpInput->GetPlayerCrashInfo());               // +0x34
-        lrSharedInfo.mpAllVehicleData        = reinterpret_cast<const AllVehicleData*>(
-                                                  maAllVehicleData);                            // +0x38
+        lrSharedInfo.mpAllVehicleData        = &mAllVehicleData;                                // +0x38
         lrSharedInfo.mpPlayerTracker         = reinterpret_cast<const VehicleTracker*>(
                                                   maVehicleTracker);                            // +0x3C
         lrSharedInfo.mpControllerInfo        = reinterpret_cast<const ControllerInfo*>(
@@ -632,10 +649,26 @@ namespace BrnDirector
     {
         // ⚠️ GATE: the "ICE sequence just finished" latch clear (maStateFlagTail).
 
-        if (GetLivePlayerCarIndex(lpIO) == -1)
+        const s32 liPlayerCarIndex = GetLivePlayerCarIndex(lpIO);
+        if (liPlayerCarIndex == -1)
             return;
 
-        // ⚠️ GATE: AllVehicleData::Update( ..., usedRaceCars, vehicleInfoArray, playerIndex, contacts )
+        // ⭐⭐ X360 line 1 of the guarded body: AllVehicleData::Update @0x8221D938. This is the
+        // ONLY producer of the snapshot every camera behaviour resolves its VehicleRefs against,
+        // and it had never run on PC -- see the extracted-leg FLAG on UpdateRaceCarsBringUp for
+        // exactly which two parts of the console's Update are deferred (the traffic array and
+        // the nearest-car rebuild) and why.
+        {
+            const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
+            const CgsContainers::BitArray<8u>* lpUsedRaceCars = lpInput->GetUsedRaceCars();
+            const BrnDirector::Camera::VehicleInfo* lpRaceCars = lpInput->GetRaceCarInfo();
+            if (lpUsedRaceCars != 0 && lpRaceCars != 0)
+            {
+                mAllVehicleData.UpdateRaceCarsBringUp(
+                    *lpUsedRaceCars, lpRaceCars,
+                    static_cast<EActiveRaceCarIndex>(liPlayerCarIndex));
+            }
+        }
 
         // ⭐ X360 line 2 of the guarded body.
         ProcessInputQueue(lpIO);
