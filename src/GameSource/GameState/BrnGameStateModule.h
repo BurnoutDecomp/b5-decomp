@@ -126,6 +126,18 @@ public:
     CarSelectManager*       GetCarSelectManager()       { return &mCarSelectManager; }
     const CarSelectManager* GetCarSelectManager() const { return &mCarSelectManager; }
 
+    // ⭐ X360 0x8236BAC8. The nearest junkyard's CgsID to lPosition -- the single input that turns
+    // the loaded TriggerData into "which junkyard do I enter". Both start-of-game entries need it:
+    // OnProfileLoaded @0x82397310 feeds it the Profile's saved position, SendSetupPlayerCarEvent
+    // @0x8239A918 feeds it TriggerData::GetPlayerStartPosition().
+    //
+    // ⚠️⚠️ DROPPED-ARGUMENT TRAP (the SIXTH recorded incident, and the first VECTOR one). Hex-Rays
+    // renders this `FindNearestJunkyardID()` -- ARITY ZERO. The asm opens `vmr128 v124, v1`, and
+    // both call sites load v1 immediately before the branch (`lvx128 v1, r30, 48` in
+    // OnProfileLoaded; `vmr128 v1, v127` in SendSetupPlayerCarEvent). It takes a Vector3 by value
+    // in a VMX register. Recovered from the asm, not the prototype.
+    CgsID FindNearestJunkyardID(Vector3 lPosition) const;
+
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
     // race-car table). Asserts mbIsUpdating.

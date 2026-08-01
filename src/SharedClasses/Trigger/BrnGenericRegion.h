@@ -99,8 +99,11 @@ public:
                     int16_t liCameraCut1, int16_t liCameraCut2,
                     int8_t leCameraType1, int8_t leCameraType2, bool lbOneWay );
 
-    // BrnGenericRegion.h:114 -- inlined accessor in X360 build; declaration only.
-    Type            GetType() const;
+    // BrnGenericRegion.h:114 -- inlined accessor in X360 build. Now given its inline body: it is
+    // the `lbz r9, 0x36(region)` that GameStateModule::FindNearestJunkyardID @0x8236BB84 does to
+    // keep only E_TYPE_JUNK_YARD (0) regions. Same read, no offset poke; still no out-of-line
+    // symbol, exactly as the console has none.
+    Type            GetType() const { return static_cast<Type>( meType ); }
 
     // BrnGenericRegion.h:117 / body @ :231 -- THIS TU (X360 0x82354760).
     const char*     GetTypeName() const;

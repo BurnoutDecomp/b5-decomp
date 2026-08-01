@@ -468,19 +468,21 @@ namespace vpu
 
 namespace BrnTrigger
 {
-    // The three trigger-region accessors BrnDirectorWorldMap reaches for the drive-thru /
-    // region queries. Nothing on the fly-by path reads a trigger region.
-    // DELETE-WHEN: the region accessors are transcribed into their SharedClasses/Trigger TUs.
-    GenericRegion::Type GenericRegion::GetType() const
-    {
-        return static_cast<GenericRegion::Type>(0);
-    }
-
-    const GenericRegion* TriggerData::GetGenericRegion(s32 liIndex) const
-    {
-        (void)liIndex;
-        return 0;
-    }
+    // ⛔ TWO OF THE THREE TRIGGER-REGION STUBS ARE RETIRED (2026-08-01). They were:
+    //     GenericRegion::Type GenericRegion::GetType() const { return (Type)0; }
+    //     const GenericRegion* TriggerData::GetGenericRegion(s32) const { return 0; }
+    // and the comment claimed "nothing on the fly-by path reads a trigger region". Both are the
+    // brief's top defect class, and the FIRST one is the dangerous kind: (Type)0 is
+    // E_TYPE_JUNK_YARD, so every one of the 4670 generic regions in TRIGGERS.DAT answered "I am a
+    // junkyard" to anyone who asked. WorldMap::GetInterestingPointNear (the only reader in the
+    // director) survived that only by accident -- its partner stub handed back NULL, and the
+    // constant-returning GetType() never touched `this`, so the null went undereferenced and the
+    // loop always fell through to `return false`. Two wrong answers cancelling is not an
+    // implementation.
+    // Both now have their real bodies: GetType() inline in BrnGenericRegion.h (the console inlines
+    // it too), GetGenericRegion in BrnTriggerData.cpp next to its GetKillzone/GetSpawnLocation
+    // siblings. BoxRegion::ComputeTransform below is STILL A STUB -- it is only reached on a hit,
+    // which could not happen before and now can.
 
     rw::math::vpu::Matrix44Affine BoxRegion::ComputeTransform() const
     {

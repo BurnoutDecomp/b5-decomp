@@ -16,6 +16,11 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"                 // CgsContainers::Array<s64,7> (opponent payload)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"       // RequestInterface<3072>::GetVehicleList/GetWheelList
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"             // GameDataAssetEvent (the list replies)
+#include "SharedClasses/Trigger/BrnTriggerData.h"                       // BrnTrigger::TriggerData (generic-region table)
+#include "SharedClasses/Trigger/BrnGenericRegion.h"                     // BrnTrigger::GenericRegion (E_TYPE_JUNK_YARD)
+#include "SharedClasses/Trigger/BrnRegion.h"                            // BrnTrigger::BoxRegion::GetPosition
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"                     // BrnTrigger::SpawnLocation (cross-table check)
+#include <cmath>                                                        // std::sqrt (FindNearestJunkyardID)
 
 namespace BrnGameState
 {
@@ -393,6 +398,48 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // mTriggerQueryManager's TriggerData, the CarColours palette) -- and the
         // OnlineCarSelectManager leg (its TU is unmounted).
         mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
+
+        // [diagnostic, one-shot] Prove the junkyard half of the trigger data end to end, WITHOUT
+        // driving anything: count the E_TYPE_JUNK_YARD generic regions, run the console's own
+        // FindNearestJunkyardID @0x8236BAC8 from the track's authored player-start position (the
+        // exact vector SendSetupPlayerCarEvent @0x8239A918 feeds it), and check that the id it
+        // picks also appears in the SPAWN table -- because that cross-table agreement is the
+        // precondition for CarSelectManager::SetupSpawnLocations filling all five slots, and
+        // therefore for the junkyard entry not null-dereferencing maSpawnLocations[1].
+        // Delete with the rest of the bring-up diagnostics.
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
+            if (lpTriggerData != 0)
+            {
+                s32 liJunkyardRegions = 0;
+                const s32 liRegionCount = lpTriggerData->GetGenericRegionCount();
+                for (s32 li = 0; li < liRegionCount; ++li)
+                {
+                    if (lpTriggerData->GetGenericRegion(li)->GetType()
+                        == BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD)
+                        ++liJunkyardRegions;
+                }
+
+                const Vector3 lStart      = lpTriggerData->GetPlayerStartPosition();
+                const CgsID   lJunkyardId = FindNearestJunkyardID(lStart);
+
+                s32 liMatchingSpawns = 0;
+                const s32 liSpawnCount = lpTriggerData->GetSpawnLocationCount();
+                for (s32 li = 0; li < liSpawnCount; ++li)
+                {
+                    if (lpTriggerData->GetSpawnLocation(li)->GetJunkyardId() == lJunkyardId)
+                        ++liMatchingSpawns;
+                }
+
+                *CgsDev::Log::gpDebugPrint
+                    << "[GameStateModule] junkyard regions=" << liJunkyardRegions
+                    << "/" << liRegionCount
+                    << " playerStart=(" << lStart.x << ", " << lStart.y << ", " << lStart.z << ")"
+                    << " nearestJunkyardId=" << static_cast<u64>(lJunkyardId)
+                    << " spawnsForThatJunkyard=" << liMatchingSpawns << "\n";
+            }
+        }
         LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare [deferred] -- prepare DONE");
         // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
         // for a later re-prepare and clears the second-pass stage word (which this slice does
@@ -409,6 +456,70 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     lpOutputBuffer->UnlockForWrite();
     mbIsUpdating = false;
     return lbDone;
+}
+
+// ----------------------------------------------------------------------------
+// ⭐ X360 0x8236BAC8 -- FindNearestJunkyardID.
+//
+// Linear scan of the track TriggerData's generic-region table for the E_TYPE_JUNK_YARD region
+// whose box centre is nearest lPosition; returns that region's CgsID. The console:
+//
+//     td    = mTriggerQueryManager.GetTriggerData();        // this + 0xAB70 (43888)
+//     count = td->miGenericRegionCount;                     // td + 0x48
+//     best  = flt_82029B70;  id = kCGSID_NULL;
+//     for (i = 0; i < count; ++i) {
+//         assert(i < td->miGenericRegionCount);              // BrnTriggerData.h:495, inlined
+//         r = td->mpGenericRegions + i * 0x38;               // td + 0x44, stride == sizeof
+//         if (r->meType != 0) continue;                      // lbz +0x36; 0 == E_TYPE_JUNK_YARD
+//         d = length(BoxRegion.position - lPosition);        // lfs +0x00/+0x04/+0x08
+//         if (d < best) { best = d; id = (s64)(s32)r->mId; } // lwz +0x24, extsw
+//     }
+//     assert(id != kCGSID_NULL);                             // BrnGameStateModule.cpp:6723
+//     return id;
+//
+// TWO MEASURED CONSTANTS, not guesses:
+//   * flt_82029B70 == 0x7F7FFFFF == FLT_MAX (read out of .rdata with headless IDA, not inferred
+//     from the idiom -- the brief's rule about guessed rodata literals).
+//   * the 0x38 stride is exactly sizeof(GenericRegion) here too (36-byte BoxRegion + 8 + 12),
+//     which is the check that our x64 GenericRegion did NOT drift from the console's.
+//
+// The X360 computes the TRUE distance, not the squared one: vmsum3fp128 gives the dot product and
+// the two vnmsubfp/vmaddfp pairs are a Newton-refined rsqrt, with a vcmpeqfp/vsel guarding the
+// zero-length case. Ordering is identical either way; the sqrt is kept so the value is the
+// console's value.
+// ----------------------------------------------------------------------------
+CgsID GameStateModule::FindNearestJunkyardID(Vector3 lPosition) const
+{
+    const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
+    const s32 liGenericRegionCount =
+        (lpTriggerData != 0) ? lpTriggerData->GetGenericRegionCount() : 0;
+
+    CgsID lJunkyardId = 0;
+    f32   lfNearest   = 3.402823466e+38f;   // flt_82029B70 == FLT_MAX
+
+    for (s32 li = 0; li < liGenericRegionCount; ++li)
+    {
+        const BrnTrigger::GenericRegion* lpRegion = lpTriggerData->GetGenericRegion(li);
+        if (lpRegion->GetType() != BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD)
+            continue;
+
+        const Vector3 lRegionPosition = lpRegion->GetBoxRegion()->GetPosition();
+        const f32 lfDeltaX = lRegionPosition.x - lPosition.x;
+        const f32 lfDeltaY = lRegionPosition.y - lPosition.y;
+        const f32 lfDeltaZ = lRegionPosition.z - lPosition.z;
+        const f32 lfSqDistance =
+            lfDeltaX * lfDeltaX + lfDeltaY * lfDeltaY + lfDeltaZ * lfDeltaZ;
+        const f32 lfDistance = (lfSqDistance != 0.0f) ? std::sqrt(lfSqDistance) : 0.0f;
+
+        if (lfDistance < lfNearest)
+        {
+            lfNearest   = lfDistance;
+            lJunkyardId = lpRegion->GetId();
+        }
+    }
+
+    CGS_ASSERT(lJunkyardId != 0, "lJunkyardId != kCGSID_NULL");
+    return lJunkyardId;
 }
 
 // X360 @ 0x823116D0. Returns whether the currently-running game mode is one of the online modes. May
