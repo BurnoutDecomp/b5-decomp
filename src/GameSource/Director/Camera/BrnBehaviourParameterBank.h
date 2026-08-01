@@ -8,6 +8,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"          // BehaviourFixedCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"       // BehaviourBystanderCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"            // BehaviourPassengerCam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h" // BehaviourRotateAboutVehicle::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -40,13 +41,14 @@ namespace BrnDirector
     struct NamedParameters
     {
         // The "look around car" / rotate-about-vehicle camera parameter block the online
-        // car-select state hands to BehaviourRotateAboutVehicle::SetParameters. @+0x2334.
-        // FLAG: opaque -- only its address is taken; type/role of the interior fields is not
-        // modelled here (the real Parameters sub-block lands with the parameter-bank TU).
-        struct LookAroundCarCamParameters
-        {
-            u8 maOpaque[1];   // opaque head; only the block's address is used
-        };
+        // car-select and (offline) car-select states hand to
+        // BehaviourRotateAboutVehicle::SetParameters. @+0x2334.
+        // ⭐ TYPED 2026-08-01: it is not opaque -- SetParameters @0x821F55B8 asserts
+        // `lpParameters->GetType() == eBehaviourRotateAboutVehicle` (tag 18) on whatever the
+        // caller hands it, and both call sites hand it exactly this block, so this block IS a
+        // BehaviourRotateAboutVehicle::Parameters. (Its interior beyond the shared
+        // Behaviour::Parameters head is still unmodelled -- see that class.)
+        typedef Camera::BehaviourRotateAboutVehicle::Parameters LookAroundCarCamParameters;
 
         // Accessor returning the address of the look-around-car parameter block (mpNamedParameters
         // + 0x2334). Returns by const reference; the caller passes &block to SetParameters.
