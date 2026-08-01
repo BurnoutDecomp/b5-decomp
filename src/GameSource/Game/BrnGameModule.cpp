@@ -1085,60 +1085,45 @@ namespace BrnGame
         }
 
         // ------------------------------------------------------------------------------
-        // [FLAG PC bring-up] THE INTRO FLY-BY STAND-IN.
+        // ⛔ THE INTRO FLY-BY STAND-IN IS RETIRED (2026-08-01).
         //
-        // What the CONSOLE does with the fly-by request (VERIFIED, X360):
+        // What used to be here: the GUI's fly-by request (477) was intercepted and turned into
+        // `Arbitrator::SetDoAttractMode(true)`, running ArbStateAttractMode's BehaviourRoadRunner
+        // -- a real console camera, but the DEBUG one. The X360 image's only writer of
+        // mbDoAttractMode besides Arbitrator::Construct is the debug-menu entry "Do attract mode"
+        // (DebugComponent::OnActivate @0x82275F68), so that camera never ships.
+        //
+        // Its DELETE-WHEN ("ArbStateCarSelect + BehaviourIceAnim + the game-intro shot group are
+        // real") is met, and the last link -- something that actually makes the director's
+        // meJunkyardState non-zero so the roaming ladder hands over to ArbStateCarSelect -- landed
+        // with GameStateModule::ProcessGameEventsReallyEnterJunkyardBringUp. The console's own
+        // chain now runs end to end:
         //   BridgeGuiToDirector 477 -> InputBuffer::mbStartGameIntroFlyby
         //   MainDirector::PostGuiUpdate  -> GameState::mbGameIntroFlybyActive = true
-        //   ArbStateCarSelect::Update    -> plays authored ICE camera movies out of the
-        //     DirectorResourceManager's "game intro" attrib shot group.
-        // So the retail intro camera is DATA (an ICE movie), not a procedural behaviour, and
-        // it is reached through ArbStateCarSelect -- which is not reconstructed and needs
-        // DirectorResourceManager::Prepare to have constructed the 65 shot-group slots.
+        //   ArbStateCarSelect::Update    -> the authored ICE camera movies from the "game intro"
+        //                                   shot group ("606002")
         //
-        // What this build does INSTEAD, until that lands: run the arbitrator's OWN attract
-        // state, whose BehaviourRoadRunner rides a real traffic lane with Camera::Utils::
-        // CreateLookAt and banks with the console's own mfBankingScale. It is real console
-        // code and it is a fly-by over the real city -- but be clear about what it is NOT:
-        // ⚠️ ArbStateAttractMode is reached ONLY through Arbitrator::mbDoAttractMode, and the
-        //    X360 image's ONLY writer of that flag besides Arbitrator::Construct is the
-        //    DEBUG MENU entry "Do attract mode" (DebugComponent::OnActivate @0x82275F68).
-        //    It is a developer camera, not the shipping intro camera.
-        // DELETE-WHEN: ArbStateCarSelect + BehaviourIceAnim + the game-intro shot group are
-        // real (then the whole block goes, and the request reaches the console's own consumer).
+        // ⚠️ WHAT SURVIVES, AND WHY. mbDirectorCameraLive is NOT part of the stand-in: it is the
+        // ONLY gate on DoDispatch's director->world camera handover (see DoDispatch). Deleting it
+        // with the rest would have taken the director's camera off the world entirely -- fly-by
+        // included -- so it stays, re-gated onto the two states in which the director is actually
+        // placing a camera rather than re-publishing a stale one:
+        //   * the GUI's fly-by request is up, and
+        //   * the junkyard / car-select owns the camera (meJunkyardState != E_JY_INACTIVE, the
+        //     console's own "ArbStateCarSelect is driving" signal -- MainDirector::
+        //     ProcessInputQueue case 73 is what sets it).
+        // [FLAG PC bring-up] the GATE is the deviation, not the camera. DELETE-WHEN DoDispatch's
+        // IO buffer set is real (the console routes the director camera unconditionally).
         // ------------------------------------------------------------------------------
         if (!lbPostGui)
         {
-            const bool lbFlybyRequested =
-                mDirectorModule.GetMainDirector().IsGameIntroFlybyActive();
+            const BrnDirector::MainDirector& lrMainDirector = mDirectorModule.GetMainDirector();
+            const bool lbFlybyRequested = lrMainDirector.IsGameIntroFlybyActive();
+            const bool lbJunkyardActive =
+                (lrMainDirector.GetGameState().meJunkyardState
+                    != BrnDirector::GameState::E_JY_INACTIVE);
+            const bool lbDriving = lbFlybyRequested || lbJunkyardActive;
 
-            BrnDirector::Arbitrator& lrArbitrator =
-                mDirectorModule.GetMainDirector().GetArbitrator();
-            const BrnDirector::Arbitrator::EState leArbState = lrArbitrator.GetState();
-
-            // The arbitrator is "unwinding" for the frames between the request dropping and
-            // UpdateAttractMode's `if (!mbDoAttractMode) { Release(); meState = NORMAL; }`
-            // actually running. Keep the stand-in alive across that, or the arbitrator parks
-            // in ATTRACT_MODE re-publishing its last camera for ever -- a frozen world.
-            const bool lbUnwinding =
-                (leArbState == BrnDirector::Arbitrator::E_STATE_CHANGING_TO_ATTRACT_MODE ||
-                 leArbState == BrnDirector::Arbitrator::E_STATE_ATTRACT_MODE);
-            const bool lbDriving = lbFlybyRequested || lbUnwinding;
-
-            if (lrArbitrator.GetDoAttractMode() != lbFlybyRequested)
-            {
-                lrArbitrator.SetDoAttractMode(lbFlybyRequested);
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint
-                        << "[FLAG PC bring-up] game-intro fly-by "
-                        << (lbFlybyRequested ? "REQUESTED" : "ENDED")
-                        << " by the GUI -- director fly-by stand-in "
-                        << (lbFlybyRequested ? "engaged" : "released") << "\n";
-                }
-            }
-
-            // Hand the world camera to the director for exactly as long as the fly-by owns it.
             if (mbDirectorCameraLive != lbDriving)
             {
                 mbDirectorCameraLive = lbDriving;
@@ -1146,8 +1131,9 @@ namespace BrnGame
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[FLAG PC bring-up] world camera "
-                        << (lbDriving ? "-> DIRECTOR (fly-by)"
-                                      : "-> bring-up tour camera (fly-by over)") << "\n";
+                        << (lbDriving ? "-> DIRECTOR" : "-> bring-up tour camera")
+                        << " (flyby=" << (lbFlybyRequested ? 1 : 0)
+                        << " junkyard=" << (lbJunkyardActive ? 1 : 0) << ")\n";
                 }
             }
         }
@@ -1868,7 +1854,27 @@ namespace BrnGame
                 // this gate stands in for that ordering, not for the call.
                 if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
                 {
-                    mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp();
+                    // ⭐ THE SECOND ARGUMENT IS THE ORDERING STAND-IN FOR GAME EVENT 78.
+                    // The console completes the start-of-game junkyard entry when the GUI tells
+                    // it to (BrnGui::InGame::OnEnter's command 145 -> BridgeGuiToGameState ->
+                    // game event 78 -> ProcessGameEvents case 78). That bridge is not plumbed
+                    // here, and its event provably arrives BEFORE the latch it tests exists on
+                    // this build (measured: InGame::OnEnter logs ~40 lines ahead of
+                    // SendSetupPlayerCarEvent), so the entry is completed on the GUI's OTHER
+                    // first-boot signal instead: mbNewProfileIntroActive, which BrnGui::InGame's
+                    // own first-boot gate raises (command 476, the same screen state that posts
+                    // the 145) and which BridgeGuiToDirector + MainDirector::PostGuiUpdate carry
+                    // into the director's GameState.
+                    // ⚠️ IT IS NOT A DELAY FOR SAFETY'S SAKE -- it is the CORRECT arm selector.
+                    // ArbStateCarSelect::Prepare reads exactly this flag to choose between the
+                    // authored GAME-INTRO movies and the junkyard E_STATE_INTRO, and completing
+                    // the entry before it is up sends the state down the wrong arm and then trips
+                    // that arm's own `!mbGameIntroFlybyActive` tripwire once per frame.
+                    // [FLAG PC bring-up] DELETE-WHEN BridgeGuiToGameState has a caller and
+                    // ProcessGameEvents drains a real post-world input buffer.
+                    const bool lbGuiFirstBootIntroLive =
+                        mDirectorModule.GetMainDirector().IsNewProfileIntroActive();
+                    mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp(lbGuiFirstBootIntroLive);
                 }
 
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)

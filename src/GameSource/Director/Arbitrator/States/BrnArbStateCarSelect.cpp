@@ -4,6 +4,8 @@
 #include <cmath>                                                                  // fabsf (the car-stillness test)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT / the FireAssert tripwires
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                      // CgsDev::StrStream (the formatted asserts)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // [DIAG] gpDebugPrint (bring-up only)
+#include <cstdlib>                                                                // getenv ([DIAG] BRN_DIRECTOR_TRACE)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"              // BrnDirector::GameState
 #include "GameSource/Director/Camera/Camera.h"                                    // Camera::Camera (mEffects / mState_uFlags)
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"                  // SharedCameraContainer
@@ -83,6 +85,7 @@
 // Latent only because this TU is unmounted. Full write-up at Attrib::Gen::iceanim::GetAnimGuid
 // in AttribSys/Generated/classes/iceanim.h.
 // ----------------------------------------------------------------------------
+
 
 namespace BrnDirector
 {
@@ -667,6 +670,25 @@ namespace BrnDirector
             *reinterpret_cast<const Camera::VehicleInfo*>(lrSharedInfo.mpPlayerCar);
         Camera::BehaviourManager&      lrManager   = *lrSharedInfo.mpBehaviourManager;
         const DirectorResourceManager& lrResources = *lrSharedInfo.mpDirectorResourceManager;
+
+        // [DIAG BRN_DIRECTOR_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. Report every meState
+        // transition once, and the fact that this state is running at all -- the sibling
+        // ArbStateRoaming carries the same block. Off unless the env var is set; remove with the
+        // bring-up path.
+        {
+            static const bool sbTrace = (getenv("BRN_DIRECTOR_TRACE") != 0);
+            static s32 siLastReported = -2;
+            if (sbTrace && static_cast<s32>(meState) != siLastReported &&
+                CgsDev::Log::gpDebugPrint != 0)
+            {
+                siLastReported = static_cast<s32>(meState);
+                *CgsDev::Log::gpDebugPrint
+                    << "[carselect] meState -> " << siLastReported
+                    << " (jy " << static_cast<s32>(lrGameState.meJunkyardState)
+                    << " newProfileIntro " << (lrGameState.mbNewProfileIntroActive ? 1 : 0)
+                    << " flyby " << (lrGameState.mbGameIntroFlybyActive ? 1 : 0) << ")\n";
+            }
+        }
 
         // The junkyard camera is not the "entering junkyard" camera by default; each arm that
         // wants that bit raises it again.

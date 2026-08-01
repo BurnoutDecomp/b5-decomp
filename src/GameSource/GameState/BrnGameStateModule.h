@@ -162,7 +162,36 @@ public:
     // reconstructed. [FLAG PC bring-up] the EXTRACTION is the deviation -- the latch, its
     // one-shot semantics and the call it makes are the console's.
     // DELETE-WHEN PreWorldUpdate lands.
-    void PreWorldUpdateSetupPlayerCarBringUp();
+    //
+    // lbMayCompleteJunkyardEntry gates the SECOND leg (the extracted ProcessGameEvents case-78
+    // arm below). It is the ordering stand-in for game event 78: the caller passes the GUI's own
+    // first-boot signal, and the body explains what firing without it measurably does.
+    void PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunkyardEntry);
+
+    // ⭐⭐ X360 ProcessGameEvents @0x823A0A18, THE CASE-78 ARM (0x823A4590..0x823A45F8) --
+    // "the GUI says the player is really in the junkyard now, finish the entry".
+    //
+    // The console's dispatcher is
+    //     void ProcessGameEvents(const GameEventQueue*, InputBuffer::GameActionQueue*,
+    //                            const PreWorldInputBuffer*, OutputBuffer*)
+    // (DWARF BrnGameStateModule.h:695; the asm consumes exactly those four in r4..r7). It is a
+    // ~180-case jump table over a merged event queue that PreWorldUpdate builds on the stack from
+    // three sources, and it is not reconstructed. Only arm 78 is extracted here, with the arm's
+    // own gate (mbWaitingToPutPlayerInJunkyard) intact -- so what runs is console code, and the
+    // deviation is the TRIGGER, not the body.
+    //
+    // [FLAG PC bring-up] the console reaches this arm from game event 78, which
+    // BridgeGuiToGameState @0x823DDB78 translates out of GUI out-event 145
+    // (BrnGui::InGame::OnEnter). Both ends of that bridge exist in this tree, but the bridge is
+    // not plumbed (nothing creates a GameStateModuleIO::PostWorldInputBuffer, and PreWorldUpdate's
+    // three-queue merge is not reconstructed) AND -- measured on this build -- InGame::OnEnter
+    // runs ~40 log lines BEFORE the latch is armed, so a faithfully-plumbed bridge would deliver
+    // the event to a latch that does not yet exist. The arm therefore runs off the latch alone,
+    // in the same sub-step as the arming leg -- which IS the console's own body order inside
+    // PreWorldUpdate (latch leg @0x823A5510, ProcessGameEvents @0x823A58B8).
+    // DELETE-WHEN ProcessGameEvents + the post-world input buffer + BridgeGuiToGameState's caller
+    // are real (then this goes and the GUI's own event drives it).
+    void ProcessGameEventsReallyEnterJunkyardBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
 
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
@@ -443,11 +472,27 @@ private:
     // moment its three data preconditions (vehicle list, wheel list, TriggerData) are all satisfied.
     bool mbSendSetupPlayerCarPending = false;
 
+    // ⭐ X360 +0x38B72 (232306) -- THE SECOND HALF OF THE START-OF-GAME JUNKYARD HANDSHAKE.
+    // SendSetupPlayerCarEvent @0x8239A918 sets it; ProcessGameEvents @0x823A0A18 case 78 tests it
+    // (`addis r29,r31,4; addi r29,r29,-0x748E; lbz r11,0(r29)`), runs
+    // CarSelectManager::ReallyEnterJunkyardAtStartOfGame and clears it (`stb r18,0(r29)`, r18==0).
+    // NAME IS THE CONSOLE'S: DWARF BrnGameStateModule.h:811 `bool mbWaitingToPutPlayerInJunkyard`.
+    // The DWARF declaration order pins it exactly at the asm-attested byte -- :809/:810 are the two
+    // streaming bools at 232304/232305, :812 is an s32 at 232308, :813 a bool[4] at 232312, and
+    // :816 (the 16-aligned action below) lands on 232320, which is the OTHER offset this arm's asm
+    // attests. Both ends of the DWARF span agree with the asm, so the byte is not a guess.
+    bool mbWaitingToPutPlayerInJunkyard = false;
+
     // X360 +0x38B80 (232320). The CarSelectionChangedAction SendSetupPlayerCarEvent hands
     // EnterJunkyardAtStartOfGame as its sixth argument (the console passes `this + 0x38B80`); the
-    // junkyard's id + spawn transform + "pos is left" bit are written into it and read back later
-    // by the car-select flow. Held by value exactly as the console holds it.
-    GameStateModuleIO::CarSelectionChangedAction mCarSelectionChangedAction;
+    // junkyard's id + spawn transform + "pos is left" bit are written into it, and ProcessGameEvents
+    // case 78 posts the whole 64-byte record as game action 64 once the junkyard entry completes.
+    // ⭐ NAME CORRECTED 2026-08-01: the repo called this `mCarSelectionChangedAction`, which was
+    // this repo's invention. The console name is `mCachedCarSelectChangedAction` -- DWARF
+    // BrnGameStateModule.h:816, independently attested by the case-78 assert literal
+    // ("mCachedCarSelectChangedAction.mJunkyard..." @ BrnGameStateModule.cpp:4099).
+    // Held by value exactly as the console holds it.
+    GameStateModuleIO::CarSelectionChangedAction mCachedCarSelectChangedAction;
 
     // X360 +0x397E0. The read-only active-race-car snapshot the module caches at the end of the last
     // world update, held BY VALUE as the console holds it (see GetLastActiveRaceCarInterface).

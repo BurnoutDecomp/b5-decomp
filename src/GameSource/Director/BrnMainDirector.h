@@ -7,6 +7,8 @@
 #include "GameSource/Director/BrnDirectorICEWrapper.h"          // BrnDirector::ICEWrapper (mICEWrapper)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitrator.h" // BrnDirector::Arbitrator (mArbitrator)
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"     // Camera::BehaviourManager (mBehaviourManager)
+#include "GameSource/Director/Camera/BrnBehaviourParameterBank.h" // BrnDirector::NamedParameters (mNamedParameters)
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h" // BrnDirector::AllVehicleData (mAllVehicleData)
 #include "GameSource/Director/Camera/BrnCameraFinaliser.h"      // BrnDirector::CameraFinaliser (mCameraFinaliser)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (mLastCamera)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (maGameState)
@@ -271,8 +273,15 @@ namespace BrnDirector
         // +0x124F0 .. +0x12C80  the embedded ICE take. FLAG: un-homed; named opaque span.
         u8 maICETake[0x12C80 - 0x124F0];
 
-        // +0x12C80 .. +0x12DC0  BrnDirector::AllVehicleData. FLAG: un-homed; named opaque span.
-        u8 maAllVehicleData[0x12DC0 - 0x12C80];
+        // ⭐ +0x12C80 .. +0x12DC0  BrnDirector::AllVehicleData -- NO LONGER AN OPAQUE SPAN
+        // (2026-08-01, junkyard-fire wave). The class IS homed (BrnDirectorAllVehicleData.h has
+        // its full DWARF member list and its inline accessors); only this owner still stood it
+        // up as 320 raw bytes, and `reinterpret_cast<const AllVehicleData*>(maAllVehicleData)`
+        // was therefore publishing an object whose mpRaceCars had never been written. Every
+        // consumer that dereferenced it asserted and then crashed -- which is exactly what
+        // ArbStateCarSelect::UpdateIntroState -> BehaviourRotateAboutVehicle::BecomeSimilarTo
+        // -> AllVehicleData::GetPlayer did the first time the junkyard state ran.
+        AllVehicleData mAllVehicleData;
 
         // +0x12DC0  the camera arbitrator. Console span 0x12DC0 .. 0x172C8.
         Arbitrator mArbitrator;
@@ -299,6 +308,21 @@ namespace BrnDirector
         // +0x1CB10  the camera-behaviour manager. Console span 0x1CB10 .. ~0x32ED8
         //           (its own last field, mbDebugDisplayAllCameras, is at manager +91076).
         Camera::BehaviourManager mBehaviourManager;
+
+        // ⭐ ADDED 2026-08-01 (junkyard-fire wave). The named-camera-parameter bank the
+        // arbitrator states reach through ArbStateSharedInfo::mpNamedParameters.
+        // ⚠️ PLACEMENT IS THE DEVIATION, and it is stated rather than hidden: on the console
+        // this block is INSIDE the behaviour manager's own mBehaviourParameterBank (the shared
+        // info's +0x1C == MainDirector +192592 == manager +75072 == bank +0x10), and that bank
+        // is still a 4-byte `OpaqueSub<0>` placeholder in BrnBehaviourManager.h. Homing the
+        // slice there would mean growing a member every consumer of that header sees; homing it
+        // here, next to the manager, keeps the blast radius to the one producer of the pointer
+        // (BuildArbStateSharedInfo, immediately below in the .cpp) while the storage is REAL and
+        // named instead of null. The block's own contents are the console's tag, not fabricated
+        // tunings -- see NamedParameters::Construct.
+        // DELETE-WHEN: BehaviourParameterBank is homed inside the manager (then this member goes
+        // and BuildArbStateSharedInfo points at mBehaviourManager's own bank).
+        NamedParameters mNamedParameters;
 
         // +0x32ED8 .. +0x32EE0  (untouched)
         u8 maPad_0x32ED8[0x08];

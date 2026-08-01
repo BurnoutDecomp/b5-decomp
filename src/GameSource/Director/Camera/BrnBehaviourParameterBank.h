@@ -57,6 +57,24 @@ namespace BrnDirector
             return maLookAroundCarCamParameters;
         }
 
+        // ⭐ ADDED 2026-08-01 (junkyard-fire wave). The console builds this bank from
+        // BehaviourParameterBank::Construct, called by BehaviourManager::Construct @0x82251778
+        // (the gate is marked in that body). Only the ONE block this slice models is seeded --
+        // with the tag its own Parameters::Construct @0x821FB330 stores, so
+        // BehaviourRotateAboutVehicle::SetParameters' `GetType() == eBehaviourRotateAboutVehicle`
+        // tripwire passes. The un-modelled head is zeroed rather than left as pool garbage.
+        // [FLAG PC bring-up] this is a ONE-BLOCK stand-in for the bank's own Construct; the
+        // authored tunings are NOT loaded (see BehaviourRotateAboutVehicle::Parameters::Construct).
+        // DELETE-WHEN: the BehaviourParameterBank TU lands with the real bank layout + its loader.
+        void Construct()
+        {
+            for (u32 luByte = 0; luByte < sizeof(maReservedHead); ++luByte)
+            {
+                maReservedHead[luByte] = 0;
+            }
+            maLookAroundCarCamParameters.Construct();
+        }
+
         // The reserved span places the addressed block at the asm-attested +0x2334. The rest of
         // the bank (the earlier named Parameters blocks) is not modelled here.
         u8                         maReservedHead[0x2334];           // +0x0000 .. +0x2333

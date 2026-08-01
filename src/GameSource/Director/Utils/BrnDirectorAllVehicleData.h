@@ -74,7 +74,65 @@ namespace BrnDirector
         typedef Array<NearestCarInfo, 8u> NearestCarInfoArray;
 
         // ---- DWARF :54-:103 -- declared-only (their own ledger functions) ----
-        void Construct();                                                        // :54
+        // ⭐ Construct @0x8221D760 -- BODIED INLINE 2026-08-01 (junkyard-fire wave), in the
+        // header because BrnDirectorAllVehicleData.cpp IS NOT ON THE BUILD LIST (see that
+        // file's own banner) and every consumer of this class is a header consumer.
+        // The console body builds three 64-byte matrix images on the stack out of two rodata
+        // floats -- flt_82001C98 on the diagonal, flt_82001CC0 elsewhere -- and stvx128's them
+        // into +0x00 / +0x40 / +0x80, i.e. the three player spaces are seeded to IDENTITY;
+        // then it clears the pointer, index, bitset, array and flag fields (`stw r11(0), 0xD0`
+        // and the rest of the zero stores).
+        void Construct()
+        {
+            mPlayerImpactSpace.SetIdentity();
+            mPlayerHeadingSpace.SetIdentity();
+            mPlayerLooseHeadingSpace.SetIdentity();
+
+            mpRaceCars                       = 0;
+            mePlayerRaceCarIndex             = static_cast<EActiveRaceCarIndex>(0);
+            mUsedRaceCars.UnSetAll();
+            mpTrafficVehicleArray            = 0;
+            maNearestRaceCarsToPlayer.Clear();
+            mbSorteddNearestRaceCarsToPlayer = false;
+            mbShouldUpdateNearestRaceCars    = true;
+        }
+
+        // ⭐ THE EXTRACTED HEAD OF Update @0x8221D938 (0x8221D95C..0x8221D9E8), 2026-08-01.
+        //
+        // The console's four field stores, in the console's own order:
+        //     stw r5, 0xC0   mpRaceCars           = lpRaceCars
+        //     stw r6, 0xC4   mePlayerRaceCarIndex = lePlayerIndex
+        //     std r4, 0xC8   mUsedRaceCars        = lUsedRaceCars   (a 64-bit store)
+        //     stw r30,0xD0   mpTrafficVehicleArray= lpTraffic
+        // followed by its two surviving guards (mpRaceCars != NULL @:69, index < 8 @:70).
+        //
+        // [FLAG PC bring-up] TWO deviations, both stated rather than hidden:
+        //  1. THE TRAFFIC ARGUMENT IS ABSENT. The console's third guard is
+        //     `lpTrafficVehicleArray != NULL` @:66 and its only producer is the traffic
+        //     module's TrafficDirectorEntity array, which the PC director input buffer does
+        //     not carry. Passing null through the real Update would fire that assert every
+        //     frame, so this leg does not take the argument at all and mpTrafficVehicleArray
+        //     is left as Construct left it (null). Nothing on the junkyard path reads it.
+        //  2. THE NEAREST-CAR REBUILD IS NOT RUN. The rest of Update walks every used race car,
+        //     Appends a NearestCarInfo per car and BubbleSorts them. The lazy sort flag is set
+        //     instead, which is the same signal the two distance queries already consume.
+        // DELETE-WHEN: the director input carries the traffic array and the nearest-car walk
+        // is transcribed (then this becomes the real four-argument Update).
+        void UpdateRaceCarsBringUp(CgsContainers::BitArray<8u> lUsedRaceCars,
+                                   const Camera::VehicleInfo*  lpRaceCars,
+                                   EActiveRaceCarIndex         lePlayerIndex)
+        {
+            mpRaceCars           = lpRaceCars;
+            mePlayerRaceCarIndex = lePlayerIndex;
+            mUsedRaceCars        = lUsedRaceCars;
+
+            CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                  // h:69
+            CGS_ASSERT(static_cast<s32>(mePlayerRaceCarIndex) < 8,
+                       "mePlayerRaceCarIndex < BrnPhysics::Vehicle::KI_MAX_VEHICLES");          // h:70
+
+            mbSorteddNearestRaceCarsToPlayer = false;
+            mbShouldUpdateNearestRaceCars    = true;
+        }
 
         // ⭐ GetPlayer @0x82205C58 / GetRaceCar @0x82205DE8 -- BODIED INLINE HERE, which is
         // where the CONSOLE had them: every assert in both cites this header

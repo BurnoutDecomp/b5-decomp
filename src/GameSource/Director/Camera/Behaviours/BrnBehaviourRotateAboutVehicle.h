@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                    // Vector3 (mOrbitDirection)
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT (SetParameters' tripwire)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"   // ⭐ THE REAL Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"     // CollisionPolicyAttachedToVehicle (embedded @+0x50)
 #include "GameSource/Director/Camera/Utils/BrnCameraSphericalRotationController.h" // Utils::CameraSphericalRotationController (embedded @+0x20)
 #include "GameSource/Director/Utils/BrnVehicleRef.h"           // BrnDirector::VehicleRef (embedded @+0x2A0)
@@ -39,7 +40,28 @@ namespace Camera
 
 struct Camera;   // the per-frame camera the behaviour produces (full type: Camera.h)
 
-class BehaviourRotateAboutVehicle
+// ⛔⛔ CORRECTED 2026-08-01 (junkyard-fire wave) -- THIS CLASS DID NOT DERIVE Camera::Behaviour,
+// AND THAT WAS A CRASH, not a modelling shortcut.
+//
+// The slice modelled the base head as a raw `void* mpVTable` placeholder plus 0x18 reserved
+// bytes. `AbstractPool::AllocateVoid<T>` placement-news the behaviour with `new (slot) T()`,
+// which VALUE-INITIALISES a class with no user-provided constructor -- so mpVTable came out as
+// a genuine 0, not as garbage. BehaviourManager::BehaviourHelper::Prepare then does
+//     GetBehaviour()->Construct();          // static_cast<Behaviour*>(void*), virtual slot 1
+// and dereferenced that 0. Access violation, every time, the FIRST time anything allocated one.
+//
+// Nothing had ever allocated one: the only three console call sites are
+// ArbStateCarSelect::Prepare, ArbStateOnlineCarSelect::Prepare and ArbStateTestbed::Update, and
+// none of them had ever run on PC. The defect was invisible to the build, to the linker and to
+// every boot test -- exactly the "an omitted override is invisible; there is nothing to grep"
+// class. It surfaced the moment the junkyard state fired for the first time.
+//
+// The base is REAL on the console: BehaviourRotateAboutVehicle::Construct @0x8222BEDC is a
+// vtable slot the manager dispatches on every pooled behaviour, and the sibling
+// BehaviourIceAnim / BehaviourGameplayExternal slices already derive Behaviour. Deriving it
+// here removes both placeholder members (the base supplies the vptr and the six Behaviour
+// fields) and does not move a single named member of this class.
+class BehaviourRotateAboutVehicle : public Behaviour
 {
 public:
 
@@ -70,6 +92,28 @@ public:
         // (eBehaviourRotateAboutVehicle), and Parameters::Construct @0x821FB330 stores 18.
         u32 GetType() const { return mType; }
 
+        // ⭐ Parameters::Construct @0x821FB330 -- THE HEAD ONLY (2026-08-01, junkyard-fire wave).
+        // The console body seeds the whole block: `stw 0x12, 0(this)` (the type tag), the debug
+        // name, then Utils::Looker::Parameters::Construct(this + 8) @0x821F8D80 plus twelve
+        // re-tuned float fields. Only the TAG + the debug-name word are transcribed here, for
+        // the reason the class FLAG above already gives: none of those float fields' NAMES is
+        // recovered, and writing twenty unnamed floats at console displacements is the offset
+        // poking the x64 rule forbids. The rest of the block is zeroed, which is what the
+        // pool's own placement-new already leaves.
+        // ⚠️ CONSEQUENCE, stated plainly: a BehaviourRotateAboutVehicle bound to a block built
+        // here orbits with ZERO tunings, not the authored ones. It does not crash and it does
+        // not fail SetParameters' tripwire, which is the whole reason this exists.
+        // DELETE-WHEN: Utils::Looker::Parameters is homed and the DWARF field names land.
+        void Construct()
+        {
+            mType        = 18u;   // X360 `stw 0x12, 0(r8)` == eBehaviourRotateAboutVehicle
+            mpcDebugName = 0;
+            for (u32 luByte = 0; luByte < sizeof(maUnrecoveredFields); ++luByte)
+            {
+                maUnrecoveredFields[luByte] = 0;
+            }
+        }
+
         // ⚠️ The record is AT LEAST 0x80 bytes and embeds a Utils::Looker::Parameters (0x64
         // bytes) at +0x08 -- Parameters::Construct @0x821FB300 runs
         // Utils::Looker::Parameters::Construct(this + 8) @0x821F8D80 and then re-tunes twelve
@@ -94,6 +138,38 @@ public:
     //   "…BehaviourIceAnim::GetCollisio" -- the same 50-char truncation.
     //   The BODY is verified; the NAME GetCollisionPolicy is inferred (high confidence).
     CollisionPolicyAttachedToVehicle* GetCollisionPolicy() { return &mCollisionPolicy; }
+
+    // ⭐ Construct @0x8222BEDC -- ADDED 2026-08-01 (junkyard-fire wave). The base's virtual
+    // slot 0, which BehaviourManager::BehaviourHelper::Prepare dispatches on every freshly
+    // pooled behaviour. It was ABSENT, so the base's default ran and the three things the
+    // console seeds here were never seeded -- most visibly mVehicleRef, which left
+    // `VehicleRef::Get` asserting "mbSet" on every BecomeSimilarTo the junkyard camera makes.
+    //
+    // The console body, as the header's own layout note already transcribed it:
+    //   0x8222BEDC  addi r3, r31, 0x50 ; li r4, 0
+    //               bl CollisionPolicyAttachedToVehicle::Construct      (the +0x50 policy)
+    //   0x8222BF5C  the +0x2A0 VehicleRef seeded to THE PLAYER CAR
+    //   0x8222BF68  the ten mRotationController stores (== that class's own Construct)
+    //   0x8222C04C  mOrbitDirection = XMMatrixRotationY(-pi/2 * 0.25f)'s "at" row
+    // The base's own six fields come first (Behaviour::Construct), which is what the console's
+    // sibling behaviours' Constructs open with as an inlined block.
+    void Construct() override
+    {
+        Behaviour::Construct();
+
+        mCollisionPolicy.Construct(false);   // X360 `li r4, 0` -- mbDoVehicleCollision
+        mRotationController.Construct();
+        mVehicleRef.Set(BrnDirector::VehicleRef::E_PLAYER_CAR,
+                        static_cast<EActiveRaceCarIndex>(0), 0u);
+
+        // XMMatrixRotationY(-pi/2 * 0.25f) == a -22.5 degree yaw; its "at" (z) row is
+        // (sin(-pi/8), 0, cos(-pi/8)). Written as the two literals the console's rodata pair
+        // holds rather than recomputed at runtime.
+        mOrbitDirection.x = -0.38268343f;
+        mOrbitDirection.y =  0.0f;
+        mOrbitDirection.z =  0.92387953f;
+        mOrbitDirection.w =  0.0f;
+    }
 
     // ⭐ SetParameters @0x821F55B8 -- BODIED 2026-08-01 (below), from the full 24-line asm.
     //
@@ -174,8 +250,9 @@ private:
     //        (BrnBehaviourGameplayExternal.h:217, DWARF :116 +0x020) and its Construct
     //        @0x82224A18 emits the identical store set (already transcribed in that .cpp).
     //     3. sizeof(CameraSphericalRotationController) == 0x30 == 0x50 - 0x20 exactly.
-    void* mpVTable;                                        // +0x000 behaviour vtable (opaque base head)
-    u8    maReserved008[0x20 - sizeof(void*)];             // +0x008 .. +0x01F
+    // +0x000 .. +0x01F is the Camera::Behaviour base (vptr + the six DWARF base fields). It is
+    // the REAL base now -- the `void* mpVTable` + reserved-span placeholders that used to stand
+    // in for it are gone; see the class banner for why they were a crash.
     Utils::CameraSphericalRotationController mRotationController;  // +0x020 (0x30)
     CollisionPolicyAttachedToVehicle mCollisionPolicy;     // +0x050 (0x250 on the console, so
                                                            //  mVehicleRef follows immediately)
