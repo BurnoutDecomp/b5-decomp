@@ -21,6 +21,7 @@
                                                            //   GetSizeOnScreen / GetFOVDegsToFitObjectToScreenSize
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"  // Timestep::E_GAME
 #include "rw/math/vpu/matrix44affine_operation.h"           // TransformVector / TransformPoint / Mult / SLerp
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint (bring-up measurement)
 
 namespace BrnDirector
 {
@@ -391,6 +392,29 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
     const VehicleInfo&    lrVehicle          = *mAttachedTo.Get(lrInfo.GetWorld());
     const Matrix44Affine& lrVehicleTransform = lrVehicle.mRaceCarState.mTransform;   // +0x1F0
     const Vector3&        lrHalfExtent       = lrVehicle.mRaceCarState.mHalfExtent;  // +0x350
+
+    // [BRING-UP MEASUREMENT, physics wave 1] the READ end of the half-extent transfer. The
+    // orbit seats the eye on the ellipsoid of THIS vector and then steps back four more radii,
+    // so a wrong half-extent is a silently valid, silently wrong shot -- nothing asserts. The
+    // WRITE end prints the same three lanes in BrnGameModule::BridgeWorldToDirector. Burst
+    // window (first 4 reads, then every 3000th) rather than a modulo sample, so the print
+    // cannot alias with a per-frame loop. Remove once the extent is settled.
+    {
+        static u32 suExtentReadCount = 0;
+        ++suExtentReadCount;
+        if (suExtentReadCount <= 4u || (suExtentReadCount % 3000u) == 0u)
+        {
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[orbit-extent] read #" << static_cast<s32>(suExtentReadCount)
+                    << " halfExtent (" << lrHalfExtent.x << ", " << lrHalfExtent.y
+                    << ", " << lrHalfExtent.z << ") carPos ("
+                    << lrVehicleTransform.wAxis.x << ", " << lrVehicleTransform.wAxis.y
+                    << ", " << lrVehicleTransform.wAxis.z << ")\n";
+            }
+        }
+    }
 
     // `vrefp128` + three Newton-Raphson refinements == the reciprocal of the half-extent,
     // folded here to the divide it converges to (the tree's rw vpu reconstruction precedent).

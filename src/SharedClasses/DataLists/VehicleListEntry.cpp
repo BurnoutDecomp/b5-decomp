@@ -125,7 +125,7 @@ u8 VehicleListEntry::GetLiveryType() const
 // `bl CgsAttribSys::AttribSysCollectionKey::GetHashKey` -- the eight bytes at +0xA0 are that
 // type's single s64 miAssetGuid. See the header for why the member itself still carries the
 // BaseCollisionGenerator forward shape (FixUp destructs it under that name).
-Attribute::Key VehicleListEntry::GetAttribCollectionKeyHash() const
+u64 VehicleListEntry::GetAttribCollectionKeyHash() const
 {
     CgsAttribSys::AttribSysCollectionKey lKey;
     std::memcpy(&lKey, &mAttribCollectionKey, sizeof(lKey));

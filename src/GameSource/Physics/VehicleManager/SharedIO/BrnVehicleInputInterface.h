@@ -49,7 +49,7 @@ namespace Vehicle
         // @0x822CC1E8: enqueue a spawn-race-car request; returns the just-added slot index.
         s32  CreateRaceCar(VolumeInstanceId lVolumeInstanceId, Matrix44Affine lInitialTransform,
                            Vector3 lInitialVelocity, Vector3 lAngularVelocity,
-                           Attribute::Key lCarAssetAttribKey, ResourceHandle lModelHandle,
+                           u64 lCarAssetAttribKey, ResourceHandle lModelHandle,   // 64-bit: see BrnVehicleEvents.h
                            ResourceHandle lGraphicsHandle, BrnWorld::ERaceCarType leRaceCarType,
                            f32 lfDeformAmount,
                            BrnPhysics::Deformation::DeformationResetType leBaseDeformationType,

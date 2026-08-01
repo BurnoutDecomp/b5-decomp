@@ -350,6 +350,123 @@ void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
 }
 
 // ----------------------------------------------------------------------------
+// ⭐⭐ UpdatePhysicsState @ 0x822D4418 -- THE PHYSICS -> RENDER SEAM (physics wave 1).
+//
+// One frame's published BrnPhysics::Vehicle::RaceCarState becomes this car's pose. Decoded
+// instruction by instruction from the X360 asm (0x822D4418..0x822D48F4); the pseudocode was
+// not used for anything (it renders the third argument as a bare `int a3` and an earlier
+// scoping pass mistook that for a timestep -- it is the world map, see the header).
+//
+//   0x822D4430  IsActive()                                       assert :0x733 == :1843
+//   0x822D4464  lpState != NULL                                  assert :0x734 == :1844
+//   0x822D4488  lwz r11,0x6F0(r29) -> mpRaceCar != NULL          assert :0x735 == :1845
+//   0x822D44B0  addi r27, r23, 0x1F0                             r27 = &lpState->mTransform
+//   0x822D44B8..0x822D4700  four vcmpeqfp. NaN sweeps over the four rows of that matrix;
+//               on failure the console composes "Bad racecar matrix coming from physics."
+//               + the car's name + ", transform: " + the matrix into the assert buffer and
+//               fires :0x736 == :1846. Reproduced as ONE CGS_ASSERT over the whole affine
+//               (rw::math::vpu::IsValid is exactly that four-row finite sweep); the string
+//               composition is diagnostic-only and is not rebuilt by hand.
+//   0x822D4704  li r5,0x460 ; mr r4,r23 ; addi r3,r29,0xE0 ; bl XMemCpy
+//                                                            ⭐ mPhysicsState = *lpState
+//   0x822D4718  IsAttached()                                     assert (BrnActiveRaceCar.h:0x441)
+//   0x822D475C  RaceCar::UpdatePositioningData(mpRaceCar, &lpState->mTransform, lpWorldMap)
+//   0x822D4764  IsAttached()                                     assert (same site)
+//   0x822D4798  RaceCar::UpdateVelocity(mpRaceCar, lpState->mLinearVelocity)  (lvx128 @+0x330)
+//   0x822D47A4  CalcBodyTransform(local) ; 4 x stvx128 into this+0x7E0
+//                                                            ⭐ mRenderParams.SetBodyTransform
+//   0x822D47E8..0x822D485C  the four-wheel loop: copy lpState->maWheelTransforms[i]
+//               (state+0x230+64i) into mRenderParams.mWheelTransforms[i] (this+0x1020+64i)
+//               and lpState->mabWheelExists[i] (state+0x446+i) into
+//               mRenderParams.mabWheelExists[i] (this+0x1560+i). The bound assert the loop
+//               carries is GetWheelTransform's own (< 6, the RENDER array's width) and it is
+//               reproduced by calling that accessor; the loop itself runs 0..3, the width of
+//               the STATE array.
+//   0x822D4860  mRenderParams.mbCrashing (this+0x1BE5) = lpState->mbCrashing (state+0x44A)
+//   0x822D4870  mRenderParams.mbIsHidden (this+0x1BEB) = lpState->mbIsHidden (state+0x452)
+//   0x822D4864..0x822D48F4  the three-way brake/reverse/engine-off tail on meEngineState
+//               (this+0x768) and lpState->mi8Gear (state+0x444) -- see the code below.
+//
+// ⭐ FOURTH INDEPENDENT CONFIRMATION OF THE RaceCarState "+4" FIX. Every state offset this
+// body touches -- 0x444 mi8Gear, 0x446 mabWheelExists[0], 0x44A mbCrashing, 0x452 mbIsHidden,
+// 0x40C mfBrake -- lands on those members ONLY with the 8-byte mCarAssetAttribKey committed
+// this wave (BrnVehicleEvents.h's banner). Under the old 4-byte model every one of them was
+// off by one member.
+//
+// ⛔ NO CALLER YET, and that is the honest state of this slice: the console's only caller is
+// RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics @0x822E87B8, which needs
+// VehicleOutputInterface::maRaceCarStates to be populated -- i.e. the vehicle manager's
+// ProcessCreateEvents/WriteOutVehicleStats legs, which are not landed. Until then
+// PublishRenderPoseWithoutPhysicsBringUp still owns the render pose. This function is the
+// consumer that replaces it, written against the real payload, and it is deliberately NOT
+// wired to a fabricated producer.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* lpState,
+                                       CgsWorld::WorldMap2D* lpWorldMap)
+{
+    CGS_ASSERT(IsActive(), "IsActive()");                        // :1843
+    CGS_ASSERT(lpState != 0, "lpState != NULL");                 // :1844
+    CGS_ASSERT(mpRaceCar != 0, "mpRaceCar != NULL");             // :1845
+
+    // The console's four-row NaN sweep over lpState->mTransform, then
+    // "Bad racecar matrix coming from physics." + the car name + ", transform: " + the matrix.
+    CGS_ASSERT(rw::math::vpu::IsValid(lpState->mTransform),
+               "Bad racecar matrix coming from physics.");       // :1846
+
+    // ⭐ 0xE0 == mPhysicsState. XMemCpy of the whole 1120-byte snapshot.
+    mPhysicsState = *lpState;
+
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+    mpRaceCar->UpdatePositioningData(lpState->mTransform, lpWorldMap);
+
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+    mpRaceCar->UpdateVelocity(lpState->mLinearVelocity);
+
+    // ⭐ 0x7E0 == mRenderParams.mBodyTransform.
+    Matrix44Affine lBodyTransform;
+    CalcBodyTransform(lBodyTransform);
+    mRenderParams.SetBodyTransform(lBodyTransform);
+
+    // The four road wheels: render transform + existence flag.
+    for (u32 luWheel = 0; luWheel < 4u; ++luWheel)
+    {
+        mRenderParams.GetWheelTransform(luWheel) = lpState->maWheelTransforms[luWheel];
+        mRenderParams.SetWheelExists(luWheel, lpState->mabWheelExists[luWheel]);
+    }
+
+    mRenderParams.SetCrashing(lpState->mbCrashing);              // this+0x1BE5
+    mRenderParams.SetRaceCarHidden(lpState->mbIsHidden);         // this+0x1BEB
+
+    // The brake / reverse / engine-off tail. `flt_82001CC0` is this file's own 0.0f
+    // (the same constant MakeIdentityTransform's off-diagonal uses).
+    if (meEngineState == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING
+        || meEngineState == RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING)
+    {
+        if (lpState->mi8Gear != 0)
+        {
+            mRenderParams.SetReversing(false);                   // this+0x1BE8 = 0
+            SetBraking(lpState->mfBrake > 0.0f);                 // this+0x1BE7 via the AI hysteresis
+            mRenderParams.SetEngineOff(false);                   // this+0x1BE6 = 0
+        }
+        else
+        {
+            // Gear ordinal 0 is REVERSE (it is also the index the console uses into the
+            // six-entry gear-ratio table, and UpdateRaceCarState reads mafGearRatios[0] first).
+            mRenderParams.SetReversing(true);                    // this+0x1BE8 = 1
+            mRenderParams.SetBraking(false);                     // this+0x1BE7 = 0 (direct, no hysteresis)
+            mRenderParams.SetEngineOff(false);                   // this+0x1BE6 = 0
+        }
+    }
+    else
+    {
+        SetBraking(false);
+        mRenderParams.SetReversing(false);                       // this+0x1BE8 = 0
+        mRenderParams.SetBraking(false);                         // this+0x1BE7 = 0 (the asm re-stores it)
+        mRenderParams.SetEngineOff(true);                        // this+0x1BE6 = 1
+    }
+}
+
+// ----------------------------------------------------------------------------
 // The identity accessors the header declares. All four are inlined into every caller
 // on the X360 (they are one load each); IsAttached is also emitted standalone
 // @0x822A1F10 and IsActive @0x822A1FB8, so both keep an out-of-line home here.
@@ -461,7 +578,7 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
                                        const CgsResource::ResourceHandle& lrGraphicsModelHandle,
                                        const Vector3&                     lrInitialVelocity,
-                                       u32                                luCarAssetAttribKey )
+                                       u64                                luCarAssetAttribKey )
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");     // BrnActiveRaceCar.cpp:821
     CGS_ASSERT(!IsActive(), "!IsActive()");       // :822
@@ -497,7 +614,7 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
 // == 0). CreateRaceCar's own parameter name for it is lbDisablePhysicsStateReset.
 // ============================================================================
 void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
-                                      u32                   luCarAssetAttribKey,
+                                      u64                   luCarAssetAttribKey,
                                       const Matrix44Affine& lrInitialTransform,
                                       const Vector3&        lrInitialVelocity,
                                       bool                  lbResettingPhysicsState,

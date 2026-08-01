@@ -57,7 +57,7 @@ namespace Vehicle
             Matrix44Affine   lInitialTransform,
             Vector3          lInitialVelocity,
             Vector3          lAngularVelocity,
-            Attribute::Key   lCarAssetAttribKey,
+            u64              lCarAssetAttribKey,
             ResourceHandle   lModelHandle,
             ResourceHandle   lGraphicsHandle,
             BrnWorld::ERaceCarType leRaceCarType,

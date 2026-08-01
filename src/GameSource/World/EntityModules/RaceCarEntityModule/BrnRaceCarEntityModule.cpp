@@ -621,7 +621,7 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         mRaceCarStreamer.GetPhysicsResourceHandle( static_cast<s32>( leActiveRaceCarIndex ) ),
         mRaceCarStreamer.GetGraphicsResourceHandle( static_cast<s32>( leActiveRaceCarIndex ) ),
         lInitialVelocity,
-        ( lpListEntry != 0 ) ? lpListEntry->GetAttribCollectionKeyHash() : 0u );
+        ( lpListEntry != 0 ) ? lpListEntry->GetAttribCollectionKeyHash() : 0ull );
 
     // [FLAG PC bring-up] SetupCarColour(leActiveRaceCarIndex) -- see the banner.
 
@@ -783,8 +783,8 @@ void RaceCarEntityModule::ResetActiveRaceCar(
     const u8 lu8CarStrengthStat = ( lpVehicleListEntry != 0 )
         ? lpVehicleListEntry->GetStrengthStat() : 0;
 
-    const u32 luCarAssetAttribKey = ( lpVehicleListEntry != 0 )
-        ? lpVehicleListEntry->GetAttribCollectionKeyHash() : 0u;
+    const u64 luCarAssetAttribKey = ( lpVehicleListEntry != 0 )
+        ? lpVehicleListEntry->GetAttribCollectionKeyHash() : 0ull;
 
     (void)liModelIndex;
 
@@ -993,7 +993,7 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
 
     // ---- the car's AttribSys collection key + personality (the AI event's payload) -----
     const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex( lModelId );
-    Attribute::Key lCarAssetAttribKey = 0;
+    u64 lCarAssetAttribKey = 0;   // 64-bit: AttachAIControlEvent::mCarAssetAttribKey is u64
     s32 lePersonalityType = 0;   // BrnAI::EPersonalityType storage (its enum has no home yet)
     if( liVehicleIndex >= 0 )
     {
