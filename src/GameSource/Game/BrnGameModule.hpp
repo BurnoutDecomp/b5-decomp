@@ -154,6 +154,10 @@ namespace BrnGame
         // The world module (the loading flow's LoadWorldModule drives its Prepare with
         // the update IO stacks -- X360 vtable +68 dispatch @0x823E72F0).
         WorldModule& GetWorldModule() { return mWorldModule; }
+        // The game-state module. Same shape as the two above: the console reaches its OUTPUT
+        // buffer through DoUpdate's LockBuffersForIO set, but DoUpdate is a PC-platform leaf, so
+        // the live world drive (DriveWorldUpdateFrame) needs it to run BridgeGameStateToWorld.
+        BrnGameState::GameStateModule& GetGameStateModule() { return mGameStateModule; }
         // The dispatch-thread input pair (the flow states post the boot loading-screen
         // command onto its write buffer, as the X360 InitialLoadingScreen::Update does
         // through the module global @0x823EF688).
@@ -435,6 +439,22 @@ namespace BrnGame
         // director INPUT buffer and the game-state module's OUTPUT buffer.
         void BridgeGameStateToDirector(
             BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+            const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
+        // ⭐⭐ X360 0x823E1890 -- the GAME-STATE->WORLD seam. Twelve transfers, no branches: it
+        // Appends the game-state output's GAME-ACTION queue into the world update input buffer's
+        // own queue (plus the takedown queue, both trigger interfaces, the race-distance and the
+        // two scoring snapshots, the payback pair and the controller-active flag).
+        //
+        // The game-action Append is the ONLY route by which a game action reaches the world at
+        // all -- WorldModule::HandleGameActions and WorldModule::BridgeInputToEntityModules both
+        // drain UpdateInputBuffer::GetGameActionQueue(), and nothing else ever fills it. That is
+        // what makes it the consumer side of CarSelectManager's ResetPlayerCarAction (type 0):
+        // the record that PLACES THE PLAYER'S CAR.
+        // Console home GameSource/Game/GameBridgeGameStateToX.cpp (body there, with its siblings);
+        // called by DoUpdate_World @0x823E8BD0 inside the world input buffer's write lock.
+        void BridgeGameStateToWorld(
+            BrnWorldIO::UpdateInputBuffer* lpWorldInput,
             const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
 
         // The main-flow states' pending GUI FSM stage request (the X360 +2523537 byte the

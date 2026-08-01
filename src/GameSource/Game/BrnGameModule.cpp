@@ -688,20 +688,38 @@ namespace BrnGame
         // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc.
         lpWorldInput->Construct();
 
-        // The controller leg of the five-source input staging (the only one of the six
-        // X360 bridges whose body is committed).
-        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGameStateToWorld
-        // @0x823E1890, BridgeGuiToWorld @0x823CBE90, BridgeSoundToWorld @0x823CDC98 and the
-        // replay-status latch (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are not
-        // reconstructed; their source modules' output buffers are not threaded into this
-        // leg on the PC yet, so the staging is omitted rather than faked. The world drive
-        // below reads NONE of those fields on the streaming path (the streamer runs off the
-        // world-entity module's own PVS state + the game-action queue), so the observable
-        // streaming behaviour is unchanged. Restore them with the DoUpdate cascade.
-        // The X360's SetTimerStatusInterface(gm+10095372) is part of that same staging.
+        // Two of the six X360 input-staging bridges are committed now: the CONTROLLER leg and
+        // (2026-08-01) the GAME-STATE leg.
+        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGuiToWorld @0x823CBE90,
+        // BridgeSoundToWorld @0x823CDC98 and the replay-status latch
+        // (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are still not reconstructed; their
+        // source modules' output buffers are not threaded into this leg on the PC yet, so that
+        // staging is omitted rather than faked. The X360's SetTimerStatusInterface(gm+10095372)
+        // is part of the same staging. Restore them with the DoUpdate cascade.
         lpWorldInput->LockForWrite();
         BridgeControllerToWorld(lpWorldInput, lpInputOutputBuffer);
         lpWorldInput->UnlockForWrite();
+
+        // ⭐⭐ THE GAME-STATE -> WORLD BRIDGE (X360 BridgeGameStateToWorld @0x823E1890), the
+        // only producer of the world update input buffer's game-action queue. The console gets
+        // the game-state output buffer from DoUpdate's own LockBuffersForIO five-source call
+        // (sub_823B7620); this leg reaches the module it owns directly, exactly as the director
+        // leg does for BridgeGameStateToDirector.
+        // ⚠️ NOTE this entry is currently UNREACHED -- DoUpdate is a PC-platform leaf, so the
+        // live world drive is DriveWorldUpdateFrame (BrnGameMainFlowStates.cpp), which runs the
+        // same bridge. Both sites move together.
+        {
+            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                mGameStateModule.GetOutputBuffer();
+            if (lpGameStateOutput != 0)
+            {
+                lpGameStateOutput->LockForRead();
+                lpWorldInput->LockForWrite();
+                BridgeGameStateToWorld(lpWorldInput, lpGameStateOutput);
+                lpWorldInput->UnlockForWrite();
+                lpGameStateOutput->UnlockForRead();
+            }
+        }
 
         if ((lUpdateSet & 0x20) != 0)
         {
@@ -855,6 +873,101 @@ namespace BrnGame
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
         lpDirectorInput->GetGameActionQueue()->Append(*lpGameStateOutput->GetGameActionQueue());
+    }
+
+    // ------------------------------------------------------------------------------------
+    // ⭐⭐ BridgeGameStateToWorld  @ 0x823E1890
+    //
+    // Twelve transfers, no branches -- the entire console body is `mr r3,r30 / bl <getter> /
+    // mr r4,r3 / mr r3,r31 / bl <setter>` twelve times over. Called by DoUpdate_World
+    // @0x823E8BD0 with this sub-step's world UPDATE INPUT buffer (r4) and the game-state
+    // module's OUTPUT buffer (r5). The caller owns both locks (world input write-locked,
+    // game-state output read-locked); every accessor below asserts one or the other, which is
+    // how the console proves that bracket.
+    //
+    // WHY THE FIRST LINE IS THE POINT OF THE WHOLE FUNCTION. It is the ONLY producer of the
+    // world update input buffer's game-action queue in the entire image.
+    // WorldModule::HandleGameActions (0x827C44D8), WorldModule::BridgeInputToEntityModules
+    // (0x827ADF88) and WorldModule::BridgeActionsTo{Physics,Traffic}Module all DRAIN
+    // UpdateInputBuffer::GetGameActionQueue(); nothing else ever fills it. Until now every one
+    // of them was draining a queue that could not be non-empty, so no game action reached the
+    // world at all -- including ResetPlayerCarAction (type 0), the record CarSelectManager
+    // builds to place the player's car at a junkyard spawn location.
+    //
+    // FIVE of the twelve getters are UNNAMED in the ARTIST exports (sub_823B96F0 /
+    // sub_823B9840 / the truncated "BrnGameState::GameStateM" @0x823B9AE0 / sub_823B9B88 /
+    // sub_823BA038) and TWO are INLINED (the bridge computes `+173240` and `+175976` itself,
+    // asm 0x823E1938 and 0x823E1948). All seven are identified at their accessors in
+    // BrnGameStateModuleIO.h by the member offset each returns plus its assert's own
+    // __FILE__/__LINE__ -- the same recovery route GetGameActionQueue() const already used.
+    //
+    // FLAG (home): the DWARF home is GameSource/Game/GameBridgeGameStateToX.cpp, alongside its
+    // five siblings. The body sits HERE for the same reason BridgeGameStateToDirector's does --
+    // and, this time, for a measured one as well: that TU IS NOT MOUNTED and DOES NOT COMPILE
+    // (`mpCgsGuiModule` is referenced but declared nowhere, and its BrnGui::GuiTakedownEvent /
+    // GuiSoftTakedownEvent placeholders collide with the real definitions in
+    // BrnGuiEventTypeDefs.h:982 / BrnGuiDemangledEventTypes.h:251). Re-home both bridges there
+    // when that TU is repaired and mounted.
+    //
+    // ⚠️ ONE DELIBERATE DEVIATION FROM A LITERAL TRANSCRIPTION, and it is load-bearing. The
+    // console passes the scoring snapshots as raw addresses because there the source span and
+    // the destination slice are both 2736 bytes. MEASURED on this x64 build:
+    // sizeof(GameStateModuleIO::ScoringOutputInterface) == 2672, while
+    // BrnWorldIO::SetScoringInterface still memcpy's the console's 2736. So the source goes
+    // through GetScoringOutputInterface(), whose storage is deliberately kept at the CONSOLE's
+    // width -- see the ⚠️ at that accessor. Without that the bridge would over-read the source
+    // by 64 bytes every frame.
+    // ------------------------------------------------------------------------------------
+    void BrnGameModule::BridgeGameStateToWorld(
+        BrnWorldIO::UpdateInputBuffer* lpWorldInput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
+    {
+        CGS_ASSERT(lpWorldInput != 0, "lpWorldInput");
+        CGS_ASSERT(lpGameStateOutput != 0, "lpGameStateOutput");
+
+        // 1. the GAME-ACTION queue (sub_823B96F0 -> AppendGameActionQueue 0x823C8B80). Both
+        //    sides are the same CgsModule::VariableEventQueue<13312,16> instantiation.
+        lpWorldInput->AppendGameActionQueue(lpGameStateOutput->GetGameActionQueue());
+
+        // 2. the takedown-event queue (sub_823B9840 -> AppendTakedownEventQueue 0x823C8C38).
+        //    FLAG cross-home cast: GameStateModuleIO::TakedownEventOutputQueueType is still a
+        //    forward-declared incomplete class; BrnWorldIO names the same X360 payload as the
+        //    committed EventQueue<BrnGameState::TakedownEvent,8>.
+        lpWorldInput->AppendTakedownEventQueue(
+            reinterpret_cast<const BrnWorldIO::TakedownEventQueue*>(
+                lpGameStateOutput->GetTakedownEventOutputQueue()));
+
+        // 3/4. the active-payback pair (0x823B9E28 / 0x823B9ED8 -> 0x823B4F50 / 0x823B5000)
+        lpWorldInput->SetActivePaybackType(lpGameStateOutput->GetActivePaybackType());
+        lpWorldInput->SetActivePaybackAggressor(lpGameStateOutput->GetActivePaybackAggressor());
+
+        // 5. the trigger-management interface (0x823B9AE0 -> 0x823DB778). Both sides are the
+        //    committed BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface now.
+        lpWorldInput->AppendTriggerManagementInputInterface(
+            lpGameStateOutput->GetTriggerManagementInputInterface());
+
+        // 6. the trigger-query interface (sub_823B9B88 -> 0x823C8CF0). Both sides are the same
+        //    VariableEventQueue<4096,16> instantiation.
+        lpWorldInput->AppendTriggerQueryInputInterface(
+            lpGameStateOutput->GetTriggerQueryInputInterface());
+
+        // 7. the race-car race-distance interface (sub_823BA038 -> 0x823B4A58).
+        //    FLAG cross-home cast: BrnWorldIO models this payload as its own 10-word slice.
+        lpWorldInput->SetRaceCarRaceDistanceInterface(
+            reinterpret_cast<const BrnWorldIO::RaceCarRaceDistanceInterface*>(
+                lpGameStateOutput->GetRaceCarRaceDistanceInterface()));
+
+        // 8/9. the two scoring snapshots (INLINED on X360 -> 0x823B4B28 / 0x823B4BE0).
+        //      FLAG cross-home casts; see the ⚠️ in the banner for the 2736-vs-2672 span.
+        lpWorldInput->SetScoringInterface(
+            reinterpret_cast<const BrnWorldIO::ScoringInterface*>(
+                lpGameStateOutput->GetScoringOutputInterface()));
+        lpWorldInput->SetOnlineScoringInterface(
+            reinterpret_cast<const BrnWorldIO::OnlineScoringInterface*>(
+                lpGameStateOutput->GetOnlineScoringOutputInterface()));
+
+        // 10. the controller-active flag (0x823B9F88 -> 0x823B4C98)
+        lpWorldInput->SetControllerActive(lpGameStateOutput->GetControllerActive());
     }
 
     void BrnGameModule::DoUpdate_Director(bool lbPostGui)
@@ -1746,6 +1859,36 @@ namespace BrnGame
                 // PreSceneQueryUpdate + Update. The module publishes its finalised camera into
                 // mpDirectorOutputBuffer, which stays alive through this frame's Render.
                 DoUpdate_Director(false);
+
+                // ⭐ RETIRE THIS SUB-STEP'S GAME ACTIONS (FLAG PC lifecycle, 2026-08-01).
+                // Both consumers of the game-state output buffer's game-action queue have now
+                // run: the WORLD leg (DriveWorldUpdateFrame -> BridgeGameStateToWorld, inside
+                // lpState->Update() above) and the DIRECTOR leg (DoUpdate_Director(false) ->
+                // BridgeGameStateToDirector). The post-GUI director pass does not read it.
+                //
+                // WHY THIS IS NEEDED. On the console the game-state module is a
+                // CgsModule::ModuleSingleBuffered whose OUTPUT DataStructure is re-Constructed
+                // by the module scheduler every frame, so its game-action queue starts EMPTY --
+                // a posted action is ONE-SHOT. On the PC the module owns ONE persistent
+                // OutputBuffer (BrnGameStateModule.cpp:68, itself a flagged bring-up seam), so
+                // without this the queue only ever grows: every action would be re-delivered to
+                // the world and the director on every sub-step for the rest of the session, and
+                // the 13312-byte queue would eventually overflow its own AddEvent. Latent until
+                // now (nothing posts yet), LIVE the moment CarSelectManager is ticked.
+                // This is the same lifecycle the GUI out-queue Clear() further down handles for
+                // the same reason, and the same one GamePrepare stage 4 already applies to this
+                // very buffer's resource-request queue.
+                // DELETE-WHEN the module's real Prepare/Swap DataStructure path lands.
+                {
+                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                        mGameStateModule.GetOutputBuffer();
+                    if (lpGameStateOutput != 0)
+                    {
+                        lpGameStateOutput->LockForWrite();
+                        lpGameStateOutput->GetGameActionQueue()->Clear();
+                        lpGameStateOutput->UnlockForWrite();
+                    }
+                }
                 // ---- controller -> GUI input pass (the console per-substep bridge) ---------
                 // Fill the player-0 pad record (InputPadsPC, the PC stand-in for the input
                 // module's own fill), then run the REAL BridgeControllerToGui: it synthesises
