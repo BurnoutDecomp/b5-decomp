@@ -1216,6 +1216,15 @@ namespace BrnGame
                         << " dt " << (mSimTimer.GetRate() * mSimTimer.GetScaleCurrent())
                         << " arb " << static_cast<s32>(lrArbitrator.GetState())
                         << " jy " << static_cast<s32>(lrGameState.meJunkyardState)
+                        // ⭐ ADDED 2026-08-01 (ArbStateRoaming::Update wave). The roaming
+                        // ladder in ProcessPossibleStateChanges STOPS at the
+                        // `GetCurrentEventState() == E_EVENT_STATE_PRE_INTRO(0)` arm and never
+                        // reaches the junkyard test below it, so "jy" alone cannot say whether
+                        // the car-select transition was even eligible. These two are the gate:
+                        // meEventType (-1 == free roam) and the event-state journal head
+                        // (0 PRE_INTRO / 1 INTRO / 2 COUNTDOWN / 3 ACTIVE / 4 POST_EVENT).
+                        << " evtype " << static_cast<s32>(lrGameState.meEventType)
+                        << " evst " << static_cast<s32>(lrGameState.GetCurrentEventState())
                         << (lrArbitrator.GetDoAttractMode() ? " attract" : " -")
                         << " eye (" << lXform.wAxis.x << ", " << lXform.wAxis.y
                         << ", " << lXform.wAxis.z << ")"

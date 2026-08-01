@@ -194,12 +194,19 @@ namespace BrnDirector
             void SetRequestedTimeDilation(f32 lfTimeScale);
 
             // ---- crash-nav (picture-paradise) effect request (BrnArbStateCrashNav::Update) ------
-            // Clear the crash-nav effect gate byte the crash-nav state zeroes on its hand-off to
-            // WAITING_TO_STOP (X360 stb 0 at mEffects +0xB7 == camera +0x11F). DECLARATION-ONLY
-            // (body lands with the Camera / CameraEffects TU); the mEffects offset is this type's
-            // own concern. FLAG: the +0xB7 byte's precise role is not recovered (modelled as a
-            // crash-nav effect gate; the byte WRITE is asm-attested).
-            void ClearCrashNavEffectGate();
+            // Drop this frame's start-hook request (X360 `stb 0` at mEffects +0xB7 ==
+            // camera +0x11F). BODIED 2026-08-01 as a header inline -- the console inlines the
+            // single byte store at every site (ArbStateRoaming::Update @0x82264670 /
+            // @0x822648B8, ArbStateCrashNav::Update, and the head of both
+            // Camera::StopCurrentEffect @0x82205BCC and Camera::EnsureEffectIsPlaying
+            // @0x821F2744, which is what proves the byte is a SEPARATE source statement from
+            // StopCurrentEffect rather than part of it).
+            // ⭐ THE OLD "FLAG: the +0xB7 byte's precise role is not recovered" IS RETIRED --
+            // BrnCameraEffects.h names +0xB7 mbHasStartHookNameString (the accessor
+            // GetStartHookNameString @0x821F1968 asserts on exactly this byte). So this is not
+            // an opaque "gate": it clears the camera's has-a-start-hook latch. The NAME is kept
+            // because it is the DWARF-side name the crash-nav state's call site carries.
+            void ClearCrashNavEffectGate() { mEffects.mbHasStartHookNameString = false; }
 
             // FLAG: minimal-slice decl used by the ICE movie-player family. Body lands
             // with this TU's Clear (@0x8223CE70, a separate function); declaration-only.

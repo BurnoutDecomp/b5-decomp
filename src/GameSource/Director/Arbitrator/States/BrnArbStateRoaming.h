@@ -71,17 +71,32 @@ namespace BrnDirector
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
         void        Construct() override;                            // @0x82259C00
         bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x82259D58
+        void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x822643A0
         bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x82234930
         const char* GetName() const override;                        // @0x821F6238
 
-        // Update() / Destruct() are NOT in this TU's X360 function set (they live in their
-        // own TUs); they keep the base declarations (no override added here).
+        // ⭐⭐ THE MISSING OVERRIDE, ADDED 2026-08-01. The old note here read "Update() /
+        // Destruct() are NOT in this TU's X360 function set (they live in their own TUs); they
+        // keep the base declarations (no override added here)." That was HALF right and it was
+        // the single most expensive defect on the director path: Update @0x822643A0 asserts
+        // against `..\..\..\GameSource\Director/Arbitrator/States/BrnArbStateRoaming.cpp`
+        // line 643 (the "unhandled state" default arm), i.e. it is THIS TU. Omitting the
+        // override was invisible -- vtable slot 2 silently resolved to ArbitratorState::Update
+        // (BrnDirectorArbitratorState.cpp:117, body `{ (void)lrSharedInfo; }`), so meState
+        // froze at E_STATE_PREPARING for the whole session, ProcessPossibleStateChanges was
+        // never called, and E_STATE_CHANGING_TO_CAR_SELECT could never be written -- the
+        // junkyard / car-select camera was unreachable BY CONSTRUCTION.
+        // Destruct() genuinely is not in this TU's set; it keeps the base declaration.
 
     private:
         // ---- private per-state helpers (DWARF BrnArbStateRoaming.h) ----------------------
-        // ProcessPossiblePaybackEffects (DWARF :1017) is NOT in this TU's X360 set; omitted.
         void ProcessPossibleFX(ArbStateSharedInfo& lrSharedInfo);           // @0x82234A00
         void ProcessPossibleStateChanges(ArbStateSharedInfo& lrSharedInfo); // @0x82219C58
+
+        // @0x82208BA8 -- DWARF :1017. ⚠️ The old note here ("NOT in this TU's X360 set;
+        // omitted") was WRONG: it is an export, its assert cites this TU's own .cpp path at
+        // line 1094, and the DRIVING arm of Update calls it UNCONDITIONALLY every frame.
+        void ProcessPossiblePaybackEffects(ArbStateSharedInfo& lrSharedInfo);
 
         // De-inlined inner branch of ProcessPossibleStateChanges (the X360 flattens it inline):
         // the drive-thru / car-select / showtime / idle-reset / rank-up transitions taken while

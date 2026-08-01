@@ -148,10 +148,21 @@ namespace BrnDirector
     bool ArbStateCrashNav::Release(ArbStateSharedInfo& lrInfo)  { (void)lrInfo; return true; }
     const char* ArbStateCrashNav::GetName() const               { return "ArbStateCrashNav"; }
 
-    void ArbStateRoaming::Construct()                           { ArbitratorState::Construct(); }
-    bool ArbStateRoaming::Prepare(ArbStateSharedInfo& lrInfo)   { (void)lrInfo; return true; }
-    bool ArbStateRoaming::Release(ArbStateSharedInfo& lrInfo)   { (void)lrInfo; return true; }
-    const char* ArbStateRoaming::GetName() const                { return "ArbStateRoaming"; }
+    // ⭐ ArbStateRoaming's FOUR STUBS ARE GONE (2026-08-01). They were
+    //     void ArbStateRoaming::Construct()                          { ArbitratorState::Construct(); }
+    //     bool ArbStateRoaming::Prepare(ArbStateSharedInfo&)         { return true; }
+    //     bool ArbStateRoaming::Release(ArbStateSharedInfo&)         { return true; }
+    //     const char* ArbStateRoaming::GetName() const               { return "ArbStateRoaming"; }
+    // and they blocked the mount of GameSource/Director/Arbitrator/States/BrnArbStateRoaming.cpp
+    // with four LNK2005s. That TU is now on the exe source list and owns all four for real,
+    // together with the newly-written Update @0x822643A0 -- the function that actually drives
+    // the roaming state machine and is the ONLY writer of E_STATE_CHANGING_TO_CAR_SELECT (via
+    // ProcessPossibleStateChanges). While these stubs stood, Prepare's unconditional `true`
+    // hid the fact that the real gate was never even reached: ArbStateRoaming had no Update
+    // override at all, so vtable slot 2 fell through to ArbitratorState::Update's empty body
+    // and meState never left E_STATE_PREPARING.
+    // The moment sub-system BrnArbStateRoaming.cpp reaches through MomentSelector is stubbed
+    // in GROUP F at the foot of this file.
 
     // Two states declare an explicit Destruct() override that their .cpp bodies.
     void ArbStateOnlineRaceIntro::Destruct() {}
@@ -528,4 +539,87 @@ namespace Utils
     }
 }
 }
+}
+
+// ============================================================================
+// GROUP F (NEW 2026-08-01, with the ArbStateRoaming mount) -- THE MOMENT SUB-SYSTEM.
+//
+// BrnArbStateRoaming.cpp is now in the link, and with it BrnMomentSelector.cpp and
+// BrnMomentController.cpp -- both REAL, in full. These four are the only leaves left open by
+// that mount, and all four sit behind MomentSelector.
+//
+// ⛔ WHAT THIS DEGRADES, PRECISELY. MomentSelector is the ESTABLISHING-SHOT picker: while free
+// roaming it watches for a stunt / jump / new-car-joined "moment" and, when one becomes valid,
+// hands ArbStateRoaming::Update's DRIVING arm that moment's own camera instead of the gameplay
+// chase cam (the cutaway shots). With these four stubbed:
+//   * NewMoment allocates nothing, so every MomentHandle stays !IsAllocated();
+//   * MomentSelector::Update never runs, so muValidMoments stays at the 0 that
+//     MomentSelector::Construct writes;
+//   * the DRIVING arm therefore takes `!HasSelectedMoment() && muValidMoments == 0` every
+//     frame and always falls through to mCamera = GetSelectedGameplayCamera().
+// OBSERVABLE COST: no establishing-shot cutaways in free roam. NOTHING ELSE -- no meState is
+// written, no handle is touched, and no branch downstream of the selector depends on it.
+//
+// ⭐ WHY NOT JUST LEAVE THEM UNRESOLVED: MomentSelector::Prepare's return value IS
+// ArbStateRoaming::Prepare's return value, which IS the gate that lets meState leave
+// E_STATE_PREPARING. The whole director state machine is downstream of these four symbols
+// resolving.
+//
+// EACH STUB RETURNS THE CONSOLE'S OWN "nothing happened" VALUE, and each is the value the real
+// body returns on its own success path -- NewMoment ends in `li r3, 1` unconditionally
+// (@0x82255850) and MomentHandle::Release in `li r3, 1` (@0x821F7390), so neither stub can
+// make MomentSelector::Prepare report a failure that the console would not have reported.
+//
+// DELETE-WHEN: mount GameSource/Director/MomentController/BrnMomentControllerNewMoment.cpp
+// (it already holds real bodies for NewMoment and MomentHandle::Release) together with
+// Moments/BrnMomentBystanderSeesAction.cpp + BrnMoment.cpp, and body MomentSelector::Update
+// @0x82239FC0 (425 asm lines) + SelectBestMomentWithExclusion @0x82250FC8. MEASURED
+// 2026-08-01: mounting the NewMoment TU on its own today costs +9 unresolved, and the moment
+// closure needs two Moments/ TUs that do not currently compile (BrnMomentPlayerJumping.cpp,
+// BrnMomentTumbling.cpp) plus a `class`-vs-`struct` class-key ODR fork on
+// BrnDirector::Moment::Parameters (BrnMoment.h:42 says `class`; BrnMomentParameterBank.cpp
+// emits `PEAU`, i.e. it sees a `struct` -- two distinct mangled symbols for one function).
+// That is a wave of its own; it is NOT a camera blocker.
+// ============================================================================
+#include "GameSource/Director/MomentController/BrnMomentSelector.h"     // MomentSelector
+#include "GameSource/Director/MomentController/BrnMomentController.h"   // MomentController
+
+namespace BrnDirector
+{
+    // @0x82255850. Real body: BrnMomentControllerNewMoment.cpp (unmounted -- see DELETE-WHEN).
+    // The console allocates a moment of leMomentType out of mMomentPool, hands the slot to the
+    // handle, and pushes the bank's parameters onto it, then returns TRUE unconditionally.
+    // Here: allocate nothing and return the same TRUE, leaving the handle unallocated.
+    bool MomentController::NewMoment(Moment::EType leMomentType,
+                                     MomentParameterBank::EMomentParamID leMomentParamID,
+                                     MomentHandle& lrMomentHandleInOut,
+                                     Camera::BehaviourManager& lrBehaviourManager)
+    {
+        (void)leMomentType;
+        (void)leMomentParamID;
+        (void)lrMomentHandleInOut;   // deliberately left !IsAllocated()
+        (void)lrBehaviourManager;
+        return true;
+    }
+
+    // ⭐ TWO OF THE FOUR NEVER BECAME STUBS. They are REAL:
+    //   * MomentController::MomentHandle::Release @0x821F7390 -- the real body moved into
+    //     BrnMomentController.cpp, which is its own DWARF home (:277) and is mounted.
+    //   * MomentSelector::Update @0x82239FC0 -- written for real in BrnMomentSelector.cpp
+    //     (accumulators + recency decay + the whole four-counter classification loop,
+    //     including muValidMoments, which is the number ArbStateRoaming::Update reads). Only
+    //     the max-active REBALANCE tail is gated there, behind mbHasMaxLimit, which nothing in
+    //     this tree ever raises.
+
+    // @0x82250FC8. Reached only through the SelectBestMoment / SelectNewBestMoment header
+    // inlines, and the DRIVING arm guards its only call with `muValidMoments > 0` -- which the
+    // stubbed Update above can never make true. So this is unreachable at runtime today; it is
+    // stubbed for the LINK. FALSE == "no moment was selected", which is what the console
+    // returns when no candidate qualifies.
+    bool MomentSelector::SelectBestMomentWithExclusion(CgsNumeric::Random& lRandom, s32 liExclusion)
+    {
+        (void)lRandom;
+        (void)liExclusion;
+        return false;
+    }
 }
