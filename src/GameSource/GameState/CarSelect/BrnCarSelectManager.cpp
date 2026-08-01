@@ -1093,7 +1093,11 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
 
     u8 lacStartupDeform[1] = { 0 };
     BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
-    if (lpProfile->IsStartOfGameDeformActive())   // FLAG: Profile + 118401 (de-inlined byte read)
+    // X360: `if ( *(mpProgressionManager + 118401) )`. mProfile is embedded at ProgressionManager
+    // +0x170 (368), so that byte is Profile +118033 == mbIsNewProfile -- the start-of-game deform
+    // is gated on the profile being BRAND NEW. (The old comment here said "Profile + 118401",
+    // which is 368 bytes past the real member; see the body in BrnProfile.cpp.)
+    if (lpProfile->IsStartOfGameDeformActive())
     {
         BrnProgression::CarData* lpCarData = lpProfile->FindCar(mStartCarId);
         if (lpCarData == 0)

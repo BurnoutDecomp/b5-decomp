@@ -110,7 +110,10 @@ public:
     //                             this+1424, firing the CgsArray 'Array used before Construct/Clear
     //                             was called' assert via the Array<u16,256> accessor).
     //   GetActiveTrigger(i)    -> maActiveTriggers.GetItem(i) (X360 short_256::GetItem on this+912).
-    const BrnTrigger::TriggerData* GetTriggerData() const;
+    // DEFINED INLINE: the X360 emits no symbol -- every caller renders as the ResourcePtr's own
+    // main-memory-pointer load off this+1568. (CarSelectManager::SetupSpawnLocations reaches the
+    // track's spawn-location table through it.)
+    const BrnTrigger::TriggerData* GetTriggerData() const { return mpTriggerData.operator->(); }
     u32                            GetActiveTriggerCount() const;
     u16                            GetActiveTrigger(u32 liIndex) const;
 

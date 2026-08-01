@@ -2,6 +2,7 @@
 #include "SharedClasses/Trigger/BrnLandmark.h"      // complete Landmark (GetOnlineLandmark walk, GetLandmarkFromRegionIndex cast)
 #include "SharedClasses/Trigger/BrnTriggerBase.h"    // TriggerRegion::GetType() / E_TYPE_LANDMARK
 #include "SharedClasses/Trigger/BrnKillzone.h"       // complete Killzone (GetKillzone stride)
+#include "SharedClasses/Trigger/BrnSpawnLocation.h"  // complete SpawnLocation (GetSpawnLocation stride)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetOnlineLandmark / FixUp message build)
 #include <cstdint>                                   // uintptr_t (load-time pointer relocation arithmetic)
@@ -43,6 +44,19 @@ BrnTrigger::TriggerData::GetKillzone( int liKillzoneIndex ) const
 {
     CGS_ASSERT( liKillzoneIndex < miKillzoneCount, "liKillzoneIndex < miKillzoneCount" );
     return &mpKillzones[liKillzoneIndex];
+}
+
+// GetSpawnLocation. No standalone symbol exists in the X360 image -- like every other
+// &mp<Table>[i] accessor on this struct it is inlined at the call site (CarSelectManager::
+// SetupSpawnLocations walks [0, GetSpawnLocationCount()) through it to file each junkyard's
+// spawn points). Reconstructed as the exact sibling of GetKillzone @0x82354820, whose
+// range-guard idiom (`index < count`) is X360-attested, over the mpSpawnLocations table @0x6C
+// with its count at 0x70. The elements are records, not pointers (contrast mppRegions).
+const BrnTrigger::SpawnLocation*
+BrnTrigger::TriggerData::GetSpawnLocation( int liIndex ) const
+{
+    CGS_ASSERT( liIndex < miSpawnLocationCount, "liIndex < miSpawnLocationCount" );
+    return &mpSpawnLocations[liIndex];
 }
 
 // X360 0x824EAA00. Returns the liLandmarkIndex'th ONLINE landmark: walks the full landmark
