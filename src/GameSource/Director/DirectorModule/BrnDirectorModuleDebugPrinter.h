@@ -63,7 +63,16 @@ namespace BrnDirector
         // callers (no standalone addresses), so they are declaration-only here -- ActualPrint is
         // the out-of-line worker. DWARF-attested shapes (BrnDirectorModuleDebugPrinter.h).
         void Print(const char* lpcMessage);
-        void Print(const char* lpcMessage, CgsDev::RGBA luColour);
+
+        // BODIED as the inline forwarder the console actually emits (2026-08-01). Every X360 call
+        // site of the explicit-colour Print -- BehaviourIceAnim::Update @0x82247108's two
+        // "Can/Can't see player" lines among them -- shows a DIRECT call to ActualPrint
+        // @0x821F71D8 with (r3 = the printer, r4 = the text, r5 = the packed RGBA); i.e. the
+        // forwarder inlined away, which is exactly this body. Reproducing it here is what lets a
+        // caller spell the operation the way the source did instead of reaching the PRIVATE
+        // worker. (See BrnBehaviourIceAnim.cpp, whose fabricated
+        // `static void ActualPrint(void*, const char*, s32)` slice this retires.)
+        void Print(const char* lpcMessage, CgsDev::RGBA luColour) { ActualPrint(lpcMessage, luColour); }
         void PrintName(const Moment& lrMoment, CgsDev::RGBA luColour);
         void PrintActive(const char* lpcMessage);
         void PrintInactive(const char* lpcMessage);

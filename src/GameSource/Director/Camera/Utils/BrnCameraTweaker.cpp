@@ -1,8 +1,9 @@
 // BrnDirector::Camera::Utils::Tweaker -- live camera-parameter debug tweaker.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX, semantic-parity (not byte-matching).
 //
-// Bodied here (5 ledger functions):
-//   Tweaker::Construct     @0x821F8588
+// Bodied here (4 ledger functions; the fifth, Tweaker::Construct @0x821F8588, was
+// file-split VERBATIM into BrnCameraTweakerConstruct.cpp on 2026-08-01 so it could be
+// mounted without this TU's debug-render leaves -- see that file's banner):
 //   Tweaker::AddMapping    @0x821F85E0  (the f32* lpfScale overload)
 //   Tweaker::GetAxisValue  @0x8220BC58
 //   Tweaker::Render        @0x8220BE88
@@ -34,29 +35,11 @@ namespace BrnDirector
             extern const char* const KAAC_AXIS_NAMES[Tweaker::E_AXIS_COUNT];
             extern const char* const KAAC_CONTROL_NAMES[DebugController::E_CONTROL_COUNT];
 
-            // @0x821F8588. Reset the tweaker to an empty, "instructions-shown" state.
-            // The X360 walks the mbUsed flag of every binding (axis stride 20,
-            // control stride 16, the two control arrays 1056 bytes apart) and clears
-            // it, then clears mbHideInstructions. Nothing else is touched -- AddMapping
-            // fully overwrites a slot when it is (re)used.
-            void Tweaker::Construct()
-            {
-                for (s32 liMap = 0; liMap < E_MAP_COUNT; ++liMap)
-                {
-                    for (s32 liAxis = 0; liAxis < E_AXIS_COUNT; ++liAxis)
-                    {
-                        maAxisMapping[liMap][liAxis].mbUsed = false;
-                    }
-
-                    for (s32 liControl = 0; liControl < DebugController::E_CONTROL_COUNT; ++liControl)
-                    {
-                        mJustPressedMapping[liMap][liControl].mbUsed  = false;
-                        mJustReleasedMapping[liMap][liControl].mbUsed = false;
-                    }
-                }
-
-                mbHideInstructions = false;
-            }
+            // @0x821F8588 Tweaker::Construct is NOT here any more (2026-08-01): it was
+            // file-split VERBATIM into the sibling BrnCameraTweakerConstruct.cpp so it could
+            // be mounted without this TU's five debug-render leaves. See that file's banner
+            // for the measurement and the DELETE-WHEN. Do not re-add it here -- a second
+            // definition is an LNK2005.
 
             // @0x821F85E0. Bind a tunable float to an axis using a LIVE scale source
             // (a pointer the caller keeps updating). Asserts all four preconditions,

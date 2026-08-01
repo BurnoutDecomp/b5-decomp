@@ -169,6 +169,51 @@ void Camera::SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform)
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::GetDepthOfField (both overloads)
+//
+// The same INLINED-everywhere shape as the three above: every console consumer forms
+// `addi rN, camera, 0x124` and works on the block in place (BrnLooker's Zoom path,
+// KeyAnimController::UpdateFocus, BehaviourIceAnim::Update, ArbStateCrashNav's
+// SetBlurriness store). The accessor exists so no consumer forms that displacement itself;
+// the body IS the member reference.
+// ----------------------------------------------------------------------------
+DepthOfField& Camera::GetDepthOfField()
+{
+    return mDepthOfField;
+}
+
+const DepthOfField& Camera::GetDepthOfField() const
+{
+    return mDepthOfField;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::RequestMotionBlur
+//
+// De-inlined from the two consumers that issue it (BehaviourIceAnim::Update @0x82247108 and
+// ArbStateCrashMode::Update). The console emits ONE store run into the camera's embedded
+// motion-blur block -- the two amounts at mEffects +0x44 / +0x48 and BOTH enable bytes at
+// +0x4C / +0x4D set to 1 -- which is exactly this block's named
+// BrnDirector::Camera::MotionBlurData (BrnEffectsData.h): mfCarsBlurAmount / mfWorldBlurAmount
+// / mbIsActive / mbIsExpensiveMotionBlur, in that declaration order.
+//
+// The argument -> field mapping is corroborated by the IceAnim call pair, which is the whole
+// reason the block has two amounts: a take ANCHORED to a car requests (0, 1) -- no extra blur
+// on the cars, full blur on the world -- and a free/world take requests (1, 1). That reads
+// correctly only with the first argument on the CARS lane, which is the +0x44 store.
+//
+// Written through the named members, never by displacement: the two `bool`s widen no differently
+// on x64 here, but the block is reached as a member, not as `camera + 0x68 + 0x44`.
+// ----------------------------------------------------------------------------
+void Camera::RequestMotionBlur(f32 lfBlurAmountA, f32 lfBlurAmountB)
+{
+    mEffects.mMotionBlurData.mfCarsBlurAmount        = lfBlurAmountA;   // mEffects +0x44
+    mEffects.mMotionBlurData.mfWorldBlurAmount       = lfBlurAmountB;   // mEffects +0x48
+    mEffects.mMotionBlurData.mbIsActive              = true;            // mEffects +0x4C
+    mEffects.mMotionBlurData.mbIsExpensiveMotionBlur = true;            // mEffects +0x4D
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::GetNearClipDistance @0x82205B68
 //
 // The active near-clip distance. The asm:
