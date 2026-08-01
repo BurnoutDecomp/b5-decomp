@@ -264,19 +264,13 @@ namespace BrnDirector
         return true;
     }
 
-    // -- The ICE resource manager's two take-data lookups. "No take data" is a valid answer
-    //    (the console returns null when a take id is not resident) and every caller null-checks.
-    const ICE::ICETakeData* ICEResourceMgr::GetTakeData(CgsResource::ID lID) const
-    {
-        (void)lID;
-        return 0;
-    }
-
-    const ICE::ICETakeData* ICEResourceMgr::GetTakeData(s32 liTakeIndex) const
-    {
-        (void)liTakeIndex;
-        return 0;
-    }
+    // -- RETIRED 2026-08-01 (ICE take-runtime wave): ICEResourceMgr's two take-data lookups
+    //    used to be `return 0` here. The ID overload @0x821F6A00 is now REAL in
+    //    GameSource/Director/BrnDirectorResourceManager.cpp -- it is the one bridge from the
+    //    ICE take runtime to the loaded take dictionaries, and mpICEDictionaryList is bound
+    //    now, so a null answer would have been a legal-looking lie (every caller null-checks
+    //    it, so a resident take would just never play). The index overload stays null there,
+    //    with the reason.
 
     // -- DirectorResourceManager::Prepare RETIRED 2026-08-01. The real body @0x8225CA08 is
     //    bodied in its own TU (GameSource/Director/BrnDirectorResourceManager.cpp), which is

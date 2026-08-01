@@ -48,6 +48,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // the one-shot bank diagnostic
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h"      // the mAfterTouchCam class key
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"  // Attrib::StringToKey
+#include "SharedClasses/DataLists/ICEList.h"                            // ICEResourceMgr::GetTakeData's dictionary lookup
 
 namespace BrnDirector
 {
@@ -105,6 +106,66 @@ namespace
 // only so this file can be mounted for Prepare without pulling six unresolved ICE externals
 // into the link, and it must be merged back when the ICE take-runtime group lands. See that
 // file's header for why a split and not six link stubs.
+
+// ----------------------------------------------------------------------------
+// @0x821F6A00 -- BrnDirector::ICEResourceMgr::GetTakeData(CgsResource::ID) const
+//
+// ⭐ THE ONE BRIDGE between the ICE take runtime and the loaded take dictionaries.
+// Every ICETake resolves its data through this virtual (ICETake::SetSubTake calls
+// vtable slot 0 with the guid still in r4). It used to be a `return 0` in
+// DirectorLinkStubs.cpp, justified because nothing could answer -- and with the ICE
+// take runtime now in the link and mpICEDictionaryList bound, that excuse is exactly
+// the one the RaceCarState::operator= incident taught us to distrust: a null return
+// here is a legal answer that every caller null-checks, so a take that IS resident
+// would simply never play, with no crash and no assert.
+//
+//     lwz r30, 4(r3)       ; ICEResourceMgr::mpResourceManager
+//     lwz r3,  0x220(r30)  ; mpICEDictionaryList          (DirectorResourceManager +544)
+//     bl  BrnResource::ICEList::GetICETakeData            ; r4 = the key, passed through
+//     if (!result) return 0
+//     lwz r11, 0x230(r30)  ; mpICEWrapper                 (DirectorResourceManager +560)
+//     lwz r4,  8(r31)      ; foundTake->miGuid
+//     addi r3, r11, 0x2750 ; &mpICEWrapper->mAuthor
+//     bl  ICE::ICEAuthor::FindEditedTakeFromGuid
+//     return result ? result : foundTake
+//
+// ⚠️ [marked deviation] the ICEAuthor overlay is OMITTED, not stubbed away. It is the
+// in-game take editor's "an edit of this take is open, play that instead" override,
+// and ICEAuthor has no instance on this build (BrnDirectorICEWrapper.cpp is unmounted
+// and ICEWrapper::Construct/Prepare are DirectorLinkStubs no-ops), so
+// FindEditedTakeFromGuid would return 0 for every guid and the console would fall
+// straight through to the dictionary take -- which is what this returns. Restoring the
+// two lines is mechanical once BrnDirectorICEWrapper.cpp + ICEAuthorTakeOps.cpp land
+// (DirectorResourceManager::GetKeyAnimFromGuid in BrnDirectorResourceManagerICE.cpp
+// already spells the identical pair).
+// ----------------------------------------------------------------------------
+const ICE::ICETakeData* ICEResourceMgr::GetTakeData(CgsResource::ID lId) const
+{
+    const BrnResource::ICEList& lrICEList = mpResourceManager->GetICEList();
+
+    // The console never converts: the id arrives in r4 and is handed to
+    // ICEList::GetICETakeData in the same register (which is why Hex-Rays shows the
+    // call as taking no argument). CgsResource::ID is the 64-bit hash and
+    // DictEntry::DictionaryKey is s64, so the source-level spelling of that identity
+    // is the reinterpretation below. (Measured on the shipped dictionary: every one of
+    // the 549 keys is a zero-extended 32-bit value, e.g. 0x00000000F01FF01D for
+    // Intro_FlyCam_Loop -- so the two widths agree on real data too.)
+    return lrICEList.GetICETakeData(
+        static_cast<CgsContainers::DictEntry::DictionaryKey>(lId.GetHash()));
+}
+
+// @-- no X360 symbol. The DWARF (ICEData.hpp:232) declares the second
+// IResourceManager virtual `GetTakeData(int32_t)` and the ARTIST image contains no
+// out-of-line body for it and no call site: the only GetTakeData symbol in the image
+// is the ID overload above. Null is the interface's own documented "not resident"
+// answer and every caller tests for it, so this stays the honest null rather than a
+// guessed by-index walk over an unknown dictionary ordering.
+// DELETE-WHEN: a call site turns up that pins what the index actually indexes.
+const ICE::ICETakeData* ICEResourceMgr::GetTakeData(s32 liTakeIndex) const
+{
+    (void)liTakeIndex;
+    return 0;
+}
 
 // ----------------------------------------------------------------------------
 // @0x821F6AB8 -- BrnDirector::DirectorResourceManager::GetEventIntroShots.
