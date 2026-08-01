@@ -12,6 +12,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h" // BrnProgression::ProgressionManager (mProgressionManager, by value)
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (mTriggerQueryManager, by value)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
+#include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"      // BrnGameState::CarSelectManager (mCarSelectManager, by value)
 
 // The module's cached read-only snapshot of the active race cars (mLastActiveRaceCarInterface,
 // X360 this+0x397E0) is held BY VALUE exactly as the console holds it, so this is a full include
@@ -113,6 +114,17 @@ public:
     // car-select flow walks. DWARF BrnGameStateModule.h:201 (X360 this+42320).
     TriggerQueryManager*       GetTriggerQueryManager()       { return &mTriggerQueryManager; }
     const TriggerQueryManager* GetTriggerQueryManager() const { return &mTriggerQueryManager; }
+
+    // ⭐ The junkyard car-select state machine (X360 this+183712 == 0x2CDA0). The console
+    // NEVER names an accessor for it -- every one of the eight console call sites reaches the
+    // embedded subobject by the inlined `this + 0x2CDA0` pointer adjust (GameStateModule::
+    // Construct / Prepare / ProcessStreamingCompleteEvent / OnProfileLoaded /
+    // SendSetupPlayerCarEvent / OnEnterOnline / ProcessGameEvents / PreWorldUpdate -- an
+    // image-wide scan for that adjust returns exactly those eight). De-inlined to this named
+    // accessor so no reconstructed body has to poke a byte offset; the member itself is the
+    // console's, held BY VALUE exactly as the console holds it.
+    CarSelectManager*       GetCarSelectManager()       { return &mCarSelectManager; }
+    const CarSelectManager* GetCarSelectManager() const { return &mCarSelectManager; }
 
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
@@ -403,7 +415,18 @@ private:
     // ---- the Prepare slice's own members (X360 offsets from Prepare @0x8239E578) ----
 
     // DWARF BrnGameStateModule.h:696. The 27-stage first-pass prepare machine's stage set.
-    // Enumerators + values are DWARF-authoritative; the X360 jump table has exactly these.
+    // Enumerators + values are DWARF-authoritative.
+    //
+    // ⛔ CORRECTION 2026-08-01: the committed line "the X360 jump table has exactly these" is
+    // WRONG -- MEASURED, the ARTIST jump table at 0x8239E630 has TWENTY-EIGHT cases (0..27), one
+    // more than this DWARF enum. The extra one sits between RUMBLE_MANAGER and DONE:
+    //     X360 case 26  zero-inits the embedded DeveloperChallengeManager (this+185712)
+    //     X360 case 27  DriveThruManager::Prepare + the car-select list publish + the DONE tail
+    // The DecFIGS DWARF is the PS3 INTERNAL build and has no DeveloperChallengeManager stage at
+    // all -- straight version drift (references/DecFIGS/README.md's own warning). The names stay
+    // DWARF-authoritative; what shifts is only which console case each does the work of, so
+    // E_PREPARESTAGE_DONE below carries the X360's case-27 body (which is the terminal one, and
+    // whose `stage = 1; stage2 = 0` tail this machine already reproduced).
     enum EPrepareStage
     {
         E_PREPARESTAGE_START                    = 0,
@@ -449,5 +472,14 @@ private:
     // stage names as the reply target for its resource request.
     CgsModule::EventReceiverQueue<3072, 16> mReceiverQueue;
     bool                                    mbReceiverQueueConstructed = false;
+
+    // ⭐ DWARF BrnGameStateModule.h:280 (X360 this+183712 == 0x2CDA0). The junkyard car-select
+    // state machine, held BY VALUE as the console holds it. Constructed from this module's
+    // Construct() with the console's own three arguments (&mTriggerQueryManager, this,
+    // &mProgressionManager -- X360 0x82380388: `CarSelectManager::Construct(a1 + 183712,
+    // a1 + 42320, a1, a1 + 47920)`), and handed the loaded vehicle/wheel lists by Prepare's
+    // terminal stage. GameStateModule::Construct is the console's ONLY caller of
+    // CarSelectManager::Construct.
+    CarSelectManager                        mCarSelectManager;
 };
 }
