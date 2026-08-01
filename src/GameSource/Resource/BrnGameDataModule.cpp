@@ -1747,7 +1747,7 @@ namespace BrnResource
         }
         else if (memcmp(lacName, "IL__", 4) == 0)
         {
-            DeferredGameDataRequest("GetICEList (id 64)", lpSlot);
+            ProcessGetICEListRequest(lpResourceInput, lpEvent, 64, liIndex);
         }
         else if (memcmp(lacName, "PRP_", 4) == 0)
         {
@@ -2534,8 +2534,8 @@ namespace BrnResource
     }
 
     // ====================================================================================
-    // The two LIST GET handlers -- @0x82666688 (vehicle, id 52) and @0x82666868 (wheel,
-    // id 59). Both are 40-instruction leaves.
+    // The three LIST GET handlers -- @0x82666688 (vehicle, id 52), @0x826667C8 (ICE, id 64)
+    // and @0x82666868 (wheel, id 59). All three are 40-instruction leaves.
     //
     // ⚠️ These do NOT stream anything, and that is the whole point: the tables were made
     // resident by Prepare stages 9/12, so the GET just posts a reply whose resource-memory
@@ -2568,6 +2568,48 @@ namespace BrnResource
         lpEvent->mpReceiverQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
             static_cast<s32>(sizeof(lResponse)));
+
+        mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
+    }
+
+    // @ 0x826667C8 -- the ICE take-dictionary list GET (id 64). Instruction-for-instruction
+    // the vehicle handler with two different immediates: the reply's mId is the fixed CgsID
+    // 0x7DDFC0102EE70838 (base-40 "IL__ICEMLIST" -- the SAME id RequestInterface<512>::
+    // GetICEList @0x82256358 puts in the request) and the resource-memory lane carries
+    // `this + 457664`, i.e. &mICEList. (X360 `addis r11, r31, 7; addi r11, r11, -0x440` ==
+    // this + 0x70000 - 0x440 -- the identical expression PrepareICEList's AddListResource
+    // uses, which is what pins the member.)
+    void GameDataModule::ProcessGetICEListRequest(
+            CgsResource::ResourceIO::InputBuffer* /*lpResourceInput*/,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        GameDataIO::GameDataAssetEvent lResponse;
+        memset(&lResponse, 0, sizeof(lResponse));
+        lResponse.miEventId       = lpEvent->miEventId;
+        lResponse.mpReceiverQueue = 0;
+        lResponse.miPoolId        = 5;                       // X360 immediate
+        lResponse.mId             = 0x7DDFC0102EE70838ull;   // CgsID("IL__ICEMLIST")
+        lResponse.meType          = static_cast<EAssetSet>(3);
+        lResponse.mbFailFlag      = false;
+        lResponse.mHandle.mpResourceMemory = &mICEList;
+        lResponse.mHandle.mpSourceEntry    = 0;
+
+        lpEvent->mpReceiverQueue->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lResponse), liEventId,
+            static_cast<s32>(sizeof(lResponse)));
+
+        // [PC diagnostic -- PRODUCER end] one-shot. The consumer end prints the pointer it
+        // stored (DirectorResourceManager::LogShotGroupBank); print what was actually sent so
+        // the two can be compared without guessing which side dropped it.
+        static bool s_bLoggedICEListReply = false;
+        if (!s_bLoggedICEListReply)
+        {
+            s_bLoggedICEListReply = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] ProcessGetICEListRequest: replied id " << liEventId
+                << " with &mICEList=" << static_cast<void*>(&mICEList)
+                << " (" << mICEList.GetICEMovieCount() << " takes)\n";
+        }
 
         mGameDataEventSlotPool.PushIndex(static_cast<s16>(liSlotIndex));
     }

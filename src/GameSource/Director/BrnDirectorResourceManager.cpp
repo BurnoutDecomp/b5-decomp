@@ -238,6 +238,13 @@ void DirectorResourceManager::LogShotGroupBankState() const
         << (mGameIntroGroup.IsValid() ? "bound" : "NULL")
         << " shots=" << (mGameIntroGroup.IsValid() ? (s32)mGameIntroGroup.Num_ShotList() : -1)
         << "\n";
+
+    // [PC diagnostic -- CONSUMER end] the two GameData list replies stage-2 collected. Print
+    // both ends of the seam (GameDataModule::ProcessGetICEListRequest logs the producer end)
+    // so a null here bisects "reply never posted" from "reply arrived after the drain".
+    *CgsDev::Log::gpDebugPrint
+        << "[Director] list replies: mpVehicleList=" << const_cast<void*>(static_cast<const void*>(mpVehicleList))
+        << " mpICEDictionaryList=" << const_cast<void*>(static_cast<const void*>(mpICEDictionaryList)) << "\n";
 }
 
 

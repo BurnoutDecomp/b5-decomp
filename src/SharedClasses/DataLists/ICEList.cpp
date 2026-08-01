@@ -10,11 +10,13 @@
 // pattern).
 //
 // The two lookup methods each loop the KI_MAX_ICE_LISTS slots and STOP at the first
-// slot whose ResourcePtr is the invalid/null handle (the lists are packed from 0 by
+// slot whose ResourcePtr is the null image (the lists are packed from 0 by
 // AddListResource, so the first empty slot is the end of the loaded set). In the
-// binary that test is an inline 3-dword (12-byte) compare of the ResourcePtr against
-// the &dword_82FFB248 sentinel (mpResourceMemory/mpNext/mpPrev == the null-handle
-// image): the X360 returns 0 the moment a slot equals the sentinel
+// binary that test is an inline 3-word compare of the ResourcePtr against the
+// &dword_82FFB248 image -- the BaseResourcePtr IDENTITY REGION, i.e. mpResourceMemory
+// plus the two mHandle words (an earlier note here said mpResourceMemory/mpNext/mpPrev;
+// that predates the X360-authoritative member reorder in CgsResourcePtr.h and is
+// corrected). The X360 returns 0 the moment a slot equals the image
 // (GetICETakeData/GetICETakeDataFromGuid @ 0x8267BDF0/0x8267BEC0 -> goto LABEL_6),
 // matching the PS3 DecFIGS `if (NULLResourcePtr == slot) break;` (0x814C48/0x8197DC).
 // It is restored as an early `return 0` on the first invalid slot. For a valid slot
@@ -22,6 +24,11 @@
 // take-dictionary linear scan (Find / GetAt over mpaIndex); those are restored to
 // the logical Dictionary accessors (dict->Find / dict->GetNumEntries / dict->GetAt),
 // which is exact semantic parity.
+//
+// ⭐ MOUNTED 2026-08-01 (ICEList wave). Nothing about this TU was wrong except one
+// unlinkable spelling (see skNullIdentity below); it had simply never been in the exe
+// source list, and its consumers -- GameDataModule::mICEList (X360 member +457664) and
+// DirectorResourceManager::mpICEDictionaryList -- only lit up with the shot-group bank.
 
 #include "SharedClasses/DataLists/ICEList.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::ResourceHandle (sentinel value)
@@ -32,14 +39,29 @@ namespace BrnResource
 
 namespace
 {
-    // X360: &dword_82FFB248 -- the invalid/default resource-handle sentinel a list
-    // slot is compared against ("is this ResourcePtr null?"). Modeled as a file-local
-    // default (zero) ResourceHandle: {nullptr, nullptr}, matching the ChallengeList
-    // sibling's skInvalidHandle.
-    // FLAG: the exact .rodata bytes of dword_82FFB248 are not recovered; an all-zero /
-    // invalid handle is the modeled value (the 12-byte compare covers the null
-    // mpResourceMemory/mpNext/mpPrev image).
-    const CgsResource::ResourceHandle skInvalidHandle = {};
+    // X360 &dword_82FFB248 -- the NULL image both lookup loops compare each slot
+    // against. CORRECTED 2026-08-01 from the recovered disassembly of
+    // GetICETakeData @0x8267BDF0 / GetICETakeDataFromGuid @0x8267BEC0: the compare is
+    //     r10 = &dword_82FFB248; r11 = &slot; r9 = 0
+    //     do { if (*(u32*)r10 != *(u32*)r11) break; r9 += 4; r10 += 4; r11 += 4; }
+    //     while (r9 < 12);
+    // i.e. CgsResource::BaseResourcePtr::IsEqual @0x8227D298 inlined -- a word-for-word
+    // compare of the ResourcePtr IDENTITY REGION (mpResourceMemory + the two mHandle
+    // words), NOT a two-pointer ResourceHandle compare.
+    //
+    // The earlier spelling here was `slot == skInvalidHandle` against a bare
+    // ResourceHandle. That reached ResourcePtr<Type>::operator==(const ResourceHandle&),
+    // which is DECLARED in CgsResourcePtr.h and DEFINED NOWHERE IN THE TREE -- so this TU
+    // could never link, which is why it was never in the exe source list. It is retired in
+    // favour of the identity image the console actually compares against, spelled through
+    // the real (bodied, X360-attested) IsEqual. Sized from the identity region itself, per
+    // the project's never-transcribe-a-console-byte-size rule.
+    struct NullIdentityImage
+    {
+        void*                        mpResourceMemory;
+        CgsResource::ResourceHandle  mHandle;
+    };
+    const NullIdentityImage skNullIdentity = { 0, { 0, 0 } };
 }
 
 // ICEList::Construct -- reset every list slot to the invalid handle and zero the
@@ -49,7 +71,7 @@ void ICEList::Construct()
 {
     for ( s32 liIndex = 0; liIndex < KI_MAX_ICE_LISTS; ++liIndex )
     {
-        maTakeDictionary[ liIndex ] = skInvalidHandle;
+        maTakeDictionary[ liIndex ] = CgsResource::NULLResourceHandle;
     }
 
     miCount     = 0;
@@ -62,7 +84,7 @@ void ICEList::Destruct()
 {
     for ( s32 liIndex = 0; liIndex < KI_MAX_ICE_LISTS; ++liIndex )
     {
-        maTakeDictionary[ liIndex ] = skInvalidHandle;
+        maTakeDictionary[ liIndex ] = CgsResource::NULLResourceHandle;
     }
 }
 
@@ -94,9 +116,9 @@ const ICE::ICETakeData* ICEList::GetICETakeData(CgsContainers::DictEntry::Dictio
 {
     for ( s32 liIndex = 0; liIndex < KI_MAX_ICE_LISTS; ++liIndex )
     {
-        // X360: 12-byte compare of the ResourcePtr against the null sentinel -- the
+        // X360: the inlined 3-word IsEqual against the null identity image -- the
         // first empty slot ends the loaded set, so bail out (return null) here.
-        if ( maTakeDictionary[ liIndex ] == skInvalidHandle )
+        if ( maTakeDictionary[ liIndex ].IsEqual(&skNullIdentity) )
         {
             return 0;
         }
@@ -122,9 +144,9 @@ const ICE::ICETakeData* ICEList::GetICETakeDataFromGuid(s32 liGuid) const
 {
     for ( s32 liDicIndex = 0; liDicIndex < KI_MAX_ICE_LISTS; ++liDicIndex )
     {
-        // X360: 12-byte compare of the ResourcePtr against the null sentinel -- the
+        // X360: the inlined 3-word IsEqual against the null identity image -- the
         // first empty slot ends the loaded set, so bail out (return null) here.
-        if ( maTakeDictionary[ liDicIndex ] == skInvalidHandle )
+        if ( maTakeDictionary[ liDicIndex ].IsEqual(&skNullIdentity) )
         {
             return 0;
         }

@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                     // maGeneratedHeapAllocators
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModule.h"      // mAttribSysModule (X360 a1+399000)
 #include "SharedClasses/DataLists/VehicleList.h"                             // mVehicleList (X360 a1+444336)
+#include "SharedClasses/DataLists/ICEList.h"                                 // mICEList     (X360 a1+457664)
 #include "SharedClasses/DataLists/WheelList.h"                               // mWheelList   (X360 a1+458696)
 #include "rw/rwcore_structs.h"                                               // rw::Resource / ResourceDescriptor (maGeneratedRaw*)
 
@@ -263,15 +264,19 @@ namespace BrnResource
         void ProcessGetVehicleListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                           const GameDataIO::GameDataAssetEvent* lpEvent,
                                           s32 liEventId, s32 liSlotIndex);             // 0x82666688
+        void ProcessGetICEListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                      const GameDataIO::GameDataAssetEvent* lpEvent,
+                                      s32 liEventId, s32 liSlotIndex);                 // 0x826667C8
         void ProcessGetWheelListRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                         const GameDataIO::GameDataAssetEvent* lpEvent,
                                         s32 liEventId, s32 liSlotIndex);               // 0x82666868
 
     public:
         // ADDITIVE accessors (the console reaches these by member offset -- the GET handlers
-        // hand out `this + 444336` / `this + 458696`). The two resident data tables every
-        // car-facing subsystem resolves through.
+        // hand out `this + 444336` / `this + 457664` / `this + 458696`). The three resident
+        // data tables every car- and camera-facing subsystem resolves through.
         BrnResource::VehicleList& GetVehicleList() { return mVehicleList; }
+        BrnResource::ICEList&     GetICEList()     { return mICEList; }
         BrnResource::WheelList&   GetWheelList()   { return mWheelList; }
 
         // ADDITIVE accessor (the console reaches the sub-module by member offset). Lets the
@@ -347,11 +352,15 @@ namespace BrnResource
         // Prepare stage 6 brings it up with the memory-map allocators (heap banks 19/20/21
         // + linear bank 22, liMaxNumVaults 80); Update pumps it with the "Attrib" input.
         CgsAttribSys::AttribSysModule  mAttribSysModule;
-        // X360 a1+444336 / a1+458696: the two RESIDENT data tables. Construct()s them,
-        // Prepare stages 9/12 fill them, and ProcessGet{Vehicle,Wheel}ListRequest hands a
-        // pointer to them straight back to the requester (the console literally replies with
-        // `this + 444336` / `this + 458696`).
+        // X360 a1+444336 / a1+457664 / a1+458696: the three RESIDENT data tables. Construct()s
+        // them, Prepare stages 9/11/12 fill them, and ProcessGet{Vehicle,ICE,Wheel}ListRequest
+        // hands a pointer to them straight back to the requester (the console literally
+        // replies with `this + 444336` / `this + 457664` / `this + 458696`).
+        // ⭐ mICEList's offset is attested TWICE and identically: PrepareICEList @0x8266CEB0
+        // binds `this + 0x70000 - 0x440` and ProcessGetICEListRequest @0x826667C8 replies with
+        // `a1 + 457664` -- 0x70000 - 0x440 == 457664, the same object.
         BrnResource::VehicleList       mVehicleList;
+        BrnResource::ICEList           mICEList;
         BrnResource::WheelList         mWheelList;
         // X360 a1[140] / a1[141] / a1[142] -- the three data-table prepares' own stage words
         // (each Prepare* helper owns one; a1[141] is PrepareICEList's, X360 offset 0x234).
