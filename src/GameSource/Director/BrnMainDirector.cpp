@@ -689,7 +689,30 @@ namespace BrnDirector
         // ⭐ X360 line 2 of the guarded body.
         ProcessInputQueue(lpIO);
 
-        // ⚠️ GATE -- the five remaining guarded steps above.
+        // ⚠️ GATE -- VehicleTracker::Update / CrashAnalyser::Update and the GameState latch
+        //   clear (see the banner).
+
+        // ⭐⭐ X360 LINE 6 (@0x8225BCF0). BODIED SINCE THE BANNER ABOVE WAS WRITTEN AND STILL
+        // NOT CALLED -- BehaviourManager::ReleaseBehaviours has a full body in
+        // BrnBehaviourManager.cpp and had NO caller anywhere in the image, so a released
+        // BehaviourHandle only ever set its needs-releasing bit and NOTHING ever handed the
+        // pool slot back. MEASURED consequence (2026-08-01): ArbStateCarSelect cycling
+        // ROTATE_ABOUT_CAR <-> ACTIVE allocates one BehaviourInterpolate per cycle, and after
+        // 20 cycles the 20-slot behaviour pool is exhausted -- "Array index out of bounds"
+        // (CgsObjectPool.h:139) out of NewBehaviour<BehaviourInterpolate>, plus a rising tide
+        // of "the set limit (N) has been reached" interpolation-lock asserts from the source
+        // helpers that were never unlocked either (an interpolate behaviour releases its two
+        // CameraReference locks in its Release virtual, i.e. from HERE).
+        // It has to run BEFORE the pre-scene behaviour pass below, which is exactly where the
+        // console puts it.
+        mBehaviourManager.ReleaseBehaviours();
+
+        // ⭐⭐ X360 LINE 7, THE LAST STEP OF THE GUARDED BODY (@0x8225BD18). This is where the
+        // console runs Behaviour::Update for every live behaviour -- NOT inside MainDirector::
+        // Update, which runs the COLLISION pass instead. Until this call existed, the PostScene
+        // entry stood in for both and vtable slot 3 was never dispatched at all; see the banner
+        // on UpdateCameraBehavioursPreScene.
+        UpdateCameraBehavioursPreScene(lpIO, liPlayerCarIndex);
     }
 
     // ------------------------------------------------------------------------
@@ -958,8 +981,14 @@ namespace BrnDirector
     //     zeroed byte block rather than fabricating either layout.
     // DELETE-WHEN: per item, as each aggregate is homed.
     // ------------------------------------------------------------------------
-    void MainDirector::UpdateCameraBehavioursPostScene(const DirectorInputOutput* lpIO,
-                                                       s32 liPlayerCarIndex)
+    // ⭐⭐ SPLIT 2026-08-01 (car-select hand-off wave). This staging used to sit inside
+    // UpdateCameraBehavioursPostScene; it is now shared, because the console has TWO entry
+    // points over it and this build only ever ran one of them. See the banner on
+    // UpdateCameraBehavioursPreScene below.
+    void MainDirector::BuildBehaviourSharedInfo(const DirectorInputOutput* lpIO,
+                                                s32 liPlayerCarIndex,
+                                                Camera::BehaviourSharedInfo& lSharedInfo,
+                                                ICE::CameraSpaceHandler& lCameraSpaces)
     {
         const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;
 
@@ -989,8 +1018,6 @@ namespace BrnDirector
 
         // ⚠️ GATE: `if (maStateFlagTail[+0x35400]) { all three = 0; }` -- the ICE-owns-the-frame
         // latch lives in the un-homed flag tail (same gate BuildArbStateSharedInfo documents).
-
-        Camera::BehaviourSharedInfo lSharedInfo = Camera::BehaviourSharedInfo();
 
         lSharedInfo.mTimestep.Set(BrnDirector::VecFloat(lfGameTimestep),
                                   BrnDirector::VecFloat(lfWorldTimestep),
@@ -1054,7 +1081,6 @@ namespace BrnDirector
         // handler is staged only when the snapshot is populated and is otherwise left as
         // Construct's default. DELETE-WHEN: MainDirector::Update's own live-player-car
         // prologue is real.
-        ICE::CameraSpaceHandler lCameraSpaces;
         if (mAllVehicleData.GetRaceCars() != 0)
         {
             const EActiveRaceCarIndex leNearest =
@@ -1076,12 +1102,71 @@ namespace BrnDirector
                                     &mArbitrator.GetSharedCameras().mGameplayExternal);
         }
         lSharedInfo.mpCameraSpaceHandler = &lCameraSpaces;
+    }
 
-        // ⚠️ FLAG (see the banner): the two incomplete-type reference arguments.
+    // ------------------------------------------------------------------------
+    // UpdateCameraBehavioursPreScene  @ 0x82255318
+    //
+    // ⭐⭐ ADDED 2026-08-01 (car-select hand-off wave). THE CONSOLE HAS TWO PASSES OVER THE
+    // BEHAVIOUR SET AND THIS BUILD ONLY EVER RAN ONE OF THEM -- and, worse, ran it from the
+    // wrong entry point. Verified in the ARTIST asm, not inferred:
+    //     MainDirector::PreSceneQueryUpdate @0x8225BA00
+    //         -> @0x8225BD18  bl UpdateCameraBehavioursPreScene   @0x82255318
+    //                             -> @0x822557B0 bl BehaviourManager::UpdateAllBehaviours
+    //     MainDirector::Update @0x82274070
+    //         -> @0x82274338  bl UpdateCameraBehavioursPostScene  @0x8224FD30
+    //                             -> @0x8225024C bl BehaviourManager::PostCollisionUpdateAllBehaviours
+    // The PC's PostScene entry called UpdateAllBehaviours -- i.e. it stood in for the PreScene
+    // pass -- so vtable slot 3 (Behaviour::PostCollisionUpdate) was NEVER DISPATCHED anywhere
+    // in the image. Every behaviour whose per-frame work lives in slot 3 was inert, silently:
+    // BehaviourInterpolate does its ENTIRE blend, its parametric-time advance and its
+    // mbHasFinished latch there, which is why ArbStateCarSelect's hand-off out of
+    // GAME_INTRO_PART_THREE published an unwritten camera and then never finished.
+    //
+    // The two entries share BuildBehaviourSharedInfo above (the console builds the same
+    // ~1540-byte block on its own stack in both; its per-entry prologue differences are inside
+    // the same GATE list that banner already carries).
+    //
+    // ⚠️ ORDERING: PreSceneQueryUpdate runs before Update in the same sub-step, and both gate
+    // on the SAME live-player-car predicate, so this pass runs on exactly the frames the old
+    // single pass did -- and the arbitrator now reads THIS frame's behaviour output instead of
+    // last frame's (the one-frame staleness the Update banner used to record is gone).
+    // ------------------------------------------------------------------------
+    void MainDirector::UpdateCameraBehavioursPreScene(const DirectorInputOutput* lpIO,
+                                                      s32 liPlayerCarIndex)
+    {
+        Camera::BehaviourSharedInfo lSharedInfo = Camera::BehaviourSharedInfo();
+        ICE::CameraSpaceHandler     lCameraSpaces;
+        BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
+
+        // ⚠️ FLAG (see the BuildBehaviourSharedInfo banner): the two incomplete-type
+        // reference arguments.
         static u8 saOpaqueControllerInfo[64] = { 0 };
         static u8 saOpaqueDebugPrinter[64]   = { 0 };
 
         mBehaviourManager.UpdateAllBehaviours(
+            false,                                                        // lbPaused
+            lSharedInfo,
+            *reinterpret_cast<const ControllerInfo*>(saOpaqueControllerInfo),
+            true,                                                         // the console's `1`
+            *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateCameraBehavioursPostScene  @ 0x8224FD30 -- the COLLISION-pass twin (see above).
+    // ------------------------------------------------------------------------
+    void MainDirector::UpdateCameraBehavioursPostScene(const DirectorInputOutput* lpIO,
+                                                       s32 liPlayerCarIndex)
+    {
+        Camera::BehaviourSharedInfo lSharedInfo = Camera::BehaviourSharedInfo();
+        ICE::CameraSpaceHandler     lCameraSpaces;
+        BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
+
+        static u8 saOpaqueControllerInfo[64] = { 0 };
+        static u8 saOpaqueDebugPrinter[64]   = { 0 };
+
+        // ⭐ @0x8225024C -- the console's own call here, and the one this build was missing.
+        mBehaviourManager.PostCollisionUpdateAllBehaviours(
             false,                                                        // lbPaused
             lSharedInfo,
             *reinterpret_cast<const ControllerInfo*>(saOpaqueControllerInfo),

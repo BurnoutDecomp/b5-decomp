@@ -3771,17 +3771,14 @@ void WorldModule::BridgePhysicsSceneUpdateToScene(void *,struct CgsSceneManager:
     }
 }
 
-// BOOT GATE -- real body @0x827A52B0 in its own home TU (not mounted: IO accessor closure).
-void WorldModule::BridgeRaceCarModuleToWorldModule_PreScene(void *,struct BrnWorld::WorldEntityIO::InputBuffer_PreScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToWorldModule_PreScene: inert [FLAG PC boot gate]\n";
-    }
-}
+// ⛔⛔ STUB RETIRED 2026-08-01 (car-select hand-off wave). The real body @0x827A52B0 is now
+// MOUNTED, out of GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp.
+// This inert copy was the ONLY definition in the link and it was the ONLY producer of
+// WorldModule::meLocalPlayerActiveRaceCarIndex -- so that index stayed at Construct's -1 all
+// session and HandleGameActions case 7 could never put the player car under the control mode
+// the junkyard asked for. Its own comment ("real body in its own home TU (not mounted: IO
+// accessor closure)") was accurate AND is exactly why nobody looked: it said the body existed,
+// not that nothing was running it.
 
 // BOOT GATE -- real body @0x827AD788 in its own home TU (not mounted: IO accessor closure).
 void WorldModule::BridgeTrafficToTrigger_PreScene(void *,class BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene const *)

@@ -1875,6 +1875,21 @@ namespace BrnGame
                     const bool lbGuiFirstBootIntroLive =
                         mDirectorModule.GetMainDirector().IsNewProfileIntroActive();
                     mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp(lbGuiFirstBootIntroLive);
+
+                    // ⭐⭐ THE CAR-SELECT LEG (X360 PreWorldUpdate @0x823A5904..0x823A5958), in
+                    // the console's own body order: the one-shot entry leg above, then the
+                    // per-sub-step CarSelectManager tick. It is the whole image's only caller of
+                    // CarSelectManager::Update, and therefore the only thing that ever ENDS the
+                    // junkyard transition-in and moves GameState::meJunkyardState off
+                    // E_JY_INTRO_NO_CARS. The gate lives inside (mJunkyardId != null), exactly
+                    // as the console's does.
+                    // ⚠️ THE TIMESTEP IS THE GAME TIMER'S, NOT THE SIM TIMER'S: the console
+                    // latches `TimerStatusInterface::maEntries[0].mfValue04 * .mfValue08`
+                    // @0x823A54D8, and StoreTimers writes entry 0 from mGameTimer. Read off the
+                    // LIVE timer for the same reason the DJ/road-time leg below does -- nothing
+                    // on this build stages a GameStateModuleIO::PreWorldInputBuffer.
+                    mGameStateModule.PreWorldUpdateCarSelectBringUp(
+                        mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
                 }
 
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)

@@ -1239,4 +1239,31 @@ void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp(bool lbMayCompleteJunk
     // consumer on this build.
 }
 
+// ============================================================================
+// PreWorldUpdateCarSelectBringUp -- the extracted CAR-SELECT leg of PreWorldUpdate
+// @0x823A5328 (0x823A5904..0x823A5958). See the header for the FLAG and the asm.
+// ============================================================================
+void GameStateModule::PreWorldUpdateCarSelectBringUp(f32 lfGameTimestep)
+{
+    if (mpOutputBuffer == 0)
+    {
+        return;
+    }
+
+    // The console's gate: a 64-bit load of CarSelectManager::mJunkyardId (this + 0x2CDC0 ==
+    // mCarSelectManager + 0x20), non-zero == "the player is in a junkyard".
+    if (!mCarSelectManager.IsInJunkyard())
+    {
+        return;
+    }
+
+    mpOutputBuffer->LockForWrite();
+    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
+    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
+    mbIsUpdating = true;
+    mCarSelectManager.Update(lpActionQueue, 0, lfGameTimestep);
+    mbIsUpdating = false;
+    mpOutputBuffer->UnlockForWrite();
+}
+
 }

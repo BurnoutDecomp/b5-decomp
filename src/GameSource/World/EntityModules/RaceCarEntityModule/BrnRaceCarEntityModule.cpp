@@ -1635,6 +1635,27 @@ void RaceCarEntityModule::PreSceneUpdate(
     // ---- step 11: pump the five component streamers -------------------------
     UpdateStreaming( lpInput, lpOutput );
 
+    // ---- step 13: the PRE-SCENE output publish ------------------------------
+    // ⭐⭐ ADDED 2026-08-01 (car-select hand-off wave). The console runs UpdateOutputInterfaces
+    // TWICE per frame -- once here and once in PostPhysicsUpdate -- and only the PostPhysics
+    // half was reproduced. VERIFIED in the asm, not inferred: PreSceneUpdate @0x8230D928 fetches
+    // the FOUR output interfaces off its own OutputBuffer_PreScene at 0x8230E410..0x8230E434 and
+    // calls UpdateOutputInterfaces at 0x8230E44C, in the same (active, global, replayActive,
+    // replayGlobal) argument order the PostPhysics site uses.
+    //
+    // ⛔ WITHOUT IT the PRE-SCENE output buffer's RCEntityActiveRaceCarOutputInterface stays
+    // Clear()ed for ever, so IsPlayerCarActive() is false there and
+    // WorldModule::BridgeRaceCarModuleToWorldModule_PreScene -- the only producer of
+    // WorldModule::meLocalPlayerActiveRaceCarIndex, and itself only just un-stubbed this wave --
+    // correctly publishes E_ACTIVE_RACE_CAR_INDEX_INVALID every frame. MEASURED: with the bridge
+    // real but this call missing, the bridge's one-shot "player active race-car index published"
+    // diag never printed, while the PostPhysics publish was reporting `playerIdx 1` in the same
+    // run. Two layers, both silent.
+    UpdateOutputInterfaces( lpOutput->GetActiveRaceCarOutputInterface(),
+                            lpOutput->GetGlobalRaceCarOutputInterface(),
+                            lpOutput->GetReplayActiveRaceCarOutputInterface(),
+                            lpOutput->GetReplayGlobalRaceCarOutputInterface() );
+
     lpOutput->UnlockForWrite();
     lpInput->UnlockForRead();
 }

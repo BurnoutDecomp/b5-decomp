@@ -24,69 +24,14 @@ namespace
     const s32 KI_WORLD_MODULE_RACE_CAR_TYPE_RIVAL = 2;
 }
 
-// @ 0x827A52B0 -- WorldBridgeEntityModulesToEntityModules.cpp:88. Latch the race-car
-// module's pre-scene active-race-car output interface into the world-entity module's
-// pre-scene input buffer, then publish the player index + per-car "is rival" markers
-// into the WorldModule (the X360 r3 context) member state.
-//
-// The interior range asserts the pseudocode inlines ("mePlayerActiveRaceCarIndex <
-// E_ACTIVE_RACE_CAR_INDEX_COUNT" :967, "Player car index hasn't been set" :980,
-// "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0"/"< E_ACTIVE_RACE_CAR_INDEX_COUNT"
-// :854/:855/:876/:877 from BrnRaceCarEntityModuleOutputInterface.h) live inside the
-// named getters IsPlayerCarActive()/IsRaceCarActive()/IsRaceCarRival(); the loop-guard
-// assert ("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", BurnoutConstants.h:39) lives in
-// EActiveRaceCarIndex's committed range-guarded operator++. They are NOT re-emitted here.
-//
-// The X360 tail returns the last EndAssert artifact in r3; the logical return type is void.
-void BridgeRaceCarModuleToWorldModule_PreScene(
-    void* lpWorldModule,
-    BrnWorld::WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
-    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene)
-{
-    CGS_ASSERT(lpWorldInputBuffer_PreScene != 0, "lpWorldInputBuffer_PreScene");           // :94
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene");     // :95
-
-    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCarEntityOutputInterface =
-        lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface();
-    CGS_ASSERT(lpRaceCarEntityOutputInterface != 0, "lpRaceCarEntityOutputInterface");     // :100
-
-    // RECONCILED 2026-07-27: the committed world-entity input buffer now names the
-    // race-car interface by its real type (InputBuffer_PreScene::ActiveRaceCarInterface
-    // == RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface), so the old
-    // cross-home cast through an opaque storage stand-in is gone -- the setter
-    // block-copies the same 10480-byte payload the X360 re-fetches.
-    lpWorldInputBuffer_PreScene->SetActiveRaceCarInterface(
-        *lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface());
-
-    // ---- publish the player active-race-car index into the WorldModule -------------------
-    u8* lpWorldModuleBytes = static_cast<u8*>(lpWorldModule);
-    if (lpRaceCarEntityOutputInterface->IsPlayerCarActive())
-    {
-        *reinterpret_cast<EActiveRaceCarIndex*>(
-            lpWorldModuleBytes + KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET) =
-            lpRaceCarEntityOutputInterface->GetPlayerActiveRaceCarIndex();
-    }
-    else
-    {
-        *reinterpret_cast<EActiveRaceCarIndex*>(
-            lpWorldModuleBytes + KU_WORLD_MODULE_PLAYER_ACTIVE_RACE_CAR_INDEX_OFFSET) =
-            E_ACTIVE_RACE_CAR_INDEX_INVALID;
-    }
-
-    // ---- mark each active rival car in the WorldModule per-car type array ----------------
-    s32* lpRaceCarType = reinterpret_cast<s32*>(
-        lpWorldModuleBytes + KU_WORLD_MODULE_RACE_CAR_TYPE_ARRAY_OFFSET);
-    for (EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
-         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
-         leActiveRaceCarIndex++)
-    {
-        if (lpRaceCarEntityOutputInterface->IsRaceCarActive(leActiveRaceCarIndex))
-        {
-            if (lpRaceCarEntityOutputInterface->IsRaceCarRival(leActiveRaceCarIndex))
-                lpRaceCarType[leActiveRaceCarIndex] = KI_WORLD_MODULE_RACE_CAR_TYPE_RIVAL;
-        }
-    }
-}
+// ⛔ MOVED OUT 2026-08-01 (car-select hand-off wave): BridgeRaceCarModuleToWorldModule_PreScene
+// @0x827A52B0 now lives in its own TU, GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp,
+// so it can be MOUNTED. This TU cannot be: its two remaining bridges reference three IO accessors
+// that are still declaration-only (MEASURED +3 unresolved --
+//   TriggerEntityModuleIO::InputBuffer_PreScene::GetInputInterface,
+//   BrnTrafficIO::OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene,
+//   BrnTrafficIO::OutputBuffer_PreScene::GetTriggerManagementInputInterface),
+// and the moved bridge needs none of them. Fold it back here when they land.
 
 // @ 0x827A51F0 -- WorldBridgeEntityModulesToEntityModules.cpp:69. Latch the traffic
 // module's post-scene traffic->race-car interface into the race-car module's pre-physics

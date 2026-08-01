@@ -553,11 +553,28 @@ void CarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::EndAssert();
     }
 
-    mbWaitingForStreaming = true;   // X360 *(this + 0x3C)... see note: the +0x3C store is the streaming latch
-    // NOTE: the X360 `stw r27,0x3C(r30)` writes byte 0x3C (meLastSpawnLocationType region) with 1.
-    // Behaviourally this arms the "a spawn/stream is pending" latch; the named member that survives is
-    // mbWaitingForStreaming. (FLAG: 0x3C overlaps meLastSpawnLocationType in the frozen layout; the
-    // store is the spawn-pending arm, reproduced via mbWaitingForStreaming.)
+    // ⛔⛔ CORRECTED 2026-08-01 (car-select hand-off wave) -- THIS LINE USED TO READ
+    //     mbWaitingForStreaming = true;
+    // behind a FLAG that admitted the console's store is at +0x3C and then bound it to the
+    // member at +0x58 anyway ("behaviourally this arms the spawn-pending latch"). It does not.
+    // The console instruction is
+    //     0x82387D18  li  r27, 1
+    //     0x82387D28  stw r27, 0x3C(r30)          ; a 4-BYTE store at CarSelectManager + 0x3C
+    // and +0x3C is meLastSpawnLocationType -- pinned by this very function's FIRST instruction,
+    // `lwz r29, 0x2C(r30)` == maSpawnLocations[1], because the 5-pointer array runs
+    // 0x28..0x3B and +0x3C is the next member. mbWaitingForStreaming is a BOOL at +0x58; a
+    // `stw` cannot be writing it.
+    //
+    // ⚠️ IT WAS NOT A HARMLESS RENAME. mbWaitingForStreaming is the gate on
+    // CarSelectManager::Update's TRANSITION_IN arm (`lfTimer >= lfMinTime &&
+    // !mbWaitingForStreaming`), and the ONLY thing that clears it is StreamingFinished, whose
+    // console caller (GameStateModule::ProcessStreamingCompleteEvent @0x8239xxxx) is not
+    // reconstructed. So the start-of-game junkyard entry armed a latch nothing could ever
+    // clear and the transition-in NEVER ENDED: measured on this build, meState sat at
+    // E_STATE_TRANSITION_IN with mfStateTimer climbing past 18 s, EndTransitionInState never
+    // ran, its action 73 {0,hasCars} was never posted, and GameState::meJunkyardState stayed
+    // at E_JY_INTRO_NO_CARS for the whole session.
+    meLastSpawnLocationType = 1;   // X360 stw 1, 0x3C(this)
 
     const BrnProgression::CarData* lpCarData = GetProfileCarData(mStartCarId);
     const f32 lfDeform = (lpCarData != 0) ? lpCarData->GetUnlockDeformationAmount() : 0.0f;

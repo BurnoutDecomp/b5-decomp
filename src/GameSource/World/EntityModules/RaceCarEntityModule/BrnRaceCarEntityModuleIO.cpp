@@ -127,6 +127,40 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface()
     return &mActiveRaceCarOutputInterface;
 }
 
+// ⭐ BODIED 2026-08-01 (car-select hand-off wave) -- the three mutable siblings of the
+// accessor above (DWARF :292 / :295 / :298). All three ARE in the export set, just UNNAMED;
+// they were recovered together from RaceCarEntityModule::PreSceneUpdate @0x8230D928, which
+// fetches all four output interfaces off its OutputBuffer_PreScene in reverse declaration
+// order immediately before its UpdateOutputInterfaces call:
+//     0x8230E410  bl sub_822B5218  -> replayGlobal   (this + 0xF0000 + 0x0510 == +0xF0510)
+//     0x8230E41C  bl sub_822B5170  -> replayActive   (this + 0xF0000 - 0x23E0 == +0xEDC20)
+//     0x8230E428  bl sub_822B50C8  -> global         (this + 0xF0000 - 0x2D50 == +0xED2B0)
+//     0x8230E434  bl <0x822B5020>  -> active         (this + 0xEAA40, the accessor above)
+// Each body is the identical "Not locked for writing" tripwire + `addis/addi this + member`
+// pair this whole file is made of, and the four displacements land in the header's member
+// DECLARATION ORDER (active < global < replayActive < replayGlobal), which is what pins the
+// binding. They are four consecutive functions on a regular 0xA8 stride.
+RCEntityGlobalRaceCarOutputInterface*
+OutputBuffer_PreScene::GetGlobalRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mGlobalRaceCarOutputInterface;
+}
+
+RCEntityActiveRaceCarOutputInterface*
+OutputBuffer_PreScene::GetReplayActiveRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mReplayActiveRaceCarOutputInterface;
+}
+
+RCEntityGlobalRaceCarOutputInterface*
+OutputBuffer_PreScene::GetReplayGlobalRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mReplayGlobalRaceCarOutputInterface;
+}
+
 // ---- OutputBuffer_PostPhysics -----------------------------------------------
 
 // DWARF :563/:564 -- the resource-request interface every race-car GameData request

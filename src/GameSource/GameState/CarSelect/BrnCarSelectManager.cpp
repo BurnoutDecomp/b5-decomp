@@ -218,6 +218,26 @@ void CarSelectManager::Prepare(const BrnResource::VehicleList* lpVehicleList,
 }
 
 // ============================================================================
+// IsInJunkyard -- NO SYMBOL IN THE IMAGE: the console INLINES it at every call site.
+//
+// Recovered from its call sites, which are all the same two instructions over mJunkyardId
+// (this + 0x20, a 64-bit CgsID):
+//     GameStateModule::PreWorldUpdate @0x823A5660 / @0x823A5914
+//         ld     r11, 0(this + 0x2CDC0)      ; == &mCarSelectManager + 0x20 == mJunkyardId
+//         cmpldi cr6, r11, 0
+//         ... -> gate on CarSelectManager::Update and on the second car-select leg
+// i.e. "in a junkyard" IS "mJunkyardId is not the null CgsID". Corroborated by the class's own
+// invariant: EnterJunkyard*/ReallyEnterJunkyardAtStartOfGame are the only writers of a non-zero
+// mJunkyardId, ExitJunkyard's tail clears it back to 0 (@0x82387880 -> this+0x20 = 0), and
+// SetupSpawnLocations asserts `mJunkyardId != kCGSID_NULL` (BrnCarSelectManager.cpp:1063) as its
+// own precondition.
+// ============================================================================
+bool CarSelectManager::IsInJunkyard() const
+{
+    return mJunkyardId != 0;
+}
+
+// ============================================================================
 // EnterModification (X360). [committed body -- preserved verbatim]
 // ============================================================================
 void CarSelectManager::EnterModification(GameStateModuleIO::GameActionQueue* lpActionQueue)
