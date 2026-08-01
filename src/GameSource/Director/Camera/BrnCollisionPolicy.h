@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BRN_COLLISION_POLICY_H
 
 #include "types.hpp"
+#include <cfloat>                                    // FLT_MAX (ResetRadiusSmoothing; XEX rodata @0x8200173C)
 #include "BrnCommonTypes.h"                          // Matrix44Affine / Vector3 (SetTarget / SetVelocity)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the policy sanity tripwires)
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                // CgsSceneManager::EntityId (SetTarget)
@@ -141,8 +142,11 @@ private:
 class CollisionPolicyAttachedToVehicle : public CollisionPolicy
 {
 public:
-    // Set the desired camera height above the vehicle. @0x821F3950: marks the desired-height
-    // override active (mbHaveDesiredHeight = 1), asserts the height is positive, then stores it.
+    // Set the desired camera height above the vehicle. @0x821F3950: raises
+    // mbUseGroundConstraint (+0x24B), asserts the height is positive, then stores it at
+    // +0x210 -- which the DWARF member order puts INSIDE mGroundConstraint, i.e. the console
+    // spelling is `mbUseGroundConstraint = true; mGroundConstraint.SetDesiredHeight(h);`.
+    // Modelled here as the flat pair until GroundConstraint gets a home.
     void SetDesiredHeight(f32 lfDesiredHeight);
 
     // ⭐ Construct @0x82224890 -- BODIED 2026-08-01 (below). BehaviourIceAnim::Construct
@@ -154,8 +158,12 @@ public:
     // literal 0 except BehaviourGameplayExternal::Construct @0x82224A44, which passes 1. An
     // `s32` narrowed to a byte member emits the same store, so the old spelling was not
     // contradicted by the ABI -- but {0,1} + a byte consumer is a flag.
-    // (VERIFIED: width and call-site values. INFERRED: the bool type and the name.)
-    void Construct(bool lbUseVehicleFrustumCollision);
+    // ⭐ NAME SETTLED 2026-08-01: the DWARF's `Construct(bool)` parameter lands on +0x24F,
+    // which its member list names mbDoVehicleCollision (h:143, the last of the eight bools).
+    // The earlier `lbUseVehicleFrustumCollision` guess conflated it with mbUseFrustrumResolver
+    // (+0x24D), which is a DIFFERENT bool Construct always zeroes.
+    // (VERIFIED: width, call-site values, and the DWARF name. INFERRED: nothing.)
+    void Construct(bool lbDoVehicleCollision);
 
     // ⭐ SetVehicleRef -- BODIED 2026-08-01 (below). X360 BehaviourIceAnim::Update
     // @0x82247568..0x822475A4 copies the 16-byte VehicleRef (the four words at ref
@@ -173,68 +181,135 @@ public:
     // VehicleRef::Construct() + VehicleRef::Set's E_PLAYER_CAR arm.
     void SetVehicleRef(const BrnDirector::VehicleRef& lrVehicleRef);
 
+    // ⭐ ResetRadiusSmoothing (DWARF BrnCollisionPolicyAttachedToVehicle.h:112) -- BODIED
+    // 2026-08-01. Re-arm the radius smoother by parking the max radius at FLT_MAX, so the
+    // next UpdateRadius @0x8220E4D0 SNAPS to the collision-limited radius instead of easing
+    // toward it. Three console sites emit exactly `stfs FLT_MAX, +0x240`:
+    //   CollisionPolicyAttachedToVehicle::Construct  @0x82224934 (the initial seed)
+    //   BehaviourGameplayExternal::Prepare           @0x82240814 (beh +0x290)
+    //   ArbStateRaceIntro::Update cases 1 and 3      @0x8226E64C (beh +0x290, the inlined
+    //                                                SharedCameraContainer re-arm)
+    // (VERIFIED: the offset, the value, and that +0x240 is the radius -- UpdateRadius
+    //  @0x8220E4D0 is the only other function in the image that touches it and it is
+    //  IDB-named. The METHOD NAME is the DWARF's.)
+    void ResetRadiusSmoothing() { mfMaxRadius = FLT_MAX; }
+
+    // ⭐ ResetTrafficCollision (DWARF BrnCollisionPolicyAttachedToVehicle.h:116) -- BODIED
+    // 2026-08-01. Raise the one-shot that makes the next GenerateSceneQueries @0x82252798
+    // ZERO mfTrafficCollisionResolution (and clear the flag again) instead of ramping it.
+    // Same three console sites as ResetRadiusSmoothing (`stb 1, +0x24E`).
+    void ResetTrafficCollision() { mbResetVehicleCollision = true; }
+
 private:
     // FLAG: only the members the bodied functions reach are modelled at their asm-attested
     //   offsets; the rest of the policy rig lands with its full TU.
-    //     +0x000 .. +0x20F  policy rig not modelled here
+    //     +0x000 .. +0x20F  policy rig not modelled here (the DWARF puts
+    //                       mFrustrumCollisionResolver @+0x010, mCarToCamera @+0x170 and
+    //                       mGroundConstraint @+0x1C0 in here -- see GenerateSceneQueries
+    //                       @0x82252690, which reaches all three by those displacements)
     //     +0x210            mfDesiredHeight     (stfs f31, 0x210)
     //     +0x214 .. +0x21F  rig members not modelled here
-    //     +0x220            mVehicleRef         (16 bytes)
-    //     +0x230 .. +0x24A  rig members not modelled here
-    //     +0x24B            mbHaveDesiredHeight (stb 1, 0x24B)
-    //     +0x24C .. +0x24E  rig members not modelled here
-    //     +0x24F            mbUseVehicleFrustumCollision (Construct's argument)
+    //     +0x220            mVehicleRef         (16 bytes; DWARF name mAttachedTo)
+    //     +0x230 .. +0x23B  mPitchMover (Utils::SmoothMover; DWARF h:126)
+    //     +0x23C            mfDesiredNearClip            (DWARF h:128)
+    //     +0x240            mfMaxRadius                  (DWARF h:129)
+    //     +0x244            mfTrafficCollisionResolution (DWARF h:130)
+    //     +0x248 .. +0x24F  the EIGHT bools, DWARF h:136..h:143, in declaration order
+    //
+    // ⭐ TAIL CARVED 2026-08-01 from references/DecFIGS/dwarfdump/GameSource/Director/Camera/
+    // CollisionPolicies/BrnCollisionPolicyAttachedToVehicle.h, which lists the whole member
+    // set in order. Three floats then eight bools fill +0x23C..+0x24F EXACTLY -- which is an
+    // independent third confirmation of the 0x250 size. Each name is also asm-attested:
+    //   +0x23C mfDesiredNearClip   Construct seeds the .data global @0x82CDA560 (0.15) and
+    //                              GenerateSceneQueries splats it into
+    //                              FrustrumCollisionResolver::GenerateSceneQueries @0x82252824.
+    //   +0x240 mfMaxRadius         UpdateRadius @0x8220E4D0 (IDB-named) is its smoother.
+    //   +0x244 mfTrafficCollisionResolution  GenerateSceneQueries @0x822527C4 ramps it toward
+    //                              1.0 at 0.05/frame while the attached vehicle's speed
+    //                              (+0x3CC) is under 35.0, else toward 0.0 at 0.01/frame --
+    //                              i.e. literally the DWARF's kfSpeedLimitForTrafficCollision
+    //                              / kfTrafficCollisionRampUp / kfTrafficCollisionRampDown.
+    //   +0x248 mbAutoElevate       Construct seeds 1 (@0x82224928).
+    //   +0x249 mbSmoothRadiusChanges  Construct seeds 0.
+    //   +0x24A mbFailOnContact     Construct seeds 0 (DWARF has SetFailOnContact).
+    //   +0x24B mbUseGroundConstraint  gates GroundConstraint::GenerateSceneQueries @0x82252750
+    //                              (and ::ProcessSceneQueryResults) -- which is why
+    //                              SetDesiredHeight raises it. ⚠️ RENAMED from the old
+    //                              `mbHaveDesiredHeight` guess.
+    //   +0x24C mbTestAgainstWorldOnly  @0x82252774 selects the SceneQueryInterface collision
+    //                              mask handed to LineTestNearest: 0x1E when clear, 0x02
+    //                              (world only) when set.
+    //   +0x24D mbUseFrustrumResolver  @0x82252778 picks the FrustrumCollisionResolver arm over
+    //                              the plain LineTestNearest arm.
+    //   +0x24E mbResetVehicleCollision  the one-shot ResetTrafficCollision raises.
+    //   +0x24F mbDoVehicleCollision  Construct's ARGUMENT. ⚠️ RENAMED from the old
+    //                              `mbUseVehicleFrustumCollision` guess -- the DWARF's
+    //                              Construct(bool) parameter lands on the LAST bool, and
+    //                              GenerateSceneQueries @0x82252814 forwards it to
+    //                              FrustrumCollisionResolver::GenerateSceneQueries.
     //
     // ⛔ CORRECTED 2026-08-01 -- THE OLD `maReserved214[0x214 .. 0x24A]` SPAN SWALLOWED A
     // NAMED MEMBER. It covered +0x220, where the policy's own BrnDirector::VehicleRef lives
     // (attested seven independent ways, see SetVehicleRef above) and +0x230, where a
     // Utils::SmoothMover sits (`SmoothMover::Update(this + 0x230, ...)` @0x822406D0). With the
     // span in place SetVehicleRef had no member to write at all -- it could only ever have been
-    // a reinterpret_cast into reserved bytes. The VehicleRef is carved out by name; the
-    // SmoothMover and the five named floats between +0x234 and +0x244 stay inside the two
-    // residual spans until that TU lands.
+    // a reinterpret_cast into reserved bytes. The VehicleRef is carved out by name; only the
+    // SmoothMover (+0x230..+0x23B, whose own +0x234/+0x238 seeds are Construct's) is still a
+    // span. The three floats at +0x23C/+0x240/+0x244 are named as of the 2026-08-01 DWARF
+    // carve above -- and the SAME defect applied to +0x240: with the span in place,
+    // ResetRadiusSmoothing() (and therefore SharedCameraContainer::
+    // ForcePrimaryGameplayBehaviourToFinish, whose whole job is that store) had no member to
+    // write either.
     //
     // ⭐ SIZE 0x250, GROWN 2026-07-29 (was 0x24C, which was 4 bytes short -- the old tail
     // simply stopped at the last member this header names). Pinned from
     // BehaviourGameplayExternal, which embeds one of these at +0x50 and whose next member
-    // (mAirShake) the asm puts at +0x2A0: 0x50 + 0x250 == 0x2A0 exactly. Two further console
-    // stores land inside the new tail and nowhere else -- Construct @0x82224A18's *(beh+668)
-    // and *(beh+669) (policy +0x24C/+0x24D) and Prepare @0x82240738's *(beh+670) (policy
-    // +0x24E) -- and that last one is the "+0x29E" the committed
-    // SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish note quotes as an
-    // unidentified behaviour-relative flag. It is a COLLISION-POLICY field, not a
-    // behaviour field. The IceAnim fork's independent slice agrees on 0x250.
-    // (the leading span now starts AFTER the CollisionPolicy base sub-object -- the console
+    // (mAirShake) the asm puts at +0x2A0: 0x50 + 0x250 == 0x2A0 exactly. The DWARF tail
+    // carved in 2026-08-01 (3 floats + 8 bools filling +0x23C..+0x24F) is the third
+    // independent agreement on that size; the IceAnim fork's retired slice was the second.
+    // (the leading span starts AFTER the CollisionPolicy base sub-object -- the console
     //  vptr that used to sit inside maReserved000 is the base's; same convention BehaviourRig.h's
     //  VisibilityCollisionPolicy uses. Console displacements in the comments are unchanged.)
     u8  maReserved000[0x210 - sizeof(CollisionPolicy)];  // .. +0x20F  rig members not modelled here
     f32 mfDesiredHeight;                      // +0x210            desired camera height (stored)
     u8  maReserved214[0x220 - 0x214];         // +0x214 .. +0x21F  rig members not modelled here
     BrnDirector::VehicleRef mVehicleRef;      // +0x220            the vehicle the camera hangs off
-    u8  maReserved230[0x24B - 0x230];         // +0x230 .. +0x24A  SmoothMover @+0x230 + 5 floats
-    u8  mbHaveDesiredHeight;                  // +0x24B            desired-height override active flag
-    u8  maReserved24C[0x24F - 0x24C];         // +0x24C .. +0x24E  two selects + the blend-reset one-shot
-    u8  mbUseVehicleFrustumCollision;         // +0x24F            Construct's argument
+                                              //                   (DWARF h:124 mAttachedTo)
+    u8  maReserved230[0x23C - 0x230];         // +0x230 .. +0x23B  mPitchMover (Utils::SmoothMover)
+    f32 mfDesiredNearClip;                    // +0x23C            DWARF h:128
+    f32 mfMaxRadius;                          // +0x240            DWARF h:129 (ResetRadiusSmoothing)
+    f32 mfTrafficCollisionResolution;         // +0x244            DWARF h:130 (0..1, ramped)
+    u8  mbAutoElevate;                        // +0x248            DWARF h:136 (Construct seeds 1)
+    u8  mbSmoothRadiusChanges;                // +0x249            DWARF h:137
+    u8  mbFailOnContact;                      // +0x24A            DWARF h:138
+    u8  mbUseGroundConstraint;                // +0x24B            DWARF h:139 (SetDesiredHeight raises)
+    u8  mbTestAgainstWorldOnly;               // +0x24C            DWARF h:140
+    u8  mbUseFrustrumResolver;                // +0x24D            DWARF h:141
+    u8  mbResetVehicleCollision;              // +0x24E            DWARF h:142 (the one-shot)
+    u8  mbDoVehicleCollision;                 // +0x24F            DWARF h:143 (Construct's argument)
 };
 
 // ----------------------------------------------------------------------------
 // CollisionPolicyAttachedToVehicle::Construct @0x82224890 -- BODIED 2026-08-01, from the asm.
+// TAIL COMPLETED 2026-08-01 (second pass): the eight bools + three floats the DWARF names are
+// now real members, so the seeds this banner used to list as GATED are reproduced below.
 //
-// ⚠️ ONLY THE MEMBERS THIS HEADER NAMES ARE WRITTEN. The console body also zeroes the
-// FrustrumCollisionResolver sub-object (+0x10/+0x60/+0xB0/+0x100 record heads, a Vector4 at
-// +0x150 and an f32 0.01f at +0x160), the LineTestNearest post-box head (+0x170), the
-// GroundConstraint head (+0x1C0), and seeds five more floats (+0x234 = 0.0f, +0x238 = -89.0f
-// min elevation, +0x23C = the near-clip global flt_82CDA560, +0x240 = FLT_MAX collision
-// radius) plus three gate bytes (+0x248 = 1, +0x249/+0x24A/+0x24C/+0x24D = 0). Every one of
-// those lands inside a reserved span above, so writing them would mean poking bytes by
-// offset -- which is exactly what the x64 rule forbids. They are recorded here and GATED.
-// ⚠️ CONSEQUENCE: a policy constructed through this body has an UNSEEDED collision radius and
-// min elevation. Anything that starts resolving collisions against it before the full policy
-// TU lands will behave as if those tunings were whatever the memory held.
+// ⚠️ STILL GATED (they land inside reserved spans, and poking them by offset is exactly what
+// the x64 rule forbids):
+//   * the FrustrumCollisionResolver sub-object zeroing (+0x10/+0x60/+0xB0/+0x100 record heads,
+//     a Vector4 at +0x150 and an f32 0.01f at +0x160),
+//   * the LineTestNearest post-box head (+0x170) and the GroundConstraint head (+0x1C0),
+//   * mPitchMover's two seeds (+0x234 = 0.0f and +0x238 = -89.0f, the min elevation).
+// ⚠️ CONSEQUENCE (narrowed): the collision RADIUS is now seeded; the MIN ELEVATION still is
+// not, so UpdateMinElevation @0x82240668 will read whatever the memory held until the
+// SmoothMover TU lands.
 // ⚠️ Construct does NOT write +0x00 -- the vptr is installed by the C++ constructor, not here.
-// DELETE-WHEN: the collision-policy rig TU lands and the spans become named members.
+// ⚠️ Construct also does NOT write mfTrafficCollisionResolution (+0x244) or
+// mbResetVehicleCollision (+0x24E) -- faithful: the console leaves both to the behaviour's
+// Prepare, which calls ResetTrafficCollision().
+// DELETE-WHEN: the collision-policy rig TU lands and the two residual spans become members.
 // ----------------------------------------------------------------------------
-inline void CollisionPolicyAttachedToVehicle::Construct(bool lbUseVehicleFrustumCollision)
+inline void CollisionPolicyAttachedToVehicle::Construct(bool lbDoVehicleCollision)
 {
     // 0x822248D0  stb 0, 4(this)  -- the CollisionPolicy base's own failure flag.
     ClearFailed();
@@ -247,13 +322,26 @@ inline void CollisionPolicyAttachedToVehicle::Construct(bool lbUseVehicleFrustum
 
     // 0x822248EC  stfs -1.0f, 0x210(this)
     mfDesiredHeight      = -1.0f;
-    // 0x82224914  stb 0, 0x24B(this)
-    mbHaveDesiredHeight  = 0;
-    // 0x82224924  stb r4, 0x24F(this)  <- THE ARGUMENT
-    mbUseVehicleFrustumCollision = lbUseVehicleFrustumCollision ? 1u : 0u;
 
-    // ⚠️ GATE: the resolver / post-box / ground-constraint zeroing and the tuning seeds
-    //   listed in the banner above.
+    // 0x8222492C..0x8222493C -- the three tail floats, in the console's store order.
+    // ⚠️ +0x23C is loaded from the .data global @0x82CDA560, NOT from an immediate: it is a
+    //   tunable default near clip (the DWARF's FrustrumCollisionResolver carries an
+    //   `extern VecFloat sDefaultDesiredNearClip` / `extern float32_t kfNearClipDistance`
+    //   pair). Its shipped value is 0x3E19999A == 0.15f, read out of the IDB .id1; spelt as
+    //   a literal here because the global has no home yet.
+    //   FLAG: if that global is ever homed, take the value from it instead.
+    mfDesiredNearClip    = 0.15f;                 // 0x8222493C stfs flt_82CDA560, 0x23C
+    mfMaxRadius          = FLT_MAX;               // 0x82224934 stfs flt_8200173C, 0x240
+    //   (+0x238 = -89.0f and +0x234 = 0.0f are mPitchMover's -- see the GATE above.)
+
+    // 0x8222490C..0x82224928 -- the bool block, in the console's (scrambled) store order.
+    mbFailOnContact       = 0;                    // 0x8222490C stb 0, 0x24A
+    mbTestAgainstWorldOnly= 0;                    // 0x82224910 stb 0, 0x24C
+    mbUseGroundConstraint = 0;                    // 0x82224914 stb 0, 0x24B
+    mbUseFrustrumResolver = 0;                    // 0x82224918 stb 0, 0x24D
+    mbSmoothRadiusChanges = 0;                    // 0x8222491C stb 0, 0x249
+    mbDoVehicleCollision  = lbDoVehicleCollision ? 1u : 0u;   // 0x82224924 stb r4, 0x24F  <- THE ARGUMENT
+    mbAutoElevate         = 1;                    // 0x82224928 stb 1, 0x248
 }
 
 // ----------------------------------------------------------------------------
@@ -321,7 +409,21 @@ class VisibilityCollisionPolicy : public CollisionPolicy
 {
 public:
     void Construct();
-    void SetCanFail(bool lbCanFail);
+
+    // ⭐ SetCanFail (DWARF BrnCollisionPolicy.h:534) -- BODIED 2026-08-01. Was
+    // declaration-only. mbCanFail is the master gate on EVERY CollisionPolicy::Fail() call
+    // this policy makes: VisibilityCollisionPolicy::ProcessSceneQueryResults @0x82224530
+    // re-reads it (`lbz 8(this)`) before each of its six failure arms, so clearing it means
+    // "this camera may not fail out for occlusion / collision / off-screen".
+    //
+    // ⛔ THIS IS THE FUNCTION `BehaviourIceAnim::ClearBaseFirstFrameGate` WAS GUESSING AT.
+    // The seven ICE-anim arbitrator states emit `stb 0, 0x28(behaviour)` right after
+    // NewBehaviour<BehaviourIceAnim> (e.g. ArbStateCarSelect::Prepare @0x8226F0C4 and
+    // @0x8226F1A8, ArbStateRaceIntro::Update @0x8226E730). Behaviour +0x28 is
+    // mCollisionPolicy (+0x20) + 0x08 -- i.e. mbCanFail, NOT a base-Behaviour "first frame"
+    // field. See the member comments below.
+    void SetCanFail(bool lbCanFail) { mbCanFail = lbCanFail; }
+
     void SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
                    CgsSceneManager::EntityId lTargetEntityId);
     void SetTestLookingAt(bool lbTestLookingAt);
@@ -356,6 +458,24 @@ public:
     // bytes (`stb 1 / stb 0 / stb 1` at policy +0x1A0/+0x1A1/+0x1A2) and its Update
     // @0x82247108 consults exactly this predicate before raising the camera's see-through
     // request. Exposed as named accessors so no caller pokes the (private) bytes.
+    //
+    // ⚠️⚠️ MIS-ATTRIBUTED MEMBER NAMES (found 2026-08-01, NOT fixed here -- it would rename
+    // public accessors BrnBehaviourIceAnim.cpp:352/353/354/559/689 uses, which this wave does
+    // not own). These three bytes are NOT policy members: they live inside mVisibilityTest.
+    // ProcessSceneQueryResults @0x822246C0 calls VisibilityTest::ProcessSceneQueryResults on
+    // `this + 0xF0` and then reads +0xB0/+0xB1/+0xB2 OFF THAT SAME POINTER (@0x82224734..
+    // @0x8222474C) -- 0xF0 + 0xB0 == 0x1A0. Cross-checked against VisibilityTest's own
+    // committed slice, whose IsOnScreen @0x821F3770 asserts on +0xB0 (mbTestLookingAt) and
+    // returns +0xB2 (mbOnScreen). So:
+    //     mbSeeThroughEnabled    (+0x1A0) is really mVisibilityTest.mbTestLookingAt
+    //     mbSeeThroughSuppressed (+0x1A2) is really mVisibilityTest.mbOnScreen
+    //     mbSeeThroughAlways     (+0x1A1) is the unnamed VisibilityTest byte between them
+    // The PREDICATE below is still byte-correct (the console computes the identical
+    // `+0xB1 || (+0xB0 && !+0xB2)`), and so is the layout -- only the three member NAMES and
+    // the three Set* accessors are wrong, and BehaviourIceAnim::Construct's seeding is
+    // genuinely a VisibilityTest::Construct inline. Behaviour is unaffected.
+    // DELETE-WHEN: VisibilityTest is embedded by name at +0xF0 and the three Set* accessors
+    // are re-pointed at it.
     bool ShouldRaiseSeeThrough() const
     {
         return mbSeeThroughAlways || (mbSeeThroughEnabled && !mbSeeThroughSuppressed);
@@ -369,7 +489,26 @@ private:
     // FLAG: reserved spans = rig members not yet recovered (LineTestNearestPostBox,
     //   VolumeTestDeepestPostBox, GroundConstraint etc.); the named members are the
     //   asm-attested carves from the class-TU bodies + the ICE-anim behaviour.
-    u8 maReservedToVehiclePredictor[0x70 - 0x08];              // X360 [+0x08, +0x70)
+    // ⭐ CARVED 2026-08-01 out of the head of the old maReservedToVehiclePredictor span.
+    // The DWARF (BrnCollisionPolicy.h:436/:437/:438) lists these three bools as the FIRST
+    // members after the CollisionPolicy base, and BehaviourIceAnim::Construct @0x82256100
+    // seeds exactly three consecutive bytes at policy +0x08/+0x09/+0x0A (1 / 1 / 0) --
+    // r11 = this+0x20 there, so @0x8225624C/@0x82256254/@0x82256258. Each is then
+    // independently attested by VisibilityCollisionPolicy::ProcessSceneQueryResults
+    // @0x82224530:
+    //   +0x08 mbCanFail     `lbz 8(this)` guards all six Fail() arms.
+    //   +0x09 mbFirstFrame  `lbz 9(this)` picks the first-frame arms, and the function's LAST
+    //                       store is `stb 0, 9(this)` -- a latch cleared after the first
+    //                       processed frame. (GenerateSceneQueries @0x822402F8 also ORs it
+    //                       into the "do the test this time" dice roll.)
+    //   +0x0A mbTargetSet   ASSERT-ATTESTED BY NAME: both virtuals open with
+    //                       FireAssert("mbTargetSet", BrnCollisionPolicy.cpp, 0x327/0x363).
+    bool mbCanFail;                                            // X360 +0x08 (default true)
+    bool mbFirstFrame;                                         // X360 +0x09 (default true)
+    bool mbTargetSet;                                          // X360 +0x0A (default false)
+    u8 maReservedToVehiclePredictor[0x70 - 0x0B];              // X360 [+0x0B, +0x70)
+                                                               //   mTargetTransform @+0x10,
+                                                               //   mTargetAABB      @+0x50
     Utils::VehicleCollisionPredictor mVehicleCollisionPredictor;   // X360 +0x70 (flag/time @+0x70/+0x74)
     u8 maReserved78[0x80 - 0x78];                              // X360 [+0x78, +0x80)
     GeometryCollisionPredictor mGeometryCollisionPredictor;    // X360 +0x80 (its +0x60/+0x64 pair == policy +0xE0/+0xE4)

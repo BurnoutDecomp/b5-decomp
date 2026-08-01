@@ -2,9 +2,10 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_ROTATE_ABOUT_VEHICLE_H
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                                    // Vector4 (mOrbitDirection)
+#include "BrnCommonTypes.h"                                    // Vector3 (mOrbitDirection)
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT (SetParameters' tripwire)
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"     // CollisionPolicyAttachedToVehicle (embedded @+0x50)
+#include "GameSource/Director/Camera/Utils/BrnCameraSphericalRotationController.h" // Utils::CameraSphericalRotationController (embedded @+0x20)
 #include "GameSource/Director/Utils/BrnVehicleRef.h"           // BrnDirector::VehicleRef (embedded @+0x2A0)
 
 // ============================================================================
@@ -28,9 +29,10 @@
 
 namespace BrnDirector
 {
-// The per-frame vehicle data the re-seat resolve reads (real home:
-// GameSource/Director/Utils/BrnDirectorAllVehicleData.h). Reference-only here.
-class AllVehicleData;
+// The per-frame vehicle data the re-seat resolve reads. Its real home
+// (GameSource/Director/Utils/BrnDirectorAllVehicleData.h) is already pulled in through
+// BrnVehicleRef.h above, so no forward declaration is repeated here -- the one that used to
+// sit here spelled it `class` while the definition spells it `struct` (MSVC C4099).
 
 namespace Camera
 {
@@ -114,13 +116,18 @@ public:
     // NAME so consumers never reach the camera by offset.
     const Camera& GetProducedCamera() const;
 
-    // ADDITIVE GROW (BrnArbStateCarSelect::Update @0x8226F5D0, several arms): re-seat this
-    // orbit behaviour so it starts from the camera another behaviour is currently producing,
-    // resolved against the frame's vehicle data (the X360 call is
-    // `BehaviourRotateAboutVehicle::BecomeSimilarTo(behaviour, &sourceCamera,
-    // info.mpAllVehicleData)` -- the junkyard states keep the look-around-car cam aligned with
-    // the ICE movie so the later interpolation onto the car has no discontinuity).
-    // DECLARATION-ONLY: the body lands with this behaviour's own TU.
+    // ⭐ BecomeSimilarTo @0x8224A350 -- BODIED 2026-08-01 in this behaviour's own .cpp, from
+    // the full 116-line asm. Re-seat this orbit behaviour so it starts from the camera another
+    // behaviour is currently producing (the junkyard states keep the look-around-car cam
+    // aligned with the ICE movie so the later interpolation onto the car has no
+    // discontinuity). Called from BrnArbStateCarSelect::Update @0x8226F5D0 in several arms.
+    //
+    // ⚠️ ARITY / ORDER RECOVERED FROM THE ASM, and the tree's four call sites are CORRECT:
+    //   r3 = this ; r4 -> the source Camera (only read: `lvx128 v0, r30, 0x30` == mTransform
+    //   .wAxis, the camera's world position) ; r5 -> the AllVehicleData, forwarded straight
+    //   into `VehicleRef::Get(this + 0x2A0, r5)`. Three arguments total, exactly the two the
+    //   PC declaration carries. Hex-Rays' own prototype (`int(int,int,int)`) drops nothing
+    //   here, but it types every one of them as `int`.
     void BecomeSimilarTo(const Camera& lrSourceCamera, const AllVehicleData& lrAllVehicleData);
 
 private:
@@ -138,25 +145,48 @@ private:
     //
     // Offsets, all asm-attested:
     //   +0x000  vtable / Behaviour base head
-    //   +0x020  a 0x30-byte sub-object Construct @0x8222BF68 and BecomeSimilarTo @0x8224A4E4
-    //           reset with the SAME ten stores (Vector4 + 4 f32 + 3 u8 + 2 f32). Utils::Looker
-    //           is the strong candidate -- Parameters embeds a Utils::Looker::Parameters --
-    //           but that is INFERRED, so it stays a span.
+    //   +0x020  Utils::CameraSphericalRotationController mRotationController (0x30)
     //   +0x050  CollisionPolicyAttachedToVehicle mCollisionPolicy (0x250; Construct @0x8222BEDC)
     //   +0x2A0  BrnDirector::VehicleRef mVehicleRef (Construct seeds it to the player car
     //           @0x8222BF5C..64; BecomeSimilarTo resolves through it @0x8224A370)
     //   +0x2B0..+0x35F  rig members not modelled here
-    //   +0x360  Vector4 mOrbitDirection (BecomeSimilarTo's only output; Construct seeds it
+    //   +0x360  Vector3 mOrbitDirection (BecomeSimilarTo's only output; Construct seeds it
     //           from XMMatrixRotationY(-pi/2 * 0.25f)'s "at" row @0x8222C04C)
     //   +0x374  const Parameters* mpParameters (SetParameters' only store)
+    //
+    // ⭐⭐ IDENTIFIED 2026-08-01 -- the "+0x020, 0x30-byte sub-object of unknown type" IS
+    //   `Utils::CameraSphericalRotationController mRotationController`, i.e. the stick-driven
+    //   yaw/pitch free-look controller. The earlier Utils::Looker guess is REFUTED (Looker is
+    //   0x20 bytes and its bool latches sit at +0x1C..+0x1F, which the store set does not fit).
+    //   THREE independent attestations:
+    //     1. The ten stores Construct @0x8222BF68 and BecomeSimilarTo @0x8224A4E4 both make map
+    //        one-for-one onto the controller's members, INCLUDING the gap:
+    //           stvx128 0,+0x20                -> mStickVector            (+0x00, Vector2 16B)
+    //           stfs 0, +0x30/+0x34/+0x38/+0x3C-> mfYawDegs / mfYawVelocity /
+    //                                             mfYawReturnRate / mfUnRotatedTime (+0x10..+0x1C)
+    //           stb  0, +0x40/+0x41/+0x42      -> mbIsLookback / mbWasLookbackLastFrame /
+    //                                             mbIsRotated              (+0x20..+0x22)
+    //           (+0x44 NOT written)            -> mPitchMover.mfCenteringRate (+0x24) -- the one
+    //                                             SmoothMover field a reset legitimately keeps
+    //           stfs 0, +0x48/+0x4C            -> mPitchMover.mfCurrentSpeed / .mfCurrentValue
+    //     2. The SIBLING behaviour BehaviourGameplayExternal carries the same member at the
+    //        SAME offset under the DWARF name `mRotationController`
+    //        (BrnBehaviourGameplayExternal.h:217, DWARF :116 +0x020) and its Construct
+    //        @0x82224A18 emits the identical store set (already transcribed in that .cpp).
+    //     3. sizeof(CameraSphericalRotationController) == 0x30 == 0x50 - 0x20 exactly.
     void* mpVTable;                                        // +0x000 behaviour vtable (opaque base head)
     u8    maReserved008[0x20 - sizeof(void*)];             // +0x008 .. +0x01F
-    u8    maReserved020[0x50 - 0x20];                      // +0x020 .. +0x04F  the reset sub-object
+    Utils::CameraSphericalRotationController mRotationController;  // +0x020 (0x30)
     CollisionPolicyAttachedToVehicle mCollisionPolicy;     // +0x050 (0x250 on the console, so
                                                            //  mVehicleRef follows immediately)
     BrnDirector::VehicleRef mVehicleRef;                   // +0x2A0
     u8    maReserved2B0[0x360 - 0x2B0];                    // +0x2B0 .. +0x35F
-    Vector4 mOrbitDirection;                               // +0x360
+    // ⚠️ RETYPED Vector4 -> Vector3 (2026-08-01): same 16 bytes, but every producer and the one
+    // consumer treat it as a Vector3 -- Construct seeds it from a Matrix44Affine::zAxis (a
+    // Vector3), BecomeSimilarTo builds it with the rw Vector3(x,y,z) codegen, and Update
+    // @0x822495E0 hands it to Utils::CreateLookAt as a Vector3. The w lane is Vector3's
+    // don't-care 4th lane in all three.
+    Vector3 mOrbitDirection;                               // +0x360
     u8    maReserved370[0x374 - 0x370];                    // +0x370 .. +0x373
     const Parameters* mpParameters;                        // +0x374
 };

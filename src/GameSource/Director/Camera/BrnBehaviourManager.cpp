@@ -407,6 +407,146 @@ namespace Camera
         }
     }
 
+    // ------------------------------------------------------------------------
+    // BehaviourManager::LockBehaviourForInterpolation   @0x82233C50
+    // BehaviourManager::UnlockBehaviourForInterpolation @0x82234118
+    //
+    // The INTERPOLATION-side twin of the handle pair above: a behaviour that is interpolating
+    // from or to another behaviour's camera holds a reference on it for the duration, so the
+    // pool cannot recycle the source out from under the interpolation. `lFrom` is the behaviour
+    // taking the lock (the interpolator); `lTo` is the behaviour being locked -- the console's
+    // own assert text (" is trying to lock ", locker first) and the inlined
+    // BehaviourControllerLockInterface expansion at CameraReference::Prepare @0x82252484 both
+    // pin that order, and every counter/flag/log below is indexed by lTo.
+    //
+    // ⭐ Unlock's tail is the second of the two places a behaviour becomes garbage (the first
+    // is UnSetBehaviourUsedByHandle above): dropping the LAST interpolation lock on a behaviour
+    // that no handle is holding either is what queues it for release. The two conditions are
+    // exactly mirrored -- handle-side checks the ref count, ref-side checks the handle flag.
+    //
+    // Both bodies were defined in the console's BrnBehaviourManager.h (their asserts cite
+    // aGamesourceDire_25, which PrepareBehaviours @0x8221EE08 identifies as the .h: it uses
+    // that string for its h:825 assert and a DIFFERENT one, aGamesourceDire_122, for its
+    // .cpp:162 assert). They are bodied HERE with the rest of the non-template manager members
+    // -- the same placement the sibling h-defined SetBehaviourUsedByHandle (h:928) already has;
+    // the h-line numbers are carried in the assert comments as usual.
+    //
+    // The rich messages the console streams through gpcMessageBuffer (each one splices two
+    // BehaviourHelper::GetDebugFullName strings around a literal) are reduced to plain
+    // CGS_ASSERT strings per the project's asserts rule -- the recovered literal fragments are
+    // kept verbatim and the two dynamic name slots are marked. All are non-gating on the
+    // console (execution falls through EndAssert), so they are modelled as CGS_ASSERT rather
+    // than early-outs, matching the asm's control flow.
+    // ------------------------------------------------------------------------
+    void BehaviourManager::LockBehaviourForInterpolation(BehaviourHelperIndex lFrom,
+                                                         BehaviourHelperIndex lTo)
+    {
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lFrom),
+                   "mBehaviourHelperPool.IsObjectAllocated(lFromBehaviourHelperIndex)");   // h:961
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lTo),
+                   "mBehaviourHelperPool.IsObjectAllocated(lToBehaviourHelperIndex)");     // h:962
+
+        const u32 luTo = static_cast<u32>(static_cast<s32>(lTo));
+
+        // Already in lTo's audit log -> lFrom is double-locking it.
+        if (mDebugBehaviourRefCountIndexLog[luTo].Contains(lFrom))
+        {
+            RefCountLogDump(lTo);
+            CGS_ASSERT(false,
+                       "<locker> is trying to lock <locked> when it has already locked it"); // h:979
+        }
+
+        // The per-behaviour lock budget NewBehaviour<> was given (mDebugBehaviourRefCountLimits).
+        if (mBehaviourRefCounts[luTo] >= mDebugBehaviourRefCountLimits[luTo])
+        {
+            RefCountLogDump(lTo);
+            CGS_ASSERT(false,
+                       "<locker> is trying to lock <locked> and the set limit (N) has been reached"); // h:990
+        }
+
+        // 27 == the console's own `cmpwi r11, 0x1B`: one audit-log slot per OTHER helper, so no
+        // behaviour can ever be locked more times than there are behaviours to lock it. This arm
+        // does NOT dump the log (the console jumps straight to BeginAssert).
+        CGS_ASSERT(mBehaviourRefCounts[luTo] < 27,
+                   "<locker> is trying to lock <locked> and the logical limit for locks has been reached"); // h:1000
+
+        mBehaviourRefCounts[luTo] = mBehaviourRefCounts[luTo] + 1;
+
+        // Locked -> it is no longer garbage, whatever the release queue thought.
+        mBehaviourNeedsReleasingFlags.UnSetBit(luTo);
+
+        mDebugBehaviourRefCountIndexLog[luTo].Append(lFrom);
+    }
+
+    void BehaviourManager::UnlockBehaviourForInterpolation(BehaviourHelperIndex lFrom,
+                                                           BehaviourHelperIndex lTo)
+    {
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lFrom),
+                   "mBehaviourHelperPool.IsObjectAllocated(lFromBehaviourHelperIndex)");   // h:1029
+        CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lTo),
+                   "mBehaviourHelperPool.IsObjectAllocated(lToBehaviourHelperIndex)");     // h:1030
+
+        const u32 luTo = static_cast<u32>(static_cast<s32>(lTo));
+
+        if (!mDebugBehaviourRefCountIndexLog[luTo].Contains(lFrom))
+        {
+            RefCountLogDump(lTo);
+            CGS_ASSERT(false,
+                       "<locker> is trying to unlock <locked> and it hasn't locked it");   // h:1047
+        }
+
+        if (mDebugBehaviourRefCountIndexLog[luTo].CountInstancesOf(lFrom) > 1)
+        {
+            RefCountLogDump(lTo);
+            CGS_ASSERT(false,
+                       "<locker> is trying to unlock <locked> and somehow has it locked more than once"); // h:1057
+        }
+
+        // This arm does NOT dump the log either.
+        CGS_ASSERT(mBehaviourRefCounts[luTo] > 0,
+                   "<locker> is trying to unlock <locked> when nothing has locked it");    // h:1067
+
+        mBehaviourRefCounts[luTo] = mBehaviourRefCounts[luTo] - 1;
+
+        // ⭐ Last interpolation lock gone AND no handle holding it -> queue it for release.
+        if (mBehaviourRefCounts[luTo] == 0 && !mBehaviourUsedByHandleFlags.IsBitSet(luTo))
+        {
+            mBehaviourNeedsReleasingFlags.SetBit(luTo);
+        }
+
+        mDebugBehaviourRefCountIndexLog[luTo].EraseInstancesOf(lFrom);
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::RefCountLogDump @0x822204E0 -- TTY-dump the chronological list of the
+    // behaviours currently holding an interpolation lock on lrHelper. Reached ONLY from the
+    // failing arms of the two functions above (never on a passing path).
+    //
+    // X360 shape (@0x822204E0):
+    //     mBehaviourHelperPool[lrHelper].GetDebugFullName(lacName);
+    //     if (CgsDev::Message::gxMessageFilterFlags & 1)
+    //         *CgsDev::Log::gpDebugPrint << "\nBehaviours referencing " << lacName
+    //                                    << ": (chronological order)\n";
+    //     for (i = 0; i < mDebugBehaviourRefCountIndexLog[lrHelper].GetCount(); ++i)
+    //     {
+    //         mBehaviourHelperPool[ log[i] ].GetDebugFullName(lacName);
+    //         if (gxMessageFilterFlags & 1) *gpDebugPrint << lacName << "\n";
+    //     }
+    //     if (gxMessageFilterFlags & 1) *gpDebugPrint << "\n";
+    //
+    // FLAG PC-platform leaf: debug-TTY dump no-op on the PC link -- exactly the treatment its
+    // sibling BehaviourManager::DebugDumpToTTY already has (DirectorLinkStubs.cpp:355). The real
+    // body needs BehaviourHelper::GetDebugFullName (declaration-only behind the un-homed helper
+    // interior) and CgsDev::Log::gpDebugPrint (no reconstructed home).
+    // DELETE-WHEN: BehaviourHelper::GetDebugFullName lands.
+    // ------------------------------------------------------------------------
+    // FLAG PC-platform leaf: debug-TTY dump no-op on the PC link (camera link-closure wave
+    // 2026-08-01) -- see the banner above; the real body walks GetDebugFullName + gpDebugPrint.
+    void BehaviourManager::RefCountLogDump(const BehaviourHelperIndex& lrHelper) const
+    {
+        (void)lrHelper;
+    }
+
 
     // ========================================================================
     // ⭐ THE BEHAVIOUR-HELPER SPINE -- the four functions that turn a pooled Camera::Behaviour

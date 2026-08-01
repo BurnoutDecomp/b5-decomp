@@ -36,18 +36,26 @@
 // f32 / u8, per the type vocabulary in types.hpp.)
 // ============================================================================
 
-// FLAG: BehaviourHandle<T> and BrnDirector::Camera::BehaviourGameplayExternal are
-// owned by other (not-yet-reconstructed) TUs. mpGamePlayCam is a POINTER, so an
-// incomplete type is sufficient here -- forward-declared (declaration-only) rather
-// than pulling the BrnDirector::Camera behaviour header. These declarations
-// self-correct when those TUs are reconstructed; the using-TUs #include this home.
-template <typename T> class BehaviourHandle;
-
+// mpGamePlayCam is a POINTER, so an incomplete type is sufficient here --
+// forward-declared rather than pulling the whole BrnDirector::Camera behaviour header
+// into every ICE TU. The TU that DEREFERENCES it (ICECameraSpaceHandler.cpp, for
+// GetTransformToWorld's eICE_GAMEPLAY_SPACE arm) includes BrnBehaviourManager.h itself.
+//
+// ⚠️ FIXED 2026-08-01: this used to forward-declare a GLOBAL `template <typename T>
+// class BehaviourHandle;`, which is a DIFFERENT type from the real
+// BrnDirector::Camera::BehaviourHandle<> that BrnBehaviourManager.h:128/422 defines and
+// that every producer of this pointer actually holds. Nothing had noticed because
+// CameraSpaceHandler::Construct still has no caller in the tree, so the global template
+// was never required to be complete -- it named a type that is defined NOWHERE. Declared
+// in its real namespace now, so the pointer means what the DWARF says it means
+// (ICECameraSpaceHandler.hpp:118 `const BehaviourHandle<BrnDirector::Camera::
+// BehaviourGameplayExternal>* mpGamePlayCam`).
 namespace BrnDirector
 {
 namespace Camera
 {
     class BehaviourGameplayExternal;
+    template <typename TBehaviour> class BehaviourHandle;
 }
 }
 
@@ -90,7 +98,7 @@ private:
     // @0x200  Back-pointer to the gameplay camera behaviour; copied verbatim by
     // the copy ctor / operator= (the trailing lwz/stw word). Forward-declared
     // template handle -> pointer-only here.
-    const BehaviourHandle<BrnDirector::Camera::BehaviourGameplayExternal>* mpGamePlayCam;
+    const BrnDirector::Camera::BehaviourHandle<BrnDirector::Camera::BehaviourGameplayExternal>* mpGamePlayCam;
 
 public:
     // Default constructor: the eight matrices + the back-pointer are left to their
@@ -124,7 +132,7 @@ public:
                    Matrix44Affine lHeadingToWorld,
                    Matrix44Affine lLooseHeadingToWorld,
                    Matrix44Affine lHeading2ToWorld,
-                   const BehaviourHandle<BrnDirector::Camera::BehaviourGameplayExternal>* lpGamePlayCam);
+                   const BrnDirector::Camera::BehaviourHandle<BrnDirector::Camera::BehaviourGameplayExternal>* lpGamePlayCam);
 
     Vector3 TransformToWorld(Vector3 lvPoint, eICESpace leSpace) const;
     Vector3 TransformToWorld(Vector3 lvPoint, u8 lu8A, u8 lu8B, u8 lu8C, u8 lu8D, f32 lfBlend) const;

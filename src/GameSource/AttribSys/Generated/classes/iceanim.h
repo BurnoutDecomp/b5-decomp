@@ -28,9 +28,11 @@ namespace Gen
         // against ClassKey().
         s64 GetClassKey() const { return *reinterpret_cast<const s64*>(this); }
 
-        // ADDITIVE GROW (ShotSelector::GetCrashShot @0x822398EC): construct over a
-        // ShotList RefSpec element (the real X360 ctor symbol takes the RefSpec + the
-        // owner). Declaration-only (bodied with the generated AttribSys layer).
+        // ⭐ THE REAL X360 CONSTRUCTOR: `Attrib::Gen::iceanim::iceanim` @0x82206908 is the
+        // ONE iceanim ctor symbol in the image, and it takes a RefSpec, not a Collection*.
+        // Construct over a ShotList RefSpec element (ShotSelector::GetCrashShot @0x822398EC,
+        // BehaviourIceAnim::SetParameters @0x8220F5C0). BODIED 2026-08-01 in iceanim.cpp --
+        // it was declaration-only, which is what kept BehaviourIceAnim's decode wrong.
         iceanim(const Attrib::RefSpec& lrRefSpec, void* lpOwner);
 
         // ADDITIVE GROW (ShotSelector::GetCrashShot @0x822398F0..F8): the generated
@@ -53,15 +55,16 @@ namespace Gen
         // read through a live instance built from the shot's RefSpec, exactly like
         // SuitableFor()/ShotProperties() above.
         //
-        // ⚠️ FLAG -- LATENT CALL-SITE MISMATCH, not fixed here. BrnBehaviourIceAnim.h:368
-        // does `typedef Attrib::Gen::iceanim ShotReference`, and SetParameters is handed a
-        // ShotReference* that is really the raw 24-byte Attrib::RefSpec element. The X360
-        // wraps that RefSpec in a TEMPORARY iceanim and reads the temporary's layout; the
-        // committed C++ calls lpParameters->GetAnimGuid() directly on the RefSpec, so it
-        // will read RefSpec+4 as if it were mpAttributeData. Same for GetClassKey(), which
-        // reads the RefSpec's leading qword and happens to be right for that reason. That
-        // TU is unmounted (the ICE frontier), so this is latent; whoever mounts
-        // BrnBehaviourIceAnim.cpp must construct the temporary iceanim the console does.
+        // ✅ RESOLVED 2026-08-01 (the mount wave). The FLAG that used to sit here recorded a
+        // LATENT CALL-SITE MISMATCH: BrnBehaviourIceAnim.h typedef'd `ShotReference` to
+        // Attrib::Gen::iceanim, while SetParameters is in fact handed the raw 24-byte
+        // Attrib::RefSpec ShotList element, so `lpParameters->GetAnimGuid()` read RefSpec+4
+        // (mCollectionKey's high word) as if it were mpAttributeData and then dereferenced
+        // it -- a garbage take guid, or a wild read. The behaviour's typedef now names
+        // Camera::ShotReference (== const Attrib::RefSpec, DWARF Camera.h:43) and its
+        // SetParameters builds the temporary iceanim over the RefSpec exactly as
+        // @0x8220F5C0 does, so this accessor is now only ever called on a REAL instance
+        // whose mpAttributeData is the resolved layout block.
         s32 GetAnimGuid() const;
     };
 

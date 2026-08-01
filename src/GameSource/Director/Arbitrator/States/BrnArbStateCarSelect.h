@@ -231,15 +231,24 @@ namespace BrnDirector
         //   +0x288 (648) junkyard ShotList[3]   +0x298 (664) junkyard ShotList[2]
         //   +0x28C (652) junkyard ShotList[4]   +0x29C (668) mCarSelectIdle  ShotList[0]
         //   +0x290 (656) mCarSelectOutro ShotList[0]
-        // (Camera::BehaviourIceAnim::ShotReference IS Attrib::Gen::iceanim -- named through
-        // the generated class here so the header needs no behaviour include.)
-        Attrib::Gen::iceanim* mpShotIntroNoNewCars;  // +0x284 (644)
-        Attrib::Gen::iceanim* mpIntroNewCarsShot;    // +0x288 (648)
-        Attrib::Gen::iceanim* mpOutroShot;           // +0x28C (652)
-        Attrib::Gen::iceanim* mpWaitForAudioShot;    // +0x290 (656)
-        Attrib::Gen::iceanim* mpLeftToRight;         // +0x294 (660)
-        Attrib::Gen::iceanim* mpRightToLeft;         // +0x298 (664)
-        Attrib::Gen::iceanim* mpIdle;                // +0x29C (668)
+        // ⭐ RETYPED 2026-08-01 from `Attrib::Gen::iceanim*`, and the DWARF settles it: this
+        // very header's DecFIGS dump declares all seven as `Camera::ShotReference *`, i.e.
+        // BrnDirector::Camera::Camera::ShotReference == `const Attrib::RefSpec` (DWARF
+        // Camera.h:43). They hold ShotList ELEMENTS -- raw 24-byte Attrib::RefSpecs handed
+        // back by shotgroup::GetShotListElement -- not constructed attribute instances, which
+        // is why BehaviourIceAnim::SetParameters has to build a temporary iceanim over them
+        // (X360 @0x8220F5C0) rather than read the guid off them directly. The old
+        // `Attrib::Gen::iceanim*` spelling was the same mistake as the behaviour's own
+        // ShotReference typedef, now corrected there too.
+        // (Camera.h arrives through BrnBehaviourManager.h above, so this still needs no
+        // behaviour include.)
+        Camera::Camera::ShotReference* mpShotIntroNoNewCars;  // +0x284 (644)
+        Camera::Camera::ShotReference* mpIntroNewCarsShot;    // +0x288 (648)
+        Camera::Camera::ShotReference* mpOutroShot;           // +0x28C (652)
+        Camera::Camera::ShotReference* mpWaitForAudioShot;    // +0x290 (656)
+        Camera::Camera::ShotReference* mpLeftToRight;         // +0x294 (660)
+        Camera::Camera::ShotReference* mpRightToLeft;         // +0x298 (664)
+        Camera::Camera::ShotReference* mpIdle;                // +0x29C (668)
 
         // ⚠️ FLAG (opaque, un-includable embedded aggregate): the DWARF member here is
         //   `Camera::Utils::CameraImpactEffect mImpactEffect` (h:182) -- a 20-byte

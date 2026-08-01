@@ -121,4 +121,44 @@ namespace BrnDirector
         return lbUseExternal ? mGameplayExternal.GetProducedCamera()
                              : mGameplayBumper.GetProducedCamera();
     }
+
+    // ------------------------------------------------------------------------
+    // SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish
+    //
+    // NO STANDALONE X360 SYMBOL EXISTS and the DWARF's SharedCameraContainer
+    // (BrnDirectorArbitratorSharedCameraContainer.h:40, its full method list) does not declare
+    // it either -- the compiler inlined it. Recovered from two identical inlined sites in
+    // ArbStateRaceIntro::Update @0x8226E5B0 (case 1 @0x8226E630..0x8226E654 and case 3
+    // @0x8226E7E4..0x8226E804), which emit, per site:
+    //     r11 = *(SharedInfo + 0)                 ; -> the SharedCameraContainer
+    //     r3  = BehaviourHandle::GetBehaviour(r11 + 4)   ; -> mGameplayExternal's behaviour
+    //     stfs flt_8200173C, 0x290(r3)            ; 0x7F7FFFFF == FLT_MAX
+    //     stb  1, 0xB5D(r3)
+    //     stb  1, 0x29E(r3)
+    //
+    // ⭐ WHAT THE THREE STORES ACTUALLY ARE (this is NOT what the name says -- see the
+    //    correction on the declaration in BrnSharedCameraContainer.h):
+    //      +0xB5D  BehaviourGameplayExternal::mbSnapToCar          (DWARF h:155)
+    //      +0x290  mCollisionPolicy(+0x50) + 0x240 == mfMaxRadius             -> ResetRadiusSmoothing()
+    //      +0x29E  mCollisionPolicy(+0x50) + 0x24E == mbResetVehicleCollision -> ResetTrafficCollision()
+    //    i.e. it is a chase-camera RE-ARM: drop the eased-in state so the shared gameplay
+    //    camera snaps to the car and re-derives its collision radius / traffic-collision ramp
+    //    from scratch when the intro or transition camera hands control back. Nothing here
+    //    touches a "remaining time" or a "finished" flag -- BehaviourGameplayExternal has
+    //    neither. The proof that this triple is a RESET and not a teardown: it is
+    //    byte-for-byte the tail of BehaviourGameplayExternal::Prepare @0x82240738
+    //    (@0x82240810/@0x82240814/@0x82240818), only in a different store order.
+    //
+    // The console resolves ONLY the external handle (container +0x04) -- the bumper cam is
+    // untouched, which is why the operation is named "primary". Reached BY NAME here; the
+    // console displacements are provenance only.
+    // ------------------------------------------------------------------------
+    void SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish()
+    {
+        Camera::BehaviourGameplayExternal* lpExternal = mGameplayExternal.GetBehaviour();
+
+        lpExternal->GetVehicleCollisionPolicy().ResetRadiusSmoothing();    // stfs FLT_MAX, +0x290
+        lpExternal->SnapToCar(true);                                       // stb 1, +0xB5D
+        lpExternal->GetVehicleCollisionPolicy().ResetTrafficCollision();   // stb 1, +0x29E
+    }
 }

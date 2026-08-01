@@ -60,9 +60,26 @@ namespace BrnDirector
         void Construct();
 
         // Public draw entry points. The X360 build inlined these one-line forwarders into their
-        // callers (no standalone addresses), so they are declaration-only here -- ActualPrint is
-        // the out-of-line worker. DWARF-attested shapes (BrnDirectorModuleDebugPrinter.h).
-        void Print(const char* lpcMessage);
+        // callers (no standalone addresses), so ActualPrint is the out-of-line worker and each
+        // forwarder shows up only as its own colour argument at the call site. DWARF-attested
+        // shapes (BrnDirectorModuleDebugPrinter.h).
+        //
+        // BODIED as the inline forwarder the console emits (2026-08-01). Recovered from the
+        // COLOUR REGISTER at all twelve X360 call sites of ActualPrint @0x821F71D8: the ones that
+        // spell the default-colour Print load r5 from the printer's OWN +0x10, i.e.
+        // mDebugPrinterInfo.muColour -- `mr r3, printer; lwz r5, 0x10(r3); bl ActualPrint`. Eight
+        // sites do exactly that: Tweaker::Render @0x8220BE88 (x4), ValidityAccount::Print
+        // @0x82220E68, ArbStateCrashing::{SelectNormalCrashCamera @0x82254FB0 (x4, mixed with
+        // literals), Update @0x8226BFB0}, ArbStateTestbed::Update @0x8226B638.
+        //
+        // ⓘ FOR WHOEVER NEEDS PrintInactive: the same survey shows THREE sites loading r5 from
+        // +0x18 == mDebugPrinterInfo.muInactiveColour (MomentController::UpdateAllMoments
+        // @0x82239DE8, BehaviourManager::UpdateAllBehaviours @0x82251960, MainDirector::Update
+        // @0x82274070) -- that is PrintInactive, and its body is the same forwarder over
+        // muInactiveColour. Left declaration-only because nothing in the tree calls it yet and an
+        // unused body cannot be link-verified. NO call site in the export set loads +0x14, so
+        // PrintActive has no attestation at all -- do not guess it by symmetry.
+        void Print(const char* lpcMessage) { ActualPrint(lpcMessage, mDebugPrinterInfo.muColour); }
 
         // BODIED as the inline forwarder the console actually emits (2026-08-01). Every X360 call
         // site of the explicit-colour Print -- BehaviourIceAnim::Update @0x82247108's two

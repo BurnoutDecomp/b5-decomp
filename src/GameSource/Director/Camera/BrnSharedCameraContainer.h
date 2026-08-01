@@ -68,14 +68,27 @@ namespace BrnDirector
         // TU).
         const Camera::Camera& GetSelectedGameplayCamera() const;
 
-        // Force the EXTERNAL (primary) gameplay-camera behaviour to finish immediately so an
-        // intro / transition camera can take over. The X360 (ArbStateRaceIntro::Update cases 1
-        // and 3) resolves the external handle (this+0x04) to its behaviour via the manager,
-        // then sets its remaining-time to FLT_MAX and raises its two "finished" flags
-        // (behaviour-relative byte stores at +0x29E and +0xB5D). Those camera-behaviour
-        // offsets belong to the gameplay-camera-behaviour TU, so this is exposed as a single
-        // named operation here rather than poked by offset. DECLARATION-ONLY (body lands with
-        // the SharedCameraContainer / gameplay-camera-behaviour TU).
+        // Re-arm the EXTERNAL (primary) gameplay-camera behaviour so it SNAPS back to the car
+        // when an intro / transition camera hands control over, instead of easing in from
+        // wherever it was left. BODIED 2026-08-01 in
+        // GameSource/Director/Arbitrator/BrnDirectorArbitratorSharedCameraContainer.cpp
+        // (the same TU as Prepare); the X360 inlines it, and the DWARF's own method list for
+        // this class does not carry it, so the NAME is ours.
+        //
+        // ⚠️⚠️ THE NAME IS WRONG AND KEPT ONLY BECAUSE CALL SITES USE IT. Nothing here
+        // "finishes" anything. Recovered from ArbStateRaceIntro::Update @0x8226E5B0 cases 1
+        // and 3, the three stores are:
+        //     behaviour +0x290 -> mCollisionPolicy.mfMaxRadius = FLT_MAX
+        //                         == CollisionPolicyAttachedToVehicle::ResetRadiusSmoothing()
+        //     behaviour +0xB5D -> mbSnapToCar = true   (DWARF BehaviourGameplayExternal.h:155)
+        //     behaviour +0x29E -> mCollisionPolicy.mbResetVehicleCollision = true
+        //                         == CollisionPolicyAttachedToVehicle::ResetTrafficCollision()
+        // -- byte-for-byte the tail of BehaviourGameplayExternal::Prepare @0x82240738. The old
+        // note here read them as "remaining-time = FLT_MAX" + "two finished flags"; that was a
+        // guess, and BehaviourGameplayExternal has neither a remaining-time nor a finished
+        // flag. RENAME-WHEN: the call sites (BrnArbStateCarSelect.cpp,
+        // BrnArbStateOnlineRaceIntro.cpp) can be touched -- suggested
+        // `SnapPrimaryGameplayBehaviourToCar()`.
         void ForcePrimaryGameplayBehaviourToFinish();
     };
 

@@ -70,21 +70,13 @@ void ICEWrapper::EditorOn(ICE::ICETakeData* lpTakeData)
 }
 
 // ---------------------------------------------------------------------------
-// GetAuthor
+// GetAuthor moved to BrnDirectorICEWrapper.h as a header inline.
 //
-// The embedded editor through its ICEAuthor base identity: ICEController IS-A
-// ICEAuthor sharing the same `this` (the ICEAuthor.hpp "ICEController overlap"
-// FLAG). Expressed as a cast HERE ONLY until the pending
-// `ICEController : public ICEAuthor` derive reconciliation retires it -- then this
-// becomes a plain base-reference return. FLAG: while the two types keep independent
-// synthetic layouts, members past the shared head may not coincide on the 64-bit
-// host; the dev-tools author calls ride on that derive fix landing.
-// ---------------------------------------------------------------------------
-ICE::ICEAuthor& ICEWrapper::GetAuthor()
-{
-    return *reinterpret_cast<ICE::ICEAuthor*>(&mICEManager.GetEditor());
-}
-
+// It has NO standalone X360 symbol, and its caller GetKeyAnimFromGuid @0x821F69A8
+// emits `lwz r11,0x230(r31); addi r3,r11,0x2750` -- zero instructions of its own,
+// so the console inlines the accessor away entirely. Keeping an out-of-line body
+// here cost the camera family an unresolved external for no fidelity gain, and
+// leaving both spellings would be C2084.
 // ---------------------------------------------------------------------------
 // EditorOff
 //

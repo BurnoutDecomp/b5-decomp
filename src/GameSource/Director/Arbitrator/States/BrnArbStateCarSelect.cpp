@@ -222,11 +222,13 @@ namespace BrnDirector
         // (Attrib::Instance::GetAttributePointer(group, 0x15246B49, index), falling back to
         // Attrib::DefaultDataArea(0x18) when the element is absent -- the generated shotgroup
         // accessor already carries exactly that fallback).
+        // (ShotReference is `const Attrib::RefSpec` since 2026-08-01, so the element no
+        // longer has to be laundered through a const_cast to be handed back.)
         Camera::BehaviourIceAnim::ShotReference* GetShot(const Attrib::Gen::shotgroup& lrGroup,
                                                         u32 luIndex)
         {
             return static_cast<Camera::BehaviourIceAnim::ShotReference*>(
-                const_cast<void*>(lrGroup.GetShotListElement(luIndex)));
+                lrGroup.GetShotListElement(luIndex));
         }
     }
 

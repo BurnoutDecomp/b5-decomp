@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"             // CgsDev::DebugUI::Metrics
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"        // CgsDev::DebugRender
 #include "GameSource/Director/MomentController/BrnMoment.h"                             // BrnDirector::Moment (PrintName virtual GetName dispatch)
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                                 // CgsCore::SnPrintf (DebugLog::ActualAppend)
 
 // ============================================================================
 // GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.cpp
@@ -78,6 +79,44 @@ namespace BrnDirector
     void DebugPrinter::PrintName(const Moment& lrMoment, CgsDev::RGBA luColour)
     {
         ActualPrint(lrMoment.GetName(), luColour);
+    }
+
+    // X360 0x8221BB78. Take a pool slot for one new log line -- recycling the OLDEST live line
+    // when the pool is full -- copy the text in, stamp it with the log's on-screen lifetime and
+    // colour, and push its slot index onto the live-order array.
+    //
+    // The recycle path is the whole point of the body: AllocateObject returns -1 on a full pool,
+    // and the console then frees the slot named by mStringIndices[0] (the oldest entry, since
+    // Append pushes at the back), erases that index, and retries. The second failure is a hard
+    // assert -- the console's own, with its file/line
+    // (GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.cpp:221, which is what
+    // pins this body to THIS TU) -- and, note, it does NOT return: it falls through and writes
+    // through the -1 index, so a dev build that clicks past the assert is already broken. That is
+    // reproduced as written; adding a guard here would be a silent behaviour change.
+    //
+    // The text copy is CgsCore::SnPrintf(dst, 64, "%s", src) -- the format-through-"%s" idiom, not
+    // a StringnCopy -- followed by an explicit `macString[63] = 0` (the console's `stb r10, 0x47(p)`;
+    // macString sits at +0x08 of the 72-byte LogString, so 0x47 is its last byte).
+    void DebugLog::ActualAppend(const char* lpcString, CgsDev::RGBA lRGBA)
+    {
+        s32 liNewIndex = mStringPool.AllocateObject();
+        if (liNewIndex == -1)
+        {
+            // Pool full: recycle the oldest live line (front of the live-order array).
+            mStringPool.FreeObject(mStringIndices.GetItem(0));
+            mStringIndices.Erase(0);
+
+            liNewIndex = mStringPool.AllocateObject();
+            CGS_ASSERT(liNewIndex != -1, "liNewIndex != -1");
+        }
+
+        LogString& lrString = mStringPool[liNewIndex];
+        CgsCore::SnPrintf(lrString.macString, sizeof(lrString.macString), "%s", lpcString);
+        lrString.macString[sizeof(lrString.macString) - 1] = '\0';
+        lrString.mfTimeLeft = mfStringDuration;
+        lrString.mRGBA      = lRGBA;
+
+        mStringIndices.Append(liNewIndex);
     }
 
     // X360 0x8224EE00 (class:BrnDirector::DebugLog TU). Resolve the moment's display

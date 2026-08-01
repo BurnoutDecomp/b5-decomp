@@ -366,10 +366,39 @@ void BehaviourIceAnim::Construct()
 }
 
 // ============================================================================
-// SetParameters
+// SetParameters @0x8220F5C0
 // ----------------------------------------------------------------------------
-// Assert the block is non-null and carries the iceanim class key, decode it just far
-// enough to read the take guid (instance +0xC), then store the block + guid.
+// Assert the shot reference is non-null and carries the iceanim class key, RESOLVE it into
+// a live attribute instance, read the take guid out of that instance's layout block, and
+// store the reference + guid.
+//
+// ⭐ THE DECODE, WHICH WAS WRONG UNTIL 2026-08-01. lpParameters is one element of a
+// shotgroup's ShotList -- a raw 24-byte Attrib::RefSpec {mClassKey, mCollectionKey,
+// mpCollectionPtr}. It is NOT an already-constructed Attrib::Instance, so the take guid is
+// not reachable off it directly. The console makes that explicit:
+//
+//     0x8220F63C  li   r5, 0                          ; owner = 0
+//     0x8220F640  mr   r4, r30                        ; the RefSpec
+//     0x8220F644  addi r3, r1, var_30                 ; a STACK iceanim
+//     0x8220F648  bl   Attrib__Gen__iceanim__iceanim  ; resolve the ref
+//     0x8220F64C  lwz  r11, var_2C(r1)                ; temporary + 4 == mpAttributeData
+//     0x8220F654  lwz  r11, 0xC(r11)                  ; the LAYOUT block's +0xC
+//     0x8220F658  stw  r30, 0xE24(r29)                ; mpSourceShot = lpParameters
+//     0x8220F65C  stw  r11, 0xE20(r29)                ; miAnimGuid
+//     0x8220F660  bl   Attrib__Instance___Instance    ; ~iceanim (drops the handle's ref)
+//
+// i.e. the guid is at the RESOLVED LAYOUT block +0xC, reached through a temporary instance
+// built over the ref -- never at RefSpec+0xC and never at RefSpec+4. The previous
+// reconstruction called GetAnimGuid() straight on the parameter, which took RefSpec+4 (the
+// high half of mCollectionKey) for mpAttributeData and dereferenced it: a garbage take guid
+// -- a camera behaviour that links and boots and plays nothing. The class-key assert below
+// did NOT catch it: a RefSpec's class key IS its leading qword, so the check passed for the
+// wrong reason.
+//
+// The temporary is a real ref-counted handle and is destroyed at the end of the statement,
+// exactly as the console destroys its stack copy. It is deliberately NOT cached: mpSourceShot
+// keeps the REFERENCE (whose lifetime is the shot group's), and Prepare/ChangeMovie re-resolve
+// from miAnimGuid.
 // ============================================================================
 void BehaviourIceAnim::SetParameters(ShotReference* lpParameters)
 {
@@ -380,9 +409,9 @@ void BehaviourIceAnim::SetParameters(ShotReference* lpParameters)
         CgsDev::Assert::EndAssert();
     }
 
-    // The class-key test compares the block's STORED class key (its leading 8-byte tag)
-    // against the generated iceanim class key.
-    if (lpParameters->GetClassKey() != Attrib::Gen::iceanim::ClassKey())
+    // The class-key test compares the reference's STORED class key (its leading 8-byte tag,
+    // X360 `ld r11, 0(r30)`) against the generated iceanim class key.
+    if (static_cast<s64>(lpParameters->GetClassKey()) != Attrib::Gen::iceanim::ClassKey())
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert(
@@ -390,9 +419,12 @@ void BehaviourIceAnim::SetParameters(ShotReference* lpParameters)
         CgsDev::Assert::EndAssert();
     }
 
-    // Decode the parameter block to reach the take guid carried at the instance's +0xC.
-    miAnimGuid = lpParameters->GetAnimGuid();
+    // Resolve the reference into a live iceanim instance and read the guid off its layout
+    // block. The instance is a scoped temporary, as on the console.
+    const Attrib::Gen::iceanim lShot(*lpParameters, 0);
+
     mpSourceShot = lpParameters;
+    miAnimGuid   = lShot.GetAnimGuid();
 }
 
 // ============================================================================

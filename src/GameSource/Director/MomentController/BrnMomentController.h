@@ -27,18 +27,13 @@ namespace BrnDirector
 {
     namespace Camera { class BehaviourManager; }   // threaded through NewMoment / MomentHandle::Prepare (by ref, not read)
 
-    // A 16-byte candidate-moment record held by value in the selector's
-    // Array<MomentDescription,10>. Array<...>::Append @0x821FD858 copies it as four 4-byte
-    // words and reads no field, so only the size/alignment is attested here. FLAG: the four
-    // 4-byte fields' names/types are NOT recovered (no field is read in any bodied TU); the
-    // record is modelled as four opaque 4-byte words to pin sizeof==0x10 exactly.
-    struct MomentDescription
-    {
-        u32 mauOpaque[4];   // +0x00..+0x0C : opaque payload (4 * 4 = 16 bytes). FLAG: fields unknown.
-    };
-
-    // No pointer members, so the X360 0x10 size holds on the x64 host build too.
-    static_assert(sizeof(MomentDescription) == 0x10, "MomentDescription layout drift");
+    // NOTE: BrnDirector::MomentDescription used to be modelled here as an opaque
+    // `u32 mauOpaque[4]` span. That was a HYPOTHESIS, and it was wrong: the DecFIGS DWARF
+    // homes MomentDescription at BrnMomentSelector.h:39 with four NAMED fields
+    // (meMomentType / meMomentParamID / mfWeighting / mbCanBeInhibited), every one of which
+    // is read by an X360 instruction (see the header comment there). It now lives in
+    // GameSource/Director/MomentController/BrnMomentSelector.h -- its real DWARF home --
+    // with the real field set. Include that header if you need the type.
 
     // MomentController owns the live director moments. DWARF home BrnMomentController.h:43.
     // It holds the moment object pool (AbstractPool<70,20,Vector4>) and the parameter bank
@@ -56,6 +51,13 @@ namespace BrnDirector
         class MomentHandle
         {
         public:
+            // DWARF BrnMomentController.h:93. No standalone X360 symbol -- the console
+            // inlines it. MomentSelector::AddMoment @0x82209F80 emits the whole body as a
+            // single `stb r11(0), var_30(r1)` into the stack handle it is about to Append,
+            // i.e. it only clears the allocated flag; the pool handle / parent are left for
+            // Prepare() to fill.
+            void Construct() { mbIsAllocated = false; }
+
             // X360 @0x821F5798 (GetMoment). Asserts mbIsAllocated (BrnMomentController.h:150)
             // then returns the held moment -- the pool handle's object pointer at this+0x04
             // (== mMomentPoolHandle.mpObject). Bodied in BrnMomentController.cpp.

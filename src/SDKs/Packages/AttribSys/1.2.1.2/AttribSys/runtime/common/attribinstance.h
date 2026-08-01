@@ -240,6 +240,21 @@ namespace Attrib
     public:
         Instance(Collection* lpCollection, void* lpOwner);
 
+        // @0x8280A248 (IDA `sub_8280A248` -- the export set carries it unnamed). Build the
+        // handle over a REFERENCE SPEC rather than an already-resolved collection: resolve
+        // the ref (RefSpec::GetCollection, which lazily looks the collection up, AddRefs it
+        // and caches it in the ref) and then run the exact body of the Collection* ctor
+        // above -- the two functions are instruction-for-instruction identical from the
+        // moment the collection is in hand (compare 0x8280A264.. against 0x82802DCC..).
+        // DWARF attests it at attribinstance.cpp:24 / attribsys.h:423 as
+        // `Instance(const Attrib::RefSpec&, uint32_t)`; the owner slot is spelled `void*`
+        // here to match the Collection* sibling and every committed call site.
+        //
+        // This is the overload the generated classes' RefSpec constructors chain to --
+        // Attrib::Gen::iceanim::iceanim @0x82206908 is the attested example, and it is how
+        // a raw ShotList element becomes a readable attribute instance.
+        Instance(const RefSpec& lrRefSpec, void* lpOwner);
+
         // Copy construct -- share the source's collection and take a reference on it.
         // ⚠️ NOT an X360 symbol: the console inlines it at every site (the IDA function
         // inventory for Attrib::Instance has ctor / dtor / Unmodify / Change /

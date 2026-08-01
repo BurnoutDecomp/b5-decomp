@@ -1,6 +1,8 @@
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"
 
+#include <cstring>                                   // strcmp (the open-coded console compares)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Director/Camera/Camera.h"       // Camera::Camera / GetEffects (EnsureEffectIsPlaying)
 
 // BrnDirector::EffectInterface -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -133,4 +135,68 @@ void EffectInterface::RegisterStoppingBackgroundEffectWithName(const HookNameStr
         mbHasCurrentBackgroundEffectName = false;
 }
 
+}
+
+
+// ============================================================================
+// BrnDirector::Camera::EnsureEffectIsPlaying @0x821F2720 -- a FREE function in
+// namespace BrnDirector::Camera (r3 = Camera&, r4 = const EffectInterface&,
+// r5 = const char*, f1 = f32; signature recovered from the asm, not from Hex-Rays).
+//
+// Asm walk, with the Camera-relative displacements resolved through mEffects @camera +0x68
+// (BrnCameraEffects.h's X360-proven 0xBC block):
+//   0x821F2744  stb 0, 0x11F(camera)      -> mEffects.mbHasStartHookNameString = false  (+0xB7)
+//   0x821F2748  stb 0, 0x120(camera)      -> mEffects.mbHasStopHookNameString  = false  (+0xB8)
+//   0x821F274C  stw 0, 0x0E4(camera)      -> mEffects.muRequestedPostFxId      = 0      (+0x7C)
+//   0x821F2750  lbz 0xD37(source)         -> EffectInterface::mbHasCurrentEffectName
+//               if clear                  -> jump straight to the request
+//   0x821F275C  open-coded strcmp(source + 0xCF4, lpcHook)      -- mCurrentEffectName,
+//               if DIFFERENT              -> jump to the request                 read inline
+//   0x821F2790  bl EffectInterface::GetCurrentEffectName; open-coded strcmp against lpcHook,
+//               if DIFFERENT              -> RETURN (do nothing)   <- note the asymmetry, it
+//                                                                     is the third || term
+//                                                                     short-circuiting
+//   0x821F27D0  bl EffectInterface::GetCurrentEffectBlendAmount
+//               if EQUAL to lfBlend       -> RETURN (already playing at this blend)
+//   0x821F27DC  the request:
+//                 HookNameStringWrapper::Set(camera + 0x68, lpcHook)  -> mStartHookNameString
+//                 stfs lfBlend, 0x80(that)  == camera + 0xE8          -> mfStartHookNameBlendAmount
+//                 stb  1,       0xB7(that)  == camera + 0x11F         -> mbHasStartHookNameString
+//               i.e. exactly CameraEffects::SetStartHookName, but with the +0xB7 / +0x80
+//               store order swapped -- both are independent stores, so this is the same
+//               named operation.
+//
+// ⚠️ THE REDUNDANT SECOND NAME COMPARE IS FAITHFUL, not a transcription slip. The console
+// evaluates the current-effect NAME twice: once inlined off +0xCF4 and once through the
+// out-of-line accessor (which carries the h:112 tripwire). Reproduced as the three-term ||
+// below, which is the only shape that reproduces the branch table exactly -- in particular
+// the A && B && !C case, where the console silently does NOTHING.
+// ============================================================================
+namespace BrnDirector
+{
+namespace Camera
+{
+
+void EnsureEffectIsPlaying(Camera& lrCamera, const EffectInterface& lrSource,
+                           const char* lpcHook, f32 lfBlend)
+{
+    CameraEffects& lrEffects = lrCamera.GetEffects();
+
+    // The three unconditional clears at the head (the previous frame's request is dropped
+    // before anything else is decided).
+    lrEffects.mbHasStartHookNameString = false;   // 0x821F2744
+    lrEffects.mbHasStopHookNameString  = false;   // 0x821F2748
+    lrEffects.muRequestedPostFxId      = 0;       // 0x821F274C
+
+    if (!lrSource.HasCurrentEffectName()                                        // 0x821F2750
+        || strcmp(lrSource.GetCurrentEffectName(), lpcHook) != 0                // 0x821F275C (inlined)
+        || (strcmp(lrSource.GetCurrentEffectName(), lpcHook) == 0               // 0x821F2790 (call)
+            && lrSource.GetCurrentEffectBlendAmount() != lfBlend))              // 0x821F27D0
+    {
+        // 0x821F27DC..0x821F27F4.
+        lrEffects.SetStartHookName(lpcHook, lfBlend);
+    }
+}
+
+}
 }
