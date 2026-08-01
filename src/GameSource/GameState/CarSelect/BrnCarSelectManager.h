@@ -47,7 +47,10 @@ namespace BrnGameState
 // DriveThruManager precedent). Forward-declare the two payload/param names so the signature type-checks.
 namespace GameStateModuleIO
 {
-    struct CarSelectionChangedAction;                          // opaque game-action payload
+    // CarSelectionChangedAction is TYPED as of 2026-08-01 -- its full 64-byte layout is in
+    // BrnGameActions.h (both ends of action 64 agree on every offset). The forward declaration
+    // stays so this header does not have to pull the whole action family; the .cpp includes it.
+    struct CarSelectionChangedAction;
     struct ControllerInput;                                    // Update() param (passed through; never deref'd here)
 }
 

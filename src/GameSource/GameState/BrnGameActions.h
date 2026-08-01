@@ -104,14 +104,76 @@ enum EGameActionType
 template <EGameActionType T>
 struct GameAction { };
 
-// X360 0x822A0250 (HasToChangeLocation). Minimal slice: the two transform members it reads.
-struct ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLAYER_CAR>
+// X360 0x822A0250 (HasToChangeLocation).
+//
+// ⭐ GROWN to the FULL 80-byte record (reset-player-car wave 2026-08-01). It was a two-member
+// slice while SIX producers built the payload as raw `u8 lac[80]` + memcpy at hand-written
+// offsets -- which is exactly how five of them ended up building it at the WRONG offsets
+// (corrected the previous wave) and the sixth, CarSelectManager::EnterJunkyardAtStartOfGame,
+// was STILL wrong when this wave started. The whole record is now typed, so the producers
+// assign named members and the class of bug cannot recur.
+//
+// Every offset below is read (or written) at that offset by BOTH ends:
+//   consumer  RaceCarEntityModule::HandleResetPlayerCarAction @0x82304FE8
+//             (lvx128 r16+0x00 / r16+0x10; ld 0x20 / 0x28; lwz 0x30 / 0x38 / 0x3C;
+//              lfs 0x34; lbz 0x40 / 0x41 / 0x43)
+//   producer  CarSelectManager::EnterJunkyardAtStartOfGame @0x82393080 and the five
+//             CarSelectManager builders at 0x82387D38 / 0x82392F78 / 0x82398B3C /
+//             0x82392D64 / 0x82398DDC.
+// Sizeof is pinned at 80 by the AddEvent liSize every producer passes (`li r6, 0x50`).
+struct alignas(16) ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLAYER_CAR>
 {
-    Vector3 mPosition;
-    Vector3 mDirection;
+    Vector3 mPosition;                 // +0x00  SpawnLocation::mPosition
+    Vector3 mDirection;                // +0x10  SpawnLocation::mDirection
+    CgsID   mCarModelId;               // +0x20  0 == "do not re-spawn, just teleport"
+    CgsID   mWheelModelId;             // +0x28  0 == "derive from the car's default wheel name"
+    EPlayerScoringIndex mePlayerScoringIndex; // +0x30  >= E_PLAYER_SCORING_INDEX_COUNT == none
+    f32     mfDeformationAmount;       // +0x34  < 0 == "no unlock deform" (the -1.0 sentinel)
+    f32     mfDeformationAmount2;      // +0x38  FLAG: the consumer stores the PAIR (+0x34,+0x38)
+                                       //        into ActiveRaceCar[499]/[498] and into the
+                                       //        module's own two deform scalars, and only when
+                                       //        +0x34 >= 0. EnterJunkyardAtStartOfGame leaves
+                                       //        this field UNWRITTEN (its -0x50 record is not
+                                       //        memset), which is safe precisely because it
+                                       //        posts the -1.0 sentinel. Name provisional.
+    s32     miInCarModification;       // +0x3C  copied to the module's +0x186CC word.
+                                       //        TeleportCurrentVehicle sets it on the in-car-mod
+                                       //        path, UpdateUnlockState posts 2. Name provisional.
+    bool    mbInCarSelectScreen;       // +0x40  -> RaceCarEntityModule::mbInCarSelectScreen
+    bool    mbCarSelectDontStreamAudio;// +0x41  -> RaceCarEntityModule::mbCarSelectDontStreamAudio
+    u8      muReserved0x42;            // +0x42  written 0 by every producer; NO consumer reads it
+    bool    mbKeepResetSection;        // +0x43  -> SpawnRaceCar's 5th arg -> the DWARF-named
+                                       //        AttachAIControlEvent::mbKeepResetSection
+    u8      maReserved0x44[0x0C];      // +0x44..+0x4F  tail of the 80-byte AddEvent image
 
     bool HasToChangeLocation() const;
 };
+static_assert(sizeof(ResetPlayerCarAction) == 80,
+              "ResetPlayerCarAction must be the 80-byte image every AddEvent(.., 0, 80) posts");
+
+// Game action 64 -- "the player's car selection changed": which junkyard, and where in it.
+// TYPED 2026-08-01 (reset-player-car wave); it was an opaque forward declaration while three
+// producers stamped it by hand and MainDirector::ProcessInputQueue read it by hand -- which is
+// how the +0x30 "pos is left" bit ended up being written at +0x10 for a whole campaign.
+// Both ends agree on every offset below:
+//   producer  CarSelectManager::SpawnInStartCar @0x82387D9C..0x82387E18 (AddEvent .., 64, 64)
+//             CarSelectManager::EnterJunkyardAtStartOfGame @0x82393178..0x823931E0 (by pointer)
+//   consumer  MainDirector::ProcessInputQueue case 64 (BrnMainDirector.cpp:753, X360
+//             `lbz r11, 0x30(r30)` @0x82238418 -> maGameState.mbJunkyardPosIsLeft)
+struct alignas(16) CarSelectionChangedAction
+{
+    CgsID   mJunkyardId;        // +0x00
+    u8      maReserved0x08[8];  // +0x08  never written by any producer
+    Vector3 mPosition;          // +0x10  SpawnLocation::mPosition
+    Vector3 mDirection;         // +0x20  SpawnLocation::mDirection
+    bool    mbJunkyardPosIsLeft;// +0x30  == (SpawnLocation::GetType() == E_TYPE_CAR_SELECT_LEFT)
+    bool    mbReserved0x31;     // +0x31  written 0
+    u8      maReserved0x32[14]; // +0x32..+0x3F  tail of the 64-byte AddEvent image
+};
+static_assert(sizeof(CarSelectionChangedAction) == 64,
+              "CarSelectionChangedAction must be the 64-byte image AddEvent(.., 64, 64) posts");
+static_assert(offsetof(CarSelectionChangedAction, mbJunkyardPosIsLeft) == 0x30,
+              "CarSelectionChangedAction::mbJunkyardPosIsLeft at +0x30 (the consumer's lbz offset)");
 
 // X360 0x82355178 (IsEmpty).
 struct SoundTriggerAction : public GameAction<E_ACTION_SOUND_TRIGGER>
