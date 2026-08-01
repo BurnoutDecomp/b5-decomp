@@ -70,6 +70,12 @@ struct ProgressionData
     // X360 0x82311790. Returns &mpaProgressionRanks[luIndex] (asserts the bound).
     const ProgressionRankData* GetProgressionRankData(u32 luIndex) const;
 
+    // ADDITIVE GROW: the rank-table length at +0x14. The X360 reads it inline --
+    // ProgressionManager::GetProgressionRank @0x823701D8 clamps the player's cached rank with
+    // `*(progressionData + 20)`, with no call. Defined inline here (same precedent as
+    // GetRivalCount below); no layout change.
+    u32 GetProgressionRankCount() const { return muProgressionRankCount; }
+
     // X360 0x823569F0. Returns &mpaTrophyUnlocks[luIndex] (asserts the bound).
     TrophyUnlockData* GetTrophyUnlock(u32 luIndex) const;
 

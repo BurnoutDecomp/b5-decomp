@@ -50,8 +50,17 @@ struct CarOpponentSet
     // ---- Remaining attested API (bodies in the OpponentData TU; declaration-only) ----
     void               Construct(CgsID lPlayerCarId, s32 liRank, s32 liOpponentCount);
     void               SetCarOpponent(s32 liIndex, const CarOpponent* lpCarOpponent);
-    const CarOpponent* GetCarOpponent(s32 liIndex) const;
-    s32                GetOpponentCount() const;
+
+    // DEFINED INLINE, same precedent as GetPlayerCarId/GetRank above: at the one call site
+    // reconstructed so far -- GameStateModule::OnPlayerCarChange @0x82396B88 -- the X360 emits
+    // NO call for either. It reads the count as `lwz r11, 0x8C(set)` and walks the opponents as
+    // `ld r11, 0(r30); r30 += 0x10`, carrying the console's own bounds assert
+    // ("liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount", BrnOpponentData.h:224)
+    // at the call site. Defining them here keeps that call site free of raw offsets.
+    // ⚠️ FLAG: if the OpponentData TU later recovers out-of-line bodies for these two, move them
+    // there and delete these -- do not end up with both.
+    const CarOpponent* GetCarOpponent(s32 liIndex) const { return &maCarOpponents[liIndex]; }
+    s32                GetOpponentCount() const          { return miOpponentCount; }
 
 private:
     CarOpponent maCarOpponents[KI_MAXIMUM_NUMBER_OF_CAR_OPPONENTS]; // 0x00 (DWARF :116)

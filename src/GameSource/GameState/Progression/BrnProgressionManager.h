@@ -18,6 +18,8 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 // to avoid a struct/class mismatch (C4099).
 namespace BrnProgression  { struct CarData; struct ProgressionData; }
 namespace BrnGameState    { class AchievementManagerBase; }
+// mpVehicleList is a pointer member only (the bodies that walk it include the owning header).
+namespace BrnResource     { struct VehicleList; struct VehicleListEntry; }
 // BrnStreetData::ChallengeHighScoreEntry / ChallengePlayerScoreEntry come in via BrnProfile.h.
 
 namespace BrnProgression
@@ -166,23 +168,39 @@ public:
     // Signatures + semantics are X360-asm-attested; bodies land with the ProgressionManager TU.
     // ------------------------------------------------------------------------
 
-    // X360 0x823701D8. The player's current progression rank, compared against a car's required rank
-    // in IsThisCarInCurrentUnlockSequence.
+    // X360 0x823701D8. The player's current progression rank, CLAMPED to the loaded
+    // ProgressionData's rank table: a negative cached rank answers 0, and a rank at or past the
+    // table's end answers count-1. Compared against a car's required rank in
+    // IsThisCarInCurrentUnlockSequence, and sign-extended from a byte by
+    // GameStateModule::OnPlayerCarChange.
     s32 GetProgressionRank() const;
 
     // X360 0x8237A970. Add lCarId to the player's owned-car list with unlock-type leUnlockType and
-    // return the new CarData record (asserts the result non-null internally). The full X360 symbol has
-    // a long inlined-temporary parameter list; the CarSelect call site passes only (carId, unlockType),
-    // so it is modelled as that 2-arg form. FLAG: reconcile the full signature with the ProgressionManager TU.
+    // return the new CarData record (asserts the result non-null internally). ⚠️ ARG SHAPE: the X360
+    // call from ProgressionManager::OnPlayerCarChange @0x8237AC38 passes (this, carId, 0) -- the
+    // Hex-Rays 11-argument prototype is register-pair noise. Modelled as the 2-arg form both real
+    // call sites use.
     CarData* AddCar(CgsID lCarId, s32 leUnlockType);
 
-    // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133489 -- a rivals-update request flag.
-    // FLAG: de-inlined byte poke, not a named member in the exports.
+    // X360 0x8237AC38. The progression layer's half of a player-car swap: persist the chosen car +
+    // wheel onto the profile, make sure the car is owned, and cache the car's chosen-livery record.
+    // When lbUpdateProfile is false it only clears the cached current-car record.
+    // ARG SHAPE FROM ASM: r3=this, r4=carId, r5=wheelId, r6=the bool.
+    void OnPlayerCarChange(CgsID lCarId, CgsID lWheelId, bool lbUpdateProfile);
+
+    // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133489 (`stbx 1`) -- a
+    // rivals-update request flag. FLAG: de-inlined byte poke, not a named member in the exports.
     void RequestUpdateRivals();
 
-    // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133512 -- a drive-thrus/rivals
-    // dirty flag. FLAG: de-inlined byte poke, not a named member in the exports.
+    // X360 UpdateExitState de-inlined byte poke at ProgressionManager+133512 (`stbx 1`) -- a
+    // drive-thrus/rivals dirty flag. FLAG: de-inlined byte poke, not a named member in the exports.
     void SetDriveThrusDirtyFlag();
+
+    // X360 this+133448 (0x20948). The loaded vehicle list the progression layer resolves car
+    // records through (ProgressionManager::OnPlayerCarChange / GetCarColourAndPalette / AddCar all
+    // read it). ⚠️ FLAG (PC bring-up): nothing installs it yet -- Prepare2's caller does on the
+    // console; every body that uses it null-checks first.
+    void SetVehicleList(const BrnResource::VehicleList* lpVehicleList);
 
     // ========================================================================
     // BODIED in this TU (BrnProgressionManager.cpp). All nine X360-asm-attested. Each reaches
@@ -337,6 +355,34 @@ private:
     // old names except the ctor's Reset() calls (now the members' own default ctors).
     CgsResource::ResourcePtr<BrnProgression::ProgressionData> mpProgressionData;  // X360 +133348 (0x20 stride)
     CgsResource::ResourcePtr<BrnAI::AISectionsData>           mpAISectionData;    // X360 +133380
+
+    // ---- the player-car / unlock block (X360 +0x208D0 .. +0x20988) ----------------------------
+    // X360 +133328 (0x208D0). The CarData record for the car the player is currently in.
+    // OnPlayerCarChange writes it (and clears it on the lbUpdateProfile == false path);
+    // GetCurrentCarData() hands it back.
+    // ⚠️ The five members below carry in-class zero initialisers. The X360 ctor @0x827DEA50 does
+    // NOT store to any of them (the console object is BSS-resident, so they start zeroed); on the
+    // host this class is a by-value sub-object of GameStateModule inside BrnGameModule and would
+    // otherwise start as garbage. Same precedent as GameStateModule::mpOutputBuffer. This is an
+    // initialisation-site difference only -- no behavioural divergence.
+    CarData*  mpCurrentCarData = 0;
+    // X360 +133332 (0x208D4). The chosen-livery record for that car
+    // (Profile::GetChosenLiveryDataForBaseCar's answer, cached by OnPlayerCarChange).
+    // The element type (BrnProgression::LiveryData) is owned by BrnProfile.h, included above.
+    LiveryData* mpCurrentLiveryData = 0;
+    // X360 +133448 (0x20948). The loaded vehicle list (see SetVehicleList).
+    const BrnResource::VehicleList* mpVehicleList = 0;
+    // X360 +133468 (0x2095C). AddCar increments it for every E_UNLOCK_TYPE_SPONSOR car and once
+    // more for "CARBEAGT" specifically. FLAG: name inferred from those two increments only.
+    s32       miSponsorCarCount = 0;
+    // X360 +133484 (0x2096C), read as an UNSIGNED byte by GetProgressionRank (`>= 0x80` == the
+    // signed-negative "rank not set yet" case, which answers 0). Distinct from the Profile's own
+    // mi8CurrentProgressionRank at Profile+112 -- this is the manager's live cache.
+    s8        mi8ProgressionRank = 0;
+    // X360 +133489 (0x20971) / +133512 (0x20988) -- the two one-byte request flags
+    // CarSelectManager::UpdateExitState sets to 1 on junkyard exit.
+    bool      mbUpdateRivalsRequested = false;
+    bool      mbDriveThrusDirty = false;
 
     // Pointer-INVARIANT layout facts only (host is the LLP64 gate target). The X360 byte offsets are
     // NOT asserted: they do not survive the 32->64-bit pointer widening of the embedded Profile.

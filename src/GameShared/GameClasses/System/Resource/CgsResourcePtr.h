@@ -184,6 +184,16 @@ namespace CgsResource
             return *this;
         }
 
+        // ADDITIVE GROW: the raw "is a main-memory resource installed" test, WITHOUT the
+        // assert the accessors carry. The X360 open-codes it as a bare load-and-branch on
+        // mpResourceMemory (+0x00) at every site that legitimately tolerates an unloaded
+        // resource and takes its own path instead -- e.g. GameStateModule::OnPlayerCarChange
+        // @0x82396B88 does `lwz r11, 0(&mpProgressionData); cntlzw ...` and jumps straight to
+        // its own "lpProgressionData != NULL" assert when it is zero. Calling operator->()
+        // there would fire the CONTAINER's assert first and change which message the build
+        // reports. No layout change; no new symbol (inline).
+        bool HasMemoryResource() const { return mpResourceMemory != 0; }
+
         // CgsResourcePtr.h:538 -> baked assert line 544 (non-const).
         Type* operator->()
         {
