@@ -118,7 +118,7 @@ void CarSelectManager::_AssertLayout()
                   "mCacheDuringChangeCarId is contiguous with mDesiredCarId (CgsID == 8 bytes)");
     // The spawn-location array is exactly KU_CARSELECT_SPAWNLOCATION_COUNT handles wide.
     static_assert(sizeof(((CarSelectManager*)0)->maSpawnLocations)
-                      == KU_CARSELECT_SPAWNLOCATION_COUNT * sizeof(Pointer32<const BrnTrigger::SpawnLocation>),
+                      == KU_CARSELECT_SPAWNLOCATION_COUNT * sizeof(HostPointer<const BrnTrigger::SpawnLocation>),
                   "maSpawnLocations holds KU_CARSELECT_SPAWNLOCATION_COUNT entries");
 }
 
@@ -169,6 +169,51 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
     mbDEBUG_DisableUnlock                = false;
     mbDEBUG_UnlockTrophyCarsForTesting   = false;
     mbDEBUG_UnlockShutdownCarsForTesting = false;
+}
+
+// ============================================================================
+// Prepare -- NO SYMBOL IN THE IMAGE: the console FULLY INLINES it.
+//
+// DWARF BrnCarSelectManager.h declares `Prepare(const VehicleList*, const WheelList*)`, but a
+// name lookup over the ARTIST export set finds nothing (the export set's holes are real, but
+// this one is an inline, not a hole). Recovered by CALLER instead -- its one call site is the
+// terminal stage of GameStateModule::Prepare @0x8239E578, where it appears as two raw stores:
+//
+//     0x8239EC8C  add   r11, r31, r14      ; r14 = 0x456EC -> GameStateModule::mpWheelList
+//     0x8239EC90  add   r10, r31, r17      ; r17 = 0x456E8 -> GameStateModule::mpVehicleList
+//     0x8239EC98  addis r9,  r31, 3
+//     0x8239ECA0  addi  r9,  r9,  -0x3260  ; r9 = this + 0x2CDA0 == &mCarSelectManager
+//     0x8239ECA4  lwz   r7,  0(r11)
+//     0x8239ECAC  lwz   r6,  0(r10)
+//     0x8239ECB0  stw   r7,  0x18(r9)      ; mpWheelList   = lpWheelList
+//     0x8239ECB4  stw   r6,  0x14(r9)      ; mpVehicleList = lpVehicleList
+//
+// That is the whole function -- two pointer stores, no asserts, no other side effect (the very
+// next instructions are the identical pair for OnlineCarSelectManager at +0x0C/+0x10). Written
+// in the DWARF's declaration order (vehicle then wheel); the X360's store order is the reverse
+// only because of the scheduler.
+// ============================================================================
+void CarSelectManager::Prepare(const BrnResource::VehicleList* lpVehicleList,
+                               const BrnResource::WheelList*   lpWheelList)
+{
+    mpVehicleList.Set(lpVehicleList);
+    mpWheelList.Set(lpWheelList);
+
+    // [diagnostic, one-shot] BOTH ENDS of the store. A non-null pointer going in is not proof
+    // the pointer came back out -- see the HostPointer banner in the header.
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+    {
+        // ⚠️ NOT via operator<<(void*): CgsStrStream.cpp:83 casts it to `(unsigned)` and so prints
+        // ONLY THE LOW 32 BITS -- which would render a truncated pointer identical to the real one.
+        *CgsDev::Log::gpDebugPrint
+            << "[CarSelectManager::Prepare] in  veh=" << (u64)(uintptr_t)lpVehicleList
+            << " wheel=" << (u64)(uintptr_t)lpWheelList
+            << " | out veh=" << (u64)(uintptr_t)mpVehicleList.Get()
+            << " wheel=" << (u64)(uintptr_t)mpWheelList.Get()
+            << " | module=" << (u64)(uintptr_t)mpGameStateModule.Get()
+            << " roundtrip=" << (mpVehicleList.Get() == lpVehicleList
+                                 && mpWheelList.Get() == lpWheelList ? 1 : 0) << "\n";
+    }
 }
 
 // ============================================================================

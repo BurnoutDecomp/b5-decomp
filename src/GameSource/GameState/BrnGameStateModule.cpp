@@ -63,6 +63,23 @@ void GameStateModule::Construct()
         mpOutputBuffer = new GameStateModuleIO::OutputBuffer();
         mpOutputBuffer->Construct();
     }
+
+    // ⭐ X360 0x82380388 (this function) is the console's ONLY caller of
+    // CarSelectManager::Construct @0x823564D0:
+    //     BrnGameState::CarSelectManager::Construct(a1 + 183712, a1 + 42320, a1, a1 + 47920)
+    // i.e. (&mCarSelectManager, &mTriggerQueryManager, this, &mProgressionManager) -- the three
+    // owning pointers the junkyard FSM keeps for its whole life. Verbatim, same arguments.
+    //
+    // ⚠️ ORDER DEVIATION (harmless, and stated rather than hidden): the console runs this AFTER
+    // TriggerQueryManager::Construct @0x82364BF0 and ProgressionManager::Construct, so the two
+    // subobjects are already initialised when their addresses are taken. Neither of those has a
+    // linked body on PC yet (BrnTriggerQueryManager.cpp is unmounted -- it costs 13 unresolved
+    // externals, all from UpdateTriggers/ProcessPlayerTriggers; ProgressionManager::Construct has
+    // no body in the tree at all), so they cannot be called here. CarSelectManager::Construct only
+    // STORES the two pointers -- it never dereferences either -- so taking the address of a
+    // not-yet-constructed subobject is well-defined and the stored value is already final.
+    // DELETE-WHEN those two Constructs land: they must then run BEFORE this line.
+    mCarSelectManager.Construct(&mTriggerQueryManager, this, &mProgressionManager);
 }
 
 void GameStateModule::Destruct()
@@ -357,7 +374,26 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                 << " wheels="
                 << (mpWheelList != 0 ? mpWheelList->GetWheelCount() : -1) << "\n";
         }
-        LogPrepareStageOnce(26, "DriveThruManager::Prepare + list publish [deferred] -- prepare DONE");
+        // ⭐ REAL now (the "list publish" half of the terminal stage). X360 @0x8239EC8C, straight
+        // after DriveThruManager::Prepare:
+        //     r9 = this + 0x2CDA0 (mCarSelectManager);  r8 = this + 0x2CE20 (mOnlineCarSelectManager)
+        //     stw *(this+0x456EC), 0x18(r9)   <- CarSelectManager::mpWheelList
+        //     stw *(this+0x456E8), 0x14(r9)   <- CarSelectManager::mpVehicleList
+        //     stw *(this+0x456EC), 0x10(r8)   <- OnlineCarSelectManager::mpWheelList
+        //     stw *(this+0x456E8), 0x0C(r8)   <- OnlineCarSelectManager::mpVehicleList
+        // Those four stores ARE CarSelectManager::Prepare / OnlineCarSelectManager::Prepare, both
+        // fully inlined (neither has a symbol in the image; the DWARF declares both as
+        // `Prepare(const VehicleList*, const WheelList*)`). Called through the named methods here.
+        //
+        // This is what the whole junkyard flow was missing: SetupSpawnLocations, SpawnInStartCar,
+        // GetProfileCarData and StartCarSelectState all resolve their car records through
+        // CarSelectManager::mpVehicleList, and nothing had ever written it.
+        //
+        // [deferred] the OTHER half of this stage -- DriveThruManager::Prepare(this+44240,
+        // mTriggerQueryManager's TriggerData, the CarColours palette) -- and the
+        // OnlineCarSelectManager leg (its TU is unmounted).
+        mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
+        LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare [deferred] -- prepare DONE");
         // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
         // for a later re-prepare and clears the second-pass stage word (which this slice does
         // not model yet). Reproduced for the stage word it does have.
