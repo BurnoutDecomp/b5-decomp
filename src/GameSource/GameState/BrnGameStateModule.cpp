@@ -9,10 +9,13 @@
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
 #include "SharedClasses/DataLists/VehicleList.h"                        // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
+#include "SharedClasses/DataLists/WheelList.h"                          // BrnResource::WheelList (GetWheelCount -- Prepare's list diagnostic)
 #include "SharedClasses/DataLists/VehicleListEntry.h"                   // BrnResource::VehicleListEntry (parent id / livery + car type / stats)
 #include "SharedClasses/Progression/BrnProgressionData.h"               // BrnProgression::ProgressionData::FindCarOpponentSet
 #include "SharedClasses/Progression/BrnOpponentData.h"                  // BrnProgression::CarOpponentSet (opponent walk)
 #include "GameShared/GameClasses/Containers/CgsArray.h"                 // CgsContainers::Array<s64,7> (opponent payload)
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"       // RequestInterface<3072>::GetVehicleList/GetWheelList
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"             // GameDataAssetEvent (the list replies)
 
 namespace BrnGameState
 {
@@ -142,6 +145,13 @@ void GameStateModule::Destruct()
 // reasoning (BrnGameDataModule.cpp:51, "[reliable] set before base Prepare"). The console sets
 // it inside ClearData, which is stage 0's deferral.
 // ----------------------------------------------------------------------------
+// The GameData reply ids the two live list stages match (BrnGameDataModule's dispatch stages
+// them at the slot: ProcessGetVehicleListRequest -> 52, ProcessGetWheelListRequest -> 59).
+// ⚠️ The FreeburnChallengeList reply (53) is NOT here on purpose: its GameData handler is a
+// DeferredGameDataRequest, so a stage waiting on it would never advance.
+static const s32 KI_REPLY_VEHICLE_LIST = 52;
+static const s32 KI_REPLY_WHEEL_LIST   = 59;
+
 namespace
 {
     // One log line per stage, once. (Same shape as the loading flow's LogScriptedStageOnce.)
@@ -157,6 +167,57 @@ namespace
                 << "[GameStateModule::Prepare] stage " << liStage << " -- " << lpcWhat << "\n";
         }
     }
+}
+
+// ----------------------------------------------------------------------------
+// The shared body of Prepare's three "receive a resident data list" stages (vehicle @X360
+// LABEL_17, wheel @LABEL_25, challenge @LABEL_9). The console writes all three out longhand;
+// they are identical apart from the expected reply id and the two baked assert LINES, so they
+// are folded here with those as parameters -- the same folding the committed
+// GameDataModule::PrepareDataListResource already does for its two twins.
+//
+//   if (mReceiverQueue.GetLength() < 1) return false;            // still waiting
+//   assert(event type == <replyId>)     "Invalid event id received\n"  <line A>
+//   assert(reply->miEventId == 0)       "Invalid event id received\n"  <line B>
+//   *lppOut = reply->mHandle.mpResourceMemory;                   // X360 `v13[8]`, i.e. +0x20
+//
+// ⚠️ The console's two asserts are built through the StrStream operator<< form
+// (CgsDev::StrStream + StrStreamBase::operator<<), not FireAssert's literal; the message text
+// is identical either way, so the plain Begin/Fire/End sequence is used with the X360 lines.
+// ----------------------------------------------------------------------------
+bool GameStateModule::ReceiveListResource(s32 liExpectedReplyId, s32 liAssertLineType,
+                                          s32 liAssertLineEventId, void** lppOutResource)
+{
+    if (mReceiverQueue.GetLength() < 1)
+        return false;
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+
+    if (liType != liExpectedReplyId)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liAssertLineType);
+        CgsDev::Assert::EndAssert();
+    }
+
+    const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
+        static_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
+
+    if (lpReply == 0 || lpReply->miEventId != 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Invalid event id received\n", KAC_GSM_FILE, liAssertLineEventId);
+        CgsDev::Assert::EndAssert();
+        return false;
+    }
+
+    // X360 `*(this + 284392) = v13[8]` -- payload +0x20 is mHandle.mpResourceMemory. Read BY
+    // MEMBER (the host ResourceHandle is 16 bytes where the console's is 8, so every literal
+    // offset past it shifts).
+    *lppOutResource = lpReply->mHandle.mpResourceMemory;
+    return true;
 }
 
 bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
@@ -231,15 +292,40 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         LogPrepareStageOnce(5, "GetFreeburnChallengeList + receive (reply 53) [deferred]");
         // fall through
     case E_PREPARESTAGE_REQUEST_VEHICLE_LIST:
-    case E_PREPARESTAGE_RECEIVE_VEHICLE_LIST:
-        // ⚠️ This is where the console installs mpVehicleList (and calls the two
-        // ApplyVehicleList hooks). Until it lands, mpVehicleList stays null and every body that
-        // needs it asserts -- exactly as its own FLAG in the header says.
-        LogPrepareStageOnce(7, "GetVehicleList + receive (reply 52) + 2 x ApplyVehicleList [deferred]");
+        // ⭐ REAL. X360 LABEL_16: `stage = 8; GetVehicleList(requests, &mReceiverQueue, 0);
+        //                          mReceiverQueue.Clear();` then fall into the receive.
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetVehicleList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
         // fall through
+
+    case E_PREPARESTAGE_RECEIVE_VEHICLE_LIST:
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_VEHICLE_LIST;
+        if (!ReceiveListResource(KI_REPLY_VEHICLE_LIST, 556, 561,
+                                 reinterpret_cast<void**>(&mpVehicleList)))
+            break;
+        // [deferred] ProgressionManager::ApplyVehicleList(this+47920) and
+        // ModeManager::ApplyVehicleList(this+4128, mpVehicleList). Neither has a body in this
+        // tree yet (only ChallengeManager::ApplyVehicleList is even declared). The pointer
+        // itself IS installed, which is what every GameStateModule body that asserts on it
+        // needs; the two republish hooks land with their managers.
+        LogPrepareStageOnce(8, "vehicle list installed; 2 x ApplyVehicleList [deferred]");
+        mePrepareStage = E_PREPARESTAGE_REQUEST_WHEEL_LIST;
+        // fall through
+
     case E_PREPARESTAGE_REQUEST_WHEEL_LIST:
+        // ⭐ REAL. X360 LABEL_24, the same shape with reply id 59.
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
+        lpOutputBuffer->GetResourceRequestInterface()->GetWheelList(&mReceiverQueue, 0);
+        mReceiverQueue.Clear();
+        // fall through
+
     case E_PREPARESTAGE_RECEIVE_WHEEL_LIST:
-        LogPrepareStageOnce(9, "GetWheelList + receive (reply 59) [deferred]");
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_WHEEL_LIST;
+        if (!ReceiveListResource(KI_REPLY_WHEEL_LIST, 599, 604,
+                                 reinterpret_cast<void**>(&mpWheelList)))
+            break;
+        mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
         // fall through
     case E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS:
     case E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS:
@@ -261,6 +347,16 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         LogPrepareStageOnce(13, "the 13 manager prepares (Mode..Rumble) [deferred]");
         // fall through
     case E_PREPARESTAGE_DONE:
+        // [diagnostic, one-shot] print BOTH ENDS of the two list stages -- a non-null pointer
+        // is not proof the list decoded. Delete with the rest of the bring-up diagnostics.
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[GameStateModule::Prepare] lists: vehicles="
+                << (mpVehicleList != 0 ? mpVehicleList->GetVehicleCount() : -1)
+                << " wheels="
+                << (mpWheelList != 0 ? mpWheelList->GetWheelCount() : -1) << "\n";
+        }
         LogPrepareStageOnce(26, "DriveThruManager::Prepare + list publish [deferred] -- prepare DONE");
         // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
         // for a later re-prepare and clears the second-pass stage word (which this slice does
@@ -395,6 +491,12 @@ void GameStateModule::SetCarUnlockAlreadyShown(CgsID lCarId)
 BrnResource::VehicleList* GameStateModule::GetVehicleList()
 {
     return mpVehicleList;
+}
+
+// X360 read at GameStateModule+0x456EC (284396) -- installed by Prepare's stage 9/10.
+BrnResource::WheelList* GameStateModule::GetWheelList()
+{
+    return mpWheelList;
 }
 
 // The active player car / wheel ids the CarSelect FSM compares against its desired car
