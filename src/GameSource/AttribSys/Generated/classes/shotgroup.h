@@ -88,6 +88,13 @@ namespace Gen
         // gGameModule. Default construction must resolve NOTHING.
         explicit shotgroup(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
 
+        // The base's validity test, re-exported (the generated classes derive Instance
+        // PRIVATELY, so it needs an explicit using-declaration to be reachable through a
+        // shotgroup). Attested by DirectorResourceManager::Prepare's own 26
+        // "m<Group>.IsValid()" assert strings -- and by the asm behind them, which is a
+        // bare mpCollection != 0 test on the slot.
+        using Instance::IsValid;
+
         // The number of shots in this group's ShotList (the length of the ShotList array
         // attribute). The intro state asserts this is > 0 before driving the group. REAL
         // X360 function @0x821F5948; declaration-only under the cl /c gate.

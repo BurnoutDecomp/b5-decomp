@@ -73,7 +73,9 @@ namespace Attrib
             return static_cast<u8*>(lpPrivate->mStaticData) + muValue;
         }
 
-        return reinterpret_cast<void*>(static_cast<uintptr_t>(muValue));
+        // Plain-pointer case: the payload slot IS the pointer. Console 4 bytes, host 8 --
+        // read the FULL-WIDTH member (muValue would truncate a host pointer to its low half).
+        return mpValue;
     }
 
     // ========================================================================
@@ -105,7 +107,7 @@ namespace Attrib
         }
         else
         {
-            lpArray = reinterpret_cast<const Array*>(static_cast<uintptr_t>(muValue));
+            lpArray = reinterpret_cast<const Array*>(mpValue);   // full-width payload
         }
         return lpArray->muNumElements;
     }

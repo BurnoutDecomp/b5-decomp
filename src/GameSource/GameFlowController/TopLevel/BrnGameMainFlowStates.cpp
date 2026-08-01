@@ -300,13 +300,11 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
 // -> MainDirector::Prepare -> done); it write-locks the output buffer for the whole call and
 // returns true only at the last stage, so the caller pumps it until it does.
 //
-// [deferred] the AttribSys queue append. The X360's first append moves the director output's
-// @0x510 VariableEventQueue<512,16> into the GameData input's AttribSys request queue (+0x8014
-// -- the same destination LoadWorldModule's own AttribSys append uses). That member is still
-// modelled as part of the committed mTimerRequestInterface byte span (see the FINDING in
-// BrnDirectorModuleIOOutputBuffer.hpp); the director issues no vault requests on the
-// reconstructed path, so the append lands when that member is re-homed. The
-// AppendRequestInterface<512> -- the half the lane load rides -- is REAL.
+// ⭐ BOTH APPENDS ARE NOW REAL (2026-08-01, Prepare wave). The X360's first append moves the
+// director output's @0x510 VariableEventQueue<512,16> into the GameData input's AttribSys
+// request queue (+0x8014 -- the same destination LoadWorldModule's own AttribSys append uses).
+// That member is re-homed to its real AttribSysRequestInterface<512> type, so the append is
+// written out below; DirectorResourceManager::Prepare's RegisterVault is what rides it.
 bool LoadingScriptedState::LoadDirectorModule(
     BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
     const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
@@ -346,6 +344,16 @@ bool LoadingScriptedState::LoadDirectorModule(
         // write lock is held by the caller (InitialLoadingScreen::Update opens the frame with
         // LockForWrite on the GameData input) for the whole stage switch.
         lpDirectorOutput->LockForRead();
+        // X360's FIRST append: the director output's @0x510 AttribSys vault queue into the
+        // GameData input's own AttribSys queue (+0x8014) -- the destination
+        // LoadWorldModule/DriveWorldUpdateFrame's AttribSys append already uses. Landed
+        // 2026-08-01 with the +0x510 re-home; DirectorResourceManager::Prepare's RegisterVault
+        // rides exactly this hop, and without it that request could never reach the module.
+        {
+            const BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputRead = lpDirectorOutput;
+            lpGameDataInputBuffer->GetAttribSysRequestInterface()->mRequestQueue.Append(
+                lpDirectorOutputRead->GetVaultRequestInterface()->mRequestQueue);
+        }
         lpGameDataInputBuffer->AppendRequestInterface<512>(*lpDirectorOutput->Get());
         lpDirectorOutput->UnlockForRead();
     }

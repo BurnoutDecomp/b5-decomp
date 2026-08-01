@@ -62,11 +62,12 @@ namespace BrnResource
             E_PREPARE_DONE = 7,
             // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
             // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
-            // PrepareHudMessages 13, PreparePopups 14). The two that are live here keep the
-            // console's numbers; the DLC 16-18 / GameTalk 7 stages and 10/11/13/14 are still
+            // PrepareHudMessages 13, PreparePopups 14). The three that are live here keep the
+            // console's numbers; the DLC 16-18 / GameTalk 7 stages and 10/13/14 are still
             // skipped between ATTRIBSYS and DONE. (Order of execution comes from the switch's
             // fall-through order below, not from the numeric value.)
             E_PREPARE_VEHICLE_LIST = 9,
+            E_PREPARE_ICE_LIST     = 11,
             E_PREPARE_WHEEL_LIST   = 12
         };
 
@@ -175,6 +176,13 @@ namespace BrnResource
         // manager's AddListResource. Returns true only in the terminal state.
         bool PrepareVehicleList();   // 0x8266C410  "Vehicles/VehicleList.bundle" / "B5VehicleList"
         bool PrepareWheelList();     // 0x8266D1F8  "Wheels/WheelList.bundle"     / "B5WheelList"
+        // @0x8266CEB0 -- Prepare stage 11, the SAME six-state machine over
+        // "Cameras.bundle" / "StandardICETakes" (both string literals read straight off the
+        // asm's own string comments at off_82F2A6F8 / off_82F2A71C, and both confirmed by
+        // hash against the shipped bundle: HashString("StandardICETakes") == 0x0DC0EE8F is
+        // its type-65 ICETakeDictionary resource). Its terminal step feeds the handle to
+        // BrnResource::ICEList::AddListResource, which is the one part still gated.
+        bool PrepareICEList();       // 0x8266CEB0  "Cameras.bundle"              / "StandardICETakes"
 
         // The shared body of the two above (the X360 emits them as two near-identical
         // functions; the only differences are the bundle path, the resource name, the
@@ -345,9 +353,10 @@ namespace BrnResource
         // `this + 444336` / `this + 458696`).
         BrnResource::VehicleList       mVehicleList;
         BrnResource::WheelList         mWheelList;
-        // X360 a1[140] / a1[142] -- the two data-table prepares' own stage words (each
-        // Prepare* helper owns one; a1[141] is the ICE list's, still deferred).
+        // X360 a1[140] / a1[141] / a1[142] -- the three data-table prepares' own stage words
+        // (each Prepare* helper owns one; a1[141] is PrepareICEList's, X360 offset 0x234).
         s32                            miVehicleListPrepareStage;
+        s32                            miICEListPrepareStage;
         s32                            miWheelListPrepareStage;
         // (the 9 GeneralAllocators, DLCManager, per-type IndexedLinkLists, HUD
         //  message / popup controllers and the game-data tables are added with their own passes.)

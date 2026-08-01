@@ -294,6 +294,14 @@ namespace Attrib
         // sub-collection pointer; the load ctor pins +0x10 as Collection::mKey.)
         u64         GetCollection() const;
 
+        // DWARF attribsys.h:437 (`bool Attrib::Instance::IsValid() const`, in the
+        // :434-:442 GetParent/SetParent/IsValid/IsDynamic/GetDynamic-or-Const-or-Parent
+        // Collection run). Header-inline on the console: every one of the 26 IsValid()
+        // asserts DirectorResourceManager::Prepare bakes compiles down to a bare
+        // `lwz r11,0(slot) ; cmplwi r11,0` -- i.e. mpCollection != 0. The assert TEXT
+        // ("mStuntRaceStartGroup.IsValid()" and 25 siblings) is what attests the NAME.
+        bool IsValid() const { return mpCollection != 0; }
+
         // Raw-field accessors used by Attrib::Attribute (ctor @ 0x82805AF0 reads the
         // layout block; IsInherited @ 0x82803600 reads the resolved collection + flags).
         const Collection* GetResolvedCollection() const { return mpCollection; }

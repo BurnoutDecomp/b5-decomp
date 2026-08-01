@@ -254,9 +254,43 @@ namespace BrnDirector
 //    "construction order is NOT declaration order" note are both exactly right.
 //    Independently, Instance::operator='s xref list is 65 call sites inside Prepare.
 // ============================================================================
+// ⭐⭐ STATUS 2026-08-01: **Prepare IS LANDED**. Body in BrnDirectorResourceManager.cpp;
+// the DirectorLinkStubs `return true` is deleted and the TU is in the exe source list.
+// Boot-verified: 0 asserts, all 65 slots BIND their collection (64/64 shotgroups +
+// mCameraDefaults, mGameIntroGroup("606002") included), the CameraVault registers as
+// AttribSys slot 0, and the loading flow still reaches the fly-by in ~52 s.
 //
-// WHAT BLOCKS A REAL Prepare TODAY (the RECOVERY is complete as of 2026-07-31; these four are
-// what stop it being written):
+// THREE THINGS HAD TO LAND WITH IT, none of them in this class:
+//   * GameDataModule::PrepareICEList @0x8266CEB0 (Prepare stage 11) -- the ONLY loader of
+//     "Cameras.bundle" in the image, and therefore the only thing that makes the CameraVault
+//     resident in pool 5 where Prepare's AcquireResource can find it. Its two string
+//     literals came off the asm's own string comments and both check out by hash:
+//     HashString("StandardICETakes") == 0x0DC0EE8F and HashString("CameraVault") ==
+//     0x28FE4576 are exactly the bundle's two resources.
+//   * The OutputBuffer +0x510 re-home (see the note further down, now ACTED ON) plus the
+//     AttribSys half of LoadDirectorModule's append -- without which RegisterVault could
+//     never reach the module.
+//   * THREE latent x64 defects in the AttribSys SDK that only this path could expose, all
+//     the same species (a CONSOLE byte offset used on a host-widened object):
+//       - Attrib::FindCollection / RefSpec::GetClass read the class registry at
+//         `DatabasePrivate + 8`; on x64 it is +16. Symptom: an unbounded storm of
+//         "table invariant is broken".
+//       - Attrib::HashMap::Release decremented `*(u16*)(this+8)`, which on x64 is
+//         muCapacity, not muRefCount. Symptom: "Too many releases of object!" on the first
+//         Instance destructor that ever ran over a real collection.
+//       - Attrib::Node (attribute.h) and Attrib::HashMap::Node (attribhashmap.h) are ONE
+//         console type that Collection::GetNode casts between, and they had DIFFERENT x64
+//         layouts (u32 payload vs machine word), so every cursor read the flags byte out of
+//         the payload pointer. Symptom: every generated Num_<array>() reported 0 elements.
+//
+// ⛔ ONE THING PREPARE CANNOT FIX, measured and left armed-but-gated: every ported vault's
+// serialised attribute entries lost their type-index/flag bytes in the PC port (the
+// transcoder widens the +0x08 value slot to a host pointer inside a 16-byte record), so
+// every array attribute reports exactly ONE element. The 37 Num_ShotList() asserts are kept
+// verbatim behind KB_PC_ATTRIB_ARRAY_LENGTHS_VALID in the .cpp; the 63 IsValid() asserts are
+// live and all pass. Full evidence at that constant.
+//
+// WHAT BLOCKED A REAL Prepare (historical; the RECOVERY was complete as of 2026-07-31):
 //    1. (CLEARED) `Attrib::Gen::shotgroup::shotgroup` (shotgroup.h:105) THROWS THE KEY AWAY. The real
 //       Attrib::FindCollection @0x82808378 is FindCollection(u64 luClassKey /*r3*/,
 //       u32 luCollectionKey /*r4*/) -- asm-verified -- and the shotgroup ctor sets only r3,
@@ -316,13 +350,13 @@ namespace BrnDirector
 //    commit; the rename table is recorded at the excision site.
 //    (The sibling KeyAnimController fork in that same header WAS retired, 2026-07-31.)
 //
-// ONE MORE NAME TO FIX ON THE WAY IN: the OutputBuffer accessor Prepare calls for the vault
-//    request interface (X360 @0x822069B0) is reconstructed as
-//    `OutputBuffer::GetTimerRequestSubInterfaceW()` returning &mTimerRequestInterface[0x10]
-//    (BrnDirectorModuleIOOutputBuffer.cpp:136). The DWARF for this TU spells it
-//    `DirectorIO::OutputBuffer::GetVaultRequestInterface`, and its result feeds
-//    AttribSysRequestInterface<512>::RegisterVault directly -- so the member at OutputBuffer
-//    +0x510 is the ATTRIBSYS VAULT request interface, not a timer sub-interface.
+// ✅ THE OUTPUTBUFFER NAME -- FIXED 2026-08-01. The accessor Prepare calls for the vault
+//    request interface (X360 @0x822069B0) was reconstructed as
+//    `OutputBuffer::GetTimerRequestSubInterfaceW()` returning &mTimerRequestInterface[0x10].
+//    It is now `DirectorIO::OutputBuffer::GetVaultRequestInterface()` (the DWARF spelling)
+//    over a real `AttribSysRequestInterface<512> mVaultRequestInterface` member, with the
+//    16-byte `CgsSystem::TimerRequestInterface` split back out ahead of it: 16 + 528 == the
+//    0x220 the opaque span used to model, which is the split's own confirmation.
 //
 // ⚠️ DATA -- RESOLVED 2026-07-31 (was: "CAMERAS.BUNDLE is still un-ported X360"). Prepare's
 //    whole point is the CameraVault, and build/game/CAMERAS.BUNDLE is now ported to platform
@@ -390,7 +424,7 @@ public:
     // @0x822712D8 stage 2 calls
     //     BrnDirector::DirectorResourceManager::Prepare(this+584, a2, this+2896)
     // == Prepare( &mDirectorResourceManager, <the director OUTPUT buffer>, <the ICE wrapper> ).
-    // Body @0x8225CA08 (own TU; stubbed in DirectorLinkStubs.cpp until it lands).
+    // Body @0x8225CA08 -- LANDED 2026-08-01 in BrnDirectorResourceManager.cpp.
     bool Prepare(DirectorIO::OutputBuffer* lpOutputBuffer, ICEWrapper* lpHACKIceWrapper);
 
     // @0x821F6948. ⚠️ MOVED OUT OF LINE 2026-07-31 (shot-group wave). These three used to
@@ -544,6 +578,10 @@ public:
     Attrib::RefSpec GetVehicleInfoRef(s64 lVehicleID) const;
 
 private:
+    // [PC diagnostic] one-shot report of how many of the 65 slots bound a collection, fired
+    // at the end of Prepare's stage 4. NOT an X360 function -- see the body.
+    void LogShotGroupBankState() const;
+
     // ============================ THE REAL LAYOUT ============================
     // Member set + ORDER are the DecFIGS DWARF's (which is the console memory order);
     // the console byte offsets quoted are PROVENANCE ONLY -- every one of these types

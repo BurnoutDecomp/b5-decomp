@@ -125,8 +125,13 @@ namespace BrnResource
             if (!PrepareVehicleList())
                 return false;
             // fall through
-            // (X360 stages 10 PrepareFreeburnChallengeList and 11 PrepareICEList sit here --
-            //  still deferred; neither list has a committed manager yet.)
+            // (X360 stage 10 PrepareFreeburnChallengeList sits here -- still deferred.)
+        case E_PREPARE_ICE_LIST:
+            // X360 stage 11 (LABEL_28): PrepareICEList.
+            mePrepareStage = E_PREPARE_ICE_LIST;
+            if (!PrepareICEList())
+                return false;
+            // fall through
         case E_PREPARE_WHEEL_LIST:
             // X360 stage 12 (LABEL_30): PrepareWheelList.
             mePrepareStage = E_PREPARE_WHEEL_LIST;
@@ -1050,6 +1055,59 @@ namespace BrnResource
         return true;
     }
 
+    // ========================================================================================
+    // @ 0x8266CEB0 -- Prepare stage 11, PrepareICEList.
+    //
+    // The SAME six-state machine as PrepareVehicleList/PrepareWheelList, over its own stage
+    // word (X360 this+0x234 == a1[141]) with:
+    //     bundle    "Cameras.bundle"      (off_82F2A6F8)
+    //     resource  "StandardICETakes"    (off_82F2A71C)
+    //     pool      5                     (`li r20, 5`, the shared KI_DATA_LIST_POOL_ID)
+    //     allowFail false                 (the X360 leaves the byte at its `li r29,0` zero)
+    //     consumer  BrnResource::ICEList::AddListResource(this + 0x70000 - 0x440, &ptr)
+    //     asserts   cpp:1257 / 1286 / 1291 / 1311 ("Invalid Stage\n")
+    // Both string literals are the IDA asm's own string comments on those two rodata slots,
+    // and both are CONFIRMED against the shipped bundle by hash:
+    //     HashString("StandardICETakes") == 0x0DC0EE8F -> CAMERAS.BUNDLE resource type 65
+    //     (the ICE take dictionary)
+    //     HashString("CameraVault")      == 0x28FE4576 -> CAMERAS.BUNDLE resource type 28
+    //     (the AttribSys vault DirectorResourceManager::Prepare acquires; SAME bundle)
+    //
+    // ⭐ WHY THIS FUNCTION MATTERS BEYOND THE ICE LIST. Its stage-0 LoadBundle is the ONLY
+    // thing in the whole image that makes "Cameras.bundle" resident. Both of the bundle's
+    // resources land in pool 5 together, so this is also what puts the CameraVault where
+    // DirectorResourceManager::Prepare's AcquireResource can find it. Without it that
+    // acquire never replies and the director's prepare stage machine parks for ever.
+    //
+    // [FLAG PC boot gate] the terminal AddListResource is the one part held back:
+    // BrnResource::ICEList (SharedClasses/DataLists/ICEList.cpp) and the ICE take
+    // dictionary's FixUp are not in the exe source list, so there is no list object to bind
+    // the resource into. Everything up to and including the acquire is the console's own
+    // sequence; only the bind is skipped (one-shot log). DELETE-WHEN: the ICE take-runtime
+    // group lands.
+    // ========================================================================================
+    bool GameDataModule::PrepareICEList()
+    {
+        CgsResource::ResourceHandle lHandle;
+        lHandle.Clear();
+        if (!PrepareDataListResource(miICEListPrepareStage,
+                                     "Cameras.bundle", "StandardICETakes",
+                                     false /*mbAllowFailiure -- the X360 leaves it 0*/,
+                                     &lHandle))
+            return false;
+
+        static bool s_bLoggedICEListGate = false;
+        if (!s_bLoggedICEListGate)
+        {
+            s_bLoggedICEListGate = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[GameData] PrepareICEList: 'Cameras.bundle' resident (StandardICETakes "
+                << (lHandle.mpResourceMemory != 0 ? "acquired" : "NOT resolved")
+                << ") -- ICEList::AddListResource skipped [FLAG PC boot gate]\n";
+        }
+        return true;
+    }
+
     // @ 0x8266D1F8 -- Prepare stage 12. (This one is NOT in the .ida-exports set -- the gap
     // rule applies: it was recovered straight from the ARTIST database with headless IDA.)
     bool GameDataModule::PrepareWheelList()
@@ -1118,6 +1176,7 @@ namespace BrnResource
         miWorldCollisionValidatePending = 0;
         miResourcePrepareStage          = 0;
         miVehicleListPrepareStage       = 0;
+        miICEListPrepareStage           = 0;
         miWheelListPrepareStage         = 0;
 
         // X360 0x82671B90 also constructs the two resident data tables here (VehicleList::
