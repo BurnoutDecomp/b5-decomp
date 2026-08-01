@@ -36,16 +36,32 @@ namespace Camera
 // ----------------------------------------------------------------------------
 // Near/far-clip class constants (DWARF Camera.h:200-202).
 //
-// FLAG (un-recovered rodata): the X360 GetNearClipDistance @0x82205B68 returns the
-// floats at flt_82CDA55C (small-near-clip) and flt_82CDA560 (default-near-clip); the
-// far-clip constant is the third member. None of these leaf magnitudes appear in any
-// available rodata dump, so their VALUES are NOT reconstructed. Defined here with a
-// flagged 0.0f placeholder rather than a fabricated magnitude -- the GetNearClipDistance
-// SELECTION logic below is fully X360-attested; only these three leaf values are unknown.
-// Replace with the real magnitudes when the .rodata at 0x82CDA55C is recovered.
-const f32 Camera::KF_SMALL_NEAR_CLIP_DISTANCE   = 0.0f;  // FLAG placeholder (flt_82CDA55C)
-const f32 Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE = 0.0f;  // FLAG placeholder (flt_82CDA560)
-const f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 0.0f;  // FLAG placeholder
+// ⭐ TWO OF THE THREE ARE RECOVERED (2026-08-01). The X360 GetNearClipDistance @0x82205B68
+// returns the floats at flt_82CDA55C (small-near-clip) and flt_82CDA560 (default-near-clip).
+// The old note here said "none of these leaf magnitudes appear in any available rodata dump"
+// and defined all three as a flagged 0.0f -- which for a NEAR clip is not merely unknown, it
+// is degenerate (a zero near plane has no valid perspective projection).
+//
+// They were read out of the unpacked IDA database's flag array (`.id1`) rather than from a
+// rodata dump -- the decrypted XEX the older readva.py expected is gone, and the function
+// exports carry no data. The reader was self-checked against two constants whose values are
+// independently known from their use sites (flt_82001C98 == 1.0f, flt_82001CC0 == 0.0f)
+// before either of these was trusted.
+//   flt_82CDA55C = 0.1f   -- the "small near clip" the camera-state 0x10000 flag selects
+//   flt_82CDA560 = 0.15f  -- the default
+// ⚠️ SINGLE-SOURCE: one recovery method, no second witness (no consumer in the tree pins the
+// magnitude by arithmetic). Nothing in the linked set calls GetNearClipDistance today
+// (CameraInterpolationController::Update, its only console consumer, is unmounted), so this
+// changes no observable behaviour yet -- but check it against the near plane the world
+// actually renders with the day that path lights up.
+//
+// FLAG (still un-recovered): the FAR-clip constant has no pinned address at all -- the third
+// DWARF member is not referenced by GetNearClipDistance, so there is nothing to read. It
+// stays a flagged 0.0f placeholder. (The world's live far plane comes from elsewhere; the sky
+// wave measured it at 5665.)
+const f32 Camera::KF_SMALL_NEAR_CLIP_DISTANCE   = 0.1f;   // flt_82CDA55C (.id1-recovered)
+const f32 Camera::KF_DEFAULT_NEAR_CLIP_DISTANCE = 0.15f;  // flt_82CDA560 (.id1-recovered)
+const f32 Camera::KF_DEFAULT_FAR_CLIP_DISTANCE  = 0.0f;   // FLAG placeholder (no pinned address)
 
 // Pointer-size-independent facts the X360 asm pins (these hold on the x64 gate too).
 // CameraEffects has no pointer members, so its 0xBC stride -- the gap the Construct asm

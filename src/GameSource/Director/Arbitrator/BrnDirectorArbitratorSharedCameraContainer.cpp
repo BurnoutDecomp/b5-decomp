@@ -82,4 +82,43 @@ namespace BrnDirector
         mGameplayBumper.SetUpdatesDuringPause(true);
         mGameplayExternal.SetUpdatesDuringPause(true);
     }
+
+    // ------------------------------------------------------------------------
+    // SharedCameraContainer::GetSelectedGameplayCamera (DWARF h:58)
+    //
+    // NO STANDALONE X360 SYMBOL EXISTS -- the compiler inlined it at every call site, which
+    // is why a name search for it comes back empty. Recovered from three independent inlined
+    // sites and cross-checked between them:
+    //     ArbStateCarSelect::Prepare  @0x8226EFA0  (the "transition cam still queued" arm)
+    //     ArbStateRaceIntro::Update   @0x8226E5B0  case 4
+    //     Arbitrator::Update          @0x8226ADA0  (the paused-in-roaming hand-over)
+    // Every site emits the same shape:
+    //     v31 = (*(container + 0) != 0) && (*(container + 1) == 0);
+    //     v32 = v31 ? sub_82212288(container + 4) : sub_82212438(container + 24);
+    //
+    // ⭐ The two subs are UNNAMED in the export set, and both are
+    // BehaviourHandle<T>::GetProducedCamera -- two template instantiations of one function.
+    // Pinned not by shape but by their own assert: each opens with
+    //     FireAssert("IsAllocated()", ".../BrnBehaviourManager.h", 610)
+    // and returns `GetHelper() + 16` == BehaviourHelper::mCamera. Line 610 of that header is
+    // GetProducedCamera's own tripwire, and +16 (console) is mCamera, the member right after
+    // the type-erased pool handle. (Its sibling sub_821FD3E8, which the same function uses
+    // for the behaviour itself, asserts at :589 and returns *GetHelper() -- GetBehaviour.)
+    //
+    // The selection predicate is byte-identical to GetGameplayCameraHelperIndex @0x82219718's
+    // (`lbz 0(this)` non-zero AND `lbz 1(this)` zero), so the two accessors agree by
+    // construction: same choice, one returning the handle's index and this one its camera.
+    // Container +4 / +24 are mGameplayExternal / mGameplayBumper -- reached BY NAME here; the
+    // console displacements are provenance only (x64 widens the handles).
+    //
+    // The reference is real all the way down (GetProducedCamera returns the pool slot's
+    // embedded Camera), which is why this could never have been honestly stubbed.
+    // ------------------------------------------------------------------------
+    const Camera::Camera& SharedCameraContainer::GetSelectedGameplayCamera() const
+    {
+        const bool lbUseExternal = mbUseGameplayExternal && !mbLookbackOverride;
+
+        return lbUseExternal ? mGameplayExternal.GetProducedCamera()
+                             : mGameplayBumper.GetProducedCamera();
+    }
 }
