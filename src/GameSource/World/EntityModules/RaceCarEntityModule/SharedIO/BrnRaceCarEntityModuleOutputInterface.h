@@ -15,6 +15,7 @@
 #include "types.hpp"                                                // s8/s32/u16/u32/f32
 #include "BrnCommonTypes.h"                                         // CgsID, Vector3, Vector4, EntityId
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // CgsModule::Event
+#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT (the header-inline accessors below)
 #include "GameShared/GameClasses/Containers/CgsArray.h"             // Array<T,N>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"          // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
@@ -92,6 +93,33 @@ namespace RaceCarEntityModuleIO
         void Construct();                           // :184 (declared-only; own TU)
     };
 
+    // ------------------------------------------------------------------------------------
+    // The per-car flags word published into RCEntityActiveRaceCarOutputInterface::
+    // maxRaceCarFlags[idx]. The ONLY producer is RaceCarEntityModule::UpdateOutputInterfaces
+    // @0x822F5CF8, which builds it bit by bit (`ori r24, r24, <bit>`); the consumers are the
+    // interface's own Is*() predicates.
+    //
+    // PROVEN: bit 0 (RaceCarEntityModule sets it on every attached slot; the out-of-line
+    // IsRaceCarActive @0x82277B10 is `& 1`), bit 2 (IsRaceCarRival @0x82705690 is `>> 2 & 1`,
+    // producer arm `muType == E_RACE_CAR_TYPE_AI`), bit 3 (IsRaceCarNetwork @0x82310140 is
+    // `>> 3 & 1`, producer arm `muType == E_RACE_CAR_TYPE_NETWORK`).
+    // FLAG (inferred, not proven): the remaining five names. The producer's CONDITIONS are
+    // asm-attested exactly as written below; what is inferred is which declared Is*()
+    // predicate reads each bit, because those predicates are header inlines with no export.
+    // ------------------------------------------------------------------------------------
+    enum ERaceCarOutputFlag : u32
+    {
+        E_RACE_CAR_OUTPUT_FLAG_IN_USE        = 0x0001, // set for every attached slot
+        E_RACE_CAR_OUTPUT_FLAG_PLAYER        = 0x0002, // mpRaceCar->muType == E_RACE_CAR_TYPE_PLAYER
+        E_RACE_CAR_OUTPUT_FLAG_RIVAL         = 0x0004, // mpRaceCar->muType == E_RACE_CAR_TYPE_AI
+        E_RACE_CAR_OUTPUT_FLAG_NETWORK       = 0x0008, // mpRaceCar->muType == E_RACE_CAR_TYPE_NETWORK
+        E_RACE_CAR_OUTPUT_FLAG_LOADED        = 0x0010, // ActiveRaceCar::IsActive()  (muState == E_STATE_ACTIVE)
+        E_RACE_CAR_OUTPUT_FLAG_CONNECTING    = 0x0020, // meOnlineState == E_ONLINE_STATE_CONNECTING
+        E_RACE_CAR_OUTPUT_FLAG_LOST_CONTACT  = 0x0040, // mbNotSendingNetworkUpdates
+        E_RACE_CAR_OUTPUT_FLAG_DISCONNECTED  = 0x0080, // mbIsDisconnectedFromNetwork
+        E_RACE_CAR_OUTPUT_FLAG_IN_SHOWTIME   = 0x0100  // mbIsInShowtime
+    };
+
     // DWARF :189 -- minimal per-car snapshot held in the active interface's race list.
     struct CarsInTheRaceData
     {
@@ -148,7 +176,21 @@ namespace RaceCarEntityModuleIO
         // player's RaceCarState). Asserts the player index has been set, like GetPlayerRaceCarState.
         // Not in the committed declaration set; added additively (definition in this TU's .cpp).
         f32  GetPlayerSpeedMPH() const;
-        bool IsPlayerCarCrashing() const;                                                    // :296 (own TU)
+        // :296 -- HEADER INLINE (no out-of-line symbol in the image). Recovered from its
+        // inlined call site at the top of BrnGameModule::BridgeWorldToDirector @0x823E3AB0:
+        //   `v25 = mePlayerActiveRaceCarIndex;
+        //    v25 == -1 ? 0 : *(1120*v25 + iface + 1914)`
+        // 1914 - 816 (maRaceCarStates) == element +1098, which is the console offset of the
+        // committed mbCrashing (@1094 here -- the uniform +4 X360 drift, see BrnPlayerInfo/
+        // GameBridgeWorldToX). Note it does NOT bounds-assert -- only the -1 sentinel is
+        // tested; the "< E_ACTIVE_RACE_CAR_INDEX_COUNT" assert at that call site belongs to
+        // the IsPlayerCarActive() inline that guards it.
+        bool IsPlayerCarCrashing() const
+        {
+            if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                return false;
+            return maRaceCarStates[mePlayerActiveRaceCarIndex].mbCrashing;
+        }
         bool IsPlayerCarDeforming() const;                                                   // :299 (own TU)
         bool IsThePlayerDrivableFromCrash() const;                                           // :302 (own TU)
         bool IsPlayerCarFatalyCrashing() const;                                              // :305 (own TU)
@@ -158,14 +200,56 @@ namespace RaceCarEntityModuleIO
         bool IsPlayerEngineOn() const;                                                       // :317 (own TU)
         bool IsPlayerEngineStarting() const;                                                 // :320 (own TU)
         EActiveRaceCarEngineState GetPlayerEngineState() const;                              // :323 (own TU)
-        bool IsRaceCarEngineOn(EActiveRaceCarIndex) const;                                   // :327 (own TU)
-        bool IsRaceCarEngineStarting(EActiveRaceCarIndex) const;                             // :331 (own TU)
+        // :327 / :331 -- HEADER INLINES (no out-of-line symbols). Recovered from the pair
+        // BrnGameModule::BridgeWorldToDirector @0x823E3AB0 inlines and ORs together to fill
+        // VehicleInfo::mbEngineOn:
+        //   engine-on(idx)       = (idx != mePlayerActiveRaceCarIndex)
+        //                       || (mePlayerActiveRaceCarIndex != -1 && engineState == RUNNING)
+        //   engine-starting(idx) = (idx != mePlayerActiveRaceCarIndex)
+        //                       || (mePlayerActiveRaceCarIndex != -1 && engineState == STARTING)
+        // i.e. only the PLAYER's engine state is tracked here; every other slot reports "on".
+        // The split of the single recovered expression into these two declared predicates is
+        // the DWARF's own naming (the compared enumerators are RUNNING(2) and STARTING(1));
+        // that split is INFERRED, the combined expression is asm-attested.
+        bool IsRaceCarEngineOn(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            if (leActiveRaceCarIndex != mePlayerActiveRaceCarIndex)
+                return true;
+            return mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                   mePlayerEngineState == E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING;
+        }
+        bool IsRaceCarEngineStarting(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            if (leActiveRaceCarIndex != mePlayerActiveRaceCarIndex)
+                return true;
+            return mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                   mePlayerEngineState == E_ACTIVE_RACE_CAR_ENGINE_STATE_STARTING;
+        }
         const BoostOutputInfo& GetBoostOutputInfo() const;                                   // :337 (own TU)
         void SetBoostOutputInfoN(EActiveRaceCarIndex, const BoostOutputInfo&);               // :342 (own TU)
-        const BoostOutputInfo* GetBoostOutputInfoN(EActiveRaceCarIndex) const;               // :346 (own TU)
+        // :346 -- HEADER INLINE (no out-of-line symbol). BridgeWorldToDirector's inlined copy
+        // carries this header's OWN assert lines (:1157 / :1158) and then indexes
+        // `36*idx + this + 528` -- the 36-byte BoostOutputInfo stride at maBoostOutputInfo.
+        const BoostOutputInfo* GetBoostOutputInfoN(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");   // :1157
+            CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // :1158
+            return &maBoostOutputInfo[leActiveRaceCarIndex];
+        }
+        // ⚠️ PARAMETER ORDER (asm-attested, 2026-08-01): the console passes
+        //   r9 = luFlags, r10 = lu16AISection, stack+0x54 = luColourIndex,
+        //   stack+0x5C = liPaintFinishIndex
+        // (X360 0x822CC080: `sthx r25(r9)` -> maxRaceCarFlags[idx] @2*(idx+0x13C0);
+        //  `sthx r24(r10)` -> mau16ActiveRaceCarAISections[idx] @2*(idx+0x1378);
+        //  `stwx arg_54` -> mauActiveRaceCarColourIndex[idx] @4*(idx+0x9AC);
+        //  `stwx arg_5C` -> maiActiveRaceCarPaintFinishIndex[idx] @4*(idx+0x9B4)).
+        // The u32 pair FLAGS/COLOUR-INDEX used to be transcribed the other way round here;
+        // it was latent because the function had no caller. Corrected -- see the .cpp.
         void SetRaceCarState(EActiveRaceCarIndex, EGlobalRaceCarIndex, CgsID, CgsID,
-                             const RaceCarState*, u32, u16, u32, s32, Vector4, Vector3,
-                             bool, bool);                                                    // :362 (own TU)
+                             const RaceCarState*, u32 /*luFlags*/, u16, u32 /*luColourIndex*/,
+                             s32, Vector4, Vector3, bool, bool);                             // :362 (own TU)
         void SetPlayerActiveRaceCarData(EActiveRaceCarIndex, EActiveRaceCarEngineState);     // :367 (own TU)
         bool GetAllActiveCarsRead() const;                                                   // :370 (own TU)
         void SetAllActiveCarsReady(bool);                                                    // :374 (own TU)
@@ -184,7 +268,12 @@ namespace RaceCarEntityModuleIO
         void AddCarToRace(BrnWorld::RaceCar*, EGlobalRaceCarIndex);                           // :413 (own TU)
         void SetActiveRaceCarIndex(BrnGameState::GameStateModuleIO::EPlayerScoringIndex, EActiveRaceCarIndex); // :420 (own TU)
         EActiveRaceCarIndex GetActiveRaceCarIndex(BrnGameState::GameStateModuleIO::EPlayerScoringIndex) const; // :424 (own TU)
-        void SetPlayerWrecked(bool);                                                         // :428 (own TU)
+        // :428 -- HEADER INLINE, not an own-TU function: the image has no out-of-line
+        // SetPlayerWrecked symbol at all, and its only caller (RaceCarEntityModule::
+        // UpdateOutputInterfaces @0x822F5CF8) reaches the member with a bare `stb r11, 0x28E0`.
+        // (The batch annotation on the block above marked every declaration "own TU"; this one
+        // is a plain store and is bodied where the DWARF declares it.)
+        void SetPlayerWrecked(bool lbWrecked) { mbPlayerWrecked = lbWrecked; }   // @+0x28E0
         bool IsPlayerWrecked() const;                                                        // :431 (own TU)
         Vector3 GetCurrentInAirRotations(EActiveRaceCarIndex) const;                         // :435 (own TU)
         bool HasCrashedIntoWater(EActiveRaceCarIndex) const;                                 // :440 (own TU)

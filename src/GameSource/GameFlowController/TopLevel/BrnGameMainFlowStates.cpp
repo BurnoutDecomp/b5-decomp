@@ -220,13 +220,27 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     }
 
     BrnWorldIO::UpdateInputBuffer*  lpWorldInput  = 0;
-    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = 0;
     lpUpdateInputStack->CreateIOBuffer(&lpWorldInput, "World");
-    lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
     // The X360 CreateIOBuffer<T> instantiation runs T::Construct after the stack alloc; the
     // generic PC template placement-news only (same restoration as LoadWorldModule).
     lpWorldInput->Construct();
-    lpWorldOutput->Construct();
+
+    // ⭐ THE OUTPUT BUFFER IS THE GAME MODULE'S, not this function's (2026-08-01, camera wave).
+    // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
+    // sub-step and threads it through DoUpdate_World, DoUpdate_Director and every other leg.
+    // This function used to create AND DESTROY it inside one call, so nothing downstream could
+    // ever read what the world published -- in particular BridgeWorldToDirector, the only
+    // route from a race car's pose to the director's cameras. It now uses the game module's
+    // per-sub-step buffer (CreateStaticIOBuffers), falling back to a local one only if that
+    // has not been created (the flow states are always driven from inside the sub-step, so the
+    // fallback is defensive).
+    BrnWorldIO::UpdateOutputBuffer* lpWorldOutput = lpGameModule->GetWorldUpdateOutputBuffer();
+    const bool lbOwnsOutputBuffer = (lpWorldOutput == 0);
+    if (lbOwnsOutputBuffer)
+    {
+        lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
+        lpWorldOutput->Construct();
+    }
 
     // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
     // dispatch. The loading update set is 0x80 (frustum testing on, nothing else).
@@ -252,7 +266,10 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
         lpGameDataInputBuffer->UnlockForWrite();
     }
 
-    lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
+    if (lbOwnsOutputBuffer)
+    {
+        lpUpdateOutputStack->DestroyIOBuffer(&lpWorldOutput);
+    }
     lpUpdateInputStack->DestroyIOBuffer(&lpWorldInput);
 }
 

@@ -80,6 +80,48 @@ void RCEntityGlobalRaceCarOutputInterface::Clear()
 }
 
 // ============================================================================
+// operator= (DWARF :483). Like its active-race-car sibling there is NO out-of-line
+// symbol: the only assignment site, BrnWorldIO::UpdateOutputBuffer::
+// SetRaceCarGlobalOutputInterface @0x827A4638, is a flat XMemCpy of the whole
+// 2416-byte object.
+//
+// ⚠️ It had been resolving from WorldLinkStubs.cpp as an INERT one-shot log, so the
+// world's global-race-car publish silently copied nothing. Member-wise here (a byte
+// copy is not portable to the x64 layout; the BitArray members carry their own).
+// ============================================================================
+void RCEntityGlobalRaceCarOutputInterface::operator=(
+        const RCEntityGlobalRaceCarOutputInterface& lrOther)
+{
+    if (this == &lrOther)
+    {
+        return;
+    }
+
+    for (s32 luIndex = 0; luIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++luIndex)
+    {
+        maRaceCarPositions[luIndex]      = lrOther.maRaceCarPositions[luIndex];
+        maRaceCarAts[luIndex]            = lrOther.maRaceCarAts[luIndex];
+        maRaceCarWorldRegions[luIndex]   = lrOther.maRaceCarWorldRegions[luIndex];
+        maRivalIds[luIndex]              = lrOther.maRivalIds[luIndex];
+        maCarModelIds[luIndex]           = lrOther.maCarModelIds[luIndex];
+        mafRaceCarSpeeds[luIndex]        = lrOther.mafRaceCarSpeeds[luIndex];
+        maeActiveRaceCarIndices[luIndex] = lrOther.maeActiveRaceCarIndices[luIndex];
+        maiRivalIndices[luIndex]         = lrOther.maiRivalIndices[luIndex];
+        mauAISectionIndices[luIndex]     = lrOther.mauAISectionIndices[luIndex];
+    }
+
+    mGlobalRaceCarIndices   = lrOther.mGlobalRaceCarIndices;
+    mIsPlayerFlags          = lrOther.mIsPlayerFlags;
+    mIsRivalAIFlags         = lrOther.mIsRivalAIFlags;
+    mIsNetworkFlags         = lrOther.mIsNetworkFlags;
+    mIsInCurrentModeFlags   = lrOther.mIsInCurrentModeFlags;
+    mIsDispersingFlags      = lrOther.mIsDispersingFlags;
+    mIsInRangeFlags         = lrOther.mIsInRangeFlags;
+
+    mePlayerGlobalRaceCarIndex = lrOther.mePlayerGlobalRaceCarIndex;
+}
+
+// ============================================================================
 // X360 0x821F46C8 -- GetActiveRaceCarIndex(EGlobalRaceCarIndex). Bounds-checks the
 // global index in [0,35) and returns maeActiveRaceCarIndices[idx] (stride 4, base
 // +0x834). (Truncated export name: "GetActi".)

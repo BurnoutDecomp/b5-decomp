@@ -135,7 +135,64 @@ void BridgeEntityModulesToOutput_PostPhysics(
     {
         lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
             lpRaceCarOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
+
+        // ⭐ THE RACE-CAR OUTPUT-INTERFACE TRANSFER. The console runs this as its own
+        // named leg; see the function below.
+        BridgeRaceCarEntityInfoToOutput_PostPhysics(lpWorldModule, lpOutputBuffer,
+                                                    lpRaceCarOutput_PostPhysics);
     }
+}
+
+// ----------------------------------------------------------------------------
+// BridgeRaceCarEntityInfoToOutput_PostPhysics  @ 0x827ADC38
+//
+// The console body, statement for statement:
+//     assert lpWorldOutput != NULL                                   (:402)
+//     assert lpRaceCarOutputBuffer_PostPhysics != NULL               (:403)
+//     StartMonitor(worldModule + 6167720);
+//     SetActiveRaceCarOutputInterface      ( out, in->GetActiveRaceCarOutputInterface() );
+//     SetReplayActiveRaceCarOutputInterface( out, in->GetReplayActiveRaceCarOutputInterface() );
+//     SetRaceCarGlobalOutputInterface      ( out, in->GetGlobalRaceCarOutputInterface() );
+//     VariableEventQueue<1536,16>::Append<1536,16>( out->GetGameEventQueue(),
+//                                                   in->GetGameEventQueue() );
+//     StopMonitor(...);
+//
+// ⭐ WHY THIS MATTERS: RaceCarEntityModule::UpdateOutputInterfaces is the only producer of
+// RCEntityActiveRaceCarOutputInterface, and THIS is the only thing that carries its answer
+// out of the race-car module. Everything downstream -- WorldModule::Update's own player
+// position/speed latch, the scoring system, and BrnGameModule::BridgeWorldToDirector's
+// per-car VehicleInfo publish -- reads the world update-output copy this writes.
+//
+// [FLAG PC bring-up] the REPLAY GLOBAL interface has no destination: the world update-output
+// buffer has no replay-global member and the console's own leg is the three above plus the
+// game-event append (it never forwards the replay global one either).
+// [FLAG] the game-event queue append is dropped: the race-car module's game-event producers
+// (SendGameEvents @ the console's own PostPhysicsUpdate tail) are un-homed on this build, so
+// the source ring is always empty; the transfer lands with them.
+// [FLAG] the console's CPU monitor (worldModule + 6167720) is not modelled on this leg --
+// the sibling bridges in this file take the same disposition.
+// ----------------------------------------------------------------------------
+void BridgeRaceCarEntityInfoToOutput_PostPhysics(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpRaceCarOutput_PostPhysics)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpOutputBuffer != 0, "lpWorldOutput != NULL");                                  // :402
+    CGS_ASSERT(lpRaceCarOutput_PostPhysics != 0, "lpRaceCarOutputBuffer_PostPhysics != NULL"); // :403
+
+    if (lpOutputBuffer == 0 || lpRaceCarOutput_PostPhysics == 0)
+    {
+        return;
+    }
+
+    lpOutputBuffer->SetActiveRaceCarOutputInterface(
+        lpRaceCarOutput_PostPhysics->GetActiveRaceCarOutputInterface());
+    lpOutputBuffer->SetReplayActiveRaceCarOutputInterface(
+        lpRaceCarOutput_PostPhysics->GetReplayActiveRaceCarOutputInterface());
+    lpOutputBuffer->SetRaceCarGlobalOutputInterface(
+        lpRaceCarOutput_PostPhysics->GetGlobalRaceCarOutputInterface());
 }
 
 

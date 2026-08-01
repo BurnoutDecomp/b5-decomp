@@ -430,6 +430,21 @@ namespace DirectorIO
             mUsedRaceCars.UnSetBit(luIndex);
     }
 
+    // @0x325C -- the player's boost fill fraction. BridgeWorldToDirector @0x823E3AB0 stores
+    // it inline (`stfsx` at input+0x325C) under the same write lock as its neighbours; the
+    // named entry point is ours, the field and the value are the console's.
+    void InputBuffer::SetPlayerBoostPercentage(f32 lfPercentage)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mfPlayerBoostPercentage = lfPercentage;
+    }
+
+    f32 InputBuffer::GetPlayerBoostPercentage() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mfPlayerBoostPercentage;
+    }
+
     void InputBuffer::SetShortcutMenuEvent(bool lbState)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");

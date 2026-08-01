@@ -388,6 +388,26 @@ public:
     BrnPhysics::Vehicle::RaceCarState*       GetPhysicsState()       { return &mPhysicsState; }
     const BrnPhysics::Vehicle::RaceCarState* GetPhysicsState() const { return &mPhysicsState; }
 
+    // ========================================================================
+    // ADDITIVE named readers for the per-frame OUTPUT publish (2026-08-01).
+    //
+    // RaceCarEntityModule::UpdateOutputInterfaces @0x822F5CF8 reads every one of these
+    // members DIRECTLY off the slot (`lbz r11, 0x788(r31)` and friends -- the console
+    // inlines the loads at the call site, so there is no console accessor to name after).
+    // Exposed here so the publish reads them BY NAME instead of re-deriving offsets, in
+    // the same spirit as ShouldRenderThisFrame() above. The offsets in the comments are
+    // the ARTIST loads that prove each one; they are provenance, never casts.
+    // ========================================================================
+    RaceCarEntityModuleIO::EActiveRaceCarEngineState GetEngineState() const { return meEngineState; }   // +0x768
+    EOnlineState GetOnlineState() const              { return meOnlineState; }                 // +0x744
+    bool IsInShowtime() const                        { return mbIsInShowtime; }                // +0x788
+    bool IsNotSendingNetworkUpdates() const          { return mbNotSendingNetworkUpdates; }    // +0x798
+    bool IsDisconnectedFromNetwork() const           { return mbIsDisconnectedFromNetwork; }   // +0x799
+    const Vector3& GetCurrentInAirRotations() const  { return mCurrentInAirRotations; }        // +0x750
+    u16  GetCurrentAISection() const                 { return muCurrAISection; }               // +0x73E
+    bool HasCrashedIntoWater() const                 { return mbCrashedIntoWater; }            // +0x783
+    bool CanDriveAwayFromCrash() const               { return mbCanDriveAwayFromCrash; }       // +0x779
+
 private:
     // ========================================================================
     // Layout (completed by the pose wave 2026-07-31).

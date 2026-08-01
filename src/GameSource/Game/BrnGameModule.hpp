@@ -83,7 +83,7 @@ using BrnWorld::WorldModule;   // DWARF: global-namespace WorldModule (BrnWorldM
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
 namespace CgsInput { namespace InputIO { struct PadOutputInformation; struct ActionInfo; struct PostWorldInputBuffer; } }
 namespace BrnDirector { namespace DirectorIO { struct InputBuffer; } }
-namespace BrnWorldIO { struct UpdateInputBuffer; }
+namespace BrnWorldIO { struct UpdateInputBuffer; struct UpdateOutputBuffer; }
 namespace BrnGame { struct DebugControllerImage; }
 namespace CgsGui { class GuiModule; }
 // Replay-bridge family (GameSource/Unity/../Game/GameBridgeReplayToX.cpp) parameter type:
@@ -215,6 +215,19 @@ namespace BrnGame
         // X360 reads them off the game-module global (e.g. LoadSoundModule 0x823E75A8).
         CgsModule::IOBufferStack* GetUpdateInputBufferStack()  { return mpUpdateInputBufferStack; }
         CgsModule::IOBufferStack* GetUpdateOutputBufferStack() { return mpUpdateOutputBufferStack; }
+
+        // ⭐ THIS SUB-STEP'S WORLD UPDATE OUTPUT BUFFER (2026-08-01, camera wave).
+        // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
+        // sub-step, near the top, and threads the same pointer through DoUpdate_World,
+        // DoUpdate_InputPostWorld, DoUpdate_Director, DoUpdate_Effects, ... destroying it at
+        // the very bottom. On this build the world leg was owned by the flow states'
+        // DriveWorldUpdateFrame, which created the buffer, drove the world into it and
+        // DESTROYED it inside one call -- so no later leg could ever read what the world
+        // published. Hoisted to the same per-sub-step lifetime as the GUI/director buffers
+        // (CreateStaticIOBuffers / DestroyStaticIOBuffers) so the director's own leg can.
+        // Fold into the real DoUpdate cascade when the module scheduler moves under the game
+        // module's own spines.
+        BrnWorldIO::UpdateOutputBuffer* GetWorldUpdateOutputBuffer() { return mpWorldUpdateOutputBuffer; }
 
         enum EGameUpdateStage   // h:248
         {
@@ -401,6 +414,16 @@ namespace BrnGame
         // same queue directly via BrnGui::GuiModule::GetGuiOutQueue().
         void BridgeGuiToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
                                  CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+
+        // ⭐ X360 0x823E3AB0 -- the WORLD->DIRECTOR seam, the ONLY caller of
+        // DirectorIO::InputBuffer::SetRaceCarInfo in the whole image and therefore the only
+        // way a race car's pose reaches the director's cameras. Signature recovered from the
+        // ASM (r3/r4/r5 only -- IDA's 16-parameter prototype is stack-slot noise); the DWARF
+        // home is GameSource/Game/GameBridgeWorldToX.cpp, where the body lives.
+        // Called by DoUpdate_Director @0x823E8DE0 with this sub-step's director INPUT buffer
+        // and the world UPDATE OUTPUT buffer.
+        void BridgeWorldToDirector(BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+                                   const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
 
         // The main-flow states' pending GUI FSM stage request (the X360 +2523537 byte the
         // MainGameFlowState OnEnters write; BridgeGameToGui consumes it).
@@ -595,6 +618,12 @@ namespace BrnGame
         CgsGui::ModelIO::OutputBuffer*         mpGuiModelOutputBuffer;// h:495
         CgsGui::CgsGuiModuleIO::OutputBuffer*  mpGuiOutputBuffer;    // h:496
         BrnDirector::DirectorIO::OutputBuffer* mpDirectorOutputBuffer;// h:497
+        // [FLAG PC placement] this sub-step's world UPDATE OUTPUT buffer. On the console it is
+        // a LOCAL of DoUpdate @0x823F0AF8 (created near the top, threaded through every leg,
+        // destroyed at the bottom); DoUpdate is a PC-platform leaf here, so it lives with the
+        // other per-sub-step static IO buffers instead. Same lifetime either way.
+        // See GetWorldUpdateOutputBuffer() above.
+        BrnWorldIO::UpdateOutputBuffer*        mpWorldUpdateOutputBuffer;
         // The double-buffered dispatch-thread input pair (X360 module +10097064): the update
         // side writes it (BridgeGuiToGame's loading-screen commands, IsStalled/IsDiskError,
         // brightness/contrast), OnEndOfUpdateFrame swaps it, and the dispatch/render side
@@ -639,13 +668,13 @@ namespace BrnGame
         // DoUpdate_Director. DELETE with GenerateDispatchListsBringUp.
         bool mbDirectorCameraLive;
 
-        // [FLAG PC bring-up] (no console member): one-shot latch for the "the staged player car
-        // is FAKE" warning DoUpdate_Director emits the first time it marks race car 0 in-use
-        // with a zeroed VehicleInfo. See the ⚠️⚠️ block at that write site: the used-race-car bit
-        // makes VehicleRef::IsValid pass on a car that does not exist, so any ICE-anim take
-        // framed against it is an origin camera. DELETE with the stand-in, when a real spawned
-        // player car exists.
-        bool mbWarnedStagedPlayerCarIsFake;
+
+        // @ +10094132 (0x9A0634). The console's own latch, written as the FIRST statement of
+        // BridgeWorldToDirector @0x823E3AB0:
+        //   mbPlayerCarCrashing = active->IsPlayerCarActive() && active->IsPlayerCarCrashing()
+        // It has no reconstructed reader yet; published anyway because dropping a store the
+        // bridge makes every frame is a silent divergence, and the field is one byte.
+        bool mbPlayerCarCrashing;
 
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)

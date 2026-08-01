@@ -74,5 +74,33 @@ void RaceCarState::Clear()
 // @0x8220A4C0 -- pure bitwise copy of the whole object; trivially copyable => defaulted.
 RaceCarState::RaceCarState(const RaceCarState&) = default;
 
+// ============================================================================
+// operator= (DWARF :214, returns void). No X360 address -- the build inlined every
+// assignment site, and the copy constructor above proves the shape: a pure bitwise copy
+// of the whole 1120-byte object.
+//
+// ⚠️⚠️ WHY THIS EXISTS NOW (2026-08-01, camera wave). This declared-but-undefined operator
+// had been resolving from BrnBaselineLinkStubs.cpp as `{}` -- an EMPTY BODY -- whose own
+// comment said "Only the Director camera path -- OFF the boot/title/menu path -- reaches
+// it". That path is now live, and the effect was invisible and total: EVERY RaceCarState
+// assignment in the tree silently copied nothing. In particular
+//     RCEntityActiveRaceCarOutputInterface::operator= (maRaceCarStates[i] = ...)
+//     BrnDirector::Camera::VehicleInfo::operator=     (mRaceCarState = ...)
+// both ran, both looked right, and both dropped the car's transform -- so the world
+// published a correctly-posed car at (3008.17, -1.16, -1874.30) and the director's camera
+// received one at the ORIGIN. Bisected with a source/destination pose print.
+//
+// The member copy is spelled out rather than memcpy'd only where it costs nothing: the
+// whole object is standard-layout scalars/arrays, so the bitwise copy IS the member-wise
+// copy, and it is what the console emits.
+// ============================================================================
+void RaceCarState::operator=(const RaceCarState& lrOther)
+{
+    if (this != &lrOther)
+    {
+        memcpy(this, &lrOther, sizeof(*this));
+    }
+}
+
 }
 }

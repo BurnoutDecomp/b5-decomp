@@ -2734,24 +2734,11 @@ struct BrnPhysics::Deformation::WheelPhysicalStates & BrnPhysics::Deformation::W
     return *this;
 }
 
-// -------------------------------------------------------------------------
-// void BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO
-// -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface const &)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RCEntityActiveRaceCarOutputInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED 2026-08-01 (camera wave): RCEntityActiveRaceCarOutputInterface::operator= now has
+// its real member-wise body in
+// SharedIO/BrnRCEntityActiveRaceCarOutputInterface.cpp. While this gate was here,
+// UpdateOutputBuffer::SetActiveRaceCarOutputInterface -- the world's only per-frame
+// race-car publish -- ran every frame and copied NOTHING.
 
 // -------------------------------------------------------------------------
 // void BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO
@@ -2761,16 +2748,9 @@ void BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::oper
 // @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
 // body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
 // not this gate.
-void BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface::operator=(struct BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface const &)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RCEntityGlobalRaceCarOutputInterface: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED 2026-08-01 (camera wave): the real member-wise body now lives in
+// SharedIO/BrnRCEntityGlobalRaceCarOutputInterface.cpp. Same silent-drop story as its
+// active-race-car sibling above.
 
 // ---------------------------------------------------------------------------
 // Attrib mount closure stubs (2026-07-27): symbols the linked SDK TUs

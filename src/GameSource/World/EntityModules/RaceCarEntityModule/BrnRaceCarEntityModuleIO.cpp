@@ -264,6 +264,41 @@ OutputBuffer_PostPhysics::GetSceneInputInterface()
     return &mSceneInputInterface;
 }
 
+// X360 0x8279E720 (R, :572) / 0x822B6530 (W, :573) -- the LIVE active-race-car output
+// accessors. Bodied 2026-08-01: the pair had stayed declaration-only because nothing
+// produced or consumed the interface; RaceCarEntityModule::UpdateOutputInterfaces (the
+// producer) and WorldModule::BridgeRaceCarEntityInfoToOutput_PostPhysics (the consumer)
+// now do. Same shape as every sibling: lock tripwire then &member.
+const RCEntityActiveRaceCarOutputInterface*
+OutputBuffer_PostPhysics::GetActiveRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mActiveRaceCarOutputInterface;
+}
+
+RCEntityActiveRaceCarOutputInterface*
+OutputBuffer_PostPhysics::GetActiveRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mActiveRaceCarOutputInterface;
+}
+
+// X360 0x8279E7C8 (R, :575) / 0x822B65D8 (W, :576) -- the LIVE global-race-car output
+// accessors (same note as the pair above).
+const RCEntityGlobalRaceCarOutputInterface*
+OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mGlobalRaceCarOutputInterface;
+}
+
+RCEntityGlobalRaceCarOutputInterface*
+OutputBuffer_PostPhysics::GetGlobalRaceCarOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mGlobalRaceCarOutputInterface;
+}
+
 // X360 0x8279E678 (R, :578) -- const replay active-race-car output accessor.
 const RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PostPhysics::GetReplayActiveRaceCarOutputInterface() const

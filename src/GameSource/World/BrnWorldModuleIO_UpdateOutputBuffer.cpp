@@ -223,6 +223,19 @@ UpdateOutputBuffer::GetActiveRaceCarOutputInterface() const
     return &mActiveRaceCarOutputInterface;
 }
 
+// X360 0x823B6D80 (h:511 R) -- the player's active-race-car slot. The console reads the
+// embedded interface's own member directly (`lwz` at this+40184 == 29856 + 10328) and
+// carries the interface's OWN "Player car index hasn't been set" assert
+// (BrnRaceCarEntityModuleOutputInterface.h:980) inlined behind the buffer's read-lock
+// tripwire (BrnWorldModuleIO.h:898) -- i.e. it is the forward written below.
+// Bodied 2026-08-01: it had stayed declaration-only until BrnGameModule::BridgeWorldToDirector
+// became its first caller.
+EActiveRaceCarIndex UpdateOutputBuffer::GetPlayerActiveRaceCarIndex() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return mActiveRaceCarOutputInterface.GetPlayerActiveRaceCarIndex();
+}
+
 // X360 0x823B5CC0 (h:547 R) -- const replay active-race-car interface accessor (+40336;
 // selected by WorldModule::Update when the update set carries 0x100).
 const UpdateOutputBuffer::RCEntityActiveRaceCarOutputInterface*

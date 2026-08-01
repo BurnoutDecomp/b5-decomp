@@ -860,6 +860,217 @@ void RaceCarEntityModule::SendStreamerEvents(
     mRaceCarStreamer.AppendGameDataRequests( lpOutput->GetResourceRequestInterface() );
 }
 
+// ============================================================================
+// X360 0x822F5CF8 -- UpdateOutputInterfaces. PARTIAL SLICE (the active-car publish).
+//
+// This is THE producer of RCEntityActiveRaceCarOutputInterface: nothing else in the
+// whole image calls SetRaceCarState or SetPlayerActiveRaceCarData. Everything the
+// director's cameras know about a car comes out of here.
+//
+// The console body, in order:
+//   1. mWorldMap2D -> both active interfaces (two 48-byte copies from module +0x18300)
+//   2. assert lpGlobalCarInterface != NULL                                    (:4900)
+//   3. THE PLAYER BLOCK, keyed on mePlayerActiveRaceCarIndex:
+//        idx == -1 : mbPlayerWrecked = false
+//        else      : mbPlayerWrecked = GetActiveRaceCar(idx)->IsWrecked();
+//                    if (slot->IsAttached())
+//                    { SetPlayerActiveRaceCarData(idx, slot->meEngineState);
+//                      SetPlayerGlobalRaceCarIndex(
+//                          slot->GetGlobalRaceCar()->GetGlobalRaceCarIndex()); }
+//   4. THE PER-SLOT LOOP (0..7): for every ATTACHED slot build the per-car flags word
+//      and publish the whole snapshot with SetRaceCarState, then publish its
+//      deformation-model resource ptr.
+//   5. the per-GLOBAL-slot loop (0..34) -> RaceCar::FillInOutputInterface
+//   6/7. the replay read/write legs against RaceCarEntitySerialiser::GetStaticLayout.
+//
+// REPRODUCED HERE: 2, 3, 4 (minus the deformation-ptr publish -- see below).
+//
+// [FLAG PC bring-up] NOT reproduced, and dropped rather than paraphrased:
+//   * step 1 -- the module's own CgsWorld::WorldMap2D member is inside this header's
+//     opaque attested-offset tail (it has no name here yet), so there is nothing to
+//     copy FROM. Nothing on the reconstructed path reads the published copy.
+//   * step 4's SetDeformationModelResourcePtr -- the console builds the ResourcePtr
+//     from ActiveRaceCar+0x1CA4, which lands inside maPad1C90, the deliberately opaque
+//     32-byte ResourcePtr pair at the end of ActiveRaceCar. Homing it would drag
+//     StreamedDeformationSpec into every consumer of that header; the published handle
+//     has no reader on this build.
+//   * step 5 -- RaceCar::FillInOutputInterface @0x822BED20 is not reconstructed, so the
+//     GLOBAL interface stays as Clear() left it. Its only reconstructed-path consumer is
+//     BridgeWorldToDirector's 2416-byte copy into the director input's global block,
+//     which is itself an honest-opaque span there.
+//   * steps 6/7 -- replay. The PC has no replay path and RaceCarEntitySerialiser has no
+//     static layout; the console gates both legs on its replay state word anyway.
+// DELETE-WHEN: each named blocker lands.
+//
+// ⚠️ The console asserts "This car should be inactive" for muType == E_RACE_CAR_TYPE_INACTIVE
+// on an ATTACHED slot and then still publishes flags == (IsActive?0x10:0) | 1. Reproduced
+// as written -- the assert is non-gating on both platforms.
+// ============================================================================
+void RaceCarEntityModule::UpdateOutputInterfaces(
+        RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
+        RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalCarInterface,
+        RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpReplayActiveCarInterface,
+        RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpReplayGlobalCarInterface )
+{
+    (void)lpReplayActiveCarInterface;    // [FLAG] steps 1 + 6/7 only
+    (void)lpReplayGlobalCarInterface;    // [FLAG] steps 6/7 only
+
+    CGS_ASSERT( lpGlobalCarInterface != 0, "lpGlobalCarInterface != NULL" );   // X360 :4900
+
+    if( lpActiveCarInterface == 0 || lpGlobalCarInterface == 0 )
+    {
+        return;
+    }
+
+    // ---- step 3: the player block -------------------------------------------------
+    if( mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        lpActiveCarInterface->SetPlayerWrecked( false );
+    }
+    else
+    {
+        ActiveRaceCar* lpPlayerSlot = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+        // [FLAG] the console's `mbPlayerWrecked = lpPlayerSlot->IsWrecked()` is OMITTED:
+        // ActiveRaceCar::IsWrecked @0x822BFDA0 is its own un-reconstructed ledger function
+        // (it walks the paired RaceCar's type, mPhysicsState's crash-cause bitfield at +484
+        // bit 14, the crash flags at +488/+1100 and the slot's crash timer at +1252).
+        // Publishing a fabricated answer would be worse than leaving the field at what
+        // Clear() put there, which is the same `false` the -1 arm publishes. Nothing on the
+        // reconstructed path reads mbPlayerWrecked. DELETE-WHEN IsWrecked lands.
+
+        if( lpPlayerSlot->IsAttached() )
+        {
+            lpActiveCarInterface->SetPlayerActiveRaceCarData( mePlayerActiveRaceCarIndex,
+                                                             lpPlayerSlot->GetEngineState() );
+            lpGlobalCarInterface->SetPlayerGlobalRaceCarIndex(
+                lpPlayerSlot->GetGlobalRaceCar()->GetGlobalRaceCarIndex() );
+        }
+    }
+
+    // ---- step 4: the per-active-slot publish ---------------------------------------
+    for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
+    {
+        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>( liSlot );
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leSlot );
+
+        if( !lpActiveRaceCar->IsAttached() )
+        {
+            CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                        "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+            continue;
+        }
+
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // BrnActiveRaceCar.h:1089
+
+        RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+        CGS_ASSERT( lpRaceCar != 0, "lpRaceCar != NULL" );             // X360 :4929
+        if( lpRaceCar == 0 )
+        {
+            continue;
+        }
+
+        // The flags word. `v44 = IsActive() ? 0x10 : 0` then one type arm, then the
+        // network/showtime arms -- each with the console's own guard asserts.
+        u32 luFlags = lpActiveRaceCar->IsActive()
+                        ? RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_LOADED
+                        : 0u;
+        luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_IN_USE;
+
+        switch( lpRaceCar->GetType() )
+        {
+        case E_RACE_CAR_TYPE_PLAYER:
+            luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_PLAYER;
+            break;
+        case E_RACE_CAR_TYPE_AI:
+            luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_RIVAL;
+            break;
+        case E_RACE_CAR_TYPE_NETWORK:
+            luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_NETWORK;
+            break;
+        default:
+            CGS_ASSERT( false, "This car should be inactive" );        // X360 :4961
+            break;
+        }
+
+        if( lpActiveRaceCar->GetOnlineState() == ActiveRaceCar::E_ONLINE_STATE_CONNECTING )
+        {
+            CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+            CGS_ASSERT( lpRaceCar->IsNetworkDriven(), "lpRaceCar->IsNetworkDriven()" );   // X360 :4968
+            luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_CONNECTING;
+        }
+
+        if( lpActiveRaceCar->IsDisconnectedFromNetwork() )
+        {
+            CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+            CGS_ASSERT( lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld(),
+                        "lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld()" );      // X360 :4973
+            luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_DISCONNECTED;
+        }
+        else if( lpActiveRaceCar->IsNotSendingNetworkUpdates() )
+        {
+            CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+            CGS_ASSERT( lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld(),
+                        "lpRaceCar->IsNetworkDriven() || !lpRaceCar->IsInWorld()" );      // X360 :4978
+            luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_LOST_CONTACT;
+        }
+
+        if( lpActiveRaceCar->IsInShowtime() )
+        {
+            CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+            CGS_ASSERT( lpRaceCar->IsPlayerDriven() || lpRaceCar->IsNetworkDriven(),
+                        "lpRaceCar->IsPlayerDriven() || lpRaceCar->IsNetworkDriven()" );  // X360 :4984
+            luFlags |= RaceCarEntityModuleIO::E_RACE_CAR_OUTPUT_FLAG_IN_SHOWTIME;
+        }
+
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // :1118 (AI section read)
+        CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );   // :1096 (paint colour read)
+
+        const Vector4 lPaintColour = lpActiveRaceCar->GetRenderParams()->GetPaintColour();
+
+        // Bring-up diagnostic (same cadence as BridgeWorldToDirector's own): the SOURCE end
+        // of the world->director chain. Keeping both ends printed is what bisected the
+        // RaceCarState::operator= empty-link-stub bug in one run -- the source read
+        // (3008.17, -1.16, -1874.30) while the destination read the origin.
+        {
+            static u32 suSrcCount = 0;
+            ++suSrcCount;
+            if (suSrcCount == 1u || (suSrcCount % 3000u) == 0u)
+            {
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    const Vector3& lP = lpActiveRaceCar->GetPhysicsState()->mTransform.Pos();
+                    const Vector3& lR = lpActiveRaceCar->GetRenderParams()->GetBodyTransform().Pos();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[uoi] #" << static_cast<s32>(suSrcCount) << " slot " << liSlot
+                        << " physics (" << lP.x << ", " << lP.y << ", " << lP.z
+                        << ") render (" << lR.x << ", " << lR.y << ", " << lR.z
+                        << ") flags " << static_cast<s32>(luFlags)
+                        << " engine " << static_cast<s32>(lpActiveRaceCar->GetEngineState())
+                        << " playerIdx " << static_cast<s32>(mePlayerActiveRaceCarIndex) << "\n";
+                }
+            }
+        }
+
+        lpActiveCarInterface->SetRaceCarState(
+            leSlot,
+            lpRaceCar->GetGlobalRaceCarIndex(),
+            lpRaceCar->GetRivalId(),
+            lpRaceCar->GetModelId(),
+            lpActiveRaceCar->GetPhysicsState(),
+            luFlags,                                    // r9
+            lpActiveRaceCar->GetCurrentAISection(),     // r10
+            static_cast<u32>( lpRaceCar->GetColourIndex() ),     // stack +0x54
+            lpRaceCar->GetColourPalette(),                       // stack +0x5C
+            lPaintColour,                               // v1
+            lpActiveRaceCar->GetCurrentInAirRotations(),// v2
+            lpActiveRaceCar->HasCrashedIntoWater(),     // stack +0x87
+            lpActiveRaceCar->CanDriveAwayFromCrash() ); // stack +0x8F
+
+        CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+    }
+}
+
 // X360 0x8230D928 -- PARTIAL SLICE.
 //
 // The console body is a 15-step per-frame spine (replay enter/leave edge, the camera-vector
@@ -919,10 +1130,16 @@ void RaceCarEntityModule::PreSceneUpdate(
 
 // X360 0x82307538 -- PARTIAL SLICE. The console body runs the post-physics half of the
 // module (ProcessCreateVehicleEvents, the crash/takedown queues, the director vehicle
-// input, the replay request interface, ...). Only the streamer drain is reproduced --
-// and it is the load-bearing one: InternalBaseStreamer::Update clears its own request ring
-// at the top of every frame, so a load request that is not drained in the frame it was
-// posted is silently lost.
+// input, the replay request interface, ...). Two of its 20-odd legs are reproduced, in the
+// console's own relative order:
+//   * UpdateOutputInterfaces -- the per-frame OUTPUT PUBLISH. Nothing else in the image
+//     writes RCEntityActiveRaceCarOutputInterface, so without it every downstream consumer
+//     (the world module's player-position latch, the scoring system, and -- through
+//     BridgeWorldToDirector -- every camera behaviour's VehicleInfo) reads a Clear()ed
+//     interface with mePlayerActiveRaceCarIndex == -1.
+//   * SendStreamerEvents -- the load-bearing streamer drain: InternalBaseStreamer::Update
+//     clears its own request ring at the top of every frame, so a load request that is not
+//     drained in the frame it was posted is silently lost.
 // [FLAG PC bring-up] the rest is dropped, NOT paraphrased. DELETE-WHEN the interior lands.
 void RaceCarEntityModule::PostPhysicsUpdate(
         RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
@@ -938,6 +1155,13 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     }
 
     lpOutput->LockForWrite();
+    // The console reads the four interfaces off the output buffer in this order
+    // (replayGlobal, replayActive, global, active) and passes them
+    // (active, global, replayActive, replayGlobal).
+    UpdateOutputInterfaces( lpOutput->GetActiveRaceCarOutputInterface(),
+                            lpOutput->GetGlobalRaceCarOutputInterface(),
+                            lpOutput->GetReplayActiveRaceCarOutputInterface(),
+                            lpOutput->GetReplayGlobalRaceCarOutputInterface() );
     SendStreamerEvents( lpOutput );
     lpOutput->UnlockForWrite();
 }
