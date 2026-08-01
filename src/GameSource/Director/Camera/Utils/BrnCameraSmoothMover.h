@@ -35,10 +35,17 @@ namespace Utils
             bool mbUseLimits;           // h:68
         };
 
-        // DWARF h:73/h:77/h:82 -- declaration-only (their own ledger functions).
+        // DWARF h:73/h:82 -- declaration-only (their own ledger functions).
         void Construct(f32 lfInitialValue);
-        f32  GetCurrentValue() const;
         void SetCurrentValue(f32 lfValue);
+
+        // ⭐ DWARF h:77 -- BODIED INLINE 2026-08-01 (orbit-camera wave). A single load off
+        // the member this header already names at +0x08. The console inlines it at every
+        // site: CameraSphericalRotationController::GetPitchRotationAngleDegs is nothing but
+        // this fetch, and BehaviourRotateAboutVehicle::Update @0x82249518 emits it as a bare
+        // `lfs f13, 0x2C(controller)` (controller +0x24 mPitchMover, +0x08 mfCurrentValue).
+        // Leaving it declaration-only made it an unresolved external for every caller.
+        f32  GetCurrentValue() const { return mfCurrentValue; }
 
         // @0x82223800 (this TU, DWARF h:89) -- dispatch on the parameter flags.
         void Update(f32 lfTimestep, f32 lfForceAppliedMinusOneToOne,
@@ -58,6 +65,19 @@ namespace Utils
         void UpdateWithLimitsNoCentering(f32 lfTimestep, f32 lfForceAppliedMinusOneToOne,
                                          const Parameters& lParameters);
 
+    public:
+        // FLAG (access level) -- WIDENED private -> public 2026-08-01 (orbit-camera wave), the
+        //   same widening and for the same reason as Behaviour.h's six base fields. The DWARF
+        //   marks these private with Construct/Get/SetCurrentValue as the intended path, but
+        //   OWNERS OF AN EMBEDDED SmoothMover WRITE THEM DIRECTLY on the console -- and they do
+        //   it as an INLINED reset, not through a setter, so there is no console function to
+        //   route through. CameraSphericalRotationController::Construct's ten-store block
+        //   (three witnesses) writes mfCurrentSpeed and mfCurrentValue while deliberately
+        //   LEAVING mfCenteringRate alone; with these private that block could only have been
+        //   written by offset, which the x64 rule forbids. Widening changes no layout and no
+        //   semantics.
+        //   DELETE-WHEN: a console setter for the speed field is found (SetCurrentValue only
+        //   covers the value), and every direct writer is re-expressed through the pair.
         f32 mfCenteringRate;   // h:117 (+0x00)
         f32 mfCurrentSpeed;    // h:118 (+0x04)
         f32 mfCurrentValue;    // h:119 (+0x08)

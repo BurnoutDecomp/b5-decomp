@@ -6,8 +6,9 @@
 // BrnDirector::Camera::Utils::CameraSphericalRotationController -- reconstructed from
 // BURNOUT_X360_ARTIST.XEX.
 //
-// Bodied here (1 ledger function):
-//   CameraSphericalRotationController::Update @0x8223F808
+// Bodied here (2 ledger functions):
+//   CameraSphericalRotationController::Update    @0x8223F808
+//   CameraSphericalRotationController::Construct (inlined on the console -- see its banner)
 //
 // Update (asm walk):
 //   * build the pitch SmoothMover::Parameters block (mMax/mMin = the passed pitch limits,
@@ -162,6 +163,59 @@ void CameraSphericalRotationController::Update(f32 lfTimestep, Vector2 lStick,
         mbIsRotated      = false;
         mfUnRotatedTime += lfTimestep;
     }
+}
+
+// ============================================================================
+// CameraSphericalRotationController::Construct
+//
+// ⛔⛔ THIS WAS AN EMPTY STUB IN GameSource/Director/DirectorLinkStubs.cpp UNTIL 2026-08-01,
+// and BOTH halves of the note that justified it had expired:
+//   "the console INLINES it into each owner (so there is no standalone body to read...)"
+//       -- true, and NOT a reason to leave it empty: the inlining is the body. Three owners
+//          emit the identical ten stores, which is three independent transcriptions of it.
+//   "Nothing reads either one ... MainDirector::UpdateCameraBehavioursPostScene (the only
+//    path that would dispatch it) is gated."
+//       -- the post-scene behaviour pass was un-gated on 2026-08-01, and
+//          BehaviourRotateAboutVehicle::BecomeSimilarTo calls this on the LIVE car-select
+//          path for the express purpose of discarding accumulated stick state. With the
+//          empty stub the stale yaw/pitch survived every re-seat, and
+//          BehaviourRotateAboutVehicle::Construct left the whole controller at whatever the
+//          pool slot happened to hold.
+//
+// THE TEN STORES (identical in all three witnesses; displacements are controller-relative):
+//   BehaviourRotateAboutVehicle::Construct   @0x8222BF68..0x8222BF90  (behaviour +0x20)
+//   BehaviourRotateAboutVehicle::BecomeSimilarTo @0x8224A4D8..0x8224A508 (same member)
+//   BehaviourGameplayExternal::Construct     @0x82224A18              (its own +0x20)
+//     stvx128 0, +0x00                 -> mStickVector (all four lanes)
+//     stfs    0, +0x10/+0x14/+0x18/+0x1C-> mfYawDegs / mfYawVelocity / mfYawReturnRate /
+//                                          mfUnRotatedTime
+//     stb     0, +0x20/+0x21/+0x22     -> mbIsLookback / mbWasLookbackLastFrame / mbIsRotated
+//     stfs    0, +0x28/+0x2C           -> mPitchMover.mfCurrentSpeed / .mfCurrentValue
+//
+// ⚠️ mPitchMover.mfCenteringRate (+0x24) IS DELIBERATELY NOT WRITTEN -- it is the one
+//   SmoothMover field absent from all three store sets, in the middle of a run that writes
+//   its two neighbours, so its omission is a decision and not a transcription gap: a reset
+//   keeps the centering rate the mover has eased to. Reproduced exactly.
+// ============================================================================
+void CameraSphericalRotationController::Construct()
+{
+    mStickVector.x = 0.0f;
+    mStickVector.y = 0.0f;
+    mStickVector.z = 0.0f;
+    mStickVector.w = 0.0f;
+
+    mfYawDegs       = 0.0f;
+    mfYawVelocity   = 0.0f;
+    mfYawReturnRate = 0.0f;
+    mfUnRotatedTime = 0.0f;
+
+    mbIsLookback           = false;
+    mbWasLookbackLastFrame = false;
+    mbIsRotated            = false;
+
+    // NOT mPitchMover.mfCenteringRate -- see the banner.
+    mPitchMover.mfCurrentSpeed = 0.0f;
+    mPitchMover.mfCurrentValue = 0.0f;
 }
 }
 }

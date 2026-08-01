@@ -30,17 +30,39 @@ namespace Utils
     // DWARF BrnCameraSphericalRotationController.h:57.
     struct CameraSphericalRotationController
     {
-        // DWARF h:61/:73-:103 -- declaration-only (their own ledger functions).
+        // ⭐ DWARF h:61 -- BODIED 2026-08-01 (orbit-camera wave), in this class's own .cpp.
+        // It used to be declaration-only here AND an EMPTY STUB in
+        // GameSource/Director/DirectorLinkStubs.cpp, whose justification ("nothing reads
+        // either one ... the only path that would dispatch it is gated") EXPIRED twice over:
+        // the post-scene behaviour pass was un-gated on 2026-08-01, and
+        // BehaviourRotateAboutVehicle::BecomeSimilarTo calls it on the live car-select path
+        // specifically to throw away accumulated stick state -- with the empty stub the stale
+        // rotation survived every re-seat.
         void Construct();
+
+        // ---- the query family (DWARF h:73..:103) ------------------------------------
+        // ⭐ THE FOUR THE ORBIT CAMERA NEEDS ARE BODIED INLINE BELOW (2026-08-01). Each is a
+        // single load off a member this header already names at its asm-attested offset, and
+        // each is INLINED at every console call site -- BehaviourRotateAboutVehicle::Update
+        // @0x822494E0..0x82249518 emits `lbz +0x20` / `lfs +0x10` / `lfs +0x2C` directly, and
+        // @0x82249454 emits `lvx128 +0x00` on the shared info's own controller. Bodying them
+        // inline is what keeps that behaviour off raw offsets; leaving them declaration-only
+        // would have made every one an unresolved external.
+        // ⚠️ ONE WITNESS EACH. They are one-line member fetches whose names match the members
+        //   exactly, so the risk is naming-only -- but GetPitchRotationAngleDegs reaching
+        //   mPitchMover.mfCurrentValue (controller +0x2C) is the one worth re-checking if a
+        //   second witness ever disagrees.
+        bool    IsLookback() const { return mbIsLookback; }                       // +0x20
+        f32     GetYawRotationAngleDegs() const { return mfYawDegs; }             // +0x10
+        f32     GetPitchRotationAngleDegs() const { return mPitchMover.GetCurrentValue(); } // +0x2C
+        Vector2 GetRawStickVector() const { return mStickVector; }                // +0x00
+
+        // Still declaration-only (their own ledger functions; no caller in this tree yet).
         bool     IsRotated() const;
         Vector2  GetAdjustedStickVector() const;
-        Vector2  GetRawStickVector() const;
-        f32      GetYawRotationAngleDegs() const;
         f32      GetYawRotationAngleRads() const;
-        f32      GetPitchRotationAngleDegs() const;
         f32      GetPitchRotationAngleRads() const;
         f32      GetUnRotatedTime() const;
-        bool     IsLookback() const;
         bool     IsStartingLookbackThisFrame() const;
         bool     IsEndingLookbackThisFrame() const;
 
