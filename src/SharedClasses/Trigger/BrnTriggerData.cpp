@@ -3,6 +3,7 @@
 #include "SharedClasses/Trigger/BrnTriggerBase.h"    // TriggerRegion::GetType() / E_TYPE_LANDMARK
 #include "SharedClasses/Trigger/BrnKillzone.h"       // complete Killzone (GetKillzone stride)
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"  // complete SpawnLocation (GetSpawnLocation stride)
+#include "SharedClasses/Trigger/BrnGenericRegion.h"  // complete GenericRegion (GetGenericRegion stride == 0x38)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetOnlineLandmark / FixUp message build)
 #include <cstdint>                                   // uintptr_t (load-time pointer relocation arithmetic)
@@ -57,6 +58,23 @@ BrnTrigger::TriggerData::GetSpawnLocation( int liIndex ) const
 {
     CGS_ASSERT( liIndex < miSpawnLocationCount, "liIndex < miSpawnLocationCount" );
     return &mpSpawnLocations[liIndex];
+}
+
+// GetGenericRegion. Same story as GetSpawnLocation above: no standalone X360 symbol, because it
+// is inlined at every call site. Recovered from GameStateModule::FindNearestJunkyardID
+// @0x8236BB48..0x8236BB80, which open-codes it as
+//     assert(liGenericRegionIndex < *(triggerData + 0x48));   // BrnTriggerData.h:495 (0x1EF)
+//     region = *(triggerData + 0x44) + liGenericRegionIndex * 0x38;
+// The 0x38 stride is exactly sizeof(GenericRegion) (36-byte BoxRegion + 8-byte TriggerRegion tail
+// + 12-byte GenericRegion tail), and 0x44/0x48 are mpGenericRegions/miGenericRegionCount. The
+// assert TEXT and LINE below are the X360's verbatim.
+const BrnTrigger::GenericRegion*
+BrnTrigger::TriggerData::GetGenericRegion( int liIndex ) const
+{
+    // (X360 assert line BrnTriggerData.h:495; plain CGS_ASSERT to match the committed
+    // GetKillzone / GetSpawnLocation siblings in this TU.)
+    CGS_ASSERT( liIndex < miGenericRegionCount, "liGenericRegionIndex < miGenericRegionCount" );
+    return &mpGenericRegions[liIndex];
 }
 
 // X360 0x824EAA00. Returns the liLandmarkIndex'th ONLINE landmark: walks the full landmark

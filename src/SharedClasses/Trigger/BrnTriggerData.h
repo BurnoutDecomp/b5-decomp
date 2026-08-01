@@ -93,6 +93,14 @@ struct TriggerData
     // X360 0x8231B648. Maps a region-table index back to its owning Landmark (asserts the type).
     const Landmark* GetLandmarkFromRegionIndex(int liRegionIndex) const;
 
+    // DWARF BrnTriggerData.h:93/96 (`Vector3 GetPlayerStartPosition() const`, ...Direction).
+    // The track's authored start pose. Inlined on the X360: GameStateModule::
+    // SendSetupPlayerCarEvent @0x8239A918 opens with two GetMemory() calls and
+    // `lvx128 v127, r11, 0x10` / `lvx128 v0, r3, 0x20` -- these two members -- and hands the
+    // POSITION straight to FindNearestJunkyardID. De-inlined here to the DWARF's own names.
+    Vector3 GetPlayerStartPosition()  const { return mPlayerStartPosition; }
+    Vector3 GetPlayerStartDirection() const { return mPlayerStartDirection; }
+
     // --- Killzone accessor owned by the BrnTriggerData TU ------------------------------------
     int GetKillzoneCount() const { return miKillzoneCount; }
 
@@ -103,6 +111,10 @@ struct TriggerData
     // reconstructed). Kept so the one coherent struct matches the DWARF interface.
     const SignatureStunt*  GetSignatureStunt(int liIndex) const;
     int  GetSignatureStuntCount() const { return miSignatureStuntCount; }
+    // BODIED (BrnTriggerData.cpp): &mpGenericRegions[liIndex]. Like every other &mp<Table>[i]
+    // accessor on this struct it has no standalone X360 symbol (inlined at the call site --
+    // GameStateModule::FindNearestJunkyardID @0x8236BAC8 walks it with the stride 0x38 that
+    // sizeof(GenericRegion) gives, and carries the range assert inline).
     const GenericRegion*   GetGenericRegion(int liIndex) const;
     int  GetGenericRegionCount() const { return miGenericRegionCount; }
     const Blackspot*       GetBlackspot(int liIndex) const;
