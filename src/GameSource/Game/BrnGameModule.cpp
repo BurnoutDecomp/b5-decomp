@@ -898,6 +898,24 @@ namespace BrnGame
             mpWorldUpdateOutputBuffer->UnlockForRead();
         }
 
+        // ⛔ THE GAME-STATE -> DIRECTOR BRIDGE IS THE ONE BRIDGE STILL MISSING HERE.
+        // X360 BrnGameModule::BridgeGameStateToDirector @0x823CD170 (console home
+        // .../Game/GameBridgeGameStateToX.cpp) does exactly three things on the PRE-GUI pass:
+        //     input->GetGameActionQueue()->Append( mGameStateModule.GetGameActionQueue() );
+        //     if (<a takedown fired>) { input->mbPlayerTakenDown = 1;
+        //                               input->mePlayerKillerCarIndex = <killer>; }
+        // That Append is the ONLY producer of the game actions MainDirector::ProcessInputQueue
+        // drains -- i.e. the only route by which the junkyard / car-select ladder can ever
+        // start. Both ENDS of it are real now (the queue is a named member of the director
+        // input buffer and the director's consumer is bodied); the MIDDLE is not, because
+        // mGameStateModule is a placeholder with no queue of its own to append (see :208 and
+        // the FLAG at the GameState stand-in below).
+        // MEASURED 2026-08-01: mounting BrnCarSelectManager.cpp alone -- the TU that posts the
+        // entry action 73 -- opens 30 unresolved externals across BrnProgression::
+        // {ProgressionManager, Profile, CarData}, BrnTrigger::SpawnLocation and nine of
+        // CarSelectManager's own private helpers. The producer is its own wave.
+        // DELETE-WHEN: GameStateModule is real; then this becomes the two lines above.
+
         // ------------------------------------------------------------------------------
         // [FLAG PC bring-up] THE INTRO FLY-BY STAND-IN.
         //
@@ -1017,10 +1035,19 @@ namespace BrnGame
                     // 9 RELEASE.
                     const BrnDirector::Arbitrator& lrArbitrator =
                         mDirectorModule.GetMainDirector().GetArbitrator();
+                    // ⭐ ALSO report the junkyard / car-select sub-state. It is the gate on the
+                    // whole car-select ladder (ArbStateRoaming -> E_STATE_CAR_SELECT), and
+                    // until MainDirector::ProcessInputQueue landed it could never be anything
+                    // but 0 -- so "did the game-action seam actually run?" is exactly this
+                    // number. EJunkyardState: 0 INACTIVE / 1 INTRO_UNLOCKING_CARS /
+                    // 2 INTRO_NO_CARS / 3 CAR_UNLOCK / 4 CAR_SELECT / 5 WAITING_FOR_AUDIO.
+                    const BrnDirector::GameState& lrGameState =
+                        mDirectorModule.GetMainDirector().GetGameState();
                     *CgsDev::Log::gpDebugPrint
                         << "[director] f" << siTraceFrame
                         << " dt " << (mSimTimer.GetRate() * mSimTimer.GetScaleCurrent())
                         << " arb " << static_cast<s32>(lrArbitrator.GetState())
+                        << " jy " << static_cast<s32>(lrGameState.meJunkyardState)
                         << (lrArbitrator.GetDoAttractMode() ? " attract" : " -")
                         << " eye (" << lXform.wAxis.x << ", " << lXform.wAxis.y
                         << ", " << lXform.wAxis.z << ")"

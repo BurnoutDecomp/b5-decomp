@@ -140,6 +140,55 @@ void GameState::Clear()
     std::memcpy(reinterpret_cast<u8*>(&mDirectorProfileData) + 0x08, &liProfileFlag, sizeof(s32));
 }
 
+// ----------------------------------------------------------------------------
+// BrnDirector::GameState::ResetPerFrameData
+//
+// ⭐ RECOVERED 2026-08-01. There is NO standalone symbol for this in the X360 image -- it is
+// INLINED, and its one emission site is the head of MainDirector::ProcessInputQueue
+// @0x82237350..0x822373AC, which materialises the GameState base
+// (`addis r11, r31, 3; addi r11, r11, 0x37E0`) and then zeroes nineteen fields before it
+// touches the event queue at all. Every store below is that list, read literally off the asm;
+// each one resolves to a member of this struct with no leftovers.
+//
+// NAMING: the DecFIGS DWARF declares exactly one member on GameState with this shape --
+// `void ResetPerFrameData()` (BrnDirectorGameState.h:258) -- and this header has carried that
+// declaration unbodied since the struct landed. De-inlined here rather than open-coded in the
+// director so the per-frame contract lives with the type that owns the fields.
+// FLAG: the NAME is the DWARF's and the shape matches; if a later attestation shows the block
+//   belongs to some other member, only the name changes -- the body is asm.
+// ----------------------------------------------------------------------------
+void GameState::ResetPerFrameData()
+{
+    mfPlayerBoostPercentage             = 0.0f;   // stfs 0.0, 0x1B8
+    miThisFramesActionFlags             = 0;      // stw  0,   0x0E4
+
+    mbJunkyardPosJustChanged            = false;  // stb 0, 0x19C
+    mbNewCarUnlockedThisFrame           = false;  // stb 0, 0x185
+    mbShouldResetPlayerCameraThisFrame  = false;  // stb 0, 0x151
+    mbPlayerAndRivalImpactOccured       = false;  // stb 0, 0x1B1
+    mbPlayerWonImpactAgainstRival       = false;  // stb 0, 0x1B2
+    mbPlayerCheckedTraffic              = false;  // stb 0, 0x1B3
+    mbPlayerInTunnel                    = false;  // stb 0, 0x0F8
+    mbPlayerHitCheckpointThisFrame      = false;  // stb 0, 0x1B4
+    mbPlayerPerformedStunt              = false;  // stb 0, 0x1B5
+    mbComboWarningActive                = false;  // stb 0, 0x1B6
+    mbRankUpMessageReceivedThisFrame    = false;  // stb 0, 0x1AB
+    mbJunkyardPlayerRespawnedThisFrame  = false;  // stb 0, 0x19E
+    mbJunkyardSelectionChangedMessageReceivedThisFrame = false;   // stb 0, 0x19F
+    mbStartingFreeburnDueToPlayerJoinThisFrame         = false;   // stb 0, 0x1C8
+    mbJunkyardCarUnlockTickedClosedThisFrame           = false;   // stb 0, 0x1A3
+
+    // stb 0, 0x1D6 -- ShowTimeInfo + 0x02, the byte IsNewRankUpRivalThisFrame() reads. That
+    // sub-object's DWARF layout is unreliable (see the header), so it stays an opaque blob and
+    // the ONE per-frame byte is cleared through its own storage, inside the type that owns it.
+    mShowTimeInfo.maOpaque[0x02] = 0;
+
+    // stb 0, 0x1E8 .. 0x1EC -- the five leading DirectorProfileData bytes. Same reasoning. The
+    // WORD at DirectorProfileData + 0x08 (which Clear seeds to 1) is deliberately NOT touched.
+    for (s32 liByte = 0; liByte < 5; ++liByte)
+        mDirectorProfileData.maOpaque[liByte] = 0;
+}
+
 } // namespace BrnDirector
 
 // The DataJournal<EEventState,2> non-const GetCurrent() instance the X360 emits @0x821FBB80

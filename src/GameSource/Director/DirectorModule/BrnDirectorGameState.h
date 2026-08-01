@@ -172,10 +172,27 @@ struct GameState
     EActiveRaceCarIndex meBeatenRivalRaceCarIndex;               // :148
     CgsID               mFinishLineID;                           // :160
     Vector3             mFinishLineNorthmostDir;                 // :161
+    // ⭐ THE JUNKYARD / CAR-SELECT SUB-STATE (GameState +0x180). Its ONLY writers in the whole
+    // X360 image are MainDirector::ProcessInputQueue @0x822372F8 (game-action cases 62/63/64/
+    // 73/77) and MainDirector::PostGuiUpdate @0x82236F88 (the E_JY_WAITING_FOR_AUDIO leg);
+    // GameState::Clear seeds it to E_JY_INACTIVE. It is the gate on
+    // ArbStateRoaming::ProcessActiveDrivingTransitions -> E_STATE_CAR_SELECT, i.e. on the
+    // whole junkyard + retail-intro-camera ladder.
     EJunkyardState      meJunkyardState;                         // :163
     bool                mbIsRivalUnlock;                         // :164
     bool                mbNewCarUnlockedThisFrame;               // :165
+    // +0x188. The "+0x186..+0x18F unaccounted gap" this file used to flag is THIS member:
+    // ProcessInputQueue case 62 (E_ACTION_NEW_CAR_UNLOCKED) does `ld r10, 0(payload);
+    // stdx r10, r31, 0x33968` -- a 64-bit CgsID store at GameState +0x188. Clear never stores
+    // there, which is why the gap looked unaccounted.
     CgsID               mUnlockedVehicleType;                    // :166
+    // +0x190. ⚠️ CORRECTION 2026-08-01: a previous wave recorded "mJunkyardId is NEVER written
+    // by the director anywhere in the image" as a VERIFIED NEGATIVE. It is WRONG.
+    // ProcessInputQueue case 64 (E_ACTION_CAR_SELECTION_CHANGED) writes it from the action's
+    // first 8 bytes: `ld r11, 0(payload); ... ori r10, r10, 0x3970; stdx r11, r31, r10`
+    // (0x33970 - 0x337E0 == 0x190). The negative came from scanning the DECOMPILER's integer
+    // literals, and Hex-Rays renders that particular 64-bit indexed store as
+    // `*(_R31 + HIDWORD(v74)) = v74;` -- the literal 211312 never appears. Read the asm.
     CgsID               mJunkyardId;                             // :167
     s32                 miJunkyardPosIndex;                      // :168
     bool                mbJunkyardPosJustChanged;                // :169
@@ -217,7 +234,9 @@ struct GameState
     // BrnDirectorGameState.h:255 -- ledger func @0x82218930 (defined in the .cpp).
     void Clear();
 
-    // BrnDirectorGameState.h:258 -- not owned by this TU; declare only.
+    // BrnDirectorGameState.h:258 -- BODIED in the .cpp since 2026-08-01. The X360 emits no
+    // standalone symbol for it (it is inlined into MainDirector::ProcessInputQueue's prologue
+    // @0x82237350); the body is that store list, de-inlined here.
     void ResetPerFrameData();
 
     // ---- small accessors other director TUs reach by name (declare-only) -----------------
