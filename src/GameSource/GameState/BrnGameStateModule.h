@@ -9,6 +9,7 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::NetworkPlayerID (s32 typedef; GetActiveRaceCarIndex param)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // GameStateModuleIO::GameActionQueue (real typedef)
+#include "GameSource/GameState/BrnGameActions.h"             // GameStateModuleIO::CarSelectionChangedAction (by value, +0x38B80)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h" // BrnProgression::ProgressionManager (mProgressionManager, by value)
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (mTriggerQueryManager, by value)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"         // CgsModule::EventReceiverQueue<3072,16> (mReceiverQueue)
@@ -137,6 +138,31 @@ public:
     // OnProfileLoaded; `vmr128 v1, v127` in SendSetupPlayerCarEvent). It takes a Vector3 by value
     // in a VMX register. Recovered from the asm, not the prototype.
     CgsID FindNearestJunkyardID(Vector3 lPosition) const;
+
+    // ⭐ X360 0x8239A918 -- SendSetupPlayerCarEvent. THE START-OF-GAME JUNKYARD ENTRY.
+    // Cache the track's authored player-start pose, pick vehicle 0 and its default wheel set,
+    // find the nearest junkyard, and hand all of it to CarSelectManager::EnterJunkyardAtStartOfGame
+    // -- which posts the ResetPlayerCarAction that places the player's car at
+    // maSpawnLocations[1]. Its two console call sites are ProcessGameEvents case 110 and
+    // PreWorldUpdate @0x823A5328 (behind the one-shot latch below).
+    void SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // X360 0x82363450 -- the player-scoring slot currently mapped to leActiveRaceCarIndex.
+    // Linear scan of the scoring module's eight per-player records (stride 344 bytes) for the one
+    // whose active-race-car index matches; returns E_PLAYER_SCORING_INDEX_0 when none does (the
+    // console's `result = 0` miss arm, NOT an invalid sentinel).
+    GameStateModuleIO::EPlayerScoringIndex FindPlayerScoringIndexForActiveRaceCar(
+            ::EActiveRaceCarIndex leActiveRaceCarIndex) const;
+
+    // ⭐ X360 PreWorldUpdate @0x823A5328, the one-shot leg at 0x823A5510..0x823A5540:
+    //     if (mbSendSetupPlayerCarPending) { SendSetupPlayerCarEvent(actionQueue);
+    //                                       SendSetUpAllEventStartsMessage(out);
+    //                                       mbSendSetupPlayerCarPending = false; }
+    // Extracted here because the rest of PreWorldUpdate (1300 lines of dossier) is not
+    // reconstructed. [FLAG PC bring-up] the EXTRACTION is the deviation -- the latch, its
+    // one-shot semantics and the call it makes are the console's.
+    // DELETE-WHEN PreWorldUpdate lands.
+    void PreWorldUpdateSetupPlayerCarBringUp();
 
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
@@ -409,6 +435,19 @@ private:
     // X360 +0x456EC (284396). The loaded wheel list -- Prepare's stage 9/10, same shape,
     // reply id 59. GetWheelList() hands it back.
     BrnResource::WheelList*   mpWheelList = 0;
+
+    // X360 +0x32DC4 (208324). The one-shot latch PreWorldUpdate @0x823A5510 tests before running
+    // SendSetupPlayerCarEvent + SendSetUpAllEventStartsMessage, and clears immediately after
+    // (`stb r17, 0(r28)` with r17 == 0). The console ARMS it from an event handler this slice does
+    // not reconstruct; on PC it is armed at the end of Prepare's terminal stage, which is the first
+    // moment its three data preconditions (vehicle list, wheel list, TriggerData) are all satisfied.
+    bool mbSendSetupPlayerCarPending = false;
+
+    // X360 +0x38B80 (232320). The CarSelectionChangedAction SendSetupPlayerCarEvent hands
+    // EnterJunkyardAtStartOfGame as its sixth argument (the console passes `this + 0x38B80`); the
+    // junkyard's id + spawn transform + "pos is left" bit are written into it and read back later
+    // by the car-select flow. Held by value exactly as the console holds it.
+    GameStateModuleIO::CarSelectionChangedAction mCarSelectionChangedAction;
 
     // X360 +0x397E0. The read-only active-race-car snapshot the module caches at the end of the last
     // world update, held BY VALUE as the console holds it (see GetLastActiveRaceCarInterface).

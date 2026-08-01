@@ -4053,16 +4053,21 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     static f32     sfPathAngle  = 0.0f;
     if ( !sbPathLatched )
     {
-        sbPathLatched = true;
+        // ⚠️ THE LATCH NOW WAITS FOR THE CAR (2026-08-01, reset-player-car wave). It used to
+        // fire on its first frame, which worked only because the car was spawned by
+        // SpawnFirstUnlockedCarBringUp from inside RaceCarEntityModule::UpdateStreaming --
+        // i.e. before this producer ever ran. The car is placed by the console's own
+        // ResetPlayerCarAction chain now, and that chain starts at IN-GAME entry, ~100 log
+        // lines AFTER this function's first frame. MEASURED: without this the tour latched on
+        // the resident-world centre and orbited 3.5 km from the only car in the world.
         sPathOrigin   = lCentre;
 
         // [FLAG PC bring-up] ...unless a race car has actually been spawned, in which case
-        // frame IT. The car is parked at an authored, road-level Paradise City position
-        // (the console's own freeburn-lobby grid, see SpawnFirstUnlockedCarBringUp) which
-        // is nowhere near the resident-world centre this tour normally orbits, so without
-        // this the only thing on this build that is genuinely posed in the world would
-        // never be on screen. Publishing the car's position as the PVS query centre is
-        // also what makes the streamer deliver the city AROUND it.
+        // frame IT. The car is parked at the junkyard spawn location the trigger data
+        // authored, which is nowhere near the resident-world centre this tour normally
+        // orbits, so without this the only thing on this build that is genuinely posed in
+        // the world would never be on screen. Publishing the car's position as the PVS query
+        // centre is also what makes the streamer deliver the city AROUND it.
         // DELETE with the rest of this bring-up producer.
         {
             Vector3 lCarPosition;
@@ -4110,7 +4115,11 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             sfPathRadius = 9.0f;
         }
 
-        if ( CgsDev::Log::gpDebugPrint != 0 )
+        // Only LATCH once there is a car to frame; until then re-evaluate every frame (the
+        // world-centre framing above is what it falls back to, exactly as before).
+        sbPathLatched = sbFramingCar;
+
+        if ( sbPathLatched && CgsDev::Log::gpDebugPrint != 0 )
         {
             *CgsDev::Log::gpDebugPrint
                 << "[FLAG PC bring-up] establishing camera latched: centre=("

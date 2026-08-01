@@ -1837,7 +1837,31 @@ namespace BrnGame
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
 
                 PerfMonCpu::StartMonitor(mCpuMonitors.miUT_EachUpdate);
+
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
+
+                // ⭐ THE GAME-STATE PRE-WORLD LEG (X360 DoUpdate_GameStatePreWorld @0x823EE0E8 ->
+                // GameStateModule::PreWorldUpdate @0x823A5328). Only its ONE-SHOT start-of-game
+                // latch is reconstructed (see PreWorldUpdateSetupPlayerCarBringUp); it runs
+                // BEFORE the flow state's Update, because that is what drives the world and
+                // therefore BridgeGameStateToWorld -- the leg that carries this sub-step's game
+                // actions (including the ResetPlayerCarAction it posts) into the world. The
+                // console's ordering is the same: PreWorldUpdate, then DoUpdate_World.
+                //
+                // ⚠️ MEASURED (2026-08-01): the flow-state gate below is LOAD-BEARING, not
+                // defensive. GameStateModule::Prepare's terminal stage -- where the latch is
+                // armed -- completes during InitialLoadingScreen stage 1, ~150 log lines BEFORE
+                // WorldModule::Prepare stage 6 has even created the race-car module's slots. Fire
+                // it there and the action is posted into a queue whose consumer does not exist
+                // yet, and this sub-step's retiring Clear() throws it away: the first run of this
+                // wave posted a perfectly correct ResetPlayerCarAction and NOTHING EVER SAW IT.
+                // On the console the arming EVENT cannot occur before the game is running, so
+                // this gate stands in for that ordering, not for the call.
+                if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
+                {
+                    mGameStateModule.PreWorldUpdateSetupPlayerCarBringUp();
+                }
+
                 if (leState != BrnGameMainFlowController::E_MGS_INVALID)
                 {
                     MainGameFlowState* lpState = mMainFlowStateMachine.GetState(leState);

@@ -399,6 +399,18 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // OnlineCarSelectManager leg (its TU is unmounted).
         mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
 
+        // ⭐ AND THE PROGRESSION LAYER'S COPY (X360 ProgressionManager +133448). MEASURED:
+        // the first live ResetPlayerCarAction chain fired the console's own "lpVehicleListEntry"
+        // assert (BrnProgressionManager.cpp:1258) from OnPlayerCarChange, because the
+        // ProgressionManager's vehicle-list pointer had NEVER been installed by anything --
+        // its SetVehicleList had zero callers in the whole tree, and the header's own FLAG said
+        // so ("nothing installs it yet -- Prepare2's caller does on the console"). Every
+        // progression body that resolves a car record reads that pointer.
+        // [FLAG PC bring-up] the console installs it from Prepare2's caller; this is the same
+        // list, published from the stage that already publishes it to the two car-select
+        // managers. DELETE-WHEN Prepare2's caller lands.
+        mProgressionManager.SetVehicleList(mpVehicleList);
+
         // [diagnostic, one-shot] Prove the junkyard half of the trigger data end to end, WITHOUT
         // driving anything: count the E_TYPE_JUNK_YARD generic regions, run the console's own
         // FindNearestJunkyardID @0x8236BAC8 from the track's authored player-start position (the
@@ -440,6 +452,15 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
                     << " spawnsForThatJunkyard=" << liMatchingSpawns << "\n";
             }
         }
+        // ⭐ ARM THE CONSOLE'S OWN START-OF-GAME LATCH (+0x32DC4). PreWorldUpdate tests it, runs
+        // SendSetupPlayerCarEvent and clears it. The console arms it from an event handler this
+        // slice does not reconstruct; this is the first moment all three of that function's data
+        // preconditions hold (mpVehicleList, mpWheelList and the TriggerQueryManager's TriggerData
+        // are all installed by the stages above), so it is armed here.
+        // [FLAG PC bring-up] the ARMING SITE is the deviation -- the latch and everything it
+        // drives are console code. DELETE-WHEN the arming event handler lands.
+        mbSendSetupPlayerCarPending = true;
+
         LogPrepareStageOnce(26, "car-select list publish REAL; DriveThruManager::Prepare [deferred] -- prepare DONE");
         // X360 tail: `*(this + 552) = 1; *(this + 560) = 0;` -- the machine re-arms at MANAGER
         // for a later re-prepare and clears the second-pass stage word (which this slice does
@@ -1003,4 +1024,124 @@ void GameStateModule::RequestStreamingForVehicleSelection(CgsID lCarId)
                "no consumer is being starved today.\n";
     }
 }
+
+// ============================================================================
+// FindPlayerScoringIndexForActiveRaceCar  @ 0x82363450
+//
+// Linear scan of the scoring module's eight per-player records (the console walks
+// `scoring + 20548 + 344*i`, comparing the leading word against the requested
+// active-race-car index) for the player scoring slot that owns leActiveRaceCarIndex.
+// ⚠️ The MISS arm returns E_PLAYER_SCORING_INDEX_0, not an invalid sentinel -- `result = 0`
+// at the console's LABEL_7 -- and that is exactly what start-of-game relies on: nothing is
+// mapped yet, so the player's car takes scoring slot 0.
+//
+// [FLAG PC bring-up] the scoring module's per-player record array is not homed on this slice
+// (the console reaches it as `this + 7632`, deep inside the un-modelled mid-object span), so
+// the scan itself has nothing to walk and the function returns the console's own miss value.
+// It is written as the miss arm, NOT as a fabricated scan. DELETE-WHEN BrnScoringSystem's
+// per-player record array is homed here.
+GameStateModuleIO::EPlayerScoringIndex
+GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    (void)leActiveRaceCarIndex;
+    return GameStateModuleIO::E_PLAYER_SCORING_INDEX_0;
+}
+
+// ============================================================================
+// SendSetupPlayerCarEvent  @ 0x8239A918   -- THE START-OF-GAME JUNKYARD ENTRY
+//
+// Console body, statement for statement (0x8239A918..0x8239AA30):
+//   1. cache the track's authored player-start pose:
+//        this+48336 = TriggerData::GetPlayerStartPosition()   (lvx128 memory+0x10)
+//        this+48352 = TriggerData::GetPlayerStartDirection()  (lvx128 memory+0x20)
+//   2. entry = VehicleList::GetVehicleData(mpVehicleList, 0);  carId = entry->GetId()
+//   3. wheelId = WheelList::GetWheelData(mpWheelList,
+//                    FindWheelIndexFromName(entry->GetDefaultWheelName()))->mID  (miss -> left 0)
+//   4. junkyardId = FindNearestJunkyardID(playerStartPosition)
+//   5. scoringIdx = FindPlayerScoringIndexForActiveRaceCar(GetPlayerActiveRaceCarIndex())
+//   6. CarSelectManager::EnterJunkyardAtStartOfGame(queue, junkyardId, carId, wheelId,
+//                                                  scoringIdx, &mCarSelectionChangedAction)
+//   7. ProgressionManager::OnDriveThru(junkyardId, 0, 0)
+//   8. this+232306 = 1     (the "waiting to REALLY enter the junkyard" flag ProcessGameEvents
+//                           case 78 tests before ReallyEnterJunkyardAtStartOfGame)
+//
+// [FLAG PC bring-up] steps 1 (the two cached pose members), 7 and 8 are DROPPED, not
+// paraphrased: the two pose members and the +232306 flag sit inside this slice's un-modelled
+// span and have no reconstructed reader, and ProgressionManager::OnDriveThru is not
+// reconstructed. Step 4 reads the start position straight from the TriggerData, which is the
+// same value step 1 would have cached.
+void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
+    if (lpTriggerData == 0 || mpVehicleList == 0 || mpWheelList == 0)
+    {
+        return;
+    }
+
+    const Vector3 lPlayerStart = lpTriggerData->GetPlayerStartPosition();
+
+    const BrnResource::VehicleListEntry* lpEntry = mpVehicleList->GetVehicleData(0);
+    if (lpEntry == 0)
+    {
+        return;
+    }
+    const CgsID lCarModelId = lpEntry->GetId();
+
+    CgsID lWheelId = 0;
+    const s32 liWheelIndex = mpWheelList->FindWheelIndexFromName(lpEntry->GetDefaultWheelName());
+    if (liWheelIndex != -1)
+    {
+        const BrnResource::WheelListEntry* lpWheelEntry = mpWheelList->GetWheelData(liWheelIndex);
+        if (lpWheelEntry != 0)
+        {
+            lWheelId = lpWheelEntry->mID;
+        }
+    }
+
+    const CgsID lJunkyardId = FindNearestJunkyardID(lPlayerStart);
+    const GameStateModuleIO::EPlayerScoringIndex leScoringIndex =
+        FindPlayerScoringIndexForActiveRaceCar(mePlayerActiveRaceCarIndex);
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[GameStateModule::SendSetupPlayerCarEvent] junkyard=" << static_cast<u64>(lJunkyardId)
+            << " car=" << static_cast<u64>(lCarModelId)
+            << " wheel=" << static_cast<u64>(lWheelId)
+            << " scoringIdx=" << static_cast<s32>(leScoringIndex)
+            << " playerStart=(" << lPlayerStart.x << ", " << lPlayerStart.y << ", "
+            << lPlayerStart.z << ")\n";
+    }
+
+    mCarSelectManager.EnterJunkyardAtStartOfGame(lpActionQueue, lJunkyardId, lCarModelId, lWheelId,
+                                                leScoringIndex, &mCarSelectionChangedAction);
+}
+
+// ============================================================================
+// PreWorldUpdateSetupPlayerCarBringUp -- the extracted one-shot leg of
+// PreWorldUpdate @0x823A5328 (0x823A5510..0x823A5540). See the header for the FLAG.
+// ============================================================================
+void GameStateModule::PreWorldUpdateSetupPlayerCarBringUp()
+{
+    if (!mbSendSetupPlayerCarPending || mpOutputBuffer == 0)
+    {
+        return;
+    }
+    mbSendSetupPlayerCarPending = false;   // the console's `stb r17, 0(r28)` -- one-shot
+
+    // The console gets the queue from GameStateModuleIO::OutputBuffer (its `Ou` accessor at
+    // 0x823A54E4) and asserts it non-null at BrnGameStateModule.cpp:1149.
+    mpOutputBuffer->LockForWrite();
+    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
+    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
+    mbIsUpdating = true;                   // the module asserts this in its own accessors
+    SendSetupPlayerCarEvent(lpActionQueue);
+    mbIsUpdating = false;
+    mpOutputBuffer->UnlockForWrite();
+
+    // [FLAG PC bring-up] SendSetUpAllEventStartsMessage (the console's partner call on this same
+    // latch) is not reconstructed; it publishes the event-start table to the GUI and has no
+    // consumer on this build.
+}
+
 }
