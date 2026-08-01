@@ -278,6 +278,12 @@ namespace RaceCarEntityModuleIO
             // have fired the "Not Constructed" pair (CgsVariableEventQueue.h:454 / :728).
             mRaceCarAIInterface.mManagementQueue.Construct();
             mAudioCarLoadedDataQueue.Construct();
+            // The console's own list names VehicleInputInterface::Construct(+16) FIRST and
+            // the body never made it -- same omission as the OutputBuffer_PrePhysics twin
+            // below (drivable wave 2026-08-01). Unreached today (nothing posts into the
+            // PRE-SCENE copy of the interface) but it is the same fifteen un-Constructed
+            // queues, so it is made here rather than left as a latent trap.
+            mVehicleInputInterface.Construct();
         }
         const VehicleInputInterface* GetVehicleInputInterface() const;                      // :282
         VehicleInputInterface*       GetVehicleInputInterface();                            // :283 W  (0x822B4ED0)
@@ -380,7 +386,10 @@ namespace RaceCarEntityModuleIO
         }
         const PotentialContactQueue* GetPotentialContactQueue() const;                     // :412
         void                         SetPotentialContactQueue(const PotentialContactQueue*); // :413
-        const SceneResultQueue* GetSceneResultQueue() const;                              // :415
+        // Bodied inline 2026-08-01 (drivable wave) alongside its non-const twin below: it
+        // was declaration-only, and PlaceOnTrackManager::PrePhysicsUpdate -- which takes the
+        // input buffer by const pointer, as the console signature does -- is its first caller.
+        const SceneResultQueue* GetSceneResultQueue() const { return &mSceneResultQueue; }  // :415
         // Real accessor (was a WorldLinkStubs stub that returned NULL, which the
         // scene->race-car pre-physics bridge then dereferenced). The member is committed.
         SceneResultQueue*       GetSceneResultQueue() { return &mSceneResultQueue; }      // :416
@@ -418,7 +427,31 @@ namespace RaceCarEntityModuleIO
         typedef BrnPhysics::Vehicle::VehicleDriverInputInterface  VehicleDriverInputInterface;  // :73
         typedef BrnPhysics::Vehicle::VehicleEffectsInputInterface VehicleEffectsInputInterface; // :76
         typedef RaceCarEntityModuleIO::GameEventQueue             GameEventQueue;               // :99
-        void Construct();                                                                  // :467
+
+        // X360 0x822EA7B0 -- the status byte, then
+        //   VehicleInputInterface::Construct(+16)
+        //   VehicleDriverInputInterface::Construct(+142192)
+        //   CreateAirRamEvent<20>::Construct(+147488) / CreateSpinEvent<10>::Construct(+148784)
+        //   the two counters at +147496/+148792 cleared
+        //   VariableEventQueue<1536,16>::Construct + ::Clear (+149312)  [== mGameEventQueue]
+        //   the 16-byte block at +149280 zeroed and the word at +149296 cleared
+        //
+        // ⛔ WAS A BASE-ONLY BOOT GATE IN WorldLinkStubs.cpp AND IT WAS A LIVE DEFECT
+        // (drivable wave 2026-08-01). mVehicleInputInterface embeds fifteen EventQueues;
+        // none of them had mpEvents. MEASURED: the first ResetActiveRaceCar ->
+        // AddHandlingModel -> CreateRaceCar fired "mpEvents != NULL" + "Reached Max length"
+        // and the process died. PARTIAL SLICE: the members whose committed types expose
+        // Construct run the REAL call; the rest are an explicit list, not a silence.
+        void Construct()
+        {
+            CgsModule::IOBuffer::Construct();
+            mVehicleInputInterface.Construct();
+            mGameEventQueue.Construct();
+            mGameEventQueue.Clear();
+            // [FLAG] VehicleDriverInputInterface::Construct, the air-ram/spin queues and
+            // their two counters, and the +149280/+149296 block: those members are still
+            // sized-opaque here.
+        }
         const OutputBuffer_PreScene::VehicleInputInterface* GetVehicleInputInterface() const; // :470
         OutputBuffer_PreScene::VehicleInputInterface*       GetVehicleInputInterface();       // :471 W (0x822B5C00)
         const VehicleDriverInputInterface*  GetVehicleDriverInterface() const;             // :473

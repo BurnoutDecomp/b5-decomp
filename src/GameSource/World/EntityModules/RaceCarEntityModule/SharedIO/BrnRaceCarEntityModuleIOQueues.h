@@ -79,9 +79,21 @@ namespace RaceCarEntityModuleIO
 
     // ---- Game event queue (OutputBuffer_PrePhysics :491 / OutputBuffer_PostPhysics :602) --
     // World-level EventQueue<BrnGameState::GameEvent, N> -> alignas(16). Grown by its own TU.
-    struct alignas(16) GameEventQueue
+    // ⛔ GROWN 2026-08-01 (drivable wave) -- THE FOURTH 256-BYTE-BLOB-VS-REAL-QUEUE FINDING
+    // IN THREE WAVES, and it is the LAST member of OutputBuffer_PrePhysics, so the overrun
+    // would have run off the end of the buffer.
+    //   RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct @0x822EA7B0 does
+    //     CgsModule::VariableEventQueue<1536,16>::Construct(this + 149312)   [== +0x24740]
+    //     CgsModule::VariableEventQueue<1536,16>::Clear    (this + 149312)
+    //   and PlaceOnTrackManager::PrePhysicsUpdate @0x822F6DF8 AddEvents an 8-byte type-13
+    //   game event into it for the player's car. sizeof is 1552, not 256.
+    // The same VariableEventQueue<1536,16> is already the committed shape of the game-state
+    // module's own game-event queue (GameBridgeGUIToX.cpp:146), i.e. two independent
+    // attestations of the width.
+    // Derives (rather than typedefs) so existing `struct GameEventQueue` forward references
+    // stay valid -- same move as SceneResultQueue / PotentialContactQueue above.
+    struct alignas(16) GameEventQueue : public CgsModule::VariableEventQueue<1536, 16>
     {
-        unsigned char maReserved[256];   // NOMINAL -- not byte-verified, grown by own TU
     };
 
     // ---- Potential-contact queue (InputBuffer_PrePhysics :441) ----------------------------

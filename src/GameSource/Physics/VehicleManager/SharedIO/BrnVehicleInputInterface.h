@@ -69,6 +69,23 @@ namespace Vehicle
         // @0x822B4770: mark an active-race-car slot as added-for-collision.
         void SetRaceCarAddedForCollision(EActiveRaceCarIndex leRaceCarIndex);
 
+        // ⛔⛔ @0x822E66A0 -- ADDED 2026-08-01 (drivable wave) AND IT WAS A LIVE DEFECT.
+        // This interface embeds FIFTEEN EventQueues by value, every one of which needs its
+        // mpEvents pointed at its own inline storage. Nothing in the PC tree ever called
+        // this: RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct was a base-only
+        // boot gate in WorldLinkStubs.cpp, and OutputBuffer_PreScene::Construct's partial
+        // slice did not name it either. MEASURED the first time a car reached
+        // ResetActiveRaceCar -> AddHandlingModel -> CreateRaceCar: the pair
+        //   [ASSERT 1] mpEvents != NULL              (CgsBaseEventQueue.h:35)
+        //   [ASSERT 2] EventQueue::AddEvent - Reached Max length  (:36)
+        // followed by the process dying. Same family as the physics 1-byte game-action
+        // queue and the 256-byte race-car queue of the previous two waves: invisible only
+        // because nothing had ever posted into it.
+        //
+        // The console has TEN callers of this function; the two the PC tree can reach are
+        // added with it.
+        void Construct();
+
         // Append the other interface's staged events onto this one (queue-merge).
         // ADDITIVE GROW: real X360 symbol (BrnPhysics::Vehicle::VehicleInputInterface::
         // Append, called by WorldModule::BridgeCrashModuleToPhysicsModule @0x827AACEC);

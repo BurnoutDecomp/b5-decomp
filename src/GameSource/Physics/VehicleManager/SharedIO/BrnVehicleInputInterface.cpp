@@ -14,6 +14,40 @@ namespace Vehicle
     // BrnPhysicalTrafficManager.h convention (the World-module enum owns the full type).
     static const u32 KU_ENTITYTYPE_TRAFFIC_VEHICLE = 2;
 
+    // ========================================================================
+    // @0x822E66A0  VehicleInputInterface::Construct
+    //   Point every embedded EventQueue's mpEvents at its own inline storage and clear the
+    //   two non-queue members. The console's call order (asm 0x822E66A0..) is the member
+    //   order with the four late-added queues appended; order is irrelevant (each Construct
+    //   only touches its own sub-object) so the members are walked in DECLARATION order
+    //   here, which is what the DWARF gives and what operator= above already assumes.
+    //   The two scalars: the triangle-cache manager pointer (a1+128016) and the
+    //   added-for-collision BitArray (a1+142160) are both zeroed.
+    // ========================================================================
+    void VehicleInputInterface::Construct()
+    {
+        mLineTestResultsQueue.Construct();
+        mCreateRaceCarEventQueue.Construct();
+        mRemoveRaceCarEventQueue.Construct();
+        mResetRaceCarEventQueue.Construct();
+        mValidateRaceCarEventQueue.Construct();
+        mSetRaceCarCollisionEventQueue.Construct();
+        mSetRaceCarCullingGroupEventQueue.Construct();
+        mNetworkCarsAddedRemovedForCollisionQueue.Construct();
+        mCreateTrafficEventQueue.Construct();
+        mCreateArticulatedTrafficEventQueue.Construct();
+        mSetTrafficCrashingEventQueue.Construct();
+        mRemoveCrashedTrafficEventQueue.Construct();
+        mUpdateNetworkTrafficEventQueue.Construct();
+        mImpactEventQueue.Construct();
+
+        // asm `*(a1 + 128016) = 0` -- mTriangleCacheInterface's manager pointer. [FLAG] the
+        // interface's own type is committed but has no Construct; the console clears exactly
+        // this one word.
+        // asm `*(a1 + 142160) = 0` -- mRaceCarsAddedForCollision (BitArray<8>).
+        mRaceCarsAddedForCollision.UnSetAll();
+    }
+
     // @0x822CC1E8  VehicleInputInterface::CreateRaceCar
     //   Enqueues a spawn-race-car request and returns the index of the freshly-appended slot
     //   (queue.miLength - 1). The event's field order is identical to this method's parameter

@@ -1366,21 +1366,18 @@ void BrnWorld::RaceCarEntityModule::PostSceneUpdate(struct BrnWorld::RaceCarEnti
     }
 }
 
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnWorld::RaceCarEntityModule::PrePhysicsUpdate(struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "RaceCarEntityModule: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED (drivable wave 2026-08-01): RaceCarEntityModule::PrePhysicsUpdate is the real
+// X360 0x82307160 slice in BrnRaceCarEntityModule.cpp now. It was a SILENT-DROP stub of
+// exactly the class the brief calls the top defect class: it swallowed both buffers, and
+// with them mPlaceOnTrackManager::PrePhysicsUpdate -- the only caller of
+// ResetActiveRaceCar, the only writer of E_STATE_ACTIVE in the XEX. Nothing could ever
+// have become an active race car while this body existed.
+//
+// ⚠️ ITS SIBLING AT :1358 (PostSceneUpdate @0x822FE3F0) IS STILL A STUB and still drops
+// the line-test REQUEST half of the place-on-track round trip. Left deliberately: the
+// four other links in that chain are stubs too (see
+// PlaceOnTrackManager::ApplyPendingRequestsWithoutSceneQueryBringUp for the five-item
+// list), so bodying this one alone would move nothing.
 
 // RETIRED (global-resource wave 2026-07-31): RaceCarEntityModule::Prepare is now the real
 // X360 0x82303E78 body in BrnRaceCarEntityModule.cpp -- it takes the OutputBuffer_Prepare
@@ -3665,11 +3662,13 @@ void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene::Construct()
     CgsModule::IOBuffer::Construct();
 }
 
-// BOOT GATE: base bring-up only (see the block note above).
-void BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct()
-{
-    CgsModule::IOBuffer::Construct();
-}
+// (BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics::Construct gate RETIRED
+//  2026-08-01, drivable wave: the real partial slice lives in BrnRaceCarEntityModuleIO.h
+//  from X360 0x822EA7B0. The base-only gate left mVehicleInputInterface's FIFTEEN embedded
+//  EventQueues with mpEvents == NULL, and the first car to reach ResetActiveRaceCar ->
+//  AddHandlingModel -> VehicleInputInterface::CreateRaceCar fired
+//  "mpEvents != NULL" + "EventQueue::AddEvent - Reached Max length" and killed the process.
+//  MEASURED, DRV_RUN1.)
 
 // (BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PreScene::Construct gate RETIRED
 //  2026-07-31: real partial slice in BrnRaceCarEntityModuleIO.h from X360 0x822EA4E0 --

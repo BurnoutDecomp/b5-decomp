@@ -38,6 +38,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.h" // BrnWorld::RaceCarStreamer (by value)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"         // BrnWorld::RaceCar (by value)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"   // BrnWorld::ActiveRaceCar (by value)
+#include "GameSource/World/BrnPlaceOnTrackManager.h"                              // BrnWorld::PlaceOnTrackManager (by value, +0x17850)
 
 #include <cstddef>                                   // offsetof
 
@@ -54,6 +55,7 @@ namespace BrnResource { struct VehicleList; class WheelList; }
 // RaceCarAIInterface is the AI publish surface SpawnRaceCar posts its attach event into.
 namespace BrnGameState { namespace GameStateModuleIO { struct ResetPlayerCarAction; } }
 namespace BrnAI       { namespace AIModuleIO         { struct RaceCarAIInterface;   } }
+namespace BrnPhysics  { namespace Vehicle            { struct VehicleInputInterface; } }
 
 namespace BrnWorld
 {
@@ -279,6 +281,40 @@ public:
         // DELETE with that camera.
         bool GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const;
 
+        // ====================================================================
+        // THE ATTACHED -> WAITING -> ACTIVE CHAIN (drivable wave 2026-08-01).
+        // These four are what retire PromoteAttachedCarToActiveBringUp.
+        // ====================================================================
+
+        // X360 0x822FEBF8. A car's five streamed resources have arrived: publish them into
+        // the slot, colour it, and ask for it to be placed on the track. PARTIAL SLICE --
+        // see the .cpp banner. Only caller: UpdateStreaming.
+        void OnRaceCarResourcesLoaded(
+                EActiveRaceCarIndex leActiveRaceCarIndex,
+                BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface );
+
+        // X360 0x822CE588. Decide WHERE a freshly loaded car goes and post the request.
+        // For a PLAYER car outside a game mode that is ActiveRaceCar::RequestPlaceOnTrack
+        // at the car's own AddToWorld pose, which is the start-of-game path this build
+        // drives; every other arm goes through RaceCar::RequestResetOnTrack.
+        void PlaceRaceCarOnLoad( RaceCar* lpRaceCar );
+
+        // X360 0x822F4880. ⭐ THE ONLY WRITER OF ActiveRaceCar::E_STATE_ACTIVE IN THE XEX.
+        // Only caller: PlaceOnTrackManager::PrePhysicsUpdate.
+        //
+        // ⚠️ FOUR arguments + a VECTOR. Hex-Rays renders `(this, index, transform,
+        // vehicleInterface)` and DROPS the velocity, which arrives in v1 (`vmr128 v127, v1`
+        // at 0x822F4890 and `vmr128 v1, v127` right before each of the two callees).
+        // Incident TEN of the dropped-argument rule.
+        void ResetActiveRaceCar( EActiveRaceCarIndex leActiveRaceCarIndex,
+                                 const Matrix44Affine& lrTransform,
+                                 const Vector3& lrVelocity,
+                                 BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface );
+
+        // X360 inlined at PlaceOnTrackManager::PrePhysicsUpdate (`*(module + 100041) == 0`
+        // -> lbIgnoreFatal). Named accessor rather than an offset read from another class.
+        bool IsInCarSelectScreen() const { return mbInCarSelectScreen; }
+
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
 
@@ -466,10 +502,21 @@ private:
     // (RETIRED 2026-08-01: mbBringUpCarRequested + SpawnFirstUnlockedCarBringUp are gone --
     //  HandleResetPlayerCarAction is the real caller of AttachActiveRaceCar now.)
 
-    // [FLAG PC bring-up] NOT an X360 function -- stands in for the two data-blocked
-    // console steps between E_STATE_ATTACHED and E_STATE_ACTIVE. Full rationale in the
-    // .cpp banner; the pose it publishes IS the console's own CalcBodyTransform.
-    void PromoteAttachedCarToActiveBringUp( ActiveRaceCar* lpActiveRaceCar );
+    // (RETIRED 2026-08-01, drivable wave: PromoteAttachedCarToActiveBringUp is gone. The
+    //  ATTACHED -> WAITING -> ACTIVE walk is the console's own OnRaceCarResourcesLoaded ->
+    //  ActiveRaceCar::OnResourcesLoaded -> PlaceRaceCarOnLoad -> RequestPlaceOnTrack ->
+    //  PlaceOnTrackManager::PrePhysicsUpdate -> ResetActiveRaceCar now. What SURVIVES of
+    //  it is the render-pose publish below, which is a different and much smaller thing.)
+
+    // [FLAG PC bring-up] NOT an X360 function. The console's ONLY producer of
+    // mRenderParams.mBodyTransform is ActiveRaceCar::UpdatePhysicsState @0x822D4418, whose
+    // only caller is ReadUpdatedActiveRaceCarDataFromPhysics -- i.e. the physics READBACK,
+    // which does not exist on this build (no physics module). Without it an ACTIVE car has
+    // no render pose at all and does not draw, so retiring the promote wholesale would have
+    // made the car INVISIBLE rather than drivable. This publishes what UpdatePhysicsState
+    // publishes, using the console's own CalcBodyTransform, from the console's own slot
+    // (PostPhysicsUpdate). DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics lands.
+    void PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar* lpActiveRaceCar );
 
     // ========================================================================
     // MODELLED members (pose wave 2026-07-31): the three module flags
@@ -506,6 +553,12 @@ private:
     // is drift). The receiver queue's 4096 capacity above was derived from the console
     // gap 0x11100 - 0x100E8 == 4120, so these two are the same layout fact.
     RaceCarStreamer mRaceCarStreamer;
+
+    // X360 +0x17850 (96336). Every console call site uses `this + 96336` as the receiver
+    // (RaceCarEntityModule::PostSceneUpdate @0x822FE3F0 and PrePhysicsUpdate @0x82307160).
+    // DWARF BrnRaceCarEntityModule.h names it mPlaceOnTrackManager; it owns the
+    // request -> line test -> ResetActiveRaceCar walk.
+    PlaceOnTrackManager mPlaceOnTrackManager;
 
     // ========================================================================
     // MODELLED members (render wave 2026-07-31): the three render debug switches the
