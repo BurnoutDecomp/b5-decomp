@@ -127,8 +127,13 @@ namespace BrnGameState
     bool StuntModeScoring::HasStuntModeEnded(bool) { return true; }
     s32  StuntModeScoring::CalculateMultiplier(const StuntInfo*, StuntModeScoring::MultiplierOutInfo*) { return 0; }
 
-    // --- CarScoreData ctor (embedded array element in the scoring records) ---
-    GameStateModuleIO::CarScoreData::CarScoreData() {}
+    // --- CarScoreData ctor: RETIRED 2026-08-01 (BridgeGameStateToWorld wave) ---
+    // The real body (X360 0x822A45A8, zero-inits the whole 296-byte record) has been sitting
+    // in BrnGameStateSharedIO.cpp:393 the whole time; that TU was simply never mounted, so this
+    // empty stub was what every scoring record actually got constructed with -- a 296-byte
+    // record left at whatever the allocation held. It is mounted now (for
+    // RaceCarRaceDistanceInterface::Clear, which OutputBuffer::Construct needs), and the stub
+    // would be a duplicate symbol.
 }
 
 // The wave-30 MainGameFlowStateInGame virtual stubs that used to live here are GONE:

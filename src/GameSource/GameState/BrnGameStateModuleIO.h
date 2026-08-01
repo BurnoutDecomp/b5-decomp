@@ -27,6 +27,7 @@
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h" // BrnAI::AIModuleIO::AICarOutputInterface (complete; embedded by value @ +0xAAC0)
 #include "GameSource/Network/BrnNetworkModuleIO.h"                 // BrnNetwork::BrnNetworkModuleIO::PlayerResultsInterface (embedded @ +0x36B8)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusInterface (embedded @ +0x2CC8)
+#include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface (OutputBuffer +0x9050, embedded by value)
 
 // PostWorldInputBuffer hands out the active-race-car output interface by pointer only
 // (GetActiveRaceCarOutputInterface, X360 0x8231D2C0); forward-declare its real home.
@@ -186,7 +187,21 @@ namespace GameStateModuleIO
     typedef BrnResource::GameDataIO::RequestInterface<3072> ResourceRequestInterface; // OutputBuffer +0x3414
     class TakedownEventOutputQueueType;    // OutputBuffer +0x4040
     struct GameStateToGuiInterface;        // OutputBuffer +0x4450 (complete def: BrnGameStateToGuiIOInterfaces.h)
-    class RaceCarRaceDistanceInterface;    // OutputBuffer +0x2A48C
+    class RaceCarRaceDistanceInterface;    // OutputBuffer +0x2A48C (complete def: BrnGameStateSharedIO.h)
+    // The two scoring snapshots BridgeGameStateToWorld (X360 0x823E1890) forwards. Both are
+    // COMMITTED types with real member sets (BrnGameStateSharedIO.h); they are returned by
+    // pointer only, so incomplete declarations keep this widely-included header off that chain.
+    struct ScoringOutputInterface;         // OutputBuffer +173240 (console span 2736)
+    struct OnlineScoringOutputInterface;   // OutputBuffer +175976 (console span 164)
+
+    // OutputBuffer +169068. The console's OutputBuffer::Construct runs
+    // `VariableEventQueue<4096,16>::Construct(this + 169068)` on it and BridgeGameStateToWorld
+    // hands it to UpdateInputBuffer::AppendTriggerQueryInputInterface, whose own member is the
+    // same instantiation -- the canonical name the PS3 DWARF spells for the merge is
+    // BrnWorld::TriggerEntityModuleIO::TriggerQueryInputInterface::Append, but that aggregate
+    // has no committed home yet, so (exactly as BrnWorldModuleIO.h does for its own copy) the
+    // instantiation is reused by name here.
+    typedef CgsModule::VariableEventQueue<4096, 16> TriggerQueryInputInterface;
 
     // Placeholder member types for the OutputBuffer interface members the OutputBuffer TU
     // returns by named pointer. Swap for the real DWARF types (TimerRequestInterface,
@@ -240,25 +255,24 @@ namespace GameStateModuleIO
         u8 maOpaque[16];
     };
 
-    // OutputBuffer +0x9050. DWARF (:283/284, :347): the trigger-management input interface
-    // (OutputBuffer::TriggerManagementInputInterface). Returned read-locked
-    // (BridgeGameStateToWorld) and write-locked (ModeManager::StartGameMode). Modelled minimally
-    // as a named opaque payload; swap for the real interface when it is homed.
-    struct TriggerManagementInputInterface
-    {
-        // X360 0x8238ECF8 (BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface::
-        // AddTriggerRegion). Arm one trigger region: query flags FIRST (the X360 passes 56,
-        // `li r4,0x38`), the RESOLVED region pointer SECOND (mppRegions[idx], `lwzx r5`).
-        // Declared-only here; body forwards to the world trigger-entity interface (own TU).
-        void AddTriggerRegion(s32 liQueryFlags, const BrnTrigger::TriggerRegion* lpRegion);
-        // Drop one armed region: post an InRemoveTriggerEvent onto the interface's embedded
-        // remove queue (asm UpdateTriggers loop @0x823923C4: AddEvent onto interface+131088).
-        // Declared-only here; body lands with the world trigger-entity interface TU (mirrors the
-        // committed ClearLandmarkIndexesForGameMode queue.AddEvent precedent).
-        void RemoveTrigger(const BrnWorld::TriggerEntityModuleIO::InRemoveTriggerEvent& lrRemoveEvent);
-
-        u8 maOpaque[16];
-    };
+    // OutputBuffer +0x9050. DWARF (:283/284, :347): the trigger-management input interface.
+    // Returned read-locked (BridgeGameStateToWorld) and write-locked (ModeManager::StartGameMode).
+    //
+    // ⛔ RETYPED 2026-08-01 (BridgeGameStateToWorld wave). This was a LOCAL 16-byte opaque
+    // placeholder struct with two declared-only methods. It is the SAME aggregate the world's
+    // UpdateInputBuffer already carries by its canonical name -- and the console proves it here
+    // too: OutputBuffer::Construct (X360 0x82382940) runs
+    //     VariableEventQueue<131072,16>::Construct(this + 36944)   // == +0x9050, the add queue
+    //     InRemoveTriggerEvent<..,256>::Construct(this + 168032)   // == 36944 + 131088
+    // i.e. exactly the committed aggregate's two embedded queues at its own two offsets, and
+    // 36944 + 132124 == 169068 == the trigger-query interface accessor's return (X360 0x823B9B88),
+    // so the aggregate occupies the whole span. The old 16-byte model made the buffer's
+    // Append/Construct legs impossible to write and would have had BridgeGameStateToWorld hand
+    // AppendTriggerManagementInputInterface a 16-byte object to read 132128 bytes out of.
+    // (Same retype BrnWorldModuleIO.h made for its own copy of this member, and for the same
+    // reason.) The two placeholder methods are gone: AddTriggerRegion is the real type's own
+    // (X360 0x8238ECF8), and RemoveTrigger is grown onto it there.
+    typedef BrnWorld::TriggerEntityModuleIO::TriggerManagementInputInterface TriggerManagementInputInterface;
 
     // OutputBuffer +0x43AC. DWARF (:293, :344): the game-state-to-controller output interface
     // (GameStateToControllerInterface). Write-locked by GameStateInviteManager::Update.
@@ -497,6 +511,24 @@ namespace GameStateModuleIO
         // above (this+0x9050). ModeManager::StartGameMode writes it write-locked.
         TriggerManagementInputInterface*       GetTriggerManagementInputInterface();
 
+        // ---- BridgeGameStateToWorld (X360 0x823E1890) read side ---------------------------
+        // The four remaining sources that bridge reads off this buffer. The first two are real
+        // X360 symbols the exports carry UNNAMED (recovered by their asserts' own
+        // __FILE__/__LINE__ + the member offset each returns, exactly as GetGameActionQueue()
+        // const / GetTakedownEventOutputQueue() const were); the last two are INLINED on the
+        // X360 (the bridge computes `outputBuffer + 173240` / `+ 175976` in-line and passes the
+        // address straight to the world setters -- see the two `addis r4,r30,3` pairs at
+        // 0x823E1938 / 0x823E1948), so they carry no own address.
+        //
+        // X360 0x823B9B88 (read-lock; BrnGameStateModuleIO.h line 279) -- returns this+169068.
+        const TriggerQueryInputInterface*      GetTriggerQueryInputInterface() const;
+        // X360 0x823BA038 (read-lock; BrnGameStateModuleIO.h line 310) -- returns this+173196.
+        const RaceCarRaceDistanceInterface*    GetRaceCarRaceDistanceInterface() const;
+        // INLINED on X360 (bridge computes this+173240).
+        const ScoringOutputInterface*          GetScoringOutputInterface() const;
+        // INLINED on X360 (bridge computes this+175976).
+        const OnlineScoringOutputInterface*    GetOnlineScoringOutputInterface() const;
+
         // ---- OutputBuffer TU accessors ----
         // X360 0x8231D560 (write-lock; line 269) -- non-const twin of GetResourceRequestInterface()
         ResourceRequestInterface*                GetResourceRequestInterface();
@@ -513,8 +545,18 @@ namespace GameStateModuleIO
         // Active payback (meActivePaybackType @+173180, meActivePaybackAggressor @+173184)
         BrnNetwork::EPaybackType GetActivePaybackType() const;                          // 0x823B9E28 read, line 298
         void                     SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType); // 0x82362E20 write, line 299
-        EActiveRaceCarIndex      GetActivePaybackAggressor() const;                     // 0x823B9ED8 read, line 301
-        void                     SetActivePaybackAggressor(EActiveRaceCarIndex leAggressor);   // 0x82362ED0 write, line 302
+        // ⚠️ EXPLICITLY GLOBAL-QUALIFIED (2026-08-01). Two distinct `enum EActiveRaceCarIndex : s32`
+        // exist in this tree -- the global one in BurnoutConstants.h (which THIS header includes
+        // for exactly this member; it is also the one BrnWorldIO::UpdateInputBuffer::
+        // SetActivePaybackAggressor takes) and BrnGameState::EActiveRaceCarIndex in
+        // BrnTakedownManagerTypes.h. These three spellings sit inside `namespace BrnGameState`, so
+        // unqualified they bound to WHICHEVER of the two the including TU happened to have pulled
+        // in: the same accessor had two different return types, hence two different mangled names,
+        // depending on include order. Caught by BridgeGameStateToWorld, whose destination takes the
+        // global one ("cannot convert BrnGameState::EActiveRaceCarIndex to EActiveRaceCarIndex").
+        // Unifying the two enums is its own cleanup; pinning the scope here is not.
+        ::EActiveRaceCarIndex    GetActivePaybackAggressor() const;                     // 0x823B9ED8 read, line 301
+        void                     SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor);   // 0x82362ED0 write, line 302
 
         // Game-mode elapsed time (mGameModeElapsedTime @+173188)
         void                       SetGameModeElapsedTime(const OutputBufferTime* lpTime);  // 0x82362F80 write, line 305
@@ -543,15 +585,46 @@ namespace GameStateModuleIO
         u8  maPadToGameStateToGui[0x4450 - (0x43AC + sizeof(GameStateToControllerInterface))]; // -> +0x4450
         u8  mGameStateToGuiInterfaceStorage[0x4840 - 0x4450];             // GameStateToGuiInterface      @ +0x4450 (17488)
         u8  mGuiEventQueueStorage[0x9050 - 0x4840];                       // GuiEventQueue                @ +18496 .. +0x9050
-        TriggerManagementInputInterface mTriggerManagementInputInterface; // @ +0x9050 (36944, named opaque)
-        u8  mPostGuiEventQueueStorage[173180 - (0x9050 + sizeof(TriggerManagementInputInterface))]; // -> +173180
-        BrnNetwork::EPaybackType meActivePaybackType;                     // +173180
-        EActiveRaceCarIndex      meActivePaybackAggressor;                // +173184
-        OutputBufferTime         mGameModeElapsedTime;                    // +173188 (8B -> +173196)
-        u8  mRaceCarRaceDistanceInterfaceStorage[192488 - (173188 + 8)];  // RaceCarRaceDistanceInterface @ +173196 (0x2A48C) .. +192488
-        bool mbSetUpAllEventStartsInterfaceIsValid;                       // +192488
-        bool mbSpecificGameModeEventInterfaceIsValid;                     // +192489
-        bool mbControllerActive;                                          // +192490
+        // ⛔ CORRECTED 2026-08-01 (BridgeGameStateToWorld wave). These two members used to be
+        //     TriggerManagementInputInterface mTriggerManagementInputInterface;   // 16-byte placeholder
+        //     u8 mPostGuiEventQueueStorage[173180 - (0x9050 + sizeof(...))];      // 136220-byte blob
+        // -- a 16-byte stand-in followed by an unnamed blob labelled "post-GUI event queue".
+        // NEITHER label was right. The console's own OutputBuffer::Construct list (transcribed at
+        // the body in the .cpp) reads
+        //     VariableEventQueue<131072,16>::Construct(this + 36944)   // == +0x9050
+        //     InRemoveTriggerEvent<..,256>::Construct(this + 168032)   // == 36944 + 131088
+        //     VariableEventQueue<4096,16>::Construct (this + 169068)
+        // The first two ARE the committed TriggerManagementInputInterface aggregate at its own two
+        // internal offsets, so it spans 36944..169068 (132124); the third is a trigger-QUERY input
+        // interface (VariableEventQueue<4096,16>, 4112 bytes) filling 169068..173180 exactly, and
+        // 169068 is precisely what the read-side accessor X360 0x823B9B88 returns. So the whole
+        // 136236-byte region is two named interfaces, and the buffer's Construct could not build
+        // either of them while they were an opaque blob. There is NO post-GUI event queue here.
+        //
+        // Both are real typed members now; the host sizes them (132128 + 4112 == 136240, four
+        // bytes over the console's 136236 because the embedded remove queue pads differently on
+        // x64). Everything after them therefore sits four bytes past its console offset -- which
+        // is fine and is why the trailing comments say "console +N", not "+N": every access to
+        // this buffer is BY NAMED MEMBER. Nothing in the tree pokes it at an absolute offset
+        // (verified by grep over 173180/173196/173240/175976/192488).
+        TriggerManagementInputInterface mTriggerManagementInputInterface; // console +0x9050 (36944)
+        TriggerQueryInputInterface      mTriggerQueryInputInterface;      // console +169068 (4112)
+        BrnNetwork::EPaybackType meActivePaybackType;                     // console +173180
+        ::EActiveRaceCarIndex    meActivePaybackAggressor;                // console +173184 (see the accessor's ⚠️)
+        OutputBufferTime         mGameModeElapsedTime;                    // console +173188 (8B)
+        // The tail, carved at the console's own anchors (all three spans are attested by
+        // OutputBuffer::Construct's zero-fills / memsets and by the two inlined address
+        // computations in BridgeGameStateToWorld). Each stays OPAQUE storage of the CONSOLE's
+        // width, with a .cpp static_assert that the committed type fits -- see the ⚠️ note on
+        // GetScoringOutputInterface's body for why the console width, not the host sizeof, is
+        // the one that matters here.
+        u8  mRaceCarRaceDistanceInterfaceStorage[173240 - 173196];        // console +173196 (44)
+        u8  mScoringOutputInterfaceStorage[175976 - 173240];              // console +173240 (2736)
+        u8  mOnlineScoringOutputInterfaceStorage[176140 - 175976];        // console +175976 (164)
+        u8  maUnmodelledTailStorage[192488 - 176140];                     // console +176140 .. +192488
+        bool mbSetUpAllEventStartsInterfaceIsValid;                       // console +192488
+        bool mbSpecificGameModeEventInterfaceIsValid;                     // console +192489
+        bool mbControllerActive;                                          // console +192490
     };
 
     // ---- free predicate over EGameModeType (X360 0x821F2B08) -----------------

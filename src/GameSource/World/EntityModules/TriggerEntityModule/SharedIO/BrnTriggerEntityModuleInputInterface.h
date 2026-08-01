@@ -170,6 +170,19 @@ namespace TriggerEntityModuleIO
         // lands on the embedded queue.
         void AddTriggerRegion(s32 liQueryFlags, const BrnTrigger::TriggerRegion* lpRegion);
 
+        // ADDITIVE GROW 3 (BridgeGameStateToWorld wave, 2026-08-01): drop one armed region by
+        // posting an InRemoveTriggerEvent onto the embedded remove queue. X360 header-inline --
+        // the TriggerQueryManager::UpdateTriggers loop @0x823923C4 AddEvents straight onto
+        // interface+131088, which is mRemoveTriggerEventQueue. Re-homed here from the local
+        // 16-byte GameStateModuleIO::TriggerManagementInputInterface placeholder that used to
+        // declare it (that placeholder is now a typedef of THIS type); its only caller,
+        // BrnTriggerQueryManager.cpp:214, is not mounted yet, so this keeps that TU compiling
+        // against the real aggregate instead of silently losing the method in the retype.
+        void RemoveTrigger(const InRemoveTriggerEvent& lrRemoveEvent)
+        {
+            mRemoveTriggerEventQueue.AddEvent(lrRemoveEvent);
+        }
+
         // X360 header-inline (BridgeInputToEntityModules @0x827AE52C/@0x827AE540): merge the
         // source interface's add queue then its remove queue into this one.
         void Append(const TriggerManagementInputInterface& lrSource)

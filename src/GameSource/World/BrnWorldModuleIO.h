@@ -309,6 +309,13 @@ namespace BrnWorldIO
         // ---- takedown event queue -------------------------------------------------
         void                   AppendTakedownEventQueue(const TakedownEventQueue*);                      // :273 W (0x823C8C38)
 
+        // ---- trigger management interface ------------------------------------------
+        // X360 0x823DB778 (:276 W, "Not locked for writing"). Body is the aggregate's own
+        // two-queue merge: VariableEventQueue<131072,16>::Append on the add queue (this+161288)
+        // then InRemoveTriggerEvent_::Append on the remove queue (this+292376 == +161288+131088)
+        // from source+131088. Producer: BridgeGameStateToWorld @0x823E1890.
+        void                   AppendTriggerManagementInputInterface(const TriggerManagementInputInterface*); // :276 W (0x823DB778)
+
         // ---- trigger query interface ----------------------------------------------
         void                   AppendTriggerQueryInputInterface(const TriggerQueryInputInterface*);      // :279 W (0x823C8CF0)
 

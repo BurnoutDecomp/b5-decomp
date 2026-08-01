@@ -1,7 +1,10 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 
+#include <cstring>                                   // std::memset (OutputBuffer::Construct's console zero-fills)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h" // RequestInterface<3072> (the +0x3414 member's real type)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"            // RaceCarRaceDistanceInterface / ScoringOutputInterface / OnlineScoringOutputInterface (the tail members' real types)
+#include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface (Construct's two embedded queues)
 
 // =============================================================================
 // BrnGameState::GameStateModuleIO buffer accessors.
@@ -249,11 +252,10 @@ TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutput
 //     this+176336 = 0; this+176344/348/352/356 = -1
 //     this+184768 = 0; this+192484 = 0; this+192488/489/490 = 0
 //
-// ⚠️ FLAG (PC, partial): this model still carries most of those members as OPAQUE u8 storage
-// (see the private section below), so only the members that are real typed objects here -- the
-// base status byte, the +0x04 game-action queue and (since 2026-08-01) the +0x3414
-// resource-request interface -- can be constructed. Grow this body as each opaque span is
-// typed; do NOT pretend the buffer is fully constructed.
+// ⚠️ FLAG (PC, partial): this model still carries several of those members as OPAQUE u8 storage
+// (see the private section below), so only the members that are real typed objects here can be
+// constructed. Grow this body as each opaque span is typed; do NOT pretend the buffer is fully
+// constructed -- the explicit "STILL NOT MADE" list at the end of the body is the checklist.
 // ----------------------------------------------------------------------------
 void OutputBuffer::Construct()
 {
@@ -285,6 +287,73 @@ void OutputBuffer::Construct()
         lpRequests->mRequestQueue.Construct();
         lpRequests->mRequestQueue.Clear();
     }
+
+    // ⭐⭐ 2026-08-01 (BridgeGameStateToWorld wave): the console's construct list for the members
+    // that bridge READS. Until now every one of these was inside an opaque blob, so none of them
+    // could be built -- and BridgeGameStateToWorld hands five of them straight to the world's
+    // Append*/Set* legs. Reading an unconstructed VariableEventQueue fires its own
+    // "Not Constructed" assert (CgsVariableEventQueue.h) and hands the destination a garbage
+    // length; that is exactly the hazard the trigger wave found on the resource-request queue,
+    // one layer along. These are the console's OWN calls, transcribed above and now made:
+    //     VariableEventQueue<131072,16>::Construct(this + 36944)   // mgmt add queue
+    //     InRemoveTriggerEvent<..,256>::Construct (this + 168032)  // mgmt remove queue
+    //     VariableEventQueue<4096,16>::Construct  (this + 169068)  // trigger-query interface
+    mTriggerManagementInputInterface.GetAddTriggerEventQueue().Construct();
+    mTriggerManagementInputInterface.GetRemoveTriggerEventQueue().Construct();
+    mTriggerQueryInputInterface.Construct();
+
+    //     this+173180 = 3 (EPaybackType); this+173184 = -1 (aggressor)
+    //     Time::SetFloatVal(this + 173188, 0.0f)
+    // NOTE the payback seeds are NOT zero: the console's "no payback" idle value is 3, and the
+    // aggressor is the invalid active-race-car index. BridgeGameStateToWorld copies both into the
+    // world input buffer every frame, so a zero-initialised buffer would publish payback type 0
+    // (a REAL payback kind) with aggressor car 0 from the first frame the bridge runs.
+    meActivePaybackType      = static_cast<BrnNetwork::EPaybackType>(3);
+    meActivePaybackAggressor = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;   // the GLOBAL enum -- see the accessor's ⚠️
+    mGameModeElapsedTime.miSeconds  = 0;
+    mGameModeElapsedTime.mfFraction = 0.0f;
+
+    //     8 x s32 zeroed from this+173196; this+173228 = 0.0f; this+173232 = 0
+    // == RaceCarRaceDistanceInterface::Clear (X360 0x82357470) on the +173196 member.
+    reinterpret_cast<RaceCarRaceDistanceInterface*>(&mRaceCarRaceDistanceInterfaceStorage)->Clear();
+
+    //     memset(this + 173240, 0, 2736)   // the scoring snapshot, console width
+    std::memset(&mScoringOutputInterfaceStorage, 0, sizeof(mScoringOutputInterfaceStorage));
+
+    //     8 x s32 = -1 from this+176008
+    // 176008 - 175976 == 0x20 == OnlineScoringOutputInterface::maOnlineAwards, so the console's
+    // "-1 block" is that array seeded to the invalid award id. Zero the interface first (the
+    // console's own zero-fill covers it) then stamp the named member.
+    std::memset(&mOnlineScoringOutputInterfaceStorage, 0, sizeof(mOnlineScoringOutputInterfaceStorage));
+    {
+        OnlineScoringOutputInterface* lpOnline =
+            reinterpret_cast<OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
+        for (s32 liCar = 0; liCar < 8; ++liCar)
+            lpOnline->maOnlineAwards[liCar] = static_cast<EOnlineAwardID>(-1);
+    }
+
+    //     this+192488/489/490 = 0
+    mbSetUpAllEventStartsInterfaceIsValid  = false;
+    mbSpecificGameModeEventInterfaceIsValid = false;
+    mbControllerActive                      = false;
+
+    // ⚠️ STILL NOT MADE, and named so nobody has to re-derive them:
+    //   * TakedownEvent<..,8>::Construct(this + 16448) -- the takedown-event OUTPUT queue, which
+    //     BridgeGameStateToWorld also forwards. Its member is still opaque storage
+    //     (TakedownEventOutputQueueType is a forward-declared incomplete class here), so it
+    //     cannot be constructed from this TU. It is SAFE to forward unconstructed only because
+    //     BaseEventQueue<T>::Append early-outs on a zero-length source and the buffer's storage
+    //     starts zeroed -- that is a property of the container, not a design, so construct it the
+    //     moment that member is typed.
+    //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784),
+    //     the two input bind/unbind request queues (this + 17324 / 17400),
+    //     GameStateToGuiInterface::Construct (this + 17488),
+    //     VariableEventQueue<18432,16>::Construct (this + 18496) -- all still opaque.
+    //   * the console's `this+175860 = -1` seed inside the scoring snapshot (== scoring + 2620).
+    //     DELIBERATELY NOT REPRODUCED: the x64 ScoringOutputInterface layout is 2672 bytes against
+    //     the console's 2736, so console byte 2620 does not name a member here. Poking it would be
+    //     an offset hack over a type whose members ARE known -- when the field is identified from
+    //     the console layout map, write it BY NAME.
 }
 
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
@@ -368,6 +437,60 @@ TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterfac
     return &mTriggerManagementInputInterface;
 }
 
+// ---- BridgeGameStateToWorld (X360 0x823E1890) read side -------------------------------------
+// The four sources that bridge reads off this buffer, in the order it reads them.
+
+// X360 0x823B9B88 (exported unnamed as sub_823B9B88) - read-lock accessor for the trigger-query
+// input interface (this+169068); assert __FILE__/__LINE__ = BrnGameStateModuleIO.h:279.
+// RECOVERED IDENTITY, same route as GetGameActionQueue() const: the exports carry it unnamed, and
+// the member it returns is pinned by the return offset (169068 == 36944 + 132124, i.e. exactly
+// past the trigger-management interface) plus the console's own Construct call
+// `VariableEventQueue<4096,16>::Construct(this + 169068)`.
+const TriggerQueryInputInterface* OutputBuffer::GetTriggerQueryInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mTriggerQueryInputInterface;
+}
+
+// X360 0x823BA038 (exported unnamed as sub_823BA038) - read-lock accessor for the race-car
+// race-distance interface (this+173196); const twin of the 0x823630F0 write-side accessor.
+const RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const RaceCarRaceDistanceInterface*>(&mRaceCarRaceDistanceInterfaceStorage);
+}
+
+// INLINED on the X360 -- BridgeGameStateToWorld computes `outputBuffer + 173240` itself
+// (0x823E1938 `addis r4,r30,3` / 0x823E1940 `addi r4,r4,-0x5B48`) and hands the address straight
+// to UpdateInputBuffer::SetScoringInterface, so there is no callable symbol and no lock assert of
+// its own (the bridge holds the buffer's read lock across the whole call).
+//
+// ⚠️ THE STORAGE IS DELIBERATELY THE CONSOLE'S WIDTH, NOT sizeof(ScoringOutputInterface).
+// MEASURED on this x64 build: sizeof(ScoringOutputInterface) == 2672, against the console's
+// 2736-byte span (173240..175976, the width OutputBuffer::Construct memsets and the width
+// UpdateInputBuffer::SetScoringInterface memcpy's). Handing the world a pointer to a 2672-byte
+// object it will read 2736 bytes out of is a 64-byte over-read; keeping the console's span as
+// opaque storage and viewing it through the committed type makes the read in-bounds by
+// construction. Do NOT "tidy" this into a typed member until the world-side ScoringInterface
+// slice is sized off the same type.
+const ScoringOutputInterface* OutputBuffer::GetScoringOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    static_assert(sizeof(ScoringOutputInterface) <= (175976 - 173240),
+                  "ScoringOutputInterface must fit the console's +173240 span (2736 bytes)");
+    return reinterpret_cast<const ScoringOutputInterface*>(&mScoringOutputInterfaceStorage);
+}
+
+// INLINED on the X360 -- `outputBuffer + 175976` (0x823E1948 / 0x823E1950). Here the committed
+// type and the console span agree exactly (164 == 164), so there is no slack.
+const OnlineScoringOutputInterface* OutputBuffer::GetOnlineScoringOutputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    static_assert(sizeof(OnlineScoringOutputInterface) <= (176140 - 175976),
+                  "OnlineScoringOutputInterface must fit the console's +175976 span (164 bytes)");
+    return reinterpret_cast<const OnlineScoringOutputInterface*>(&mOnlineScoringOutputInterfaceStorage);
+}
+
 // =====================  OutputBuffer (OutputBuffer TU)  =====================
 
 // X360 0x8231D560 - write-lock accessor for the resource-request interface (this+0x3414).
@@ -434,7 +557,7 @@ void OutputBuffer::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 }
 
 // X360 0x823B9ED8 - read-lock getter for meActivePaybackAggressor (this+173184).
-EActiveRaceCarIndex OutputBuffer::GetActivePaybackAggressor() const
+::EActiveRaceCarIndex OutputBuffer::GetActivePaybackAggressor() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return meActivePaybackAggressor;
@@ -442,7 +565,7 @@ EActiveRaceCarIndex OutputBuffer::GetActivePaybackAggressor() const
 
 // X360 0x82362ED0 - write-lock setter for meActivePaybackAggressor (this+173184).
 // (Verifier fix: was CGS_ASSERT_W, an undefined macro -> explicit Begin/Fire/End.)
-void OutputBuffer::SetActivePaybackAggressor(EActiveRaceCarIndex leAggressor)
+void OutputBuffer::SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     meActivePaybackAggressor = leAggressor;
