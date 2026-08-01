@@ -570,32 +570,81 @@ void CarSelectManager::SpawnInStartCar(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
         CgsDev::Assert::EndAssert();
     }
-    const u8 lbSpawnTypeBit = (luSpawnType != 0) ? 0 : 1;   // X360 extrwi of cntlzw(type-1): 1 iff type==0
+    // ⛔ CORRECTED 2026-08-01 -- the committed line was `(luSpawnType != 0) ? 0 : 1`, described as
+    // "1 iff type==0". It is 1 iff type == 1. The X360 idiom (0x82387DF0..0x82387E14) is
+    //     r11 = cntlzw(type - 1);  bit = extrwi(r11, 1, 26)      // == bit 5 of the count
+    // cntlzw(0) == 32 (0b100000, bit 5 set -> 1); cntlzw(-1) == 0; cntlzw(1) == 31 (0b011111 -> 0).
+    // So only type - 1 == 0, i.e. type == E_TYPE_CAR_SELECT_LEFT (1), yields 1 -- which is exactly
+    // what the consumer calls it: MainDirector::ProcessInputQueue case 64 stores it into
+    // maGameState.mbJunkyardPosIsLeft. The old form was inverted AND tested the wrong enumerator.
+    // (CarSelectManager::EndUnlockState in the sibling TU already had `(luSpawnType == 1)`, so the
+    // tree carried both spellings of the same bit.)
+    const u8 lbSpawnTypeBit = (luSpawnType == 1u) ? 1 : 0;
 
     // --- ResetPlayerCarAction (type 0, 80B) ---
+    // ⛔⛔ CORRECTED 2026-08-01 -- THIS PAYLOAD WAS BUILT AT THE WRONG OFFSETS, ALL OF THEM, and
+    // the spawn transform (the part that actually PUTS THE CAR IN THE JUNKYARD) was dismissed as
+    // "opaque". It is not opaque: it is SpawnLocation::mPosition / ::mDirection, already named in
+    // BrnSpawnLocation.h at exactly the +0x00/+0x10 the X360 lvx128's from.
+    //
+    // Recovered field by field from 0x82387D38..0x82387D98 (payload base == stack var_90, size 0x50;
+    // each var_XX below is var_90 + (0x90 - XX)):
+    //   var_90 +0x00  stvx128 v0  <- lvx128(r29+0x00)   SpawnLocation::mPosition   (16B)
+    //   var_80 +0x10  stvx128 v0  <- lvx128(r29+0x10)   SpawnLocation::mDirection  (16B)
+    //   var_70 +0x20  std r10     <- *(this+0x40)       mStartCarId                (8B)
+    //   var_68 +0x28  std r31     <- 0                                             (8B)
+    //   var_60 +0x30  stw r10     <- 8                  (s32 -- the car-select type)
+    //   var_5C +0x34  stfs f0     <- CarData+0x0C       deform amount              (f32)
+    //   var_58 +0x38  stw r27     <- 1                  (s32 -- in-car-select)
+    //   var_54 +0x3C  stw r31     <- 0                  (s32 -- the in-car-MOD bit; 0 on this path)
+    //   var_50 +0x40  stb r27     <- 1
+    //   var_4F +0x41  stb r31     <- 0     (TeleportCurrentVehicle writes 1 here; this path 0)
+    //   var_4E +0x42  stb r31     <- 0
+    //   var_4D +0x43  stb r31     <- 0
+    //
+    // ⚠️ NOTHING ON PC CONSUMES ACTION 0 YET: there is no BridgeGameStateToWorld, so this record is
+    // built correctly and then goes nowhere. Say it plainly -- fixing the offsets does NOT by itself
+    // move a car. It stops the record being wrong when the world bridge lands. (Action 64 below IS
+    // consumed, by MainDirector::ProcessInputQueue -- see the correction there.)
     {
         u8 lacReset[80];
         std::memset(lacReset, 0, sizeof(lacReset));
-        const CgsID lStartCar = mStartCarId;
-        // The X360 copies the spawn-location transform (16B) into the leading payload slot, then the
-        // start car id, deform and the in-car-select flags. Only the named scalars are reproduced; the
-        // transform + full layout are opaque (FLAG).
-        std::memcpy(lacReset + 0x10, &lStartCar, sizeof(lStartCar));   // car id
-        std::memcpy(lacReset + 0x14, &lfDeform, sizeof(lfDeform));     // deform amount (CarData +0x0C)
-        lacReset[0x28] = 8;             // car-select-type
-        lacReset[0x30] = 1;             // in-car-select
+        const CgsID lStartCar     = mStartCarId;
+        const s32   liCarSelType  = 8;
+        const s32   liInCarSelect = 1;
+        const s32   liInCarMod    = 0;
+        std::memcpy(lacReset + 0x00, &lpSpawnLocation->mPosition,  sizeof(Vector3));
+        std::memcpy(lacReset + 0x10, &lpSpawnLocation->mDirection, sizeof(Vector3));
+        std::memcpy(lacReset + 0x20, &lStartCar,     sizeof(lStartCar));
+        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
+        std::memcpy(lacReset + 0x34, &lfDeform,      sizeof(lfDeform));
+        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
+        std::memcpy(lacReset + 0x3C, &liInCarMod,    sizeof(liInCarMod));
+        lacReset[0x40] = 1;
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lacReset), 0 /*KI_ACTION_RESET_PLAYER_CAR*/, 80);
     }
 
     // --- CarSelectionChangedAction (type 64, 64B) ---
+    // ⛔⛔ CORRECTED 2026-08-01 -- the spawn-type bit was written at +0x10 and
+    // MainDirector::ProcessInputQueue case 64 reads it at +0x30 (BrnMainDirector.cpp:753,
+    // `mbJunkyardPosIsLeft = (lpacPayload[0x30] != 0)`). BOTH ENDS ARE IN THIS TREE AND THEY
+    // DISAGREED: the producer was stamping the bit on top of what the console puts the spawn
+    // POSITION in, and the consumer was reading a byte nobody wrote. Recovered from
+    // 0x82387D9C..0x82387E18 (payload base == var_90, size 0x40):
+    //   +0x00  std r10      <- *(this+0x20)      mJunkyardId              (8B)
+    //   +0x10  stvx128 v0   <- SpawnLocation::mPosition                   (16B)
+    //   +0x20  stvx128 v13  <- SpawnLocation::mDirection                  (16B)
+    //   +0x30  stb r11      <- the spawn-location type bit
+    //   +0x31  stb r31      <- 0
     {
         u8 lacChanged[64];
         std::memset(lacChanged, 0, sizeof(lacChanged));
         const CgsID lJunkyard = mJunkyardId;
-        std::memcpy(lacChanged, &lJunkyard, sizeof(lJunkyard));        // X360 v20[0] = *(this+0x20) (junkyard id)
-        // The X360 copies the spawn-location transform (two vectors) into +0x10/+0x20; opaque here (FLAG).
-        lacChanged[0x10] = lbSpawnTypeBit;   // spawn-location type bit
+        std::memcpy(lacChanged + 0x00, &lJunkyard,                 sizeof(lJunkyard));
+        std::memcpy(lacChanged + 0x10, &lpSpawnLocation->mPosition,  sizeof(Vector3));
+        std::memcpy(lacChanged + 0x20, &lpSpawnLocation->mDirection, sizeof(Vector3));
+        lacChanged[0x30] = lbSpawnTypeBit;
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lacChanged), 64 /*KI_ACTION_CAR_SELECTION_CHANGED*/, 64);
     }
@@ -652,20 +701,43 @@ void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue
         CgsDev::Assert::FireAssert("muType < E_TYPE_COUNT", KAC_SPAWNLOC_FILE, 152);
         CgsDev::Assert::EndAssert();
     }
-    const u8 lbSpawnTypeBit = (luSpawnType != 0) ? 0 : 1;
+    // ⛔ CORRECTED 2026-08-01 -- same inverted/wrong-enumerator bit as SpawnInStartCar; see the
+    // full derivation there. 1 iff type == E_TYPE_CAR_SELECT_LEFT.
+    const u8 lbSpawnTypeBit = (luSpawnType == 1u) ? 1 : 0;
 
     // --- ResetPlayerCarAction (type 0, 80B) ---
+    // ⛔ CORRECTED 2026-08-01, same defect as SpawnInStartCar's copy: every field was at the wrong
+    // offset and the spawn transform was missing. Recovered from 0x82392F78..0x82392FEC (payload
+    // base == var_90, size 0x50). It is the IDENTICAL record shape SpawnInStartCar builds, with
+    // exactly two differences, both marked below:
+    //   +0x00  stvx128 v0  <- lvx128(r31+0x00)   SpawnLocation::mPosition   (16B)
+    //   +0x10  stvx128 v0  <- lvx128(r31+0x10)   SpawnLocation::mDirection  (16B)
+    //   +0x20  std r10     <- *(this+0x48)       mDesiredCarId              (8B)   [DIFFERENT id]
+    //   +0x28  std r11     <- 0                                             (8B)
+    //   +0x30  stw r11     <- 8                  (s32)
+    //   +0x34  stfs f0     <- CarData+0x0C       deform amount              (f32)
+    //   +0x38  stw r11     <- 1                  (s32)
+    //   +0x3C  stw r10     <- extrwi(cntlzw(*(this+0x73)),1,26)             (s32)  [DIFFERENT: the
+    //          in-car-MOD bit. cntlzw(0)==32 -> bit 26 set -> 1; cntlzw(1)==31 -> 0. So the value is
+    //          `mbInCarModScreen == 0`, which the old body had RIGHT -- at the wrong offset (+0x1C)
+    //          and the wrong width (u8 vs s32).]
+    //   +0x40  stb r11 <- 1     +0x41 stb r11 <- 1     +0x42 <- 0     +0x43 <- 0
     {
         u8 lacReset[80];
         std::memset(lacReset, 0, sizeof(lacReset));
-        const CgsID lDesired = mDesiredCarId;
-        std::memcpy(lacReset + 0x10, &lDesired, sizeof(lDesired));   // car id
-        std::memcpy(lacReset + 0x14, &lfDeform, sizeof(lfDeform));   // deform amount
-        // X360: payload +0x1C == (mbInCarModScreen == 0) -- "is NOT in car-mod" flag.
-        lacReset[0x1C] = (mbInCarModScreen ? 0 : 1);
-        lacReset[0x28] = 8;   // car-select-type
-        lacReset[0x30] = 1;   // in-car-select
-        lacReset[0x31] = 1;   // (X360 v25 == 1)
+        const CgsID lDesired      = mDesiredCarId;
+        const s32   liCarSelType  = 8;
+        const s32   liInCarSelect = 1;
+        const s32   liNotInCarMod = mbInCarModScreen ? 0 : 1;
+        std::memcpy(lacReset + 0x00, &lpSpawnLocation->mPosition,  sizeof(Vector3));
+        std::memcpy(lacReset + 0x10, &lpSpawnLocation->mDirection, sizeof(Vector3));
+        std::memcpy(lacReset + 0x20, &lDesired,      sizeof(lDesired));
+        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
+        std::memcpy(lacReset + 0x34, &lfDeform,      sizeof(lfDeform));
+        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
+        std::memcpy(lacReset + 0x3C, &liNotInCarMod, sizeof(liNotInCarMod));
+        lacReset[0x40] = 1;
+        lacReset[0x41] = 1;
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lacReset), 0 /*KI_ACTION_RESET_PLAYER_CAR*/, 80);
     }

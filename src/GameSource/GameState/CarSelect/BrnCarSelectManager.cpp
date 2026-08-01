@@ -666,25 +666,43 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
     mpGameStateModule.Get()->SetCarUnlockAlreadyShown(lpUnlockCarData->GetId());
     mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(mCurrentCarToUnlock, 0, lpActionQueue, true);
 
-    if (maSpawnLocations[3].Get() == 0)   // X360 *(v2+13) byte 0x34 == maSpawnLocations[3]
+    const BrnTrigger::SpawnLocation* lpUnlockSpawnLocation = maSpawnLocations[3].Get();
+    if (lpUnlockSpawnLocation == 0)   // X360 *(v2+13) byte 0x34 == maSpawnLocations[3]
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 824);
         CgsDev::Assert::EndAssert();
     }
 
-    // ResetPlayerCarAction (80B). Only the few fields the X360 seeds are reproduced: the unlocked car
-    // id, the car's deform amount (CarData +12), and the in-car-select / car-select-type / dont-stream
-    // flags. FLAG: full ResetPlayerCarAction layout not in exports.
+    // ResetPlayerCarAction (80B).
+    // ⛔ CORRECTED 2026-08-01 -- the "FLAG: full ResetPlayerCarAction layout not in exports" was
+    // wrong: the layout is fully attested at 0x82398B3C..0x82398B9C (payload base == var_B0,
+    // size 0x50, r25 == 0, r28 == 1, r23 == 2), and it is the SAME record the other four builders
+    // in this class emit. Every field of the old body was at the wrong offset and the spawn
+    // transform was missing entirely. See BrnCarSelectManager_CarChange.cpp SpawnInStartCar for the
+    // annotated master copy.
+    //   +0x00 mPosition (16B)   +0x10 mDirection (16B)   +0x20 car id (8B)   +0x28 0 (8B)
+    //   +0x30 8 (s32)           +0x34 deform (f32)       +0x38 1 (s32)       +0x3C 2 (s32)
+    //   +0x40 1  +0x41 1  +0x42 0  +0x43 0
+    // ⚠️ +0x3C is 2 HERE and 0 in SpawnInStartCar/EndUnlockState (`li r23, 2` @0x82398A74) -- the
+    // unlock sequence is the one path that sets it; recorded as the console's literal.
     {
         u8 lacReset[80];
         std::memset(lacReset, 0, sizeof(lacReset));
-        const CgsID lCarId = lpUnlockCarData->GetId();
-        std::memcpy(lacReset, &lCarId, sizeof(lCarId));                       // car id
-        const f32 lfDeform = lpUnlockCarData->GetUnlockDeformationAmount();
-        std::memcpy(lacReset + 0x14, &lfDeform, sizeof(lfDeform));            // deform amount slot
-        lacReset[0x28] = 8;   // car-select-type
-        lacReset[0x30] = 1;   // in-car-select
+        const CgsID lCarId        = lpUnlockCarData->GetId();
+        const f32   lfDeform      = lpUnlockCarData->GetUnlockDeformationAmount();
+        const s32   liCarSelType  = 8;
+        const s32   liInCarSelect = 1;
+        const s32   liUnlockMode  = 2;
+        std::memcpy(lacReset + 0x00, &lpUnlockSpawnLocation->mPosition,  sizeof(Vector3));
+        std::memcpy(lacReset + 0x10, &lpUnlockSpawnLocation->mDirection, sizeof(Vector3));
+        std::memcpy(lacReset + 0x20, &lCarId,        sizeof(lCarId));
+        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
+        std::memcpy(lacReset + 0x34, &lfDeform,      sizeof(lfDeform));
+        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
+        std::memcpy(lacReset + 0x3C, &liUnlockMode,  sizeof(liUnlockMode));
+        lacReset[0x40] = 1;
+        lacReset[0x41] = 1;
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
     }
@@ -753,19 +771,31 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
     CgsID lUnlockCarId = mCurrentCarToUnlock;
     const BrnProgression::CarData* lpCarData = GetProfileCarData(lUnlockCarId);
 
-    // ResetPlayerCarAction (80B): the spawn-location transform (the X360 vector copies) + the unlocked
-    // car id + its deform amount + flags. FLAG: full layout not in exports; transform modelled opaque.
+    // ResetPlayerCarAction (80B).
+    // ⛔ CORRECTED 2026-08-01 -- the transform was NOT "modelled opaque", it was simply missing, and
+    // every remaining field sat at the wrong offset. Attested at 0x82392D64..0x82392DC8 (payload
+    // base == var_90, size 0x50, r30 == 0, r28 == 1):
+    //   +0x00 mPosition (16B)   +0x10 mDirection (16B)   +0x20 mCurrentCarToUnlock (8B)  +0x28 0
+    //   +0x30 8 (s32)           +0x34 deform (f32)       +0x38 1 (s32)                   +0x3C 0
+    //   +0x40 1  +0x41 1  +0x42 0  +0x43 0
     {
         u8 lacReset[80];
         std::memset(lacReset, 0, sizeof(lacReset));
-        std::memcpy(lacReset, &mCurrentCarToUnlock, sizeof(mCurrentCarToUnlock));
+        const CgsID lCarId        = mCurrentCarToUnlock;
+        const s32   liCarSelType  = 8;
+        const s32   liInCarSelect = 1;
+        std::memcpy(lacReset + 0x00, &lpSpawnLocation->mPosition,  sizeof(Vector3));
+        std::memcpy(lacReset + 0x10, &lpSpawnLocation->mDirection, sizeof(Vector3));
+        std::memcpy(lacReset + 0x20, &lCarId,        sizeof(lCarId));
+        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
         if (lpCarData != 0)
         {
             const f32 lfDeform = lpCarData->GetUnlockDeformationAmount();
-            std::memcpy(lacReset + 0x14, &lfDeform, sizeof(lfDeform));
+            std::memcpy(lacReset + 0x34, &lfDeform, sizeof(lfDeform));
         }
-        lacReset[0x28] = 8;   // car-select-type
-        lacReset[0x30] = 1;   // in-car-select
+        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
+        lacReset[0x40] = 1;
+        lacReset[0x41] = 1;
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
     }
@@ -778,12 +808,18 @@ void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActi
         CgsDev::Assert::EndAssert();
     }
 
-    // CarSelectionChangedAction (64B): the junkyard id + the spawn-location "is type 1" bit.
+    // CarSelectionChangedAction (64B): junkyard id + the spawn transform + the "pos is left" bit.
+    // ⛔ CORRECTED 2026-08-01 -- the bit VALUE here was already right (type == 1) but it was stamped
+    // at +0x10, on top of where the console puts the spawn POSITION, and the consumer
+    // (MainDirector::ProcessInputQueue case 64, `lbz r11, 0x30(r30)`) reads +0x30. X360
+    // 0x82392DCC..: +0x00 mJunkyardId, +0x10 mPosition, +0x20 mDirection, +0x30 the bit, +0x31 0.
     {
         u8 lacChanged[64];
         std::memset(lacChanged, 0, sizeof(lacChanged));
-        std::memcpy(lacChanged, &mJunkyardId, sizeof(mJunkyardId));
-        lacChanged[0x10] = (luSpawnType == 1) ? 1 : 0;
+        std::memcpy(lacChanged + 0x00, &mJunkyardId,                 sizeof(mJunkyardId));
+        std::memcpy(lacChanged + 0x10, &lpSpawnLocation->mPosition,  sizeof(Vector3));
+        std::memcpy(lacChanged + 0x20, &lpSpawnLocation->mDirection, sizeof(Vector3));
+        lacChanged[0x30] = (luSpawnType == 1) ? 1 : 0;
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(lacChanged), KI_ACTION_CAR_SELECTION_CHANGED, 64);
     }
@@ -1023,7 +1059,8 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacResetDriver), KI_ACTION_RESET_PLAYER_DRIVER, 1);
     }
 
-    if (maSpawnLocations[4].Get() == 0)   // X360 v2[14] byte 0x38 == maSpawnLocations[4]
+    const BrnTrigger::SpawnLocation* lpExitSpawnLocation = maSpawnLocations[4].Get();
+    if (lpExitSpawnLocation == 0)   // X360 v2[14] byte 0x38 == maSpawnLocations[4]
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 988);
@@ -1051,14 +1088,27 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::EndAssert();
     }
 
-    // ResetPlayerCarAction (80B): desired car id + deform + flags (the X360 vector copies are opaque).
+    // ResetPlayerCarAction (80B) -- the EXIT placement: this is the record that puts the player's
+    // car back on the junkyard's generic drive-in slot when they leave. ⛔ CORRECTED 2026-08-01:
+    // "the X360 vector copies are opaque" was wrong; they are the spawn transform, and the rest of
+    // the fields were at the wrong offsets. Attested at 0x82398DDC..0x82398E3C (payload base ==
+    // var_A0, size 0x50, r31 == 0, r25 == 1):
+    //   +0x00 mPosition (16B)   +0x10 mDirection (16B)   +0x20 mDesiredCarId (8B)   +0x28 0 (8B)
+    //   +0x30 8 (s32)           +0x34 deform (f32)       +0x38 1 (s32)              +0x3C 0 (s32)
+    //   +0x40..+0x43 all 0      [this is the one builder of the five whose trailing bytes are 0]
     {
         u8 lacReset[80];
         std::memset(lacReset, 0, sizeof(lacReset));
-        std::memcpy(lacReset, &mDesiredCarId, sizeof(mDesiredCarId));
-        const f32 lfDeform = lpCarData->GetUnlockDeformationAmount();
-        std::memcpy(lacReset + 0x14, &lfDeform, sizeof(lfDeform));
-        lacReset[0x28] = 8;   // car-select-type
+        const CgsID lDesired      = mDesiredCarId;
+        const f32   lfDeform      = lpCarData->GetUnlockDeformationAmount();
+        const s32   liCarSelType  = 8;
+        const s32   liInCarSelect = 1;
+        std::memcpy(lacReset + 0x00, &lpExitSpawnLocation->mPosition,  sizeof(Vector3));
+        std::memcpy(lacReset + 0x10, &lpExitSpawnLocation->mDirection, sizeof(Vector3));
+        std::memcpy(lacReset + 0x20, &lDesired,      sizeof(lDesired));
+        std::memcpy(lacReset + 0x30, &liCarSelType,  sizeof(liCarSelType));
+        std::memcpy(lacReset + 0x34, &lfDeform,      sizeof(lfDeform));
+        std::memcpy(lacReset + 0x38, &liInCarSelect, sizeof(liInCarSelect));
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
     }
 
