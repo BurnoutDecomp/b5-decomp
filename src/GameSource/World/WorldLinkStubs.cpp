@@ -3002,21 +3002,12 @@ void WorldModule::BridgeInputToCrashModule(void *,struct BrnWorld::CrashIO::Inpu
     }
 }
 
-// BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
-// WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.
-// X360 0x827ABF40 -- reconstruct and DELETE this gate.
-// One-shot log + inert: the module/interface it would feed is itself gated
-// inert, so dropping the transfer is the consistent observable.
-void WorldModule::BridgeActionsToRaceCarModule(void *,struct BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene *,struct BrnWorldIO::UpdateInputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeActionsToRaceCarModule: inert [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED 2026-08-01 (reset-player-car wave): WorldModule::BridgeActionsToRaceCarModule
+// @0x827ABF40 is REAL in
+// GameSource/World/Bridges/WorldBridgeToEntityModules.cpp beside its physics/traffic/
+// world-entity siblings. It is the only producer of the race-car module's game-action
+// queue, so this gate discarded every game action the race-car module was ever sent --
+// including action 0, ResetPlayerCarAction.
 
 // BOOT GATE (world-drive wave 2026-07-27): REACHED every frame by
 // WorldModule::Update @0x827D63E8 once the drive is wired. Per-frame world bridge.

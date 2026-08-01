@@ -127,6 +127,57 @@ void WorldModule::BridgeActionsToTrafficModule(
     }
 }
 
+// ============================================================================
+// @ 0x827ABF40 -- WorldBridgeToEntityModules.cpp:86/:87. The RACE-CAR leg of the
+// game-action fan-out, run by WorldModule::Update @0x827D63E8 in the pre-scene input
+// staging block (BrnWorldModule.cpp:2275, which has been calling an inert
+// WorldLinkStubs gate since the world-drive wave).
+//
+// ⭐ THIS BRIDGE IS THE ONLY PRODUCER OF THE RACE-CAR MODULE'S GAME-ACTION QUEUE in the
+// whole image (0x8279D060, InputBuffer_PreScene::GetGameActionQueue, is called from here
+// and nowhere else). RaceCarEntityModule::HandleGameActions @0x8230BE08 drains that queue,
+// and its case 0 is HandleResetPlayerCarAction -- the record that places the player's car
+// at a junkyard spawn. Until this bridge was real, that queue could not be non-empty.
+//
+// ⚠️ UNLIKE the physics/traffic/world-entity siblings above there is NO ALLOWLIST and no
+// per-event walk: the console Appends the WHOLE queue (the mangled callee at 0x827ABFC4 is
+// CgsModule::VariableEventQueue<13312,16>::Append<13312,16>(const VariableEventQueue&)),
+// so the race-car module sees every game action the world saw. The second half appends the
+// world input's audio-car-data-loaded queue into the race-car input's own.
+// Both null tripwires are NON-gating (the X360 fires the assert and falls through); the
+// X360 tail leaves Append's result in r3 as a register artifact, logical return void.
+void WorldModule::BridgeActionsToRaceCarModule(
+    void* lpWorldModule,
+    BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene* lpRaceCarModuleInputBuffer,
+    const BrnWorldIO::UpdateInputBuffer* lpWorldInput)
+{
+    (void)lpWorldModule;   // X360 r3 -- never read by this bridge
+
+    const BrnWorldIO::GameActionQueue* lpInQueue = lpWorldInput->GetGameActionQueue();
+    BrnWorld::RaceCarEntityModuleIO::InputBuffer_PreScene::GameActionQueue* lpOutQueue =
+        lpRaceCarModuleInputBuffer->GetGameActionQueue();
+
+    CGS_ASSERT(lpInQueue != 0, "lpInQueue");     // :86 (non-gating)
+    CGS_ASSERT(lpOutQueue != 0, "lpOutQueue");   // :87 (non-gating)
+
+    if (lpInQueue != 0 && lpOutQueue != 0)
+    {
+        lpOutQueue->Append(*lpInQueue);
+    }
+
+    // The audio-car-data-loaded queue leg (X360 sub_827A4040 -> sub_8279D308 ->
+    // EventQueue<AudioCarDataLoadedEvent,16>::Append). RaceCarAudioStreamer::Update is the
+    // consumer on the race-car side.
+    const BrnWorldIO::UpdateInputBuffer::AudioCarLoadedDataQueue* lpInAudio =
+        lpWorldInput->GetAudioCarDataLoadedQueue();
+    BrnWorld::RaceCarEntityModuleIO::AudioCarLoadedDataQueue* lpOutAudio =
+        lpRaceCarModuleInputBuffer->GetAudioCarLoadedDataQueue();
+    if (lpInAudio != 0 && lpOutAudio != 0)
+    {
+        lpOutAudio->Append(*lpInAudio);
+    }
+}
+
 // @ 0x827AC488 -- WorldBridgeToEntityModules.cpp:178. The WORLD-ENTITY leg of the
 // game-action fan-out, run by WorldModule::Update @0x827D63E8 just before the
 // post-physics spine: CLEAR the world-entity module's post-physics game-action queue
