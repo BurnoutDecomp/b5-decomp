@@ -31,6 +31,7 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"                                 // BrnGameState::LandmarkIndex
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"           // BrnGameState::LightTriggerId (committed typedef home)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                            // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"                // CgsModule::EventReceiverQueue<3072,16> (Prepare's reply queue)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"                  // CgsResource::ResourcePtr<T>
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // BrnWorld::TriggerEntityModuleIO::InRemoveTriggerEvent
 
@@ -38,6 +39,7 @@
 // methods on these / store pointers to them, so forward declarations + the declared-only methods
 // in their committed homes (grown additively) suffice; their full layouts are not needed here.
 namespace BrnTrigger      { struct TriggerData; struct TriggerRegion; struct GenericRegion; }
+namespace BrnTraffic      { struct TrafficData; }
 namespace BrnProgression  { struct ProgressionManager; }
 namespace BrnGameState    { class TakedownManager; class RoadRulesManager; class StuntManager; class DriveThruManager; }
 namespace BrnResource     { struct VehicleList; }
@@ -55,7 +57,30 @@ class TriggerQueryManager
 {
 public:
 
+    // DWARF BrnTriggerQueryManager.h:184. The trigger/traffic resource-load state machine
+    // Prepare walks (the X360 stage word is this+0x61C == +1564). Enumerator names + values
+    // are DWARF-authoritative; the X360 switch has exactly these seven cases.
+    enum ETriggerLoadStage
+    {
+        E_TRIGGER_LOAD_NOT_STARTED    = 0,
+        E_TRIGGER_LOAD_REQUESTED      = 1,
+        E_TRIGGER_ACQUIRE_NOT_STARTED = 2,
+        E_TRIGGER_ACQUIRE_REQUESTED   = 3,
+        E_TRIGGER_LOAD_TRAFFIC        = 4,
+        E_TRIGGER_WFLOAD_TRAFFIC      = 5,
+        E_TRIGGER_LOAD_DONE           = 6,
+    };
+
     // ---- functions this TU owns (bodies in BrnTriggerQueryManager.cpp) ----
+
+    // ⭐ X360 0x82398218 (body: BrnTriggerQueryManager_Prepare.cpp). THE TRIGGERS.DAT LOADER.
+    // Resumable: LoadBundle("Triggers.dat") into pool 5 -> acquire "TriggerData" -> bind
+    // mpTriggerData -> LoadTrafficLanes -> bind mpTrafficData -> done. Returns true only at
+    // E_TRIGGER_LOAD_DONE, so the caller (GameStateModule::Prepare stage 3) pumps it.
+    // DWARF signature (BrnTriggerQueryManager.h:161):
+    //   bool Prepare(GameStateModuleIO::OutputBuffer*, CgsModule::EventReceiverQueue<3072,16>*)
+    bool Prepare(GameStateModuleIO::OutputBuffer* lpOutput,
+                 CgsModule::EventReceiverQueue<3072, 16>* lpReceiverQueue);
 
     // X360 0x82364BF0. One-time init: asserts the three injected manager pointers are non-NULL,
     // zeroes the cached trigger state (all the Array<> live-count words, the cached vectors, the
@@ -119,31 +144,62 @@ public:
 
 private:
 
-    // ---- leading preamble (offsets 0..911) not yet reconstructed; reserved to place the first
-    //      touched member (maActiveTriggers @912) at its X360 byte offset. The real members here
-    //      per DWARF are: mDebugComponent, 3 * CgsID group ids, maSoundActions (Array<SoundTrigger-
-    //      Action,16>). Grow into real members when the full class lands.
-    u8 mauReserved_Head[912];                        // this+0 .. this+911
+    // ---- leading preamble (offsets 0..911), grown in place 2026-08-01 -----------------------
+    // this+0 .. this+351: mDebugComponent (BrnGameState::TriggerQueryManagerDebugComponent,
+    // DWARF h:211). Still reserved -- the component's own header is a separate slice and
+    // Prepare's Construct/Register of it is a documented deferral (see the Prepare body).
+    u8 mauReserved_DebugComponent[352];              // this+0 .. this+351
+    // this+352/360/368 (DWARF h:212/213/214). The three player trigger-GROUP ids.
+    // TriggerQueryManager::Prepare zeroes all three with three 8-byte stores
+    // (`std r28, 0x160/0x168/0x170(r31)` @0x823983D4/D8/E4) right after it binds the trigger
+    // data -- CgsID is a u64, so three consecutive CgsIDs is exactly what those stores are.
+    CgsID mPlayerSigTakedownGroupID;                 // this+352 (0x160)
+    CgsID mPlayerSuperJumpGroupID;                   // this+360 (0x168)
+    CgsID mPlayerRoadLimitGroupID;                   // this+368 (0x170)
+    // this+376 .. this+911: maSoundActions (Array<GameStateModuleIO::SoundTriggerAction,16>,
+    // DWARF h:217) -- not touched by any committed body; reserved so maActiveTriggers still
+    // lands at this+912.
+    u8 mauReserved_SoundActions[912 - 376];          // this+376 .. this+911
 
     // this+912. The per-frame active-trigger set (region indexes currently armed in the world
     // TriggerEntityModule). DWARF BrnTriggerQueryManager.h:220 (Array<uint16_t,256u>). Element
     // store this+912..this+1423 (256 * 2B), live-count word this+1424 (== *(this+1424) in X360).
     Array<u16, 256> maActiveTriggers;                // this+912 (elements), count @ this+1424
 
-    // this+1428 .. this+1567: maLastPlayerTriggers (Array<u16,32>), maLastFrameTriggers
-    // (Array<u16,32>), meTriggerLoadStage (enum) — not touched by these three funcs; reserved so
-    // mpTriggerData lands at this+1568.
-    u8 mauReserved_AfterActive[1568 - 1428];         // this+1428 .. this+1567
+    // this+1428 / this+1496 (DWARF h:221/222). The previous-frame trigger sets. Not touched by
+    // any committed body yet; declared as their real types so meTriggerLoadStage below is a real
+    // member. Array<u16,32> is 32*2 + a 4-byte count == 68 bytes, pointer-free, so the pair is
+    // exactly the console's 136 bytes on the 64-bit gate too.
+    Array<u16, 32> maLastPlayerTriggers;             // this+1428 (elements), count @ this+1492
+    Array<u16, 32> maLastFrameTriggers;              // this+1496 (elements), count @ this+1560
+
+    // this+1564 (0x61C) (DWARF h:225). ⭐ The resource-load stage word Prepare switches on --
+    // the X360 reads/writes `*(this + 0x61C)` at every case. Grown from the reserved blob
+    // 2026-08-01 with Prepare.
+    // ⚠️ FLAG (PC bring-up): the console clears it in GameStateModule::ClearData (Prepare
+    // stage 0), which is not reconstructed; the in-class initialiser below stands in for that
+    // one store. GameStateModule is embedded BY VALUE in BrnGameModule and is NOT in its ctor
+    // init list, so without it this word is garbage. DELETE-WHEN ClearData lands.
+    ETriggerLoadStage meTriggerLoadStage = E_TRIGGER_LOAD_NOT_STARTED;   // this+1564
 
     // this+1568. ResourcePtr onto the loaded track TriggerData resource (DWARF h:226). operator->
     // dereferences its leading main-memory pointer (this+1568); a NULL pointer fires the X360
     // "Can not instance resource pointer - it has no main memory resource" assert.
     CgsResource::ResourcePtr<BrnTrigger::TriggerData> mpTriggerData;   // this+1568 (0x1C bytes)
 
-    // this+1596 .. this+1775: mpTrafficData (ResourcePtr), maActiveRaceCarPosLastFrame[8]
-    // (Vector3[8]), mPlayerLookAheadPos (Vector3) — not touched by these three funcs; reserved so
-    // mLastPlayerPosition lands at this+1776.
-    u8 mauReserved_AfterTriggerData[1776 - (1568 + 28)]; // this+1596 .. this+1775
+    // this+1600 (0x640) (DWARF h:227). The loaded traffic-lane resource. Prepare's last stage
+    // binds it (`addi r3, r31, 0x640; bl BaseResourcePtr::CreateFromHandle` @0x823984A4).
+    // ⚠️ The X360 gap between mpTriggerData (+1568) and this (+1600) is 32, not the 28 bytes
+    // BaseResourcePtr's six 32-bit fields add up to -- so the console's ResourcePtr is 32 bytes
+    // wide, not 28. Immaterial on the 64-bit gate (both are 56 there and every absolute offset
+    // below this point is already #if-guarded to the 32-bit build), but the committed
+    // "0x1C bytes" annotation on mpTriggerData above is WRONG by 4 and is corrected here.
+    CgsResource::ResourcePtr<BrnTraffic::TrafficData> mpTrafficData;   // this+1600
+
+    // this+1632 .. this+1775: maActiveRaceCarPosLastFrame[8] (Vector3[8], DWARF h:229) and
+    // mPlayerLookAheadPos (Vector3, h:230) — not touched by any committed body; reserved so
+    // mLastPlayerPosition lands at this+1776 on the console.
+    u8 mauReserved_AfterTrafficData[1776 - 1632];    // this+1632 .. this+1775
 
     // this+1776. Cached player world position from the last trigger refresh (Vector3, 16B SIMD).
     // UpdateTriggers compares the current player position against this (squared distance >

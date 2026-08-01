@@ -1,6 +1,7 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/EndAssert
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h" // RequestInterface<3072> (the +0x3414 member's real type)
 
 // =============================================================================
 // BrnGameState::GameStateModuleIO buffer accessors.
@@ -249,19 +250,41 @@ TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutput
 //     this+184768 = 0; this+192484 = 0; this+192488/489/490 = 0
 //
 // ⚠️ FLAG (PC, partial): this model still carries most of those members as OPAQUE u8 storage
-// (see the private section below), so only the two that are real typed objects here -- the
-// base status byte and the +0x04 game-action queue -- can be constructed. That is exactly the
-// pair BridgeGameStateToDirector needs. Grow this body as each opaque span is typed; do NOT
-// pretend the buffer is fully constructed.
+// (see the private section below), so only the members that are real typed objects here -- the
+// base status byte, the +0x04 game-action queue and (since 2026-08-01) the +0x3414
+// resource-request interface -- can be constructed. Grow this body as each opaque span is
+// typed; do NOT pretend the buffer is fully constructed.
 // ----------------------------------------------------------------------------
 void OutputBuffer::Construct()
 {
+    // The re-homed +0x3414 member must occupy EXACTLY the console's span, or every later
+    // offset in this buffer moves. RequestInterface<3072> is pointer-free, so its host size
+    // is the console's.
+    static_assert(sizeof(BrnResource::GameDataIO::RequestInterface<3072>)
+                      == (0x4024 - 0x3414),
+                  "ResourceRequestInterface must be exactly 3088 bytes (RequestInterface<3072>)");
+
     CgsModule::IOBuffer::Construct();
 
     // Constructed WITHOUT the write lock on purpose: the console does the same (Construct runs
     // before anybody can lock the buffer), and the queue's own Construct is what makes
     // AddEvent/Append legal at all.
     reinterpret_cast<GameActionQueue*>(&mGameActionQueueStorage)->Construct();
+
+    // ⭐ 2026-08-01: the console's own construct list (transcribed above) runs
+    //     VariableEventQueue<3072,16>::Construct(this + 13332)
+    //     VariableEventQueue<3072,16>::Clear    (this + 13332)
+    // on the resource-request interface. It was missing here, so EVERY producer that reaches
+    // GetResourceRequestInterface() -- TriggerQueryManager::Prepare, GameStateModule::Prepare's
+    // list stages, StreetManager::LoadAIData, StuntManager::LoadDistrictMap -- would have been
+    // AddEvent-ing onto an unconstructed queue. Now real.
+    {
+        BrnResource::GameDataIO::RequestInterface<3072>* lpRequests =
+            reinterpret_cast<BrnResource::GameDataIO::RequestInterface<3072>*>(
+                &mResourceRequestInterfaceStorage);
+        lpRequests->mRequestQueue.Construct();
+        lpRequests->mRequestQueue.Clear();
+    }
 }
 
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
