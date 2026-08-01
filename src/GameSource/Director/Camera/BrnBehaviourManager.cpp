@@ -841,6 +841,66 @@ namespace Camera
     }
 
     // ------------------------------------------------------------------------
+    // BehaviourManager::PostCollisionUpdateAllBehaviours @0x8221F870 -- run every live
+    // behaviour's COLLISION-PASS frame (vtable slot 3).
+    //
+    // ⭐⭐ BODIED 2026-08-01 (car-select hand-off wave). It had never had one, and nothing
+    // called it -- so slot 3 was never dispatched anywhere in this build. That mattered because
+    // BehaviourInterpolate does ALL of its per-frame work in slot 3: the parametric-time
+    // advance, the blend and the mbHasFinished latch. With the pass missing, an interpolate
+    // behaviour produced a never-written camera and never reported "finished", which is what
+    // stalled ArbStateCarSelect in GAME_INTRO_PART_THREE.
+    //
+    // The console's body is structurally the twin of UpdateAllBehaviours above -- same
+    // responder/rotation-controller prologue over the same manager region, same
+    // helper-index-array walk with the same `helper < 0x1C` bound assert
+    // (0x8221FAFC) and the same mBehaviourUpdateDuringPauseFlags gate word
+    // (`addi rN, helper, 0x2958` -- byte-identical to UpdateAllBehaviours' @0x8225212C) --
+    // differing only in the dispatched slot:
+    //     0x8221FDA8  addi r4, r11, 0x10      ; &helper.mCamera
+    //     0x8221FDA0  mr   r5, r21            ;  lrSharedInfo
+    //     0x8221FDAC  lwz  r3,  0(r11)        ;  the behaviour
+    //     0x8221FDB0  lwz  r11, 0xC(vtable)   ;  slot 3 == PostCollisionUpdate
+    // (UpdateAllBehaviours' twin instruction is a direct `bl BehaviourHelper::Update`.)
+    //
+    // ⚠️ THE PROLOGUE IS GATED exactly as UpdateAllBehaviours' is, and for the same reasons --
+    // see that banner. What this one additionally publishes into the shared info before the
+    // loop (0x8221F8E0..0x8221F9F0: mCameraModifier at +0x5F0, mbUseControlPauseBehaviour /
+    // mbLookback at +0x600/+0x601 off the un-homed ControllerInfo and AllVehicleData::
+    // GetPlayer()+0x44A, mpBehaviourManager at +0x5C0, and a vperm'd +0x590 pair) is the same
+    // family of un-homed reads. The CALLER (MainDirector::UpdateCameraBehavioursPostScene)
+    // already seeds mpBehaviourManager and leaves the rest at the values its own gate list
+    // documents, so nothing here is fabricated.
+    // ------------------------------------------------------------------------
+    void BehaviourManager::PostCollisionUpdateAllBehaviours(bool lbPaused,
+                                                            BehaviourSharedInfo& lrSharedInfo,
+                                                            const ControllerInfo& lrControllerInfo,
+                                                            bool lbArg,
+                                                            DebugPrinter& lrDebugPrinter)
+    {
+        (void)lrControllerInfo;
+        (void)lbArg;
+        (void)lrDebugPrinter;
+
+        // ⚠️ GATE: the responder / rotation-controller / shared-info-staging prologue (banner).
+
+        const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
+        for (u32 luEntry = 0; luEntry < luNumBehaviours; ++luEntry)
+        {
+            const BehaviourHelperIndex lHelper = mBehaviourHelperIndexArray[luEntry];
+            const u32 luHelper = static_cast<u32>(static_cast<s32>(lHelper));
+
+            if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(luHelper))
+            {
+                mBehaviourHelperPool[lHelper].PostCollisionUpdate(lrSharedInfo);
+            }
+
+            // ⚠️ GATE: the per-behaviour debug readout (the StrStreamBase::AppendFormat name
+            //   build + its .cpp:203 assert path), same as UpdateAllBehaviours'.
+        }
+    }
+
+    // ------------------------------------------------------------------------
     // BehaviourManager::SetBehaviourUpdatesDuringPause @0x82208390 -- whether a behaviour keeps
     // ticking while the game is paused (the flag UpdateAllBehaviours' loop consults).
     // ------------------------------------------------------------------------

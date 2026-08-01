@@ -193,6 +193,31 @@ public:
     // are real (then this goes and the GUI's own event drives it).
     void ProcessGameEventsReallyEnterJunkyardBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ⭐⭐ X360 PreWorldUpdate @0x823A5328, the CAR-SELECT leg at 0x823A5904..0x823A5958:
+    //     PerfMonCpu::StartMonitor(mCpuMonitors.<car-select>);
+    //     if (mCarSelectManager.mJunkyardId != kCGSID_NULL)          // `ld r11,0(this+0x2CDC0)`
+    //         mCarSelectManager.Update(lpActionQueue,
+    //                                  lpInput->GetControllerInput(),
+    //                                  lfGameTimestep);
+    //     PerfMonCpu::StopMonitor(...);
+    // (the console's `f31` is `TimerStatusInterface::maEntries[0].mfValue04 *
+    //  .mfValue08` -- the GAME timer's rate * scale, latched at 0x823A54D8.)
+    //
+    // ⭐ WHY THIS LEG MATTERS: it is the ONLY caller of CarSelectManager::Update in the whole
+    // image, and CarSelectManager::Update is what ENDS the junkyard transition-in. Without it
+    // meState stays E_STATE_TRANSITION_IN for ever, EndTransitionInState never posts its
+    // action 73 {0, hasCars}, and MainDirector::ProcessInputQueue never moves
+    // GameState::meJunkyardState off E_JY_INTRO_NO_CARS -- which is exactly what this build
+    // did (measured: `jy 2` on every frame to the end of the run).
+    //
+    // [FLAG PC bring-up] the EXTRACTION is the deviation, as with the two legs above: the gate,
+    // the call and its arguments are the console's. The controller-input argument is passed as
+    // NULL because nothing on this build creates a GameStateModuleIO::PreWorldInputBuffer --
+    // CarSelectManager::Update never dereferences it (it threads it to the deeper state
+    // updaters, none of which take it in the reconstruction).
+    // DELETE-WHEN PreWorldUpdate lands with its real input buffer.
+    void PreWorldUpdateCarSelectBringUp(f32 lfGameTimestep);
+
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
     // race-car table). Asserts mbIsUpdating.

@@ -120,6 +120,31 @@ public:
         EInterpolationMapping meInterpolationMapping;  // +0x0C (:190)
     };
 
+    // ------------------------------------------------------------------------
+    // ⭐⭐ THE FIVE VIRTUALS (2026-08-01, car-select hand-off wave). Until now this class
+    // declared NONE of them, so every one resolved to Camera::Behaviour's shape-only default
+    // -- and `Behaviour::Update` is `return true;` WITHOUT TOUCHING THE CAMERA. That is the
+    // whole reason ArbStateCarSelect's hand-off collapsed: the moment
+    // GAME_INTRO_PART_THREE published `mToGameplayInterpolater.GetCamera()`, it published a
+    // camera that nothing had ever written -- i.e. exactly what BehaviourHelper::Prepare's
+    // `Camera::Construct` left there, an identity basis at the origin -- and mbHasFinished was
+    // never set, so meState never left PART_THREE either.
+    //
+    // ⚠️ The base's own FLAG said those defaults were "never dispatched on the live path (every
+    // pooled behaviour is a concrete leaf)". BehaviourInterpolate IS a concrete leaf that was
+    // pooled and dispatched -- the note had expired. (Behaviour.cpp's FLAG is corrected there.)
+    //
+    // X360: Construct @0x82255FC8, Prepare @0x82252A10, Update @0x82244998,
+    //       PostCollisionUpdate @0x82252AB8, Release @0x82252CB8, GetName @0x821F9F00.
+    // ------------------------------------------------------------------------
+    void        Construct() override;                                                 // slot 0
+    bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;     // slot 1
+    bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;  // slot 2
+    bool        PostCollisionUpdate(Camera& lrCamera,
+                                    const BehaviourSharedInfo& lrInfo) override;       // slot 3
+    void        Release(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;      // slot 4
+    const char* GetName() const override;                                              // slot 9
+
     // 0 == cut / no pause updates, 2 == updates-during-pause. (Own ledger function.)
     void SetInterpolationMode(s32 liMode);
 

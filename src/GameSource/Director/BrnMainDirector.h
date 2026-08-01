@@ -161,10 +161,23 @@ namespace BrnDirector
         // DECLARATION-ONLY + FLAG ([todo] Attrib::Gen generated behaviour parameter types).
         void UpdateAttribSys(const DirectorInputOutput* lpIO);
 
-        // X360 0x82255318 / 0x8224FD30. The pre/post-scene camera-behaviour passes.
-        // DECLARATION-ONLY + FLAG (BehaviourManager::UpdateAllBehaviours is a VMX pipeline).
+        // X360 0x82255318 / 0x8224FD30. The pre/post-scene camera-behaviour passes. BOTH ARE
+        // BODIED (2026-08-01, car-select hand-off wave) and they are NOT interchangeable:
+        // PreScene (called from PreSceneQueryUpdate) runs BehaviourManager::UpdateAllBehaviours
+        // == vtable slot 2; PostScene (called from Update) runs
+        // BehaviourManager::PostCollisionUpdateAllBehaviours == vtable slot 3. This build used
+        // to have only PostScene, calling the PreScene pass's manager entry -- so slot 3 was
+        // never dispatched anywhere. See the .cpp banner.
         void UpdateCameraBehavioursPreScene(const DirectorInputOutput* lpIO, s32 liArg);
         void UpdateCameraBehavioursPostScene(const DirectorInputOutput* lpIO, s32 liArg);
+
+        // NOT an X360 function -- the shared prologue of the two passes above (the console
+        // builds the same ~1540-byte BehaviourSharedInfo on its own stack inside each). The
+        // CameraSpaceHandler is the CALLER's stack object on the console too, so it is passed
+        // in by reference rather than returned.
+        void BuildBehaviourSharedInfo(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex,
+                                      Camera::BehaviourSharedInfo& lSharedInfo,
+                                      ICE::CameraSpaceHandler& lCameraSpaces);
 
         // ⭐ X360 0x822372F8. Drain the input buffer's GAME-ACTION QUEUE and apply each action
         // to the GameState snapshot. BODIED (junkyard/car-select arms; see the .cpp banner).

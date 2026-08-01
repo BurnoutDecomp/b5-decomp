@@ -17,6 +17,29 @@ namespace BrnDirector
 namespace Camera
 {
 
+// ----------------------------------------------------------------------------
+// CameraReference::Construct (DWARF :49) -- NO SYMBOL IN THE IMAGE: the console INLINES it.
+// BODIED 2026-08-01 from BehaviourInterpolate::Construct @0x82255FC8, which inlines it TWICE
+// (once per embedded reference) in exactly this shape:
+//     0x82256024  stw  r31(0), 0x168(r29)   ; meType = E_TYPE_INVALID   <- BEFORE the camera
+//     0x82256028  bl   Camera::Construct    ; r3 == r29 == &mCamera (the reference's head)
+//     0x82256030  stw  r31(0), 0x160(r29)   ; mpIceWrapper = NULL
+//     0x82256034  stb  r31(0), 0x16C(r29)   ; mbBehaviourLocked = false
+//     0x8225603C..0x82256050  the identical four for the second reference (this + 0x420)
+//
+// ⚠️ mBehaviourHelperIndex (+0x164) IS NOT WRITTEN -- neither inlining touches it, and the
+// omission is safe by construction: every read of it is behind `meType == E_TYPE_BEHAVIOUR`,
+// which only Setup(BehaviourHelperIndex, ...) can raise, and that setter writes the index.
+// Reproduced verbatim rather than "tidied", so a future reader sees the console's own gap.
+// ----------------------------------------------------------------------------
+void CameraReference::Construct()
+{
+    meType = E_TYPE_INVALID;
+    mCamera.Construct();
+    mpIceWrapper      = 0;
+    mbBehaviourLocked = false;
+}
+
 // @ 0x821F8508 -- cpp:93. Adopt an ICE movie wrapper as the camera source. The X360
 // stores the wrapper/type BEFORE the null tripwire fires -- order preserved.
 void CameraReference::Setup(const BrnDirector::ICEWrapper* lpIceWrapper)

@@ -163,9 +163,21 @@ CollisionPolicy* Behaviour::GetCollisionPolicy()
 // reconstruct. They are given the only safe default here (succeed / no parameters / a name)
 // rather than being made pure-virtual, because the manager's pools CONSTRUCT behaviours by
 // value through placement-new and a pure-virtual base would forbid that for the base itself.
-// FLAG: shape-only defaults, never dispatched on the live path (every pooled behaviour is a
-// concrete leaf). DELETE-WHEN: the base is proven abstract in the console (a vtable dump
-// showing __purecall in slots 1/2/6/7/8/9).
+// ⛔⛔ FLAG CORRECTED 2026-08-01 -- IT USED TO READ "never dispatched on the live path (every
+// pooled behaviour is a concrete leaf)". THAT WAS FALSE, and it cost a whole wave to find.
+// BehaviourInterpolate IS a concrete leaf, it IS pooled, it IS dispatched every frame by the
+// arbitrator's car-select state -- and until 2026-08-01 it declared NONE of these virtuals, so
+// `Behaviour::Update` below (a `return true;` that never touches the camera) was its real
+// Update. The behaviour looked completely healthy from the outside: allocated, prepared, ready,
+// producing a camera every frame -- a camera nothing had ever written, i.e. exactly what
+// BehaviourHelper::Prepare's Camera::Construct left there. "A concrete leaf overrides these"
+// is an ASSUMPTION about every derived class, not a property of this file, and it goes stale
+// the moment a leaf lands without its virtuals.
+// The remaining risk is the same shape: these bodies are the safe default for a leaf that has
+// not been reconstructed yet, and a leaf that reaches them SILENTLY DOES NOTHING. If a camera
+// or behaviour "runs but produces nothing", check here FIRST.
+// DELETE-WHEN: the base is proven abstract in the console (a vtable dump showing __purecall in
+// slots 1/2/6/7/8/9).
 // ----------------------------------------------------------------------------
 bool Behaviour::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
