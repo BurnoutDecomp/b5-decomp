@@ -12,6 +12,8 @@
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h" // CgsMemory::LinearMalloc (the world frame allocator)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (the command slot values)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer (stage 3)
+#include "GameSource/GameState/BrnGameStateModule.h"    // BrnGameState::GameStateModule::GetOutputBuffer (BridgeGameStateToWorld source)
+#include "GameSource/GameState/BrnGameStateModuleIO.h"  // GameStateModuleIO::OutputBuffer (its lock bracket)
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -240,6 +242,29 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     {
         lpUpdateOutputStack->CreateIOBuffer(&lpWorldOutput, "World");
         lpWorldOutput->Construct();
+    }
+
+    // ⭐⭐ THE GAME-STATE -> WORLD BRIDGE (X360 BridgeGameStateToWorld @0x823E1890), staged into
+    // the input buffer before the world drive reads it -- the console's own order inside
+    // DoUpdate_World @0x823E8BD0 (which is where this call ALSO lives; see the note there).
+    // Its game-action Append is the ONLY producer of the queue WorldModule::HandleGameActions
+    // and WorldModule::BridgeInputToEntityModules drain, so before this the world could not see
+    // a single game action -- including ResetPlayerCarAction, the record that places the
+    // player's car at a junkyard spawn.
+    // FLAG PC placement: this leg lives here rather than in DoUpdate_World for exactly the
+    // reason the banner above gives -- DoUpdate is a PC-platform leaf, so this function is the
+    // live world drive. Both sites carry the same call and move together.
+    {
+        BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+            lpGameModule->GetGameStateModule().GetOutputBuffer();
+        if (lpGameStateOutput != 0)
+        {
+            lpGameStateOutput->LockForRead();
+            lpWorldInput->LockForWrite();
+            lpGameModule->BridgeGameStateToWorld(lpWorldInput, lpGameStateOutput);
+            lpWorldInput->UnlockForWrite();
+            lpGameStateOutput->UnlockForRead();
+        }
     }
 
     // X360: LinearMalloc::FreeAll(gm->mpWorldUpdateFrameAllocator) then the vtable+76
