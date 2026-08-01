@@ -95,17 +95,24 @@ void ICEChannel::EnforceSpacing(u16 lu16Interval, f32 lfMinSpacing)
     }
 }
 
-// ICE::ICEChannel::GetIntervalStart(u16) const  @0x82531810
+// ICE::ICEChannel::GetIntervalStart() const  @0x82531810
 //
-// The parameter value at the START of the channel's CURRENT interval. Like the
-// keystone GetIntervalBracket overload, the u16 argument is part of the frozen
-// overload signature but the body operates on the cached mu16CurrentInterval (the
-// asm reads *(this+4), not the argument): GetIntervalParameter(mu16CurrentInterval)
-// with the sentinel rules (0 -> 0.0, >= mu16Intervals -> 1.0).
-f32 ICEChannel::GetIntervalStart(u16 lu16Interval) const
+// The parameter value at the START of the channel's CURRENT interval:
+// GetIntervalParameter(mu16CurrentInterval) with the sentinel rules (0 -> 0.0,
+// >= mu16Intervals -> 1.0).
+//
+// ⭐ OVERLOAD CORRECTED 2026-08-01, the same defect as ICEChannel::
+// GetIntervalBracket in ICEData.cpp. This body used to be attached to the
+// GetIntervalStart(u16) sibling with a `(void)lu16Interval;` line explaining that
+// the argument was ignored. It is not ignored -- it was never there: 0x82531810
+// touches only r3 (`lhz r11, 4(r3)` = mu16CurrentInterval) and its caller, the
+// public ICETake::SetParameter @0x82534118, calls it with r3 alone
+// (`addi r3, r31, 0x174; bl ICEChannel::GetIntervalStart` at 0x825341F0). Both
+// overloads are DWARF-declared (ICEDataEnums.hpp:402 and :403); this is the :402
+// no-argument one. The interval-argument sibling has no X360 body and no caller in
+// the tree, so it stays declaration-only.
+f32 ICEChannel::GetIntervalStart() const
 {
-    (void)lu16Interval;   // unused: the body works off the cached current interval
-
     const u16 lu16Current = mu16CurrentInterval;
     if (lu16Current == 0)
         return 0.0f;

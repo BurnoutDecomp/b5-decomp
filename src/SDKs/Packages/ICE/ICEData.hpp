@@ -141,7 +141,6 @@ struct ICETakeData
     void SetNumKeys(s32 liChannel, s32 liNumKeys);
     void SetNumIntervals(s32 liChannel, s32 liNumIntervals);
     void SetName(const char* lpcName);
-    const char* GetName() const;
     // Debug text dumper (class:ICE::ICETakeData TU, @0x82532CF8): writes an XML-ish
     // dump of the decoded take through an ICEFileHandler. ICEFileHandler is the
     // SDKs/Packages/ICE/ICEFile.cpp type (forward-declared above).
@@ -154,6 +153,11 @@ struct ICETakeData
     void SetGuid(s32 liGuid)                       { miGuid = liGuid; }
     f32  GetLength() const                         { return mfLength; }
     void SetLength(f32 lfLength)                   { mfLength = lfLength; }
+    // No out-of-line X360 symbol -- inlined at every call site as the bare
+    // `take + 0x0C`. Attested at ICEAuthor::SaveTake @0x82533B90, which formats
+    // `"<TAKE name=\"%s\" guid=\"%s\">"` with `(a2 + 12)` as the name argument (and
+    // `*(a2 + 8)` == miGuid, with -1 as its invalid sentinel, as the guid source).
+    const char* GetName() const                    { return macTakeName; }
 };
 
 // ---------------------------------------------------------------------------
@@ -292,13 +296,23 @@ public:
     bool IsHardCut(s32 liChannel, s32 liElement) const;
     bool IsHardCut(s32 liChannel, u16 lu16Key, s32 liElement) const;
 
-    ICEParameter* GetParameterData(s32 liChannel) const;
-    u16*          GetKeyData(s32 liChannel) const;
     u8*           GetElementData(s32 liChannel) const;
 
-    u16 GetNumKeys(s32 liChannel) const;
-    u16 GetNumIntervals(s32 liChannel) const;
     u16 GetCurrentInterval(s32 liChannel) const;
+
+    // --- Channel-forwarding accessors (no out-of-line X360 symbol: the console
+    // INLINES each of these into its callers). Every one is a single read through
+    // the embedded ICEChannel, and each is attested by the inlined form in the
+    // callers' asm -- ICETakeData::SaveData @0x82532CF8 walks a bound scratch take
+    // and reads channel+0 (keys), channel+2 (intervals), channel+8 (mpKeyIndices)
+    // and channel+0xC (mpParameters) directly, with mChannels based at take+0xD4
+    // and a 16-byte channel stride. Bodied here beside the other trivial
+    // inline-away accessors, per this header's own convention. ---
+    ICEParameter* GetParameterData(s32 liChannel) const { return mChannels[liChannel].GetParameterData(); }
+    u16*          GetKeyData(s32 liChannel) const       { return mChannels[liChannel].GetKeyData(); }
+
+    u16 GetNumKeys(s32 liChannel) const      { return (u16)mChannels[liChannel].GetNumKeys(); }
+    u16 GetNumIntervals(s32 liChannel) const { return (u16)mChannels[liChannel].GetNumIntervals(); }
 
     u16 GetIntervalKey(s32 liChannel, u16 lu16Interval) const;
     f32 GetIntervalEnd(s32 liChannel, u16 lu16Interval) const;
@@ -365,7 +379,18 @@ private:
     f32  GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) const;
     void MarkChannelFromSubTake(s32 liChannel);
     void FlushUndo();
-    bool IsEditable() const;
+
+    // No out-of-line X360 symbol -- the console inlines this predicate into every
+    // `CGS_ASSERT(IsEditable(), "IsEditable()")` site. Read straight off the asm at
+    // the head of ICETake::Insert @0x8253C288 (and identically in Delete
+    // @0x8253C528 and its six siblings):
+    //     lwz r11, 4(r3)      ; mpTakeData
+    //     beq -> 0            ; null take is not editable
+    //     lwz r11, 0x30(r11)  ; mpTakeData->muAllocated
+    //     -> (r11 != 0)
+    // i.e. an edit buffer is one whose take data is heap-owned (muAllocated set),
+    // which is exactly what FreeEditBuffer uses to decide it may free it.
+    bool IsEditable() const { return mpTakeData != 0 && mpTakeData->IsAllocated(); }
 };
 
 // ---------------------------------------------------------------------------
