@@ -134,7 +134,7 @@ struct bNode
 // bList (DWARF ICEMemory.hpp:191). The intrusive list head. HeadNode is the first
 // member (offset 0), so EndOfList() -- the past-the-end sentinel -- is &HeadNode,
 // i.e. the list pointer reinterpreted as a node. The iterator only COMPARES its
-// _Ptr against EndOfList(); EndOfList is declaration-only (the gate does not link).
+// _Ptr against EndOfList().
 struct bList
 {
 private:
@@ -146,7 +146,18 @@ public:
     void   Construct();
     void   InitList();
     bool   IsEmpty();
-    bNode* EndOfList();
+
+    // BODIED as the HEADER INLINE the console emits (2026-08-01). EndOfList has NO
+    // standalone symbol anywhere in the X360 ARTIST export set: every call site expands
+    // to the sentinel's ADDRESS with no `bl`. ICEAuthor::FindEditedTakeFromGuid
+    // @0x82531878 is the attestation -- it walks the edited-take list and compares the
+    // cursor against `r28 = author + 0xF48`, the list head itself, i.e. &HeadNode taken
+    // in place; the same expansion appears inside the iterator's own assert (the
+    // "_Ptr && _Lst && _Ptr!=_Lst->EndOfList()" tripwire at ICEMemory.hpp:368, which
+    // fires a plain register compare, not a call). HeadNode is the first member, so the
+    // sentinel IS the list pointer reinterpreted as a node -- which is exactly what the
+    // console computes.
+    bNode* EndOfList() { return &HeadNode; }
     bNode* GetHead();
     bNode* GetTail();
     bNode* GetByPos(s32 liPos);

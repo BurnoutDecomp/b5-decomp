@@ -9,6 +9,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the inline accessors' tripwires)
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h" // BrnDirector::Camera::VehicleInfo (mpRaceCars' real pointee)
 
+#include <cfloat>   // FLT_MAX -- the no-opposing-car sentinel (XEX rodata flt_8200173C,
+                    // read as 0x7F7FFFFF == 3.4028235e+38 == FLT_MAX)
+
 // BrnDirector::AllVehicleData - the director's per-frame view of every live
 // vehicle (player spaces, the race-car table, traffic, and the sorted
 // nearest-cars-to-player list). Class shape / member names / method set verbatim
@@ -147,16 +150,79 @@ namespace BrnDirector
             return mePlayerRaceCarIndex;
         }
 
-        // @0x82233488 (this class TU; body in BrnDirectorAllVehicleData.cpp) -- the
-        // squared distance of the nearest OTHER car (sorted row 1; row 0 is the
-        // player itself). CONST + mutable sort state: the committed consumers reach
-        // these through a `const AllVehicleData*` (ArbStateSharedInfo +0x38), so
-        // the lazy first-use sort is modelled with mutable members.
-        f32 GetSqDistanceOfNearestCarToPlayer() const;
+        // ====================================================================
+        // ⭐ MOVED HERE FROM BrnDirectorAllVehicleData.cpp (2026-08-01), for the SAME reason
+        // the five siblings above were moved: that .cpp is NOT on the build list, so both
+        // bodies -- written, and (re)verified against the X360 asm this wave -- were
+        // unreachable, and every consumer of them saw an unresolved external for finished
+        // code. (Sixth instance of that pattern in this project.)
+        //
+        // ⚠️ HONEST PROVENANCE, because rule 12's usual test does NOT decide these two.
+        // Neither function contains an assert that cites a source file of its own:
+        // GetSqDistanceOfNearestCarToPlayer has no assert at all, and the single assert
+        // inside SqDistanceOfNearestOpposingTeamMember is GetLength()'s own inlined
+        // CgsArray.h:336 tripwire. The header home rests instead on the DecFIGS DWARF's
+        // file split for this class: BrnDirectorAllVehicleData.cpp contains EXACTLY TWO
+        // definitions there (Construct @cpp:36 and Update @cpp:59) -- every one of the
+        // class's twelve accessors is header-defined. Both queries are accessors of that
+        // same shape (lazily sort, then read one row), and neither appears anywhere in
+        // the PS3 DWARF (they are X360-revision additions), so no DWARF line cites a
+        // .cpp for them either. Inline here is behaviourally identical to out-of-line and
+        // costs the link nothing; it needs no build-list change.
+        // ====================================================================
 
-        // @0x822334E0 (this class TU) -- the squared distance of the nearest car on
-        // a different team, or FLT_MAX when every listed car shares liMyTeam.
-        f32 SqDistanceOfNearestOpposingTeamMember(s32 liMyTeam) const;
+        // @0x82233488 -- the squared distance of the nearest OTHER car (sorted row 1; row 0
+        // is the player itself). VERIFIED store-for-store against the X360 asm this wave:
+        //   lbz +0x138 -> if unsorted: BubbleSort(&maNearest.. @+0xD4), stb 1 @+0x138;
+        //   then operator[](array, 1) and `lfs f1, 4(r3)` == the row's mfDistance.
+        // CONST + mutable sort state: the committed consumers reach these through a
+        // `const AllVehicleData*` (ArbStateSharedInfo +0x38), so the lazy first-use sort is
+        // modelled with mutable members.
+        f32 GetSqDistanceOfNearestCarToPlayer() const
+        {
+            if (!mbSorteddNearestRaceCarsToPlayer)
+            {
+                CgsAlgorithms::BubbleSort(maNearestRaceCarsToPlayer);
+                mbSorteddNearestRaceCarsToPlayer = true;
+            }
+            return maNearestRaceCarsToPlayer.GetItem(1u).mfDistance;
+        }
+
+        // @0x822334E0 -- the squared distance of the nearest car on a different team, or
+        // FLT_MAX when every listed car shares liMyTeam.
+        //
+        // ⚠️ CORRECTED THIS WAVE: the count was read with GetCount(), which is the RAW
+        // count accessor and fires no tripwire. The asm re-reads the count word at array
+        // +0x60 EVERY iteration and each read carries the "Array used before
+        // Construct/Clear was called" assert at CgsArray.h line 336 (`li r5, 0x150`) --
+        // that is GetLength()'s inlined tripwire, not GetCount()'s (which has none). The
+        // file's own comment already claimed the tripwire re-fired per iteration while the
+        // code did not do it. GetLength() also returns u32, matching the console's UNSIGNED
+        // `cmplw` bound test, where the old `static_cast<u32>(GetCount())` was a cast.
+        //
+        // The rest is VERIFIED as it stood: the team word is read at element +0x08 and
+        // compared SIGNED (`cmpw`) against the argument; a mismatch re-enters operator[] a
+        // SECOND time to read mfDistance (the console really does index twice); the
+        // fall-through loads flt_8200173C.
+        f32 SqDistanceOfNearestOpposingTeamMember(s32 liMyTeam) const
+        {
+            if (!mbSorteddNearestRaceCarsToPlayer)
+            {
+                CgsAlgorithms::BubbleSort(maNearestRaceCarsToPlayer);
+                mbSorteddNearestRaceCarsToPlayer = true;
+            }
+
+            u32 luRow = 1;
+            while (luRow < maNearestRaceCarsToPlayer.GetLength())   // CgsArray.h:336 tripwire per pass
+            {
+                if (maNearestRaceCarsToPlayer.GetItem(luRow).miTeam != liMyTeam)
+                {
+                    return maNearestRaceCarsToPlayer.GetItem(luRow).mfDistance;
+                }
+                ++luRow;
+            }
+            return FLT_MAX;   // flt_8200173C
+        }
 
     private:
         // DWARF :121-:139 order (Matrix44Affine members keep the class 16-aligned).

@@ -169,7 +169,19 @@ public:
     // the cast lives in the .cpp and retires with the pending
     // `ICEController : public ICEAuthor` derive reconciliation).
     ICE::ICEController& GetEditor() { return mICEManager.GetEditor(); }
-    ICE::ICEAuthor& GetAuthor();
+
+    // HEADER INLINE, and that is the faithful shape: ICEWrapper::GetAuthor has NO
+    // standalone X360 symbol, and its caller GetKeyAnimFromGuid @0x821F69A8 emits
+    // `lwz r11,0x230(r31); addi r3,r11,0x2750` -- zero instructions of its own, i.e.
+    // the console inlines the whole accessor away. Bodying it out of line cost the
+    // camera family an unresolved external for no fidelity gain.
+    // FLAG: the cast stands until the pending `ICEController : public ICEAuthor`
+    // derive reconciliation lands; while the two types keep independent synthetic
+    // layouts, members past the shared head may not coincide on the 64-bit host.
+    ICE::ICEAuthor& GetAuthor()
+    {
+        return *reinterpret_cast<ICE::ICEAuthor*>(&mICEManager.GetEditor());
+    }
     void SetAcceptInput(bool lbAcceptInput) { mbAcceptInput = lbAcceptInput; }
     bool WasEditorActive() const { return mbWasEditorActive; }
     void SetWasEditorActive(bool lbWasEditorActive)
@@ -183,8 +195,29 @@ public:
     // True while a take started by PlayMovie is still playing.
     bool IsPlayingMovie();
 
+    // ------------------------------------------------------------------------
     // The wrapper's live take camera (the player copies it / blends from it).
-    const Camera::Camera& GetCamera();
+    //
+    // ⭐ BODIED 2026-08-01, AS A HEADER INLINE, AND RETYPED. There is no
+    // BrnDirector::ICEWrapper::GetCamera symbol in BURNOUT_X360_ARTIST.XEX -- every call site
+    // expands it, so the expansion is the definition. CameraReference::GetCamera @0x8223EB4C
+    // is the clearest one:
+    //     lis  r10, 1 / ori r29, r10, 0x1D70     ; r29 = 0x11D70
+    //     lwz  r11, 0x160(reference)             ; mpIceWrapper
+    //     add. r11, r11, r29                     ; &wrapper->mICECamera.mCamera, flags set
+    //     bne  ...                               ; the NULL check is on the RETURNED POINTER
+    // i.e. the accessor is `return &mICECamera.mCamera;` and it returns a POINTER, which is
+    // what makes the console's `assert(mpIceWrapper->GetCamera() != NULL)` a sensible test.
+    // The DecFIGS DWARF (SDKs/Packages/ICE/ICEWrapper.hpp:198) spells it exactly
+    // `const Camera * GetCamera() const;` -- the previous committed declaration returned a
+    // REFERENCE and was non-const, which no caller could null-check and which the const
+    // CameraReference::mpIceWrapper could not even call without a const_cast.
+    //
+    // ICECamera's own GetCamera() is likewise a header inline with no console symbol; the
+    // wrapper's +0x11D70 == mICECamera (+0x11D60) + the ICECamera's embedded Camera (+0x10),
+    // which is the composition this expresses by name.
+    // ------------------------------------------------------------------------
+    const Camera::Camera* GetCamera() const { return mICECamera.GetCamera(); }
 
     // FLAG: minimal-slice decls reached through the ICEWrapper* by the sibling header
     // BrnDirectorResourceManager.h (its inline GetKeyAnim / GetShakeTakes). They are

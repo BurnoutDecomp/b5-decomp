@@ -78,14 +78,14 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
     case E_TYPE_ICE:
     {
         CGS_ASSERT(mpIceWrapper != 0, "mpIceWrapper != NULL");   // :194
-        // The X360 forms &wrapper->mCamera (+0x11D70) and null-checks the ADDRESS --
-        // the original GetCamera() evidently returned a pointer. The committed
-        // ICEWrapper accessor is a non-const reference-returning method; taking its
-        // address reproduces the checked value. (const_cast: the DWARF member is a
-        // const wrapper pointer while the committed accessor is non-const per its
-        // own asm cite.)
-        const Camera* lpIceCamera =
-            &const_cast<BrnDirector::ICEWrapper*>(mpIceWrapper)->GetCamera();
+        // ⭐ SETTLED 2026-08-01. The X360 forms &wrapper->mICECamera.mCamera (+0x11D70,
+        // `lis 1 / ori 0x1D70 / add.`) and null-checks the ADDRESS, so GetCamera()
+        // returns a POINTER -- now confirmed by the DecFIGS DWARF
+        // (ICEWrapper.hpp:198, `const Camera * GetCamera() const`) and by the accessor
+        // having no console symbol at all (it is a header inline, bodied in
+        // BrnDirectorICEWrapper.h). The const_cast that used to sit here only existed
+        // to work around the old reference-returning, non-const declaration.
+        const Camera* lpIceCamera = mpIceWrapper->GetCamera();
         CGS_ASSERT(lpIceCamera != 0, "mpIceWrapper->GetCamera() != NULL");   // :195
         mCamera = *lpIceCamera;
         break;

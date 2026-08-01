@@ -45,6 +45,14 @@ const u32 KU_FLOAT_BUFFER_SIZE = 8;
 class Random;
 }
 
+// Forward-declared for the bounded RandomVector draws below; the complete types live in
+// rw/math/vpu/types.h and are NOT pulled in here (see the note on those declarations).
+namespace rw { namespace math { namespace vpu {
+struct Vector2;
+struct Vector3;
+struct Vector4;
+} } }
+
 // The effects-system per-call vector randomisers draw straight from a Random's
 // internal LCG ring (asm @ 0x82277EC8 / 0x82277FB8 read muSeed @+0x20, the index
 // @+0x28, and the f32/u32 ring union at +0). They are granted friend access below
@@ -93,6 +101,22 @@ public:
     f32  RandomFloat();
     f32  RandomFloat(f32 lfMin, f32 lfMax);
     f32  RandomSignedFloat();
+
+    // ADDITIVE 2026-08-01 (DWARF CgsRandom.h:143/:148/:153) -- the bounded VECTOR draws of the
+    // RandomVectorN family this header's banner lists but never declared. Declared with a
+    // FORWARD-declared rw::math::vpu type so the header keeps standing alone (a declaration
+    // may use an incomplete parameter/return type; only definitions and calls need it
+    // complete), which is what the banner's "without forking the Vector2/3/4 return types into
+    // this minimal home" asked for.
+    // FIRST CONSUMER: BrnDirector::Camera::Utils::CameraShake::Update @0x82221310 inlines the
+    // Vector3 overload for its wobble impulse. Its draw is attested there store-for-store and
+    // is byte-identical to the one BrnEffects::Utils::Vector3Randomiser::RandomiseXYZ
+    // @0x82277EC8 already reconstructs (two LCG steps, the two high words packed across three
+    // ring slots at the Vector slot ((muOldestBufferIndex + 3) & 4), returning the quad primed
+    // by the PREVIOUS call). Bodies land with the full CgsRandom TU.
+    rw::math::vpu::Vector2 RandomVector(rw::math::vpu::Vector2 lMin, rw::math::vpu::Vector2 lMax);
+    rw::math::vpu::Vector3 RandomVector(rw::math::vpu::Vector3 lMin, rw::math::vpu::Vector3 lMax);
+    rw::math::vpu::Vector4 RandomVector(rw::math::vpu::Vector4 lMin, rw::math::vpu::Vector4 lMax);
 
 private:
     union

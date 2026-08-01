@@ -573,12 +573,39 @@ namespace Camera
     // ------------------------------------------------------------------------
     // BehaviourControllerLockInterface -- the per-behaviour lock interface the manager hands
     // to a behaviour so it can lock/unlock an interpolation pair (DWARF BrnBehaviourManager.h:460).
+    //
+    // ⭐ THE TWO PUBLIC ACCESSORS ARE BODIED HERE, AS HEADER INLINES (2026-08-01). Neither has
+    // a standalone symbol in BURNOUT_X360_ARTIST.XEX and neither carries an assert of its own;
+    // every call site expands them in place, so the expansion IS the definition. The one at
+    // CameraReference::Prepare @0x82252484 is the whole function:
+    //     lwz r5, 0x164(reference)  ; the CameraReference's mBehaviourHelperIndex  -> arg 2
+    //     lwz r4, 0(interface)      ; interface +0x00 == mCurrentBehaviourHelper   -> arg 1
+    //     lwz r3, 4(interface)      ; interface +0x04 == mpBehaviourManager        -> this
+    //     bl  BehaviourManager::LockBehaviourForInterpolation
+    // and CameraReference::Release @0x8225252C is the identical shape into Unlock.
+    //
+    // That expansion pins THREE things at once, none of which were previously attested:
+    //   * the two member offsets modelled below (+0x00 helper index, +0x04 manager),
+    //   * the ARGUMENT ORDER of the manager's two-argument pair -- the interface's OWN helper
+    //     (the behaviour doing the locking) is lFrom, the passed-in helper is lTo; the
+    //     manager's assert messages (" is trying to lock ") confirm it from the other side,
+    //   * that the manager's pair is what these forward to (there is no third function).
     // ------------------------------------------------------------------------
     class BehaviourControllerLockInterface
     {
     public:
-        void LockBehaviourForInterpolation(BehaviourHelperIndex lHelper) const;
-        void UnlockBehaviourForInterpolation(BehaviourHelperIndex lHelper) const;
+        // The interpolating behaviour (mCurrentBehaviourHelper, stamped by the manager before
+        // each dispatch) takes / drops a lock on lHelper's behaviour so the pool cannot recycle
+        // it while it is being interpolated from or to.
+        void LockBehaviourForInterpolation(BehaviourHelperIndex lHelper) const
+        {
+            mpBehaviourManager->LockBehaviourForInterpolation(mCurrentBehaviourHelper, lHelper);
+        }
+
+        void UnlockBehaviourForInterpolation(BehaviourHelperIndex lHelper) const
+        {
+            mpBehaviourManager->UnlockBehaviourForInterpolation(mCurrentBehaviourHelper, lHelper);
+        }
 
     private:
         void Construct(BehaviourManager* lpManager);

@@ -47,8 +47,16 @@ namespace ICE
         //     SetCameraMatrix (reconstructed in ICECamera.cpp). ----------------------
         void Construct();                                                   // :53
         void Destruct();                                                    // :54
-        Camera* GetCamera();                                                // :56
-        const Camera* GetCamera() const;                                    // :57
+
+        // :56 / :57 -- BODIED 2026-08-01 as header inlines. Neither overload has a symbol in
+        // BURNOUT_X360_ARTIST.XEX: every caller expands `&mCamera` in place (e.g.
+        // CameraReference::GetCamera @0x8223EB4C forms wrapper+0x11D70 == the owning
+        // ICEWrapper's mICECamera +0x10 with no call at all, then NULL-checks that pointer --
+        // which is only meaningful if the accessor returns one). The pointer return type is
+        // DWARF-attested (SDKs/Packages/ICE/ICECamera.hpp:25/:28).
+        Camera*       GetCamera()       { return &mCamera; }                // :56
+        const Camera* GetCamera() const { return &mCamera; }                // :57
+
         void SetCamera(Camera*);                                            // :58
         void ClearVelocity();                                               // :60
         void SetSimTimeMultiplier(f32);                                     // :62

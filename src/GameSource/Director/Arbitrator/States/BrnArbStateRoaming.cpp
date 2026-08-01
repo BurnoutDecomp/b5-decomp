@@ -454,14 +454,14 @@ namespace BrnDirector
             // asm @0x82219CF4: target container EState 2 (CRASHING), blocked-value 7.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
                 lrSharedInfo, ArbitratorStateContainer::E_STATE_CRASHING,
-                meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_CRASHING);
+                meState, E_STATE_CHANGING_TO_CRASHING, E_STATE_INACTIVE);
         }
         else if (lrGameState.mbTakedownActive)   // +0xDA
         {
             // asm @0x82219D20: target 3 (TAKEDOWN), blocked 8.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
                 lrSharedInfo, ArbitratorStateContainer::E_STATE_TAKEDOWN,
-                meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_TAKEDOWN);
+                meState, E_STATE_CHANGING_TO_TAKEDOWN, E_STATE_INACTIVE);
         }
         else if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_PRE_INTRO)
         {
@@ -473,7 +473,7 @@ namespace BrnDirector
                 // asm @0x82219DC0: target 6 (RACE_INTRO), blocked 9.
                 ArbUtils::ChangeToStateWithoutRelease<EState>(
                     lrSharedInfo, ArbitratorStateContainer::E_STATE_RACE_INTRO,
-                    meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_RACE_INTRO);
+                    meState, E_STATE_CHANGING_TO_RACE_INTRO, E_STATE_INACTIVE);
                 break;
             default:
                 break;
@@ -535,7 +535,7 @@ namespace BrnDirector
                 // asm @0x82219EA4: target 7 (ONLINE_RACE_INTRO), blocked 0xA.
                 ArbUtils::ChangeToStateWithoutRelease<EState>(
                     lrSharedInfo, ArbitratorStateContainer::E_STATE_ONLINE_RACE_INTRO,
-                    meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_ONLINE_RACE_INTRO);
+                    meState, E_STATE_CHANGING_TO_ONLINE_RACE_INTRO, E_STATE_INACTIVE);
             }
             else
             {
@@ -543,7 +543,7 @@ namespace BrnDirector
                 // blocked 9.
                 ArbUtils::ChangeToStateWithoutRelease<EState>(
                     lrSharedInfo, ArbitratorStateContainer::E_STATE_RACE_INTRO,
-                    meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_RACE_INTRO);
+                    meState, E_STATE_CHANGING_TO_RACE_INTRO, E_STATE_INACTIVE);
             }
             return;
         }
@@ -552,7 +552,7 @@ namespace BrnDirector
             // asm @0x82219ED4: target 5 (POST_EVENT), blocked 0xB.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
                 lrSharedInfo, ArbitratorStateContainer::E_STATE_POST_EVENT,
-                meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_RACE_POST_EVENT);
+                meState, E_STATE_CHANGING_TO_RACE_POST_EVENT, E_STATE_INACTIVE);
             return;
         }
         if (lrGameState.mbDriveThruActive)       // +0xD0
@@ -560,7 +560,7 @@ namespace BrnDirector
             // asm @0x82219F00: target 0 (DRIVETHRU), blocked 0xC.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
                 lrSharedInfo, ArbitratorStateContainer::E_STATE_DRIVETHRU,
-                meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_DRIVETHRU);
+                meState, E_STATE_CHANGING_TO_DRIVETHRU, E_STATE_INACTIVE);
             return;
         }
         if (lrGameState.meJunkyardState != GameState::E_JY_INACTIVE)   // +0x180
@@ -568,7 +568,7 @@ namespace BrnDirector
             // asm @0x82219F28: target 8 (CAR_SELECT), blocked 0xD.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
                 lrSharedInfo, ArbitratorStateContainer::E_STATE_CAR_SELECT,
-                meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_CAR_SELECT);
+                meState, E_STATE_CHANGING_TO_CAR_SELECT, E_STATE_INACTIVE);
             return;
         }
 
@@ -614,7 +614,7 @@ namespace BrnDirector
             // asm @0x8221A010: target 9 (RANK_UP), blocked 0xE.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
                 lrSharedInfo, ArbitratorStateContainer::E_STATE_RANK_UP,
-                meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_RANK_UP);
+                meState, E_STATE_CHANGING_TO_RANK_UP, E_STATE_INACTIVE);
             return;
         }
         if (lrGameState.mbIsOnlineCarSelectActive)             // +0x1A5
@@ -622,7 +622,7 @@ namespace BrnDirector
             // asm @0x8221A034: target 0xA (ONLINE_CAR_SELECT), blocked 0xF.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
                 lrSharedInfo, ArbitratorStateContainer::E_STATE_ONLINE_CAR_SELECT,
-                meState, E_STATE_INACTIVE, E_STATE_CHANGING_TO_ONLINE_CAR_SELECT);
+                meState, E_STATE_CHANGING_TO_ONLINE_CAR_SELECT, E_STATE_INACTIVE);
             return;
         }
     }

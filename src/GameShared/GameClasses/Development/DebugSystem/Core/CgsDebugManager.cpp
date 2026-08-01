@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"  // mp3dRender SetDebugFont (font handoff)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"             // mBufferedRenderer (buffered debug prims)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/Internal/CgsDebugInternal.h"     // Internal::SetDebugSingletons
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"        // DebugInterface::Get2dRender (bodied here -- see its note at the bottom)
 #include "GameShared/GameClasses/Development/PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.h"  // the CPU perfmon overlay component
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"       // Assert::gAssertManager / AssertData (on-screen assert overlay)
@@ -456,5 +457,34 @@ namespace CgsDev
                                            60.0f, 30.0f, "over last minute", 0.0f, true);
         RenderMemory();
         RenderHUD();
+    }
+
+    // ------------------------------------------------------------------------
+    // DebugInterface::Get2dRender -- X360 @0x82822750.
+    //
+    // [marked deviation -- HOME, not behaviour] This is a DebugInterface method and its own assert
+    // names GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.cpp:190 as
+    // its console home. It is bodied HERE instead, for one reason: the console reaches the buffered
+    // renderer as `mpDebugManager + 0x14C` -- a DebugManager MEMBER (mBufferedRenderer) -- and this
+    // tree deliberately models that member as the file-static gBufferedRenderer above, "kept out of
+    // the widely-included manager header to avoid pulling the event-queue in everywhere" (its own
+    // comment). gBufferedRenderer has internal linkage, so only this TU can name it. The
+    // alternatives were both worse: growing CgsDebugManager.h by a ~16 KB by-value DebugRender
+    // member (and the CgsVariableEventQueue include behind it) into every consumer of that header,
+    // or adding a second accessor to the manager purely as a trampoline.
+    // MOVE-WHEN: mBufferedRenderer becomes a real named member of DebugManager -- then this body
+    // goes back to CgsDebugInterface.cpp and reads it through the manager reference.
+    //
+    // Behaviour is the console's, unchanged: assert the manager pointer, then return its buffered
+    // renderer by reference. (X360: `lwz r11,0(r30); cmplwi; <assert "mpDebugManager">;
+    // lwz r11,0(r30); addi r3,r11,0x14C`.)
+    //
+    // This is what BrnDirector::DebugPrinter::ActualPrint @0x821F71D8 and Camera::Utils::Tweaker's
+    // on-screen readout both draw through.
+    // ------------------------------------------------------------------------
+    DebugRender& DebugInterface::Get2dRender()
+    {
+        CGS_ASSERT(mpDebugManager, "mpDebugManager");
+        return gBufferedRenderer;
     }
 }

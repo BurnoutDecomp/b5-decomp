@@ -198,6 +198,20 @@ public:
     // unidentified "finished flag": it is mbSnapToCar, and Prepare raises it too.
     void SnapToCar(bool lbSnap) { mbSnapToCar = lbSnap; }
 
+    // ADDED 2026-08-01 (de-inlining aid, NOT a DWARF member). The console reaches this
+    // behaviour's own mCollisionPolicy directly from two places that are not members of this
+    // class after inlining: BehaviourGameplayExternal::Prepare @0x82240814/@0x82240818 (a
+    // member, fine) and ArbStateRaceIntro::Update cases 1 and 3 @0x8226E64C/@0x8226E654 --
+    // the inlined SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish, which is NOT
+    // a member and so needs a way in. The DWARF's only public route is the virtual
+    // GetCollisionPolicy(), which hands back the abstract base (and returns NULL when the
+    // parameter block is unset), so it cannot express the two policy resets. Exposed by name
+    // here so the container never pokes the policy by offset.
+    // FLAG: the ACCESSOR NAME is ours; the member and the two operations it reaches are
+    // DWARF-named and asm-attested.
+    CollisionPolicyAttachedToVehicle&       GetVehicleCollisionPolicy()       { return mCollisionPolicy; }
+    const CollisionPolicyAttachedToVehicle& GetVehicleCollisionPolicy() const { return mCollisionPolicy; }
+
     // FLAG (not transcribed): the DWARF also declares `virtual bool Update(Camera&, const
     //   BehaviourSharedInfo&)` (.cpp:188, X360 @0x82240828) and `virtual void
     //   SetupTweaker(Tweaker&)` (.cpp:148), plus the seven private helpers Update drives

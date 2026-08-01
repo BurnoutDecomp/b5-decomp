@@ -94,9 +94,18 @@ namespace Utils
             mfCurrentWobbleYVel = 0.0f;
         }
 
-        // :70 -- advance the wobble one frame and fold it into lrTransform.
-        // DECLARATION-ONLY (its own ledger function; nothing on the live director path
-        // dispatches it yet).
+        // ⭐ :70 / @0x82221310 -- advance the wobble one frame and fold it into lrTransform.
+        // BODIED 2026-08-01 in BrnCameraShake.cpp, from the full 300-line asm; the banner
+        // there carries the walk, the draw identification and the arity recovery.
+        // ⚠️ The signature below is CONFIRMED against the asm register-by-register (r3 this /
+        //   r4 transform / r5 params / r6 random / f1 the wobble integration timestep / f2 the
+        //   scale on the final angle). The two f32 NAMES are the pre-existing committed ones
+        //   and remain INFERRED -- see the note in the .cpp; `lfSpeedRatio` reads more like a
+        //   shake amount at the two call sites that were checked.
+        // ⚠️ NOT dormant: SIXTEEN console callers dispatch it (every camera behaviour's
+        //   Update, ImpactShakeController, KeyAnimShakeController and
+        //   BehaviourGameplayExternal::ApplyJumpEffects). The old "nothing dispatches it"
+        //   note described the PC build's gating, not the console.
         void Update(Matrix44Affine& lrTransform, const Parameters& lrParams,
                     Random& lrRandom, f32 lfTimestep, f32 lfSpeedRatio);
 

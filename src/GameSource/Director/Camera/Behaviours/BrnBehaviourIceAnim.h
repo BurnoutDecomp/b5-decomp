@@ -273,9 +273,28 @@ namespace BrnDirector { namespace Camera {
 class BehaviourIceAnim : public Behaviour
 {
 public:
-    // The arbitrator-side parameter block SetParameters / ChangeMovie consume. It is the
-    // generated iceanim attrib instance; the behaviour only reads its class key + guid.
-    typedef Attrib::Gen::iceanim ShotReference;
+    // The arbitrator-side parameter block SetParameters / ChangeMovie consume: ONE ELEMENT
+    // of a shotgroup's ShotList, i.e. a raw 24-byte Attrib::RefSpec.
+    //
+    // ⭐ CORRECTED 2026-08-01, and the old spelling was a real (latent) DEFECT, not a naming
+    // preference. This used to read `typedef Attrib::Gen::iceanim ShotReference;`. Every
+    // producer in the tree hands SetParameters a ShotList element -- shotgroup's
+    // GetShotListElement / GetShotListData, or Attrib::DefaultDataArea(0x18) as the null
+    // fallback -- and that element is an Attrib::RefSpec {mClassKey, mCollectionKey,
+    // mpCollectionPtr}, NOT a constructed Attrib::Instance. Under the old typedef,
+    // `lpParameters->GetAnimGuid()` read RefSpec+4 (the high half of mCollectionKey) as if
+    // it were Instance::mpAttributeData and dereferenced it at +0xC: a garbage take guid at
+    // best, a wild read at worst -- a camera that links, boots, and silently plays nothing.
+    // The class-key assert did not catch it, because a RefSpec's class key IS its leading
+    // qword and so the check passed for the wrong reason.
+    //
+    // The correct type was already in the tree: Camera::ShotReference (Camera.h:83-84,
+    // DWARF Camera.h:43 `typedef const Attrib::RefSpec ShotReference;`), which is what
+    // Camera::mpSourceShot @+0x54 uses for the SAME console field role as this behaviour's
+    // mpSourceShot @+0xE24. This typedef now names that one rather than forking it, so the
+    // two cannot drift apart again. SetParameters builds the temporary iceanim over the
+    // RefSpec exactly as the console does (@0x8220F5C0); see its body.
+    typedef ::BrnDirector::Camera::Camera::ShotReference ShotReference;
 
     // Build the behaviour object: set up the vtables and default-construct the embedded
     // ICETake. Body in the class TU.
@@ -379,11 +398,28 @@ public:
     // SetControllerParametricTime0To1(0.0f).
     void RewindControllerToStart()                    { SetControllerParametricTime0To1(0.0f); }
 
-    // Clear the base-behaviour "first-frame" gate the intro state resets (X360 stb 0 at the
-    // base behaviour's +0x28 -- a field beyond this header's modelled base slice). DECLARATION-
-    // ONLY: the body lands with the Behaviour base TU that owns that offset; the per-TU cl /c
-    // gate does not link.
-    void ClearBaseFirstFrameGate();   // base +0x28 = 0
+    // ⭐ SetCollisionPolicyCanFail -- BODIED 2026-08-01. Every ICE-anim arbitrator state emits
+    // `stb <0>, 0x28(behaviour)` immediately after NewBehaviour<BehaviourIceAnim>:
+    //     ArbStateCarSelect::Prepare  @0x8226F0C4 and @0x8226F1A8   (r23 == 0, li r23,0 @0x8226EFD4)
+    //     ArbStateRaceIntro::Update   @0x8226E730                   (r10 == 0)
+    // Behaviour +0x28 is NOT a base-Behaviour field: the Behaviour base ends at +0x14 (vptr,
+    // meTimestepType @+4, five flag bytes @+8..+0xC, mpcDebugParametersName @+0x10), and
+    // mCollisionPolicy sits at +0x20 -- so +0x28 is mCollisionPolicy + 0x08, which the DecFIGS
+    // DWARF (BrnCollisionPolicy.h:436) names VisibilityCollisionPolicy::mbCanFail and which
+    // BehaviourIceAnim::Construct @0x8225624C seeds to 1 through this same pointer. So the
+    // arbitrator states are saying "this take's camera may NOT fail out for occlusion /
+    // collision / off-screen", not "clear a first-frame gate".
+    void SetCollisionPolicyCanFail(bool lbCanFail) { mCollisionPolicy.SetCanFail(lbCanFail); }
+
+    // ⛔ DEPRECATED ALIAS -- MIS-NAMED, KEPT ONLY SO THE 17 EXISTING CALL SITES KEEP LINKING.
+    // It was a guess ("clear the base-behaviour first-frame gate") at the +0x28 store decoded
+    // above, and it was declaration-only, which is why it was one of this wave's unresolved
+    // externals. Callers today: BrnArbStateCarSelect.cpp (9), BrnArbStateOnlineRaceIntro.cpp
+    // (3), BrnArbStateRaceIntro.cpp (2), BrnArbStatePostEvent.cpp, BrnArbStateRankUp.cpp,
+    // BrnArbStateTakedown.cpp. DELETE-WHEN: all six files are re-pointed at
+    // `SetCollisionPolicyCanFail(false)` (a straight textual substitution:
+    //   ClearBaseFirstFrameGate()  ->  SetCollisionPolicyCanFail(false)).
+    void ClearBaseFirstFrameGate() { SetCollisionPolicyCanFail(false); }   // policy +0x08 = 0
 
     // ---- rank-up arbitrator-state pokes (BrnArbStateRankUp::Prepare/Update) -------------
     // Bind the behaviour's primary anchor vehicle reference (mPrimaryVehicleRef @+0xDF0) to a

@@ -9,7 +9,8 @@
 //   Attrib::Instance::GetAttributePointer @ 0x82805880
 //   Attrib::Instance::GetClass            @ 0x82802F18
 //   Attrib::Instance::GetCollection       @ 0x82802F40
-//   Attrib::Instance::Instance            @ 0x82802DB8
+//   Attrib::Instance::Instance            @ 0x82802DB8   (Collection*, owner)
+//   Attrib::Instance::Instance            @ 0x8280A248   (const RefSpec&, owner)
 //   Attrib::Instance::~Instance           @ 0x8280D100
 //
 // AttribSys SDK (no PC binary / open source present -> reconstructed from the
@@ -121,6 +122,40 @@ namespace Attrib
             CGS_ASSERT(lpCollection->muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
             ++lpCollection->muRefCount;
         }
+    }
+
+    // ------------------------------------------------------------------------
+    // Attrib::Instance::Instance(const RefSpec&, void*) @ 0x8280A248
+    // ------------------------------------------------------------------------
+    // The X360 body, in full:
+    //     mr   r31,r3 / mr r3,r4 / mr r29,r5
+    //     bl   Attrib__RefSpec__GetCollection      ; r30 = the resolved collection
+    //     stw  r29,8(r31)  ; mpOwner
+    //     stw  r30,0(r31)  ; mpCollection
+    //     stw  r11,4(r31)  ; mpAttributeData = 0
+    //     stw  r11,0xC(r31); muFlags         = 0
+    //     beq  -> return                          ; null collection: nothing more to do
+    //     lwz  r11,0x20(r30) ; if (!collection->mpSource) muFlags = 1
+    //     lwz  r11,0x1C(r30) ; mpAttributeData = collection->mpData
+    //     lhz  r11,8(r30)    ; bounded ++collection->muRefCount  (attribhashmap.h:622)
+    // From 0x8280A264 onward that is INSTRUCTION-FOR-INSTRUCTION the Collection* ctor
+    // @0x82802DCC, so this delegates rather than restating it -- the only thing this
+    // overload adds is the RefSpec resolve in front.
+    //
+    // ⚠️ The resolve DOUBLE-COUNTS on purpose, and that is the console's behaviour, not a
+    // leak: RefSpec::GetCollection AddRefs when it caches a freshly-resolved collection in
+    // the ref, and then this ctor AddRefs again for the handle. ~Instance drops the handle's
+    // reference; the ref keeps its own until RefSpec::Clean(). Do not "fix" one of the two.
+    //
+    // The two const_casts are spelling artefacts of this tree's own drift, not semantics:
+    // DWARF attribsys.h:753 declares `const Attrib::Collection* GetCollection() const` (the
+    // cache member is mutable in the real SDK) and attribsys.h:534 types mCollection as
+    // `const Attrib::Collection*`. The committed header carries the non-const spellings of
+    // both, so the resolve has to be laundered through them here.
+    Instance::Instance(const RefSpec& lrRefSpec, void* lpOwner)
+        : Instance(const_cast<Collection*>(const_cast<RefSpec&>(lrRefSpec).GetCollection()),
+                   lpOwner)
+    {
     }
 
     // Copy construct. NOT an X360 out-of-line symbol (the console inlines it everywhere);

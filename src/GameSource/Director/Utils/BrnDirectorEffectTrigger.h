@@ -2,8 +2,10 @@
 #define GAMESOURCE_DIRECTOR_UTILS_BRN_DIRECTOR_EFFECT_TRIGGER_H
 
 #include "types.hpp"
+#include <cstring>                                        // strcpy / strcmp / strlen (Set + the comparisons)
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> (the 100-slot hook table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (the current-effect tripwires)
+#include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"            // BrnGui::KI_MAX_PFX_ID_LENGTH (Set's tripwire)
 
 // ============================================================================
 // GameSource/Director/Utils/BrnDirectorEffectTrigger.h
@@ -30,8 +32,27 @@ namespace BrnDirector
     {
         char mHookNameString[33];   // BrnDirectorEffectTrigger.h:40
 
-        // @0x821F15B8: strcpy(mHookNameString, lpcName) after asserting non-NULL + length.
-        void Set(const char* lpcName);
+        // @0x821F15B8 -- BODIED 2026-08-01 (was declaration-only; it was one of the camera
+        // wave's unresolved externals, pulled in by Camera::EnsureEffectIsPlaying).
+        // HEADER INLINE by rule: the function's own two tripwires cite
+        // "..\..\..\GameSource\Director/Utils/BrnDirectorEffectTrigger.h" at lines 0x36 (54)
+        // and 0x37 (55), i.e. it is DEFINED IN THIS HEADER, two/three lines below the DWARF's
+        // declaration line 52. Asm walk:
+        //   0x821F15D0  assert lpcName != NULL                                    (h:54)
+        //   0x821F15F8  inline strlen; assert strlen(lpcName) <= 0x20             (h:55)
+        //   0x821F1640  inline strlen again; the third assert is the bounded-copy helper's
+        //               own ("String <x> is too long. Buffer size = 32, string length = N",
+        //               GameShared/GameClasses/Co...:65) -- it fires at strlen >= 0x20, one
+        //               tighter than h:55, and is NOT this header's. Folded into the same
+        //               CGS_ASSERT here rather than fabricating the StrStream message.
+        //   0x821F179C  the stbx loop: a plain strcpy including the NUL.
+        void Set(const char* lpcName)
+        {
+            CGS_ASSERT(lpcName != NULL, "lpcName != NULL");                              // :54
+            CGS_ASSERT(strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH,
+                       "strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH");               // :55
+            strcpy(mHookNameString, lpcName);                                            // 0x821F17A4..
+        }
 
         // User-defined copy-assign routed through Set (GROWN by the
         // Array<HookNameStringWrapper,100> instantiation TU: its Append @0x82210418
@@ -44,10 +65,22 @@ namespace BrnDirector
             return *this;
         }
 
-        bool operator==(const HookNameStringWrapper& lrRhs) const;
-        bool operator==(const char* lpcName) const;
-        bool operator!=(const HookNameStringWrapper& lrRhs) const;
-        bool operator!=(const char* lpcName) const;
+        // DWARF h:61/h:65/h:69/h:73 -- all four are declared (and so defined) IN THIS HEADER.
+        // BODIED 2026-08-01: they were declaration-only, and the pair taking `const char*` is
+        // already used by BrnDirectorEffectTrigger.cpp's RegisterStopping*EffectWithName and
+        // (inlined) by Camera::EnsureEffectIsPlaying / EffectInterface::HookExists. Every
+        // console site emits the same open-coded byte-compare loop that `strcmp(a,b) == 0`
+        // compiles to (e.g. EnsureEffectIsPlaying @0x821F2764..0x821F2788).
+        bool operator==(const HookNameStringWrapper& lrRhs) const
+        {
+            return strcmp(mHookNameString, lrRhs.mHookNameString) == 0;
+        }
+        bool operator==(const char* lpcName) const
+        {
+            return strcmp(mHookNameString, lpcName) == 0;
+        }
+        bool operator!=(const HookNameStringWrapper& lrRhs) const { return !(*this == lrRhs); }
+        bool operator!=(const char* lpcName) const               { return !(*this == lpcName); }
     };
 
     // The set of camera-PFX hooks currently live this frame (the SharedInfo's
@@ -154,10 +187,14 @@ namespace BrnDirector
     {
         struct Camera;
 
-        // @0x821F2720. Request that the named camera-PFX hook be playing on lrCamera at the
-        // given blend, but only re-trigger it when it is not already the live hook at that
-        // blend (the X360 compares against the EffectInterface's current hook/blend). Used
-        // for the Race_Day / Damage_Crit / Smash_Effect / Wrecked event hooks.
+        // @0x821F2720 -- BODIED 2026-08-01 in BrnDirectorEffectTrigger.cpp (see the asm walk
+        // in the banner there). Drop this frame's start/stop-hook request and the requested
+        // post-FX id on lrCamera, then re-request the named camera-PFX hook at the given
+        // blend UNLESS it is already the EffectInterface's live hook at exactly that blend.
+        // Used for the Car_Reset / Race_Day / Damage_Crit / Smash_Effect / Wrecked hooks and
+        // by ArbStateCarSelect for the junkyard fade-outs.
+        // SIGNATURE RECOVERED FROM ASM: r3 Camera&, r4 const EffectInterface&, r5 const char*,
+        // f1 f32 -- matching the committed order below.
         void EnsureEffectIsPlaying(Camera& lrCamera, const EffectInterface& lrSource,
                                    const char* lpcHook, f32 lfBlend);
 

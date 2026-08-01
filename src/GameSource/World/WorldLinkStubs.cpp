@@ -362,21 +362,16 @@ class CgsModule::EventQueue<struct BrnAI::RouteMapModuleIO::RouteResponse,16> co
 // -------------------------------------------------------------------------
 // BrnDirector::HookNameStringWrapper
 // -------------------------------------------------------------------------
-// BOOT GATE (world-IO wave 2026-07-27): converted from an assert TRAP to a quiet
-// one-shot log. This symbol is REACHED every frame now that WorldModule::Update
-// @0x827D63E8 drives the world, and a trap stops the simulation on frame 1. The
-// body is still NOT reconstructed -- the fix is the real X360 body in its own TU,
-// not this gate.
-void BrnDirector::HookNameStringWrapper::Set(char const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "HookNameStringWrapper: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// DESTUBBED (camera-family wave 2026-08-01). The real body is now a header inline
+// in BrnDirectorEffectTrigger.h -- HookNameStringWrapper::Set @0x821F15B8, whose own
+// asserts cite BrnDirectorEffectTrigger.h lines 0x36/0x37, so the console defines it
+// in the header too.
+//
+// Worth recording why this mattered: the gate below was REACHED EVERY FRAME once
+// WorldModule::Update @0x827D63E8 went live, and it silently did nothing -- so every
+// effect-hook name the camera set was dropped on the floor, with a one-shot log line
+// as the only trace. Camera::EnsureEffectIsPlaying (@0x821F2720, landed this wave)
+// re-requests through exactly this call, so the stub had to go for it to work at all.
 
 // -------------------------------------------------------------------------
 // BrnGame::DispatchThreadInputBuffer

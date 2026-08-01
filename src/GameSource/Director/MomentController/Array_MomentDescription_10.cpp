@@ -17,7 +17,9 @@
 // The count word at byte 0xA0 == 10 * sizeof(MomentDescription) confirms the inline
 // maElements[10] buffer end and sizeof(MomentDescription) == 0x10.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
-#include "GameSource/Director/MomentController/BrnMomentController.h"
+// MomentDescription's DWARF home is BrnMomentSelector.h:39 (it used to be modelled as an
+// opaque span in BrnMomentController.h; that hypothesis was wrong -- see the note there).
+#include "GameSource/Director/MomentController/BrnMomentSelector.h"
 
 template void Array<BrnDirector::MomentDescription, 10>::Append(
     const BrnDirector::MomentDescription&);

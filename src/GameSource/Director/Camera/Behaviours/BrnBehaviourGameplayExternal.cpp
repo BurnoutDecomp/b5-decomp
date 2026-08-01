@@ -138,23 +138,29 @@ void BehaviourGameplayExternal::Parameters::Set(const Source* lpSource)
 //     whose interior is not byte-mapped. Calling the (declaration-only) member instead of
 //     poking those offsets is the faithful shape; the member is invoked below and link-stubbed
 //     in DirectorLinkStubs.cpp until BrnCameraSphericalRotationController.cpp lands.
-//   * mCollisionPolicy -- CollisionPolicyAttachedToVehicle::Construct(policy, 1) is a real
-//     call @+0x50, but that type is a reserved-span slice in BrnCollisionPolicy.h with no
-//     Construct declared, and four further stores the console makes right after it (+664,
-//     +665, +668, +669, and Prepare's +656/+670) land INSIDE the policy at offsets whose
-//     members are not identified. Declaring a Construct there would be guessing at what it
-//     initialises, and poking the four offsets is exactly the raw-offset write this project
-//     forbids. Left out, with the call site recorded here.
 //   * mBoostShake -- Constructed by Prepare on the console, not by Construct. Reproduced.
-// Every one of those sub-objects is unread today (Update is not transcribed) and the pool's
+// Both of those sub-objects are unread today (Update is not transcribed) and the pool's
 // placement-new is `new (slot) T()`, i.e. value-initialisation, so they start zeroed anyway.
-// DELETE-WHEN: the two Constructs are homed (Step 0 #3 unblocks the policy one).
+// DELETE-WHEN: CameraSphericalRotationController::Construct is homed.
+//
+// ⭐ RESOLVED 2026-08-01 -- mCollisionPolicy USED TO BE A THIRD ENTRY IN THAT FLAG LIST.
+//   `CollisionPolicyAttachedToVehicle::Construct(this+0x50, 1)` @0x82224AB0 is a real call
+//   and it is now reproduced below: the type gained a declared+bodied `Construct(bool)` in
+//   BrnCollisionPolicy.h and, as of the 2026-08-01 DWARF tail carve, named members for every
+//   byte it seeds except mPitchMover's two floats. (The old note's "four further stores the
+//   console makes right after it" was wrong -- +664/+665/+668/+669 are stores made BY the
+//   policy's own Construct at policy +0x248/+0x249/+0x24C/+0x24D, not by this function; the
+//   asm here goes straight from the call to the mLastCarPos/mLastDisplacement zeroing.)
+//   ⚠️ CONSEQUENCE OF THE OLD OMISSION: the chase cam's policy was never seeded at all --
+//   in particular mfMaxRadius stayed 0 instead of FLT_MAX, i.e. "the camera is always
+//   further out than allowed", and mbAutoElevate stayed false.
 // ============================================================================
 void BehaviourGameplayExternal::Construct()
 {
     Behaviour::Construct();              // the inlined base head
 
     mRotationController.Construct();     // stvx128 0,+32 / +48..+66 / +72 / +76
+    mCollisionPolicy.Construct(true);    // 0x82224AB0: Construct(this+0x50, r4 = 1)
     mAirShake.Construct();               // *(this + 672/676/680/684) = 0.0f
     mImpactShake.Construct();            // *(this + 688/692/696/700) = 0.0f
 
@@ -206,12 +212,15 @@ void BehaviourGameplayExternal::Construct()
 //   *(this+8)    = 1                               -> mbIsPrepared
 //   li r3,1                                        -> cannot fail
 //
-// FLAG: two further stores, *(this+656) = FLT_MAX and *(this+670) = 1, land INSIDE
-//   mCollisionPolicy (which spans +0x050..+0x29F) at offsets whose members are not identified
-//   -- and they are exactly the two the committed
-//   SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish note quotes as
-//   "remaining-time = FLT_MAX" + a flag at +0x29E. Not reproduced (see Construct's FLAG).
-//   DELETE-WHEN: CollisionPolicyAttachedToVehicle's interior is byte-mapped.
+//   *(this+656) = FLT_MAX                          -> mCollisionPolicy.ResetRadiusSmoothing()
+//   *(this+670) = 1                                -> mCollisionPolicy.ResetTrafficCollision()
+//
+// ⭐ THE TWO POLICY STORES ARE REPRODUCED AS OF 2026-08-01 (they were a documented FLAG:
+//   "offsets whose members are not identified"). Behaviour +656 == 0x290 and +670 == 0x29E
+//   are mCollisionPolicy (@+0x50) +0x240 and +0x24E -- mfMaxRadius and
+//   mbResetVehicleCollision, now carved into BrnCollisionPolicy.h from the DecFIGS DWARF.
+//   The identical triple is what SharedCameraContainer::ForcePrimaryGameplayBehaviourToFinish
+//   re-issues from outside; see BrnDirectorArbitratorSharedCameraContainer.cpp.
 // ============================================================================
 bool BehaviourGameplayExternal::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
@@ -220,6 +229,9 @@ bool BehaviourGameplayExternal::Prepare(const BehaviourSharedPrepareReleaseInfo&
 
     mfJumpFOV = 80.0f;                        // *(this + 2904)
     SnapToCar(true);                          // *(this + 2909) = 1
+
+    mCollisionPolicy.ResetRadiusSmoothing();  // *(this + 656) = FLT_MAX   (policy +0x240)
+    mCollisionPolicy.ResetTrafficCollision(); // *(this + 670) = 1         (policy +0x24E)
 
     SetPrepared();                            // *(this + 8) = 1
     return true;

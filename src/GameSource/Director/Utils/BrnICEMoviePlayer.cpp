@@ -412,7 +412,9 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
     }
     else
     {
-        mCamera = mpICEWrapper->GetCamera();
+        // ICEWrapper::GetCamera returns a POINTER (DWARF ICEWrapper.hpp:198; the console
+        // null-checks the returned address at CameraReference::GetCamera @0x8223EB58).
+        mCamera = *mpICEWrapper->GetCamera();
     }
 
     if (mbInterpolateOutNow && !mOutInterpolator.IsAllocated())
@@ -423,7 +425,7 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
         lpOut->SetInterpolationMode(mbInterpolateOutUpdatesDuringPause ? 2 : 0);
         lpOut->SetParameters(mpInterpolateOutParams);
         lpOut->SetupDuration(mfInterpolateOutDuration);
-        lpOut->SetupCameraAFromCamera(mpICEWrapper->GetCamera());
+        lpOut->SetupCameraAFromCamera(*mpICEWrapper->GetCamera());
         lpOut->SetupCameraBFromHelper(mToBehaviourHelperIndex, lrBehaviourManager);
         lpOut->Setup();
     }
@@ -545,9 +547,11 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
     {
         Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
         CGS_ASSERT(!lpInterpolate->HasFinished(), "Can't setup camera B after Setup() has been called");
-        // FLAG: camera B is the ICE wrapper's live take camera (the source passes a
-        // pointer to the wrapper here). The wrapper-side camera accessor is its own TU.
-        lpInterpolate->SetupCameraBFromCamera(mpICEWrapper->GetCamera());
+        // Camera B is the ICE wrapper's live take camera. (SETTLED 2026-08-01: the old FLAG
+        // here -- "the source passes a pointer to the wrapper" -- was reading the console's
+        // POINTER-returning ICEWrapper::GetCamera, DWARF ICEWrapper.hpp:198; the accessor is
+        // now typed and bodied that way, so the deref is explicit and the FLAG is retired.)
+        lpInterpolate->SetupCameraBFromCamera(*mpICEWrapper->GetCamera());
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");

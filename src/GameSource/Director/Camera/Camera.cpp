@@ -229,6 +229,165 @@ void Camera::RequestMotionBlur(f32 lfBlurAmountA, f32 lfBlurAmountB)
     mEffects.mMotionBlurData.mbIsExpensiveMotionBlur = true;            // mEffects +0x4D
 }
 
+// ============================================================================
+// The four ArbStateRoaming::ProcessPossibleFX effect requests (2026-08-01).
+//
+// NONE OF THE FOUR HAS A STANDALONE X360 EXPORT -- a name search over the whole export
+// set for ImpactShake / ShowtimeBlur / RequestedPostFX returns only
+// ImpactShakeController::Update. That is rule 9 in its other form: the console INLINES
+// all four into their single caller, BrnDirector::ArbStateRoaming::ProcessPossibleFX
+// @0x82234A00, so every signature and every store below is recovered from THAT function's
+// asm rather than from a symbol of its own.
+//
+// TWO BASE DISPLACEMENTS, both pinned by that same function, make the recovery unambiguous:
+//   * the state's camera is at state +0x10 -- every effect call in ProcessPossibleFX forms
+//     `addi r3, r31, 0x10` before `bl Camera::StopCurrentEffect / ::EnsureEffectIsPlaying`;
+//   * mEffects is at camera +0x68 -- at 0x82234BD0 the same function forms
+//     `addi r29, r31, 0x78` (== camera +0x68) and then does
+//     HookNameStringWrapper::Set(r29, "Checkpoint") / `stfs f0, 0x80(r29)` /
+//     `stb r11, 0xB7(r29)`, i.e. mStartHookNameString / mfStartHookNameBlendAmount /
+//     mbHasStartHookNameString -- three committed members at their committed offsets.
+// So a displacement D off the state maps to mEffects + (D - 0x78).
+//
+// RULE 4 CHECKED, CLEAN: all seven destinations below (+0x44/+0x48/+0x4C/+0x4D, +0xA8,
+// +0xAC/+0xB0/+0xB4) are ALREADY-NAMED CameraEffects members. Nothing here writes into a
+// maReserved* span, so no member had to be carved out.
+//
+// ⛔⛔ FLAG -- A MEMBER NAME DEFECT THIS WAVE FOUND BUT DID NOT FIX (it is not this TU's
+// file). The committed BrnCameraEffects.h calls the field at mEffects +0xA8
+// `mfRaceEndEffectAmount`. THE DWARF SAYS THAT FIELD IS `mfBlackBarAmount`
+// (BrnCameraEffects.h:317) AND THAT `mfRaceEndEffectAmount` (:304) LIVES AT +0x84, inside
+// the committed `maReserved84` span. The DWARF member chain is fully determined and closes
+// on two independent X360 anchors, so this is not a guess:
+//     :303 mfStartHookBlendAmount +0x80  (X360-pinned: GetStartHookNameBlendAmount
+//                                         @0x821F1910 does `lfs f1, 0x80`)
+//     :304 mfRaceEndEffectAmount  +0x84      :306 muFadeColor        +0x88
+//     :307 meOverlay             +0x8C       :309 mfBloomThreshold   +0x90
+//     :310 mfBloomLuminance      +0x94       :311 mfTimeOfDay        +0x98
+//     :313 mfSimTimeScale        +0x9C       :314 mfGameCameraBlend  +0xA0
+//     :315 mfCameraLag           +0xA4       :317 mfBlackBarAmount   +0xA8
+//     :320 mfShakeAmplitude      +0xAC       :321 mfShakeFrequency   +0xB0
+//     :322 mu8ShakeType          +0xB4       :324 mu8GameCameraBlendCurve  +0xB5
+//     :325 mu8GameCameraBlendMethod +0xB6    :327 mbHasStartHookNameString +0xB7  <-- X360-pinned
+//     :328 mbHasStopHookNameString  +0xB8    :329 mbSetTimeOfDay           +0xB9
+//     :330 mbRequestingScreenshot   +0xBA    pad -> 0xBC                          <-- X360-pinned
+// Laid out sequentially from the pinned +0x80 the chain lands mbHasStartHookNameString on
+// exactly +0xB7 and ends the block on exactly the X360-proven 0xBC stride, with no slack --
+// and it independently re-derives the shake triple SetImpactShake writes below. Three
+// semantic witnesses agree the field is a letterbox/bars amount, not a race-end amount:
+// this state drives it from its BORDERS timer; BrnKeyAnimController.cpp:255 assigns it
+// `(lfLetterbox > 0) ? KF_LETTERBOX_EFFECT_AMOUNT : 0`; and the DWARF gives CameraEffects
+// SetShowBlackBarsAmount / GetShowBlackBarsAmount plus a KF_BLACK_BAR_SIZE constant (:293)
+// with no other float to hold it. RENAMING IT TOUCHES FOUR FILES THIS TU DOES NOT OWN
+// (BrnCameraEffects.h/.cpp, BrnKeyAnimController.cpp, BrnMomentPlayerStunt.cpp), so the
+// bodies below write the correctly-PLACED member under its currently-committed NAME. The
+// storage is right; only the name is wrong.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::SetImpactShake / ::ScaleImpactShake
+//
+// The caller's tail, 0x82234F2C..0x82234F60 (r31 == the ArbStateRoaming `this`):
+//   0x82234F2C  lfs   f0,  0x3AC(r31)     ; the state's mfImpactShakeAmount
+//   0x82234F30  fcmpu cr6, f0,  f31       ; f31 == flt_82001CC0 (read: 0x00000000 == 0.0f)
+//   0x82234F34  ble   cr6, loc_82234F58   ; amount <= 0 -> the ScaleImpactShake arm
+//   0x82234F38  lbz   r11, 0x3C4(r31)     ; the state's mu8ImpactShakeType  -- a BYTE load
+//   0x82234F3C  stfs  f0,  0x124(r31)     ; mEffects.mfShakeAmplitude  (+0xAC)
+//   0x82234F40  lfs   f0,  flt_82001C98   ; 1.0f -- the CALLER's frequency argument, not ours
+//   0x82234F44  stfs  f0,  0x128(r31)     ; mEffects.mfShakeFrequency  (+0xB0)
+//   0x82234F48  stb   r11, 0x12C(r31)     ; mEffects.mu8ShakeType      (+0xB4) -- a BYTE store
+// loc_82234F58:
+//   0x82234F58  lfs   f13, 0x124(r31)     ; mEffects.mfShakeAmplitude
+//   0x82234F5C  fmuls f0,  f0,  f13       ; requested amount * live amplitude
+//   0x82234F60  stfs  f0,  0x124(r31)     ; -> mEffects.mfShakeAmplitude
+//
+// SIGNATURE FROM ASM: three arguments, and the third is a genuine u8 -- the console carries
+// the shake type lbz -> stb end to end into a one-byte field whose next neighbour
+// (mu8GameCameraBlendCurve, +0xB5) is also a byte, so it cannot be a widened word.
+//
+// No float literal belongs to either body: the 1.0f frequency is materialised at the CALL
+// SITE (it is the caller's KF_UNIT argument), and the 0.0f is the caller's own branch test.
+// ----------------------------------------------------------------------------
+void Camera::SetImpactShake(f32 lfAmplitude, f32 lfFrequency, u8 lu8ShakeType)
+{
+    mEffects.mfShakeAmplitude = lfAmplitude;    // stfs -> mEffects +0xAC
+    mEffects.mfShakeFrequency = lfFrequency;    // stfs -> mEffects +0xB0
+    mEffects.mu8ShakeType     = lu8ShakeType;   // stb  -> mEffects +0xB4
+}
+
+void Camera::ScaleImpactShake(f32 lfScale)
+{
+    // fmuls f0, f0(scale), f13(live amplitude) -> stfs back into the amplitude.
+    mEffects.mfShakeAmplitude = lfScale * mEffects.mfShakeAmplitude;
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::SetShowtimeBlurAndBars
+//
+// The caller's showtime-intro block, 0x82234E28..0x82234E78 (r31 == the state):
+//   0x82234E3C  stb   r27, 0xC4(r31)   ; r27 == 1 -> mEffects.mMotionBlurData.mbIsActive (+0x4C)
+//   0x82234E44  stb   r27, 0xC5(r31)   ;         -> ...mbIsExpensiveMotionBlur           (+0x4D)
+//   ... f12 and f0 both end up holding the SAME value: max(min(t * 0.8, 0.7), 0) ...
+//   0x82234E60  fsubs f13, f13(1.0), f12          ; 1.0 - amount
+//   0x82234E68  fsel  f13, f13, f12, f8(1.0)      ; (1.0 - amount >= 0) ? amount : 1.0
+//   0x82234E6C  stfs  f13, 0xBC(r31)              ; -> ...mfCarsBlurAmount  (+0x44)
+//   0x82234E64  fsubs f9,  f9(1.0), f0            ; the same clamp, re-materialised
+//   0x82234E74  fsel  f0,  f9,  f0,  f13(1.0)     ; (1.0 - amount >= 0) ? amount : 1.0
+//   0x82234E78  stfs  f0,  0xC0(r31)              ; -> ...mfWorldBlurAmount (+0x48)
+// The two byte stores precede both float stores, so the store order below is the asm's.
+//
+// This function writes NOTHING BUT the four MotionBlurData fields -- it is the same
+// operation as Camera::RequestMotionBlur above, plus the two flags taken as arguments
+// instead of forced true, plus the per-lane clamp. The DWARF names the console's own form
+// MotionBlurData::Set(bool, bool, float32_t, float32_t) (BrnCameraEffects.h:56): bools
+// FIRST, i.e. the committed parameter order here is INVERTED vs the console's setter
+// (rule 1 -- kept as declared because the cross-TU call site is committed).
+//
+// ⚠️ FIDELITY NOTE FOR THE CALLER (not this TU's file). On the console BOTH amount lanes
+// receive the SAME clamped blur value -- f12 and f0 are two register chains carrying one
+// quantity, not two. The committed ArbStateRoaming::ProcessPossibleFX passes
+// `max(1 - blurClamped, 0)` as the second argument, which the asm does not do anywhere in
+// this block. The bars the caller is reaching for are the +0xA8 store handled by
+// SetRequestedPostFX below, not this one.
+//
+// The 1.0f clamp bound is the same flt_82001C98 the rest of this function uses (read as
+// 0x3F800000 == 1.0f); it is written as the literal fsel predicate so the ordering, and the
+// NaN behaviour, stay the console's.
+// ----------------------------------------------------------------------------
+void Camera::SetShowtimeBlurAndBars(f32 lfCarsBlurAmount, f32 lfWorldBlurAmount,
+                                    bool lbIsActive, bool lbIsExpensiveMotionBlur)
+{
+    mEffects.mMotionBlurData.mbIsActive              = lbIsActive;              // stb -> +0x4C
+    mEffects.mMotionBlurData.mbIsExpensiveMotionBlur = lbIsExpensiveMotionBlur; // stb -> +0x4D
+
+    // fsel on (1.0 - amount): clamp each lane to <= 1 before its store.
+    mEffects.mMotionBlurData.mfCarsBlurAmount =
+        ((1.0f - lfCarsBlurAmount) >= 0.0f) ? lfCarsBlurAmount : 1.0f;          // stfs -> +0x44
+    mEffects.mMotionBlurData.mfWorldBlurAmount =
+        ((1.0f - lfWorldBlurAmount) >= 0.0f) ? lfWorldBlurAmount : 1.0f;        // stfs -> +0x48
+}
+
+// ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::SetRequestedPostFX
+//
+// The caller's borders fade-out, 0x82234EAC..0x82234EC4 (r31 == the state):
+//   0x82234EAC  fdivs f13, f0(mfBordersTime), f10(flt_82CDA498 == 2.0f)
+//   0x82234EB8  fsubs f12, f12(1.0), f13
+//   0x82234EC0  fmuls f13, f12, f13(flt_82CDA5E0 == 0.15f)
+//   0x82234EC4  stfs  f13, 0x120(r31)     ; -> mEffects +0xA8
+// The whole expression is the caller's; this function is the single `stfs` at the end of it.
+//
+// `stfs` settles what the field is: a FLOAT at +0xA8, not the u32 post-FX id at +0x7C
+// (muRequestedPostFxId). The DWARF's CameraEffects::SetRequestedPostFX(uint32_t) (:264) is
+// a DIFFERENT function on that other field; this Camera-level f32 helper only shares its
+// name. Per the block FLAG above, +0xA8 is the black-bar / letterbox amount, committed
+// under the name mfRaceEndEffectAmount.
+// ----------------------------------------------------------------------------
+void Camera::SetRequestedPostFX(f32 lfAmount)
+{
+    mEffects.mfRaceEndEffectAmount = lfAmount;   // stfs -> mEffects +0xA8 (== mfBlackBarAmount)
+}
+
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::GetNearClipDistance @0x82205B68
 //

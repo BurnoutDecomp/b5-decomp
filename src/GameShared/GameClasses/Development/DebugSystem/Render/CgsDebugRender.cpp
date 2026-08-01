@@ -34,6 +34,56 @@ namespace CgsDev
                               Internal::E_INEVENT_2D_TEXT, static_cast<s32>(sizeof(lEvent)));
     }
 
+    // X360 Draw2DTextJustified 0x8282BAC0 (DWARF CgsDebugRender.cpp:672). Measure the string at
+    // lfSize, shift the position LEFT by 0 / half / all of that width for LEFT / CENTRE / RIGHT,
+    // then queue it exactly like Draw2DText (STRING event id 0, then the TEXT record id 1).
+    //
+    // The width model is the console's own and is a flat monospace estimate, not a font metric:
+    //   width = strlen(text) * lfSize * 0.65        (flt_82097F40 == 0.65f, read off the image)
+    //   CENTRE: x -= width * 0.5                    (flt_82001DA0 == 0.5f)
+    //   RIGHT:  x -= width
+    // The X360 inlines the strlen (a `lbz`/`addi`/`cmplwi` loop, no call), so it is spelled inline
+    // here too rather than pulling rw::core::stdc::StringLength into this TU. Only the X lane is
+    // written back (`vrlimi128 v0, v13, 8, 0` merges lane 0 alone), and the LEFT arm skips the
+    // merge entirely -- so Y/Z/W ride through untouched in every case.
+    //
+    // ⚠️ NO NULL GUARD, deliberately: the console's first act is to dereference lpcText in the
+    // length loop. Draw2DText above does guard, because its own X360 body does.
+    //
+    // This is the entry point BrnDirector::DebugPrinter::ActualPrint @0x821F71D8 draws every
+    // Director debug line through, and the one Camera::Utils::Tweaker's readout uses.
+    void DebugRender::Draw2DTextJustified(const char* lpcText, Vector2 lv2Position,
+                                          Justification leJustification, f32 lfSize, RGBA lColour)
+    {
+        // Inlined string length (the console's own loop).
+        u32 luLength = 0;
+        while (lpcText[luLength] != '\0')
+        {
+            ++luLength;
+        }
+
+        const f32 lfWidth = static_cast<f32>(luLength) * lfSize * 0.65f;
+
+        if (leJustification == E_JUSTIFY_CENTRE)
+        {
+            lv2Position.x -= lfWidth * 0.5f;
+        }
+        else if (leJustification == E_JUSTIFY_RIGHT)
+        {
+            lv2Position.x -= lfWidth;
+        }
+
+        m2DQueue.AddStringEventSafe(lpcText, Internal::E_INEVENT_2D_STRING);
+
+        Internal::CInEventDrawText2D lEvent;
+        lEvent.mfX     = lv2Position.x;
+        lEvent.mfY     = lv2Position.y;
+        lEvent.mfSize  = lfSize;
+        lEvent.mColour = lColour;
+        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                              Internal::E_INEVENT_2D_TEXT, static_cast<s32>(sizeof(lEvent)));
+    }
+
     // X360 Draw2DLine (CInEventDrawLine2D, ID 2).
     void DebugRender::Draw2DLine(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour)
     {

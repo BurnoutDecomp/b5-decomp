@@ -135,14 +135,40 @@ namespace BrnDirector
             // mEffects offsets are this type's own concern. FLAG: the committed mEffects field
             // layout is nominal past +0x44 -- these setters are the offset-authoritative API.
 
-            // Set the per-frame impact-shake (amplitude, frequency, shake-type id).
+            // ⭐ BODIED 2026-08-01 (Camera.cpp). None of the four has a standalone X360 export:
+            // the console inlines all of them into their single caller,
+            // ArbStateRoaming::ProcessPossibleFX @0x82234A00, so every signature below is
+            // recovered from THAT asm (rule 1 -- Hex-Rays shows the caller's byte argument as a
+            // plain int store). The same function pins the two base displacements the bodies
+            // rely on: the state's camera is `addi rN, r31, 0x10` and mEffects is
+            // `addi r29, r31, 0x78` (== camera +0x68), independently proven at 0x82234BD0 by the
+            // HookNameStringWrapper::Set / `stfs f0, 0x80(r29)` / `stb r11, 0xB7(r29)` triple.
+            // All four land on ALREADY-NAMED CameraEffects members -- no reserved span is
+            // written, so nothing had to be carved out (rule 4 checked, clean).
+
+            // Set the per-frame impact-shake. Writes mEffects.mfShakeAmplitude (+0xAC),
+            // .mfShakeFrequency (+0xB0) and .mu8ShakeType (+0xB4), in that store order.
+            // The third argument IS a byte on the console (lbz -> stb end to end).
             void SetImpactShake(f32 lfAmplitude, f32 lfFrequency, u8 lu8ShakeType);
             // Multiply the live shake amplitude (used to decay it when the requested amount
-            // is non-positive).
+            // is non-positive): mEffects.mfShakeAmplitude *= lfScale.
             void ScaleImpactShake(f32 lfScale);
-            // Set the showtime-intro motion-blur + black-bars request amounts.
-            void SetShowtimeBlurAndBars(f32 lfBlur, f32 lfBars, bool lbHasStart, bool lbHasStop);
-            // Set the requested post-FX (full-screen) amount.
+            // ⚠️ NAME IS A MISNOMER, KEPT ONLY BECAUSE IT IS THE COMMITTED CROSS-TU API.
+            // This sets NO bars. It writes the four fields of mEffects.mMotionBlurData ONLY:
+            // the two enable bytes first (+0x4C / +0x4D), then the two blur amounts (+0x44 /
+            // +0x48), each clamped to <= 1 by an fsel. The console shape is the DWARF's
+            // MotionBlurData::Set(bool, bool, f32, f32) (BrnCameraEffects.h:56) -- i.e. the
+            // parameter order here is INVERTED vs the console's own setter (rule 1). The
+            // parameter NAMES were `lfBlur / lfBars / lbHasStart / lbHasStop`; renamed to the
+            // fields they actually reach. The BARS live on SetRequestedPostFX below.
+            void SetShowtimeBlurAndBars(f32 lfCarsBlurAmount, f32 lfWorldBlurAmount,
+                                        bool lbIsActive, bool lbIsExpensiveMotionBlur);
+            // ⚠️ ALSO A MISNOMER, kept for the same reason. The store is `stfs` (a FLOAT) to
+            // mEffects +0xA8 -- which is the BLACK-BAR amount, NOT the u32 post-FX id at
+            // +0x7C (the DWARF's CameraEffects::SetRequestedPostFX(uint32_t), :264, is a
+            // different function on a different field). See the FLAG in Camera.cpp: +0xA8 is
+            // committed under the name `mfRaceEndEffectAmount`, which the DWARF member chain
+            // shows is itself a mis-name for `mfBlackBarAmount` (:317).
             void SetRequestedPostFX(f32 lfAmount);
 
             // ---- crash-mode effect requests (BrnArbStateCrashMode::Update / ::DoCloseup) ----

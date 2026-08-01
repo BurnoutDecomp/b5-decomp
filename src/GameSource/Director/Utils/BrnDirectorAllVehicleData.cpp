@@ -1,16 +1,24 @@
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
 
-#include <cfloat>   // FLT_MAX (the no-opponent sentinel, XEX rodata @0x8200173C)
-
 // BrnDirector::AllVehicleData -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
-// Bodied here (2 ledger functions, class:BrnDirector::AllVehicleData):
-//   AllVehicleData::GetSqDistanceOfNearestCarToPlayer     @0x82233488
-//   AllVehicleData::SqDistanceOfNearestOpposingTeamMember @0x822334E0
-// Both lazily bubble-sort the nearest-car table on first use (the
-// BubbleSort<NearestCarInfo,8> instantiation is its own ledger function); the
-// element accesses go through the committed Array::GetItem (the X360 de-inlines
-// it per instantiation, with the CgsArray.h construct/bounds tripwires).
+// ⚠️ THIS TU IS NOT ON THE BUILD LIST. Anything defined here is invisible to the link.
+// Keep that in mind before bodying a consumed function in this file.
+//
+// All that remains here is one out-of-line template anchor. The two distance queries this
+// file used to body -- GetSqDistanceOfNearestCarToPlayer @0x82233488 and
+// SqDistanceOfNearestOpposingTeamMember @0x822334E0 -- moved INTO
+// BrnDirectorAllVehicleData.h on 2026-08-01 (see the block comment there for the asm
+// verification and for the honest note that rule 12's assert test does not decide their
+// home; the DWARF's two-definition .cpp for this class does). They had been written and
+// ledger-complete for some time while every consumer still saw an unresolved external,
+// because this file is not compiled -- the same defect the prior wave fixed for
+// GetPlayer / GetRaceCar / GetNearestRaceCarIndexToPlayer.
+//
+// One real bug was found in them on the way (fixed in the header, not merely moved):
+// SqDistanceOfNearestOpposingTeamMember read the live count with the raw GetCount()
+// instead of GetLength(), dropping the per-iteration CgsArray.h:336 tripwire that the
+// X360 asm fires on every pass and that this file's own comment already claimed it kept.
 
 namespace BrnDirector
 {
@@ -29,39 +37,6 @@ void AllVehicleData_AppendNearestCarAnchor(
     const AllVehicleData::NearestCarInfo& lrInfo)
 {
     lrArray.Append(lrInfo);
-}
-
-// @ 0x82233488 -- ensure sorted, then row 1 squared distance (row 0 == the player).
-f32 AllVehicleData::GetSqDistanceOfNearestCarToPlayer() const
-{
-    if (!mbSorteddNearestRaceCarsToPlayer)
-    {
-        CgsAlgorithms::BubbleSort(maNearestRaceCarsToPlayer);
-        mbSorteddNearestRaceCarsToPlayer = true;
-    }
-    return maNearestRaceCarsToPlayer.GetItem(1u).mfDistance;
-}
-
-// @ 0x822334E0 -- ensure sorted, then scan rows 1..count-1 for the first car on a
-// different team (the count is re-read -- and its construct tripwire re-fired --
-// each iteration, exactly as the X360 inlines the Array count access). FLT_MAX
-// (the XEX rodata sentinel @0x8200173C) when no opposing car is listed.
-f32 AllVehicleData::SqDistanceOfNearestOpposingTeamMember(s32 liMyTeam) const
-{
-    if (!mbSorteddNearestRaceCarsToPlayer)
-    {
-        CgsAlgorithms::BubbleSort(maNearestRaceCarsToPlayer);
-        mbSorteddNearestRaceCarsToPlayer = true;
-    }
-
-    u32 luRow = 1;
-    while (luRow < static_cast<u32>(maNearestRaceCarsToPlayer.GetCount()))
-    {
-        if (maNearestRaceCarsToPlayer.GetItem(luRow).miTeam != liMyTeam)
-            return maNearestRaceCarsToPlayer.GetItem(luRow).mfDistance;
-        ++luRow;
-    }
-    return FLT_MAX;
 }
 
 // ============================================================================
@@ -83,8 +58,8 @@ f32 AllVehicleData::SqDistanceOfNearestOpposingTeamMember(s32 liMyTeam) const
 }
 
 // ---- Array<NearestCarInfo,8>::operator[] const (X360 0x821FF4E0) --------------------
-// The two const distance queries above index the nearest-car table through
-// maNearestRaceCarsToPlayer.GetItem(i) (== const operator[]); the X360 de-inlines the const
+// The two const distance queries (now header-inline, see above) index the nearest-car table
+// through maNearestRaceCarsToPlayer.GetItem(i) (== const operator[]); the X360 de-inlines the const
 // checked accessor out of line. Count word @+0x60 (8*12), the unconstructed tripwire
 // (CgsArray.h:556) + dynamic out-of-bounds check (CgsArray.h:557), then &maElements[index] at
 // the 12-byte NearestCarInfo stride (slwi/add/slwi == 12*i). Lines 556/557 == the CONST

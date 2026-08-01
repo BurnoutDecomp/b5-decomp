@@ -102,6 +102,13 @@ public:
     // Capacity of the inline buffer.
     u32 GetSize() const { return N; }
 
+    // GetCapacity - the same value under the name the X360 source itself uses. Attested by the
+    // assert text baked into BrnDirector::MomentSelector::AddMoment @0x82209F80:
+    // "mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()" (the
+    // stringized condition IS the original source expression). Additive alias over GetSize();
+    // no layout/sizeof change, no existing caller affected.
+    u32 GetCapacity() const { return N; }
+
     // ===== Added for the Array<LandmarkIndex,16> TU =====
     // Linear search for the first element equal to lrElement. Returns the index, or the
     // KI_UNCONSTRUCTED(-1) sentinel when absent/empty (X360 0x8231AB70 returns -1 literally;
