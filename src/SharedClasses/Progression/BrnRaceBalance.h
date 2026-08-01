@@ -2,6 +2,7 @@
 #define BRN_RACE_BALANCE_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the four inline bounds guards)
 
 // =============================================================================
 // BrnRaceBalance.h  (OWNING HEADER for BrnProgression::OpponentBalanceData)
@@ -31,11 +32,40 @@ struct OpponentBalanceData
     void Construct();
     void FixUp();
     void FixDown();
-    // The "liPointIndex >= 0 && liPointIndex < KI_GRAPH_POINTS" assert lives in these bodies.
-    f32  GetAheadTime(s32 liPointIndex) const;
-    f32  GetBehindTime(s32 liPointIndex) const;
-    void SetAheadTime(s32 liPointIndex, f32 lfTime);
-    void SetBehindTime(s32 liPointIndex, f32 lfTime);
+
+    // ---- the four graph-point accessors, DEFINED INLINE ------------------------------------
+    // ⭐ CORRECTED 2026-08-01 (were declaration-only, "bodies are a separate BrnRaceBalance TU").
+    // There IS no such TU: the X360 image contains NO standalone symbol for any of the four --
+    // every call site open-codes the bounds assert plus the indexed load/store. Both known
+    // callers prove it, each carrying all four baked lines itself:
+    //   ProgressionData::GetInterpolatedAIBalanceGraph @0x82676820
+    //   BrnAI::AIModule::SetupRaceBalancingManager     @0x8278A460
+    // Same precedent as CarData::GetId / Profile::GetIsNewProfile. The assert string is
+    // reproduced VERBATIM including the console's missing space after "liPointIndex".
+    f32 GetAheadTime(s32 liPointIndex) const
+    {
+        CGS_ASSERT(liPointIndex >= 0 && liPointIndex < KI_GRAPH_POINTS,
+                   "liPointIndex>= 0 && liPointIndex < KI_GRAPH_POINTS");   // BrnRaceBalance.h:144
+        return mafAheadGraphPoints[liPointIndex];
+    }
+    f32 GetBehindTime(s32 liPointIndex) const
+    {
+        CGS_ASSERT(liPointIndex >= 0 && liPointIndex < KI_GRAPH_POINTS,
+                   "liPointIndex>= 0 && liPointIndex < KI_GRAPH_POINTS");   // BrnRaceBalance.h:152
+        return mafBehindGraphPoints[liPointIndex];
+    }
+    void SetAheadTime(s32 liPointIndex, f32 lfTime)
+    {
+        CGS_ASSERT(liPointIndex >= 0 && liPointIndex < KI_GRAPH_POINTS,
+                   "liPointIndex>= 0 && liPointIndex < KI_GRAPH_POINTS");   // BrnRaceBalance.h:161
+        mafAheadGraphPoints[liPointIndex] = lfTime;
+    }
+    void SetBehindTime(s32 liPointIndex, f32 lfTime)
+    {
+        CGS_ASSERT(liPointIndex >= 0 && liPointIndex < KI_GRAPH_POINTS,
+                   "liPointIndex>= 0 && liPointIndex < KI_GRAPH_POINTS");   // BrnRaceBalance.h:170
+        mafBehindGraphPoints[liPointIndex] = lfTime;
+    }
 
     // ---- Layout (X360-faithful, 68 bytes) --------------------------------------------------
     f32 mafAheadGraphPoints[KI_GRAPH_POINTS];   // 0x00 (DWARF BrnRaceBalance.h:87)

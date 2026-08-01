@@ -238,6 +238,31 @@ public:
     bool GetIsNewProfile() const               { return mbIsNewProfile; }
     void SetIsNewProfile(bool lbIsNewProfile)  { mbIsNewProfile = lbIsNewProfile; }
 
+    // ADDITIVE GROW: the cached "type of car the player is currently in" word at +117948
+    // (meCurrentCarType, logical BrnResource::ECarType). The X360 emits no accessor symbol --
+    // GameStateModule::OnSpecialEventPlayerCarChange @0x8238FB40 open-codes the store as
+    // `stwx r29, profile, 0x1CCBC` after reading the VehicleListEntry's car-type byte (+0xE8).
+    // Defined inline here, same precedent as the GetIsNewProfile pair above.
+    s32  GetCurrentCarType() const             { return meCurrentCarType; }
+    void SetCurrentCarType(s32 leCarType)      { meCurrentCarType = leCarType; }
+
+    // ADDITIVE GROW: the persisted "car the player is in / where they left it" pair at +80/+88
+    // (mSpawnCarId / mSpawnWheelId). The X360 emits no accessor symbols -- ProgressionManager::
+    // OnPlayerCarChange @0x8237AC38 open-codes the two stores as `std r29, 0x1C0(progMgr)` /
+    // `std r5, 0x1C8(progMgr)` (i.e. Profile+80/+88), and GameStateModule::OnProfileLoaded
+    // @0x82397310 reads them back as `ld 0x50(profile)` / `ld 0x58(profile)` with the
+    // "mSpawnCarId != 0" assert between. Defined inline, same precedent as the pairs above.
+    CgsID GetSpawnCarId() const                { return mSpawnCarId; }
+    void  SetSpawnCarId(CgsID lCarId)          { mSpawnCarId = lCarId; }
+    CgsID GetSpawnWheelId() const              { return mSpawnWheelId; }
+    void  SetSpawnWheelId(CgsID lWheelId)      { mSpawnWheelId = lWheelId; }
+
+    // ADDITIVE GROW: the gold/silver derived-car unlock flags at +42516/+42517. The X360 tests
+    // the gold one inline in ProgressionManager::AddCar @0x8237A970 (`lwz *(progMgr + 42884)`,
+    // i.e. Profile+42516) to decide whether to fan a new car out to its derived variants.
+    bool GetGoldCarsUnlocked() const           { return mbGoldCarsUnlocked; }
+    bool GetSilverCarsUnlocked() const         { return mbSilverCarsUnlocked; }
+
     // ADDITIVE GROW: the two profile reads BrnGui::LicenseComponent inlines. Neither has a
     // standalone symbol in the X360 image -- every call site open-codes the load pair -- so
     // both are defined inline here, exactly as the GetIsNewProfile pair above.

@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"                 // BrnTrigger::SpawnLocation (GetType / Type / E_TYPE_COUNT)
+#include "SharedClasses/DataLists/VehicleList.h"                    // BrnResource::VehicleList (GetVehicleIndex / GetVehicleData)
+#include "SharedClasses/DataLists/VehicleListEntry.h"               // BrnResource::VehicleListEntry (livery type / parent id)
 #include "GameSource/GameState/Progression/BrnProgressionCarData.h" // BrnProgression::CarData (Id / unlock-type / deform)
 #include "GameSource/GameState/Progression/BrnProfile.h"           // BrnProgression::Profile (SetChosenLiveryIdForBaseCar / FindCar)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"// BrnProgression::ProgressionManager (GetCarColourAndPalette)
@@ -89,6 +91,12 @@ enum EGameAction
     KI_ACTION_REQUEST_GAME_TRAINING     = 149,  // size 4          -- RequestGameTrainingAction
     KI_ACTION_STARTUP_DEFORM            = 106,  // size 1          -- (ReallyEnter start-of-game deform)
 };
+
+// The pause-reason bit the junkyard exit clears (X360 UpdateExitState @0x82398C20 passes `li r4,1`
+// to GameStateModule::RequestUnpause). The enum's real name is GameStateModuleIO::EPauseModule
+// (the assert string "leUnpauseModule != E_PAUSE_NONE" attests it); only this one enumerator's
+// VALUE is recovered, so it is named locally rather than fabricating the whole enum.
+static const s32 KI_PAUSE_REASON_CAR_SELECT = 1;
 
 // X360 GameStateModule member byte the bodies poke directly through mpGameStateModule / the cached
 // PreWorldInputBuffer ("a real call to that owner" -- de-inlined where a named accessor exists; the
@@ -340,6 +348,115 @@ void CarSelectManager::EndTransitionInState(GameStateModuleIO::GameActionQueue* 
 // "ready" (payload=1) + the car-mod-screen (payload[0]=1,[1]=0) actions, and -- when the desired car
 // id's hi word is 0 -- copies mStartCarId into mDesiredCarId.
 // ============================================================================
+// ============================================================================
+// SaveChosenLiveryForCar (X360 0x82379EE8).
+// Pin lCarId as the chosen livery of its BASE car on the profile. A livery variant (its
+// VehicleListEntry livery-type byte at +0xE9 in {1,3,4}) is keyed under its parent car;
+// anything else is its own base.
+// ============================================================================
+void CarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
+{
+    BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
+    if (lpProfile == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpProfile", KAC_CSM_FILE, 1550);
+        CgsDev::Assert::EndAssert();
+        return;
+    }
+
+    const BrnResource::VehicleList* lpVehicleList = mpVehicleList.Get();
+    const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lCarId);
+    const BrnResource::VehicleListEntry* lpVehicleListEntry =
+        (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
+
+    if (lpVehicleListEntry == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpVehicleListEntry", KAC_CSM_FILE, 1553);
+        CgsDev::Assert::EndAssert();
+        return;   // the X360 falls through into a null deref; bail instead of faulting
+    }
+
+    const u8 luLiveryType = lpVehicleListEntry->GetLiveryType();
+    if (luLiveryType == 1 || luLiveryType == 3 || luLiveryType == 4)
+    {
+        lpProfile->SetChosenLiveryIdForBaseCar(lpVehicleListEntry->GetParentId(), lCarId);
+    }
+    else
+    {
+        lpProfile->SetChosenLiveryIdForBaseCar(lCarId, lCarId);
+    }
+}
+
+// ============================================================================
+// StartCarModificationState (X360 0x82387410).
+// Enter the paint/livery screen: state 5, reset timer, set mbInCarModScreen, post the
+// car-mod-screen action (76, 8B), make sure a desired car is selected, and hand the car's
+// derived colour-livery collection to the progression layer / the GUI.
+//
+// ⛔ HONEST PARTIAL -- the derived-livery collection. From `ConstructColourLiveryList` onwards
+// the console needs BrnDerivedCars.h (DerivedCarArray + ConstructColourLiveryList @0x82374F60 +
+// ProgressionManager::UnlockDerivedCarCollection @0x8237AD70 + DEBUG_PrintArray @0x8236ACE8,
+// ~600 X360 instructions) which is NOT reconstructed. What is missing, precisely: the derived
+// cars of the selected car are not unlocked here, and the 88-byte livery-list action (69) is not
+// posted when the car has more than one livery version. Everything up to and including the
+// car-mod-screen action IS the console's. This whole state is only reachable from the paint-shop
+// entry (EnterModification / Update case 4), i.e. off the "enter junkyard -> pick the one
+// unlocked car -> drive" path. It announces itself in the log when it is hit.
+// DELETE-WHEN BrnDerivedCars.h lands.
+// ============================================================================
+void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (meState != E_STATE_CAR_SELECT && meState != E_STATE_REQUEST_CAR_CHANGE)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "CarSelectManager: State needs to be in E_STATE_CAR_SELECT or E_STATE_REQUEST_CAR_CHANGE.",
+            KAC_CSM_FILE, 385);
+        CgsDev::Assert::EndAssert();
+    }
+
+    mfStateTimer     = KF_TIMER_RESET;              // X360 *(this+4) = 0.0
+    meState          = E_STATE_CAR_MODIFICATION;    // 5
+    mbInCarModScreen = true;                        // X360 *(this+115) = 1
+
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Car Modification\n";
+
+    {
+        u8 lacModScreen[8];
+        std::memset(lacModScreen, 0, sizeof(lacModScreen));
+        lacModScreen[0] = 1;   // X360 v21 = 1
+        lacModScreen[4] = 1;   // X360 v22 = 1
+        AsActionQueue(lpActionQueue)->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(lacModScreen), KI_ACTION_CAR_MOD_SCREEN, 8);
+    }
+
+    // X360: if (mDesiredCarId == 0) mDesiredCarId = mStartCarId; then assert it is non-null.
+    if (mDesiredCarId == 0)
+    {
+        mDesiredCarId = mStartCarId;
+    }
+    if (mDesiredCarId == 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mDesiredCarId != kCGSID_NULL", KAC_CSM_FILE, 402);
+        CgsDev::Assert::EndAssert();
+    }
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[FLAG PC bring-up] CarSelectManager::StartCarModificationState: the derived-livery "
+               "collection is NOT reconstructed (needs BrnDerivedCars.h -- "
+               "DerivedCarArray::ConstructColourLiveryList @0x82374F60). Car "
+            << static_cast<u32>(mDesiredCarId)
+            << " entered the modification screen without its livery versions being unlocked or "
+               "published (action 69 not posted).\n";
+    }
+}
+
 void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_TRANSITION_IN && meState != E_STATE_CAR_MODIFICATION &&
@@ -917,7 +1034,9 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
     // X360 raw poke: *(mpProgressionManager + 133512) = 1 (a drive-thrus-dirty / rivals-dirty flag).
     mpProgressionManager.Get()->SetDriveThrusDirtyFlag();   // FLAG: ProgressionManager + 133512 (de-inlined byte poke)
 
-    mpGameStateModule.Get()->RequestUnpause(true, lpActionQueue);
+    // X360 UpdateExitState @0x82398C20: `li r4, 1` -- the pause-REASON bit this exit clears, not a
+    // bool (see the RequestUnpause signature note in BrnGameStateModule.h).
+    mpGameStateModule.Get()->RequestUnpause(KI_PAUSE_REASON_CAR_SELECT, lpActionQueue);
 
     if (!mpGameStateModule.Get()->IsOnlineGameMode())
         mpGameStateModule.Get()->OnPlayerCarChange(mDesiredCarId, 0, lpActionQueue, true);

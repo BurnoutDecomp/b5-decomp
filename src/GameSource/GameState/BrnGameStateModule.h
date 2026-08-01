@@ -11,10 +11,13 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // GameStateModuleIO::GameActionQueue (real typedef)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h" // BrnProgression::ProgressionManager (mProgressionManager, by value)
 
-// Forward declarations for the BrnTrainingManager additive-grow accessor signatures below (pointer/
-// reference only -- no layout needed here; the real types are included by the TrainingManager TU).
-// GameStateModuleIO::GameActionQueue is a real typedef (BrnGameStateSharedIO.h, included above).
-namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+// The module's cached read-only snapshot of the active race cars (mLastActiveRaceCarInterface,
+// X360 this+0x397E0) is held BY VALUE exactly as the console holds it, so this is a full include
+// rather than a forward declaration.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+// VehicleList is held by pointer (mpVehicleList, X360 this+0x456E8) -- forward declaration is
+// enough here; the bodies that walk it include the owning header.
+namespace BrnResource { struct VehicleList; struct VehicleListEntry; }
 // The achievement manager the BurnoutSkillzManager grow returns (StuntModeScoring::AchievementManager
 // is a typedef of this; pointer only here).
 namespace BrnGameState { class AchievementManagerPS3; }
@@ -100,9 +103,9 @@ public:
     // (X360 0x82363978); declare-only suffices for the per-TU `cl /c` gate.
     ::EActiveRaceCarIndex GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lPlayerID);
 
-    // ADDITIVE GROW (declare-only) for the BrnGameState::DeveloperChallengeManager TU. CheckCarID
-    // resolves the loaded vehicle list off the owning module (the X360 reads the VehicleList* at
-    // this+284392). Body + the real member land with the GameStateModule TU. Declare-only.
+    // The loaded vehicle list (X360 reads the VehicleList* at this+284392 == 0x456E8). BODIED --
+    // OnSpecialEventPlayerCarChange / ApplyCarStats / GetOriginalCarId all resolve their vehicle
+    // records through it.
     BrnResource::VehicleList* GetVehicleList();
 
     // ADDITIVE GROW (declare-only) for the StreetManager wave-C TU. StreetManager::
@@ -166,21 +169,25 @@ public:
                       GameStateModuleIO::GameActionQueue* lpGameActionQueue,
                       s32 liArg3, s32 liArg4);
 
-    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU. FLAG: the X360 reads an s32 at
-    // this+232288 (0x38B60) in BOTH TrainingManager::RequestTraining (0x82365B20) and
-    // TriggerAnyFollowOnTrainingTips (0x823889C8); in each it suppresses the training-driven pause /
-    // request when nonzero (the X360 `if (*(mpGameStateModule+232288)) bail/skip-pause`). The exact
-    // member name is unconfirmed in this bounded view -- semantics ("a training-pause is currently
-    // suppressed/blocked") are inferred from the two call sites; rename when the GameStateModule TU is
-    // fully reconstructed. Body + real member land with the GameStateModule TU.
+    // ⭐ CORRECTED 2026-08-01 (was: "the exact member name is unconfirmed"). The s32 at
+    // this+232288 (0x38B60) that TrainingManager::RequestTraining @0x82365B20,
+    // TriggerAnyFollowOnTrainingTips @0x823889C8 and CarSelectManager::Update @0x8239C218 all
+    // nonzero-test is **miSimPauseFlags** -- the pause-reason bitfield. PROVEN two ways:
+    //   IsSimPaused    @0x82356978 reads `*(this + 232288)` and returns `!= 0` (masked when online);
+    //   RequestUnpause @0x82382138 does `*(this + 232288) &= ~leUnpauseModule`.
+    // So this predicate is EXACTLY `IsSimPaused(false, false)` -- "the simulation is already paused
+    // for some reason", which is why a training tip does not request its own pause and why the
+    // car-select tick short-circuits. Kept as its own named predicate because the three call sites
+    // read the raw word inline rather than calling IsSimPaused; the name now says what it reads.
     bool IsTrainingPauseSuppressed() const;
 
-    // ADDITIVE GROW (declare-only) for the BrnTrainingManager TU.
-    // X360 BrnGameState::GameStateModule::GetLastActiveRaceCarInterface -- the read-only snapshot of the
-    // player's + rivals' active race cars the GameStateModule cached at the end of the last world update
-    // (the X360 reaches it as the embedded interface at this+0x397E0). RequestTraining queries it for the
-    // boost / player-car state behind the boost-training tip. Returns a pointer to the embedded
-    // by-value interface; body + real member land with the GameStateModule TU. FLAG: declare-only grow.
+    // X360 GetLastActiveRaceCarInterface -- the read-only snapshot of the player's + rivals' active
+    // race cars the GameStateModule cached at the end of the last world update (the X360 reaches it
+    // as the interface EMBEDDED BY VALUE at this+0x397E0; it is held by value here too).
+    // ⚠️ FLAG: nothing on PC copies the world's published interface into it yet, so it reads as the
+    // Clear()ed state -- which is the console's own "no valid last player car" answer, and is what
+    // CarSelectManager::SetupSpawnLocations' two geometry helpers already assume.
+    // DELETE-WHEN GameStateModule::Update's world-snapshot leg lands.
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
         GetLastActiveRaceCarInterface() const;
 
@@ -201,33 +208,43 @@ public:
                                      GameStateModuleIO::GameActionQueue* lpQueue);
 
     // ------------------------------------------------------------------------
-    // ADDITIVE GROW (declare-only) for the BrnGameState::CarSelectManager (junkyard car-select) TUs.
-    // The junkyard FSM routes the player-car snapshot / streaming / swap-broadcast / unpause hooks
-    // through the owning GameStateModule. Signatures + semantics are X360-asm-attested; bodies land
-    // with the GameStateModule TU. Declare-only suffices for the `cl /c` compile gate.
+    // The BrnGameState::CarSelectManager (junkyard car-select) hooks. The junkyard FSM routes the
+    // player-car snapshot / streaming / swap-broadcast / unpause hooks through the owning
+    // GameStateModule. Every signature below was RE-RECOVERED FROM THE X360 ASM this wave (the
+    // register-pair rendering in the Hex-Rays prototypes drops arguments -- see the bodies).
     // ------------------------------------------------------------------------
 
     // X360 read at GameStateModule+0x456D8 -- the active player car's CgsID, compared against the
-    // desired/current car id to detect a swap completing.
+    // desired/current car id to detect a swap completing. Written by OnSpecialEventPlayerCarChange.
     CgsID GetActivePlayerCarId() const;
 
-    // X360 0x82382550. Kick the world to start streaming the chosen vehicle-selection car.
+    // X360 0x82382550. Kick the world to start streaming the vehicle-selection carousel around
+    // lCarId (posts the 88-byte "cars to stream" action 69).
     void RequestStreamingForVehicleSelection(CgsID lCarId);
 
     // X360 0x8238FB40. Broadcast a special-event player-car change (the unlock-display / change-car
-    // path uses it). lWheelOrZero is the wheel id (0 when unchanged); lbArg == the X360 trailing 1.
-    void OnSpecialEventPlayerCarChange(CgsID lCarId, CgsID lWheelOrZero,
-                                       GameStateModuleIO::GameActionQueue* lpQueue, bool lbArg);
+    // / start-of-game path uses it). ARG SHAPE RECOVERED FROM ASM: r3=this, r4=car id, r5=wheel id,
+    // r6=queue, r7=the trailing bool (forwarded to ProgressionManager::OnPlayerCarChange).
+    void OnSpecialEventPlayerCarChange(CgsID lCarId, CgsID lWheelId,
+                                       GameStateModuleIO::GameActionQueue* lpQueue, bool lbUpdateProfile);
 
     // X360 0x82396B88. Broadcast a (non-special-event) player-car change on junkyard exit (offline).
-    void OnPlayerCarChange(CgsID lCarId, CgsID lZero,
-                           GameStateModuleIO::GameActionQueue* lpQueue, bool lbArg);
+    // Same arg shape; it forwards straight to OnSpecialEventPlayerCarChange and then publishes the
+    // new car's opponent set.
+    void OnPlayerCarChange(CgsID lCarId, CgsID lWheelId,
+                           GameStateModuleIO::GameActionQueue* lpQueue, bool lbUpdateProfile);
 
     // X360 0x82363698. Mark car lCarId as already-shown in the unlock sequence (so it is not shown again).
     void SetCarUnlockAlreadyShown(CgsID lCarId);
 
-    // X360 0x82382138. Request the world un-pause on junkyard exit.
-    void RequestUnpause(bool lbArg, GameStateModuleIO::GameActionQueue* lpQueue);
+    // X360 0x82382010 / 0x82382138. Request / release a pause on the simulation.
+    // ⚠️ SIGNATURE CORRECTION (2026-08-01): the committed declaration had `RequestUnpause(bool, ...)`.
+    // The X360 second argument is NOT a bool -- it is the pause-reason BITFLAG the call clears:
+    //   0x82382138: `CGS_ASSERT(leUnpauseModule != E_PAUSE_NONE)` then `miSimPauseFlags &= ~a2`.
+    // CarSelectManager::UpdateExitState @0x82398C20 passes `li r4, 1` (bit 0, the car-select reason);
+    // TrainingManager::TriggerAnyFollowOnTrainingTips passes 0x40 to RequestPause. The old
+    // `RequestUnpause(true, q)` happened to produce the same bit only by accident.
+    void RequestUnpause(s32 leUnpauseModule, GameStateModuleIO::GameActionQueue* lpQueue);
 
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the BrnGameState::ResetPlayerDebugComponent TU. The
@@ -270,6 +287,21 @@ public:
     bool IsModeChangeInProgress() const;
 
 private:
+    // ------------------------------------------------------------------------
+    // Private helpers the CarSelect hooks above call. Both are real X360 symbols with exactly one
+    // caller each inside this class, so they stay private here.
+    // ------------------------------------------------------------------------
+
+    // X360 0x82381188. Publish the newly-selected car's handling/boost stats (the 24-byte action
+    // 198) from its VehicleListEntry. Sole caller: OnSpecialEventPlayerCarChange.
+    void  ApplyCarStats(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpQueue);
+
+    // X360 0x823758E8. Walk lCarId up its VehicleListEntry parent chain (at most two levels, as the
+    // console does) to the base/"original" car a livery variant derives from. Used by
+    // OnPlayerCarChange to look up the opponent set, and by ModeManager::SetupOpponentData /
+    // StartModeAtLights (not reconstructed) on the console.
+    CgsID GetOriginalCarId(CgsID lCarId);
+
     // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode.
     ModeManager         mModeManager;
     // DWARF BrnGameStateModule.h:794 (X360 this+208304).
@@ -295,8 +327,25 @@ private:
     s32                 miPlayerGlobalRaceCarIndex;
     // X360 read in IsRaceCarCrashing @0x82356870 -- per-active-slot "this car is crashing" cache.
     bool                maRaceCarCrashing[E_ACTIVE_RACE_CAR_INDEX_COUNT];
-    // X360 read in IsSimPaused @0x82356978 -- bitfield of active pause reasons (0 == running).
+    // X360 this+232288 (0x38B60) -- bitfield of active pause reasons (0 == running). Read by
+    // IsSimPaused @0x82356978 and IsTrainingPauseSuppressed; cleared by RequestUnpause @0x82382138.
     s32                 miSimPauseFlags;
+
+    // ---- the CarSelect / player-car block (X360 this+0x456D8 .. +0x456E8, contiguous there) ----
+    // X360 +0x456D8 (284376). The active player car's CgsID. WRITTEN by OnSpecialEventPlayerCarChange
+    // (`stdx r4, this, 0x456D8`), read by CarSelectManager at four sites.
+    CgsID               mActivePlayerCarId;
+    // X360 +0x456E0 (284384). The active player car's wheel-set CgsID (`stdx r5, this, 0x456E0`).
+    CgsID               mActivePlayerWheelId;
+    // X360 +0x456E8 (284392). The loaded vehicle list (`lwzx r29, this, 0x456E8`).
+    // ⚠️ FLAG (PC bring-up): nothing on PC calls GameStateModule::Prepare, which is where the console
+    // installs this, so it is null until a caller sets it. Every body that uses it asserts first,
+    // exactly as the console does. DELETE-WHEN the module's Prepare() lands.
+    BrnResource::VehicleList* mpVehicleList = 0;
+
+    // X360 +0x397E0. The read-only active-race-car snapshot the module caches at the end of the last
+    // world update, held BY VALUE as the console holds it (see GetLastActiveRaceCarInterface).
+    BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface mLastActiveRaceCarInterface;
     // X360 @0x823566F8 hands this back (GetOutputGuiEventQueue); the PaybackManager and the
     // other managers publish their HUD/GUI events onto it.
     CgsModule::VariableEventQueue<18432, 16> mOutputGuiEventQueue;
