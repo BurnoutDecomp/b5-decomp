@@ -85,7 +85,7 @@ ProgressionManager::ProgressionManager()
 // compile). The three back-pointer stores -- the observable side effects -- are reproduced.
 // ------------------------------------------------------------------------------------
 bool ProgressionManager::Prepare2(void* lpOutput, void* lpGameStateModule,
-                                  InputBuffer::GameActionQueue* lpReceiverQueue,
+                                  BrnGameState::GameStateModuleIO::GameActionQueue* lpReceiverQueue,
                                   void* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
 {
@@ -247,6 +247,20 @@ void ProgressionManager::SetRoadRuleNetworkHighScores(const BrnStreetData::Chall
 {
     CGS_ASSERT(lpaChallengeHighScores != nullptr, "lpaChallengeHighScores");
     mProfile.SetRoadRuleNetworkHighScores(lpaChallengeHighScores);
+}
+
+// ------------------------------------------------------------------------------------
+// ProgressionManager::GetProfile
+//
+// The player Profile is EMBEDDED BY VALUE at ProgressionManager+0x170 (mProfile), so the X360
+// renders every GetProfile() call as a `this + 0x170` pointer adjust with no call at all --
+// which is why the exports carry no symbol for it. Its callers ALWAYS null-check the result
+// (`CGS_ASSERT(mProgressionManager.GetProfile())`), so the console's own contract allows a
+// null answer; an embedded sub-object simply never is one.
+// ------------------------------------------------------------------------------------
+Profile* ProgressionManager::GetProfile()
+{
+    return &mProfile;
 }
 
 } // namespace BrnProgression

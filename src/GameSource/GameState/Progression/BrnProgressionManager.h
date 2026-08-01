@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h" // CgsResource::ResourcePtr (mpProgressionData / mpAISectionData)
 
 #include <cstddef> // offsetof (uncalled _AssertLayout)
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::GameActionQueue (real typedef)
 
 namespace BrnAI { struct AISectionsData; }   // ResourcePtr<T> tag only (never dereferenced here)
 namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }   // SendGameCompletionResults param (pointer-only)
@@ -17,7 +18,6 @@ namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue
 // to avoid a struct/class mismatch (C4099).
 namespace BrnProgression  { struct CarData; struct ProgressionData; }
 namespace BrnGameState    { class AchievementManagerBase; }
-namespace InputBuffer     { class GameActionQueue; }
 // BrnStreetData::ChallengeHighScoreEntry / ChallengePlayerScoreEntry come in via BrnProfile.h.
 
 namespace BrnProgression
@@ -142,7 +142,7 @@ public:
 
     // X360 0x82399DD0. Record discovery of drive-thru lId of kind leType and post the resulting
     // game actions onto lpQueue.
-    void OnDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType, InputBuffer::GameActionQueue* lpQueue);
+    void OnDriveThru(CgsID lId, BrnTrigger::GenericRegion::Type leType, BrnGameState::GameStateModuleIO::GameActionQueue* lpQueue);
 
     // The player's currently-selected car record (NULL when none). DriveThruManager body/paint
     // shops read its id and write its colour/palette.
@@ -200,7 +200,7 @@ public:
     // component and sets up the roaming sections. Returns true on a successful load.
     // FLAG: a3 (mpGameStateModule back-pointer, stored at +0x2093C) and the SetupRoamingSections
     // argument list are modelled as the void* the X360 forwards; reconcile when those TUs land.
-    bool Prepare2(void* lpOutput, void* lpGameStateModule, InputBuffer::GameActionQueue* lpReceiverQueue,
+    bool Prepare2(void* lpOutput, void* lpGameStateModule, BrnGameState::GameStateModuleIO::GameActionQueue* lpReceiverQueue,
                   void* lpTriggerData, BrnGameState::AchievementManagerBase* lpAchievementManager);
 
     // X360 0x82311520. True when road rules are available: the player has reached medal-progress >= 4

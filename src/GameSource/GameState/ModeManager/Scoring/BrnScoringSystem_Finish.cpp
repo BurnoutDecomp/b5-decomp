@@ -113,7 +113,7 @@ namespace BrnGameState
     // straight through (Road-Rage models the not-yet-committed GameActionQueue as void*).
     // ------------------------------------------------------------------------
     void ScoringSystem::OnPlayerDoesATakedown(CgsSystem::Time lTime,
-                                              InputBuffer::GameActionQueue* lpQueue)
+                                              GameStateModuleIO::GameActionQueue* lpQueue)
     {
         mRoadRageModeScoring.IncrementPlayerNumTakedowns(this, lTime, lpQueue);
     }

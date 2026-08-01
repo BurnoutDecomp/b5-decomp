@@ -43,7 +43,9 @@ namespace BrnProgression
 
         // GetId()          -> mId (the packed car id at +0x00).
         // SetColourIndex() -> X360 0x82354890. SetPaletteIndex() -> X360 0x823548F0.
-        CgsID GetId() const;
+        // GetId is DEFINED INLINE: the X360 emits no symbol for it -- every caller reads
+        // CarData+0x00 directly (Profile::AddCar / FindCar / the CarSelect walk all inline it).
+        CgsID GetId() const { return mId; }
         void  SetColourIndex(s32 liColour);
         void  SetPaletteIndex(s32 liPalette);
 

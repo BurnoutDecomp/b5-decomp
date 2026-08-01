@@ -84,9 +84,11 @@ public:
     // --- Queries used by the nested GameMode states (IntroState) -------------------------
     // DWARF-attested public accessors, inlined in the X360 build (IntroState's pseudocode renders
     // them as inline field reads: meCurrentGameModeType, mpCurrentGameMode, mbModeDataIsLoading).
-    // Declared (not defined) here; the bodies + real members land with the ModeManager TU.
-    GameStateModuleIO::EGameModeType GetCurrentGameModeType() const;
-    const GameMode* GetCurrentGameMode() const;
+    // DEFINED INLINE, which is the faithful shape: the X360 emits NO symbol for either -- every
+    // caller reads meCurrentGameModeType / mpCurrentGameMode directly. (IsWaitingForModeDataToLoad
+    // stays declare-only; its mbModeDataIsLoading member is not modelled yet.)
+    GameStateModuleIO::EGameModeType GetCurrentGameModeType() const { return meCurrentGameModeType; }
+    const GameMode* GetCurrentGameMode() const                      { return mpCurrentGameMode; }
     bool            IsWaitingForModeDataToLoad() const;
 
     // ADDITIVE GROW (declare-only) for the BrnMugshotManager TU. X360-inlined helper: true when the

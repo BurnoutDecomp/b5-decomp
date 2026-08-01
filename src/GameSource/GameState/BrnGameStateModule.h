@@ -8,17 +8,21 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::NetworkPlayerID (s32 typedef; GetActiveRaceCarIndex param)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"       // GameStateModuleIO::GameActionQueue (real typedef)
+#include "GameSource/GameState/Progression/BrnProgressionManager.h" // BrnProgression::ProgressionManager (mProgressionManager, by value)
 
 // Forward declarations for the BrnTrainingManager additive-grow accessor signatures below (pointer/
 // reference only -- no layout needed here; the real types are included by the TrainingManager TU).
-namespace BrnGameState { namespace GameStateModuleIO { class GameActionQueue; } }
+// GameStateModuleIO::GameActionQueue is a real typedef (BrnGameStateSharedIO.h, included above).
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
 // The achievement manager the BurnoutSkillzManager grow returns (StuntModeScoring::AchievementManager
 // is a typedef of this; pointer only here).
 namespace BrnGameState { class AchievementManagerPS3; }
 // For the DriveThruManager additive grow below (pointer-only).
 namespace BrnProgression { class Profile; }
-namespace InputBuffer    { class GameActionQueue; }
+// The module's OutputBuffer is held by POINTER here so this header does not have to pull the
+// whole (192 KB, ~40-member) BrnGameStateModuleIO.h; the owning .cpp includes it.
+namespace BrnGameState  { namespace GameStateModuleIO { struct OutputBuffer; } }
 // For the DeveloperChallengeManager additive grow below (pointer-only).
 namespace BrnResource    { struct VehicleList; }
 // For the StreetManager wave-C GetDeveloperChallengeManager grow below (pointer-only;
@@ -51,6 +55,39 @@ public:
 
     // X360 @ 0x823116D0 (BrnGameStateModule.h:982). Out-of-line; defined in BrnGameStateModule.cpp.
     bool IsOnlineGameMode();
+
+    // ------------------------------------------------------------------------
+    // ⭐ THE MODULE'S OUTPUT BUFFER.
+    //
+    // On the console the GameState module is a CgsModule::ModuleSingleBuffered: its
+    // GameStateModuleIO::OutputBuffer is the DataStructure the base allocates through
+    // CreateOutputDataStructure() during Prepare(), and EVERY producer in the game-state
+    // tree publishes through it -- CarSelectManager, DriveThruManager, StuntManager,
+    // PaybackManager, the mode managers -- by posting onto its +0x04 game-action queue.
+    // BrnGameModule::BridgeGameStateToDirector @0x823CD170 then bulk-Appends that queue
+    // into the director input buffer's own <13312,16> queue once a frame. That Append is
+    // the ONLY route by which a game action ever reaches MainDirector::ProcessInputQueue.
+    //
+    // ⚠️ FLAG (PC bring-up seam): nothing on PC calls this module's Prepare(), so the
+    // console's allocation point never runs. Construct() below news the buffer instead and
+    // Destruct() frees it. The buffer itself, its Construct and its accessors are the real
+    // console ones; only the ALLOCATION SITE is moved. DELETE-WHEN the module's
+    // Prepare()/CreateOutputDataStructure() path is reconstructed.
+    GameStateModuleIO::OutputBuffer* GetOutputBuffer() { return mpOutputBuffer; }
+
+    void Construct() override;
+    void Destruct()  override;
+
+    // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
+    // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
+    // race-car table). Asserts mbIsUpdating.
+    s32  GetPlayerGlobalRaceCarIndex();
+    // X360 @ 0x82356870. Is the active race car in this slot currently crashing?
+    bool IsRaceCarCrashing(::EActiveRaceCarIndex leRaceCarIndex);
+    // X360 @ 0x823567A8. Is the current game mode a showtime mode (offline or online)?
+    bool IsShowtimeGameMode();
+    // X360 @ 0x82356978. Is the simulation currently paused (see the mask notes at the body)?
+    bool IsSimPaused(bool lbCheckGameMode, bool lbStrictMask) const;
 
     // ADDITIVE GROW (declare-only) for the BrnChallengeManager wave-C TUs (NetworkPlayerRemoved
     // @0x8234E420 / SetRemotePlayersChallengeCompleted @0x82323DF8 call it through mpGameStateModule
@@ -161,7 +198,7 @@ public:
     // decl (BrnScoringSystem.h) shadowing the global queue type when this header is parsed inside
     // namespace BrnGameState.
     void CheckForAllEventsBeingFound(BrnProgression::Profile* lpProfile,
-                                     ::InputBuffer::GameActionQueue* lpQueue);
+                                     GameStateModuleIO::GameActionQueue* lpQueue);
 
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the BrnGameState::CarSelectManager (junkyard car-select) TUs.
@@ -180,17 +217,17 @@ public:
     // X360 0x8238FB40. Broadcast a special-event player-car change (the unlock-display / change-car
     // path uses it). lWheelOrZero is the wheel id (0 when unchanged); lbArg == the X360 trailing 1.
     void OnSpecialEventPlayerCarChange(CgsID lCarId, CgsID lWheelOrZero,
-                                       ::InputBuffer::GameActionQueue* lpQueue, bool lbArg);
+                                       GameStateModuleIO::GameActionQueue* lpQueue, bool lbArg);
 
     // X360 0x82396B88. Broadcast a (non-special-event) player-car change on junkyard exit (offline).
     void OnPlayerCarChange(CgsID lCarId, CgsID lZero,
-                           ::InputBuffer::GameActionQueue* lpQueue, bool lbArg);
+                           GameStateModuleIO::GameActionQueue* lpQueue, bool lbArg);
 
     // X360 0x82363698. Mark car lCarId as already-shown in the unlock sequence (so it is not shown again).
     void SetCarUnlockAlreadyShown(CgsID lCarId);
 
     // X360 0x82382138. Request the world un-pause on junkyard exit.
-    void RequestUnpause(bool lbArg, ::InputBuffer::GameActionQueue* lpQueue);
+    void RequestUnpause(bool lbArg, GameStateModuleIO::GameActionQueue* lpQueue);
 
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the BrnGameState::ResetPlayerDebugComponent TU. The
@@ -239,5 +276,36 @@ private:
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
     // DWARF BrnGameStateModule.h:882 (X360 this+292289) -- set true only while the module is updating.
     bool                mbIsUpdating;
+
+    // ------------------------------------------------------------------------
+    // Members the ALREADY-RECONSTRUCTED bodies in BrnGameStateModule.cpp bind to.
+    //
+    // ⚠️⚠️ THOSE BODIES DID NOT COMPILE. BrnGameStateModule.cpp carries seven finished
+    // X360 reconstructions (IsOnlineGameMode, GetPlayerGlobalRaceCarIndex, IsRaceCarCrashing,
+    // IsShowtimeGameMode, IsSimPaused, GetOutputGuiEventQueue, SetCarUnlockAlreadyShown) that
+    // were written against a RICHER version of this header; the header was later reduced to
+    // the "minimal slice" and the TU was left unmounted, so nothing ever noticed that
+    // `cl /c` on it fails with 15 errors. Declaring the members it uses is what makes those
+    // bodies real code again. (Same defect family as a silent-drop stub: finished work that
+    // the link never reaches.)
+    // ------------------------------------------------------------------------
+
+    // X360 read in GetPlayerGlobalRaceCarIndex @0x82311620 -- the player's slot in the FULL
+    // world race-car table (distinct from mePlayerActiveRaceCarIndex, the active-car slot).
+    s32                 miPlayerGlobalRaceCarIndex;
+    // X360 read in IsRaceCarCrashing @0x82356870 -- per-active-slot "this car is crashing" cache.
+    bool                maRaceCarCrashing[E_ACTIVE_RACE_CAR_INDEX_COUNT];
+    // X360 read in IsSimPaused @0x82356978 -- bitfield of active pause reasons (0 == running).
+    s32                 miSimPauseFlags;
+    // X360 @0x823566F8 hands this back (GetOutputGuiEventQueue); the PaybackManager and the
+    // other managers publish their HUD/GUI events onto it.
+    CgsModule::VariableEventQueue<18432, 16> mOutputGuiEventQueue;
+    // X360 SetCarUnlockAlreadyShown @0x82363698 resolves the player Profile through it.
+    BrnProgression::ProgressionManager       mProgressionManager;
+
+    // The module's own output buffer -- see GetOutputBuffer() above for the ownership FLAG.
+    // Zero-initialised in-class: BrnGameModule embeds this module by value and does NOT list
+    // it in its ctor init list, so without this the Construct() guard would read garbage.
+    GameStateModuleIO::OutputBuffer*         mpOutputBuffer = 0;
 };
 }

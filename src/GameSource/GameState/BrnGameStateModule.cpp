@@ -6,9 +6,47 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                  // GameStateModuleIO::EGameModeType (E_MODE_*_SHOWTIME)
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
+#include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
 
 namespace BrnGameState
 {
+// ----------------------------------------------------------------------------
+// Construct / Destruct.
+//
+// The console's GameStateModule is a CgsModule::ModuleSingleBuffered, so its
+// GameStateModuleIO::OutputBuffer is the DataStructure the base allocates from the module's
+// own DataBuffer inside Prepare() -> CreateOutputDataStructure(). ⚠️ FLAG (PC bring-up seam):
+// nothing on PC calls this module's Prepare(), so that allocation point never runs. The
+// buffer is newed here instead and freed in Destruct(); the buffer TYPE, its Construct
+// (X360 0x82382940) and its accessors are the real console ones -- only the allocation SITE
+// moves. DELETE-WHEN the module's Prepare()/CreateOutputDataStructure() path is real.
+//
+// Constructing it is what makes the game-state -> director game-action route exist at all:
+// BrnGameModule::BridgeGameStateToDirector @0x823CD170 Appends this buffer's +0x04 queue into
+// the director input buffer's queue every frame, and MainDirector::ProcessInputQueue drains it.
+// ----------------------------------------------------------------------------
+void GameStateModule::Construct()
+{
+    CgsModule::ModuleSingleBuffered::Construct();
+
+    if (mpOutputBuffer == 0)
+    {
+        mpOutputBuffer = new GameStateModuleIO::OutputBuffer();
+        mpOutputBuffer->Construct();
+    }
+}
+
+void GameStateModule::Destruct()
+{
+    if (mpOutputBuffer != 0)
+    {
+        delete mpOutputBuffer;
+        mpOutputBuffer = 0;
+    }
+
+    CgsModule::ModuleSingleBuffered::Destruct();
+}
+
 // X360 @ 0x823116D0. Returns whether the currently-running game mode is one of the online modes. May
 // only be called while the module is updating (asserts mbIsUpdating). Fetches the current game mode
 // from the embedded ModeManager and forwards to GameMode::IsOnline(); if there is no current mode,
@@ -24,6 +62,14 @@ bool GameStateModule::IsOnlineGameMode()
         return lpCurrentGameMode->IsOnline();
     }
     return false;
+}
+
+// The cached current-game-mode type. The X360 reads it as the raw scalar just below the embedded
+// mModeManager (GameStateModule+7604 == mModeManager+0xD94, meCurrentGameModeType); de-inlined to
+// the ModeManager's own named accessor -- same read, no offset poke.
+GameStateModuleIO::EGameModeType GameStateModule::GetCurrentGameModeType() const
+{
+    return mModeManager.GetCurrentGameModeType();
 }
 
 // X360 @ 0x82311620. Returns the player's GLOBAL race-car index (its slot in the full world race-car

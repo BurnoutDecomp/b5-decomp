@@ -1436,4 +1436,36 @@ void SplitArray<ProfileEvent, BrnGuiSaveLoad::ProfileEvent>(
     *lpiDlcCount  = liDlcIndex;
 }
 
+// ------------------------------------------------------------------------------------
+// Profile::GetCarCount
+//
+// The number of CarData records actually populated in maCars (X360 read of Profile+0x26C).
+// The X360 inlines it at every call site; kept out-of-line here because BrnProfile.h already
+// declares it that way and several unmounted TUs bind to the symbol.
+// ------------------------------------------------------------------------------------
+s32 Profile::GetCarCount() const
+{
+    return miCarCount;
+}
+
+// ------------------------------------------------------------------------------------
+// Profile::SetRoadRuleNetworkHighScores  (callee of ProgressionManager::SetRoadRuleNetworkHighScores
+// @0x82311430) -- wholesale copy of the 64-entry ChallengeHighScoreEntry table into
+// maNetworkChallengeData (Profile+96472). X360 XMemCpy size 3584 == 64 * 56.
+// ------------------------------------------------------------------------------------
+void Profile::SetRoadRuleNetworkHighScores(const BrnStreetData::ChallengeHighScoreEntry* lpaChallengeHighScores)
+{
+    memcpy(maNetworkChallengeData, lpaChallengeHighScores, sizeof(maNetworkChallengeData));
+}
+
+// ------------------------------------------------------------------------------------
+// Profile::SetRoadRuleChallengeData  (callee of ProgressionManager::SetRoadRuleChallengeData)
+// -- wholesale copy of the 64-entry ChallengePlayerScoreEntry table into maChallengeData
+// (Profile+100056). X360 XMemCpy size 2560 == 64 * 40.
+// ------------------------------------------------------------------------------------
+void Profile::SetRoadRuleChallengeData(const BrnStreetData::ChallengePlayerScoreEntry* lpaChallengeScores)
+{
+    memcpy(maChallengeData, lpaChallengeScores, sizeof(maChallengeData));
+}
+
 } // namespace BrnProgression

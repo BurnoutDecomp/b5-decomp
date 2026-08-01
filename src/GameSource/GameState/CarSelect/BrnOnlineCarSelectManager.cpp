@@ -40,7 +40,7 @@ void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
 // (asserts otherwise), then delegates to the modification state set-up helper. The X360 builds the
 // assert message into a StrStream buffer; since the text is a plain string literal it is passed
 // directly as the CGS_ASSERT message.
-void OnlineCarSelectManager::EnterModification(InputBuffer::GameActionQueue* lpActionQueue)
+void OnlineCarSelectManager::EnterModification(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.");
 
@@ -51,7 +51,7 @@ void OnlineCarSelectManager::EnterModification(InputBuffer::GameActionQueue* lpA
 // car-select state (asserts otherwise, verbatim baked file/line BrnOnlineCarSelectManager.h:354).
 // The action-queue parameter is part of the DWARF shape but unused by the body (the X360 Hex-Rays
 // elided it), so it is left unnamed-but-present.
-void OnlineCarSelectManager::EnterWaitForHost(InputBuffer::GameActionQueue* /*lpActionQueue*/)
+void OnlineCarSelectManager::EnterWaitForHost(GameStateModuleIO::GameActionQueue* /*lpActionQueue*/)
 {
     CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.");
 
@@ -65,7 +65,7 @@ void OnlineCarSelectManager::EnterWaitForHost(InputBuffer::GameActionQueue* /*lp
 // CgsDev::Message::gxMessageFilterFlags bit 0 and streamed through the committed
 // CgsDev::Log::gpDebugPrint (string-only operator<< chain).
 void OnlineCarSelectManager::StreamingFinished(CgsID lActiveCarZeroId,
-                                               InputBuffer::GameActionQueue* /*lpActionQueue*/)
+                                               GameStateModuleIO::GameActionQueue* /*lpActionQueue*/)
 {
     if (mDesiredCarId == lActiveCarZeroId)
     {

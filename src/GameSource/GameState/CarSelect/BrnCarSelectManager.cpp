@@ -15,14 +15,16 @@
 
 namespace BrnGameState
 {
-// The game-action queue the callers hand us is an ::InputBuffer::GameActionQueue* (X360 == the
+// The game-action queue the callers hand us is an GameStateModuleIO::GameActionQueue* (X360 == the
 // OutputBuffer's embedded queue at this+4). Reinterpret it to the real backing type and post events
 // via AddEvent (established precedent: BrnDriveThruManager.cpp / BrnTriggerQueryManager.cpp).
 typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 
-static inline GameActionQueueImpl* AsActionQueue(::InputBuffer::GameActionQueue* lpQueue)
+static inline GameActionQueueImpl* AsActionQueue(GameStateModuleIO::GameActionQueue* lpQueue)
 {
-    return reinterpret_cast<GameActionQueueImpl*>(lpQueue);
+    // IDENTITY. GameStateModuleIO::GameActionQueue IS CgsModule::VariableEventQueue<13312,16>
+    // (BrnGameStateSharedIO.h). The helper survives only as the call-site vocabulary.
+    return lpQueue;
 }
 
 // The verbatim X360-baked source path the asserts reference (every assert in this TU shares it).
@@ -164,7 +166,7 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
 // ============================================================================
 // EnterModification (X360). [committed body -- preserved verbatim]
 // ============================================================================
-void CarSelectManager::EnterModification(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::EnterModification(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     CGS_ASSERT(meState == E_STATE_CAR_SELECT || meState == E_STATE_REQUEST_CAR_CHANGE, "CarSelectManager: Need to be in E_STATE_CAR_SELECT or E_STATE_REQUEST_CAR_CHANGE state.");
 
@@ -184,7 +186,7 @@ void CarSelectManager::EnterModification(::InputBuffer::GameActionQueue* lpActio
 //   7/8 (CHANGING_CAR)  -> UpdateChangeCarState.
 //   9 (EXITING)         -> UpdateExitState.
 // ============================================================================
-void CarSelectManager::Update(::InputBuffer::GameActionQueue* lpActionQueue,
+void CarSelectManager::Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
                               const GameStateModuleIO::ControllerInput* lpControllerInput,
                               f32 lfGameTimestep)
 {
@@ -265,7 +267,7 @@ void CarSelectManager::Update(::InputBuffer::GameActionQueue* lpActionQueue,
 // (the first car if there are any to unlock, arming the one-shot streaming kick), posts the
 // transition-in action (payload[0]=1 begin, payload[1]= "has cars to unlock"), then spawns the start car.
 // ============================================================================
-void CarSelectManager::StartTransitionInState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::StartTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_NONE)
     {
@@ -306,7 +308,7 @@ void CarSelectManager::StartTransitionInState(::InputBuffer::GameActionQueue* lp
 // unlocks"), then branches into the unlock sequence (if any cars remain to unlock) or straight to car
 // select.
 // ============================================================================
-void CarSelectManager::EndTransitionInState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::EndTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_TRANSITION_IN)
     {
@@ -338,7 +340,7 @@ void CarSelectManager::EndTransitionInState(::InputBuffer::GameActionQueue* lpAc
 // "ready" (payload=1) + the car-mod-screen (payload[0]=1,[1]=0) actions, and -- when the desired car
 // id's hi word is 0 -- copies mStartCarId into mDesiredCarId.
 // ============================================================================
-void CarSelectManager::StartCarSelectState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_TRANSITION_IN && meState != E_STATE_CAR_MODIFICATION &&
         meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS &&
@@ -389,7 +391,7 @@ void CarSelectManager::StartCarSelectState(::InputBuffer::GameActionQueue* lpAct
 // Otherwise it picks state 3 (shutdown rivals) or 2 (normal) per mbShutdownUnlockSequence, resets the
 // unlock target / ticker, and arms the unlock hold timer (mfStateTimer = 7.0, faded-out target 0).
 // ============================================================================
-void CarSelectManager::StartUnlockState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::StartUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_TRANSITION_IN && meState != E_STATE_DISPLAY_UNLOCKED_CARS)
     {
@@ -438,7 +440,7 @@ void CarSelectManager::StartUnlockState(::InputBuffer::GameActionQueue* lpAction
 // flips the ticker visible, requests streaming, resets the timer, and decrements the remaining count.
 // When no cars remain -> EndUnlockState.
 // ============================================================================
-void CarSelectManager::UpdateUnlockState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS)
     {
@@ -556,7 +558,7 @@ void CarSelectManager::UpdateUnlockState(::InputBuffer::GameActionQueue* lpActio
 // caches the current car into mCacheDuringChangeCarId, clears the unlock count, posts the unlock-end
 // action, then drops to car select.
 // ============================================================================
-void CarSelectManager::EndUnlockState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::EndUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_DISPLAY_UNLOCKED_CARS && meState != E_STATE_DISPLAY_UNLOCKED_SHUTDOWN_CARS)
     {
@@ -663,7 +665,7 @@ void CarSelectManager::EndUnlockState(::InputBuffer::GameActionQueue* lpActionQu
 // car-selection (64B, spawn-type bits), optionally re-requests vehicle-selection streaming, and arms
 // state 7 (timer 0).
 // ============================================================================
-void CarSelectManager::UpdateRequestCarChangeState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::UpdateRequestCarChangeState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_REQUEST_CAR_CHANGE)
     {
@@ -737,7 +739,7 @@ void CarSelectManager::UpdateRequestCarChangeState(::InputBuffer::GameActionQueu
 // screen (state 5) or car select (state 4): if a queued car-change is pending it re-requests it, else
 // posts the drop-in-complete (16B) action.
 // ============================================================================
-void CarSelectManager::UpdateChangeCarState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_STARTING_CHANGING_CAR && meState != E_STATE_CHANGING_CAR)
     {
@@ -823,7 +825,7 @@ void CarSelectManager::UpdateChangeCarState(::InputBuffer::GameActionQueue* lpAc
 // a training prompt (4B), pokes the two GameStateModule output-buffer flags, unpauses the world, fires
 // OnPlayerCarChange when offline, and posts the auto-save (1B) action.
 // ============================================================================
-void CarSelectManager::UpdateExitState(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_EXITING)
     {
@@ -947,7 +949,7 @@ void CarSelectManager::UpdateExitState(::InputBuffer::GameActionQueue* lpActionQ
 // (1B) actions, snapshots the active player car id into mStartCarId, pins its chosen base-car livery
 // on the profile, then starts the transition-in.
 // ============================================================================
-void CarSelectManager::EnterJunkyard(::InputBuffer::GameActionQueue* lpActionQueue, CgsID lJunkyardId)
+void CarSelectManager::EnterJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue, CgsID lJunkyardId)
 {
     if (meState != E_STATE_NONE)
     {
@@ -1008,7 +1010,7 @@ void CarSelectManager::EnterJunkyard(::InputBuffer::GameActionQueue* lpActionQue
 // CarSelectionChangedAction, set the drop-in "type 1" flag, and fire OnSpecialEventPlayerCarChange.
 // The desired car id is then cached into mStartCarId.
 // ============================================================================
-void CarSelectManager::EnterJunkyardAtStartOfGame(::InputBuffer::GameActionQueue* lpActionQueue,
+void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQueue* lpActionQueue,
                                                   CgsID lJunkyardId, CgsID lCarModelId, CgsID lWheelId,
                                                   GameStateModuleIO::EPlayerScoringIndex leScoringIndex,
                                                   GameStateModuleIO::CarSelectionChangedAction* lpCarSelectChangedAction)
@@ -1072,7 +1074,7 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(::InputBuffer::GameActionQueue
 // the desired car's CarData and stamps the 0.85 startup deform, posting the startup-deform (1B) flag.
 // Posts the junkyard-entered (1B) action, then starts the transition-in.
 // ============================================================================
-void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     GameActionQueueImpl* lpQueue = AsActionQueue(lpActionQueue);
 
@@ -1118,7 +1120,7 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(::InputBuffer::GameActio
 // Must be E_STATE_CAR_MODIFICATION. Resets the timer, sets state 9 (EXITING), posts the car-select-exit
 // (1B) action, sets waiting-for-streaming + the exit-pending latch (this+117), and logs the exit start.
 // ============================================================================
-void CarSelectManager::ExitJunkyard(::InputBuffer::GameActionQueue* lpActionQueue)
+void CarSelectManager::ExitJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     if (meState != E_STATE_CAR_MODIFICATION)
     {
@@ -1150,7 +1152,7 @@ void CarSelectManager::ExitJunkyard(::InputBuffer::GameActionQueue* lpActionQueu
 // runs UpdateExitState to completion, posts the abort (1B: lbToOnlineEvent) action, and sets the
 // exit-pending latch (this+117).
 // ============================================================================
-void CarSelectManager::ForceExitJunkyard(::InputBuffer::GameActionQueue* lpActionQueue, bool lbToOnlineEvent)
+void CarSelectManager::ForceExitJunkyard(GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbToOnlineEvent)
 {
     // X360 asm: mfStateTimer = 0.0; meState = 9 (li r9,9); mbWaitingForStreaming = 0;
     // mDesiredCarId(+0x48) = mStartCarId(+0x40) (the abort carries the entry car id back through exit).

@@ -44,6 +44,7 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"           // BrnGameState::StuntElementType (enum values)
 #include "GameSource/GameState/Offences/BrnStuntManagerDebugComponent.h" // StuntManagerDebugComponent (mStuntManagerDebugComponent, complete-by-value)
 #include "SharedClasses/World/BrnWorldRegion.h"               // BrnWorld::ECounty / EDistrict / WorldRegion (signatures + Prepare)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"       // GameStateModuleIO::GameActionQueue (real typedef)
 
 namespace BrnProgression { class ProgressionManager; }   // committed tag: class (BrnProgressionManager.h)
 namespace BrnTrigger     { struct GenericRegion; struct SignatureStunt; }
@@ -60,7 +61,8 @@ namespace BrnGameState
     class  TrainingManager;
     class  TriggerQueryManager;
 
-    namespace GameStateModuleIO { struct OutputBuffer; class GameActionQueue; struct OnStuntElementCompleteAction; }
+    // GameActionQueue is a real typedef (BrnGameStateSharedIO.h, included above).
+    namespace GameStateModuleIO { struct OutputBuffer; struct OnStuntElementCompleteAction; }
 
     struct StuntManager
     {

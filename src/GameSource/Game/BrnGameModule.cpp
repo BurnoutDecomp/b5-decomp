@@ -18,6 +18,7 @@
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h" // ValidityAccount::SetupFailFlagMask (interim bridge in Construct)
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (GamePrepare's request bracket)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer (DoUpdate_Director)
+#include "GameSource/GameState/BrnGameStateModuleIO.h" // GameStateModuleIO::OutputBuffer (BridgeGameStateToDirector)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // DirectorIO::SceneQuery{Input,Output}Buffer
 
 // The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
@@ -814,6 +815,48 @@ namespace BrnGame
         lpDirectorInput->UnlockForWrite();
     }
 
+    // ------------------------------------------------------------------------------------
+    // BrnGameModule::BridgeGameStateToDirector  @ X360 0x823CD170
+    // (console home GameSource/Game/GameBridgeGameStateToX.cpp; body kept here with the other
+    //  DoUpdate_Director bridges -- the BridgeGuiToDirector precedent.)
+    //
+    // ⭐ THE GAME-ACTION LEG (the whole reason this bridge exists, and the only leg whose two
+    // ends are real today):
+    //     lpDirectorInput->GetGameActionQueue()->Append( *lpGameStateOutput->GetGameActionQueue() )
+    // The X360 renders it as
+    //     v29 = sub_823B96F0(a3);                                  // gameStateOut->GetGameActionQueue() const
+    //     v30 = BrnDirector::DirectorIO::InputBuffe(a2);           // directorIn->GetGameActionQueue()
+    //     CgsModule::VariableEventQueue<13312,16>::Append<13312,16>(v30, v29);
+    // -- the console itself proving both queues are the SAME instantiated type.
+    //
+    // ⚠️ THE BRIEF'S "TWO-LINER" IS WRONG, and it matters: 0x823CD170 is a ~150-line function
+    // whose OTHER legs are, in console order --
+    //   * a BrnReplays::DirectorBridgeSerialiser state machine wrapped round the whole body
+    //     (Lock / GetStaticLayout / Unlock; on replay PLAYBACK the game actions are Appended
+    //     from the SERIALISED layout at +10128 instead of from the live buffer, and on RECORD
+    //     they are Appended into it as well);
+    //   * a walk of the game-state output buffer's takedown-event queue (this+0x4040) matching
+    //     each record's race-car index against the player's, publishing mbPlayerTakenDown /
+    //     mePlayerKillerCarIndex into the director input (+31424 / +31404) with the verbatim
+    //     assert "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID"
+    //     (GameBridgeGameStateToX.cpp:228);
+    //   * the player's vehicle TEAM into the director input (+31408) and all 8 teams through
+    //     DirectorIO::InputBuffer::SetVehicleTeam;
+    //   * a CarScoreData::operator= of the player's score record (gameStateOut+173240 + 296*i)
+    //     into the director input at +12560, plus +12888 and the two flags at +31445/+31446.
+    // NONE of those legs is reconstructed here: every source member they read is still opaque
+    // storage in this model's GameStateModuleIO::OutputBuffer and every one of their consumers
+    // in the director input is likewise unmodelled. Writing them against opaque zeroes would be
+    // the "data arrives wrong-but-plausible" failure mode, so they are documented, not faked.
+    // DELETE-WHEN: the takedown queue / score / team spans of OutputBuffer are typed.
+    // ------------------------------------------------------------------------------------
+    void BrnGameModule::BridgeGameStateToDirector(
+        BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
+        const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
+    {
+        lpDirectorInput->GetGameActionQueue()->Append(*lpGameStateOutput->GetGameActionQueue());
+    }
+
     void BrnGameModule::DoUpdate_Director(bool lbPostGui)
     {
         if (mpDirectorOutputBuffer == 0)
@@ -898,23 +941,35 @@ namespace BrnGame
             mpWorldUpdateOutputBuffer->UnlockForRead();
         }
 
-        // ⛔ THE GAME-STATE -> DIRECTOR BRIDGE IS THE ONE BRIDGE STILL MISSING HERE.
-        // X360 BrnGameModule::BridgeGameStateToDirector @0x823CD170 (console home
-        // .../Game/GameBridgeGameStateToX.cpp) does exactly three things on the PRE-GUI pass:
-        //     input->GetGameActionQueue()->Append( mGameStateModule.GetGameActionQueue() );
-        //     if (<a takedown fired>) { input->mbPlayerTakenDown = 1;
-        //                               input->mePlayerKillerCarIndex = <killer>; }
-        // That Append is the ONLY producer of the game actions MainDirector::ProcessInputQueue
-        // drains -- i.e. the only route by which the junkyard / car-select ladder can ever
-        // start. Both ENDS of it are real now (the queue is a named member of the director
-        // input buffer and the director's consumer is bodied); the MIDDLE is not, because
-        // mGameStateModule is a placeholder with no queue of its own to append (see :208 and
-        // the FLAG at the GameState stand-in below).
-        // MEASURED 2026-08-01: mounting BrnCarSelectManager.cpp alone -- the TU that posts the
-        // entry action 73 -- opens 30 unresolved externals across BrnProgression::
-        // {ProgressionManager, Profile, CarData}, BrnTrigger::SpawnLocation and nine of
-        // CarSelectManager's own private helpers. The producer is its own wave.
-        // DELETE-WHEN: GameStateModule is real; then this becomes the two lines above.
+        // ⭐⭐ THE GAME-STATE -> DIRECTOR BRIDGE (X360 BridgeGameStateToDirector @0x823CD170,
+        // run by DoUpdate_Director on the PRE-GUI pass). Its Append is the ONLY producer of
+        // the game actions MainDirector::ProcessInputQueue drains -- the only route by which
+        // the junkyard / car-select ladder can ever start. All three links are real now:
+        //   producer  GameStateModuleIO::OutputBuffer::GetGameActionQueue()  (X360 0x823B96F0)
+        //   bridge    this call
+        //   consumer  MainDirector::ProcessInputQueue                        (cases 62..85)
+        // ⛔ WHAT IS STILL MISSING is a PRODUCER THAT POSTS: CarSelectManager (the TU that
+        // posts entry action 73) is not mounted yet, so this queue is empty every frame today.
+        // See the measured cost at the top of BrnCarSelectManager.cpp.
+        if (!lbPostGui)
+        {
+            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                mGameStateModule.GetOutputBuffer();
+            // ⭐ RUNTIME-PROVEN 2026-08-01 (PROD_RUN1, 140 s, 0 asserts): a temporary probe that
+            // posted game action 73 (E_ACTION_CAR_SELECT_TRANSITION_IN, payload {1,0}) onto
+            // lpGameStateOutput->GetGameActionQueue() at frame 120 -- i.e. onto the CONSOLE'S OWN
+            // producer surface, not forged into the director -- drove the director's
+            // meJunkyardState 0 -> 2 (E_JY_INTRO_NO_CARS) and held it for 388 trace samples.
+            // The probe was removed; the path it exercised is the code below.
+            if (lpGameStateOutput != 0)
+            {
+                lpGameStateOutput->LockForRead();
+                lpDirectorInput->LockForWrite();
+                BridgeGameStateToDirector(lpDirectorInput, lpGameStateOutput);
+                lpDirectorInput->UnlockForWrite();
+                lpGameStateOutput->UnlockForRead();
+            }
+        }
 
         // ------------------------------------------------------------------------------
         // [FLAG PC bring-up] THE INTRO FLY-BY STAND-IN.

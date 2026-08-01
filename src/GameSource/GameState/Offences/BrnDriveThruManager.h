@@ -15,7 +15,6 @@ namespace BrnWorld       { struct GlobalColourPalette;
 namespace BrnProgression { class  ProgressionManager; }
 namespace BrnTrigger     { struct TriggerData; }
 namespace CgsSystem      { class  TimerRequestInterface; }
-namespace InputBuffer    { class  GameActionQueue; }
 namespace BrnGameState
 {
     class CarSelectManager;
@@ -74,7 +73,7 @@ public:
 
     // X360 0x8239EEF0. Per-frame tick: ages the active drive-thru timers, fires the
     // activation/discovery events and posts the resulting game actions.
-    void Update(::InputBuffer::GameActionQueue*  lpActionQueue,
+    void Update(GameStateModuleIO::GameActionQueue*  lpActionQueue,
                 CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
                 f32  lfTimeStep,
                 BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRcOutputInterface,
@@ -104,19 +103,19 @@ public:
 private:
     // X360 0x82386840. When a body-shop repair unlocks a car that gates an event junction,
     // flag that event found, bump the count, and post the unlock + autosave actions.
-    void UnlockCarChallengeForCar(CgsID lRepairedCarID, ::InputBuffer::GameActionQueue* lpActionQueue);
+    void UnlockCarChallengeForCar(CgsID lRepairedCarID, GameStateModuleIO::GameActionQueue* lpActionQueue);
 
     // X360 0x8239B6E8. Dispatches one drive-thru type to its shop behaviour (junk yard /
     // gas station / body shop / paint shop / car park). Bodied by THIS TU.
     void ProcessDriveThru(BrnTrigger::GenericRegion::Type leTriggerType,
-                          ::InputBuffer::GameActionQueue*   lpActionQueue,
+                          GameStateModuleIO::GameActionQueue*   lpActionQueue,
                           CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
                           BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRcOutputInterface,
                           bool  lbIsOnline,
                           bool* lpbIsInJunkyard);
 
     // The four below have their own X360 TUs; declared-only (called by the bodied funcs).
-    void SetPlayerCarDriver(::InputBuffer::GameActionQueue* lpActionQueue,
+    void SetPlayerCarDriver(GameStateModuleIO::GameActionQueue* lpActionQueue,
                             CgsSystem::TimerRequestInterface* lpTimerRequestInterface,
                             const BrnTrigger::BoxRegion* lpBoxRegion,
                             bool lbPlayerDriving, f32 lfMaxSpeed);                 // X360 0x823867A0
