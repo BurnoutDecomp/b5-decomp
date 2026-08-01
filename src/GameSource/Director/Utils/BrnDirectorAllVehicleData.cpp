@@ -64,6 +64,65 @@ f32 AllVehicleData::SqDistanceOfNearestOpposingTeamMember(s32 liMyTeam) const
     return FLT_MAX;
 }
 
+// ============================================================================
+// ⛔ GetPlayer @0x82205C58 / GetRaceCar @0x82205DE8 ARE RECOVERED BUT NOT BODIED HERE, and
+// the reason is a NAMESPACE FORK, not missing asm. Both are three asserts then one indexed
+// read at the 0x4F0 VehicleInfo stride (`mulli rN, rIdx, 0x4F0` + the mpRaceCars base):
+//
+//   GetPlayer:   assert(mpRaceCars != NULL)                                        // h:157
+//                assert(mePlayerRaceCarIndex < 8)   <- SIGNED cmpwi                // h:158
+//                assert(mUsedRaceCars.IsBitSet(mePlayerRaceCarIndex))              // h:159
+//                return mpRaceCars[mePlayerRaceCarIndex];
+//   GetRaceCar:  the same three, on leRaceCarIndex                                 // h:170/:171/:172
+//                return mpRaceCars[leRaceCarIndex];
+//
+// (The third assert in each is IsBitSet's OWN inlined CgsBitArray.h:203 tripwire, which is an
+// UNSIGNED cmplwi -- the two index guards are deliberately different comparisons.)
+//
+// WHY NOT BODIED: `mpRaceCars` is declared `const BrnDirector::VehicleInfo*` -- a
+// forward-declaration in the WRONG NAMESPACE. The real type is
+// BrnDirector::Camera::VehicleInfo (Camera/SharedIO/BrnPlayerInfo.h), so the declared pointee
+// is an incomplete type that will never be completed, and indexing it is a hard C2036. This is
+// the SAME fork BrnArbStateCarSelect.cpp already documents for ArbStateSharedInfo::mpPlayerCar
+// ("the shared header's forward declaration is in the wrong namespace"), and it has to be
+// fixed once, for the whole AllVehicleData / ArbStateSharedInfo surface, rather than papered
+// over per call site with a reinterpret_cast.
+// DELETE-WHEN: AllVehicleData's VehicleInfo forward declaration is re-pointed at
+// BrnDirector::Camera::VehicleInfo -> then transcribe the two bodies above verbatim.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// AllVehicleData::GetNearestRaceCarIndexToPlayer @0x82233380
+//
+// The rank-th nearest car's active index. Base pointer in the asm is `this + 0xD4`
+// (maNearestRaceCarsToPlayer), its count word at +0x60, and `this + 0x138` is
+// mbSorteddNearestRaceCarsToPlayer -- all three land exactly on this class's committed
+// members, which is what pins the identity.
+//
+// ⚠️ The clamp happens BEFORE the sort, and the range compare is UNSIGNED (`cmplw`), so a
+// rank at or past the live count collapses onto the last row rather than wrapping.
+// The three extra "Array used before Construct/Clear was called" (CgsArray.h:336) asserts in
+// the asm are GetLength()'s OWN inlined tripwire, once per call above -- not separate logic.
+// ----------------------------------------------------------------------------
+EActiveRaceCarIndex AllVehicleData::GetNearestRaceCarIndexToPlayer(u32 luRank) const
+{
+    CGS_ASSERT(maNearestRaceCarsToPlayer.GetLength() > 0,
+               "maNearestRaceCarsToPlayer.GetLength() > 0");                                // h:186
+
+    if (luRank >= static_cast<u32>(maNearestRaceCarsToPlayer.GetLength()))
+    {
+        luRank = static_cast<u32>(maNearestRaceCarsToPlayer.GetLength()) - 1u;
+    }
+
+    if (!mbSorteddNearestRaceCarsToPlayer)
+    {
+        CgsAlgorithms::BubbleSort(maNearestRaceCarsToPlayer);
+        mbSorteddNearestRaceCarsToPlayer = true;
+    }
+
+    return maNearestRaceCarsToPlayer.GetItem(luRank).meRaceCarIndex;
+}
+
 }
 
 // ---- Array<NearestCarInfo,8>::operator[] const (X360 0x821FF4E0) --------------------

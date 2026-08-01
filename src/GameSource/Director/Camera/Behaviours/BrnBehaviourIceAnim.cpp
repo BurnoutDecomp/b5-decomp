@@ -9,6 +9,12 @@
                                                               //   real one is a `struct`, which mangles
                                                               //   differently, so this include is what makes
                                                               //   the two calls below link.
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"
+                                                              // BrnDirector::Camera::VehicleInfo -- the
+                                                              //   real pointee of what VehicleRef::Get
+                                                              //   hands back (its mRaceCarState.mTransform
+                                                              //   IS the +0x1F0 the two heading-space
+                                                              //   helpers below form on the console).
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"
                                                               // BrnDirector::DebugPrinter -- THE home
                                                               //   (2026-08-01). Same story as ICEAuthor
@@ -80,8 +86,22 @@ namespace BrnDirector
 namespace Camera
 {
 
-    // True when the produced camera can actually see the look target this frame.
-    bool IsLookingAtTarget(const Camera& lrCamera, const void* lpEye, const void* lpLook);
+    // ------------------------------------------------------------------------
+    // IsLookingAtTarget @0x822331F0 -- true when the produced camera's frustum still contains
+    // the target's oriented bounding box.
+    //
+    // ⚠️ THE PARAMETER NAMES ARE MISLEADING and are corrected here. They were inherited from
+    // a retired fork that read the pair as "eye target / look target"; the asm says otherwise.
+    // The second argument is read at +0x00/+0x10/+0x20/+0x30 -- four rows, i.e. a
+    // Matrix44Affine -- and the third at +0x00/+0x10 only, i.e. an {min,max} box. They are the
+    // TARGET's world transform and the TARGET's local bounds. The caller passes the shared
+    // info's mPlayerInfo.mRaceCarState.mTransform (info +592) and mPlayerInfo.mAABB (info
+    // +1280), which independently confirms both types.
+    // Still typed `const void*` because BehaviourSharedInfo's accessors return `const void*`
+    // (its mPlayerInfo is still a FLAGGED opaque slot -- see Behaviour.h:167-176).
+    // DECLARATION-ONLY; body below.
+    bool IsLookingAtTarget(const Camera& lrCamera, const void* lpTargetTransform,
+                           const void* lpTargetBounds);
 
     // ------------------------------------------------------------------------
     // The HEADING-SPACE frame of an anchor vehicle: a look-at built at the vehicle's world
@@ -90,12 +110,73 @@ namespace Camera
     // transform (vehicle +0x1F0), splats its at-row's x and z lanes into {at.x, 0, at.z, 0},
     // adds that to the position row, and calls Utils::CreateLookAt(position, position + that).
     //
-    // FLAG: BrnDirector::VehicleRef::Get returns an UNTYPED vehicle pointer -- the vehicle's
-    //   own type has no reconstructed accessor set yet, so the two reads live behind these
-    //   named helpers rather than being formed as offsets here. DECLARATION-ONLY; the bodies
-    //   land with the vehicle TU. DELETE-WHEN: the anchor vehicle's transform accessor lands.
+    // The untyped parameter is what BrnDirector::VehicleRef::Get hands back. Its real pointee
+    // IS reconstructed -- BrnDirector::Camera::VehicleInfo (SharedIO/BrnPlayerInfo.h), whose
+    // mRaceCarState.mTransform sits at +0x1F0 == the 496 the asm forms -- so the bodies below
+    // cast to it by NAME instead of forming displacements. The DECLARATIONS keep `const void*`
+    // because VehicleRef::Get's own return type is still untyped.
     rw::math::vpu::Matrix44Affine CreateHeadingSpaceLookAt(const void* lpVehicle);
     rw::math::vpu::Vector3        GetVehicleWorldPosition(const void* lpVehicle);
+
+    // ------------------------------------------------------------------------
+    // CreateHeadingSpaceLookAt -- BODIED 2026-08-01.
+    //
+    // No standalone X360 symbol: the console inlines it TWICE inside
+    // BehaviourIceAnim::Update (0x82247270-0x822472B0 and 0x822472D8-0x8224733C), which is why
+    // a name search finds nothing. Both blocks are identical and both store the result into
+    // mHeadingSpaceTransform, which is what pins the identity.
+    //
+    //   addi r11, r3, 0x1F0            ; &mRaceCarState.mTransform
+    //   vspltisw v11, 0                ; 0.0f
+    //   v13 = splat(zAxis, lane 0)     ; zAxis.x
+    //   v12 = splat(zAxis, lane 2)     ; zAxis.z
+    //   v1  = wAxis                    ; lvx r11, 0x30
+    //   v0  = vperm(v13, v11, mask@0x82CDA350)   )  the standard rw Vector3(x,y,z)
+    //   v0  = vrlimi128(v0, v12, 2, 0)           )  construction codegen
+    //   v2  = v1 + v0
+    //   CreateLookAt(eye = v1, target = v2)
+    //
+    // The vperm+vrlimi pair is Vector3's three-float constructor (verified against
+    // BrnGui::MapTransform::MakeCoordSpaceFromRect @0x82450460, which uses the same pair three
+    // times with distinct sources). So the added vector is Vector3(zAxis.x, 0, zAxis.z) -- the
+    // forward axis flattened to horizontal, NOT normalised (CreateLookAt normalises).
+    // Argument order is attested inside CreateLookAt @0x8220C4F8, which asserts
+    // "IsValid(lEyePosition)" on its first vector and "IsValid(lTargetPosition)" on its second.
+    // ------------------------------------------------------------------------
+    inline rw::math::vpu::Matrix44Affine CreateHeadingSpaceLookAt(const void* lpVehicle)
+    {
+        const rw::math::vpu::Matrix44Affine& lrTransform =
+            static_cast<const VehicleInfo*>(lpVehicle)->mRaceCarState.mTransform;
+
+        // v0 = Vector3(zAxis.x, 0, zAxis.z) -- the forward axis flattened to horizontal.
+        const rw::math::vpu::Vector3 lFlatHeading =
+            { lrTransform.zAxis.x, 0.0f, lrTransform.zAxis.z, 0.0f };
+
+        const rw::math::vpu::Vector3 lEye    = lrTransform.wAxis;      // v1
+        const rw::math::vpu::Vector3 lTarget = { lEye.x + lFlatHeading.x,   // v2 = v1 + v0
+                                                 lEye.y + lFlatHeading.y,
+                                                 lEye.z + lFlatHeading.z,
+                                                 0.0f };
+
+        return Utils::CreateLookAt(lEye, lTarget);
+    }
+
+    // ------------------------------------------------------------------------
+    // GetVehicleWorldPosition -- BODIED 2026-08-01.
+    //
+    // Also inlined, at 0x822472E4-0x82247308 (immediately before the second
+    // CreateHeadingSpaceLookAt): one 16-byte lane read, no branches, no asserts.
+    //   addi r11, r3, 0x1F0   ; &mRaceCarState.mTransform
+    //   addi r10, r11, 0x30   ; &.wAxis
+    //   lvx128 v0, r0, r10  /  stvx128 v0, r31, r9   ; r9 == 0x640 == mHeadingSpaceTransform.wAxis
+    // ------------------------------------------------------------------------
+    inline rw::math::vpu::Vector3 GetVehicleWorldPosition(const void* lpVehicle)
+    {
+        const rw::math::vpu::Matrix44Affine& lrTransform =
+            static_cast<const VehicleInfo*>(lpVehicle)->mRaceCarState.mTransform;
+
+        return lrTransform.wAxis;   // the whole 16-byte lane, as the single lvx128/stvx128 pair does
+    }
 
 } // namespace Camera
 
