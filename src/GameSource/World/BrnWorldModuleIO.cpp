@@ -249,6 +249,20 @@ void UpdateInputBuffer::AppendTakedownEventQueue(const TakedownEventQueue* lpQue
     mTakedownEventQueue.Append(*lpQueue);
 }
 
+// ---- trigger management interface --------------------------------------------
+
+// X360 0x823DB778 (:276 W) -- merge a source trigger-management interface into ours (+161288).
+// The console body is the aggregate's own two-queue merge, spelled out:
+//     VariableEventQueue<131072,16>::Append<131072,16>(this + 161288, src)
+//     BrnWorld::TriggerEntityModuleIO::InRemoveTriggerEvent_::Append(this + 292376, src + 131088)
+// and +292376 == +161288 + 131088 == the member's own remove-queue offset, i.e. exactly
+// TriggerManagementInputInterface::Append. Sole producer: BridgeGameStateToWorld @0x823E1890.
+void UpdateInputBuffer::AppendTriggerManagementInputInterface(const TriggerManagementInputInterface* lpInterface)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    mTriggerManagementInputInterface.Append(*lpInterface);
+}
+
 // ---- trigger query interface ------------------------------------------------
 
 // X360 0x823C8CF0 (:279 W) -- merge a source trigger-query queue into ours (+293412).
