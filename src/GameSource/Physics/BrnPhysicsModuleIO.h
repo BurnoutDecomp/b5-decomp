@@ -39,6 +39,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"  // CgsModule::IOBuffer
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
 
 namespace BrnPhysics
 {
@@ -150,7 +151,22 @@ namespace PhysicsModuleIO
         struct RCEntityOutputInterfaceStorage       { unsigned char maBytes[0x28F0]; }; // 10480
         struct TimerStatusInterfaceStorage          { unsigned char maBytes[0x30]; };   // 48
         struct PropInputInterfaceStorage            { unsigned char maBytes[1]; };
-        struct GameActionQueueStorage               { unsigned char maBytes[1]; };
+        // ⛔⛔ CORRECTED 2026-08-01 (BridgeGameStateToWorld wave) -- THIS WAS A ONE-BYTE MEMBER
+        // THAT A COMMITTED BRIDGE WRITES A 13328-BYTE QUEUE INTO.
+        // WorldModule::BridgeActionsToPhysicsModule (X360 0x827AC568,
+        // WorldBridgeToEntityModules.cpp:28) does
+        //     reinterpret_cast<VariableEventQueue<13312,16>*>(input->GetGameActionQueue())
+        //         ->AddEvent(event, type, size);
+        // for eighteen game-action ids (7/11/23/34/37/39/42/43/65/97/98/99/116/135/138/146/
+        // 176/198). mGameActionQueue is the LAST member of this buffer, so AddEvent's first
+        // store -- the CBufferEntry at macData[0], i.e. this member + 16 -- lands PAST THE END
+        // of the IOBufferStack allocation, and the payload memcpy follows it. It was invisible
+        // only because nothing had ever put a game action into the world input buffer: there was
+        // no BridgeGameStateToWorld. Sizing it as the real queue makes the write in-bounds; the
+        // buffer grows 13327 bytes (the update input stack is 16 MB).
+        // The name is kept as a typedef so the four accessors' signatures do not change; the
+        // two bridges' reinterpret_casts are now casts to the same type and can be retired.
+        typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueStorage;
 
         // ---- getters (read-lock: status bit 4) ----
         const CameraStorage*                        GetCameraInput() const;                 // 0x8259F7F8 :272
@@ -173,6 +189,15 @@ namespace PhysicsModuleIO
         void SetRCEntityOutputInterface(const RCEntityOutputInterfaceStorage* lpInterface); // 0x8279EF20 :285
         void SetTimerInterface(const TimerStatusInterfaceStorage* lpTimer);                 // 0x8279F128 :296
         void SetSolverMaxIterations(const u32* lpValue);                                    // 0x8279F240 :299
+
+        // The X360 CreateIOBuffer<T> stack template runs T::Construct after the alloc; the PC
+        // template placement-news only, so WorldModule::Update calls this explicitly. Until now
+        // it resolved to the base IOBuffer::Construct, which raises the status byte and nothing
+        // else -- so the embedded game-action queue was never Constructed and every
+        // BridgeActionsToPhysicsModule AddEvent fired "Not Constructed"
+        // (CgsVariableEventQueue.h:454) before corrupting memory. Raise the status, then run the
+        // queue's own Construct (the console's own construct-list shape for this buffer).
+        void Construct();
 
         static void _AssertLayout();
 

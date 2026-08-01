@@ -15,6 +15,26 @@ namespace BrnTraffic
 {
 namespace BrnTrafficIO
 {
+    // FILE-SPLIT NOTE (2026-08-01, BridgeGameStateToWorld wave): InputBuffer_PostPhysics::Construct
+    // lives HERE, not with its siblings in BrnTrafficEntityModuleIO_InputBuffer_PostPhysics.cpp,
+    // because that TU is NOT MOUNTED -- MEASURED mount cost is 4 unresolved externals (the
+    // VehicleOutputInterface / VehicleManagerOutputInterface / DeformationOutputInterface
+    // ForEntityModules / RCEntityActiveRaceCarOutputInterface operator=s its five setters call).
+    // Construct touches none of them. Re-home it when that TU is mounted.
+    // ⛔ 2026-08-01 (BridgeGameStateToWorld wave): raise the IOBuffer status AND Construct the
+    // embedded game-action queue. Before this the explicit ->Construct() calls in
+    // WorldModule::Update / UpdateForBootUpVideo resolved to the base
+    // CgsModule::IOBuffer::Construct (status byte only), so BridgeActionsToTrafficModule's
+    // AddEvent hit an unconstructed VariableEventQueue<13312,16> -- measured as a pair of
+    // "Not Constructed" asserts (CgsVariableEventQueue.h:454 then :728) on the first game action
+    // the new GameState->World bridge delivered.
+    void InputBuffer_PostPhysics::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGameActionQueue.Construct();
+    }
+
+
     // X360 0x82710F20 (:228) -- read-lock; return &mCrashTrafficOutputInterface (this+8).
     // Consumers: TrafficEntityModule::HandleCrashingNetworkTraffic / CleanUpCrashedVehicles.
     const InputBuffer_PostScene::CrashTrafficOutputInterface* InputBuffer_PostScene::GetCrashTrafficOutputInterface() const

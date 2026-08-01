@@ -47,6 +47,24 @@ namespace PhysicsModuleIO
         static_assert(offsetof(InputBuffer, mSolverMaxIterations)         == 327200, "mSolverMaxIterations @327200");
         static_assert(offsetof(InputBuffer, mPropManagerInputInterface)   == 327216, "mPropManagerInputInterface @327216");
         static_assert(offsetof(InputBuffer, mGameActionQueue)             == 338496, "mGameActionQueue @338496");
+        // The game-action queue member must be the real 13328-byte queue, not a stand-in: it is
+        // the LAST member and WorldModule::BridgeActionsToPhysicsModule AddEvents into it.
+        static_assert(sizeof(InputBuffer::GameActionQueueStorage) == 13328,
+                      "PhysicsModuleIO::InputBuffer::mGameActionQueue must be VariableEventQueue<13312,16> (13328 bytes)");
+    }
+
+    // ⛔ 2026-08-01 (BridgeGameStateToWorld wave). The X360 CreateIOBuffer<T> stack template runs
+    // T::Construct after the alloc; the PC template placement-news only, so WorldModule::Update
+    // calls Construct explicitly -- and until now that resolved to the base
+    // CgsModule::IOBuffer::Construct, which raises the status byte and nothing else. The embedded
+    // game-action queue was therefore never Constructed, and the first
+    // BridgeActionsToPhysicsModule AddEvent fired "Not Constructed"
+    // (CgsVariableEventQueue.h:454 / :728). Measured live the moment BridgeGameStateToWorld
+    // started delivering game actions to the world.
+    void InputBuffer::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mGameActionQueue.Construct();
     }
 
     // ---- getters (read-lock: status bit 4) ------------------------------------------

@@ -256,9 +256,21 @@ namespace BrnTrafficIO
         // typedef for RCEntityActiveRaceCarOutputInterface (DWARF :144). Use the real type directly.
         typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarOutputInterface;
 
-        // Opaque-by-value stand-in for the game-action queue member (:373). Promoted to public so
-        // the GetGameActionQueue overloads can name it as their return type; size/slot UNCHANGED.
-        struct GameActionQueueStorage  { unsigned char maReserved[13328]; }; // :373 span +0xEC30+sizeof(VMOI) .. +0x128C0
+        // ⛔ RETYPED 2026-08-01 (BridgeGameStateToWorld wave), SIZE UNCHANGED (13328 == the X360
+        // span == sizeof(VariableEventQueue<13312,16>) on the host too -- the type is pointer-free).
+        // WorldModule::BridgeActionsToTrafficModule (X360 0x827ABFF0) already reinterpret_cast this
+        // slot to VariableEventQueue<13312,16> and AddEvents into it for 22 game-action ids; as an
+        // opaque blob the queue could never be Constructed, so the first delivered action fired
+        // "Not Constructed" (CgsVariableEventQueue.h:454 / :728) -- MEASURED, the moment
+        // BridgeGameStateToWorld started feeding the world's queue. Naming the type lets Construct()
+        // below build it. The typedef keeps the accessors' signatures identical.
+        typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueStorage; // :373 span +0xEC30+sizeof(VMOI) .. +0x128C0
+
+        // See the physics sibling: the X360 CreateIOBuffer<T> template runs T::Construct after the
+        // stack alloc; the PC template placement-news only, so WorldModule::Update /
+        // UpdateForBootUpVideo call this explicitly. It used to resolve to the base
+        // CgsModule::IOBuffer::Construct (status byte only).
+        void Construct();
 
         // X360 0x827A9F50 (:347): write-lock; mVehicleOutputInterface = *src.
         void SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface);
