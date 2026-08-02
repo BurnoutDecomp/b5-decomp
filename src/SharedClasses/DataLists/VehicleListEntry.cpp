@@ -44,6 +44,9 @@ namespace
     // Offsets inside the trailing opaque region (maPad224, +0xE0..0xEF).
     const u32 KU_OFFSET_CAR_TYPE     = 0xE8 - 0xE0;
     const u32 KU_OFFSET_LIVERY_TYPE  = 0xE9 - 0xE0;
+    // The two car-select gauge ratings (wiki muTopSpeedNormalGUIStat / muTopSpeedBoostGUIStat).
+    const u32 KU_OFFSET_SPEED_STAT   = 0xEC - 0xE0;
+    const u32 KU_OFFSET_BOOST_STAT   = 0xED - 0xE0;
 
     // The two flag bits the X360 readers extract from the +0x94 word.
     const u32 KU_FLAG_TROPHY_CAR     = 1u << 0;   // `extrwi r11,r11,1,31` (bit 0)
@@ -117,6 +120,18 @@ u8 VehicleListEntry::GetCarType() const
 u8 VehicleListEntry::GetLiveryType() const
 {
     return maPad224[KU_OFFSET_LIVERY_TYPE];
+}
+
+// The car-select speed gauge rating (+0xEC) -- raw byte, scaled by the caller's stats bar.
+u8 VehicleListEntry::GetSpeedStat() const
+{
+    return maPad224[KU_OFFSET_SPEED_STAT];
+}
+
+// The car-select boost gauge rating (+0xED) -- raw byte.
+u8 VehicleListEntry::GetBoostStat() const
+{
+    return maPad224[KU_OFFSET_BOOST_STAT];
 }
 
 
