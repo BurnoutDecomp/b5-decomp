@@ -101,8 +101,32 @@ namespace BrnGui
         // overwrites only its car id with the highlighted row's.
         CarSetupInfo lHighlightedSetupInfo = mCurrentSetupInfo;
 
-        CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
-        const CgsID lHighlightedId = mCarSelector.GetHighlighted()->GetId();
+        // ⚠️ PC-BUILD GUARD -- see "PC-BUILD GUARDS" in BrnCarSelectVehicle.h.
+        // ROOT-CAUSED 2026-08-02 from the WER fault offset (0xFAE23 == SetupComponents+0x1A3,
+        // `mov r15, qword ptr [rax+0x18]`), the same offset in two independent crashes:
+        //
+        //   SetCarSelectorComponent (called five lines up) bails on the absent VehicleList, so
+        //   mCarSelector is EMPTY and miHighlightedIndex is still Construct's -1.
+        //   SelectableGroup::GetHighlighted (@0x8240FD60) has NO LOWER BOUND: the X360 asm's
+        //   `lbz r11,0xA5(r28) / extsb / cmpwi r11,0 / blt` only SKIPS the ">= 100" assert when
+        //   the index is negative -- it still performs `*(4 * (index + 42) + a1)`. So an empty
+        //   group returns the bytes that PRECEDE the array, i.e.
+        //   {miSelectableCount, miHighlightedIndex, mbWrapped, pad} == 0x0000FF00 in this state.
+        //   That value is NON-NULL, so the console's own `!= 0` assert on the next line passes
+        //   (which is exactly why no [ASSERT] line ever appeared before the crash) and the
+        //   ->GetId() load at +0x18 access-violates on 0xFF18.
+        //
+        // The console never reaches that state because event 412 always fills the selector
+        // first. Guard with the console's OWN "nothing is highlighted" idiom -- the signed
+        // `miHighlightedIndex > -1` test that TextSelection::Update @0x824E83A0 uses (X360
+        // `extsb / cmpwi -1`) -- and keep the committed car as the highlighted one. Delete the
+        // guard and restore the bare assert + deref once the event-412 producer lands.
+        CgsID lHighlightedId = mCurrentSetupInfo.mCarId;
+        if (mCarSelector.miHighlightedIndex > -1)
+        {
+            CGS_ASSERT(mCarSelector.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
+            lHighlightedId = mCarSelector.GetHighlighted()->GetId();
+        }
         lHighlightedSetupInfo.mCarId = lHighlightedId;
 
         SetupStatsComponent(&lHighlightedSetupInfo);

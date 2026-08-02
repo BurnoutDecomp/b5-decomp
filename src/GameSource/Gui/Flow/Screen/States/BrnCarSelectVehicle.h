@@ -74,6 +74,15 @@
 // `if (lp... == 0)` bail marked "PC-BUILD GUARD". They are behaviour-preserving for every
 // case the console can actually reach, and they should be REMOVED once the event-412 /
 // event-406 producers land.
+//
+// ⚠️ A SIXTH site, found 2026-08-02 and of a DIFFERENT shape -- it is what actually killed
+// the process on this screen. SetCarSelectorComponent's bail leaves mCarSelector EMPTY, and
+// SelectableGroup::GetHighlighted() has no lower bound on miHighlightedIndex (see the long
+// HAZARD note on that body), so on an empty group it returns the four bytes preceding
+// maSelectables -- 0x0000FF00 -- which is NON-NULL. The console's own `!= 0` assert therefore
+// NEVER fires and the ->GetId() that follows access-violates. SetupComponents now tests
+// `mCarSelector.miHighlightedIndex > -1` (the console's own idiom) before dereferencing and
+// falls back to the committed car id. Same removal condition as the five above.
 // ===================================================================================
 
 #include "types.hpp"
