@@ -204,6 +204,19 @@ public:
         // ONLY way a race-car load request leaves this module. Called from PostPhysicsUpdate.
         void SendStreamerEvents( RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
 
+        // X360 0x822CF208 (DWARF BrnRaceCarEntityModule.h:650). THE per-frame PAINT PUBLISH:
+        // for every ATTACHED active slot, resolve the paired global RaceCar's
+        // {miColourPalette, miColourIndex} (both -1 -> 0) against mCarColoursResource and copy
+        // the two Vector4 colours into the slot's render snapshot. It is the ONLY writer of
+        // RenderParams::mPaintColour / mPearlescentColour anywhere in the image, and
+        // RenderRaceCar uploads exactly those two as shader constants 20 (g_paintColour) and
+        // 21 (g_pearlescentColour) -- the body panels' whole colour, since
+        // Vehicle_Opaque_BodypartsSkin_EnvMapped_Default declares no diffuse sampler at all.
+        // Called from PostPhysicsUpdate (its only caller), unconditionally: the console's
+        // paused branch at 0x82307610 jumps to 0x823076C0, i.e. to the instruction that sets
+        // up this call, so it runs paused or not.
+        void UpdateActiveRaceCarColours();
+
         // X360 0x822F5CF8. THE per-frame OUTPUT PUBLISH: copy every attached active slot's
         // live physics state + identity into the active-race-car output interface, and the
         // player's slot/engine-state into its player-scoped scalars. Called from both
@@ -577,6 +590,42 @@ private:
     bool mbRenderCarsDuringCrash;   // X360 +0x1834B (99147)
     bool mbRenderWheels;            // X360 +0x1834C (99148)
     bool mbRenderRaceCarCoronas;    // X360 +0x1834F (99151)
+
+    // ========================================================================
+    // MODELLED members (paint wave 2026-08-02): the two DEBUG COLOUR OVERRIDES
+    // UpdateActiveRaceCarColours reads. Every one is NAMED BY THE DWARF
+    // (references/DecFIGS/.../BrnRaceCarEntityModule.h entries :480..:489) and every one
+    // lands on an offset the asm of 0x822CF208 bakes in, with no fudging:
+    //   +0x18794 (100244) DEBUG_mbOverrideCarColor   `lbzx r11, r27, r20`, r20 = 0x18794
+    //   +0x18798 (100248) DEBUG_mfOverridePaintColorR `lfsx f0, r27, 0x18798`
+    //   +0x1879C (100252) DEBUG_mfOverridePaintColorG
+    //   +0x187A0 (100256) DEBUG_mfOverridePaintColorB
+    //   +0x187A4 (100260) DEBUG_mfOverridePearlColorR
+    //   +0x187A8 (100264) DEBUG_mfOverridePearlColorG
+    //   +0x187AC (100268) DEBUG_mfOverridePearlColorB
+    //   +0x187B0 (100272) DEBUG_mbOverrideCarPalette `lbzx r11, r27, 0x187B0`
+    //   +0x187B4 (100276) DEBUG_miPaletteIndex       `addis r11,r27,2 ; addi r11,r11,-0x784C`
+    //   +0x187B8 (100280) DEBUG_miColourIndex        `addis r31,r27,2 ; addi r31,r31,-0x7848`
+    // The DWARF run is contiguous and the two bool->float alignment pads fall exactly where
+    // the console offsets say they must (100244 + 4 == 100248; 100268 + 4 == 100272), so this
+    // is a ten-point fit, not a placement.
+    //
+    // They are dev switches with NO writer on this build (nothing outside the debug menu
+    // ever set them on the console either), so both blocks are inert and the palette path
+    // runs. They are modelled rather than dropped so the reconstruction is the console's
+    // whole function: dropping them would have made the body a partial slice for two
+    // branches that cost nothing.
+    // ========================================================================
+    bool DEBUG_mbOverrideCarColor    = false;   // +0x18794 (100244)
+    f32  DEBUG_mfOverridePaintColorR = 0.0f;    // +0x18798 (100248)
+    f32  DEBUG_mfOverridePaintColorG = 0.0f;    // +0x1879C (100252)
+    f32  DEBUG_mfOverridePaintColorB = 0.0f;    // +0x187A0 (100256)
+    f32  DEBUG_mfOverridePearlColorR = 0.0f;    // +0x187A4 (100260)
+    f32  DEBUG_mfOverridePearlColorG = 0.0f;    // +0x187A8 (100264)
+    f32  DEBUG_mfOverridePearlColorB = 0.0f;    // +0x187AC (100268)
+    bool DEBUG_mbOverrideCarPalette  = false;   // +0x187B0 (100272)
+    s32  DEBUG_miPaletteIndex        = 0;       // +0x187B4 (100276)
+    s32  DEBUG_miColourIndex         = 0;       // +0x187B8 (100280)
 
     // X360 +0x18398 (99224). The SIM time step latched once per frame by PreSceneUpdate
     // (`mfTimeStep = lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->

@@ -1384,6 +1384,169 @@ void RaceCarEntityModule::SendStreamerEvents(
 }
 
 // ============================================================================
+// X360 0x822CF208 -- UpdateActiveRaceCarColours. COMPLETE (paint wave 2026-08-02).
+//
+// ⭐ THIS IS THE ONLY WRITER OF THE CAR'S PAINT ANYWHERE IN THE IMAGE, and until now it
+// existed in this tree only as a NAME inside the FLAG inventory below. RenderParams::
+// SetPaintColour / SetPearlescentColour (BrnActiveRaceCar.h:331-332) had ZERO callers, so
+// RenderParams::Reset()'s (1,1,1,1) stood for ever -- and RenderRaceCar uploads exactly
+// those two as shader constants 20 (g_paintColour) and 21 (g_pearlescentColour). The main
+// body-panel technique Vehicle_Opaque_BodypartsSkin_EnvMapped_Default declares NO diffuse
+// sampler at all: its whole colour is g_paintColour x lighting. ⇒ the Hunter Cavalry was
+// not untextured, it was WHITE, and this function is the reason.
+//
+// The console body, in asm order (0x822CF2A4 .. 0x822CF690):
+//   for (slot = 0; slot < 8; slot++)                       // range-guarded operator++
+//     car = GetActiveRaceCar(slot); if (!car->IsAttached()) continue;
+//     rc = car->GetGlobalRaceCar();                        // its own IsAttached() assert
+//     palette = (rc->GetColourPalette() == -1) ? 0 : rc->GetColourPalette();   // +0x98
+//     colour  = (rc->GetColourIndex()   == -1) ? 0 : rc->GetColourIndex();     // +0x94
+//     assert palette in [0,4)                              (:2969 "Invalid Palette Index: ")
+//     assert colour  in [0, maPalettes[palette].miNumColours)
+//                                                          (:2970 "Invalid Colour Index: ")
+//     if (DEBUG_mbOverrideCarPalette) { clamp + re-read the two debug indices }
+//     paint = maPalettes[palette].GetPaintColours()[colour];   // lvx128 v0,r11,r31 / stvx +0x1360
+//     pearl = maPalettes[palette].GetPearlColours()[colour];   //                   / stvx +0x1370
+//     if (DEBUG_mbOverrideCarColor)  { paint/pearl = the six debug floats, w = 1.0f }
+//
+// EVERY OFFSET CROSS-CHECKS against this tree's named members with no fudging:
+//   ActiveRaceCar+0x6F0 (1776)   == mpRaceCar                        (BrnActiveRaceCar.h:575)
+//   RaceCar+0x98 / +0x94         == miColourPalette / miColourIndex  (BrnRaceCar.h:181-182)
+//   module +0x1843C (99388)      == mCarColoursResource              (this header :495)
+//   ActiveRaceCar+0x1360 (4960)  == mRenderParams(+2016) + mPaintColour(+2944)
+//   ActiveRaceCar+0x1370 (4976)  == mRenderParams(+2016) + mPearlescentColour(+2960)
+//   palette stride 12, colour stride 16 (`slwi r11,r29,1; add r11,r29,r11; slwi r11,r11,2`
+//   and `slwi r31,r28,4`) == sizeof(PlayerCarColourPalette) / sizeof(Vector4).
+//
+// ⭐ NOTHING HAD TO BE CHOSEN. RaceCar::Reset seeds both indices to -1 (BrnRaceCar.cpp:100),
+// the console's own -1 -> 0 fallback resolves that to palette 0 / colour 0, and this build's
+// own log already prints what palette 0 colour 0 is:
+//   "[CarSelectLivery] palette 0 resolved: 25 colours; [0] paint=(0.784314, 0, 0, 1)
+//    pearl=(0.588235, 0, 0, 1)"   -- the default Hunter Cavalry is RED.
+//
+// ⚠️ THE -1 -> 0 CLAMP MUST HAPPEN BEFORE THE ASSERTS, exactly as the asm does it
+// (0x822CF2FC..0x822CF31C precede the 0x822CF31C range test): a verbatim assert on the RAW
+// index would trap on the first frame of every freshly-Reset car.
+//
+// ⚠️ The two asserts are the CONSOLE'S OWN and both are reachable-but-quiet here: with the
+// clamp in place palette == 0 < 4 and colour == 0 < 25. They are emitted verbatim, not
+// softened -- if a future colour writer ever puts a bad index in a RaceCar, the console's
+// own diagnostic is what should fire.
+//
+// ⚠️ mCarColoursResource is dereferenced WITHOUT a null check, exactly as the console does.
+// That is safe here for a measured reason, not an assumed one: the only path that reaches
+// the dereference is an ATTACHED slot, and a slot can only be attached through
+// AttachActiveRaceCar, which needs mpVehicleList -- which LoadGlobalResources publishes in
+// the SAME stage chain that binds this palette ("[RaceCar] LoadGlobalResources done:
+// ... carColours=1", BrnGame.log:227). If that ever stops holding, ResourcePtr::operator->
+// fires its own "Can not instance resource pointer" assert, which is the right diagnostic.
+// ============================================================================
+void RaceCarEntityModule::UpdateActiveRaceCarColours()
+{
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++ )
+    {
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
+
+        if( !lpActiveRaceCar->IsAttached() )
+        {
+            continue;
+        }
+
+        // GetGlobalRaceCar() carries the console's second IsAttached() assert
+        // (BrnActiveRaceCar.h:1089, the `li r5, 0x441` at 0x822CF2DC).
+        RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+
+        s32 liPaletteIndex = 0;
+        s32 liColourIndex  = 0;
+
+        if( lpRaceCar->GetColourPalette() != -1 )
+        {
+            liPaletteIndex = lpRaceCar->GetColourPalette();
+        }
+
+        if( lpRaceCar->GetColourIndex() != -1 )
+        {
+            liColourIndex = lpRaceCar->GetColourIndex();
+        }
+
+        // The X360 streams the offending index into the assert buffer through StrStream
+        // ("Invalid Palette Index: " << idx). CGS_ASSERT forwards a plain string here, the
+        // same shortening HandleResetPlayerCarAction's :7535/:7556 pair already uses.
+        CGS_ASSERT( liPaletteIndex >= 0 && liPaletteIndex < E_NUM_PALETTES,
+                    "Invalid Palette Index: " );                             // X360 :2969
+
+        CGS_ASSERT( liColourIndex >= 0
+                    && liColourIndex <
+                       mCarColoursResource->maPalettes[liPaletteIndex].GetNumColours(),
+                    "Invalid Colour Index: " );                              // X360 :2970
+
+        // The palette override: clamp both debug indices into range, then use them.
+        if( DEBUG_mbOverrideCarPalette )
+        {
+            if( DEBUG_miPaletteIndex >= E_NUM_PALETTES )
+            {
+                DEBUG_miPaletteIndex = E_NUM_PALETTES - 1;
+            }
+            liPaletteIndex = DEBUG_miPaletteIndex;
+
+            if( DEBUG_miColourIndex >=
+                mCarColoursResource->maPalettes[liPaletteIndex].GetNumColours() )
+            {
+                DEBUG_miColourIndex =
+                    mCarColoursResource->maPalettes[liPaletteIndex].GetNumColours() - 1;
+            }
+            liColourIndex = DEBUG_miColourIndex;
+        }
+
+        const PlayerCarColourPalette& lrPalette =
+            mCarColoursResource->maPalettes[liPaletteIndex];
+
+        Vector4 lPaintColor = lrPalette.GetPaintColours()[liColourIndex];
+        Vector4 lPearlColor = lrPalette.GetPearlColours()[liColourIndex];
+
+        // The colour override: the six debug floats with w == 1.0f (`stfs f31` where
+        // f31 == flt_82001C98 == 1.0f).
+        if( DEBUG_mbOverrideCarColor )
+        {
+            lPaintColor.x = DEBUG_mfOverridePaintColorR;
+            lPaintColor.y = DEBUG_mfOverridePaintColorG;
+            lPaintColor.z = DEBUG_mfOverridePaintColorB;
+            lPaintColor.w = 1.0f;
+
+            lPearlColor.x = DEBUG_mfOverridePearlColorR;
+            lPearlColor.y = DEBUG_mfOverridePearlColorG;
+            lPearlColor.z = DEBUG_mfOverridePearlColorB;
+            lPearlColor.w = 1.0f;
+        }
+
+        lpActiveRaceCar->GetRenderParams()->SetPaintColour( lPaintColor );
+        lpActiveRaceCar->GetRenderParams()->SetPearlescentColour( lPearlColor );
+
+        // [PC diagnostic] print the value at the PRODUCING end. The consuming end
+        // (RenderRaceCar's shader constant 20) prints its own one-shot -- the
+        // RaceCarState::operator= lesson: print BOTH ends of a transfer.
+        {
+            static bool sbLoggedFirstPaint = false;
+            if( !sbLoggedFirstPaint && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedFirstPaint = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[racecar-paint] UpdateActiveRaceCarColours: slot "
+                    << static_cast<s32>( leActiveRaceCarIndex )
+                    << " palette " << liPaletteIndex << " colour " << liColourIndex
+                    << " of " << lrPalette.GetNumColours()
+                    << " -> paint (" << lPaintColor.x << ", " << lPaintColor.y << ", "
+                    << lPaintColor.z << ", " << lPaintColor.w << ")"
+                    << " pearl (" << lPearlColor.x << ", " << lPearlColor.y << ", "
+                    << lPearlColor.z << ", " << lPearlColor.w << ")\n";
+            }
+        }
+    }
+}
+
+// ============================================================================
 // X360 0x822F5CF8 -- UpdateOutputInterfaces. PARTIAL SLICE (the active-car publish).
 //
 // This is THE producer of RCEntityActiveRaceCarOutputInterface: nothing else in the
@@ -1681,8 +1844,12 @@ void RaceCarEntityModule::PreSceneUpdate(
 
 // X360 0x82307538 -- PARTIAL SLICE. The console body runs the post-physics half of the
 // module (ProcessCreateVehicleEvents, the crash/takedown queues, the director vehicle
-// input, the replay request interface, ...). Two of its 20-odd legs are reproduced, in the
+// input, the replay request interface, ...). Three of its 20-odd legs are reproduced, in the
 // console's own relative order:
+//   * UpdateActiveRaceCarColours -- the per-frame PAINT PUBLISH (added 2026-08-02). Nothing
+//     else in the image writes RenderParams::mPaintColour / mPearlescentColour, and
+//     RenderRaceCar uploads both as shader constants 20/21. Without it every car draws with
+//     RenderParams::Reset()'s (1,1,1,1) -- i.e. WHITE, which is what the Hunter Cavalry was.
 //   * UpdateOutputInterfaces -- the per-frame OUTPUT PUBLISH. Nothing else in the image
 //     writes RCEntityActiveRaceCarOutputInterface, so without it every downstream consumer
 //     (the world module's player-position latch, the scoring system, and -- through
@@ -1721,6 +1888,19 @@ void RaceCarEntityModule::PostPhysicsUpdate(
             PublishRenderPoseWithoutPhysicsBringUp( lpActiveRaceCar );
         }
     }
+
+    // ⭐ THE PAINT PUBLISH, at the console's own position. VERIFIED from the asm of
+    // PostPhysicsUpdate @0x82307538: the call sequence is
+    //   ReadUpdatedActiveRaceCarDataFromPhysics (0x8230761C)
+    //   ... UpdateActiveRaceCarTransforms (0x82307688) ... StorePlayerRoutePortalPositions
+    //   UpdateActiveRaceCarColours (0x823076C4)
+    //   ... UpdateOutputInterfaces (0x8230771C) ... SendStreamerEvents (0x82307944)
+    // so it sits AFTER the pose leg and BEFORE the output publish, which is exactly where
+    // the two reproduced legs put it here. It is also OUTSIDE the paused branch: the
+    // `bne cr6, loc_823076C0` at 0x82307610 skips the whole physics-readback run and lands
+    // on the instruction pair that sets this call up, so the paint refresh runs every frame
+    // whether the sim is paused or not.
+    UpdateActiveRaceCarColours();
 
     // The console reads the four interfaces off the output buffer in this order
     // (replayGlobal, replayActive, global, active) and passes them
@@ -1812,7 +1992,10 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 // [VMX]      multi-stage lvx128/stvx128 pipelines (transform/visibility/integrate):
 //   Construct, Destruct, GenerateDispatchLists, RenderRaceCar, SubmitCoronasForRaceCar,
 //   PreSceneUpdate, PostSceneUpdate, PrePhysicsUpdate, PostPhysicsUpdate,
-//   UpdateActiveRaceCarTransforms, UpdateActiveRaceCarColours, ReadUpdatedActiveRaceCarDataFromPhysics,
+//   UpdateActiveRaceCarTransforms, ReadUpdatedActiveRaceCarDataFromPhysics,
+//   (UpdateActiveRaceCarColours RETIRED from this list 2026-08-02 -- it is COMPLETE above.
+//    It was never a [VMX] function: its only vector work is two lvx128/stvx128 pairs that
+//    copy a whole Vector4 out of the palette, which is a plain assignment in C++.)
 //   WriteUpdatedAIData, ReadOutOfRangeRaceCarDataFromAI, UpdateOutputInterfaces,
 //   ResetActiveRaceCar, AttachActiveRaceCar, OnRaceCarResourcesLoaded, AddRivalCar,
 //   AddRaceCarToStartingGridOrFreeburnLobby, SetUpAIForMode, SetUpPlayerCarForMode,

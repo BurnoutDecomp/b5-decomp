@@ -135,6 +135,26 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 20, lpRenderParams->GetPaintColour() );
     CgsGraphics::mShaderConstantTable.SetShaderConstantData( 21, lpRenderParams->GetPearlescentColour() );
 
+    // [PC diagnostic] print the value at the CONSUMING end. UpdateActiveRaceCarColours
+    // prints the same two vectors where it writes them; this prints what actually reaches
+    // shader constant 20/21, so a silent drop between the two shows up as a mismatch rather
+    // than as a plausible-looking white car. (The existing [WorldShader] / [WorldSamplers]
+    // tallies cannot answer this -- both saturate at 4096 draws, long before a car exists.)
+    {
+        static bool sbLoggedFirstPaintUpload = false;
+        if( !sbLoggedFirstPaintUpload && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            sbLoggedFirstPaintUpload = true;
+            const Vector4& lrPaint = lpRenderParams->GetPaintColour();
+            const Vector4& lrPearl = lpRenderParams->GetPearlescentColour();
+            *CgsDev::Log::gpDebugPrint
+                << "[racecar-paint] RenderRaceCar -> shader constant 20 g_paintColour ("
+                << lrPaint.x << ", " << lrPaint.y << ", " << lrPaint.z << ", " << lrPaint.w
+                << ") / 21 g_pearlescentColour (" << lrPearl.x << ", " << lrPearl.y << ", "
+                << lrPearl.z << ", " << lrPearl.w << ")\n";
+        }
+    }
+
     // 26: the per-car FOG blend. The console inlines a powf here (vlogefp / vexptefp plus
     // the usual polynomial refinement over the .rodata coefficient vectors at
     // 0x82014AC0..0x82014AF0); de-optimised back to the library call it is:
