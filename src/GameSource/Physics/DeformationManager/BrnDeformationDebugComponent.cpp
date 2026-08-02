@@ -760,7 +760,9 @@ namespace Deformation
         for ( s32 liWheel = 0; liWheel < 4; ++liWheel )
         {
             const BrnPhysics::Vehicle::Wheel& lrWheel =
-                lpPhysics->GetWheel( static_cast<BrnPhysics::Vehicle::VehiclePhysics::EVehicleDrivenWheel>(liWheel) );
+                // EVehicleDrivenWheel is a NAMESPACE-scope enum (BrnSimpleVehiclePhysics.h:52), not
+                // nested in VehiclePhysics -- the nested copy retired with the re-parenting.
+                lpPhysics->GetWheel( static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(liWheel) );
             CGS_ASSERT( &lrWheel != nullptr, "lpWheel" );   // BrnDeformationDebugComponent.cpp:556 (non-gating)
 
             const WheelSpec* lpWheelSpec = lpSpec->GetW( liWheel );

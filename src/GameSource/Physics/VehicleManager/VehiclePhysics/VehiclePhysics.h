@@ -27,6 +27,67 @@
 // with the slam/shunt state they read (mfSlamLife @+0x111C, mShuntEffect @+0x1130,
 // mi8SlammingRaceCarId @+0x13E0), each pinned BY NAME. The pre-existing members/methods are
 // untouched; nothing is reordered/retyped/removed.
+//
+// ===== RE-PARENTED onto the real base chain (physics wave 2b) =====
+// The DecFIGS DWARF gives the ORIGINAL declaration verbatim:
+//     references/DecFIGS/dwarfdump/.../VehiclePhysics.h:810
+//         struct BrnPhysics::Vehicle::VehiclePhysics : public SimpleVehiclePhysics
+// and the complete non-static data-member list of VehiclePhysics (62 members) and of the three
+// base classes (28). This file used to be a FLAT struct with no base, which meant a member the
+// base already owned had to be re-declared here to be usable -- 25 of the 53 members it declared
+// were duplicates of a base/own member, 20 of them under a DIFFERENT NAME. Every one of those is
+// a silent-split hazard: two copies of one console member, written through one and read through
+// the other, with nothing to grep.
+//
+// All 25 are now removed. The base subobject offset is VERIFIED from the asm -- every
+// VehiclePhysics method that calls a base entry passes `addi r3,this,0x10` (ApplyNormalBoostForce
+// @0x825D3174, ApplyBoostKickForce @0x825D3294, ApplySuspensionForces @0x825D2108), so the
+// vptr occupies +0x00..+0x0F and the ExternallySimulatedBody subobject starts at +0x10. With
+// sizeof(ExternalPhysicsBody) == 0x120 that puts SimpleVehiclePhysics's own members at +0x130,
+// which GetHeightAboveRoad @0x825B3998 confirms directly (`addi r11,r4,0x130` for maWheels[0],
+// `addi r8,r4,0x210` for maWheels[1] -- stride 0xE0). BASE-frame offset X therefore appears as
+// X+0x10 in every VehiclePhysics asm listing, and the annotations below are in the VP frame.
+//
+// The renames, each settled from the ASM (not from the name):
+//   mLocalVelocity            +0x60  -> ExternallySimulatedBody::mAngularVelocity
+//                                      (IsCounterSteeringAtLowSpeed @0x825BFF7C reads its .y lane
+//                                      = the YAW RATE; ApplyBoostKickForce damps it as omega)
+//   mUpAxis                   +0x20  -> mTransform.yAxis  (GetCarGroundDistanceCheck @0x825C0100
+//                                      tests its .y lane < 0 == "car is inverted")
+//   maLocalWheelPositions     +0x530 -> SimpleVehiclePhysics::maLocalTractionPoints
+//   mGroundNormal             +0x580 -> mAboveGroundTestResult.mIntersectionNormal
+//   mfWaterDepth              +0x590 -> mAboveGroundTestResult.mfVerticalDistance
+//   mWaterContactTag          +0x594 -> mAboveGroundTestResult.mCollisionTag, BE-high half
+//   mRepresentativeContactTag +0x596 -> mAboveGroundTestResult.mCollisionTag, BE-low  half
+//   mbAboveGroundTestValid    +0x598 -> mAboveGroundTestResult.mbValid
+//     (all five proved by SimpleVehiclePhysics::SetAboveGroundTestResult @0x826029D4, which takes
+//      `addi r11,this,0x570` and then writes +0x00/+0x10/+0x24/+0x26/+0x20/+0x28 off it)
+//   mfCarGroundCheckExtent    +0x6A4 -> SimpleVehiclePhysics::mHalfExtent .y lane
+//   mLinearImpulseAccumulator +0x100 -> ExternalPhysicsBody::mTotalTorque      (see FLAG below)
+//   mAngularImpulseAccumulatorRow +0x120 -> ExternalPhysicsBody::mTotalAngularImpulse
+//   mfSlamSteering/-OriginalSteering/mfSlamLife/mfTotalSlamTime/mfRecoveryTime/mi8SlamNumber
+//     +0x1114..+0x1128 -> the six scalar fields of this class's own `SlamEffect mSlamEffect`
+//     @+0x1100 (AddSlam @0x825D4880/4889C/4904 reads +0x111C/+0x1120/+0x1128; the struct ends at
+//     +0x1130, which is exactly where mShuntEffect begins -- the DWARF's very next member)
+//   mbSlamActive              +0x135D -> mbJustBeenSlammed
+//   mi8SlammingRaceCarId      +0x13E0 -> mi8LastAttackersRaceCarIndex
+//     (both proved by VehicleOutputInterface::UpdateRaceCarState @0x825EC8C0/@0x825ECB0C, which
+//      copies +0x13E0 to RaceCarState+0x43C == mi8LastAttackersRaceCarIndex and +0x135D to
+//      RaceCarState+0x44F == mbJustBeenSlammed)
+//   mWeightTransferMirror     +0x1330 -> mPreviousWorldSpaceVelocity
+//     (UpdateSuspension @0x8261F6F4 does `lvx128 v0,this,0x50 ; stvx128 v0,this,0x1330` -- it
+//      snapshots mLinearVelocity, NOT a "weight register", so CalculateWeightTransfer can
+//      difference it against this frame's velocity. maSpinEffects[8] ends at exactly 0x1330.)
+//
+// ⚠️ CORRECTION -- the committed note on mLinearImpulseAccumulator was WRONG, and so was the
+// wave-2 finding that repeated it ("mLinearImpulseAccumulator IS the base's mTotalLinearImpulse").
+// Its "+0x100" is a VehiclePhysics-frame offset, so it is base+0xF0 == mTotalTorque, not
+// base+0x100 == mTotalLinearImpulse. ApplyBoostKickForce @0x825D338C-0x825D3408 damps exactly
+// three registers along mTransform.xAxis -- +0x60, +0x100 and +0x120 -- and reading those as
+// {angular velocity, TORQUE, angular impulse} is the only physically coherent set for a wheelie
+// limiter; {angular velocity, LINEAR impulse, angular impulse} is not. AddLocalForce @0x825A183C
+// independently confirms base+0xE0 = mTotalLinearForce and base+0xF0 = mTotalTorque.
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"   // the base chain: SimpleVehiclePhysics : ExternalPhysicsBody : ExternallySimulatedBody
 #include "BrnCommonTypes.h"   // Vector3, Vector3Plus, Vector4
 #include "types.hpp"          // f32, s8
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"   // Wheel + Wheel::RoadContact
@@ -156,27 +217,28 @@ namespace Vehicle
         BoostAttribs mBoostAttribs;
     };
 
-    // Minimal VehiclePhysics: only the nested SlamEffect / ShuntEffect are reconstructed.
-    struct VehiclePhysics
+    // BrnPhysics::Vehicle::VehiclePhysics -- the full race-car handling body. Derives from
+    // SimpleVehiclePhysics per the DWARF (VehiclePhysics.h:810); see the re-parenting note at the
+    // top of this file for the base-frame offset proof and the 25 duplicate members it retired.
+    struct VehiclePhysics : public SimpleVehiclePhysics
     {
-        // The four driven wheels, in the order GetHeightAboveRoad iterates them (DWARF
-        // VehiclePhysics.h:106 EVehicleDrivenWheel). Front-left, front-right, rear-left, rear-right.
-        enum EVehicleDrivenWheel
-        {
-            eFrontLeftWheel = 0,
-            eFrontRightWheel,
-            eRearLeftWheel,
-            eRearRightWheel,
-            eNumDrivenWheels
-        };
+        // EVehicleDrivenWheel is NOT nested: the DWARF homes it at NAMESPACE scope
+        // (BrnPhysics::Vehicle::EVehicleDrivenWheel, BrnSimpleVehiclePhysics.h:52) and the base
+        // header above already provides it. The nested copy this file used to carry was a fork of
+        // that type -- it shadowed the inherited one inside the class, so a value formed here could
+        // not be passed to any base method that takes the real enum. Retired with the member
+        // duplicates for the same reason.
 
         // Accessor for one driven wheel (DWARF VehiclePhysics.h:244). GetHeightAboveRoad reads
-        // each wheel's road-contact result through this.
+        // each wheel's road-contact result through this. maWheels is the BASE's array.
         const Wheel& GetWheel(EVehicleDrivenWheel leWheel) const { return maWheels[leWheel]; }
 
         // The vehicle "up" axis used to decide whether a wheel's road contact is on the ground
-        // (the asm's lvx at _R4+0x20 + vmsum3fp128 dot vs 0.5). Pinned BY NAME.
-        const Vector3& GetUpAxis() const { return mUpAxis; }
+        // (the asm's lvx at _R4+0x20 + vmsum3fp128 dot vs 0.5). +0x20 is base+0x10 == the SECOND
+        // row of mTransform, i.e. the body Y axis -- confirmed by GetCarGroundDistanceCheck
+        // @0x825C0100, which splats that row's .y lane and tests it < 0 to detect an inverted car.
+        // (Matrix44Affine::Up() is the same row.)
+        const Vector3& GetUpAxis() const { return mTransform.yAxis; }
 
         // A directional "slam" impulse with decay/steering and a slam-index counter.
         struct SlamEffect
@@ -327,7 +389,8 @@ namespace Vehicle
         void AddWorldSpaceForce(const Vector3& lvForce);
         void AddWorldSpaceImpulse(const Vector3& lvImpulse);
         void AddWorldSpaceAngularImpulse(const Vector3& lvAngularImpulse);
-        void AddLocalImpulse(const Vector3& lvLocalImpulse, const Vector3& lvLocalPos);
+        // AddLocalImpulse is the BASE's 4-argument form (see ExternalPhysicsBody.h) -- the 2-argument
+        // declaration that used to sit here dropped both rw::physics::InputSpace tags.
 
         // @0x825BE9D0 (ExternalPhysicsBody): the world-space torque accumulator (accum += arg @+0xF0,
         // guarded). DECLARE-ONLY here (owned by the ExternalPhysicsBody base TU) -- the C06 drift yaw
@@ -341,18 +404,23 @@ namespace Vehicle
         void CheckForEnteringDrift(const BrnPlayerDriverControls* lpControls, f32 lfSlipAngle,
                                    f32 lfSpeed, f32 lfTimeStep, f32 lfSteeringDir);
 
-        // @ SimpleVehiclePhysics::AddTractionPoint: record a wheel/surface traction point. This
-        // minimal slice has no real SimpleVehiclePhysics base type, so the base entry the
-        // RaceCarPhysics override chains into is declared here (DECLARE-ONLY, bodied by the base TU).
+        // FLAG (re-parenting): a 2-argument stand-in that HIDES the base's real 4-argument
+        // SimpleVehiclePhysics::AddTractionPoint(EVehicleDrivenWheel, Vector3, Vector3, u32)
+        // (@0x825D9608). The stand-in predates the base chain and is kept only because
+        // RaceCarPhysics::AddTractionPoint @0x825FFAE8 chains into it with two arguments; it is
+        // NOT the console signature. Reconcile when that override's real signature is recovered
+        // from the asm -- do not add a body to this form.
         void AddTractionPoint(s32 leWheel, u32 luSurfaceTag);
 
-        // @ ExternallySimulatedBody: the world-space linear velocity (mLinearVelocity, base +0x50).
+        // @ ExternallySimulatedBody: the world-space linear velocity (mLinearVelocity, base +0x40,
+        // == VehiclePhysics frame +0x50). The member now comes from the base.
         const Vector3& GetLinearVelocity() const { return mLinearVelocity; }
         void SetLinearVelocity(const Vector3& lvVelocity) { mLinearVelocity = lvVelocity; }
 
-        // The body world-transform up row (mUpAxis, base +0x20/+0x30 region). The C10 launch builds
-        // its push direction from worldUp; provided as a const accessor over the pinned member.
-        const Vector3& GetWorldUpRow() const { return mUpAxis; }
+        // The body world-transform up row. The C10 launch builds its push direction from worldUp.
+        // Same row as GetUpAxis (mTransform.yAxis) -- these two were separately-named views of the
+        // one console register (+0x20) and are now both expressed over the base's mTransform.
+        const Vector3& GetWorldUpRow() const { return mTransform.yAxis; }
 
         // ----- ADDITIVE GROW (stunt-offences group): three transform/velocity accessors over the
         //       already-pinned members, mirroring GetLinearVelocity/GetWorldUpRow. BrnPhysics::
@@ -361,9 +429,11 @@ namespace Vehicle
         //       bytes wide -- the stunt code must NOT touch raw console byte offsets). -----
         const Matrix44Affine& GetTransform() const { return mTransform; }
         const Vector3& GetPosition() const { return mTransform.wAxis; }
-        // The +0x60 angular-velocity register (named mLocalVelocity in this slice); UpdateInAirRotations
-        // integrates it (transposed into car space) to score rolls/spins.
-        const Vector3& GetAngularVelocity() const { return mLocalVelocity; }
+        // The +0x60 angular-velocity register. This slice used to call it mLocalVelocity and declare
+        // its own copy; +0x60 is base+0x50 == ExternallySimulatedBody::mAngularVelocity, so the
+        // duplicate is retired and this reads the base member. UpdateInAirRotations integrates it
+        // (transposed into car space) to score rolls/spins.
+        const Vector3& GetAngularVelocity() const { return mAngularVelocity; }
 
         // ----- ADDITIVE GROW (takedown-chain group): the post-slam/shunt wheel-velocity refresh the
         //       car-car contact handler re-runs on both cars after applying a slam/shunt impulse
@@ -573,7 +643,9 @@ namespace Vehicle
             if (!KB_COUNTER_STEER_LOW_SPEED_ENABLED || lfSpeed <= 0.2f)
                 return false;
 
-            const f32 lfLateral = mLocalVelocity.y;   // lane 1 of the velocity register at +0x60
+            // lane 1 of the +0x60 register == base+0x50 == mAngularVelocity.y == the YAW RATE
+            // (asm @0x825BFF6C-0x825BFF84: `li r9,0x60 ; lvx128 v0,r3,r9 ; vspltw v0,v0,1`).
+            const f32 lfLateral = mAngularVelocity.y;
 
             if (lfLateral > 0.5f && lfSteering >= -0.1f)
                 return true;
@@ -715,59 +787,50 @@ namespace Vehicle
         //   along the forward axis. A soft, capped nudge -- never a hard velocity set.
         void UpdateSpeedMatch(const BrnPlayerDriverControls* lpControls, f32 lfTimeStep);
 
-        // ----- ADDITIVE GROW (C07): the base-class force entry point the boost appliers call. Owned by
-        //       BrnPhysics::ExternalPhysicsBody (a separate TU); declared BY NAME here (no body) so the
-        //       boost .cpp can reference it without an ODR clash. The X360 calls it on the body subobject
-        //       (`addi r3,this,0x10 ; bl AddLocalForce`). Scalar de-SIMD'd shape: a local-space force at a
-        //       local-space position. FLAG: the full console signature carries force/position SPACE enums
-        //       (rw::physics::InputSpace) the boost callers pass as small immediates; modelled here as the
-        //       (force, localPosition) pair the appliers actually populate. -----
-        void AddLocalForce(const Vector3& lvLocalForce, const Vector3& lvLocalPosition);
-
-        // The local-space velocity register read by IsCounterSteeringAtLowSpeed (its .y lane). The
-        // full VehiclePhysics owns many members preceding this; per project rule the absolute
-        // console offset (this+0x60) is pinned BY NAME, not reproduced as padding before it.
-        Vector3 mLocalVelocity;
-
-        // The vehicle up axis + the driven-wheel array read by RaceCarPhysics::GetHeightAboveRoad.
-        // The full VehiclePhysics interleaves these among many other members; per project rule the
-        // absolute console offsets (maWheels @ +0x130 stride 0xE0, up axis @ +0x20) are pinned BY
-        // NAME, not reproduced as padding.
-        Vector3 mUpAxis;
-        Wheel   maWheels[eNumDrivenWheels];
-
-        // @+0x530 (1328, BY NAME): the four wheels' positions in the body's local frame, written by
-        // StoreLocalWheelPositions (stvx128 at +1328/+1344/+1360/+1376, stride 16) at the tail of
-        // UpdateDriving. Pinned BY NAME at the console offset (the intervening engine/drift/boost
-        // state between the wheel array and here is owned by the full TU, not reproduced as padding).
-        Vector3 maLocalWheelPositions[eNumDrivenWheels];
+        // AddLocalForce is the BASE's 4-argument form (ExternalPhysicsBody @0x825A1670). The
+        // 2-argument declaration that used to sit here dropped both rw::physics::InputSpace tags,
+        // and its FLAG guessed that the appliers pass "a local-space force at a local-space
+        // position". They do not: every call site recovered from its own asm passes the FORCE in
+        // WORLD_SPACE and only the POSITION in BODY_SPACE.
+        //   ApplyNormalBoostForce @0x825D3138/0x825D3160 : r4 = 0 (WORLD), r5 = 1 (BODY)
+        //   ApplyBoostKickForce   @0x825D3280/0x825D3290 : r4 = 0 (WORLD), r5 = 1 (BODY)
+        //   ApplySuspensionForces @0x825D20FC/0x825D2100 : r4 = 0 (WORLD), r5 = 1 (BODY)
+        //   UpdateAirRam          @0x825FCA7C/0x825FCA80 : r4 = mAirRamEffect[i].meImpulseSpace
+        //                                                  (a STORED tag, not a literal), r5 = 1
+        //   RaceCarPhysics::UpdateAftertouch @0x8262F490/0x8262F5C4 : r4 = 0, r5 = 0 (both WORLD)
+        // (r4 gates the force vector, r5 the position -- AddLocalForce tests them at 0x825A17D0
+        // `cmpwi r28,1` and 0x825A17FC `cmpwi r27,0`, i.e. against OPPOSITE values, so no single
+        // 2-argument form can be right for both.)
 
         // ----- Vehicle-physics group (class TU): slam/shunt state read by the out-of-line
         //       Is{...}Slamed-or-Shunted predicates (bodied in VehiclePhysics.cpp) -----
 
-        // @+0x111C: remaining time of the in-progress slam impulse (the asm reads `lfs f13,0x111C(r3)`
-        // and tests `> 0.0`). Positive while a slam is active. Pinned BY NAME (the ~0x1100 bytes of
-        // base + engine/drift/boost state that precede it are not reproduced as padding).
-        f32        mfSlamLife;
-
-        // ----- ADDITIVE GROW (C09 group): the standalone slam scalars the slam pipeline touches,
-        //       pinned BY NAME flat (consistent with the standalone mfSlamLife above -- the committed
-        //       home pins the slam scalars flat, not as an embedded SlamEffect instance). -----
-        f32        mfSlamSteering;          // @+0x1114  current slam steering offset (env-shaped)
-        f32        mfSlamOriginalSteering;  // @+0x1118  the entry slam steering magnitude
-        f32        mfTotalSlamTime;         // @+0x1120  the slam's total duration (envelope denominator)
-        f32        mfRecoveryTime;          // @+0x1124  post-slam recovery window
-        s8         mi8SlamNumber;           // @+0x1128  chained-slam counter (saturated at 2)
-        bool       mbSlamActive;            // @+0x135D  set by AddSlam, cleared by UpdateSlam path
+        // @+0x1100: the in-progress slam. This home used to pin the six SlamEffect scalars FLAT
+        // (mfSlamSteering @+0x1114, mfSlamOriginalSteering @+0x1118, mfSlamLife @+0x111C,
+        // mfTotalSlamTime @+0x1120, mfRecoveryTime @+0x1124, mi8SlamNumber @+0x1128) with a note
+        // saying the console pinned them flat "not as an embedded SlamEffect instance". That was
+        // wrong: the DWARF (VehiclePhysics.h:927) declares `SlamEffect mSlamEffect` and the asm
+        // agrees exactly -- the nested SlamEffect's own field order puts mfSteering/mfOriginalSteering/
+        // mfSlamLife/mfTotalSlamTime/mfRecoveryTime/mi8SlamNumber at +0x14/+0x18/+0x1C/+0x20/+0x24/
+        // +0x28 off a base of +0x1100, reproducing all six committed offsets, and the struct ends at
+        // +0x1130 which is precisely where mShuntEffect (the DWARF's very next member) begins.
+        // AddSlam @0x825D4880/0x825D489C/0x825D4904 reads +0x111C/+0x1120/+0x1128 off `this`.
+        SlamEffect mSlamEffect;
 
         // @+0x1130: the embedded shunt effect; IsBeingSlamedOrShunted consults mShuntEffect.IsActive()
         // (asm: `addi r3,r3,0x1130 ; bl ShuntEffect::IsActive`). Pinned BY NAME.
         ShuntEffect mShuntEffect;
 
-        // @+0x13E0: the id of the race car currently slamming/shunting this vehicle, used by
-        // IsBeingSlamedOrShuntedByRaceCar to filter (asm: `lbz r11,0x13E0(r3) ; extsb` then compared
-        // sign-extended against the queried id). Pinned BY NAME.
-        s8         mi8SlammingRaceCarId;
+        // @+0x13E0: the id of the race car that last attacked (slammed/shunted) this vehicle, read
+        // by IsBeingSlamedOrShuntedByRaceCar to filter (asm @0x8261529C: `lbz r11,0x13E0(r3) ; extsb`
+        // then compared sign-extended against the queried id). This home used to call it
+        // `mi8SlammingRaceCarId`, a proposed name; the DWARF member is mi8LastAttackersRaceCarIndex
+        // (VehiclePhysics.h:979) and VehicleOutputInterface::UpdateRaceCarState @0x825EC8C0 settles
+        // it -- it sign-extends +0x13E0 into RaceCarState+0x43C, which BrnVehicleEvents.h:136 names
+        // mi8LastAttackersRaceCarIndex. (+0x1150, the byte right after mShuntEffect, is the DIFFERENT
+        // member mi8LastContactedRaceCar; UpdateRaceCarState @0x825EC8CC copies that one to
+        // RaceCarState+0x445. Two console members, one of which this slice had absorbed.)
+        s8         mi8LastAttackersRaceCarIndex;
 
         // ----- ADDITIVE GROW (C08 airborne/water/freeze/spin group): the air-ram + spin slot
         //       allocators and their effect-record arrays, read/written by UpdateAirRam /
@@ -799,17 +862,12 @@ namespace Vehicle
         // ----- Vehicle-physics group (class TU): members read/written by the three VMX128 funcs
         //       (GetCarGroundDistanceCheck / GetTransformDelta / UpdateLinearVelocityMagnitude) -----
 
-        // The physics-body world transform, owned by the ExternallySimulatedBody base @+0x10
-        // (Matrix44Affine, 64 bytes). GetTransformDelta reads this as the "current" matrix
-        // (asm: `addi r10,r4,0x10 ; lvx128` of the four rows). Pinned BY NAME (the vptr +
-        // ExternallySimulatedBody/ExternalPhysicsBody preamble that precedes it is not reproduced
-        // as padding; the full base is a separate TU).
-        Matrix44Affine mTransform;
-
-        // The world-space linear velocity, owned by the ExternallySimulatedBody base @+0x50.
-        // UpdateLinearVelocityMagnitude reads this (`addi r9,r3,0x50 ; lvx128`) and normalizes it.
-        // Pinned BY NAME. Also the v^2 source for GetDownForce (`lvx128 v0,r4,0x50 ; vmsum3fp128`).
-        Vector3        mLinearVelocity;
+        // mTransform (@+0x10) and mLinearVelocity (@+0x50) are the ExternallySimulatedBody base's,
+        // and are no longer re-declared here. GetTransformDelta reads the transform as the "current"
+        // matrix (asm: `addi r10,r4,0x10 ; lvx128` of the four rows -- the +0x10 is the base
+        // subobject offset, which is why it appeared as "base @+0x10" in the old note);
+        // UpdateLinearVelocityMagnitude reads the velocity (`addi r9,r3,0x50 ; lvx128`) and
+        // normalizes it, and GetDownForce squares it (`lvx128 v0,r4,0x50 ; vmsum3fp128`).
 
         // @+0x720: the live per-car attribute/tuning block (player vs AI set is reconciled each
         // frame by Update via SwitchAttribs). GetDownForce reads mpAttribs->mvAeroParams (asm:
@@ -818,39 +876,45 @@ namespace Vehicle
         // full VehiclePhysics TU). Typed against the minimal VehicleAttribs slice above.
         const VehicleAttribs* mpAttribs;
 
-        // @+0x596 (BY NAME). The single representative-contact CollisionTag GetSurfaceLinearDrag
-        // reads (asm: `*(a2 + 1430) >> 4 & 0x3F`). Unlike grip/roughness this is NOT a per-wheel
-        // tag (1430 lies past the 4-wheel array) -- it is a separate vehicle-level contact tag;
-        // FLAG: the source member is not named in the DWARF slice, pinned BY NAME with a proposed
-        // name. Used only for the linear-drag surface id.
-        CollisionTag mRepresentativeContactTag;
+        // ===== The +0x570 above-ground-test block and the +0x6A0 half-extent are the BASE's =====
+        // This home used to carry five separately-named members over the console bytes
+        // +0x580/+0x590/+0x594/+0x596/+0x598, plus a scalar at +0x6A4. All six are views into two
+        // SimpleVehiclePhysics members, and SetAboveGroundTestResult @0x82602880 proves the frame:
+        // it takes `addi r11,this,0x570` (0x826029D4) and then writes
+        //     +0x00 mIntersectionPosition   +0x10 mIntersectionNormal
+        //     +0x24 mCollisionTag hi-u16    +0x26 mCollisionTag lo-u16
+        //     +0x20 mfVerticalDistance      +0x28 mbValid = 1
+        // so mAboveGroundTestResult sits at +0x570 and the five map as:
+        //     mGroundNormal             +0x580 -> mAboveGroundTestResult.mIntersectionNormal
+        //     mfWaterDepth              +0x590 -> mAboveGroundTestResult.mfVerticalDistance
+        //     mWaterContactTag          +0x594 -> mAboveGroundTestResult.mCollisionTag, BE-high u16
+        //     mRepresentativeContactTag +0x596 -> mAboveGroundTestResult.mCollisionTag, BE-low  u16
+        //     mbAboveGroundTestValid    +0x598 -> mAboveGroundTestResult.mbValid
+        // ⚠️ mfVerticalDistance is NOT a "water depth": the asm computes it as
+        // mTransform.wAxis.y - lineTestResult.y (0x826029D4-0x826029F8), i.e. the height of the car
+        // above the road. UpdateInWaterBehaviour tests that height against a threshold; the old
+        // "water-depth scalar" name inverted the quantity's meaning.
+        // ⚠️ mWaterContactTag / mRepresentativeContactTag were TWO names for the two halves of ONE
+        // u32 CollisionTag. On the X360 the +0x594 halfword is the HIGH half of that word and +0x596
+        // the LOW half; on x64 the byte positions swap, so a consumer must take the halves from
+        // mCollisionTag.muValue by SHIFT, never by re-deriving a byte offset. Helpers below.
+        u16 GetAboveGroundTagHi() const { return u16((mAboveGroundTestResult.mCollisionTag.muValue >> 16) & 0xFFFFu); }
+        u16 GetAboveGroundTagLo() const { return u16( mAboveGroundTestResult.mCollisionTag.muValue        & 0xFFFFu); }
 
-        // ----- ADDITIVE GROW (C08 airborne/water/freeze/spin group): the two fields UpdateInWaterBehaviour
-        //       reads. Pinned BY NAME at their console offsets. -----
+        // The car's vertical extent GetCarGroundDistanceCheck @0x825C0138 reads when the car is
+        // inverted (`lfs f13,0x6A4(r3)`) was a separately-named f32 `mfCarGroundCheckExtent`. +0x6A0
+        // is SimpleVehiclePhysics::mHalfExtent (both boost appliers load +0x6A0 and splat lane .z),
+        // so +0x6A4 is simply its .y lane -- the box's vertical half-extent, which is exactly the
+        // quantity that check needs. The base owns it; retired here.
 
-        // @+0x590 (1424): the water-depth scalar UpdateInWaterBehaviour tests (`*(this+1424) <
-        // flt_82F2A4E4` -> deep enough to drown). FLAG: the source member is not named in the DWARF
-        // slice; pinned BY NAME with a proposed name at the asm offset. (Read as a scalar float.)
-        f32          mfWaterDepth;
-
-        // @+0x594 (1428): the contact CollisionTag whose surface id (`(>>4)&0x3F`) UpdateInWaterBehaviour
-        // looks up in the water-surface table (byte_82FB7DF4[id]). FLAG: proposed name at the asm
-        // offset; distinct from mRepresentativeContactTag (+0x596).
-        CollisionTag mWaterContactTag;
-
-        // @+0x6A4: the car's vertical extent used by GetCarGroundDistanceCheck when the car is
-        // inverted (read as a scalar float: `lfs f13,0x6A4(r3)`). Pinned BY NAME (the intervening
-        // attribs/spring/state block is not reproduced as padding). FLAG: the multiplier the asm
-        // applies to it (flt_82001D9C) is un-homed .rdata -- see the body's KF_* constant.
-        f32        mfCarGroundCheckExtent;
-
-        // @+0x6C0 (1728): the cached body-frame speed in MPH (mfSpeedMPH; recomputed each frame at the
-        // tail of UpdateDriving = dot3(mTransform forward axis, mLinearVelocity) x 2.2369363).
+        // mfSpeedMPH @+0x6C0 is the BASE's (SimpleVehiclePhysics :365). The DWARF types it VecFloat,
+        // not f32 -- this home's f32 copy was both a duplicate and a narrowing. Recomputed each frame
+        // at the tail of UpdateDriving = dot3(mTransform forward axis, mLinearVelocity) x 2.2369363.
         // UpdateRoadNoise reads it (`li r24,0x6C0 ; lvx128 v124,r29,r24`) so the rumble scales with
-        // speed. UpdateBoost reads it as the boost speed (`li r6,0x6C0 ; lvx128 v12,r31,r6`) for the
-        // 5.0-mph floor + the MaxBoostSpeed cap + the BoostKickMaxStartSpeed eligibility test. Pinned
-        // BY NAME (the intervening state block is not reproduced as padding).
-        f32        mfSpeedMPH;
+        // speed; UpdateBoost reads it (`li r6,0x6C0 ; lvx128 v12,r31,r6`) for the 5.0-mph floor, the
+        // MaxBoostSpeed cap and the BoostKickMaxStartSpeed eligibility test. The +0x6A0/+0x6B0/+0x6C0
+        // spacing is exactly mHalfExtent / mWheelPlanePosAndHeight / mfSpeedMPH in DWARF sequence,
+        // which independently confirms both endpoints.
 
         // ----- ADDITIVE GROW (C06 steering/drift/handbrake group): the 11-Vector4 DRIFT STATE BANK
         //       (+0xFE0..+0x1080) + the drift byte flags + the ground-normal/aboveground members the
@@ -920,26 +984,15 @@ namespace Vehicle
         //   hysteresis). Read by UpdateDrift / MaintainDriftSpeed / the drift-force gates. Pinned BY NAME.
         bool mbHandBrake;
 
-        // @+0x580 (1408): the ground contact normal the drift forces tangent-project against (so drift
-        //   never pushes into/off the road). ApplyDriftLatForce/ApplyDriftYaw/MaintainDriftSpeed read it
-        //   (`lvx128 r31,1408 ; vmsum3fp128`). Pinned BY NAME. FLAG: source member name inferred (the
-        //   DWARF slice for the above-ground-test block is not in this excerpt).
-        Vector3 mGroundNormal;
+        // The drift forces' ground normal (+0x580) and above-ground-valid flag (+0x598) are the base's
+        // mAboveGroundTestResult.mIntersectionNormal / .mbValid -- see the block above. The drift code
+        // tangent-projects against the normal so drift never pushes into or off the road
+        // (ApplyDriftLatForce/ApplyDriftYaw/MaintainDriftSpeed: `lvx128 r31,1408 ; vmsum3fp128`).
 
-        // @+0x598 (1432): mAboveGroundTestResult.mbValid -- the per-frame "are we above the road" flag
-        //   gating each drift force (asm `*(this+1432)` + the elided "mAboveGroundTestResult.mbValid"
-        //   assert). Pinned BY NAME. FLAG: only the mbValid byte of the result struct is pinned here.
-        bool mbAboveGroundTestValid;
-
-        // ----- ADDITIVE GROW (C07 boost/speed-match group): the boost-state register + boost-kick flag +
-        //       the box half-extent the boost appliers use as the local force-application point. -----
-
-        // @+0x6A0 (1696, BY NAME). The body-space box half-extent (SimpleVehiclePhysics::mHalfExtent per
-        // the findings doc). Both boost appliers read its .z lane, NEGATE it, and use it as the z of the
-        // local force-application point (so the boost force is applied behind the centre of mass).
-        // FLAG: the source member is a base-class SimpleVehiclePhysics field not in the committed slice;
-        // pinned BY NAME at its console offset with the findings-doc name.
-        Vector3    mHalfExtent;
+        // The body-space box half-extent (+0x6A0) is SimpleVehiclePhysics::mHalfExtent. Both boost
+        // appliers read its .z lane, NEGATE it, and use it as the z of the local force-application
+        // point, so the boost force acts behind the centre of mass (ApplyNormalBoostForce
+        // @0x825D3120-0x825D3170, ApplyBoostKickForce @0x825D3270-0x825D32B4).
 
         // @+0x1040 (4160, BY NAME). The boost-state register
         // (mvSideForceMag_TimeBoosting_TimeSinceLastBoostKick_CurrentBoostKickTime in the full
@@ -955,19 +1008,36 @@ namespace Vehicle
         // sets it from `CurrentBoostKickTime > TimeBoosting` (`stb r11,0x10F5(r31)`). Pinned BY NAME.
         bool       mbInBoostKick;
 
-        // @+0x100 (256, BY NAME) and @+0x120 (288, BY NAME). The linear/angular impulse-accumulator rows
-        // ApplyBoostKickForce damps (alongside mLocalVelocity @+0x60) to self-limit the kick wheelie:
-        // once the pitch exceeds the max-wheelie angle, each row's component along the body right axis
-        // (mTransform.xAxis) is bled out by kfWheelieLimitDamping. Owned by the ExternalPhysicsBody base
-        // (findings: +0x100 = linear impulse accumulator, +0x110/+0x120 = angular); pinned BY NAME at
-        // their console offsets. FLAG: the precise base-member spellings live in the base TU.
-        Vector3    mLinearImpulseAccumulator;     // +0x100
-        Vector3    mAngularImpulseAccumulatorRow; // +0x120
+        // ⚠️ RETIRED, AND THE OLD NOTE WAS WRONG. This home used to declare
+        //     Vector3 mLinearImpulseAccumulator;      // +0x100
+        //     Vector3 mAngularImpulseAccumulatorRow;  // +0x120
+        // with the justification "+0x100 = linear impulse accumulator, +0x110/+0x120 = angular".
+        // Those are VehiclePhysics-frame offsets, and the base subobject starts at +0x10, so
+        //     +0x100 == base+0xF0  == ExternalPhysicsBody::mTotalTorque
+        //     +0x120 == base+0x110 == ExternalPhysicsBody::mTotalAngularImpulse
+        // -- the first is a TORQUE, not a linear impulse. AddLocalForce @0x825A183C-0x825A1868
+        // settles the base frame independently: it accumulates the rotated force into base+0xE0 and
+        // cross(r,F) into base+0xF0, i.e. mTotalLinearForce / mTotalTorque.
+        // ApplyBoostKickForce @0x825D338C-0x825D3408 damps exactly three registers along
+        // mTransform.xAxis (the body RIGHT axis, i.e. the pitch axis): +0x60, +0x100 and +0x120.
+        // Read through the corrected map those are {mAngularVelocity, mTotalTorque,
+        // mTotalAngularImpulse} -- three ANGULAR quantities, which is the only coherent set for a
+        // wheelie limiter. The old reading mixed one linear quantity into an angular damper.
+        // Both members are the base's; nothing is re-declared here.
 
         // @+0x135B (4955, BY NAME). The "all driven wheels have traction" gate the boost appliers and
         // UpdateSpeedMatch consult before applying force (`lbz r11,0x135B(r3) ; cmplwi ; beq`). Pinned BY
         // NAME (it sits in the drift/crash byte-flag block; mbHandBrake/mu8DriftState are nearby).
         bool       mbAllWheelsHaveTraction;
+
+        // @+0x135D (4957). The one-frame "was just slammed" latch AddSlam raises (`stb r10,0x135D(r11)`
+        // @0x825D4940) and VehiclePhysics::Prepare @0x826380A0 clears. This home used to call it
+        // `mbSlamActive`; the DWARF member is mbJustBeenSlammed (VehiclePhysics.h:958) and
+        // VehicleOutputInterface::UpdateRaceCarState @0x825ECB0C settles it -- it copies +0x135D to
+        // RaceCarState+0x44F, which BrnVehicleEvents.h:146 names mbJustBeenSlammed. The DWARF byte
+        // order also lands it exactly: mbAllWheelsHaveTraction +0x135B, mbResetCarTransform +0x135C,
+        // mbJustBeenSlammed +0x135D.
+        bool       mbJustBeenSlammed;
 
         // @+0x1340: cached normalized linear velocity (xyz lanes) + speed magnitude (w/"plus" lane),
         // written by UpdateLinearVelocityMagnitude (`addi r10,r3,0x1340 ; stvx128`) and read by
@@ -984,11 +1054,25 @@ namespace Vehicle
         // SuspensionSpring is the already-committed namespace-scope slice (sizeof 0x30 = 3*Vector4).
         SuspensionSpring maSprings[eNumDrivenWheels];
 
-        // @+0xEE0 (3808)/@+0xEE8 (3816): the dynamic load-transfer force CalculateWeightTransfer builds
-        // and distributes to the springs (SetExternalForce). UpdateSuspension mirrors the +0x50 weight
-        // register to a +4912 snapshot first. FLAG: the member names + the +4912 mirror are inferred.
+        // @+0xEE0 (3808): the dynamic load-transfer force CalculateWeightTransfer builds and
+        // distributes to the springs (SetExternalForce). DWARF VehiclePhysics.h:830. The offset is
+        // confirmed by sequence: maSprings @+0xE10 + 4*0x30 = +0xED0 = mvSpringMassScalers, then
+        // mWeightTransfer at +0xEE0.
         Vector3 mWeightTransfer;        // +0xEE0 (packed; .x/.y/.z load-transfer per body axis)
-        Vector4 mWeightTransferMirror;  // +0x1330 (4912): the +0x50 weight register snapshot
+
+        // @+0x1330 (4912): the PREVIOUS frame's world-space linear velocity. This home used to call
+        // it `mWeightTransferMirror` and describe it as "the +0x50 weight register snapshot" -- but
+        // +0x50 is base+0x40 == mLinearVelocity, not a weight register, and UpdateSuspension
+        // @0x8261F6E4-0x8261F6F8 literally does `lvx128 v0,this,0x50 ; stvx128 v0,this,0x1330`
+        // immediately before calling CalculateWeightTransfer, so the snapshot exists so the weight
+        // transfer can difference this frame's velocity against last frame's (i.e. derive the body
+        // acceleration). That is the DWARF member mPreviousWorldSpaceVelocity (VehiclePhysics.h:939),
+        // and the offset closes exactly: maSpinEffects[8] runs +0x1230..+0x1330, and the members
+        // after it (mNormLinearVelocityMag +0x1340, mbHasAir +0x1350, mu8DriftState +0x1352,
+        // mi8NumWorldCollisions +0x1353, miNumCollisions +0x1354, mbHandBrake +0x1358,
+        // mbAllWheelsHaveTraction +0x135B, mbJustBeenSlammed +0x135D) reproduce every committed
+        // offset in the byte block in DWARF declaration order.
+        Vector3 mPreviousWorldSpaceVelocity;
 
         // ----- C03 suspension phases (bodies in VehiclePhysics.cpp) -----
         void SetupSuspension(f64 lfTimeStep);               // @0x825CF718 BLOCKED (VMX permute scatter)
