@@ -229,6 +229,23 @@ public:
     virtual bool Update(Camera& lCamera, const BehaviourSharedInfo& lrSharedInfo);
     // (argument names are the DWARF's own -- the PS3 export carries `this` / `lCamera` /
     //  `lrSharedInfo` on the register parameters.)
+    //
+    // ⭐⭐ AND IT IS MEASURED CORRECT, NOT MERELY GREEN (UT_PROBE1, 2026-08-02). Slot 2 is
+    // dispatched every frame once the parameter block goes valid, and a one-shot probe on the
+    // published transform gives, with the car parked in the junkyard:
+    //     cam = (2981.687, -2.625, -2013.986)   car = (2986.933, -3.525, -2011.418)
+    //     fwd = ( 0.898144, 0.0, 0.439701)      fov = 80.0 authored
+    // The camera-to-car offset is (-5.25, +0.90, -2.57): its horizontal part normalises to
+    // (-0.8983, ., -0.4394), i.e. EXACTLY the negated forward axis, 5.85 m along it, 0.90 m
+    // up. That is a textbook chase pose, and it is arithmetic rather than a screenshot.
+    // ⭐ The FOV tail is verified the same way: the world handover logs fov 90.395088, which
+    // is 2*atan(tan(80/2 deg) * 1.2) in degrees to six figures -- so :515's TANGENT-SPACE
+    // widening (not a degree scale) is confirmed numerically.
+    // ⛔ NO SCREENSHOT SHIPS ANYWAY, and the reason is NOT the camera: with the
+    // BrnGameModule.cpp:1177 gate forced open for the probe, the session still never leaves
+    // the CAR-SELECT screen, so there is no driving view for this camera to be on. Retiring
+    // sBringUpCamera would swap one unseen camera for another. The remaining blocker is the
+    // car-select -> drive handover, which is a different campaign.
 
     // FLAG (not transcribed): the DWARF also declares `virtual void
     //   SetupTweaker(Tweaker&)` (.cpp:148), plus the eight private helpers Update drives --
