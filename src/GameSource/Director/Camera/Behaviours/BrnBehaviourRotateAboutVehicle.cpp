@@ -716,16 +716,15 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
     }
 
     // ---- wipe the free-look rotation state ----------------------------------
-    // ⚠️ SILENT-DROP STUB ON A LIVE PATH: CameraSphericalRotationController::Construct is an
-    // EMPTY body in GameSource/Director/DirectorLinkStubs.cpp:522. That was argued safe because
-    // its only other caller (BehaviourGameplayExternal::Construct) runs on a freshly
-    // placement-new'd, zero-initialised object -- but THIS caller does not. BecomeSimilarTo runs
-    // on a behaviour that has been live for many frames, and the whole point of these ten stores
-    // is to throw away the accumulated stick yaw / pitch / lookback state so the re-seated orbit
-    // starts neutral. With the empty stub the stale rotation survives the re-seat.
-    // The real body IS fully attested (three witnesses, spelled out in the header's layout
-    // note) -- it just cannot be written from this file, because DirectorLinkStubs.cpp owns the
-    // symbol and an inline in the canonical header would collide with it.
+    // ✅ RESOLVED (this note used to read "SILENT-DROP STUB ON A LIVE PATH" and is retracted).
+    // CameraSphericalRotationController::Construct was an EMPTY body in
+    // GameSource/Director/DirectorLinkStubs.cpp; it was retired in the orbit-camera wave and now
+    // has its real ten-store body in its own home,
+    // Camera/Utils/BrnCameraSphericalRotationController.cpp:200 (see the retirement note in
+    // DirectorLinkStubs.cpp GROUP E). That matters HERE specifically: BecomeSimilarTo runs on a
+    // behaviour that has been live for many frames, and the whole point of these ten stores is to
+    // throw away the accumulated stick yaw / pitch / lookback state so the re-seated orbit starts
+    // neutral. While the stub was empty the stale rotation survived every re-seat.
     mRotationController.Construct();   // stvx128 0,+0x20 / +0x30..+0x42 / +0x48 / +0x4C
 }
 
