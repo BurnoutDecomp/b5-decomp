@@ -138,6 +138,22 @@ struct VehicleListEntry
     // adoption per the wiki rule; the width (u8) is the one the asm loads.
     u8 GetStrengthStat() const { return mu8StrengthRating; }
 
+    // ADDITIVE GROW (car-select carousel wave 2026-08-02). The two GUI GAUGE ratings the
+    // car-select stats bars display. X360-attested: BrnGui::CarSelectVehicle::
+    // SetupStatsComponent @0x824C1200 pushes, in this exact order,
+    //     mSpeedStatsBar.SetCar(*(entry + 0xEC), colour)
+    //     mBoostStatsBar.SetCar(*(entry + 0xED), colour)
+    //     mStrengthStatsBar.SetCar(*(entry + 0x9B), colour)
+    // (`lbz r4, 0xEC(r3)` / `lbz r4, 0xED(r11)`, with +0x9B already named GetStrengthStat
+    // above). The burnout.wiki Vehicle List page independently names +0xEC
+    // muTopSpeedNormalGUIStat ("Speed Rating") and +0xED muTopSpeedBoostGUIStat ("Boost
+    // Rating") -- two independent sources agreeing on both the offsets and the roles.
+    // NAME-ONLY adoption per the wiki rule; the width (u8) is the one the asm loads. Both
+    // bytes live in the recovered maPad224 span, exactly like GetCarType (+0xE8) and
+    // GetLiveryType (+0xE9) above.
+    u8 GetSpeedStat() const;
+    u8 GetBoostStat() const;
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[0x9B];                                                      // +0x00
     u8 mu8StrengthRating;                                                 // +0x9B

@@ -338,6 +338,17 @@ namespace BrnGui
         // DWARF h: -- the GUI world-data front-end (event records + landmark counts).
         WorldDataController* GetWorldDataController() const;
 
+        // ADDITIVE GROW (car-select wave 2026-08-02). The SAME pointer, WITHOUT the console
+        // assert. GetWorldDataController's assert is a dev tripwire for a pointer NOTHING ON
+        // THIS BUILD POPULATES (the GUI-side WorldDataController acquisition state machine is
+        // unreconstructed -- BrnLicenseComponent.cpp already documents the same gap), and a
+        // dev assert BLOCKS the sim, so a caller that must tolerate the absence -- currently
+        // only BrnGui::CarSelectMain::UpdateGuiCache, which runs every time GUI event 64
+        // lands on the car-select screen -- has to be able to ask without tripping it.
+        // DELETE THIS ACCESSOR (and restore the plain call at its one call site) as soon as
+        // the controller is populated.
+        WorldDataController* PeekWorldDataController() const;
+
         // ADDITIVE GROW (BrnSatNavRenderer TU). The world-space camera position the sat-nav
         // renderer measures off-screen icons against. RenderIconsForSatNav loads it ONCE before
         // the per-icon loop (X360 @0x8245FA48: lvx128 v124, mpGuiCache, 0x4AE0 -- the far member
@@ -493,6 +504,11 @@ namespace BrnGui
         // what keeps those TUs off raw offsets.
         // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
         s32 GetCamStatus() const;                            // X360 far member @0x13B58
+
+        // ADDITIVE GROW (BrnCarSelectVehicle TU). The car-select "transition already shown"
+        // gate at X360 far member @0x13B5E -- see the member's own note. Header-inline (a
+        // single byte read; the X360 reader inlines the raw far-member load too).
+        bool GetCarSelectTransitionAlreadyShown() const { return mbCarSelectTransitionAlreadyShown; }
 
         // ADDITIVE GROW (the GUI per-frame time pump). The cache LEADS with the embedded
         // GuiEventTimeInfo pair (mfTimeStep @+0x00, mfTimeNow @+0x04) and every GUI-side timer
@@ -951,7 +967,17 @@ namespace BrnGui
         // is exactly an Xbox 360 with no camera plugged in, and selects the retail
         // no-camera path in every one of those readers.
         s32 miCamStatus;                                 // +0x13B58 (80728)
-        u8  mPad_13B5C[56];                              // +0x13B5C..+0x13B93
+        u8  mPad_13B5C[2];                               // +0x13B5C..+0x13B5D
+        // +0x13B5E (80734). Carved out of the old mPad_13B5C span (2 + 1 + 53 == 56, so the
+        // layout is unchanged). BrnGui::CarSelectVehicle::SetupComponents @0x824C9978 reads
+        // it as `lis r11,1 / ori r11,r11,0x3B5E / lbzx r11, mpGuiCache, r11` and branches on
+        // it: SET means "the car-select screen has already played its transition", so it
+        // re-shows the ticker instead of running mMainAnimComponent's "transin"; CLEAR runs
+        // the transition. FLAG: the NAME is from that single recovered reader (no writer is
+        // reconstructed yet, so it stays 0 on this build and the transition always plays --
+        // which is the first-entry behaviour). Retire the FLAG when the writer lands.
+        bool mbCarSelectTransitionAlreadyShown;          // +0x13B5E (80734)
+        u8  mPad_13B5F[53];                              // +0x13B5F..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
         u8  mPad_13B98[8];                               // +0x13B98..+0x13B9F
         // ---- replay slots / status interface / player tables ----

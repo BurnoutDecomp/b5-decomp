@@ -189,6 +189,27 @@ namespace BrnGui
         // overwrites it (ScreenLoading's ApplyOptionsDataProfileSettings reads it on
         // the world-load hand-off).
         GetOptionsDataProfile()->Construct();
+
+        // ⛔ FLAG GameState stand-in (2026-08-02, car-select wave).
+        // CONSOLE CHAIN: meCarSelectType is latched by RecEvent's `case 77` (see the switch
+        // below) from a 4-byte GAME-STATE event that carries the running car-select flavour;
+        // the game-state module raises it when CarSelectManager::StartCarSelectState
+        // @0x823872D0 enters E_STATE_CAR_SELECT.
+        // WHY A STAND-IN: that action -> GUI-event bridge does not exist on this build
+        // (BrnGameModule's GameState bridge is still a placeholder -- see the event-137 /
+        // event-350 stand-ins in BrnGameModule.cpp), so the field stayed at
+        // E_CAR_SELECT_TYPE_NONE (0) and the console's own
+        // GetCurrentCarSelectType() assert -- "meCarSelectType >
+        // GsmIO::E_CAR_SELECT_TYPE_NONE", inlined into CarSelectMain::OnEnter @0x824C8B34
+        // and ExitCarSelection @0x824C8CF4 -- fired the moment BrnGui::CarSelectVehicle was
+        // re-homed onto CarSelectMain and its OnEnter started running. A dev assert BLOCKS
+        // the sim, so it would stall the very screen this wave brings up.
+        // WHY JUNKYARD: E_CAR_SELECT_TYPE_JUNKYARD is the only value this build can reach --
+        // the sibling E_CAR_SELECT_TYPE_ONLINE_EVENT_START needs an online lobby, and it is
+        // the value ExitCarSelection's `== 1` branch tests for when it posts the junkyard
+        // GuiEventActivateCarSelect. Replace this seed with the real event when the
+        // GameState->Gui bridge lands (RecEvent's case 77 already consumes it).
+        meCarSelectType = 1;   // BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD
     }
 
     // @0x8250DC30 -- publish the queue selected on the previous frame, clear it,
@@ -804,6 +825,16 @@ namespace BrnGui
                 mStateLoadingHelper.MarkAptComponentInitialised(lpTrigger);
             break;
         }
+        case 77:
+            // ADDITIVE (car-select wave 2026-08-02). The X360 switch (rebased by -4) reaches
+            // `jumptable 8250DE3C case 77` at 0x8250EE20 and does exactly this: one
+            // `lwz r11, 0(payload)` / `stw r11, 0x4B70(this)`. +0x4B70 is meCarSelectType,
+            // which CarSelectMain::OnEnter and CarSelectVehicle read through
+            // GetCurrentCarSelectType(). No producer for this event exists on PC yet -- see
+            // the FLAG stand-in in Construct() above -- but wiring the consumer now means the
+            // real producer needs no further change here.
+            meCarSelectType = *reinterpret_cast<const s32*>(lpEvent);
+            break;
         default:
             break;
         }
@@ -1050,6 +1081,15 @@ namespace BrnGui
         CGS_ASSERT(mpWorldDataController != nullptr, "mpWorldDataController");
         // The X360 stores the controller as a non-const pointer the GUI mutates through;
         // the cache member is declared const, so cast away for the (non-const) accessor.
+        return const_cast<WorldDataController*>(mpWorldDataController);
+    }
+
+    // ADDITIVE GROW (car-select wave 2026-08-02) -- the assert-free face of the accessor
+    // above. See the header note: PC has no producer for mpWorldDataController, and the
+    // console's dev assert BLOCKS the sim, so the one caller that must tolerate NULL asks
+    // through here. Retire it with the gap.
+    WorldDataController* GuiCache::PeekWorldDataController() const
+    {
         return const_cast<WorldDataController*>(mpWorldDataController);
     }
 

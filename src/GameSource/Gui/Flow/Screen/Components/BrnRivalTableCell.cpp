@@ -96,4 +96,54 @@ void RivalTableCell::SetScreenPosition(Vector2 lv2ScreenPosition)
     }
 }
 
+// Component vtable SLOT 4 (off_820717E0 + 0x10) holds 0x8284CB38 -- the image-wide
+// ICF fold of a bare `blr`, i.e. an EMPTY body, not _purecall (the same address the
+// four empty CarSelectMain event handlers occupy, 193 xrefs). So this cell really does
+// override Select() with nothing: a carousel icon is a display cell, and the group's
+// Select() (slot 4 on the GROUP) is what the screen dispatches. Proven, not assumed --
+// the sibling BrnGui::TextSelectionItem::Select is the same fold.
+void RivalTableCell::Select()
+{
+}
+
+// ---- the three small setters, recovered from their INLINED copies -----------------
+// The X360 emits no out-of-line symbol for SetEmpty / SetCarID / SetDriven -- every call
+// site inlines them -- so they were declaration-only here. BrnGui::CarSelectVehicle::
+// SetCarouselComponent @0x824BBE90 inlines all three TWICE (once in the blanking loop at
+// 0x824BBF00..0x824BBF8C, once in the binding loop at 0x824BC080..0x824BC3D0), which pins
+// their bodies store for store. `r31`/`r27` there point at cell + 0x0C (Selectable::mxFlags),
+// so the displacements below decode as: +0(from r31) == mxFlags, +0xA4 == mbDriven,
+// +0xA6 == mbEmpty, r31-0xA(=cell+0xA8) == mCarID, r31-0xA2(=cell+0x10) == Selectable::mId.
+
+// SetEmpty: a guarded latch -- only a CHANGE writes the byte and dirties the cell.
+//   lbz mbEmpty / cmplwi <new> / beq skip / lbz mxFlags / stb <new> / ori 0x10 / stb mxFlags
+void RivalTableCell::SetEmpty(bool lbEmpty)
+{
+    if (mbEmpty != lbEmpty)
+    {
+        mbEmpty = lbEmpty;
+        SetDirty();
+    }
+}
+
+// SetCarID: un-empty the cell, push the id into BOTH the Selectable identity and the cell's
+// own mCarID, dirtying between the two stores (the console emits `ori 0x10 / stb` twice).
+void RivalTableCell::SetCarID(CgsID lCarID)
+{
+    SetEmpty(false);
+
+    SetId(lCarID);        // std -> cell + 0x10 (Selectable::mId)
+    SetDirty();
+
+    mCarID = lCarID;      // std -> cell + 0xA8
+    SetDirty();
+}
+
+// SetDriven: a bare store -- the console writes the byte with no flag update
+// (`stb r21, 0xA4(r31)` / `stb r11, 0xA4(r27)`, no surrounding ori).
+void RivalTableCell::SetDriven(bool lbDriven)
+{
+    mbDriven = lbDriven;
+}
+
 }

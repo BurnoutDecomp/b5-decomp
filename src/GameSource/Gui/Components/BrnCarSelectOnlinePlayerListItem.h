@@ -57,6 +57,12 @@ namespace BrnGui
         // (localisation key "CAR_CAPS_<id>"), gated on visibility + id change.
         void SetPlayerCar(CgsID lCarID);
 
+        // ADDITIVE GROW (CarSelectOnlinePlayerList::IsShowing @0x82482950): the row's
+        // visible flag. The X360 owner reads it directly as `lbz (index * 0x2F0) + 0x378`
+        // off the list, i.e. row + 0x2E8 == mbVisible; exposed by name so the owner stays
+        // off the raw offset. Faithful 1-load accessor (mbVisible is private).
+        bool IsVisible() const { return mbVisible; }
+
     private:
         // BrnCarSelectOnlinePlayerListItem.cpp:23/24 (DWARF-named clip-name constants).
         static const char KAC_GAMERTAG_TEXTFIELD_NAME[12];   // "gamertag_mc"

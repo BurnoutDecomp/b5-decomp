@@ -106,10 +106,17 @@ namespace BrnGui
 
         mpGuiCache = lpCache;
 
-        WorldDataController* lpWorldData = mpGuiCache->GetWorldDataController();
-        CGS_ASSERT(lpWorldData != 0, "mpWorldDataController");
+        WorldDataController* lpWorldData = mpGuiCache->PeekWorldDataController();
 
-        mpVehicleList = lpWorldData->GetVehicleList();
+        // ⚠️ PC-BUILD GUARD (2026-08-02). The console calls the ASSERTING accessor
+        // (GetWorldDataController) and dereferences the result directly here.
+        // NOTHING ON THIS BUILD POPULATES GuiCache::mpWorldDataController (+0x4064) -- the
+        // GUI-side WorldDataController acquisition state machine is unreconstructed; the
+        // committed BrnLicenseComponent.cpp already documents the same gap and works around
+        // it. Before BrnGui::CarSelectVehicle was re-homed onto this class nothing reached
+        // this line, so the null dereference was latent. Remove the guard when the GUI world
+        // data lands.
+        mpVehicleList = (lpWorldData != 0) ? lpWorldData->GetVehicleList() : 0;
     }
 
     // ---- SetupCar @ 0x824B5548 ----------------------------------------------------
@@ -129,14 +136,23 @@ namespace BrnGui
     {
         typedef CgsLanguage::LanguageManager LM;
 
-        CGS_ASSERT(mpVehicleList, "mpVehicleList");   // cpp:880
+        // cpp:880 -- ⚠️ PC-BUILD GUARD (2026-08-02, car-select wave). The console asserts
+        // mpVehicleList and then dereferences it; on this build the list is legitimately
+        // absent (GuiCache::mpWorldDataController is never populated -- see UpdateGuiCache
+        // above) and a dev assert BLOCKS the sim, so the bail replaces it. Restore the
+        // assert when the GUI WorldDataController lands.
+        if (mpVehicleList == 0)
+            return;
 
         const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
         const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lSelectedCarId);
 
         const BrnResource::VehicleListEntry* lpVehicleData =
             (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
-        CGS_ASSERT(lpVehicleData, "lpVehicleData");   // cpp:883
+        // cpp:883 -- same PC-BUILD GUARD reasoning as above (the console asserts and then
+        // dereferences; an unresolved car id is reachable on this build).
+        if (lpVehicleData == 0)
+            return;
 
         char lacId[16];
         char lacCarText[32];
@@ -174,5 +190,82 @@ namespace BrnGui
             GuiEventTriggerCarSelect lEvent(mCurrentSetupInfo.mCarId);
             mpStateInterface->GetOutputEventQueue()->AddEvent(&lEvent, 40, 24);
         }
+    }
+
+    // ================================================================================
+    // The ten base virtuals with no out-of-line X360 symbol (2026-08-02).
+    //
+    // Until this wave nothing in the tree instantiated a CarSelectMain-derived state, so
+    // the class's vtable was never emitted and these ten never had to link. Re-homing
+    // BrnGui::CarSelectVehicle onto this class makes the base sub-object real, and MSVC
+    // emits CarSelectMain's own vtable alongside it -- so every declared virtual now needs
+    // a definition. None of them is dispatched on a live CarSelectVehicle (it overrides the
+    // first six and the last four are empty on the console), and CarSelectMain itself is
+    // never instantiated: BrnScreenFlow::Prepare only ever news the derived states.
+    //
+    //  * The FOUR event handlers below are EMPTY ON THE CONSOLE, proven not assumed: the
+    //    derived vtable off_82075470 holds 0x8284CB38 in slots +0x48/+0x4C/+0x50/+0x54, and
+    //    0x8284CB38 is a bare `blr` with 193 xrefs -- the image-wide ICF fold of an empty
+    //    body, NOT _purecall. Making them `= 0` would route events 564/406/413/414 into
+    //    _purecall on this exact screen.
+    //  * GetResourcesToLoad() / GetNumberResourcesToLoad() return "no resources", which is
+    //    exactly what the base's ATTESTED 2-argument sibling
+    //    CarSelectMain::GetResourcesToLoad(ptr, count) @0x824B55B8 writes ({0, 0}).
+    //  * IsLoading / PlayMovie / SetupComponents / HandleCarInfoResponseEvent are the
+    //    neutral base behaviours (nothing pending, no movie, nothing to build, nothing to
+    //    adopt). FLAG: the X360 emitted no body for these four -- the DWARF places them at
+    //    cpp:954 / h:136 / cpp:511 / cpp:563 in the PS3 build, where the derived states also
+    //    own the real work. Replace them if a CarSelectMain-derived state ever needs a
+    //    non-trivial base default.
+    // ================================================================================
+
+    bool CarSelectMain::IsLoading() const
+    {
+        return false;
+    }
+
+    void CarSelectMain::PlayMovie()
+    {
+    }
+
+    void CarSelectMain::SetupComponents()
+    {
+    }
+
+    void CarSelectMain::HandleCarInfoResponseEvent(const CgsModule::Event* /*lpEvent*/,
+                                                   s32 /*liEventType*/)
+    {
+    }
+
+    // The four ICF-folded empty overrides (derived vtable slots +0x48..+0x54).
+    void CarSelectMain::HandleCarAudioLoadComplete()
+    {
+    }
+
+    void CarSelectMain::HandlePlayerInfoResponse(const CgsModule::Event* /*lpEvent*/,
+                                                  s32 /*liEventType*/)
+    {
+    }
+
+    void CarSelectMain::HandleUnlockedLiveryResponseEvent(const CgsModule::Event* /*lpEvent*/,
+                                                           s32 /*liEventType*/)
+    {
+    }
+
+    void CarSelectMain::HandlePlayerCarColourResponseEvent(const CgsModule::Event* /*lpEvent*/,
+                                                            s32 /*liEventType*/)
+    {
+    }
+
+    // The two 0-argument resource getters GetResourcesToLoadForCarSelect forwards to
+    // (X360 slots +0x24 / +0x60).
+    CgsGui::sResourceTuple* CarSelectMain::GetResourcesToLoad() const
+    {
+        return 0;
+    }
+
+    u32 CarSelectMain::GetNumberResourcesToLoad() const
+    {
+        return 0;
     }
 }

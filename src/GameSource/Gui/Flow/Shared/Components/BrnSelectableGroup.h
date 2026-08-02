@@ -89,6 +89,23 @@ namespace BrnGui
         // Component vtable slot 5.
         void Update();
 
+        // ADDITIVE GROW (BrnGui::CarSelectVehicle::OnEnter @0x824C9470). The group head IS a
+        // BrnGui::Selectable on the console (this class models that head as reserved storage
+        // plus the muFlags byte, so it cannot inherit the method), and OnEnter reaches
+        // Selectable::SetHighlightable through the group's component vtable SLOT 1:
+        // `(*(*(this + 0x2370) + 4))(this + 0x2370, 1)`. muFlags IS Selectable::mxFlags --
+        // both live at +0x0C -- so this reproduces Selectable::SetHighlightable @0x824E5730
+        // store for store on the same byte: set/clear bit 1, dirty and report a change.
+        bool SetHighlightable(bool lbHighlightable)
+        {
+            const u8 luFlags = muFlags;
+            if (lbHighlightable == (((luFlags >> 1) & 1) != 0))
+                return false;
+            muFlags = static_cast<u8>(lbHighlightable ? (luFlags | 0x02) : (luFlags ^ 0x02));
+            muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+            return true;
+        }
+
         // @ 0x824E31D8 -- set one item's id + dirty it.
         void SetSelectableId(s32 liIndex, u64 luId);
         // @ 0x824E3248 -- set every item's id (from the array, or its index when null) + dirty.
