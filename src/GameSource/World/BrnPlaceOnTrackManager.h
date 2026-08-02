@@ -159,7 +159,21 @@ private:
 // BrnPlaceOnTrackManager.h:57..59 (DWARF). The line test runs KF_LINE_TEST_LENGTH metres
 // up and the same distance down through the requested position; KI_LINE_TEST_OWNER is the
 // SceneQueryId owner byte PrePhysicsUpdate filters on (`BYTE1(*event) != 5`).
-const f32 KF_PLACE_ON_TRACK_LINE_TEST_LENGTH = 1000.0f;
+//
+// ⛔ CORRECTED 2026-08-02 (car-placement wave): this was 1000.0f, which no consumer ever
+// read, so nothing caught it. The console's value is the rodata float flt_820138DC that
+// PlaceOnTrackManager::PostSceneUpdate @0x822D3168 splats into the .y lane of the two
+// stack vectors it adds to / subtracts from mPlaceOnTrackPosition:
+//     0x822D3244  lfs  f0, flt_820138DC@l(r27)
+//     0x822D3250  stfs f0, var_12C(r1)      ; lineStart.y offset
+//     0x822D3270  stfs f0, var_13C(r1)      ; lineEnd.y   offset
+//     0x822D3290  vaddfp128 v127, v0, v13   ; mLineStart = pos + (0, +len, 0)
+//     0x822D32A8  vsubfp128 v126, v0, v12   ; mLineEnd   = pos - (0, +len, 0)
+// flt_820138DC == 50.0f, cross-checked at four unrelated call sites that print it as a
+// literal (PropCollisions::UpdateLocatorVfx, BoostBurnout5::Prepare,
+// ModeManagerDebugComponent::RenderHUD, RaceCarEntityModuleDebugComponent::
+// RenderTrafficRelated). So the console's place-on-track line is 100 m long, not 2 km.
+const f32 KF_PLACE_ON_TRACK_LINE_TEST_LENGTH = 50.0f;
 const f32 KF_PLACE_ON_TRACK_Y_OFFSET         = 1.0f;
 const u8  KI_PLACE_ON_TRACK_LINE_TEST_OWNER  = 5;
 

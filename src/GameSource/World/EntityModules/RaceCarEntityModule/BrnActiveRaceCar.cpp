@@ -649,6 +649,18 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
 }
 
 // ----------------------------------------------------------------------------
+// [FLAG PC bring-up] SeedPhysicsStateFromCreateEventBringUp -- NOT an X360 function.
+// See the banner in BrnActiveRaceCar.h. The console's UpdatePhysicsState memcpy's the
+// whole 1120-byte RaceCarState; only mTransform is knowable without a physics tick, and
+// only mTransform is written here.
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine& lrTransform)
+{
+    CGS_ASSERT(IsAttached(), "IsAttached()");
+    mPhysicsState.mTransform = lrTransform;
+}
+
+// ----------------------------------------------------------------------------
 // GetTransform @ 0x822CCEB8. Forwards to the paired global slot's world transform.
 // The third IsAttached() assert is the one inlined from GetGlobalRaceCar() itself.
 // ----------------------------------------------------------------------------
