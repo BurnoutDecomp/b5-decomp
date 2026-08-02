@@ -164,32 +164,34 @@ public:
     // jump FOV, snap to the car, report ready (cannot fail).
     virtual bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo);
 
-    // FLAG (recovered but NOT declared): `virtual CollisionPolicy* GetCollisionPolicy()`
-    //   @0x821F9138 is fully decoded --
-    //       CGS_ASSERT(mpParameters, "calling GetCollisionPolicy() with no parameters");
-    //                                                  // .cpp:120, tests *(this+2816)
-    //       if (!mpParameters->mbIsValid) return 0;     // *(params + 172) == +0xAC
-    //       return &mCollisionPolicy;                   // this + 80
-    //   -- and both operands land exactly on the named members above, which is a nice
-    //   independent confirmation of the layout. It is NOT declared here because
-    //   CollisionPolicyAttachedToVehicle does not (yet) DERIVE the abstract CollisionPolicy:
-    //   that base's only definition is a minimal slice inside Behaviours/BehaviourRig.h,
-    //   which BrnCollisionPolicy.h cannot include (BehaviourRig.h includes IT). Returning the
-    //   member would need a cast through a base the type does not have. The slot therefore
-    //   keeps Behaviour::GetCollisionPolicy's default (null).
-    //   ⚠️⚠️ THIS FLAG'S "SO TODAY THE TWO AGREE" CLAUSE EXPIRED ON 2026-08-02, and it was the
-    //   camera parameter-chain wave's OWN change that expired it. The clause read: "null is
-    //   what the console itself returns whenever the parameters are unset, which is the state
-    //   every allocated gameplay camera is in here (SharedCameraContainer::Prepare's parameter
-    //   binds are gated on BehaviourParameterBank)". Both halves are now false: the binds are
-    //   restored and MainDirector::ProcessNewVehicleEvents raises mbIsValid, so the console
-    //   would return &mCollisionPolicy from the moment the player's car arrives while this
-    //   build still returns null. That is a REAL DIVERGENCE now, not an agreement -- the chase
-    //   camera will have no collision policy in the scene-query pass until the base lands.
-    //   (It is not yet observable, because slot 2 Update is still the base's no-op.)
-    //   DELETE-WHEN: the CollisionPolicy base is moved to BrnCollisionPolicy.h (its natural
-    //   home) and CollisionPolicyAttachedToVehicle derives it -- Step 0 #3, the IceAnim /
-    //   BehaviourRig fork family.
+    // @0x821F9138 -- the slot-5 override: the vehicle-attached collision policy, but only
+    // once the parameter block is bound AND valid.
+    //
+    // ⭐⭐ DECLARED + BODIED 2026-08-02. It used to be a FLAG ("recovered but NOT declared")
+    // resting on TWO reasons, and BOTH have now expired -- the second one was already
+    // retired in place on 2026-08-02, the first had been dead since 2026-07-30 and nobody
+    // re-read it:
+    //   (1) "CollisionPolicyAttachedToVehicle does not (yet) DERIVE the abstract
+    //       CollisionPolicy: that base's only definition is a minimal slice inside
+    //       Behaviours/BehaviourRig.h, which BrnCollisionPolicy.h cannot include
+    //       (BehaviourRig.h includes IT). Returning the member would need a cast through a
+    //       base the type does not have."
+    //       ⛔ FALSE since the ICE-anim de-fork wave: `class CollisionPolicy` has lived in
+    //       BrnCollisionPolicy.h:111 since 2026-07-30 (BehaviourRig.h:73 carries the
+    //       "they MOVED there unchanged" note), and BrnCollisionPolicy.h:142 reads
+    //       `class CollisionPolicyAttachedToVehicle : public CollisionPolicy`. The type HAS
+    //       the base; no cast is needed and none is used below.
+    //   (2) "null is what the console itself returns whenever the parameters are unset,
+    //       which is the state every allocated gameplay camera is in here ... so today the
+    //       two agree."
+    //       ⛔ FALSE since the parameter-chain wave (f1f28351): SharedCameraContainer::
+    //       Prepare's binds are restored and MainDirector::ProcessNewVehicleEvents raises
+    //       mbIsValid, measured, on the first frame the player's car exists. The console
+    //       returns &mCollisionPolicy from that moment; this build returned null.
+    // ⇒ it was a REAL DIVERGENCE, and the reason given for tolerating it had been wrong for
+    //   three days. The chase camera had no collision policy in the scene-query pass at all,
+    //   so nothing could ever pull it in out of geometry.
+    virtual CollisionPolicy* GetCollisionPolicy();
 
     // @0x821F91A8 -- the slot-7 override (the DWARF declares it taking the BASE Parameters
     // type, .cpp:135, which is what makes it an override rather than a hiding overload the
@@ -238,6 +240,135 @@ public:
     //   transcribing the chase rig is its own wave (Update alone is 91 source statements
     //   spanning .cpp:188..:561, plus ~360 more across the helpers).
     //
+    // ⭐⭐ THE DECODE OF THAT CLUSTER, AS FAR AS IT IS *VERIFIED* (2026-08-02). Recorded here
+    //   -- and NOT turned into bodies -- for the same reason f669b437 gave: a body with no
+    //   caller is dead code, and Update cannot link until all eight helpers exist. Every line
+    //   below is read off the asm of BOTH exports; where the two disagree the X360 wins on
+    //   constants/offsets and DecFIGS wins on names (it carries the DWARF's own register and
+    //   local names). Anything still unsettled is marked INFERRED.
+    //
+    //   ⚠️⚠️ THE OPERAND CONVENTION THAT MAKES THE VECTOR MATH READABLE -- get this wrong and
+    //   every multiply-add in the cluster inverts. In BOTH exports IDA prints AltiVec
+    //   `vmaddfp` in FIELD order `vD, vA, vB, vC` while the SEMANTICS are `vD = vA*vC + vB`
+    //   (correspondingly `vnmsubfp d,a,b,c` is `b - a*c`). Settled by three independent
+    //   witnesses, not assumed:
+    //     * ModifyTargetAngles PS3 0x18EF4 `vmaddfp v0, v0, v1(=0), v11` HAS to be
+    //       `rollCoeff * angles`, because the X360 twin @0x82225620 spells the same statement
+    //       `vmulfp128 v0, v0, v12`.
+    //     * Update PS3 0x699D8 `vmaddfp v12, v8, v27(=0), v8` HAS to be `v8*v8`, because the
+    //       next four instructions rotate-and-add its lanes (a squared length).
+    //     * the rsqrt Newton-Raphson at PS3 0x69A2C..0x69A38 only reads as the textbook
+    //       `x0*(1.5 - 0.5*a*x0^2)` under this convention.
+    //   ⚠️ the X360's OWN `vmulfp128` / `vmaddfp128` print in ASSEMBLER order instead -- the
+    //   two forms sit side by side inside CalculateCameraTransform.
+    //
+    //   ---- CalculateCameraTransform @0x8220E838 / PS3 @0x276FC (.cpp:813..:839) ----------
+    //   The keystone: this is the function that decides where the chase camera IS. Small --
+    //   164 X360 asm lines, of which ~90 are one inlined VMX SinCos.
+    //   VERIFIED argument map (X360 passes vector args from v1, PS3 from v2; the two agree
+    //   member for member, which is itself the cross-check):
+    //     r3  this            -- and the body reads `this->mpParameters->mfDownAngle` (+0x94),
+    //                            NOT the rCameraAttribs reference it is handed
+    //     r4  rCameraAttribs  -- DEAD in the body (the caller does pass mpParameters)
+    //     r5  lCameraMatrix   -- Matrix44Affine&, the OUTPUT
+    //     r6  lrCarMatrix     -- Matrix44Affine by value (big vector struct => hidden pointer)
+    //     V1  euler angles for the SECOND rotate
+    //     V2  multiplied component-wise into BOTH translations (VERIFIED as the multiplier;
+    //         "a scale" is INFERRED -- the caller's own stack slot is DWARF-named lCarScale)
+    //     V3  the first translation (row3 = V3 * V2)
+    //     V4  euler angles for the FIRST rotate
+    //     V5  DEAD -- X360 clobbers v5 at 0x8220E8CC before any read; PS3 clobbers ITS v6
+    //         (same ordinal) at 0x27708. Two independent builds agree the 5th Vector3 is unused.
+    //     V6  the second translation offset (row3 += V6 * V2)
+    //     f1  lfSpeedMPH, f2 lfTimestep -- BOTH DEAD in the body (the caller does pass them:
+    //         PS3 0x6AC70 `lfs f1, 0x42C(lrSharedInfo)` / 0x6AC78 the timestep)
+    //   VERIFIED body shape, statement for statement:
+    //     .cpp:817  lfDownAngleRads = mpParameters->mfDownAngle * 0.0174533f  (flt_82001744
+    //               == KF_DEGS_TO_RADS) and SinCos of it -- the inlined minimax at
+    //               unk_82000BD0..82000C20 with the range-reduction table unk_82000C60 ==
+    //               { PI, 2*PI, 1/PI, 1/(2*PI) } (read out of the image, all four words).
+    //               The three rows written are an X-axis rotation by that angle:
+    //               row0 {1,0,0}, row1 {0,c,s}, row2 {0,-s,c}.
+    //               ⚠️ INFERRED: the exact sign lane assignment -- the two `vrlimi128`s pick
+    //               lanes out of the sin/cos pair and I have not settled which row takes the
+    //               negated one. Everything else here is store-for-store.
+    //     .cpp:819  lCameraMatrix.SetTranslation(V3 * V2)          (`vmulfp128 v8, v3, v127`)
+    //     .cpp:822  Utils::RotateMatrix44AffineByEulerAnglesZXY(lCameraMatrix, V4)
+    //     .cpp:82x  lCameraMatrix.SetTranslation(GetTranslation() + V6 * V2)
+    //                                                    (`vmaddfp128 v0, v125, v127, v0`)
+    //     .cpp:828  Utils::RotateMatrix44AffineByEulerAnglesZXY(lCameraMatrix, V1)
+    //     .cpp:832  lCameraMatrix.SetTranslation(GetTranslation() + lrCarMatrix.GetTranslation())
+    //   ⇒ pivot-then-rotate-then-offset-then-rotate-then-place-on-the-car. Both callees are
+    //   ALREADY BODIED here (CameraUtils.cpp), so this helper has no unresolved dependency.
+    //
+    //   ---- ModifyTargetAngles @0x82225580 / PS3 @0x18E24 (.cpp:622..:642) ----------------
+    //   VERIFIED complete (43 X360 asm lines, no asserts, no calls):
+    //       lrTargetAngles.x = Clamp(x, -PI/mrPitchLimit, +PI/mrPitchLimit);   // .cpp:625
+    //       lrTargetAngles.z = Clamp(z, -PI/mrRollLimit,  +PI/mrRollLimit);    // .cpp:626
+    //       lrTargetAngles.z *= mrRollCoeff;                                   // .cpp:633
+    //   (flt_8200174C == 3.14159; the defaults mrPitchLimit == mrRollLimit == 8.0f make the
+    //   band +/-22.5 degrees, and mrRollCoeff's default 0.0f kills roll entirely.)
+    //
+    //   ---- CalcSpringCoeffs @0x8220E5D0 / PS3 @0x3A37C (.cpp:644..:673) -----------------
+    //   VERIFIED complete:
+    //       CGS_ASSERT(!IsNaN(lfXSpringCoeff), ...);   // .cpp:646, streams "lfXSpringCoeff: "
+    //       CGS_ASSERT(!IsNaN(lfYSpringCoeff), ...);   // .cpp:647, streams " lfYSpringCoeff: "
+    //       lfSpeedFactor   = Min(Abs(lfSpeedMPH) * 0.02f, 1.0f);   // saturates at 50 MPH
+    //       lrInverseSpring = Vector3((1 - Clamp(lfXSpringCoeff,0,1)) * lfSpeedFactor,
+    //                                  1 - Clamp(lfYSpringCoeff,0,1), 0);
+    //       lrSpring        = Vector3(1,1,1) - lrInverseSpring;
+    //   ⚠️ THE OUTPUTS ARE REVERSED RELATIVE TO THE ARGUMENT NAMES: the 4th parameter
+    //   (lrSpring) receives `1 - v` and the 5th (lrInverseSpring) receives `v`. Update's only
+    //   call site feeds it (speedMPH, lfTimeStepMod * mfZVelocity, lfTimeStepMod * mfYawDrift).
+    //
+    //   ---- Update @0x82240828 itself: the statement map that IS settled ------------------
+    //     :190  if (!mpParameters) assert("Updating with no parameters")   -- non-gating
+    //     :192  if (mpParameters->mbIsValid) {                             -- the whole body
+    //     :197  lfTimestep = lrInfo.GetTimestep(GetTimestepType())  -- and the same statement
+    //           raises bit 1 of the camera's own state bit array (`ld/ori 2/std` at
+    //           lrCamera + 0x140, CgsBitArray.h:213 over BrnCameraState.h:114)
+    //     :201  lfTimeStepMod = lfTimestep * 60.0f      (X360 flt_82004C6C, read out of .rdata)
+    //     :207  Normalize(lrInfo.mPlayerInfo.<+0x330, i.e. shared-info +0x390> velocity) with
+    //           a zero-length guard (`vmsum3fp128 v0,v12,v12` then the rsqrt NR pair)
+    //     :226  mRotationController.Update(lfTimestep, lrInfo.mCameraModifier,
+    //                                      lrInfo.mbLookback, lrInfo.mbUseControlPauseBehaviour,
+    //                                      lfMinPitch, lfMaxPitch)   <- ALREADY BODIED
+    //     :235..:240  build a car-velocity frame from lrInfo.GetEyeTarget() (+0x250)
+    //     :260/:261/:264  rw::math::vpu::SLerp x2 + OrthoNormalize3x3, rate
+    //                     kvfVelocityTransformSlerpSpeed
+    //     :287  InterpolateLastPlayerTransform(...)
+    //     :301  a FUNCTION-LOCAL STATIC `mLastCameraAngles` (Vector3) with a real guard
+    //           variable -- it is per-class, not per-instance, and both gameplay cameras
+    //           share it
+    //     :307  Utils::EulerAnglesZXYFromMatrix44Affine(...)            <- ALREADY BODIED
+    //     :321  ModifyTargetAngles(*mpParameters, lTargetAngles)
+    //     :331  CalcSpringCoeffs(speedMPH, lfTimeStepMod*mfZVelocity, lfTimeStepMod*mfYawDrift,
+    //                            lSpring, lInverseSpring)
+    //     :337  Utils::GetSmallestDifferenceBetweenRadAngles(...)  <- NOT in CameraUtils.h yet
+    //     :397  UpdateLooking(lfFOVInOut, lRotation, lPivot, lCarSpaceOffset, lrAABBox)
+    //     :409  CalculateCameraTransform(...)  (see the argument map above)
+    //     :445  mBoostShake.Update(lrInfo.mpDirectorResourceManager, lfTimestep,
+    //                              ln8ShakeType, lfShakeFrequency, <amplitude>)
+    //           with the file statics ln8ShakeType == 2, lfShakeFrequency == 1.0f and the
+    //           amplitude scaled by 9.0f (X360 flt_82CDAD58/5C/60 read out of .data)
+    //     :453  UpdateJumping(lrInfo, lfTimestep, lrCamera)
+    //     :469..:474  mfImpactShakeFactor = Max(mfImpactShakeFactor,
+    //                     Min(Max(<speed/impact term>, 0), 0.8f));  ApplySlideyEffects(...)
+    //     :498  ApplyJumpEffects(lrCamera, lrInfo)
+    //     :500  mfPitchCoefficient *= kfShakeDropoffFactor
+    //     :505  mImpactShake.Update(matrix, params, *lrInfo.mpRandom,
+    //                               kfJumpParamsImpactShakeMaxAmplitude,
+    //                               kfJumpParamsImpactShakeMaxFreqMul)
+    //     :515  mbLastCarPosInitialised = false ... :520/:522 the FOV publish
+    //   ⇒ the remaining unknowns are concentrated in FOUR helpers (UpdateLooking 669 asm
+    //     lines, ApplySlideyEffects 434, InterpolateLastPlayerTransform 307, ApplyJumpEffects
+    //     303, UpdateJumping 205) plus Update's own .cpp:246..:296 branch tail.
+    //   ⛔ ONE MISSING DEPENDENCY, and it is not in this file: `Utils::
+    //     GetSmallestDifferenceBetweenRadAngles(Vector3, Vector3)` (.cpp:337) has no
+    //     declaration in Camera/Utils/CameraUtils.h -- only the DEGREES scalar sibling
+    //     GetSmallestDifferenceBetweenDegsAngles does. It must be added and bodied before
+    //     Update can link.
+    //
     // ⚠️⚠️ THE OLD CLOSING CLAUSE OF THIS FLAG WAS WRONG, AND IT WAS LOAD-BEARING (retired
     //   2026-08-02). It read: "nothing dispatches slot 2 today anyway (MainDirector::
     //   UpdateCameraBehavioursPostScene @0x8224FD30, the only caller of UpdateAllBehaviours,
@@ -276,7 +407,16 @@ public:
     //                   ControllerInfo +0x01 == mbGameTalkRefreshRequest (DecFIGS DWARF
     //                   BrnDirectorControllerInfo.h:49), the live-tuning tool's pulse. Nothing
     //                   on a PC/retail build sets it.
+    //     ✅ REAL      GetCollisionPolicy @0x821F9138 (2026-08-02) -- was a divergence the
+    //                   moment mbIsValid went true; the console hands back &mCollisionPolicy
+    //                   and this build handed back null, so the chase camera had no policy in
+    //                   the scene-query pass at all.
     //     [MISSING]   this Update + the eight helpers above.   <- THE ONLY REMAINING LINK HERE
+    //                   ⛔ AND ONE DEPENDENCY OUTSIDE THIS FILE:
+    //                   Utils::GetSmallestDifferenceBetweenRadAngles(Vector3, Vector3), which
+    //                   Update calls at .cpp:337 and which CameraUtils.h does not declare
+    //                   (only the DEGREES scalar sibling exists). Verified by grep over the
+    //                   whole tree, not assumed.
     //     [BRING-UP]  BrnGameModule.cpp:1177 gates the director->world camera handover on
     //                   `flyby || meJunkyardState != E_JY_INACTIVE`, which goes FALSE exactly
     //                   when car-select exits -- so the world still falls back to

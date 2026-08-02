@@ -238,6 +238,48 @@ bool BehaviourGameplayExternal::Prepare(const BehaviourSharedPrepareReleaseInfo&
 }
 
 // ============================================================================
+// BehaviourGameplayExternal::GetCollisionPolicy @0x821F9138   (vtable slot 5)
+//
+// Store-for-store from the asm (r31 == this):
+//   lwz  r11, 0xB00(r31) ; cmplwi ; bne  -> if (!mpParameters) FireAssert(
+//                                             "calling GetCollisionPolicy() with no
+//                                              parameters", ...Camera/Behaviours/
+//                                              BehaviourGameplayExternal.cpp, line 0x78==120)
+//   lwz  r11, 0xB00(r31)                  -> mpParameters (re-loaded)
+//   addi r3,  r31, 0x50                   -> the return value is ALWAYS formed first:
+//                                            &mCollisionPolicy
+//   lbz  r11, 0xAC(r11) ; cmplwi ; bne    -> mpParameters->mbIsValid
+//   li   r3, 0                            -> ... and only replaced by null when it is false
+//
+// ⭐ Both operands land exactly on the named members (mpParameters @+0xB00,
+// Parameters::mbIsValid @+0xAC, mCollisionPolicy @+0x50) -- an independent confirmation of
+// the header's layout that costs nothing.
+//
+// ⚠️ THE ASSERT DOES NOT GATE. CgsAssert.cpp:34's FireAssert logs and returns (the
+// __debugbreak is commented out), and so does the console's: the very next instruction
+// re-loads mpParameters and dereferences it. Reproduced with that shape -- assert, then
+// carry on -- rather than an early return the console does not make.
+//
+// ⚠️ SCOPE OF THE FIX, stated honestly: handing the policy back is now CORRECT, but it is
+// still INERT on this build, and for a reason that has nothing to do with this function.
+// CollisionPolicyAttachedToVehicle does not yet override CollisionPolicy::
+// GenerateSceneQueries / ::ProcessSceneQueryResults (BrnCollisionPolicy.h:115-116 -- the base
+// slice's two `{}`), so the scene-query pass reaches the right object and asks it to do
+// nothing. What this DOES buy is that the divergence is closed at the seam the console draws
+// it at, so when those two overrides land the scene-query pass reaches them -- instead of a
+// null return two layers up dropping them without a trace.
+// ============================================================================
+CollisionPolicy* BehaviourGameplayExternal::GetCollisionPolicy()
+{
+    CGS_ASSERT(mpParameters != 0, "calling GetCollisionPolicy() with no parameters");
+
+    if (!mpParameters->mbIsValid)
+        return 0;
+
+    return &mCollisionPolicy;
+}
+
+// ============================================================================
 // BehaviourGameplayExternal::SetParameters @0x821F91A8   (vtable slot 7)
 //
 //   if (*a2) assert "lpParameters->GetType() == eBehaviourGameplayExternal"
