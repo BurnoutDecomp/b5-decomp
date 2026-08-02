@@ -106,39 +106,22 @@ namespace Vehicle
     static const Vector3 KV_ZERO = { 0.0f, 0.0f, 0.0f, 0.0f };
 
     // -------------------------------------------------------------------------------------------
-    // Construct  @0x826203E8
-    //   base Construct, Wheel::Clear each of the 4 wheels (the do/while walks +304 stride 224 until
-    //   Wheel::Clear returns the sentinel), SimpleVehicleAttribs::Construct, zero
-    //   mHandlingBodyOffset(+1680)/mHalfExtent(+1696)/the two AABBs(@+1392 stride 16, the
-    //   `stvx128 v1,r11,r10` pair) and seed the flag words: *(+1430)=0x8000, *(+1428)=-1,
-    //   *(+1424)=0.0, *(+1432)=0 -- these console scratch words land in the AABB/flag region; in the
-    //   BY-NAME home they are reproduced as the deform/crash bool seeds + the wheel-plane reset, then
-    //   Reset, then *(+112)=0 (the base engine-only gate cleared).
+    // Construct @0x826203E8 lives in its own TU, BrnSimpleVehiclePhysics_Construct.cpp --
+    // SPLIT 2026-08-02 (physics wave 3). BUILD-MECHANICS SPLIT ONLY (byte-identical body,
+    // unchanged declared home).
+    //
+    // WHY: it is the only function in this TU that calls SimpleVehicleAttribs::Construct
+    // @0x825E6580, which has NO BODY anywhere in the tree. That console function is a ~120-line
+    // lane-write initialiser over ~15 unresolved .rdata float constants (flt_82096C9C /
+    // flt_8200473C / flt_82004F5C / flt_82013A78 / flt_8200D538 / flt_82020A84 / flt_82004A1C /
+    // flt_82012EF8 / flt_82004740 / flt_820047C0 / flt_82004010 ...) writing offsets +0x00 .. +0xE4
+    // of a type this tree still models as a TWO-MEMBER minimal slice (mCOMOffset / mbIsValid) --
+    // it cannot be bodied until the real VehicleAttribs layout pass lands, and inventing the
+    // constants is forbidden. Keeping Construct here made the whole TU -- including
+    // GetGraphicsVehicleTransform, the function VehicleOutputInterface::UpdateRaceCarState needs
+    // to publish the car's render pose -- unlinkable for the sake of one blocked callee.
+    // Re-merge when SimpleVehicleAttribs::Construct lands.
     // -------------------------------------------------------------------------------------------
-    void SimpleVehiclePhysics::Construct()
-    {
-        // The X360 calls the DIRECT base's Construct on the base subobject (`this+16`):
-        // `bl BrnPhysics__ExternalPhysicsBody__Construct`. ExternalPhysicsBody::Construct is
-        // declared (ExternalPhysicsBody.h) with its body in that TU; call it BY NAME.
-        ExternalPhysicsBody::Construct();
-        for (int liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
-            maWheels[liWheel].Clear();
-        mSimpleAttribs.Construct();
-
-        mHandlingBodyOffset = KV_ZERO;                 // +1680
-        mHalfExtent         = KV_ZERO;                 // +1696
-        mDeformableAABB.mMin = KV_ZERO;                // +1392 region (the stvx128 v1 zero pair)
-        mDeformableAABB.mMax = KV_ZERO;
-        mOriginalAABB.mMin   = KV_ZERO;
-        mOriginalAABB.mMax   = KV_ZERO;
-
-        // FLAG: the X360 seeds raw scratch words *(+1430)=0x8000 / *(+1428)=-1 / *(+1424)=0.0 /
-        // *(+1432)=0 that sit in the deform/crash-flag/wheel-plane region. In the BY-NAME home the
-        // faithful intent is the post-construct reset state, applied by Reset() below.
-        Reset();
-        // *(this+112)=0 -- the base sleep/engine-only-update gate (mbFrozen region), cleared.
-        SetFrozen(false);
-    }
 
     // -------------------------------------------------------------------------------------------
     // Destruct  @0x826206D0

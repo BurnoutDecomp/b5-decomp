@@ -547,8 +547,19 @@ namespace Deformation
             // resolve into world linear + angular impulse and bank on the vehicle body.
             Vector3 lWorldImpulse        = { 0.0f, 0.0f, 0.0f, 0.0f };
             Vector3 lWorldAngularImpulse = { 0.0f, 0.0f, 0.0f, 0.0f };
-            lpVehicle->GetImpulsesFromLocalImpulse(lShaped, lContact.mPointOnA,
-                                                   lWorldImpulse, lWorldAngularImpulse);
+            // The base kernel is the SIX-argument ExternalPhysicsBody form (@0x825A1A80): the two
+            // rw::physics::InputSpace tags gate the two rotations (r4 == 1 -> rotate the impulse
+            // into world, r5 == 0 -> the position is already world and only needs the COM
+            // subtraction). The 4-argument VehiclePhysics-scoped overload this call used to bind to
+            // never existed -- it was a shadowing redeclaration retired in physics wave 3.
+            // FLAG: this call site's own two tags are NOT recovered from asm here (this TU is
+            // unmounted and its X360 body was not re-read this wave); BODY_SPACE / WORLD_SPACE is
+            // what the shape of the surrounding code implies -- a local (body) impulse at a world
+            // contact point (lContact.mPointOnA is a world contact point) -- and matches the only
+            // asm-proven sibling (VehicleRigidBody::ApplyImpulseToVehicle @0x8260E088 `li r4,1`).
+            lpVehicle->GetImpulsesFromLocalImpulse(lShaped, rw::physics::BODY_SPACE,
+                                                   lContact.mPointOnA, rw::physics::WORLD_SPACE,
+                                                   &lWorldImpulse, &lWorldAngularImpulse);
 
             ExternalPhysicsBody& lBody = GetVehicleBody();
             lBody.AddWorldSpaceImpulse(lWorldImpulse);

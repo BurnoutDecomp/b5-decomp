@@ -2156,13 +2156,19 @@ namespace Vehicle
     // recovered exactly; the per-axis SCALE vectors are un-homed rodata carried as flagged-0
     // placeholders -- with them zero the projection is the identity (the impulse passes through),
     // which is faithful-but-inert. NEVER fabricated.
-    void VehiclePhysics::ApplyCarContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition)
+    void VehiclePhysics::ApplyCarContactImpulse(const Vector3& lvLocalImpulse,
+                                                rw::physics::InputSpace leImpulseSpace,
+                                                const Vector3& lvContactPosition,
+                                                rw::physics::InputSpace lePositionSpace)
     {
     ++miNumCollisions;   // +0x1354
 
     Vector3 lvJ;
     Vector3 lvAngularJ;
-    GetImpulsesFromLocalImpulse(lvLocalImpulse, lvContactPosition, lvJ, lvAngularJ);
+    // The base kernel @0x825A1A80. r4/r5 (the two InputSpace tags) are NEVER written before the
+    // `bl` at 0x825D4C48 -- they are this function's own arguments, passed straight through.
+    GetImpulsesFromLocalImpulse(lvLocalImpulse, leImpulseSpace,
+                                lvContactPosition, lePositionSpace, &lvJ, &lvAngularJ);
 
     if (!IsCrashing())   // +0x710 master gate
     {
@@ -2206,13 +2212,20 @@ namespace Vehicle
     //   else:                  rxJ *= mpAttribs->mvCrashImpulseScale.y  (lvx128 mpAttribs+0x280 ;
     //                          vspltw v13,v13,1 ; vmulfp J,J,scale) -- scales the ANGULAR impulse.
     //   AddWorldSpaceImpulse(J) ; AddWorldSpaceAngularImpulse(rxJ).
-    void VehiclePhysics::ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition, bool lbZeroResponse)
+    void VehiclePhysics::ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse,
+                                                    rw::physics::InputSpace leImpulseSpace,
+                                                    const Vector3& lvContactPosition,
+                                                    rw::physics::InputSpace lePositionSpace,
+                                                    bool lbZeroResponse)
     {
     ++miNumCollisions;   // +0x1354
 
     Vector3 lvJ;
     Vector3 lvAngularJ;
-    GetImpulsesFromLocalImpulse(lvLocalImpulse, lvContactPosition, lvJ, lvAngularJ);
+    // r4/r5 untouched before the `bl` at 0x825D4D80 (`mr r30,r6` proves lbZeroResponse is the
+    // THIRD integer argument) -> both tags are passed through.
+    GetImpulsesFromLocalImpulse(lvLocalImpulse, leImpulseSpace,
+                                lvContactPosition, lePositionSpace, &lvJ, &lvAngularJ);
 
     if (lbZeroResponse)
     {
@@ -2253,7 +2266,10 @@ namespace Vehicle
     // store-faithfully recoverable from the degenerate VMX export -> the projection is reproduced
     // structurally; the restitution is applied to the supplied local impulse. The un-homed projection
     // permute vector stays inert. NEVER fabricated.
-    void VehiclePhysics::ApplyWallContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactNormal, bool lbContactPositionNotWorldSpace)
+    void VehiclePhysics::ApplyWallContactImpulse(const Vector3& lvLocalImpulse,
+                                                 rw::physics::InputSpace leImpulseSpace,
+                                                 const Vector3& lvContactNormal,
+                                                 rw::physics::InputSpace lePositionSpace)
     {
     ++mi8NumWorldCollisions;   // +0x1353
     ++miNumCollisions;         // +0x1354
@@ -2285,11 +2301,19 @@ namespace Vehicle
 
     Vector3 lvJ;
     Vector3 lvAngularJ;
-    GetImpulsesFromLocalImpulse(lvScaledImpulse, lvContactNormal, lvJ, lvAngularJ);
+    // 0x825FEB98-0x825FEBA4: `li r5,1` (BODY_SPACE for the position) and `mr r4,r29` where r29
+    // was `mr r29,r4` at entry -- the impulse space is forwarded, the position space is a literal.
+    GetImpulsesFromLocalImpulse(lvScaledImpulse, leImpulseSpace,
+                                lvContactNormal, rw::physics::BODY_SPACE, &lvJ, &lvAngularJ);
 
     AddWorldSpaceImpulse(lvJ);
     AddWorldSpaceAngularImpulse(lvAngularJ);
-    (void)lbContactPositionNotWorldSpace;   // asserted WORLD_SPACE (debug guard elided)
+    // r5 was `lbContactPositionNotWorldSpace` (a bool) here. VehicleRigidBody::ApplyImpulseToVehicle
+    // @0x8260E090 loads it as `lwz r5, 0x50(r11)` == ImpulseParams::mePositionSpace, an
+    // rw::physics::InputSpace, and the same r5 feeds ApplyCrashedContactImpulse and
+    // ApplyCarContactImpulse on the sibling branches -- so it is the POSITION SPACE, not a bool.
+    // The body only asserts on it (debug guard elided).
+    (void)lePositionSpace;
     }
 
 // [partial] ApplyShowtimeContactImpulse  @ FLAGS: INLINE literals {0.30, 0.0, 0.97} (dword_82FBA1D0 lazily-cached tunables) are EXACT, used as literal values; the 3-axis velocity-removal STRUCTURE + the binary 0.0-vs-0.97 restitution pick are recovered; the precise VMX lane routing of the residual-direction threshold is structural
@@ -2307,7 +2331,11 @@ namespace Vehicle
     // the binary 0.0-vs-0.97 restitution pick are recovered; the exact per-lane VMX routing of the
     // residual-direction threshold + the angular unk_82FB8B10 scale is structural. The K* constants
     // are the literal values seen in the asm (NOT flagged-0). NEVER fabricated.
-    void VehiclePhysics::ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition, bool lbZeroResponse)
+    void VehiclePhysics::ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse,
+                                                     rw::physics::InputSpace leImpulseSpace,
+                                                     const Vector3& lvContactPosition,
+                                                     rw::physics::InputSpace lePositionSpace,
+                                                     bool lbZeroResponse)
     {
     ++miNumCollisions;   // +0x1354
     if (lbZeroResponse)
@@ -2319,7 +2347,9 @@ namespace Vehicle
 
     Vector3 lvJ;
     Vector3 lvAngularJ;
-    GetImpulsesFromLocalImpulse(lvLocalImpulse, lvContactPosition, lvJ, lvAngularJ);
+    // r4/r5 untouched before the `bl` at 0x825D4E60 -> both tags are passed through.
+    GetImpulsesFromLocalImpulse(lvLocalImpulse, leImpulseSpace,
+                                lvContactPosition, lePositionSpace, &lvJ, &lvAngularJ);
 
     // Process-wide cached Showtime restitution tunables (inline literals).
     static const f32 KF_SHOWTIME_FRICTION = 0.30000001f;   // dword_82FBA1D0 K0 (per-axis strip scale)

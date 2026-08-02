@@ -364,11 +364,17 @@ namespace Vehicle
                     Vector3 lrPassThroughV1, Vector3 lrTimeStep);
 
         // ----- ADDITIVE GROW (C11 group): the crash master-gate accessors the TrafficPhysics layer
-        //       consults. Inherited by SimpleVehiclePhysics in the console layout (mbIsCrashing @
-        //       +0x710); on this standalone VehiclePhysics minimal slice they are DECLARE-ONLY,
-        //       bodied by the SimpleVehiclePhysics/VehiclePhysics TU. (DWARF BrnSimpleVehiclePhysics.h
-        //       :285 IsCrashing / .cpp:805 SetCrashing.) -----
-        bool IsCrashing() const;
+        //       consults. (DWARF BrnSimpleVehiclePhysics.h :285 IsCrashing / .cpp:805 SetCrashing.)
+        //
+        // ⚠️ RETIRED 2026-08-02 (physics wave 3): this home used to RE-DECLARE
+        //   `bool IsCrashing() const;`
+        // as "DECLARE-ONLY ... bodied by the SimpleVehiclePhysics/VehiclePhysics TU". That comment
+        // described an intention, not C++ semantics: a redeclaration in the derived class HIDES the
+        // base's inline `SimpleVehiclePhysics::IsCrashing() { return mbCrashing; }` and mangles to
+        // `?IsCrashing@VehiclePhysics@...` -- a symbol no TU defines and no console function
+        // corresponds to. MEASURED: it was one of six such declarations that made VehiclePhysics.cpp
+        // unlinkable (LNK2019). The name is now simply INHERITED. SetCrashing stays: it is a real
+        // virtual override with a body in this TU. -----
         virtual void SetCrashing();
 
         // @0x825D3720 (inlined into UpdateDriving): re-run steering on the engine-only path.
@@ -385,18 +391,24 @@ namespace Vehicle
         void AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
                        Vector3 lvCustomImpulse, Vector3 lvCustomPosition, f32 lfTimerTillFire);
 
-        // @0x825BE710 / siblings (ExternalPhysicsBody integrator accumulators; accum += arg, guarded).
-        void AddWorldSpaceForce(const Vector3& lvForce);
-        void AddWorldSpaceImpulse(const Vector3& lvImpulse);
-        void AddWorldSpaceAngularImpulse(const Vector3& lvAngularImpulse);
-        // AddLocalImpulse is the BASE's 4-argument form (see ExternalPhysicsBody.h) -- the 2-argument
-        // declaration that used to sit here dropped both rw::physics::InputSpace tags.
-
-        // @0x825BE9D0 (ExternalPhysicsBody): the world-space torque accumulator (accum += arg @+0xF0,
-        // guarded). DECLARE-ONLY here (owned by the ExternalPhysicsBody base TU) -- the C06 drift yaw
-        // (ApplyDriftYaw / ApplyNaturalDriftForces) banks its yaw torque through it. Added BY NAME by
-        // the C06 group; the pre-existing AddWorldSpace* siblings above are untouched.
-        void AddWorldSpaceTorque(const Vector3& lvTorque);
+        // ⚠️ RETIRED 2026-08-02 (physics wave 3). This home used to re-declare all four
+        // ExternalPhysicsBody accumulators:
+        //     void AddWorldSpaceForce(const Vector3&);          // @0x825BE710
+        //     void AddWorldSpaceImpulse(const Vector3&);        // @0x825BE8F8
+        //     void AddWorldSpaceAngularImpulse(const Vector3&); // @0x825BEAA8
+        //     void AddWorldSpaceTorque(const Vector3&);         // @0x825BE9D0
+        // each commented "(ExternalPhysicsBody ...) DECLARE-ONLY here (owned by the base TU)".
+        // ExternalPhysicsBody.h had already written down the rule these violated:
+        //     "When VehiclePhysics is re-parented onto this chain those local declarations must be
+        //      deleted, not left to shadow these."
+        // The re-parenting (wave 2b) landed; the deletions did not. A derived redeclaration HIDES
+        // the base name, and these even differ in signature (base takes Vector3 BY VALUE, these took
+        // `const Vector3&`), so all 29 call sites in this TU mangled to VehiclePhysics-scoped symbols
+        // that no TU can ever define. MEASURED as four of the LNK2019s that made this TU unmountable.
+        // The names are now INHERITED from ExternalPhysicsBody -- which is also what the console
+        // does: ApplyCarContactImpulse @0x825D4D24/@0x825D4D34 calls
+        // `BrnPhysics__ExternalPhysicsBody__AddWorldSpaceImpulse` / `...AngularImpulse` with
+        // r3 == this + 0x10 (the ExternalPhysicsBody sub-object), not a VehiclePhysics symbol.
 
         // (owned elsewhere): the drift-entry test UpdateDriftState chains into to LATCH a new drift
         // (it sets mu8DriftState + seeds the bank when entry conditions are met). DECLARE-ONLY here --
@@ -1086,14 +1098,49 @@ namespace Vehicle
 
         // ===== ADDITIVE GROW (C09 crash/contact-impulse group) =====
         // The contact-impulse handlers + the slam enqueue/tick. (SetCrashing override + UpdateShunt +
-        // UpdateCrashing are already declared above / left declare-only.) The base off-centre-impulse
-        // kernel GetImpulsesFromLocalImpulse is declare-only (owned by ExternalPhysicsBody).
-        void ApplyCarContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition);        // @0x825D4C10
-        void ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
+        // UpdateCrashing are already declared above / left declare-only.)
+        //
+        // ⚠️⚠️ SIGNATURES CORRECTED 2026-08-02 (physics wave 3) -- THE DROPPED-ARGUMENT TRAP, AGAIN.
+        // All four of these forward TWO `rw::physics::InputSpace` tags straight into the base
+        // ExternalPhysicsBody::GetImpulsesFromLocalImpulse, and the committed 2-/3-argument forms
+        // dropped both. This is the same defect wave 2b settled for the AddLocal* family, in four
+        // more functions. The base kernel @0x825A1A80 gates on them explicitly:
+        //     0x825A1A88  cmpwi cr6, r4, 1     ; r4 == leImpulseSpace  (BODY_SPACE -> rotate)
+        //     0x825A1AB4  cmpwi cr6, r5, 0     ; r5 == lePositionSpace (WORLD_SPACE -> subtract COM)
+        // and each caller's own asm shows where its r4/r5 come from:
+        //     ApplyCarContactImpulse      @0x825D4C10  r4,r5 NEVER WRITTEN before the bl -> both are
+        //                                              this function's own arguments, passed through.
+        //     ApplyCrashedContactImpulse  @0x825D4D50  r4,r5 untouched (`mr r30,r6` proves the bool
+        //                                              is the THIRD integer arg, i.e. r4/r5 precede it).
+        //     ApplyShowtimeContactImpulse @0x825D4E00  same shape (`clrlwi r10,r6,24` on the bool).
+        //     ApplyWallContactImpulse     @0x825FEA18  `mr r29,r4` at entry then `mr r4,r29` at the
+        //                                              call -> the impulse space is forwarded; the
+        //                                              POSITION space is the literal `li r5,1`
+        //                                              (BODY_SPACE), so this one takes only one tag
+        //                                              and its `bool` really is r5.
+        // FLAG (not fabricated, not yet settled): the VECTOR-register slots do not line up with a
+        // naive (Vector3, InputSpace, Vector3, InputSpace) reading -- ApplyCarContactImpulse does
+        // `vmr v2, v3` and ApplyWallContactImpulse `vmr128 v125, v3`, i.e. their second Vector3
+        // arrives in v3, so at least one further vector-register parameter (very likely a VecFloat)
+        // sits between them and is not yet recovered. The INTEGER argument order below is
+        // asm-proven; the vector argument list may still grow. No literal tag is invented anywhere.
+        void ApplyCarContactImpulse(const Vector3& lvLocalImpulse,
+                                    rw::physics::InputSpace leImpulseSpace,
+                                    const Vector3& lvContactPosition,
+                                    rw::physics::InputSpace lePositionSpace);                                // @0x825D4C10
+        void ApplyCrashedContactImpulse(const Vector3& lvLocalImpulse,
+                                        rw::physics::InputSpace leImpulseSpace,
+                                        const Vector3& lvContactPosition,
+                                        rw::physics::InputSpace lePositionSpace,
                                         bool lbZeroResponse);                                                // @0x825D4D50
-        void ApplyWallContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactNormal,
-                                     bool lbContactPositionNotWorldSpace);                                   // @0x825FEA18
-        void ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
+        void ApplyWallContactImpulse(const Vector3& lvLocalImpulse,
+                                     rw::physics::InputSpace leImpulseSpace,
+                                     const Vector3& lvContactNormal,
+                                     rw::physics::InputSpace lePositionSpace);                               // @0x825FEA18
+        void ApplyShowtimeContactImpulse(const Vector3& lvLocalImpulse,
+                                         rw::physics::InputSpace leImpulseSpace,
+                                         const Vector3& lvContactPosition,
+                                         rw::physics::InputSpace lePositionSpace,
                                          bool lbZeroResponse);                                               // @0x825D4E00
         void AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId);        // @0x825D4870
         // __fastcall with three VMX128 float args the Hex-Rays signature drops: speed-increase delta,
@@ -1101,8 +1148,11 @@ namespace Vehicle
         void AddShunt(f32 lfSpeedIncrease, const Vector3& lvShuntDirection, f32 lfLifeSeed,
                      s8 li8RaceCarId);                                                                       // @0x825FC630
         void UpdateSlam(f32* lpControlsCopy, f32 lfFrameTime);                                               // @0x825D4950
-        void GetImpulsesFromLocalImpulse(const Vector3& lvLocalImpulse, const Vector3& lvContactPosition,
-                                         Vector3& lrJWorld, Vector3& lrAngularJWorld) const;  // declare-only (base)
+        // ⚠️ RETIRED 2026-08-02: a 4-argument `GetImpulsesFromLocalImpulse(const Vector3&, const
+        // Vector3&, Vector3&, Vector3&) const` used to sit here, marked "declare-only (base)". It was
+        // not the base's function -- the base's is SIX arguments with the two InputSpace tags above,
+        // so this declaration both HID the inherited name and mangled to a symbol nothing defines.
+        // The name is now inherited from ExternalPhysicsBody.
 
         // ===== ADDITIVE GROW (deformation impulse-passing group) =====
         // The vtable-slot query VehicleRigidBody::RecievePassedOnImpulse calls on its attached vehicle
