@@ -541,7 +541,16 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
 
     // Ease this frame's shake against last frame's, then fold the result onto the camera.
     // A blend of 0 (which is what Parameters::Construct's default gives) holds the identity,
-    // i.e. NO SHAKE -- the authored bank is what turns it on.
+    // i.e. NO SHAKE.
+    // ⛔ CORRECTED 2026-08-02 (framing wave). This used to end "-- the authored bank is what
+    //   turns it on", i.e. it explained the dead shake away as a missing tuning. IT IS NOT.
+    //   BehaviourParameterBank::Construct @0x8223DC90 re-tunes this block in exactly four
+    //   places (all four in mLookerParams -- the subject size and screen offset, now
+    //   transcribed in BrnBehaviourParameterBank.h) and +0x7C is not one of them: a scan of
+    //   every store in that function with a displacement inside the block's [0x2344, 0x23C4)
+    //   returns those four and nothing else. mfShakeBlending0to1 stays 0.0f on the console
+    //   too, so THIS CAMERA HAS NO SHAKE BY DESIGN and the SLerp is a no-op on the shipped
+    //   path. The code stays because the console runs it.
     Vector3 lUnusedAngle = { 0.0f, 0.0f, 0.0f, 0.0f };
     mLastShakeTransform = rw::math::vpu::SLerp(mLastShakeTransform,
                                                lShakeTransform,

@@ -496,9 +496,15 @@ namespace BrnDirector
     // "not on the live path" reasoning expires silently -- nothing in the build, the linker or
     // any boot test can tell you it has.
     // The slot now points at MainDirector::mNamedParameters, real named storage seeded by
-    // NamedParameters::Construct. ⚠️ The block carries the console's TYPE TAG but not its
-    // authored tunings -- see BehaviourRotateAboutVehicle::Parameters::Construct for exactly
-    // what is and is not transcribed. DELETE-WHEN: BehaviourParameterBank is homed.
+    // NamedParameters::Construct.
+    // ⭐ UPDATED 2026-08-02 (framing wave): the block now carries the console's TYPE TAG *AND*
+    // its authored tunings. Both halves are transcribed --
+    // BehaviourRotateAboutVehicle::Parameters::Construct @0x821FB300's thirteen re-tunes, plus
+    // the FOUR the BANK's own Construct @0x8223DC90 applies to this block afterwards (the
+    // Looker subject size 0.75/0.75 and screen offset +0.125/-0.125, transcribed in
+    // NamedParameters::Construct with their asm and .rdata provenance). There is no data file
+    // to load: BehaviourParameterBank::LoadParameters reads "d:\\camera.txt" and has no callers.
+    // DELETE-WHEN: BehaviourParameterBank is homed (the other ~40 blocks are still unmodelled).
     //
     // ⚠️ THE UN-HOMED REGION POINTERS. mpDebugPrinter / mpDebugLog / mpMomentController /
     // mpGameState / mpRandom / mpEffectInterface / mpAllVehicleData / mpPlayerTracker and the

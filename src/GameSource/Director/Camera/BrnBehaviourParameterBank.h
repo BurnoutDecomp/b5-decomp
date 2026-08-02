@@ -58,14 +58,59 @@ namespace BrnDirector
         }
 
         // ⭐ ADDED 2026-08-01 (junkyard-fire wave). The console builds this bank from
-        // BehaviourParameterBank::Construct, called by BehaviourManager::Construct @0x82251778
-        // (the gate is marked in that body). Only the ONE block this slice models is seeded --
-        // with the tag its own Parameters::Construct @0x821FB330 stores, so
+        // BehaviourParameterBank::Construct @0x8223DC90, called by BehaviourManager::Construct
+        // @0x82251778 (the gate is marked in that body). Only the ONE block this slice models is
+        // seeded -- with the tag its own Parameters::Construct @0x821FB330 stores, so
         // BehaviourRotateAboutVehicle::SetParameters' `GetType() == eBehaviourRotateAboutVehicle`
         // tripwire passes. The un-modelled head is zeroed rather than left as pool garbage.
-        // [FLAG PC bring-up] this is a ONE-BLOCK stand-in for the bank's own Construct; the
-        // authored tunings are NOT loaded (see BehaviourRotateAboutVehicle::Parameters::Construct).
-        // DELETE-WHEN: the BehaviourParameterBank TU lands with the real bank layout + its loader.
+        //
+        // ⭐⭐ THE BANK'S OWN FOUR RE-TUNES FOR THIS BLOCK LAND 2026-08-02 (framing wave), AND
+        // THEY RETIRE A WRONG PREMISE. The note that used to end this banner said "the authored
+        // tunings are NOT loaded", which read as *there is a data file we do not read*. There is
+        // no such file for this bank. BehaviourParameterBank::LoadParameters @0x82273268 opens
+        // "d:\\camera.txt" and has ZERO xrefs in the whole XEX -- it is the dev tweaker's
+        // reload, the mirror of SaveParameters. The console's authored tunings for this camera
+        // are COMPILED IN, in two places:
+        //   (a) BehaviourRotateAboutVehicle::Parameters::Construct @0x821FB300 -- its thirteen
+        //       re-tunes, which this tree already transcribed in full; and
+        //   (b) ⭐ FOUR MORE `stfs` in the BANK's Construct, applied to this block AFTER the
+        //       call, which nothing here reproduced. THOSE FOUR ARE THE FRAMING.
+        //
+        // The four, read straight off the asm (block base is bank+0x2344, so the displacements
+        // below are block-relative):
+        //   0x8223E6BC  stfs f25, 0x235C(r31)   -> +0x18  mfTargetSubjectXSize
+        //   0x8223E6C8  stfs f25, 0x2360(r31)   -> +0x1C  mfTargetSubjectYSize
+        //   0x8223E6B8  stfs f19, 0x2364(r31)   -> +0x20  mfTargetSubjectXScreenOffset
+        //   0x8223E6C4  stfs f0,  0x2368(r31)   -> +0x24  mfTargetSubjectYScreenOffset
+        // f25's last load is `lfs f25, flt_82004018` @0x8223E258, f19's is
+        // `lfs f19, flt_82004010` @0x8223E140, and f0 is loaded from flt_82009B70 at
+        // 0x8223E6C0 -- no other instruction in the function touches f19 or f25 in between.
+        // The three .rdata words (read with the recalibrated .id1 reader, NOT cam5_id1.py):
+        //   flt_82004018 = 0x3F400000 =  0.75f
+        //   flt_82004010 = 0x3E000000 =  0.125f
+        //   flt_82009B70 = 0xBE000000 = -0.125f
+        // Sanity-checked in the same read: the two words the neighbouring FixedCam block stores
+        // at bank+0x233C/+0x2340 come back as 70.0f and 10.0f, which is exactly what the
+        // pseudocode of the same function shows -- so the reader is calibrated on this region.
+        //
+        // ⛔ AND THE BLOCK GETS NOTHING ELSE. A scan of every store in Construct with a
+        // displacement inside [0x2344, 0x23C4) off r31 returns exactly these four, and no
+        // `addi` in the function forms an alias base into the block's interior. In particular
+        // +0x7C mfShakeBlending0to1 (bank+0x23C0) IS NOT WRITTEN -- see the note this retires in
+        // BrnBehaviourRotateAboutVehicle.cpp: the shake staying at 0 is the console's own shape
+        // for this camera, not something the authored bank was going to switch on.
+        //
+        // ⓘ COROBORATION FOR THE +0x2334 MODEL BELOW (still not proof, still flagged): the bank
+        // puts this block at bank+0x2344 while the arbitrator states reach it at
+        // mpNamedParameters+0x2334, and bank+0x10 is exactly where the bank's FIRST Parameters
+        // block starts (`addi r3, r31, 0x10` -> BehaviourAftertouchCam::Parameters::Construct).
+        // 0x10 + 0x2334 == 0x2344, so NamedParameters is very likely the bank's payload viewed
+        // from +0x10. bank+0x2334 itself holds a 16-byte {tag 15, 0, 70.0f, 10.0f} block --
+        // the FixedCam one the header's own accessor list already attributes there.
+        //
+        // [FLAG PC bring-up] this is still a ONE-BLOCK stand-in for the bank's own Construct:
+        // the other ~40 named blocks are neither placed nor seeded.
+        // DELETE-WHEN: the BehaviourParameterBank TU lands with the real bank layout.
         void Construct()
         {
             for (u32 luByte = 0; luByte < sizeof(maReservedHead); ++luByte)
@@ -73,6 +118,12 @@ namespace BrnDirector
                 maReservedHead[luByte] = 0;
             }
             maLookAroundCarCamParameters.Construct();
+
+            // The bank's own four post-Construct re-tunes -- see the banner.
+            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectXSize         =  0.75f;
+            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectYSize         =  0.75f;
+            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectXScreenOffset =  0.125f;
+            maLookAroundCarCamParameters.mLookerParams.mfTargetSubjectYScreenOffset = -0.125f;
         }
 
         // The reserved span places the addressed block at the asm-attested +0x2334. The rest of
