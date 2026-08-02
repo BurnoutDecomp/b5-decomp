@@ -1158,14 +1158,35 @@ namespace BrnGame
         // ⚠️ WHAT SURVIVES, AND WHY. mbDirectorCameraLive is NOT part of the stand-in: it is the
         // ONLY gate on DoDispatch's director->world camera handover (see DoDispatch). Deleting it
         // with the rest would have taken the director's camera off the world entirely -- fly-by
-        // included -- so it stays, re-gated onto the two states in which the director is actually
-        // placing a camera rather than re-publishing a stale one:
-        //   * the GUI's fly-by request is up, and
-        //   * the junkyard / car-select owns the camera (meJunkyardState != E_JY_INACTIVE, the
-        //     console's own "ArbStateCarSelect is driving" signal -- MainDirector::
-        //     ProcessInputQueue case 73 is what sets it).
+        // included -- so it stays, gated onto the states in which the director is actually
+        // placing a camera rather than re-publishing a stale one.
         // [FLAG PC bring-up] the GATE is the deviation, not the camera. DELETE-WHEN DoDispatch's
         // IO buffer set is real (the console routes the director camera unconditionally).
+        //
+        // ⭐⭐ WIDENED TO COVER DRIVING (2026-08-02, drive-handover wave) -- MEASURED, NOT
+        // ASSUMED. The two original terms were the fly-by request and
+        // `meJunkyardState != E_JY_INACTIVE`. The junkyard exit CLEARS meJunkyardState, so the
+        // gate closed on the exact frame the car was handed to the player: the director camera
+        // was live for the car-select screen and dead for driving, precisely inverted. Measured
+        // on the committed build (`DH_TRACE1`, plain + BRN_DIRECTOR_TRACE, 200 s):
+        //     f5160  arb 2  jy 0   eye (3010.878, -2.599, -1946.891)  fov 72.605   <- exiting
+        //     f5340  arb 2  jy 0   eye (3007.983, -2.310, -1939.326)  fov 90.395   <- chase cam
+        //     ... held to f11040, because nothing is driving the parked car ...
+        //     line 1311 of the same run: "world camera -> bring-up tour camera (flyby=0 junkyard=0)"
+        // fov 90.395088 is BehaviourGameplayExternal::Update's own signature value
+        // (2*atan(tan(80/2 deg) * 1.2) in degrees, the authored 80 widened by the boost/speed
+        // term), so the thing publishing post-handover IS the chase camera, at a real city
+        // position, not a stale latch left by the car-select shot.
+        //
+        // The added term is the ARBITRATOR's own outer state. E_STATE_NORMAL is the state in
+        // which Arbitrator::Update dispatches a live behaviour stack and copies its produced
+        // camera into lrCameraInOut every frame; in E_STATE_PREPARE (the boot value, trace f0)
+        // it publishes Camera::Construct's identity at the origin. That is exactly the
+        // "is the director placing a camera?" question this gate is asking, and it is a
+        // strictly WIDER condition than the two it joins (both measured with arb == 2), so it
+        // cannot close a window that used to be open.
+        // ⚠️ The origin guard in DoDispatch stays load-bearing regardless -- E_STATE_NORMAL is
+        // reached before the first behaviour actually places a camera.
         // ------------------------------------------------------------------------------
         if (!lbPostGui)
         {
@@ -1174,7 +1195,10 @@ namespace BrnGame
             const bool lbJunkyardActive =
                 (lrMainDirector.GetGameState().meJunkyardState
                     != BrnDirector::GameState::E_JY_INACTIVE);
-            const bool lbDriving = lbFlybyRequested || lbJunkyardActive;
+            const bool lbArbitratorRunning =
+                (lrMainDirector.GetArbitrator().GetState()
+                    == BrnDirector::Arbitrator::E_STATE_NORMAL);
+            const bool lbDriving = lbFlybyRequested || lbJunkyardActive || lbArbitratorRunning;
 
             if (mbDirectorCameraLive != lbDriving)
             {
@@ -1185,7 +1209,8 @@ namespace BrnGame
                         << "[FLAG PC bring-up] world camera "
                         << (lbDriving ? "-> DIRECTOR" : "-> bring-up tour camera")
                         << " (flyby=" << (lbFlybyRequested ? 1 : 0)
-                        << " junkyard=" << (lbJunkyardActive ? 1 : 0) << ")\n";
+                        << " junkyard=" << (lbJunkyardActive ? 1 : 0)
+                        << " arbNormal=" << (lbArbitratorRunning ? 1 : 0) << ")\n";
                 }
             }
         }
@@ -1314,11 +1339,14 @@ namespace BrnGame
         // DELETE-WHEN: DoDispatch's IO buffer set is real (then this whole staging goes with
         // GenerateDispatchListsBringUp).
         // ⭐ ...and only while the DIRECTOR is the thing driving it (mbDirectorCameraLive, set
-        // in DoUpdate_Director for exactly the frames the GUI's fly-by request owns the
-        // camera). Outside that window the director publishes whatever its last state left --
-        // a STATIC camera -- and routing that would freeze the world and stop the streamer
-        // turning over. Handing the world back to the tour camera keeps it alive until the
-        // real post-fly-by consumer (ArbStateCarSelect) exists.
+        // in DoUpdate_Director for the frames in which the arbitrator is actually running a
+        // behaviour stack -- see the widening banner there). Outside that window the director
+        // publishes whatever its last state left -- a STATIC camera -- and routing that would
+        // freeze the world and stop the streamer turning over. Handing the world back to the
+        // tour camera keeps it alive over boot and loading.
+        // ⚠️ "The published eye did not change this frame" is NOT the same as "the camera is
+        // stale": with the chase camera live and the car parked, holding still is the correct
+        // output. Distinguish the two by what the arbitrator is doing, never by the value.
         if (mpDirectorOutputBuffer != 0 && mbDirectorCameraLive)
         {
             mpDirectorOutputBuffer->LockForRead();
