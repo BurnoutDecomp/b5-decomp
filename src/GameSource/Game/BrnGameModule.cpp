@@ -289,6 +289,9 @@ namespace BrnGame
         mbPlayerCarCrashing    = false;
         mbWorldDataPrepared    = false;
         mbCarSelectionPublished = false;
+        mbCarSelectActivatePending  = false;
+        maiPendingCarSelectActivate[0] = 0;
+        maiPendingCarSelectActivate[1] = 0;
     }
 
     // @ 0x823DCA10 -- the game->GUI flow-FSM bridge (see BrnGameModule.hpp). Posts each
@@ -416,6 +419,37 @@ namespace BrnGame
                         CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
                                                 "loading screen retired (world-load stand-in).\n");
                         break;
+                    case 192:
+                    {
+                        // ⭐⭐ THE CAR-SELECT ACTIVATE RECORD -- the GUI half of the junkyard
+                        // handover. { 8, 192, 12, action, carSelectType }, 20 bytes on channel
+                        // 40, posted by CarSelectVehicle::Update (action 0 == start),
+                        // CarSelectLivery::Update (action 1 == enter modification) and
+                        // CarSelectMain::ExitCarSelection (action 4 == exit the junkyard).
+                        //
+                        // The console routes it BridgeGuiToGameState @0x823DDB78 case 192 ->
+                        // game event 94 (8 bytes: the same two words, in the same order) ->
+                        // ProcessGameEvents case 94. GameBridgeGUIToX.cpp already reconstructs
+                        // that translation faithfully, but it has no caller and its sink
+                        // (GameStateModuleIO::PostWorldInput) has no definition, so this walk --
+                        // which is already over the very same out-queue -- performs the SAME
+                        // decode and calls the extracted case-94 arm directly.
+                        // [FLAG PC bring-up] DELETE-WHEN BridgeGuiToGameState has a caller and
+                        // ProcessGameEvents drains a real post-world input buffer.
+                        // ⚠️ LATCHED, NOT DISPATCHED HERE. This walk runs inside the GUI phase;
+                        // the game-state module's output buffer belongs to the SIM spine and is
+                        // only written under its own Lock/Unlock bracket there. The request is
+                        // therefore handed to the same sub-step leg that already ticks the
+                        // CarSelectManager (see the E_MGS_IN_GAME block in DoUpdate), which is
+                        // also the console's ordering: ProcessGameEvents runs inside
+                        // PreWorldUpdate, not inside the GUI update.
+                        maiPendingCarSelectActivate[0] =
+                            static_cast<s32>(reinterpret_cast<const u32*>(lpEvent)[3]);   // action
+                        maiPendingCarSelectActivate[1] =
+                            static_cast<s32>(reinterpret_cast<const u32*>(lpEvent)[4]);   // type
+                        mbCarSelectActivatePending = true;
+                        break;
+                    }
                     case 86: case 87: case 89:
                         // Quit-to-dash (X360: XGetLaunchData + XLaunchNewImage). [FLAG PC
                         // platform: no dash relaunch; logged so the request is visible.]
@@ -2023,6 +2057,21 @@ namespace BrnGame
                     // @0x823A54D8, and StoreTimers writes entry 0 from mGameTimer. Read off the
                     // LIVE timer for the same reason the DJ/road-time leg below does -- nothing
                     // on this build stages a GameStateModuleIO::PreWorldInputBuffer.
+                    // ⭐ THE GUI -> GAME-STATE CAR-SELECT LEG. BridgeGuiToGame's channel-40 walk
+                    // latched a GUI out-event 192 (GuiEventActivateCarSelect) during the GUI
+                    // phase; hand it to the extracted ProcessGameEvents case-94 arm here, where
+                    // the game-state module owns its output buffer -- which is also where the
+                    // console runs ProcessGameEvents (inside PreWorldUpdate @0x823A58B8). Serviced
+                    // BEFORE the CarSelectManager tick so an ExitJunkyard lands in the same
+                    // sub-step's Update, exactly as the console's body order does.
+                    // [FLAG PC bring-up] DELETE-WHEN BridgeGuiToGameState has a caller.
+                    if (mbCarSelectActivatePending)
+                    {
+                        mbCarSelectActivatePending = false;
+                        mGameStateModule.ProcessGameEventsActivateCarSelectBringUp(
+                            maiPendingCarSelectActivate[0], maiPendingCarSelectActivate[1]);
+                    }
+
                     mGameStateModule.PreWorldUpdateCarSelectBringUp(
                         mGameTimer.GetRate() * mGameTimer.GetScaleCurrent());
                 }

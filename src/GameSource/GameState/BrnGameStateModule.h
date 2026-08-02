@@ -218,6 +218,30 @@ public:
     // DELETE-WHEN PreWorldUpdate lands with its real input buffer.
     void PreWorldUpdateCarSelectBringUp(f32 lfGameTimestep);
 
+    // ⭐⭐ X360 ProcessGameEvents @0x823A0A18, THE CASE-94 JUNKYARD ARM (the switch at
+    // 0x823A4EE0-ish; pseudocode `case 94:` -> `if (v236 == 1) { assert IsInJunkyard();
+    // switch (*_R25) { 0: StartCarSelectState  1: EnterModification  4: ExitJunkyard } }`).
+    //
+    // ⭐ THE TWO PAYLOAD WORDS ARE (ACTION, TYPE), IN THAT ORDER. The dispatcher reads the
+    // SECOND word (`_R25[1]`) as the car-select TYPE (1 == junkyard, 2 == online event) and the
+    // FIRST word (`*_R25`) as the ACTION. Both GUI producers write the pair as ONE big-endian
+    // `std`, so the value that lands in word0 is the __int64's HIGH dword:
+    //   CarSelectVehicle::Update @0x824DCBF0  `v13 = meCarSelectType`            -> {0, type}
+    //   CarSelectLivery::Update  @0x824DFCD0  `LODWORD=type; HIDWORD=1`          -> {1, type}
+    //   CarSelectMain::ExitCarSelection @0x824C8CB8  record {8,192,12,4,1}       -> {4, 1}
+    // i.e. entering the vehicle screen starts car-select, entering the livery screen enters
+    // modification, and accepting on the livery screen exits the junkyard.
+    //
+    // [FLAG PC bring-up] the EXTRACTION is the deviation -- the arm's own gate, its three calls
+    // and its default assert are the console's. The console reaches it from game event 94, which
+    // BridgeGuiToGameState @0x823DDB78 case 192 translates out of GUI out-event 192; that
+    // translation IS reconstructed (GameBridgeGUIToX.cpp) but the bridge has no caller and its
+    // sink (GameStateModuleIO::PostWorldInput) has no definition, so BrnGameModule's
+    // BridgeGuiToGame walk calls this directly with the SAME decode.
+    // DELETE-WHEN ProcessGameEvents + the post-world input buffer + BridgeGuiToGameState's
+    // caller are real.
+    void ProcessGameEventsActivateCarSelectBringUp(s32 liAction, s32 liCarSelectType);
+
     // ---- bodies already reconstructed in BrnGameStateModule.cpp -------------
     // X360 @ 0x82311620. The player's GLOBAL race-car index (its slot in the full world
     // race-car table). Asserts mbIsUpdating.

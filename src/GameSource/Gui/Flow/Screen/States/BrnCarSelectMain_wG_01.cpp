@@ -68,11 +68,24 @@ namespace BrnGui
 
         // The junkyard "activate car select" record (@0x824C8D38): { 8, 192, 12, 4, 1 },
         // channel 40, 20 bytes. BrnGuiDemangledEventTypes.h attests the id-192 payload as
-        // 8 bytes; the two payload words' roles are not recovered, so they stay generic.
+        // 8 bytes.
+        //
+        // ⭐ THE TWO PAYLOAD WORDS ARE (ACTION, TYPE) -- RECOVERED 2026-08-02 from the consumer,
+        // GameStateModule::ProcessGameEvents @0x823A0A18 case 94:
+        //     word1 (`_R25[1]`) is the car-select TYPE   -- 1 junkyard, 2 online event;
+        //     word0 (`*_R25`)   is the car-select ACTION -- 0 StartCarSelectState,
+        //                                                   1 EnterModification,
+        //                                                   4 ExitJunkyard.
+        // So this record's { 4, 1 } is "exit the junkyard, junkyard flow". Its two siblings are
+        // CarSelectVehicle::Update @0x824DCBF0 ({ 0, type }) and CarSelectLivery::Update
+        // @0x824DFCD0 ({ 1, type }) -- both of which build the pair with ONE big-endian `std`,
+        // so the word that lands in word0 is the __int64's HIGH dword. ⚠️ Modelling either as a
+        // single u64 member SWAPS THE WORDS on a little-endian host (that bug was live in
+        // CarSelectVehicle until this wave).
         struct GuiEventActivateCarSelect20 : public CgsGui::GuiEvent<192>
         {
-            u32 muWord0;   // +0x0C (X360 stores 4)
-            u32 muWord1;   // +0x10 (X360 stores 1)
+            u32 muWord0;   // +0x0C -- the ACTION  (X360 stores 4 == ExitJunkyard)
+            u32 muWord1;   // +0x10 -- the TYPE    (X360 stores 1 == E_CAR_SELECT_TYPE_JUNKYARD)
 
             GuiEventActivateCarSelect20(u32 luWord0, u32 luWord1)
                 : CgsGui::GuiEvent<192>(8, 12), muWord0(luWord0), muWord1(luWord1) {}

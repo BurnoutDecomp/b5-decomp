@@ -95,14 +95,33 @@ namespace BrnGui
                 , muPad0C(0) {}
         };
 
-        // The one-shot car-select-type record Update posts on its first frame:
-        // { 8, 192, 12, u64 carSelectType }, channel 40, 20 bytes.
-        struct GuiCarSelectTypeWire : public CgsGui::GuiEvent<192>
+        // The one-shot activate-car-select record Update posts on its first frame:
+        // { 8, 192, 12, u32 action, u32 carSelectType }, channel 40, 20 bytes.
+        //
+        // ⛔⛔ CORRECTED 2026-08-02 (car-select handover wave). This USED TO BE a single
+        // `u64 mu64CarSelectType` seeded with GetCurrentCarSelectType(), on the reading that the
+        // X360's one `std` writes "the 64-bit widened enum word". It does not -- and modelling it
+        // as a u64 SWAPS THE TWO PAYLOAD WORDS on a little-endian host.
+        //
+        // The consumer is ProcessGameEvents @0x823A0A18 case 94, which reads the payload as TWO
+        // words: `*_R25` == the car-select ACTION (0 start / 1 enter-modification / 4 exit) and
+        // `_R25[1]` == the car-select TYPE (1 junkyard / 2 online event). The X360 emitter here
+        // does `v13 = meCarSelectType` (a sign-extending 32->64 widen) then one `std`, so on a
+        // BIG-endian machine the high dword -- zero -- lands in word0 and the type lands in
+        // word1: { 0, type } == "start car select in this flow". A u64 member on x64 puts the
+        // type in word0 and zero in word1, i.e. { type, 0 } == action 1 (enter modification) with
+        // type 0 (E_CAR_SELECT_TYPE_NONE) -- the wrong action AND a type the dispatcher asserts
+        // on. Nothing had ever consumed the record, so it was invisible.
+        // Its siblings are CarSelectLivery::Update ({1, type}) and CarSelectMain::
+        // ExitCarSelection ({4, 1}, already modelled as two explicit words).
+        struct GuiActivateCarSelectWire : public CgsGui::GuiEvent<192>
         {
-            u64 mu64CarSelectType;   // +0x0C (X360 std of the 64-bit widened enum word)
-            GuiCarSelectTypeWire()
+            u32 muAction;           // +0x0C (X360 word0: 0 == start car select)
+            u32 muCarSelectType;    // +0x10 (X360 word1: GsmIO::ECarSelectType)
+            GuiActivateCarSelectWire()
                 : CgsGui::GuiEvent<192>(8, 12)
-                , mu64CarSelectType(0) {}
+                , muAction(0)
+                , muCarSelectType(0) {}
         };
 
         // ---- in-queue payload views (the queue delivers the header-stripped payload) ----
@@ -365,9 +384,10 @@ namespace BrnGui
         {
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:319
 
-            GuiCarSelectTypeWire lCarSelectType;
-            lCarSelectType.mu64CarSelectType =
-                static_cast<u64>(mpGuiCache->GetCurrentCarSelectType());
+            GuiActivateCarSelectWire lCarSelectType;
+            lCarSelectType.muAction        = 0;   // X360 word0 == the sign-extension, i.e. "start"
+            lCarSelectType.muCarSelectType =
+                static_cast<u32>(mpGuiCache->GetCurrentCarSelectType());
             mpStateInterface->GetOutputEventQueue()->AddEvent(&lCarSelectType, KI_CHANNEL_GUI_OUT,
                                                               static_cast<s32>(sizeof(lCarSelectType)));
 
