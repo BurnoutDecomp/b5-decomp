@@ -44,6 +44,15 @@
 // declaration-only and it gated the whole chase-camera helper cluster plus BrnCameraShake.cpp):
 //   RotateMatrix44AffineByEulerAnglesZXY    @0x82204F98   (CameraUtils.h:423)
 //
+// Bodied here (3 ledger functions, class:BrnDirector::Camera::Utils -- the scalar response
+// curves BehaviourGameplayExternal::ApplySlideyEffects drives; ADDED 2026-08-02, and NONE of
+// the three had a declaration anywhere in the tree before this. SineLerp alone is named as a
+// blocker by four other committed camera TUs):
+//   PositiveValueTendToLimit  @0x821F8B78 / PS3 @0x1B410   (CameraUtils.cpp:616)
+//   TendToLimits(f32 x5)      NO X360 SYMBOL / PS3 @0x1B53C (CameraUtils.cpp:660) -- the
+//                             X360 inlines it into every caller; see its own banner
+//   SineLerp                  @0x8220CCB0 / PS3 @0x20AE4   (CameraUtils.cpp:808)
+//
 // DECLARATION-ONLY + FLAGGED (declared in CameraUtils.h, bodies not reconstructed --
 // each is an inline VMX minimax / corner lattice / permute over UNATTESTED raw rodata
 // coefficient constants; bodying them store-for-store would fabricate those
@@ -730,6 +739,112 @@ Vector3 GetSmallestDifferenceBetweenRadAngles(Vector3 lFromRads, Vector3 lToRads
     lResult.y = GetSmallestDifferenceBetweenRadAngles(lFromRads.y, lToRads.y);
     lResult.z = GetSmallestDifferenceBetweenRadAngles(lFromRads.z, lToRads.z);
     return lResult;
+}
+
+// ----------------------------------------------------------------------------
+// PositiveValueTendToLimit @0x821F8B78 / PS3 @0x1B410   (DWARF CameraUtils.cpp:616)
+// ADDED 2026-08-02 (final-helpers wave). ~30 asm lines, of which ~20 are the three asserts.
+//
+// The saturating response curve the chase camera's slide/drift offsets are shaped by. It is
+// a Michaelis-Menten / hyperbola: strictly increasing, asymptotic to lrLimit, and reaching
+// exactly HALF of lrLimit at lrValueIn == lrValueForHalfway -- which is the whole point of
+// the second parameter's name and the check that this decode is the right one.
+//
+// asm walk (f1 = lrValueIn, f2 = lrValueForHalfway, f3 = lrLimit):
+//   0x821F8BAC  assert lrValueIn >= 0.0f                                 (.cpp:618)
+//   0x821F8BD0  assert lrValueForHalfway > 0.0f                          (.cpp:643)
+//   0x821F8BF4  fdivs f30, f31, f30            -- lrX = in / halfway
+//   0x821F8C04  fadds f31, f30, 1.0f           -- lrX + 1
+//   0x821F8C0C  the IsZero band test on that sum, then                   (.cpp:645)
+//               assert "!rw::math::fpu::IsZero(lrX+1.0f)"
+//   0x821F8C54  fdivs f0, f30, f31 ; fmuls f1, f0, f28
+//
+// ⚠️ THE THIRD ASSERT'S BAND *IS* rw::math::fpu::IsZero, not a hand-rolled epsilon: the two
+// bounds it compares against are flt_82001770 == +1.1920929e-07 and flt_82002514 ==
+// -1.1920929e-07, both DUMPED, and that is exactly the vendor header's KF_IS_ZERO_TOLERANCE.
+// Spelled as the call the assert text names rather than as two literals.
+// ⚠️ All three asserts are NON-GATING (the console falls straight through into the divide).
+// ⚠️ PARAMETER NAMES are the DWARF's own (the PS3 export carries them on f1/f2/f3).
+// ----------------------------------------------------------------------------
+f32 PositiveValueTendToLimit(f32 lrValueIn, f32 lrValueForHalfway, f32 lrLimit)
+{
+    CGS_ASSERT(lrValueIn >= 0.0f, "lrValueIn >= 0.0f");                    // .cpp:618
+    CGS_ASSERT(lrValueForHalfway > 0.0f, "lrValueForHalfway > 0.0f");      // .cpp:643
+
+    const f32 lrX = lrValueIn / lrValueForHalfway;
+
+    CGS_ASSERT(!rw::math::fpu::IsZero(lrX + 1.0f),                         // .cpp:645
+               "!rw::math::fpu::IsZero(lrX+1.0f)");
+
+    return (lrX / (lrX + 1.0f)) * lrLimit;
+}
+
+// ----------------------------------------------------------------------------
+// TendToLimits(f32 x5) PS3 @0x1B53C   (DWARF CameraUtils.cpp:660)
+// ADDED 2026-08-02 (final-helpers wave). SIX instructions on PS3, both arms a TAIL BRANCH
+// into PositiveValueTendToLimit -- so the whole function is "fold the sign away, then pick
+// which of the two authored response pairs applies".
+//
+//   0x1B540  fcmpu cr7, lrValueIn, 0.0 ; cror eq = gt|eq ; bne -> the negative arm
+//   0x1B54C  (>= 0)  fmr f2, f4 ; fmr f3, f5  -- swap the POS pair into the callee's slots
+//   0x1B558  (<  0)  fneg f1, f1              -- and keep the NEG pair already in place
+//
+// ⚠️ NO X360 SYMBOL AT ALL: the X360 ARTIST build inlines this into every caller. That is
+// not a gap, it is the corroboration -- BehaviourGameplayExternal::ApplySlideyEffects
+// contains two verbatim expansions of exactly this shape (@0x822262E4 and @0x822263EC,
+// each an `fcmpu`/`blt` around an `fneg` and two `fmr`/`lfs` pairs feeding one
+// PositiveValueTendToLimit call), and reading those is how that helper's arguments were
+// separated. Two builds, one function.
+// ⚠️ THE NEG PAIR COMES FIRST in the signature and the two are easy to transpose. The
+// console's own `fmr f2, f4` / `fmr f3, f5` in the >= 0 arm is what fixes it: f2/f3 are the
+// slots PositiveValueTendToLimit reads, so f2/f3 must be the NEGATIVE pair and f4/f5 the
+// POSITIVE one. DecFIGS names all five.
+// ----------------------------------------------------------------------------
+f32 TendToLimits(f32 lrValueIn,
+                 f32 lrNegValueForHalfway, f32 lrNegLimit,
+                 f32 lrPosValueForHalfway, f32 lrPosLimit)
+{
+    if (lrValueIn >= 0.0f)
+    {
+        return PositiveValueTendToLimit(lrValueIn, lrPosValueForHalfway, lrPosLimit);
+    }
+
+    return PositiveValueTendToLimit(-lrValueIn, lrNegValueForHalfway, lrNegLimit);
+}
+
+// ----------------------------------------------------------------------------
+// SineLerp @0x8220CCB0 / PS3 @0x20AE4   (DWARF CameraUtils.cpp:808)
+// ADDED 2026-08-02 (final-helpers wave). ~25 asm lines.
+//
+// A cosine-eased lerp: ordinary Lerp(from, to, t) with the parameter first pushed through
+// the classic smooth-step-by-cosine remap, so the blend starts and ends with zero slope.
+//
+// asm walk (f1 = lfFrom, f2 = lfTo, f3 = lfParameter):
+//   0x8220CCE0  assert lfParameter >= 0.0f && lfParameter <= 1.0f     (.cpp:810)
+//   0x8220CD14  lfs flt_8200174C (PI, DUMPED 3.1415927) ; fmuls f1, f30, f0
+//   0x8220CD1C  bl cos                       <- a REAL libm call in the shipped X360 image,
+//                                               not an inlined XMVectorSinCos minimax
+//   0x8220CD24  lfs flt_82001DA0 == 0.5      ; fsubs f13, f28, f29  == lfTo - lfFrom
+//   0x8220CD30  fadds f12, f12, 1.0f
+//   0x8220CD34  fnmsubs f0, f12, 0.5f, 1.0f  == 1 - (cos + 1) * 0.5
+//   0x8220CD38  fmadds f1, f0, f13, f29      == lfFrom + t * (lfTo - lfFrom)
+//
+// ⭐ THE REMAP IS PINNED BY ITS ENDPOINTS, not by pattern-matching: p=0 -> 1-(1+1)/2 = 0,
+// p=1 -> 1-(-1+1)/2 = 1, p=0.5 -> 1-(0+1)/2 = 0.5. Any sign slip breaks one of the three.
+// ⚠️ The assert is NON-GATING, and its bound is INCLUSIVE at both ends.
+// ⚠️ NOTE FOR CALLERS: an out-of-range parameter does not clamp -- it extrapolates through
+// the cosine, which is why the assert exists at all.
+// ----------------------------------------------------------------------------
+f32 SineLerp(f32 lfFrom, f32 lfTo, f32 lfParameter)
+{
+    const f32 KF_PI = 3.1415927f;   // flt_8200174C == rw::math::PI
+
+    CGS_ASSERT(lfParameter >= 0.0f && lfParameter <= 1.0f,                 // .cpp:810
+               "lfParameter >= 0.0f && lfParameter <= 1.0f");
+
+    const f32 lfEased = 1.0f - (std::cos(lfParameter * KF_PI) + 1.0f) * 0.5f;
+
+    return lfFrom + lfEased * (lfTo - lfFrom);
 }
 
 // ----------------------------------------------------------------------------
