@@ -87,6 +87,31 @@ public:
         return tuNumBits;
     }
 
+    // uint32_t CountSetBits() const -- the DWARF-attested name (CgsBitArray.h, alongside
+    // GetCapacity/IsZero). The X360 build inlines it at every call site as the textbook SWAR
+    // 64-bit population count, one field at a time; PropDebugComponent::RenderStats @0x826131E8
+    // carries two verbatim copies of it (on PropManager::mUsedProps @+0x80 and mUsedParts @+0x90),
+    // and the constant chain there is exactly this sequence:
+    //     x -= (x >> 1) & 0x5555555555555555
+    //     x  = (x & 0x3333333333333333) + ((x >> 2) & 0x3333333333333333)
+    //     x  = (x + (x >> 4)) & 0x0F0F0F0F0F0F0F0F
+    //     return (u32)((x * 0x0101010101010101) >> 56)
+    // Note the X360 does NOT mask off the bits above tuNumBits: the fields only ever hold bits
+    // this container itself set, so the unused high bits are always zero. Reproduced as-is.
+    u32 CountSetBits() const
+    {
+        u32 luCount = 0;
+        for (u32 luField = 0; luField < kuNumberOfBitFields; ++luField)
+        {
+            u64 lu64 = maxBits[luField];
+            lu64 -= (lu64 >> 1) & 0x5555555555555555ULL;
+            lu64  = (lu64 & 0x3333333333333333ULL) + ((lu64 >> 2) & 0x3333333333333333ULL);
+            lu64  = (lu64 + (lu64 >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+            luCount += static_cast<u32>((lu64 * 0x0101010101010101ULL) >> 56);
+        }
+        return luCount;
+    }
+
     // Per-field bitwise OR of two arrays into this one (this = lpArrayA | lpArrayB).
     // The exact method the DecFIGS DWARF attests for BitArray<60u> (CgsBitArray.h:491,
     // alongside the symmetric ANDArrays @ :445 in the Feb-2007 reference). The X360

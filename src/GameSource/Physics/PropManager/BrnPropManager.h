@@ -1,9 +1,14 @@
 #pragma once
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"                                                 // ::VecFloat, Vector3, Matrix44Affine
+#include "GameSource/Physics/PropManager/BrnPropDebugComponent.h"           // PropDebugComponent (by value, +0x00)
 #include "GameSource/Physics/PropManager/PropPhysics/BrnPropInstance.h"     // PropInstance, PropEntityID
 #include "GameSource/Physics/PropManager/PropPhysics/BrnPropPartInstance.h" // PropPartInstance
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"          // UpdatePropEvent
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                  // CgsContainers::BitArray
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"          // CgsResource::ResourcePtr<T>
 
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; } }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only member (mpPrimitiveWithTriangleStream)
@@ -12,88 +17,154 @@ namespace BrnPhysics
 {
 namespace Props
 {
+    class PropPhysicsDataHeader;      // ResourcePtr referent only (SharedClasses/Physics/Props)
+
+    // ---- The prop-physics tuning globals ------------------------------------------------
+    // Namespace-scope, defined in BrnPropManager.cpp -- which is exactly where the DecFIGS
+    // dwarfdump puts them (BrnPropManager.cpp:45..51). They are the twelve values the prop
+    // debug component registers with the debug UI, and the seven VecFloats are what its
+    // OnChange* callbacks splat-store into (X360 0x825BAEF0..0x825BB040, PS3 0x6B5AA4..0x6B5C7C
+    // where the relocations carry the names).
+    //
+    // ⚠️ The five f32s below have real static initialisers, read straight out of the shipped
+    //    image; the seven VecFloats read as all-zero on disk (their whole 0x82FB9xxx page is
+    //    zero-filled) and the ARTIST export set contains NO function that initialises them --
+    //    only readers and the OnChange* writers. Their initial values are therefore
+    //    UNRECOVERED and are NOT invented here; see the definitions in BrnPropManager.cpp.
+    extern ::VecFloat KVF_GRAVITY_SCALE;                   // X360 0x82FB94E0
+    extern ::VecFloat KVF_INERTIA_SCALE;                   // X360 0x82FB9400
+    extern ::VecFloat KVF_ANTI_HERD_UPWARD_SCALE;          // X360 0x82FB93E0
+    extern ::VecFloat KVF_ANTI_HERD_SIDE_SCALE;            // X360 0x82FB9450
+    extern ::VecFloat KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE; // X360 0x82FB9D70
+    extern ::VecFloat KVF_MAX_SPEED_FOR_SIDE_FORCE;        // X360 0x82FB93A0
+    extern ::VecFloat KVF_SPEED_CLAMP;                     // X360 0x82FB94A0
+
+    extern f32 KF_PROP_ANGULAR_DRAG;                       // X360 0x82F2A388
+    extern f32 KF_PROP_LINEAR_DRAG;                        // X360 0x82F2A38C
+    extern f32 KF_PROP_MAX_ANGULAR_VEL;                    // X360 0x82F2A390
+    extern f32 KF_PROP_MAX_LINEAR_VEL;                     // X360 0x82F2A394
+    extern f32 KF_PROP_RESTITUTION;                        // X360 0x82F2A398
+
+    // =====================================================================================
+    // BrnPhysics::Props::PropManager -- FULL member sequence, DWARF declaration order
+    // (references/DecFIGS/.../BrnPropManager.h:245..301), landing gap-free on every offset
+    // the X360 asm touches. The offset column is NOT a host layout claim (x64 widens the
+    // pointers); it is the evidence column -- each line is an actual load or store in the
+    // ARTIST image, and the run being gap-free is what makes the name<->offset mapping a
+    // proof rather than a proposal. The derivation, its arithmetic self-checks, and the
+    // (now settled) history are in BrnPropManager.cpp's banner.
+    //
+    // ⭐ THE CLASS HAS NO BASE. Two things settle it: the dwarfdump prints base classes and
+    //    prints `struct BrnPhysics::Props::PropManager {` with none, and Construct @0x82627390
+    //    calls PropDebugComponent::Construct with r3 == r4 == this, i.e. &mDebugComponent ==
+    //    this. The `bl BaseCollisionGenerator::Destruct` in Destruct's tail (which an older
+    //    note read as a base-class call) is an ICF fold: THREE different empty `void f(T*)`
+    //    bodies in this one subsystem call that same address -- PropDebugComponent::Construct
+    //    @0x825BAD74 where DebugComponent::Construct belongs, PropDebugComponent::OnRegister
+    //    @0x822A9750 (a bare `b` to it) where DebugComponent::OnRegister belongs, and
+    //    PropManager::Destruct @0x825E33E4 where mDebugComponent's own Destruct tail belongs.
+    // =====================================================================================
     class PropManager
     {
     public:
-        bool mbRenderCentreOfMass;
-        bool mbDisableFreezing;
+        // DWARF BrnPropManager.h:103..107 (nested). Sized by Construct's own allocation
+        // request: 0x600 bytes for KI_MAX_DEBUG_WORLD_CONTACTS(32) entries == 48 bytes each,
+        // which is exactly three Vector3s.
+        struct DebugWorldContactInfo
+        {
+            Vector3 mPoint0;
+            Vector3 mPoint1;
+            Vector3 mNormal;
+        };
+
+        static const s32 KI_MAX_DEBUG_WORLD_CONTACTS = 32;    // DWARF BrnPropManager.h:110
+        static const s32 KI_PROP_INDEX_NOT_FOUND     = -1;    // DWARF BrnPropManager.h:245
+
+        typedef CgsModule::EventQueue<UpdatePropEvent, 200> UpdatePropEventQueue;
+        typedef CgsModule::EventQueue<UpdatePropEvent, 15>  UpdateJointedPropEventQueue;
+
+        PropDebugComponent           mDebugComponent;              // X360 +0x0000  (sizeof 0x48)
+        bool                         mbRenderCOM;                  // X360 +0x0048  stb 0
+        bool                         mbUseOverides;                // X360 +0x0049  stb 0
+        f32                          mfMassOverride;               // X360 +0x004C  = 10.0f
+        f32                          mfMaxLeanAngleOverride;       // X360 +0x0050  =  0.0f
+
+        // X360 +0x0054. PropDebugComponent::RenderStats @0x826131E8 reaches it as
+        // `addi r3,r11,0x54` into ResourcePtr<T>::operator-> -- identified by that call's baked
+        // assert line 0x220 == 544, the non-const operator->'s line in CgsResourcePtr.h -- and
+        // then reads word 0 of the header == muNumberOfPropTypes. Construct does NOT touch it.
+        CgsResource::ResourcePtr<PropPhysicsDataHeader> mpPhysicsData;
+
+        f32                          mfStaticFriction;             // X360 +0x0074  = 0.3f
+        f32                          mfDynamicFriction;            // X360 +0x0078  = 0.6f
+
+        // The instance-array slice. The three query getters (FindPropIndex /
+        // HasPropJustBeenRemoved / HasPartJustBeenRemoved) attest each stride/offset:
+        // PropInstance stride 112 with mEntityId @+0x60; PropPartInstance stride 64 with
+        // mEntityId @+0x30; the two BitArrays read at this+0x80 / this+0x90.
+        PropInstance*                mpaPropInstances;             // X360 +0x007C
+        CgsContainers::BitArray<15>  mUsedProps;                   // X360 +0x0080  std 0
+        u32                          muNumberOfPropInstances;      // X360 +0x0088
+        PropPartInstance*            mpaPartInstances;             // X360 +0x008C
+        CgsContainers::BitArray<30>  mUsedParts;                   // X360 +0x0090  std 0
+        u32                          muNumberOfPartInstances;      // X360 +0x0098
+
+        // The perf-monitor slice. miNumJobsAdded is attested by
+        // BeginPropWorldContactGeneration @0x82628CFC (`stw r26,0x9C(r31)`, r26 == 0);
+        // mpPrimitiveWithTriangleStream by Construct (`stw r30,0xA0(r31)`) and by that same
+        // function storing a stream producer there; the five monitor ids by the two
+        // Construct*PerfMonitors bodies, whose own NAMES name the members they zero.
+        // miProcessBreakPropPM is written by NEITHER constructor -- a fact of the shipped
+        // image, stated rather than smoothed over.
+        s32                          miNumJobsAdded;               // X360 +0x009C
+        CgsMemory::SimpleDataStreamProducer* mpPrimitiveWithTriangleStream;  // X360 +0x00A0
+        s32                          miContactGeneratorWaitPM;     // X360 +0x00A4
+        s32                          miProcessRemovePropPM;        // X360 +0x00A8
+        s32                          miProcessRemovePartPM;        // X360 +0x00AC
+        s32                          miProcessAddPropInstancePM;   // X360 +0x00B0
+        s32                          miProcessAddPartInstancePM;   // X360 +0x00B4
+        s32                          miProcessBreakPropPM;         // X360 +0x00B8
+
+        // The prop-joint block. Untouched by Construct except the two bit-sets; the strides
+        // are what close the run from +0xC0 to +0x680 exactly (15*16 + 15*16 + 15 (padded to
+        // 16) + 15*64 == 0x5B0, i.e. 0xC0 + 0x5B0 == 0x670).
+        Vector3                      maPropJointPositions[15];     // X360 +0x00C0
+        Vector3                      maLastJointRotation[15];      // X360 +0x01B0
+        u8                           mauPropIndexForJoint[15];     // X360 +0x02A0
+        Matrix44Affine               maCurrentJointTransforms[15]; // X360 +0x02B0
+        CgsContainers::BitArray<15>  mUsedPropJoints;              // X360 +0x0670  std 0
+        CgsContainers::BitArray<15>  mBreakPropJoints;             // X360 +0x0678  std 0
+
+        // Construct calls EventQueue<UpdatePropEvent,200>::Construct on this+0x680 and
+        // EventQueue<UpdatePropEvent,15>::Construct on this+0x5E10. The difference,
+        // 0x5790 == 0x10 + 200*112, and 0x64B0 - 0x5E10 == 0x6A0 == 0x10 + 15*112, are the
+        // two arithmetic self-checks on the already-committed sizeof(UpdatePropEvent) == 112.
+        UpdatePropEventQueue         mUpdatedProps;                // X360 +0x0680
+        UpdateJointedPropEventQueue  mUpdatedJointedProps;         // X360 +0x5E10
+
+        DebugWorldContactInfo*       mpDebugWorldContacts;         // X360 +0x64B0
+        s32                          miNumDebugWorldContacts;      // X360 +0x64B4  stw 0
+        bool                         mbDisableFreezing;            // X360 +0x64B8  stb 0
+        PropEntityID                 maPropsAddedToContactGen[45]; // X360 +0x64BC  (45*4 == 0xB4)
+        s32                          miNumPropsAddedToContactGen;  // X360 +0x6570  stw 0
+
+        // X360 0x82627390 (82 asm). Defined in BrnPropManager.cpp.
+        void Construct();
+
+        // X360 0x825BAC60. Four instructions: `li r11,0 ; stw r11,0xA4(r3) ; blr`.
+        void ConstructContactGenerationPerfMonitors();
+
+        // X360 0x825BAC70. Six instructions: zero the four pre-scene process-event monitor ids.
+        void ConstructPreScenePerfMonitors();
 
         // X360 0x825BACB0 (private prop/race-car helper; DWARF BrnPropManager.h:311).
         // Retargets the RACE-CAR side of a prop/race-car potential contact onto the shared
         // "dummy" race car by overwriting that RigidBodyId's EntityId owner-type with the
-        // dummy-car owner (11). Does not touch PropManager state (no `this` use), so it is
-        // reconstructable ahead of the still-blocked PropManager layout. Defined out-of-line
-        // in BrnPropManager_RoutePropVsRaceCarContactToDummyCar.cpp.
+        // dummy-car owner (11). Does not touch PropManager state (no `this` use). Defined
+        // out-of-line in BrnPropManager_RoutePropVsRaceCarContactToDummyCar.cpp.
         void RoutePropVsRaceCarContactToDummyCar(
             bool                                             lbPropIsEntityA,
             CgsPhysics::PhysicsSimulationIO::InAddPotentialContact* lpOutContact );
-
-        // ADDITIVE GROW (prop/part instance-query slice). The three const-ish query getters
-        // below (FindPropIndex / HasPropJustBeenRemoved / HasPartJustBeenRemoved) only touch
-        // the PropManager-owned instance arrays and their "used" bit-sets -- never the
-        // still-ungroundable BaseCollisionGenerator base sub-object, the event queues, or the
-        // physics/IO dependency family that keeps the rest of BrnPropManager.cpp blocked. So
-        // this slice can be reconstructed on its own (mirroring the RoutePropVsRaceCarContact-
-        // ToDummyCar split-out). The member NAMES + types are the DecFIGS DWARF layout for this
-        // path (references/DecFIGS/dwarfdump/GameSource/Physics/PropManager/BrnPropManager.h:98-113):
-        //   mpaPropInstances @X360+0x7C, mUsedProps @+0x80, muNumberOfPropInstances @+0x88,
-        //   mpaPartInstances @+0x8C, mUsedParts @+0x90, muNumberOfPartInstances @+0x98 -- and the
-        //   X360 asm of the three getters attests each stride/offset (PropInstance stride 112 with
-        //   mEntityId @+0x60; PropPartInstance stride 64 with mEntityId @+0x30; the two BitArrays
-        //   read at this+0x80 / this+0x90). Only these six DWARF members are added (the preceding
-        //   base + shell members remain unreconstructed, so absolute host offsets are NOT pinned;
-        //   the bodies are by-name and behaviour-faithful, matching the split-out precedent).
-        PropInstance*                mpaPropInstances;
-        CgsContainers::BitArray<15>  mUsedProps;
-        u32                          muNumberOfPropInstances;
-        PropPartInstance*            mpaPartInstances;
-        CgsContainers::BitArray<30>  mUsedParts;
-        u32                          muNumberOfPartInstances;
-
-        // ---- ADDITIVE GROW (perf-monitor slice; DWARF BrnPropManager.h:266..277, in
-        //      declaration order, immediately after muNumberOfPartInstances) --------------------
-        // These eight members are the ones ConstructPreScenePerfMonitors /
-        // ConstructContactGenerationPerfMonitors / Construct write, and their X360 offsets form a
-        // gap-free run straight out of the DWARF sequence, which is what makes the
-        // offset->name mapping PROVEN rather than proposed:
-        //
-        //   +0x90 mUsedParts (BitArray<30>, 8B) .. +0x98 muNumberOfPartInstances (already
-        //   committed, and both are written by Construct: `std r30,0x90(r31)`)
-        //   +0x9C  miNumJobsAdded                    (BeginPropWorldContactGeneration @0x82628CFC
-        //                                             does `stw r26,0x9C(r31)` with r26 == 0)
-        //   +0xA0  mpPrimitiveWithTriangleStream     (Construct: `stw r30,0xA0(r31)`, r30 == 0;
-        //                                             BeginPropWorldContactGeneration then stores
-        //                                             a stream producer there)
-        //   +0xA4  miContactGeneratorWaitPM          (ConstructContactGenerationPerfMonitors --
-        //                                             the ONLY store that function makes, and the
-        //                                             function's own name names the member)
-        //   +0xA8  miProcessRemovePropPM             \
-        //   +0xAC  miProcessRemovePartPM              |  the four ConstructPreScenePerfMonitors
-        //   +0xB0  miProcessAddPropInstancePM         |  zeroes (stores in the order B0,B4,A8,AC)
-        //   +0xB4  miProcessAddPartInstancePM        /
-        //   +0xB8  miProcessBreakPropPM              (written by NEITHER constructor -- stated as a
-        //                                             fact of the asm, not smoothed over)
-        //
-        // The run then continues at +0xC0 with maPropJointPositions[15] (16-aligned Vector3s),
-        // and the rest of the DWARF sequence lands gap-free all the way to
-        // miNumPropsAddedToContactGen at +0x6570 -- see the layout table in BrnPropManager.cpp.
-        s32                          miNumJobsAdded;
-        CgsMemory::SimpleDataStreamProducer* mpPrimitiveWithTriangleStream;
-        s32                          miContactGeneratorWaitPM;
-        s32                          miProcessRemovePropPM;
-        s32                          miProcessRemovePartPM;
-        s32                          miProcessAddPropInstancePM;
-        s32                          miProcessAddPartInstancePM;
-        s32                          miProcessBreakPropPM;
-
-        // X360 0x825BAC60 (DWARF BrnPropManager.h). Called by PhysicsModule::Construct
-        // @0x825AE308 on the embedded mPropManager. In the shipped ARTIST image this is four
-        // instructions: `li r11,0 ; stw r11,0xA4(r3) ; blr`. Defined in BrnPropManager.cpp.
-        void ConstructContactGenerationPerfMonitors();
-
-        // X360 0x825BAC70. Six instructions: zero the four pre-scene process-event monitor ids.
-        // Defined in BrnPropManager.cpp.
-        void ConstructPreScenePerfMonitors();
 
         // X360 0x82606148 (DWARF BrnPropManager.h:250). Linear-scan the used-prop bit-set;
         // return the slot whose stored PropEntityID matches, else -1.
