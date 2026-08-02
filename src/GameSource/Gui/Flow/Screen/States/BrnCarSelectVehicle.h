@@ -75,6 +75,16 @@
 // case the console can actually reach, and they should be REMOVED once the event-412 /
 // event-406 producers land.
 //
+// ⚠️⚠️ AND ONE OF THOSE FIVE GUARDED THE WRONG POINTER. IsLoading's guard tests the LOOKED-UP
+// ENTRY, so it reads as if it covered `mpVehicleList->GetVehicleData(...)` -- but that call
+// dereferences the LIST, and VehicleList::GetVehicleData(CgsID) opens with
+// `mov edi,[rcx+0x3700]`, so a null list AVs inside the callee before any result exists to
+// test. UpdateComponents calls IsLoading EVERY FRAME; it survived only because the
+// `mbVoiceOverPlaying` early return above it masked the call for the nine seconds of the
+// Junkyard car-info VO. A `mpVehicleList == 0 -> return true` guard now precedes the lookup.
+// (Lesson for the ledger: a guard's COMMENT is a claim -- check which pointer it actually
+// tests, and against which dereference.)
+//
 // ⚠️ A SIXTH site, found 2026-08-02 and of a DIFFERENT shape -- it is what actually killed
 // the process on this screen. SetCarSelectorComponent's bail leaves mCarSelector EMPTY, and
 // SelectableGroup::GetHighlighted() has no lower bound on miHighlightedIndex (see the long
