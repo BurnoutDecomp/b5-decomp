@@ -4,6 +4,17 @@
 // Bodied here (1 ledger function):
 //   BoostShakeController::Update   @0x8220E548
 //
+// ⛔⛔ THIS TU IS NOT ON THE BUILD LIST, AND IT HAS A REAL CONSOLE CALLER (found 2026-08-02,
+// final-camera wave). BehaviourGameplayExternal::Update @0x82240828 calls
+// BrnDirector::BoostShakeController::Update directly at 0x822422B0. So the body below is
+// the fifth member of this cluster's "body exists, nothing links it" family -- the same
+// shape that hid Camera::SetRequestedTimeDilation for months: the link stays green only
+// because nothing on the build list reaches it, and it will become an unresolved external
+// the moment BehaviourGameplayExternal::Update is transcribed.
+// ⭐ MOUNTING IT COSTS NOTHING: this TU includes only its own header, and that header
+// includes only types.hpp and <cstddef>, so there is NO cascade -- measured, not assumed.
+// Mount it WITH Update (a body with no caller is as dead as no body), not before.
+//
 // The X360 body is pure scalar FP (fcmpu / fdivs / fsubs / fmuls + four fsel branchless
 // clamps); it is reproduced step-for-step below. The two literals the asm pulls from
 // rodata are 0.0 (flt_82001CC0, also the divide-by-zero guard constant and the f12

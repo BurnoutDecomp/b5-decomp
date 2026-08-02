@@ -411,9 +411,46 @@ public:
     //                                      lrInfo.mbLookback, lrInfo.mbUseControlPauseBehaviour,
     //                                      lfMinPitch, lfMaxPitch)   <- ALREADY BODIED
     //     :235..:240  build a car-velocity frame from lrInfo.GetEyeTarget() (+0x250)
-    //     :260/:261/:264  rw::math::vpu::SLerp x2 + OrthoNormalize3x3, rate
-    //                     kvfVelocityTransformSlerpSpeed
+    //   ⭐ THE :246..:296 TAIL, DECODED 2026-08-02 (final-camera wave) from the DecFIGS
+    //     per-instruction line attribution. This was the second half of that wave's target;
+    //     it lands as a MAP rather than as code because Update still cannot link (see the
+    //     link-closure set). Every line below is one own-line DecFIGS statement:
+    //     :246  if (<shared info +0x4A4, a bool>) {          PS3 0x69BB4 `lbz r0, 0x4A4(r3)`
+    //     :260    lVelocityTransform = SLerp(lFrom, lTo, Min(<blend>, 1))
+    //             ⭐ the rate is the file-scope VecFloat kvfVelocityTransformSlerpSpeed --
+    //             a DecFIGS-NAMED symbol (`_ZN...30kvfVelocityTransformSlerpSpeedE`), and it
+    //             is the SAME dynamically-initialised-BSS shape as the five
+    //             KVF_LAST_PLAYER_TRANSFORM_* constants, so it will read as ZERO in the image
+    //             and must be byte-scanned out of .text (scratchpad\fh_lis.py + fh_dis.py).
+    //             ⚠️ DO NOT take it from the image at face value.
+    //     :261    lVelocityTransform = OrthoNormalize3x3(lVelocityTransform)
+    //     :264    <a SECOND SLerp>, same helper, different pair            PS3 0x69DF4
+    //           }
+    //     :267  reads this->mfYawSpring (+0xB38) and a vector off the shared info
+    //     :269  if (mbSnapToCar) {                            PS3 0x69E44 `lbz 0xB4D` (X360 0xB5D)
+    //     :271    mfCenteringFactor = 0.0f;                   PS3 0x6B4EC `stfs 0xB04`
+    //     :273    mRotationController.Construct();            PS3 0x6B504, the real call
+    //           }
+    //     :277  if (<shared info +0x4AA, a bool>) {           PS3 0x69E84 / 0x6B50C
+    //     :280/:281/:282  copy mLastPlayerTransform's xAxis/yAxis/zAxis rows out to locals
+    //                     (PS3 0x6B4A8: r29 == this+0xA90 == mLastPlayerTransform, X360 +0xAA0)
+    //           }
     //     :287  InterpolateLastPlayerTransform(...)
+    //     :290  if (lrInfo.mfAbsDriftScale (+0x45C) < 0.1f)
+    //     :292    mfCenteringFactor += (0.0f - mfCenteringFactor) * <rate>
+    //           else
+    //     :296    mfCenteringFactor += (1.0f - mfCenteringFactor) * <rate>
+    //           ⭐ SO UPDATE PRE-SEEDS THE SAME mfCenteringFactor UpdateLooking then drives,
+    //           and the sense is: DRIFTING HARD pushes it to 1, i.e. the rig re-centres onto
+    //           the car. ⭐ The 0.1f threshold is DOUBLY ATTESTED -- PS3 dword_FF2D30 here is
+    //           the same constant ApplySlideyEffects :894 tests mfAbsDriftScale against, and
+    //           the same one UpdateLooking :793 uses as its FOV blend rate (X360 flt_82004014,
+    //           DUMPED 0.1f). Three uses, one value.
+    //     ⚠️ +0x4A4 and +0x4AA are PS3-attested offsets. INFERRED that they carry over to
+    //       X360: mfAbsDriftScale is +0x45C on BOTH builds (this decode and the committed
+    //       ApplySlideyEffects banner), so the two agree in this span -- but that is an
+    //       argument, not a second witness for these two bytes. Re-read them from the X360
+    //       asm before naming them.
     //     :301  a FUNCTION-LOCAL STATIC `mLastCameraAngles` (Vector3) with a real guard
     //           variable -- it is per-class, not per-instance, and both gameplay cameras
     //           share it
