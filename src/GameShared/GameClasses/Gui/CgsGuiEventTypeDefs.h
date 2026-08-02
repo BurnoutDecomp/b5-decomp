@@ -169,7 +169,33 @@ namespace CgsGui
     // from GuiEvent<id>, else a raw byte struct carrying its own GetEventType()==id.
     // ============================================================================
     struct GuiEventNetworkConnected { u8 maData[2]; s32 GetEventType() const { return 43; } };  // id 43 size 2
-    struct GuiEventNetworkDisconnected : public CgsGui::GuiEvent<44> { u8 maPayload[120]; };  // id 44 size 132
+
+    // GuiEventNetworkDisconnected -- REAL shape, measured; no longer the byte-blob
+    // placeholder. It is NOT an OutputGuiEvent wrapper record: the publisher
+    // BrnNetworkModule::AddOutputGuiEvent<GuiEventNetworkDisconnected> @0x825660B0 hands
+    // AddEvent the OBJECT itself (`li r6, 0x84; li r5, 0x2C` @0x82566150/54), so the
+    // 132-byte object IS the queued record and nothing is prepended to it -- matching
+    // DWARF CgsGuiEvent.h:6974, where GuiEvent<44> carries no data members. Modelling it
+    // with the tree's 12-byte GuiEvent<N> header in front would push every field 12 bytes
+    // out of phase for the consumer.
+    //
+    // FIELD ORDER is the X360's, taken off the consumer
+    // CrashNavEnterOnlineBase::HandleDisconnectedEvent @0x824D8830: the error word is read
+    // at payload+0 (`lwz r4, 0(r28)` @0x824D89F0) and the reason text starts at payload+4
+    // (`lbz r11, 4(r28)` / `addi r30, r28, 4` @0x824D89BC/C0); the whole record is memcpy'd
+    // at 0x84 == 132 bytes (@0x824D8AE0). Names and the reason-buffer bound are the DWARF's
+    // (CgsGuiEventTypeDefs.h:374-376), which lists the two members in the opposite order --
+    // the asm arbitrates layout.
+    struct GuiEventNetworkDisconnected
+    {
+        static const s32 KI_MAX_REASON_LENGTH = 128;   // DWARF CgsGuiEventTypeDefs.h:374
+
+        s32  meLastError;                        // +0x00 (0 == no coded failure)
+        char macReason[KI_MAX_REASON_LENGTH];    // +0x04 (empty == server sent no wording)
+
+        s32 GetEventType() const { return 44; }
+    };
+
     struct GuiEventNetworkInGame { u8 maData[1]; s32 GetEventType() const { return 50; } };  // id 50 size 1
     struct GuiEventNetworkInGameFailed { u8 maData[4]; s32 GetEventType() const { return 51; } };  // id 51 size 4
     struct GuiEventNetworkLaunched { u8 maData[4]; s32 GetEventType() const { return 58; } };  // id 58 size 4
@@ -194,4 +220,39 @@ namespace CgsGui
     static_assert(__builtin_offsetof(GuiEventControllerAxis, mfYAxis)             == 0x14, "axis y @+0x14");
     static_assert(__builtin_offsetof(GuiControllerDisconnected, miPlayer)         == 0x0C, "disconnect player @+0x0C");
     static_assert(__builtin_offsetof(GuiControllerDisconnected, miPort)           == 0x10, "disconnect port @+0x10");
+
+    // The disconnect record is header-free, so its own two fields sit at +0 and +4 and the
+    // whole object is the 132-byte record. Every member is a scalar or a char array, so
+    // these X360 numbers must survive the x64 host unchanged.
+    static_assert(sizeof(GuiEventNetworkDisconnected)                              == 132,  "disconnect record is 132 bytes (AddEvent size 0x84 @0x82566150)");
+    static_assert(__builtin_offsetof(GuiEventNetworkDisconnected, meLastError)     == 0x00, "disconnect error word @+0x00 (lwz r4, 0(r28) @0x824D89F0)");
+    static_assert(__builtin_offsetof(GuiEventNetworkDisconnected, macReason)       == 0x04, "disconnect reason text @+0x04 (addi r30, r28, 4 @0x824D89C0)");
+
+    // DWARF CgsGuiEventTypeDefs.h:380 -- which login question the sign-in flow is showing.
+    // X360-attested by CrashNavEnterOnlineBase (the show-function dispatch indexes it and
+    // OnEnter resets the current question to E_LOGIN_QUESTION_COUNT).
+    enum ELoginQuestion
+    {
+        E_LOGIN_QUESTION_TOS              = 0,
+        E_LOGIN_QUESTION_CREATE_ACCOUNT   = 1,
+        E_LOGIN_QUESTION_SHARE            = 2,
+        E_LOGIN_QUESTION_OPEN_US_ACCOUNT  = 3,
+        E_LOGIN_QUESTION_NO_AGREEMENT     = 4,
+        E_LOGIN_QUESTION_SHOW_SIGN_IN     = 5,
+        E_LOGIN_QUESTION_CHAT_RESTRICTION = 6,
+        E_LOGIN_QUESTION_COUNT            = 7,
+    };
+
+    // DWARF CgsGuiEventTypeDefs.h:427 -- `typedef GuiEvent<49> GuiEventCancelLogin;`,
+    // recovered through GuiEventWrapper<CgsGui::GuiEvent<49>,40> (DWARF CgsGuiEvent.h:
+    // 10085-10101, whose mOutEvent member is spelled with this typedef) and through
+    // AddGuiEvent<GuiEventOut<GuiEventCancelLogin>> (DWARF CgsGuiEvent.h:11124). The event
+    // is payload-free: DWARF CgsGuiEvent.h:9705 shows GuiEvent<49> declares no data
+    // members, which is why the producers' record carries a payload-size word of 1.
+    // It is the "abandon the sign-in attempt" request the sign-in screens post when the
+    // player backs out of a login question (CrashNavEnterOnlineBase::
+    // HandleLoginInputShareInfo @0x824D8548 builds { 1, 49, 12 } and posts 16 bytes on
+    // channel 40).
+    typedef GuiEvent<49> GuiEventCancelLogin;
+
 }

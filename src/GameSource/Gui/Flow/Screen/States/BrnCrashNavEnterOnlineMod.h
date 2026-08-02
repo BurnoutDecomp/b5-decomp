@@ -14,6 +14,13 @@ namespace BrnGui
     struct CrashNavEnterOnlineX360 : public CrashNavEnterOnlineBase
     {
         virtual void OnEnter();
+        virtual void OnLeave();       // @0x82487EA0 (X360/BrnCrashNavEnterOnlineX360.cpp)
+        // @0x82488010 -- the Xbox sign-in UI trigger (base pure-virtual slot 10).
+        virtual u32 ShowSignInUI();
+
+        // The system XNotify listener handle (X360 this+0x37F0; created by OnEnter,
+        // closed by OnLeave). Host-opaque handle.
+        void* mhNotificationListener;
     };
 
     // DWARF Mod.h:59 -- the full (titled) sign-in screen. OnEnter (Mod.cpp:38) is
