@@ -212,7 +212,10 @@ namespace Vehicle
             else
                 mfSlamSteering = mfSlamSteering * 0.94999999f;   // inside -> decay 0.95/frame
 
-            if (mi8SlammingRaceCarId > 0 /* int1354 > 0 in asm: per-frame crash counter */)
+            if (miNumCollisions > 0)   // asm @0x82641814: `lwz r11,0x1354(r31)` -- a WORD at +0x1354, i.e.
+                                       // miNumCollisions. The committed source named mi8SlammingRaceCarId
+                                       // (a BYTE at +0x13E0) while its own comment cited int1354; RaceCarPhysics
+                                       // never references +0x13E0. Corrected during the re-parenting audit.
                 mfSlamSteering = 0.0f;
 
             // clamp +/-10 (fsel min then max)
@@ -878,7 +881,19 @@ namespace Vehicle
                 lvPitchImpulse = vpu::Subtract(Vector3{ 0.0f, lfWheelie, 0.0f, 0.0f }, lvPitchImpulse);
             else
                 lvPitchImpulse = vpu::Add(Vector3{ 0.0f, lfWheelie, 0.0f, 0.0f }, lvPitchImpulse);
-            AddLocalImpulse(vpu::Mult(lvPitchImpulse, KF_AFTERTOUCH_PITCH), Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
+            // InputSpace tags recovered from UpdateAftertouch's own asm. The X360 issues this call
+            // TWICE (@0x8262F49C and @0x8262F5D0) and both sites set `li r5,0 ; li r4,0` -- BOTH
+            // vectors WORLD_SPACE. This is the only one of the five AddLocal* call sites in the
+            // vehicle tree whose POSITION is world-space rather than body-space.
+            // ⛔ FLAG (position argument, pre-existing): the zero vector below is a STAND-IN and the
+            // asm contradicts it -- v2 at the call is `vsubfp v2, v0, v12` (@0x8262F458), a live
+            // difference of two vectors, not a literal zero. With a WORLD_SPACE tag a zero position
+            // means "the world origin", so AddLocalImpulse would use r = -mTransform.wAxis (the car's
+            // whole world position) as the lever arm. The tags here are console-exact; the position
+            // is NOT, and must be recovered before this TU is mounted. (This TU is unmounted and also
+            // still carries KF_DT = 0.0f, so nothing runs today.)
+            AddLocalImpulse(vpu::Mult(lvPitchImpulse, KF_AFTERTOUCH_PITCH), rw::physics::WORLD_SPACE,
+                            Vector3{ 0.0f, 0.0f, 0.0f, 0.0f }, rw::physics::WORLD_SPACE);
         }
 
         if (lbShowtime)
