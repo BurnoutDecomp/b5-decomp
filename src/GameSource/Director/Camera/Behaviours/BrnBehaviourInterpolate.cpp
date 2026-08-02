@@ -11,6 +11,7 @@
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // BehaviourManager (the two GetCamera resolves)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log::gpDebugPrint (bring-up measurement)
 
 namespace BrnDirector
 {
@@ -266,7 +267,6 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
 
     const Camera lFrom(mFromCamera.GetCamera(lrInfo.mpBehaviourManager));
     const Camera lTo(mToCamera.GetCamera(lrInfo.mpBehaviourManager));
-    (void)lTo;
 
     CGS_ASSERT(!IsZero(mfDuration), "!rw::math::fpu::IsZero(mfDuration)");            // :145
 
@@ -290,7 +290,7 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
     lrCamera.GetEffects().mu8InterpolateType =
         static_cast<u8>(mpParameters->GetInterpolationMethod());
 
-    // ⛔⛔ GATE -- THE BLEND ITSELF. The console's last statement is
+    // ⭐⭐ THE ENDPOINT OF THE BLEND. The console's last statement is
     //     BrnDirector::CameraInterpolationController::Update(&mInterpolator, lrCamera, lTo,
     //                                                        lrSharedInfo.GetEyeTarget())
     //   @0x822513D8 (227 asm lines). It reads the three fields written just above, maps the
@@ -300,21 +300,63 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
     //   E_METHOD_ROTATE_ABOUT_PLAYER_CAR), then lerps CameraState, CameraEffects, the
     //   5-float DepthOfField block, the FOV and the near-clip distance toward lTo.
     //
-    //   ⛔ NOT GATED FOR EFFORT -- GATED BECAUSE BLENDING TODAY WOULD BE WORSE THAN NOT
-    //   BLENDING. The "to" camera on the live car-select path is mLookAroundCarCam, a
-    //   Camera::BehaviourRotateAboutVehicle -- and THAT behaviour has no Construct and no
-    //   Update in this tree either (X360 @0x8222BEC0 / @0x822493C0; only BecomeSimilarTo,
-    //   SetParameters and GetCollisionPolicy are bodied). Its produced camera is therefore
-    //   still whatever BehaviourHelper::Prepare's Camera::Construct left -- an identity basis
-    //   at the origin. Interpolating toward it would walk the published camera INTO the origin
-    //   over mfDuration instead of leaving it on the (real, authored) source camera.
-    //   CONSEQUENCE while gated: the blend is a HOLD -- the helper keeps producing the source
-    //   camera, with the correct parametric time / curve / method published on it, and
-    //   mbHasFinished still latches on schedule so the owning state machine advances exactly
-    //   when the console's does.
-    //   DELETE-WHEN: BehaviourRotateAboutVehicle::{Construct,Update} land (they are the real
-    //   blocker), and with them CameraInterpolationController::Update +
-    //   Camera::CameraState::Interpolate @0x82220BC0.
+    //   AT PARAMETRIC TIME 1.0 THAT WHOLE PIPELINE'S OUTPUT IS EXACTLY lTo -- every component,
+    //   under every one of the four mappings (the fourth's k^100 term is identically zero in
+    //   f32) and under both methods (an endpoint is an endpoint for slerp and for
+    //   rotate-about-pivot alike; the extract/rebuild pair is a round trip at t == 1). So the
+    //   endpoint needs NO interpolation maths and is reproduced here exactly, not approximated.
+    //
+    //   ⭐ THIS IS THE WHOLE OF THE LIVE JUNKYARD SHOT, not an edge case.
+    //   ArbStateCarSelect::Prepare only enters E_STATE_ROTATE_ABOUT_CAR once
+    //   mToGameplayInterpolater.HasFinished() (BrnArbStateCarSelect.cpp:635), and that state
+    //   publishes THIS behaviour's produced camera every frame. The interpolater is therefore
+    //   at t == 1 for the entire state, so what is written below is the console's own output
+    //   for every frame of the junkyard car-select shot.
+    if (lfParametricTime >= KF_ONE)
+    {
+        lrCamera = lTo;
+    }
+
+    // ⚠️ STILL GATED: THE IN-BETWEEN (0 < t < 1) only. Reproducing it needs
+    //   CameraInterpolationController::Update itself plus, for this call site's
+    //   E_METHOD_ROTATE_ABOUT_PLAYER_CAR, RotateAboutPivot -> ExtractRotateAboutPivotParams
+    //   (declaration-only, a dense VMX pipeline) and Matrix44AffineFromRota (an honest
+    //   documented floor), and Camera::CameraState::Interpolate @0x82220BC0.
+    //   CONSEQUENCE while gated: the transition into a blended camera is a CUT at t == 1
+    //   rather than the console's eased ramp. On the junkyard path that ramp is
+    //   KF_INTERPOLATE_ONTO_CAR_SECS == 1.0f long and is over before the state that shows the
+    //   result is entered, so nothing on that path is visibly short-changed.
+    //   ⛔ THE PREVIOUS, WIDER GATE'S JUSTIFICATION HAS EXPIRED AND IS RETRACTED. It read
+    //   "the 'to' camera ... is mLookAroundCarCam, a BehaviourRotateAboutVehicle -- and THAT
+    //   behaviour has no Construct and no Update in this tree either ... interpolating toward
+    //   it would walk the published camera INTO the origin", with
+    //   "DELETE-WHEN: BehaviourRotateAboutVehicle::{Construct,Update} land". Both landed
+    //   (BrnBehaviourRotateAboutVehicle.cpp Construct @:247 / Update @:332) and Update runs
+    //   every frame, so the "to" camera is a real orbit-about-car shot and the hold it
+    //   justified was, by then, the only thing freezing the junkyard camera.
+    //   DELETE-WHEN: CameraInterpolationController::Update + CameraState::Interpolate +
+    //   the two VMX pivot helpers are transcribed.
+
+    // [BRING-UP MEASUREMENT, camera 1:1 wave] the blend's two endpoints and the parametric
+    // time, so a frozen or mis-framed shot can be attributed to the SOURCE camera, the TARGET
+    // camera or the blend without another boot. Burst window (first 4, then every 600th
+    // ~= 10 s) rather than a modulo sample, so the print cannot alias with a per-frame loop.
+    // Remove once the junkyard shot is settled.
+    {
+        static u32 suBlendTraceCount = 0;
+        ++suBlendTraceCount;
+        if ((suBlendTraceCount <= 4u || (suBlendTraceCount % 600u) == 0u)
+            && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[interp] #" << static_cast<s32>(suBlendTraceCount)
+                << " t=" << lfParametricTime
+                << " from (" << lFrom.mTransform.wAxis.x << ", " << lFrom.mTransform.wAxis.y
+                << ", " << lFrom.mTransform.wAxis.z << ") fov " << lFrom.mfFOV
+                << " -> to (" << lTo.mTransform.wAxis.x << ", " << lTo.mTransform.wAxis.y
+                << ", " << lTo.mTransform.wAxis.z << ") fov " << lTo.mfFOV << "\n";
+        }
+    }
 
     return true;
 }
