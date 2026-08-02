@@ -256,7 +256,15 @@ namespace BrnGui
         //     label; copied from the event-412 payload word at +0x428. FLAG: the name is
         //     from its role (the companion of the available count); the console symbol is
         //     unnamed.
+        // ⭐ gsiNumCarouselCars IS SHARED WITH BrnGui::CarSelectLivery (2026-08-02). That
+        // screen reads dword_82FB4958 at two sites -- UpdateComponents @0x824C7CB0 (offer the
+        // "$GENERAL_OPTION_BACK" prompt only when there is more than one car) and
+        // HandleControllerInput @0x824D6D10 case 0x32 (allow the GO_BACK press on the same
+        // condition). Two TUs reading one address means the console's counter is
+        // linker-visible, not a file-scope static, so this one is public.
+    public:
         static s32 gsiNumCarouselCars;
+    private:
         static s32 gsiNumCarsUnlockedTotal;
 
         // ---- members over the CarSelectMain base (X360 offsets are documentary) ---------

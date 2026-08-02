@@ -106,6 +106,17 @@ namespace BrnGui
             return true;
         }
 
+        // ADDITIVE GROW (BrnGui::CarSelectLivery, 2026-08-02). The three SIBLING slots of the
+        // SetHighlightable above -- slot 0 SetActive, slot 2 SetSelectable, slot 3
+        // SetHighlighted. CarSelectLivery reaches all three on its MenuToggleGroupVarSize<2>
+        // (`(*(*(this + 0x8F0) + 0/8/0xC))(...)` in SetupComponents and HandleControllerInput).
+        // Same construction as SetHighlightable: muFlags IS Selectable::mxFlags, so these
+        // reproduce Selectable::SetActive @0x824E56E0 / SetSelectable @0x824E5780 /
+        // SetHighlighted @0x824E57D0 store for store on the same byte.
+        bool SetActive(bool lbActive)           { return SetStateFlag(0x01, lbActive); }
+        bool SetSelectable(bool lbSelectable)   { return SetStateFlag(0x04, lbSelectable); }
+        bool SetHighlighted(bool lbHighlighted) { return SetStateFlag(0x08, lbHighlighted); }
+
         // @ 0x824E31D8 -- set one item's id + dirty it.
         void SetSelectableId(s32 liIndex, u64 luId);
         // @ 0x824E3248 -- set every item's id (from the array, or its index when null) + dirty.
@@ -113,6 +124,25 @@ namespace BrnGui
 
         // The component's apt name (delegates to the group's GuiComponent identity).
         const char* GetName() const { return mGuiComponentBase.GetName(); }
+
+        // The flag byte as the owning screen states sample it (`*(group + 0xC) & 8`).
+        bool IsHighlighted() const { return (muFlags & 0x08) != 0; }
+
+    private:
+        // The shared body of the four Selectable flag setters: no-op (returning false) when
+        // the bit already reads the requested way, otherwise flip it, dirty the component and
+        // report the change.
+        bool SetStateFlag(u8 luBit, bool lbSet)
+        {
+            const u8 luFlags = muFlags;
+            if (lbSet == ((luFlags & luBit) != 0))
+                return false;
+            muFlags = static_cast<u8>(lbSet ? (luFlags | luBit) : (luFlags ^ luBit));
+            muFlags = static_cast<u8>(muFlags | KU_FLAG_QUERIED);
+            return true;
+        }
+
+    public:
 
         // Members carrying the recovered fields. The leading head (+0x00..+0xA3) is the
         // multiply-inherited Selectable + GuiComponent base pair, modelled as reserved spans

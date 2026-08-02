@@ -48,10 +48,11 @@ namespace BrnGui
         // Component dirty flag OR-ed into muFlags (+0xC) on any mutation.
         static const u8 KU_FLAG_DIRTY = 0x10;
 
-        // @ 0x82500DB8 (<3>) -- install the group vtable and default-construct the
-        // TI_SIZE MenuToggle rows (each brings up its embedded TextSelection arrays). Its
-        // body is a compiler-synthesised embedded-aggregate ctor whose sub-object vtable
-        // identities are not reconstructed in this batch -- BLOCKED (declared-but-undefined).
+        // @ 0x82500DB8 (<3>) / 0x82500AC0 (<2>) -- install the group vtable and
+        // default-construct the TI_SIZE MenuToggle rows (each brings up its embedded
+        // TextSelection arrays). Every store in the X360 body is a sub-object vtable install
+        // that C++ emits implicitly here, so the reconstruction is an empty body (2026-08-02;
+        // it used to be declared-but-undefined and flagged BLOCKED).
         MenuToggleGroupVarSize();
 
         // Group Construct (DWARF): validate args, base-construct the SelectableGroup, construct
@@ -76,10 +77,24 @@ namespace BrnGui
         // rest, set the wrap flag, mark dirty.
         void SetupGroup(s32 liItemCount, u8 lbWrapped);
 
-        // @ 0x82428288 (<3>) -- (re)configure the toggle at liIndex: enable/disable it and
-        // forward the text/id payload to MenuToggle::SetupMenuToggle.
-        void SetupToggle(s32 liIndex, s32 lbActive, const char* lpacText,
-                         const char** lppacOptions, u64* lpu64Ids, s32 liUnused);
+        // @ 0x82428288 (<3>) / 0x824BD520 (<2>) -- (re)configure the toggle at liIndex:
+        // enable/disable it and forward the option payload to MenuToggle::SetupMenuToggle.
+        //
+        // ⭐⭐ PARAMETER ROLES CORRECTED 2026-08-02 (the CarSelectLivery wave -- this class's
+        // FIRST caller). The committed declaration read
+        //   SetupToggle(s32 liIndex, s32 lbActive, const char* lpacText,
+        //               const char** lppacOptions, u64* lpu64Ids, s32 liUnused)
+        // which forwarded r5..r9 to MenuToggle::SetupMenuToggle positionally -- so the BEHAVIOUR
+        // was right, but the LAST parameter was typed `s32` while the value the console puts in
+        // r9 is the `u64*` id array. On x64 that TRUNCATES A POINTER TO 32 BITS. The two
+        // call sites in BrnGui::CarSelectLivery::SetupComponents settle the real roles from the
+        // asm (@0x824C8554 and @0x824C8608):
+        //   r3 = this, r4 = index, r5 = numOptions, r6 = active, r7 = text,
+        //   r8 = options[], r9 = ids[]
+        // -- e.g. (0, muNumUnlockedLiveryCars, 1, "$CAR_MOD_LIVERY", $LIVERY_0..7, liveryIds)
+        // and (1, 3, 1, "$CAR_MOD_PAINT_FINISH", $PAINT_GLOSS/METALLIC/PEARLESCENT, {0,1,2}).
+        void SetupToggle(s32 liIndex, s32 liNumOptions, bool lbActive, const char* lpacText,
+                         const char** lppacOptions, u64* lpu64Ids);
 
         // @ 0x824BA9D0 (<3>) -- tear the group down: run the base Unloaded, reset
         // miLoadedItems, then Unloaded each of the miMaxItems rows.

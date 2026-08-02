@@ -35,4 +35,18 @@ namespace BrnGui
         *lppv4OutColour1 = mpcSelectionColour1;   // stw @0x824E55BC
         *lppv4OutColour2 = mpcSelectionColour2;   // stw @0x824E55C4
     }
+
+    // ---- Select -- an EMPTY override, verified, not assumed -------------------------
+    // This class's vtable (off_8207184C) reads
+    //   +0x00 Selectable::SetActive        +0x04 Selectable::SetHighlightable
+    //   +0x08 Selectable::SetSelectable    +0x0C Selectable::SetHighlighted
+    //   +0x10 0x8284CB38                   +0x14 Selectable::Update
+    // Slot 4 (+0x10) is Select, and 0x8284CB38 is the image-wide ICF fold of a bare `blr`
+    // (193 xrefs -- NOT _purecall): every other slot resolves to the real base body, so the
+    // item genuinely overrides Select with an empty one. Declaring it pure would make the
+    // class abstract (it is embedded 100-per-picker BY VALUE) and routing it to the base
+    // default would run the base's selection behaviour, which the console suppresses here.
+    void ColourSelectionItem::Select()
+    {
+    }
 }

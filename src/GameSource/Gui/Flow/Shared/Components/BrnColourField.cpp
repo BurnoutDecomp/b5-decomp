@@ -69,6 +69,14 @@ namespace BrnGui
         OutputAptData();
     }
 
+    // Inlined at eight sites inside BrnGui::ColourMenuToggle::HighlightNeighbours
+    // @0x824E8DE8 (`stb <0/1>, 0xAC(field)` followed by `bl ColourField::OutputAptData`).
+    void ColourField::SetHidden(bool lbHidden)
+    {
+        mbHidden = lbHidden;
+        OutputAptData();
+    }
+
     // @ 0x824E84A0
     void ColourField::SetGradient(u32 luColour1, u32 luColour2)
     {

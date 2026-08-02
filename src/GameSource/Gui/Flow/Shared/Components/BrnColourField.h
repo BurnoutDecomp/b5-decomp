@@ -37,6 +37,13 @@ namespace BrnGui
         // both colour buffers, then push to the apt movie.
         void SetGradient(u32 luColour1, u32 luColour2);
 
+        // The `stb <0/1>, 0xAC(field); bl ColourField::OutputAptData` pair
+        // BrnGui::ColourMenuToggle::HighlightNeighbours @0x824E8DE8 emits inline for each of
+        // the eight flanking swatch/plate fields it hides or reveals. Named for that use; the
+        // console has no separate symbol (it writes the byte and calls OutputAptData directly,
+        // which is only reachable from inside the class).
+        void SetHidden(bool lbHidden);
+
     private:
         // 0x824E5440 -- push the colour/gradient/hidden state to the apt movie.
         void OutputAptData();

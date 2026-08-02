@@ -47,6 +47,8 @@ namespace
     // The two car-select gauge ratings (wiki muTopSpeedNormalGUIStat / muTopSpeedBoostGUIStat).
     const u32 KU_OFFSET_SPEED_STAT   = 0xEC - 0xE0;
     const u32 KU_OFFSET_BOOST_STAT   = 0xED - 0xE0;
+    const u32 KU_OFFSET_DEF_COLOUR   = 0xEE - 0xE0;
+    const u32 KU_OFFSET_DEF_FINISH   = 0xEF - 0xE0;
 
     // The two flag bits the X360 readers extract from the +0x94 word.
     const u32 KU_FLAG_TROPHY_CAR     = 1u << 0;   // `extrwi r11,r11,1,31` (bit 0)
@@ -132,6 +134,21 @@ u8 VehicleListEntry::GetSpeedStat() const
 u8 VehicleListEntry::GetBoostStat() const
 {
     return maPad224[KU_OFFSET_BOOST_STAT];
+}
+
+// The car's FACTORY paint colour index (+0xEE) -- raw byte. See the header note: read by
+// BrnGui::CarSelectLivery::UpdateComponents (as BYTE2 of the big-endian word at +0xEC) and
+// by its HandleControllerInput restore arm (as *(entry + 238)).
+u8 VehicleListEntry::GetDefaultPaintColour() const
+{
+    return maPad224[KU_OFFSET_DEF_COLOUR];
+}
+
+// The car's FACTORY paint FINISH index (+0xEF, a BrnWorld::EPalettesTypes value) -- raw byte.
+// Read by the same two CarSelectLivery sites (LOBYTE of +0xEC / *(entry + 239)).
+u8 VehicleListEntry::GetDefaultPaintFinish() const
+{
+    return maPad224[KU_OFFSET_DEF_FINISH];
 }
 
 

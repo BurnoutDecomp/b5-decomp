@@ -40,14 +40,8 @@ namespace BrnGui
         virtual void Update();
     };
 
-    // FLAG PC-platform leaf: placeholder -- real BrnGui::CarSelectLivery (X360 46096B;
-    // out-of-line ctor, its own todo TU) not yet reconstructed. Script id "CS_LIVERY".
-    struct CarSelectLivery : public CgsGui::State
-    {
-        virtual void OnEnter();
-        virtual void OnLeave();
-        virtual void Update();
-    };
+    // (BrnGui::CarSelectLivery -- the CS_LIVERY screen -- was RECONSTRUCTED 2026-08-02;
+    //  its real home is States/BrnCarSelectLivery.h + three partfiles.)
 
     // FLAG PC-platform leaf: placeholder -- real BrnGui::CrashNavMapEvent (X360 25104B;
     // CrashNavMap base ctor + the event-map vtable @0x82077044) not yet reconstructed

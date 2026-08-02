@@ -43,12 +43,7 @@ namespace BrnGui
     void CarSelectUnlock::Update()  {}
 
     // ---- CS_LIVERY --------------------------------------------------------------------
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CarSelectLivery.
-    void CarSelectLivery::OnEnter() { LogUnreconstructedState("CarSelectLivery", "OnEnter"); }
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CarSelectLivery.
-    void CarSelectLivery::OnLeave() {}
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CarSelectLivery.
-    void CarSelectLivery::Update()  {}
+    // (CarSelectLivery's placeholder lifecycle is GONE -- the real class landed 2026-08-02.)
 
     // ---- CN_MAP_EVENT -----------------------------------------------------------------
     // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CrashNavMapEvent.
