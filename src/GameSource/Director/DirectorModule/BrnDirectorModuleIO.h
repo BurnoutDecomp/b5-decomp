@@ -9,6 +9,7 @@
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"    // BrnDirector::Camera::VehicleInfo (committed, 1264 bytes)
 #include "GameSource/Director/Camera/Utils/BrnDebugController.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface @0x6750, exactly 48B)
+#include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h" // BrnDirector::BrnDirectorVehicleInputInterface (mVehicleDriverInputInterface @0x6780)
 
 // BrnDirector::DirectorIO::InputBuffer -- the Director module's per-frame INPUT payload buffer.
 // Like every CgsModule IO buffer it derives the shared CgsModule::IOBuffer (status-flag-guarded
@@ -94,19 +95,48 @@ namespace DirectorIO
     {
         // ---- ADDITIVE (MainDirector::UpdateArbitrator @0x82271120 / Arbitrator::Update
         //      @0x8226ADA0) --------------------------------------------------------------
-        // Three camera-control bytes the director reads out of this block. X360-attested as
-        // byte loads at control-block +2 / +3 / +4:
+        // Camera-control bytes the director reads out of this block. X360-attested as byte
+        // loads at control-block +1 / +2 / +3 / +4:
         //   * UpdateArbitrator passes controller[3] as Arbitrator::Update's lbCycleCamera and
         //     controller[2] as its lbCycleCameraHeld (the "tap to cycle / hold for slow-mo"
         //     pair UpdateCameraCycleControl consumes);
         //   * Arbitrator::Update's NORMAL case stores controller[4] straight into
-        //     SharedCameraContainer::mbLookbackOverride.
-        // Exposed as named queries so those two TUs never index this block by offset.
-        // FLAG: the member NAMES are inferred from those roles (the trimmed DWARF does not
-        //   name the control block's interior); the byte OFFSETS are asm-attested.
-        bool IsCycleCameraPressed() const { return maPad[3] != 0; }   // +0x03
-        bool IsCycleCameraHeld() const    { return maPad[2] != 0; }   // +0x02
-        bool IsLookbackHeld() const       { return maPad[4] != 0; }   // +0x04
+        //     SharedCameraContainer::mbLookbackOverride;
+        //   * MainDirector::UpdateAttribSys @0x8221AFD0 gates its ENTIRE body on controller[1].
+        //
+        // ⭐⭐ THE NAMES ARE NO LONGER INFERRED (2026-08-02). The DecFIGS DWARF has this whole
+        // block, at GameSource/Director/SharedIO/BrnDirectorControllerInfo.h:42 --
+        // `struct BrnDirector::DirectorIO::ControllerInfo`, a run of bools in declaration
+        // order starting at offset 0:
+        //     :48 mbAnyInput               +0x00
+        //     :49 mbGameTalkRefreshRequest +0x01
+        //     :50 mbCameraButtonHeldDown   +0x02
+        //     :51 mbCycleCameras           +0x03
+        //     :52 mbLookback               +0x04
+        //     :53 mbRequestSloMo           +0x05
+        //     :54 mbTakeScreenshot         +0x06
+        //     :55 mbTempBoredOfCamera      +0x07
+        //     :56 mbTempBoosting           +0x08
+        //     :57 mbHandbrake              +0x09
+        //     :58 Vector2 mCarModifier / :59 Vector2 mCameraModifier / :61 DebugController
+        // The three previously-inferred names land EXACTLY on the DWARF's +2/+3/+4 roles,
+        // which is what makes this a retrofit rather than a rewrite; the accessors keep their
+        // existing spellings (callers depend on them) with the DWARF member named alongside.
+        // FLAG: the block interior below is still modelled as maPad -- only the byte offsets
+        //   and these roles are pinned. Retype to the DWARF struct when its own home lands.
+        bool IsCycleCameraPressed() const { return maPad[3] != 0; }   // +0x03 mbCycleCameras
+        bool IsCycleCameraHeld() const    { return maPad[2] != 0; }   // +0x02 mbCameraButtonHeldDown
+        bool IsLookbackHeld() const       { return maPad[4] != 0; }   // +0x04 mbLookback
+
+        // ⭐⭐ +0x01 mbGameTalkRefreshRequest -- the LIVE-TUNING refresh request. GameTalk is
+        // the EA authoring tool that edits AttribSys values on a running build; this byte is
+        // its "re-read the attribs" pulse. It is the ONLY gate on
+        // MainDirector::UpdateAttribSys, which is why that function is NOT a per-frame
+        // re-seed: on a build with no GameTalk connection it never runs its body at all.
+        // ⇒ MainDirector::ProcessNewVehicleEvents is the ONLY thing that seeds the two
+        // gameplay cameras' Parameters on this build. (Corrects the "per-frame re-seed"
+        // reading that had been carried in the camera chain map.)
+        bool IsGameTalkRefreshRequested() const { return maPad[1] != 0; }   // +0x01
 
         u8 maPad[48];
         BrnDirector::Camera::Utils::DebugController mDebugController;
@@ -126,9 +156,9 @@ namespace DirectorIO
         void Construct();
 
         // --- queries (getters): all const, all read-lock-asserted ---
-        // (GetContacts/GetHookEnumeration/GetControllerInfo/GetTimerStatusInterface/
-        //  GetVehicleInputInterface return the addresses of opaque-but-correctly-sized members,
-        //  typed as void* until those interface homes are reconstructed.)
+        // (GetContacts/GetHookEnumeration/GetControllerInfo return the addresses of
+        //  opaque-but-correctly-sized members, typed as void* until those interface homes are
+        //  reconstructed. GetVehicleInputInterface is TYPED as of 2026-08-02 -- see the member.)
         const void*                                        GetContacts() const;
         const CgsContainers::BitArray<8u>*                 GetUsedRaceCars() const;
         // Address of the X360 VehicleInfo* pointer table (stored as pointer-width u32 slots).
@@ -138,8 +168,8 @@ namespace DirectorIO
         // X360 @0x823B27E8 -- the WRITE-side overload BrnGameModule::BridgeTimers uses to
         // copy the game module's 48-byte snapshot in under the buffer's write lock.
         CgsSystem::TimerStatusInterface*                   GetTimerStatusInterface();
-        const void*                                        GetVehicleInputInterface() const;
-        void*                                              GetVehicleInputInterface();
+        const BrnDirector::BrnDirectorVehicleInputInterface* GetVehicleInputInterface() const;
+        BrnDirector::BrnDirectorVehicleInputInterface*       GetVehicleInputInterface();
         const void*                                        GetHookEnumeration() const;
         EActiveRaceCarIndex                                GetPlayerCarIndex() const;
         bool                                               GetShortcutMenuState() const;
@@ -332,9 +362,25 @@ namespace DirectorIO
         // of it. Naming it is what lets both sides stop casting.
         CgsSystem::TimerStatusInterface mTimerInterface;  // @0x6750
 
-        // @0x6780 (26496): the vehicle driver-input interface (Get/SetVehicleInputInterface).
-        // HONEST opaque, spanning to the contact-spy interface @0x6AB8.
-        u8  mVehicleDriverInputInterface[0x6AB8 - 0x6780]; // @0x6780
+        // @0x6780 (26496): the vehicle input interface (Get/SetVehicleInputInterface).
+        // ⭐ RETYPED 2026-08-02 (camera parameter-chain wave) from an opaque u8[0x338] to the
+        // real BrnDirector::BrnDirectorVehicleInputInterface. The type was ALREADY homed
+        // (SharedIO/BrnDirectorVehicleInputInterface.h -- an EventQueue<NewVehicleEvent,50>);
+        // it was only the DESTINATION that stayed opaque, so MainDirector::
+        // ProcessNewVehicleEvents had nothing typed to read. X360-attested:
+        // InputBuffer::GetVehicleInputInterface @0x82206DA0 returns `this + 0x6780` and
+        // ProcessNewVehicleEvents @0x8221A6B0 immediately does `lwz r11, 8(r3)` on the result
+        // -- BaseEventQueue::miLength -- then GetEvent(i) at a 16-byte stride, i.e. the
+        // interface's FIRST member is the queue, which is exactly this type's only member.
+        //
+        // The trailing pad keeps the span exactly 0x338 so every _AssertLayout pin after it
+        // (mContacts @0x6AB8 onward) still holds. On x64 the interface is 816 bytes
+        // (16-byte queue head + 50 * 16 events) against the console's 824-byte span, so the
+        // pad is 8 bytes; it is the un-modelled remainder of the console's own span, NOT
+        // padding we invented for alignment.
+        BrnDirector::BrnDirectorVehicleInputInterface mVehicleDriverInputInterface;   // @0x6780
+        u8  maVehicleDriverInputInterfacePad[
+                (0x6AB8 - 0x6780) - sizeof(BrnDirector::BrnDirectorVehicleInputInterface)];
 
         // @0x6AB8 (27320): contacts. AppendContacts stores one 32-bit word at member word [0]
         // (this[6830] == 0x6AB8). GetContacts returns its address. HONEST opaque storage spanning

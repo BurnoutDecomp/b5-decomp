@@ -40,6 +40,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"  // ArbStateSharedInfo
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"             // BehaviourManager / BehaviourHandle
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"       // Camera::BehaviourParameterBank
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diag] CgsDev::Log::gpDebugPrint
 
 namespace BrnDirector
 {
@@ -58,46 +59,52 @@ namespace BrnDirector
         lpBehaviourManager->NewBehaviour<Camera::BehaviourGameplayExternal>(
             mGameplayExternal, NULL, 0, 4);
 
-        // [GATED -- the two SetParameters binds]
-        //   const Camera::BehaviourParameterBank& lrBank =            // X360 manager + 0x12530
-        //       lpBehaviourManager->GetBehaviourParameterBank();
-        //   mGameplayBumper  .GetBehaviour()->SetParameters(&lrBank.GetGameplayBumperCameraParamsForCar());
-        //   mGameplayExternal.GetBehaviour()->SetParameters(&lrBank.GetGameplayExternalCameraParamsForCar());
+        // ⭐⭐ THE TWO SetParameters BINDS -- RESTORED 2026-08-02 (camera parameter-chain wave),
+        // verbatim, after having been gated since this TU was written.
         //
-        // WHY: BehaviourManager models mBehaviourParameterBank (DWARF :325, X360 manager
-        // +0x12530) as an OPAQUE embedded sub-object -- BehaviourParameterBank has a declared
-        // API but NO homed layout and NO TU, so all three accessors above return REFERENCES to
-        // objects that do not exist here. A stub for a reference-returning accessor can only
-        // hand back a fabricated object, and SetParameters would then latch that fabrication as
-        // the two shared gameplay cameras' live parameter block -- strictly worse than leaving
-        // them on their Construct() defaults. The ALLOCATIONS above are the part that matters
-        // structurally (the handles become valid, so SetUpdatesDuringPause's IsAllocated assert
-        // below holds); only the parameter BIND is skipped.
-        // ⚠️ THE OLD CLOSING SENTENCE OF THIS NOTE HAS EXPIRED (retired 2026-08-02). It read
-        // "Nothing on the DJ fly-by path reads either camera -- ArbStateAttractMode drives its
-        // own BehaviourRoadRunner." True when written, false now: ArbStateCarSelect's
-        // E_STATE_CHANGING_TO_ROAMING publishes GetSelectedGameplayCamera() (below), i.e.
-        // mGameplayExternal's produced camera, and the build sits in that state after car
-        // select. So this bind IS on the live path today -- it is just not the only missing
-        // link, and restoring it alone changes nothing.
+        // WHAT THE GATE SAID, AND WHAT ACTUALLY UNBLOCKED IT. The note here read: the bank is
+        // an "OPAQUE embedded sub-object ... all three accessors return REFERENCES to objects
+        // that do not exist here", so a bind could only latch a fabrication. That was true and
+        // it is now fixed at the root: BehaviourParameterBank carries its two gameplay-camera
+        // Parameters blocks and the latched car key as REAL members, pinned off
+        // BehaviourManager == MainDirector + 0x1CB10 (see BrnBehaviourParameterBank.h), and
+        // BehaviourManager::Construct runs the bank's own Construct. So the references below
+        // resolve to the same storage the console's inlined displacements reach.
         //
-        // ⭐ WHAT RESTORING IT ACTUALLY NEEDS (VERIFIED 2026-08-02): a bank block whose
-        // Parameters::mbIsValid is TRUE. `BehaviourParameterBank::Construct @0x8223DC90` forms
-        // `addi r11, r31, 0x2488` (the external block) / `+0x2538` (the bumper block) and
-        // inlines each Parameters::Construct over it -- and those stores include
-        // `stb r30(=0), 0xAC(r11)`, i.e. the bank DELIBERATELY leaves mbIsValid false. The only
-        // writers of `true` are BehaviourGameplayExternal/Bumper::Parameters::Set, whose three
-        // X360 callers are MainDirector::ProcessNewVehicleEvents @0x8221A6B0,
-        // MainDirector::UpdateAttribSys @0x8221AFD0 and ReplayDirector::PreSceneQueryUpdate
-        // @0x8225BD28 -- all three declaration-only here, and the first two are fed by a
-        // NewVehicleEvent queue whose producer chain
-        // (RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 ->
-        // BrnDirectorVehicleInputInterface::NewVehicle @0x822CBA90 -> BridgeWorldToDirector
-        // step 6) is missing/dropped on this build. So a homed bank layout is NECESSARY BUT NOT
-        // SUFFICIENT: without Set, both blocks stay invalid and both Updates no-op on their
-        // first branch. Full map in BrnBehaviourGameplayExternal.h's Update FLAG.
-        // DELETE-WHEN: BehaviourParameterBank gets a homed layout + TU (then restore verbatim)
-        // AND Parameters::Set has a live caller.
+        // ⚠️ AND THE SECOND HALF OF THE GATE WAS THE REAL ONE: a homed bank is NECESSARY BUT
+        // NOT SUFFICIENT, because BehaviourParameterBank::Construct @0x8223DC90 deliberately
+        // leaves both blocks' mbIsValid FALSE (`stb r30(=0), 0xAC(r11)`), and only
+        // Parameters::Set raises it. That is why this wave landed the whole producer chain --
+        // world new-vehicle publish -> BridgeWorldToDirector step 6 ->
+        // MainDirector::ProcessNewVehicleEvents -> Parameters::Set -- rather than just the
+        // layout. Binding without it would hand both cameras a valid POINTER to an INVALID
+        // block, which is exactly the state their Update already handles (it no-ops).
+        const Camera::BehaviourParameterBank& lrBank =            // X360 manager + 0x12530
+            lpBehaviourManager->GetBehaviourParameterBank();
+        mGameplayBumper  .GetBehaviour()->SetParameters(&lrBank.GetGameplayBumperCameraParamsForCar());
+        mGameplayExternal.GetBehaviour()->SetParameters(&lrBank.GetGameplayExternalCameraParamsForCar());
+
+        // [diag, one-shot -- NOT console code] the bind is a POINTER bind, so it legitimately
+        // runs BEFORE any car exists and both blocks are still invalid here; the seed
+        // (MainDirector::ProcessNewVehicleEvents) then lands in the SAME storage and the
+        // cameras see it. This line exists so the two halves can be matched up in one log:
+        // pair it with the "[newveh] MainDirector::ProcessNewVehicleEvents: seeded ..." line.
+        // Remove when BehaviourGameplayExternal::Update lands and the camera is the evidence.
+        {
+            static bool sbReported = false;
+            if (!sbReported && (CgsDev::Message::gxMessageFilterFlags & 1) &&
+                CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbReported = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[newveh] SharedCameraContainer::Prepare: both gameplay cameras bound to"
+                       " the bank (external valid "
+                    << (lrBank.GetGameplayExternalCameraParamsForCar().mbIsValid ? 1 : 0)
+                    << ", bumper valid "
+                    << (lrBank.GetGameplayBumperCameraParamsForCar().mbIsValid ? 1 : 0)
+                    << " at bind time)\n";
+            }
+        }
 
         // Both shared gameplay cameras keep updating while the game is paused (asserts each
         // handle is allocated -- BrnBehaviourManager.h:676).

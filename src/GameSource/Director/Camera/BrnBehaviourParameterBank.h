@@ -152,14 +152,103 @@ namespace BrnDirector
         // shared context reaches named parameter blocks through mpNamedParameters (+0x2334
         // block) and the manager reaches these two through its own +0x12530 bank; whether
         // those are the same object is left to the bank's own TU.
+        //
+        // ⭐⭐ THE TWO GAMEPLAY BLOCKS + THE LATCHED CAR KEY ARE HOMED AS OF 2026-08-02
+        // (camera parameter-chain wave). They are the three slots the whole chase/bumper
+        // camera chain turns on, and until now they existed NOWHERE, which is why every
+        // consumer of them was commented out. The pin is derived, not guessed:
+        //
+        //   1. MainDirector::UpdateCameraBehavioursPreScene @0x82255318 builds the `this`
+        //      for BehaviourManager::UpdateAllBehaviours as
+        //          addis r26, r31, 2 ; addi r26, r26, -0x34F0     (@0x82255770/@0x8225577C)
+        //      == director + 0x1CB10  ⇒ BehaviourManager sits at MainDirector + 0x1CB10.
+        //   2. SharedCameraContainer::Prepare @0x82263D50 forms the bank as manager+0x12530,
+        //      so bank == director + 0x1CB10 + 0x12530 == director + 0x2F040.
+        //   3. MainDirector::ProcessNewVehicleEvents @0x8221A6B0 and UpdateAttribSys
+        //      @0x8221AFD0 then reach, off the DIRECTOR:
+        //          director + 0x314C0  ==  bank + 0x2480   the 8-byte car key (`std`/`ldx`)
+        //          director + 0x314C8  ==  bank + 0x2488   the EXTERNAL params block
+        //          director + 0x31578  ==  bank + 0x2538   the BUMPER   params block
+        //      -- the same two block offsets SharedCameraContainer::Prepare inlines, and the
+        //      same 0xB0 spacing (== sizeof(BehaviourGameplayExternal::Parameters)) at both
+        //      sites. Two independent functions agreeing on both offsets AND the gap is what
+        //      makes this a pin rather than an arithmetic coincidence.
+        //
+        // ⇒ the 8 bytes at bank+0x2480, immediately below the external block, are a BANK
+        // member: the attribute-collection key of the car the two gameplay blocks were last
+        // seeded from. ProcessNewVehicleEvents `std`s it after seeding; UpdateAttribSys
+        // `ldx`s it every frame to re-seed from the same car without re-reading the queue.
+        // FLAG: the member NAME is ours (the console has no symbol for it); its offset, width
+        // and role are all asm-attested.
+        //
+        // [FLAG PC bring-up] THIS IS STILL A THREE-SLOT SLICE of a bank that holds ~40 named
+        // blocks. The other accessors below stay DECLARATION-ONLY and their blocks are not
+        // placed. x64 parity is BY NAMED MEMBER, so no reserved head is invented to reproduce
+        // +0x2480 -- the console displacements above are provenance only.
         class BehaviourParameterBank
         {
         public:
+            // ⭐ X360 BehaviourParameterBank::Construct @0x8223DC90, the three-slot slice --
+            // the console's own three statements, in its own order:
+            //   0x8223DCCC  std r30(=0), 0x2480(r31)      the latched car key = 0
+            //   0x8223DCB4  addi r11, r31, 0x2488  + the INLINED external Parameters::Construct
+            //   0x8223DCC8  addi r10, r31, 0x2538  + the INLINED bumper   Parameters::Construct
+            // Both per-block Constructs are now REAL (BrnBehaviourGameplayExternal.cpp /
+            // BrnBehaviourGameplayBumper.cpp, each transcribed from those inlined stores), so
+            // this is a faithful call rather than a stand-in. THE BANK DELIBERATELY LEAVES
+            // BOTH mbIsValid FALSE; only Parameters::Set raises them.
+            //
+            // ⭐ THE `std` AT 0x8223DCCC IS ALSO THE DIRECT PROOF that bank+0x2480 is an
+            // eight-byte member of THIS class -- the banner's derivation from
+            // ProcessNewVehicleEvents' `std` and UpdateAttribSys' `ldx` is corroborated here
+            // by the bank's own zeroing of the same slot at the same width.
+            //
+            // [FLAG, PC-only] the two ZeroBlock calls are NOT console behaviour: the console
+            // leaves the rest of each block at whatever the manager's storage held and relies
+            // on Parameters::Set writing every 4-byte slot before mbIsValid goes true. They
+            // are here so no PC consumer can read an indeterminate f32 in the window before
+            // the first Set. Strict superset of the console's stores; remove if the bank ever
+            // gets a zero-initialised home of its own.
+            void Construct()
+            {
+                ZeroBlock(&mGameplayExternalCameraParamsForCar,
+                          sizeof(mGameplayExternalCameraParamsForCar));
+                ZeroBlock(&mGameplayBumperCameraParamsForCar,
+                          sizeof(mGameplayBumperCameraParamsForCar));
+
+                mxGameplayCameraCarAttribsKey = 0;                       // std 0, 0x2480
+                mGameplayExternalCameraParamsForCar.Construct();         // over +0x2488
+                mGameplayBumperCameraParamsForCar.Construct();           // over +0x2538
+            }
+
+            // The `burnoutcarasset` collection key of the car the two blocks below currently
+            // hold the tuning for. X360 bank+0x2480 -- see the banner.
+            u64  GetGameplayCameraCarAttribsKey() const { return mxGameplayCameraCarAttribsKey; }
+            void SetGameplayCameraCarAttribsKey(u64 lxKey) { mxGameplayCameraCarAttribsKey = lxKey; }
+
             // X360 bank+0x2538: the bumper-cam ("in car") gameplay parameter block.
-            const BehaviourGameplayBumper::Parameters& GetGameplayBumperCameraParamsForCar() const;
+            const BehaviourGameplayBumper::Parameters& GetGameplayBumperCameraParamsForCar() const
+            {
+                return mGameplayBumperCameraParamsForCar;
+            }
+            // The write-side overload the director's attribute pump seeds through
+            // (ProcessNewVehicleEvents / UpdateAttribSys hand `director+0x31578` straight to
+            // Parameters::Set). FLAG: the non-const spelling is ours; the console reaches the
+            // same storage by inlined displacement.
+            BehaviourGameplayBumper::Parameters& GetGameplayBumperCameraParamsForCar()
+            {
+                return mGameplayBumperCameraParamsForCar;
+            }
 
             // X360 bank+0x2488: the external ("chase") gameplay parameter block.
-            const BehaviourGameplayExternal::Parameters& GetGameplayExternalCameraParamsForCar() const;
+            const BehaviourGameplayExternal::Parameters& GetGameplayExternalCameraParamsForCar() const
+            {
+                return mGameplayExternalCameraParamsForCar;
+            }
+            BehaviourGameplayExternal::Parameters& GetGameplayExternalCameraParamsForCar()
+            {
+                return mGameplayExternalCameraParamsForCar;
+            }
 
             // X360 bank+0xAB4 (manager+0x12FE4): the gyro-cam block the hit-traffic
             // moment binds (MomentHitTraffic::Update @0x82271EB8 hands it to
@@ -214,6 +303,23 @@ namespace BrnDirector
             // TextFileWriteSerialiser&)`). The per-instantiation bodies are separate (still-todo)
             // TUs; declared here so SaveParameters can call it. T is deduced from the argument.
             template<class T> void Serialise(T& lrSerialiser);
+
+        private:
+            // Byte zero-fill helper for the two blocks -- see Construct's FLAG. Kept as a
+            // named helper so no caller memsets a class type in place.
+            static void ZeroBlock(void* lpBlock, u32 luBytes)
+            {
+                u8* lpBytes = static_cast<u8*>(lpBlock);
+                for (u32 luByte = 0; luByte < luBytes; ++luByte)
+                {
+                    lpBytes[luByte] = 0;
+                }
+            }
+
+            // ---- the three homed slots (see the banner for the pin) -----------------------
+            u64                                   mxGameplayCameraCarAttribsKey;        // +0x2480
+            BehaviourGameplayExternal::Parameters mGameplayExternalCameraParamsForCar;  // +0x2488
+            BehaviourGameplayBumper::Parameters   mGameplayBumperCameraParamsForCar;    // +0x2538
         };
     }
 }

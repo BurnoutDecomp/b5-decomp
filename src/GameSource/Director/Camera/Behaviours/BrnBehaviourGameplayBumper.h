@@ -168,13 +168,20 @@ public:
     //   @0x8224FD30 (the only caller of UpdateAllBehaviours) is itself still gated." Both
     //   clauses are false since the 2026-08-01 PreScene/PostScene split -- `BrnMainDirector.cpp
     //   :1153` calls UpdateAllBehaviours from UpdateCameraBehavioursPreScene @0x82255318,
-    //   un-gated. SLOT 2 IS DISPATCHED. This behaviour is inert for the same reason its
-    //   external sibling is: its parameter block is never validated. The full seven-link chain
-    //   (shared by both gameplay cameras, since one SharedCameraContainer::Prepare binds them
-    //   together and one MainDirector::ProcessNewVehicleEvents seeds them together) is written
-    //   out in BrnBehaviourGameplayExternal.h's matching FLAG -- read it there.
-    //   DELETE-WHEN: @0x82226778 is transcribed AND the parameter chain reaches
-    //   Parameters::Set.
+    //   un-gated. SLOT 2 IS DISPATCHED.
+    //   ⭐ UPDATED 2026-08-02: "its parameter block is never validated" is ALSO no longer true.
+    //   The parameter chain landed (camera parameter-chain wave): one
+    //   SharedCameraContainer::Prepare binds both gameplay cameras and one
+    //   MainDirector::ProcessNewVehicleEvents seeds both, so THIS block's mbIsValid is true on
+    //   the same frame the external one's is (measured: "bumperValid 1"). This behaviour is now
+    //   inert for exactly ONE reason: @0x82226778 is not transcribed. The full link-by-link
+    //   state is in BrnBehaviourGameplayExternal.h's matching FLAG -- read it there.
+    //   ⭐ Parameters::Construct @ (inlined in BehaviourParameterBank::Construct @0x8223DC90)
+    //   IS BODIED NOW, in this class's own TU, and one of its stores is load-bearing: it
+    //   stamps mType = eBehaviourGameplayBumper. Without it SetParameters' own tripwire below
+    //   fires (measured, four times per run) because a zeroed tag reads as the EXTERNAL
+    //   camera's tag.
+    //   DELETE-WHEN: @0x82226778 is transcribed.
 
 private:
     // ---- layout (DWARF h:88..:100; every offset asm-pinned -- see the file banner) -------

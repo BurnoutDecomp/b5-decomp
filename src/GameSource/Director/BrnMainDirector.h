@@ -157,9 +157,21 @@ namespace BrnDirector
         // DECLARATION-ONLY + FLAG (moment-controller aggregate un-homed).
         void UpdateMoments(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex);
 
-        // X360 0x8221AFD0. Pull the per-frame camera-behaviour parameters out of the AttribSys.
-        // DECLARATION-ONLY + FLAG ([todo] Attrib::Gen generated behaviour parameter types).
-        void UpdateAttribSys(const DirectorInputOutput* lpIO);
+        // ⭐ X360 0x8221AFD0. RE-READ the two gameplay cameras' authored attribs for the car
+        // whose key the behaviour parameter bank has latched. BODIED 2026-08-02.
+        //
+        // ⚠️ ARGUMENT TYPE CORRECTED IN THE SAME PASS: this was declared taking a
+        // `const DirectorInputOutput*`. The console's r4 goes STRAIGHT into
+        // DirectorIO::InputBuffer::GetControll (`mr r3, r4 ; bl ...InputBuffer::GetControll`
+        // @0x8221AFE4), so a2 is the INPUT BUFFER. The old spelling would have compiled and
+        // silently read a DirectorInputOutput's first pointer as a controller block.
+        //
+        // ⚠️⚠️ AND IT IS NOT A PER-FRAME RE-SEED. Its entire body is gated on
+        // ControllerInfo +0x01 == mbGameTalkRefreshRequest (DecFIGS DWARF
+        // BrnDirectorControllerInfo.h:49) -- the live-tuning tool's "re-read the attribs"
+        // pulse. Nothing on a PC/retail build sets it, so this body is INERT here by design.
+        // The seeding that matters is ProcessNewVehicleEvents'.
+        void UpdateAttribSys(const DirectorIO::InputBuffer* lpInput);
 
         // X360 0x82255318 / 0x8224FD30. The pre/post-scene camera-behaviour passes. BOTH ARE
         // BODIED (2026-08-01, car-select hand-off wave) and they are NOT interchangeable:
@@ -188,9 +200,22 @@ namespace BrnDirector
         // no-argument spelling would have compiled, linked and silently drained nothing.
         void ProcessInputQueue(const DirectorInputOutput* lpIO);
 
-        // X360 0x8221A6B0. Apply the per-frame new-vehicle events to the AllVehicleData tracker.
-        // DECLARATION-ONLY + FLAG (AllVehicleData un-homed).
-        void ProcessNewVehicleEvents(const DirectorInputOutput* lpIO);
+        // ⭐⭐ X360 0x8221A6B0. Drain the input buffer's NewVehicleEvent queue and seed the two
+        // shared gameplay cameras' parameter blocks from each car's authored camera attribs.
+        // BODIED 2026-08-02 (camera parameter-chain wave) -- it is the ONLY primary writer of
+        // BehaviourGameplay{External,Bumper}::Parameters::mbIsValid, i.e. the one function
+        // that makes the console chase camera capable of running at all.
+        //
+        // ⚠️ THE OLD DECLARATION WAS WRONG IN BOTH HALVES, and both halves mattered:
+        //   * its FLAG read "(AllVehicleData un-homed)". The asm touches no AllVehicleData at
+        //     all -- it is FindCollection + two RefSpec resolves + two Parameters::Set + a key
+        //     latch -- and AllVehicleData has been homed (BrnDirectorAllVehicleData.h, used by
+        //     three arbitrator states) since well before this wave. Tenth expired gate.
+        //   * it took a `const DirectorInputOutput*`. The console's r4 goes straight into
+        //     DirectorIO::InputBuffer::GetVehicleInputInterface (`mr r3,r4` @0x8221A6C4), so
+        //     a2 is the INPUT BUFFER, which is also what ProcessInputQueue's own banner shows
+        //     it passing.
+        void ProcessNewVehicleEvents(const DirectorIO::InputBuffer* lpInput);
 
         // X360 0x8221B0B0. Handle a "prepare for mode" director action.
         // DECLARATION-ONLY + FLAG (GameState action region).

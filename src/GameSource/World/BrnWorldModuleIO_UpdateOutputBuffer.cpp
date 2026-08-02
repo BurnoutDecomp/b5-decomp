@@ -69,6 +69,14 @@ void UpdateOutputBuffer::Construct()
     mPropUpdateNotificationQueue.Construct();               // X360 PropUpdateNotification<200> +203296
     mGuiEventQueue.Construct();                             // X360 VEQ<32768,16> +170176 (the tail call)
 
+    // ⭐ ADDED 2026-08-02 (camera parameter-chain wave). One of the interfaces the banner
+    // above lists as "covered by the zero-fill" -- and a zero-fill is exactly wrong for it:
+    // BrnDirectorVehicleInputInterface wraps an EventQueue<NewVehicleEvent,50> whose mpEvents
+    // must point at its own inline buffer. SetDirectorVehicleInputInterface (below) Appends
+    // into it, and BridgeWorldToDirector step 6 reads it out; both would have gone through a
+    // NULL mpEvents.
+    mDirectorVehicleInputInterface.Construct();
+
     // X360 zero stores covered by the zero-fill: mPlayerVehicleControls (+150772, 60 B),
     // mEffectsEnvironmentInterface (+169072, 16 B vspltisw), mReplayRequestInterface
     // (+169308, 11 words), mTriangleCacheInterface (+216112, pointer), and

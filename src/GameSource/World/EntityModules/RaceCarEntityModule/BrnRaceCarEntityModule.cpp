@@ -54,6 +54,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                                         // GameStateModuleIO::ResetPlayerCarAction (game action 0)
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"                         // BrnAI::AIModuleIO::RaceCarAIInterface / AttachAIControlEvent
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"                      // Attrib::Gen::burnoutcarasset (the new-vehicle residency gate)
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine)
 
@@ -886,6 +887,138 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
     Matrix44Affine lBodyTransform;
     lpActiveRaceCar->CalcBodyTransform( lBodyTransform );
     lpActiveRaceCar->GetRenderParams()->SetBodyTransform( lBodyTransform );
+}
+
+
+// ============================================================================
+// [FLAG PC bring-up] PublishNewVehicleToDirectorWithoutPhysicsBringUp -- NOT an X360
+// function. It stands in for exactly ONE console leg, in the console's own frame slot.
+//
+// ⭐⭐ WHAT IT STANDS IN FOR, and why the real function cannot simply be transcribed.
+// The console's ProcessCreateVehicleEvents @0x822FF620 (called from PostPhysicsUpdate
+// @0x823075F8, i.e. right here) walks
+//     lpInput->GetVehicleManagerOutputInterface()->mCreateVehicleResultQueue
+// and, for each result whose active-race-car slot IsPlayer(), does
+//     lpOutput->GetDirectorVehicleInputInterface()->NewVehicle(
+//         VehicleList::GetVehicleData(liModelIndex)->AttribSysCollectionKey.GetHashKey(),
+//         liModelIndex );
+// (asm @0x822FF898..@0x822FF8C4: GetVehicleData -> `addi r3,r3,0xA0` -> GetHashKey ->
+// NewVehicle(interface, key, liModelIndex)).
+//
+// ⛔ THAT QUEUE IS PERMANENTLY EMPTY ON THIS BUILD, and it is not a mount away from being
+// filled. The ONLY producer of a CreateVehicleResult anywhere in the XEX is
+// BrnPhysics::Vehicle::VehicleManager::ProcessCreateEvents @0x82616770 -- verified as the
+// single entry in the xrefs_to set of BaseEventQueue<CreateVehicleResult>::AddEvent
+// @0x825E4EC8. BrnVehicleManager.cpp is not on the build list and that function has no body
+// here, so transcribing @0x822FF620 verbatim would add a loop over an always-zero-length
+// queue: a body with no input, which is as dead as no body. It stays in this file's FLAG
+// INVENTORY, correctly, under [VMX]/[INTERIOR].
+//
+// WHAT IS HONEST ABOUT THIS STAND-IN:
+//   * it publishes ONLY for the player's car, which is the only case the console's own
+//     `if (ActiveRaceCar::IsPlayer())` arm reaches NewVehicle in;
+//   * the two published values are read from the SAME two sources the console reads them
+//     from -- VehicleList::GetVehicleIndex(RaceCar::GetModelId()) for the index and the
+//     entry's own AttribSysCollectionKey hash for the key;
+//   * it runs in PostPhysicsUpdate at the console's own position for the function it
+//     replaces (before the physics readback, not after);
+//   * NewVehicle itself is NOT stood in for -- the real @0x822CBA90 body runs, asserts and
+//     all (GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.cpp).
+//
+// WHAT IS A LIE, stated plainly:
+//   * the TRIGGER. The console publishes when PHYSICS finishes creating the vehicle; this
+//     publishes when the player's ActiveRaceCar slot reports a model the vehicle list knows
+//     AND that car's attribute collection has actually arrived. The edge is detected with a
+//     function-local static rather than a member because this module's layout is offset-pinned
+//     and this state is not the console's.
+//   * the console also runs OnHandlingModelAdded per created vehicle; that leg reaches
+//     un-homed physics/AI interiors and is NOT reproduced here.
+//
+// ⚠️⚠️ THE RESIDENCY GATE IS NOT OPTIONAL, and it is the console's ordering, not ours.
+// MEASURED (CAM_RUN1, before the gate existed): the publish fired the moment the player's
+// ActiveRaceCar attached, which on this build is ~150 log lines BEFORE
+// `Vehicles\VEH_PUSMC01_AT.bin` is streamed and its vault registered
+// ("[ATTRIBSYS LOAD] Just loaded vault resource with ID 109b0d7b00000000"). So
+// Attrib::FindCollection missed, every generated ctor substituted
+// Attrib::DefaultDataArea (zeros), and the chain delivered FOUR-TEEN new asserts and a
+// VALID-but-all-zero parameter block (mrFOV 0, mfBoostFOV 0) -- the exact "wrong-but-plausible
+// data" failure this project keeps hitting. On the console the create-vehicle completion is
+// downstream of the car's resource load by construction, so the collection is always there;
+// gating on the resolve is how that ordering is reproduced without a physics module.
+// The key itself was never wrong: it is byte-present, little-endian, at +0x398 of our own
+// ported VEH_PUSMC01_AT.BIN.
+//
+// DELETE-WHEN VehicleManager::ProcessCreateEvents lands and ProcessCreateVehicleEvents can
+// be transcribed against a queue that is actually written.
+// ============================================================================
+void RaceCarEntityModule::PublishNewVehicleToDirectorWithoutPhysicsBringUp(
+        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    // [FLAG PC bring-up] the edge state -- see the banner.
+    static s32 sliPublishedModelIndex = -1;
+
+    if( lpOutput == 0 || mpVehicleList == 0 )
+    {
+        return;
+    }
+    if( mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        return;
+    }
+
+    const ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+    if( lpActiveRaceCar == 0 || !lpActiveRaceCar->IsAttached() )
+    {
+        return;
+    }
+
+    const RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+    if( lpRaceCar == 0 )
+    {
+        return;
+    }
+
+    // The console's own two lines: model id -> vehicle-list index -> entry -> attrib key.
+    const s32 liModelIndex = mpVehicleList->GetVehicleIndex( lpRaceCar->GetModelId() );
+    CGS_ASSERT( liModelIndex >= 0, "liModelIndex >= 0" );          // X360 :5211
+    if( liModelIndex < 0 || liModelIndex == sliPublishedModelIndex )
+    {
+        return;
+    }
+
+    const BrnResource::VehicleListEntry* lpEntry = mpVehicleList->GetVehicleData( liModelIndex );
+    if( lpEntry == 0 )
+    {
+        return;
+    }
+
+    const u64 lxAttribsKey = lpEntry->GetAttribCollectionKeyHash();
+
+    // ⚠️ THE RESIDENCY GATE -- see the banner. Retry every frame until the car's own
+    // burnoutcarasset collection is in the attribute database; publishing before it is what
+    // the console's physics-driven ordering makes impossible.
+    if( lxAttribsKey == 0 ||
+        Attrib::FindCollection(
+            Attrib::Gen::burnoutcarasset::KU_BURNOUTCARASSET_CLASS_KEY, lxAttribsKey ) == 0 )
+    {
+        return;
+    }
+
+    sliPublishedModelIndex = liModelIndex;
+
+    lpOutput->GetDirectorVehicleInputInterface()->NewVehicle( lxAttribsKey, liModelIndex );
+
+    // [diag, one-shot -- NOT console code] this is the head of the chain that ends in the two
+    // shared gameplay cameras' Parameters::mbIsValid; the line proves the key really leaves
+    // the race-car module. Remove with the FLAG above.
+    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[newveh] RaceCarEntityModule: published NewVehicle( key hi "
+            << static_cast<s32>( lxAttribsKey >> 32 ) << " lo "
+            << static_cast<s32>( lxAttribsKey & 0xFFFFFFFFu ) << ", modelIndex "
+            << liModelIndex << " )\n";
+    }
 }
 
 
@@ -1891,6 +2024,11 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     }
 
     lpOutput->LockForWrite();
+
+    // ⭐ THE NEW-VEHICLE PUBLISH, at the console's own position for
+    // ProcessCreateVehicleEvents (@0x823075F8 -- early, BEFORE the physics readback at
+    // @0x8230761C). See PublishNewVehicleToDirectorWithoutPhysicsBringUp's banner.
+    PublishNewVehicleToDirectorWithoutPhysicsBringUp( lpOutput );
 
     // [FLAG PC bring-up] the console's ReadUpdatedActiveRaceCarDataFromPhysics runs HERE
     // and is what publishes every active car's render pose. It does not exist on this

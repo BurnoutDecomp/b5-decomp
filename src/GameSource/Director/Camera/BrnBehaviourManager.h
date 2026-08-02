@@ -10,6 +10,7 @@
 #include "GameSource/Director/Utils/BrnAbstractPool.h"               // BrnDirector::AbstractPool<>, AbstractPoolVoidHandle
 #include "GameSource/Director/Camera/Camera.h"                       // BrnDirector::Camera::Camera (mCamera, by value)
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"     // ValidityAccount (per-frame mask reset)
+#include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"    // Camera::BehaviourParameterBank (:325, by value)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"         // Camera::Behaviour -- the pooled objects'
                                                                      //   BASE: every helper dispatch goes
                                                                      //   through its vtable
@@ -247,12 +248,17 @@ namespace Camera
         void UnSetBehaviourUsedByHandle(u32 luAllocationKey);
 
         // The per-named-behaviour parameter bank (the DWARF :325 mBehaviourParameterBank
-        // sub-object, X360 manager +0x12530). The bank's own layout is un-homed (the member
-        // below is a FLAGGED opaque slot), so this accessor is DECLARATION-ONLY -- the body
-        // lands when the bank sub-object is homed. X360-attested consumer:
-        // SharedCameraContainer::Prepare @0x82263D50 (addis/addi manager+0x12530 then fixed
-        // offsets into the bank).
-        const BehaviourParameterBank& GetBehaviourParameterBank() const;
+        // sub-object, X360 manager +0x12530). X360-attested consumers:
+        // SharedCameraContainer::Prepare @0x82263D50 and ArbStateRoaming::Update
+        // @0x82264518 (both addis/addi manager+0x12530 then fixed offsets into the bank).
+        // ⭐ BODIED 2026-08-02: the bank's two gameplay-camera blocks + the latched car key
+        // are homed (BrnBehaviourParameterBank.h), so the member below is the real type and
+        // this returns it. The rest of the bank is still un-modelled -- see that header.
+        const BehaviourParameterBank& GetBehaviourParameterBank() const { return mBehaviourParameterBank; }
+        // The write-side overload the main director's attribute pump seeds through
+        // (ProcessNewVehicleEvents / UpdateAttribSys). FLAG: the non-const spelling is ours;
+        // the console reaches the same storage by inlined displacement off the DIRECTOR.
+        BehaviourParameterBank&       GetBehaviourParameterBank()       { return mBehaviourParameterBank; }
 
         void LockBehaviourForInterpolation(BehaviourHelperIndex lFrom, BehaviourHelperIndex lTo);
         void UnlockBehaviourForInterpolation(BehaviourHelperIndex lFrom, BehaviourHelperIndex lTo);
@@ -357,9 +363,13 @@ namespace Camera
         // +console 0xFAB0 (64176)  the live-behaviour helper pool (DWARF :324).
         HelperPool mBehaviourHelperPool;                                                   // :324
 
-        // FLAG opaque: the per-named-behaviour parameter bank (DWARF :325). Un-homed heavy
-        // cascade; modelled as a named opaque sub-object.
-        OpaqueSub<0> mBehaviourParameterBank;                                              // :325
+        // ⭐ RETYPED 2026-08-02 (camera parameter-chain wave) from OpaqueSub<0> to the real
+        // BrnDirector::Camera::BehaviourParameterBank (DWARF :325). The bank now carries its
+        // two gameplay-camera Parameters blocks + the latched car attribs key -- the three
+        // slots the whole chase/bumper camera chain turns on. It is still a SLICE of the
+        // console's ~40-block bank; see BrnBehaviourParameterBank.h. The other FLAGGED
+        // OpaqueSub<> members in this class are untouched.
+        BehaviourParameterBank mBehaviourParameterBank;                                    // :325
 
         // The four 28-bit book-keeping sets (DWARF :327..:331). The X360 indexes these as
         // 64-bit fields (CgsBitArray.h:203 assert) -- one u64 field per BitArray<28>.

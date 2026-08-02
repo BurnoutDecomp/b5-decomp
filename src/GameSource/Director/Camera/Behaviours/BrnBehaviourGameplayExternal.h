@@ -176,10 +176,17 @@ public:
     //   that base's only definition is a minimal slice inside Behaviours/BehaviourRig.h,
     //   which BrnCollisionPolicy.h cannot include (BehaviourRig.h includes IT). Returning the
     //   member would need a cast through a base the type does not have. The slot therefore
-    //   keeps Behaviour::GetCollisionPolicy's default (null) -- and null is what the console
-    //   itself returns whenever the parameters are unset, which is the state every allocated
-    //   gameplay camera is in here (SharedCameraContainer::Prepare's parameter binds are
-    //   gated on BehaviourParameterBank). So today the two agree.
+    //   keeps Behaviour::GetCollisionPolicy's default (null).
+    //   ⚠️⚠️ THIS FLAG'S "SO TODAY THE TWO AGREE" CLAUSE EXPIRED ON 2026-08-02, and it was the
+    //   camera parameter-chain wave's OWN change that expired it. The clause read: "null is
+    //   what the console itself returns whenever the parameters are unset, which is the state
+    //   every allocated gameplay camera is in here (SharedCameraContainer::Prepare's parameter
+    //   binds are gated on BehaviourParameterBank)". Both halves are now false: the binds are
+    //   restored and MainDirector::ProcessNewVehicleEvents raises mbIsValid, so the console
+    //   would return &mCollisionPolicy from the moment the player's car arrives while this
+    //   build still returns null. That is a REAL DIVERGENCE now, not an agreement -- the chase
+    //   camera will have no collision policy in the scene-query pass until the base lands.
+    //   (It is not yet observable, because slot 2 Update is still the base's no-op.)
     //   DELETE-WHEN: the CollisionPolicy base is moved to BrnCollisionPolicy.h (its natural
     //   home) and CollisionPolicyAttachedToVehicle derives it -- Step 0 #3, the IceAnim /
     //   BehaviourRig fork family.
@@ -241,42 +248,56 @@ public:
     //   IS DISPATCHED. Anyone reading the old text would conclude this class is inert for a
     //   reason that expired; it is inert for a DIFFERENT reason (below).
     //
-    // ⭐⭐ WHY TRANSCRIBING @0x82240828 ALONE WOULD CHANGE NOTHING -- the real chain, all
-    //   VERIFIED 2026-08-02, seven links from the vehicle to the screen. Update's ENTIRE body
-    //   sits inside `if (mpParameters->mbIsValid)` (PS3 @0x6985C tests *(params + 0xAC) right
-    //   after the .cpp:190 "Updating with no parameters" assert), and NOTHING in this build
-    //   ever makes that byte true:
-    //     [MISSING]   RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620
-    //                   -> BrnDirectorVehicleInputInterface::NewVehicle @0x822CBA90 (AddEvent)
-    //     [DROPPED]   BridgeWorldToDirector @0x823E3AB0 step 6 -- NewVehicleEvent<50>::Append
-    //                   (named as dropped in GameBridgeWorldToX.cpp's banner)
-    //     [DECL-ONLY] MainDirector::ProcessNewVehicleEvents @0x8221A6B0 -- the ONLY primary
-    //                   writer: it resolves the car's attrib collection, builds an
-    //                   Attrib::Gen::cameraexternalbehaviour from RefSpec(instance + 416), and
-    //                   calls Parameters::Set, which stores mbIsValid = 1. It also latches the
-    //                   key at director +0x314C0 for the per-frame re-seed below.
-    //     [DECL-ONLY] MainDirector::UpdateAttribSys @0x8221AFD0 -- the per-frame re-seed off
-    //                   that latched key (54 asm lines, fully decoded; needs the key first).
-    //     [GATED]     SharedCameraContainer::Prepare @0x82263D50 -- its two SetParameters binds
-    //                   are commented out (BrnDirectorArbitratorSharedCameraContainer.cpp:61).
-    //     [MISSING]   this Update + the eight helpers above.
+    // ⭐⭐ THE PARAMETER CHAIN IS CLOSED AS OF 2026-08-02. Update's ENTIRE body sits inside
+    //   `if (mpParameters->mbIsValid)` (PS3 @0x6985C tests *(params + 0xAC) right after the
+    //   .cpp:190 "Updating with no parameters" assert). That byte is now TRUE on this build,
+    //   and the block is bound. State of every link, MEASURED (CAM_RUN4):
+    //     [BRING-UP]  the producer. RaceCarEntityModule::ProcessCreateVehicleEvents
+    //                   @0x822FF620 is NOT transcribed and must not be: it drains
+    //                   VehicleManagerOutputInterface::mCreateVehicleResultQueue, whose ONLY
+    //                   producer in the whole XEX is the physics
+    //                   VehicleManager::ProcessCreateEvents @0x82616770 -- absent here. A
+    //                   flagged stand-in publishes the player car's leg at the console's own
+    //                   frame position: RaceCarEntityModule::
+    //                   PublishNewVehicleToDirectorWithoutPhysicsBringUp.
+    //     ✅ REAL      BrnDirectorVehicleInputInterface::NewVehicle @0x822CBA90 (its own TU).
+    //     ✅ REAL      BridgeEntityModulesToOutput_PostPhysics ->
+    //                   UpdateOutputBuffer::SetDirectorVehicleInputInterface @0x827AD1A0.
+    //     ✅ REAL      BridgeWorldToDirector @0x823E3AB0 step 6 (the queue merge).
+    //     ✅ REAL      MainDirector::ProcessNewVehicleEvents @0x8221A6B0 -- THE only primary
+    //                   writer of mbIsValid on this build. Resolves the car's burnoutcarasset
+    //                   collection, builds cameraexternalbehaviour from RefSpec(data + 0x1A0)
+    //                   / camerabumperbehaviour from +0x1B8, calls both Parameters::Set, and
+    //                   latches the key at bank+0x2480.
+    //     ✅ REAL      SharedCameraContainer::Prepare @0x82263D50 -- both SetParameters binds
+    //                   restored, plus the per-frame re-bind in ArbStateRoaming::Update.
+    //     ⚠️ INERT     MainDirector::UpdateAttribSys @0x8221AFD0 is transcribed but is NOT the
+    //                   "per-frame re-seed" earlier notes called it: its single gate is
+    //                   ControllerInfo +0x01 == mbGameTalkRefreshRequest (DecFIGS DWARF
+    //                   BrnDirectorControllerInfo.h:49), the live-tuning tool's pulse. Nothing
+    //                   on a PC/retail build sets it.
+    //     [MISSING]   this Update + the eight helpers above.   <- THE ONLY REMAINING LINK HERE
     //     [BRING-UP]  BrnGameModule.cpp:1177 gates the director->world camera handover on
     //                   `flyby || meJunkyardState != E_JY_INACTIVE`, which goes FALSE exactly
-    //                   when car-select exits -- so the world falls back to sBringUpCamera.
-    //   ⛔ AND `BehaviourParameterBank::Construct @0x8223DC90` DOES NOT HELP: it forms
-    //   `addi r11, r31, 0x2488` (this block) and inlines Parameters::Construct over it, whose
-    //   stores include `stb r30(=0), 0xAC(r11)` -- it explicitly leaves mbIsValid FALSE. The
-    //   authored tuning only ever arrives through Parameters::Set.
-    //   ✅ THE DATA IS NOT THE PROBLEM: hash64("cameraexternalbehaviour") == 0xE9EDA3B8C4EA3C84
-    //   (low word == the generated header's KI_CAMERAEXTERNALBEHAVIOUR_CLASS), and that
-    //   collection is present little-endian at +0x470 of our own ported
-    //   build/game/VEHICLES/VEH_PUSMC01_AT.BIN (the Hunter Cavalry, platform 4).
-    //   Corroboration that Parameters::Source models the right thing:
-    //   ProcessNewVehicleEvents asserts `*(externalInstance[1] + 64) > 0.0f` before calling
-    //   Set -- instance +0x04 is the f32 array and +0x40 is mfBoostFOV, exactly as
-    //   Parameters::Set reads it.
-    //   DELETE-WHEN: @0x82240828 and its helper cluster are transcribed AND the parameter
-    //   chain above reaches Parameters::Set.
+    //                   when car-select exits -- so the world still falls back to
+    //                   sBringUpCamera even once Update lands.
+    //   MEASURED END TO END, one boot: "[newveh] SharedCameraContainer::Prepare: both gameplay
+    //   cameras bound to the bank (external valid 0, bumper valid 0 at bind time)" ... then
+    //   "[newveh] MainDirector::ProcessNewVehicleEvents: seeded ... externalValid 1 FOV
+    //   80.000000 boostFOV 95.000000 | bumperValid 1". The bind legitimately precedes the seed
+    //   -- it is a POINTER bind into the bank block the seed then fills, which is the console's
+    //   own ordering.
+    //   ✅ THE DATA WAS NEVER THE PROBLEM: hash64("cameraexternalbehaviour") ==
+    //   0xE9EDA3B8C4EA3C84 (low word == the generated header's KI_CAMERAEXTERNALBEHAVIOUR_CLASS)
+    //   and that collection is present little-endian at +0x470 of our own ported
+    //   build/game/VEHICLES/VEH_PUSMC01_AT.BIN. The car key the chain carries
+    //   (0xC61649FE42DCF854, hash64 of the Hunter Cavalry's AttribSysCollectionKey) is present
+    //   at +0x398 of the same file. The 80/95 degree FOVs above are that file's authored values.
+    //   ⚠️ ORDERING IS LOAD-BEARING: the publish must wait until the car's AT bundle has been
+    //   streamed and its vault registered. Publishing at attach time instead (measured,
+    //   CAM_RUN1) made every resolve miss, substituted Attrib::DefaultDataArea zeros, and
+    //   produced a VALID-but-all-zero block plus fourteen asserts.
+    //   DELETE-WHEN: @0x82240828 and its helper cluster are transcribed.
 
 private:
     // ---- layout (DWARF h:116..:160; the anchors are asm-pinned -- see the file banner) ---

@@ -81,6 +81,14 @@ namespace DirectorIO
     {
         CgsModule::IOBuffer::Construct();
 
+        // ⭐ ADDED 2026-08-02 (camera parameter-chain wave). One of the "aggregate sub-object
+        // Constructs" the note below lists: the vehicle input interface's embedded
+        // EventQueue<NewVehicleEvent,50>. It is no longer un-homed, and it is now written --
+        // BridgeWorldToDirector step 6 Appends the world's queue into it every frame and
+        // MainDirector::ProcessNewVehicleEvents drains it. Without this call mpEvents stays
+        // NULL and the first Append/AddEvent writes through it.
+        mVehicleDriverInputInterface.Construct();
+
         // The two "none" sentinels. Everything downstream tests them with `> -1` / `== -1`.
         mePlayerCarIndex       = static_cast<EActiveRaceCarIndex>(-1);   // 31400 = -1
         mePlayerKillerCarIndex = static_cast<EActiveRaceCarIndex>(-1);
@@ -235,18 +243,20 @@ namespace DirectorIO
         return &mTimerInterface;
     }
 
-    const void* InputBuffer::GetVehicleInputInterface() const
+    // X360 0x82206DA0 -- read-lock-asserted (:618, "Not locked for reading"), returns
+    // `this + 0x6780`. Its only console caller is MainDirector::ProcessNewVehicleEvents.
+    const BrnDirectorVehicleInputInterface* InputBuffer::GetVehicleInputInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mVehicleDriverInputInterface;
+        return &mVehicleDriverInputInterface;
     }
 
-    void* InputBuffer::GetVehicleInputInterface()
+    BrnDirectorVehicleInputInterface* InputBuffer::GetVehicleInputInterface()
     {
         // X360 0x823B2890: the non-const (write-side) handle tests bit 3 (write-lock),
         // unlike the const read-lock overload above.
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        return mVehicleDriverInputInterface;
+        return &mVehicleDriverInputInterface;
     }
 
     const void* InputBuffer::GetHookEnumeration() const

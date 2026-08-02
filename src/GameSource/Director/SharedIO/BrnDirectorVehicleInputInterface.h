@@ -43,10 +43,15 @@ namespace BrnDirector
             mNewVehicleQueue.Append(lpSource->mNewVehicleQueue);
         }
 
-        // ---- methods bodied by this type's own TU ----
+        // ---- methods bodied by this type's own TU (BrnDirectorVehicleInputInterface.cpp) ----
         void Construct();                                               // DWARF :54
         const NewVehicleEventQueue* GetNewVehicleEventQueue() const;    // DWARF :57
-        s32  NewVehicle(Attribute::Key lAttribsKey, s32 liEntityIndex); // DWARF :63
+
+        // Announce that a car has entered the simulation. The DWARF spells the first
+        // parameter Attribute::Key; it is spelled u64 here for the reason NewVehicleEvent::
+        // mAttribsKey is (see BrnDirectorEvents.h's banner -- the X360 body @0x822CBA90
+        // stages it with `std`). @0x822CBA90.
+        s32  NewVehicle(u64 lAttribsKey, s32 liEntityIndex);            // DWARF :63
 
     private:
         NewVehicleEventQueue mNewVehicleQueue;   // DWARF :67

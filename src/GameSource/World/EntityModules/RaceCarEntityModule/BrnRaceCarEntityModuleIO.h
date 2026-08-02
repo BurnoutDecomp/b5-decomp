@@ -533,6 +533,13 @@ namespace RaceCarEntityModuleIO
             CgsModule::IOBuffer::Construct();
             mResourceRequestInterface.mRequestQueue.Construct();
             mResourceRequestInterface.mRequestQueue.Clear();
+            // ⭐ ADDED 2026-08-02 (camera parameter-chain wave) -- the "NewVehicleEvent<50>::
+            // Construct" leg named in the X360 note above. The producer that writes it lands
+            // in this wave (RaceCarEntityModule's new-vehicle publish), and an unconstructed
+            // queue has mpEvents == NULL, which is what killed the process the last time an
+            // embedded queue in this family went un-Constructed (see the retired
+            // OutputBuffer_PrePhysics gate in WorldLinkStubs.cpp).
+            mDirectorVehicleInputInterface.Construct();
         }
         const ResourceRequestInterface* GetResourceRequestInterface() const;              // :563
         ResourceRequestInterface*       GetResourceRequestInterface();                     // :564

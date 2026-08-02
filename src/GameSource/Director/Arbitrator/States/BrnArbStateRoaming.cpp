@@ -316,24 +316,18 @@ namespace BrnDirector
                 mfStateTimer = 0.0f;                                   // 0x82264514
             }
 
-            // [GATED @0x82264518..0x82264550 -- the two shared gameplay parameter binds]
-            //   const Camera::BehaviourParameterBank& lrBank =                 // manager +0x12530
-            //       lrSharedInfo.mpBehaviourManager->GetBehaviourParameterBank();
-            //   lrContainer.mGameplayBumper.GetBehaviour()->SetParameters(
-            //       &lrBank.GetGameplayBumperCameraParamsForCar());            // bank +0x2538
-            //   lrContainer.mGameplayExternal.GetBehaviour()->SetParameters(
-            //       &lrBank.GetGameplayExternalCameraParamsForCar());          // bank +0x2488
-            // WHY: identical to the gate already documented at
-            // BrnDirectorArbitratorSharedCameraContainer.cpp:62 -- BehaviourManager models
-            // mBehaviourParameterBank (DWARF :325) as an OPAQUE 4-byte sub-object, so all three
-            // accessors return REFERENCES to objects that do not exist in this tree. A stub
-            // could only hand back a fabrication, and SetParameters would latch it as the two
-            // shared gameplay cameras' live parameter block -- strictly worse than leaving them
-            // on their Construct() defaults. This is a RE-BIND of the same two blocks the
-            // container already binds (or would) at Prepare time, so skipping it per-frame
-            // changes nothing that the container's own gate has not already changed.
-            // DELETE-WHEN: BehaviourParameterBank gets a homed layout + TU (restore verbatim,
-            // here and in SharedCameraContainer::Prepare together).
+            // ⭐ @0x82264518..0x82264550 -- the two shared gameplay parameter RE-BINDS.
+            // RESTORED 2026-08-02 (camera parameter-chain wave), together with the identical
+            // pair in SharedCameraContainer::Prepare, exactly as the retired gate's own
+            // DELETE-WHEN asked. BehaviourParameterBank now carries the two blocks as real
+            // members (see BrnBehaviourParameterBank.h), so these references resolve to the
+            // same storage MainDirector::ProcessNewVehicleEvents seeds.
+            const Camera::BehaviourParameterBank& lrBank =                 // manager +0x12530
+                lrSharedInfo.mpBehaviourManager->GetBehaviourParameterBank();
+            lrContainer.mGameplayBumper.GetBehaviour()->SetParameters(
+                &lrBank.GetGameplayBumperCameraParamsForCar());            // bank +0x2538
+            lrContainer.mGameplayExternal.GetBehaviour()->SetParameters(
+                &lrBank.GetGameplayExternalCameraParamsForCar());          // bank +0x2488
 
             // ---- camera cycle request @0x82264554: the base's per-frame flag, ignored while
             // the lookback override owns the choice; it flips which gameplay cam is selected.

@@ -294,6 +294,15 @@ public:
         // DELETE with that camera.
         bool GetSpawnedCarPositionBringUp( Vector3& lrPosition ) const;
 
+        // [FLAG PC bring-up] NOT an X360 function. Stands in for the player-car leg of
+        // ProcessCreateVehicleEvents @0x822FF620, whose input queue
+        // (VehicleManagerOutputInterface::mCreateVehicleResultQueue) has no producer on this
+        // build -- its only console producer is the physics VehicleManager. Runs from
+        // PostPhysicsUpdate at the console's own position for the function it replaces.
+        // Full provenance in the .cpp banner.
+        void PublishNewVehicleToDirectorWithoutPhysicsBringUp(
+                RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput );
+
         // ====================================================================
         // THE ATTACHED -> WAITING -> ACTIVE CHAIN (drivable wave 2026-08-01).
         // These four are what retire PromoteAttachedCarToActiveBringUp.
