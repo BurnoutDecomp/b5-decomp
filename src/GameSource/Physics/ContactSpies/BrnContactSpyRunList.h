@@ -3,12 +3,10 @@
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 
-// EEntityTypeID's canonical home is GameSource/World/BrnEntityTypes.h (namespace BrnWorld),
-// not yet reconstructed in-tree. Forward-declared with its underlying type so this header can
-// self-contain the ContactSpyRunList layout member meEntityType. A bare unscoped
-// `enum EEntityTypeID;` is ill-formed C++; this opaque-enum declaration is well-formed and
-// matches the DWARF (signed enumerators down to E_ENTITYTYPE_INVALID = -1, so int underlying).
-namespace BrnWorld { enum EEntityTypeID : int; }
+// EEntityTypeID's canonical home is GameSource/World/BrnEntityTypes.h (namespace BrnWorld).
+// It is now reconstructed in-tree (DWARF-verbatim), so the former opaque-enum forward
+// declaration is replaced by the real include.
+#include "GameSource/World/BrnEntityTypes.h"
 
 namespace BrnPhysics
 {
@@ -56,6 +54,21 @@ namespace BrnPhysics
         class ContactSpyRunList : public CgsModule::EventQueue<ContactSpyRunData, MaxLength>
         {
         public:
+            // ContactSpyRunList<MaxLength>::Construct(BrnWorld::EEntityTypeID) -- DWARF
+            // BrnContactSpyRunList.h (the tag is an ARGUMENT). Same shape as the queue's
+            // Construct: chain the base fixed-capacity construction, then stamp the tag.
+            // Inlined at every X360 call site (no out-of-line symbol); ContactSpyData::Construct
+            // @0x825AE010 shows `bl EventQueue<ContactSpyRunData,N>::Construct` immediately
+            // followed by a store at 0x10 + N*80 -- sizeof(ContactSpyRunData) is 80 because the
+            // leading EntityId is padded out to the first 16-byte-aligned Vector3. The four
+            // instantiations check out exactly: N=8 -> 0x290, 64 -> 0x1410, 50 -> 0xFB0,
+            // 100 -> 0x1F50, which are the four store offsets in that asm.
+            void Construct(BrnWorld::EEntityTypeID leEntityType)
+            {
+                CgsModule::EventQueue<ContactSpyRunData, MaxLength>::Construct();
+                meEntityType = leEntityType;
+            }
+
             // Forwards to the base live count (CgsBaseEventQueue::miLength). DWARF lists this as a
             // distinct per-specialisation symbol at BrnContactSpyRunList.h:437.
             s32 GetLength() const

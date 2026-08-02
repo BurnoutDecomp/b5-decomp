@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                  // CgsContainers::BitArray
 
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; } }
+namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only member (mpPrimitiveWithTriangleStream)
 
 namespace BrnPhysics
 {
@@ -48,6 +49,51 @@ namespace Props
         PropPartInstance*            mpaPartInstances;
         CgsContainers::BitArray<30>  mUsedParts;
         u32                          muNumberOfPartInstances;
+
+        // ---- ADDITIVE GROW (perf-monitor slice; DWARF BrnPropManager.h:266..277, in
+        //      declaration order, immediately after muNumberOfPartInstances) --------------------
+        // These eight members are the ones ConstructPreScenePerfMonitors /
+        // ConstructContactGenerationPerfMonitors / Construct write, and their X360 offsets form a
+        // gap-free run straight out of the DWARF sequence, which is what makes the
+        // offset->name mapping PROVEN rather than proposed:
+        //
+        //   +0x90 mUsedParts (BitArray<30>, 8B) .. +0x98 muNumberOfPartInstances (already
+        //   committed, and both are written by Construct: `std r30,0x90(r31)`)
+        //   +0x9C  miNumJobsAdded                    (BeginPropWorldContactGeneration @0x82628CFC
+        //                                             does `stw r26,0x9C(r31)` with r26 == 0)
+        //   +0xA0  mpPrimitiveWithTriangleStream     (Construct: `stw r30,0xA0(r31)`, r30 == 0;
+        //                                             BeginPropWorldContactGeneration then stores
+        //                                             a stream producer there)
+        //   +0xA4  miContactGeneratorWaitPM          (ConstructContactGenerationPerfMonitors --
+        //                                             the ONLY store that function makes, and the
+        //                                             function's own name names the member)
+        //   +0xA8  miProcessRemovePropPM             \
+        //   +0xAC  miProcessRemovePartPM              |  the four ConstructPreScenePerfMonitors
+        //   +0xB0  miProcessAddPropInstancePM         |  zeroes (stores in the order B0,B4,A8,AC)
+        //   +0xB4  miProcessAddPartInstancePM        /
+        //   +0xB8  miProcessBreakPropPM              (written by NEITHER constructor -- stated as a
+        //                                             fact of the asm, not smoothed over)
+        //
+        // The run then continues at +0xC0 with maPropJointPositions[15] (16-aligned Vector3s),
+        // and the rest of the DWARF sequence lands gap-free all the way to
+        // miNumPropsAddedToContactGen at +0x6570 -- see the layout table in BrnPropManager.cpp.
+        s32                          miNumJobsAdded;
+        CgsMemory::SimpleDataStreamProducer* mpPrimitiveWithTriangleStream;
+        s32                          miContactGeneratorWaitPM;
+        s32                          miProcessRemovePropPM;
+        s32                          miProcessRemovePartPM;
+        s32                          miProcessAddPropInstancePM;
+        s32                          miProcessAddPartInstancePM;
+        s32                          miProcessBreakPropPM;
+
+        // X360 0x825BAC60 (DWARF BrnPropManager.h). Called by PhysicsModule::Construct
+        // @0x825AE308 on the embedded mPropManager. In the shipped ARTIST image this is four
+        // instructions: `li r11,0 ; stw r11,0xA4(r3) ; blr`. Defined in BrnPropManager.cpp.
+        void ConstructContactGenerationPerfMonitors();
+
+        // X360 0x825BAC70. Six instructions: zero the four pre-scene process-event monitor ids.
+        // Defined in BrnPropManager.cpp.
+        void ConstructPreScenePerfMonitors();
 
         // X360 0x82606148 (DWARF BrnPropManager.h:250). Linear-scan the used-prop bit-set;
         // return the slot whose stored PropEntityID matches, else -1.
