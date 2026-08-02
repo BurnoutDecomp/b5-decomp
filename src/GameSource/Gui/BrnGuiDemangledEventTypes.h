@@ -2,7 +2,8 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
-#include "GameShared/GameClasses/Core/CgsID.h"        // CgsID (GuiPlayerInfoResponse::mCarId)
+#include "GameShared/GameClasses/Core/CgsID.h"
+#include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
 
 // ============================================================================
 // b5-decomp/src/GameSource/Gui/BrnGuiDemangledEventTypes.h
@@ -151,7 +152,13 @@ namespace BrnGui
     struct GuiEventRoadRuleTickerScoreResponse : public CgsGui::GuiEvent<345> { u8 maPayload[36]; };  // id 345 size 48 (12B GuiEvent header + opaque payload)
     struct GuiEventRoadRuleUpdate : public CgsGui::GuiEvent<338> { u8 maPayload[8]; };  // id 338 size 20 (12B GuiEvent header + opaque payload)
     struct GuiEventRoadRuleUpdateTargetScores : public CgsGui::GuiEvent<339> { u8 maPayload[44]; };  // id 339 size 56 (12B GuiEvent header + opaque payload)
-    struct GuiEventRunFsm : public CgsGui::GuiEvent<144> { u8 maPayload[12]; };  // id 144 size 24 (12B GuiEvent header + opaque payload)
+    // GuiEventRunFsm: NO placeholder here -- the real hand-reconstructed home is
+    // BrnGuiEventTypeDefs.h (named fields, derives from CgsModule::Event). A placeholder
+    // must never shadow a real home; defining both made every TU that includes both
+    // headers a hard C2011 (it already broke two committed files before wave I hit it).
+    // FLAG / OPEN: this catalogue read the id as 144 size 24 from the AddGuiEvent<T>
+    // spine, which does NOT match the real home. One of the two is misnamed -- unresolved,
+    // needs asm arbitration, deliberately not guessed here.
     struct GuiEventSaveImageFileAndAutosave : public CgsGui::GuiEvent<358> { u8 maPayload[4]; };  // id 358 size 16 (12B GuiEvent header + opaque payload)
     struct GuiEventScoreUpdate : public CgsGui::GuiEvent<424> { u8 maPayload[8]; };  // id 424 size 20 (12B GuiEvent header + opaque payload)
     struct GuiEventScoreboardDownloadedChallengeable : public CgsGui::GuiEvent<123> { u8 maPayload[4]; };  // id 123 size 16 (12B GuiEvent header + opaque payload)
@@ -275,7 +282,11 @@ namespace BrnGui
     // matches the OutputGuiEvent<T> asm (offset 16 -- the real payload is an 8-byte CgsID).
     struct alignas(8) GuiOverlayShowingNotification { u8 maData[8]; s32 GetEventType() const { return 190; } };  // id 190 size 8 [8-aligned: OGE off16]
     struct alignas(8) GuiAudioEvent : public CgsGui::GuiEvent<456> { u8 maPayload[12]; };  // id 456 size 24 [8-aligned: OGE off16]
-    struct GuiAudioTriggerEvent : public CgsGui::GuiEvent<457> { u8 maPayload[88]; };  // id 457 size 100
+    // GuiAudioTriggerEvent: NO placeholder here -- the real hand-reconstructed home is
+    // BrnGuiEventTypeDefs.h (macComponent/meAction/macLabel/macMovie, id 201, sizeof 112).
+    // FLAG / OPEN: this catalogue read the id as 457 size 100 from the AddGuiEvent<T>
+    // spine, which does NOT match the real home's id 201 size 112. Two different events
+    // are sharing one name; one of them is misnamed. Unresolved -- needs asm arbitration.
     // X360-RECOVERED LAYOUT (no longer an opaque placeholder). The inner field breakdown IS
     // recovered from three attesting producers -- BrnGui::ChallengeSelector::Hide (@0x82436F70),
     // BrnGui::FriendsListComponent::Close (@0x824397E8) and ::SelectPrevious (@0x82441988), which
@@ -314,7 +325,25 @@ namespace BrnGui
     struct GuiEventControllerSettings { u8 maData[3]; s32 GetEventType() const { return 472; } };  // id 472 size 3
     struct alignas(8) GuiEventCustomeEventCreate : public CgsGui::GuiEvent<172> { u8 maPayload[108]; };  // id 172 size 120 [8-aligned: OGE off16]
     struct GuiEventKeyboardResponse { u8 maData[4]; s32 GetEventType() const { return 142; } };  // id 142 size 4
-    struct GuiEventNetworkConnect { u8 maData[4]; s32 GetEventType() const { return 272; } };  // id 272 size 4
+    // id 272. The payload word is the sign-in flavour the producer asks for (0 = full
+    // sign-in, 2 = no-title); the producer-side enum name is unrecovered.
+    // Shaped as a GuiEvent<272> subclass, NOT as an opaque POD, because the X360 posts it
+    // through StateInterface::OutputGuiEvent -- CgsGuiStateInterface_OutputGuiEvent_Inst.cpp
+    // carries the explicit instantiation for this exact type at 0x824C2E98 (inside
+    // CrashNavEnterOnlineBase::OnEnter), and that template requires a CgsModule::Event.
+    // FLAG: this catalogue's original entry read "size 4", which cannot be right for an
+    // OutputGuiEvent payload (the GuiEvent header alone is 12) -- the 4 is the payload word
+    // only. The posted size is the HOST sizeof, never a console immediate.
+    struct GuiEventNetworkConnect : public CgsGui::GuiEvent<272>
+    {
+        s32 miConnectType;
+
+        explicit GuiEventNetworkConnect(s32 liConnectType)
+            : CgsGui::GuiEvent<272>(
+                  static_cast<u32>(sizeof(GuiEventNetworkConnect) - sizeof(CgsGui::GuiEvent<272>)),
+                  static_cast<u32>(sizeof(CgsGui::GuiEvent<272>)))
+            , miConnectType(liConnectType) {}
+    };
     struct GuiEventNetworkCustomMatchJoin { u8 maData[4]; s32 GetEventType() const { return 255; } };  // id 255 size 4
     struct GuiEventNetworkCustomMatchResults : public CgsGui::GuiEvent<254> { u8 maPayload[592]; };  // id 254 size 604
     struct GuiEventNetworkCustomMatchSearch : public CgsGui::GuiEvent<252> {};  // id 252 size 12
@@ -332,11 +361,55 @@ namespace BrnGui
     struct GuiEventRequestTraining { u8 maData[4]; s32 GetEventType() const { return 572; } };  // id 572 size 4
     struct alignas(8) GuiEventRoadRuleDataRequest { u8 maData[8]; s32 GetEventType() const { return 327; } };  // id 327 size 8 [8-aligned: OGE off16]
     struct GuiEventRoadRuleModeRequest { u8 maData[8]; s32 GetEventType() const { return 326; } };  // id 326 size 8
-    struct GuiEventScoreboardRequestEvScoreTarget : public CgsGui::GuiEvent<121> { u8 maPayload[24]; };  // id 121 size 36
-    struct GuiEventScoreboardRequestGamercardEvent : public CgsGui::GuiEvent<120> { u8 maPayload[4]; };  // id 120 size 16
-    struct GuiEventScoreboardRequestIndexEvent { u8 maData[4]; s32 GetEventType() const { return 111; } };  // id 111 size 4
-    struct GuiEventScoreboardRequestTableEvent { u8 maData[4]; s32 GetEventType() const { return 113; } };  // id 113 size 4
-    struct GuiEventScoreboardRequestVariationEvent { u8 maData[4]; s32 GetEventType() const { return 112; } };  // id 112 size 4
+    // X360 instantiation @0x82493F88: record { 36, 121, 12, score, category, index,
+    // variation, name[16], isCurrentTarget, pad[3] }, ch40, 48 bytes (GameBridgeGUIToX
+    // case 121 "36-byte record": words 0..3, name @+16, byte @+32).
+    struct GuiEventScoreboardRequestEvScoreTarget : public CgsGui::GuiEvent<121>
+    {
+        s32  miScore;             // +0x0C
+        s32  miCategory;          // +0x10
+        s32  miIndex;             // +0x14
+        s32  miVariation;         // +0x18
+        CgsNetwork::PlayerName mPlayerName;   // +0x1C (16 bytes; the named home of the same char[16])
+        bool mbIsCurrentTarget;   // +0x2C  FLAG consumer-named (the producer compares the
+                                  //         highlighted gamertag against the current target)
+        u8   maPad[3];            // +0x2D..0x2F
+        GuiEventScoreboardRequestEvScoreTarget()
+            : CgsGui::GuiEvent<121>(36, 12)
+            , miScore(0), miCategory(0), miIndex(0), miVariation(0), mbIsCurrentTarget(false)
+        { mPlayerName.macName[0] = 0; maPad[0] = maPad[1] = maPad[2] = 0; }
+    };
+    // X360 instantiation @0x82493D38: record { 16, 120, 12, name[16] }, ch40, 28 bytes
+    // (GameBridgeGUIToX case 120 memcpy's 16 -- the old maPayload[4] under-copied).
+    struct GuiEventScoreboardRequestGamercardEvent : public CgsGui::GuiEvent<120>
+    {
+        CgsNetwork::PlayerName mPlayerName;   // +0x0C (16 bytes; the named home of the same char[16])
+        GuiEventScoreboardRequestGamercardEvent()
+            : CgsGui::GuiEvent<120>(16, 12) { mPlayerName.macName[0] = 0; }
+    };
+    // X360 instantiation @0x82493FF8: record { 4, 111, 12, <category> }, ch40, 16 bytes
+    // (GameBridgeGUIToX reads the word at record+12 -- the old raw {maData[4]} shape
+    // dropped the 12-byte header the consumer expects).
+    struct GuiEventScoreboardRequestIndexEvent : public CgsGui::GuiEvent<111>
+    {
+        s32 miCategory;   // +0x0C
+        explicit GuiEventScoreboardRequestIndexEvent(s32 liCategory)
+            : CgsGui::GuiEvent<111>(4, 12), miCategory(liCategory) {}
+    };
+    // X360 instantiation @0x82494098: record { 4, 113, 12, <variation/road> }, ch40, 16 bytes.
+    struct GuiEventScoreboardRequestTableEvent : public CgsGui::GuiEvent<113>
+    {
+        s32 miVariation;   // +0x0C
+        explicit GuiEventScoreboardRequestTableEvent(s32 liVariation)
+            : CgsGui::GuiEvent<113>(4, 12), miVariation(liVariation) {}
+    };
+    // X360 instantiation @0x82494048: record { 4, 112, 12, <index> }, ch40, 16 bytes.
+    struct GuiEventScoreboardRequestVariationEvent : public CgsGui::GuiEvent<112>
+    {
+        s32 miIndex;   // +0x0C
+        explicit GuiEventScoreboardRequestVariationEvent(s32 liIndex)
+            : CgsGui::GuiEvent<112>(4, 12), miIndex(liIndex) {}
+    };
     struct GuiEventSetPlayer0ControllerPort { u8 maData[4]; s32 GetEventType() const { return 143; } };  // id 143 size 4
     struct GuiEventVoipSettings { u8 maData[4]; s32 GetEventType() const { return 474; } };  // id 474 size 4
     struct GuiImageGalleryRequestCollectedDataEvent { u8 maData[4]; s32 GetEventType() const { return 521; } };  // id 521 size 4
@@ -350,7 +423,17 @@ namespace BrnGui
     struct GuiRequestCarControlChangeEvent { u8 maData[1]; s32 GetEventType() const { return 65; } };  // id 65 size 1
     struct GuiResponseTimeDateString : public CgsGui::GuiEvent<594> { u8 maPayload[24]; };  // id 594 size 36
     struct GuiSaveLoadImageExportRequested { u8 maData[17]; s32 GetEventType() const { return 361; } };  // id 361 size 17
-    struct GuiTelemetryEvent : public CgsGui::GuiEvent<323> { u8 maPayload[8]; };  // id 323 size 20
+    // X360 instantiation @0x824940E8: record { 20, 323, 12, type, params[16] }, ch40,
+    // 32 bytes (GameBridgeGUIToX case 323 memcpy's 20 -- the old maPayload[8] was short).
+    // FLAG: field names consumer-derived (the type word + the SPrintf'd parameter string
+    // BrnNetwork::BrnNetworkModuleIO::TelemetryData::AddParameter appends).
+    struct GuiTelemetryEvent : public CgsGui::GuiEvent<323>
+    {
+        s32  miTelemetryType;   // +0x0C
+        char macParams[16];     // +0x10
+        explicit GuiTelemetryEvent(s32 liTelemetryType)
+            : CgsGui::GuiEvent<323>(20, 12), miTelemetryType(liTelemetryType) { macParams[0] = 0; }
+    };
 
     // ============================================================================
     // VIEW / INTERNAL-STATE GUI-event PAYLOAD homes (ADDITIVE GROW -- output view/internal-state

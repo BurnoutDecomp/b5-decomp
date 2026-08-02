@@ -50,6 +50,11 @@ namespace BrnGui
         // @0x82419368 (this TU) -- return the value in the currently-highlighted row's first
         // score-bearing column (a number/time/currency data type), parsed as an integer.
         s32  GetHighlightedScore() const;
+        // @0x82419208 (foreign ledger TU) -- copy the highlighted row's name-column cell
+        // string into the caller's 16-byte buffer (walks the used columns for the name data
+        // type, asserting bounds); returns the buffer. Declared here for the type home; the
+        // body links from its own TU.
+        char* GetHighlightedGamertag(char* lpacPlayerName);
 
         // @0x82436580 (this TU) -- highlight the row whose name-column cell string-matches
         // lpacPlayerName (clearing the highlight when the name is empty, there is no name column,

@@ -25,10 +25,21 @@
 // not touch) is a reserved byte-span sized to the attested stride. All access is by name.
 // ===================================================================================
 
+// LAYOUT CAVEAT for the HelpBar TU: the model below is KNOWN INCOMPLETE. The real object
+// also carries live counts near +7700/+7744, and the OnlineGameOptions embed pins the
+// console sizeof at 7760 (its members run 23616..31376). Nothing is resized here because
+// every access is by name, but do not treat this class as fully mapped.
 #include "types.hpp"
+
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                  // GuiFlow (AppendExpectedAptComponent)
+#include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h" // ButtonIconComponent::EPadButton
+
+namespace CgsGui { struct StateInterface; }
 
 namespace BrnGui
 {
+    class GuiCache;
+
     class HelpBar
     {
     public:
@@ -65,6 +76,38 @@ namespace BrnGui
         // @ 0x824E2330 - return the pointer to item `luIndex`'s animator. Asserts
         // 0 <= luIndex < 7.
         Animator* GetAnimator(u32 luIndex);
+
+        // ---- declared here, bodies owned by the class:BrnGui::HelpBar TU --------------
+        // These are ledger-`reviewed` but defined nowhere in the tree yet (the committed
+        // .cpp carries only the two accessors above), so consumers compile but will not
+        // link until that TU lands. Signatures are X360-attested from the call sites and
+        // the asserts.
+
+        // @0x824EA4F8 - name the bar, then Construct + Animator-construct liNumItems
+        // "<name><i>" sub-components. Asserts lpacName/lpStateInterface non-null and
+        // liNumItems <= KI_MAX_ITEMS. (Args from the asm: r4 name, r5 count, r6 state
+        // interface, r7 parent name.)
+        void Construct(const char* lpacName, s32 liNumItems,
+                       CgsGui::StateInterface* lpStateInterface, const char* lpacParentName);
+        // @0x824E2570 - post-load wiring of the bar's apt sub-components.
+        void SetupComponent();
+        // @0x824E26C8 - register the bar's expected apt components on the cache.
+        void AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache);
+        // @0x824E91A8 - reset the appended items (live count -> 0; per-item resets).
+        void Clear();
+        // @0x824E5E38 - append one {text, button} item; returns the item index. Both
+        // button arguments are asserted < 0x10 ("Invalid button"). The second one is the
+        // OPTIONAL second icon, and the call sites pass E_PADBUTTON_INVISIBLE (15) for
+        // "none" -- it is NOT a pad bitmask (dumped 0x824E5E38: r20 is compared against
+        // the same enum bound and indexes the same icon table as the first).
+        // Signature is the DecFIGS DWARF's (BrnHelpBar.h:86/212) -- s32 return and two
+        // ButtonIconComponent::EPadButton parameters, NOT the (void, u32, u32) an earlier
+        // wave-I draft proposed.
+        s32 AppendHelpBarItem(const char* lpacText,
+                              ButtonIconComponent::EPadButton leButton,
+                              ButtonIconComponent::EPadButton leSecondButton);
+        // @0x824E92C0 - per-frame item-info / animator update.
+        void Update(f32 lfTime);
 
     private:
         // ---- recovered layout (guest 32-bit offsets) -----------------------------------
