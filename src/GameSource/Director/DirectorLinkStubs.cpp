@@ -587,14 +587,29 @@ namespace BrnTrigger
 //   THAT IS THE THIRD TIME THIS CAMPAIGN A "nothing on the live path reads this" GATE HAS
 //   GONE STALE WITHOUT ANYTHING IN THE BUILD, THE LINKER OR A BOOT TEST NOTICING.
 //
-// `CameraShakeICEController::Construct` IS STILL A STUB: unlike its neighbour it is a real
-// (non-inlined) console call whose body was never dumped, so there is nothing to transcribe.
-// It stays safe for the same reason as before -- the manager's pools construct every
-// behaviour with `new (slot) T()` (BrnAbstractPool.h:148), i.e. value-initialisation, so the
-// sub-object starts zeroed regardless -- but note that "safe because it starts zeroed" is an
-// argument about the FIRST use, not about a re-Construct on a live object, which is exactly
-// how its neighbour went wrong.
-// DELETE-WHEN: the CameraShakeICEController TU lands.
+// ⛔⛔ BOTH OF GROUP E'S STUBS ARE NOW RETIRED. `CameraShakeICEController::Construct` went
+//   the same way as its neighbour on 2026-08-02 (ICE-shake wave) -- real body in
+//   Camera/Utils/BrnCameraShakeICEController.cpp -- and ITS justification had expired too. It
+//   read:
+//     "unlike its neighbour it is a real (non-inlined) console call whose body was never
+//      dumped, so there is nothing to transcribe. It stays safe for the same reason as before
+//      -- the manager's pools construct every behaviour with `new (slot) T()`
+//      (BrnAbstractPool.h:148), i.e. value-initialisation, so the sub-object starts zeroed
+//      regardless"
+//   ⚠️⚠️ THE FIRST CLAUSE WAS SIMPLY FALSE: 0x8223EBF0 is a fully exported 186-line function
+//     in .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8223EBF0.json. "Never dumped" is a claim about
+//     the export set, and the export set is one directory listing away. FOURTEENTH stale gate.
+//   ⚠️⚠️ AND THE SECOND CLAUSE -- the safety argument -- WAS THE DANGER, not the mitigation.
+//     Construct's real job is to set mMatrix to the IDENTITY. Zero-initialised, mMatrix is the
+//     ALL-ZERO matrix, and BehaviourGameplayExternal::Update inlines GetMatrix() as four
+//     `lvx128` off mBoostShake (0x82241C70..0x82241C8C) and multiplies the result into the
+//     camera transform. An all-zero matrix does not leave a post-multiply alone -- it
+//     ANNIHILATES it, collapsing the chase camera onto the origin with an empty basis.
+//     BehaviourGameplayExternal::Prepare has been calling mBoostShake.Construct() since
+//     2026-08-01 (BrnBehaviourGameplayExternal.cpp:260), so the zeroed matrix was already
+//     sitting in the object waiting for its one reader to land.
+//   ⇒ THAT IS THE THIRD TIME THIS CAMPAIGN A "safe because nothing reads it yet" GATE HAS
+//     BEEN ONE COMMIT AWAY FROM BEING WRONG, and the second time in this very namespace.
 // ============================================================================
 namespace BrnDirector
 {
@@ -602,10 +617,6 @@ namespace Camera
 {
 namespace Utils
 {
-    void CameraShakeICEController::Construct()
-    {
-    }
-
     // ------------------------------------------------------------------------
     // ✅ CameraShake::Update @0x82221310 -- THE STUB IS GONE (retired 2026-08-02,
     //    rotate-helper wave). It used to be an EMPTY `{}` right here.
