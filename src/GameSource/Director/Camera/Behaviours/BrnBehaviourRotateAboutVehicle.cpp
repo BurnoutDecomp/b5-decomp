@@ -146,38 +146,29 @@ namespace
 
     // ------------------------------------------------------------------------
     // The two Xbox-360 xnamath rotation builders Construct and Update call by name
-    // (`bl XMMatrixRotationX` / `bl XMMatrixRotationY`). They have no reconstructed home in
-    // this tree, and they are library functions with fixed published semantics rather than
-    // game code, so they are de-inlined here rather than invented: a right-handed rotation of
-    // `lfAngleRads` about the axis, row-major, with an identity translation row -- which is
-    // exactly the convention the consumers rely on (Construct takes RotationY's zAxis row and
-    // gets (sin, 0, cos), matching the -22.5 deg seed the rodata pair holds).
-    // DELETE-WHEN: an rw/math home for the rotation builders lands; these become calls to it.
+    // (`bl XMMatrixRotationX` / `bl XMMatrixRotationY`): a right-handed rotation of
+    // `lfAngleRads` about the axis, row-major, with a zero translation row -- which is exactly
+    // the convention the consumers rely on (Construct takes RotationY's zAxis row and gets
+    // (sin, 0, cos), matching the -22.5 deg seed the rodata pair holds).
+    //
+    // ⭐ RETIRED 2026-08-02 (rotate-helper wave). These used to be hand-de-inlined here with
+    // the note "DELETE-WHEN: an rw/math home for the rotation builders lands". That home now
+    // exists: rw::math::vpu::MakeRotationX / MakeRotationY / MakeRotationZ in
+    // rw/math/vpu/matrix44affine_operation.h, pinned to the SDK's own
+    // matrix44affine_operation_platform_inline.h :239/:240, :253 and :269 by which builders
+    // each of three independent callers inlines. The rows there are IDENTICAL to the ones this
+    // file carried -- two reconstructions, from different functions, months apart, agreeing --
+    // which is why the switch is a rename and not a behaviour change. These thin aliases keep
+    // the console's own call-site spelling readable.
     // ------------------------------------------------------------------------
-    rw::math::vpu::Matrix44Affine XMMatrixRotationX(f32 lfAngleRads)
+    inline rw::math::vpu::Matrix44Affine XMMatrixRotationX(f32 lfAngleRads)
     {
-        const f32 lfSin = sinf(lfAngleRads);
-        const f32 lfCos = cosf(lfAngleRads);
-
-        rw::math::vpu::Matrix44Affine lResult;
-        lResult.xAxis.x = 1.0f;   lResult.xAxis.y = 0.0f;    lResult.xAxis.z = 0.0f;   lResult.xAxis.w = 0.0f;
-        lResult.yAxis.x = 0.0f;   lResult.yAxis.y = lfCos;   lResult.yAxis.z = lfSin;  lResult.yAxis.w = 0.0f;
-        lResult.zAxis.x = 0.0f;   lResult.zAxis.y = -lfSin;  lResult.zAxis.z = lfCos;  lResult.zAxis.w = 0.0f;
-        lResult.wAxis.x = 0.0f;   lResult.wAxis.y = 0.0f;    lResult.wAxis.z = 0.0f;   lResult.wAxis.w = 0.0f;
-        return lResult;
+        return rw::math::vpu::MakeRotationX(lfAngleRads);
     }
 
-    rw::math::vpu::Matrix44Affine XMMatrixRotationY(f32 lfAngleRads)
+    inline rw::math::vpu::Matrix44Affine XMMatrixRotationY(f32 lfAngleRads)
     {
-        const f32 lfSin = sinf(lfAngleRads);
-        const f32 lfCos = cosf(lfAngleRads);
-
-        rw::math::vpu::Matrix44Affine lResult;
-        lResult.xAxis.x = lfCos;  lResult.xAxis.y = 0.0f;    lResult.xAxis.z = -lfSin; lResult.xAxis.w = 0.0f;
-        lResult.yAxis.x = 0.0f;   lResult.yAxis.y = 1.0f;    lResult.yAxis.z = 0.0f;   lResult.yAxis.w = 0.0f;
-        lResult.zAxis.x = lfSin;  lResult.zAxis.y = 0.0f;    lResult.zAxis.z = lfCos;  lResult.zAxis.w = 0.0f;
-        lResult.wAxis.x = 0.0f;   lResult.wAxis.y = 0.0f;    lResult.wAxis.z = 0.0f;   lResult.wAxis.w = 0.0f;
-        return lResult;
+        return rw::math::vpu::MakeRotationY(lfAngleRads);
     }
 
     // Degrees -> radians. The console spells it as a `fmuls` against flt_82001744.

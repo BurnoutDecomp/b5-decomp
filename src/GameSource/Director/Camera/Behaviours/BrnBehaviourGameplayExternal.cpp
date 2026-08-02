@@ -24,6 +24,11 @@
 #include "rw/math/fpu/scalar_operation.h"               // Clamp / Min / Abs / IsValid --
                                                         //   the console's fsel / fabs / fcmpu
                                                         //   self-compare idioms
+#include "rw/math/vpu/vector3_operation.h"              // Mult(Vector3, Vector3) / operator+
+                                                        //   (CalculateCameraTransform's arms)
+#include "rw/math/vpu/matrix44affine_operation.h"       // Mult / MakeRotationX / MakeRotationY /
+                                                        //   MakeRotationZ (the SDK's three
+                                                        //   elementary rotation builders)
 
 // ----------------------------------------------------------------------------
 // NOTE -- BehaviourGameplayExternal::Parameters::Serialise<S> (the versioned field-walk visitor:
@@ -674,6 +679,188 @@ void BehaviourGameplayExternal::UpdateJumping(const BehaviourSharedInfo& lrInfo,
 
     // The unconditional tail store both builds end on (X360 0x8220EDFC / PS3 0x1D134).
     lrCamera.SetRequestedTimeDilation(1.0f);
+}
+
+// ============================================================================
+// CalculateCameraTransform @0x8220E838 / PS3 @0x276FC  (.cpp:813..:832)
+// helper 6/8 -- BODIED 2026-08-02 (rotate-helper wave).
+//
+// THE KEYSTONE OF THE CHASE RIG: given the car's frame and a pile of per-frame angles and
+// offsets, this is the function that produces the camera's world transform. Six statements.
+// Its ONLY callee is Utils::RotateMatrix44AffineByEulerAnglesZXY, which it calls twice, and
+// which was declaration-only until this same wave -- that is the entire reason this helper
+// sat unwritten while the three scalar ones went in.
+//
+// ⭐ THE SHAPE IS A TWO-JOINT ARM, and reading it that way is what makes every store obvious:
+//     seat the frame pitched DOWN by the authored down-angle, put the pivot arm on it,
+//     swing the whole thing by the first angles, extend by the camera arm,
+//     swing again by the second angles, and finally translate onto the car.
+//   ⚠️⚠️ IT ONLY WORKS BECAUSE RotateMatrix44AffineByEulerAnglesZXY ROTATES THE TRANSLATION
+//   ROW TOO. That is documented at that function's own definition as a deliberate
+//   preservation of console behaviour, and THIS is the caller that proves it is not a slip:
+//   both arms are stored into wAxis BEFORE a rotate and are expected to swing with it. If
+//   that helper is ever "fixed" to leave the position alone, this camera collapses onto the
+//   car's origin and nothing else in the tree will report it.
+//
+// STATEMENT MAP -- DecFIGS line numbers, X360 addresses:
+//   .cpp:817  lfDownAngleRads = mpParameters->mfDownAngle * 0.017453292f
+//             (flt_82001744, DUMPED as 0.01745329238 -- read at 0x8220E880/0x8220E8AC from
+//             mpParameters at this+0xB00, member +0x94), then ONE inlined SinCos of it and
+//             the three rotation rows of an X-axis rotation by that angle -- the SDK's
+//             MakeRotationX, which DecFIGS tags matrix44affine_operation_platform_inline.h
+//             :239/:240 and which is the ONLY rotation builder this function inlines.
+//             ⭐ THE SIGN LANE ASSIGNMENT, which the header's decode carried as INFERRED, is
+//             now VERIFIED: row1 = {0, cos, sin} and row2 = {0, -sin, cos}. Settled three
+//             ways -- (a) at 0x8220EA00..0x8220EA08 the console negates the SIN chain (the
+//             chain seeded from x^3 at 0x8220E900) and vrlimi128s it into row2's y lane,
+//             while the COS chain (seeded from 1.0f at 0x8220E9D4) lands unnegated in both
+//             diagonal slots; (b) it is byte-for-byte the same packing the newly bodied
+//             RotateMatrix44AffineByEulerAnglesZXY emits for its own X matrix; (c) it
+//             reproduces the hand-de-inlined XMMatrixRotationX that
+//             BrnBehaviourRotateAboutVehicle.cpp has carried, independently, since 2026-07.
+//             ⚠️ PS3 writes all four rows here (row3 = 0, matrix44affine_type_inline.h:28..31
+//             at 0x27928..0x27940) and then overwrites row3 at :819; the X360 compiler elided
+//             the dead zero-store. Same source, two schedules.
+//   .cpp:819  lrCameraMatrix.wAxis = lPivotOffset * lCarScale
+//             (X360 `vmulfp128 v8, v3, v127` at 0x8220EA3C; PS3 hoists the identical
+//             component-wise Mult to 0x277C8, tagged vector3_operation_inline.h:105 -- the
+//             SDK's Mult(Vector3, Vector3), which it emits as `vmaddfp v4, v4, 0, v3`.)
+//   .cpp:822  Utils::RotateMatrix44AffineByEulerAnglesZXY(lrCameraMatrix, lFirstRotationAngles)
+//             (PS3 0x277F0 `vmr v2, v5` -- the FOURTH Vector3 -- tagged :822.)
+//   .cpp:82x  lrCameraMatrix.wAxis += lCameraOffset * lCarScale
+//             ⚠️ NO OWN-LINE ATTESTATION: every instruction of this statement is attributed
+//             to the inlined vector3_operation_inline.h (:105 for the Mult, :693 for the
+//             add), so DWARF never names its .cpp line. It is bracketed between :822 and
+//             :828 and that is all that is attested. (X360 folds it to one
+//             `vmaddfp128 v0, v125, v127, v0` at 0x8220EA88; PS3 keeps the Mult hoisted at
+//             0x277D8 and adds at 0x2795C. Both compute offset*scale + wAxis.)
+//   .cpp:828  Utils::RotateMatrix44AffineByEulerAnglesZXY(lrCameraMatrix, lSecondRotationAngles)
+//             (PS3 0x27954 `vmr v2, v22`, v22 being the FIRST Vector3, tagged :828.)
+//   .cpp:832  lrCameraMatrix.wAxis += lCarMatrix.wAxis
+//             (X360 0x8220EAA0 loads r29+0x30, the by-value car matrix's translation row.)
+//
+// ARGUMENT MAP -- how the six Vector3s were separated, in BOTH builds (X360 passes vector
+// arguments from v1, PS3 from v2; the two agreeing member for member IS the cross-check):
+//     #1 -> the SECOND rotate's angles      (X360 v1  saved to v126 @0x8220E874)
+//     #2 -> the component-wise multiplier   (X360 v2  saved to v127 @0x8220E870)
+//     #3 -> the pivot arm                   (X360 v3, multiplied by #2 @0x8220EA3C)
+//     #4 -> the FIRST rotate's angles       (X360 v4, moved to v1 @0x8220E9F8)
+//     #5 -> DEAD                            (X360 clobbers v5 @0x8220E8CC before any read)
+//     #6 -> the camera arm                  (X360 v6  saved to v125 @0x8220E868)
+// ⚠️ THE NAMES BELOW ARE DESCRIPTIONS, NOT ATTESTATIONS. DWARF records no parameter names for
+//   this function; the only one with outside support is lCarScale, which is what the DWARF
+//   calls the caller's own stack slot for argument #2. Everything else is named for what the
+//   asm demonstrably does with it, and should be re-read that way rather than trusted.
+// ⚠️ lfSpeedMPH / lfTimestep are DEAD here even though Update genuinely passes them
+//   (PS3 0x6AC70 `lfs f1, 0x42C(lrSharedInfo)` and 0x6AC78). Kept in the signature because
+//   the DWARF declares them.
+// ============================================================================
+void BehaviourGameplayExternal::CalculateCameraTransform(const Parameters& /*lrCameraAttribs*/,
+                                                         Matrix44Affine& lrCameraMatrix,
+                                                         Matrix44Affine lCarMatrix,
+                                                         Vector3 lSecondRotationAngles,
+                                                         Vector3 lCarScale,
+                                                         Vector3 lPivotOffset,
+                                                         Vector3 lFirstRotationAngles,
+                                                         Vector3 /*lUnusedVector*/,
+                                                         Vector3 lCameraOffset,
+                                                         f32 /*lfSpeedMPH*/,
+                                                         f32 /*lfTimestep*/)
+{
+    const f32 KF_DEGS_TO_RADS = 0.017453292f;   // flt_82001744, dumped
+
+    // .cpp:817 -- seat the frame as a pure rotation about X by the authored down-angle.
+    const f32 lfDownAngleRads = mpParameters->mfDownAngle * KF_DEGS_TO_RADS;
+    lrCameraMatrix = rw::math::vpu::MakeRotationX(lfDownAngleRads);
+
+    // .cpp:819 -- the pivot arm, scaled.
+    lrCameraMatrix.wAxis = rw::math::vpu::Mult(lPivotOffset, lCarScale);
+
+    // .cpp:822 -- swing the whole frame (arm included) by the first angles.
+    Utils::RotateMatrix44AffineByEulerAnglesZXY(lrCameraMatrix, lFirstRotationAngles);
+
+    // .cpp:82x -- extend by the camera arm, scaled.
+    lrCameraMatrix.wAxis = lrCameraMatrix.wAxis + rw::math::vpu::Mult(lCameraOffset, lCarScale);
+
+    // .cpp:828 -- swing again by the second angles.
+    Utils::RotateMatrix44AffineByEulerAnglesZXY(lrCameraMatrix, lSecondRotationAngles);
+
+    // .cpp:832 -- and place the result on the car.
+    lrCameraMatrix.wAxis = lrCameraMatrix.wAxis + lCarMatrix.wAxis;
+}
+
+// ============================================================================
+// ApplyJumpEffects @0x822250C0 / PS3 @0x598AC  (.cpp:607..:615)
+// helper 8/8 -- BODIED 2026-08-02 (rotate-helper wave).
+//
+// 303 X360 asm lines that are THREE statements: ~250 of those lines are two inlined SinCos
+// expansions and two inlined 4x4 affine products, and the rest is the shake call's argument
+// setup. It was blocked on nothing but the rotation vocabulary.
+//
+// ⭐⭐ THE MULTIPLY IS THE OTHER WAY ROUND FROM CalculateCameraTransform'S, AND THAT IS THE
+//   WHOLE POINT OF THE FUNCTION. Here the rotation is on the LEFT --
+//   `Mult(rotation, cameraTransform)` -- so the camera spins about ITS OWN axes and its
+//   position does not move. Verified from the store cascade: the new row_i is
+//   `rot.row_i.x*cam.xAxis + rot.row_i.y*cam.yAxis + rot.row_i.z*cam.zAxis`, and the
+//   translation row comes out as `0*cam.xAxis + 0*cam.yAxis + 0*cam.zAxis + cam.wAxis`,
+//   i.e. UNCHANGED (X360 0x82225328..0x82225338 and again 0x82225500..0x82225518). Getting
+//   this backwards would fling the camera around the world origin every frame the car drifts.
+//
+// STATEMENT MAP:
+//   (a) yaw:   Mult(MakeRotationY(mfYawDrift),   transform)
+//       X360 reads this+0xB28 (mfYawDrift) at 0x822250F0, SinCos, packs
+//       row0 = (cos, 0, -sin) / row1 = (0,1,0) / row2 = (sin, 0, cos) / row3 = 0
+//       at 0x82225288..0x822252CC, multiplies and stores all four camera rows.
+//   (b) dutch: Mult(MakeRotationZ(mfDutchDrift), transform)
+//       X360 reads this+0xB20 (mfDutchDrift) at 0x82225340, SinCos, packs
+//       row0 = (cos, sin, 0) / row1 = (-sin, cos, 0) / row2 = (0,0,1) / row3 = 0
+//       at 0x82225488..0x822254D4, multiplies and stores again.
+//   ⭐ WHICH AXIS IS WHICH IS NOT READ OFF THE PACKING ALONE. DecFIGS tags this function's
+//     inlined rotation builders matrix44affine_operation_platform_inline.h :253 and :269 and
+//     NOTHING ELSE -- exactly the two lines that CalculateCameraTransform (X only, :239/:240)
+//     does not use and that RotateMatrix44AffineByEulerAnglesZXY (all three) does. Three
+//     functions, one consistent assignment; see MakeRotationX's note in that vendor header.
+//   (c) .cpp:614  mAirShake.Update(transform, mpParameters->mAirShakeParams, *mpRandom,
+//                                  lrSharedInfo.GetTimestep(GetTimestepType()), mfWobbleScale)
+//       Every argument is offset-pinned in both builds:
+//         this+0x2A0  -> mAirShake            (X360 0x8222556C `addi r3, r30, 0x2A0`)
+//         mpParameters+0x0C -> mAirShakeParams (0x82225568 `addi r5, r11, 0xC`) -- and it is
+//              the AIR params that pair with the AIR shake, which is the check that the
+//              +0x0C/+0x1C pair in the Parameters block is the right way round
+//         lrSharedInfo+0x5D4 -> mpRandom       (0x82225564)
+//         lrSharedInfo+0x580 + leType*4 -> the timestep array; the console open-codes
+//              Timestep::Get including its `leType > E_TIMESTEP_INVALID && leType <
+//              E_TIMESTEP_MAX` assert (0x82225520..0x8222554C), which is why this is spelled
+//              as the accessor rather than as a raw index
+//         this+0xB40 -> mfWobbleScale          (0x8222555C; PS3 reads its own +0xB30, the
+//              constant -0x10 tail shift between the two builds)
+//
+// ⚠️⚠️ AND THIS IS THE CALL THAT MADE THE SHAKE STUB URGENT. `Utils::CameraShake::Update`
+//   had an empty `{}` in DirectorLinkStubs.cpp; the line above would have LINKED AND DONE
+//   NOTHING, invisibly. That stub is retired in this same commit (BrnCameraShake.cpp is now
+//   mounted) precisely so that this body is not the thing that quietly re-arms it.
+//
+// ⚠️ The first parameter is a `Camera&` and is handed straight to CameraShake::Update as a
+//   `Matrix44Affine&` (DecFIGS names the callee's parameter `lMatrixInOut`). That is legal
+//   because Camera::mTransform is at +0x00 -- there is a static_assert on exactly that in
+//   Camera.h -- and it is spelled here as the member it actually is.
+// ⚠️ PARAMETER NAMES: `lCameraInOut` and `lrSharedInfo` ARE the DWARF's own (the PS3 export
+//   carries them on r4/r5). Not invented.
+// ============================================================================
+void BehaviourGameplayExternal::ApplyJumpEffects(Camera& lCameraInOut,
+                                                 const BehaviourSharedInfo& lrSharedInfo)
+{
+    lCameraInOut.mTransform = rw::math::vpu::Mult(rw::math::vpu::MakeRotationY(mfYawDrift),
+                                                  lCameraInOut.mTransform);
+
+    lCameraInOut.mTransform = rw::math::vpu::Mult(rw::math::vpu::MakeRotationZ(mfDutchDrift),
+                                                  lCameraInOut.mTransform);
+
+    mAirShake.Update(lCameraInOut.mTransform,                                  // .cpp:614
+                     mpParameters->mAirShakeParams,
+                     *lrSharedInfo.mpRandom,
+                     lrSharedInfo.GetTimestep(GetTimestepType()),
+                     mfWobbleScale);
 }
 
 // @0x821F9218.

@@ -95,6 +95,71 @@ namespace vpu
         return Mult(lrLhs, lrRhs);
     }
 
+    // -- elementary rotation builders ----------------------------------------------------
+
+    // MakeRotationX/Y/Z(rads): the affine of a right-handed rotation of `lfAngleRads` about
+    // one axis, row-major, with a ZERO translation row (NOT (0,0,0,1) -- the SDK leaves the
+    // affine's fourth row at zero, which is what makes Mult(rot, m) leave m's position alone
+    // and Mult(m, rot) swing it about the origin).
+    //
+    // ADDITIVE GROW 2026-08-02 (rotate-helper wave). These are the console SDK's own three
+    // inlines -- DecFIGS attributes them to matrix44affine_operation_platform_inline.h
+    // :239/:240 (X), :253 (Y) and :269 (Z) -- and the assignment of line to axis is not a
+    // guess: it falls straight out of which builders each caller uses.
+    //     BehaviourGameplayExternal::CalculateCameraTransform  -> :239/:240 ONLY, and its asm
+    //         builds exactly one X rotation (from the authored down-angle).
+    //     BehaviourGameplayExternal::ApplyJumpEffects          -> :253 and :269 ONLY, and its
+    //         asm builds exactly one Y (yaw drift) and one Z (dutch drift).
+    //     Camera::Utils::RotateMatrix44AffineByEulerAnglesZXY  -> ALL THREE, and its asm
+    //         builds all three.
+    // The row contents below were read off the console's vperm/vrlimi128 packing in those
+    // functions, and they independently reproduce the two hand-de-inlined `XMMatrixRotationX`
+    // / `XMMatrixRotationY` that BrnBehaviourRotateAboutVehicle.cpp has carried since
+    // 2026-07 -- whose comment already said "DELETE-WHEN: an rw/math home for the rotation
+    // builders lands". This is that home.
+    //
+    // FLAG (PC-platform, numeric): the console evaluates sin and cos as one inlined SinCos
+    // minimax over a 2pi-reduced argument; std::sin / std::cos are the exact forms. The same
+    // de-optimisation this family already applies to rsqrt (Normalize) and reciprocal.
+    inline Matrix44Affine MakeRotationX(f32 lfAngleRads)
+    {
+        const f32 lfSin = std::sin(lfAngleRads);
+        const f32 lfCos = std::cos(lfAngleRads);
+
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{ 1.0f,    0.0f,   0.0f, 0.0f };
+        lResult.yAxis = Vector3{ 0.0f,  lfCos, lfSin, 0.0f };
+        lResult.zAxis = Vector3{ 0.0f, -lfSin, lfCos, 0.0f };
+        lResult.wAxis = Vector3{ 0.0f,    0.0f,   0.0f, 0.0f };
+        return lResult;
+    }
+
+    inline Matrix44Affine MakeRotationY(f32 lfAngleRads)
+    {
+        const f32 lfSin = std::sin(lfAngleRads);
+        const f32 lfCos = std::cos(lfAngleRads);
+
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{ lfCos, 0.0f, -lfSin, 0.0f };
+        lResult.yAxis = Vector3{  0.0f, 1.0f,    0.0f, 0.0f };
+        lResult.zAxis = Vector3{ lfSin, 0.0f,  lfCos, 0.0f };
+        lResult.wAxis = Vector3{  0.0f, 0.0f,    0.0f, 0.0f };
+        return lResult;
+    }
+
+    inline Matrix44Affine MakeRotationZ(f32 lfAngleRads)
+    {
+        const f32 lfSin = std::sin(lfAngleRads);
+        const f32 lfCos = std::cos(lfAngleRads);
+
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{  lfCos, lfSin, 0.0f, 0.0f };
+        lResult.yAxis = Vector3{ -lfSin, lfCos, 0.0f, 0.0f };
+        lResult.zAxis = Vector3{   0.0f,  0.0f, 1.0f, 0.0f };
+        lResult.wAxis = Vector3{   0.0f,  0.0f, 0.0f, 0.0f };
+        return lResult;
+    }
+
     // -- orthonormalisation -------------------------------------------------------------
 
     // OrthoNormalize3x3(m): re-normalise the three rotation rows (xAxis/yAxis/zAxis) of an

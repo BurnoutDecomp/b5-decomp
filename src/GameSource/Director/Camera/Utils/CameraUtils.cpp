@@ -6,7 +6,8 @@
 #include "rw/math/vpu/matrix44affine_operation.h"    // Mult / TransformPoint /
                                                      //   InverseOfMatrixWithOrthonormal3x3
 
-#include <cmath>   // std::atan / std::acos / std::asin / std::fabs / std::copysign
+#include <cmath>   // std::atan / std::acos / std::asin / std::sin / std::cos / std::fabs /
+                   //   std::copysign
 
 // BrnDirector::Camera::Utils -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -38,11 +39,24 @@
 // branch-by-branch attestation):
 //   EulerAnglesZXYFromMatrix44Affine        @0x82222180   (CameraUtils.cpp:453)
 //
+// Bodied here (1 ledger function, class:BrnDirector::Camera::Utils -- the ZXY Euler
+// COMPOSER, i.e. the exact inverse of the decomposition above; ADDED 2026-08-02, it was
+// declaration-only and it gated the whole chase-camera helper cluster plus BrnCameraShake.cpp):
+//   RotateMatrix44AffineByEulerAnglesZXY    @0x82204F98   (CameraUtils.h:423)
+//
 // DECLARATION-ONLY + FLAGGED (declared in CameraUtils.h, bodies not reconstructed --
 // each is an inline VMX minimax / corner lattice / permute over UNATTESTED raw rodata
 // coefficient constants; bodying them store-for-store would fabricate those
 // tables, so they are left unbodied per the no-fabrication rule):
 //   ApplyPitchAboutPointRads          @0x822183E0  (Sin/Cos minimax, rodata 82000BD0..82000C60)
+//       ⛔ ITS REASON IS THE ONE THAT JUST EXPIRED FOR ITS NEIGHBOUR -- DO NOT RE-QUOTE IT.
+//       RotateMatrix44AffineByEulerAnglesZXY sat on this same list, citing this same rodata
+//       range, and the coefficients turned out to be an implementation detail of sin and cos
+//       that this file de-optimises to libm as a matter of course (see its definition below).
+//       0x82000C60 is DUMPED as { pi, 2pi, 1/pi, 1/(2pi) } -- the range-reduction row, not a
+//       coefficient table. What actually has to be recovered here is the pivot/compose order,
+//       and nobody has tried. It stays on this list only because it has not been done, NOT
+//       because it is blocked.
 //   CalcNearClipCorners               @0x821F25B8  (XMVectorTan + VMX corner lattice)
 //   FindNonParallelNormalisedVectorTo @0x822171B0  (the SECOND of its two returned constants
 //                                                   is still unattested; unk_82181510 is now
@@ -463,6 +477,97 @@ Vector3 EulerAnglesZXYFromMatrix44Affine(Matrix44Affine lIn, Vector3* lpLastAngl
     }
 
     return lEulerAngles;
+}
+
+// ----------------------------------------------------------------------------
+// RotateMatrix44AffineByEulerAnglesZXY  @0x82204F98 / PS3 @0xA9780   (368 asm lines)
+//
+// BODIED 2026-08-02 (rotate-helper wave). It was DECLARATION-ONLY and it was the highest-
+// leverage symbol left in the chase-camera cluster: BehaviourGameplayExternal's
+// CalculateCameraTransform needs it twice and ApplyJumpEffects once, BrnCameraShake.cpp
+// cannot be mounted without it, and BrnPerlinShakeController / BrnBehaviourDebugFlyWorld /
+// BrnLooker already call it.
+//
+// ⛔⛔ ITS COMMITTED BLOCKING REASON WAS STALE, AND IT IS THE SAME STALE SHAPE THIS FILE'S
+// OWN BANNER ALREADY WARNS ABOUT. DirectorLinkStubs.cpp said the body is "almost entirely an
+// inlined XMVectorSinCos minimax polynomial whose coefficient table has not been dumped".
+// The first clause is true and the second is true, AND NEITHER IS A REASON: the coefficients
+// are an implementation detail OF sin and cos, and de-optimising a console minimax to the
+// exact libm form is the standing convention of this very file -- already applied to
+// XMVectorASin and XMVectorATan inside EulerAnglesZXYFromMatrix44Affine directly above, and
+// to vrsqrtefp/vrefp in Normalize and OrthoNormalize3x3. There was never anything to
+// fabricate. (`ApplyPitchAboutPointRads @0x822183E0` is still on the banner's FLAG list
+// citing the SAME rodata range 82000BD0..82000C60 for the SAME reason -- re-read it before
+// trusting it.)
+//
+// WHAT THE ASM ACTUALLY IS, and how each claim below was settled:
+//
+//   * THE ANGLE LANES. Three SinCos evaluations, in source order Y, X, Z -- the console
+//     splats lane 1 first (0x82204F9C), lane 0 second (0x82205134), lane 2 third
+//     (0x82205328). So lEulerAngles is {x = pitch, y = yaw, z = roll}, which is also what
+//     the two DebugFlyWorld call sites pass ({0, mfYaw, 0} and {mfPitch, mfYaw, mfRoll}).
+//
+//   * THE RANGE REDUCTION IS DUMPED, not inferred: v30/v29 are lanes 3 and 1 of the 16-byte
+//     row at 0x82000C60, read out of the shipped image as
+//         {3.1415927, 6.2831855, 0.31830987, 0.15915494} == {pi, 2pi, 1/pi, 1/(2pi)}
+//     and the idiom at 0x82204FD0..0x82205024 is `x - 2pi * vrfin(x * (1/(2pi)))`. std::sin
+//     and std::cos do their own (better) argument reduction, so this drops out.
+//     ⚠️ Only the reduction row is attested; 0x82000BD0..0x82000C50 (the minimax
+//     coefficients themselves) read as UNMAPPED in the .id1 -- which is exactly why they are
+//     not transcribed and exactly why they do not need to be.
+//
+//   * THE THREE ELEMENTARY MATRICES, read off the vperm/vrlimi128 packing store-for-store:
+//         Ry rows: ( cosY, 0, -sinY ) ( 0, 1, 0 ) ( sinY, 0, cosY )    0x82205190..0x822051B8
+//         Rx rows: ( 1, 0, 0 ) ( 0, cosX, sinX ) ( 0, -sinX, cosX )    0x822052B0..0x822052F0
+//         Rz rows: ( cosZ, sinZ, 0 ) ( -sinZ, cosZ, 0 ) ( 0, 0, 1 )    0x82205454..0x8220549C
+//     Every one of the three has a ZERO fourth row (each is built by vperm-ing the zero
+//     register), which is why the composed rotation contributes no translation below.
+//
+//   * THE COMPOSITION ORDER, which is the only thing in here that was ever real work:
+//         lRotation = Mult(Rz, Mult(Rx, Ry))          [row-major, i.e. Z applied first]
+//         lrMatrix  = Mult(lrMatrix, lRotation)
+//     The inner product is at 0x822052EC..0x82205378 (Rx's rows broadcast against Ry's rows)
+//     and the outer at 0x8220547C..0x822054E8 (Rz's rows against that product).
+//
+//   * ⭐ AND IT ROUND-TRIPS. EulerAnglesZXYFromMatrix44Affine directly above is this
+//     function's exact inverse, so the order is TESTABLE rather than arguable. Composing the
+//     three rows above in this order gives
+//         zAxis = ( cosX*sinY, -sinX, cosX*cosY )
+//         xAxis.y = sinZ*cosX ,  yAxis.y = cosZ*cosX
+//     and the inverse reads back exactly pitch = asin(-zAxis.y), yaw = atan2(zAxis.x,
+//     zAxis.z), roll = atan2(xAxis.y, yAxis.y) -- which is, line for line, what the
+//     committed decomposition does. No other ordering of the three closes that loop.
+//
+// ⚠️ THE TRANSLATION ROW IS ROTATED TOO, AND THAT IS NOT A TRANSCRIPTION SLIP. The console
+//   loads all FOUR rows (r3, r3+0x10, r3+0x20, r3+0x30 at 0x82205440..0x822054F4) and stores
+//   all four back (0x822054F8..0x8220554C); the w row goes through the same
+//   `row.x*R0 + row.y*R1 + row.z*R2 + R3` cascade as the other three, with R3 == 0. So this
+//   is the plain affine product `lrMatrix * lRotation`, and a matrix with a non-zero
+//   position has that position swung about the WORLD ORIGIN. Callers that want an in-place
+//   re-orientation must hand it a matrix whose Pos() is zero (DebugFlyWorld does exactly
+//   that: it SetIdentity()s a scratch frame first). Preserved deliberately -- it is the
+//   console's own behaviour, and Looker's fixed-look-offset path depends on whatever it
+//   produces.
+//
+// FLAG (PC-platform, numeric): the console's SinCos is a shared minimax polynomial over a
+//   2pi-reduced argument; std::sin / std::cos are the exact forms. Tighter than the console,
+//   never looser -- the same de-optimisation the rest of this file already applies.
+// ----------------------------------------------------------------------------
+void RotateMatrix44AffineByEulerAnglesZXY(Matrix44Affine& lrMatrix, Vector3 lEulerAngles)
+{
+    // The console evaluates SinCos in the order Y, X, Z and hands each pair to the SDK's own
+    // elementary builder (matrix44affine_operation_platform_inline.h :253 / :239-:240 / :269
+    // respectively -- see the note at MakeRotationX in matrix44affine_operation.h for how
+    // those three line numbers were pinned to their axes).
+    const Matrix44Affine lRotateAboutY = rw::math::vpu::MakeRotationY(lEulerAngles.y);
+    const Matrix44Affine lRotateAboutX = rw::math::vpu::MakeRotationX(lEulerAngles.x);
+    const Matrix44Affine lRotateAboutZ = rw::math::vpu::MakeRotationZ(lEulerAngles.z);
+
+    const Matrix44Affine lRotation =
+        rw::math::vpu::Mult(lRotateAboutZ,
+                            rw::math::vpu::Mult(lRotateAboutX, lRotateAboutY));
+
+    lrMatrix = rw::math::vpu::Mult(lrMatrix, lRotation);
 }
 
 // ============================================================================

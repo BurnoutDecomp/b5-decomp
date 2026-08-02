@@ -86,8 +86,14 @@ namespace Utils
                                         VecFloat lvAspect,
                                         Vector2 lScreenOffset);
 
-    // DWARF CameraUtils.h:66. Rotate an affine in place by ZXY Euler angles (radians).
-    // Used by Track when applying the fixed look offset.
+    // @0x82204F98 / PS3 @0xA9780 (DWARF CameraUtils.h:423 -- the console keeps the body
+    // inline in this header; the reconstruction puts it in CameraUtils.cpp's own TU like the
+    // rest of the family). Rotate an affine in place by ZXY Euler angles in RADIANS, laid out
+    // {x = pitch, y = yaw, z = roll}: post-multiplies lrMatrix by Rz*Rx*Ry (row-major), i.e.
+    // roll is applied first and yaw last. Used by Track's fixed look offset, by
+    // BehaviourDebugFlyWorld's rig, by PerlinShakeController and by CameraShake::Update.
+    // ⚠️ It is the PLAIN affine product, so the TRANSLATION ROW IS ROTATED ABOUT THE WORLD
+    // ORIGIN as well -- see the block comment at the definition. BODIED 2026-08-02.
     void RotateMatrix44AffineByEulerAnglesZXY(Matrix44Affine& lrMatrix, Vector3 lEulerAngles);
 
     // @0x82222180 (DWARF CameraUtils.cpp:453,
@@ -163,9 +169,14 @@ namespace Utils
 
     // @0x822183E0. Rotate a look-at frame about a world pivot by a pitch angle (radians).
     // Used by CollisionPolicyAttachedToVehicle::GenerateSceneQueries.
-    // FLAG (declaration-only): the console body is an inline VMX Sin/Cos minimax whose
-    // coefficient tables (rodata 82000BD0..82000C60) are not attested as named constants;
-    // bodying it would require fabricating the polynomial. Left unbodied.
+    // FLAG (declaration-only): NOT YET DONE. ⛔ ITS OLD REASON IS RETIRED (2026-08-02) -- it
+    // read "an inline VMX Sin/Cos minimax whose coefficient tables (rodata
+    // 82000BD0..82000C60) are not attested as named constants; bodying it would require
+    // fabricating the polynomial", which is exactly what was said about
+    // RotateMatrix44AffineByEulerAnglesZXY below until that turned out to be no obstacle at
+    // all: the coefficients belong to sin/cos, which this family de-optimises to libm, and
+    // 0x82000C60 is the DUMPED range-reduction row { pi, 2pi, 1/pi, 1/(2pi) }, not a
+    // coefficient table. The real work is the pivot/compose order and nobody has done it.
     Matrix44Affine ApplyPitchAboutPointRads(Vector3 lPoint, VecFloat lvPitchRads);
 
     // @0x821F25B8. The FOUR near-clip-plane corner positions for a camera transform (a2..a5
