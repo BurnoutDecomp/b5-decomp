@@ -464,6 +464,19 @@ namespace BrnGui
         if (mbVoiceOverPlaying)
             return true;
 
+        // ⚠️⚠️ PC-BUILD GUARD ON THE **LIST**, not on the looked-up entry. The guard below
+        // (added with this class) tests the RESULT and reads as if it covered this call --
+        // it does not: `mpVehicleList->GetVehicleData(...)` dereferences the LIST, and
+        // `VehicleList::GetVehicleData(CgsID)` opens with `mov edi,[rcx+0x3700]`
+        // (GetVehicleCount), so a null list access-violates INSIDE the callee before any
+        // result exists to test. Confirmed 2026-08-02 from WER fault offset 0x596C4 ==
+        // GetVehicleData(CgsID)+0x14, reproduced twice; the caller is IsLoading+0x50, which
+        // UpdateComponents runs EVERY FRAME. It hid behind the `mbVoiceOverPlaying` early
+        // return above -- the screen only died once the 9-second Junkyard car-info VO
+        // (INT_SHOWCAR.SNS) drained. Same removal condition as the other guards.
+        if (mpVehicleList == 0)
+            return true;
+
         const BrnResource::VehicleListEntry* lpVehicleListEntry =
             mpVehicleList->GetVehicleData(miMostRecentDropInId);
         CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");   // cpp:1505
