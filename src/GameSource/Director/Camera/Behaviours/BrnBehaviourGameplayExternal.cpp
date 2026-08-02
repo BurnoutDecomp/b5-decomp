@@ -263,6 +263,47 @@ void BehaviourGameplayExternal::SetParameters(const Behaviour::Parameters* lpPar
     SetDebugParametersName(lpParameters->GetDebugName());          // v3[4]   = a2[1]
 }
 
+// ----------------------------------------------------------------------------
+// BehaviourGameplayExternal::Parameters::Construct   (DWARF h:277)
+//
+// ⭐ BODIED 2026-08-02 (camera parameter-chain wave), from the console's own INLINED copy
+// inside BehaviourParameterBank::Construct @0x8223DC90 (block base r11 = r31 + 0x2488).
+// Same reason as its bumper sibling: the bank is now homed, so this actually runs, and
+// SharedCameraContainer::Prepare binds the chase camera to this block long before any car's
+// attribs arrive. It is what leaves mbIsValid FALSE -- the state the whole camera chain
+// turns on.
+//   0x8223DCD4  stw  r30(=0), 4(r11)     -> mpcDebugName = 0
+//   0x8223DCE0  stw  r30(=0), 0(r11)     -> mType        = eBehaviourGameplayExternal (0)
+//   0x8223DCE4  stb  r30(=0), 0xAC(r11)  -> mbIsValid    = false
+//   0x8223DCF0/DCF4/DCEC/DCE8            -> the inlined CameraShake::Parameters::Construct
+//                                           over mAirShakeParams @+0x0C (0.06/0.0/1.15/0.11,
+//                                           kept -- no override follows)
+//   0x8223DD08/DD14/DD04/DD00 then       -> the same seed over mImpactShakeParams @+0x1C,
+//   0x8223DD1C/DD20/DD2C/DD18               then the four overrides leaving
+//                                           {0.0f, 0.0f, 3.0f, 1.0f}
+//   0x8223DD34  stfs f24(0.5f), 0xA8(r11)-> mfDropFactor = 0.5f
+// Nothing else in the block is written -- the per-vehicle tunables are Set's job. Note the
+// three values that are the SAME as Set's fixed-default prefix (air shake, impact shake,
+// mfDropFactor): the bank pre-seeds them so the block is coherent before any car exists.
+// ----------------------------------------------------------------------------
+void BehaviourGameplayExternal::Parameters::Construct()
+{
+    mType = eBehaviourGameplayExternal;    // stw r30(=0), 0x00
+    SetDebugName(0);                       // stw r30(=0), 0x04
+
+    mAirShakeParams.Construct();           // 0.06f / 0.0f / 1.15f / 0.11f, no override
+
+    mImpactShakeParams.Construct();
+    mImpactShakeParams.mfXYShakeMagnitudeDegs  = 0.0f;   // stfs flt_82001CC0, 0x1C
+    mImpactShakeParams.mfZShakeMagnitudeDegs   = 0.0f;   // stfs flt_82001CC0, 0x20
+    mImpactShakeParams.mfXYWobbleMagnitudeDegs = 3.0f;   // stfs flt_82004270, 0x24
+    mImpactShakeParams.mfWobbleCenteringFactor = 1.0f;   // stfs flt_82001C98, 0x28
+
+    mfDropFactor = 0.5f;                   // stfs flt_82001DA0, 0xA8
+
+    mbIsValid = false;                     // stb r30(=0), 0xAC
+}
+
 // @0x821F9218.
 const char* BehaviourGameplayExternal::GetName() const
 {

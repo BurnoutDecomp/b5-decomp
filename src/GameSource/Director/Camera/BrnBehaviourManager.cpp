@@ -123,7 +123,25 @@
 // included here so sizeof(BehaviourInterpolate) is the real size.
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourPassengerCam.h"
+// ⭐⭐ REPOINTED 2026-08-02 (camera parameter-chain wave) from the STALE FORK
+// BrnBehaviourPassengerCam.h to the DWARF-verbatim home. There are TWO definitions of
+// BrnDirector::Camera::BehaviourPassengerCam in this tree:
+//   * Behaviours/BrnBehaviourPassengerCam.h -- an old minimal SLICE: no base, its own
+//     `void* mpVTable` head, a reserved span and two words. sizeof == 0x18.
+//   * Behaviours/BehaviourPassengerCam.h    -- the real one: `struct BehaviourPassengerCam :
+//     public Behaviour`, the DWARF's six virtuals and a Parameters carrying a 0x40-byte
+//     CameraImpactEffect::Parameters.
+// They had never met in one TU, so the fork was invisible -- but line 965 of THIS file
+// explicitly instantiates AllocateBehaviour<BehaviourPassengerCam>(), which sizes a pool
+// bucket from sizeof(T). Against the slice that books 0x18 bytes for an object that is
+// neither 0x18 bytes nor even polymorphic in the same way -- the identical failure mode the
+// BehaviourInterpolate note six lines above records (there it booked 1600 bytes for a 1-byte
+// object; here it under-books). Pointing this TU at the real home makes the bucket the real
+// size. FLAG: the stale slice is still on disk and still included by the two camera-tunings
+// serialiser TUs (neither mounted) for its Parameters::Serialise declaration; de-forking it
+// properly -- moving Serialise + the eBehaviourPassengerCam tag onto the DWARF type and
+// deleting the slice -- is its own job.
+#include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"
@@ -162,12 +180,12 @@ namespace Camera
     //
     // ⚠️ TWO DOCUMENTED QUIET GATES (both land inside members this header models as FLAGGED
     // opaque sub-objects, whose interiors are deliberately never fabricated):
-    //   * `BehaviourParameterBank::Construct(this + 75056)` -- `mBehaviourParameterBank` is
-    //     `OpaqueSub<0>`; the bank's own layout is un-homed. CONSEQUENCE: the per-named-
-    //     behaviour parameter bank is not initialised, so `GetBehaviourParameterBank()` has
-    //     nothing to hand out and `SharedCameraContainer::Prepare` cannot bind the gameplay
-    //     behaviours to their parameter blocks. DELETE-WHEN: BehaviourParameterBank is homed
-    //     (BrnBehaviourParameterBank.h exists but carries no layout for this sub-object yet).
+    //   * (RETIRED 2026-08-02) `BehaviourParameterBank::Construct(this + 75056)` -- the gate
+    //     that used to sit here. The bank's three load-bearing slots (the two gameplay-camera
+    //     Parameters blocks + the latched car attribs key) are homed as of the camera
+    //     parameter-chain wave, so the call is REAL below. The rest of the bank's ~40 named
+    //     blocks are still un-modelled and their seeds still do not run; see
+    //     BrnBehaviourParameterBank.h's [FLAG PC bring-up].
     //   * the +88172..+88288 seeds (a float time accumulator, the 0.4 / 0.1 / 0.125 responder
     //     constants and three flag bytes) land inside `mTempCameraBoostResponder` /
     //     `mSpeedResponder` / `mRotationController` / `mSphericalRotationController`, all
@@ -180,7 +198,10 @@ namespace Camera
     {
         mpDirectorResourceManager = 0;                       // +91068
 
-        // ⚠️ GATE: BehaviourParameterBank::Construct( &mBehaviourParameterBank );
+        // ⭐ REAL as of 2026-08-02 -- the console's own call (X360 `this + 75056`). It leaves
+        // both gameplay blocks' mbIsValid FALSE, which is the console's shape: only
+        // Parameters::Set ever raises them.
+        mBehaviourParameterBank.Construct();
 
         // The three pools: occupancy cleared only (the free queues are refilled by Prepare).
         mLargeBehaviourPool.Construct();                     // occupancy @+32056

@@ -18,6 +18,20 @@ namespace Gen
     {
     public:
         explicit cameraexternalbehaviour(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // ADDED 2026-08-02 (camera parameter-chain wave). The two base members the console
+        // reads straight off the stack instance at every one of this class's four use sites
+        // (MainDirector::ProcessNewVehicleEvents @0x8221A6B0 / UpdateAttribSys @0x8221AFD0,
+        // BrnDirectorVehicleInputInterface::NewVehicle @0x822CBA90, ReplayDirector::
+        // PreSceneQueryUpdate @0x8225BD28):
+        //   `lwz r11, 0(inst)` + `cmplwi r11,0`  -- the collection, i.e. IsValid()
+        //   `lwz r11, 4(inst)` then `lfs f0, 0x40(r11)` -- the attribute DATA AREA, whose
+        //     +0x40 is mfBoostFOV and which BehaviourGameplayExternal::Parameters::Set reads
+        //     as its whole f32 source array.
+        // Re-exported rather than re-derived because Instance is a PRIVATE base here (same
+        // using-declaration precedent as cameradefaults.h:71 / shotgroup.h).
+        using Instance::IsValid;
+        using Instance::GetLayoutPointer;
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::cameraexternalbehaviour,

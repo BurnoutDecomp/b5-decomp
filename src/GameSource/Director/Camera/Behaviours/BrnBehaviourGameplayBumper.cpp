@@ -139,6 +139,53 @@ const char* BehaviourGameplayBumper::GetName() const
     return "GameplayBumper";
 }
 
+// ----------------------------------------------------------------------------
+// BehaviourGameplayBumper::Parameters::Construct   (DWARF h:132)
+//
+// ⭐ BODIED 2026-08-02 (camera parameter-chain wave). It used to be declaration-only with the
+// note "nothing on the live director path calls it, Set is what the attribute pump uses".
+// That was true only while the parameter BANK had no layout: the console's
+// BehaviourParameterBank::Construct @0x8223DC90 calls exactly this, INLINED, over its bumper
+// block at bank+0x2538 -- and the bank is what SharedCameraContainer::Prepare binds the
+// bumper camera to LONG BEFORE any car arrives.
+//
+// ⚠️⚠️ AND ONE OF ITS STORES IS LOAD-BEARING, MEASURED. The block's TYPE TAG is stamped HERE,
+// not by Set. With the bank zero-filled instead (CAM_RUN2), BehaviourGameplayBumper::
+// SetParameters' own tripwire `lpParameters->GetType() == eBehaviourGameplayBumper` fired
+// four times per run, because a zeroed tag reads as the EXTERNAL camera's tag (0), not the
+// bumper's (1). The external block gets away with it by accident -- its tag IS 0.
+//
+// The body is read straight off the bank's inlined copy (block base r10 = r31 + 0x2538):
+//   0x8223DD38  stw  r30(=0), 4(r10)    -> mpcDebugName          = 0
+//   0x8223DD3C  stw  r29(=1), 0(r10)    -> mType                 = eBehaviourGameplayBumper
+//   0x8223DD50  stb  r30(=0), 0x34(r10) -> mbIsValid             = false
+//   0x8223DD48  stfs f28,     0x38(r10) -> the inlined CameraShake::Parameters::Construct
+//   0x8223DD4C  stfs f31,     0x3C(r10)    seed (0.06 / 0.0 / 1.15 / 0.11) over
+//   0x8223DD44  stfs f22,     0x40(r10)    mImpactShakeParams @+0x38 ...
+//   0x8223DD40  stfs f23,     0x44(r10)
+//   0x8223DD5C  stfs f31(0.0f),  0x38(r10)  ... then the four overrides that leave it
+//   0x8223DD60  stfs f31(0.0f),  0x3C(r10)      {0.0f, 0.0f, 3.0f, 1.0f} -- exactly the
+//   0x8223DD58  stfs f0 (3.0f),  0x40(r10)      quadruple this header already identified as
+//   0x8223DD54  stfs f27(1.0f),  0x44(r10)      one CameraShake::Parameters. Independent
+//                                               confirmation of that identification.
+// (rodata: flt_820047B8 0.06, flt_82001CC0 0.0, flt_820047BC 1.15, flt_820047C0 0.11,
+//  flt_82001C98 1.0, flt_82004270 3.0.)
+// Nothing else in the block is written -- the per-vehicle tunables are Set's job.
+// ----------------------------------------------------------------------------
+void BehaviourGameplayBumper::Parameters::Construct()
+{
+    mType = eBehaviourGameplayBumper;      // stw r29(=1), 0x00
+    SetDebugName(0);                       // stw r30(=0), 0x04
+
+    mImpactShakeParams.Construct();        // the inlined CameraShake::Parameters::Construct
+    mImpactShakeParams.mfXYShakeMagnitudeDegs  = 0.0f;   // stfs flt_82001CC0, 0x38
+    mImpactShakeParams.mfZShakeMagnitudeDegs   = 0.0f;   // stfs flt_82001CC0, 0x3C
+    mImpactShakeParams.mfXYWobbleMagnitudeDegs = 3.0f;   // stfs flt_82004270, 0x40
+    mImpactShakeParams.mfWobbleCenteringFactor = 1.0f;   // stfs flt_82001C98, 0x44
+
+    mbIsValid = false;                     // stb r30(=0), 0x34
+}
+
 // Out-of-line anchor: forces BehaviourGameplayBumper::SetParameters (inline in the header) to
 // be emitted in this TU.
 void BehaviourGameplayBumper_SetParametersAnchor(

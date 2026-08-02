@@ -18,6 +18,13 @@ namespace Gen
     {
     public:
         explicit camerabumperbehaviour(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // ADDED 2026-08-02 (camera parameter-chain wave) -- see the identical note on the
+        // sibling cameraexternalbehaviour.h. The console reads `lwz r11,0(inst)` (IsValid)
+        // and `lwz r11,4(inst)` then `lfs f0,0x18(r11)` (the data area, whose +0x18 is the
+        // BUMPER cam's mfBoostFOV) at every use site. Instance is a private base here.
+        using Instance::IsValid;
+        using Instance::GetLayoutPointer;
     };
 
     // Chain the Instance ctor, assert the collection's class is

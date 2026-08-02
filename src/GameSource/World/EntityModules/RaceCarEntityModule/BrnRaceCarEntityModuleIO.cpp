@@ -310,6 +310,27 @@ OutputBuffer_PostPhysics::GetSceneInputInterface()
     return &mSceneInputInterface;
 }
 
+// X360 0x8279E7xx (R, :569) / 0x822B6xxx (W, :570) -- the NEW-VEHICLE event interface.
+// Bodied 2026-08-02 (camera parameter-chain wave): the pair had stayed declaration-only
+// because nothing produced or consumed the queue. Both ends land in this wave --
+// RaceCarEntityModule::PublishNewVehicleToDirectorWithoutPhysicsBringUp writes it (standing
+// in for the absent physics create-vehicle completion) and
+// WorldModule::BridgeEntityModulesToOutput_PostPhysics reads it out. Same shape as every
+// sibling: lock tripwire then &member.
+const OutputBuffer_PostPhysics::DirectorVehicleInputInterface*
+OutputBuffer_PostPhysics::GetDirectorVehicleInputInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mDirectorVehicleInputInterface;
+}
+
+OutputBuffer_PostPhysics::DirectorVehicleInputInterface*
+OutputBuffer_PostPhysics::GetDirectorVehicleInputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    return &mDirectorVehicleInputInterface;
+}
+
 // X360 0x8279E720 (R, :572) / 0x822B6530 (W, :573) -- the LIVE active-race-car output
 // accessors. Bodied 2026-08-01: the pair had stayed declaration-only because nothing
 // produced or consumed the interface; RaceCarEntityModule::UpdateOutputInterfaces (the

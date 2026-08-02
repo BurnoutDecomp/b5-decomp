@@ -65,6 +65,7 @@
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugOrbitPlayer.h"
+#include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"           // the DWARF home (NOT the stale BrnBehaviourPassengerCam.h slice)
 
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"                       // group E
 #include "GameSource/Director/Camera/Utils/BrnCameraSphericalRotationController.h" // group E
@@ -229,6 +230,36 @@ namespace Camera
     {
         (void)lEye;
         (void)lLookAt;
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourPassengerCam's two DECLARATION-ONLY virtuals (added 2026-08-02, camera
+    // parameter-chain wave). The class's other four virtuals are REAL, in its own TU
+    // Behaviours/BehaviourPassengerCam.cpp, now mounted -- these two are the ones its header
+    // already marks "own ledger fn (declared-only)" (DWARF cpp:65 / cpp:116; neither is
+    // X360-exported under this class's name).
+    //
+    // WHY THEY ARE NEEDED NOW: BrnBehaviourManager.cpp:965 explicitly instantiates
+    // AllocateBehaviour<BehaviourPassengerCam>(), which emits the vtable. That instantiation
+    // used to bind to the STALE 0x18-byte BrnBehaviourPassengerCam.h SLICE -- a second,
+    // non-derived definition of the same class that had never met the real one in a TU -- so
+    // it booked a pool bucket from the wrong sizeof and referenced no virtuals at all. See
+    // the repoint note at the top of BrnBehaviourManager.cpp.
+    //
+    // The values are the base Behaviour's own defaults for these two slots (Prepare == ready,
+    // SetupTweaker == nothing to expose), so a passenger cam allocated today behaves exactly
+    // as it did while the class was the slice: allocatable and inert. Nothing allocates one.
+    // DELETE-WHEN the passenger cam's Prepare/SetupTweaker bodies land.
+    // ------------------------------------------------------------------------
+    bool BehaviourPassengerCam::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
+    {
+        (void)lrInfo;
+        return true;
+    }
+
+    void BehaviourPassengerCam::SetupTweaker(Utils::Tweaker& lrTweaker)
+    {
+        (void)lrTweaker;
     }
 
     void BehaviourDebugOrbitPlayer::Construct()

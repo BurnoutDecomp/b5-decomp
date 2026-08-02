@@ -136,6 +136,24 @@ void BridgeEntityModulesToOutput_PostPhysics(
         lpOutputBuffer->GetResourceRequestResourceInterface()->mRequestQueue.Append(
             lpRaceCarOutput_PostPhysics->GetResourceRequestInterface()->mRequestQueue);
 
+        // ⭐ THE NEW-VEHICLE QUEUE TRANSFER (added 2026-08-02, camera parameter-chain wave).
+        // X360-attested by the xref set: BrnWorldIO::UpdateOutputBuffer::
+        // SetDirectorVehicleInputInterface @0x827AD1A0 has exactly ONE caller in the whole
+        // image, and it is THIS function (@0x827AEEB0). The setter is the inlined
+        // BrnDirectorVehicleInputInterface::Append -- it Clears the destination queue and
+        // merges the source's events, which is why it is safe to run unconditionally every
+        // frame. (@0x827AEEB0 is one of the holes in the JSON export set, so the leg's
+        // POSITION inside this function is not asm-ordered; it is placed with the other
+        // race-car transfers, which is the only group it can belong to.)
+        //
+        // ⭐⭐ WHY IT MATTERS: this is the only way a car's attribute key reaches the
+        // director. Without it BridgeWorldToDirector step 6 has an empty source, so
+        // MainDirector::ProcessNewVehicleEvents never runs, Parameters::Set never runs, and
+        // BOTH shared gameplay cameras stay on mbIsValid == false -- i.e. the chase camera's
+        // whole Update body is skipped. Full map in BrnBehaviourGameplayExternal.h.
+        lpOutputBuffer->SetDirectorVehicleInputInterface(
+            lpRaceCarOutput_PostPhysics->GetDirectorVehicleInputInterface());
+
         // ⭐ THE RACE-CAR OUTPUT-INTERFACE TRANSFER. The console runs this as its own
         // named leg; see the function below.
         BridgeRaceCarEntityInfoToOutput_PostPhysics(lpWorldModule, lpOutputBuffer,

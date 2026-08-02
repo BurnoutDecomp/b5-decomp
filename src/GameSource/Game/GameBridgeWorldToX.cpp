@@ -41,7 +41,7 @@
 //   14. input->mbWorldWantsDebugControllerFocus = world-entity-status byte
 //   15. mDirectorBridgeSerialiser.Unlock()
 //
-// REPRODUCED HERE: 2, 3, 7, 9, 10, 11, 12.
+// REPRODUCED HERE: 2, 3, 6, 7, 9, 10, 11, 12.   (6 restored 2026-08-02.)
 //
 // [FLAG PC bring-up] dropped rather than paraphrased, each for a NAMED reason:
 //   1/15 + the whole state-4..6 replay arm -- BrnGameModule has no mDirectorBridgeSerialiser
@@ -57,8 +57,7 @@
 //        member starts at +16 (16-aligned after the 1-byte IOBuffer base), not at +1 as the
 //        current opaque span models it. sizeof(RCEntityGlobalRaceCarOutputInterface) is 2416
 //        on x64 too, so retyping that span to the real type reproduces the layout exactly.
-//   6  -- BrnDirector::BrnDirectorVehicleInputInterface's NewVehicleEvent<50> queue and the
-//        world side's producer are both un-homed; the queue is empty on this build.
+//   (6 IS NO LONGER DROPPED -- restored 2026-08-02, see the step in the body.)
 //   13 -- BrnDirector::PlayerCrashInfo has no reconstructed home, and its source (the
 //        vehicle-manager output's 64-byte crash-event ring) is inside an opaque span.
 //   14 -- reads world-entity-status byte +217668, inside an opaque span.
@@ -186,6 +185,31 @@ namespace BrnGame
         // ---- step 9 (the console orders it after 4..8, all of which are gated) ------------
         CGS_ASSERT(lpActiveRaceCars->IsPlayerCarActive(), "Player race car index not active"); // :66
         const EActiveRaceCarIndex lePlayerIndex = lpWorldOutput->GetPlayerActiveRaceCarIndex();
+
+        // ---- step 6: the NEW-VEHICLE queue merge ------------------------------------------
+        // ⭐ RESTORED 2026-08-02 (camera parameter-chain wave). The console's own step, in the
+        // console's own position (immediately before the contact-spy publish). The X360 body
+        // inlines BrnDirectorVehicleInputInterface::Append into
+        // DirectorIO::InputBuffer::SetVehicleInputInterface @0x827AD1A0's mirror on this side:
+        // clear the destination queue, then EventQueue<NewVehicleEvent,50>::Append @0x823C2CB8
+        // the source's live events.
+        //
+        // ⚠️ THE DROP NOTE THIS RETIRES WAS PART TRUE AND PART EXPIRED. It read:
+        // "BrnDirector::BrnDirectorVehicleInputInterface's NewVehicleEvent<50> queue and the
+        // world side's producer are both un-homed; the queue is empty on this build."
+        //   * "un-homed" is FALSE and was false when written: the interface has had a real
+        //     home (SharedIO/BrnDirectorVehicleInputInterface.h, the DWARF layout with
+        //     Append) since before this file's banner. Only the DESTINATION was opaque
+        //     (DirectorIO::InputBuffer's +0x6780 span), and it is typed as of this wave.
+        //   * "the queue is empty" was TRUE and is the part that had to be fixed: the
+        //     console's producer chain starts in the physics VehicleManager, which this build
+        //     does not have. See RaceCarEntityModule::
+        //     PublishNewVehicleToDirectorWithoutPhysicsBringUp for the flagged stand-in.
+        // This merge is what makes MainDirector::ProcessNewVehicleEvents see anything at all,
+        // and that function is the ONLY primary writer of the two shared gameplay cameras'
+        // Parameters::mbIsValid. Full map in BrnBehaviourGameplayExternal.h's Update FLAG.
+        lpDirectorInput->GetVehicleInputInterface()->Append(
+            lpWorldOutput->GetDirectorVehicleInputInterface());
 
         // ---- step 7: the contact-spy publish ---------------------------------------------
         lpDirectorInput->AppendContacts(lpWorldOutput->GetContactSpyInterface());

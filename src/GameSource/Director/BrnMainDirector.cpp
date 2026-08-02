@@ -48,6 +48,11 @@
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"                 // ICE::CameraSpaceHandler
                                                                        //   (UpdateCameraBehavioursPostScene
                                                                        //    stages one per frame)
+// -- ProcessNewVehicleEvents / UpdateAttribSys: the car's authored camera attribs ----------
+#include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h"   // NewVehicleEvent queue
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"          // Attrib::Gen::burnoutcarasset
+#include "GameSource/AttribSys/Generated/classes/camerabumperbehaviour.h"    // Attrib::Gen::camerabumperbehaviour
+#include "GameSource/AttribSys/Generated/classes/cameraexternalbehaviour.h"  // Attrib::Gen::cameraexternalbehaviour
 
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 
@@ -721,6 +726,218 @@ namespace BrnDirector
         UpdateCameraBehavioursPreScene(lpIO, liPlayerCarIndex);
     }
 
+    // ========================================================================================
+    // THE GAMEPLAY-CAMERA ATTRIBUTE SEED  (camera parameter-chain wave, 2026-08-02)
+    //
+    // ⭐⭐ These two functions are the ONLY writers of BehaviourGameplayExternal::Parameters::
+    // mbIsValid and BehaviourGameplayBumper::Parameters::mbIsValid anywhere on this build
+    // (the third console writer, ReplayDirector::PreSceneQueryUpdate @0x8225BD28, is
+    // declaration-only and the PC has no replay path). Both camera behaviours' whole Update
+    // body sits inside `if (mpParameters->mbIsValid)`, so until one of these runs, the chase
+    // and bumper cameras are structurally incapable of doing anything -- which is why
+    // `sBringUpCamera` still draws the world after car select.
+    //
+    // Both seed the SAME two blocks, which live in the behaviour manager's parameter bank:
+    //     bank + 0x2488  the external ("chase") block   == director + 0x314C8
+    //     bank + 0x2538  the bumper ("in car") block    == director + 0x31578
+    //     bank + 0x2480  the latched car attribs key    == director + 0x314C0
+    // (the director-relative displacements are the ones these two functions inline; the
+    // bank-relative ones are SharedCameraContainer::Prepare's. The bridge between them is
+    // BehaviourManager == director + 0x1CB10, read off UpdateCameraBehavioursPreScene's own
+    // `addis r26,r31,2 / addi r26,r26,-0x34F0`. See BrnBehaviourParameterBank.h.)
+    //
+    // The source of the tuning is the car's `burnoutcarasset` collection -- resolved by the
+    // 64-bit key the world publishes -- and, inside it, the two RefSpecs at data +0x1A0
+    // (cameraexternalbehaviour) and +0x1B8 (camerabumperbehaviour). Each resolved instance's
+    // attribute data area IS Parameters::Source: Set re-loads `lwz r11, 4(source)` before
+    // every field copy, and +0x04 of an Attrib::Instance is mpAttributeData.
+    // ========================================================================================
+
+    namespace
+    {
+        // Stage a Parameters::Source over a resolved generated instance's attribute data
+        // area. The console passes the stack Attrib::Gen::* object straight to Set and lets
+        // Set read its +0x04 slot; on x64 that slot is at +0x08, so the source block is
+        // staged BY NAMED MEMBER here instead of reinterpret_cast'ing the instance.
+        template <class TParameters, class TInstance>
+        void SeedGameplayCameraParameters(TParameters& lrParameters, const TInstance& lrInstance)
+        {
+            typename TParameters::Source lSource;
+            lSource.mpfValues = static_cast<const f32*>(lrInstance.GetLayoutPointer());
+            lrParameters.Set(&lSource);
+        }
+
+        // The two Boost-FOV tripwire operands, as byte offsets into each camera's attribute
+        // data area (`lfs f0, 0x18(r11)` / `lfs f0, 0x40(r11)`). They are the same two source
+        // slots Parameters::Set copies mfBoostFOV from.
+        const u32 KU_BUMPER_SOURCE_BOOST_FOV_OFFSET   = 0x18;
+        const u32 KU_EXTERNAL_SOURCE_BOOST_FOV_OFFSET = 0x40;
+
+        f32 ReadCameraSourceFloat(const void* lpAttributeData, u32 luByteOffset)
+        {
+            if (lpAttributeData == 0)
+            {
+                return 0.0f;
+            }
+            return *reinterpret_cast<const f32*>(
+                static_cast<const u8*>(lpAttributeData) + luByteOffset);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // ProcessNewVehicleEvents  @ 0x8221A6B0   -- ⭐⭐ THE ONLY PRIMARY SEED
+    //
+    // Console body, per event in lpInput->GetVehicleInputInterface()'s NewVehicleEvent queue:
+    //     assert lEvent.mAttribsKey != 0                                         // .cpp:1783
+    //     burnoutcarasset lCar( lEvent.mAttribsKey, 0 )    // FindCollection(class, key)
+    //     assert lCar.IsValid()                                                  // .cpp:1787
+    //     camerabumperbehaviour   lBumper  ( RefSpec(carData + 0x1B8).GetCollection(), 0 )
+    //     cameraexternalbehaviour lExternal( RefSpec(carData + 0x1A0).GetCollection(), 0 )
+    //     <lpcName = *(carData + 0x1E8), assert text only>
+    //     assert lBumper.IsValid()                                               // .cpp:1795
+    //     assert bumperData[0x18]   > 0.0f                                       // .cpp:1796
+    //     assert lExternal.IsValid()                                             // .cpp:1797
+    //     assert externalData[0x40] > 0.0f                                       // .cpp:1798
+    //     BehaviourGameplayBumper  ::Parameters::Set( director + 0x31578, &lBumper   )
+    //     BehaviourGameplayExternal::Parameters::Set( director + 0x314C8, &lExternal )
+    //     std  lEvent.mAttribsKey, 0(director + 0x314C0)          <- latch, for UpdateAttribSys
+    //
+    // ⚠️ THE FIVE ASSERTS ARE NON-GATING, AND SO ARE THE TWO Set CALLS -- the console runs
+    // both unconditionally, even when the collections did not resolve (in which case each
+    // generated ctor has substituted Attrib::DefaultDataArea, i.e. zeros). That is
+    // reproduced verbatim: an invalid car asset produces a VALID-but-zero parameter block on
+    // the console too. UpdateAttribSys below is the one that gates its Sets on IsValid().
+    // ------------------------------------------------------------------------
+    void MainDirector::ProcessNewVehicleEvents(const DirectorIO::InputBuffer* lpInput)
+    {
+        if (lpInput == 0)
+            return;
+
+        const BrnDirectorVehicleInputInterface* lpVehicleInput = lpInput->GetVehicleInputInterface();
+        if (lpVehicleInput == 0)
+            return;
+
+        const BrnDirectorVehicleInputInterface::NewVehicleEventQueue* lpQueue =
+            lpVehicleInput->GetNewVehicleEventQueue();
+
+        Camera::BehaviourParameterBank& lrBank = mBehaviourManager.GetBehaviourParameterBank();
+
+        for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+        {
+            const NewVehicleEvent& lrEvent = lpQueue->GetEvent(liEvent);
+
+            CGS_ASSERT(lrEvent.mAttribsKey != 0, "lEvent.mAttribsKey!=0");            // :1783
+
+            Attrib::Gen::burnoutcarasset lCarAsset(lrEvent.mAttribsKey, 0);
+            CGS_ASSERT(lCarAsset.IsValid(), "Invalid car asset, key:");               // :1787
+
+            Attrib::RefSpec* lpBumperRef   = lCarAsset.GetBumperCamRefSpec();
+            Attrib::RefSpec* lpExternalRef = lCarAsset.GetExternalCamRefSpec();
+
+            Attrib::Gen::camerabumperbehaviour lBumperCam(
+                (lpBumperRef != 0)
+                    ? const_cast<Attrib::Collection*>(lpBumperRef->GetCollection()) : 0, 0);
+            Attrib::Gen::cameraexternalbehaviour lExternalCam(
+                (lpExternalRef != 0)
+                    ? const_cast<Attrib::Collection*>(lpExternalRef->GetCollection()) : 0, 0);
+
+            // The console loads the asset name here; it only feeds the assert messages.
+            (void)lCarAsset.GetAssetName();
+
+            CGS_ASSERT(lBumperCam.IsValid(), "Invalid bumpercam asset, key:");        // :1795
+            CGS_ASSERT(ReadCameraSourceFloat(lBumperCam.GetLayoutPointer(),
+                                             KU_BUMPER_SOURCE_BOOST_FOV_OFFSET) > 0.0f,
+                       "Invalid bumpercam Boost FOV, key:");                          // :1796
+            CGS_ASSERT(lExternalCam.IsValid(), "Invalid externalcam asset, key:");    // :1797
+            CGS_ASSERT(ReadCameraSourceFloat(lExternalCam.GetLayoutPointer(),
+                                             KU_EXTERNAL_SOURCE_BOOST_FOV_OFFSET) > 0.0f,
+                       "Invalid externalcam Boost FOV, key:");                        // :1798
+
+            SeedGameplayCameraParameters(lrBank.GetGameplayBumperCameraParamsForCar(), lBumperCam);
+            SeedGameplayCameraParameters(lrBank.GetGameplayExternalCameraParamsForCar(), lExternalCam);
+
+            lrBank.SetGameplayCameraCarAttribsKey(lrEvent.mAttribsKey);
+
+            // [diag, one-shot -- NOT console code] the far end of the chain the world's
+            // new-vehicle publish starts. It reports the two bytes that decide whether the
+            // console gameplay cameras can run at all. Remove when the chase camera's own
+            // Update lands and the camera itself is the evidence.
+            {
+                static bool sbReported = false;
+                if (!sbReported && (CgsDev::Message::gxMessageFilterFlags & 1) &&
+                    CgsDev::Log::gpDebugPrint != 0)
+                {
+                    sbReported = true;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[newveh] MainDirector::ProcessNewVehicleEvents: seeded from key hi "
+                        << static_cast<s32>(lrEvent.mAttribsKey >> 32) << " lo "
+                        << static_cast<s32>(lrEvent.mAttribsKey & 0xFFFFFFFFu)
+                        << " -- externalValid "
+                        << (lrBank.GetGameplayExternalCameraParamsForCar().mbIsValid ? 1 : 0)
+                        << " FOV " << lrBank.GetGameplayExternalCameraParamsForCar().mrFOV
+                        << " boostFOV " << lrBank.GetGameplayExternalCameraParamsForCar().mfBoostFOV
+                        << " | bumperValid "
+                        << (lrBank.GetGameplayBumperCameraParamsForCar().mbIsValid ? 1 : 0)
+                        << "\n";
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // UpdateAttribSys  @ 0x8221AFD0   -- the GameTalk live-tuning re-read (54 asm lines)
+    //
+    //     if ( !lpInput->GetControll()->mbGameTalkRefreshRequest )   return;   // controller +1
+    //     burnoutcarasset lCar( bank.mxGameplayCameraCarAttribsKey, 0 );       // director+0x314C0
+    //     camerabumperbehaviour   lBumper  ( RefSpec(carData + 0x1B8).GetCollection(), 0 );
+    //     cameraexternalbehaviour lExternal( RefSpec(carData + 0x1A0).GetCollection(), 0 );
+    //     if ( lBumper.IsValid()   )  bumperParams  .Set( &lBumper   );        // director+0x31578
+    //     if ( lExternal.IsValid() )  externalParams.Set( &lExternal );        // director+0x314C8
+    //
+    // ⚠️⚠️ THIS IS NOT A PER-FRAME RE-SEED, and the camera-chain map carried into this wave
+    // said it was. Its ONE gate is ControllerInfo +0x01, which the DecFIGS DWARF names
+    // mbGameTalkRefreshRequest (BrnDirectorControllerInfo.h:49) -- the authoring tool's
+    // "I changed a value, re-read it" pulse. Nothing on this build ever sets it, so this body
+    // is inert here BY DESIGN, not by omission. It is transcribed anyway because it is cheap,
+    // it is the console's, and it is the consumer that explains why the latched key exists at
+    // all; but ProcessNewVehicleEvents above is the function that does the work.
+    //
+    // Unlike ProcessNewVehicleEvents this one GATES each Set on the resolve, and it carries
+    // no asserts.
+    // ------------------------------------------------------------------------
+    void MainDirector::UpdateAttribSys(const DirectorIO::InputBuffer* lpInput)
+    {
+        if (lpInput == 0)
+            return;
+
+        const DirectorIO::ControlInput* lpControl = lpInput->GetControll();
+        if (lpControl == 0 || !lpControl->IsGameTalkRefreshRequested())
+            return;
+
+        Camera::BehaviourParameterBank& lrBank = mBehaviourManager.GetBehaviourParameterBank();
+
+        Attrib::Gen::burnoutcarasset lCarAsset(lrBank.GetGameplayCameraCarAttribsKey(), 0);
+
+        Attrib::RefSpec* lpBumperRef   = lCarAsset.GetBumperCamRefSpec();
+        Attrib::RefSpec* lpExternalRef = lCarAsset.GetExternalCamRefSpec();
+
+        Attrib::Gen::camerabumperbehaviour lBumperCam(
+            (lpBumperRef != 0)
+                ? const_cast<Attrib::Collection*>(lpBumperRef->GetCollection()) : 0, 0);
+        Attrib::Gen::cameraexternalbehaviour lExternalCam(
+            (lpExternalRef != 0)
+                ? const_cast<Attrib::Collection*>(lpExternalRef->GetCollection()) : 0, 0);
+
+        if (lBumperCam.IsValid())
+        {
+            SeedGameplayCameraParameters(lrBank.GetGameplayBumperCameraParamsForCar(), lBumperCam);
+        }
+        if (lExternalCam.IsValid())
+        {
+            SeedGameplayCameraParameters(lrBank.GetGameplayExternalCameraParamsForCar(), lExternalCam);
+        }
+    }
+
     // ------------------------------------------------------------------------
     // ProcessInputQueue  @ 0x822372F8   -- ⭐⭐ THE GAME-ACTION -> GAMESTATE SEAM
     //
@@ -769,7 +986,12 @@ namespace BrnDirector
         // 0x82237350..0x822373AC -- the inlined GameState::ResetPerFrameData().
         maGameState.ResetPerFrameData();
 
-        // ⚠️ GATE: ProcessNewVehicleEvents( lpInput ) -- declaration-only (AllVehicleData).
+        // ⭐⭐ REAL as of 2026-08-02 (camera parameter-chain wave), at the console's own
+        // position (immediately after ResetPerFrameData). The gate this replaces read
+        // "declaration-only (AllVehicleData un-homed)" -- both halves were wrong; see the
+        // declaration in BrnMainDirector.h. This is the ONLY writer of the two shared gameplay
+        // cameras' Parameters::mbIsValid on this build.
+        ProcessNewVehicleEvents(lpInput);
 
         // 0x822373B0 -- the takedown pair. The console re-reads the flag to assert on it
         // ("mbPlayerTakenDown", BrnMainDirector.cpp:232) between the two stores.
@@ -1305,7 +1527,13 @@ namespace BrnDirector
         // own Prepare). Without it the fly-by state would poll for ever.
         mBehaviourManager.PrepareBehaviours(lpIO->mpResourceManager);
 
-        // ⚠️ GATE: the rest of the post-publish tail (lines 871-877 / 879-924) -- see the banner.
+        // ⭐ X360 line 879 -- UpdateAttribSys( lpIO->mpInputBuffer ). REAL as of 2026-08-02,
+        // in the console's own position (immediately after PrepareBehaviours). It is INERT on
+        // this build by design: its only gate is the controller block's
+        // mbGameTalkRefreshRequest byte, which only the live-tuning tool sets. See its body.
+        UpdateAttribSys(lpIO->mpInputBuffer);
+
+        // ⚠️ GATE: the rest of the post-publish tail (lines 871-877 / 880-924) -- see the banner.
     }
 
     // ------------------------------------------------------------------------
