@@ -96,6 +96,16 @@ namespace BrnGui
         // stop pumping without re-entering the machine.
         EWorldDataControllerState GetState() const { return meState; }
 
+        // [PC bring-up helper -- NOT an X360 method, and deliberately NOT a state test.]
+        // True once the stage-6/7 "CarColours" acquire has bound a resource with real memory
+        // behind it. GetColourPaletteFromType @0x824BDA40 has NO meState gate (verified: the
+        // asm only compares lType against 4), so a caller that wants to know whether the
+        // palette is readable must ask about the RESOURCE, not about meState. Same
+        // HasMemoryResource() idiom ProgressionManager::GetProgressionData already uses, and
+        // for the same reason -- calling operator-> on an unbound ResourcePtr fires its own
+        // assert before the caller can decide anything.
+        bool HasPlayerCarColours() const { return mpPlayerCarColours.HasMemoryResource(); }
+
         // ---- Accessors (bodies in BrnGuiWorldDataController.cpp) --------------------------------
 
         // DWARF h:93 / X360 0x82501270 -- the landmark whose region index equals lLandmarkIndex

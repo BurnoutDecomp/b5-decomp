@@ -162,6 +162,23 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
             << " len " << (lpTakeData != 0 ? lpTakeData->GetLength() : 0.0f) << "\n";
     }
 
+    // [DIAG -- BRING-UP SCAFFOLDING, NOT CONSOLE CODE, capped at 8 lines.] Names the take
+    // whose SetParameter below trips the ICEData.cpp:1851 key-bounds assert (12 of the 15
+    // whole-run asserts as of 2026-08-02). Paired with the [ice-bounds] line in
+    // ICETake::GetValue, this identifies the take AND the offending element/channel in one
+    // run. Remove with the ICE-camera campaign.
+    {
+        static s32 s_iPrepareReports = 0;
+        if (s_iPrepareReports < 8 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++s_iPrepareReports;
+            *CgsDev::Log::gpDebugPrint
+                << "[ice-prepare] guid " << liAnimGuid
+                << " takeData " << (lpTakeData != 0 ? 1 : 0)
+                << " len " << (lpTakeData != 0 ? lpTakeData->GetLength() : 0.0f) << "\n";
+        }
+    }
+
     mPlaybackTake.SetDataPointers(lpTakeData, false);
 
     // Rewind to the start of the take, forcing the seek and taking the simple all-channel

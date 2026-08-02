@@ -34,6 +34,7 @@
 #include "SharedClasses/DataLists/VehicleListResourceType.h"                   // BrnResource::VehicleListResourceType (0x10005)
 #include "SharedClasses/DataLists/WheelListResourceType.h"                     // BrnResource::WheelListResourceType (0x10009)
 #include "SharedClasses/World/BrnVehicleGraphicsSpecResourceType.h"            // BrnVehicle::GraphicsSpecResourceType (0x10006)
+#include "SharedClasses/Graphics/PlayerCarColoursResourceType.h"               // CgsResource::PlayerCarColoursResourceType (0x1001E)
 #include "GameShared/GameClasses/Containers/CgsDictionaryResourceType.h"       // CgsContainers::DictionaryResourceType<ICE::ICETakeData> (0x41)
 #include "SDKs/Packages/ICE/ICEData.hpp"                                       // ICE::ICETakeData (the dictionary's element type)
 
@@ -185,15 +186,21 @@ namespace CgsResource
         // build/game/CAMERAS.BUNDLE: miNumEntries 549, mpaIndex 0x10, entry[0].mpData 0x3388.)
         static CgsContainers::DictionaryResourceType<ICE::ICETakeData> sICETakeDictionary; // 0x41 (65)
         TypeRegistry::Register(&sICETakeDictionary);
-        // NOT registered: PlayerCarColours (0x1001E / 65566), the SECOND resource inside
-        // VEHICLELIST.BUNDLE. Its handler exists (SharedClasses/Graphics/
-        // PlayerCarColoursResourceType.cpp) but that TU is written against 32-bit pointers
-        // (`reinterpret_cast<u32>(lpResource)`) and does not compile for x64, so mounting it is
-        // its own job. With no handler the pool takes the documented null-type path
-        // (CgsResourcePool.cpp AllocateMemoryForResource): the payload is allocated and stored
-        // raw and its FixUp is SKIPPED -- safe today because nothing reads the palette yet, but
-        // the two colour-array pointers inside it stay un-relocated. Fix before any car-livery
-        // colour work.
+        // ---- the player-car colour palette (colour-picker wave, 2026-08-02) ------------------
+        // PlayerCarColours (0x1001E / 65566), the SECOND resource inside VEHICLELIST.BUNDLE.
+        // This registration is the whole reason the car-livery colour picker was empty: with
+        // no handler the pool took the null-type path (CgsResourcePool.cpp
+        // AllocateMemoryForResource), the loader logged "[bundle] UNREGISTERED resource type id
+        // 65566 in 'Vehicles/VehicleList.bundle'" and SKIPPED FixUp, so the "CarColours"
+        // acquire came back with a NULL memory pointer (BrnGame.log "carColours=0") and
+        // WorldDataController::GetColourPaletteFromType handed out `&null->maPalettes[type]`.
+        // The handler itself was already reconstructed; it simply did not compile for x64
+        // because it spelled its load-base truncations as `reinterpret_cast<u32>(pointer)`.
+        // That is fixed (it now uses the shared CgsResource::GetLoadBase, like VehicleList),
+        // its GetTypeID is defined, and BOTH pointer columns stay 32-bit serialised slots --
+        // see the two-proof banner in SharedClasses/Graphics/BrnGlobalColourPalette.h.
+        static PlayerCarColoursResourceType sPlayerCarColours;   // 0x1001E (65566)
+        TypeRegistry::Register(&sPlayerCarColours);
 
         // ---- the world-render resource types (2026-07-27) -------------------------------------
         // The streamed TRK_UNIT bundles carry these; without a registered handler the
