@@ -33,11 +33,11 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"
 
-// EEntityTypeID's canonical home is GameSource/World/BrnEntityTypes.h (namespace
-// BrnWorld), not yet reconstructed in-tree. Opaque-enum declaration (matches the
-// DecFIGS DWARF, signed enumerators -> int underlying), same forward-decl style
-// already used by the committed BrnContactSpyRunList.h.
-namespace BrnWorld { enum EEntityTypeID : int; }
+// EEntityTypeID's canonical home is GameSource/World/BrnEntityTypes.h (namespace BrnWorld).
+// It is now reconstructed in-tree (DWARF-verbatim), so the former opaque-enum forward
+// declaration is replaced by the real include -- Construct() below needs the enumerators'
+// type to be complete-ish at its call sites and ContactSpyData::Construct needs the values.
+#include "GameSource/World/BrnEntityTypes.h"
 
 namespace BrnPhysics
 {
@@ -56,6 +56,24 @@ namespace BrnPhysics
         class ContactSpyQueue : public CgsModule::EventQueue<T, N>
         {
         public:
+            // ContactSpyQueue<T,N>::Construct(BrnWorld::EEntityTypeID) -- DWARF
+            // BrnContactSpyQueue.h (signature is DWARF-authoritative: the tag is an ARGUMENT,
+            // not a separate setter). Chains the base fixed-capacity queue construction, then
+            // stamps the per-queue entity-type tag.
+            //
+            // The X360 has NO out-of-line symbol for this function (the index has only the
+            // SortAndCreateRunList/ImportContactSpies instantiations): every call site inlines
+            // it, leaving a `bl CgsModule::EventQueue<T,N>::Construct` followed by an immediate
+            // `stw <tag>` at the meEntityType offset. ContactSpyData::Construct @0x825AE010 is
+            // exactly that pattern ten times over, and each of its store offsets equals
+            // 0x10 + N*sizeof(T) for the queue being constructed -- i.e. meEntityType. Defining
+            // this inline here reproduces that code shape exactly.
+            void Construct(BrnWorld::EEntityTypeID leEntityType)
+            {
+                CgsModule::EventQueue<T, N>::Construct();
+                meEntityType = leEntityType;
+            }
+
             // Checked element accessor into the inline maEvents buffer, reinterpreted
             // as the contact's BaseContact sub-object (BrnContactSpyQueue.h:142/155).
             // &GetEvent(i) == &maEvents[i]; the base GetEvent carries the bounds asserts
