@@ -477,6 +477,32 @@ public:
     const BrnPhysics::Vehicle::RaceCarState* GetPhysicsState() const { return &mPhysicsState; }
 
     // ========================================================================
+    // [FLAG PC bring-up] SeedPhysicsStateFromCreateEventBringUp -- NOT an X360 function.
+    //
+    // CLOSES THE OPEN HALF OF THE CREATE EVENT. AddHandlingModel hands the placement
+    // transform to VehicleInputInterface::CreateRaceCar; on the console the vehicle
+    // manager answers on the very next tick with a RaceCarState whose mTransform IS that
+    // transform (the car has not moved yet), and UpdatePhysicsState @0x822D4418 memcpy's
+    // the whole snapshot into mPhysicsState. On this build nothing answers -- the create
+    // event has no consumer -- so mPhysicsState.mTransform keeps the value Attach seeded
+    // from RaceCar::GetTransform(), i.e. the SPAWN ANCHOR, and the render pose
+    // (PublishRenderPoseWithoutPhysicsBringUp -> CalcBodyTransform) publishes that instead
+    // of where the car was actually placed.
+    //
+    // ⛔ MEASURED 2026-08-02: this is what kept the junkyard car 4.534 m in the air even
+    // after the place-on-track drop query started returning the real ground. The log said
+    // "race car 0 -> E_STATE_ACTIVE at (2986.933105, -3.525000, -2011.417969)" while the
+    // very next [uoi] publish still read (2986.933105, 1.009405, -2011.417969).
+    //
+    // It invents nothing: the value stored is the argument the console's own
+    // CreateRaceCar was just given, which is exactly what the console's own readback would
+    // write back for a car at rest.
+    // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics + UpdatePhysicsState are wired to
+    // a real VehicleOutputInterface::maRaceCarStates.
+    // ========================================================================
+    void SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine& lrTransform);
+
+    // ========================================================================
     // ADDITIVE named readers for the per-frame OUTPUT publish (2026-08-01).
     //
     // RaceCarEntityModule::UpdateOutputInterfaces @0x822F5CF8 reads every one of these

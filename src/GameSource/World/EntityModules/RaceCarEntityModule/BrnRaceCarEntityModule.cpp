@@ -815,6 +815,16 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                                        lrTransform, lrVelocity,
                                        lbResettingPhysicsState, lu8CarStrengthStat );
 
+    // [FLAG PC bring-up] the OTHER half of that create event. AddHandlingModel has just
+    // published lrTransform to the vehicle manager; on the console the next tick's
+    // RaceCarState carries it straight back into mPhysicsState via UpdatePhysicsState.
+    // Nothing on this build answers a create event, so without this the slot keeps the
+    // transform Attach seeded (the spawn ANCHOR) and every consumer downstream -- the
+    // render pose, the output interface, the director's framing -- reads the car at a
+    // position it was NOT placed at. See BrnActiveRaceCar.h for the measurement.
+    // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics is wired to a real producer.
+    lpActiveRaceCar->SeedPhysicsStateFromCreateEventBringUp( lrTransform );
+
     if( CgsDev::Log::gpDebugPrint != 0 )
     {
         *CgsDev::Log::gpDebugPrint
@@ -838,11 +848,19 @@ void RaceCarEntityModule::ResetActiveRaceCar(
 // the promote.)
 //
 // WHAT IS HONEST ABOUT IT. UpdatePhysicsState stores `CalcBodyTransform()`. Until the
-// physics def is read, mCentreOfMassTransform is the IDENTITY Prepare/Attach left behind
-// and mPhysicsState.mTransform is what Attach seeded from RaceCar::GetTransform(), so for
-// a stationary car the console's own CalcBodyTransform here produces bit-for-bit what
-// UpdatePhysicsState would have stored. Nothing about the pose is invented: the position
-// comes from the junkyard spawn location, the maths is the console's.
+// physics def is read, mCentreOfMassTransform is the IDENTITY Prepare/Attach left behind,
+// so for a stationary car the console's own CalcBodyTransform here produces bit-for-bit
+// what UpdatePhysicsState would have stored. Nothing about the pose is invented: the maths
+// is the console's and the transform is the one the placement published.
+//
+// ⛔ CORRECTED 2026-08-02 (car-placement wave). This banner used to say the transform was
+// "what Attach seeded from RaceCar::GetTransform()", and treated that as equivalent. It is
+// NOT: Attach seeds the SPAWN ANCHOR, and the console's place-on-track line test then moves
+// the car onto the ground before ResetActiveRaceCar publishes it. Reading the Attach seed
+// rendered the junkyard car 4.534 m above the junkyard floor for as long as this helper has
+// existed. ResetActiveRaceCar now closes the create-event round trip explicitly
+// (ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp), so mPhysicsState.mTransform is
+// the placement's transform, which is what the console's readback would carry.
 //
 // WHAT IS STILL A LIE, stated plainly:
 //   * mLOD is forced to LOD 0. On the console the scene/replay arm sets it via
