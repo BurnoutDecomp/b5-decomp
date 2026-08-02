@@ -27,16 +27,18 @@
 // the trailing contained-interface stamp + empty-list initialisation, which lands
 // on the asm-sized placeholder member by name.
 //
-// FLAG -- DEFERRED sub-construction. The X360 ctor explicitly chains
-// CgsPhysics::PhysicsSimulationModule::PhysicsSimulationModule on the embedded
-// mSimulationModule. That type has no complete reconstructed layout (only its
-// JointData/DriveData slot tables exist), so it is modelled as an opaque
-// placeholder here and its sub-constructor is NOT chained -- doing so would
-// require fabricating its type/vtable, which the project rules forbid. Likewise
-// mVehicleManager's own constructor (X360 @0x827E4D58) is itself DEFERRED in its
-// home TU (BrnVehicleManagerPlayerStats.cpp) because that class is padding-
-// modelled; the embed therefore default-constructs trivially here. Both fold in
-// when those layout passes land.
+// mSimulationModule -- RESOLVED 2026-08-03 (was FLAG/DEFERRED). The X360 ctor
+// chains CgsPhysics::PhysicsSimulationModule::PhysicsSimulationModule @0x827DF1E0
+// on the embedded member at +0x230. That class now has a real, byte-closing
+// layout (CgsPhysicsSimulationModule.h), so the placeholder is folded and the
+// chain is the implicit member construction: it really does run at boot now, and
+// it really does seed mBodyData's 200 rw::physics::Inertia records and
+// mJointData's 36 JointLimits.
+//
+// FLAG -- still DEFERRED: mVehicleManager's own constructor (X360 @0x827E4D58) is
+// deferred in its home TU (BrnVehicleManagerPlayerStats.cpp) because that class is
+// padding-modelled; the embed therefore default-constructs trivially here. It
+// folds in when that pass lands.
 
 namespace BrnPhysics
 {
