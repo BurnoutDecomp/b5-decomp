@@ -214,17 +214,69 @@ public:
 
     // FLAG (not transcribed): the DWARF also declares `virtual bool Update(Camera&, const
     //   BehaviourSharedInfo&)` (.cpp:188, X360 @0x82240828) and `virtual void
-    //   SetupTweaker(Tweaker&)` (.cpp:148), plus the seven private helpers Update drives
-    //   (ModifyTargetAngles @0x82225580, CalcSpringCoeffs @0x8220E5D0, UpdateLooking
-    //   @0x82225630, UpdateJumping @0x8220EAD0, CalculateCameraTransform @0x8220E838,
-    //   ApplySlideyEffects @0x822260A8, ApplyJumpEffects @0x822250C0,
-    //   InterpolateLastPlayerTransform @0x82224BF0). None is declared here, so slots 2 and 8
-    //   keep the base's defaults (Update returns true and leaves the camera untouched).
-    //   That is a DOCUMENTED GAP, not a fabrication: transcribing the chase rig is its own
-    //   wave, and nothing dispatches slot 2 today anyway (MainDirector::
+    //   SetupTweaker(Tweaker&)` (.cpp:148), plus the eight private helpers Update drives --
+    //   with the DWARF's own signatures (BehaviourGameplayExternal.h:300..:337):
+    //     InterpolateLastPlayerTransform(Matrix44Affine, VecFloat, VecFloat)  @0x82224BF0 .cpp:575
+    //     ApplyJumpEffects(Camera&, const BehaviourSharedInfo&)               @0x822250C0 .cpp:607
+    //     ModifyTargetAngles(const Parameters&, Vector3&)                     @0x82225580 .cpp:622
+    //     CalcSpringCoeffs(f32, f32, f32, Vector3&, Vector3&)                 @0x8220E5D0 .cpp:644
+    //     UpdateLooking(f32&, Vector3&, Vector3&, Vector3&, const AABBox&)    @0x82225630 .cpp:675
+    //     CalculateCameraTransform(const Parameters&, Matrix44Affine&, Matrix44Affine,
+    //                              Vector3 x6, f32, f32)                      @0x8220E838 .cpp:813
+    //     ApplySlideyEffects(const Parameters&, Matrix44Affine&, Matrix44Affine,
+    //                        const BehaviourSharedInfo&)                       @0x822260A8 .cpp:841
+    //     UpdateJumping(const BehaviourSharedInfo&, f32, Camera&)              @0x8220EAD0 .cpp:948
+    //   None is declared here, so slots 2 and 8 keep the base's defaults (Update returns true
+    //   and leaves the camera untouched). That is a DOCUMENTED GAP, not a fabrication:
+    //   transcribing the chase rig is its own wave (Update alone is 91 source statements
+    //   spanning .cpp:188..:561, plus ~360 more across the helpers).
+    //
+    // ⚠️⚠️ THE OLD CLOSING CLAUSE OF THIS FLAG WAS WRONG, AND IT WAS LOAD-BEARING (retired
+    //   2026-08-02). It read: "nothing dispatches slot 2 today anyway (MainDirector::
     //   UpdateCameraBehavioursPostScene @0x8224FD30, the only caller of UpdateAllBehaviours,
-    //   is itself still gated).
-    //   DELETE-WHEN: @0x82240828 and its helper cluster are transcribed.
+    //   is itself still gated)". BOTH clauses are false since the 2026-08-01 PreScene/PostScene
+    //   split: `BrnMainDirector.cpp:1153` calls `mBehaviourManager.UpdateAllBehaviours(...)`
+    //   from UpdateCameraBehavioursPreScene @0x82255318, un-gated, on every frame
+    //   PreSceneQueryUpdate runs -- and PostScene now correctly drives slot 3 instead. SLOT 2
+    //   IS DISPATCHED. Anyone reading the old text would conclude this class is inert for a
+    //   reason that expired; it is inert for a DIFFERENT reason (below).
+    //
+    // ⭐⭐ WHY TRANSCRIBING @0x82240828 ALONE WOULD CHANGE NOTHING -- the real chain, all
+    //   VERIFIED 2026-08-02, seven links from the vehicle to the screen. Update's ENTIRE body
+    //   sits inside `if (mpParameters->mbIsValid)` (PS3 @0x6985C tests *(params + 0xAC) right
+    //   after the .cpp:190 "Updating with no parameters" assert), and NOTHING in this build
+    //   ever makes that byte true:
+    //     [MISSING]   RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620
+    //                   -> BrnDirectorVehicleInputInterface::NewVehicle @0x822CBA90 (AddEvent)
+    //     [DROPPED]   BridgeWorldToDirector @0x823E3AB0 step 6 -- NewVehicleEvent<50>::Append
+    //                   (named as dropped in GameBridgeWorldToX.cpp's banner)
+    //     [DECL-ONLY] MainDirector::ProcessNewVehicleEvents @0x8221A6B0 -- the ONLY primary
+    //                   writer: it resolves the car's attrib collection, builds an
+    //                   Attrib::Gen::cameraexternalbehaviour from RefSpec(instance + 416), and
+    //                   calls Parameters::Set, which stores mbIsValid = 1. It also latches the
+    //                   key at director +0x314C0 for the per-frame re-seed below.
+    //     [DECL-ONLY] MainDirector::UpdateAttribSys @0x8221AFD0 -- the per-frame re-seed off
+    //                   that latched key (54 asm lines, fully decoded; needs the key first).
+    //     [GATED]     SharedCameraContainer::Prepare @0x82263D50 -- its two SetParameters binds
+    //                   are commented out (BrnDirectorArbitratorSharedCameraContainer.cpp:61).
+    //     [MISSING]   this Update + the eight helpers above.
+    //     [BRING-UP]  BrnGameModule.cpp:1177 gates the director->world camera handover on
+    //                   `flyby || meJunkyardState != E_JY_INACTIVE`, which goes FALSE exactly
+    //                   when car-select exits -- so the world falls back to sBringUpCamera.
+    //   ⛔ AND `BehaviourParameterBank::Construct @0x8223DC90` DOES NOT HELP: it forms
+    //   `addi r11, r31, 0x2488` (this block) and inlines Parameters::Construct over it, whose
+    //   stores include `stb r30(=0), 0xAC(r11)` -- it explicitly leaves mbIsValid FALSE. The
+    //   authored tuning only ever arrives through Parameters::Set.
+    //   ✅ THE DATA IS NOT THE PROBLEM: hash64("cameraexternalbehaviour") == 0xE9EDA3B8C4EA3C84
+    //   (low word == the generated header's KI_CAMERAEXTERNALBEHAVIOUR_CLASS), and that
+    //   collection is present little-endian at +0x470 of our own ported
+    //   build/game/VEHICLES/VEH_PUSMC01_AT.BIN (the Hunter Cavalry, platform 4).
+    //   Corroboration that Parameters::Source models the right thing:
+    //   ProcessNewVehicleEvents asserts `*(externalInstance[1] + 64) > 0.0f` before calling
+    //   Set -- instance +0x04 is the f32 array and +0x40 is mfBoostFOV, exactly as
+    //   Parameters::Set reads it.
+    //   DELETE-WHEN: @0x82240828 and its helper cluster are transcribed AND the parameter
+    //   chain above reaches Parameters::Set.
 
 private:
     // ---- layout (DWARF h:116..:160; the anchors are asm-pinned -- see the file banner) ---
