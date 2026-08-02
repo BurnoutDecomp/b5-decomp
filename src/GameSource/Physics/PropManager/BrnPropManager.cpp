@@ -111,10 +111,133 @@
 
 #include "GameSource/Physics/PropManager/BrnPropManager.h"
 
+#include "GameSource/Resource/BrnResourceAllocator.h"   // BrnResource::GetDebugAllocator
+#include "rw/rwcore_structs.h"                          // rw::Resource / rw::ResourceDescriptor
+
 namespace BrnPhysics
 {
 namespace Props
 {
+
+// =========================================================================================
+// The prop-physics tuning globals (DWARF BrnPropManager.cpp:45..51 -- this file, these lines).
+//
+// THE FIVE f32s: values read directly out of the shipped ARTIST image's .data, at the exact
+// addresses PropDebugComponent::OnActivate @0x825E3628 hands to RegisterVariable. They sit as
+// one contiguous run 0x82F2A388..0x82F2A398 in declaration order, which is itself the check
+// that the address->name mapping is right:
+//     0x82F2A388  3ba3d70a  0.005f   KF_PROP_ANGULAR_DRAG
+//     0x82F2A38C  3b83126f  0.004f   KF_PROP_LINEAR_DRAG
+//     0x82F2A390  41d80000  27.0f    KF_PROP_MAX_ANGULAR_VEL
+//     0x82F2A394  41f00000  30.0f    KF_PROP_MAX_LINEAR_VEL
+//     0x82F2A398  3ca3d70a  0.02f    KF_PROP_RESTITUTION
+//
+// ⚠️ THE SEVEN VecFloats: THEIR INITIAL VALUES ARE NOT RECOVERED, AND NOTHING IS INVENTED FOR
+//    THEM. Every one of the seven reads as all-zero on disk, and so does the whole 0x82FB9xxx
+//    page around them -- i.e. they live in the zero-filled region, so their values must come
+//    from a dynamic initialiser. The ARTIST export set contains no such initialiser: a scan of
+//    all 30 084 exported functions for any reference to 0x82FB94E0 / 0x82FB9400 / 0x82FB93E0 /
+//    0x82FB9450 / 0x82FB9D70 / 0x82FB93A0 / 0x82FB94A0 returns only READERS
+//    (PropManager::ReadUpdatedBodies, ApplyAntiHerdingForce, AddPropToSim, CreatePart) and the
+//    OnChange*/OnActivate sites in the debug component. They are therefore defined
+//    zero-initialised, which is what the image itself holds, and flagged here so that whoever
+//    bodies ApplyAntiHerdingForce knows the anti-herding gains are still missing rather than
+//    "measured as zero".
+// =========================================================================================
+::VecFloat KVF_GRAVITY_SCALE;
+::VecFloat KVF_INERTIA_SCALE;
+::VecFloat KVF_ANTI_HERD_UPWARD_SCALE;
+::VecFloat KVF_ANTI_HERD_SIDE_SCALE;
+::VecFloat KVF_ANTI_HERD_HIGH_SPEED_SIDE_SCALE;
+::VecFloat KVF_MAX_SPEED_FOR_SIDE_FORCE;
+::VecFloat KVF_SPEED_CLAMP;
+
+f32 KF_PROP_ANGULAR_DRAG   = 0.005f;
+f32 KF_PROP_LINEAR_DRAG    = 0.004f;
+f32 KF_PROP_MAX_ANGULAR_VEL = 27.0f;
+f32 KF_PROP_MAX_LINEAR_VEL  = 30.0f;
+f32 KF_PROP_RESTITUTION     = 0.02f;
+
+// =========================================================================================
+// BrnPhysics::Props::PropManager::Construct @ 0x82627390 (82 asm).
+//
+// The three `bl`s in the body are hard ordering barriers, so the statement order below is not
+// a guess -- it is the only order consistent with which store sits between which pair of calls:
+//
+//   before EventQueue<UpdatePropEvent,200>::Construct(this+0x680)
+//       std 0x80  mUsedProps      std 0x90  mUsedParts
+//   between it and EventQueue<UpdatePropEvent,15>::Construct(this+0x5E10)
+//       (nothing)
+//   between that and PropDebugComponent::Construct(this, this)
+//       std 0x670 mUsedPropJoints   std 0x678 mBreakPropJoints
+//       stfs 0.3f -> 0x74   stw 0 -> 0xA0   stw 0 -> 0x6570   stfs 0.6f -> 0x78
+//   between that and the allocator call
+//       stb 0 -> 0x48   stb 0 -> 0x49   stfs 10.0f -> 0x4C   stfs 0.0f -> 0x50
+//   after it
+//       stw 0 -> 0x64B4   stb 0 -> 0x64B8   stw <ptr> -> 0x64B0
+//
+// The four .rdata seeds were read out of the image, not chosen: flt_82004740 == 0.3f
+// (mfStaticFriction), flt_82004D00 == 0.6f (mfDynamicFriction), flt_82004A20 == 10.0f
+// (mfMassOverride), flt_82001CC0 == 0.0f (mfMaxLeanAngleOverride).
+//
+// The allocation is a plain RenderWare single-base-resource request:
+//     descriptor[0] = { 0x600, 0x10 }, descriptor[1..] = { 0, 1 }
+// and 0x600 == 32 * 48 == KI_MAX_DEBUG_WORLD_CONTACTS * sizeof(DebugWorldContactInfo), which
+// is the arithmetic check that fixes the nested struct at three Vector3s. The X360 resolves
+// the allocator statically (the object at 0x82F2C7DC) and reaches DoAllocate through the
+// rw::IResourceAllocator vtable, and the `Allocators::mpInternalDebugAllocator != NULL` assert
+// that precedes it has the file/line of BrnResourceAllocator (line 0x171 == 369) -- i.e. it is
+// GetDebugAllocator()'s OWN inlined assert, not one PropManager wrote. So the source form is a
+// bare GetDebugAllocator()->Allocate(...) and no assert is duplicated here.
+//
+// ⚠️ TWO OBSERVATIONS STATED RATHER THAN TIDIED:
+//   * the shipped image stores zero to 0x670 and to 0x678 TWICE each (0x826273C4..0x826273D4)
+//     while storing 0x80 and 0x90 once. Two identical stores of the same value to the same
+//     address are behaviourally one; the likely source shape is a Construct()+UnSetAll() pair
+//     on the two joint bit-sets, but nothing is invented to reproduce the duplication.
+//   * the result of the allocation is NOT null-checked by this function. That is the console's
+//     and it is left alone.
+// =========================================================================================
+void PropManager::Construct()
+{
+    mUsedProps.UnSetAll();
+    mUsedParts.UnSetAll();
+
+    mUpdatedProps.Construct();
+    mUpdatedJointedProps.Construct();
+
+    mUsedPropJoints.UnSetAll();
+    mBreakPropJoints.UnSetAll();
+
+    mfStaticFriction              = 0.3f;
+    mfDynamicFriction             = 0.6f;
+    mpPrimitiveWithTriangleStream = NULL;
+    miNumPropsAddedToContactGen   = 0;
+
+    mDebugComponent.Construct(this);
+
+    mbRenderCOM            = false;
+    mbUseOverides          = false;
+    mfMassOverride         = 10.0f;
+    mfMaxLeanAngleOverride = 0.0f;
+
+    rw::ResourceDescriptor lDescriptor;
+    lDescriptor.m_baseResourceDescriptors[0].m_size =
+        static_cast<u32>(KI_MAX_DEBUG_WORLD_CONTACTS * sizeof(DebugWorldContactInfo));
+    lDescriptor.m_baseResourceDescriptors[0].m_alignment = 16;
+    for (u32 luIndex = 1; luIndex < 4; ++luIndex)
+    {
+        lDescriptor.m_baseResourceDescriptors[luIndex].m_size      = 0;
+        lDescriptor.m_baseResourceDescriptors[luIndex].m_alignment = 1;
+    }
+
+    const rw::Resource lResource = BrnResource::GetDebugAllocator()->Allocate(lDescriptor, 0);
+
+    miNumDebugWorldContacts = 0;
+    mbDisableFreezing       = false;
+    mpDebugWorldContacts    =
+        static_cast<DebugWorldContactInfo*>(lResource.m_baseResources[0]);
+}
 
 // BrnPhysics::Props::PropManager::ConstructContactGenerationPerfMonitors @ 0x825BAC60.
 //
