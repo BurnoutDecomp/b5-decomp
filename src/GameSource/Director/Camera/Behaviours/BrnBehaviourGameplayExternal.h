@@ -239,23 +239,26 @@ public:
     //   returns true and leaves the camera untouched). That is a DOCUMENTED GAP, not a
     //   fabrication: Update alone is 91 source statements spanning .cpp:188..:561.
     //
-    // ⭐⭐ HELPER SCOREBOARD, 2026-08-02 (chase-camera helper wave) -- 3 of 8 BODIED:
+    // ⭐⭐ HELPER SCOREBOARD, 2026-08-02 (rotate-helper wave) -- 5 of 8 BODIED:
     //     1  ModifyTargetAngles              ✅ BODIED  (43 asm lines, scalar+clamp)
     //     2  CalcSpringCoeffs                ✅ BODIED  (153, ~110 of them the NaN tripwires)
     //     3  InterpolateLastPlayerTransform  ⛔ 307 asm lines, 11 statements
     //     4  UpdateJumping                   ✅ BODIED  (205, pure scalar)
     //     5  UpdateLooking                   ⛔ 669 asm lines, 32 statements
-    //     6  CalculateCameraTransform        ⛔ 164 asm lines, 6 statements (shape settled
-    //                                           below; BLOCKED on dependency (3) further down)
+    //     6  CalculateCameraTransform        ✅ BODIED  (164, 6 statements)
     //     7  ApplySlideyEffects              ⛔ 434 asm lines, 27 statements
-    //     8  ApplyJumpEffects                ⛔ 303 asm lines, 3 statements (BLOCKED on (3))
-    //   The three that landed are exactly the three whose bodies are SCALAR. The five that
-    //   remain are dense hand-VMX whose source-level expression (which rw-math helper, which
-    //   lane, which permute constant) has to be recovered before a body can be honest.
+    //     8  ApplyJumpEffects                ✅ BODIED  (303, 3 statements)
+    //   ⭐ 6 and 8 were never really 164 and 303 lines of work: between them they are NINE
+    //   statements, and ~550 of those 467+ lines are inlined SinCos expansions and inlined
+    //   4x4 affine products. What actually blocked them was a single missing helper
+    //   (RotateMatrix44AffineByEulerAnglesZXY) plus the elementary-rotation vocabulary --
+    //   both of which now exist. THE REMAINING THREE ARE THE REAL WORK: their asm is dense
+    //   hand-VMX whose source-level expression (which rw-math helper, which lane, which
+    //   permute constant) still has to be recovered before a body can be honest.
     //
-    // ⛔⛔ AND THE LINK-CLOSURE SET IS BIGGER THAN "ONE MISSING DEPENDENCY". The predecessor
-    //   named exactly one symbol outside this file that Update needs. Walking every callee of
-    //   Update AND of the eight helpers turns up SIX, of which two are now closed and FOUR
+    // ⛔⛔ THE LINK-CLOSURE SET IS BIGGER THAN "ONE MISSING DEPENDENCY". A predecessor named
+    //   exactly one symbol outside this file that Update needs. Walking every callee of
+    //   Update AND of the eight helpers turns up SIX, of which FOUR are now closed and TWO
     //   are not. Verified by grep for a DEFINITION, not for a declaration:
     //     ✅ Utils::GetSmallestDifferenceBetweenRadAngles(f32,f32) and (Vector3,Vector3)
     //          -- BODIED 2026-08-02 in Camera/Utils/CameraUtils.cpp. Update .cpp:337.
@@ -263,33 +266,32 @@ public:
     //          -- BODIED 2026-08-02 in Camera/Camera.cpp. It had NO definition anywhere in
     //          the tree while TWO committed TUs already called it; the link was green only
     //          because neither is on the build list. UpdateJumping .cpp:1000 / :1054.
-    //     ⛔ Utils::RotateMatrix44AffineByEulerAnglesZXY(Matrix44Affine&, Vector3) @0x82204F98
-    //          -- DECLARATION-ONLY (CameraUtils.h:91; on that file's own "declaration-only +
-    //          flagged" list). Needed TWICE by CalculateCameraTransform (.cpp:822 / :828) and
-    //          by ApplyJumpEffects. ⭐ IT IS THE SINGLE HIGHEST-LEVERAGE ITEM LEFT: bodying it
-    //          unblocks helpers 6 and 8 AND lets Camera/Utils/BrnCameraShake.cpp be mounted,
-    //          which retires the silent-drop stub below.
-    //          ⚠️ ITS COMMITTED BLOCKING REASON MAY BE STALE AND SHOULD BE RE-READ, NOT
-    //          RE-QUOTED: DirectorLinkStubs.cpp says the blocker is "an inlined XMVectorSinCos
-    //          minimax polynomial whose coefficient table has not been dumped". But the
-    //          coefficients are an implementation detail of SinCos -- the SOURCE-level
-    //          statement is sin/cos, and this tree's vendor-SIMD rule already lowers VMX to
-    //          portable lane math everywhere else (see matrix44_operation_platform_inline.h's
-    //          banner). The REAL work is the 368 lines of matrix composition ORDER and sign
-    //          convention, which is a different (and smaller) problem than "unattested rodata".
-    //          ⭐ A free cross-check exists and is already committed: Utils::
-    //          EulerAnglesZXYFromMatrix44Affine (CameraUtils.cpp, bodied) is this function's
-    //          exact inverse, so any candidate composition can be round-tripped against it.
+    //     ✅ Utils::RotateMatrix44AffineByEulerAnglesZXY(Matrix44Affine&, Vector3) @0x82204F98
+    //          -- BODIED 2026-08-02 in Camera/Utils/CameraUtils.cpp. It was the single
+    //          highest-leverage item in the cluster and it unblocked helpers 6 and 8 AND the
+    //          camera-shake mount.
+    //          ⭐⭐ AND ITS COMMITTED BLOCKING REASON WAS STALE -- exactly as the note that
+    //          used to sit here suspected. DirectorLinkStubs.cpp called it "an inlined
+    //          XMVectorSinCos minimax polynomial whose coefficient table has not been
+    //          dumped": both clauses true, neither a reason, because the coefficients are an
+    //          implementation detail OF sin and cos and this tree de-optimises console
+    //          minimaxes to libm as a matter of course. The real work WAS the composition
+    //          order, it took one pass, and it was settled by round-tripping the candidate
+    //          against the already-committed inverse (EulerAnglesZXYFromMatrix44Affine) --
+    //          which is exactly the free cross-check the old note pointed at. ⇒ WHEN A GATE
+    //          NAMES A REASON, TEST THE REASON.
+    //     ✅ Utils::CameraShake::Update(...) -- THE SILENT-DROP STUB IS RETIRED (2026-08-02).
+    //          Its real body was file-split into Camera/Utils/BrnCameraShakeUpdate.cpp and
+    //          that TU is now mounted; the empty `{}` in Director/DirectorLinkStubs.cpp is
+    //          gone. ApplyJumpEffects (bodied above) ends on a call to it and Update .cpp:505
+    //          makes another -- both of which would have silently done nothing had the stub
+    //          still been standing when they landed. It was killed FIRST, deliberately.
     //     ⛔ Utils::CameraShakeICEController::Update(...)  -- DECLARED (BrnCameraShake.h:172),
     //          defined NOWHERE. Update .cpp:445 drives the boost shake through it.
     //     ⛔ Utils::CameraShakeICEController::GetMatrix()  -- same, BrnCameraShake.h:175.
-    //     ⚠️⚠️ Utils::CameraShake::Update(...) -- IT WILL LINK AND DO NOTHING. The real body
-    //          exists in the unmounted Camera/Utils/BrnCameraShake.cpp; what the link resolves
-    //          today is the empty `{}` in Director/DirectorLinkStubs.cpp. ApplyJumpEffects
-    //          ends on a call to it (the air shake) and Update .cpp:505 makes another (the
-    //          impact shake). ⇒ THE MOMENT UPDATE LANDS, BOTH SHAKES SILENTLY DO NOTHING and
-    //          nothing in the build, the linker or a boot test will say so. That stub's own
-    //          FLAG already predicted this shape would recur; this is the recurrence.
+    //   ⚠️ THOSE LAST TWO ARE THE ONLY EXTERNAL SYMBOLS LEFT, and they are STILL DECLARED WITH
+    //     NO DEFINITION ANYWHERE -- the shape that hid Camera::SetRequestedTimeDilation for
+    //     months. Check for a body, not a declaration, before calling them closed.
     //
     // ⭐⭐ THE DECODE OF THE REMAINING FIVE, AS FAR AS IT IS *VERIFIED* (2026-08-02). Every
     //   line below is read off the asm of BOTH exports; where the two disagree the X360 wins
@@ -317,44 +319,11 @@ public:
     //   ⚠️ the X360's OWN `vmulfp128` / `vmaddfp128` print in ASSEMBLER order instead -- the
     //   two forms sit side by side inside CalculateCameraTransform.
     //
-    //   ---- CalculateCameraTransform @0x8220E838 / PS3 @0x276FC (.cpp:813..:839) ----------
-    //   The keystone: this is the function that decides where the chase camera IS. Small --
-    //   164 X360 asm lines, of which ~90 are one inlined VMX SinCos.
-    //   VERIFIED argument map (X360 passes vector args from v1, PS3 from v2; the two agree
-    //   member for member, which is itself the cross-check):
-    //     r3  this            -- and the body reads `this->mpParameters->mfDownAngle` (+0x94),
-    //                            NOT the rCameraAttribs reference it is handed
-    //     r4  rCameraAttribs  -- DEAD in the body (the caller does pass mpParameters)
-    //     r5  lCameraMatrix   -- Matrix44Affine&, the OUTPUT
-    //     r6  lrCarMatrix     -- Matrix44Affine by value (big vector struct => hidden pointer)
-    //     V1  euler angles for the SECOND rotate
-    //     V2  multiplied component-wise into BOTH translations (VERIFIED as the multiplier;
-    //         "a scale" is INFERRED -- the caller's own stack slot is DWARF-named lCarScale)
-    //     V3  the first translation (row3 = V3 * V2)
-    //     V4  euler angles for the FIRST rotate
-    //     V5  DEAD -- X360 clobbers v5 at 0x8220E8CC before any read; PS3 clobbers ITS v6
-    //         (same ordinal) at 0x27708. Two independent builds agree the 5th Vector3 is unused.
-    //     V6  the second translation offset (row3 += V6 * V2)
-    //     f1  lfSpeedMPH, f2 lfTimestep -- BOTH DEAD in the body (the caller does pass them:
-    //         PS3 0x6AC70 `lfs f1, 0x42C(lrSharedInfo)` / 0x6AC78 the timestep)
-    //   VERIFIED body shape, statement for statement:
-    //     .cpp:817  lfDownAngleRads = mpParameters->mfDownAngle * 0.0174533f  (flt_82001744
-    //               == KF_DEGS_TO_RADS) and SinCos of it -- the inlined minimax at
-    //               unk_82000BD0..82000C20 with the range-reduction table unk_82000C60 ==
-    //               { PI, 2*PI, 1/PI, 1/(2*PI) } (read out of the image, all four words).
-    //               The three rows written are an X-axis rotation by that angle:
-    //               row0 {1,0,0}, row1 {0,c,s}, row2 {0,-s,c}.
-    //               ⚠️ INFERRED: the exact sign lane assignment -- the two `vrlimi128`s pick
-    //               lanes out of the sin/cos pair and I have not settled which row takes the
-    //               negated one. Everything else here is store-for-store.
-    //     .cpp:819  lCameraMatrix.SetTranslation(V3 * V2)          (`vmulfp128 v8, v3, v127`)
-    //     .cpp:822  Utils::RotateMatrix44AffineByEulerAnglesZXY(lCameraMatrix, V4)
-    //     .cpp:82x  lCameraMatrix.SetTranslation(GetTranslation() + V6 * V2)
-    //                                                    (`vmaddfp128 v0, v125, v127, v0`)
-    //     .cpp:828  Utils::RotateMatrix44AffineByEulerAnglesZXY(lCameraMatrix, V1)
-    //     .cpp:832  lCameraMatrix.SetTranslation(GetTranslation() + lrCarMatrix.GetTranslation())
-    //   ⇒ pivot-then-rotate-then-offset-then-rotate-then-place-on-the-car. Both callees are
-    //   ALREADY BODIED here (CameraUtils.cpp), so this helper has no unresolved dependency.
+    //   (The CalculateCameraTransform entry that used to sit here has moved into its own .cpp
+    //   banner now that it is bodied, and it was re-derived from the asm on the way rather
+    //   than copied out of this comment. Two things changed by doing that: the sign lane
+    //   assignment it carried as INFERRED is now VERIFIED three independent ways, and the
+    //   "V2 is a scale" reading held up.)
     //
     //   ---- ModifyTargetAngles @0x82225580 / PS3 @0x18E24 (.cpp:622..:642) ----------------
     //   VERIFIED complete (43 X360 asm lines, no asserts, no calls):
@@ -467,11 +436,15 @@ public:
     //                   and this build handed back null, so the chase camera had no policy in
     //                   the scene-query pass at all.
     //     [PARTIAL]   this Update + the eight helpers.   <- THE ONLY REMAINING LINK HERE
-    //                   3 of the 8 helpers are BODIED as of 2026-08-02 (ModifyTargetAngles,
-    //                   CalcSpringCoeffs, UpdateJumping) and two of the external symbols are
-    //                   closed. See the HELPER SCOREBOARD and the LINK-CLOSURE SET near the
-    //                   top of this FLAG for exactly what is left and which item unblocks the
-    //                   most (RotateMatrix44AffineByEulerAnglesZXY).
+    //                   5 of the 8 helpers are BODIED as of 2026-08-02 (ModifyTargetAngles,
+    //                   CalcSpringCoeffs, UpdateJumping, CalculateCameraTransform,
+    //                   ApplyJumpEffects) and FOUR of the six external symbols are closed --
+    //                   including the CameraShake::Update silent-drop stub, which was retired
+    //                   BEFORE its callers landed. What is left is three VMX helpers
+    //                   (InterpolateLastPlayerTransform / UpdateLooking / ApplySlideyEffects),
+    //                   the two CameraShakeICEController members that have no body anywhere,
+    //                   and Update itself. See the HELPER SCOREBOARD and the LINK-CLOSURE SET
+    //                   near the top of this FLAG.
     //     [BRING-UP]  BrnGameModule.cpp:1177 gates the director->world camera handover on
     //                   `flyby || meJunkyardState != E_JY_INACTIVE`, which goes FALSE exactly
     //                   when car-select exits -- so the world still falls back to
@@ -528,6 +501,39 @@ private:
     // ⚠️ NO CALLER YET, by construction: Update is the only one, and Update cannot link until
     //   the remaining four helpers exist. Kept private, as the DWARF declares it.
     void UpdateJumping(const BehaviourSharedInfo& lrInfo, f32 lfTimestep, Camera& lrCamera);
+
+    // ⭐⭐ DECLARED + BODIED 2026-08-02 (rotate-helper wave) -- helper 6/8, THE KEYSTONE: the
+    // function that decides where the chase camera IS (DWARF h:331, .cpp:813, X360 @0x8220E838
+    // / PS3 @0x276FC). 164 X360 asm lines, ~90 of them one inlined SinCos, six statements.
+    // It became writable the moment Utils::RotateMatrix44AffineByEulerAnglesZXY was bodied --
+    // it is this helper's only callee, and it is called TWICE.
+    // ⚠️⚠️ THREE OF THE ELEVEN PARAMETERS ARE DEAD IN THE BODY, and that is a two-build
+    // finding, not a reading of one export: the 5th Vector3 (X360 clobbers v5 at 0x8220E8CC
+    // and PS3 clobbers the same ordinal at 0x27708 before either is read) and both trailing
+    // floats. They are kept in the signature because the DWARF declares them and the caller
+    // passes them.
+    // ⚠️ The body reads `this->mpParameters->mfDownAngle`, NOT the `lrCameraAttribs`
+    // reference it is handed -- also verified in both builds.
+    void CalculateCameraTransform(const Parameters& lrCameraAttribs,
+                                  Matrix44Affine& lrCameraMatrix,
+                                  Matrix44Affine lCarMatrix,
+                                  Vector3 lSecondRotationAngles,
+                                  Vector3 lCarScale,
+                                  Vector3 lPivotOffset,
+                                  Vector3 lFirstRotationAngles,
+                                  Vector3 lUnusedVector,
+                                  Vector3 lCameraOffset,
+                                  f32 lfSpeedMPH,
+                                  f32 lfTimestep);
+
+    // ⭐ DECLARED + BODIED 2026-08-02 (rotate-helper wave) -- helper 8/8 (DWARF h:337,
+    // .cpp:607, X360 @0x822250C0 / PS3 @0x598AC). 303 asm lines, THREE statements: a yaw
+    // rotation, a dutch (roll) rotation, and the air-shake call.
+    // ⚠️⚠️ Its two rotations PRE-multiply (`Mult(rotation, transform)`), unlike
+    // CalculateCameraTransform's, so they spin the camera about its own axes and leave the
+    // position alone. See the .cpp banner -- that asymmetry is load-bearing.
+    // Parameter names are the DWARF's own (the PS3 export carries them on r4/r5).
+    void ApplyJumpEffects(Camera& lCameraInOut, const BehaviourSharedInfo& lrSharedInfo);
 
     // ---- the file-scope tuning constants UpdateJumping reads -----------------------------
     // NAMES from the DecFIGS PS3 export (which keeps them as named symbols); VALUES read out
