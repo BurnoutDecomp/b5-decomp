@@ -89,12 +89,33 @@ namespace CgsDev
         // StopMonitor / GetMonitorData take that handle. Returns -1 if the registry is full/unbuilt.
         s32  AddMonitor(const char* lpcName, PerfMonCpuPage lePage, bool lbMinimum, f32 lfCpuBudget, bool lbLibPerfTagged);
 
-        // X360 ARTIST-build 6-parameter form (a hierarchical variant: liParentHandle nests this
-        // monitor under a parent in the perfmon tree). The X360 call sites pass colour as an int,
-        // the cpu budget as a double, and bool-ish min/flags; declared here (the type's real home)
-        // so callers like BrnGui::GuiPerfmons / LionPerfMon use it instead of re-declaring PerfMonCpu.
-        // Body is its own TU. FLAG: coexists with the 5-param form above pending a maintainer
-        // decision on which signature is canonical for this build.
+        // ⚠️⚠️ THE 6-PARAMETER FORM IS A HEX-RAYS ARTEFACT, NOT A SECOND CONSOLE OVERLOAD.
+        // SETTLED 2026-08-03 (VehicleManager layout wave). On the PPC ABI a float/double argument
+        // consumes an integer-register SLOT as well as an FP register, so the real 5-argument call
+        // `AddMonitor(name, page, min, budget, tag)` is emitted as `r3, r4, r5, f1, r7` -- **r6 is
+        // never written**. Hex-Rays sees the hole and invents a 6th argument for it. Read directly
+        // out of VehicleManager::Construct @0x8263B7C8, which issues thirty of these:
+        //     lis/addi r3, <name> ; li r4, 0xC ; li r5, 0 ; fmr f1, f22 ; li r7, 1 ; bl AddMonitor
+        // -- name, page 12, min 0, budget flt_82004A20, tag 1. No r6 anywhere in the function.
+        // AddMonitor's own body @0x82824C30 reads r3/r4/r5/f1/r7 and never touches r6.
+        //
+        // ⇒ THE 5-PARAMETER FORM ABOVE IS THE CONSOLE'S SIGNATURE. New reconstructions -- notably
+        // the ~55 call sites the PhysicsSimulationModule / VehicleManager constructor waves will
+        // add -- must call THAT one, mapping the Hex-Rays 6-tuple as
+        // (name, colour->page, minimum, budget, flags->tag) and dropping the phantom parent handle.
+        //
+        // ⚠️ It is NOT removed, and it is NOT undefined: a forwarder in WorldLinkStubs.cpp defines
+        // it (`?AddMonitor@PerfMonCpu@CgsDev@@YAHPEBDHHNHH@Z`, present in Burnout_PC.map) and it is
+        // REACHED ~27x at boot from the already-mounted CgsSceneManagerModule.cpp and
+        // CgsNetworkImageConverter.cpp, whose committed call sites were transcribed in the 6-arg
+        // shape. Deleting the declaration would break two mounted TUs for no gain. Retire it when
+        // those call sites are re-transcribed to the 5-argument form.
+        //
+        // ⚠️ ODR HAZARD: GameSource/Effects/Particles/LionPerfMon.cpp re-declares this as a STATIC
+        // MEMBER of a `class PerfMonCpu` rather than a free function in `namespace PerfMonCpu`.
+        // Those mangle differently (`SA...` vs `YA...`), so its 22 calls can never bind to the
+        // forwarder. That TU is not mounted; mounting it without fixing the declaration is an
+        // instant LNK2019 x22.
         s32  AddMonitor(const char* lpcName, s32 liColour, s32 liMinimum, double lfCpuBudget, s32 liParentHandle, s32 liFlags);
 
         void StartMonitor(s32 liMonitorHandle);
