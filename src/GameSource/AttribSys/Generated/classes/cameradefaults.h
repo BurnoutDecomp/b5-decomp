@@ -69,6 +69,13 @@ namespace Gen
         // itself never asserts this slot (mCameraDefaults is one of the three
         // Prepare builds and never validates).
         using Instance::IsValid;
+
+        // ⭐ Re-exported 2026-08-02 for BoostShakeController::Update, which is the console's
+        // one reader of this instance's attribute data (`lwz r11, 4(r6)` then 0x18/0x1C/0x20/
+        // 0x24). Same re-export the sibling cameraexternalbehaviour already carries, and the
+        // ONLY sound way to reach that slot on x64: it is Instance +0x04 on console and +0x08
+        // here, so any modelled head over it is an offset poke.
+        using Instance::GetLayoutPointer;
     };
 
     // X360 ctor @0x82208770: Collection = FindCollection(0x095B375E_5F206F31, r4); chain
