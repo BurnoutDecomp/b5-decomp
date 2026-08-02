@@ -239,14 +239,14 @@ public:
     //   returns true and leaves the camera untouched). That is a DOCUMENTED GAP, not a
     //   fabrication: Update alone is 91 source statements spanning .cpp:188..:561.
     //
-    // ⭐⭐ HELPER SCOREBOARD, 2026-08-02 (rotate-helper wave) -- 5 of 8 BODIED:
+    // ⭐⭐ HELPER SCOREBOARD, 2026-08-02 (final-helpers wave) -- 7 of 8 BODIED:
     //     1  ModifyTargetAngles              ✅ BODIED  (43 asm lines, scalar+clamp)
     //     2  CalcSpringCoeffs                ✅ BODIED  (153, ~110 of them the NaN tripwires)
-    //     3  InterpolateLastPlayerTransform  ⛔ 307 asm lines, 11 statements
+    //     3  InterpolateLastPlayerTransform  ✅ BODIED  (307, 11 statements)
     //     4  UpdateJumping                   ✅ BODIED  (205, pure scalar)
-    //     5  UpdateLooking                   ⛔ 669 asm lines, 32 statements
+    //     5  UpdateLooking                   ⛔ 669 asm lines, 32 statements -- THE LAST ONE
     //     6  CalculateCameraTransform        ✅ BODIED  (164, 6 statements)
-    //     7  ApplySlideyEffects              ⛔ 434 asm lines, 27 statements
+    //     7  ApplySlideyEffects              ✅ BODIED  (434, ~24 statements)
     //     8  ApplyJumpEffects                ✅ BODIED  (303, 3 statements)
     //   ⭐ 6 and 8 were never really 164 and 303 lines of work: between them they are NINE
     //   statements, and ~550 of those 467+ lines are inlined SinCos expansions and inlined
@@ -286,12 +286,31 @@ public:
     //          gone. ApplyJumpEffects (bodied above) ends on a call to it and Update .cpp:505
     //          makes another -- both of which would have silently done nothing had the stub
     //          still been standing when they landed. It was killed FIRST, deliberately.
+    //     ✅ Utils::PositiveValueTendToLimit / Utils::TendToLimits(f32 x5) / Utils::SineLerp
+    //          -- BODIED 2026-08-02 in Camera/Utils/CameraUtils.cpp. All three are
+    //          ApplySlideyEffects' callees and NONE of them had a declaration anywhere in the
+    //          tree; the count went from "one missing dependency" to six to NINE by the simple
+    //          expedient of grepping each new body's callees for a DEFINITION. SineLerp is
+    //          additionally named as a blocker by four other committed camera TUs.
+    //          ⚠️ TendToLimits has NO X360 SYMBOL AT ALL (inlined into every caller there);
+    //          its five arguments were separated out of ApplySlideyEffects' own asm.
+    //     ✅ CameraSphericalRotationController::GetYawRotationAngleRads / ::GetPitchRotationAngleRads
+    //          -- BODIED 2026-08-02 inline in that header. ⚠️ They are NOT "the Degs accessors
+    //          times pi/180": both carry a LOOKBACK special case (yaw -> 180 degs, pitch -> 0)
+    //          that the obvious reading drops silently, and BOTH BUILDS attest it.
     //     ⛔ Utils::CameraShakeICEController::Update(...)  -- DECLARED (BrnCameraShake.h:172),
     //          defined NOWHERE. Update .cpp:445 drives the boost shake through it.
+    //          ⚠️ NOT a small job: PS3 @0x68840 is 1032 asm lines and reaches
+    //          DirectorResourceManager::GetKeyAnimFromGuid, Attrib::DefaultDataArea and the
+    //          ICE take machinery (which is gated -- DirectorLinkStubs.cpp group C).
     //     ⛔ Utils::CameraShakeICEController::GetMatrix()  -- same, BrnCameraShake.h:175.
-    //   ⚠️ THOSE LAST TWO ARE THE ONLY EXTERNAL SYMBOLS LEFT, and they are STILL DECLARED WITH
-    //     NO DEFINITION ANYWHERE -- the shape that hid Camera::SetRequestedTimeDilation for
-    //     months. Check for a body, not a declaration, before calling them closed.
+    //          A one-line `return mMatrix;` (it is inlined everywhere on both builds, so it
+    //          has no standalone address on either).
+    //   ⚠️ THOSE LAST TWO ARE THE ONLY EXTERNAL SYMBOLS LEFT KNOWN TODAY, and they are STILL
+    //     DECLARED WITH NO DEFINITION ANYWHERE -- the shape that hid
+    //     Camera::SetRequestedTimeDilation for months. Check for a body, not a declaration,
+    //     before calling them closed -- AND re-walk UpdateLooking's callees when it lands,
+    //     because every helper so far has added to this list.
     //
     // ⭐⭐ THE DECODE OF THE REMAINING FIVE, AS FAR AS IT IS *VERIFIED* (2026-08-02). Every
     //   line below is read off the asm of BOTH exports; where the two disagree the X360 wins
@@ -436,14 +455,12 @@ public:
     //                   and this build handed back null, so the chase camera had no policy in
     //                   the scene-query pass at all.
     //     [PARTIAL]   this Update + the eight helpers.   <- THE ONLY REMAINING LINK HERE
-    //                   5 of the 8 helpers are BODIED as of 2026-08-02 (ModifyTargetAngles,
-    //                   CalcSpringCoeffs, UpdateJumping, CalculateCameraTransform,
-    //                   ApplyJumpEffects) and FOUR of the six external symbols are closed --
-    //                   including the CameraShake::Update silent-drop stub, which was retired
-    //                   BEFORE its callers landed. What is left is three VMX helpers
-    //                   (InterpolateLastPlayerTransform / UpdateLooking / ApplySlideyEffects),
-    //                   the two CameraShakeICEController members that have no body anywhere,
-    //                   and Update itself. See the HELPER SCOREBOARD and the LINK-CLOSURE SET
+    //                   7 of the 8 helpers are BODIED as of 2026-08-02; NINE of the eleven
+    //                   external symbols are closed -- including the CameraShake::Update
+    //                   silent-drop stub, which was retired BEFORE its callers landed. What is
+    //                   left is ONE helper (UpdateLooking, 669 asm lines / 32 statements), the
+    //                   two CameraShakeICEController members that have no body anywhere, and
+    //                   Update itself. See the HELPER SCOREBOARD and the LINK-CLOSURE SET
     //                   near the top of this FLAG.
     //     [BRING-UP]  BrnGameModule.cpp:1177 gates the director->world camera handover on
     //                   `flyby || meJunkyardState != E_JY_INACTIVE`, which goes FALSE exactly
@@ -485,6 +502,28 @@ private:
     void CalcSpringCoeffs(f32 lfSpeedMPH, f32 lfXSpringCoeff, f32 lfYSpringCoeff,
                           Vector3& lSpring, Vector3& lInverseSpring);
 
+    // ⭐⭐ DECLARED + BODIED 2026-08-02 (final-helpers wave) -- helper 3/8 (DWARF h:300,
+    // .cpp:575, X360 @0x82224BF0 / PS3 @0x39B74). 307 asm lines, ELEVEN statements; the
+    // first of the three dense-VMX ones to fall.
+    // The chase rig follows a LAGGED copy of the car's frame (mLastPlayerTransform), and this
+    // is what drags that copy toward the real one -- rate-limited in ANGLE (0.01..0.05 rad per
+    // frame), not in time, which is why the camera sweeps through a corner instead of snapping.
+    // ⚠️⚠️ ITS FIVE TUNING CONSTANTS ARE *ZERO* IN THE X360 IMAGE and have no literal xref:
+    // they are dynamically-initialised file-scope VecFloats, and the initialiser is in a span
+    // the IDA export set does not cover. Reading them from the image would have yielded five
+    // silent 0.0f's (max interp 0, divisor guard 0) -- see the .cpp banner for how they were
+    // byte-scanned out of .text instead, and for the three independent checks on the mapping.
+    // ⚠️ `::VecFloat` IS DELIBERATELY QUALIFIED. Inside namespace BrnDirector, an unqualified
+    // `VecFloat` binds to BrnDirector::VecFloat -- the Timestep header's own flagged broadcast-
+    // register slice -- and NOT to the global BrnCommonTypes alias for rw::math::vpu::Vector4
+    // that the DWARF type means. Both are 16 bytes, so the shadowed spelling COMPILES; it
+    // would just resolve to a different type in TUs that include BrnDirectorTimestep.h than in
+    // TUs that do not, i.e. a silent ODR fork on a public signature. BehaviourRig.cpp:246
+    // already carries the same qualification for the same reason.
+    void InterpolateLastPlayerTransform(Matrix44Affine lPlayerTransform,
+                                        ::VecFloat lvfCarSpeed,
+                                        ::VecFloat lvfTimestep);
+
     // ⭐⭐ DECLARED + BODIED 2026-08-02 (chase-camera helper wave) -- the FOURTH of the eight
     // helpers Update drives (DWARF h:337, .cpp:948, X360 @0x8220EAD0 / PS3 @0x1CFFC), and the
     // first of the five the predecessor wave left standing. It is the only one of those five
@@ -525,6 +564,24 @@ private:
                                   Vector3 lCameraOffset,
                                   f32 lfSpeedMPH,
                                   f32 lfTimestep);
+
+    // ⭐⭐ DECLARED + BODIED 2026-08-02 (final-helpers wave) -- helper 7/8 (DWARF h:334,
+    // .cpp:841, X360 @0x822260A8 / PS3 @0x59E18). 434 asm lines, ~24 statements.
+    // THE SLIDE/DRIFT RESPONSE: it takes the car's own velocity expressed in CAR SPACE, shapes
+    // each axis through a saturating tend-to-limit curve, smooths the Z (fore/aft) term, and
+    // pushes the camera along the result -- then swings that push by the free-look yaw/pitch.
+    // ⚠️ IT CLOSED FIVE EXTERNAL SYMBOLS ON THE WAY IN, none of which existed in the tree:
+    //   Utils::PositiveValueTendToLimit / Utils::TendToLimits / Utils::SineLerp (all three now
+    //   in Camera/Utils/CameraUtils.cpp) and CameraSphericalRotationController::
+    //   GetYawRotationAngleRads / ::GetPitchRotationAngleRads (bodied inline in that header --
+    //   and they carry a LOOKBACK special case that "Degs * pi/180" would have silently lost).
+    // ⚠️ It reads `mpParameters->mfZAndTiltCutoffSpeedMPH` -- the MEMBER pointer -- while every
+    //   other tunable comes from the `lrCameraAttribs` reference it is handed. Same asymmetry
+    //   CalculateCameraTransform has with mfDownAngle, verified the same way (both builds).
+    void ApplySlideyEffects(const Parameters& lrCameraAttribs,
+                            Matrix44Affine& lrCameraMatrix,
+                            Matrix44Affine lCarMatrix,
+                            const BehaviourSharedInfo& lrSharedInfo);
 
     // ⭐ DECLARED + BODIED 2026-08-02 (rotate-helper wave) -- helper 8/8 (DWARF h:337,
     // .cpp:607, X360 @0x822250C0 / PS3 @0x598AC). 303 asm lines, THREE statements: a yaw

@@ -167,6 +167,51 @@ namespace Utils
     // keeps it out of line, so the shape below is read off @0x382E0 store-for-store.
     Vector3 GetSmallestDifferenceBetweenRadAngles(Vector3 lFromRads, Vector3 lToRads);
 
+    // ------------------------------------------------------------------------------------
+    // ⭐⭐ THE "TEND TO LIMIT" FAMILY -- ADDED 2026-08-02 (final-helpers wave).
+    // Three scalar response curves BehaviourGameplayExternal::ApplySlideyEffects drives, and
+    // NONE of the three was declared anywhere in the tree. Found by walking that helper's
+    // callee set and grepping for a DEFINITION rather than a declaration -- the same check
+    // that turned up Camera::SetRequestedTimeDilation and the CameraShake::Update stub.
+    // SineLerp in particular is cited as a blocker by FOUR other committed camera TUs
+    // (BrnBehaviourInterpolate, BrnBehaviourRoadRunner, BrnBehaviourManager, BrnReplayDirector).
+    // Bodied here BEFORE their caller lands, deliberately -- the standing rule in this cluster
+    // since the shake stub.
+    // ------------------------------------------------------------------------------------
+
+    // @0x821F8B78 / PS3 @0x1B410 (DWARF CameraUtils.cpp:616). A saturating response curve:
+    // maps [0, inf) onto [0, lrLimit), reaching HALF of lrLimit exactly at
+    // lrValueIn == lrValueForHalfway -- which is what names the second parameter and is the
+    // cheapest check on the formula.
+    //   x = lrValueIn / lrValueForHalfway ;  return (x / (x + 1)) * lrLimit
+    // Three asserts, all non-gating (X360/DWARF lines 618 / 643 / 645).
+    // ⚠️ PARAMETER NAMES ARE THE DWARF'S OWN (the PS3 export carries lrValueIn /
+    //   lrValueForHalfway / lrLimit on f1/f2/f3), and so are the assert texts.
+    f32 PositiveValueTendToLimit(f32 lrValueIn, f32 lrValueForHalfway, f32 lrLimit);
+
+    // PS3 @0x1B53C (DWARF CameraUtils.cpp:660). The two-sided form: pick the NEGATIVE pair or
+    // the POSITIVE pair by the sign of lrValueIn, take the absolute value, and tail-call the
+    // helper above. Both console arms are literal tail branches into it.
+    // ⚠️ NO X360 ADDRESS -- the X360 ARTIST export has no such symbol at all: it is inlined
+    //   into every caller there (ApplySlideyEffects contains two expansions of it,
+    //   @0x822262E4 and @0x822263EC, and reading THOSE is how each caller's five arguments
+    //   were separated). The PS3 build keeps it out of line and carries the DWARF names.
+    // ⚠️ THE ARGUMENT ORDER IS NEG-PAIR-FIRST and it is easy to get backwards: the console's
+    //   `fmr f2, f4` / `fmr f3, f5` in the >= 0 arm is what says f2/f3 are the NEG pair and
+    //   f4/f5 the POS pair.
+    // FLAG (not transcribed): the DWARF also declares the per-lane Vector3 overload at
+    //   CameraUtils.cpp:680 (PS3 @0x1B560). No caller needs it yet; left undeclared rather
+    //   than guessed.
+    f32 TendToLimits(f32 lrValueIn,
+                     f32 lrNegValueForHalfway, f32 lrNegLimit,
+                     f32 lrPosValueForHalfway, f32 lrPosLimit);
+
+    // @0x8220CCB0 / PS3 @0x20AE4 (DWARF CameraUtils.cpp:808). A cosine-eased lerp: the
+    // parameter is remapped through 1 - (cos(p * PI) + 1) / 2 (0 -> 0, 0.5 -> 0.5, 1 -> 1,
+    // with zero slope at both ends) and then used as an ordinary lerp weight.
+    // One non-gating assert that the parameter is in [0, 1] (line 810).
+    f32 SineLerp(f32 lfFrom, f32 lfTo, f32 lfParameter);
+
     // @0x822183E0. Rotate a look-at frame about a world pivot by a pitch angle (radians).
     // Used by CollisionPolicyAttachedToVehicle::GenerateSceneQueries.
     // FLAG (declaration-only): NOT YET DONE. ⛔ ITS OLD REASON IS RETIRED (2026-08-02) -- it

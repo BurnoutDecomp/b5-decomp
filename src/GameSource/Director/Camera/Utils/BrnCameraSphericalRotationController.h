@@ -57,11 +57,40 @@ namespace Utils
         f32     GetPitchRotationAngleDegs() const { return mPitchMover.GetCurrentValue(); } // +0x2C
         Vector2 GetRawStickVector() const { return mStickVector; }                // +0x00
 
+        // ⭐⭐ THE RADIANS PAIR IS BODIED AS OF 2026-08-02 (final-helpers wave), and NOT by
+        // assuming it is "the Degs one times pi/180" -- the LOOKBACK SPECIAL CASE lives
+        // inside these two and would have been lost by that assumption.
+        // Attested from BehaviourGameplayExternal::ApplySlideyEffects, which inlines both:
+        //   X360 @0x82226650  lbz this+0x40 (== controller +0x20, mbIsLookback)
+        //        @0x8222665C  lookback  -> 0.0f
+        //        @0x82226664  otherwise -> lfs this+0x4C (== mPitchMover.mfCurrentValue)
+        //        @0x8222667C  fmuls by flt_82001744 (DUMPED 0.017453292 == pi/180)
+        //   X360 @0x822266B0  the same byte again
+        //        @0x822266D4  lookback  -> flt_820025FC (DUMPED 180.0f)
+        //        @0x822266E0  otherwise -> lfs this+0x30 (== mfYawDegs)
+        //        @0x822266E8  fmuls by the same pi/180
+        // ⭐ CORROBORATED BY THE OTHER BUILD AT THE ACCESSOR'S OWN SOURCE LINES: DecFIGS
+        // charges those loads to BrnCameraSphericalRotationController.h:82 and :88 -- i.e.
+        // the work really is inside these two members, not open-coded in the caller -- and it
+        // shows the PS3 compiler having CONSTANT-FOLDED both lookback arms (yaw's arm loads
+        // PI outright, pitch's folds to zero), which is the same source read two ways.
+        // ⇒ lookback flips the camera to look BACKWARDS (180 degs of yaw) and levels the
+        //   pitch, and it does so for every consumer of these two, not just the chase cam.
+        f32 GetYawRotationAngleRads() const
+        {
+            const f32 KF_DEGS_TO_RADS = 0.017453292f;   // flt_82001744, dumped
+            return (mbIsLookback ? 180.0f : mfYawDegs) * KF_DEGS_TO_RADS;
+        }
+
+        f32 GetPitchRotationAngleRads() const
+        {
+            const f32 KF_DEGS_TO_RADS = 0.017453292f;   // flt_82001744, dumped
+            return (mbIsLookback ? 0.0f : mPitchMover.GetCurrentValue()) * KF_DEGS_TO_RADS;
+        }
+
         // Still declaration-only (their own ledger functions; no caller in this tree yet).
         bool     IsRotated() const;
         Vector2  GetAdjustedStickVector() const;
-        f32      GetYawRotationAngleRads() const;
-        f32      GetPitchRotationAngleRads() const;
         f32      GetUnRotatedTime() const;
         bool     IsStartingLookbackThisFrame() const;
         bool     IsEndingLookbackThisFrame() const;

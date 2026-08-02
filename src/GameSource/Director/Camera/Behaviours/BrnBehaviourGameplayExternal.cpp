@@ -6,7 +6,10 @@
 //   - BehaviourGameplayExternal::Parameters::Set @0x821F9228  (defined here)
 //   - BehaviourGameplayExternal::ModifyTargetAngles @0x82225580 (added 2026-08-02, helper 1/8)
 //   - BehaviourGameplayExternal::CalcSpringCoeffs   @0x8220E5D0 (added 2026-08-02, helper 2/8)
+//   - BehaviourGameplayExternal::InterpolateLastPlayerTransform @0x82224BF0
+//                                                   (added 2026-08-02, helper 3/8)
 //   - BehaviourGameplayExternal::UpdateJumping      @0x8220EAD0 (added 2026-08-02, helper 4/8)
+//   - BehaviourGameplayExternal::ApplySlideyEffects @0x822260A8 (added 2026-08-02, helper 7/8)
 // (each has its own banner below; none has a caller yet -- Update is the only one, and
 //  Update cannot link until all eight exist. See the header's FLAG for the running count.)
 //
@@ -18,6 +21,10 @@
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
 
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
+                                                        // VehicleTracker::GetImplicitVelocity()
+                                                        //   (Behaviour.h only forward-declares
+                                                        //    it; ApplySlideyEffects calls it)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random::RandomBool
                                                         //   (Behaviour.h only forward-declares it;
                                                         //    UpdateJumping needs the complete type)
@@ -29,6 +36,9 @@
 #include "rw/math/vpu/matrix44affine_operation.h"       // Mult / MakeRotationX / MakeRotationY /
                                                         //   MakeRotationZ (the SDK's three
                                                         //   elementary rotation builders)
+                                                        //   + SLerp / IsValid(Matrix44Affine)
+
+#include <cmath>                                        // std::acos -- the console's XMVectorACos
 
 // ----------------------------------------------------------------------------
 // NOTE -- BehaviourGameplayExternal::Parameters::Serialise<S> (the versioned field-walk visitor:
@@ -481,6 +491,180 @@ void BehaviourGameplayExternal::CalcSpringCoeffs(f32 lfSpeedMPH,
 }
 
 // ============================================================================
+// The five file-scope VecFloat tunables InterpolateLastPlayerTransform reads.
+//
+// ⭐⭐ NAMES *AND* VALUES, AND NEITHER CAME FROM THE PLACE YOU WOULD LOOK FIRST.
+//
+// NAMES: the DecFIGS DWARF puts all five in this .cpp's ANONYMOUS namespace at
+// BehaviourGameplayExternal.cpp:565..:569, in this order
+// (references/DecFIGS/dwarfdump/.../BehaviourGameplayExternal.cpp), and the PS3 export carries
+// them as named TOC symbols. They are not class members, so they are spelled here the way the
+// DWARF spells them.
+//
+// VALUES: ⚠️⚠️ THE X360 IMAGE HOLDS ZERO FOR ALL FIVE, AND NOTHING IN THE EXPORTED CODE STORES
+// TO THEM. `VecFloat` has a non-trivial constructor, so these live in a BSS-like span
+// (0x82FAA700..0x82FAAC00 -- the whole director-wide VecFloat constant table reads back as
+// zeros) and are filled by a compiler-generated dynamic initialiser that the IDA export set
+// does not cover: a literal scan for `unk_82FAA940` finds exactly ONE function, the READER
+// below. Reading a value straight out of the image here would have produced five plausible
+// 0.0f "constants" -- a max interp of zero, a divisor guard of zero -- and nothing downstream
+// would have complained.
+// ⇒ recovered by BYTE-SCANNING .text for `lis rD, 0x82FB` and following each one to its
+//   completing `addi`, which lands on an unexported initialiser block at 0x82C49390..0x82C49478
+//   (scratchpad\fh_lis.py + fh_dis.py). Each entry there is
+//     lfs f0, <rodata>  /  stfs f0, -16(r1)  /  lvlx  /  vspltw  /  stvx v0, r0, <target>
+//   so the rodata float and the destination are read off the SAME block. Verified two ways:
+//     * the initialiser emits them in DECLARATION ORDER, and that order is exactly the DWARF's
+//       :565, :566, :567, :568, :569;
+//     * every value's ROLE in the formula matches its NAME independently (the one that is
+//       subtracted from a speed is the ..._MPS one, the vmaxfp bound is MIN, the vminfp bound
+//       is MAX, the divisor guard is MIN_DIV_ANGLE) -- and MIN < MAX holds.
+//   The PS3 export names the two loads inside the :584 statement (r11 = CAR_SPEED_FACTOR,
+//   r9 = the subtracted one), which pins that pair a third way.
+//
+//   .cpp | X360 store target | rodata     | value        | name
+//   -----+-------------------+------------+--------------+--------------------------------
+//   :565 | 0x82FAAB40        | 0x8200D5F4 | 0.59999996   | CAR_SPEED_FACTOR
+//   :566 | 0x82FAA940        | 0x82004270 | 3.0          | SPEED_TO_INTERP_MPS
+//   :567 | 0x82FAA770        | 0x820047C8 | 0.05         | MAX_INTERP   (radians/frame)
+//   :568 | 0x82FAA7C0        | 0x82002138 | 0.01         | MIN_INTERP   (radians/frame)
+//   :569 | 0x82FAABF0        | 0x82004884 | 0.00001      | MIN_DIV_ANGLE
+// ⚠️ 0x8200D5F4 is 0x3F199999, i.e. the float BELOW 0.6f (0x3F19999A). Transcribed as the
+//   image has it, the way this file already spells 0.019999999f / 0.069999999f.
+// ============================================================================
+namespace
+{
+    const f32 KVF_LAST_PLAYER_TRANSFORM_CAR_SPEED_FACTOR    = 0.59999996f;
+    const f32 KVF_LAST_PLAYER_TRANSFORM_SPEED_TO_INTERP_MPS = 3.0f;
+    const f32 KVF_LAST_PLAYER_TRANSFORM_MAX_INTERP          = 0.05f;
+    const f32 KVF_LAST_PLAYER_TRANSFORM_MIN_INTERP          = 0.01f;
+    const f32 KVF_LAST_PLAYER_TRANSFORM_MIN_DIV_ANGLE       = 0.00001f;
+}
+
+// ============================================================================
+// InterpolateLastPlayerTransform @0x82224BF0 / PS3 @0x39B74  (.cpp:575..:600)
+// helper 3/8 -- BODIED 2026-08-02 (final-helpers wave).
+//
+// The chase rig does NOT follow the car's own frame: it follows a LAGGED copy of it,
+// mLastPlayerTransform, and this is the function that drags that copy toward the real one.
+// The lag is rate-limited in ANGLE, not in time -- which is why the camera swings smoothly
+// through a hard corner instead of snapping.
+//
+// 307 X360 asm lines, ELEVEN statements; ~200 of those lines are the three NaN tripwires
+// (one of which streams three floats) and two inlined rsqrt Newton-Raphson normalises.
+//
+// STATEMENT MAP -- DecFIGS line numbers, X360 addresses:
+//   :579  lvfOutAngle = ACos(Clamp(Dot(Normalize(lPlayerTransform.zAxis),
+//                                      Normalize(mLastPlayerTransform.zAxis)), -1, +1))
+//         X360 0x82224C2C loads lPlayerTransform+0x20 and 0x82224C38 loads this+0xAC0
+//         (mLastPlayerTransform's zAxis row -- mLastPlayerTransform is at +0xAA0), two
+//         vmsum3fp128 self-dots, vrsqrtefp + one Newton-Raphson step each, one vmsum3fp128
+//         cross-dot, vmaxfp against vcfsx(-1), vminfp against vcsxwfp(+1), then
+//         `bl XMVectorACos` @0x82224C8C.
+//         ⭐ IT IS THE SAME FOUR LINES rw::math::vpu::SLerp OPENS WITH -- and SLerp is
+//         called at :598 with the same two matrices, so the console computes this angle
+//         TWICE per frame. Reproduced as written rather than folded, because the two uses
+//         diverge (this one is clamped and rate-limited; SLerp's is not).
+//   :580  CGS_ASSERT(IsValid(lvfOutAngle))                      X360 line 0x28E == 654
+//   :584  lvfSpeedMod = Sqr(Max(lvfCarSpeed - SPEED_TO_INTERP_MPS, 0))
+//                       * CAR_SPEED_FACTOR * lvfTimestep
+//         X360 0x82224CEC..0x82224D04; PS3 0x39D98..0x39DA8, where the three `vmaddfp`s
+//         against a zero register are the SDK's Sqr (vec_float_operation_inline.h:1540) and
+//         two scalar multiplies, and `v22`/`v21` are the two VecFloat arguments in order.
+//   :585  CGS_ASSERT(IsValid(lvfSpeedMod))                      X360 line 0x293 == 659
+//   :589  lvfAngleToRotate        = lvfOutAngle * Clamp(lvfSpeedMod, 0, 1)
+//   :590  lvfAngleToRotateClamped = Clamp(lvfAngleToRotate, MIN_INTERP, MAX_INTERP)
+//         (Max first, then Min, on both builds: X360 0x82224D80 / 0x82224D90.)
+//   :590/:591  lvfSpeedMod = lvfAngleToRotateClamped / Max(lvfOutAngle, MIN_DIV_ANGLE)
+//         ⚠️ NO OWN-LINE ATTESTATION: on PS3 every instruction of this statement is charged
+//         to the inlined vec_float_operation_inline.h:1689 (the reciprocal + its two
+//         Newton-Raphson steps) and scalar_operation_inline.h:150, so DWARF never names its
+//         .cpp line. It is bracketed between :590 and :592 and that is all that is attested.
+//         ⭐ THE VARIABLE IS REUSED: lvfSpeedMod stops being a speed here and becomes the
+//         SLerp blend fraction. The X360 stack slot the :592 assert streams as "lvfSpeedMod"
+//         (var_100) holds THIS value, not the :584 one -- which is how the reuse is known.
+//   :592  CGS_ASSERT(IsValid(lvfSpeedMod)) streaming all three floats, in the order
+//         "lvfSpeedMod: " / " lvfAngleToRotate: " / " lvfAngleToRotateClamped: "
+//                                                              X360 line 0x29A == 666
+//   :598  mLastPlayerTransform = SLerp(mLastPlayerTransform, lPlayerTransform,
+//                                      Clamp(lvfSpeedMod, 0, 1), lvfAngleToRotateClamped)
+//         X360 0x82224ED4: r4 = this+0xAA0 (lFrom), r5 = the by-value player transform (lTo),
+//         v1 = the clamped blend, r6 = &lvfAngleToRotateClamped. DecFIGS names SLerp's first
+//         two parameters lFrom / lTo, which fixes the direction.
+//   :599  CGS_ASSERT(IsValid(mLastPlayerTransform)) -- the console open-codes it as twelve
+//         `vspltw` + `vcmpeqfp.` self-compares, four rows by three lanes (0x82224F04..
+//         0x82225088), i.e. exactly matrix44affine_operation.h's IsValid.
+//
+// ⚠️ SLerp's FOURTH argument is an OUT parameter and the console hands it the storage of
+//   lvfAngleToRotateClamped, which nothing reads afterwards. Our SLerp declares it
+//   `Vector3* lpvAngleOut` (a corrected signature recorded in that vendor header) rather than
+//   the DWARF's `VecFloat&`, so it is spelled here as a named throwaway local. The value
+//   written back is discarded either way; the reuse is recorded, not reproduced by aliasing.
+//
+// ⚠️ PARAMETER NAMES: `lPlayerTransform` IS the DWARF's own (the PS3 export carries it on r4).
+//   The two VecFloats get no DWARF name -- they arrive in vector registers -- so `lvfCarSpeed`
+//   and `lvfTimestep` are DESCRIPTIONS read off what the asm does with them: the first is what
+//   SPEED_TO_INTERP_MPS is subtracted from, the second is a bare multiplier, and Update's call
+//   site @0x82240E38 builds the second by `vspltw`-broadcasting a scalar stack float. Re-read
+//   them that way rather than trusting the names.
+//
+// ⚠️ VecFloat is a BROADCAST lane here (all four lanes equal), so the body is the portable
+//   scalar math on lane x -- the same de-vectorisation rw::math::vpu::SLerp itself uses for
+//   its blend argument. Never a placeholder: every operation below is one console instruction.
+//
+// ⚠️⚠️ `::VecFloat` IS QUALIFIED ON PURPOSE -- there are TWO VecFloats in scope here and the
+//   unqualified spelling silently picks the wrong one. See the declaration's note in the
+//   header: BrnDirector::VecFloat (BrnDirectorTimestep.h:39) shadows the global
+//   BrnCommonTypes alias inside this namespace, and because both are 16 bytes wide the
+//   shadowed form compiles cleanly in either direction -- it just means a DIFFERENT TYPE in
+//   TUs that pull in the Timestep header than in TUs that do not.
+// ============================================================================
+void BehaviourGameplayExternal::InterpolateLastPlayerTransform(Matrix44Affine lPlayerTransform,
+                                                               ::VecFloat lvfCarSpeed,
+                                                               ::VecFloat lvfTimestep)
+{
+    // .cpp:579 -- the angle between the two forward axes.
+    const f32 lfCos = rw::math::fpu::Clamp(
+        rw::math::vpu::Dot(rw::math::vpu::Normalize(lPlayerTransform.zAxis),
+                           rw::math::vpu::Normalize(mLastPlayerTransform.zAxis)),
+        -1.0f, 1.0f);
+    const f32 lfOutAngle = std::acos(lfCos);
+    CGS_ASSERT(rw::math::fpu::IsValid(lfOutAngle), "IsValid( lvfOutAngle )");   // .cpp:580
+
+    // .cpp:584 -- how much of the gap to close this frame, as a fraction. Below 3 m/s the
+    // camera does not chase the car's heading at all; the response then grows with the SQUARE
+    // of the excess speed, so it saturates (Clamp below) at about 8 m/s at 60 fps.
+    const f32 lfExcessSpeed =
+        rw::math::fpu::Max(lvfCarSpeed.x - KVF_LAST_PLAYER_TRANSFORM_SPEED_TO_INTERP_MPS, 0.0f);
+    f32 lfSpeedMod = (lfExcessSpeed * lfExcessSpeed)
+                   * KVF_LAST_PLAYER_TRANSFORM_CAR_SPEED_FACTOR * lvfTimestep.x;
+    CGS_ASSERT(rw::math::fpu::IsValid(lfSpeedMod), "IsValid( lvfSpeedMod )");   // .cpp:585
+
+    // .cpp:589 / :590 -- turn that fraction into an ANGLE, then rate-limit the angle into
+    // [0.01, 0.05] radians per frame (0.57 to 2.9 degrees).
+    const f32 lfAngleToRotate = lfOutAngle * rw::math::fpu::Clamp(lfSpeedMod, 0.0f, 1.0f);
+    const f32 lfAngleToRotateClamped =
+        rw::math::fpu::Clamp(lfAngleToRotate,
+                             KVF_LAST_PLAYER_TRANSFORM_MIN_INTERP,
+                             KVF_LAST_PLAYER_TRANSFORM_MAX_INTERP);
+
+    // .cpp:590/:591 -- and back into a blend fraction of the remaining gap.
+    lfSpeedMod = lfAngleToRotateClamped
+               / rw::math::fpu::Max(lfOutAngle, KVF_LAST_PLAYER_TRANSFORM_MIN_DIV_ANGLE);
+    CGS_ASSERT(rw::math::fpu::IsValid(lfSpeedMod),                              // .cpp:592
+               "lvfSpeedMod / lvfAngleToRotate / lvfAngleToRotateClamped");
+
+    // .cpp:598 -- drag the lagged frame that far toward the real one.
+    Vector3 lvUnusedAngleOut;   // the console reuses lvfAngleToRotateClamped's slot here
+    mLastPlayerTransform = rw::math::vpu::SLerp(mLastPlayerTransform,
+                                                lPlayerTransform,
+                                                rw::math::fpu::Clamp(lfSpeedMod, 0.0f, 1.0f),
+                                                &lvUnusedAngleOut);
+    CGS_ASSERT(rw::math::vpu::IsValid(mLastPlayerTransform),                    // .cpp:599
+               "IsValid( mLastPlayerTransform )");
+}
+
+// ============================================================================
 // The file-scope jump tuning constants (DecFIGS-NAMED, X360-VALUED).
 //
 // The DecFIGS PS3 export keeps these as named symbols
@@ -787,6 +971,220 @@ void BehaviourGameplayExternal::CalculateCameraTransform(const Parameters& /*lrC
 
     // .cpp:832 -- and place the result on the car.
     lrCameraMatrix.wAxis = lrCameraMatrix.wAxis + lCarMatrix.wAxis;
+}
+
+// ============================================================================
+// ApplySlideyEffects @0x822260A8 / PS3 @0x59E18  (.cpp:841..:940)
+// helper 7/8 -- BODIED 2026-08-02 (final-helpers wave).
+//
+// THE SLIDE / DRIFT RESPONSE. Everything that makes the chase camera feel like it is being
+// dragged behind a car rather than bolted to one lives here: take the car's implicit
+// velocity, express it in the CAR's own axes, shape each axis through a saturating
+// tend-to-limit curve, smooth the fore/aft term, and push the camera along the result --
+// then swing that push by the player's free-look yaw and pitch.
+//
+// 434 X360 asm lines, ~24 statements. It looks bigger than it is: ~120 lines are the two
+// IsValid tripwires and the Timestep::Get assert, and another ~120 are two inlined SinCos
+// expansions plus four inlined vector transforms.
+//
+// ⚠️⚠️ FIVE EXTERNAL SYMBOLS HAD TO BE BODIED FIRST AND NONE OF THEM EXISTED IN THE TREE --
+//   Utils::PositiveValueTendToLimit, Utils::TendToLimits, Utils::SineLerp (all three now in
+//   Camera/Utils/CameraUtils.cpp) and the rotation controller's two RADIANS accessors. Found
+//   by grepping for a DEFINITION, not a declaration. Two of them are shapes that would have
+//   compiled and linked wrong rather than failed: TendToLimits has NO X360 SYMBOL AT ALL (it
+//   is inlined into both call sites here, so its five arguments had to be separated out of
+//   THIS function's asm), and the two accessors carry a LOOKBACK special case that reading
+//   them as "the Degs accessor times pi/180" would have discarded without any diagnostic.
+//
+// STATEMENT MAP -- DecFIGS line numbers, X360 addresses:
+//   :844/:846/:847  first frame only: seed mLastCarPos from the car and latch the flag
+//                   (X360 0x822260EC reads this+0xB5C, 0x82226108 stores this+0xAE0).
+//   :856  lDisplacement = the tracker's implicit velocity IN CAR SPACE.
+//         ⭐ THE CONSOLE SPELLS THIS AS A 3x3 TRANSPOSE: six vmrghw/vmrglw at
+//         0x82226144..0x82226170 build the car matrix's three COLUMNS, and the vmulfp +
+//         two vmaddfp cascade at 0x82226190 then computes column0*v.x + column1*v.y +
+//         column2*v.z -- which is Dot(row_i, v) per lane, i.e. the INVERSE rotation, not
+//         TransformVector. Written below as the three dots it is; folding it into
+//         TransformVector would rotate the wrong way and still look plausible.
+//         (The zero vector fed as the transpose's fourth row is what makes the w lane 0.)
+//   :857  CGS_ASSERT(IsValid(lDisplacement))                       X360 line 0x3A3 == 931
+//   :859  mLastDisplacement = lDisplacement                        (this+0xAF0)
+//   :862  lDisplacement.y = <a SECOND GetImplicitVelocity call>.y
+//         ⚠️ The console really does call the tracker twice (0x82226174 and 0x82226244) and
+//         keeps only lane Y of the second (`vrlimi128 v0, v13, 4, 0`, mask 4 == lane Y). So
+//         Y is WORLD-space vertical velocity while X and Z stay car-space, and
+//         mLastDisplacement keeps the pure car-space triple from before the swap.
+//   :863  CGS_ASSERT(IsValid(lDisplacement))                       X360 line 0x3A9 == 937
+//   :869  lDisplacement.y = TendToLimits(y, 30, mfSlideYScale, 15, 0)
+//         X360 0x822262E4..0x82226314 is TendToLimits inlined: `blt` on the sign, `fneg`,
+//         and the two (halfway, limit) pairs -- 30.0f/mfSlideYScale for the negative side,
+//         15.0f/0.0f for the positive. ⇒ upward motion contributes NOTHING (posLimit 0) and
+//         only downward motion raises the camera.
+//   :873  lDisplacement.z = GetTimestep(GetTimestepType()) * (speedMPH - STATIC_last_mph)
+//         i.e. a raw per-frame acceleration proxy. The Timestep::Get assert
+//         ("leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_MAX") is open-coded at
+//         0x82226328..0x8222637C, exactly as in ApplyJumpEffects.
+//   :87x  lDisplacement = Mult(lDisplacement, {mrSlideXScale, 1, mrSlideZScale})
+//         ⚠️ NO OWN-LINE ATTESTATION (one `vmulfp128` at 0x822263E0 against a vector the
+//         compiler HOISTED to the function head, 0x8222612C..0x82226160). Bracketed
+//         between :873 and :885, and that is all that is attested.
+//   :885  lDisplacement.z = TendToLimits(z, mrSlideZInputForHalf, +1,
+//                                           mrSlideZInputForHalf, -1)
+//         (second inlined expansion, 0x822263EC..0x8222640C; both halfway args are the same
+//         tunable, only the limits' signs differ -- accelerating pushes the camera back,
+//         braking pulls it in.)
+//   :888  mfDesiredZDisplacement += (z - mfDesiredZDisplacement) * mfAccelZLerpAmount
+//         and lDisplacement.z becomes that smoothed value.
+//   :894  if (mfAbsDriftScale > 0.1f)                              (shared info +0x45C)
+//   :896      mOverrideScale = 0
+//   :898  else if (speedMPH > mpParameters->mfZAndTiltCutoffSpeedMPH)
+//   :900      mOverrideScale += (STATIC_override_max_speed - mOverrideScale)
+//                             * STATIC_override_scale_lerp
+//         else
+//   :904      mOverrideScale += (1 - mOverrideScale) * STATIC_override_scale_lerp
+//   :909  if (speedMPH > mpParameters->mfZAndTiltCutoffSpeedMPH) lDisplacement.z = 0
+//   :919  mfSmoothedZDisplacement += (z - mfSmoothedZDisplacement)
+//                                   * (SineLerp(STATIC_MinLerp, 1, Abs(z) * mOverrideScale)
+//                                      * mfZLerpAmount)
+//         (the Abs is the console's `vspltisw -1` / `vslw` sign-mask + `vandc` at
+//         0x82226548..0x82226574, not a call.)
+//   :922  STATIC_last_mph = speedMPH
+//   :927  lDisplacement.z  = mrSlideZOutputMax * mfSmoothedZDisplacement
+//   :930  lDisplacement.z += mfZDistanceScale * mrSlideZOutputMax
+//   :934  push = TransformVector(MakeRotationX(pitchRads),
+//                                TransformVector(lrCameraMatrix, lDisplacement))
+//   :935  lrCameraMatrix.wAxis += TransformVector(MakeRotationY(yawRads), push)
+//   :939  mLastCarPos = lCarMatrix.wAxis
+//
+// ⚠️ THE FOUR `STATIC_*` NAMES ARE THE DWARF'S OWN -- they are FUNCTION-LOCAL STATICS and
+//   the PS3 export carries their full mangled `_ZZ...E<name>` symbols. Their X360 storage is
+//   three consecutive .data floats at 0x82CDAD24/28/2C plus one BSS float at 0x82FAAD24, and
+//   the name-to-address mapping is fixed twice over: the PS3 block is consecutive in the same
+//   declaration order (0x10206C4C/50/54), and each one's ROLE matches at its use site (the
+//   SineLerp argument is MinLerp on both builds, the over-cutoff target is override_max_speed
+//   on both, the blend rate is override_scale_lerp on both).
+// ⚠️⚠️ STATIC_last_mph IS MUTABLE AND PER-CLASS, NOT PER-INSTANCE -- both shared gameplay
+//   cameras write it, exactly like the function-local `mLastCameraAngles` in Update. Making
+//   it a member would change behaviour whenever two of these run in one frame.
+// ⚠️ STATIC_override_max_speed is 0.01f despite its name (it is a SCALE target, not a speed).
+//   Transcribed as the image has it; the name is the DWARF's, the value is the image's, and
+//   they simply disagree.
+// ============================================================================
+namespace
+{
+    // DecFIGS-NAMED function-local statics; X360-VALUED (flt_82CDAD24/28/2C, all 0.01f).
+    // Kept at file scope rather than inside the body only so the banner above can document
+    // them in one place -- they are `static` in the console source and have no other consumer.
+    const f32 KF_SLIDEY_STATIC_MIN_LERP             = 0.01f;   // STATIC_MinLerp
+    const f32 KF_SLIDEY_STATIC_OVERRIDE_MAX_SPEED   = 0.01f;   // STATIC_override_max_speed
+    const f32 KF_SLIDEY_STATIC_OVERRIDE_SCALE_LERP  = 0.01f;   // STATIC_override_scale_lerp
+}
+
+void BehaviourGameplayExternal::ApplySlideyEffects(const Parameters& lrCameraAttribs,
+                                                   Matrix44Affine& lrCameraMatrix,
+                                                   Matrix44Affine lCarMatrix,
+                                                   const BehaviourSharedInfo& lrSharedInfo)
+{
+    // The one MUTABLE console static: last frame's speed, shared by both gameplay cameras.
+    static f32 STATIC_last_mph = 0.0f;                         // X360 flt_82FAAD24 (BSS)
+
+    // .cpp:844..:847
+    if (!mbLastCarPosInitialised)
+    {
+        mLastCarPos = lCarMatrix.wAxis;
+        mbLastCarPosInitialised = true;
+    }
+
+    const f32 lfSpeedMPH = lrSharedInfo.mPlayerInfo.mRaceCarState.mfSpeedMPH;   // info +0x42C
+
+    // .cpp:856 -- the car's implicit velocity in the CAR's own axes (the console's inlined
+    // 3x3 transpose; see the banner -- these three dots ARE that transpose's cascade).
+    const Vector3 lVelocity = lrSharedInfo.mpPlayerTracker->GetImplicitVelocity();
+    Vector3 lDisplacement;
+    lDisplacement.x = rw::math::vpu::Dot(lCarMatrix.xAxis, lVelocity);
+    lDisplacement.y = rw::math::vpu::Dot(lCarMatrix.yAxis, lVelocity);
+    lDisplacement.z = rw::math::vpu::Dot(lCarMatrix.zAxis, lVelocity);
+    lDisplacement.w = 0.0f;
+    CGS_ASSERT(rw::math::vpu::IsValid(lDisplacement), "IsValid(lDisplacement)");  // .cpp:857
+
+    mLastDisplacement = lDisplacement;                                           // .cpp:859
+
+    // .cpp:862 -- lane Y only, and from a SECOND call: world-space vertical velocity.
+    lDisplacement.y = lrSharedInfo.mpPlayerTracker->GetImplicitVelocity().y;
+    CGS_ASSERT(rw::math::vpu::IsValid(lDisplacement), "IsValid(lDisplacement)");  // .cpp:863
+
+    // .cpp:869 -- flt_82004F5C == 30.0f, flt_820047C4 == 15.0f, both dumped.
+    lDisplacement.y = Utils::TendToLimits(lDisplacement.y,
+                                          30.0f, mfSlideYScale,
+                                          15.0f, 0.0f);
+
+    // .cpp:873 -- the fore/aft term starts life as an acceleration proxy.
+    lDisplacement.z = lrSharedInfo.GetTimestep(GetTimestepType())
+                    * (lfSpeedMPH - STATIC_last_mph);
+
+    // .cpp:87x (no own line) -- the authored per-axis slide scales, Y left alone.
+    lDisplacement = rw::math::vpu::Mult(lDisplacement,
+                                        Vector3{ lrCameraAttribs.mrSlideXScale,
+                                                 1.0f,
+                                                 lrCameraAttribs.mrSlideZScale,
+                                                 0.0f });
+
+    // .cpp:885
+    lDisplacement.z = Utils::TendToLimits(lDisplacement.z,
+                                          lrCameraAttribs.mrSlideZInputForHalf,  1.0f,
+                                          lrCameraAttribs.mrSlideZInputForHalf, -1.0f);
+
+    // .cpp:888
+    mfDesiredZDisplacement += (lDisplacement.z - mfDesiredZDisplacement)
+                            * lrCameraAttribs.mfAccelZLerpAmount;
+    lDisplacement.z = mfDesiredZDisplacement;
+
+    // .cpp:894..:904 -- flt_82004014 == 0.1f. NOTE mpParameters, not lrCameraAttribs.
+    if (lrSharedInfo.mPlayerInfo.mRaceCarState.mfAbsDriftScale > 0.1f)
+    {
+        mOverrideScale = 0.0f;                                                   // .cpp:896
+    }
+    else if (lfSpeedMPH > mpParameters->mfZAndTiltCutoffSpeedMPH)
+    {
+        mOverrideScale += (KF_SLIDEY_STATIC_OVERRIDE_MAX_SPEED - mOverrideScale) // .cpp:900
+                        * KF_SLIDEY_STATIC_OVERRIDE_SCALE_LERP;
+    }
+    else
+    {
+        mOverrideScale += (1.0f - mOverrideScale)                                // .cpp:904
+                        * KF_SLIDEY_STATIC_OVERRIDE_SCALE_LERP;
+    }
+
+    // .cpp:909 -- above the cutoff speed the fore/aft slide is switched off entirely.
+    if (lfSpeedMPH > mpParameters->mfZAndTiltCutoffSpeedMPH)
+    {
+        lDisplacement.z = 0.0f;
+    }
+
+    // .cpp:919
+    mfSmoothedZDisplacement += (lDisplacement.z - mfSmoothedZDisplacement)
+        * (Utils::SineLerp(KF_SLIDEY_STATIC_MIN_LERP, 1.0f,
+                           rw::math::fpu::Abs(lDisplacement.z) * mOverrideScale)
+           * lrCameraAttribs.mfZLerpAmount);
+
+    STATIC_last_mph = lfSpeedMPH;                                                // .cpp:922
+
+    // .cpp:927 / :930
+    lDisplacement.z  = lrCameraAttribs.mrSlideZOutputMax * mfSmoothedZDisplacement;
+    lDisplacement.z += lrCameraAttribs.mfZDistanceScale * lrCameraAttribs.mrSlideZOutputMax;
+
+    // .cpp:934 / :935 -- into camera space, then swung by the free-look pitch and yaw.
+    Vector3 lPush = rw::math::vpu::TransformVector(lrCameraMatrix, lDisplacement);
+    lPush = rw::math::vpu::TransformVector(
+                rw::math::vpu::MakeRotationX(mRotationController.GetPitchRotationAngleRads()),
+                lPush);
+    lPush = rw::math::vpu::TransformVector(
+                rw::math::vpu::MakeRotationY(mRotationController.GetYawRotationAngleRads()),
+                lPush);
+
+    lrCameraMatrix.wAxis = lrCameraMatrix.wAxis + lPush;
+
+    mLastCarPos = lCarMatrix.wAxis;                                              // .cpp:939
 }
 
 // ============================================================================
