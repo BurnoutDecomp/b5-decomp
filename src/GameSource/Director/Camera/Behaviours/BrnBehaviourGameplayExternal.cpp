@@ -44,7 +44,15 @@
                                                         //   elementary rotation builders)
                                                         //   + SLerp / IsValid(Matrix44Affine)
 
+#include "GameSource/Director/Camera/Camera.h"           // Camera (Update publishes into it)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
+                                                        // CgsDev::DebugInterface -- Update's
+                                                        //   debug-render arm (.cpp:364/:370)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
+                                                        // CgsDev::DebugRender::DrawBox/DrawLine
+
 #include <cmath>                                        // std::acos -- the console's XMVectorACos
+                                                        //   + std::atan / std::sqrt (Update)
 
 // ----------------------------------------------------------------------------
 // NOTE -- BehaviourGameplayExternal::Parameters::Serialise<S> (the versioned field-walk visitor:
@@ -1520,6 +1528,521 @@ void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
 const char* BehaviourGameplayExternal::GetName() const
 {
     return "GameplayExternal";
+}
+
+// ---- Update's own constants ------------------------------------------------------------
+// VALUES read out of the X360 image one statement at a time (see the Update banner for the
+// address of each). The three at the top are the BYTE-SCANNED ones -- they read 0.0f in the
+// image because they are dynamically-initialised file-scope VecFloats, and taking them at
+// face value would give a zero pitch band, a zero speed cap and a zero drift rate.
+// NAMES: `kvfMaxPitchLimit` is the DWARF's own (BehaviourGameplayExternal.cpp:40); the rest
+// are descriptive -- DWARF records no name for them and they are spelled here for what the
+// asm demonstrably does with each.
+namespace
+{
+    const f32 KVF_MAX_PITCH_LIMIT              = 5.0f;         // 0x82FAA800 (byte-scanned)
+    const f32 KF_MPH_TO_METRES_PER_SECOND      = 0.44704f;     // 0x83017FE0 (byte-scanned)
+    const f32 KVF_VELOCITY_BLEND_RATE          = 0.1f;         // 0x82FAAC40 (byte-scanned)
+
+    const u8  KU8_BOOST_SHAKE_TYPE             = 2;            // byte_82CDAD60
+    const f32 KF_BOOST_SHAKE_FREQUENCY         = 1.0f;         // flt_82CDAD5C
+    const f32 KF_BOOST_SHAKE_AMPLITUDE         = 9.0f;         // flt_82CDAD58
+
+    const f32 KF_CAMERA_DISTANCE_SCALE_MIN     = 2.3f;         // flt_82CDAD64
+    const f32 KF_CAMERA_DISTANCE_SCALE_MAX     = 2.3f;         // flt_82CDAD68 (same value)
+
+    const f32 KF_DEGREES_TO_HALF_ANGLE_RADIANS = 0.0087266462f; // flt_82002518 == PI/360
+    const f32 KF_DEGREES_TO_RADIANS            = 0.017453292f;  // flt_82001744
+    const f32 KF_RADIANS_TO_DEGREES            = 57.295780f;    // flt_82001748
+}
+
+// The three DecFIGS-named file-scope tunables Update reads that the header declares but the
+// UpdateJumping block above does not define (BehaviourGameplayExternal.cpp:32/:33/:34).
+const f32 BehaviourGameplayExternal::kfShakeDropoffFactor                = 0.059999999f; // flt_82CDA6FC
+const f32 BehaviourGameplayExternal::kfJumpParamsImpactShakeMaxAmplitude = 2.0f;         // flt_82CDA700
+const f32 BehaviourGameplayExternal::kfJumpParamsImpactShakeMaxFreqMul   = 8.0f;         // flt_82CDA704
+
+// ============================================================================
+// BehaviourGameplayExternal::Update @0x82240828 / PS3 @0x6985C   (.cpp:188..:561)
+// ⭐⭐⭐ THE CHASE CAMERA'S PER-FRAME BODY -- BODIED 2026-08-02 (update-transcribe wave).
+// 1792 X360 asm lines; 91 DecFIGS own-line statements; drives all eight helpers, both
+// CameraShakes, the ICE boost shake, the debug-render arm and the FOV publish.
+//
+// PROVENANCE / METHOD. Every statement below was read off the X360 asm (constants, offsets,
+// branch senses) with the DecFIGS PS3 per-instruction line attribution used ONLY to place
+// statement boundaries and to name the inlined SDK calls. The inline-name resolution is
+// mechanical and worth reusing: a lineinfo row pointing at `<sdk header>:<N>` lies inside
+// whichever declaration the dwarfdump's own `// <file>:<M>` comment puts at the greatest
+// M <= N (scratchpad ut_resolve.py). That is what turned :207 from "a normalise and a length"
+// into the single SDK call `NormalizeReturnMagnitude`, and :238/:239 into Lerp + Cross.
+//
+// ⚠️⚠️ THE X360 SOURCE-LINE OFFSET IS **NOT CONSTANT** IN THIS FUNCTION, and the file-wide
+//   "DecFIGS + 74" the header used to state would mis-anchor every assert in the head:
+//     X360 251 / 270 / 278            -> DecFIGS :190 / :209 / :217      (+61)
+//     X360 409/410/412/414/415/422 and 473/474/485/501/524/550/569/594
+//                                     -> :335/:336/:338/:340/:341/:348 and
+//                                        :399/:400/:411/:427/:450/:476/:495/:520   (+74)
+//   Fourteen exact hits at +74 and three at +61 -- so the X360 source gained 13 lines
+//   somewhere between :217 and :335 relative to the DecFIGS revision. Lines quoted below are
+//   the DecFIGS ones (the numbering the rest of this file uses).
+//
+// ---- THREE FLAGGED OMISSIONS, all deliberate, none silent -----------------------------
+//  (a) .cpp:512 -- `BoostShakeController::Update` IS NOT CALLED. ⚠️⚠️ NOT because the body is
+//      missing (BrnBoostShakeController.cpp is bodied AND mounted) but because the committed
+//      BrnBoostShakeController.h MISTYPED BOTH OF ITS BLOCKS, and calling it through those
+//      types would be an offset poke that silently writes the wrong x64 fields:
+//        * X360 0x822422A4 `mr r4, r29` -- argument 1 is the **Camera**, not a separate
+//          "shake-output block". Its +0x114/+0x11C are `mEffects.mfShakeAmplitude` /
+//          `mEffects.mu8ShakeType` (Camera::mEffects @+0x68, CameraEffects +0xAC/+0xB4 --
+//          both already NAMED in BrnCameraEffects.h and cross-attested there by
+//          PerlinShakeController::Update and Camera::SetImpactShake).
+//        * X360 0x822422A0 `addi r5, r19, 0x60` -- argument 2 is
+//          **lrSharedInfo.mPlayerInfo** (a VehicleInfo), not "the gameplay-external camera
+//          state". Its +0x3CC/+0x3D4 are inside mRaceCarState.
+//        * argument 3 is `mpDirectorResourceManager + 0x5D8`; `this` is a stack temporary
+//          (the controller is stateless, so the console never reads it).
+//      Consequence of the omission: the camera's BOOST-shake amplitude/type request is not
+//      published, so there is no boost shake. That is a MISSING effect, not a corrupting one,
+//      and it is the honest state until that header is re-typed against named members.
+//  (b) .cpp:392 -- an assert that exists in the DecFIGS build and NOT in the X360 one (the
+//      X360 assert-line set jumps 0x1A6 -> 0x1D9 with nothing between). Not transcribed: the
+//      X360 is this build's target.
+//  (c) every assert's streamed VALUE. The console builds each message by streaming a Vector3
+//      / Matrix44Affine / float into the shared assert buffer; CGS_ASSERT takes a literal, so
+//      the predicate is transcribed and the value is dropped -- the same convention
+//      UpdateLooking and CameraUtils::CreateLookAt already use. Where the console DOES have
+//      literal text ("Spring: ", "FOV is ", " after scaling, was ") it is quoted verbatim.
+//
+// ---- THE CONSTANTS, AND THE TWO THAT READ ZERO IN THE IMAGE ---------------------------
+//   flt_82004C6C 60.0f  flt_82004A20 10.0f  flt_820054CC 20.0f  flt_82001B48 -10.0f
+//   flt_820049E0 100.0f flt_82004014 0.1f   flt_820047C8 0.05f  flt_82002138 0.01f
+//   flt_82001C98 1.0f   flt_82001CC0 0.0f   flt_820047C4 15.0f  flt_82004D0C 40.0f
+//   flt_82002540 1e-4f  flt_82008714 0.025f flt_820054C8 0.8f   flt_82001D9C 2.0f
+//   flt_82009B84 1.2f   flt_82002518 pi/360 flt_82001744 deg2rad flt_82001748 rad2deg
+//   flt_82006948 2.79252672f (== 160 degrees) flt_82001770 / flt_82002514 +/- FLT_EPSILON
+//   flt_82CDAD58 9.0f   flt_82CDAD5C 1.0f   byte_82CDAD60 2   flt_82CDAD64/68 2.3f
+//   flt_82CDA6FC 0.06f  flt_82CDA700 2.0f   flt_82CDA704 8.0f
+// ⚠️⚠️ `kvfMaxPitchLimit` (flt_82FAA800, DWARF-named at .cpp:40) and the 0.1f broadcast at
+//   unk_82FAAC40 BOTH READ 0.0f IN THE IMAGE -- the same dynamically-initialised file-scope
+//   VecFloat shape as the five KVF_LAST_PLAYER_TRANSFORM_* constants above. Recovered by
+//   byte-scanning .text for the initialiser that STORES to them (scratchpad ut_init.py, the
+//   `lis/addi -> lvlx -> vspltw -> stvx128` idiom):
+//     0x82FAA800 <- init @0x82C49380, rodata 0x8200426C == 5.0f    (kvfMaxPitchLimit)
+//     0x82FAAC40 <- init @0x82C493A8, rodata 0x82004014 == 0.1f
+//   and `unk_83017FE0` -- the VecFloat :211 multiplies 100.0f by -- <- init @0x82C6D174,
+//   rodata 0x82F31928 == 0.44704f, i.e. the MPH->m/s factor. Taking any of the three from the
+//   image at face value gives a pitch limit of zero, a drift crossfade rate of zero and a
+//   speed cap of zero, and nothing downstream complains.
+// ⚠️ `kvfVelocityTransformSlerpSpeed` (DWARF .cpp:42) -- the trap the predecessor flagged --
+//   is NOT read by this function. :260's blend is `Min(1, (speed - 1) * 0.1)` built from
+//   unk_82FAAC40 (above) and :264's is `mfDriftScale`. Neither touches that symbol, and no
+//   instruction in 0x82240828..0x82242418 references it. Whatever reads it, it is not Update.
+//
+// ---- THE MEMBERS THIS BODY WRITES, AND THE THREE CORRECTIONS THAT CAME OUT OF IT -------
+//   The committed statement map in the header put :271/:290/:292/:296 on mfCenteringFactor,
+//   :267 on mfYawSpring and CalcSpringCoeffs' inputs on mfZVelocity/mfYawDrift. All three
+//   were wrong; the first two because the PS3 offsets in this tail are X360 MINUS 0x10 (a
+//   shift the committed UpdateJumping banner already documents) and the third by reading the
+//   wrong pair of `lfs`. The corrected members are mfDriftScale (+0xB14), mfTimeDelta
+//   (+0xB48) and mfPitchSpring/mfYawSpring (+0xB3C/+0xB38) -- and the corrected reading is
+//   self-consistent, because mfDriftScale is exactly what :264's SLerp blends on.
+//
+// ---- THE SHAPE, IN ONE PARAGRAPH ------------------------------------------------------
+//   Build a frame from the car's VELOCITY (its forward is the velocity direction, its up
+//   lerped between world-up and the car's own -Z by the velocity's y), SLerp from the car's
+//   own frame toward it by how fast the car is going, ortho-normalise, then SLerp back toward
+//   the car's frame by how hard it is drifting, and pull the origin back along the velocity.
+//   Take that lagged frame's ZXY Euler angles, spring them toward the last frame's, hand the
+//   remainder to the free-look pass, build the two-joint arm through CalculateCameraTransform,
+//   dolly out by the FOV, shake it, jump it, slide it, and publish transform + FOV.
+// ============================================================================
+bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInfo& lrSharedInfo)
+{
+    // .cpp:190 -- NON-GATING: the console asserts and then dereferences anyway (X360
+    // 0x82240884 re-loads mpParameters immediately after EndAssert).
+    CGS_ASSERT(mpParameters != 0, "Updating with no parameters");
+
+    // .cpp:192 -- THE WHOLE BODY sits inside this test (`lbz r11, 0xAC(params)`).
+    if (mpParameters->mbIsValid)
+    {
+        const Parameters& lrCameraAttribs = *mpParameters;
+        const BrnPhysics::Vehicle::RaceCarState& lrCarState = lrSharedInfo.mPlayerInfo.mRaceCarState;
+
+        // .cpp:197 -- one statement, two effects: sample this behaviour's declared timestep
+        // flavour AND raise the camera's "behaviour ran" state bit (X360
+        // `ld/ori 2/std` at lCamera + 0x140 == CameraState's current-flag word, bit 1).
+        const f32 lfTimestep = lrSharedInfo.GetTimestep(GetTimestepType());
+        lCamera.GetState().SetFlag(1, true);
+
+        // .cpp:201 -- frames-at-60Hz, the unit every spring rate below is authored in.
+        const f32 lfTimeStepMod = lfTimestep * 60.0f;
+
+        // .cpp:207 -- ONE SDK call publishing both outputs (see the vendored
+        // NormalizeReturnMagnitude); the zero-length guard is the console's own vsel.
+        Vector3 lPlayerDirection;
+        const f32 lfPlayerSpeed =
+            rw::math::vpu::NormalizeReturnMagnitude(lrCarState.mLinearVelocity, lPlayerDirection);
+
+        // .cpp:209 -- `vcmpeqfp128. v124, v124` : the NaN self-compare on the SPEED.
+        CGS_ASSERT(rw::math::fpu::IsValid(lfPlayerSpeed), "IsValid(lvfPlayerSpeed)");
+
+        // .cpp:211/:214 -- how much of the authored pitch band this speed eats. The cap is
+        // 100 MPH expressed in m/s (see the banner); the reduction saturates there.
+        const f32 kfPitchLimitMaxSpeed = 100.0f * KF_MPH_TO_METRES_PER_SECOND;
+        const f32 lfPitchLimitReduction =
+            (rw::math::fpu::Min(lfPlayerSpeed, kfPitchLimitMaxSpeed) / kfPitchLimitMaxSpeed)
+            * KVF_MAX_PITCH_LIMIT;
+
+        // .cpp:217 -- the console streams all four values; only the predicate is transcribed.
+        CGS_ASSERT(rw::math::fpu::IsValid(lfPitchLimitReduction), "IsValid(lfPitchLimitReduction)");
+
+        // .cpp:226 -- the free-look stick integrator. ⚠️ THE PITCH BAND IS ASYMMETRIC AND
+        // SPEED-DEPENDENT: the floor is a flat -10 degrees, the ceiling is 10 degrees MINUS
+        // the reduction above, so the faster you go the less you can look up. When mbJumping
+        // the band is forced to 20 degrees and the "paused" flag is forced true instead of
+        // being read from the shared info (X360 0x82240B30..0x82240B50).
+        // ⚠️ The timestep here is the GAME lane read DIRECTLY (`lfs 0x588` == mTimestep
+        // + 0x38 == mafTimestep[2] == E_GAME), NOT this behaviour's declared flavour -- the
+        // console indexes the array with a constant and the compiler folded the accessor away.
+        mRotationController.Update(
+            lrSharedInfo.mTimestep.Get(BrnDirector::Timestep::E_GAME),
+            lrSharedInfo.mCameraModifier,
+            lrSharedInfo.mbLookback,
+            mbJumping ? true : lrSharedInfo.mbUseControlPauseBehaviour,
+            -10.0f,
+            mbJumping ? 20.0f : (10.0f - lfPitchLimitReduction));
+
+        // ---- .cpp:230..:240 -- THE VELOCITY FRAME -------------------------------------
+        // A right-handed frame whose forward IS the car's velocity direction. Its up axis is
+        // Lerp(world-up, -car.zAxis, velocity.y): level ground gives world-up, and the more
+        // vertically the car is moving the more the frame rolls onto the car's own back.
+        const Matrix44Affine& lrEyeTarget = lrSharedInfo.GetEyeTarget();
+
+        const Vector3 lUpReference =                                       // .cpp:238
+            rw::math::vpu::Lerp(Vector3{ 0.0f, 1.0f, 0.0f, 0.0f },
+                                Vector3{ -lrEyeTarget.zAxis.x, -lrEyeTarget.zAxis.y,
+                                         -lrEyeTarget.zAxis.z, -lrEyeTarget.zAxis.w },
+                                lPlayerDirection.y);
+
+        const Vector3 lVelocityRight =                                     // .cpp:238
+            rw::math::vpu::NormalizeFast(rw::math::vpu::Cross(lUpReference, lPlayerDirection));
+        const Vector3 lVelocityUp =                                        // .cpp:239
+            rw::math::vpu::NormalizeFast(rw::math::vpu::Cross(lPlayerDirection, lVelocityRight));
+
+        Matrix44Affine lVelocityFrame;                                     // .cpp:235
+        lVelocityFrame.xAxis = lVelocityRight;
+        lVelocityFrame.yAxis = lVelocityUp;
+        lVelocityFrame.zAxis = lPlayerDirection;
+        lVelocityFrame.wAxis = lrEyeTarget.wAxis;
+
+        // .cpp:240/:246 -- the car's own frame, YAWED 180 DEGREES WHEN THE GEARBOX IS IN
+        // SLOT 0 (`lbz 0x4A4` == mPlayerInfo.mRaceCarState.mi8Gear; the X360 branch at
+        // 0x82240C7C SKIPS the negation when the gear is non-zero). Reversing runs the car
+        // backwards along its own -Z, so the reference frame the camera blends toward has to
+        // flip with it or the chase camera ends up in front of the bonnet.
+        Matrix44Affine lCarFrame = lrEyeTarget;
+        if (lrCarState.mi8Gear == 0)
+        {
+            lCarFrame.xAxis = rw::math::vpu::Mult(lCarFrame.xAxis, -1.0f);
+            lCarFrame.zAxis = rw::math::vpu::Mult(lCarFrame.zAxis, -1.0f);
+        }
+
+        // .cpp:260 -- blend from the car's frame TOWARD the velocity frame, by speed: nothing
+        // below 1 m/s, fully by 11 m/s. .cpp:261 re-orthonormalises the result.
+        Vector3 lUnusedAngle;
+        Matrix44Affine lVelocityTransform =
+            rw::math::vpu::SLerp(lCarFrame, lVelocityFrame,
+                                 rw::math::fpu::Min(rw::math::fpu::Max((lfPlayerSpeed - 1.0f)
+                                                                       * KVF_VELOCITY_BLEND_RATE,
+                                                                       0.0f),
+                                                    1.0f),
+                                 &lUnusedAngle);
+        lVelocityTransform = rw::math::vpu::OrthoNormalize3x3(lVelocityTransform);   // .cpp:261
+
+        // .cpp:264 -- and blend BACK toward the car's own frame by how hard it is drifting.
+        lVelocityTransform = rw::math::vpu::SLerp(lVelocityTransform, lrEyeTarget,
+                                                  mfDriftScale, &lUnusedAngle);
+
+        // .cpp:267 -- pull the frame's origin back along the car's velocity by one
+        // mfTimeDelta's worth of travel (the rig's lag budget).
+        lVelocityTransform.wAxis =
+            lVelocityTransform.wAxis
+            - rw::math::vpu::Mult(lrCarState.mLinearVelocity, mfTimeDelta);
+
+        // .cpp:269..:273 -- a snap request throws away the accumulated drift and re-seats the
+        // lagged transform on the car, then re-constructs the free-look integrator.
+        if (mbSnapToCar)
+        {
+            mfDriftScale = 0.0f;                                            // .cpp:271
+            mLastPlayerTransform = lCarFrame;                               // .cpp:272
+            mRotationController.Construct();                                // .cpp:273
+        }
+
+        // .cpp:277..:282 -- while the car is CRASHING the rig stops following the velocity
+        // frame's ROTATION and re-uses the lagged one (the translation row keeps updating).
+        if (lrCarState.mbCrashing)
+        {
+            lVelocityTransform.xAxis = mLastPlayerTransform.xAxis;          // .cpp:280
+            lVelocityTransform.yAxis = mLastPlayerTransform.yAxis;          // .cpp:281
+            lVelocityTransform.zAxis = mLastPlayerTransform.zAxis;          // .cpp:282
+        }
+
+        // .cpp:287 -- drag mLastPlayerTransform toward that frame, rate-limited in ANGLE.
+        InterpolateLastPlayerTransform(lVelocityTransform,
+                                       ::VecFloat{ lfPlayerSpeed, lfPlayerSpeed,
+                                                   lfPlayerSpeed, lfPlayerSpeed },
+                                       ::VecFloat{ lfTimestep, lfTimestep,
+                                                   lfTimestep, lfTimestep });
+
+        // .cpp:290..:296 -- the drift crossfade. Drifting hard drives mfDriftScale to 1 (at
+        // 0.1 per frame), releasing lets it decay to 0 (at 0.05) -- and mfDriftScale is what
+        // :264 above blends the camera frame back onto the car with.
+        if (lrCarState.mfAbsDriftScale < 0.1f)
+            mfDriftScale += (0.0f - mfDriftScale) * 0.05f;                  // .cpp:292
+        else
+            mfDriftScale += (1.0f - mfDriftScale) * 0.1f;                   // .cpp:296
+
+        // .cpp:301 -- ⚠️ A FUNCTION-LOCAL STATIC, with a real guard variable on console
+        // (unk_82FAAD40 behind the bit-0 guard at dword_82FAAD50). It is PER-CLASS, not
+        // per-instance: both shared gameplay cameras run through this same storage.
+        static Vector3 sLastCameraAngles = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        // .cpp:307 -- the lagged frame's ZXY Euler angles, disambiguated toward last frame's.
+        Vector3 lTargetAngles =
+            Utils::EulerAnglesZXYFromMatrix44Affine(mLastPlayerTransform, &sLastCameraAngles, 0.01f);
+
+        if (mbSnapToCar)
+            sLastCameraAngles = lTargetAngles;                              // .cpp:309
+        if (lrCarState.mbCrashing)
+            lTargetAngles = sLastCameraAngles;                              // .cpp:317
+
+        // .cpp:321 -- clamp the pitch/roll into the authored band and scale the roll.
+        ModifyTargetAngles(lrCameraAttribs, lTargetAngles);
+
+        // .cpp:331 -- ⚠️ THE OUTPUTS ARE THE OTHER WAY ROUND FROM THEIR NAMES (see that
+        // helper's banner): lSpring receives `1 - v` and lInverseSpring receives `v`.
+        Vector3 lSpring;
+        Vector3 lInverseSpring;
+        CalcSpringCoeffs(lrCarState.mfSpeedMPH,
+                         mfPitchSpring * lfTimeStepMod,
+                         mfYawSpring * lfTimeStepMod,
+                         lSpring, lInverseSpring);
+
+        CGS_ASSERT(rw::math::vpu::IsValid(sLastCameraAngles), "IsValid(mLastCameraAngles)"); // :335
+        CGS_ASSERT(rw::math::vpu::IsValid(lTargetAngles), "IsValid(lTargetAngles)");         // :336
+
+        // .cpp:337 -- the wrapped (shortest-way-round) angular error.
+        const Vector3 lAngleDelta =
+            Utils::GetSmallestDifferenceBetweenRadAngles(sLastCameraAngles, lTargetAngles);
+        CGS_ASSERT(rw::math::vpu::IsValid(lAngleDelta), "IsValid(lAngleDifference)");        // :338
+
+        // .cpp:340/:341 -- both stream "Spring: <lSpring> Inverse Spring: <lInverseSpring>\n";
+        // the PREDICATES are on different vectors and in this order (X360 checks var_380 for
+        // line 414 and var_360 for 415).
+        CGS_ASSERT(rw::math::vpu::IsValid(lInverseSpring),
+                   "Spring / Inverse Spring: IsValid(lInverseSpring)");
+        CGS_ASSERT(rw::math::vpu::IsValid(lSpring),
+                   "Spring / Inverse Spring: IsValid(lSpring)");
+
+        // .cpp:344 -- the spring integrator: the static angles take the sprung share of the
+        // error, and .cpp:346 hands the REMAINDER to the free-look pass as its base rotation.
+        sLastCameraAngles = sLastCameraAngles + rw::math::vpu::Mult(lAngleDelta, lSpring);
+        Vector3 lRotation = rw::math::vpu::Mult(                            // .cpp:346
+            Vector3{ -lAngleDelta.x, -lAngleDelta.y, -lAngleDelta.z, -lAngleDelta.w },
+            lInverseSpring);
+        CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid(lRotation)");                 // :348
+
+        // .cpp:351/:357 -- the authored orbit arm and the camera arm, in car space.
+        // ⚠️ THE PIVOT'S Z IS NEGATED and its X is dropped: the orbit centre sits ABOVE and
+        // BEHIND the car's origin. The scale vector is a literal (1,1,1) here -- the hook
+        // CalculateCameraTransform multiplies both arms by.
+        Vector3 lPivot          = Vector3{ 0.0f, lrCameraAttribs.mrPivotY,
+                                           -lrCameraAttribs.mrPivotZ, 0.0f };
+        const Vector3 lCarScale = Vector3{ 1.0f, 1.0f, 1.0f, 0.0f };
+        Vector3 lCarSpaceOffset = Vector3{ 0.0f, 0.0f, lrCameraAttribs.mrPivotZOffset, 0.0f };
+
+        // .cpp:364..:375 -- THE DEBUG-RENDER ARM, gated on mbEnableDebugRender (X360
+        // `lbz r7, 0xB5E` then `beq` over the whole arm). Nothing on this build raises that
+        // member, so this never runs; it is transcribed rather than dropped so the two
+        // CgsDev::DebugRender entry points stay on the record. See WorldLinkStubs.cpp for
+        // their (one-shot-logging) stubs -- neither has a reconstructed body anywhere.
+        if (mbEnableDebugRender)
+        {
+            CgsDev::DebugInterface lDebugInterface;
+            lDebugInterface.GetRender().DrawBox(&lrEyeTarget.xAxis.x, 0xFF00FF00u,
+                                                Vector4{ 0.0f, lrCameraAttribs.mrPivotY,
+                                                         -lrCameraAttribs.mrPivotZ, 0.0f },
+                                                Vector4{ 0.0f, 0.0f,
+                                                         lrCameraAttribs.mrPivotZOffset, 0.0f });
+
+            const Vector3 lDebugFrom = rw::math::vpu::TransformPoint(lrEyeTarget, lPivot);
+            lDebugInterface.GetRender().DrawLine(0xFF00FF00u, lDebugFrom,
+                                                 lDebugFrom + Vector3{ 0.0f, 2.0f, 0.0f, 0.0f });
+        }
+
+        // .cpp:375/:377 -- the FOV this frame: the authored FOV lerped toward the authored
+        // BOOST FOV (plus a temporary offset the effects path can push) by the speed ratio.
+        // ⚠️ mbEnableBoostEffects gates only the OFFSET, not the lerp.
+        const f32 lfBoostFOVOffset =
+            mbEnableBoostEffects
+            ? (lrSharedInfo.mfSpeedRatio * lrSharedInfo.mfTempFOVBoostAmount * 15.0f)
+            : 0.0f;
+        f32 lfFOV = lrCameraAttribs.mrFOV
+                  + ((lrCameraAttribs.mfBoostFOV + lfBoostFOVOffset) - lrCameraAttribs.mrFOV)
+                    * lrSharedInfo.mfSpeedRatio;
+
+        // .cpp:383/:386 -- while the car is airborne the FOV is FROZEN at whatever it was on
+        // take-off; on the ground the latch tracks.
+        if (lrCarState.mfTimeInAir > 0.0f)
+            lfFOV = mfJumpFOV;
+        else
+            mfJumpFOV = lfFOV;
+
+        // .cpp:397 -- the free-look pass: folds the stick into lRotation, re-shapes the pivot
+        // and the car-space offset, and adjusts lfFOV through its in/out reference.
+        UpdateLooking(lfFOV, lRotation, lPivot, lCarSpaceOffset, lrSharedInfo.GetLookTarget());
+
+        CGS_ASSERT(rw::math::vpu::IsValid(lTargetAngles), "IsValid(lTargetAngles)");         // :399
+        CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid(lRotation)");                 // :400
+
+        // .cpp:409 -- THE KEYSTONE. ⚠️ ARGUMENT ORDER IS X360 v1..v6 (see that helper's
+        // banner): #1 the SECOND rotate's angles, #2 the scale, #3 the pivot arm, #4 the
+        // FIRST rotate's angles, #5 DEAD, #6 the camera arm. The dead slot really is fed
+        // lInverseSpring by the console (v5 still holds it from :340) -- kept, because the
+        // DWARF declares the parameter and the caller passes it.
+        Matrix44Affine lCameraMatrix;
+        CalculateCameraTransform(lrCameraAttribs, lCameraMatrix, lVelocityTransform,
+                                 lTargetAngles, lCarScale, lPivot,
+                                 lRotation, lInverseSpring, lCarSpaceOffset,
+                                 lrCarState.mfSpeedMPH, lfTimestep);
+        CGS_ASSERT(rw::math::vpu::IsValid(lCameraMatrix.xAxis)                               // :411
+                   && rw::math::vpu::IsValid(lCameraMatrix.yAxis)
+                   && rw::math::vpu::IsValid(lCameraMatrix.zAxis)
+                   && rw::math::vpu::IsValid(lCameraMatrix.wAxis),
+                   "IsValid(lCameraMatrix)");
+
+        // .cpp:417/:424/:427 -- DOLLY THE RIG TO KEEP THE CAR THE SAME SIZE ON SCREEN. As the
+        // FOV widens, 1/tan(halfFOV) shrinks and the camera is pushed FORWARD along its own
+        // Z by the difference, scaled by a distance constant.
+        // ⚠️ flt_82CDAD64 and flt_82CDAD68 are BOTH 2.3f, so the Lerp between them is a
+        //   constant on the shipped image. Transcribed as the lerp the console evaluates
+        //   rather than folded, because the two ARE separate authored slots.
+        const f32 lfDistanceScale =
+            KF_CAMERA_DISTANCE_SCALE_MIN
+            + (KF_CAMERA_DISTANCE_SCALE_MAX - KF_CAMERA_DISTANCE_SCALE_MIN)
+              * lrSharedInfo.mfTempFOVBoostAmount;
+        const f32 lfHalfFOVRads = lfFOV * KF_DEGREES_TO_HALF_ANGLE_RADIANS;
+        lCameraMatrix.wAxis =                                                // .cpp:427
+            lCameraMatrix.wAxis
+            + rw::math::vpu::Mult(lCameraMatrix.zAxis,
+                                  lfDistanceScale
+                                  - (1.0f / rw::math::fpu::Tan(lfHalfFOVRads)) * lfDistanceScale);
+        CGS_ASSERT(rw::math::vpu::IsValid(lCameraMatrix.wAxis), "IsValid(lCameraMatrix)");   // :427
+
+        // .cpp:435..:445 -- the AUTHORED (ICE) boost shake. ⚠️ Shake type 2, frequency 1.0f
+        // and the 9.0f amplitude scale are the three .data constants the ICE-shake wave
+        // already attested independently. The amplitude falls off to nothing while airborne.
+        if (mbEnableBoostEffects && !rw::math::fpu::IsZero(lrSharedInfo.mfSpeedRatio))
+        {
+            const f32 lfGrounded =                                           // .cpp:440
+                1.0f - rw::math::fpu::Min(rw::math::fpu::Max(lrCarState.mfTimeInAir, 0.0f), 1.0f);
+            mBoostShake.Update(lrSharedInfo.mpDirectorResourceManager,       // .cpp:445
+                               lfTimestep,
+                               KU8_BOOST_SHAKE_TYPE,
+                               lfGrounded
+                               * (lrSharedInfo.mfSpeedRatio + lrSharedInfo.mfTempFOVBoostAmount)
+                               * lrSharedInfo.mfSpeedRatio * KF_BOOST_SHAKE_AMPLITUDE,
+                               KF_BOOST_SHAKE_FREQUENCY);
+
+            // .cpp:450 -- the shake matrix PRE-multiplies (it is expressed in camera space,
+            // so it rocks the camera about its own axes and leaves the position alone
+            // except for the shake's own translation row).
+            lCameraMatrix = rw::math::vpu::Mult(mBoostShake.GetMatrix(), lCameraMatrix);
+        }
+        CGS_ASSERT(rw::math::vpu::IsValid(lCameraMatrix.wAxis), "IsValid(lCameraMatrix)");   // :450
+
+        // .cpp:453 -- the jump/landing dutch + FOV integrator.
+        UpdateJumping(lrSharedInfo, lfTimestep, lCamera);
+
+        // .cpp:460..:469 -- the IMPACT shake request: the hardest impact this frame, ramped
+        // in below 40 MPH (|speed| * 0.025 is exactly 1.0 at 40, so the ramp is continuous),
+        // clamped to 0.8 and LATCHED (only ever raised here; :500 decays it).
+        f32 lfImpactShake =
+            std::sqrt(lrSharedInfo.mPlayerInfo.mfHardestImpact) * 0.0001f;
+        const f32 lfSpeedMPHAbs = rw::math::fpu::Abs(lrCarState.mfSpeedMPH);
+        if (lfSpeedMPHAbs < 40.0f)
+            lfImpactShake = lfSpeedMPHAbs * lfImpactShake * 0.025f;
+        mfImpactShakeFactor =
+            rw::math::fpu::Max(mfImpactShakeFactor,
+                               rw::math::fpu::Min(rw::math::fpu::Max(lfImpactShake, 0.0f), 0.8f));
+
+        // .cpp:474 -- the slide/drift push.
+        ApplySlideyEffects(lrCameraAttribs, lCameraMatrix, lVelocityTransform, lrSharedInfo);
+        CGS_ASSERT(rw::math::vpu::IsValid(lCameraMatrix.wAxis), "IsValid(lCameraMatrix)");   // :476
+
+        // .cpp:479 -- PUBLISH. The anti-zoom compensation pushes the camera along its own Z
+        // proportionally to the speed ratio, cancelling the boost FOV's apparent pull-in.
+        lCamera.mTransform.xAxis = lCameraMatrix.xAxis;
+        lCamera.mTransform.yAxis = lCameraMatrix.yAxis;
+        lCamera.mTransform.zAxis = lCameraMatrix.zAxis;
+        lCamera.mTransform.wAxis =
+            lCameraMatrix.wAxis
+            + rw::math::vpu::Mult(lCameraMatrix.zAxis,
+                                  lrCameraAttribs.mfBoostFOVZoomCompensation
+                                  * lrSharedInfo.mfSpeedRatio);
+        lCamera.ValidateTransformWithDebugInfo();
+
+        // .cpp:495 -- flag 3: this behaviour has published a transform this frame.
+        lCamera.GetState().SetFlag(3, true);
+        CGS_ASSERT(lfFOV > 0.0f, "FOV is <value> before scaling");
+
+        lCamera.SetFOV(lfFOV);                                              // .cpp:495 tail
+        ApplyJumpEffects(lCamera, lrSharedInfo);                            // .cpp:498
+
+        // .cpp:500 -- the impact-shake latch decays toward zero every frame.
+        mfImpactShakeFactor += (0.0f - mfImpactShakeFactor) * kfShakeDropoffFactor;
+
+        // .cpp:505 -- ⚠️ the two constants are SCALES, not values: the frequency argument is
+        // the timestep times 8, the amplitude is the latched factor times 2.
+        mImpactShake.Update(lCamera.mTransform,
+                            lrCameraAttribs.mImpactShakeParams,
+                            *lrSharedInfo.mpRandom,
+                            lrSharedInfo.GetTimestep(GetTimestepType())
+                                * kfJumpParamsImpactShakeMaxFreqMul,
+                            mfImpactShakeFactor * kfJumpParamsImpactShakeMaxAmplitude);
+
+        // .cpp:508 -- the snap request is consumed.
+        mbSnapToCar = false;
+
+        // .cpp:512 -- ⛔ OMITTED: BoostShakeController::Update. See flag (a) in the banner.
+
+        // .cpp:515/:522 -- WIDEN THE PUBLISHED FOV BY 1.2x IN TANGENT SPACE (not in degrees),
+        // then clamp to [1, 160] degrees. Reading lCamera's own FOV back is deliberate: it is
+        // the value SetFOV above just committed (and clamped).
+        const f32 lfScaledFOVRads =
+            2.0f * std::atan(rw::math::fpu::Tan(lCamera.mfFOV * KF_DEGREES_TO_HALF_ANGLE_RADIANS)
+                             * 1.2f);
+        CGS_ASSERT(lfFOV > 0.0f, "FOV is <value> after scaling, was <value> before");  // :520
+        lCamera.SetFOV(rw::math::fpu::Clamp(lfScaledFOVRads,
+                                            KF_DEGREES_TO_RADIANS, 2.79252672f)
+                       * KF_RADIANS_TO_DEGREES);
+
+        // .cpp:561 -- flag 6 tracks a lookback TRANSITION. ⚠️ The console's two arms are
+        // (!starting && ending) and (starting && !ending), i.e. an EXCLUSIVE test -- both set
+        // at once falls through to the Clear. Transcribed as read; the two are mutually
+        // exclusive in practice, so the XOR and the OR agree on every reachable state.
+        if (mRotationController.IsStartingLookbackThisFrame()
+            != mRotationController.IsEndingLookbackThisFrame())
+        {
+            lCamera.GetState().SetFlag(6, true);
+        }
+        else
+        {
+            lCamera.GetState().ClearFlag(6);
+        }
+    }
+
+    return true;                                                            // X360 `li r3, 1`
 }
 
 } // namespace Camera

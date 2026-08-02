@@ -1795,6 +1795,38 @@ void CgsDev::DebugRender::DrawCircle(struct rw::math::vpu::Vector3,struct rw::ma
 }
 
 // -------------------------------------------------------------------------
+// LINK STUBS (update-transcribe wave 2026-08-02): the two 3D debug primitives
+// BehaviourGameplayExternal::Update's debug-render arm draws (X360 @0x822414C0 /
+// @0x82241524). NEITHER HAS A RECONSTRUCTED BODY ANYWHERE -- the buffered
+// DebugRender in this tree models only the 2D event queue, and these queue into
+// the 3D one.
+// ⭐ THEY ARE NOT ON THE SHIPPING PATH: the arm that calls them is gated on
+// BehaviourGameplayExternal::mbEnableDebugRender, which nothing on this build
+// ever raises, so these must not fire. They log ONCE if they ever do -- an
+// unannounced no-op is exactly the failure this tree keeps paying for.
+void CgsDev::DebugRender::DrawBox(const f32*, RGBA, Vector4, Vector4)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DebugRender::DrawBox: inert (3D queue not reconstructed) [FLAG PC boot gate]\n";
+    }
+}
+
+void CgsDev::DebugRender::DrawLine(RGBA, Vector3, Vector3)
+{
+    static bool s_bLogged = false;
+    if (!s_bLogged)
+    {
+        s_bLogged = true;
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+            *CgsDev::Log::gpDebugPrint << "DebugRender::DrawLine: inert (3D queue not reconstructed) [FLAG PC boot gate]\n";
+    }
+}
+
+// -------------------------------------------------------------------------
 // CgsDev::PerfMonCpu
 // -------------------------------------------------------------------------
 // BOOT-GATE FORWARDER (world-module mount 2026-07-26): the 6-arg hierarchical
