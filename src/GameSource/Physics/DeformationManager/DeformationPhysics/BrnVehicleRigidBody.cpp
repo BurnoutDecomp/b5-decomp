@@ -84,17 +84,24 @@ namespace Deformation
         if ( lpVehicle->IsCrashing() )                       // *(*(this+4)+1808)
         {
             const Vector3& lrContactPosition = lpImpulseParams->mImpulsePosition;   // params+32 (v2)
-            lpVehicle->ApplyCrashedContactImpulse(liImpulse, lrContactPosition, false);
+            // 0x8260E088 `li r4,1` (BODY_SPACE impulse) and 0x8260E090 `lwz r5,0x50(r11)`
+            // (== ImpulseParams::mePositionSpace) are set ONCE, above the three-way branch, so
+            // all three Apply*ContactImpulse variants receive the same pair. r6 is the bool.
+            lpVehicle->ApplyCrashedContactImpulse(liImpulse, rw::physics::BODY_SPACE,
+                                                  lrContactPosition, lpImpulseParams->mePositionSpace,
+                                                  false);
         }
         else if ( lpImpulseParams->mbWorldContact )          // *(params+184)
         {
             const Vector3& lrContactNormal = lpImpulseParams->mWorldImpulseDirection;   // params+48 (v2)
-            lpVehicle->ApplyWallContactImpulse(liImpulse, lrContactNormal, false);
+            lpVehicle->ApplyWallContactImpulse(liImpulse, rw::physics::BODY_SPACE,
+                                               lrContactNormal, lpImpulseParams->mePositionSpace);
         }
         else
         {
             const Vector3& lrContactPosition = lpImpulseParams->mImpulsePosition;   // params+32 (v3)
-            lpVehicle->ApplyCarContactImpulse(liImpulse, lrContactPosition);
+            lpVehicle->ApplyCarContactImpulse(liImpulse, rw::physics::BODY_SPACE,
+                                              lrContactPosition, lpImpulseParams->mePositionSpace);
         }
     }
 

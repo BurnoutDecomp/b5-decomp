@@ -133,10 +133,18 @@ namespace BrnPhysics
         //   position:      WORLD_SPACE -> made relative to the centre of mass (pos - mTransform.wAxis)
         //                  BODY_SPACE  -> rotated into a world-space offset by the 3x3
         // then linear accumulator += v, angular accumulator += r x v.
-        // ⚠️ NOTE for the VehiclePhysics re-parenting: VehiclePhysics.h currently declares its own
-        // TWO-argument AddLocalForce/AddLocalImpulse on the flat struct. Those drop both InputSpace
-        // tags. When VehiclePhysics is re-parented onto this chain those local declarations must be
-        // deleted, not left to shadow these.
+        // ✅ SETTLED 2026-08-02 (physics wave 3). This note used to warn: "VehiclePhysics.h currently
+        // declares its own TWO-argument AddLocalForce/AddLocalImpulse on the flat struct. Those drop
+        // both InputSpace tags. When VehiclePhysics is re-parented onto this chain those local
+        // declarations must be deleted, not left to shadow these."
+        // The re-parenting landed in wave 2b and the AddLocal* pair was cleaned up then -- but SIX
+        // MORE such declarations survived it (AddWorldSpace{Force,Impulse,AngularImpulse,Torque},
+        // IsCrashing, and a four-argument GetImpulsesFromLocalImpulse that dropped the same two tags),
+        // and they were only found when VehiclePhysics.cpp was first put through the linker: each one
+        // mangled to a VehiclePhysics-scoped symbol no TU defines. All six are now deleted and the
+        // names inherited. ⭐ LESSON: a shadowing redeclaration is INVISIBLE to the compiler and to
+        // every per-TU compile gate -- only a LINK finds it. Compile-gating a TU is not evidence that
+        // its calls bind to the functions its comments say they bind to.
         void AddLocalForce(Vector3 lForce, rw::physics::InputSpace leForceSpace,
                            Vector3 lPosition, rw::physics::InputSpace lePositionSpace);
         void AddLocalImpulse(Vector3 lImpulse, rw::physics::InputSpace leImpulseSpace,
