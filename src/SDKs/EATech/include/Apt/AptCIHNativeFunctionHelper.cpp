@@ -123,22 +123,59 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_getDepth(AptValue* pContext, int /
 }
 
 // ===========================================================================
-// sMethod_play @0x82AE2AC8 -- AS play(): start the play-head of a movie-clip /
-// animation node (character type tag 5 or 9). Sets the clip's "playing" bit
-// (mnClipActionFlags |= 0x40) and dirties the node. Always returns undefined.
+// sMethod_play @0x82AE2AC8 (PS3 @0x7EE574) -- AS play(): start the play-head of a
+// movie-clip / animation node (character type tag 5 or 9) via
+// AptCIH::SetIsPlaying(true) -- sets the clip's "playing" bit (mnClipActionFlags
+// |= 0x40) and dirties the node. Always returns undefined.
+// (The X360 inlines SetIsPlaying, which is why the earlier recon open-coded the
+// bit write here; the PS3 external ships the shared member both this and
+// sMethod_stop tail into.)
 // ===========================================================================
 AptValue* AptCIHNativeFunctionHelper::sMethod_play(AptValue* pContext, int /*nArgCount*/)
 {
     AptCIH* const pNode = static_cast<AptCIH*>(pContext);
-    AptCharacterInst* const pInst = pNode->GetCharacterInst();
-    const uint32_t nTypeTag = pInst->GetTypeTag();
+    const uint32_t nTypeTag = pNode->GetCharacterInst()->GetTypeTag();
 
     if (nTypeTag == 5 || nTypeTag == 9)
     {
         // type tag 5/9 -> the instance is an AptCharacterSpriteInstBase.
-        AptCharacterSpriteInstBase* const pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
-        pSprite->mnClipActionFlags |= KU_CLIP_PLAYING;
-        pNode->SetDirtyState(true, true);
+        pNode->SetIsPlaying(true);
+    }
+    return gpUndefinedValue;
+}
+
+// ===========================================================================
+// sMethod_stop (PS3 @0x7EE5D4; the X360 creator is @0x82B0E9A8 / off_8324E480 --
+// the ARTIST export set has no record for the body, see the PS3 symbol
+// _ZN26AptCIHNativeFunctionHelper12sMethod_stopEP8AptValuei) -- AS stop(): halt
+// the play-head of a movie-clip / animation node (character type tag 5 or 9) via
+// AptCIH::SetIsPlaying(false). sMethod_play's exact mirror EXCEPT that the stop
+// arm does NOT dirty the node (SetIsPlaying only calls SetDirtyState when the
+// argument is 1). Always returns undefined.
+//
+// ⚠️ This native was a deferred no-op (AptCIHMembers.cpp objectMemberGet case 110
+// returned nullptr, so `clip.stop()` resolved to `undefined` and silently did
+// nothing). That is NOT inert: B5ComplexBar.Done(liSize) -- the AS class behind
+// every stats/progress bar in the GUI -- is
+//     Done(liSize) { CAptCommunicator.SendAptEvent(4, liSize, this.msName);
+//                    this.stop(); }
+// so with stop() dropped the bar timeline ran straight on through the NEXT
+// segment frame and fired another transition-complete, which the C++
+// BrnGui::ComplexBar::HandleTransitionComplete answered by re-kicking a
+// transition to the segment it had just left. The result was a permanent
+// two-frame oscillation around the target segment -- one halting
+// BrnComplexBar.cpp:67 "Transition should be currently running" dev assert per
+// cycle, per bar, forever (the Junkyard car-select screen's assert storm:
+// ~5/s/bar, fps 100 -> 42, and an assert overlay on every dumped frame).
+// ===========================================================================
+AptValue* AptCIHNativeFunctionHelper::sMethod_stop(AptValue* pContext, int /*nArgCount*/)
+{
+    AptCIH* const pNode = static_cast<AptCIH*>(pContext);
+    const uint32_t nTypeTag = pNode->GetCharacterInst()->GetTypeTag();
+
+    if (nTypeTag == 5 || nTypeTag == 9)
+    {
+        pNode->SetIsPlaying(false);
     }
     return gpUndefinedValue;
 }

@@ -267,6 +267,7 @@ struct AptCIH : public AptValueGC
     AptCXForm*       GetColorMatrixWritable();          // @0x82AE6758 (lazy-alloc)
     AptRenderItem*   SetDepth(int16_t nDepth);          // @0x82AE2300
     bool             GetIsPlaying() const;              // @0x82AD5C00 (movie-clip play-head bit)
+    void             SetIsPlaying(bool bPlaying);       // PS3 @0x7EE474 (X360 inlines it)
     void             SetEventHandler(int nEventMask);   // @0x82AD5B48 (OR into the hash event mask)
     void             RemoveEventHandler(int32_t nMask); // @0x82AD5B70 (clear hash event bits)
     void             SetHasMask(bool bHasMask, AptRenderItem* pMask);  // @0x82AE22B8
