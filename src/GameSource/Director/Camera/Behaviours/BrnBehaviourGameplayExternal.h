@@ -239,24 +239,24 @@ public:
     //   returns true and leaves the camera untouched). That is a DOCUMENTED GAP, not a
     //   fabrication: Update alone is 91 source statements spanning .cpp:188..:561.
     //
-    // ⭐⭐ HELPER SCOREBOARD, 2026-08-02 (final-helpers wave) -- 7 of 8 BODIED:
+    // ⭐⭐ HELPER SCOREBOARD, 2026-08-02 (final-camera wave) -- 8 of 8 BODIED. THE HELPER
+    //   CLUSTER IS COMPLETE. ⛔ That does NOT make Update writable -- see the link-closure
+    //   set above; the blocker moved OUT of this class.
     //     1  ModifyTargetAngles              ✅ BODIED  (43 asm lines, scalar+clamp)
     //     2  CalcSpringCoeffs                ✅ BODIED  (153, ~110 of them the NaN tripwires)
     //     3  InterpolateLastPlayerTransform  ✅ BODIED  (307, 11 statements)
     //     4  UpdateJumping                   ✅ BODIED  (205, pure scalar)
-    //     5  UpdateLooking                   ⛔ 669 asm lines, 32 statements -- THE LAST ONE
-    //        ⭐ SCOUTED 2026-08-02, and it is SMALLER THAN ITS LINE COUNT SAYS. Its whole
-    //        external surface is `sin` and `cos`: the only other `bl`s in the X360 body are
-    //        NINE assert triples plus three calls to sub_82203F70, and that function is 15
-    //        instructions of `CgsDev::StrStreamBase::AppendFormat("(%f, %f, %f)", ...)`, i.e.
-    //        the Vector3 stream operator the asserts use -- NOT a math helper. So unlike
-    //        every other helper in this cluster it should close NO new link dependencies.
-    //        Its own-line set (DecFIGS) is .cpp:675 677 679 685 688 696 701 705 710 711 713
-    //        721 722 723 731 732 733 745 749 753 756 761 764 772 776 780 781 782 785 793
-    //        796 797, X360 @0x82225630, PS3 @0x6985C's sibling. Signature (DWARF h:325):
-    //        UpdateLooking(f32& lrFOVInOut, Vector3&, Vector3&, Vector3&, const AABBox&).
-    //        ⚠️ Re-walk its callees for DEFINITIONS anyway when it is written -- that check is
-    //        what took this cluster's closure set from one symbol to eleven.
+    //     5  UpdateLooking                   ✅ BODIED  (669, 32 statements) 2026-08-02
+    //        ⭐ THE SCOUT'S PREDICTION HELD: it closed NO new EXTERNAL symbols -- its whole
+    //        external surface really is `sin`/`cos` plus the assert machinery. But it DID
+    //        need three CameraSphericalRotationController accessors that had no definition
+    //        anywhere (IsRotated, IsStartingLookbackThisFrame, IsEndingLookbackThisFrame),
+    //        which is the FIFTH time in this cluster that "grep for a DEFINITION" has turned
+    //        something up. All three are now bodied inline in that header from this
+    //        function's own asm, which inlines the lookback pair TWICE each.
+    //        ⚠️ It also needed `rw::math::vpu::Dot(Vector2, Vector2)`, which did not exist in
+    //        the vendored tree; added as vendor/renderware/include/rw/math/vpu/
+    //        vector2_operation.h with the DecFIGS attribution that names it.
     //     6  CalculateCameraTransform        ✅ BODIED  (164, 6 statements)
     //     7  ApplySlideyEffects              ✅ BODIED  (434, ~24 statements)
     //     8  ApplyJumpEffects                ✅ BODIED  (303, 3 statements)
@@ -310,19 +310,41 @@ public:
     //          -- BODIED 2026-08-02 inline in that header. ⚠️ They are NOT "the Degs accessors
     //          times pi/180": both carry a LOOKBACK special case (yaw -> 180 degs, pitch -> 0)
     //          that the obvious reading drops silently, and BOTH BUILDS attest it.
+    //     ✅ CameraSphericalRotationController::IsRotated / ::IsStartingLookbackThisFrame /
+    //          ::IsEndingLookbackThisFrame -- BODIED 2026-08-02 inline in that header, from
+    //          UpdateLooking's own asm (it inlines all three, the lookback pair twice each).
+    //          None had a definition anywhere; none has a standalone symbol on either export.
+    //     ✅ rw::math::vpu::Dot(Vector2, Vector2) -- ADDED 2026-08-02 as
+    //          vendor/renderware/include/rw/math/vpu/vector2_operation.h. UpdateLooking takes
+    //          two 2-lane dots against constant axes and DecFIGS charges both to the SDK's
+    //          own detail/vector2_operation_inline.h:108, so it is a real SDK entry point,
+    //          not open-coded arithmetic.
     //     ⛔ Utils::CameraShakeICEController::Update(...)  -- DECLARED (BrnCameraShake.h:172),
-    //          defined NOWHERE. Update .cpp:445 drives the boost shake through it.
-    //          ⚠️ NOT a small job: PS3 @0x68840 is 1032 asm lines and reaches
-    //          DirectorResourceManager::GetKeyAnimFromGuid, Attrib::DefaultDataArea and the
-    //          ICE take machinery (which is gated -- DirectorLinkStubs.cpp group C).
+    //          defined NOWHERE. ⭐⭐ CONFIRMED 2026-08-02 TO BE ON UPDATE'S REQUIRED LINK
+    //          PATH, not merely "reachable": Update @0x82240828 makes a DIRECT `bl` to it at
+    //          0x82241C6C (.cpp:445, the boost shake). Update cannot link without it.
+    //          ⚠️ NOT a small job: X360 @0x8223EEC8 is ~590 asm lines / PS3 @0x68840 is 1032,
+    //          and it reaches the ICE take machinery -- ICE::ICETake::SetDataPointers,
+    //          Attrib::Gen::iceanim::iceanim, Attrib::Gen::shotgroup::Num_ShotList,
+    //          Attrib::Instance::GetAttributePointer, Attrib::RefSpec::RefSpec/::Clean,
+    //          Attrib::DefaultDataArea, DirectorResourceManager::GetKeyAnimFromGuid --
+    //          which is gated (DirectorLinkStubs.cpp group C).
     //     ⛔ Utils::CameraShakeICEController::GetMatrix()  -- same, BrnCameraShake.h:175.
     //          A one-line `return mMatrix;` (it is inlined everywhere on both builds, so it
     //          has no standalone address on either).
-    //   ⚠️ THOSE LAST TWO ARE THE ONLY EXTERNAL SYMBOLS LEFT KNOWN TODAY, and they are STILL
-    //     DECLARED WITH NO DEFINITION ANYWHERE -- the shape that hid
-    //     Camera::SetRequestedTimeDilation for months. Check for a body, not a declaration,
-    //     before calling them closed -- AND re-walk UpdateLooking's callees when it lands,
-    //     because every helper so far has added to this list.
+    //     ⛔ BrnDirector::BoostShakeController::Update @0x8220E548 -- NEW 2026-08-02, and it
+    //          is the FIFTH member of this cluster's "body exists, nothing links it" family.
+    //          Update calls it directly at 0x822422B0. It IS bodied, at
+    //          Camera/BrnBoostShakeController.cpp:36 -- but that TU is NOT ON THE BUILD LIST,
+    //          so the link is green today only because nothing reaches it. Exactly the shape
+    //          that hid Camera::SetRequestedTimeDilation. MOUNT IT with Update, not before.
+    //   ⚠️ THE REST OF UPDATE'S OWN CALL SET IS CLOSED (walked instruction by instruction over
+    //     @0x82240828, not inferred): Camera::ValidateTransformWithDebugInfo and
+    //     Camera::SetFOV (Camera.cpp, mounted), rw::math::vpu::SLerp and OrthoNormalize3x3
+    //     (vendored matrix44affine_operation.h, inline), CameraState::SetFlag/::ClearFlag,
+    //     Timestep::Get, and the CgsDev assert / debug-render machinery.
+    //   ⚠️ CHECK FOR A BODY, NOT A DECLARATION, before calling any of these closed -- that is
+    //     the check that took this cluster's set from one symbol to eleven and now thirteen.
     //
     // ⭐⭐ THE DECODE OF THE REMAINING FIVE, AS FAR AS IT IS *VERIFIED* (2026-08-02). Every
     //   line below is read off the asm of BOTH exports; where the two disagree the X360 wins
@@ -415,10 +437,8 @@ public:
     //                               kfJumpParamsImpactShakeMaxAmplitude,
     //                               kfJumpParamsImpactShakeMaxFreqMul)
     //     :515  mbLastCarPosInitialised = false ... :520/:522 the FOV publish
-    //   ⇒ the remaining unknowns are concentrated in FOUR helpers (UpdateLooking 669 asm
-    //     lines, ApplySlideyEffects 434, InterpolateLastPlayerTransform 307, ApplyJumpEffects
-    //     303) plus Update's own .cpp:246..:296 branch tail. (UpdateJumping, 205 lines, was
-    //     the fifth and is now bodied.)
+    //   ⇒ ALL EIGHT HELPERS ARE NOW BODIED. The only unknown left inside Update itself is its
+    //     own .cpp:246..:296 branch tail.
     //   ⛔ FOR THE MISSING EXTERNAL DEPENDENCIES SEE THE LINK-CLOSURE SET NEAR THE TOP OF
     //     THIS FLAG. The old text here claimed there was exactly ONE (`Utils::
     //     GetSmallestDifferenceBetweenRadAngles`); that one is now BODIED, and walking every
@@ -467,13 +487,15 @@ public:
     //                   and this build handed back null, so the chase camera had no policy in
     //                   the scene-query pass at all.
     //     [PARTIAL]   this Update + the eight helpers.   <- THE ONLY REMAINING LINK HERE
-    //                   7 of the 8 helpers are BODIED as of 2026-08-02; NINE of the eleven
-    //                   external symbols are closed -- including the CameraShake::Update
-    //                   silent-drop stub, which was retired BEFORE its callers landed. What is
-    //                   left is ONE helper (UpdateLooking, 669 asm lines / 32 statements), the
-    //                   two CameraShakeICEController members that have no body anywhere, and
-    //                   Update itself. See the HELPER SCOREBOARD and the LINK-CLOSURE SET
-    //                   near the top of this FLAG.
+    //                   ⭐ ALL EIGHT HELPERS ARE BODIED as of 2026-08-02, and ELEVEN of the
+    //                   thirteen external symbols are closed -- including the
+    //                   CameraShake::Update silent-drop stub, which was retired BEFORE its
+    //                   callers landed. WHAT IS LEFT IS NO LONGER IN THIS CLASS: the two
+    //                   CameraShakeICEController members that have no body anywhere (::Update
+    //                   is a direct `bl` from Update, so it is a hard link dependency, and it
+    //                   is ~590/1032 asm lines into the gated ICE take machinery), the
+    //                   unmounted BoostShakeController TU, and Update itself. See the HELPER
+    //                   SCOREBOARD and the LINK-CLOSURE SET near the top of this FLAG.
     //     [BRING-UP]  BrnGameModule.cpp:1177 gates the director->world camera handover on
     //                   `flyby || meJunkyardState != E_JY_INACTIVE`, which goes FALSE exactly
     //                   when car-select exits -- so the world still falls back to
@@ -594,6 +616,28 @@ private:
                             Matrix44Affine& lrCameraMatrix,
                             Matrix44Affine lCarMatrix,
                             const BehaviourSharedInfo& lrSharedInfo);
+
+    // ⭐⭐ DECLARED + BODIED 2026-08-02 (final-camera wave) -- helper 5/8, THE LAST ONE
+    // (DWARF h:325, .cpp:675, X360 @0x82225630 / PS3 @0x3A870). 669 asm lines, 32 statements.
+    // THE FREE-LOOK RESPONSE: it folds the look stick's yaw/pitch into the requested camera
+    // rotation, then re-shapes the PIVOT the chase rig orbits (centering, the car's own
+    // width/length aspect, a pull-in when looking backwards, and a vertical "drop"), and
+    // finally publishes an FOV adjustment through its in/out float.
+    // ⭐ IT CLOSED NO NEW EXTERNAL SYMBOLS, as scouted -- its entire external surface is
+    //   `sin` and `cos`. It DID need three CameraSphericalRotationController accessors that
+    //   had no definition anywhere (IsRotated / IsStartingLookbackThisFrame /
+    //   IsEndingLookbackThisFrame); all three are now bodied inline in that header from this
+    //   function's own asm, which inlines each of them (the lookback pair TWICE each).
+    // ⚠️ THE X360 LINE NUMBERS ARE DecFIGS + 74, pinned three ways (751/677, 759/685,
+    //   770/696). Every assert below is quoted with both.
+    // ⚠️ Its two "IsLookback" arms are NOT a compiler duplication: BOTH builds charge the
+    //   arms to DIFFERENT source lines (:685 vs :696), so the yaw/pitch folding really is
+    //   written out twice in the console source.
+    void UpdateLooking(f32& lfFOVInOut,
+                       Vector3& lRotation,
+                       Vector3& lPivot,
+                       Vector3& lCarSpaceOffset,
+                       const AABBox& lrAABBox);
 
     // ⭐ DECLARED + BODIED 2026-08-02 (rotate-helper wave) -- helper 8/8 (DWARF h:337,
     // .cpp:607, X360 @0x822250C0 / PS3 @0x598AC). 303 asm lines, THREE statements: a yaw

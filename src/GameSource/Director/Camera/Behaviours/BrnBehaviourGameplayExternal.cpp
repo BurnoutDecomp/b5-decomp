@@ -10,8 +10,12 @@
 //                                                   (added 2026-08-02, helper 3/8)
 //   - BehaviourGameplayExternal::UpdateJumping      @0x8220EAD0 (added 2026-08-02, helper 4/8)
 //   - BehaviourGameplayExternal::ApplySlideyEffects @0x822260A8 (added 2026-08-02, helper 7/8)
+//   - BehaviourGameplayExternal::UpdateLooking      @0x82225630 (added 2026-08-02, helper 5/8
+//                                                    -- THE LAST HELPER; the eight are done)
 // (each has its own banner below; none has a caller yet -- Update is the only one, and
-//  Update cannot link until all eight exist. See the header's FLAG for the running count.)
+//  Update STILL cannot link even now that all eight helpers exist: it makes a direct call to
+//  Utils::CameraShakeICEController::Update @0x82241C6C and that symbol has no definition
+//  anywhere in the tree. See the header's LINK-CLOSURE SET.)
 //
 // Parameters::Set is the seeding step the main director runs (ProcessNewVehicleEvents /
 // UpdateAttribSys) and the replay director runs (PreSceneQueryUpdate) to populate an
@@ -31,6 +35,8 @@
 #include "rw/math/fpu/scalar_operation.h"               // Clamp / Min / Abs / IsValid --
                                                         //   the console's fsel / fabs / fcmpu
                                                         //   self-compare idioms
+#include "rw/math/vpu/vector2_operation.h"              // Dot(Vector2, Vector2) -- UpdateLooking's
+                                                        //   two 2-lane dots against constant axes
 #include "rw/math/vpu/vector3_operation.h"              // Mult(Vector3, Vector3) / operator+
                                                         //   (CalculateCameraTransform's arms)
 #include "rw/math/vpu/matrix44affine_operation.h"       // Mult / MakeRotationX / MakeRotationY /
@@ -1259,6 +1265,255 @@ void BehaviourGameplayExternal::ApplyJumpEffects(Camera& lCameraInOut,
                      *lrSharedInfo.mpRandom,
                      lrSharedInfo.GetTimestep(GetTimestepType()),
                      mfWobbleScale);
+}
+
+// ============================================================================
+// BrnDirector::Camera::BehaviourGameplayExternal::UpdateLooking @0x82225630
+//   (DWARF h:325 / BehaviourGameplayExternal.cpp:675; PS3 @0x3A870)  -- helper 5/8, the last.
+//
+// THE FREE-LOOK RESPONSE. Update hands it the requested rotation, the pivot the chase rig
+// orbits, the camera's car-space offset and the car's own bounding box; it folds the look
+// stick into the rotation and then re-shapes the pivot four ways -- centering, the car's
+// width/length aspect, a pull-in when the player looks backwards, and a vertical drop --
+// before publishing an FOV adjustment through its in/out float.
+//
+// ⚠️⚠️ THE X360 SOURCE LINE NUMBERS ARE DecFIGS + 74. Pinned by three asserts whose
+//   condition and streamed value are identical on both builds: X360 0x2EF/751 == DecFIGS
+//   :677, 0x2F7/759 == :685, 0x302/770 == :696. Every line quoted below is the DecFIGS one
+//   (the numbering the rest of this file already uses); the X360 line is given with each
+//   assert so the mapping stays checkable.
+//
+// STATEMENT MAP -- all 32 of the DecFIGS own-line set are accounted for:
+//   :677  CGS_ASSERT(IsValid(lRotation))                          X360 line 0x2EF == 751
+//         (the console builds the message by STREAMING lRotation into the assert buffer --
+//          `bl sub_82203F70`, the Vector3 stream operator; there is no literal text.)
+//   :679  if (mRotationController.IsLookback())            X360 0x82225744 `lbz this+0x40`
+//   :681/:683  lRotation.y += GetYawRotationAngleRads();
+//              lRotation.x += GetPitchRotationAngleRads();
+//         (`vrlimi128 v0,v13,4,0` == lane Y then `...,8,0` == lane X, 0x822257B8/0x82225814.)
+//   :685  CGS_ASSERT(IsValid(lRotation))                          X360 line 0x2F7 == 759
+//   :688  mfCenteringFactor = 1.0f                       (flt_82001C98, this+0xB04)
+//   :692/:694  THE SAME TWO ADDS AGAIN, in the else arm
+//   :696  CGS_ASSERT(IsValid(lRotation))                          X360 line 0x302 == 770
+//   :701  mfCenteringFactor += (1.0f - mfCenteringFactor) * 0.2f  when the controller is
+//         rotated or in lookback           (flt_82004744 == 0.2f, DUMPED)
+//   :705  mfCenteringFactor += (0.0f - mfCenteringFactor) * 0.2f  otherwise
+//   :710  lPivot += lCarSpaceOffset * mfCenteringFactor
+//         X360 0x82225AC0 `vmaddfp v0, v0, v13, v12` -- SEMANTICS vD = vA*vC + vB, so
+//         lCarSpaceOffset * broadcast(centering) + lPivot. (See the header's operand-order
+//         note; the field order IDA prints is NOT the operand order.)
+//   :711  CGS_ASSERT(!IsZero(lPivot))                             X360 line 0x311 == 785
+//   :713  lCarSpaceOffset *= (1.0f - mfCenteringFactor)
+//   :~715 lLookDirection = Vector2(Sin(yawRads), Cos(yawRads))
+//   :~717 lfLength = lrAABBox.mMax.z - lrAABBox.mMin.z
+//   :~718 lfWidth  = lrAABBox.mMax.x - lrAABBox.mMin.x
+//   :721  CGS_ASSERT(!IsZero(lfLength))                           X360 line 0x31B == 795
+//   :722  CGS_ASSERT(!IsZero(lfWidth))                            X360 line 0x31C == 796
+//   :723  lfWidth /= lfLength            (it is a RATIO from here on)
+//   :~72x lrSideScaleAmount = Abs(Dot(lLookDirection, Vector2(1,0)))   == |sin(yaw)|
+//   :731  CGS_ASSERT(!IsZero(lPivot))                             X360 line 0x325 == 805
+//   :732  lPivot *= 1.0f + (lfWidth - 1.0f) * lrSideScaleAmount * 0.25f   (flt_82003F40)
+//   :733  CGS_ASSERT(!IsZero(lPivot))                             X360 line 0x327 == 807
+//   :~74x lrDotBackwards = Clamp(Dot(lLookDirection, Vector2(0,-1)), 0, 1)  == clamped -cos
+//   :745  CGS_ASSERT(!IsZero(lPivot))                             X360 line 0x333 == 819
+//   :749  lfPivotLength = Magnitude(lPivot); then SET the pivot's length to
+//           lfPivotLength - (lfPivotLength - lfLength*0.5f) * mfFrontInAmount * lrDotBackwards
+//         by scaling lPivot by that over lfPivotLength.
+//   :753  lfDesiredDropAmount = (lrDotBackwards > 0.0f) ? 1.0f : lrSideScaleAmount
+//   :756  if (IsLookback()) lfDesiredDropAmount = 0.0f
+//   :761/:764/:772  latch-or-tend mfDropAmount at 0.09f  (flt_820086A4)
+//   :776  lPivot.y -= lPivot.y * mpParameters->mfDropFactor * mfDropAmount
+//   :780  lfDesiredFOVAdjustment = mpParameters->mfInFrontFOVMax - lfFOVInOut
+//   :781  lfDesiredFOVAdjustmentScaled = lfDesiredFOVAdjustment
+//                                      * ((lrDotBackwards > 0.0f) ? 1.0f : lrSideScaleAmount)
+//   :782/:785/:793  latch-or-tend mfFOVAdjustment at 0.1f     (flt_82004014)
+//   :796  lfFOVInOut += mfFOVAdjustment
+//
+// FLOAT CONSTANTS -- every one DUMPED from the X360 image at the address the SAME statement
+// loads (scratchpad\fc_flt.py, the per-segment `naive()` mapping; the segs[0]-based form
+// silently reads STRING bytes as floats and I hit exactly that before fixing it):
+//   flt_82001744 = 0.017453292 (pi/180)   flt_82001770 = 1.1920929e-07 (FLT_EPSILON)
+//   flt_82001C98 = 1.0                    flt_82001CC0 = 0.0
+//   flt_82001DA0 = 0.5                    flt_82002514 = -1.1920929e-07
+//   flt_820025FC = 180.0                  flt_820037C8 = -1.0
+//   flt_82003F40 = 0.25                   flt_82004014 = 0.1   <- FOV blend rate
+//   flt_82004744 = 0.2   <- centering blend rate     flt_820086A4 = 0.09  <- drop blend rate
+//   ⚠️ 0x82004014 is 0.1f and 0x82004018 is 0.75f -- adjacent, and this file's own
+//     Parameters::Set banner already names both. Reading the wrong one would have made the
+//     FOV chase 7.5x too fast.
+//
+// ⚠️⚠️ THE TWO "IsLookback" ARMS REALLY DO REPEAT THE SAME TWO ADDS, and that is a
+//   TWO-BUILD finding, not a reading of one export. X360 emits the yaw/pitch fold once at
+//   0x8222575C..0x82225818 and again at 0x822258D0..0x82225990, and DecFIGS charges the two
+//   copies to DIFFERENT source lines (:685 vs :696 for their closing asserts) with both arms
+//   inlining BrnCameraSphericalRotationController.h:82 and :88. A compiler duplicating a
+//   common prefix would reuse one line number; two line numbers means two source regions.
+//   Neither arm is specialised either -- both re-load mbIsLookback inside the inlined
+//   accessor -- so the console is genuinely doing the work twice.
+//
+// ⚠️ THE TWO 2-LANE DOTS ARE SDK CALLS, NOT OPEN-CODED ARITHMETIC. DecFIGS charges both to
+//   rw/math/vpu/detail/vector2_operation_inline.h:108, and the Vector2 build to
+//   vector2_type_inline.h:39. `rw::math::vpu::Dot(Vector2, Vector2)` did not exist in the
+//   vendored tree and is added by this commit with that provenance.
+//
+// ⚠️ THE AXES ARE READ OFF THE CONSTANT VECTORS THE CONSOLE BUILDS ON THE STACK, not
+//   guessed: {1.0f, 0.0f} at X360 0x82225C7C/0x82225C84 and {0.0f, -1.0f} at 0x82225D8C/
+//   0x82225DA8 (flt_820037C8 == -1.0f). With lLookDirection == {sin(yaw), cos(yaw)} those
+//   give |sin(yaw)| (how far to the SIDE the player is looking) and clamped -cos(yaw) (how
+//   far BEHIND). Both fall out of the yaw alone; the pivot maths is all trigonometry of the
+//   free-look angle.
+//
+// ⚠️ mfCenteringFactor RUNS BACKWARDS FROM ITS NAME: it is 1 when the stick is deflected
+//   (or in lookback) and decays to 0 when it is not. :710/:713 then use it as a CROSSFADE --
+//   the pivot gains the camera's car-space offset while that same offset is faded out. So
+//   "centering" is how far the rig has moved its orbit centre ONTO the car.
+//
+// ⚠️ THE FOUR-ARGUMENT ASSERT MESSAGES ARE OURS. The console builds each of the three
+//   IsValid messages by streaming lRotation's value into the shared assert buffer with no
+//   literal prefix at all (`stb 0, gpcMessageBuffer` then `bl sub_82203F70`), so there is no
+//   console text to copy. The six IsZero asserts DO have literal text and it is quoted
+//   verbatim ("!IsZero(lPivot)", "!rw::math::fpu::IsZero(lfLength)", "...(lfWidth)").
+//
+// ⚠️ PARAMETER NAMES ARE THE DWARF'S OWN -- the PS3 export carries lfFOVInOut / lRotation /
+//   lPivot / lCarSpaceOffset / lrAABBox on the stack slots arg_38..arg_58, in that order.
+//   Likewise the locals lfLength / lfWidth / lfPivotLength / lrDotBackwards /
+//   lrSideScaleAmount / lfDesiredDropAmount / lfDesiredFOVAdjustment(+Scaled). Where DWARF
+//   reuses one register under two names the DEFINING instruction's name is taken (lfWidth
+//   at :723 is the same value DWARF calls lrSideScale at :732; it is kept as lfWidth here
+//   and the alias is recorded rather than a second variable invented).
+//
+// ⚠️ NO CALLER YET, by construction: Update is the only one, and Update still cannot link --
+//   Utils::CameraShakeICEController::Update (a direct `bl` from Update @0x82241C6C) has no
+//   definition anywhere in the tree. See the header's LINK-CLOSURE SET.
+// ============================================================================
+void BehaviourGameplayExternal::UpdateLooking(f32& lfFOVInOut,
+                                              Vector3& lRotation,
+                                              Vector3& lPivot,
+                                              Vector3& lCarSpaceOffset,
+                                              const AABBox& lrAABBox)
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid( lRotation )");        // .cpp:677
+
+    // .cpp:679 -- the two arms fold the look stick in identically and then part ways on how
+    // the centering factor moves. See the banner: the repetition is the console's, not ours.
+    if (mRotationController.IsLookback())
+    {
+        lRotation.y += mRotationController.GetYawRotationAngleRads();             // .cpp:681
+        lRotation.x += mRotationController.GetPitchRotationAngleRads();           // .cpp:683
+        CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid( lRotation )");    // .cpp:685
+
+        mfCenteringFactor = 1.0f;                                                 // .cpp:688
+    }
+    else
+    {
+        lRotation.y += mRotationController.GetYawRotationAngleRads();             // .cpp:692
+        lRotation.x += mRotationController.GetPitchRotationAngleRads();           // .cpp:694
+        CGS_ASSERT(rw::math::vpu::IsValid(lRotation), "IsValid( lRotation )");    // .cpp:696
+
+        if (mRotationController.IsRotated() || mRotationController.IsLookback())
+        {
+            mfCenteringFactor += (1.0f - mfCenteringFactor) * 0.2f;               // .cpp:701
+        }
+        else
+        {
+            mfCenteringFactor += (0.0f - mfCenteringFactor) * 0.2f;               // .cpp:705
+        }
+    }
+
+    // .cpp:710/:713 -- crossfade the camera's car-space offset INTO the orbit centre.
+    lPivot = lPivot + lCarSpaceOffset * mfCenteringFactor;
+    CGS_ASSERT(!rw::math::vpu::IsZero(lPivot, rw::math::fpu::KF_IS_ZERO_TOLERANCE),
+               "!IsZero(lPivot)");                                                // .cpp:711
+    lCarSpaceOffset = lCarSpaceOffset * (1.0f - mfCenteringFactor);               // .cpp:713
+
+    // The free-look direction in the car's ground plane. The console evaluates the accessor
+    // once per trig call (two `lbz`+`fmuls` pairs, 0x82225B48 and 0x82225B6C) and computes
+    // cos before sin; the value is the same either way.
+    const f32 lfYawRads = mRotationController.GetYawRotationAngleRads();
+    const Vector2 lLookDirection = Vector2{ rw::math::fpu::Sin(lfYawRads),
+                                            rw::math::fpu::Cos(lfYawRads), 0.0f, 0.0f };
+
+    // The car's own footprint, from the look-target box Update passes down.
+    f32 lfLength = lrAABBox.mMax.z - lrAABBox.mMin.z;
+    f32 lfWidth  = lrAABBox.mMax.x - lrAABBox.mMin.x;
+    CGS_ASSERT(!rw::math::fpu::IsZero(lfLength),
+               "!rw::math::fpu::IsZero(lfLength)");                               // .cpp:721
+    CGS_ASSERT(!rw::math::fpu::IsZero(lfWidth),
+               "!rw::math::fpu::IsZero(lfWidth)");                                // .cpp:722
+    lfWidth /= lfLength;   // a WIDTH-TO-LENGTH RATIO from here on (DWARF: lrSideScale)
+
+    CGS_ASSERT(!rw::math::vpu::IsZero(lPivot, rw::math::fpu::KF_IS_ZERO_TOLERANCE),
+               "!IsZero(lPivot)");                                                // .cpp:731
+
+    // .cpp:732 -- looking sideways widens (or narrows) the orbit by the car's own aspect
+    // ratio, a quarter of the way. lrSideScaleAmount is a NAMED local, not an inline
+    // sub-expression: the console computes it once (X360 `fabs f30` @0x82225CE0) and keeps
+    // it in f30 across all THREE of its uses, here and at :753 and :781.
+    const f32 lrSideScaleAmount =
+        rw::math::fpu::Abs(rw::math::vpu::Dot(lLookDirection,
+                                              Vector2{ 1.0f, 0.0f, 0.0f, 0.0f }));
+    lPivot = lPivot * (1.0f + (lfWidth - 1.0f) * lrSideScaleAmount * 0.25f);
+    CGS_ASSERT(!rw::math::vpu::IsZero(lPivot, rw::math::fpu::KF_IS_ZERO_TOLERANCE),
+               "!IsZero(lPivot)");                                                // .cpp:733
+
+    // How far behind the car the player is looking, 0..1.
+    const f32 lrDotBackwards =
+        rw::math::fpu::Clamp(rw::math::vpu::Dot(lLookDirection,
+                                                Vector2{ 0.0f, -1.0f, 0.0f, 0.0f }),
+                             0.0f, 1.0f);
+    CGS_ASSERT(!rw::math::vpu::IsZero(lPivot, rw::math::fpu::KF_IS_ZERO_TOLERANCE),
+               "!IsZero(lPivot)");                                                // .cpp:745
+
+    // .cpp:749 -- pull the orbit centre in toward the car's midpoint as the player looks
+    // back, by "Look Front Towards Factor". The divide by the old length is what turns the
+    // scale into a straight SET of the pivot's distance; :745 is the guard that makes it safe.
+    const f32 lfPivotLength = rw::math::vpu::Magnitude(lPivot);
+    const f32 lfNewPivotLength =
+        lfPivotLength - (lfPivotLength - lfLength * 0.5f)
+                      * mpParameters->mfFrontInAmount * lrDotBackwards;
+    lPivot = lPivot * (lfNewPivotLength / lfPivotLength);
+
+    // .cpp:753/:756 -- how much of the vertical drop to ask for this frame.
+    f32 lfDesiredDropAmount = (lrDotBackwards > 0.0f) ? 1.0f : lrSideScaleAmount;
+    if (mRotationController.IsLookback())
+    {
+        lfDesiredDropAmount = 0.0f;
+    }
+
+    // .cpp:761 -- do not smooth ACROSS a lookback edge or a snap; latch instead.
+    if (mRotationController.IsEndingLookbackThisFrame()
+        || mRotationController.IsStartingLookbackThisFrame()
+        || mbSnapToCar)
+    {
+        mfDropAmount = lfDesiredDropAmount;                                       // .cpp:764
+    }
+    else
+    {
+        mfDropAmount += (lfDesiredDropAmount - mfDropAmount) * 0.09f;             // .cpp:772
+    }
+
+    // .cpp:776 -- and drop the orbit centre, proportionally to how high it already is.
+    lPivot.y -= lPivot.y * mpParameters->mfDropFactor * mfDropAmount;
+
+    // .cpp:780/:781 -- widen the FOV toward "Look Front FOV Offset" by the same side/back
+    // weighting, then latch or ease it in exactly as the drop above.
+    const f32 lfDesiredFOVAdjustment = mpParameters->mfInFrontFOVMax - lfFOVInOut;
+    const f32 lfDesiredFOVAdjustmentScaled =
+        ((lrDotBackwards > 0.0f) ? 1.0f : lrSideScaleAmount) * lfDesiredFOVAdjustment;
+
+    if (mRotationController.IsEndingLookbackThisFrame()                           // .cpp:782
+        || mRotationController.IsStartingLookbackThisFrame()
+        || mbSnapToCar)
+    {
+        mfFOVAdjustment = lfDesiredFOVAdjustmentScaled;                           // .cpp:785
+    }
+    else
+    {
+        mfFOVAdjustment += (lfDesiredFOVAdjustmentScaled - mfFOVAdjustment)       // .cpp:793
+                         * 0.1f;
+    }
+
+    lfFOVInOut += mfFOVAdjustment;                                                // .cpp:796
 }
 
 // @0x821F9218.

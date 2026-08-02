@@ -88,12 +88,41 @@ namespace Utils
             return (mbIsLookback ? 0.0f : mPitchMover.GetCurrentValue()) * KF_DEGS_TO_RADS;
         }
 
+        // ⭐⭐ THE LOOKBACK EDGE PAIR + IsRotated ARE BODIED AS OF 2026-08-02 (final-camera
+        // wave). All three are inlined at every console call site -- they have NO standalone
+        // symbol on either export -- and BehaviourGameplayExternal::UpdateLooking inlines all
+        // three, which is where the shapes below are read from:
+        //   IsRotated()                    X360 @0x82225A3C  `lbz r11, 0x40+2(this)`, i.e.
+        //                                  controller +0x22 == mbIsRotated, tested against 0.
+        //   IsEndingLookbackThisFrame()    X360 @0x82225EE8..0x82225F08 AND @0x82225FF4..
+        //                                  0x82226018 -- TWO independent inlinings in the one
+        //                                  function, identical both times:
+        //                                    lbz +0x20 ; bne -> 0   (mbIsLookback  => false)
+        //                                    lbz +0x21 ; bne -> 1   (mbWasLookback => true)
+        //   IsStartingLookbackThisFrame()  X360 @0x82225F14..0x82225F34 AND @0x82226024..
+        //                                  0x82226040 -- likewise twice, the mirror image:
+        //                                    lbz +0x20 ; beq -> 0   (!mbIsLookback => false)
+        //                                    lbz +0x21 ; bne -> 0   ( mbWasLookback => false)
+        // ⭐ CORROBORATED BY THE OTHER BUILD AT THE ACCESSORS' OWN SOURCE LINES: DecFIGS
+        // charges both edge tests to BrnCameraSphericalRotationController.h:100..:103 (an
+        // `[inlined ...h:100..103 x7]` run immediately before BehaviourGameplayExternal.cpp
+        // :761 and again before :782) -- so the work really is inside these two members.
+        // ⇒ the pair is a RISING/FALLING EDGE on mbIsLookback, which Update's own frame
+        //   bookkeeping (mbWasLookbackLastFrame, written by ::Update @0x8223F808) provides.
+        //   Both are used as "do not smooth across this frame" latches by the chase camera.
+        bool IsRotated() const { return mbIsRotated; }                            // +0x22
+        bool IsStartingLookbackThisFrame() const                                  // +0x20/+0x21
+        {
+            return mbIsLookback && !mbWasLookbackLastFrame;
+        }
+        bool IsEndingLookbackThisFrame() const                                    // +0x20/+0x21
+        {
+            return !mbIsLookback && mbWasLookbackLastFrame;
+        }
+
         // Still declaration-only (their own ledger functions; no caller in this tree yet).
-        bool     IsRotated() const;
         Vector2  GetAdjustedStickVector() const;
         f32      GetUnRotatedTime() const;
-        bool     IsStartingLookbackThisFrame() const;
-        bool     IsEndingLookbackThisFrame() const;
 
         // @0x8223F808 (this TU, DWARF h:70) -- advance one frame: stash the look stick,
         // update lookback edge flags, drive yaw (free-spring when live, integrated when
