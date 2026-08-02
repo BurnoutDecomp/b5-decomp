@@ -1261,7 +1261,93 @@ void GameStateModule::PreWorldUpdateCarSelectBringUp(f32 lfGameTimestep)
     GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
     mbIsUpdating = true;
+    // [FLAG PC bring-up] stand-in for the world's StreamingCompleteEvent -- see
+    // CarSelectManager::UpdateExitStreamingBringUp. Runs immediately before Update so the
+    // console's own case-9 arm (UpdateExitState) sees the cleared latch in the SAME sub-step,
+    // which is what happens on the console when the exit needs no new streaming.
+    mCarSelectManager.UpdateExitStreamingBringUp(lpActionQueue);
     mCarSelectManager.Update(lpActionQueue, 0, lfGameTimestep);
+    mbIsUpdating = false;
+    mpOutputBuffer->UnlockForWrite();
+}
+
+// ============================================================================
+// ProcessGameEventsActivateCarSelectBringUp -- the extracted case-94 JUNKYARD arm of
+// ProcessGameEvents @0x823A0A18. See the header for the FLAG and the (action, type) proof.
+// ============================================================================
+void GameStateModule::ProcessGameEventsActivateCarSelectBringUp(s32 liAction, s32 liCarSelectType)
+{
+    // The three ACTION values the console's inner switch recognises. Left as TU-local constants
+    // rather than promoted into an enum: the X360 switch is over bare integers and no DWARF
+    // enum for them has been found, so naming them publicly would be a fabricated type.
+    const s32 KI_CAR_SELECT_ACTION_START  = 0;   // -> StartCarSelectState
+    const s32 KI_CAR_SELECT_ACTION_MODIFY = 1;   // -> EnterModification
+    const s32 KI_CAR_SELECT_ACTION_EXIT   = 4;   // -> ExitJunkyard
+
+    // The console's outer pivot: word1 selects the manager. 1 == the junkyard
+    // (CarSelectManager), 2 == the online event (OnlineCarSelectManager, not wired here), and
+    // anything else is the console's own "Unknown car select type" assert @cpp:3302.
+    if (liCarSelectType != GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD)
+    {
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[GameStateModule::ProcessGameEvents case 94] car-select type " << liCarSelectType
+                << " is not the junkyard -- the OnlineCarSelectManager arm is not plumbed on this"
+                   " build (FLAG).\n";
+        }
+        return;
+    }
+
+    if (mpOutputBuffer == 0)
+    {
+        return;
+    }
+
+    // The console's own gate for this arm (BrnGameStateModule.cpp:3222).
+    CGS_ASSERT(mCarSelectManager.IsInJunkyard(), "mCarSelectManager.IsInJunkyard()");
+    if (!mCarSelectManager.IsInJunkyard())
+    {
+        return;
+    }
+
+    mpOutputBuffer->LockForWrite();
+    GameStateModuleIO::GameActionQueue* lpActionQueue = mpOutputBuffer->GetGameActionQueue();
+    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
+    mbIsUpdating = true;
+
+    switch (liAction)
+    {
+    case KI_CAR_SELECT_ACTION_START:          // 0
+        if (CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint
+                << "[GameStateModule::ProcessGameEvents case 94] action 0 -> StartCarSelectState\n";
+        mCarSelectManager.StartCarSelectState(lpActionQueue);
+        break;
+
+    case KI_CAR_SELECT_ACTION_MODIFY:         // 1
+        if (CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint
+                << "[GameStateModule::ProcessGameEvents case 94] action 1 -> EnterModification\n";
+        mCarSelectManager.EnterModification(lpActionQueue);
+        break;
+
+    case KI_CAR_SELECT_ACTION_EXIT:           // 4
+        if (CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint
+                << "[GameStateModule::ProcessGameEvents case 94] action 4 -> ExitJunkyard\n";
+        mCarSelectManager.ExitJunkyard(lpActionQueue);
+        break;
+
+    default:
+        // The console's formatted default assert (BrnGameStateModule.cpp:3245).
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("Unknown car select action",
+                                   "GameSource/GameState/BrnGameStateModule.cpp", 3245);
+        CgsDev::Assert::EndAssert();
+        break;
+    }
+
     mbIsUpdating = false;
     mpOutputBuffer->UnlockForWrite();
 }

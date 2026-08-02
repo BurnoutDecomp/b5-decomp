@@ -1427,6 +1427,30 @@ void CarSelectManager::ExitJunkyard(GameStateModuleIO::GameActionQueue* lpAction
 }
 
 // ============================================================================
+// UpdateExitStreamingBringUp -- [FLAG PC bring-up] NOT A CONSOLE FUNCTION.
+// See the header: the stand-in for GameStateModule::ProcessStreamingCompleteEvent @0x82390200,
+// which is the only thing that ever clears mbWaitingForStreaming after ExitJunkyard sets it.
+// DELETE-WHEN ProcessStreamingCompleteEvent + the world StreamingCompleteEvent are real.
+// ============================================================================
+void CarSelectManager::UpdateExitStreamingBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (meState != E_STATE_EXITING || !mbWaitingForStreaming)
+    {
+        return;
+    }
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[FLAG PC bring-up] CarSelectManager: no streaming module on this build -- "
+               "signalling StreamingFinished for the junkyard exit.\n";
+    }
+
+    // The console's own body, with the id that makes its first arm the live one.
+    StreamingFinished(mDesiredCarId, lpActionQueue);
+}
+
+// ============================================================================
 // ForceExitJunkyard (X360 0x8239C418).
 // Abort path (OnEnterOnline / ProcessGameEvents). Forces the manager straight into the EXITING state:
 // resets the timer, sets state 9, clears waiting-for-streaming, copies mStartCarId into mDesiredCarId,

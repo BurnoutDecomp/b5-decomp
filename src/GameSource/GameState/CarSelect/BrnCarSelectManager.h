@@ -142,13 +142,32 @@ public:
     void OnCarUnlockTickerComplete();
     void SetCarUnlockEnabled(bool lbEnabled);
 
+    // MOVED OUT OF THE PRIVATE BLOCK 2026-08-02 (car-select handover wave). The DWARF groups it
+    // with the private helpers, but GameStateModule::ProcessGameEvents @0x823A0A18 calls it
+    // DIRECTLY from the case-94 junkyard arm (xref in the ARTIST export set, alongside
+    // EnterModification and ExitJunkyard which the DWARF already has public). Its three other
+    // callers (StartUnlockState / EndTransitionInState / EndUnlockState) are internal.
+    void StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue);         // X360 0x823872D0
+
+    // [FLAG PC bring-up] NOT A CONSOLE FUNCTION -- the stand-in for the streaming-complete
+    // signal that closes a junkyard exit. ExitJunkyard sets mbWaitingForStreaming and the ONLY
+    // thing that clears it is StreamingFinished, whose one console caller is
+    // GameStateModule::ProcessStreamingCompleteEvent @0x82390200 -- reached from a world
+    // StreamingCompleteEvent through ProcessGameEvents, none of which exists on this build. With
+    // no clear, Update's case-9 arm (UpdateExitState) returns early for ever and the junkyard
+    // exit never finishes. This calls the console's own StreamingFinished with mDesiredCarId (so
+    // its `lActiveCarZeroId == mDesiredCarId` arm is the one that runs), and ONLY while the
+    // manager is actually EXITING and actually waiting -- it can therefore never disturb the
+    // car-change states, which are the other users of that latch.
+    // DELETE-WHEN ProcessStreamingCompleteEvent + the world StreamingCompleteEvent are real.
+    void UpdateExitStreamingBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
 private:
     // ---- private helpers (DWARF :166-285) ----------------------------------
     void UpdateCarColour(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpActionQueue) const;
     void SaveChosenLiveryForCar(CgsID lCarId);
     void StartTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue);      // X360 0x823929D0
     void EndTransitionInState(GameStateModuleIO::GameActionQueue* lpActionQueue);        // X360 0x82392B30
-    void StartCarSelectState(GameStateModuleIO::GameActionQueue* lpActionQueue);         // X360 0x823872D0
     void StartCarModificationState(GameStateModuleIO::GameActionQueue* lpActionQueue);
     void StartUnlockState(GameStateModuleIO::GameActionQueue* lpActionQueue);            // X360 0x82387730
     void UpdateRequestCarChangeState(GameStateModuleIO::GameActionQueue* lpActionQueue); // X360 0x82387AB8

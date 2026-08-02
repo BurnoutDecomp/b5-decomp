@@ -724,6 +724,16 @@ namespace BrnGame
         // re-entry republishes. See PublishCarSelectionToGui.
         bool mbCarSelectionPublished;
 
+        // [FLAG PC bring-up] (no console member): one GUI out-event 192
+        // (GuiEventActivateCarSelect) seen by BridgeGuiToGame's channel-40 walk, held until the
+        // sim spine's car-select leg can hand it to the extracted ProcessGameEvents case-94 arm
+        // under the game-state module's own output-buffer lock. [0] = the action word,
+        // [1] = the car-select type word -- in the console's own payload order.
+        // DELETE-WHEN BridgeGuiToGameState has a caller and ProcessGameEvents drains a real
+        // post-world input buffer.
+        bool mbCarSelectActivatePending;
+        s32  maiPendingCarSelectActivate[2];
+
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)
         s32  miSecondaryControllerPort; // @ +10094144 (the rumble/debug-controller read port)
