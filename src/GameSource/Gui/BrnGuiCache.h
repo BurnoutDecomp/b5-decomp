@@ -42,6 +42,8 @@ namespace BrnGui
     struct MapIconManager;
     class  GuiTracker;             // GetGuiTracker return (pointer only; home GameSource/Gui/SatNav/BrnGuiTracker.h)
     struct OnlineGameRoomPlayerInfo; // friend of GuiCache (reads its wave-H-carved members by name)
+    struct OnlineGameOptions;        // friend of GuiCache (reads its wave-I-carved members by name)
+    struct CrashNavEnterOnlineBase;  // friend of GuiCache (reads its wave-I-carved members by name)
     // Defined later in this header (minimal-slice records returned by GetPresetEvent /
     // the inlined event-display helpers).
     struct PresetEvent;
@@ -453,6 +455,7 @@ namespace BrnGui
         void SetOnlineMatchRanked(bool lbRanked)     { mbOnlineMatchRanked = lbRanked; }     // +0x4B51
         void SetOnlineMatchUnranked(bool lbUnranked) { mbOnlineMatchUnranked = lbUnranked; } // +0x4B52
         void SetOnlineStartPending(bool lbPending)   { mbOnlineStartPending = lbPending; }   // +0x4B53
+        bool IsOnlineStartPending() const     { return mbOnlineStartPending; }      // +0x4B53 (19283) CrashNavEnterOnlineBase Handle{Disconnected,OverlayComplete}Event lbz
         s32 GetPlayerActiveRaceCarIndex() const                  { return mePlayerActiveRaceCarIndex; }  // DWARF h:924
         s32 GetActiveRoadRule() const                            { return meActiveRoadRule; }
 
@@ -469,6 +472,7 @@ namespace BrnGui
             CGS_ASSERT(meCarSelectType > 0, "meCarSelectType > GsmIO::E_CAR_SELECT_TYPE_NONE");
             return meCarSelectType;
         }
+        bool IsJunkyardCarUnlockPending() const          { return mbJunkyardCarUnlockPending; }  // +0x4B74 (19316)
 
         // DWARF h:1425 SetDoDisconnectPopup(const CgsModule::Event*). Latch the error word the
         // disconnect popup shows: the event's leading word, or 0 when no event rode along. The
@@ -660,6 +664,14 @@ namespace BrnGui
         // no DWARF accessor rows exist for these.
         friend struct OnlineGameRoomPlayerInfo;
 
+        // Same exposure rule again for the create-match / game-options screen and the
+        // sign-in screen (wave I): the X360 inlines their raw loads and stores of the
+        // ranked/unranked and online-start bytes (+0x4B51..53), the game-mode options
+        // storage, the options-changed byte (+0xA9E0) and the junkyard car-unlock byte
+        // (+0x4B74). No DWARF accessor rows exist for these X360-only offsets.
+        friend struct OnlineGameOptions;
+        friend struct CrashNavEnterOnlineBase;
+
         // ===================================================================
         //  DATA LAYOUT -- named anchors at asm-proven `this+offset`, gaps
         //  reserved with explicit padding (AGENTS.md "LAYOUT RECOVERY WITH
@@ -775,7 +787,11 @@ namespace BrnGui
         // boundary header's enum convention; the value home is
         // BrnGameState::GameStateModuleIO::ECarSelectType (BrnGameStateSharedIO.h).
         s32  meCarSelectType;                            // +0x4B70 (19312)
-        u8   mPad_4B74[1];                               // +0x4B74
+        // ADDITIVE CARVE (CrashNavEnterOnlineBase::HandleEnteringJunkyard @0x824CB070,
+        // lbz mpGuiCache+0x4B74 == 1 -> "TO_CUNLOCK" else "TO_CSELECT"). FLAG:
+        // consumer-named -- the producer-side semantics are unrecovered (it gates the
+        // junkyard entry into the car-UNLOCK flavour of car select).
+        bool mbJunkyardCarUnlockPending;                 // +0x4B74 (19316)
         // ADDITIVE GROW (BrnGuiCache DetermineCarUnlockPending @0x824EC678): the two car-unlock
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.
         bool mbCarUnlockPending;                         // +0x4B75 (19317) set 1 when an un-shown unlocked car remains
@@ -893,7 +909,13 @@ namespace BrnGui
         bool mbOnlineTrafficOn;                          // +0xA9DD (43485) params.mbTrafficOn
         bool mbOnlineTrafficCheckingOn;                  // +0xA9DE (43486) params.mbTrafficCheckingOn
         bool mbOnlineRanked;                             // +0xA9DF (43487) params.mbRanked (lbzx @0x8248C184; gates the security pause option + world-rank display)
-        u8  mPad_A9E0[80];                               // +0xA9E0..+0xAA2F
+        // ADDITIVE CARVE (OnlineGameOptions wave I): the byte right after the params
+        // mirror. OnlineGameOptions::HandleGuiCacheEvent (@0x824A85E8, lbzx cache+0xA9E0)
+        // tests it (OR meOnlineGameMode == 15) to publish the id-409 refresh record on
+        // first entry, then clears it. FLAG: consumer-named -- the producer side is not
+        // yet reconstructed.
+        bool mbOnlineGameOptionsChanged;                 // +0xA9E0 (43488)
+        u8  mPad_A9E1[79];                               // +0xA9E1..+0xAA2F
         // ctor field-inits a stride-56 SoA of 8 lanes (one per ARCI): int@+0, float@+4 each
         // (ctor @0x827E05B8 writes +43568..+43964). FLAG: only the +0/+4 words are attested
         // (the 48-byte tail is reserved); semantic of the pair is unrecovered.
