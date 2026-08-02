@@ -284,14 +284,33 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
         if( mReceiverQueue.GetCount() < miExpectedResponseCount )
             return false;
 
-        s32 liReplyId = -1;
-        const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
-            PeekGameDataReply( mReceiverQueue, &liReplyId );
-        if( lpReply != 0 )
+        // ⭐ FIXED 2026-08-02 (colour-picker wave) -- THIS BLOCK READ PAST THE END OF THE
+        // EVENT. The stage-0/1 request above is a type-4 AcquireResourceRequest, so the pool
+        // module answers with a CgsResource::Events::AcquireResourceResponse (see
+        // PoolModule::DoAcquireResourceRequest @0x828FCD48, tag 6). The reply was being read
+        // through a BrnResource::GameDataIO::GameDataAssetEvent view, which is a DIFFERENT
+        // record: GameDataAssetEvent::mHandle sits at +40, while AcquireResourceResponse is
+        // only {PoolEvent, mpResourceMemory, mpSourceEntry} == 32 bytes on x64. So both
+        // `mCarColoursResource` and `mbCarColoursBound` were built from bytes past the end of
+        // the record -- which is why "[RaceCar] LoadGlobalResources done: ... carColours=0"
+        // reported a FALSE NEGATIVE even once the palette resource really was resident.
+        // Read it the way WorldDataController::Prepare's identical stage does: by name off
+        // the response's own two lanes.
+        const CgsModule::Event* lpEvent = 0;
+        s32 liEventSize = 0;
+        mReceiverQueue.GetFirstEvent( &lpEvent, &liEventSize );
+        if( lpEvent != 0 )
         {
-            CgsResource::ResourcePtr<GlobalColourPalette> lPalette( lpReply->mHandle );
+            const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>( lpEvent );
+
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+            lHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
+
+            CgsResource::ResourcePtr<GlobalColourPalette> lPalette( lHandle );
             mCarColoursResource  = lPalette;
-            mbCarColoursBound    = ( lpReply->mHandle.mpResourceMemory != 0 );
+            mbCarColoursBound    = ( lpAcquire->mpResourceMemory != 0 );
         }
     }
     // fall through

@@ -5,14 +5,15 @@
 
 namespace CgsResource
 {
-// Resource-type handler for a serialised PlayerCarColours payload (a
-// BrnWorld::GlobalColourPalette = 4 x PlayerCarColourPalette, each
-// { Vector4* mpPaintColours; Vector4* mpPearlColours; s32 miNumColours; } = 12B),
-// deriving from CgsResource::Type. FixUp/FixDown rebase the two colour-array
-// pointers of every palette entry; Serialise copies the payload to the destination
-// resource and rebases pointers in place. GetTypeID/GetSerialisedResourceDescriptor
-// are sibling virtuals owned by other recon passes. Base/signatures recovered from
-// the DecFIGS DWARF (PlayerCarColoursResourceType.h) and the X360 pseudocode.
+// Resource-type handler for a serialised PlayerCarColours payload (registry id
+// 0x1001E / 65566): a BrnWorld::GlobalColourPalette == 4 x PlayerCarColourPalette,
+// each { u32 muPaintColours; u32 muPearlColours; s32 miNumColours; } == 12 bytes.
+// Derives from CgsResource::Type. FixUp/FixDown rebase the two 32-bit colour-array
+// columns of every palette entry; Serialise copies the payload to the destination
+// resource and rebases the columns in place. Base/signatures recovered from the
+// DecFIGS DWARF (PlayerCarColoursResourceType.h) and the X360 pseudocode; the
+// 12-byte stride and the 32-bit columns are proven twice in
+// SharedClasses/Graphics/BrnGlobalColourPalette.h.
 class PlayerCarColoursResourceType : public CgsResource::Type
 {
 public:

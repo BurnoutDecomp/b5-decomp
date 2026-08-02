@@ -52,20 +52,44 @@ namespace BrnGui
 // while its reply has not arrived. The console's caller (GuiModule::Prepare stage 14) re-enters
 // it every pass until it returns true.
 //
-// ⚠️ TWO STAGES CANNOT COMPLETE ON THIS BUILD, and they do so by the console's own mechanism --
-// an outstanding request whose producer never answers, which parks the machine in its ACQUIRING
-// arm without spinning (the arm only re-checks the queue; it does not re-issue):
-//   * PREPARING_ACQUIRING_PROGRESSION waits on the "CarColours" acquire. GameStateModule::Prepare
-//     documents the same resource as `[deferred]` at its own stage 11.
-//   * PREPARING_ACQUIRING_STREET_DATA waits on GetFreeburnChallengeList, which
-//     GameDataModule::ProcessGetGameDataEvent routes to DeferredGameDataRequest ("CL__").
-// So meState settles at PREPARING_ACQUIRING_PROGRESSION and the controller never reaches
-// WFPLAYERCARCOLOURS. That is correct behaviour for the missing producers, and it does NOT
-// affect the car-select screen: GetVehicleList()/GetFreeburnChallengeList() are the only two
-// accessors the X360 does NOT gate on meState (0x824F3AF0/0x824F3AF8 are bare returns), and the
-// vehicle list is bound two stages EARLIER. The readiness-gated accessors (landmarks, events,
-// colour palettes) will assert if called before those two producers land -- which is the console's
-// own contract, not a substitution.
+// ⚠️ WHAT ACTUALLY HAPPENS ON THIS BUILD -- CORRECTED 2026-08-02, THE OLD NOTE WAS WRONG TWICE.
+// It said the machine settles at PREPARING_ACQUIRING_PROGRESSION (7) because "no PC producer
+// answers the CarColours acquire". Boot-measured, it settles at PREPARING_ACQUIRING_STREET_DATA
+// (9): the CarColours acquire IS answered (the pool always answers an acquire, even when the
+// resource is absent -- it replies with a null memory pointer), so stage 7 advances. The one
+// stage that cannot complete is stage 9, waiting on GetFreeburnChallengeList, which
+// GameDataModule::ProcessGetGameDataEvent routes to DeferredGameDataRequest ("CL__").
+//
+// ⛔ AND THE REPLY HANDLER IS DELIBERATELY STILL NOT IMPLEMENTED. The console's
+// ProcessGetFreeburnChallengeListRequest @0x82666728 is trivial -- 20 instructions that post
+// reply id 53 carrying `&mChallengeList` (the resident table at X360 this+462800), exactly like
+// ProcessGetVehicleListRequest. What makes it correct on the console is GameDataModule::Prepare
+// STAGE 10 (PrepareFreeburnChallengeList @0x8266C088) having FILLED that table first. Stage 10
+// is deferred on this build and there is no challenge-list bundle in build/game to fill it
+// from. Writing the reply handler alone would hand every consumer a live-looking, permanently
+// EMPTY table -- a plausible-but-wrong answer indistinguishable from "this profile has no
+// challenges", i.e. the silent-drop shape this project keeps getting bitten by. Land stage 10
+// and the handler together, or not at all.
+//
+// ⚠️ Parking at 9 costs LESS than the old note implied. It does NOT affect the colour picker
+// (see below), and it is not what fires any assert in the current whole-run set. What it does
+// gate is the five genuinely meState-gated accessors (landmarks, events, progression), none of
+// which is reached on the junkyard -> car-select -> handover path.
+//
+// ⚠️ AND: "the readiness-gated accessors (landmarks, events, colour palettes) will assert" was
+// wrong for the colour palette. GetColourPaletteFromType @0x824BDA40 has NO meState compare --
+// only `lType < eNumPalettes`. Its sibling GetProgressionData @0x82428818 DOES gate
+// (`cmpwi r11, 0xB`); that is where the confusion came from. GetVehicleList/
+// GetFreeburnChallengeList (0x824F3AF0/0x824F3AF8) are bare returns, so THREE accessors are
+// ungated, not two.
+//
+// ⛔ STILL TRUE AND STILL A GAP: nothing in this function ever writes mpProgressionData (+0x444)
+// or mpStreetData (+0x488) -- that is the CONSOLE's shape, verified instruction by instruction
+// against 0x82516770, not a missing slice. Some other producer fills them; until it lands,
+// WorldDataController::GetProgressionData() returns an unbound ResourcePtr. (It is NOT what
+// fires the "lpProgressionData != NULL" assert in GameStateModule::OnPlayerCarChange -- that
+// one reads ProgressionManager::mpProgressionData, a different object entirely, loaded from
+// Progression.dat by ProgressionManager::LoadProgressionData @0x82399ED0.)
 // ================================================================================================
 
 // X360-inlined in GuiModule::Construct @0x82518028 (stores at guiModule+307836..+309028).
@@ -252,7 +276,10 @@ s32 WorldDataController::GetTotalNumberOfOnlineLandmarks() const
 }
 
 // X360 0x824BDA40. Returns the lType'th car-colour palette entry from the loaded global
-// colour-palette resource. lType indexes maPalettes[4] (12-byte PlayerCarColourPalette stride).
+// colour-palette resource. lType indexes maPalettes[4]; the console's own tail
+// `slwi r11,r31,1 / add r11,r31,r11 / slwi r11,r11,2 / add r3,r11,r30` == base + 12*type is one
+// of the two proofs that PlayerCarColourPalette is the 12-byte SERIALISED record.
+// NOTE (verified): this accessor has NO meState gate -- unlike GetProgressionData below.
 const BrnWorld::PlayerCarColourPalette*
 WorldDataController::GetColourPaletteFromType(BrnWorld::EPalettesTypes lType) const
 {

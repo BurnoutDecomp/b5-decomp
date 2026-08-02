@@ -457,29 +457,36 @@ namespace BrnGui
         CGS_ASSERT(mpGuiCache->GetWorldDataController() != 0,
                    "mpWorldDataController");   // BrnGuiCache.h:2324
 
-        // ⚠️⚠️ FLAG PC bring-up guard -- NOT in the X360 body, and it is load-bearing.
-        // GetColourPaletteFromType hands back `&mpPlayerCarColours->maPalettes[type]` with NO
-        // readiness check of its own; the console can do that because its WorldDataController
-        // always walks through E_WORLDDATACONTROLLERSTATE_PLAYERCARCOLOURS (10) /
-        // WFPLAYERCARCOLOURS (11) before any car-select screen is interactive. On THIS build
-        // the acquire machine parks at state 7 (PREPARING_ACQUIRING_PROGRESSION) because no PC
-        // producer answers the progression request, so the palette resource is never loaded and
-        // the returned pointer is into unmapped storage. Boot-measured: WER fault offset
-        // 0x1011D9 == ColourSelection::SetupColourSelectionGradient + 0x239, i.e. the first
-        // read of the palette's colour columns. Remove this guard when the acquire machine
-        // reaches state 11 -- the assert below will say so.
         BrnGui::WorldDataController* lpWorldData = mpGuiCache->GetWorldDataController();
-        if (lpWorldData->GetState() < WorldDataController::E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS)
+
+        // ⚠️ FLAG PC bring-up guard -- NOT in the X360 body. RETIRED-AND-REPLACED 2026-08-02.
+        //
+        // The previous guard bailed whenever the acquire machine had not reached
+        // E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS (11), on the stated grounds that
+        // GetColourPaletteFromType gates on that state. IT DOES NOT: the X360 body @0x824BDA40
+        // has no meState compare at all, only `lType < eNumPalettes`. (Its sibling
+        // GetProgressionData @0x82428818 DOES gate -- `cmpwi r11, 0xB` -- which is where that
+        // claim came from.) The real reason the palette was unreadable was that resource type
+        // 0x1001E was never REGISTERED, so the "CarColours" acquire replied with a null memory
+        // pointer and the accessor handed back `&null->maPalettes[type]` -- boot-measured WER
+        // fault offset 0x1011D9 == ColourSelection::SetupColourSelectionGradient + 0x239.
+        // That registration has landed, so the state gate is gone.
+        //
+        // What is left is a NULL-RESOURCE guard, which is a strictly weaker and honest claim:
+        // if the acquire ever fails again (a missing bundle, a failed pool load) this bails
+        // instead of dereferencing null. It costs one pointer test on a path the console
+        // reaches with the resource always bound.
+        if (!lpWorldData->HasPlayerCarColours())
         {
             static bool s_bLoggedNoPalette = false;
             if (!s_bLoggedNoPalette && CgsDev::Log::gpDebugPrint != 0)
             {
                 s_bLoggedNoPalette = true;
                 *CgsDev::Log::gpDebugPrint
-                    << "[CarSelectLivery] FLAG: the player-car-colour palette is not loaded "
+                    << "[CarSelectLivery] FLAG: the player-car-colour resource did not bind "
                        "(WorldDataController state "
                     << static_cast<s32>(lpWorldData->GetState())
-                    << " < 11) -- the colour picker stays empty this run.\n";
+                    << ") -- the colour picker stays empty this run.\n";
             }
             return;
         }
@@ -494,6 +501,30 @@ namespace BrnGui
             liNumColours = lpPalette->miNumColours;
         }
 
+        // [DIAG -- BRING-UP SCAFFOLDING, NOT CONSOLE CODE, one shot.] The colour picker has
+        // no drawn representation on this build yet (the livery Apt movie does not composite
+        // the toggle), so a screenshot cannot show whether the palette actually arrived.
+        // Print what the resource resolved to instead: the palette index, its colour count
+        // and the first paint/pearl pair. Expected from the shipped payload:
+        // {25, 25, 25, 2} colours, palette 0 colour 0 == paint (0.784, 0, 0, 1) /
+        // pearl (0.588, 0, 0, 1). Remove with the FLAG above once the toggle draws.
+        {
+            static bool s_bLoggedPalette = false;
+            if (!s_bLoggedPalette && CgsDev::Log::gpDebugPrint != 0 && liNumColours > 0)
+            {
+                s_bLoggedPalette = true;
+                const rw::math::vpu::Vector4& lrPaint = lpPalette->GetPaintColours()[0];
+                const rw::math::vpu::Vector4& lrPearl = lpPalette->GetPearlColours()[0];
+                *CgsDev::Log::gpDebugPrint
+                    << "[CarSelectLivery] palette " << liPaintFinish << " resolved: "
+                    << lpPalette->miNumColours << " colours; [0] paint=("
+                    << lrPaint.x << ", " << lrPaint.y << ", " << lrPaint.z << ", " << lrPaint.w
+                    << ") pearl=("
+                    << lrPearl.x << ", " << lrPearl.y << ", " << lrPearl.z << ", " << lrPearl.w
+                    << ")\n";
+            }
+        }
+
         // The three parallel arrays the toggle wants: the top colour, the bottom colour and
         // the option id, one per palette entry.
         const rw::math::vpu::Vector4* lapTopColours[KI_MAX_PALETTE_COLOURS];
@@ -503,10 +534,12 @@ namespace BrnGui
         for (s32 liColour = 0; liColour < liNumColours; ++liColour)
         {
             // The X360 walks both pointer columns by 16 bytes (one Vector4) per entry:
-            // `*&v22[i] = *palette + 16*i` / `*&v23[i] = palette[1] + 16*i`.
+            // `*&v22[i] = *palette + 16*i` / `*&v23[i] = palette[1] + 16*i`. Both columns are
+            // 32-bit SERIALISED slots that PlayerCarColoursResourceType::FixUp has rebased;
+            // GetPaintColours()/GetPearlColours() are that widening, nothing more.
             lau64Ids[liColour]         = static_cast<u64>(liColour);
-            lapTopColours[liColour]    = &lpPalette->mpPaintColours[liColour];
-            lapBottomColours[liColour] = &lpPalette->mpPearlColours[liColour];
+            lapTopColours[liColour]    = &lpPalette->GetPaintColours()[liColour];
+            lapBottomColours[liColour] = &lpPalette->GetPearlColours()[liColour];
         }
 
         mColourMenuToggle.Clear();                        // toggle slot 6

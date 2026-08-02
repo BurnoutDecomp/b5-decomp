@@ -25,6 +25,7 @@
 #include "SDKs/Packages/ICE/ICEMemory.hpp"         // ICE::spICEMemory (ICE::ICEMemory*) / ICEMemory::GetMemory / mEditHeap
 #include "rw/core/stdc/stdc.h"                      // rw::core::stdc::MemClear / MemCopy (minimal slice)
 #include "SDKs/Packages/ICE/ICEFile.hpp"            // ICE::ICEFileHandler (ICETakeData::SaveData sink)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [DIAG] CgsDev::Log::gpDebugPrint (key-bounds trace)
 
 #include <cstring>                                  // memset (ICETakeData::Construct)
 #include <cstdint>                                  // uintptr_t (SetDataPointers alignment math)
@@ -1847,6 +1848,28 @@ ICEValue ICETake::GetValue(s32 liChannel, u16 lu16Key) const
     if (liChannel < 28)
         li16Limit = lrChannel.GetNumKeys();
 
+    // [DIAG -- BRING-UP SCAFFOLDING, NOT CONSOLE CODE, capped at 20 lines.] The whole-run
+    // assert set is dominated by this one bound (12 of 15 as of 2026-08-02, all through
+    // BehaviourIceAnim::Prepare -> KeyAnimController::Prepare -> SetParameter -> GetSlope).
+    // Print WHICH element, WHICH channel and WHICH index over WHICH limit, so the next wave
+    // can decide between a data-port fault and a transcription fault in the bracket-key
+    // arithmetic without another instrumented build. Remove with the ICE-camera campaign.
+    if (lu16Key >= (u16)li16Limit)
+    {
+        static s32 s_iKeyBoundReports = 0;
+        if (s_iKeyBoundReports < 20 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++s_iKeyBoundReports;
+            *CgsDev::Log::gpDebugPrint
+                << "[ice-bounds] element " << liChannel
+                << " channel " << lrDesc.miChannelNumber
+                << " key " << (s32)lu16Key
+                << " limit " << (s32)li16Limit
+                << " (numKeys " << (s32)lrChannel.GetNumKeys()
+                << ", numIntervals " << (s32)lrChannel.GetNumIntervals() << ")\n";
+        }
+    }
+
     CGS_ASSERT(lu16Key < (u16)li16Limit,
                "lu16Index < ( is_key ? lChannel.GetNumKeys() : lChannel.GetNumIntervals())");
 
@@ -1986,7 +2009,17 @@ s32 ICETake::GetValueInt(s32 liChannel) const
 // (ValDesired-Val), the gate is miCubicLinear (+0x30) not miTangentScale,
 // and the FINAL multiply is the miTangentScale (+0x34) partner sample. The internal
 // float value-sampler (an inlined GetValueFloat-by-element) is modelled via
-// GetValueFloat. A focused review of this one function is recommended.
+// GetValueFloat.
+//
+// ⭐ THE "focused review of this one function is recommended" NOTE HAS BEEN ACTED ON
+// (2026-08-02) AND IT FOUND TWO REAL DEFECTS -- see the corrected block at (3) below.
+// Both were in the finite-difference sample: the wrong index space (channel where the
+// console passes the element) and the wrong key (liSampleKey where the console passes
+// li16KeyNeighbour, an off-by-one on the incoming side). Between them they produced the
+// entire ICEData.cpp:1851 key-bounds assert family. The parameter NAMES here are the
+// frozen declaration's and are misleading: liChannel is the ELEMENT index (it indexes
+// ICEElementDescriptions) and liElement is the CHANNEL index (it indexes mChannels).
+// The X360 pins both: `dword_82F28880[22*a2]` vs `16*a3 + a1` @0x825303C0.
 // ---------------------------------------------------------------------------
 f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) const
 {
@@ -2037,18 +2070,23 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
     f32 lfSlope = lfCubicDelta;
     bool lbInRange = true;
     const s32 liLastInterval = (s32)lrChannel.GetNumIntervals() - 1;
+
+    // The NEIGHBOUR interval's left-edge key (the X360's v21). Hoisted out of the
+    // range test 2026-08-02 because the blend below samples it -- which is what the
+    // console does too: v21 is computed at LABEL_15, reached BOTH by falling through the
+    // range test and by the `numIntervals - 1 < 0` goto that skips it.
+    s16 li16KeyNeighbour;
+    if (liNeighbour == 0)
+        li16KeyNeighbour = 0;
+    else if (liNeighbour + 1 < (s32)lrChannel.GetNumIntervals())
+        li16KeyNeighbour = lrChannel.GetKeyIndex((u16)(liNeighbour - 1));
+    else
+        li16KeyNeighbour = (s16)(lrChannel.GetNumKeys() - 2);
+
     if (liLastInterval >= 0)
     {
         s32 liClamped = (liNeighbour >= 0) ? liNeighbour : 0;
         if (liLastInterval < liClamped) liClamped = liLastInterval;
-
-        s16 li16KeyNeighbour;
-        if (liNeighbour == 0)
-            li16KeyNeighbour = 0;
-        else if (liNeighbour + 1 < (s32)lrChannel.GetNumIntervals())
-            li16KeyNeighbour = lrChannel.GetKeyIndex((u16)(liNeighbour - 1));
-        else
-            li16KeyNeighbour = (s16)(lrChannel.GetNumKeys() - 2);
 
         if (liNeighbour != liClamped ||
             (u16)liSampleKey != (u16)((liSide ^ 1) + (s32)(u16)li16KeyNeighbour))
@@ -2057,9 +2095,33 @@ f32 ICETake::GetSlope(s32 liChannel, s32 liElement, u16 lu16Key, s32 liSide) con
 
     if (lbInRange)
     {
-        // Finite difference of the sampled element across the bracket key.
-        const f32 lfValNext = GetValueFloat(liElement, (u16)(liSampleKey + 1));
-        const f32 lfValPrev = GetValueFloat(liElement, (u16)liSampleKey);
+        // Finite difference of the sampled element across the NEIGHBOUR's bracket key.
+        //
+        // ⭐⭐ CORRECTED 2026-08-02 -- BOTH ARGUMENTS WERE WRONG, AND THEY WERE THE WHOLE
+        // ICEData.cpp:1851 ASSERT FAMILY (12 of the 15 whole-run asserts). The X360 body
+        // @0x825303C0 is unambiguous about both:
+        //     sub_8252F848(a1, a2, (v21 + 1));   // GetValueFloat(element, keyNeighbour + 1)
+        //     sub_8252F848(a1, a2, v21);         // GetValueFloat(element, keyNeighbour)
+        // where the register roles are pinned by the two table indexings earlier in the same
+        // body: `dword_82F28880[22*a2]` is the ELEMENT-description table (so a2 == liChannel,
+        // the element index) and `16*a3 + a1` is mChannels[] (so a3 == liElement, the channel
+        // index), and v21 is EdgeKey(liNeighbour) == li16KeyNeighbour.
+        //
+        //   (1) ELEMENT vs CHANNEL. This passed liElement -- the CHANNEL index -- where
+        //       GetValueFloat wants an ELEMENT index. GetValue then bounds the read against
+        //       ICEElementDescriptions[channelIndex].miChannelNumber, i.e. a DIFFERENT
+        //       channel from the one whose key indices produced the index. Measured:
+        //       "[ice-bounds] element 3 channel 0 key 2 limit 2 (numKeys 2, numIntervals 1)"
+        //       -- element 3 is what channel index 3 decodes to, and its channel 0 has 2 keys.
+        //   (2) WHICH KEY. This sampled {liSampleKey, liSampleKey + 1}; the console samples
+        //       {li16KeyNeighbour, li16KeyNeighbour + 1}. Under the guard just above
+        //       (liSampleKey == (liSide ^ 1) + li16KeyNeighbour) the two agree on the
+        //       OUTGOING side (liSide == 1) and are OFF BY ONE on the INCOMING side
+        //       (liSide == 0), where liSampleKey == li16KeyNeighbour + 1 -- so the incoming
+        //       tangent read one key past the end of a 2-key channel. That is exactly the
+        //       "key 2, limit 2" the diagnostic captured.
+        const f32 lfValNext = GetValueFloat(liChannel, (u16)(li16KeyNeighbour + 1));
+        const f32 lfValPrev = GetValueFloat(liChannel, (u16)li16KeyNeighbour);
 
         // Interval sizes: this interval (lu16Key) and the neighbour interval.
         const f32 lfSizeThis  = lrChannel.GetIntervalSize(lu16Key);
