@@ -4,6 +4,8 @@
 // Compilation home for the BrnDirector::Camera::BehaviourGameplayExternal::Parameters slice
 // this TU owns:
 //   - BehaviourGameplayExternal::Parameters::Set @0x821F9228  (defined here)
+//   - BehaviourGameplayExternal::UpdateJumping   @0x8220EAD0  (added 2026-08-02; the fourth
+//     of the eight helpers Update drives -- see its own banner below)
 //
 // Parameters::Set is the seeding step the main director runs (ProcessNewVehicleEvents /
 // UpdateAttribSys) and the replay director runs (PreSceneQueryUpdate) to populate an
@@ -12,6 +14,10 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
+
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random::RandomBool
+                                                        //   (Behaviour.h only forward-declares it;
+                                                        //    UpdateJumping needs the complete type)
 
 // ----------------------------------------------------------------------------
 // NOTE -- BehaviourGameplayExternal::Parameters::Serialise<S> (the versioned field-walk visitor:
@@ -344,6 +350,207 @@ void BehaviourGameplayExternal::Parameters::Construct()
     mfDropFactor = 0.5f;                   // stfs flt_82001DA0, 0xA8
 
     mbIsValid = false;                     // stb r30(=0), 0xAC
+}
+
+// ============================================================================
+// The file-scope jump tuning constants (DecFIGS-NAMED, X360-VALUED).
+//
+// The DecFIGS PS3 export keeps these as named symbols
+// (`BrnDirector::Camera::BehaviourGameplayExternal::kfJumpParams...`), so the NAME of each
+// one is read, not guessed. The VALUE of each was then read out of the X360 ARTIST image
+// (scratchpad\afw_id1b.py) at the address the SAME STATEMENT loads -- so every pairing below
+// is anchored on a statement both builds agree on, not on address order (the two builds lay
+// the block out differently).
+//
+//   PS3 statement | X360 address | value    | name
+//   --------------+--------------+----------+--------------------------------------
+//   :1011/:1045   | flt_82CDA6E8 | 0.1      | kfJumpParamsBlendFactor
+//   :1041         | flt_82CDA6EC | 0.25     | kfJumpParamsDutchBlendFactor
+//   :993          | flt_82CDA6F0 | 0.02     | kfJumpParamsDutchCooloffRate
+//   :977/:981     | flt_82CDA6F4 | 5.0      | kfJumpParamsDutchInitialVelocity
+//   :1010         | flt_82CDA708 | 0.2      | kfJumpParamsTimeDelta
+//   :1010         | flt_82CDA70C | 0.001    | kfJumpParamsTimeDeltaBlendInFactor
+//   :1044         | flt_82CDA710 | 0.1      | kfJumpParamsTimeDeltaBlendOutFactor
+//   :1015         | flt_82CDA714 | 0.01     | kfSlideYScaleScaleUpFactor
+//   :991          | flt_82CDAD10 | 0.261799 | kfJumpParamsDutchMax
+//
+// ⭐ kfJumpParamsDutchMax reads as 0.2617994 == 15 degrees in radians, and
+// kfJumpParamsDutchInitialVelocity is 5.0 multiplied by KF_DEGS_TO_RADS at the point of use
+// (i.e. 5 degrees/second) -- two independent sanity checks that these are angular tunables
+// in the units the rest of the class uses.
+// ============================================================================
+const f32 BehaviourGameplayExternal::kfJumpParamsBlendFactor             = 0.1f;
+const f32 BehaviourGameplayExternal::kfJumpParamsDutchBlendFactor        = 0.25f;
+const f32 BehaviourGameplayExternal::kfJumpParamsDutchCooloffRate        = 0.019999999f;
+const f32 BehaviourGameplayExternal::kfJumpParamsDutchInitialVelocity    = 5.0f;
+const f32 BehaviourGameplayExternal::kfJumpParamsTimeDelta               = 0.2f;
+const f32 BehaviourGameplayExternal::kfJumpParamsTimeDeltaBlendInFactor  = 0.001f;
+const f32 BehaviourGameplayExternal::kfJumpParamsTimeDeltaBlendOutFactor = 0.1f;
+const f32 BehaviourGameplayExternal::kfSlideYScaleScaleUpFactor          = 0.0099999998f;
+const f32 BehaviourGameplayExternal::kfJumpParamsDutchMax                = 0.2617994f;
+
+// ============================================================================
+// BehaviourGameplayExternal::UpdateJumping @0x8220EAD0 / PS3 @0x1CFFC  (.cpp:948..:1054)
+//
+// The jump ("air") state machine of the chase camera: while the car is genuinely airborne it
+// starts and integrates a DUTCH ROLL (a left-or-right camera tilt whose direction is a coin
+// flip), lets the yaw drift accumulate and eases the spring/scale tunables toward their
+// in-air targets; the moment the car is not airborne it converts the time spent in the jump
+// into an IMPACT SHAKE and eases everything back toward the authored parameter block.
+//
+// ---- how the shared-info offsets were NAMED (a chain, every link already committed) -----
+//   lrInfo + 0x60 == mPlayerInfo (Behaviour.h's KEYSTONE: mPlayerInfo at console +96, and
+//                    96 + sizeof(RaceCarState) lands on mTimestep at +1360)
+//   +0x088 (x4, stride 0x70)  = mPlayerInfo.mRaceCarState.maWheels[i]        (WheelLite,
+//                               sizeof 0x70) .mRoadContact.mbIsOnGround      (RoadContact
+//                               +0x28: two Vector3s + f32 + CollisionTag)
+//   +0x240 = mRaceCarState.mAboveGroundTestResult.mfVerticalDistance         (448 + 32)
+//   +0x248 = mRaceCarState.mAboveGroundTestResult.mbValid                    (448 + 40)
+//   +0x464 = mRaceCarState.mfTimeInAir                                       (== 1028)
+//   +0x5D4 = mpRandom                                                        (== 1492)
+// Every one of those five lands exactly on a NAMED member of an already-committed struct --
+// no reserved span, no offset poke, and mfTimeInAir landing on the jump gate is the kind of
+// agreement that cannot happen by accident.
+//
+// ---- the X360 / PS3 cross-check --------------------------------------------------------
+// The two builds do NOT share this class's tail offsets: every member from mfSlideYScale
+// onward is 0x10 LOWER on PS3 (e.g. mbJumping is X360 +0xB60 / PS3 +0xB50, mpParameters is
+// X360 +0xB00 / PS3 +0xAF0). Every statement below matches under that single constant shift,
+// in both directions -- which is what lets the DecFIGS LINE NUMBERS be trusted to split the
+// X360's heavily-scheduled instruction stream back into statements. X360 wins on constants
+// and offsets; DecFIGS wins on names and statement boundaries.
+//
+// ⚠️ TWO SHAPES WORTH FLAGGING, both reproduced rather than tidied:
+//   * `lbHighEnough` is TRUE when the above-ground test is INVALID (.cpp:964 is
+//     `!mbValid || mfVerticalDistance >= 1.0f`). Both builds agree; the console treats "no
+//     ground result" as "nothing below us", which is the conservative reading for a jump.
+//   * the impact-shake conversion at .cpp:1032 runs on the frame the car STOPS being
+//     airborne, using the mfTimeInJump accumulated up to that frame -- and mfTimeInJump is
+//     only reset when the NEXT jump starts (.cpp:984), never here.
+// ============================================================================
+void BehaviourGameplayExternal::UpdateJumping(const BehaviourSharedInfo& lrInfo,
+                                              f32 lfTimestep,
+                                              Camera& lrCamera)
+{
+    const BrnPhysics::Vehicle::RaceCarState& lrCarState = lrInfo.mPlayerInfo.mRaceCarState;
+
+    // .cpp:955/:957 -- X360 unrolls this to four `lbz`/`cmplwi` pairs at +0x88 stride 0x70;
+    // PS3 keeps the `mtctr 4` loop. Same four bytes either way.
+    bool lbAllWheelsOffGround = true;
+    for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+    {
+        lbAllWheelsOffGround = lbAllWheelsOffGround
+                            && !lrCarState.maWheels[liWheel].mRoadContact.mbIsOnGround;
+    }
+
+    // .cpp:964 -- flt_82001C98 == 1.0f (one metre of clearance).
+    const bool lbHighEnough = !lrCarState.mAboveGroundTestResult.mbValid
+                            || lrCarState.mAboveGroundTestResult.mfVerticalDistance >= 1.0f;
+
+    // .cpp:970 -- flt_82001CC0 == 0.0f. The three tests are evaluated in this order on X360.
+    if (lrCarState.mfTimeInAir > 0.0f && lbHighEnough && lbAllWheelsOffGround)
+    {
+        // .cpp:972
+        if (!mbJumping)
+        {
+            mbJumping = true;                                            // .cpp:974
+
+            // .cpp:975 -- the console INLINES CgsNumeric::Random::RandomBool here (the LCG
+            // step + the old seed's bit 32); see CgsRandom.h for that block's attestation.
+            // KF_DEGS_TO_RADS is flt_82001744 == +0.017453292 on one arm and flt_82006D74 ==
+            // -0.017453292 on the other -- i.e. the coin flip picks the SIGN of the roll.
+            if (lrInfo.mpRandom->RandomBool())
+            {
+                mfDutchVelocity = kfJumpParamsDutchInitialVelocity * -0.017453292f; // .cpp:977
+            }
+            else
+            {
+                mfDutchVelocity = kfJumpParamsDutchInitialVelocity *  0.017453292f; // .cpp:981
+            }
+
+            mfTimeInJump  = 0.0f;                                        // .cpp:984
+            mfYawVelocity = 0.0f;                                        // .cpp:986
+        }
+        else
+        {
+            mfDutchDrift += mfDutchVelocity * lfTimestep;                // .cpp:990
+
+            if (mfDutchDrift > kfJumpParamsDutchMax)                     // .cpp:991
+            {
+                // .cpp:993 -- X360 `fneg f12, f0` then `fmadds f0, f12, rate, f0`, i.e. the
+                // same blend-toward-zero shape the tail below uses everywhere.
+                mfDutchVelocity += (0.0f - mfDutchVelocity) * kfJumpParamsDutchCooloffRate;
+            }
+
+            mfYawDrift   += mfYawVelocity * lfTimestep;                  // .cpp:996
+            mfTimeInJump += lfTimestep;                                  // .cpp:997
+        }
+
+        // .cpp:1000 -- dead in this arm on both builds (we are only here because
+        // mfTimeInAir > 0), and reproduced anyway: the console really does re-test it.
+        if (lrCarState.mfTimeInAir <= 0.0f)
+        {
+            lrCamera.SetRequestedTimeDilation(1.0f);
+        }
+
+        // ---- ease the tunables toward their IN-AIR targets ----------------------------
+        // .cpp:1010 -- note the DIFFERENT (much slower) rate for the time delta.
+        mfTimeDelta        += (kfJumpParamsTimeDelta - mfTimeDelta)
+                            * kfJumpParamsTimeDeltaBlendInFactor;
+        // .cpp:1011..:1013 -- the three literal targets are flt_82001C98 / flt_82004744 /
+        // flt_82002138; the PS3 shows all three as unnamed dwords, so they are literals.
+        mfPitchCoefficient += (1.0f  - mfPitchCoefficient) * kfJumpParamsBlendFactor;
+        mfPitchSpring      += (0.2f  - mfPitchSpring)      * kfJumpParamsBlendFactor;
+        mfYawSpring        += (0.01f - mfYawSpring)        * kfJumpParamsBlendFactor;
+
+        // .cpp:1015 -- flt_82006D70 == -2.0f (also an unnamed literal on PS3). Recall
+        // Parameters::Set forces mfSlideYScaleJump to -1.0f as its final store, so the
+        // target here is +2.0 for every authored car.
+        mfSlideYScale      += ((mpParameters->mfSlideYScaleJump * -2.0f) - mfSlideYScale)
+                            * kfSlideYScaleScaleUpFactor;
+
+        mfWobbleScale = 0.0f;                                            // .cpp:1017
+        return;
+    }
+
+    // ---- NOT airborne ------------------------------------------------------------------
+    // .cpp:1024
+    if (mbJumping)
+    {
+        // .cpp:1032 -- both `fsel`s are the console's Min/Max idiom (scalar.h:155/:222 in the
+        // PS3 attribution). flt_82001D9C == 2.0f, flt_82004270 == 3.0f, both unnamed on PS3.
+        const f32 lfImpactForce = ((mfTimeInJump > 2.0f) ? 2.0f : mfTimeInJump) * 3.0f;
+
+        // .cpp:1037
+        mfImpactShakeFactor = (mfImpactShakeFactor > lfImpactForce) ? mfImpactShakeFactor
+                                                                    : lfImpactForce;
+    }
+
+    mbJumping = false;                                                   // .cpp:1040
+
+    // ---- ease everything back toward the AUTHORED parameter block ----------------------
+    mfDutchDrift += (0.0f - mfDutchDrift) * kfJumpParamsDutchBlendFactor;        // .cpp:1041
+    mfYawDrift    = 0.0f;                                                        // .cpp:1042
+    mfTimeDelta  += (0.0f - mfTimeDelta) * kfJumpParamsTimeDeltaBlendOutFactor;  // .cpp:1044
+
+    mfPitchCoefficient += (mpParameters->mrPitchCoeff  - mfPitchCoefficient)     // .cpp:1045
+                        * kfJumpParamsBlendFactor;
+    mfPitchSpring      += (mpParameters->mrPitchSpring - mfPitchSpring)          // .cpp:1046
+                        * kfJumpParamsBlendFactor;
+
+    // .cpp:1051 -- the yaw spring's target is the DRIFT-blended spring: Lerp(mrYawSpring,
+    // mfDriftYawSpring, mfDriftScale). X360 `fmadds f0, f12, f6, f0` with
+    // f12 == mfDriftYawSpring - mrYawSpring, f6 == mfDriftScale, f0 == mrYawSpring.
+    mfYawSpring   += (((mpParameters->mfDriftYawSpring - mpParameters->mrYawSpring)
+                        * mfDriftScale + mpParameters->mrYawSpring) - mfYawSpring)
+                   * kfJumpParamsBlendFactor;
+
+    mfSlideYScale += (mpParameters->mrSlideYScale - mfSlideYScale)               // .cpp:1053
+                   * kfJumpParamsBlendFactor;
+    mfWobbleScale += (0.0f - mfWobbleScale) * kfJumpParamsBlendFactor;           // .cpp:1054
+
+    // The unconditional tail store both builds end on (X360 0x8220EDFC / PS3 0x1D134).
+    lrCamera.SetRequestedTimeDilation(1.0f);
 }
 
 // @0x821F9218.

@@ -389,6 +389,33 @@ void Camera::SetRequestedPostFX(f32 lfAmount)
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::SetRequestedTimeDilation
+//
+// ⚠️⚠️ BODIED 2026-08-02 -- IT HAD NO DEFINITION ANYWHERE IN THE TREE, and this was a LATENT
+// LINK BREAK, not a new requirement. Camera.h:194 has declared it since the mEffects carve,
+// and TWO committed TUs already call it:
+//     Arbitrator/States/BrnArbStateCrashMode.cpp:176 and :347
+//     Camera/Behaviours/BrnBehaviourDebugFlyWorld.cpp:391
+// Neither is on the build list today, which is the ONLY reason the link is green -- the
+// moment either is mounted (or any mounted TU calls it, which is what dragged this into the
+// light: BehaviourGameplayExternal::UpdateJumping ends on exactly this store) the build dies
+// with LNK2019. ⇒ a declared-but-never-defined member that no per-TU compile gate can see;
+// see the AGENTS.md note that a green compile gate is not a green link.
+//
+// The console never emits it as a function: every caller inlines the single store, which is
+// how the offset is attested. UpdateJumping @0x8220EAD0 spells it `stfs f5, 0x104(r6)` with
+// f5 == flt_82001C98 == 1.0f and r6 == the Camera&, and 0x104 - 0x68 (mEffects) == +0x9C ==
+// mfSimTimeScale. The DecFIGS PS3 build attributes the identical store to BrnCameraEffects.h
+// :201, i.e. it is a one-line inline setter on CameraEffects that the Camera-level helper
+// forwards to. De-inlined here, as the file's siblings above already are, so no caller pokes
+// mEffects by offset.
+// ----------------------------------------------------------------------------
+void Camera::SetRequestedTimeDilation(f32 lfTimeScale)
+{
+    mEffects.mfSimTimeScale = lfTimeScale;       // stfs -> mEffects +0x9C  (camera +0x104)
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::GetNearClipDistance @0x82205B68
 //
 // The active near-clip distance. The asm:

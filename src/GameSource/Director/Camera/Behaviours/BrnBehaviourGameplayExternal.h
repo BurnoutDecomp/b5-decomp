@@ -440,6 +440,37 @@ public:
     //   DELETE-WHEN: @0x82240828 and its helper cluster are transcribed.
 
 private:
+    // ⭐⭐ DECLARED + BODIED 2026-08-02 (chase-camera helper wave) -- the FOURTH of the eight
+    // helpers Update drives (DWARF h:337, .cpp:948, X360 @0x8220EAD0 / PS3 @0x1CFFC), and the
+    // first of the five the predecessor wave left standing. It is the only one of those five
+    // that is pure SCALAR code, which is why it is the one that could be settled
+    // store-for-store in a single pass:
+    //   * every one of its ~36 statements lands on an f32 member of this class or on a NAMED
+    //     member of the shared info (see the .cpp banner for the chain that names the four
+    //     wheel bytes, the above-ground test and mfTimeInAir);
+    //   * all nine `kfJumpParams*` / `kfSlideYScaleScaleUpFactor` constants are DecFIGS-NAMED
+    //     and their VALUES were read out of the X360 image one statement at a time -- not
+    //     inferred, and not carried over from a sibling;
+    //   * the two builds' member offsets in this tail differ by a constant -0x10 (PS3 vs
+    //     X360) and EVERY statement matches under that one shift, which is itself the check.
+    // ⚠️ NO CALLER YET, by construction: Update is the only one, and Update cannot link until
+    //   the remaining four helpers exist. Kept private, as the DWARF declares it.
+    void UpdateJumping(const BehaviourSharedInfo& lrInfo, f32 lfTimestep, Camera& lrCamera);
+
+    // ---- the file-scope tuning constants UpdateJumping reads -----------------------------
+    // NAMES from the DecFIGS PS3 export (which keeps them as named symbols); VALUES read out
+    // of the X360 ARTIST image at the address the same statement loads. Anything the PS3
+    // shows as an UNNAMED `dword_...` is a source literal and is spelled as one in the body.
+    static const f32 kfJumpParamsBlendFactor;             // 0.1f       flt_82CDA6E8
+    static const f32 kfJumpParamsDutchBlendFactor;        // 0.25f      flt_82CDA6EC
+    static const f32 kfJumpParamsDutchCooloffRate;        // 0.02f      flt_82CDA6F0
+    static const f32 kfJumpParamsDutchInitialVelocity;    // 5.0f       flt_82CDA6F4 (degrees)
+    static const f32 kfJumpParamsTimeDelta;               // 0.2f       flt_82CDA708
+    static const f32 kfJumpParamsTimeDeltaBlendInFactor;  // 0.001f     flt_82CDA70C
+    static const f32 kfJumpParamsTimeDeltaBlendOutFactor; // 0.1f       flt_82CDA710
+    static const f32 kfSlideYScaleScaleUpFactor;          // 0.01f      flt_82CDA714
+    static const f32 kfJumpParamsDutchMax;                // 0.2617994f flt_82CDAD10 (15 degs)
+
     // ---- layout (DWARF h:116..:160; the anchors are asm-pinned -- see the file banner) ---
     Utils::CameraSphericalRotationController mRotationController;   // :116 +0x020
     CollisionPolicyAttachedToVehicle         mCollisionPolicy;      // :118 +0x050 (0x250)
