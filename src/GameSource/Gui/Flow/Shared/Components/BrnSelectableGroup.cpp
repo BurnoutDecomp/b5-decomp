@@ -85,6 +85,20 @@ namespace BrnGui
     }
 
     // @ 0x8240FD60 -- return the highlighted slot (X360 only bounds-checks the upper end).
+    //
+    // ⚠️⚠️ HAZARD, and it is the CONSOLE's, reproduced faithfully: there is NO LOWER bound.
+    // The X360 body is `lbz r11,0xA5(r28) / extsb / cmpwi r11,0 / blt <skip assert> /
+    // cmpwi r11,0x64 ... / lwzx r3, r28, 4*(r11+42)` -- a negative index only skips the
+    // ">= 100" ASSERT, the indexed load still happens. So calling this on an EMPTY group
+    // (miHighlightedIndex == -1, the Construct/Clear value) reads the storage immediately
+    // BEFORE maSelectables -- {miSelectableCount, miHighlightedIndex, mbWrapped, pad} --
+    // and returns it as a Selectable*. On this build that is 0x0000FF00: NON-NULL, so every
+    // caller's `CGS_ASSERT(GetHighlighted() != 0)` passes silently and the next member read
+    // access-violates. (Cost: one wave, chasing an Apt-engine crash that was this.)
+    //
+    // Callers must test "is anything highlighted" THEMSELVES, with the console's own signed
+    // idiom `miHighlightedIndex > -1` -- see TextSelection::Update @0x824E83A0 (X360
+    // `extsb / cmpwi -1`) and the PC-BUILD GUARD in CarSelectVehicle::SetupComponents.
     Selectable* SelectableGroup::GetHighlighted()
     {
         CGS_ASSERT(miHighlightedIndex < KI_MAX_SELECTABLES, "No highlighted index to get");
