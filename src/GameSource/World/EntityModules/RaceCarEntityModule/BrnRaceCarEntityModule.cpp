@@ -1453,9 +1453,11 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 // 0x8230C098). Nearly every case reaches an un-reconstructed handler or the un-homed
 // RaceCar/ActiveRaceCar/manager interiors.
 //
-// REPRODUCED: the queue walk and case 0 (ResetPlayerCarAction). That is not an arbitrary
-// choice -- action 0 is the only game action on this build that has a live producer
-// (CarSelectManager) AND a fully reachable consumer.
+// REPRODUCED: the queue walk, case 0 (ResetPlayerCarAction) and case 79
+// (CarSelectChangeColourAction -> ChangePlayerCarColour). Neither is an arbitrary choice --
+// they are the two actions on this build that have a live producer (CarSelectManager) AND a
+// fully reachable consumer, and together they are the whole "spawn the player's car, then
+// paint it its authored colour" pair.
 //
 // [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
 // console dispatches to and that are still un-reconstructed:
@@ -1463,7 +1465,9 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 //   5   HandleSetupNetworkCarAction         7   the player-control-changed AI publish
 //   11  HandleRemotePlayerDisconnected      23  HandlePrepareForModeAction
 //   34  the payback arm                     39  HandleStopModeAction
-//   73/74/76/77/79  the car-select / drive-thru arms
+//   73/74/76/77     the car-select / drive-thru arms
+//   126 SwitchCarColourAction (an AI car's colour; asserts :7393/:7397/:7398)
+//   219 the network setup-car arm, which also writes the colour pair (:7212/:7215)
 //   97/98/99        the network add/remove arms       + ~80 more.
 // Because the walk itself is real, adding any one of them later is a case label, not a
 // re-derivation. DELETE-WHEN the handlers land.
@@ -1498,6 +1502,21 @@ void RaceCarEntityModule::HandleGameActions(
                     lpEvent ),
                 lpOutput );
             break;
+
+        // X360 `case 79`: ChangePlayerCarColour(payload[0], payload[4]). The payload is
+        // CarSelectChangeColourAction -- PALETTE first (see the record's banner in
+        // BrnGameActions.h). This is the action that carries the car's AUTHORED default
+        // colour out of the VehicleList and into the world, so dropping it painted every
+        // car in palette 0 / colour 0.
+        case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR:   // 79
+        {
+            const BrnGameState::GameStateModuleIO::CarSelectChangeColourAction* lpColour =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::CarSelectChangeColourAction*>(
+                        lpEvent );
+            ChangePlayerCarColour( lpColour->muPaletteIndex, lpColour->muColourIndex );
+            break;
+        }
 
         default:
             break;   // [FLAG PC bring-up] see the banner
@@ -1678,11 +1697,18 @@ void RaceCarEntityModule::UpdateActiveRaceCarColours()
         // [PC diagnostic] print the value at the PRODUCING end. The consuming end
         // (RenderRaceCar's shader constant 20) prints its own one-shot -- the
         // RaceCarState::operator= lesson: print BOTH ends of a transfer.
+        // The latch is on the {palette, colour} PAIR, not a plain "logged once" bool: the pair
+        // starts at 0/0 on every fresh spawn and only becomes the car's authored default when
+        // ChangePlayerCarColour runs, several frames later. A one-shot latch would print the
+        // fallback and never the real value.
         {
-            static bool sbLoggedFirstPaint = false;
-            if( !sbLoggedFirstPaint && CgsDev::Log::gpDebugPrint != 0 )
+            static s32 siLastLoggedPalette = -2;
+            static s32 siLastLoggedColour  = -2;
+            if( ( liPaletteIndex != siLastLoggedPalette || liColourIndex != siLastLoggedColour )
+                && CgsDev::Log::gpDebugPrint != 0 )
             {
-                sbLoggedFirstPaint = true;
+                siLastLoggedPalette = liPaletteIndex;
+                siLastLoggedColour  = liColourIndex;
                 *CgsDev::Log::gpDebugPrint
                     << "[racecar-paint] UpdateActiveRaceCarColours: slot "
                     << static_cast<s32>( leActiveRaceCarIndex )
@@ -1694,6 +1720,95 @@ void RaceCarEntityModule::UpdateActiveRaceCarColours()
                     << lPearlColor.z << ", " << lPearlColor.w << ")\n";
             }
         }
+    }
+}
+
+// ============================================================================
+// X360 0x822D27B0 -- ChangePlayerCarColour. COMPLETE (colour wave 2026-08-03).
+//
+// ⭐ THIS IS WHERE A CAR'S AUTHORED COLOUR ENTERS THE WORLD. UpdateActiveRaceCarColours
+// above resolves RaceCar::{miColourPalette, miColourIndex} against mCarColoursResource with
+// the console's own -1 -> 0 fallback -- but nothing on this build ever wrote those two
+// members with anything except 0, so every car took the fallback and rendered palette 0 /
+// colour 0 == (0.784314, 0, 0, 1), RED. The VehicleList authors PUSMC01 (the Hunter
+// Cavalry) as colour 13 / palette 0, and 367 of its 431 entries author a pair that is not
+// (0,0), so the whole list was being ignored.
+//
+// ⚠️ HandleResetPlayerCarAction is NOT the missing writer, and its committed body is
+// faithful: the console really does spawn a fresh car at 0/0 there (it only carries an OLD
+// car's pair across when the model id is unchanged). The authored default arrives
+// afterwards, as game action 79, which this build was dropping in HandleGameActions'
+// `default:` arm. Three console writers of RaceCar+148/+152 exist and all three are in this
+// module -- this one, `case 219` (the network setup-car arm, asserts :7212/:7215) and
+// `case 126` (SwitchCarColourAction, colour only, asserts :7393/:7397/:7398). None is in
+// ActiveRaceCar::Attach / SpawnRaceCar / AddHandlingModel.
+//
+// The console body, in asm order (0x822D27B0..0x822D2984):
+//   assert luPaletteIndex < 4                          "Invalid Palette Index"        :8465
+//   lpActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex)   // this+0x182F8
+//   assert lpActiveRaceCar->IsAttached()               BrnActiveRaceCar.h:1089
+//   lpPlayerCar = lpActiveRaceCar->mpRaceCar           // +0x6F0, GetGlobalRaceCar inlined
+//   assert lpPlayerCar != 0                            "lpPlayerCar"                  :8468
+//   assert luPaletteIndex < 4          (StrStream)     "Invalid Number of Palettes: " :8471
+//   assert luColourIndex < maPalettes[luPaletteIndex].miNumColours
+//                                      (StrStream)     "Invalid car colour: "         :8472
+//   lpPlayerCar->miColourPalette = luPaletteIndex;     // +152
+//   lpPlayerCar->miColourIndex   = luColourIndex;      // +148
+//
+// ⚠️ SIGNATURE FROM THE ASM, not from Hex-Rays' argument count: `r4` is compared with
+// `cmplwi ..,4` (unsigned, the palette) and `r5` with `cmpw` against miNumColours (signed).
+// The DWARF declares both parameters uint32_t; the signed compare is reproduced with the
+// cast the console's own `cmpw` implies.
+//
+// ⚠️ The palette is asserted TWICE with two different messages -- the plain :8465 on entry
+// and the StrStream :8471 further down. That is not a transcription slip; both are in the
+// asm, and both are kept.
+// ============================================================================
+void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColourIndex )
+{
+    CGS_ASSERT( luPaletteIndex < static_cast<u32>( E_NUM_PALETTES ),
+                "Invalid Palette Index" );                                   // X360 :8465
+
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+
+    CGS_ASSERT( lpActiveRaceCar->IsAttached(), "IsAttached()" );  // BrnActiveRaceCar.h:1089
+
+    // The console loads mpRaceCar straight out of +0x6F0 here; GetGlobalRaceCar() is that
+    // load plus the IsAttached() assert the line above already reproduces.
+    RaceCar* lpPlayerCar = lpActiveRaceCar->GetGlobalRaceCar();
+
+    CGS_ASSERT( lpPlayerCar != 0, "lpPlayerCar" );                           // X360 :8468
+
+    if( lpPlayerCar == 0 )
+    {
+        // The X360 asserts and then stores through the null pointer anyway. Bail instead of
+        // faulting -- the same treatment ProgressionManager::GetCarColourAndPalette's
+        // "lpVehicleListEntry" assert already gets.
+        return;
+    }
+
+    // The X360 streams the offending index into the assert buffer through StrStream
+    // ("Invalid Number of Palettes: " << idx). CGS_ASSERT forwards a plain string here, the
+    // same shortening HandleResetPlayerCarAction's :7535/:7556 pair already uses.
+    CGS_ASSERT( luPaletteIndex < static_cast<u32>( E_NUM_PALETTES ),
+                "Invalid Number of Palettes: " );                            // X360 :8471
+
+    CGS_ASSERT( static_cast<s32>( luColourIndex ) <
+                    mCarColoursResource->maPalettes[luPaletteIndex].GetNumColours(),
+                "Invalid car colour: " );                                    // X360 :8472
+
+    lpPlayerCar->SetColourPalette( static_cast<s32>( luPaletteIndex ) );      // RaceCar +152
+    lpPlayerCar->SetColourIndex( static_cast<s32>( luColourIndex ) );         // RaceCar +148
+
+    // [PC diagnostic] the paired print at the far end of this transfer is the
+    // "[racecar-paint]" line in UpdateActiveRaceCarColours -- print BOTH ends.
+    if( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[racecar-paint] ChangePlayerCarColour: player slot "
+            << static_cast<s32>( mePlayerActiveRaceCarIndex )
+            << " -> palette " << static_cast<s32>( luPaletteIndex )
+            << " colour " << static_cast<s32>( luColourIndex ) << "\n";
     }
 }
 

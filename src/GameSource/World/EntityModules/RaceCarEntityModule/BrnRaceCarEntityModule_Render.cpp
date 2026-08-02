@@ -141,10 +141,21 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // than as a plausible-looking white car. (The existing [WorldShader] / [WorldSamplers]
     // tallies cannot answer this -- both saturate at 4096 draws, long before a car exists.)
     {
-        static bool sbLoggedFirstPaintUpload = false;
-        if( !sbLoggedFirstPaintUpload && CgsDev::Log::gpDebugPrint != 0 )
+        // Latched on the VALUE, not on a "printed once" bool -- the paint starts at the
+        // palette-0/colour-0 fallback and only becomes the car's authored colour once game
+        // action 79 (CarSelectChangeColourAction) has been processed, several frames later.
+        static f32 sfLastLoggedPaintX = -1.0f;
+        static f32 sfLastLoggedPaintY = -1.0f;
+        static f32 sfLastLoggedPaintZ = -1.0f;
+        const Vector4& lrPaintProbe = lpRenderParams->GetPaintColour();
+        if( ( lrPaintProbe.x != sfLastLoggedPaintX
+              || lrPaintProbe.y != sfLastLoggedPaintY
+              || lrPaintProbe.z != sfLastLoggedPaintZ )
+            && CgsDev::Log::gpDebugPrint != 0 )
         {
-            sbLoggedFirstPaintUpload = true;
+            sfLastLoggedPaintX = lrPaintProbe.x;
+            sfLastLoggedPaintY = lrPaintProbe.y;
+            sfLastLoggedPaintZ = lrPaintProbe.z;
             const Vector4& lrPaint = lpRenderParams->GetPaintColour();
             const Vector4& lrPearl = lpRenderParams->GetPearlescentColour();
             *CgsDev::Log::gpDebugPrint

@@ -28,6 +28,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"// BrnProgression::ProgressionManager (rank / AddCar / colour+palette)
 #include "GameSource/GameState/BrnGameStateModule.h"               // BrnGameState::GameStateModule (online mode / last-active-race-car)
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // BrnGameState::TriggerQueryManager (GetTriggerData)
+#include "GameSource/GameState/BrnGameActions.h"                   // GameStateModuleIO::CarSelectChangeColourAction (typed payload)
 
 namespace BrnGameState
 {
@@ -770,16 +771,23 @@ void CarSelectManager::TeleportCurrentVehicle(GameStateModuleIO::GameActionQueue
             reinterpret_cast<const CgsModule::Event*>(lacDropIn), 65 /*KI_ACTION_CAR_SELECTION_DROPIN*/, 16);
     }
 
-    // --- CarUnlockAction (type 79, 8B): the desired car's colour + palette ---
+    // --- CarSelectChangeColourAction (type 79, 8B): the desired car's palette + colour ---
+    // X360 0x82392EF0: `GetCarColourAndPalette(.., &v14 + 4, &v14)` then `AddEvent(&v14, 79, 8)`
+    // -- the COLOUR lands at payload+4 and the PALETTE at payload+0.
     {
-        s32 laiColourPalette[2] = { 0, 0 };
+        GameStateModuleIO::CarSelectChangeColourAction lColour;
+        s32 liColour  = 0;
+        s32 liPalette = 0;
         // X360 reads *(this + 0x4C) == the cache-during-change car id (mCacheDuringChangeCarId region)
         // for the colour query; behaviourally it is the car just teleported in. Use mDesiredCarId,
         // which is the active car at this point of the swap.
-        mpProgressionManager.Get()->GetCarColourAndPalette(
-            mDesiredCarId, &laiColourPalette[0], &laiColourPalette[1]);
+        mpProgressionManager.Get()->GetCarColourAndPalette(mDesiredCarId, &liColour, &liPalette);
+        lColour.muPaletteIndex = static_cast<u32>(liPalette);
+        lColour.muColourIndex  = static_cast<u32>(liColour);
         AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(laiColourPalette), 79 /*KI_ACTION_CAR_UNLOCK*/, 8);
+            reinterpret_cast<const CgsModule::Event*>(&lColour),
+            GameStateModuleIO::E_ACTION_CAR_SELECT_CHANGE_COLOUR,
+            static_cast<s32>(sizeof(lColour)));
     }
 }
 
