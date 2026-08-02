@@ -2,8 +2,15 @@
 // BrnGui::ColourMenuToggle -- out-of-line bodies.
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   Clear @0x824E5670, Construct @0x824E8B70, HighlightIndex @0x824EA2A0,
-//   HighlightNext @0x824EA1A0, HighlightPrevious @0x824EA220, Select @0x824E56C8.
-// (HighlightNeighbours / SetupMenuToggleGradient / Update are SKIPPED -- declared-only.)
+//   HighlightNext @0x824EA1A0, HighlightPrevious @0x824EA220, Select @0x824E56C8,
+//   HighlightNeighbours @0x824E8DE8, SetupMenuToggleGradient @0x824EA110,
+//   Update @0x824E8D08.
+//
+// 2026-08-02: HighlightNeighbours landed, and the two "thin forwarder" free functions that
+// stood in for the picker's Construct / SetupColourSelectionGradient are GONE -- both were
+// declared-but-never-defined, and every other picker call went through a raw
+// `*(void***)slot` vtable read on storage nothing initialises. BrnGui::ColourSelection is a
+// real type now; every call below is by name.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Shared/Components/BrnColourMenuToggle.h"
@@ -12,21 +19,6 @@
 
 namespace BrnGui
 {
-    // Thin forwarder for the picker's Construct. The real method is
-    // BrnGui::ColourSelection::Construct; it is bodied co-located with that type. Declared
-    // free here so the toggle need not fully size the picker (the per-TU gate does not link).
-    void ColourSelectionConstruct(void* lpSelection, const char* lpacName,
-                                  CgsGui::StateInterface* lpStateInterface,
-                                  const char* lpacParentName, u64 lu64Id);
-
-    // Thin forwarder for BrnGui::ColourSelection::SetupColourSelectionGradient, bodied
-    // co-located with that (not-yet-sized) type. Declared free here for the same reason as
-    // ColourSelectionConstruct: the toggle need not fully size the picker.
-    void ColourSelectionSetupGradient(void* lpSelection, s32 liActiveCount, bool lbActive,
-                                      const rw::math::vpu::Vector4** lppTopColours,
-                                      const rw::math::vpu::Vector4** lppBottomColours,
-                                      u64* lpu64Ids);
-
     // off_82F27474 -- the five child colour-selection component names, by offset-from-centre.
     // Only entry [0] "ItemColourM2" is rodata-attested for this TU; [1..4] follow the M2..P2
     // pattern the class uses everywhere. Verify against off_82F27474 when the block is dumped.
@@ -58,12 +50,9 @@ namespace BrnGui
     // 0x1338 and dispatches (*(*sel + 0x18))(sel).
     void ColourMenuToggle::Clear()
     {
-        ColourSelectionSlot* lpSel = &maColourSelection[0];        // this + 0xA8
         for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
         {
-            void** lppVTable = *reinterpret_cast<void***>(lpSel);
-            reinterpret_cast<void (*)(ColourSelectionSlot*)>(lppVTable[6])(lpSel); // slot 6 == +0x18
-            lpSel = reinterpret_cast<ColourSelectionSlot*>(reinterpret_cast<u8*>(lpSel) + 0x1338);
+            maColourSelection[li].Clear();   // picker slot 6 (+0x18)
         }
     }
 
@@ -86,12 +75,10 @@ namespace BrnGui
         // (X360 passes r27 == this + 0x1C == mGuiComponentBase.macName).
         const char* lpacChildParent = mGuiComponentBase.GetName();
 
-        ColourSelectionSlot* lpSel = &maColourSelection[0];   // this + 0xA8
         for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
         {
-            ColourSelectionConstruct(lpSel, KAC_ITEM_COLOUR_COMPONENT[li],
-                                     lpStateInterface, lpacChildParent, KU64_NO_ID);
-            lpSel = reinterpret_cast<ColourSelectionSlot*>(reinterpret_cast<u8*>(lpSel) + 0x1338);
+            maColourSelection[li].Construct(KAC_ITEM_COLOUR_COMPONENT[li],
+                                            lpStateInterface, lpacChildParent, KU64_NO_ID);
         }
 
         // Title text field: virtual Construct (slot 0) on the embedded TextField @ +0x60C0.
@@ -105,12 +92,9 @@ namespace BrnGui
     // dirty the component. The X360 forwards ONLY r3 == centre selection.
     bool ColourMenuToggle::HighlightIndex(s32 liIndex)
     {
-        (void)liIndex;
-        ColourSelectionSlot* lpCentre = &maColourSelection[KI_CENTRE_ITEM]; // this + 0x2718
-        void** lppVTable = *reinterpret_cast<void***>(lpCentre);
-        const bool lbChanged =
-            reinterpret_cast<bool (*)(ColourSelectionSlot*)>(lppVTable[12])(lpCentre); // slot 12 == +0x30
-        if (!lbChanged)
+        // ⚠️ See the FLAG on the declaration: the X360 passes NO index here (r4 is left
+        // undefined at both the call site and inside). Forwarded explicitly.
+        if (!GetFocusedSelectionNav()->HighlightIndex(liIndex))   // picker slot 12 (+0x30)
             return false;
 
         HighlightNeighbours();
@@ -163,15 +147,65 @@ namespace BrnGui
         // unk_820046A7 sentinel -> empty string when no title text is supplied.
         mTitleText.SetText(lpacText ? lpacText : "");
 
-        ColourSelectionSlot* lpSel = &maColourSelection[0];   // this + 0xA8
         for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
         {
-            ColourSelectionSetupGradient(lpSel, liActiveCount, lbActive,
-                                         lppTopColours, lppBottomColours, lpu64Ids);
-            lpSel = reinterpret_cast<ColourSelectionSlot*>(reinterpret_cast<u8*>(lpSel) + 0x1338);
+            maColourSelection[li].SetupColourSelectionGradient(
+                liActiveCount, lbActive, lppTopColours, lppBottomColours, lpu64Ids);
         }
 
         muFlags |= KU_FLAG_DIRTY;   // *(this+0xC) |= 0x10
+    }
+
+    // @ 0x824E8DE8 -- re-seat the four flanking pickers around the centre one, then hide the
+    // swatch + backing plate of any picker whose highlight has collided with its INNER
+    // neighbour's (i.e. the palette has run out on that side).
+    //
+    // The X360 reads the centre picker's highlighted index at +10173
+    // (== 0xA8 + 2*0x1338 + 0xA5) and clamps outward: picker[0] to index-2, picker[1] to
+    // index-1 (both floored at 0), picker[3] to index+1 and picker[4] to index+2 (both
+    // ceilinged at that picker's own miSelectableCount - 1).
+    void ColourMenuToggle::HighlightNeighbours()
+    {
+        const s32 liCentre = GetHighlightedColourIndex();
+
+        s32 liLeft2 = liCentre - 2;
+        if (liLeft2 <= 0)
+            liLeft2 = 0;
+        maColourSelection[0].HighlightIndex(liLeft2);
+
+        s32 liLeft1 = liCentre - 1;
+        if (liLeft1 <= 0)
+            liLeft1 = 0;
+        maColourSelection[1].HighlightIndex(liLeft1);
+
+        s32 liRight1 = liCentre + 1;
+        if (liRight1 >= maColourSelection[3].miSelectableCount - 1)
+            liRight1 = maColourSelection[3].miSelectableCount - 1;
+        maColourSelection[3].HighlightIndex(liRight1);
+
+        s32 liRight2 = liCentre + 2;
+        if (liRight2 >= maColourSelection[4].miSelectableCount - 1)
+            liRight2 = maColourSelection[4].miSelectableCount - 1;
+        maColourSelection[4].HighlightIndex(liRight2);
+
+        for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
+        {
+            if (li == KI_CENTRE_ITEM)
+                continue;
+
+            // The picker one step further IN: 0->1, 1->2, 3->2, 4->3. The X360 computes it
+            // as the signed `(li - 2) / 2 + 2` (division truncating toward zero) and bounds
+            // the result with its own assert.
+            const s32 liInner = (li - KI_CENTRE_ITEM) / 2 + KI_CENTRE_ITEM;
+            CGS_ASSERT(static_cast<u32>(liInner) < 6u, "index out of range");   // cpp:441
+
+            const bool lbCollided =
+                (maColourSelection[li].miHighlightedIndex ==
+                 maColourSelection[liInner].miHighlightedIndex);
+
+            maColourSelection[li].mColourField.SetHidden(lbCollided);
+            maColourSelection[li].mBackgroundColourField.SetHidden(lbCollided);
+        }
     }
 
     // @ 0x824E8D08 -- lazy apt refresh. When the dirty bit is set: clear it, resolve the
@@ -199,12 +233,9 @@ namespace BrnGui
         mGuiComponentBase.AddOutputAptViewState("apt_state", KAC_STATE_NAMES[leState], false);
 
         // Update each embedded colour selection via its component Update virtual.
-        ColourSelectionSlot* lpSel = &maColourSelection[0];   // this + 0xA8
         for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
         {
-            void** lppVTable = *reinterpret_cast<void***>(lpSel);
-            reinterpret_cast<void (*)(ColourSelectionSlot*)>(lppVTable[5])(lpSel); // slot 5 == +0x14
-            lpSel = reinterpret_cast<ColourSelectionSlot*>(reinterpret_cast<u8*>(lpSel) + 0x1338);
+            maColourSelection[li].Update();   // picker slot 5 (+0x14)
         }
     }
 }

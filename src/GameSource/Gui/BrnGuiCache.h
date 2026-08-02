@@ -505,6 +505,21 @@ namespace BrnGui
         // single byte read; the X360 reader inlines the raw far-member load too).
         bool GetCarSelectTransitionAlreadyShown() const { return mbCarSelectTransitionAlreadyShown; }
 
+        // ADDITIVE GROW (BrnCarSelectLivery TU). Its OnLeave @0x824D6C30 clears the same far
+        // member on the way out (`lis r10,1 / ori r10,r10,0x3B5E / stbx r9(0), cache, r10`),
+        // so the screen that consumed the one-shot transition gate is the one that re-arms it.
+        void SetCarSelectTransitionAlreadyShown(bool lbShown)
+        {
+            mbCarSelectTransitionAlreadyShown = lbShown;
+        }
+
+        // ADDITIVE GROW (BrnCarSelectLivery TU). The params-mirror game mode
+        // BrnGui::CarSelectLivery::CanCarBePainted @0x824B52E0 gates on (it reads
+        // `*(mpGuiCache + 43008 + 440)`, i.e. the meGameMode slot of the +0xA800 mirror, and
+        // refuses to paint in modes 12 and 17). Header-inline, matching the raw far-member
+        // load the X360 emits.
+        s32 GetOnlineGameMode() const { return meOnlineGameMode; }
+
         // ADDITIVE GROW (the GUI per-frame time pump). The cache LEADS with the embedded
         // GuiEventTimeInfo pair (mfTimeStep @+0x00, mfTimeNow @+0x04) and every GUI-side timer
         // in the game reads it -- Intro::HandleStateTransitions @0x824DAA48 does

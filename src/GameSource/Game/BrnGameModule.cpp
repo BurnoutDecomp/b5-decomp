@@ -419,6 +419,22 @@ namespace BrnGame
                         CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
                                                 "loading screen retired (world-load stand-in).\n");
                         break;
+                    case 405:
+                        // ⭐ THE CAR-SELECT SCREEN'S OWN DATA REQUEST. Every car-select screen
+                        // state posts command 405 from CarSelectMain::OnEnter @0x824C8920 --
+                        // it is the console's "this screen is up, send me the car-select
+                        // data" request, and the 406 / 412 / 413 records are its answers.
+                        // Re-arming the publish latch here is what makes the answers arrive
+                        // ONCE PER SCREEN instead of once per boot.
+                        //
+                        // ⚠️ THIS MATTERS AND IT WAS FOUND BY BOOT: every screen state is its
+                        // OWN object with its OWN mCurrentSetupInfo / car list. Publishing once
+                        // per boot fed CS_VEHICLE and left CS_LIVERY with mCarId == (CgsID)-1
+                        // and an EMPTY livery selector -- five asserts a frame from
+                        // CanCarBePainted and GetHighlighted(). The latch is armed by the
+                        // request now, exactly as the console's producer is.
+                        mbCarSelectionPublished = false;
+                        break;
                     case 192:
                     {
                         // ⭐⭐ THE CAR-SELECT ACTIVATE RECORD -- the GUI half of the junkyard
@@ -1855,11 +1871,40 @@ namespace BrnGame
                 static_cast<s32>(sizeof(laRecord)));
         }
 
+        // ---- GUI event 413 (the UNLOCKED-LIVERY list, 0x48 bytes) ---------------------------
+        // +0x00 CgsContainers::Array<s64,8> ids   +0x40 its count
+        //
+        // ⭐ WITHOUT THIS THE CS_LIVERY SCREEN'S CAROUSEL IS EMPTY, and empty is not benign:
+        // BrnGui::CarSelectLivery::HandleUnlockedLiveryResponseEvent is the ONLY writer of
+        // muNumUnlockedLiveryCars, so with no producer SetupComponents calls
+        // SetupTextSelection(0, ...) and every later GetHighlighted() runs on an empty
+        // SelectableGroup -- which has no lower bound on miHighlightedIndex and has already
+        // been observed returning the NON-NULL garbage 0x0000FF00, defeating the console's own
+        // `!= 0` assert and access-violating downstream.
+        //
+        // FLAG STAND-IN, same shape and same reason as the 406 / 412 records above: the
+        // console's producer answers a GUI request out of the player's PROFILE livery
+        // ownership, which this build's (empty) profile car list cannot serve. The one car the
+        // game state actually has is published as its own single unlocked livery -- which is
+        // also what the Junkyard starter car genuinely is. Replace with the real
+        // GameStateModule producer when the profile livery path lands. ⛔ Do NOT widen this
+        // into a "every livery is unlocked" list; that would invent a rule the console
+        // does not have.
+        {
+            u8 laRecord[0x48];
+            std::memset(laRecord, 0, sizeof(laRecord));
+            reinterpret_cast<CgsID*>(&laRecord[0])[0] = lPlayerCarId;
+            *reinterpret_cast<s32*>(&laRecord[0x40]) = 1;   // one unlocked livery
+            mpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(laRecord), 413,
+                static_cast<s32>(sizeof(laRecord)));
+        }
+
         if (CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
-                << "[CarSelectBridge] published GUI 406 + 412 for car id "
-                << static_cast<u32>(lPlayerCarId) << " (1 selectable car)\n";
+                << "[CarSelectBridge] published GUI 406 + 412 + 413 for car id "
+                << static_cast<u32>(lPlayerCarId) << " (1 selectable car, 1 unlocked livery)\n";
         }
     }
 

@@ -15,11 +15,13 @@
 //   BrnGui::TextField       mTitleText
 //   int32_t                 miLoadedItems
 //
-// The picker type BrnGui::ColourSelection is not yet sized in its committed home, so the five
-// pickers are modelled as strided opaque ColourSelectionSlot storage and driven through a
-// SelectableGroup* view (for the virtual nav/select) + the picker's own vtable slots (reached
-// by byte offset for Clear/HighlightIndex). When ColourSelection is sized, replace
-// ColourSelectionSlot with the real type and call its methods directly.
+// 2026-08-02 -- THE OPAQUE PICKER SLOTS ARE RETIRED. The five pickers used to be strided
+// `u8 maStorage[0x1338]` blobs driven through `*(void***)slot` raw vtable reads. Nothing in
+// this tree ever writes a vtable word into modelled component storage, so the very first
+// Clear()/Update()/HighlightIndex() would have jumped through an uninitialised pointer --
+// this TU was simply never mounted, which is the only reason it never fired. BrnGui::
+// ColourSelection is now a real, sized type (see BrnColourSelection.h) and every call below
+// is by name.
 // ===================================================================================
 
 #include "types.hpp"
@@ -28,6 +30,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"   // CgsGui::GuiComponent (identity base)
 #include "GameSource/Gui/BrnGuiTextField.h"                           // BrnGui::TextField (mTitleText)
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h" // BrnGui::SelectableGroup (picker nav base)
+#include "GameSource/Gui/Flow/Shared/Components/BrnColourSelection.h" // BrnGui::ColourSelection (by value, x5)
 
 namespace CgsGui { struct StateInterface; }
 
@@ -71,6 +74,15 @@ namespace BrnGui
                        const char* lpacParentName, u64 lu64AptId);
         // @ 0x824EA2A0 -- highlight the requested index on the centre picker; on change,
         // refresh neighbours + dirty the component.
+        //
+        // ⚠️ FLAG (2026-08-02): the X360 body sets ONLY r3 before dispatching the centre
+        // picker's slot 12 (`addi r3,r31,0x2718 / lwz r11,0x2718(r31) / lwz r11,0x30(r11) /
+        // bctrl` -- no r4), and its two BrnGui::CarSelectLivery call sites likewise pass only
+        // `this`. The console therefore hands SelectableGroup::HighlightIndex whatever the
+        // caller happened to leave in r4 -- undefined, and not a behaviour that can be
+        // reproduced. Reconstructed with the index as an explicit parameter and forwarded;
+        // the callers pass the index they are re-applying, which is the only defined reading
+        // of "refresh the colour highlight".
         bool HighlightIndex(s32 liIndex);
         // @ 0x824EA1A0 / 0x824EA220 -- move the focused picker's highlight next/prev.
         bool HighlightNext();
@@ -87,20 +99,52 @@ namespace BrnGui
         // then Update every embedded colour selection.
         void Update();
 
-    private:
-        // Owned by a sibling recon pass (verdict=fail here); declared so the nav entry points
-        // can call it (the per-TU gate does not link).
+        // @ 0x824E8DE8 -- after the centre picker's highlight has moved, re-seat the four
+        // flanking pickers' highlights and hide the swatch/plate pair of any picker that has
+        // run into its inner neighbour.
         void HighlightNeighbours();
 
-        // One 0x1338-byte colour-picker slot (opaque; the real ColourSelection is not yet sized).
-        struct ColourSelectionSlot { u8 maStorage[0x1338]; };
-
-        // The focused picker (element[2]) as a SelectableGroup view for the toggle's virtual
-        // delegation (Select / HighlightNext(false) / HighlightPrevious(false)).
-        SelectableGroup* GetFocusedSelectionNav()
+        // The currently selected colour index -- the centre picker's own highlighted-item
+        // index. BrnGui::CarSelectLivery reads it as the byte at +20509
+        // (== 0xA8 + 2*0x1338 + 0xA5) at three sites.
+        s32 GetHighlightedColourIndex() const
         {
-            return reinterpret_cast<SelectableGroup*>(&maColourSelection[KI_CENTRE_ITEM]);
+            return maColourSelection[KI_CENTRE_ITEM].miHighlightedIndex;
         }
+
+        // The component's flag byte, as the owning screen state samples it (+0xC).
+        bool IsHighlighted() const { return (muFlags & KU_FLAG_HIGHLIGHTED) != 0; }
+
+        // ADDITIVE GROW (BrnGui::CarSelectLivery, 2026-08-02). Component vtable slots 0..3,
+        // which SetupPaintColourToggle and HandleControllerInput reach as
+        // `(*(*(this + 0x2860) + 0/4/8/0xC))(this + 0x2860, x)`. The toggle's head carries the
+        // same Selectable flag byte at +0x0C that SelectableGroup models, so these reproduce
+        // Selectable::SetActive / SetHighlightable / SetSelectable / SetHighlighted on it.
+        bool SetActive(bool lbActive)               { return SetStateFlag(KU_FLAG_ACTIVE, lbActive); }
+        bool SetHighlightable(bool lbHighlightable) { return SetStateFlag(0x02, lbHighlightable); }
+        bool SetSelectable(bool lbSelectable)       { return SetStateFlag(KU_FLAG_ENABLED, lbSelectable); }
+        bool SetHighlighted(bool lbHighlighted)     { return SetStateFlag(KU_FLAG_HIGHLIGHTED, lbHighlighted); }
+
+        // Mark the component dirty so the next Update() re-pushes its apt view state
+        // (`*(this+0xC) |= 0x10`). CarSelectLivery's SetupPaintColourToggle does this
+        // explicitly after re-seating the picker.
+        void SetDirty() { muFlags = static_cast<u8>(muFlags | KU_FLAG_DIRTY); }
+
+    private:
+        // The shared body of the four flag setters (see SelectableGroup::SetStateFlag).
+        bool SetStateFlag(u8 luBit, bool lbSet)
+        {
+            const u8 luFlags = muFlags;
+            if (lbSet == ((luFlags & luBit) != 0))
+                return false;
+            muFlags = static_cast<u8>(lbSet ? (luFlags | luBit) : (luFlags ^ luBit));
+            muFlags = static_cast<u8>(muFlags | KU_FLAG_DIRTY);
+            return true;
+        }
+
+        // The focused picker (element[2]) -- the toggle's virtual delegation target
+        // (Select / HighlightNext(false) / HighlightPrevious(false) / HighlightIndex).
+        ColourSelection* GetFocusedSelectionNav() { return &maColourSelection[KI_CENTRE_ITEM]; }
 
         // ---- members ----------------------------------------------------------------
         void* mppVTable;                        // +0x00 (component vtable pointer)
@@ -110,7 +154,7 @@ namespace BrnGui
         u64   mu64Id;                           // +0x10
         CgsGui::GuiComponent mGuiComponentBase; // +0x18
 
-        ColourSelectionSlot maColourSelection[KI_NUM_ITEMS];   // +0xA8 (stride 0x1338; [2] @ +0x2718)
+        ColourSelection maColourSelection[KI_NUM_ITEMS];   // +0xA8 (stride 0x1338; [2] @ +0x2718)
 
         TextField mTitleText;                   // +0x60C0
         s32       miLoadedItems;                // +0x61E6

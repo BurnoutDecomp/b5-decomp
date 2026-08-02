@@ -8,20 +8,26 @@
 // (the <3> recon fixed the canonical member names/signatures in BrnMenuToggleGroup.h; the <2>/<4>
 // /<5> recons match those bodies store-for-store, differing only in TI_SIZE).
 //
-// The group dispatches the still-unnamed GuiComponent virtuals through the base SelectableGroup's
-// modelled component vtable (mppVTable) BY SLOT, following the project's flat-vtable convention.
-// Per-row (MenuToggle) virtuals are dispatched via the row's own leading vtable pointer (the row
-// has no exposed mppVTable member, so the X360 `(*(*item + 0x18))(item)` slot-6 idiom is spelled
-// through a reinterpret_cast to a vtable-pointer array).
+// ⚠️⚠️ 2026-08-02 -- THE FLAT-VTABLE DISPATCH IN THIS FILE WAS UNSOUND AND IS RETIRED.
+// Every group/row virtual used to be reached through `lpGroup->mppVTable[slot]` or
+// `(*(void***)lpItem)[slot]`. `SelectableGroup::mppVTable` is a MODELLED data member that
+// NOTHING in this tree ever writes (its own header says so: "flow does not depend on
+// mppVTable being a live table"), and BrnGui::MenuToggle exposed no vtable at all -- so the
+// first call through either would have jumped through an uninitialised pointer. This TU was
+// unmounted, which is the only reason it never fired. Both targets are now known BY NAME:
+//   group slot  0/1/2/3 -> SetActive / SetHighlightable / SetSelectable / SetHighlighted
+//   group slot  4/5/6/7 -> Select / Update / Clear / Add
+//   group slot 10/11/12 -> HighlightNext / HighlightPrevious / HighlightIndex
+// (the slot map resolved from .rdata for TextSelection @0x82073020,
+//  MenuToggleGroupVarSize<2> @0x820746F0 and ColourMenuToggle @0x82074730), so every
+// dispatch below is a plain by-name call and the two helper families are gone.
 //
-// The compiler-synthesised default ctor (MenuToggleGroupVarSize()) is BLOCKED: its X360 body
-// installs the group's own vtable pair then, per row, brings up three polymorphic sub-object
-// vtable chains + a 100-element BrnGui::TextSelectionItem `vector constructor iterator', writing
-// off_820746F0/off_820746EC/off_82055B70/off_8207306C/off_82073068/off_82073020/off_8207301C/
-// off_82072F8C -- none of those sub-object vtable identities are reconstructed in this wave.
-// Modelling them as raw addresses would assert unattested identities and zeroing would be wrong,
-// so the ctor is left declared-but-undefined (NOT explicitly instantiated below). GROW this home
-// when the MenuToggle row layout + vtable symbols land.
+// The compiler-synthesised default ctor (MenuToggleGroupVarSize()) used to be BLOCKED on the
+// grounds that its X360 body installs a raft of sub-object vtables. That is exactly what C++
+// emits IMPLICITLY for an object of this shape (its own vtable pair, each row's Selectable +
+// GuiComponent + TextSelection + 100 TextSelectionItem chains): the body stores no field
+// values, so the reconstruction is an empty body -- the same reading BrnGui::CarSelectVehicle's
+// and BrnGui::TextSelection's ctors already carry.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggleGroup.h"
@@ -39,43 +45,25 @@ namespace BrnGui
 {
     // The X360 "get the group's currently-highlighted MenuToggle row" accessor (sub_824E21B8),
     // shared identically across every VarSize<N> (HighlightNextItem/HighlightPreviousItem both
-    // call it, then forward MenuToggle::HighlightNext/HighlightPrevious). Its own home is not
-    // reconstructed in this wave, so it is declared here as a file-local forward reference; the
-    // gate is compile-only, so the definition lands with its own recon pass. Modelled taking the
-    // group (as a SelectableGroup*, the value `this` passes straight through in r3) and returning
-    // the highlighted MenuToggle*.
+    // call it, then forward MenuToggle::HighlightNext/HighlightPrevious). It is
+    // SelectableGroup::GetHighlighted() -- the rows ARE the group's selectables (SetupGroup
+    // Add()s each activated row through group slot 7), so the highlighted selectable is the
+    // highlighted row.
     namespace
     {
-        MenuToggle* GetHighlightedToggle(SelectableGroup* lpGroup);
+        inline MenuToggle* GetHighlightedToggle(SelectableGroup* lpGroup)
+        {
+            return static_cast<MenuToggle*>(lpGroup->GetHighlighted());
+        }
     }
 
-    // Row (MenuToggle) component-virtual dispatch: `(*(*item + byteOff))(item)` with no arg /
-    // one s32 arg. MenuToggle exposes no vtable-pointer member, so the leading vptr is reached
-    // via a reinterpret_cast (the flat-vtable convention). byteOff>>2 == the slot index.
-    static inline void RowVCall(MenuToggle* lpItem, s32 liByteOff)
+    // ---------------------------------------------------------------------------------
+    // @ 0x82500AC0 (<2>) -- the compiler-synthesised default ctor. Its X360 body is a run of
+    // sub-object vtable installs plus the rows' `vector constructor iterator's; C++ emits all
+    // of them implicitly here. It stores no field values (Construct does that).
+    template <s32 TI_SIZE>
+    MenuToggleGroupVarSize<TI_SIZE>::MenuToggleGroupVarSize()
     {
-        void** lppVTable = *reinterpret_cast<void***>(lpItem);
-        reinterpret_cast<void (*)(MenuToggle*)>(lppVTable[liByteOff >> 2])(lpItem);
-    }
-    static inline void RowVCall(MenuToggle* lpItem, s32 liByteOff, s32 liArg)
-    {
-        void** lppVTable = *reinterpret_cast<void***>(lpItem);
-        reinterpret_cast<void (*)(MenuToggle*, s32)>(lppVTable[liByteOff >> 2])(lpItem, liArg);
-    }
-
-    // Group component-virtual dispatch through the base SelectableGroup's modelled vtable
-    // (mppVTable): parameterless / one-s32-arg / one-row-arg forms.
-    static inline void GroupVCall(SelectableGroup* lpGroup, s32 liByteOff)
-    {
-        reinterpret_cast<void (*)(SelectableGroup*)>(lpGroup->mppVTable[liByteOff >> 2])(lpGroup);
-    }
-    static inline void GroupVCall(SelectableGroup* lpGroup, s32 liByteOff, s32 liArg)
-    {
-        reinterpret_cast<void (*)(SelectableGroup*, s32)>(lpGroup->mppVTable[liByteOff >> 2])(lpGroup, liArg);
-    }
-    static inline void GroupVCallRow(SelectableGroup* lpGroup, s32 liByteOff, MenuToggle* lpItem)
-    {
-        reinterpret_cast<void (*)(SelectableGroup*, MenuToggle*)>(lpGroup->mppVTable[liByteOff >> 2])(lpGroup, lpItem);
     }
 
     // ---------------------------------------------------------------------------------
@@ -124,7 +112,7 @@ namespace BrnGui
 
         for (s32 liIndex = 0; liIndex < miMaxItems; ++liIndex)
         {
-            RowVCall(&maItems[liIndex], 0x18);   // row slot 6
+            maItems[liIndex].Clear();            // row slot 6
         }
     }
 
@@ -152,11 +140,11 @@ namespace BrnGui
         for (s32 liSlot = 0; liSlot < TI_SIZE; ++liSlot)
         {
             maItems[liSlot].Construct(lpacName, lpStateInterface, lpacParentName, luAptId);
-            RowVCall(&maItems[liSlot], 0x18);
+            maItems[liSlot].Clear();
         }
 
-        // Self-clear (this group's own component vtable slot 6).
-        GroupVCall(this, 0x18);
+        // Self-clear (this group's own component vtable slot 6 -- the DERIVED Clear).
+        Clear();
 
         char lacName[0x80];
         for (s32 liIndex = 0; liIndex < miMaxItems; ++liIndex)
@@ -189,15 +177,12 @@ namespace BrnGui
     {
         MenuToggle* lpToggle = GetSelectable(liIndex);
 
-        SelectableGroup* lpInner = &lpToggle->mSelectableGroup;   // row +0xA8
-        typedef bool (*HighlightFn)(SelectableGroup*, s32);
-        HighlightFn lpfHighlight =
-            reinterpret_cast<HighlightFn>(lpInner->mppVTable[12]);   // +0x30 == slot 12
-        if (!lpfHighlight(lpInner, liItem))
+        // The row's embedded option selection (+0xA8), vtable slot 12 == HighlightIndex.
+        if (!lpToggle->mItemText.HighlightIndex(liItem))
         {
             return false;
         }
-        lpToggle->muFlags |= MenuToggle::KU_FLAG_DIRTY;   // row +0xC |= 0x10
+        lpToggle->SetDirty();                            // row +0xC |= 0x10
         return true;
     }
 
@@ -233,27 +218,27 @@ namespace BrnGui
         CGS_ASSERT(liItemCount >= 0 && liItemCount <= miMaxItems,
                    "MenuToggleGroupVarSize::SetupGroup() item countspecified");
 
-        GroupVCall(this, 0x18);
+        Clear();
 
         for (s32 liIndex = 0; liIndex < miMaxItems; ++liIndex)
         {
             MenuToggle* lpItem = &maItems[liIndex];
             if (liIndex >= liItemCount)
             {
-                RowVCall(lpItem, 0x00, 0);              // deactivate (row slot 0, arg 0)
+                lpItem->SetActive(false);               // row slot 0
             }
             else
             {
-                RowVCall(lpItem, 0x00, 1);              // activate (row slot 0, arg 1)
-                RowVCall(lpItem, 0x04, 1);              // row slot +0x04, arg 1
-                RowVCall(lpItem, 0x08, 1);              // row slot +0x08, arg 1
-                GroupVCallRow(this, 0x1C, lpItem);      // group slot +0x1C (register the row)
+                lpItem->SetActive(true);                // row slot 0
+                lpItem->SetHighlightable(true);         // row slot 1 (+0x04)
+                lpItem->SetSelectable(true);            // row slot 2 (+0x08)
+                Add(lpItem);                            // group slot 7 (+0x1C)
             }
         }
 
         if (liItemCount > 0)
         {
-            GroupVCall(this, 0x30, 0);                  // group slot +0x30 (highlight first)
+            HighlightIndex(0);                          // group slot 12 (+0x30)
         }
 
         if ((lbWrapped != 0) != mbWrapped)
@@ -271,26 +256,26 @@ namespace BrnGui
     // to MenuToggle::SetupMenuToggle (active) or all-zero (inactive).
     template <s32 TI_SIZE>
     void MenuToggleGroupVarSize<TI_SIZE>::SetupToggle(
-        s32 liIndex, s32 lbActive, const char* lpacText,
-        const char** lppacOptions, u64* lpu64Ids, s32 liUnused)
+        s32 liIndex, s32 liNumOptions, bool lbActive, const char* lpacText,
+        const char** lppacOptions, u64* lpu64Ids)
     {
         CGS_ASSERT(liIndex >= 0 && liIndex <= miMaxItems,
                    "MenuToggleGroupVarSize::SetupToggle() invalid index specified");
         CGS_ASSERT(GetSelectable(liIndex) != 0, "Invalid selectable specified");
-        CGS_ASSERT(!(lpu64Ids == 0 && lbActive != 0), "Invalid text specified");
+        CGS_ASSERT(!(lpacText == 0 && lbActive), "Invalid text specified");
 
         MenuToggle* lpItem = &maItems[liIndex];
-        RowVCall(lpItem, 0x18);                          // dirty the row (row slot 6)
+        lpItem->Clear();                                 // row slot 6
 
         if (lbActive)
         {
-            RowVCall(lpItem, 0x00, 1);                   // activate (row slot 0)
-            lpItem->SetupMenuToggle(lbActive, lpacText, lppacOptions, lpu64Ids, liUnused);
+            lpItem->SetActive(true);                     // row slot 0
+            lpItem->SetupMenuToggle(liNumOptions, lbActive, lpacText, lppacOptions, lpu64Ids);
         }
         else
         {
-            RowVCall(lpItem, 0x00, 0);                   // deactivate (row slot 0)
-            lpItem->SetupMenuToggle(0, 0, 0, 0, 0);
+            lpItem->SetActive(false);                    // row slot 0
+            lpItem->SetupMenuToggle(0, false, 0, 0, 0);
         }
     }
 
@@ -301,7 +286,7 @@ namespace BrnGui
     template <s32 TI_SIZE>
     void MenuToggleGroupVarSize<TI_SIZE>::Unloaded()
     {
-        GroupVCall(this, 0x18);
+        Clear();
 
         miLoadedItems = 0;
         for (s32 liIndex = 0; liIndex < miMaxItems; ++liIndex)
@@ -317,6 +302,7 @@ namespace BrnGui
     // `template class MenuToggleGroupVarSize<N>;` would require its (unreconstructed) body.
     // ---------------------------------------------------------------------------------
 #define BRN_INSTANTIATE_MENUTOGGLEGROUP(N)                                                        \
+    template MenuToggleGroupVarSize<N>::MenuToggleGroupVarSize();                                  \
     template void        MenuToggleGroupVarSize<N>::AppendExpectedAptComponent(GuiFlow, GuiCache*, bool); \
     template void        MenuToggleGroupVarSize<N>::Clear();                                       \
     template void        MenuToggleGroupVarSize<N>::Construct(const char*, CgsGui::StateInterface*,\
@@ -326,8 +312,8 @@ namespace BrnGui
     template bool        MenuToggleGroupVarSize<N>::HighlightNextItem();                           \
     template bool        MenuToggleGroupVarSize<N>::HighlightPreviousItem();                       \
     template void        MenuToggleGroupVarSize<N>::SetupGroup(s32, u8);                           \
-    template void        MenuToggleGroupVarSize<N>::SetupToggle(s32, s32, const char*,             \
-                                                               const char**, u64*, s32);           \
+    template void        MenuToggleGroupVarSize<N>::SetupToggle(s32, s32, bool, const char*,       \
+                                                               const char**, u64*);                \
     template void        MenuToggleGroupVarSize<N>::Unloaded();
 
     BRN_INSTANTIATE_MENUTOGGLEGROUP(2)

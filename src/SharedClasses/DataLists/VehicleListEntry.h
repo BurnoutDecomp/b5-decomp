@@ -154,6 +154,22 @@ struct VehicleListEntry
     u8 GetSpeedStat() const;
     u8 GetBoostStat() const;
 
+    // ADDITIVE GROW (CarSelectLivery wave 2026-08-02). The car's FACTORY paint pair -- the
+    // colour index at +0xEE and the paint-finish (BrnWorld::EPalettesTypes) index at +0xEF.
+    // X360-attested twice in BrnGui::CarSelectLivery:
+    //   UpdateComponents @0x824C7CB0 gates the "$GENERAL_OPTION_RESTORE" help item on
+    //     `paintFinishToggle.miHighlightedIndex == LOBYTE(entry[59])` and
+    //     `colourPicker.miHighlightedIndex == BYTE2(entry[59])` -- entry[59] is the BIG-ENDIAN
+    //     word at +0xEC, so LOBYTE is +0xEF and BYTE2 is +0xEE;
+    //   HandleControllerInput @0x824D6D10 case 0x34 (the RESTORE press) reads the same two
+    //     bytes as `*(entry + 239)` and `*(entry + 238)` and re-seats both toggles onto them.
+    // Two independent sites, the same two offsets, and the restore semantics name the roles.
+    // FLAG: offsets recovered from the asm; the burnout.wiki Vehicle List table does not name
+    // this pair, so the names are role-derived. Both live in the recovered maPad224 span,
+    // exactly like GetCarType (+0xE8) / GetLiveryType (+0xE9) / GetSpeedStat (+0xEC).
+    u8 GetDefaultPaintColour() const;
+    u8 GetDefaultPaintFinish() const;
+
     // ---- on-disk layout (recovered from FixUp's key destructs); sizeof == 0xF0 (240) ----
     u8 maPad0[0x9B];                                                      // +0x00
     u8 mu8StrengthRating;                                                 // +0x9B

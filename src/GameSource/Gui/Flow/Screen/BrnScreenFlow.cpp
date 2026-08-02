@@ -11,6 +11,7 @@
 // The committed screen states (REAL classes; constructed exactly as the X360 Prepare does).
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectVehicle.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectOnlineEnd.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnScreenLoading.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnInGame.h"
