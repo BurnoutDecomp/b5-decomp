@@ -2,22 +2,28 @@
 // GameSource/Director/Camera/Utils/BrnCameraShake.cpp
 //
 // Compilation home for the BrnDirector::Camera::Utils::CameraShake slice this TU owns:
-//   - CameraShake::Update                                        @0x82221310
 //   - CameraShake::Parameters::Serialise<DebugMenuSerialiser>    @0x82215540
 //   - CameraShake::Parameters::Serialise<TextFileReadSerialiser> @0x82202EE0
 //   - CameraShake::Parameters::Serialise<TextFileWriteSerialiser> @0x82215D90
 //
+// ⭐ `CameraShake::Update` @0x82221310 USED TO LIVE HERE and now lives in its own TU,
+// Utils/BrnCameraShakeUpdate.cpp (file-split 2026-08-02, rotate-helper wave). The reason is
+// link closure, not tidiness: the three explicit instantiations below drag DebugMenuSerialiser
+// / TextFileWriteSerialiser / TextFileReadSerialiser, whose `Serialise(const char*, f32&)` are
+// out-of-line in TUs that are not on the build list, so mounting THIS file to reach Update
+// opened three unresolved externals to close one. The split file is mounted; this one is not.
+// ⚠️ THAT MEANS THE THREE VISITORS BELOW ARE STILL UNMOUNTED CODE. They compile, and nothing
+// links them. Do not read their presence as "the shake tunings serialise".
+//
 // CameraShake::Parameters itself (the four f32 shake tunables) is homed in the canonical
 // Utils/BrnCameraShake.h (the BehaviourRig.h copy that this banner used to name was retired
-// in 2026-07-29); this TU bodies the per-frame Update and the ONE field-walk visitor, and
-// instantiates the visitor over the three camera-tunings serialisers. The block is the shake
-// post-process tunings shared by the gameplay/bystander/gyro/aftertouch/heli camera
-// behaviours (each embeds a CameraShake and saves/loads/menus this block through its own
-// Serialise<T>).
+// in 2026-07-29); this TU bodies the ONE field-walk visitor and instantiates it over the three
+// camera-tunings serialisers. The block is the shake post-process tunings shared by the
+// gameplay/bystander/gyro/aftertouch/heli camera behaviours (each embeds a CameraShake and
+// saves/loads/menus this block through its own Serialise<T>).
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"             // THE home: CameraShake + ::Parameters
-#include "GameSource/Director/Camera/Utils/CameraUtils.h"                // Utils::RotateMatrix44AffineByEulerAnglesZXY
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"          // (kept: the serialiser slice's original include)
 #include "GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h" // DebugMenuSerialiser
 #include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"  // TextFileWriteSerialiser
