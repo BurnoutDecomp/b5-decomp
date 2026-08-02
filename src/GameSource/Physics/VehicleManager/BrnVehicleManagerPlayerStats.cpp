@@ -182,16 +182,16 @@ namespace Vehicle
     // SetNetworkRaceCarHidden  @0x825C3040
     //
     // Mark a NETWORK race car hidden for at least liFrames frames: set its bit in the
-    // mHiddenNetworkRaceCars bitset and store the frame count into maHiddenForFrames[index].
+    // mHiddenRaceCars bitset and store the frame count into mauNetworkCarHiddenFramesRemaining[index].
     // (asm: stdx the per-index bit into the 64-bit word @ this+44704; stwx liFrames @ 4*idx+44736.)
     // -------------------------------------------------------------------------------------------
     void VehicleManager::SetNetworkRaceCarHidden(EActiveRaceCarIndex leActiveRaceCarIndex, s32 liFrames)
     {
         const s32 liIndex = static_cast<s32>(leActiveRaceCarIndex);
 
-        // (asm: assert maRaceCarCrashState[idx] == 2 -- the "this slot is a NETWORK race car" check;
-        // the same per-car word the takedown TU names maRaceCarCrashState, value 2 == network/fatal.)
-        CGS_ASSERT(maRaceCarCrashState[liIndex] == 2,
+        // (asm: assert maeRaceCarTypes[idx] == 2 -- the "this slot is a NETWORK race car" check;
+        // the same per-car word the takedown TU names maeRaceCarTypes, value 2 == network/fatal.)
+        CGS_ASSERT(maeRaceCarTypes[liIndex] == 2,
                    "maeRaceCarTypes[leActiveRaceCarIndex] == BrnWorld::E_RACE_CAR_TYPE_NETWORK");
 
         // (asm: an optional HIDE_ONLINE debug-log block gated on CgsDev::Message::gxMessageFilterFlags
@@ -201,8 +201,8 @@ namespace Vehicle
         // bound check.)
         CGS_ASSERT(liIndex < 8, "Index < Number of bits");
 
-        mHiddenNetworkRaceCars.SetBit(static_cast<u32>(liIndex));   // asm: 64-bit word @ +44704, set bit idx
-        maHiddenForFrames[liIndex] = liFrames;                      // asm: stwx liFrames @ 4*idx + 44736
+        mHiddenRaceCars.SetBit(static_cast<u32>(liIndex));   // asm: 64-bit word @ +44704, set bit idx
+        mauNetworkCarHiddenFramesRemaining[liIndex] = liFrames;                      // asm: stwx liFrames @ 4*idx + 44736
     }
 
     // -------------------------------------------------------------------------------------------
@@ -268,8 +268,8 @@ namespace Vehicle
     void VehicleManager::_AssertLayoutPlayerStats()
     {
         static_assert(offsetof(RaceCarVehicleRecord, mfPlayerBoostStrengthStat) == 5084, "in-record player boost stat (asm: 5216*idx + 6940 -> in-record +5084)");
-        static_assert(offsetof(VehicleManager, mHiddenNetworkRaceCars)          == 44704,  "mHiddenNetworkRaceCars (asm +44704)");
-        static_assert(offsetof(VehicleManager, maHiddenForFrames)               == 44736,  "maHiddenForFrames (asm base 44736)");
+        static_assert(offsetof(VehicleManager, mHiddenRaceCars)          == 44704,  "mHiddenRaceCars (asm +44704)");
+        static_assert(offsetof(VehicleManager, mauNetworkCarHiddenFramesRemaining)               == 44736,  "mauNetworkCarHiddenFramesRemaining (asm base 44736)");
         static_assert(offsetof(VehicleManager, mau8GlobalToPhysicalEntityIndexMap) == 149456, "global->physical map (asm +149456)");
         static_assert(offsetof(VehicleManager, mfShowtimePlayerCarStrength)     == 172320, "mfShowtimePlayerCarStrength (asm +172320)");
         static_assert(offsetof(VehicleManager, mfShowtimePlayerCarDamageLimit)  == 172324, "mfShowtimePlayerCarDamageLimit (asm +172324)");
@@ -283,7 +283,7 @@ namespace Vehicle
     // FLAG: NOT bodied here. The constructor sets the per-car-record + manager vtable pointers
     // (off_820974E4 / off_820D0C68 / off_820D1034 / off_820CEE90 / off_820CF988 / off_820CF1D4) and
     // runs `vector constructor iterator` over the embedded collision-generator sub-arrays inside each
-    // RaceCarStatusRecord / RaceCarVehicleRecord, then chains PhysicalTrafficManager's constructor on
+    // RaceCarDriverRecord / RaceCarVehicleRecord, then chains PhysicalTrafficManager's constructor on
     // the contained subobject @ +44768. The current VehicleManager layout models those records and the
     // contained manager as OPAQUE PADDING (no vtables, no real sub-objects), so a faithful constructor
     // body cannot be written against it without fabricating vtable symbols and placement-construction

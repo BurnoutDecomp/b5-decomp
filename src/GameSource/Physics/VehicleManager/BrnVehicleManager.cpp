@@ -141,10 +141,10 @@ namespace Vehicle
         lInfo.mpRaceCarA = reinterpret_cast<RaceCarPhysics*>(&lrRecordA);
         lInfo.mpRaceCarB = reinterpret_cast<RaceCarPhysics*>(&lrRecordB);
 
-        // Per-car crash-state -> is-player / is-crashing flags. asm: v70 = maRaceCarCrashState[A],
-        // v71 = maRaceCarCrashState[B]; the _cntlzw tricks derive is-player (crash-state encodes the
-        // player car) and is-crashing (crash-state==1 or the per-record +3664 disabled flag).
-        // FLAG: the exact crash-state -> bool encoding is the X360's _cntlzw idiom; reconstructed here
+        // Per-car TYPE -> is-player / is-crashing flags. asm: v70 = maeRaceCarTypes[A],
+        // v71 = maeRaceCarTypes[B]; the _cntlzw tricks derive is-player (type 0 == PLAYER) and
+        // is-crashing (type 1 == AI, or the per-record +3664 disabled flag).
+        // FLAG: the exact type -> bool encoding is the X360's _cntlzw idiom; reconstructed here
         // as the documented predicates (player car == mePlayerActiveRaceCarIndex; crashing == the
         // in-record disabled flag). The struct's A/B crashing bytes carry the X360 swap (B->A, A->B).
         const s32 liPlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
@@ -201,7 +201,7 @@ namespace Vehicle
 
         // ---- Step 3: per-car crashing pre-gate (asm: bail if BOTH already crashing/disabled) ----
         // asm: if (v90 && v93 || v78 && v79) goto LABEL_92. (v90/v93 = the two +3664 disabled flags;
-        // v78/v79 = the crash-state derived flags.) Reproduced via the response-info crash flags.
+        // v78/v79 = the car-type derived flags.) Reproduced via the response-info crash flags.
         if (lInfo.mbRaceCarAIsCrashing && lInfo.mbRaceCarBIsCrashing)
             return;
 
@@ -405,12 +405,18 @@ namespace Vehicle
     }
 
     // -------------------------------------------------------------------------------------------
-    // The sentinel the per-car crash-state array holds while a car is in the fatal/active crash
-    // state. InstantTakedown skips re-crashing the victim when its crash-state already equals this.
-    // FLAG: no recovered enum home for the crash-state values -- the X360 compares the array slot
-    // against the bare literal 2, so it is reproduced here as a named integer literal (NOT an
-    // invented enum). Resolve the real crash-state enum and replace this when its home is recovered.
-    static const s32 KI_RACECAR_CRASH_STATE_FATAL = 2;   // FLAG: literal sentinel; enum home unrecovered
+    // ⭐ RETIRED 2026-08-03 (VehicleManager layout wave): `KI_RACECAR_CRASH_STATE_FATAL = 2`.
+    // The array it guarded is not a crash-state array at all -- it is
+    // `BrnWorld::ERaceCarType maeRaceCarTypes[8]` (DWARF BrnVehicleManager.h:828), and
+    // VehicleManager::Construct seeds every slot with 3 == E_RACE_CAR_TYPE_INACTIVE
+    // (`stw r24, 0(r28)`, r24 == 3, r28 == this + 44192, stride 4, x8). The literals the bodies
+    // compare against are therefore enumerators, not sentinels: `!= 2` is
+    // "not E_RACE_CAR_TYPE_NETWORK" and `== 1` is "is E_RACE_CAR_TYPE_AI". The committed tree
+    // already half-knew this -- BrnVehicleManagerPlayerStats.cpp's own assert string spells it
+    // "== BrnWorld::E_RACE_CAR_TYPE_NETWORK" while the member it read was named
+    // maRaceCarCrashState. Every comparison keeps the same numeric value; only the meaning is
+    // corrected.
+    // -------------------------------------------------------------------------------------------
 
     // -------------------------------------------------------------------------------------------
     // InstantTakedown  @0x82636108
@@ -426,7 +432,7 @@ namespace Vehicle
     //   5. records the aggressor (via miAttackerToRecord) as the victim's last attacker, and marks
     //      the aggressor's "taken down this frame" status byte.
     //
-    // INDEXING NOTE (asm-authoritative, surprising): the crash-state check and the last-attacker
+    // INDEXING NOTE (asm-authoritative, surprising): the car-type check and the last-attacker
     // write are indexed by the VICTIM slot, while the recovery-timer zero and the taken-down status
     // byte are indexed by the AGGRESSOR slot. This matches the X360 exactly (5216*v39 and 224*v39
     // use the aggressor index v39; 4*(v38+...) use the victim index v38) -- reproduced verbatim.
@@ -459,8 +465,9 @@ namespace Vehicle
         if (!mbTakedownsEnabled)
             return;
 
-        // Crash the victim, unless it is already in the fatal/active-crash state.
-        if (maRaceCarCrashState[liVictimActiveRaceCarIndex] != KI_RACECAR_CRASH_STATE_FATAL)
+        // Crash the victim, unless it is a NETWORK car (the X360 `!= 2`; see the maeRaceCarTypes
+        // note above -- this used to read as "already in the fatal crash state").
+        if (maeRaceCarTypes[liVictimActiveRaceCarIndex] != BrnWorld::E_RACE_CAR_TYPE_NETWORK)
         {
             SetRaceCarCrashing(lVictimEntityId,
                                lAggressorEntityId,
@@ -479,7 +486,7 @@ namespace Vehicle
 
         // Record who took the victim down, and flag the aggressor as having scored a takedown this frame.
         maRaceCarLastAttacker[liVictimActiveRaceCarIndex]   = miAttackerToRecord;
-        maRaceCarStatus[liAggressorActiveRaceCarIndex].mbTakenDown = 1;
+        maRaceCarDrivers[liAggressorActiveRaceCarIndex].mbTakenDown = 1;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -524,15 +531,15 @@ namespace Vehicle
 
         // ---- Step 1: index + early-out suppression gates (asm v36/v38/v43/v44/v45) ----
         const s32 liVictimIndex = static_cast<s32>((lVictimEntityId.muValue >> 10) & 0x3FFF);
-        RaceCarStatusRecord& lrStatus = maRaceCarStatus[liVictimIndex];   // asm 224*v36 + this
-        const s32 liCrashState = maRaceCarCrashState[liVictimIndex];      // asm v44 = maRaceCarCrashState[v36]
+        RaceCarDriverRecord& lrStatus = maRaceCarDrivers[liVictimIndex];   // asm 224*v36 + this
+        const s32 liCrashState = maeRaceCarTypes[liVictimIndex];      // asm v44 = maeRaceCarTypes[v36]
         const bool lbWasInCrashState1 = (liCrashState == 1);             // asm v45 -> AddRaceCarCrashEvent arg
 
         // The cause sub-code = the OWNER byte of the aggressor id (RACECAR=1, remap-required=2, ...).
         // asm: v42 = HIBYTE(a2).
         const u32 luCauseSubCode = (lAggressorEntityId.muValue >> 24) & 0xFF;
 
-        // The two RaceCarStatusRecord flag bytes the asm reads: +124 (mbTakenDown) and +125
+        // The two RaceCarDriverRecord flag bytes the asm reads: +124 (mbTakenDown) and +125
         // (mbSuppressByCause), both now NAMED fields of the record.
         const unsigned char lbFlag124 = lrStatus.mbTakenDown;       // asm *(v38+124)
         const unsigned char lbFlag125 = lrStatus.mbSuppressByCause; // asm *(v38+125)
@@ -549,7 +556,7 @@ namespace Vehicle
         // a developer check with no runtime effect; not reproduced.)
 
         // ---- Step 2: entity-id validation / remap (asm: pure debug asserts against the id tables) --
-        // The asm validates the packed id against maRaceCarEntityId[victim] (+43584) and remaps a
+        // The asm validates the packed id against maRaceCarEntityIDs[victim] (+43584) and remaps a
         // type-2 id through maRaceCarEntityIdRemap (+148128). The asserts are debug-only; the remap is
         // the load-bearing part for the secondary event below.
         EntityId lValidatedVictimId = lVictimEntityId;   // asm v34
@@ -582,7 +589,7 @@ namespace Vehicle
         {
             // (B) LOCAL / physical-crash path.
             // The X360 latch bool is an AND of four conditions (asm): the player slot is not remote,
-            // the victim is within the proximity radius of the player camera, the victim's crash-state
+            // the victim is within the proximity radius of the player camera, the victim's car type
             // is 1, and the a7-derived predicate (here always true -- a7 is the no-takedown-type
             // sentinel path; the X360 sets v108=1 when a7==-1||a7==0). FLAG: the a7 predicate is
             // modelled as always-true because the bodied callers pass the -1 sentinel.
@@ -601,7 +608,7 @@ namespace Vehicle
             const bool lbLatchPhysics =
                 (!lrPlayerRecord.mbIsCrashingOrDisabled)   // asm *(_R10+3664)==0  (player not remote)
                 && lbWithinRadius                          // asm dist<radius
-                && (liCrashState == 1)                     // asm *(v39+v35)==1  (== maRaceCarCrashState[victim])
+                && (liCrashState == 1)                     // asm *(v39+v35)==1  (== maeRaceCarTypes[victim])
                 /* && lbA7Predicate */;                    // asm & v108 (FLAG: modelled true, see above)
 
             // The single call site of RaceCarPhysics::SetCrashing: latch the victim's physics into
@@ -650,12 +657,12 @@ namespace Vehicle
         // ---- Step 4: allocate (or overwrite) a RaceCarCrashData[32] slot ----
         // The asm finds the first FREE slot via the complement-scan idiom (v140 = ~field; the lowest
         // set bit of the complement == the lowest CLEAR bit == the first free slot). A set bit in
-        // mRaceCarCrashDataAllocBits == an allocated slot, so a free slot is the first CLEAR bit. The
+        // mUsedRaceCarCrashesList == an allocated slot, so a free slot is the first CLEAR bit. The
         // CgsBitArray API exposes IsBitSet (used by name to find the first clear bit).
         s32 liSlot = -1;
         for (s32 liScan = 0; liScan < 32; ++liScan)   // asm: first clear bit in the alloc bitfield
         {
-            if (!mRaceCarCrashDataAllocBits.IsBitSet(static_cast<u32>(liScan)))
+            if (!mUsedRaceCarCrashesList.IsBitSet(static_cast<u32>(liScan)))
             {
                 liSlot = liScan;
                 break;
@@ -667,12 +674,12 @@ namespace Vehicle
             // Overwriting a RaceCarCrashData class" path scans +43816, the priority float, for the
             // max and reuses that slot).
             liSlot = 0;
-            f32 lfHighestPriority = maRaceCarCrashData[0].mfPriority;
+            f32 lfHighestPriority = maRaceCarCrashes[0].mfPriority;
             for (s32 liScan = 1; liScan < 32; ++liScan)
             {
-                if (maRaceCarCrashData[liScan].mfPriority > lfHighestPriority)
+                if (maRaceCarCrashes[liScan].mfPriority > lfHighestPriority)
                 {
-                    lfHighestPriority = maRaceCarCrashData[liScan].mfPriority;
+                    lfHighestPriority = maRaceCarCrashes[liScan].mfPriority;
                     liSlot = liScan;
                 }
             }
@@ -681,10 +688,10 @@ namespace Vehicle
         // Write the slot: { mEntityId = victim packed id, meType = takedown type, mfPriority = 0 }.
         // asm: *(v150+43816)=0.0 (priority); *(12*(v138+3651)+v35)=v149 (== slot+43812, meType);
         //      *(v150+43808)=a13 (== slot+43808, mEntityId, the packed victim id).
-        maRaceCarCrashData[liSlot].mfPriority = 0.0f;
-        maRaceCarCrashData[liSlot].meType     = static_cast<u32>(leTakedownType);   // FLAG: see header note
-        maRaceCarCrashData[liSlot].mEntityId  = lVictimEntityId.muValue;            // asm a13 = packed victim id
-        mRaceCarCrashDataAllocBits.SetBit(static_cast<u32>(liSlot));   // asm: set the allocation bit (v179 OR into field)
+        maRaceCarCrashes[liSlot].mfPriority = 0.0f;
+        maRaceCarCrashes[liSlot].meType     = static_cast<u32>(leTakedownType);   // FLAG: see header note
+        maRaceCarCrashes[liSlot].mEntityId  = lVictimEntityId.muValue;            // asm a13 = packed victim id
+        mUsedRaceCarCrashesList.SetBit(static_cast<u32>(liSlot));   // asm: set the allocation bit (v179 OR into field)
 
         // ---- Step 5: secondary remapped-entity event ----
         // Only fired when the takedown cause sub-code is type 2 (a remap-required id); the asm remaps
@@ -1071,7 +1078,7 @@ namespace Vehicle
             lpInfo->meImpactType = leType;                             // asm _R31[61] = v25
             // Promote a plain shunt to a boost-shunt when the aggressor is boost-eligible (+123).
             const s32 liAggressor = static_cast<s32>(lpInfo->meAggressorActiveRaceCarIndex);
-            if (maRaceCarStatus[liAggressor].mbBoostImpactEligible && lpInfo->meImpactType == E_IMPACT_SHUNT)
+            if (maRaceCarDrivers[liAggressor].mbBoostImpactEligible && lpInfo->meImpactType == E_IMPACT_SHUNT)
                 lpInfo->meImpactType = E_IMPACT_BOOST_SHUNT;          // asm _R31[61] = 6
             return true;
         }
@@ -1145,7 +1152,7 @@ namespace Vehicle
         lpInfo->meAggressorActiveRaceCarIndex = lpInfo->meActiveRaceCarIndexA; // asm *(_R31+248)=v27
         lpInfo->meVictimActiveRaceCarIndex    = lpInfo->meActiveRaceCarIndexB; // asm *(_R31+252)=v29
         EImpactType leSeverity = E_IMPACT_TRADING_PAINT;                       // asm *(_R31+244)=1
-        if (maRaceCarStatus[liA].mbBoostImpactEligible)
+        if (maRaceCarDrivers[liA].mbBoostImpactEligible)
             leSeverity = E_IMPACT_BOOST_SLAM;                                  // asm *(_R31+244)=5 (3->5 promote)
         lpInfo->meImpactType = leSeverity;
         return true;
@@ -1217,7 +1224,7 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     // CheckForPlayerSlammingAIIntoAI  @0x8263E000  ->  STANDARD (domino). Highest priority.
     //
-    // The player rams one AI into a second AI. Requires both cars active AI (maRaceCarCrashState==1),
+    // The player rams one AI into a second AI. Requires both cars active AI (maeRaceCarTypes==1),
     // neither crashing, and (via per-record attacker bookkeeping vs mePlayerActiveRaceCarIndex) that
     // the player is the slammer. Calls ShouldRaceCarCrashOnCarImpact per victim and commits each
     // that passes.
@@ -1233,10 +1240,10 @@ namespace Vehicle
         const s32 liA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA); // asm v8 = a2[7]
         const s32 liB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB); // asm v9 = a2[8]
 
-        // Both cars must be active AI (crash-state == 1) and neither crashing.
-        if (maRaceCarCrashState[liA] != 1)
+        // Both cars must be AI (maeRaceCarTypes == E_RACE_CAR_TYPE_AI) and neither crashing.
+        if (maeRaceCarTypes[liA] != 1)
             return false;
-        if (maRaceCarCrashState[liB] != 1 || lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
+        if (maeRaceCarTypes[liB] != 1 || lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
             return false;
 
         RaceCarPhysics* const lpVehA = reinterpret_cast<RaceCarPhysics*>(&maRaceCarVehicles[liA]);
@@ -1293,11 +1300,11 @@ namespace Vehicle
     // One car is already crashing and the other rams it. Runs BEFORE the not-crashing gate. Includes
     // a player-revenge sub-gate (mePlayerActiveRaceCarIndex vs the record's current-attacker field).
     // Calls ShouldRaceCarCrashOnCarImpact for the still-live car; commits if it passes and the two
-    // cars' crash-states are both 1.
+    // cars' types are both E_RACE_CAR_TYPE_AI.
     //
     // FLAG: the asm reads RaceCarPhysics in-record velocity lanes (5216*idx + 5680, the +4432
-    // current-attacker field, and the +4176 height lane) plus the maRaceCarCrashState array via
-    // 4*(idx+11048)+this. The crash-state reads ARE modelled (named array); the in-record velocity /
+    // current-attacker field, and the +4176 height lane) plus the maeRaceCarTypes array via
+    // 4*(idx+11048)+this. The car-type reads ARE modelled (named array); the in-record velocity /
     // attacker / height reads are unmodelled RaceCarPhysics fields, so the "which car is crashing"
     // determination is taken from the response-info crash flags and the player-revenge sub-gate is
     // delegated to ShouldRaceCarCrashOnCarImpact. Those omitted in-record reads are documented.
@@ -1328,13 +1335,13 @@ namespace Vehicle
             // Guard is the LIVE car's NETWORK flag (asm 0x8263DE5C: if(!*(_R31+85))), not the crash flag.
             if (!lpInfo->mbRaceCarBIsNetworkCar)
             {
-                // Both cars' crash-states must read 1 for the pile-on takedown to register.
-                if (maRaceCarCrashState[liA] == 1 && maRaceCarCrashState[liB] == 1)
+                // Both cars' types must read E_RACE_CAR_TYPE_AI for the pile-on takedown to register.
+                if (maeRaceCarTypes[liA] == 1 && maeRaceCarTypes[liB] == 1)
                 {
                     // Player-revenge sub-gate: only fire when the player is the current attacker.
                     // FLAG: the asm reads the in-record current-attacker field (+4432) and the
                     // +4176 height lane vs mePlayerActiveRaceCarIndex; those in-record reads are
-                    // unmodelled, so the revenge confirmation is delegated to the crash-state gate.
+                    // unmodelled, so the revenge confirmation is delegated to the car-type gate.
                     const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
                     const EntityId lVictim    = MakeRaceCarEntityId(static_cast<u32>(liB)); // asm victim=(v6<<10) = indexB
                     const EntityId lAggressor = MakeRaceCarEntityId(luPlayer);              // asm aggr=(v35<<10) = player
@@ -1361,7 +1368,7 @@ namespace Vehicle
         // Guard is the live car's NETWORK flag (asm 0x8263DBFC: if(!*(_R31+84))), not the crash flag.
         if (!lpInfo->mbRaceCarAIsNetworkCar)
         {
-            if (maRaceCarCrashState[liA] == 1 && maRaceCarCrashState[liB] == 1)
+            if (maeRaceCarTypes[liA] == 1 && maeRaceCarTypes[liB] == 1)
             {
                 // FLAG: player-revenge in-record reads (+4432 / +4176) omitted as above.
                 const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
@@ -1389,10 +1396,20 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     void VehicleManager::_AssertLayout()
     {
-        static_assert(sizeof(RaceCarStatusRecord)  == 224,  "RaceCarStatusRecord stride (asm: 224)");
-        static_assert(offsetof(RaceCarStatusRecord, mbBoostImpactEligible) == 123, "boost-eligible byte (asm: +123)");
-        static_assert(offsetof(RaceCarStatusRecord, mbTakenDown) == 124, "taken-down byte (asm: +124)");
-        static_assert(offsetof(RaceCarStatusRecord, mbSuppressByCause) == 125, "suppress-by-cause byte (asm: +125)");
+        // ---- the class HEAD (re-seated 2026-08-03; see the header banner) --------------------
+        static_assert(offsetof(VehicleManager, mePrepareStage) == 0,  "mePrepareStage (asm stw 0, 0(r31))");
+        static_assert(offsetof(VehicleManager, meReleaseStage) == 4,  "meReleaseStage (asm stw 3, 4(r31))");
+        static_assert(offsetof(VehicleManager, mRandom)        == 16, "mRandom (asm addi r11, r31, 0x10) -- 16-aligned, NOT +8");
+        static_assert(sizeof(VehicleManager::mRandom) == 48, "CgsNumeric::Random is 44 bytes at align 16 -> sizeof 48");
+
+        static_assert(sizeof(RaceCarDriverRecord)  == 224,  "RaceCarDriverRecord stride (asm: addi r25, r25, 0xE0)");
+        // The three named bytes are at ABSOLUTE class offsets 224*idx + 123/124/125; with the array
+        // correctly seated at +64 that is in-record 59/60/61 (inside VehicleDriver::mControls).
+        static_assert(offsetof(RaceCarDriverRecord, mbBoostImpactEligible) == 59, "boost-eligible byte (asm: 224*idx + 123)");
+        static_assert(offsetof(RaceCarDriverRecord, mbTakenDown) == 60, "taken-down byte (asm: 224*idx + 124)");
+        static_assert(offsetof(RaceCarDriverRecord, mbSuppressByCause) == 61, "suppress-by-cause byte (asm: 224*idx + 125)");
+        static_assert(offsetof(VehicleManager, maRaceCarDrivers) + 224 * 1 + 59 == 224 * 1 + 123,
+                      "the re-seat is byte-identical to the old model for every element");
         static_assert(sizeof(RaceCarVehicleRecord) == 5216, "RaceCarVehicleRecord stride (asm: 5216)");
         static_assert(offsetof(RaceCarVehicleRecord, mbIsCrashingOrDisabled) == 1808, "in-record crashing flag (asm: +3664)");
         static_assert(offsetof(RaceCarVehicleRecord, mfProximityRadiusSq) == 1904, "in-record radius-sq (asm: +1904)");
@@ -1405,17 +1422,28 @@ namespace Vehicle
         static_assert(offsetof(RaceCarVehicleRecord, mStampedEntityId) == 5200, "in-record stamped id (asm: +7056)");
         static_assert(sizeof(RaceCarCrashData)     == 12,   "RaceCarCrashData stride (asm: 12)");
 
-        static_assert(offsetof(VehicleManager, maRaceCarStatus)          == 0,      "maRaceCarStatus (asm base 0)");
-        static_assert(offsetof(VehicleManager, maRaceCarVehicles)        == 1856,   "maRaceCarVehicles (asm base 1856)");
-        static_assert(offsetof(VehicleManager, maRaceCarEntityId)        == 43584,  "maRaceCarEntityId (asm base 43584)");
-        static_assert(offsetof(VehicleManager, maAggressiveDrivingVictimEntityId) == 43744, "maAggressiveDrivingVictimEntityId (doc/asm base 43744)");
-        static_assert(offsetof(VehicleManager, maRaceCarCrashData)       == 43808,  "maRaceCarCrashData (asm base 43808)");
-        static_assert(offsetof(VehicleManager, maRaceCarCrashState)      == 44192,  "maRaceCarCrashState (asm base 44192)");
+        static_assert(offsetof(VehicleManager, maRaceCarDrivers)         == 64,     "maRaceCarDrivers (asm addi r25, r31, 0x40) -- was WRONGLY seated at 0");
+        static_assert(offsetof(VehicleManager, maRaceCarVehicles)        == 1856,   "maRaceCarVehicles (asm r29 - 0x140D)");
+        static_assert(offsetof(VehicleManager, maRaceCarEntityIDs)       == 43584,  "maRaceCarEntityIDs (asm base 43584)");
+        static_assert(offsetof(VehicleManager, maRaceCarHandlingBodyIDs) == 43744,  "maRaceCarHandlingBodyIDs (asm addi r26,r26,-0x5520)");
+        static_assert(sizeof(VehicleManager::maRaceCarHandlingBodyIDs) == 64,
+                      "RigidBodyId is 8 bytes -- the ctor's `std` + `addi r26, r26, 8`, and 43744 + 64 == 43808");
+        static_assert(offsetof(VehicleManager, maRaceCarCrashes)         == 43808,  "maRaceCarCrashes (asm base 43808)");
+        static_assert(offsetof(VehicleManager, maeRaceCarTypes)          == 44192,  "maeRaceCarTypes (asm base 44192; ctor seeds 3 == E_RACE_CAR_TYPE_INACTIVE)");
         static_assert(sizeof(CgsContainers::BitArray<8>)  == 8, "BitArray<8> single 64-bit field (8 bytes)");
         static_assert(sizeof(CgsContainers::BitArray<32>) == 8, "BitArray<32> single 64-bit field (8 bytes)");
         static_assert(offsetof(VehicleManager, mUsedRaceCars)            == 44224,  "mUsedRaceCars (asm +44224)");
-        static_assert(offsetof(VehicleManager, mRaceCarCrashDataAllocBits) == 44232, "mRaceCarCrashDataAllocBits (asm +44232)");
+        static_assert(offsetof(VehicleManager, mUsedRaceCarCrashesList)  == 44232,  "mUsedRaceCarCrashesList (asm +44232)");
+        static_assert(offsetof(VehicleManager, mStuntOffencesManager)    == 44240,  "mStuntOffencesManager (asm StuntOffencesManager::Construct(this + 44240))");
+        static_assert(offsetof(VehicleManager, mRaceCarsAddedForCollision)             == 44712, "mRaceCarsAddedForCollision (asm +44712)");
+        static_assert(offsetof(VehicleManager, mNetworkCarsAddedForCollisionThisFrame) == 44720, "mNetworkCarsAddedForCollisionThisFrame (asm +44720)");
+        static_assert(offsetof(VehicleManager, mNetworkCarsRecievedFirstUpdate)        == 44728, "mNetworkCarsRecievedFirstUpdate (asm +44728)");
         static_assert(offsetof(VehicleManager, maRaceCarEntityIdRemap)   == 148128, "maRaceCarEntityIdRemap (asm base 148128)");
+        static_assert(offsetof(VehicleManager, mDiscardedContacts)       == 160672, "mDiscardedContacts (asm addi r29,r29,0x73A0)");
+        static_assert(offsetof(VehicleManager, mDebugComponent)          == 161968, "mDebugComponent (asm VehicleManagerDebugComponent::Construct(this + 161968, this))");
+        static_assert(offsetof(VehicleManager, maRaceCarDebugComponent)  == 163264, "maRaceCarDebugComponent (asm addi r27,r27,0x7DC0; stride 0x400)");
+        static_assert(offsetof(VehicleManager, mabRaceCarDebugComponentRegistered) == 171456,
+                      "163264 + 8*1024 == 171456, and +8 lands exactly on the asm-proven gate byte at 171464");
         static_assert(offsetof(VehicleManager, mbTakedownsEnabled)       == 171464, "mbTakedownsEnabled (asm +171464)");
         static_assert(offsetof(VehicleManager, mbSlamShuntPhysicsEnabled) == 171465, "mbSlamShuntPhysicsEnabled (asm +171465)");
         static_assert(offsetof(VehicleManager, miAttackerToRecord)       == 171540, "miAttackerToRecord (asm +171540)");
@@ -1433,7 +1461,10 @@ namespace Vehicle
         static_assert(offsetof(VehicleManager, mTakenDownRaceCarsBitArray) == 171736, "mTakenDownRaceCarsBitArray (asm +171736)");
         static_assert(offsetof(VehicleManager, mfGrindingThresholdA)     == 171868, "mfGrindingThresholdA (asm +171868)");
         static_assert(offsetof(VehicleManager, mfGrindingThresholdB)     == 171900, "mfGrindingThresholdB (asm +171900)");
+        static_assert(offsetof(VehicleManager, mPlayerAiDriver)          == 171968, "mPlayerAiDriver (asm VehicleDriver::Construct(this + 171968))");
         static_assert(offsetof(VehicleManager, mePlayerActiveRaceCarIndex) == 172204, "mePlayerActiveRaceCarIndex (DWARF/asm +172204)");
+        static_assert(offsetof(VehicleManager, mCameraMatrix)            == 172240, "mCameraMatrix (asm addi r11,r11,-0x5F30; 4 x stvx128)");
+        static_assert(offsetof(VehicleManager, mCameraMatrix) % 16 == 0, "Matrix44Affine must land 16-aligned with no compiler-inserted padding");
         static_assert(offsetof(VehicleManager, mbSuppressPlayerCrash)    == 172306, "mbSuppressPlayerCrash (asm +172306)");
         static_assert(offsetof(VehicleManager, mbSuppressIfAlreadyCrashState1) == 172307, "mbSuppressIfAlreadyCrashState1 (asm +172307)");
         static_assert(offsetof(VehicleManager, mbHornTakedownEnabled)    == 172311, "mbHornTakedownEnabled (asm +172311)");
