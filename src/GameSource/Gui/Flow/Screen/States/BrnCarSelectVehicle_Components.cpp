@@ -81,16 +81,12 @@ namespace BrnGui
         SetCarSelectorComponent();
         CarSelectMain::SetupCarNameComponent(mCurrentSetupInfo.mCarId);
 
-        // The manufacturer badge. ⚠️ SUBSTITUTION, flagged: the X360 re-fetches the list as
+        // The manufacturer badge. The console's re-fetch, RESTORED 2026-08-02: the X360 reads
         // mpGuiCache->GetWorldDataController()->GetVehicleList() (its inlined
-        // mpWorldDataController assert is BrnGuiCache.h:2324). That is provably the SAME
-        // pointer as the latched mpVehicleList -- CarSelectMain::UpdateGuiCache assigns
-        // mpVehicleList from exactly that expression -- and on this build the re-fetch would
-        // fire GuiCache's own "mpWorldDataController" assert (the pointer is never populated;
-        // see the PC-BUILD GUARD note in BrnCarSelectVehicle.h), and a dev assert BLOCKS the
-        // sim. Restore the re-fetch when the GUI WorldDataController lands.
-        if (mpVehicleList != 0)
-            mManufacturerLogo.Set(mpVehicleList, mCurrentSetupInfo.mCarId);
+        // mpWorldDataController assert is BrnGuiCache.h:2324), which is the same pointer
+        // CarSelectMain::UpdateGuiCache latches into mpVehicleList.
+        mManufacturerLogo.Set(mpGuiCache->GetWorldDataController()->GetVehicleList(),
+                              mCurrentSetupInfo.mCarId);
 
         SetupCarsUnlockedTextComponent();
 
@@ -168,12 +164,9 @@ namespace BrnGui
     // behaviour of the shipped build is exactly this: the asserts fire, nothing else changes.
     void CarSelectVehicle::SetupMenuComponents()
     {
-        // cpp:540 -- ⚠️ PC-BUILD GUARD, see "PC-BUILD GUARDS" in BrnCarSelectVehicle.h. The
-        // console asserts mpVehicleList here; on this build the list is legitimately absent
-        // (the GUI WorldDataController is unreconstructed) and a dev assert BLOCKS the sim,
-        // so the bail replaces it. Restore the assert with the list.
-        if (mpVehicleList == 0)
-            return;
+        // cpp:540 -- the console's assert, RESTORED 2026-08-02 (the LIST guard that stood here
+        // is retired with the WorldDataController; see BrnCarSelectVehicle.h).
+        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:540
 
         CgsID       laCarIds[KI_MAX_SELECTABLE_CARS];
         const char* lapacCarNames[KI_MAX_SELECTABLE_CARS];
@@ -210,9 +203,8 @@ namespace BrnGui
     // the ids and the row texts are pushed row by row in the loop below.
     void CarSelectVehicle::SetCarSelectorComponent()
     {
-        // cpp:441 -- ⚠️ PC-BUILD GUARD (same as SetupMenuComponents above).
-        if (mpVehicleList == 0)
-            return;
+        // cpp:441 -- the console's assert, RESTORED 2026-08-02 (LIST guard retired).
+        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:441
 
         const s32 liNumCars = gsiNumCarouselCars;
 
@@ -227,7 +219,9 @@ namespace BrnGui
             const BrnResource::VehicleListEntry* lpVehicleData =
                 mpVehicleList->GetVehicleData(maSelectedCars[liCar]);
 
-            // ⚠️ PC-BUILD GUARD -- see "PC-BUILD GUARDS" in BrnCarSelectVehicle.h.
+            // ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h) -- the console dereferences
+            // the lookup result unchecked. STAYS until the real 406/565 producers land: the
+            // ids in maSelectedCars come from a stand-in publisher.
             if (lpVehicleData == 0)
                 continue;
 
@@ -244,8 +238,8 @@ namespace BrnGui
         const BrnResource::VehicleListEntry* lpCurrentData =
             mpVehicleList->GetVehicleData(mCurrentSetupInfo.mCarId);
 
-        // ⚠️ PC-BUILD GUARD -- see "PC-BUILD GUARDS" in BrnCarSelectVehicle.h. The console
-        // dereferences lpCurrentData unconditionally on the next line.
+        // ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h). The console dereferences
+        // lpCurrentData unconditionally on the next line.
         if (lpCurrentData != 0)
         {
             const u8 luLiveryType = lpCurrentData->GetLiveryType();
@@ -268,27 +262,22 @@ namespace BrnGui
     {
         CGS_ASSERT(mpGuiCache != 0, "lpGuiCache");   // cpp:1125
 
-        // ⚠️ SAME FLAGGED SUBSTITUTION as SetupComponents' badge line above: the X360 reads
-        // mpGuiCache->GetWorldDataController()->GetVehicleList() here, which is the same
-        // pointer CarSelectMain::UpdateGuiCache latched into mpVehicleList.
-        const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
-
-        if (lpVehicleList == 0)
-        {
-            // cpp:1128 (streamed form). ⚠️ The console asserts here; on this build the list
-            // is legitimately absent until the GUI WorldDataController lands, and a dev
-            // assert BLOCKS the sim -- so the bail is kept and the assert is not raised.
-            return;
-        }
+        // The console's own re-fetch, RESTORED 2026-08-02: the X360 reads
+        // mpGuiCache->GetWorldDataController()->GetVehicleList() here (its inlined
+        // "mpWorldDataController" assert is BrnGuiCache.h:2324). Now that the controller is
+        // populated the substitution that read the latched mpVehicleList is retired.
+        const BrnResource::VehicleList* lpVehicleList =
+            mpGuiCache->GetWorldDataController()->GetVehicleList();
+        CGS_ASSERT(lpVehicleList != 0, "mpVehicleList");   // cpp:1128 (streamed form)
 
         const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lpSetupInfo->mCarId);
         const BrnResource::VehicleListEntry* lpVehicleData =
             (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
 
-        // ⚠️ PC-BUILD GUARD -- see "PC-BUILD GUARDS" in BrnCarSelectVehicle.h. The console
-        // dereferences lpVehicleData unconditionally from here on (it has no assert at all
-        // on this pointer), which it can afford because the car it is handed is always a
-        // live VehicleList id.
+        // ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h). The console dereferences
+        // lpVehicleData unconditionally from here on (it has no assert at all on this
+        // pointer), which it can afford because the car it is handed is always a live
+        // VehicleList id.
         if (lpVehicleData == 0)
             return;
 
@@ -345,9 +334,9 @@ namespace BrnGui
     // bound and the rest stay empty.
     void CarSelectVehicle::SetCarouselComponent(CgsID lCarId)
     {
-        // cpp:1191 -- the console asserts mpVehicleList here AND guards the whole body on it
-        // (`lwz 0x28C / beq skip`), so the bail is the console's own; only the assert is
-        // suppressed. ⚠️ PC-BUILD GUARD, see BrnCarSelectVehicle.h.
+        // cpp:1191 -- THE CONSOLE'S OWN guard: it asserts mpVehicleList AND gates the whole
+        // body on it (`lwz 0x28C / beq skip`). Both restored (this one was never a PC guard).
+        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:1191
         if (mpVehicleList == 0)
             return;
 

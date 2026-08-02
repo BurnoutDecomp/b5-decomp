@@ -140,8 +140,27 @@ namespace BrnGui
         const BrnResource::VehicleListEntry* lpVehicleData =
             (liVehicleIndex < 0) ? nullptr : lpVehicleList->GetVehicleData(liVehicleIndex);
 
-        // Prefer the parent car's id for the badge lookup when one is set. The X360 reads
-        // entry+0x08 UNCONDITIONALLY (`ld r11,8(r3)`, no null guard before it); mirror that.
+        // ⚠️ MARKED DEVIATION (2026-08-02, and it is not theoretical): the X360 reads
+        // entry+0x08 UNCONDITIONALLY on the next line (`ld r11,8(r3)`, no null guard before
+        // it), which it can afford because every caller hands it a live VehicleList id. On
+        // this build the id comes from CarSelectMain::mCurrentSetupInfo.mCarId, which
+        // CarSelectMain::Construct seeds to (CgsID)-1 and which only becomes real when
+        // BrnGameModule::PublishCarSelectionToGui -- a flagged STAND-IN for the console's
+        // action-182/406 producer -- has published. The moment the car-select screen stopped
+        // bailing on a null VehicleList this AV'd for real: WER fault offset 0x59A70 on the
+        // 0x6a6eab6e build, which resolves through Burnout_PC.map to the ICF fold of
+        // `mov rax,[rcx+8] / ret` shared by VehicleListEntry::GetParentId, and a byte-scan of
+        // .text for `E8 rel32 -> 0x59A70` puts ManufacturersIcon::Set+0x46 in the caller set.
+        // Bailing (no badge) is what the console shows for an unmapped car anyway -- the
+        // `lbIconHasBeenSet == false` arm below hides the badge. DELETE-WHEN the real
+        // event-406/565 producer lands and mCurrentSetupInfo.mCarId is always a live id.
+        if (lpVehicleData == 0)
+        {
+            AddOutputAptViewState("apt_manufacturer", "invisible", false);
+            return;
+        }
+
+        // Prefer the parent car's id for the badge lookup when one is set.
         const CgsID lParentId = lpVehicleData->GetParentId();
         if (lParentId != 0)
             lConvertId = lParentId;

@@ -10,6 +10,12 @@
 #include "SharedClasses/Trigger/BrnGenericRegion.h"                   // BrnTrigger::GenericRegion (GetId / GetBoxRegion)
 #include "SharedClasses/Trigger/BrnRegion.h"                          // BrnTrigger::BoxRegion (region copy)
 #include "GameSource/GameState/BrnGameStateTypes.h"                   // BrnGameState::LandmarkIndex (operator s32)
+#include "GameSource/Resource/BrnGameDataModuleIO.h"                  // BrnResource::GameDataIO::InputBuffer
+#include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"     // RequestInterface<32768>::GetVehicleList / GetFreeburnChallengeList
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"     // CgsResource::ID::HashString
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // AcquireResourceRequest / AcquireResourceResponse
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"           // GameDataAssetEvent (the GET reply record)
 
 // BrnGui::WorldDataController -- readiness accessors reconstructed from BURNOUT_X360_ARTIST.XEX.
 // Each asserts the controller has reached the ready state (the X360 compares meState against 11 /
@@ -19,6 +25,213 @@
 
 namespace BrnGui
 {
+
+// ================================================================================================
+// THE ACQUISITION STATE MACHINE (X360 0x82516770) -- what actually populates this object.
+//
+// Every resource the GUI reads about the world arrives through the GAME DATA request queue, i.e.
+// `lpGameDataInput->GetRequestInterface()`, and every reply lands in THIS object's mReceiverQueue
+// (each request carries &mReceiverQueue as its reply target). Two request shapes are used:
+//
+//   * an AcquireResourceRequest (queue id 4, 24 bytes) for the two resources looked up BY NAME
+//     HASH -- "TriggerData" (eventId 1) and "CarColours" (eventId 0). GameDataModule::Update's
+//     drain loop passes every id < 26 STRAIGHT THROUGH to the resource module's own queue
+//     (X360 `if (i >= 26) ProcessGameDataEvent(...) else resourceIn->GetResourceQueue()->
+//     AddEvent(...)`), so the pool answers these directly with an AcquireResourceResponse (id 4)
+//     whose {mpResourceMemory, mpSourceEntry} pair IS a ResourceHandle -- the console hands
+//     `payload + 0x18` straight to BaseResourcePtr::CreateFromHandle.
+//   * a typed GameData GET (queue id 49) for the two LIST resources -- RequestInterface<32768>::
+//     GetVehicleList (eventId 1) and ::GetFreeburnChallengeList (eventId 1). GameDataModule
+//     answers those from its own resident tables (ProcessGetVehicleListRequest replies with
+//     &GameDataModule::mVehicleList), and the console reads the pointer out of the reply's
+//     mHandle.mpResourceMemory -- the X360 `lwz r11, 0x20(payload) / stw r11, 0x464(this)`.
+//     This is the SAME reply GameStateModule::ReceiveListResource consumes for its own
+//     mpVehicleList, so both consumers end up holding the identical resident table.
+//
+// Each stage is resumable: the machine issues its request, advances meState, and returns false
+// while its reply has not arrived. The console's caller (GuiModule::Prepare stage 14) re-enters
+// it every pass until it returns true.
+//
+// ⚠️ TWO STAGES CANNOT COMPLETE ON THIS BUILD, and they do so by the console's own mechanism --
+// an outstanding request whose producer never answers, which parks the machine in its ACQUIRING
+// arm without spinning (the arm only re-checks the queue; it does not re-issue):
+//   * PREPARING_ACQUIRING_PROGRESSION waits on the "CarColours" acquire. GameStateModule::Prepare
+//     documents the same resource as `[deferred]` at its own stage 11.
+//   * PREPARING_ACQUIRING_STREET_DATA waits on GetFreeburnChallengeList, which
+//     GameDataModule::ProcessGetGameDataEvent routes to DeferredGameDataRequest ("CL__").
+// So meState settles at PREPARING_ACQUIRING_PROGRESSION and the controller never reaches
+// WFPLAYERCARCOLOURS. That is correct behaviour for the missing producers, and it does NOT
+// affect the car-select screen: GetVehicleList()/GetFreeburnChallengeList() are the only two
+// accessors the X360 does NOT gate on meState (0x824F3AF0/0x824F3AF8 are bare returns), and the
+// vehicle list is bound two stages EARLIER. The readiness-gated accessors (landmarks, events,
+// colour palettes) will assert if called before those two producers land -- which is the console's
+// own contract, not a substitution.
+// ================================================================================================
+
+// X360-inlined in GuiModule::Construct @0x82518028 (stores at guiModule+307836..+309028).
+void WorldDataController::Construct()
+{
+    meState = E_WORLDDATACONTROLLERSTATE_CONSTRUCTED;   // X360 `*(gm + 307836) = 1`
+    mReceiverQueue.Construct();                         // capacity 1024 / alignment 16, then Clear
+    miResourceCount  = 0;
+    mpVehicleList    = 0;                               // X360 `*(gm + 308960) = 0`
+    mpChallengeList  = 0;                               // X360 `*(gm + 309028) = 0`
+}
+
+namespace
+{
+    // The console's two inlined receiver-queue reads, factored so each stage reads the same way it
+    // does on the X360: `lpEvent = mReceiverQueue.mpBuffer + miStartOffset + 8` with the two
+    // asserts around it. Returns the payload (or NULL on an empty queue).
+    const CgsModule::Event* PeekFirstPayload(const CgsModule::BaseEventReceiverQueue& lrQueue)
+    {
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        lrQueue.GetFirstEvent(&lpEvent, &liSize);
+        return lpEvent;
+    }
+}
+
+// X360 0x82516770. The resumable acquire machine. Line numbers in the asserts are the console's
+// baked BrnGuiWorldDataController.cpp lines (102/110/113/140/147/152/184/188/214/221/226/243).
+bool WorldDataController::Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+{
+    switch (meState)
+    {
+    case E_WORLDDATACONTROLLERSTATE_CONSTRUCTED:
+        meState = E_WORLDDATACONTROLLERSTATE_CONSTRUCTED;
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_TRIGGERS:
+    {
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_TRIGGERS;
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = 1;
+        lRequest.miPoolId  = 5;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>("TriggerData")))));
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+            static_cast<s32>(sizeof(lRequest)));
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_TRIGGERS:
+    {
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_TRIGGERS;
+        if (mReceiverQueue.GetLength() == 0)
+            return false;
+        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:102
+
+        const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
+        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:110
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+        CGS_ASSERT(lpAcquire != 0, "NULL != lpAcquire");                                  // cpp:113
+        if (lpAcquire != 0)
+        {
+            // X360 `CreateFromHandle(this + 0x424, payload + 0x18)`: the response's trailing
+            // {mpResourceMemory, mpSourceEntry} pair IS a ResourceHandle (same two members, same
+            // order). Spelled through ResourcePtr<T>::operator=(const ResourceHandle&), which is
+            // literally that one CreateFromHandle call (the protected base method's public face).
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+            lHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
+            mpTriggerData = lHandle;
+        }
+        mReceiverQueue.Clear();
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_VEHICLES:
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_VEHICLES;
+        lpGameDataInput->GetRequestInterface()->GetVehicleList(&mReceiverQueue, 1);
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_VEHICLES:
+    {
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_VEHICLES;
+        if (mReceiverQueue.GetLength() == 0)
+            return false;
+        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:140
+
+        const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
+        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:147
+        const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
+            reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
+        // X360 `if (*payload != 1)` -- the echoed miEventId, which GetVehicleList set to 1.
+        CGS_ASSERT(lpReply != 0 && lpReply->miEventId == 1, "Invalid event id received\n");  // cpp:152
+        if (lpReply != 0)
+            mpVehicleList = static_cast<const BrnResource::VehicleList*>(lpReply->mHandle.mpResourceMemory);
+        mReceiverQueue.Clear();
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_PROGRESSION:
+    {
+        miResourceCount = 1;                       // X360 `stw r27, 0x420(r28)` (r27 == 1)
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_PROGRESSION;
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        lRequest.mpUser    = &mReceiverQueue;
+        lRequest.miEventId = 0;                    // X360 `li r10, 0` (NOT the triggers' 1)
+        lRequest.miPoolId  = 5;
+        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
+            CgsResource::ID::HashString(reinterpret_cast<const u8*>("CarColours")))));
+        lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 4,
+            static_cast<s32>(sizeof(lRequest)));
+        mReceiverQueue.Clear();
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_PROGRESSION:
+    {
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_PROGRESSION;
+        // X360 `if (mReceiverQueue.GetLength() < miResourceCount) return 0;`
+        if (mReceiverQueue.GetLength() < miResourceCount)
+            return false;
+
+        const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
+        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:184
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+        CGS_ASSERT(lpAcquire != 0, "NULL != lpAcquire");                                  // cpp:188
+        if (lpAcquire != 0)
+        {
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+            lHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
+            mpPlayerCarColours = lHandle;
+        }
+        mReceiverQueue.Clear();
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_STREET_DATA:
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_FOR_STREET_DATA;
+        lpGameDataInput->GetRequestInterface()->GetFreeburnChallengeList(&mReceiverQueue, 1);
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_STREET_DATA:
+    {
+        meState = E_WORLDDATACONTROLLERSTATE_PREPARING_ACQUIRING_STREET_DATA;
+        if (mReceiverQueue.GetLength() == 0)
+            return false;
+        CGS_ASSERT(mReceiverQueue.GetLength() == 1, "1 == mReceiverQueue.GetLength()");   // cpp:214
+
+        const CgsModule::Event* lpEvent = PeekFirstPayload(mReceiverQueue);
+        CGS_ASSERT(lpEvent != 0, "NULL != lpEvent");                                      // cpp:221
+        const BrnResource::GameDataIO::GameDataAssetEvent* lpReply =
+            reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>(lpEvent);
+        CGS_ASSERT(lpReply != 0 && lpReply->miEventId == 1, "Invalid event id received\n");  // cpp:226
+        if (lpReply != 0)
+            mpChallengeList = static_cast<const ChallengeList*>(lpReply->mHandle.mpResourceMemory);
+        mReceiverQueue.Clear();
+    }
+        // fall through
+    case E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS:
+        meState = E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS;
+        return true;
+
+    default:
+        // X360 cpp:243, streamed: "Unhandled state [" << meState << "] in WorldDataController::Prepare"
+        CGS_ASSERT(false, "Unhandled state in WorldDataController::Prepare");
+        return false;
+    }
+}
 
 // X360 0x8248E6D8. Total landmark count in the loaded trigger data (TriggerData::miLandmarkCount @+0x34).
 s32 WorldDataController::GetTotalNumberOfLandmarks() const

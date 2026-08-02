@@ -19,6 +19,7 @@
 #include "GameSource/Gui/BrnGuiProfile.h"                               // BrnGui::ProfileManager (module-owned; REAL)
 #include "GameShared/GameClasses/Gui/CgsGuideIntegration.h"             // CgsGui::SystemUserProfile (module-owned; X360 +949152)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // BrnGui::GuiCache (the flow states' cache)
+#include "GameSource/Gui/BrnGuiWorldDataController.h"                   // BrnGui::WorldDataController (module-owned; X360 +307836)
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"     // module-owned permanent FLApt components
 
 // BrnGui::GuiModule -- the GUI module (a dispatched CgsModule, like BrnRendererModule). The X360 module
@@ -111,6 +112,36 @@ namespace BrnGui
         ProfileManager&       GetProfileManager()       { return mProfileManager; }
         const ProfileManager& GetProfileManager() const { return mProfileManager; }
 
+        // X360 GuiModule::Prepare @0x82518D68 STAGE 14: `if (!WorldDataController::Prepare(
+        // guiModule + 307836, gameDataInputBuffer)) return 0;`. The controller is a GuiModule
+        // member (Construct binds it into the cache) and its acquire machine talks to the
+        // GAME DATA request queue, so it can only be pumped where that buffer pair is live.
+        // FLAG PC drive point: the console's module scheduler hands GuiModule::Prepare the
+        // GameData input/output pair; on PC the only place that pair exists and is pumped is
+        // BrnGameModule::ResourceUpdateThread (the single-threaded stand-in for the console's
+        // resource thread), which calls this immediately before GameDataModule::Update -- the
+        // same "stage the request, then pump" order the console's Prepare has. Returns the
+        // machine's own done flag.
+        bool PrepareWorldData(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
+
+        // True once PrepareWorldData has reported done (or has parked on a request no PC
+        // producer answers -- see the banner in BrnGuiWorldDataController.cpp). The driver
+        // reads it only for its one-shot diagnostic.
+        const WorldDataController& GetWorldDataController() const { return mWorldDataController; }
+
+        // Is the SCREEN flow's live state currently subscribed to liEventId? The observer
+        // table is the module's own record of the type-34/35 registration records each state
+        // posts from OnEnter (RegisterForEvents), so this is the exact "a state is listening
+        // for this event right now" signal -- and it goes false again when that state leaves.
+        // Read by the game module's GameState->GUI car-select stand-in, which must not publish
+        // into a queue nobody is draining. FLAG PC bring-up: on the console the producers are
+        // driven by the game-state side, which never needs to ask.
+        bool IsScreenFlowObserving(s32 liEventId) const
+        {
+            return liEventId >= 0 && liEventId < KI_MAX_OBSERVED_EVENT_ID
+                && mabObservedEventIds[E_GUIFLOW_SCREEN][liEventId];
+        }
+
     private:
         // Dispatch this sub-step's inbound GUI events (the real GuiModule::Update event
         // switch @0x82527A58: 144 -> RunFsm, 481 -> HandleHudStateLoadComplete + forward,
@@ -169,6 +200,10 @@ namespace BrnGui
         AlwaysAvailableComponentsManager mAlwaysAvailableComponentsManager;
 
         // ---- the real flow-controller chain (X360 GuiModule members) --------------------
+        // X360 +307836 -- the GUI-side world/progression/vehicle data front-end. Construct
+        // Constructs it and binds it into the cache (SetWorldDataController); Prepare stage 14
+        // runs its acquire machine. It MUST outlive every flow state that resolves a car.
+        WorldDataController mWorldDataController;   // X360 +307836
         GuiCache          mGuiCache;        // X360 +1005376 (the flow states' cache; event-64 payload)
         BrnScreenFlow     mScreenFlow;      // X360 mScreenFlow (SCREEN = E_GUIFLOW_SCREEN, the front-end)
         BrnHudFlow        mHudFlow;         // X360 +638904-adjacent flow set (HUD = E_GUIFLOW_HUD)

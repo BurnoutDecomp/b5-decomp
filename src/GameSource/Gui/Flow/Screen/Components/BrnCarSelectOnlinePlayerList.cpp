@@ -41,25 +41,13 @@ namespace BrnGui
             maPlayerRows[liRow].Construct(lacRowName, mpStateInterface, GetName());
         }
 
-        // ⚠️ FLAGGED SUBSTITUTION (car-select wave 2026-08-02). The X360 reaches the list as
-        // GetAccessPointers()->GetGuiCache()->GetWorldDataController()->GetVehicleList() and
-        // asserts the result ("mpVehicleList != NULL", cpp:62). NOTHING ON THIS BUILD
-        // POPULATES GuiCache::mpWorldDataController, and both the cache accessor's assert and
-        // this one are dev asserts that BLOCK the sim -- so the fetch goes through the
-        // assert-free GuiCache::PeekWorldDataController and the null result is accepted.
-        // Restore the console form (and the assert) with the GUI WorldDataController.
-        mpVehicleList = 0;
-        CgsGui::GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
-        if (lpAccessPointers != 0)
-        {
-            GuiCache* lpGuiCache = lpAccessPointers->GetGuiCache();
-            if (lpGuiCache != 0)
-            {
-                WorldDataController* lpWorldData = lpGuiCache->PeekWorldDataController();
-                if (lpWorldData != 0)
-                    mpVehicleList = lpWorldData->GetVehicleList();
-            }
-        }
+        // The console form, restored 2026-08-02 (the SUBSTITUTION that stood here while
+        // GuiCache::mpWorldDataController had no producer is retired): the X360 reaches the list
+        // as GetAccessPointers()->GetGuiCache()->GetWorldDataController()->GetVehicleList() and
+        // asserts the result (cpp:62).
+        mpVehicleList = mpStateInterface->GetAccessPointers()
+                            ->GetGuiCache()->GetWorldDataController()->GetVehicleList();
+        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList != NULL");   // cpp:62
     }
 
     // @ 0x82482950
