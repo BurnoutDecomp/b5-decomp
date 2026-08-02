@@ -161,10 +161,20 @@ public:
     //   `virtual void SetupTweaker(Tweaker&)` (.cpp:314). Neither is declared here, so both
     //   vtable slots keep the base's defaults (Update returns true and leaves the camera
     //   untouched; SetupTweaker does nothing). That is a DOCUMENTED GAP, not a fabrication --
-    //   the alternative would be inventing a camera rig. Nothing dispatches slot 2 today
-    //   anyway: MainDirector::UpdateCameraBehavioursPostScene @0x8224FD30 (the only caller of
-    //   UpdateAllBehaviours) is itself still gated.
-    //   DELETE-WHEN: @0x82226778 is transcribed.
+    //   the alternative would be inventing a camera rig.
+    //
+    // ⚠️ THE CLOSING CLAUSE OF THIS FLAG WAS WRONG (retired 2026-08-02). It read: "Nothing
+    //   dispatches slot 2 today anyway: MainDirector::UpdateCameraBehavioursPostScene
+    //   @0x8224FD30 (the only caller of UpdateAllBehaviours) is itself still gated." Both
+    //   clauses are false since the 2026-08-01 PreScene/PostScene split -- `BrnMainDirector.cpp
+    //   :1153` calls UpdateAllBehaviours from UpdateCameraBehavioursPreScene @0x82255318,
+    //   un-gated. SLOT 2 IS DISPATCHED. This behaviour is inert for the same reason its
+    //   external sibling is: its parameter block is never validated. The full seven-link chain
+    //   (shared by both gameplay cameras, since one SharedCameraContainer::Prepare binds them
+    //   together and one MainDirector::ProcessNewVehicleEvents seeds them together) is written
+    //   out in BrnBehaviourGameplayExternal.h's matching FLAG -- read it there.
+    //   DELETE-WHEN: @0x82226778 is transcribed AND the parameter chain reaches
+    //   Parameters::Set.
 
 private:
     // ---- layout (DWARF h:88..:100; every offset asm-pinned -- see the file banner) -------

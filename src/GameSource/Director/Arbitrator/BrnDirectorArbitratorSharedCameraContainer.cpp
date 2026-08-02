@@ -73,9 +73,31 @@ namespace BrnDirector
         // them on their Construct() defaults. The ALLOCATIONS above are the part that matters
         // structurally (the handles become valid, so SetUpdatesDuringPause's IsAllocated assert
         // below holds); only the parameter BIND is skipped.
-        // Nothing on the DJ fly-by path reads either camera -- ArbStateAttractMode drives its
-        // own BehaviourRoadRunner.
-        // DELETE-WHEN: BehaviourParameterBank gets a homed layout + TU (then restore verbatim).
+        // ⚠️ THE OLD CLOSING SENTENCE OF THIS NOTE HAS EXPIRED (retired 2026-08-02). It read
+        // "Nothing on the DJ fly-by path reads either camera -- ArbStateAttractMode drives its
+        // own BehaviourRoadRunner." True when written, false now: ArbStateCarSelect's
+        // E_STATE_CHANGING_TO_ROAMING publishes GetSelectedGameplayCamera() (below), i.e.
+        // mGameplayExternal's produced camera, and the build sits in that state after car
+        // select. So this bind IS on the live path today -- it is just not the only missing
+        // link, and restoring it alone changes nothing.
+        //
+        // ⭐ WHAT RESTORING IT ACTUALLY NEEDS (VERIFIED 2026-08-02): a bank block whose
+        // Parameters::mbIsValid is TRUE. `BehaviourParameterBank::Construct @0x8223DC90` forms
+        // `addi r11, r31, 0x2488` (the external block) / `+0x2538` (the bumper block) and
+        // inlines each Parameters::Construct over it -- and those stores include
+        // `stb r30(=0), 0xAC(r11)`, i.e. the bank DELIBERATELY leaves mbIsValid false. The only
+        // writers of `true` are BehaviourGameplayExternal/Bumper::Parameters::Set, whose three
+        // X360 callers are MainDirector::ProcessNewVehicleEvents @0x8221A6B0,
+        // MainDirector::UpdateAttribSys @0x8221AFD0 and ReplayDirector::PreSceneQueryUpdate
+        // @0x8225BD28 -- all three declaration-only here, and the first two are fed by a
+        // NewVehicleEvent queue whose producer chain
+        // (RaceCarEntityModule::ProcessCreateVehicleEvents @0x822FF620 ->
+        // BrnDirectorVehicleInputInterface::NewVehicle @0x822CBA90 -> BridgeWorldToDirector
+        // step 6) is missing/dropped on this build. So a homed bank layout is NECESSARY BUT NOT
+        // SUFFICIENT: without Set, both blocks stay invalid and both Updates no-op on their
+        // first branch. Full map in BrnBehaviourGameplayExternal.h's Update FLAG.
+        // DELETE-WHEN: BehaviourParameterBank gets a homed layout + TU (then restore verbatim)
+        // AND Parameters::Set has a live caller.
 
         // Both shared gameplay cameras keep updating while the game is paused (asserts each
         // handle is allocated -- BrnBehaviourManager.h:676).
