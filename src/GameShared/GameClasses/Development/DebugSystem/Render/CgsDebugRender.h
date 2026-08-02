@@ -92,6 +92,13 @@ namespace CgsDev
         //       float* + RGBA + two Vector4 corners) is asm-derived from the call.
         void DrawBox(const f32* lpTransform, RGBA lColour, Vector4 lv4MinCorner, Vector4 lv4MaxCorner);
 
+        // FLAG (header grow 2026-08-02): DrawLine (3D) added for
+        // BehaviourGameplayExternal::Update's debug-render arm (.cpp:370, X360 @0x82241524).
+        // ARGUMENT SHAPE IS ASM-DERIVED and matches DrawSolidQuad's above: the packed colour
+        // arrives in the GPR slot (r4) and the two world-space endpoints in v1/v2. No DWARF
+        // here; DECLARATION-ONLY, the body is the Debug3D render follow-on.
+        void DrawLine(RGBA lColour, Vector3 lv3From, Vector3 lv3To);
+
         // FLAG (header grow): DrawAxis + DrawSolidQuad added for BehaviourRig::Update.
         // DrawAxis: draws the 3 coordinate axes of a world-space transform (asm @BehaviourRig::Update).
         void DrawAxis(const f32* lpTransform);

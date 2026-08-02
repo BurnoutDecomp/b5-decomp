@@ -164,6 +164,32 @@ namespace vpu
     // error is irrelevant to the PC parity build, so it reduces to the exact Normalize above.
     inline Vector3 NormalizeFast(Vector3 lrVector) { return Normalize(lrVector); }
 
+    // ADDITIVE GROW 2026-08-02 (consumed by BehaviourGameplayExternal::Update .cpp:207):
+    // the SDK's NormalizeReturnMagnitude(v, &out) -- ONE rsqrt pipeline that publishes BOTH
+    // the unit vector (through the out-parameter) and the magnitude (as the return value).
+    // DecFIGS names it -- detail/vector3_operation_inline.h:207 -- and the X360 twin proves
+    // the double publish: @0x82240924 `vmulfp128 v0, v0, v13` is |v|^2 * rsqrt (the LENGTH)
+    // while @0x82240928 `vmulfp128 v127, v12, v13` is v * rsqrt (the DIRECTION), both off the
+    // same refined estimate, and the zero-length `vsel128` guard at 0x8224092C substitutes
+    // ZERO for the magnitude. Reproduced here as the exact scalar form, exactly as the
+    // Normalize above already is.
+    // ⚠️ ON A ZERO-LENGTH INPUT the console publishes a zero magnitude AND a zero direction
+    //   (both fall out of the same vsel), so the guard is reproduced on both outputs.
+    inline float NormalizeReturnMagnitude(Vector3 lrVector, Vector3& lrUnitOut)
+    {
+        const float lfMagnitudeSquared = MagnitudeSquared(lrVector);
+        if (lfMagnitudeSquared <= 0.0f)
+        {
+            lrUnitOut = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            return 0.0f;
+        }
+
+        const float lfInverseMagnitude = 1.0f / std::sqrt(lfMagnitudeSquared);
+        lrUnitOut = Vector3{ lrVector.x * lfInverseMagnitude, lrVector.y * lfInverseMagnitude,
+                             lrVector.z * lfInverseMagnitude, lrVector.w * lfInverseMagnitude };
+        return lfMagnitudeSquared * lfInverseMagnitude;
+    }
+
     // ADDITIVE GROW (consumed by BrnLooker.cpp): the SDK's SqrtFast(s) -- a vrsqrtefp-based
     // reciprocal-sqrt estimate refined to sqrt. Modelled as the exact scalar std::sqrt
     // (broadcast across the lanes by the VecFloat alias); negative/zero inputs return 0,

@@ -221,8 +221,16 @@ public:
     CollisionPolicyAttachedToVehicle&       GetVehicleCollisionPolicy()       { return mCollisionPolicy; }
     const CollisionPolicyAttachedToVehicle& GetVehicleCollisionPolicy() const { return mCollisionPolicy; }
 
-    // FLAG (not transcribed): the DWARF also declares `virtual bool Update(Camera&, const
-    //   BehaviourSharedInfo&)` (.cpp:188, X360 @0x82240828) and `virtual void
+    // ⭐⭐⭐ @0x82240828 / PS3 @0x6985C (.cpp:188..:561) -- DECLARED + BODIED 2026-08-02
+    // (update-transcribe wave). THE CHASE CAMERA'S PER-FRAME BODY: 1792 X360 asm lines,
+    // 91 DecFIGS own-line statements, all eight helpers, both shakes and the FOV publish.
+    // The statement map, the corrections to the map that used to sit in this FLAG, and the
+    // three flagged omissions are in the .cpp banner -- read that before changing anything.
+    virtual bool Update(Camera& lCamera, const BehaviourSharedInfo& lrSharedInfo);
+    // (argument names are the DWARF's own -- the PS3 export carries `this` / `lCamera` /
+    //  `lrSharedInfo` on the register parameters.)
+
+    // FLAG (not transcribed): the DWARF also declares `virtual void
     //   SetupTweaker(Tweaker&)` (.cpp:148), plus the eight private helpers Update drives --
     //   with the DWARF's own signatures (BehaviourGameplayExternal.h:300..:337):
     //     InterpolateLastPlayerTransform(Matrix44Affine, VecFloat, VecFloat)  @0x82224BF0 .cpp:575
@@ -235,9 +243,8 @@ public:
     //     ApplySlideyEffects(const Parameters&, Matrix44Affine&, Matrix44Affine,
     //                        const BehaviourSharedInfo&)                       @0x822260A8 .cpp:841
     //     UpdateJumping(const BehaviourSharedInfo&, f32, Camera&)              @0x8220EAD0 .cpp:948
-    //   Update is still not declared here, so slots 2 and 8 keep the base's defaults (Update
-    //   returns true and leaves the camera untouched). That is a DOCUMENTED GAP, not a
-    //   fabrication: Update alone is 91 source statements spanning .cpp:188..:561.
+    //   (Update itself IS now declared and bodied -- see above. Only SetupTweaker, slot 8,
+    //   still keeps the base's default.)
     //
     // ⭐⭐ HELPER SCOREBOARD, 2026-08-02 (final-camera wave) -- 8 of 8 BODIED. THE HELPER
     //   CLUSTER IS COMPLETE. ⛔ That does NOT make Update writable -- see the link-closure
@@ -335,24 +342,37 @@ public:
     //          camera transform -- which would have collapsed the chase camera onto the origin
     //          rather than merely dropping a shake.
     //
-    // ⛔⛔ AND UPDATE'S CLOSURE IS **STILL NOT COMPLETE** -- re-walked 2026-08-02 by extracting
-    //   every `bl` target out of @0x82240828 and grepping each for a DEFINITION. Six remain,
-    //   none of them in the shake cluster. DO NOT START Update believing it will link:
-    //     ⛔ CgsDev::DebugRender::DrawBox   (0x822414C0)  -- no definition anywhere
-    //     ⛔ CgsDev::DebugRender::DrawLine  (0x82241524)  -- no definition anywhere
-    //        Both sit in the debug-render arm (a GetRender() pair at 0x822414AC/0x82241514).
-    //        Gate the arm or stub them the way WorldLinkStubs.cpp already does for
-    //        DebugInterface::GetRender -- but decide it deliberately, do not discover it.
-    //     ⛔ sub_821F0FC0 (five sites, each immediately after a CgsDev::StrStream::StrStream)
-    //        -- unidentified; assert-message construction.
-    //     ⛔ sub_82222598 (0x822410BC) -- unidentified, and it is on the LIVE path, not in an
-    //        assert arm: it takes v1 and v2 and returns v1, i.e. a two-vector operation whose
-    //        result is immediately NaN-checked. Identify it before transcribing .cpp:409-ish.
-    //   ⭐ Two of the four unnamed callees are ALREADY identified in this tree, so check the
-    //     committed notes before re-deriving: sub_82203F70 is the Vector3 stream operator
-    //     (named in this very .cpp at :1289/:1373 and in CameraUtils.cpp:372) and sub_821F0F40
-    //     is a Director-local ICF copy of the numeric stream operator
-    //     (BrnBehaviourRenderMetrics.cpp:14).
+    // ⭐⭐ UPDATE'S CLOSURE IS **SETTLED** (2026-08-02, update-transcribe wave). The six
+    //   symbols the previous wave left open are ALL resolved, and FOUR of them needed no new
+    //   code at all. What follows is the disposition of each, because "no definition found"
+    //   was the right observation and the wrong conclusion in four cases out of six:
+    //     ✅ sub_82222598 (0x822410BC) -- it is `Utils::GetSmallestDifferenceBetweenRadAngles
+    //        (Vector3, Vector3)`, ALREADY BODIED AND MOUNTED (Camera/Utils/CameraUtils.cpp).
+    //        Its own asm settles it in nine lines: it homes v1/v2 to the stack, makes THREE
+    //        `bl`s to the SCALAR overload (by name) on lanes x/y/z, and vrlimi128s the three
+    //        results back into lanes 0/1/2. The X360 simply never named the vector overload.
+    //        ⇒ THE ONE "ON THE LIVE PATH" BLOCKER WAS NEVER A BLOCKER.
+    //     ✅ sub_821F0F40 -- `CgsDev::StrStreamBase::operator<<(f32)`, mounted
+    //        (GameShared/.../CgsStrStream.cpp:73). Its body is the PrintMode switch:
+    //        mode 1/2 print "0x%X" (and mode 2 self-clears), otherwise "%f".
+    //     ✅ sub_82203F70 -- `operator<<(StrStreamBase&, Vector3)`, format "(%f, %f, %f)".
+    //     ✅ sub_821F0FC0 -- `operator<<(StrStreamBase&, const Matrix44Affine&)`, format
+    //        "\n(%f, %f, %f, %f)\n(%f, %f, %f, %f)\n(..." over the four rows at +0/+0x10/
+    //        +0x20/+0x30.
+    //        ⭐ NEITHER OF THE LAST TWO IS A LINK DEPENDENCY OF THIS BUILD. They only ever
+    //        appear inside an assert's MESSAGE construction, and this tree's standing
+    //        convention -- already applied by UpdateLooking's three IsValid asserts and by
+    //        CameraUtils::CreateLookAt -- is that CGS_ASSERT takes a plain literal and the
+    //        streamed VALUE is dropped; the predicate is what is transcribed. So the
+    //        operators are identified for the record and deliberately not written.
+    //     ✅ CgsDev::DebugRender::DrawBox / ::DrawLine -- the debug-render arm (.cpp:364/:370)
+    //        is gated on `mbEnableDebugRender` (X360 `lbz r7, 0xB5E(r20)` @0x8224140C then
+    //        `beq` over the WHOLE arm at 0x82241484), a member nothing on this build ever
+    //        raises. The arm is transcribed behind that gate and the two draws are bodied as
+    //        one-shot-logging link stubs beside the existing DrawCircle stub in
+    //        World/WorldLinkStubs.cpp. DrawLine's signature (RGBA first, then the two world
+    //        points in v1/v2) is asm-derived and matches the DrawSolidQuad shape already in
+    //        CgsDebugRender.h.
     //   ✅ Everything else in the `bl` set has a body and is mounted, verified the same way:
     //     the eight helpers, Camera::ValidateTransformWithDebugInfo / ::SetFOV (Camera.cpp),
     //     CameraState::SetFlag/::ClearFlag (BrnCameraState.cpp), Timestep::Get (header inline),
@@ -416,90 +436,37 @@ public:
     //       lrSpring        = Vector3(1,1,1) - lrInverseSpring;
     //   ⚠️ THE OUTPUTS ARE REVERSED RELATIVE TO THE ARGUMENT NAMES: the 4th parameter
     //   (lrSpring) receives `1 - v` and the 5th (lrInverseSpring) receives `v`. Update's only
-    //   call site feeds it (speedMPH, lfTimeStepMod * mfZVelocity, lfTimeStepMod * mfYawDrift).
+    //   call site feeds it (lrSharedInfo.mPlayerInfo.mRaceCarState.mfSpeedMPH,
+    //   mfPitchSpring * lfTimeStepMod, mfYawSpring * lfTimeStepMod).
+    //   ⚠️ CORRECTED 2026-08-02: this line used to read "lfTimeStepMod * mfZVelocity,
+    //   lfTimeStepMod * mfYawDrift" and both members were wrong -- see correction 2 below.
     //
-    //   ---- Update @0x82240828 itself: the statement map that IS settled ------------------
-    //     :190  if (!mpParameters) assert("Updating with no parameters")   -- non-gating
-    //     :192  if (mpParameters->mbIsValid) {                             -- the whole body
-    //     :197  lfTimestep = lrInfo.GetTimestep(GetTimestepType())  -- and the same statement
-    //           raises bit 1 of the camera's own state bit array (`ld/ori 2/std` at
-    //           lrCamera + 0x140, CgsBitArray.h:213 over BrnCameraState.h:114)
-    //     :201  lfTimeStepMod = lfTimestep * 60.0f      (X360 flt_82004C6C, read out of .rdata)
-    //     :207  Normalize(lrInfo.mPlayerInfo.<+0x330, i.e. shared-info +0x390> velocity) with
-    //           a zero-length guard (`vmsum3fp128 v0,v12,v12` then the rsqrt NR pair)
-    //     :226  mRotationController.Update(lfTimestep, lrInfo.mCameraModifier,
-    //                                      lrInfo.mbLookback, lrInfo.mbUseControlPauseBehaviour,
-    //                                      lfMinPitch, lfMaxPitch)   <- ALREADY BODIED
-    //     :235..:240  build a car-velocity frame from lrInfo.GetEyeTarget() (+0x250)
-    //   ⭐ THE :246..:296 TAIL, DECODED 2026-08-02 (final-camera wave) from the DecFIGS
-    //     per-instruction line attribution. This was the second half of that wave's target;
-    //     it lands as a MAP rather than as code because Update still cannot link (see the
-    //     link-closure set). Every line below is one own-line DecFIGS statement:
-    //     :246  if (<shared info +0x4A4, a bool>) {          PS3 0x69BB4 `lbz r0, 0x4A4(r3)`
-    //     :260    lVelocityTransform = SLerp(lFrom, lTo, Min(<blend>, 1))
-    //             ⭐ the rate is the file-scope VecFloat kvfVelocityTransformSlerpSpeed --
-    //             a DecFIGS-NAMED symbol (`_ZN...30kvfVelocityTransformSlerpSpeedE`), and it
-    //             is the SAME dynamically-initialised-BSS shape as the five
-    //             KVF_LAST_PLAYER_TRANSFORM_* constants, so it will read as ZERO in the image
-    //             and must be byte-scanned out of .text (scratchpad\fh_lis.py + fh_dis.py).
-    //             ⚠️ DO NOT take it from the image at face value.
-    //     :261    lVelocityTransform = OrthoNormalize3x3(lVelocityTransform)
-    //     :264    <a SECOND SLerp>, same helper, different pair            PS3 0x69DF4
-    //           }
-    //     :267  reads this->mfYawSpring (+0xB38) and a vector off the shared info
-    //     :269  if (mbSnapToCar) {                            PS3 0x69E44 `lbz 0xB4D` (X360 0xB5D)
-    //     :271    mfCenteringFactor = 0.0f;                   PS3 0x6B4EC `stfs 0xB04`
-    //     :273    mRotationController.Construct();            PS3 0x6B504, the real call
-    //           }
-    //     :277  if (<shared info +0x4AA, a bool>) {           PS3 0x69E84 / 0x6B50C
-    //     :280/:281/:282  copy mLastPlayerTransform's xAxis/yAxis/zAxis rows out to locals
-    //                     (PS3 0x6B4A8: r29 == this+0xA90 == mLastPlayerTransform, X360 +0xAA0)
-    //           }
-    //     :287  InterpolateLastPlayerTransform(...)
-    //     :290  if (lrInfo.mfAbsDriftScale (+0x45C) < 0.1f)
-    //     :292    mfCenteringFactor += (0.0f - mfCenteringFactor) * <rate>
-    //           else
-    //     :296    mfCenteringFactor += (1.0f - mfCenteringFactor) * <rate>
-    //           ⭐ SO UPDATE PRE-SEEDS THE SAME mfCenteringFactor UpdateLooking then drives,
-    //           and the sense is: DRIFTING HARD pushes it to 1, i.e. the rig re-centres onto
-    //           the car. ⭐ The 0.1f threshold is DOUBLY ATTESTED -- PS3 dword_FF2D30 here is
-    //           the same constant ApplySlideyEffects :894 tests mfAbsDriftScale against, and
-    //           the same one UpdateLooking :793 uses as its FOV blend rate (X360 flt_82004014,
-    //           DUMPED 0.1f). Three uses, one value.
-    //     ⚠️ +0x4A4 and +0x4AA are PS3-attested offsets. INFERRED that they carry over to
-    //       X360: mfAbsDriftScale is +0x45C on BOTH builds (this decode and the committed
-    //       ApplySlideyEffects banner), so the two agree in this span -- but that is an
-    //       argument, not a second witness for these two bytes. Re-read them from the X360
-    //       asm before naming them.
-    //     :301  a FUNCTION-LOCAL STATIC `mLastCameraAngles` (Vector3) with a real guard
-    //           variable -- it is per-class, not per-instance, and both gameplay cameras
-    //           share it
-    //     :307  Utils::EulerAnglesZXYFromMatrix44Affine(...)            <- ALREADY BODIED
-    //     :321  ModifyTargetAngles(*mpParameters, lTargetAngles)
-    //     :331  CalcSpringCoeffs(speedMPH, lfTimeStepMod*mfZVelocity, lfTimeStepMod*mfYawDrift,
-    //                            lSpring, lInverseSpring)
-    //     :337  Utils::GetSmallestDifferenceBetweenRadAngles(...)  <- NOT in CameraUtils.h yet
-    //     :397  UpdateLooking(lfFOVInOut, lRotation, lPivot, lCarSpaceOffset, lrAABBox)
-    //     :409  CalculateCameraTransform(...)  (see the argument map above)
-    //     :445  mBoostShake.Update(lrInfo.mpDirectorResourceManager, lfTimestep,
-    //                              ln8ShakeType, lfShakeFrequency, <amplitude>)
-    //           with the file statics ln8ShakeType == 2, lfShakeFrequency == 1.0f and the
-    //           amplitude scaled by 9.0f (X360 flt_82CDAD58/5C/60 read out of .data)
-    //     :453  UpdateJumping(lrInfo, lfTimestep, lrCamera)
-    //     :469..:474  mfImpactShakeFactor = Max(mfImpactShakeFactor,
-    //                     Min(Max(<speed/impact term>, 0), 0.8f));  ApplySlideyEffects(...)
-    //     :498  ApplyJumpEffects(lrCamera, lrInfo)
-    //     :500  mfPitchCoefficient *= kfShakeDropoffFactor
-    //     :505  mImpactShake.Update(matrix, params, *lrInfo.mpRandom,
-    //                               kfJumpParamsImpactShakeMaxAmplitude,
-    //                               kfJumpParamsImpactShakeMaxFreqMul)
-    //     :515  mbLastCarPosInitialised = false ... :520/:522 the FOV publish
-    //   ⇒ ALL EIGHT HELPERS ARE NOW BODIED. The only unknown left inside Update itself is its
-    //     own .cpp:246..:296 branch tail.
-    //   ⛔ FOR THE MISSING EXTERNAL DEPENDENCIES SEE THE LINK-CLOSURE SET NEAR THE TOP OF
-    //     THIS FLAG. The old text here claimed there was exactly ONE (`Utils::
-    //     GetSmallestDifferenceBetweenRadAngles`); that one is now BODIED, and walking every
-    //     callee turned up three more that are not.
+    //   ---- Update @0x82240828 itself ------------------------------------------------------
+    //   ⭐⭐ THE STATEMENT MAP THAT USED TO SIT HERE HAS MOVED INTO THE .cpp BANNER, because
+    //   the function is now BODIED and every line of it was re-derived from the asm on the way
+    //   in rather than copied out of this comment. Doing that overturned FIVE of its claims,
+    //   which is the whole reason the rule exists -- each correction is recorded at the body:
+    //     1. THE X360 LINE OFFSET IS NOT A SINGLE CONSTANT IN THIS FUNCTION. It is DecFIGS+61
+    //        for :190/:209/:217 (X360 asserts 251/270/278) and DecFIGS+74 from :335 onward
+    //        (409/410/412/414/415/422/473/474/485/501/524/550/569/594 -- fourteen exact hits).
+    //        The blanket "+74 for this file" would have mis-anchored every assert in the head.
+    //     2. `CalcSpringCoeffs`'s call site does NOT pass `lfTimeStepMod * mfZVelocity` and
+    //        `lfTimeStepMod * mfYawDrift`. It passes mfPitchSpring (+0xB3C) and mfYawSpring
+    //        (+0xB38), each times lfTimeStepMod -- X360 0x82240F1C..0x82240F38.
+    //     3. `:271` does NOT write mfCenteringFactor. The PS3 offset +0xB04 is X360 +0xB14,
+    //        i.e. **mfDriftScale** -- this tail's two builds differ by a constant +0x10, which
+    //        the committed UpdateJumping banner already says. Same correction applies to
+    //        :290/:292/:296: the drift crossfade drives mfDriftScale, not mfCenteringFactor,
+    //        so "Update pre-seeds the same mfCenteringFactor UpdateLooking then drives" is
+    //        RETRACTED. (mfDriftScale is exactly what the :264 SLerp blends on -- which is
+    //        what makes the corrected reading self-consistent.)
+    //     4. `:267` reads mfTimeDelta (+0xB48), not mfYawSpring -- same +0x10 shift.
+    //     5. `:505`'s last two arguments are the timestep times kfJumpParamsImpactShakeMaxFreqMul
+    //        (8.0f) and mfImpactShakeFactor times kfJumpParamsImpactShakeMaxAmplitude (2.0f);
+    //        the constants are SCALES applied to live values, not the values themselves.
+    //   ⚠️ The +0x4A4 / +0x4AA pair the old map carried as "PS3-attested only" is now settled
+    //     on BOTH builds and NAMED: shared-info +0x4A4 == mPlayerInfo.mRaceCarState.mi8Gear
+    //     (@1092) and +0x4AA == ...mbCrashing (@1098). See the .cpp banner for what each gates.
     //
     // ⚠️⚠️ THE OLD CLOSING CLAUSE OF THIS FLAG WAS WRONG, AND IT WAS LOAD-BEARING (retired
     //   2026-08-02). It read: "nothing dispatches slot 2 today anyway (MainDirector::
@@ -718,6 +685,14 @@ private:
     static const f32 kfJumpParamsTimeDeltaBlendOutFactor; // 0.1f       flt_82CDA710
     static const f32 kfSlideYScaleScaleUpFactor;          // 0.01f      flt_82CDA714
     static const f32 kfJumpParamsDutchMax;                // 0.2617994f flt_82CDAD10 (15 degs)
+
+    // ---- the three Update reads (DWARF .cpp:32/:33/:34) ----------------------------------
+    // ⚠️ THE LAST TWO ARE SCALES, NOT VALUES: :505 multiplies the timestep by the FreqMul and
+    // mfImpactShakeFactor by the MaxAmplitude. The committed statement map read them as the
+    // arguments themselves.
+    static const f32 kfShakeDropoffFactor;                // 0.06f      flt_82CDA6FC
+    static const f32 kfJumpParamsImpactShakeMaxAmplitude; // 2.0f       flt_82CDA700
+    static const f32 kfJumpParamsImpactShakeMaxFreqMul;   // 8.0f       flt_82CDA704
 
     // ---- layout (DWARF h:116..:160; the anchors are asm-pinned -- see the file banner) ---
     Utils::CameraSphericalRotationController mRotationController;   // :116 +0x020
