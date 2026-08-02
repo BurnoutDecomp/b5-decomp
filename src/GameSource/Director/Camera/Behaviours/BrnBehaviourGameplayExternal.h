@@ -245,6 +245,18 @@ public:
     //     3  InterpolateLastPlayerTransform  ✅ BODIED  (307, 11 statements)
     //     4  UpdateJumping                   ✅ BODIED  (205, pure scalar)
     //     5  UpdateLooking                   ⛔ 669 asm lines, 32 statements -- THE LAST ONE
+    //        ⭐ SCOUTED 2026-08-02, and it is SMALLER THAN ITS LINE COUNT SAYS. Its whole
+    //        external surface is `sin` and `cos`: the only other `bl`s in the X360 body are
+    //        NINE assert triples plus three calls to sub_82203F70, and that function is 15
+    //        instructions of `CgsDev::StrStreamBase::AppendFormat("(%f, %f, %f)", ...)`, i.e.
+    //        the Vector3 stream operator the asserts use -- NOT a math helper. So unlike
+    //        every other helper in this cluster it should close NO new link dependencies.
+    //        Its own-line set (DecFIGS) is .cpp:675 677 679 685 688 696 701 705 710 711 713
+    //        721 722 723 731 732 733 745 749 753 756 761 764 772 776 780 781 782 785 793
+    //        796 797, X360 @0x82225630, PS3 @0x6985C's sibling. Signature (DWARF h:325):
+    //        UpdateLooking(f32& lrFOVInOut, Vector3&, Vector3&, Vector3&, const AABBox&).
+    //        ⚠️ Re-walk its callees for DEFINITIONS anyway when it is written -- that check is
+    //        what took this cluster's closure set from one symbol to eleven.
     //     6  CalculateCameraTransform        ✅ BODIED  (164, 6 statements)
     //     7  ApplySlideyEffects              ✅ BODIED  (434, ~24 statements)
     //     8  ApplyJumpEffects                ✅ BODIED  (303, 3 statements)
