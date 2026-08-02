@@ -106,17 +106,10 @@ namespace BrnGui
 
         mpGuiCache = lpCache;
 
-        WorldDataController* lpWorldData = mpGuiCache->PeekWorldDataController();
-
-        // ⚠️ PC-BUILD GUARD (2026-08-02). The console calls the ASSERTING accessor
-        // (GetWorldDataController) and dereferences the result directly here.
-        // NOTHING ON THIS BUILD POPULATES GuiCache::mpWorldDataController (+0x4064) -- the
-        // GUI-side WorldDataController acquisition state machine is unreconstructed; the
-        // committed BrnLicenseComponent.cpp already documents the same gap and works around
-        // it. Before BrnGui::CarSelectVehicle was re-homed onto this class nothing reached
-        // this line, so the null dereference was latent. Remove the guard when the GUI world
-        // data lands.
-        mpVehicleList = (lpWorldData != 0) ? lpWorldData->GetVehicleList() : 0;
+        // (PC-BUILD GUARD RETIRED 2026-08-02: GuiModule::Construct now binds the module's own
+        // WorldDataController into the cache and its acquire machine binds the vehicle list, so
+        // the console's asserting accessor is restored.)
+        mpVehicleList = mpGuiCache->GetWorldDataController()->GetVehicleList();
     }
 
     // ---- SetupCar @ 0x824B5548 ----------------------------------------------------
@@ -136,21 +129,19 @@ namespace BrnGui
     {
         typedef CgsLanguage::LanguageManager LM;
 
-        // cpp:880 -- ⚠️ PC-BUILD GUARD (2026-08-02, car-select wave). The console asserts
-        // mpVehicleList and then dereferences it; on this build the list is legitimately
-        // absent (GuiCache::mpWorldDataController is never populated -- see UpdateGuiCache
-        // above) and a dev assert BLOCKS the sim, so the bail replaces it. Restore the
-        // assert when the GUI WorldDataController lands.
-        if (mpVehicleList == 0)
-            return;
+        // cpp:880 -- the console's assert, RESTORED 2026-08-02: GuiCache::mpWorldDataController
+        // is populated now, so mpVehicleList is the real list (see UpdateGuiCache above).
+        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:880
 
         const BrnResource::VehicleList* lpVehicleList = mpVehicleList;
         const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lSelectedCarId);
 
         const BrnResource::VehicleListEntry* lpVehicleData =
             (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
-        // cpp:883 -- same PC-BUILD GUARD reasoning as above (the console asserts and then
-        // dereferences; an unresolved car id is reachable on this build).
+        // cpp:883 -- ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h): the console asserts
+        // and then dereferences. The id reaching here is published by a stand-in
+        // (BrnGameModule::PublishCarSelectionToGui) and CarSelectMain::Construct seeds it to
+        // (CgsID)-1, so an unresolved car id is still reachable on this build.
         if (lpVehicleData == 0)
             return;
 

@@ -1084,13 +1084,13 @@ namespace BrnGui
         return const_cast<WorldDataController*>(mpWorldDataController);
     }
 
-    // ADDITIVE GROW (car-select wave 2026-08-02) -- the assert-free face of the accessor
-    // above. See the header note: PC has no producer for mpWorldDataController, and the
-    // console's dev assert BLOCKS the sim, so the one caller that must tolerate NULL asks
-    // through here. Retire it with the gap.
-    WorldDataController* GuiCache::PeekWorldDataController() const
+    // X360-INLINED at BrnGuiCache.h:2310 -- BrnGui::GuiModule::Construct @0x82518028 fires
+    // the "lpController" assert then stores the module's own WorldDataController into the
+    // cache (`*(gm + 1021860) = gm + 307836`, i.e. cache+0x4064).
+    void GuiCache::SetWorldDataController(WorldDataController* lpController)
     {
-        return const_cast<WorldDataController*>(mpWorldDataController);
+        CGS_ASSERT(lpController != nullptr, "lpController");   // BrnGuiCache.h:2310
+        mpWorldDataController = lpController;
     }
 
     // @ (far member +40536) -- the active game-mode the GUI reads to pick mode-specific

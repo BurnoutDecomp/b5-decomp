@@ -233,11 +233,14 @@ namespace BrnGui
         // per-rank required-wins word).
         //
         // The GUI cache's WorldDataController (GuiCache +0x4064) is the GUI's front end onto
-        // the streamed progression resource. NOTHING ON PC POPULATES IT YET -- the pointer is
-        // never assigned in this tree, and GuiCache::GetWorldDataController() would fire its
-        // own "mpWorldDataController" assert and hand back NULL. Until the GUI-side
-        // world/progression acquisition lands (BrnGuiWorldDataController's Prepare state
-        // machine), report the console's own no-rank-data answer: 0, which is exactly what
+        // the streamed progression resource. ⚠️ CORRECTED 2026-08-02: the POINTER is populated
+        // now (GuiModule::Construct binds the module's own WorldDataController into the cache),
+        // so the old claim "nothing on PC populates it" is stale. What is still missing is the
+        // DATA and the accessor: WorldDataController::Prepare parks at
+        // PREPARING_ACQUIRING_PROGRESSION because no PC producer answers the "CarColours"
+        // acquire, so meState never reaches READY and every readiness-gated accessor would
+        // assert; GetRequiredWinsInRank (@0x82428740) has no body here either. Until both land,
+        // report the console's own no-rank-data answer: 0, which is exactly what
         // GetRequiredWinsInRank itself returns for an unknown rank. With 0 the three consumers
         // behave as they do for a brand-new profile -- ShowLicense picks
         // E_LICENSE_SHOWING_NORMAL, SetPlayerInfo leaves miWinsInCurrentRank at 0, and

@@ -398,6 +398,12 @@ namespace BrnGame
         //   4 -> BrnBFProFsm (HUD)      5 -> BrnScreenFsm@LOADING (SCREEN) + BrnFBFsm (HUD)
         void BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
 
+        // [FLAG PC stand-in] Publish the car-select screen's car list to the GUI as events
+        // 406 + 412 -- the two records BridgeGameStateToGui's action-182/184 cases carry on the
+        // console. Full provenance + the DELETE-WHEN condition are on the body in
+        // BrnGameModule.cpp; called from the per-sub-step GUI publish block in Update.
+        void PublishCarSelectionToGui();
+
         // X360 0x823CB758 -- the GUI->game out-event consumer: walk the GUI module's out
         // events and latch the flow commands (19/20 loading screen, 70 phase complete,
         // 71 pre-accept/resume-world, 90 profile-first, 189 sign-out, 86/87/89 quit,
@@ -707,6 +713,16 @@ namespace BrnGame
         // It has no reconstructed reader yet; published anyway because dropping a store the
         // bridge makes every frame is a silent divergence, and the field is one byte.
         bool mbPlayerCarCrashing;
+
+        // [FLAG PC drive point] (no console member): latched once BrnGui::WorldDataController::
+        // Prepare reports done, so ResourceUpdateThread stops re-entering it. On the console
+        // the equivalent latch is GuiModule::Prepare's own stage word reaching 15.
+        bool mbWorldDataPrepared;
+
+        // [FLAG PC stand-in] (no console member): the GUI events 406 + 412 have gone out for the
+        // car-select screen currently on the flow. Cleared when that screen unsubscribes, so a
+        // re-entry republishes. See PublishCarSelectionToGui.
+        bool mbCarSelectionPublished;
 
         s32  miInputModuleState;        // @ +10094136 (==4 means input module ready / player-0 assigned)
         s32  miPlayer0ControllerPort;   // @ +10094140 (asserted <= CgsInput::KU_NUMBER_OF_PADS)

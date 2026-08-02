@@ -59,40 +59,45 @@
 // 0x8284CB38 -- a bare `blr` with 193 xrefs, i.e. the image-wide ICF fold of an EMPTY body,
 // NOT _purecall. They are real, empty overrides in the base and stay non-pure here.
 //
-// ⚠️⚠️ PC-BUILD GUARDS. Five bodies in this class resolve a car id through
-// VehicleList::GetVehicleData and then dereference the result WITHOUT a null test (the two
-// that assert -- IsLoading cpp:1505 and SetTicker cpp:1082 -- assert and carry on anyway).
-// The console can afford that because the game-state module always publishes a live car
-// list (GUI event 412) and a live drop-in car id (events 406 / 565) before this screen goes
-// interactive. NEITHER PRODUCER EXISTS ON THIS BUILD: BrnGameModule's game-state bridge is
-// still a stand-in (BrnGameModule.cpp), so on entry gsiNumCarouselCars == 0,
-// miMostRecentDropInId == 0 and mCurrentSetupInfo.mCarId == (CgsID)-1, and each of those
-// lookups misses. Reproducing the console literally would therefore null-dereference on the
-// FIRST SetupComponents and then again every frame from UpdateComponents -> IsLoading.
-// The five sites -- IsLoading, SetupStatsComponent, SetCarSelectorComponent (x1 in the row
-// loop, x1 on the committed car) and SetTicker -- each carry an explicit, commented
-// `if (lp... == 0)` bail marked "PC-BUILD GUARD". They are behaviour-preserving for every
-// case the console can actually reach, and they should be REMOVED once the event-412 /
-// event-406 producers land.
+// ⚠️ VEHICLE-LIST GUARDS -- HALF OF THEM RETIRED 2026-08-02 (the carousel wave). Read this
+// before touching any `== 0` test in this class: the two shapes are NOT interchangeable, and
+// mistaking one for the other cost the previous wave a crash it could not explain.
 //
-// ⚠️⚠️ AND ONE OF THOSE FIVE GUARDED THE WRONG POINTER. IsLoading's guard tests the LOOKED-UP
-// ENTRY, so it reads as if it covered `mpVehicleList->GetVehicleData(...)` -- but that call
-// dereferences the LIST, and VehicleList::GetVehicleData(CgsID) opens with
-// `mov edi,[rcx+0x3700]`, so a null list AVs inside the callee before any result exists to
-// test. UpdateComponents calls IsLoading EVERY FRAME; it survived only because the
-// `mbVoiceOverPlaying` early return above it masked the call for the nine seconds of the
-// Junkyard car-info VO. A `mpVehicleList == 0 -> return true` guard now precedes the lookup.
+//   (a) LIST guards -- `mpVehicleList == 0`. These existed because NOTHING populated
+//       GuiCache::mpWorldDataController, so mpVehicleList was NULL for the whole screen.
+//       ⭐ THAT GAP IS CLOSED: BrnGui::GuiModule now owns a real WorldDataController,
+//       Construct binds it into the cache (GuiCache::SetWorldDataController) and its
+//       Prepare acquire machine binds the real 430-entry VehicleList through the GameData
+//       request path. ALL of the (a) guards are GONE and the console's asserts are restored.
+//
+//   (b) ENTRY guards -- `lpVehicleData == 0` after a GetVehicleData/GetVehicleIndex lookup.
+//       These are a DIFFERENT problem and they STAY. The console can dereference a lookup
+//       result unchecked because the game-state module publishes a live drop-in car id
+//       (GUI events 406 / 565) before this screen goes interactive; on this build that id
+//       comes from BrnGameModule::PublishCarSelectionToGui, a flagged STAND-IN, and
+//       CarSelectMain::Construct still seeds mCurrentSetupInfo.mCarId = (CgsID)-1 -- an id
+//       that is in no vehicle list. Remove the (b) guards only when the real
+//       ProcessGameEvents/BridgeGameStateToGui producers land.
+//
+// ⚠️⚠️ ONE OF THE ORIGINAL GUARDS TESTED THE WRONG POINTER, which is how (a) and (b) got
+// conflated: IsLoading's guard tested the LOOKED-UP ENTRY, so it read as if it covered
+// `mpVehicleList->GetVehicleData(...)` -- but that call dereferences the LIST, and
+// VehicleList::GetVehicleData(CgsID) opens with `mov edi,[rcx+0x3700]`, so a null list AV'd
+// inside the callee before any result existed to test. UpdateComponents calls IsLoading EVERY
+// FRAME; it survived only because the `mbVoiceOverPlaying` early return above it masked the
+// call for the nine seconds of the Junkyard car-info VO.
 // (Lesson for the ledger: a guard's COMMENT is a claim -- check which pointer it actually
 // tests, and against which dereference.)
 //
-// ⚠️ A SIXTH site, found 2026-08-02 and of a DIFFERENT shape -- it is what actually killed
-// the process on this screen. SetCarSelectorComponent's bail leaves mCarSelector EMPTY, and
-// SelectableGroup::GetHighlighted() has no lower bound on miHighlightedIndex (see the long
-// HAZARD note on that body), so on an empty group it returns the four bytes preceding
-// maSelectables -- 0x0000FF00 -- which is NON-NULL. The console's own `!= 0` assert therefore
-// NEVER fires and the ->GetId() that follows access-violates. SetupComponents now tests
-// `mCarSelector.miHighlightedIndex > -1` (the console's own idiom) before dereferencing and
-// falls back to the committed car id. Same removal condition as the five above.
+// ⚠️ A THIRD shape, and it is what killed the process on this screen twice.
+// SetCarSelectorComponent's bail left mCarSelector EMPTY, and SelectableGroup::GetHighlighted()
+// has no lower bound on miHighlightedIndex (see the long HAZARD note on that body), so on an
+// empty group it returned the four bytes preceding maSelectables -- 0x0000FF00 -- which is
+// NON-NULL. The console's own `!= 0` assert therefore NEVER fired and the ->GetId() that
+// followed access-violated. SetupComponents tests `mCarSelector.miHighlightedIndex > -1` (the
+// console's own idiom) before dereferencing and falls back to the committed car id. That test
+// is now normally redundant (the selector is populated), but it is the group's real emptiness
+// contract and it stays until GetHighlighted itself is made safe.
 // ===================================================================================
 
 #include "types.hpp"

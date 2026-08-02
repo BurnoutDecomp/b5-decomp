@@ -389,11 +389,10 @@ namespace BrnGui
         SetupStatsComponent(lpSetupInfo);
         SetCarouselComponent(lpSetupInfo->mCarId);
 
-        // ⚠️ SAME FLAGGED SUBSTITUTION as SetupComponents' badge line: the X360 re-fetches
-        // through mpGuiCache->GetWorldDataController()->GetVehicleList(), which is the same
-        // pointer CarSelectMain::UpdateGuiCache latched into mpVehicleList.
-        if (mpVehicleList != 0)
-            mManufacturerLogo.Set(mpVehicleList, lpSetupInfo->mCarId);
+        // The console's own re-fetch, RESTORED 2026-08-02 (the substitution that read the
+        // latched mpVehicleList is retired with the WorldDataController).
+        mManufacturerLogo.Set(mpGuiCache->GetWorldDataController()->GetVehicleList(),
+                              lpSetupInfo->mCarId);
 
         SetTicker(lpSetupInfo->mCarId);
     }
@@ -403,15 +402,14 @@ namespace BrnGui
     // form for a car the player can pick, the "how to win it" form otherwise.
     void CarSelectVehicle::SetTicker(CgsID lCarId)
     {
-        // cpp:1074 -- ⚠️ PC-BUILD GUARD (see BrnCarSelectVehicle.h): the console asserts
-        // mpVehicleList and then dereferences it.
-        if (mpVehicleList == 0)
-            return;
+        // cpp:1074 -- the console's assert, RESTORED 2026-08-02 (LIST guard retired).
+        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");   // cpp:1074
 
         const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lCarId);
         const BrnResource::VehicleListEntry* lpVehicleData =
             (liVehicleIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liVehicleIndex);
-        // cpp:1082 -- the console's assert; suppressed for the same reason.
+        // cpp:1082 -- the console's assert on the ENTRY. Still suppressed: the id it is handed
+        // comes from a stand-in producer (shape (b) in BrnCarSelectVehicle.h).
 
         {
             GuiTickerFlagsWire536 lTickerClear;
@@ -419,8 +417,8 @@ namespace BrnGui
                                                               static_cast<s32>(sizeof(lTickerClear)));
         }
 
-        // ⚠️ PC-BUILD GUARD -- see "PC-BUILD GUARDS" in BrnCarSelectVehicle.h. The console
-        // dereferences lpVehicleData unconditionally below.
+        // ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h). The console dereferences
+        // lpVehicleData unconditionally below.
         if (lpVehicleData == 0)
             return;
 

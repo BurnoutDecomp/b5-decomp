@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // CgsID (landmark/trigger lookups)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::ResourcePtr<T>
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h" // CgsModule::EventReceiverQueue<1024,16>
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"           // BrnWorld::GlobalColourPalette, PlayerCarColourPalette
 
 // BrnGui::WorldDataController -- the GUI-side world/progression data front-end. The cache owns
@@ -20,12 +21,17 @@
 //
 // This wave homes the readiness accessors GetColourPaletteFromType / GetProgressionData /
 // GetTotalNumberOfLandmarks / GetTotalNumberOfOnlineLandmarks, and keeps the two the sat-nav
-// renderer already links (GetEventInfoFromEventId / GetTotalNumberOfOnlineLandmarks). The
-// Prepare acquire state machine + GetRequiredWinsInRank land in later waves.
+// renderer already links (GetEventInfoFromEventId / GetTotalNumberOfOnlineLandmarks).
+// GetRequiredWinsInRank lands in a later wave.
+//
+// 2026-08-02 (carousel wave): Construct + the Prepare ACQUIRE STATE MACHINE are now real
+// (X360 0x82516770). Both were previously missing, which is why GuiCache::mpWorldDataController
+// was never populated and every car-select component that resolves a car through the vehicle
+// list bailed. See the banner in BrnGuiWorldDataController.cpp for the request/reply contract.
 
 namespace BrnProgression { struct RaceEventData; struct ProgressionData; }
 namespace BrnTrigger     { struct TriggerData; struct Landmark; struct BoxRegion; }
-namespace BrnResource    { struct VehicleList; }
+namespace BrnResource    { struct VehicleList; namespace GameDataIO { struct InputBuffer; } }
 namespace BrnStreetData  { struct StreetData; }
 namespace BrnGameState   { class  LandmarkIndex; }
 namespace BrnGui { struct ChallengeList; }
@@ -71,6 +77,25 @@ namespace BrnGui
             E_WORLDDATACONTROLLERSTATE_COUNT                                   = 16,
         };
 
+        // ---- Bring-up (bodies in BrnGuiWorldDataController.cpp) ---------------------------------
+
+        // X360-INLINED into BrnGui::GuiModule::Construct @0x82518028 (the seven stores at
+        // guiModule+307836..+309028 immediately before the BaseEventReceiverQueue::Clear on
+        // guiModule+307844): meState = CONSTRUCTED, the 1024/16 receiver queue bound to its
+        // embedded buffer and cleared, and the two raw resource pointers nulled.
+        void Construct();
+
+        // X360 0x82516770 -- the resumable resource-acquisition state machine. Returns true once
+        // the controller reaches E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS (the state every
+        // readiness accessor gates on); false while a reply is still outstanding, exactly as the
+        // console's own "no event on the receiver queue yet" arm does. The console drives it from
+        // BrnGui::GuiModule::Prepare stage 14 with the module scheduler's GameData INPUT buffer.
+        bool Prepare(BrnResource::GameDataIO::InputBuffer* lpGameDataInput);
+
+        // The live state (the readiness gate the accessors assert on). Exposed so the driver can
+        // stop pumping without re-entering the machine.
+        EWorldDataControllerState GetState() const { return meState; }
+
         // ---- Accessors (bodies in BrnGuiWorldDataController.cpp) --------------------------------
 
         // DWARF h:93 / X360 0x82501270 -- the landmark whose region index equals lLandmarkIndex
@@ -111,11 +136,13 @@ namespace BrnGui
 
     private:
         // Full DWARF-faithful member set (BrnGuiWorldDataController.h:182-193), in source order.
-        // mReceiverQueue is an EventReceiverQueue<1024,16> whose full layout is not modelled; it is
-        // held here as an opaque byte blob sized so the following resource pointers land at their
-        // X360 offsets (mpTriggerData@0x424). X360 offsets are in the comments and NOT host-asserted.
+        // mReceiverQueue is the REAL CgsModule::EventReceiverQueue<1024,16> (2026-08-02): the X360
+        // Construct's `*(wdc+0x18) = 1024 / *(wdc+0x1C) = 16 / *(wdc+0x08) = wdc+0x20` pins both the
+        // capacity/alignment pair and the embedded 1024-byte buffer at +0x20, and Prepare drives it
+        // through GetLength/GetFirstEvent/Clear. X360 offsets stay in the comments and are NOT
+        // host-asserted (the base's buffer pointer widens on x64; callers reach members BY NAME).
         EWorldDataControllerState meState;               // X360 +0x000  (DWARF :182)
-        u8                        mReceiverQueue[0x41C]; // X360 +0x004  EventReceiverQueue<1024,16> (opaque)
+        CgsModule::EventReceiverQueue<1024, 16> mReceiverQueue;  // X360 +0x004 (base) / buffer +0x20
         s32                       miResourceCount;       // X360 +0x420  (DWARF :184)
 
         CgsResource::ResourcePtr<BrnTrigger::TriggerData>          mpTriggerData;      // X360 +0x424  (DWARF :186)

@@ -464,32 +464,30 @@ namespace BrnGui
         if (mbVoiceOverPlaying)
             return true;
 
-        // ⚠️⚠️ PC-BUILD GUARD ON THE **LIST**, not on the looked-up entry. The guard below
-        // (added with this class) tests the RESULT and reads as if it covered this call --
-        // it does not: `mpVehicleList->GetVehicleData(...)` dereferences the LIST, and
-        // `VehicleList::GetVehicleData(CgsID)` opens with `mov edi,[rcx+0x3700]`
-        // (GetVehicleCount), so a null list access-violates INSIDE the callee before any
-        // result exists to test. Confirmed 2026-08-02 from WER fault offset 0x596C4 ==
+        // (The LIST guard that stood here is RETIRED 2026-08-02 with the WorldDataController.
+        // ⚠️ HISTORY, keep for the ledger: it was added as a guard on the LOOKED-UP ENTRY and
+        // read as if it covered this call -- it did not. `mpVehicleList->GetVehicleData(...)`
+        // dereferences the LIST, and `VehicleList::GetVehicleData(CgsID)` opens with
+        // `mov edi,[rcx+0x3700]` (GetVehicleCount), so a null list access-violated INSIDE the
+        // callee before any result existed to test. Confirmed from WER fault offset 0x596C4 ==
         // GetVehicleData(CgsID)+0x14, reproduced twice; the caller is IsLoading+0x50, which
         // UpdateComponents runs EVERY FRAME. It hid behind the `mbVoiceOverPlaying` early
         // return above -- the screen only died once the 9-second Junkyard car-info VO
-        // (INT_SHOWCAR.SNS) drained. Same removal condition as the other guards.
-        if (mpVehicleList == 0)
-            return true;
-
+        // (INT_SHOWCAR.SNS) drained.)
         const BrnResource::VehicleListEntry* lpVehicleListEntry =
             mpVehicleList->GetVehicleData(miMostRecentDropInId);
         CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");   // cpp:1505
 
-        // ⚠️ PC-BUILD GUARD, not in the X360 body. The console dereferences the entry
-        // unconditionally on the line below; it can do that because the game-state module
-        // always publishes a live drop-in car id (event 406 / 565) before this screen goes
-        // interactive. On this build that producer does not exist yet, so
-        // miMostRecentDropInId is still 0 here and the lookup misses -- which on the console
-        // path would be an immediate null dereference EVERY FRAME (UpdateComponents calls
-        // IsLoading through vtable slot +0x2C). Reporting "still loading" is the meaning of
-        // an unresolved drop-in id, so the guard is behaviour-preserving for every case the
-        // console can actually reach. Remove it when the event-406/565 producer lands.
+        // ⚠️ ENTRY guard (shape (b) in BrnCarSelectVehicle.h), not in the X360 body. The
+        // console dereferences the entry unconditionally on the line below; it can do that
+        // because the game-state module always publishes a live drop-in car id (event 406 /
+        // 565) before this screen goes interactive. On this build that id comes from
+        // BrnGameModule::PublishCarSelectionToGui, a flagged stand-in, and miMostRecentDropInId
+        // is still 0 until it lands -- which on the console path would be an immediate null
+        // dereference EVERY FRAME (UpdateComponents calls IsLoading through vtable slot
+        // +0x2C). Reporting "still loading" is the meaning of an unresolved drop-in id, so the
+        // guard is behaviour-preserving for every case the console can actually reach. Remove
+        // it when the real event-406/565 producer lands.
         if (lpVehicleListEntry == 0)
             return true;
 

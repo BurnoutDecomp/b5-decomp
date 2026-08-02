@@ -338,16 +338,11 @@ namespace BrnGui
         // DWARF h: -- the GUI world-data front-end (event records + landmark counts).
         WorldDataController* GetWorldDataController() const;
 
-        // ADDITIVE GROW (car-select wave 2026-08-02). The SAME pointer, WITHOUT the console
-        // assert. GetWorldDataController's assert is a dev tripwire for a pointer NOTHING ON
-        // THIS BUILD POPULATES (the GUI-side WorldDataController acquisition state machine is
-        // unreconstructed -- BrnLicenseComponent.cpp already documents the same gap), and a
-        // dev assert BLOCKS the sim, so a caller that must tolerate the absence -- currently
-        // only BrnGui::CarSelectMain::UpdateGuiCache, which runs every time GUI event 64
-        // lands on the car-select screen -- has to be able to ask without tripping it.
-        // DELETE THIS ACCESSOR (and restore the plain call at its one call site) as soon as
-        // the controller is populated.
-        WorldDataController* PeekWorldDataController() const;
+        // X360-INLINED at BrnGuiCache.h:2310 (GuiModule::Construct's `*(gm + 1021860) =
+        // gm + 307836`, preceded by the "lpController" assert): bind the module's own
+        // WorldDataController into the cache. The GUI reaches every world/progression/vehicle
+        // resource through it.
+        void SetWorldDataController(WorldDataController* lpController);
 
         // ADDITIVE GROW (BrnSatNavRenderer TU). The world-space camera position the sat-nav
         // renderer measures off-screen icons against. RenderIconsForSatNav loads it ONCE before

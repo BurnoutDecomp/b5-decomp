@@ -975,6 +975,15 @@ namespace BrnGui
         // controller starts UNLOADED on every flow slot.
         mGuiCache.Construct();
 
+        // X360 GuiModule::Construct @0x82518028, the two lines that follow GuiCache::Construct
+        // and MapIconManager::Construct: Construct the module's own WorldDataController (the
+        // seven inlined stores at gm+307836..+309028 + the receiver-queue Clear) and bind it
+        // into the cache (`*(gm + 1021860) = gm + 307836`, guarded by the "lpController"
+        // assert at BrnGuiCache.h:2310). This is the pointer every GUI component that resolves
+        // a car / landmark / event through GuiCache::GetWorldDataController reaches.
+        mWorldDataController.Construct();
+        mGuiCache.SetWorldDataController(&mWorldDataController);
+
         // X360 GuiModule::Construct wires the shared state-access bundle here, before
         // any flow is allowed to run: ViewModule::GetAptAux/GetLanguageManager,
         // ViewModule::GetFlaptManager, and this GuiCache are the four live owners.
@@ -1329,6 +1338,16 @@ namespace BrnGui
         CgsDev::Log::WriteToLog(
             "[GuiModule] flow controller live (HUD flow registered; awaiting GuiEventRunFsm).\n");
         return true;
+    }
+
+    // X360 GuiModule::Prepare @0x82518D68 STAGE 14, split out to its own entry point because the
+    // PC has no module scheduler to hand GuiModule::Prepare the GameData IO pair. See the FLAG on
+    // the declaration; the machine itself is the console's, unaltered.
+    bool GuiModule::PrepareWorldData(BrnResource::GameDataIO::InputBuffer* lpGameDataInput)
+    {
+        if (lpGameDataInput == 0)
+            return false;
+        return mWorldDataController.Prepare(lpGameDataInput);
     }
 
     bool GuiModule::Release()
