@@ -137,6 +137,16 @@ namespace BrnGui
         // field at this+0xB98). Faithful 1-store accessor (mbAutosize is private).
         void SetAutoSize(bool lbAutosize) { mbAutosize = lbAutosize; }
 
+        // ADDITIVE GROW (BrnGui::CrashNavEnterOnlineBase::ShowTOS @0x824BC598 and the
+        // Show{CreateAccount,OpenAccountInUS} siblings): raise the reset-scroll flag
+        // before OutputAptData. The X360 inlines it to the single li 1 / stb r11,
+        // +0x125(field) store (field+0x125 == mbResetScroll).
+        // NO-ARG per the DecFIGS DWARF (BrnTextField.h:98/124 `void ResetScroll();`),
+        // which also lists it as the inlined callee at those sites. An earlier wave-I
+        // draft proposed a SetResetScroll(bool) accessor -- that spelling appears nowhere
+        // in the DWARF and was a fabrication; do not reintroduce it.
+        void ResetScroll() { mbResetScroll = true; }
+
     private:
         u32  muTextColour;          // +0x8C  (set by SetColour)
         s32  miScroll;              // +0x90

@@ -11,7 +11,8 @@
 #include "GameSource/AttribSys/Enums/OnlineVoiceOver.h"            // AttribSys::Enums::OnlineVoiceOver::OnlineVoiceOver
 #include "GameSource/Sound/Global/BrnFxEffect.h"                    // BrnSound::Logic::FxMessage_*
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"     // BrnSound::ESoundMessages/FxVolumes/GameModeLostResults/RaceCarIsNowActive
-#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"               // BrnGui GUI audio-event payloads (read-only reuse)
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"          // real home of GuiAudioTriggerEvent / GuiEventRunFsm               // BrnGui GUI audio-event payloads (read-only reuse)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::GuiEventPlayMusicOnMenuStream (read-only reuse)
 #include "GameSource/Sound/Module/LogicModule/Brn3DEffectControl.h"      // BrnSound::Logic::Brn3DEffectControl::DrawSphere
 
