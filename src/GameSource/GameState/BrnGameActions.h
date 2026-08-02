@@ -79,6 +79,12 @@ enum EGameActionType
     E_ACTION_WORLD_STUNT_PERFORMED      = 122,   // DWARF BrnGameActions.h:132
     E_ACTION_POWER_PARK_RESULT          = 139,   // DWARF BrnGameActions.h:149
 
+    // X360-ATTESTED value: the DWARF (PS3) enumerator is 74, but every X360 producer posts
+    // `li r5, 0x4F` (79) with size 8, and the X360 consumer is HandleGameActions' `case 79`.
+    // That is the SAME +5 shift this enum already records for NEW_CAR_UNLOCKED (DWARF 57 ->
+    // X360 62) and CAR_UNLOCK_END (DWARF 58 -> X360 63).
+    E_ACTION_CAR_SELECT_CHANGE_COLOUR   = 79,    // DWARF 74 (+5 X360)
+
     // Freeburn-challenge action block (ChallengeManager keystone). X360-ATTESTED values:
     // the PS3-DWARF block is 145..153, but every ChallengeManager AddEvent callsite posts
     // id == DWARF+8 with the byte size matching the DWARF struct exactly (update action
@@ -174,6 +180,42 @@ static_assert(sizeof(CarSelectionChangedAction) == 64,
               "CarSelectionChangedAction must be the 64-byte image AddEvent(.., 64, 64) posts");
 static_assert(offsetof(CarSelectionChangedAction, mbJunkyardPosIsLeft) == 0x30,
               "CarSelectionChangedAction::mbJunkyardPosIsLeft at +0x30 (the consumer's lbz offset)");
+
+// Game action 79 -- "paint the player's car": the palette (paint finish) and colour indices the
+// car-select / junkyard flow resolved for the car that is now in the world. It is the ONLY route
+// by which a car's AUTHORED default colour reaches BrnWorld::RaceCar: HandleResetPlayerCarAction
+// spawns every fresh car at 0/0 (it only carries an OLD car's colour across a same-model
+// respawn), and this action is what the console posts immediately afterwards.
+//
+// ⭐ PALETTE FIRST. Both ends are attested and they agree:
+//   producer  CarSelectManager::ReallyEnterJunkyardAtStartOfGame @0x823931F8
+//             (`r5 = &sp+0x5C` == the COLOUR out-param, `r6 = &sp+0x58` == the PALETTE
+//              out-param, then `AddEvent(sp+0x58, 79, 8)` -- the payload BASE is the palette),
+//             CarSelectManager::UpdateUnlockState @0x82398920 and
+//             CarSelectManager::TeleportCurrentVehicle @0x82392EF0
+//             (both `GetCarColourAndPalette(.., &v + 4, &v); AddEvent(&v, 79, 8)`).
+//   consumer  RaceCarEntityModule::ChangePlayerCarColour @0x822D27B0, reached from
+//             HandleGameActions' `case 79` as `ChangePlayerCarColour(payload[0], payload[4])`,
+//             which stores arg0 to RaceCar+152 (miColourPalette) and arg1 to +148
+//             (miColourIndex).
+// The member names and widths are the DWARF's (BrnGameActions.h:2811 CarSelectChangeColourAction
+// : GameAction<E_ACTION_CAR_SELECT_CHANGE_COLOUR> { uint32_t muPaletteIndex; uint32_t
+// muColourIndex; }) -- which independently puts the palette first.
+//
+// ⚠️ NOT to be confused with the DWARF's CarUnlockAction: that is
+// GameAction<E_ACTION_GUI_CAR_UNLOCK> (PS3 id 2) and holds a single `CgsID mCurrentCarToUnlock`
+// -- the other 8-byte event UpdateUnlockState posts (`AddEvent(&v17, 2, 8)`).
+struct CarSelectChangeColourAction : public GameAction<E_ACTION_CAR_SELECT_CHANGE_COLOUR>
+{
+    u32 muPaletteIndex;   // +0x00
+    u32 muColourIndex;    // +0x04
+};
+static_assert(sizeof(CarSelectChangeColourAction) == 8,
+              "CarSelectChangeColourAction must be the 8-byte image AddEvent(.., 79, 8) posts");
+static_assert(offsetof(CarSelectChangeColourAction, muPaletteIndex) == 0,
+              "the palette index is payload word 0 (ChangePlayerCarColour's first argument)");
+static_assert(offsetof(CarSelectChangeColourAction, muColourIndex) == 4,
+              "the colour index is payload word 1 (ChangePlayerCarColour's second argument)");
 
 // X360 0x82355178 (IsEmpty).
 struct SoundTriggerAction : public GameAction<E_ACTION_SOUND_TRIGGER>

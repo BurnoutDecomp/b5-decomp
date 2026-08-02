@@ -78,7 +78,12 @@ enum EGameAction
     KI_ACTION_CAR_SELECT_EXIT           = 74,   // size 1          -- CarSelectExitAction
     KI_ACTION_FORCE_EXIT                = 78,   // size 1          -- CarSelectAbortAction
     KI_ACTION_NEW_CAR_UNLOCKED          = 62,   // size 16         -- NewCarUnlockedAction
-    KI_ACTION_CAR_UNLOCK                = 79,   // size 8          -- CarUnlockAction (colour/palette)
+    // ⚠️ RENAMED 2026-08-03. This is DWARF `CarSelectChangeColourAction`
+    // (GameAction<E_ACTION_CAR_SELECT_CHANGE_COLOUR>, PS3 id 74 -> X360 79), whose payload is
+    // {u32 muPaletteIndex, u32 muColourIndex} -- PALETTE FIRST. The old name `CarUnlockAction`
+    // belongs to a DIFFERENT record: GameAction<E_ACTION_GUI_CAR_UNLOCK> (PS3 id 2), a single
+    // `CgsID mCurrentCarToUnlock`, which is what KI_ACTION_CAR_CHANGED_SUFFIX below posts.
+    KI_ACTION_CAR_SELECT_CHANGE_COLOUR  = 79,   // size 8          -- CarSelectChangeColourAction
     KI_ACTION_CAR_UNLOCK_END            = 63,   // size 1          -- CarUnlockEndAction
     KI_ACTION_CAR_SELECTION_CHANGED     = 64,   // size 64 (0x40)  -- CarSelectionChangedAction
     KI_ACTION_CAR_SELECTION_DROPIN      = 65,   // size 16         -- CarSelectionChangedDropInAction
@@ -728,12 +733,19 @@ void CarSelectManager::UpdateUnlockState(GameStateModuleIO::GameActionQueue* lpA
             reinterpret_cast<const CgsModule::Event*>(lacReset), KI_ACTION_RESET_PLAYER_CAR, 80);
     }
 
-    // CarUnlockAction (8B): the unlocked car's colour + palette indices.
+    // CarSelectChangeColourAction (8B): the unlocked car's palette + colour indices.
+    // X360 0x82398920: `GetCarColourAndPalette(.., &v17 + 4, &v17)` then `AddEvent(&v17, 79, 8)`
+    // -- the COLOUR goes to payload+4 and the PALETTE to payload+0.
     {
-        s32 laiColourPalette[2] = { 0, 0 };
-        mpProgressionManager.Get()->GetCarColourAndPalette(mCurrentCarToUnlock, &laiColourPalette[0], &laiColourPalette[1]);
+        GameStateModuleIO::CarSelectChangeColourAction lColour;
+        s32 liColour  = 0;
+        s32 liPalette = 0;
+        mpProgressionManager.Get()->GetCarColourAndPalette(mCurrentCarToUnlock, &liColour, &liPalette);
+        lColour.muPaletteIndex = static_cast<u32>(liPalette);
+        lColour.muColourIndex  = static_cast<u32>(liColour);
         AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(laiColourPalette), KI_ACTION_CAR_UNLOCK, 8);
+            reinterpret_cast<const CgsModule::Event*>(&lColour),
+            KI_ACTION_CAR_SELECT_CHANGE_COLOUR, static_cast<s32>(sizeof(lColour)));
     }
 
     // CarSelectionChanged suffix (8B): the new unlock-target id.
@@ -1361,11 +1373,20 @@ void CarSelectManager::ReallyEnterJunkyardAtStartOfGame(GameStateModuleIO::GameA
         lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacDriveThru), KI_ACTION_JUNKYARD_DRIVE_THRU, 48);
     }
 
-    // CarUnlockAction (8B): the desired car's colour + palette.
+    // CarSelectChangeColourAction (8B): the desired car's palette + colour.
+    // ⭐ THIS is the event that paints the Hunter Cavalry its authored colour on the junkyard
+    // start-of-game path. X360 0x8239322C..0x82393250: `r5 = sp+0x5C` (the COLOUR out-param),
+    // `r6 = sp+0x58` (the PALETTE out-param), then `AddEvent(sp+0x58, 79, 8)` -- the payload
+    // BASE is the palette slot, so the record is {palette, colour}, not {colour, palette}.
     {
-        s32 laiColourPalette[2] = { 0, 0 };
-        mpProgressionManager.Get()->GetCarColourAndPalette(mStartCarId, &laiColourPalette[0], &laiColourPalette[1]);
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laiColourPalette), KI_ACTION_CAR_UNLOCK, 8);
+        GameStateModuleIO::CarSelectChangeColourAction lColour;
+        s32 liColour  = 0;
+        s32 liPalette = 0;
+        mpProgressionManager.Get()->GetCarColourAndPalette(mStartCarId, &liColour, &liPalette);
+        lColour.muPaletteIndex = static_cast<u32>(liPalette);
+        lColour.muColourIndex  = static_cast<u32>(liColour);
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lColour),
+                          KI_ACTION_CAR_SELECT_CHANGE_COLOUR, static_cast<s32>(sizeof(lColour)));
     }
 
     u8 lacStartupDeform[1] = { 0 };

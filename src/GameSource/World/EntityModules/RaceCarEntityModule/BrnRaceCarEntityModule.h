@@ -217,6 +217,17 @@ public:
         // up this call, so it runs paused or not.
         void UpdateActiveRaceCarColours();
 
+        // X360 0x822D27B0 (DWARF BrnRaceCarEntityModule.h:824 --
+        // `void ChangePlayerCarColour(uint32_t, uint32_t)`). Seed the PLAYER's global
+        // RaceCar with the {palette, colour} pair game action 79
+        // (CarSelectChangeColourAction) carries, after range-asserting both against
+        // mCarColoursResource. It is the ONLY console writer of the pair on the
+        // junkyard start-of-game path -- HandleResetPlayerCarAction spawns every fresh
+        // car at 0/0 -- so without it every car renders in palette 0 / colour 0
+        // regardless of the default the VehicleList authored (367 of 431 entries author
+        // something else; PUSMC01 authors colour 13).
+        void ChangePlayerCarColour( u32 luPaletteIndex, u32 luColourIndex );
+
         // X360 0x822F5CF8. THE per-frame OUTPUT PUBLISH: copy every attached active slot's
         // live physics state + identity into the active-race-car output interface, and the
         // player's slot/engine-state into its player-scoped scalars. Called from both
