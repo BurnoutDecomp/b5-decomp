@@ -24,6 +24,7 @@
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h" // EImpactType, EImpactSituation
 #include "GameSource/GameState/BrnTakedownType.h"                 // BrnGameState::ETakedownType
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // BrnWorld::ERaceCarType (maeRaceCarTypes)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"  // RaceCarContact (mNormal @+48, mPointOnA @+64)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<1536,16> (the IO event queue the crash/takedown events push onto)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (live-car bitset, crash-data free-list, taken-down bitset)
@@ -284,29 +285,67 @@ namespace Vehicle
 
     private:
         // ------------------------------------------------------------------------------------------
-        // Deep VehicleManager data members the takedown chain touches, recovered by LAYOUT RECOVERY
-        // WITH PADDING from the X360 asm offsets (offsets are asm-authoritative; member NAMES marked
-        // "FLAG" are proposed by role -- only mePlayerActiveRaceCarIndex is DWARF-attested). The full
-        // VehicleManager is ~172 KB across many parallel per-car arrays; only the members the
-        // takedown classifiers + InstantTakedown reach are modelled here. Everything else is opaque
-        // padding so each named member lands at its proven byte offset (pinned by the offsetof
-        // asserts in _AssertLayout). The gate FAILS if any padding run is wrong, which is the signal.
+        // Deep VehicleManager data members, recovered by LAYOUT RECOVERY WITH PADDING from the X360
+        // asm offsets. The full VehicleManager is ~172 KB across many parallel per-car arrays;
+        // everything not modelled is opaque padding so each named member lands at its proven byte
+        // offset (pinned by the offsetof asserts in _AssertLayout / _AssertLayoutPlayerStats). The
+        // gate FAILS if any padding run is wrong, which is the signal.
+        //
+        // ⭐ RE-SEATED 2026-08-03. Every member from the class head down to +44768 has now been
+        // re-derived directly from `VehicleManager::Construct` @0x8263B7C8 (943 instructions) and
+        // cross-checked against the DWARF's member ORDER (BrnVehicleManager.h:815-970), which lists
+        // the same members in the same sequence. Four committed errors were corrected -- the whole
+        // per-car driver array was 64 bytes too low, a stride-8 array was modelled at stride 4, a
+        // car-TYPE array was named as a crash-STATE array, and three live bitsets were buried in
+        // padding -- and nine members were newly pinned. Names below are the DWARF's wherever the
+        // DWARF names that seat; the remaining "FLAG" names are still role-derived.
+        //
+        // ⚠️ Members reached by ABSOLUTE offset from inside a contained sub-object (the
+        // PhysicalTrafficManager interior at +148128 / +149456) stay siblings here, because the X360
+        // build folds them to absolute class offsets; that is deliberate, not an oversight.
         // ------------------------------------------------------------------------------------------
 
-        // Per-car STATUS record array @ class offset 0. Stride 224 (asm: 224*idx + 124). Only the
-        // "taken down this frame" byte at in-record +124 is named; the rest is opaque.
-        // FLAG: record/field names proposed; the 224-byte stride and +124 field offset are asm-proven.
-        // (A second per-record flag byte at in-record +123 is read by the shunt classifiers -- the
-        // "boost-charged" / boost-slam-eligible bit; modelled below as mbBoostImpactEligible.)
-        struct RaceCarStatusRecord
+        // ==========================================================================================
+        // ⭐ RE-SEATED 2026-08-03 (VehicleManager layout wave). This array used to be declared as
+        // `RaceCarStatusRecord maRaceCarStatus[8]` at class offset **0**. It is really the DWARF's
+        // `VehicleDriver maRaceCarDrivers[8]` at class offset **+64**, and the 64 bytes ahead of it
+        // are mePrepareStage / meReleaseStage / mRandom (see the class head below).
+        //
+        // Why it mattered: the three named in-record fields were 64 bytes too high. They are
+        // byte-faithful ONLY while the region is padding -- the instant a wave turns those 64 bytes
+        // into real members, the three writes corrupt real driver state and the symptom (cars
+        // mis-flagged) looks like a bug in the new constructor. Corrected while provably inert.
+        //
+        // [V] BOTH the base and the stride are asm-literal in VehicleManager::Construct @0x8263B7C8:
+        //     0x8263BE90  addi r25, r31, 0x40      <- &maRaceCarDrivers[0] == this + 64
+        //     0x8263BF08  bl   VehicleDriver::Construct
+        //     0x8263BF80  addi r25, r25, 0xE0      <- stride 224, x8 -> ends at 1856
+        // and 1856 is exactly where maRaceCarVehicles starts (asm below), so the array closes.
+        //
+        // ⚠️ THE RECORD IS A STAND-IN, NOT THE REAL VehicleDriver. The DWARF type is
+        //   VehicleDriver { BrnAIDriverControls mControls;      // 0..80
+        //                   Matrix44Affine mCatchupTargetTransform;  // +80
+        //                   Matrix44Affine mSlerpTransform;          // +144
+        //                   E_DRIVER_TYPE meDriverType;              // +208
+        //                   int8_t mi8NumOfInterpSteps;              // +212
+        //                   bool mbSnappedThisFrame; }               // +213  -> sizeof 224
+        // so all three fields named here live INSIDE mControls. [I] Walking the DWARF
+        // BrnPlayerDriverControls run (miVehicleID@0, twelve floats, miVehicleIDToMerge@52, then the
+        // bool run mbReset@53 .. mbHorn@62) puts in-record 59/60/61 on mbBoostBounce /
+        // mbIsOnStartLine / mbIsSteeringWheel. That is a HYPOTHESIS, not a measurement -- it assumes
+        // an empty `CgsModule::Event` base (which this tree's `struct Event {}` is) and it has not
+        // been checked against a use site. The role-derived names below are kept because the bodies
+        // read them by role; DELETE-WHEN VehicleDriver + BrnAIDriverControls are really reconstructed
+        // (that is wave T2-B), at which point this stand-in disappears entirely.
+        struct RaceCarDriverRecord
         {
-            unsigned char mPad0000[123];
-            unsigned char mbBoostImpactEligible; // +123 (asm: 224*idx+123; promotes SLAM->BOOST_SLAM, SHUNT->BOOST_SHUNT)
-            unsigned char mbTakenDown;           // +124 (asm stores literal 1; also read as a crash-suppression flag)
-            // +125: a second per-car suppression flag SetRaceCarCrashing reads (asm *(v38+125)). It
-            // gates the crash by the cause sub-code (0/3/5). FLAG: role/name proposed; +125 asm-proven.
-            unsigned char mbSuppressByCause;     // +125
-            unsigned char mPad007E[224 - 126];
+            unsigned char mPad0000[59];
+            unsigned char mbBoostImpactEligible; // in-record +59 (asm: 224*idx + 123; promotes SLAM->BOOST_SLAM, SHUNT->BOOST_SHUNT)
+            unsigned char mbTakenDown;           // in-record +60 (asm: 224*idx + 124; stores literal 1; also read as a crash-suppression flag)
+            // in-record +61 (asm: 224*idx + 125): a second per-car suppression flag SetRaceCarCrashing
+            // reads. It gates the crash by the cause sub-code (0/3/5). FLAG: role/name proposed.
+            unsigned char mbSuppressByCause;     // in-record +61
+            unsigned char mPad003E[224 - 62];
         };
 
         // Per-car VEHICLE/physics record array @ class offset 1856. Stride 5216 -- this is the
@@ -373,50 +412,122 @@ namespace Vehicle
             f32 mfPriority;  // +8
         };
 
-        RaceCarStatusRecord  maRaceCarStatus[8];     // +0       (224 * 8 = 1792)
-        unsigned char        mPad0700[1856 - sizeof(RaceCarStatusRecord) * 8];
-        RaceCarVehicleRecord maRaceCarVehicles[8];   // +1856    (5216 * 8 = 41728; ends at 43584)
+        // ==========================================================================================
+        // THE CLASS HEAD -- re-derived 2026-08-03 from VehicleManager::Construct @0x8263B7C8 and
+        // cross-checked against the DWARF member ORDER (BrnVehicleManager.h:815-847), which lists
+        // exactly these members in exactly this sequence.
+        //
+        //   0x8263BCC0  stw  r30(0), 0(r31)      -> mePrepareStage = 0
+        //   0x8263BCC8  stw  r24(3), 4(r31)      -> meReleaseStage = 3
+        //   0x8263BCEC  addi r11, r31, 0x10      -> &mRandom == this + 16, then
+        //               stw 1.0f, 0(r11) / stwx buf[i], 4*i(r11) / std seed, 0x20(r11) /
+        //               stw index, 0x28(r11)
+        //
+        // ⚠️ mRandom is at +16, NOT +8. CgsNumeric::Random is
+        // `union { f32[8]; u32[8]; VectorIntrinsic[2] } + u64 muSeed(+0x20) + u32 index(+0x28)`
+        // == 44 bytes but **16-byte aligned** because of the VectorIntrinsic[2] member, so it
+        // cannot sit at +8 and its sizeof is 48. 16 + 48 == 64 == &maRaceCarDrivers[0]: the head
+        // closes on three independently-attested numbers. (An earlier brief reached the right
+        // +64 answer from the wrong arithmetic -- mRandom@8 -- which would have left an 8-byte
+        // hole in a different place.)
+        // ==========================================================================================
+        s32                  mePrepareStage;    // +0   EPrepareStage (Construct: 0)
+        s32                  meReleaseStage;    // +4   EReleaseStage (Construct: 3)
+        unsigned char        mPad0008[8];       // +8   alignment ahead of the 16-aligned mRandom
+        // CgsNumeric::Random mRandom -- OPAQUE 48 bytes (alignas 16). The real type belongs to its
+        // own TU (wave T2-B); modelled as a sized, aligned blob so every offset behind it is right.
+        alignas(16) unsigned char mRandom[48];  // +16  (ends at 64)
 
-        // Per-car EntityId validation table @ +43584. Stride 4 (asm: 4*(idx+10896) == 4*idx+43584).
-        // SetRaceCarCrashing asserts the packed victim/aggressor id matches the stored id here.
-        // FLAG: name proposed; +43584 / stride 4 asm-proven.
-        EntityId             maRaceCarEntityId[8];    // +43584 (4 * 8 = 32; ends 43616)
-        unsigned char        mPadAA60[43744 - 43616];
-        // Per-car aggressive-driving victim EntityId @ +43744 (doc §7; not touched by these two
-        // functions but carved so the offset is documented). FLAG: name proposed; offset from doc §7.
-        EntityId             maAggressiveDrivingVictimEntityId[8]; // +43744 (4 * 8 = 32; ends 43776)
-        unsigned char        mPadAAC0[43808 - 43776];
-        // The crash-data type pool @ +43808 (32 * 12 = 384; ends at 44192, abutting maRaceCarCrashState).
-        RaceCarCrashData     maRaceCarCrashData[32];  // +43808
+        RaceCarDriverRecord  maRaceCarDrivers[8];   // +64      (224 * 8 = 1792; ends at 1856)
+        RaceCarVehicleRecord maRaceCarVehicles[8];  // +1856    (5216 * 8 = 41728; ends at 43584)
 
-        // Per-car crash-state array @ +44192. Stride 4 (asm: 4*(idx+11048) == 4*idx+44192). The asm
-        // compares this != 2 to decide whether the victim still needs crashing (sentinel 2 == the
-        // fatal/active-crash state). FLAG: no recovered enum home for the crash-state values -- left
-        // as a plain s32 here and compared against the literal 2 in the body (see KI_RACECAR_CRASH_STATE_FATAL).
-        s32                  maRaceCarCrashState[8];  // +44192   (4 * 8 = 32; ends at 44224)
+        // Per-car EntityId validation table @ +43584. Stride 4 (asm: 4*(idx+10896) == 4*idx+43584;
+        // Construct seeds it from dword_82F2A3A4 through a stride-4 cursor). SetRaceCarCrashing
+        // asserts the packed victim/aggressor id matches the stored id here. Spelling per the DWARF
+        // (`EntityId[8] maRaceCarEntityIDs`).
+        EntityId             maRaceCarEntityIDs[8];   // +43584 (4 * 8 = 32; ends 43616)
 
-        // The live-car bitset and the crash-data free-list, now given their REAL CgsBitArray type so
-        // the bodies use the container's named ops (IsBitSet/GetFirstNonZeroBit/SetBit) instead of raw
+        // ⭐ The 128 bytes at +43616..+43744 are the DWARF's two ResourceHandle arrays
+        // (`ResourceHandle[8] maRaceCarModelHandles` then `ResourceHandle[8]
+        // maRaceCarGraphicsModelHandles`, BrnVehicleManager.h:824/825). They fill the gap exactly at
+        // **8 bytes per handle** -- 43616 + 64 = 43680, + 64 = 43744 -- which is the independent
+        // confirmation that ResourceHandle is 8 bytes here. Modelled as an opaque span because
+        // CgsResource::ResourceHandle has no committed home in this tree yet and Construct does not
+        // touch either array; the two names + the 8-byte width are recorded so the next wave can
+        // split it without re-deriving anything. DELETE-WHEN ResourceHandle lands.
+        unsigned char        mPadAA60[43744 - 43616];  // maRaceCarModelHandles / maRaceCarGraphicsModelHandles
+
+        // ⭐ CORRECTED 2026-08-03: this was committed as `EntityId
+        // maAggressiveDrivingVictimEntityId[8]` at **stride 4**, which left 32 bytes of the span
+        // unaccounted and would have mis-seated every element. It is the DWARF's
+        // `RigidBodyId[8] maRaceCarHandlingBodyIDs` at **stride 8**:
+        //   0x8263BE78/0x8263BE88  addis r26,r31,1 ; addi r26,r26,-0x5520  -> this + 43744
+        //   0x8263BF44/0x8263BF48  ld r11, qword_82F2A3A8 ; std r11, 0(r26)   <- an 8-BYTE store
+        //   0x8263BF78             addi r26, r26, 8                          <- stride 8, x8
+        // 43744 + 64 == 43808, which is exactly where maRaceCarCrashes starts. RigidBodyId is
+        // modelled as u64 (the sentinel it is seeded with, qword_82F2A3A8, is a 64-bit value --
+        // the same K_INVALID_RIGID_BODY_ID idiom CgsPhysicsSimulationModule.h already names).
+        u64                  maRaceCarHandlingBodyIDs[8]; // +43744 (8 * 8 = 64; ends 43808)
+
+        // The crash-data pool @ +43808 (32 * 12 = 384; ends at 44192, abutting maeRaceCarTypes).
+        // Spelling per the DWARF (`RaceCarCrashData[32] maRaceCarCrashes`).
+        RaceCarCrashData     maRaceCarCrashes[32];  // +43808
+
+        // ⭐ CORRECTED 2026-08-03: this was committed as `s32 maRaceCarCrashState[8]` with the note
+        // "sentinel 2 == fatal crash state". It is the DWARF's `BrnWorld::ERaceCarType[8]
+        // maeRaceCarTypes`, and the comparisons in the bodies are TYPE tests, not crash-state tests:
+        //   Construct: `stw r24, 0(r28)` with r24 == 3 and r28 == this + 44192, stride 4, x8
+        //              -- i.e. every slot is seeded E_RACE_CAR_TYPE_INACTIVE (== 3).
+        //   the classifiers' `== 1`   is E_RACE_CAR_TYPE_AI      ("both cars are AI")
+        //   SetRaceCarCrashing's `!= 2` is != E_RACE_CAR_TYPE_NETWORK ("not a network car")
+        // The literals are numerically unchanged, so this is a NAMING correction with no behaviour
+        // change -- but the old name made every read of it mean the wrong thing.
+        BrnWorld::ERaceCarType maeRaceCarTypes[8];  // +44192   (4 * 8 = 32; ends at 44224)
+
+        // The live-car bitset and the crash-data free-list, given their REAL CgsBitArray type so the
+        // bodies use the container's named ops (IsBitSet/GetFirstNonZeroBit/SetBit) instead of raw
         // offset access. Each BitArray<N<=64> is a single 8-byte u64 field == the same image the X360
-        // scans. FLAG: names proposed; only the +44224/+44232 offsets are asm-proven.
-        CgsContainers::BitArray<8>  mUsedRaceCars;               // +44224 (live-car bitset)
-        CgsContainers::BitArray<32> mRaceCarCrashDataAllocBits;  // +44232 (crash-data free-list)
+        // scans. Both offsets are asm-literal (Construct: `addis r11,r31,1; addi r11,r11,-0x5340`
+        // -> 44224 and `addi r10,r10,-0x5338` -> 44232, each `std 0`). Names per the DWARF
+        // (`mUsedRaceCars`, `BitArray<32u> mUsedRaceCarCrashesList`).
+        CgsContainers::BitArray<8>  mUsedRaceCars;             // +44224 (live-car bitset)
+        CgsContainers::BitArray<32> mUsedRaceCarCrashesList;   // +44232 (crash-data free-list)
 
-        unsigned char        mPadACE8[44704 - (44232 + 8)];
-        // The "network race car hidden" bitset @ +44704 (CgsBitArray<8>, single 8-byte word). Read /
-        // SetBit by SetNetworkRaceCarHidden (asm: this+44704, sets bit leActiveRaceCarIndex). FLAG:
-        // name proposed; +44704 asm-proven (r27 = this + 44704; sld/or/stdx the per-index bit).
-        CgsContainers::BitArray<8> mHiddenNetworkRaceCars;        // +44704 (ends 44712)
-        unsigned char        mPadAEB8[44736 - (44704 + 8)];
-        // Per-car "hide for at least N frames" countdown @ +44736. Stride 4 (asm: 4*(idx+11184) ==
-        // 4*idx+44736); SetNetworkRaceCarHidden stores the requested frame count here. FLAG: name
-        // proposed; +44736 / stride 4 asm-proven.
-        s32                  maHiddenForFrames[8];                // +44736 (4 * 8 = 32; ends 44768)
-        // (the contained PhysicalTrafficManager subobject begins at +44768 -- modelled as opaque
-        // padding here, consistent with the existing layout that also names maRaceCarEntityIdRemap as
-        // a direct sibling at +148128 inside this region. The X360 build folds every contained-manager
-        // member the VehicleManager methods touch to its absolute class offset, so the members below
-        // are reached BY their absolute-offset NAMES rather than through an embedded manager object.)
+        // ⭐ NEWLY PINNED: the contained StuntOffencesManager subobject. Construct calls
+        // `StuntOffencesManager::Construct(this + 65536 - 0x5330)` == this + 44240 @0x8263C620, and
+        // the next pinned member (mHiddenRaceCars) is at 44704, so the subobject occupies exactly
+        // 464 bytes. Opaque until BrnStuntOffencesManager's layout pass; the span is what stops a
+        // future member from being dropped into it.
+        unsigned char        mStuntOffencesManager[44704 - 44240];  // +44240 (464 bytes)
+
+        // ⭐ NEWLY PINNED / RENAMED: FOUR RaceCarBitArrays, not one. Construct zero-stores all four
+        // back to back (0x8263C0A8..0x8263C0C0), and the DWARF lists exactly these four names in
+        // this order (BrnVehicleManager.h:838-841):
+        //   addi r11,r11,-0x5160 -> 44704   mHiddenRaceCars          (was mHiddenNetworkRaceCars)
+        //   addi r9, r9, -0x5158 -> 44712   mRaceCarsAddedForCollision
+        //   addi r8, r8, -0x5150 -> 44720   mNetworkCarsAddedForCollisionThisFrame
+        //   addi r10,r10,-0x5148 -> 44728   mNetworkCarsRecievedFirstUpdate   (DWARF's spelling)
+        // The committed header modelled 44712..44736 as padding, so three real bitsets were
+        // invisible.
+        CgsContainers::BitArray<8> mHiddenRaceCars;                        // +44704
+        CgsContainers::BitArray<8> mRaceCarsAddedForCollision;             // +44712
+        CgsContainers::BitArray<8> mNetworkCarsAddedForCollisionThisFrame; // +44720
+        CgsContainers::BitArray<8> mNetworkCarsRecievedFirstUpdate;        // +44728
+        // Per-car "hide for at least N frames" countdown @ +44736. Stride 4 (asm: `stw r30, 0x220(r28)`
+        // off the stride-4 cursor at 44192 -> 44192 + 544 == 44736); SetNetworkRaceCarHidden stores
+        // the requested frame count here. DWARF name (`uint32_t[8] mauNetworkCarHiddenFramesRemaining`).
+        u32                  mauNetworkCarHiddenFramesRemaining[8];        // +44736 (ends 44768)
+
+        // The contained PhysicalTrafficManager subobject begins at **+44768** -- asm-literal
+        // (`addis r3,r31,1; addi r3,r3,-0x5120; bl PhysicalTrafficManager::Construct` @0x8263BF9C).
+        // Still modelled as opaque padding, consistent with the existing layout that names
+        // maRaceCarEntityIdRemap as a direct sibling at +148128 inside this region: the X360 build
+        // folds every contained-manager member the VehicleManager methods touch to its absolute class
+        // offset, so the members below are reached BY their absolute-offset NAMES rather than through
+        // an embedded manager object.
+        // Two further DWARF members live inside this span and are NOT separately pinned yet:
+        // `PotentialContact[128] maNonPhysicalContacts` + `int32_t miNonPhysicalContactCount`
+        // (BrnVehicleManager.h:850/851), which sit between the traffic manager and mDiscardedContacts.
         unsigned char        mPadAEE0[148128 - 44768];
         // Per-car EntityId REMAP table @ +148128. Stride 4 (asm: 4*(idx+37032) == 4*idx+148128).
         // SetRaceCarCrashing remaps a "type 2" packed id through this table before re-validating /
@@ -430,10 +541,40 @@ namespace Vehicle
         // index". GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe reads it. FLAG: name from the assert
         // string; +149456 / size 600 asm-proven (lbzx this+149456+idx; cmplwi idx, 0x258).
         unsigned char        mau8GlobalToPhysicalEntityIndexMap[600]; // +149456 (ends 150056)
-        unsigned char        mPad24A68[171464 - 150056];
-        // Master "takedowns enabled" gate @ +171464 (asm: a non-zero byte gates the whole routine).
-        // FLAG: name proposed; offset asm-proven.
-        bool                 mbTakedownsEnabled;      // +171464
+        unsigned char        mPad24A68[160672 - 150056];
+
+        // ⭐ NEWLY PINNED: the discarded-contact queue. Construct binds it in place @0x8263C048:
+        //   addis r29,r31,2 ; addi r29,r29,0x73A0   -> this + 160672
+        //   addi  r28,r29,0x10                      -> the buffer, this + 160688
+        //   stw r28,0(r29) ; stw 0x14,4(r29) ; stw 0,8(r29)   -> {buffer, capacity 20, count 0}
+        // plus the console's own `lpEventBuffer != NULL` assert (BrnContactSpyData.h:160). The
+        // 16-byte header + 20 entries fills exactly to mDebugComponent, so each entry is 64 bytes.
+        // DWARF: `ContactSpyData::DiscardedContactQueue mDiscardedContacts` (BrnVehicleManager.h:854).
+        unsigned char        mDiscardedContacts[161968 - 160672];  // +160672 (1296 bytes)
+
+        // ⭐ NEWLY PINNED: the manager's own debug component. Construct calls
+        // `VehicleManagerDebugComponent::Construct(this + 161968, this)` @0x8263BCD8 -- note it takes
+        // TWO arguments (r3 = the component, r4 = r31 = the manager); Hex-Rays renders it with none.
+        unsigned char        mDebugComponent[163264 - 161968];     // +161968 (1296 bytes)
+
+        // ⭐ NEWLY PINNED: the per-car debug components. Construct walks them in the 8-car loop with
+        // `addis r27,r31,2 ; addi r27,r27,0x7DC0` -> this + 163264 and `addi r27,r27,0x400`
+        // (stride 1024), storing each into the matching maRaceCarVehicles[] record and firing the
+        // console's own `lpDebugComponent != NULL` assert. DWARF:
+        // `BrnPhysics::Vehicle::DebugComponent[8] maRaceCarDebugComponent` (BrnVehicleManager.h:860),
+        // immediately followed by `bool[8] mabRaceCarDebugComponentRegistered` (:861).
+        // ⭐ THE CHAIN CLOSES TO THE BYTE: 163264 + 8*1024 == 171456, + 8 == 171464, which is the
+        // independently asm-proven offset of the gate byte below. Four numbers, one closure.
+        unsigned char        maRaceCarDebugComponent[8][1024];        // +163264 (ends 171456)
+        bool                 mabRaceCarDebugComponentRegistered[8];   // +171456 (ends 171464)
+
+        // Master gate byte @ +171464 (asm: a non-zero byte gates the whole routine).
+        // ⚠️ FLAG (2026-08-03): the DWARF names the two bytes at this seat `mbSlamsAndShuntsOn`
+        // (:865) and `mbAllowSlamsAndShuntsEffectsForRivals` (:866), and the closure above lands them
+        // exactly here. The role-derived names are kept for now because the bodies read them as
+        // gates and the X360 use sites have not been re-checked against the DWARF semantics; do the
+        // rename in the wave that reconstructs the slam/shunt appliers, not in a layout pass.
+        bool                 mbTakedownsEnabled;      // +171464 (DWARF: mbSlamsAndShuntsOn)
 
         // The slam/shunt-physics enable gate @ +171465, one byte past the takedowns gate. Read by
         // HandleRaceCarRaceCarContact before ApplySlam/ApplyShunt. FLAG: name proposed; offset asm-proven.
@@ -490,11 +631,41 @@ namespace Vehicle
         unsigned char        mPad29FFC[171900 - (171868 + 4)];
         f32                  mfGrindingThresholdB;    // +171900 (ends 171904)
 
-        unsigned char        mPad2A01C[172204 - (171900 + 4)];
-        // The local player's active-race-car slot @ +172204. DWARF-attested name (BrnVehicleManager.h:559).
+        unsigned char        mPad2A01C[171968 - (171900 + 4)];
+        // ⭐ NEWLY PINNED: the manager's own spare AI driver. Construct calls
+        // `VehicleDriver::Construct(this + 3*65536 - 0x6040)` == this + 171968 @0x8263C088 -- the
+        // SECOND VehicleDriver::Construct call in the function, the first being the 8-car array at
+        // +64. DWARF: `VehicleDriver mPlayerAiDriver` (BrnVehicleManager.h:953). Same 224-byte
+        // stand-in record as the array.
+        RaceCarDriverRecord  mPlayerAiDriver;         // +171968 (224; ends 172192)
+
+        // [I] +172192..+172204 is the DWARF run that follows mPlayerAiDriver:
+        //   bool mbPlayerAiDriverValid (:954), float mfPlayerRecentSteering (:955),
+        //   float mfSteeringUpdateRemainder (:956)
+        // -- which lands the next member on 172204 exactly, i.e. it is what CLOSES this span onto
+        // the asm-proven mePlayerActiveRaceCarIndex. Left opaque rather than declared: the placement
+        // comes from DWARF ORDER, not from an asm store, and a wrong guess here would be invisible.
+        unsigned char        mPad2A040[172204 - 172192];
+
+        // The local player's active-race-car slot @ +172204. DWARF-attested name (BrnVehicleManager.h:959).
         EActiveRaceCarIndex  mePlayerActiveRaceCarIndex; // +172204 (ends 172208)
 
-        unsigned char        mPad2A04C[172306 - (172204 + 4)];
+        // [I] +172208..+172240 is the DWARF's six-float run (:962-968,
+        // mfCrashingAICollisionCrashThresholdMPH .. mfVerticalTakedownAngleDeg) plus the 16-byte
+        // alignment ahead of mCameraMatrix. Left opaque for the same reason as the span above.
+        unsigned char        mPad2A050[172240 - (172204 + 4)];
+
+        // ⭐ NEWLY PINNED: the camera matrix Construct stamps with the identity. Asm @0x8263C068:
+        //   addis r11,r31,3 ; addi r11,r11,-0x5F30   -> this + 172240
+        //   stvx128 v0,r0,r11 / v13,r11,0x10 / v12,r11,0x20 / v11,r11,0x30
+        // -- four 16-byte lanes built on the stack from flt_82001C98 (1.0f) and flt_82001CC0 (0.0f).
+        // DWARF: `Matrix44Affine mCameraMatrix` (BrnVehicleManager.h:970). 172240 is 16-aligned, so
+        // the declaration needs no extra padding.
+        Matrix44Affine       mCameraMatrix;           // +172240 (64; ends 172304)
+
+        // [I] +172304 / +172305 are the DWARF's `mbImpactTime` (:972) and `mbEasyCrashingEnabled`
+        // (:973); the next two bools ARE asm-proven and are named below.
+        unsigned char        mPad2A0B0[172306 - 172304];
         // ---- crash-suppression + alternate-entry gates (asm-proven offsets; FLAG: names proposed) --
         bool                 mbSuppressPlayerCrash;            // +172306
         bool                 mbSuppressIfAlreadyCrashState1;   // +172307 (ends 172308)
