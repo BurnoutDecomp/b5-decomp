@@ -45,6 +45,8 @@
                                                         //   + SLerp / IsValid(Matrix44Affine)
 
 #include "GameSource/Director/Camera/Camera.h"           // Camera (Update publishes into it)
+#include "GameSource/Director/Camera/BrnBoostShakeController.h"  // .cpp:512's boost-shake driver
+#include "GameSource/Director/BrnDirectorResourceManager.h"      // GetCameraDefaults() (its arg 3)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
                                                         // CgsDev::DebugInterface -- Update's
                                                         //   debug-render arm (.cpp:364/:370)
@@ -1586,24 +1588,34 @@ const f32 BehaviourGameplayExternal::kfJumpParamsImpactShakeMaxFreqMul   = 8.0f;
 //   somewhere between :217 and :335 relative to the DecFIGS revision. Lines quoted below are
 //   the DecFIGS ones (the numbering the rest of this file uses).
 //
-// ---- THREE FLAGGED OMISSIONS, all deliberate, none silent -----------------------------
-//  (a) .cpp:512 -- `BoostShakeController::Update` IS NOT CALLED. ⚠️⚠️ NOT because the body is
-//      missing (BrnBoostShakeController.cpp is bodied AND mounted) but because the committed
-//      BrnBoostShakeController.h MISTYPED BOTH OF ITS BLOCKS, and calling it through those
-//      types would be an offset poke that silently writes the wrong x64 fields:
-//        * X360 0x822422A4 `mr r4, r29` -- argument 1 is the **Camera**, not a separate
-//          "shake-output block". Its +0x114/+0x11C are `mEffects.mfShakeAmplitude` /
-//          `mEffects.mu8ShakeType` (Camera::mEffects @+0x68, CameraEffects +0xAC/+0xB4 --
-//          both already NAMED in BrnCameraEffects.h and cross-attested there by
-//          PerlinShakeController::Update and Camera::SetImpactShake).
+// ---- TWO FLAGGED OMISSIONS, both deliberate, neither silent ---------------------------
+//  (a) ✅ RETIRED 2026-08-02 (drive-handover wave). `.cpp:512` -- `BoostShakeController::
+//      Update` -- IS CALLED NOW. It was omitted because BrnBoostShakeController.h modelled
+//      its three arguments as INVENTED opaque-padded blocks over console offsets, so calling
+//      through it would have been an offset poke. That header is re-typed against the DecFIGS
+//      DWARF's own declaration -- `Update(Camera*, const RaceCarState&, const cameradefaults&)`
+//      -- and all three arguments are NAMED members now:
+//        * X360 0x822422A4 `mr r4, r29` -- argument 1 is the **Camera**. Its +0x114/+0x11C
+//          are `mEffects.mfShakeAmplitude` / `mEffects.mu8ShakeType` (Camera::mEffects @+0x68,
+//          CameraEffects +0xAC/+0xB4 -- both already NAMED in BrnCameraEffects.h and
+//          cross-attested there by PerlinShakeController::Update and Camera::SetImpactShake).
 //        * X360 0x822422A0 `addi r5, r19, 0x60` -- argument 2 is
-//          **lrSharedInfo.mPlayerInfo** (a VehicleInfo), not "the gameplay-external camera
-//          state". Its +0x3CC/+0x3D4 are inside mRaceCarState.
-//        * argument 3 is `mpDirectorResourceManager + 0x5D8`; `this` is a stack temporary
-//          (the controller is stateless, so the console never reads it).
-//      Consequence of the omission: the camera's BOOST-shake amplitude/type request is not
-//      published, so there is no boost shake. That is a MISSING effect, not a corrupting one,
-//      and it is the honest state until that header is re-typed against named members.
+//          **lrSharedInfo.mPlayerInfo.mRaceCarState** (VehicleInfo's first member IS the
+//          RaceCarState). Its +0x3CC/+0x3D4 are `mfSpeedMPH` / `mfMaxBoostSpeedMPH` -- a SPEED
+//          RATIO, ⚠️ not the "boost elapsed / boost duration" the old header claimed.
+//        * argument 3 is `mpDirectorResourceManager->GetCameraDefaults()` (manager +0x5D8);
+//          `this` is a stack temporary (the controller is stateless).
+//      ⭐ MEASURED, NOT INFERRED (DH_RUN4, plain, 190 s) -- the call's own entry probe:
+//          [boostshake] CALLED: speed 0.000000 mph, maxBoost 0.000000 mph,
+//                       cameradefaults data present
+//      i.e. the leg IS reached (mbEnableBoostEffects is true, the resource manager is
+//      non-null) and the cameradefaults attribute data IS resolved -- but BOTH RaceCarState
+//      speeds read 0, so the console's own divide-by-zero guard writes amplitude 0 and
+//      returns. ⚠️ `mfMaxBoostSpeedMPH == 0` is a DATA gap in its own right (the vehicle's
+//      boost top speed is never published on this build), not a camera one.
+//      Consequence: no visible boost shake yet, and CameraShakeICEController::Update's
+//      gate 1 (`mfShakeAmplitude == 0`) still returns -- which is exactly why the ICE take
+//      arm there has never once fired in four measured runs.
 //  (b) .cpp:392 -- an assert that exists in the DecFIGS build and NOT in the X360 one (the
 //      X360 assert-line set jumps 0x1A6 -> 0x1D9 with nothing between). Not transcribed: the
 //      X360 is this build's target.
@@ -2014,7 +2026,30 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // .cpp:508 -- the snap request is consumed.
         mbSnapToCar = false;
 
-        // .cpp:512 -- ⛔ OMITTED: BoostShakeController::Update. See flag (a) in the banner.
+        // .cpp:512 -- the BOOST-shake amplitude/type request, gated on mbEnableBoostEffects
+        // (X360 `lbz r11, 0xB5F(r20)` @0x82242290 then `beq` over the whole call). `this` is a
+        // STACK TEMPORARY on the console too (`addi r3, r1, var_370`) -- the controller is
+        // stateless and never reads it.
+        // ⭐ NO LONGER OMITTED (2026-08-02, drive-handover wave). The omission was correct
+        // while BrnBoostShakeController.h modelled its three blocks as invented opaque views
+        // over console offsets; that header is re-typed against the DecFIGS DWARF's own
+        // `Update(Camera*, const RaceCarState&, const cameradefaults&)` and every argument
+        // below is now a NAMED member. See the banner there for the per-argument asm.
+        // ⚠️ THE `mpDirectorResourceManager != 0` HALF IS A DEVIATION, and a deliberate one:
+        // the console dereferences it unconditionally (`lwz r11, 0x5A8(r19)`). On this build
+        // that pointer is published by MainDirector::UpdateCameraBehavioursPreScene and has
+        // been non-null in every measured run, so the test is dead weight today -- but the
+        // gate byte it sits next to is console-set and the manager is bring-up-published, and
+        // those two truths have not always agreed here. DELETE the null half with the bring-up
+        // path; the `mbEnableBoostEffects` half is the console's own and stays.
+        if (mbEnableBoostEffects && lrSharedInfo.mpDirectorResourceManager != 0)
+        {
+            const BoostShakeController lBoostShake;
+            lBoostShake.Update(&lCamera,
+                               lrSharedInfo.mPlayerInfo.mRaceCarState,        // sharedInfo +0x60
+                               lrSharedInfo.mpDirectorResourceManager
+                                   ->GetCameraDefaults());                    // manager  +0x5D8
+        }
 
         // .cpp:515/:522 -- WIDEN THE PUBLISHED FOV BY 1.2x IN TANGENT SPACE (not in degrees),
         // then clamp to [1, 160] degrees. Reading lCamera's own FOV back is deliberate: it is
