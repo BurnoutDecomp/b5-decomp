@@ -22,6 +22,12 @@
 
 namespace BrnPhysics
 {
+    // Forward declaration only, so SuspensionSpring can name its friend (see the ACCESS NOTE on
+    // that class). `struct` matches the DecFIGS DWARF spelling
+    // (dwarfdump/.../VehiclePhysics.h: `struct BrnPhysics::Vehicle::VehiclePhysics`) and the
+    // committed VehiclePhysics.h:160. No layout is pulled in.
+    namespace Vehicle { struct VehiclePhysics; }
+
     struct Spring1D
     {
         // --- the 3 ledger funcs bodied in Spring1D.cpp ---
@@ -86,6 +92,24 @@ namespace BrnPhysics
     // by a future TU.
     struct SuspensionSpring
     {
+        // The suspension model's owner. VERIFIED, not assumed: every X360 caller of every
+        // PROTECTED member of this class is a VehiclePhysics member function, and there is no
+        // other caller anywhere in the image --
+        //   SetExternalForce @0x825BFCA8  xrefs_to = { VehiclePhysics::UpdateSuspensionSprings
+        //                                              @0x825F7AF0,
+        //                                              VehiclePhysics::CalculateWeightTransfer
+        //                                              @0x825F9DD0 }
+        //   SetAcceleration  @0x825BF9C0  xrefs_to = { VehiclePhysics::UpdateSuspensionSprings }
+        //   SetSpringForce   @0x825BFBB0  xrefs_to = { VehiclePhysics::UpdateSuspensionSprings }
+        // and CalculateWeightTransfer issues `bl SuspensionSpring::SetExternalForce` OUT OF LINE
+        // (0x825FA22C), so the access is a real cross-class call, not an inlined member fold.
+        // A non-member, non-derived class can only make that call as a friend, so the console
+        // header must have carried this declaration. It is deliberately the tightest form the
+        // evidence supports (one named class), NOT a blanket friend and NOT a widening of the
+        // members to public -- the DecFIGS DWARF is explicit that the three registers and the
+        // four force/acceleration setters are `protected` (Spring1D.h:147-191).
+        friend struct BrnPhysics::Vehicle::VehiclePhysics;
+
         void     Construct();
         void     Destruct();
         void     Prepare(VecFloat lvStiffness, VecFloat lvDamping, VecFloat lvMass);
@@ -125,11 +149,15 @@ namespace BrnPhysics
         // @0x825BFCA8: base+32, vrlimi mask 8 -> lane 0 (.x) of the external-force vec.
         void SetExternalForce(f32 lfExternalForce);
 
-        // ACCESS NOTE: the three registers are PUBLIC. The console inlines every spring access, so
-        // C++ access control is not observable in the asm -- but VehiclePhysics::ApplySuspensionForces
-        // @0x825D1EE8 reads reg0.z (mass) * reg1.y (acceleration) directly from OUTSIDE the class, and
-        // the (now-retired) VehiclePhysics.h fork of this same type modelled them public for exactly
-        // that reason. `protected` here would only force a fabricated accessor.
+        // ACCESS NOTE -- CORRECTED (2026-08-02). The previous note here claimed "the three registers
+        // are PUBLIC ... `protected` here would only force a fabricated accessor". That claim was
+        // FALSE and it was never evidence: the DecFIGS DWARF records the accessibility straight out
+        // of the original declaration and puts all three registers (and SetAcceleration /
+        // SetDampingForce / SetSpringForce / SetExternalForce / the three force getters) under
+        // `protected`. The note was also self-defeating -- it justified `public` by pointing at
+        // VehiclePhysics::ApplySuspensionForces @0x825D1EE8 reading reg0.z * reg1.y from outside the
+        // class, which is exactly what the `friend struct Vehicle::VehiclePhysics` above licenses.
+        // The members stay protected; nothing is fabricated; no accessor was invented.
         // :147  +0x00  {x=stiffness, y=damping, z=mass, w=position}
         Vector4 mvStiffness_Damping_Mass_Position;
         // :148  +0x10  {x=velocity, y=acceleration, z=damping force, w=spring force}
