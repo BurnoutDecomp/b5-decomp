@@ -319,32 +319,52 @@ public:
     //          two 2-lane dots against constant axes and DecFIGS charges both to the SDK's
     //          own detail/vector2_operation_inline.h:108, so it is a real SDK entry point,
     //          not open-coded arithmetic.
-    //     ⛔ Utils::CameraShakeICEController::Update(...)  -- DECLARED (BrnCameraShake.h:172),
-    //          defined NOWHERE. ⭐⭐ CONFIRMED 2026-08-02 TO BE ON UPDATE'S REQUIRED LINK
-    //          PATH, not merely "reachable": Update @0x82240828 makes a DIRECT `bl` to it at
-    //          0x82241C6C (.cpp:445, the boost shake). Update cannot link without it.
-    //          ⚠️ NOT a small job: X360 @0x8223EEC8 is ~590 asm lines / PS3 @0x68840 is 1032,
-    //          and it reaches the ICE take machinery -- ICE::ICETake::SetDataPointers,
-    //          Attrib::Gen::iceanim::iceanim, Attrib::Gen::shotgroup::Num_ShotList,
-    //          Attrib::Instance::GetAttributePointer, Attrib::RefSpec::RefSpec/::Clean,
-    //          Attrib::DefaultDataArea, DirectorResourceManager::GetKeyAnimFromGuid --
-    //          which is gated (DirectorLinkStubs.cpp group C).
-    //     ⛔ Utils::CameraShakeICEController::GetMatrix()  -- same, BrnCameraShake.h:175.
-    //          A one-line `return mMatrix;` (it is inlined everywhere on both builds, so it
-    //          has no standalone address on either).
-    //     ⛔ BrnDirector::BoostShakeController::Update @0x8220E548 -- NEW 2026-08-02, and it
-    //          is the FIFTH member of this cluster's "body exists, nothing links it" family.
-    //          Update calls it directly at 0x822422B0. It IS bodied, at
-    //          Camera/BrnBoostShakeController.cpp:36 -- but that TU is NOT ON THE BUILD LIST,
-    //          so the link is green today only because nothing reaches it. Exactly the shape
-    //          that hid Camera::SetRequestedTimeDilation. MOUNT IT with Update, not before.
-    //   ⚠️ THE REST OF UPDATE'S OWN CALL SET IS CLOSED (walked instruction by instruction over
-    //     @0x82240828, not inferred): Camera::ValidateTransformWithDebugInfo and
-    //     Camera::SetFOV (Camera.cpp, mounted), rw::math::vpu::SLerp and OrthoNormalize3x3
-    //     (vendored matrix44affine_operation.h, inline), CameraState::SetFlag/::ClearFlag,
-    //     Timestep::Get, and the CgsDev assert / debug-render machinery.
+    //     ✅ Utils::CameraShakeICEController::Update / ::GetMatrix / BoostShakeController::Update
+    //          -- ALL THREE CLOSED 2026-08-02 (ICE-shake wave). ::Construct and ::Update are
+    //          bodied in Camera/Utils/BrnCameraShakeICEController.cpp (mounted), ::GetMatrix
+    //          inline in BrnCameraShake.h, and Camera/BrnBoostShakeController.cpp is now on
+    //          the build list -- it was the FIFTH "body exists, nothing links it" here.
+    //          ⚠️ ::Update IS A DOCUMENTED PARTIAL: head + its three gates are complete, the
+    //          authored ICE take arm is not, and it ANNOUNCES ITSELF ("[iceshake]") the first
+    //          time all three gates pass. On a gated frame it is bit-identical to the console;
+    //          .cpp:445 below passes shakeType 2 against a shot group that boot-verifies as
+    //          bound, so expect that line and expect the boost shake to be missing until the
+    //          arm lands. Read that TU's banner before assuming the shake works.
+    //          ⭐ AND ::Construct WAS AN ARMED STUB, not a missing one: without its real body
+    //          mMatrix is the ALL-ZERO matrix, and Update post-multiplies GetMatrix() into the
+    //          camera transform -- which would have collapsed the chase camera onto the origin
+    //          rather than merely dropping a shake.
+    //
+    // ⛔⛔ AND UPDATE'S CLOSURE IS **STILL NOT COMPLETE** -- re-walked 2026-08-02 by extracting
+    //   every `bl` target out of @0x82240828 and grepping each for a DEFINITION. Six remain,
+    //   none of them in the shake cluster. DO NOT START Update believing it will link:
+    //     ⛔ CgsDev::DebugRender::DrawBox   (0x822414C0)  -- no definition anywhere
+    //     ⛔ CgsDev::DebugRender::DrawLine  (0x82241524)  -- no definition anywhere
+    //        Both sit in the debug-render arm (a GetRender() pair at 0x822414AC/0x82241514).
+    //        Gate the arm or stub them the way WorldLinkStubs.cpp already does for
+    //        DebugInterface::GetRender -- but decide it deliberately, do not discover it.
+    //     ⛔ sub_821F0FC0 (five sites, each immediately after a CgsDev::StrStream::StrStream)
+    //        -- unidentified; assert-message construction.
+    //     ⛔ sub_82222598 (0x822410BC) -- unidentified, and it is on the LIVE path, not in an
+    //        assert arm: it takes v1 and v2 and returns v1, i.e. a two-vector operation whose
+    //        result is immediately NaN-checked. Identify it before transcribing .cpp:409-ish.
+    //   ⭐ Two of the four unnamed callees are ALREADY identified in this tree, so check the
+    //     committed notes before re-deriving: sub_82203F70 is the Vector3 stream operator
+    //     (named in this very .cpp at :1289/:1373 and in CameraUtils.cpp:372) and sub_821F0F40
+    //     is a Director-local ICF copy of the numeric stream operator
+    //     (BrnBehaviourRenderMetrics.cpp:14).
+    //   ✅ Everything else in the `bl` set has a body and is mounted, verified the same way:
+    //     the eight helpers, Camera::ValidateTransformWithDebugInfo / ::SetFOV (Camera.cpp),
+    //     CameraState::SetFlag/::ClearFlag (BrnCameraState.cpp), Timestep::Get (header inline),
+    //     CgsContainers::BasePriorityQueue::Clear (CgsPriorityQueue.cpp),
+    //     Utils::CameraShake::Update, Utils::CameraSphericalRotationController::Update,
+    //     Utils::EulerAnglesZXYFromMatrix44Affine, CgsDev::DebugManager::ThreadSafeRelease,
+    //     CgsDev::DebugInterface::GetRender/::DebugInterface, the three CgsDev::Assert entry
+    //     points, CgsDev::StrStream::StrStream / StrStreamBase::operator<<,
+    //     rw::math::vpu::SLerp and OrthoNormalize3x3 (vendored, inline), and tan/atan.
     //   ⚠️ CHECK FOR A BODY, NOT A DECLARATION, before calling any of these closed -- that is
-    //     the check that took this cluster's set from one symbol to eleven and now thirteen.
+    //     the check that took this cluster's set from one symbol to eleven, then thirteen, and
+    //     that is what turned "the last hard dependency" into six more.
     //
     // ⭐⭐ THE DECODE OF THE REMAINING FIVE, AS FAR AS IT IS *VERIFIED* (2026-08-02). Every
     //   line below is read off the asm of BOTH exports; where the two disagree the X360 wins
