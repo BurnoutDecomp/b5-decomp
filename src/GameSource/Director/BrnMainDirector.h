@@ -241,6 +241,11 @@ namespace BrnDirector
 
         ICEWrapper&               GetICEWrapper()             { return mICEWrapper; }
         Arbitrator&               GetArbitrator()             { return mArbitrator; }
+        // ⭐ Const overload, for the same reason GetGameState() below is exposed const: the PC
+        // bring-up camera gate in BrnGameModule::DoUpdate_Director asks the arbitrator which
+        // outer state it is in (E_STATE_NORMAL == "a live behaviour stack is placing a camera
+        // this frame") and must not be able to drive it.
+        const Arbitrator&         GetArbitrator() const       { return mArbitrator; }
 
         // ⭐ The game-intro fly-by latch (GameState +217), raised/cleared by PostGuiUpdate from
         // the GUI's fly-by START/END commands. Exposed by name because the PC bring-up producer
